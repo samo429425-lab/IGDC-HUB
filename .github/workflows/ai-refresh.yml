@@ -1,12 +1,12 @@
 name: AI Thumbnails Refresh
 
 on:
-  workflow_dispatch:           # 수동 실행 버튼
-  schedule:
-    - cron: "0 */6 * * *"      # 6시간마다 실행 (UTC)
+  workflow_dispatch:   # 수동 실행 버튼
+  schedule:            # 6시간마다 실행 (UTC)
+    - cron: "0 */6 * * *"
 
 permissions:
-  contents: write              # git push 권한
+  contents: write      # git push 권한
 
 jobs:
   refresh:
@@ -26,11 +26,10 @@ jobs:
           npm ci || npm install
           mkdir -p data
 
-      # 레포 루트에 있는 ai_refresh.js 실행 (scripts/ 가 아님)
       - name: Run AI refresh script
         run: node ai_refresh.js
 
-      - name: Commit & Push updated thumbnails
+      - name: Commit & Push updated files
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
@@ -38,8 +37,7 @@ jobs:
           git commit -m "AI refresh thumbnails [skip ci]" || echo "No changes"
           git push
 
-      # (선택) Netlify 빌드 훅 — 레포 시크릿에 NETLIFY_BUILD_HOOK 가 있을 때만 호출
-      - name: Trigger Netlify build hook
+      - name: Trigger Netlify build hook (if set)
         if: ${{ secrets.NETLIFY_BUILD_HOOK != '' }}
         run: |
-          curl -X POST -d '{}' "${{ secrets.NETLIFY_BUILD_HOOK }}"
+          curl -X POST -d '{}' ${{ secrets.NETLIFY_BUILD_HOOK }}
