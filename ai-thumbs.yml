@@ -1,28 +1,37 @@
 name: AI Thumbnails Refresh
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:       # 수동 실행 가능
   schedule:
-    - cron: '0 0 * * *'
+    - cron: "0 */6 * * *"  # 6시간마다 자동 실행
 
 jobs:
-  build:
+  refresh:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v3
-      - name: Setup Node.js
+
+      - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'
+
       - name: Install dependencies
-        run: npm install
-      - name: Run refresh script
+        run: npm install axios fs
+
+      - name: Run AI refresh script
         run: node scripts/ai_refresh.js
-      - name: Commit & Push changes
+
+      - name: Commit & Push updated thumbnails
         run: |
-          git config user.name 'github-actions'
-          git config user.email 'actions@github.com'
-          git add data/sources.json
-          git commit -m "Auto-refresh thumbnails" || echo "No changes"
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add data/thumbnails.json
+          git commit -m "AI refresh thumbnails [skip ci]" || echo "No changes"
           git push
+
+      - name: Trigger Netlify build hook
+        run: |
+          curl -X POST -d {} ${{ secrets.NETLIFY_BUILD_HOOK }}
