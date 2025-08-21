@@ -1,5 +1,8 @@
 {
-  "name": "IGDC Hub Data",
-  "lastRefresh": null,
-  "items": []
+  "sources": [
+    {
+      "name": "Example Source",
+      "url": "https://example.com/api/data"
+    }
+  ]
 }
