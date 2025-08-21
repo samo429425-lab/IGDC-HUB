@@ -8,25 +8,34 @@ on:
 permissions:
   contents: write                 # push 권한
 
+concurrency:
+  group: ai-refresh               # 중복 실행 방지
+  cancel-in-progress: true
+
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    env:
+      BRANCH: main                # 기본 브랜치명 다르면 변경
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: true
-          ref: main               # 기본 브랜치 명이 다르면 수정
+          ref: ${{ env.BRANCH }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
-          cache: npm
+          node-version: '18'
+          cache: 'npm'
 
       - name: Install dependencies & prepare dir
-        shell: bash
         run: |
           set -e
           mkdir -p data
@@ -34,14 +43,22 @@ jobs:
             npm ci || npm install
           else
             npm init -y
-            npm install axios fs
+            # 필요한 외부 모듈만 설치 (fs는 내장 모듈이므로 설치 불필요)
+            npm install axios
           fi
 
       - name: Run AI refresh script
-        run: node ai_refresh.js    # scripts/ 경로면 수정: node scripts/ai_refresh.js
+        run: |
+          set -e
+          if [ -f ai_refresh.js ]; then
+            node ai_refresh.js
+          elif [ -f scripts/ai_refresh.js ]; then
+            node scripts/ai_refresh.js
+          else
+            echo "✖ ai_refresh.js not found in repo root or scripts/"; exit 1
+          fi
 
       - name: Commit & Push updated files (if any)
-        shell: bash
         run: |
           set -e
           git config user.name  "github-actions"
@@ -49,12 +66,15 @@ jobs:
           git add -A
           if ! git diff --staged --quiet; then
             git commit -m "AI refresh [skip ci]"
-            git pull --rebase origin main
-            git push origin HEAD:main
+            git pull --rebase origin "$BRANCH"
+            git push origin HEAD:"$BRANCH"
           else
             echo "No changes"
           fi
 
       - name: Trigger Netlify build hook (if set)
-        if: ${{ secrets.NETLIFY_BUILD_HOOK }}
-        run: curl -X POST -d '{}' "${{ secrets.NETLIFY_BUILD_HOOK }}"
+        env:
+          NETLIFY_BUILD_HOOK: ${{ secrets.NETLIFY_BUILD_HOOK }}
+        if: ${{ env.NETLIFY_BUILD_HOOK != '' }}
+        run: |
+          curl -s -X POST -d '{}' "$NETLIFY_BUILD_HOOK"
