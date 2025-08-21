@@ -1,37 +1,41 @@
 name: AI Thumbnails Refresh
 
 on:
-  workflow_dispatch:       # 수동 실행 가능
-  schedule:
-    - cron: "0 */6 * * *"  # 6시간마다 자동 실행 (UTC 기준)
+workflow_dispatch: # 수동 실행 버튼
+schedule:
+- cron: "0 */6 * * *" # 6시간마다 자동 실행 (UTC)
 
 jobs:
-  refresh:
-    runs-on: ubuntu-latest
+refresh:
+runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+steps:
+- name: Checkout repository
+uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
+- name: Set up Node.js
+uses: actions/setup-node@v3
+with:
+node-version: '18'
 
-      - name: Install dependencies
-        run: npm install axios fs
+- name: Install dependencies
+run: npm install axios fs
 
-      - name: Run AI refresh script
-        run: node scripts/ai_refresh.js
+- name: Ensure data dir
+run: mkdir -p data
 
-      - name: Commit & Push updated thumbnails
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add data/thumbnails.json
-          git commit -m "AI refresh thumbnails [skip ci]" || echo "No changes"
-          git push
+- name: Run AI refresh script
+run: node ai_refresh.js
 
-      - name: Trigger Netlify build hook
-        run: |
-          curl -X POST -d {} ${{ secrets.NETLIFY_BUILD_HOOK }}
+- name: Commit & Push updated thumbnails
+run: |
+git config user.name "github-actions"
+git config user.email "github-actions@github.com"
+git add data/thumbnails.json || echo "no thumbnails.json"
+git commit -m "AI refresh thumbnails [skip ci]" || echo "No changes"
+git push
+
+# (선택) Netlify 빌드 훅 — 시크릿 NETLIFY_BUILD_HOOK 추가 후 주석 해제
+# - name: Trigger Netlify build hook
+# run: |
+# curl -X POST -d '{}' ${{ secrets.NETLIFY_BUILD_HOOK }}
