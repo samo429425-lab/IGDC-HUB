@@ -1,12 +1,12 @@
 name: AI Thumbnails Refresh
 
 on:
-  workflow_dispatch:   # 수동 실행 버튼
-  schedule:            # 6시간마다 실행 (UTC)
-    - cron: "0 */6 * * *"
+  workflow_dispatch:     # 수동 실행
+  schedule:
+    - cron: '0 */6 * * *'   # 6시간마다 (UTC)
 
 permissions:
-  contents: write      # git push 권한
+  contents: write
 
 jobs:
   refresh:
@@ -14,29 +14,51 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: true
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: 18
+          cache: npm
 
-      - name: Install dependencies & prepare dir
+      # package.json이 없으면 임시로 만들고 axios만 설치,
+      # 있으면 ci → 실패 시 install로 폴백
+      - name: Install dependencies
         run: |
-          npm ci || npm install
-          mkdir -p data
+          if [ -f package.json ]; then
+            npm ci || npm install
+          else
+            npm init -y
+            npm install axios
+          fi
 
+      # ai_refresh.js 위치 자동 탐지(루트 우선, 없으면 scripts/)
       - name: Run AI refresh script
-        run: node ai_refresh.js
+        run: |
+          if [ -f ai_refresh.js ]; then
+            node ai_refresh.js
+          elif [ -f scripts/ai_refresh.js ]; then
+            node scripts/ai_refresh.js
+          else
+            echo "❌ ai_refresh.js not found in repo root or scripts/"; exit 1
+          fi
 
+      # 변경이 있을 때만 커밋/푸시
       - name: Commit & Push updated files
         run: |
-          git config user.name "github-actions"
+          git config user.name  "github-actions"
           git config user.email "github-actions@github.com"
           git add -A
-          git commit -m "AI refresh thumbnails [skip ci]" || echo "No changes"
-          git push
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "AI refresh [skip ci]"
+            git push
+          fi
 
+      # 선택: Netlify 빌드 훅
       - name: Trigger Netlify build hook (if set)
         if: ${{ secrets.NETLIFY_BUILD_HOOK != '' }}
         run: |
