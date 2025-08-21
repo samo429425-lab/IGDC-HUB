@@ -1,12 +1,12 @@
 name: AI Thumbnails Refresh
 
 on:
-  workflow_dispatch:     # 수동 실행
+  workflow_dispatch:              # 수동 실행
   schedule:
-    - cron: '0 */6 * * *'   # 6시간마다 (UTC)
+    - cron: '0 */6 * * *'         # 6시간마다 (UTC)
 
 permissions:
-  contents: write
+  contents: write                 # push 권한
 
 jobs:
   refresh:
@@ -15,7 +15,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           persist-credentials: true
+          ref: main               # 기본 브랜치 명이 다르면 수정
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -23,43 +25,36 @@ jobs:
           node-version: 18
           cache: npm
 
-      # package.json이 없으면 임시로 만들고 axios만 설치,
-      # 있으면 ci → 실패 시 install로 폴백
-      - name: Install dependencies
+      - name: Install dependencies & prepare dir
+        shell: bash
         run: |
+          set -e
+          mkdir -p data
           if [ -f package.json ]; then
             npm ci || npm install
           else
             npm init -y
-            npm install axios
+            npm install axios fs
           fi
 
-      # ai_refresh.js 위치 자동 탐지(루트 우선, 없으면 scripts/)
       - name: Run AI refresh script
-        run: |
-          if [ -f ai_refresh.js ]; then
-            node ai_refresh.js
-          elif [ -f scripts/ai_refresh.js ]; then
-            node scripts/ai_refresh.js
-          else
-            echo "❌ ai_refresh.js not found in repo root or scripts/"; exit 1
-          fi
+        run: node ai_refresh.js    # scripts/ 경로면 수정: node scripts/ai_refresh.js
 
-      # 변경이 있을 때만 커밋/푸시
-      - name: Commit & Push updated files
+      - name: Commit & Push updated files (if any)
+        shell: bash
         run: |
+          set -e
           git config user.name  "github-actions"
           git config user.email "github-actions@github.com"
           git add -A
-          if git diff --staged --quiet; then
-            echo "No changes to commit."
-          else
+          if ! git diff --staged --quiet; then
             git commit -m "AI refresh [skip ci]"
-            git push
+            git pull --rebase origin main
+            git push origin HEAD:main
+          else
+            echo "No changes"
           fi
 
-      # 선택: Netlify 빌드 훅
       - name: Trigger Netlify build hook (if set)
-        if: ${{ secrets.NETLIFY_BUILD_HOOK != '' }}
-        run: |
-          curl -X POST -d '{}' ${{ secrets.NETLIFY_BUILD_HOOK }}
+        if: ${{ secrets.NETLIFY_BUILD_HOOK }}
+        run: curl -X POST -d '{}' "${{ secrets.NETLIFY_BUILD_HOOK }}"
