@@ -1,43 +1,45 @@
 name: AI Thumbnails Refresh
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:           # 수동 실행 버튼
   schedule:
-    - cron: "0 */6 * * *"
+    - cron: "0 */6 * * *"      # 6시간마다 실행 (UTC)
 
 permissions:
-  contents: write
+  contents: write              # git push 권한
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
+          cache: 'npm'
 
-      - name: Install dependencies
-        run: npm install axios fs
+      - name: Install dependencies & prepare dir
+        run: |
+          npm ci || npm install
+          mkdir -p data
 
-      # ✅ 레포 루트에 있는 파일로 경로 수정
+      # 레포 루트에 있는 ai_refresh.js 실행 (scripts/ 가 아님)
       - name: Run AI refresh script
         run: node ai_refresh.js
 
-      # ✅ 바뀐 모든 파일을 안전하게 추가
-      - name: Commit & Push updated files
+      - name: Commit & Push updated thumbnails
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add -A
-          git commit -m "AI refresh [skip ci]" || echo "No changes"
+          git commit -m "AI refresh thumbnails [skip ci]" || echo "No changes"
           git push
 
-      # ✅ Netlify 훅이 있으면만 실행(없으면 건너뜀)
-      - name: Trigger Netlify build hook (if set)
+      # (선택) Netlify 빌드 훅 — 레포 시크릿에 NETLIFY_BUILD_HOOK 가 있을 때만 호출
+      - name: Trigger Netlify build hook
         if: ${{ secrets.NETLIFY_BUILD_HOOK != '' }}
         run: |
-          curl -X POST -d {} "${{ secrets.NETLIFY_BUILD_HOOK }}"
+          curl -X POST -d '{}' "${{ secrets.NETLIFY_BUILD_HOOK }}"
