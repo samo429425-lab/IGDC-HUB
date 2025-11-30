@@ -1,3 +1,6 @@
-/*
-  Access-Control-Allow-Origin: *
-  Cache-Control: max-age=300
+/index.html
+  Cache-Control: no-store, no-cache, must-revalidate, max-age=0
+/404.html
+  Cache-Control: no-store, no-cache, must-revalidate, max-age=0
+/sw-nuke.html
+  X-Robots-Tag: noindex, nofollow, noarchive

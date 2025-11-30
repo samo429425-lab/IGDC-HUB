@@ -1,0 +1,12 @@
+{
+  "autoLatest": true,
+  "adPanelMobileIndex": 10,
+  "ads": {
+    "mode": "AUTO",
+    "providers": {
+      "direct": true,
+      "affiliate": false,
+      "gads": true
+    }
+  }
+}

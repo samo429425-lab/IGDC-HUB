@@ -1,0 +1,31 @@
+<!doctype html><meta charset="utf-8"><title>SW Nuke</title>
+<meta name="robots" content="noindex,nofollow,noarchive">
+<style>body{font-family:system-ui;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}</style>
+<div><button id="run">Nuke 실행</button> <span id="log"></span></div>
+<script>
+async function nuke(){
+  try{
+    if('serviceWorker' in navigator){
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r=>r.unregister()));
+    }
+    if('caches' in window && caches.keys){
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k=>caches.delete(k)));
+    }
+    try{localStorage.clear();}catch(e){}
+    try{sessionStorage.clear();}catch(e){}
+    if('indexedDB' in window && indexedDB.databases){
+      try{
+        const dbs = await indexedDB.databases();
+        await Promise.all((dbs||[]).map(d=>{ try{ indexedDB.deleteDatabase(d.name); }catch(e){} }));
+      }catch(e){}
+    }
+    document.getElementById('log').textContent='완료, 이동 중…';
+  }finally{
+    setTimeout(()=>location.replace('/?reset='+Date.now()), 300);
+  }
+}
+document.getElementById('run').addEventListener('click', nuke);
+if (new URLSearchParams(location.search).get('run')==='1') nuke();
+</script>

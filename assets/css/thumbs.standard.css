@@ -1,0 +1,27 @@
+
+/* Standardize thumbnail card sizing across lists/grids/rows and ad panels */
+.thumb-list .thumb-card,
+.thumb-grid .thumb-card,
+.thumb-row .thumb-card,
+.ad-list .thumb-card {
+  display: block;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+/* Force consistent image box: 16:9, cover */
+.thumb-list .thumb-card img,
+.thumb-grid .thumb-card img,
+.thumb-row .thumb-card img,
+.ad-list .thumb-card img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  display: block;
+}
+
+/* Optional: consistent gap if parent uses flex/grid */
+.thumb-list, .thumb-grid, .thumb-row, .ad-list {
+  gap: 12px;
+}

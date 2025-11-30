@@ -1,0 +1,32 @@
+{
+  "sections": [
+    {
+      "id": "recommend",
+      "items": []
+    },
+    {
+      "id": "ads",
+      "items": []
+    },
+    {
+      "id": "trending",
+      "items": []
+    },
+    {
+      "id": "new",
+      "items": []
+    },
+    {
+      "id": "special",
+      "items": []
+    },
+    {
+      "id": "others",
+      "items": []
+    },
+    {
+      "id": "mobile-ads",
+      "items": []
+    }
+  ]
+}

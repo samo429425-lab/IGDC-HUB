@@ -1,0 +1,35 @@
+{
+  "cards": [
+    {
+      "id": "beauty_serum_001",
+      "title": "로즈 인텐스 세럼 50ml",
+      "url": "https://supplier.example.com/rose-serum-50",
+      "thumb": "/assets/img/ads/rose_serum_50.jpg",
+      "brand": "FloraLab",
+      "price": "₩29,000",
+      "platform": "direct",
+      "label": "recommended",
+      "category": "beauty",
+      "estConversionRate": 0.032,
+      "marginClass": "High",
+      "supplierTrust": 0.92,
+      "expiresAt": "2026-12-31"
+    },
+    {
+      "id": "apparel_tee_001",
+      "title": "프리미엄 코튼 티셔츠",
+      "url": "https://supplier.example.com/tee-001",
+      "thumb": "/assets/img/ads/tee_001.jpg",
+      "brand": "WearLab",
+      "price": "₩19,800",
+      "platform": "direct",
+      "label": "recommended",
+      "category": "apparel",
+      "estConversionRate": 0.031,
+      "marginClass": "High",
+      "supplierTrust": 0.91,
+      "expiresAt": "2026-12-31"
+    }
+  ],
+  "networkSlots": []
+}

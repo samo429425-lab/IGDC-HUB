@@ -1,0 +1,11 @@
+/* 768px 이하 모바일 최적화 */
+@media (max-width:768px){
+  nav{flex-wrap:wrap}
+  .language-select{position:static;margin:8px 12px}
+  iframe{height:65vh}
+  .container{flex-direction:column}
+  .sidebar{width:100%; max-width:100%; padding-top:12px}
+  .main-content{max-width:100%; margin:12px auto; padding:18px 14px}
+  .ad-panel{width:100%; order:3; margin-top:8px}
+  .ad-box{height:96px; line-height:88px}
+}

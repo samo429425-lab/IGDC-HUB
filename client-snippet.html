@@ -1,0 +1,15 @@
+<!-- Paste this small snippet inside each card page (change ?page=NEWSNAME) -->
+<script>
+(async function(){
+  const pageName = window.CARD_PAGE || 'news'; // set per page: window.CARD_PAGE='shopping'
+  const res = await fetch('/api/feed?page=' + pageName, { cache:'no-store' });
+  const data = await res.json();
+  const items = data.items || [];
+  const el = document.getElementById('cards') || document.body;
+  el.innerHTML = items.map(i => `<article class="card">
+    <img src="${i.image}" alt="${i.title}" loading="lazy">
+    <h3>${i.title}</h3>
+    <p>${i.subtitle||''}</p>
+  </article>`).join('');
+})();
+</script>

@@ -1,0 +1,22 @@
+{
+  "networkSlots": [
+    {
+      "slotId": "gads-right-1",
+      "provider": "gads",
+      "size": [
+        300,
+        250
+      ],
+      "media": "display"
+    },
+    {
+      "slotId": "gads-right-2",
+      "provider": "gads",
+      "size": [
+        300,
+        600
+      ],
+      "media": "display"
+    }
+  ]
+}
