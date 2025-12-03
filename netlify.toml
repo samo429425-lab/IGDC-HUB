@@ -1,0 +1,14 @@
+# netlify_relaxed.toml — 완화된 CSP (https 전반 허용)
+# 여러 포털/플랫폼을 넓게 쓰기 위해 https 전체, data/blob, wss 허용
+[build]
+  publish = "."
+  functions = "netlify/functions"
+  command = "npm run build"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  included_files = ["netlify/functions/**"]
+
+[build.environment]
+  NODE_VERSION = "20"
