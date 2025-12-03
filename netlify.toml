@@ -1,22 +1,14 @@
 # netlify_relaxed.toml — 완화된 CSP (https 전반 허용)
 # 여러 포털/플랫폼을 넓게 쓰기 위해 https 전체, data/blob, wss 허용
-[[headers]]
-  for = "/*"
-  [headers.values]
-    Content-Security-Policy = "default-src 'self' https: data: blob: wss:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' https: data: blob:; connect-src 'self' https: wss:; font-src 'self' https: data:; frame-src 'self' https:; media-src 'self' https: blob:; base-uri 'self'; form-action 'self' https:"
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "strict-origin-when-cross-origin"
-    Permissions-Policy = "geolocation=(), microphone=(), camera=(), payment=()"
-
 [build]
+  publish = "."
   functions = "netlify/functions"
+  command = "npm run start"
 
 [functions]
-  directory   = "netlify/functions"
+  directory = "netlify/functions"
   node_bundler = "esbuild"
-  
-[functions]
-  node_bundler = "esbuild"
+  included_files = ["netlify/functions/**"]
 
 [build.environment]
   NODE_VERSION = "20"
