@@ -2,42 +2,71 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>Service Worker Nuke</title>
+  <title>Cache & Service Worker Nuke</title>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: #f6f7fb;
+      color: #222;
+      font-family: sans-serif;
+    }
+    button {
+      padding: 12px 28px;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      background: #0077ff;
+      color: white;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background: #005acc;
+    }
+    #msg {
+      margin-top: 16px;
+    }
+  </style>
 </head>
 <body>
-  <h2>Clearing Cache & Service Workers...</h2>
+  <h2>Service Worker & Cache Cleaner</h2>
+  <button id="nuke">🧹 Clear Cache Now</button>
+  <p id="msg"></p>
+
   <script>
     async function nukeEverything() {
+      const msg = document.getElementById("msg");
+      msg.innerText = "Clearing cache...";
       try {
-        // unregister all service workers
         const regs = await navigator.serviceWorker.getRegistrations();
         for (const reg of regs) await reg.unregister();
 
-        // clear all caches
         const cacheNames = await caches.keys();
         for (const name of cacheNames) await caches.delete(name);
 
-        // clear local/session storage
         localStorage.clear();
         sessionStorage.clear();
 
-        // clear IndexedDB
         if (window.indexedDB && indexedDB.databases) {
           const dbs = await indexedDB.databases();
           for (const db of dbs) indexedDB.deleteDatabase(db.name);
         }
 
-        // short delay to ensure completion
+        msg.innerText = "✅ Cache cleared. Reloading...";
         setTimeout(() => {
           const ts = Date.now();
           window.location.replace(`/?reset=${ts}`);
         }, 800);
       } catch (err) {
-        document.body.innerHTML += `<p style="color:red;">Error: ${err}</p>`;
+        msg.innerText = `❌ Error: ${err}`;
       }
     }
 
-    nukeEverything();
+    document.getElementById("nuke").addEventListener("click", nukeEverything);
   </script>
 </body>
 </html>
