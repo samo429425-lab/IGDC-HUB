@@ -12,3 +12,7 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  
+[dev]
+  command = "netlify dev"
+  functions = "netlify/functions"
