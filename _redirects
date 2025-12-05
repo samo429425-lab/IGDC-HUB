@@ -44,10 +44,12 @@
 /admin/api/log          /.netlify/functions/admin-log    200
 
 /.netlify/functions/*   /.netlify/functions/:splat       200
+/api/ai-diagnose    /.netlify/functions/ai-diagnose      200
 /api/igdc/core/inflow        /.netlify/functions/igdc-core-inflow        200
 /api/igdc/donations/recent   /.netlify/functions/igdc-donations-recent   200
-/api/*                       /.netlify/functions/:splat                  200
 /api/feed                    /.netlify/functions/feed                    200
+/api/*                       /.netlify/functions/:splat                  200
+
 
 /callback.html          /index.html                      200
 
