@@ -487,7 +487,7 @@
 <div aria-label="관리자용 Q&amp;A" id="igdc-qna-launch">
 <div class="box">
 <span style="font-weight:800;">관리자용 Q&amp;A</span>
-<button onclick="window.openAdminPanel &amp;&amp; openAdminPanel()" type="button">열기</button>
+<button onclick="window.openAdminPanel && openAdminPanel()" type="button">열기</button>
 </div>
 </div>
 </div>
@@ -517,7 +517,7 @@
 </div>
 <div style="background-color: #fff4e0; border: 1px solid #f3d9b0; border-radius: 8px; padding: 10px 20px; margin: 20px auto; text-align: left; display: flex; justify-content: flex-start; align-items: center; gap: 30px; color: #804000; font-weight: bold; max-width: 760px;">
 <span>💠 블록체인<br/>/ Web3 연동 </span>
-<button onclick="try{connectWallet&amp;&amp;connectWallet();}catch(e){} __openIG();" style="padding: 8px 14px; font-size: 0.85rem; background-color: white; border: 1px solid #ccc; border-radius: 5px; cursor: pointer;">
+<button onclick="try{connectWallet&&connectWallet();}catch(e){} __openIG();" style="padding: 8px 14px; font-size: 0.85rem; background-color: white; border: 1px solid #ccc; border-radius: 5px; cursor: pointer;">
   🔌 지갑 연결
 </button>
 <span id="walletStatus" style="font-weight: bold;">상 태 -<br/>미연결</span>
@@ -1096,19 +1096,25 @@ window.connectWallet = window.connectWallet || function(){
 };
 </script>
 <script>
-(function(){
-  function setText(id, val){ var el=document.getElementById(id); if(el) el.(/<br\/?>/i.test(val)? (el.innerHTML = val) : (el.textContent = val)); }
-  function applySnapshot(snap){
-    if(!snap) return;
-    setText('walletStatus', '상태: ' + (snap.status || '미연결'));
-    setText('walletNetwork', '네트워크: ' + (snap.network || '-'));
-    setText('walletAddress', '주소: ' + (snap.address ? (snap.address.slice(0,6)+'…'+snap.address.slice(-4)) : '-'));
+(function () {
+  function setText(id, val) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    if (val == null) { val = ""; }
+    else if (typeof val !== "string") { val = String(val); }
+    if (/<br\s*\/?>/i.test(val)) { el.innerHTML = val; }
+    else { el.textContent = val; }
   }
-  window.addEventListener('IGDC_WALLET_SNAPSHOT', function(ev){
-    try{ applySnapshot(ev.detail||{}); }catch(e){}
+  function applySnapshot(snap) {
+    if (!snap) return;
+    setText("walletStatus", "상태: " + (snap.status || "미연결"));
+    setText("walletNetwork", "네트워크: " + (snap.network || "-"));
+    setText("walletAddress", "주소: " + (snap.address ? (snap.address.slice(0, 6) + "…" + snap.address.slice(-4)) : "-"));
+  }
+  window.addEventListener("IGDC_WALLET_SNAPSHOT", function (ev) {
+    try { applySnapshot(ev.detail || {}); } catch (e) {}
   });
-  // 초기 표시는 미연결
-  applySnapshot({status:'미연결', network:'-', address:''});
+  applySnapshot({ status: "미연결", network: "-", address: "" });
 })();
 </script>
 <script>
@@ -1159,6 +1165,13 @@ window.connectWallet = window.connectWallet || function(){
 })();
 </script>
 <!-- === IGDC 관리자용 Q&A (title-right launcher + popup) === -->
+<script id="igdc-qa-config">
+(function(){
+  var baseConfig={url:"https://iuxvjxyeriagkjtdcrom.supabase.co",project:"IGDC",pageId:null,aiEndpoint:null};
+  var anonKey=(window.IGDC_ENV&&window.IGDC_ENV.SUPABASE_ANON_KEY)||"";
+  window.SUPER_VARSAR=Object.assign(window.SUPER_VARSAR||{},baseConfig,{anonKey:anonKey});
+})();
+</script>
 <script>
 (function(){
   if (window.__IGDC_ADMIN_QNA_TITLERIGHT__) return;
@@ -1388,80 +1401,10 @@ window.connectWallet = window.connectWallet || function(){
 })();
 <\/script>
 
-
-<div id="payments-view" style="padding:12px"></div>
-
-
-<!-- payments-viewer-v1 (read-only list + optional refund) -->
-<script id="payments-viewer-v1">
-(function(){
-  var SV = window.SUPER_VARSAR || window.SUPABASE_VARS || {};
-  function ensureScript(src, id){
-    return new Promise(function(res, rej){
-      if(document.getElementById(id)) return res();
-      var s=document.createElement('script'); s.id=id; s.src=src; s.defer=true;
-      s.onload=res; s.onerror=function(){rej(new Error('load fail: '+src));};
-      document.head.appendChild(s);
-    });
-  }
-  async function main(){
-    try{
-      var mount = document.getElementById('payments-view'); if(!mount) return;
-      if(!(SV.url && SV.anonKey)){
-        mount.innerHTML = '<div style="background:#fff3cd;border:1px solid #ffeeba;padding:10px;border-radius:8px">Supabase 환경변수가 없어 결제내역을 표시할 수 없습니다. (SUPABASE_URL / SUPABASE_ANON_KEY)</div>';
-        return;
-      }
-      await ensureScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2', 'sbjs');
-      var supabase = window.supabase.createClient(SV.url, SV.anonKey);
-      mount.innerHTML = '<div style="font-weight:700;margin-bottom:8px">결제 내역 (최근 100건)</div><div id="pv-table" style="overflow:auto;max-height:60vh;border:1px solid #eee;border-radius:8px"></div>';
-      async function refresh(){
-        var { data, error } = await supabase.from('payments').select('*').order('created_at', {ascending:false}).limit(100);
-        if(error){ document.getElementById('pv-table').innerHTML = '<div style="color:#b00">'+(error.message||'조회 오류')+'</div>'; return; }
-        var rows = Array.isArray(data)? data: [];
-        var html = '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'+
-                   '<th style="text-align:left;padding:8px;border-bottom:1px solid #eee">created</th>'+
-                   '<th style="text-align:left;padding:8px;border-bottom:1px solid #eee">provider</th>'+
-                   '<th style="text-align:right;padding:8px;border-bottom:1px solid #eee">amount</th>'+
-                   '<th style="text-align:left;padding:8px;border-bottom:1px solid #eee">currency</th>'+
-                   '<th style="text-align:left;padding:8px;border-bottom:1px solid #eee">status</th>'+
-                   '<th style="text-align:left;padding:8px;border-bottom:1px solid #eee">user</th>'+
-                   '<th style="text-align:left;padding:8px;border-bottom:1px solid #eee">role</th>'+
-                   '<th style="text-align:left;padding:8px;border-bottom:1px solid #eee">id</th>'+
-                   '<th style="text-align:center;padding:8px;border-bottom:1px solid #eee">ops</th>'+
-                   '</tr></thead><tbody>';
-        html += rows.map(function(r){
-          var rid = (r.id||'').toString().slice(0,12);
-          return '<tr>'+
-            '<td style="padding:6px;border-bottom:1px solid #f3f3f3">'+(r.created_at||'')+'</td>'+
-            '<td style="padding:6px;border-bottom:1px solid #f3f3f3">'+(r.provider||'')+'</td>'+
-            '<td style="padding:6px;border-bottom:1px solid #f3f3f3;text-align:right">'+(r.amount||0)+'</td>'+
-            '<td style="padding:6px;border-bottom:1px solid #f3f3f3">'+(r.currency||'')+'</td>'+
-            '<td style="padding:6px;border-bottom:1px solid #f3f3f3">'+(r.status||'')+'</td>'+
-            '<td style="padding:6px;border-bottom:1px solid #f3f3f3">'+(r.user_id||'')+'</td>'+
-            '<td style="padding:6px;border-bottom:1px solid #f3f3f3">'+(r.role||'')+'</td>'+
-            '<td style="padding:6px;border-bottom:1px solid #f3f3f3">'+rid+'</td>'+
-            '<td style="padding:6px;border-bottom:1px solid #f3f3f3;text-align:center">'+
-            '<button data-id="'+(r.id||'')+'" class="pv-refund" style="font-size:11px">refund</button>'+
-            '</td>'+
-          '</tr>';
-        }).join('') + '</tbody></table>';
-        document.getElementById('pv-table').innerHTML = html;
-        Array.prototype.forEach.call(document.querySelectorAll('.pv-refund'), function(btn){
-          btn.addEventListener('click', async function(){
-            var id = this.getAttribute('data-id'); if(!id) return;
-            try{
-              const r = await fetch('/.netlify/functions/refund', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id:id })});
-              const res = await r.json();
-              if(res && res.ok){ alert('Refund OK'); refresh(); }
-              else{ alert('Refund failed: '+(res && res.code || 'ERROR')); }
-            }catch(e){ alert('Refund error'); }
-          });
-        });
-      }
-      refresh();
-    }catch(e){ console.error(e); }
-  }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', main, {once:true}); else main();
+</body></html>`);
+    pop.document.close();
+    return pop;
+  };
 })();
 </script>
 </body></html>`);
@@ -1961,5 +1904,7 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
 </script>
 
 <script src="assets/js/igdc-site-control.js"></script>
+
+
 </body>
 </html>
