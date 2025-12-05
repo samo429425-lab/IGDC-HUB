@@ -2382,7 +2382,7 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
   (function () {
     // 1) 민감 정보 없는 기본 설정
     const baseConfig = {
-      url: "https://iuxvjxyeriagkjtdcrom.supabase.co", // 기본 Supabase URL (env에 없을 때만 사용)
+      url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "",
       project: "IGDC",
       pageId: null,
       aiEndpoint: null

@@ -2377,6 +2377,75 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
 })();
 </script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/assets/js/igdc-core.min.js"></script>
+
+<script id="igdc-qa-config">
+  (function () {
+    // 1) 민감 정보 없는 기본 설정
+    const baseConfig = {
+      url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "",
+      project: "IGDC",
+      pageId: null,
+      aiEndpoint: null
+    };
+
+    // Supabase 환경을 SUPER_VARSAR에 적용하는 함수
+    function applyConfig(env) {
+      const url =
+        (env && env.SUPABASE_URL) ||
+        baseConfig.url;
+
+      const anonKey =
+        (env && env.SUPABASE_ANON_KEY) ||
+        "";
+
+      if (!anonKey) {
+        console.warn("[IGDC] Supabase anonKey is not configured.");
+      }
+
+      // Q&A 메인 스크립트가 참고하는 전역 설정
+      window.SUPER_VARSAR = Object.assign(
+        window.SUPER_VARSAR || {},
+        baseConfig,
+        {
+          url: url,
+          anonKey: anonKey
+        }
+      );
+    }
+
+    // 2) 이미 전역에 IGDC_ENV가 있으면(로컬 테스트용 등) 우선 사용
+    if (window.IGDC_ENV &&
+        (window.IGDC_ENV.SUPABASE_ANON_KEY || window.IGDC_ENV.SUPABASE_URL)) {
+      applyConfig(window.IGDC_ENV);
+      return;
+    }
+
+    // 3) 없으면 Netlify Functions에서 환경변수 읽어오기
+    //    secureEnvBridge는 Netlify env의 SUPABASE_URL / SUPABASE_ANON_KEY를 JSON으로 반환한다고 가정
+    var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
+
+    fetch(endpoint, { cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("http " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        // { env: { SUPABASE_URL: "...", SUPABASE_ANON_KEY: "..." } } 또는 평평한 구조 모두 대응
+        var env = data && (data.env || data) || {};
+        // 한 번 받아온 값은 전역에도 저장 (다른 스크립트에서 재사용 가능)
+        window.IGDC_ENV = Object.assign(window.IGDC_ENV || {}, env);
+        applyConfig(window.IGDC_ENV);
+        console.log("[IGDC] Supabase env loaded from secureEnvBridge.");
+      })
+      .catch(function (err) {
+        console.warn("[IGDC] Failed to load Supabase env:", err && err.message);
+        // 실패해도 페이지가 깨지지 않도록 기본값만 적용
+        applyConfig(null);
+      });
+  })();
+</script>
 <script>
 (function(){
   function hideLitLinks(){
