@@ -1,52 +1,42 @@
-// netlify/functions/ai-diagnose.js
+// /netlify/functions/ai-diagnose.js
+// Admin 패널 호환 진단 엔드포인트
+// - 비밀값 미노출
+// - summary / summaryText 모두 제공(패널 호환성)
+exports.handler = async () => {
+  const hasOpenAI = !!process.env.OPENAI_API_KEY;
+  const hasSupabaseUrl = !!process.env.SUPABASE_URL;
+  const hasSupabaseAnon = !!process.env.SUPABASE_ANON_KEY;
 
+  const items = [
+    hasOpenAI ? "OPENAI_API_KEY OK" : "OPENAI_API_KEY MISSING",
+    hasSupabaseUrl ? "SUPABASE_URL OK" : "SUPABASE_URL MISSING",
+    hasSupabaseAnon ? "SUPABASE_ANON_KEY OK" : "SUPABASE_ANON_KEY MISSING",
+  ];
 
-exports.handler = async function () {
-try {
-const openaiKey = process.env.OPENAI_API_KEY || process.env.IGDC_OPENAI_KEY;
+  const ok = hasOpenAI && hasSupabaseUrl && hasSupabaseAnon;
 
+  const payload = {
+    endpoint: "/api/ai-diagnose",
+    ok,
+    status: ok ? "정상 작동 중" : "설정 필요",
+    summary: items,                                 // array
+    summaryText: items.join(" | "),                 // 패널 요약 문자열
+    env: {
+      OPENAI_API_KEY: hasOpenAI ? "✔ loaded (hidden)" : "✖ missing",
+      SUPABASE_URL: hasSupabaseUrl ? "✔ loaded (hidden)" : "✖ missing",
+      SUPABASE_ANON_KEY: hasSupabaseAnon ? "✔ loaded (hidden)" : "✖ missing",
+      NODE_VERSION: process.version
+    },
+    ts: new Date().toISOString()
+  };
 
-if (!openaiKey) {
-return {
-statusCode: 500,
-headers: { "content-type": "application/json; charset=utf-8" },
-body: JSON.stringify({
-error: "OPENAI_API_KEY (또는 IGDC_OPENAI_KEY) 환경변수가 설정되어 있지 않습니다.",
-}),
-};
-}
-
-
-// 간단한 자기 진단용 데이터 (selfcheck 제거 버전)
-const selfcheckJson = {
-ok: true,
-note: "Selfcheck 기능은 비활성화되어 있습니다.",
-ts: new Date().toISOString(),
-};
-
-
-// AI 환경 진단 요약
-const summary = {
-endpoint: "/api/ai-diagnose",
-status: "정상 작동 중",
-env: {
-OPENAI_API_KEY: !!openaiKey,
-NODE_VERSION: process.version,
-},
-selfcheck: selfcheckJson,
-};
-
-
-return {
-statusCode: 200,
-headers: { "content-type": "application/json; charset=utf-8" },
-body: JSON.stringify(summary, null, 2),
-};
-} catch (error) {
-return {
-statusCode: 500,
-headers: { "content-type": "application/json; charset=utf-8" },
-body: JSON.stringify({ error: String(error) }),
-};
-}
+  return {
+    statusCode: 200,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Access-Control-Allow-Origin": "*",
+    },
+    body: JSON.stringify(payload, null, 2)
+  };
 };
