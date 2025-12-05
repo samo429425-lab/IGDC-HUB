@@ -5055,7 +5055,7 @@ footer{
   (function () {
     // 1) 민감정보 없는 기본 설정
     const baseConfig = {
-      url: "https://iuxvjxyeriagkjtdcrom.supabase.co",
+      url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "",
       project: "IGDC",
       pageId: null,
       aiEndpoint: null
