@@ -8,7 +8,7 @@
   (function () {
     // 1) 기본값 (민감정보 없음)
     const defaultConfig = {
-      url: "https://iuxvjxyeriagkjtdcrom.supabase.co",
+      url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "",
       anonKey: ""
     };
 
