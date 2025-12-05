@@ -1238,14 +1238,69 @@ a[href^="mailto:"]:hover {
 .sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
 </style>
 <script id="igdc-qa-config">
-window.SUPER_VARSAR = Object.assign(window.SUPER_VARSAR||{}, {
-  url: "https://iuxvjxyeriagkjtdcrom.supabase.co",
-  anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1eHZqeHllcmlhZ2tqdGRjcm9tIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NTM0ODUwMCwiZXhwIjoyMDcwOTI0NTAwfQ.a0spncjSkvfuU50BpsTbtHCCAQaBykvNmjT-QmB_6WU",
-  project: "IGDC",
-  pageId: null,
-  aiEndpoint: null
-});
+  (function () {
+    // 1) 민감정보 없는 기본 설정
+    const baseConfig = {
+      url: "https://iuxvjxyeriagkjtdcrom.supabase.co",
+      project: "IGDC",
+      pageId: null,
+      aiEndpoint: null
+    };
+
+    // Supabase 환경을 SUPER_VARSAR에 적용하는 함수
+    function applyConfig(env) {
+      const url =
+        (env && env.SUPABASE_URL) ||
+        baseConfig.url;
+
+      const anonKey =
+        (env && env.SUPABASE_ANON_KEY) ||
+        "";
+
+      if (!anonKey) {
+        console.warn("[IGDC] Supabase anonKey is not configured.");
+      }
+
+      window.SUPER_VARSAR = Object.assign(
+        window.SUPER_VARSAR || {},
+        baseConfig,
+        {
+          url: url,
+          anonKey: anonKey
+        }
+      );
+    }
+
+    // 2) 이미 window.IGDC_ENV가 있다면(로컬 테스트 등) 그걸 우선 사용
+    if (window.IGDC_ENV &&
+        (window.IGDC_ENV.SUPABASE_ANON_KEY || window.IGDC_ENV.SUPABASE_URL)) {
+      applyConfig(window.IGDC_ENV);
+      return;
+    }
+
+    // 3) 없으면 Netlify Functions에서 환경변수 읽어오기
+    var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
+
+    fetch(endpoint, { cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("http " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        var env = data && (data.env || data);
+        window.IGDC_ENV = Object.assign(window.IGDC_ENV || {}, env || {});
+        applyConfig(window.IGDC_ENV);
+        console.log("[IGDC] Supabase env loaded from secureEnvBridge.");
+      })
+      .catch(function (err) {
+        console.warn("[IGDC] Failed to load Supabase env:", err && err.message);
+        applyConfig(null);
+      });
+  })();
 </script>
+
 <script id="igdc-qa-script">
 (function(){
   if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
