@@ -1166,10 +1166,38 @@ window.connectWallet = window.connectWallet || function(){
 </script>
 <!-- === IGDC 관리자용 Q&A (title-right launcher + popup) === -->
 <script id="igdc-qa-config">
-(function(){
-  var baseConfig={url:"https://iuxvjxyeriagkjtdcrom.supabase.co",project:"IGDC",pageId:null,aiEndpoint:null};
-  var anonKey=(window.IGDC_ENV&&window.IGDC_ENV.SUPABASE_ANON_KEY)||"";
-  window.SUPER_VARSAR=Object.assign(window.SUPER_VARSAR||{},baseConfig,{anonKey:anonKey});
+(function () {
+  // 민감정보 없는 기본값
+  var baseConfig = { url: "", project: "IGDC", pageId: null, aiEndpoint: null };
+
+  function applyEnv(env) {
+    var url  = (env && env.SUPABASE_URL) || "";
+    var anon = (env && env.SUPABASE_ANON_KEY) || "";
+    if (!url)  console.warn("[IGDC] SUPABASE_URL not configured.");
+    if (!anon) console.warn("[IGDC] SUPABASE_ANON_KEY not configured.");
+    window.SUPER_VARSAR = Object.assign({}, baseConfig, { url: url, anonKey: anon });
+  }
+
+  // 1) 로컬/사전 주입된 값 우선
+  if (window.IGDC_ENV && (window.IGDC_ENV.SUPABASE_URL || window.IGDC_ENV.SUPABASE_ANON_KEY)) {
+    applyEnv(window.IGDC_ENV);
+    return;
+  }
+
+  // 2) Netlify Functions에서 런타임 로드
+  var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
+  fetch(endpoint, { cache: "no-store" })
+    .then(function (res) { if (!res.ok) throw new Error("http " + res.status); return res.json(); })
+    .then(function (data) {
+      var env = (data && (data.env || data)) || {};
+      window.IGDC_ENV = Object.assign(window.IGDC_ENV || {}, env);
+      applyEnv(window.IGDC_ENV);
+      console.log("[IGDC] Supabase env loaded from secureEnvBridge.");
+    })
+    .catch(function (err) {
+      console.warn("[IGDC] Failed to load Supabase env:", err && err.message);
+      applyEnv(null);
+    });
 })();
 </script>
 <script>
