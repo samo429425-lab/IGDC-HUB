@@ -1141,46 +1141,63 @@ window.connectWallet = window.connectWallet || function(){
 </script>
 <script>
 (function(){
-  // 기본 샘플 (ledger 데이터가 없을 때 fallback)
-  var defaultDonationRows = [
-    { 항목: "일반 후원", 건수: 8,  금액: 240000 },
-    { 항목: "프로젝트 A", 건수: 3, 금액: 180000 },
-    { 항목: "기타",     건수: 2, 금액:  60000 }
-  ];
-
   function fmt(n){
-    try { return Number(n).toLocaleString('ko-KR'); }
-    catch(e){ return n; }
+    var num = Number(n);
+    if (!isFinite(num)) return n;
+    try {
+      return num.toLocaleString('ko-KR');
+    } catch(e) {
+      return num;
+    }
   }
 
   function renderDonationTable(rows){
+    var wrap = document.getElementById('donationTableWrap');
+    if (!wrap) return;
+
+    if (!rows || !rows.length) {
+      wrap.innerHTML = '<p style="margin:12px 0;">표시할 도네이션 데이터가 아직 없습니다.</p>';
+      return;
+    }
+
     var totalCnt = 0, totalAmt = 0;
     rows.forEach(function(r){
-      totalCnt += (r.건수||0);
-      totalAmt += (r.금액||0);
+      totalCnt += (r.건수 || 0);
+      totalAmt += (r.금액 || 0);
     });
-    var html = '<table class="donation-table"><thead><tr><th>항목</th><th>건수</th><th>금액(원)</th></tr></thead><tbody>';
+
+    var html = '<table class="donation-table"><thead><tr>'
+      + '<th>항목</th><th>건수</th><th>금액(원)</th>'
+      + '</tr></thead><tbody>';
+
     html += rows.map(function(r){
-      return '<tr><td>'+r.항목+'</td><td>'+fmt(r.건수)+'</td><td>'+fmt(r.금액)+'</td></tr>';
+      return '<tr>'
+        + '<td>' + r.항목 + '</td>'
+        + '<td>' + fmt(r.건수) + '</td>'
+        + '<td>' + fmt(r.금액) + '</td>'
+        + '</tr>';
     }).join('');
-    html += '</tbody><tfoot><tr><th>합계</th><th>'+fmt(totalCnt)+'</th><th>'+fmt(totalAmt)+'</th></tr></tfoot></table>';
-    var wrap = document.getElementById('donationTableWrap');
-    if(wrap) wrap.innerHTML = html;
+
+    html += '</tbody><tfoot><tr>'
+      + '<th>합계</th>'
+      + '<th>' + fmt(totalCnt) + '</th>'
+      + '<th>' + fmt(totalAmt) + '</th>'
+      + '</tr></tfoot></table>';
+
+    wrap.innerHTML = html;
   }
 
-  // ledger (/api/ledger)에서 넘어온 rows를 이용해 도네이션 요약 만들기
+  // ledger 데이터(백엔드 유입 rows)를 항목별로 묶어서 도네이션 요약으로 사용
   function buildRowsFromLedger(){
-    try{
+    try {
       var ledger = window.__IGDC_LEDGER_ROWS;
-      if(!Array.isArray(ledger) || !ledger.length) return null;
-
+      if (!Array.isArray(ledger) || !ledger.length) return [];
       var map = {};
 
       ledger.forEach(function(r){
         var src = (r.source || '').toLowerCase();
         var label;
-
-        switch(src){
+        switch (src) {
           case 'donation':
             label = '일반 후원';
             break;
@@ -1200,59 +1217,47 @@ window.connectWallet = window.connectWallet || function(){
           default:
             label = '기타';
         }
-
-        if(!map[label]){
+        if (!map[label]) {
           map[label] = { 항목: label, 건수: 0, 금액: 0 };
         }
         map[label].건수 += 1;
         map[label].금액 += Number(r.amount) || 0;
       });
 
-      var out = Object.keys(map).map(function(k){ return map[k]; });
-      if(!out.length) return null;
-      return out;
-    }catch(e){
-      return null;
+      return Object.keys(map).map(function(k){ return map[k]; });
+    } catch(e) {
+      return [];
     }
   }
 
-  function getDonationRows(){
-    // 1) ledger 기반 요약 시도
-    var fromLedger = buildRowsFromLedger();
-    if(fromLedger && fromLedger.length) return fromLedger;
-    // 2) 없으면 기존 샘플 사용
-    return defaultDonationRows;
+  function escHandler(e){
+    if (e.key === 'Escape') window.closeDonationModal();
   }
 
   window.openDonationModal = function(){
-    try{
-      var rows = getDonationRows();
-      renderDonationTable(rows);
-      var b = document.getElementById('donationBackdrop');
-      var m = document.getElementById('donationModal');
-      if(b) b.style.display = 'block';
-      if(m) m.style.display = 'grid';
-      document.addEventListener('keydown', escHandler);
-    }catch(e){
-      alert('팝업을 열 수 없습니다.');
-    }
+    var rows = buildRowsFromLedger();
+    renderDonationTable(rows);
+
+    var b = document.getElementById('donationBackdrop');
+    var m = document.getElementById('donationModal');
+    if (b) b.style.display = 'block';
+    if (m) m.style.display = 'grid';
+
+    document.addEventListener('keydown', escHandler);
     return false;
   };
 
   window.closeDonationModal = function(){
     var b = document.getElementById('donationBackdrop');
     var m = document.getElementById('donationModal');
-    if(b) b.style.display = 'none';
-    if(m) m.style.display = 'none';
+    if (b) b.style.display = 'none';
+    if (m) m.style.display = 'none';
     document.removeEventListener('keydown', escHandler);
     return false;
   };
-
-  function escHandler(e){
-    if(e.key === 'Escape') window.closeDonationModal();
-  }
 })();
 </script>
+
 
 <!-- === IGDC 관리자용 Q&A (title-right launcher + popup) === -->
 <script id="igdc-qa-config">
