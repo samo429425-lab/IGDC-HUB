@@ -795,24 +795,236 @@ function openPopup(url){
   return false;
 }
 </script>
-<!-- Donation popup (added minimally) -->
+<!-- Donation popup with table + chart -->
 <div aria-hidden="true" class="donation-backdrop" id="donationBackdrop"></div>
 <div aria-labelledby="donationTitle" aria-modal="true" class="donation-modal" id="donationModal" role="dialog">
-<div class="donation-sheet">
-<div class="donation-header">
-<h2 id="donationTitle" style="margin:0;font-size:1.1rem;">도네이션 요약</h2>
-<button aria-label="닫기" class="donation-close" onclick="closeDonationModal()">✕</button>
+  <div class="donation-sheet">
+    <div class="donation-header">
+      <h2 id="donationTitle" style="margin:0;font-size:1.1rem;">도네이션 요약</h2>
+      <button aria-label="닫기" class="donation-close" onclick="closeDonationModal()">✕</button>
+    </div>
+    <div class="donation-body">
+      <p class="donation-muted">최근 유입된 도네이션을 항목별로 간략히 정리했습니다.</p>
+
+      <!-- 막대 차트 영역 -->
+      <div id="donationChartWrap" style="margin-top:8px;margin-bottom:12px;">
+        <canvas id="donationChart" style="width:100%;max-height:220px;"></canvas>
+      </div>
+
+      <!-- 항목/건수/금액 표 -->
+      <div id="donationTableWrap"></div>
+
+      <div style="margin-top:12px; text-align:right;">
+        <button class="donation-close" onclick="closeDonationModal()">닫기</button>
+      </div>
+    </div>
+  </div>
 </div>
-<div class="donation-body">
-<p class="donation-muted">최근 유입된 도네이션을 항목별로 간략히 정리했습니다.</p>
-<div id="donationTableWrap"></div>
-<div style="margin-top:12px; text-align:right;">
-<button class="donation-close" onclick="closeDonationModal()">닫기</button>
-</div>
-</div>
-</div>
-</div>
+
+<!-- Chart.js (bar chart용) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
 <script>
+(function(){
+  // 숫자 포맷
+  function fmt(n){
+    var num = Number(n);
+    if (!isFinite(num)) return n;
+    try {
+      return num.toLocaleString('ko-KR');
+    } catch(e) {
+      return num;
+    }
+  }
+
+  // rows: [{항목, 건수, 금액}], isEmpty: 실제 유입이 하나도 없으면 true
+  function renderDonationTable(rows, isEmpty){
+    var wrap = document.getElementById('donationTableWrap');
+    if (!wrap) return;
+
+    if (!rows || !rows.length) {
+      wrap.innerHTML = '<p class="donation-muted" style="margin:8px 0;">표시할 도네이션 데이터가 아직 없습니다.</p>';
+      return;
+    }
+
+    var totalCnt = 0, totalAmt = 0;
+    rows.forEach(function(r){
+      totalCnt += (r.건수 || 0);
+      totalAmt += (r.금액 || 0);
+    });
+
+    var html = '';
+
+    // 아직 ledger 자체가 비어 있는 경우 안내 한 줄
+    if (isEmpty) {
+      html += '<p class="donation-muted" style="margin:8px 0 4px;">' +
+              '아직 실제 유입 데이터가 없어 모든 항목을 0으로 표시합니다.' +
+              '</p>';
+    }
+
+    html += '<table class="donation-table"><thead><tr>'
+      + '<th>항목</th>'
+      + '<th>건수</th>'
+      + '<th>금액(원)</th>'
+      + '</tr></thead><tbody>';
+
+    html += rows.map(function(r){
+      return '<tr>'
+        + '<td>' + r.항목 + '</td>'
+        + '<td>' + fmt(r.건수) + '</td>'
+        + '<td>' + fmt(r.금액) + '</td>'
+        + '</tr>';
+    }).join('');
+
+    html += '</tbody><tfoot><tr>'
+      + '<th>합계</th>'
+      + '<th>' + fmt(totalCnt) + '</th>'
+      + '<th>' + fmt(totalAmt) + '</th>'
+      + '</tr></tfoot></table>';
+
+    wrap.innerHTML = html;
+  }
+
+  // ledger → 고정 항목 6개로 집계
+  // 항목 순서: 일반 후원 / 지갑 후원 / 쿠팡 파트너스 / 카드·결제 / 미디어·광고 / 기타
+  function buildRowsFromLedger(){
+    var ORDER = ['일반 후원','지갑 후원','쿠팡 파트너스','카드/결제','미디어·광고','기타'];
+    var base = {};
+    ORDER.forEach(function(label){
+      base[label] = { 항목: label, 건수: 0, 금액: 0 };
+    });
+
+    var hasData = false;
+
+    try {
+      var ledger = window.__IGDC_LEDGER_ROWS;
+      if (Array.isArray(ledger)) {
+        ledger.forEach(function(r){
+          var src = (r.source || '').toLowerCase();
+          var label;
+          switch (src) {
+            case 'donation':
+              label = '일반 후원';
+              break;
+            case 'wallet':
+              label = '지갑 후원';
+              break;
+            case 'coupang':
+              label = '쿠팡 파트너스';
+              break;
+            case 'stripe':
+              label = '카드/결제';
+              break;
+            case 'ads':
+            case 'youtube':
+              label = '미디어·광고';
+              break;
+            default:
+              label = '기타';
+          }
+          hasData = true;
+          if (!base[label]) {
+            base[label] = { 항목: label, 건수: 0, 금액: 0 };
+          }
+          base[label].건수 += 1;
+          base[label].금액 += Number(r.amount) || 0;
+        });
+      }
+    } catch(e) {
+      // 에러 나면 hasData = false 그대로, 전부 0 으로 유지
+    }
+
+    var rows = ORDER.map(function(label){
+      return base[label] || { 항목: label, 건수: 0, 금액: 0 };
+    });
+
+    return { rows: rows, isEmpty: !hasData };
+  }
+
+  // 막대 차트 그리기 (Chart.js)
+  function renderDonationChart(rows){
+    var canvas = document.getElementById('donationChart');
+    if (!canvas || typeof Chart === 'undefined') return;
+
+    var labels  = rows.map(function(r){ return r.항목; });
+    var amounts = rows.map(function(r){ return r.금액 || 0; });
+
+    if (window.donationChart) {
+      window.donationChart.data.labels = labels;
+      window.donationChart.data.datasets[0].data = amounts;
+      window.donationChart.update();
+      return;
+    }
+
+    window.donationChart = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: '도네이션 금액(원)',
+          data: amounts
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: { precision: 0 }
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function(ctx){
+                var v = ctx.parsed.y || 0;
+                try {
+                  return v.toLocaleString('ko-KR') + '원';
+                } catch(e) {
+                  return v + '원';
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  function escHandler(e){
+    if (e.key === 'Escape') window.closeDonationModal();
+  }
+
+  // 팝업 열기/닫기 글로벌 함수
+  window.openDonationModal = function(){
+    var info = buildRowsFromLedger();
+    var rows = info.rows;
+
+    renderDonationTable(rows, info.isEmpty);
+    renderDonationChart(rows);
+
+    var b = document.getElementById('donationBackdrop');
+    var m = document.getElementById('donationModal');
+    if (b) b.style.display = 'block';
+    if (m) m.style.display = 'grid';
+
+    document.addEventListener('keydown', escHandler);
+    return false;
+  };
+
+  window.closeDonationModal = function(){
+    var b = document.getElementById('donationBackdrop');
+    var m = document.getElementById('donationModal');
+    if (b) b.style.display = 'none';
+    if (m) m.style.display = 'none';
+    document.removeEventListener('keydown', escHandler);
+    return false;
+  };
+})();
+</script>
+
 (function(){
   function el(html){ var d=document.createElement('div'); d.innerHTML=html; return d.firstElementChild; }
   function pill(s){ return '<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:#f0f0f0;margin-right:6px;font-size:12px;">'+s+'</span>'; }
@@ -875,65 +1087,155 @@ function openPopup(url){
 </script>
 <!-- IGDC minimal additions: wallet strip + backend inflow (hooks only) -->
 <style>
-  /* Non-intrusive styles for minimal additions */
-  .igdc-wallet-strip{display:flex;gap:10px;align-items:center;background:#fff4e0;border:1px solid #f3d9b0;border-radius:10px;padding:10px 12px;margin:12px 0;color:#804000;font-weight:700;}
-  .igdc-btn{padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-size:.9rem;}
-  .igdc-badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#f0f0f0;font-size:12px;margin-right:6px;}
-  /* Right-half inflow panel default (hidden until placed) */
-  #igdc-inflow-panel{background:#f7fbff;border:1px solid #cfe3ff;border-radius:12px;padding:10px 12px;display:none;}
-  #igdc-inflow-panel .muted{color:#666;font-size:.9rem;}
-  #igdc-inflow-panel table{width:100%;border-collapse:collapse;}
-  #igdc-inflow-panel th,#igdc-inflow-panel td{border-bottom:1px solid #eee;padding:6px 8px;text-align:left;}
+  /* ===== Wallet strip (상단 지갑 요약바, 이미 있으면 그대로 사용) ===== */
+  .igdc-wallet-strip{
+    display:flex;gap:10px;align-items:center;
+    background:#fff7ec;border:1px solid #ffd9a6;
+    border-radius:12px;padding:8px 12px;margin:10px 0;
+    font-size:.9rem;
+  }
+  .igdc-wallet-label{font-weight:700;margin-right:4px;}
+  .igdc-wallet-tag{display:inline-block;padding:2px 8px;border-radius:999px;background:#f3f3f3;font-size:11px;}
+
+  /* ===== 백엔드 유입 패널 기본 스타일 ===== */
+  #igdc-inflow-panel{
+    background:#f7fbff;
+    border:1px solid #cfe3ff;
+    border-radius:12px;
+    padding:10px 12px;
+    display:none;
+    font-size:.9rem;
+  }
+  #igdc-inflow-panel strong{font-size:1rem;}
+  #igdc-inflow-panel .muted{color:#666;font-size:.85rem;margin-top:4px;}
+  #igdc-inflow-panel .igdc-inflow-stats{
+    margin-top:6px;margin-bottom:6px;
+    display:flex;flex-wrap:wrap;gap:10px;
+  }
+  #igdc-inflow-panel .igdc-inflow-stats span{background:#eef4ff;border-radius:999px;padding:2px 8px;}
+  #igdc-inflow-panel table{width:100%;border-collapse:collapse;margin-top:4px;}
+  #igdc-inflow-panel th,#igdc-inflow-panel td{
+    border-bottom:1px solid #eee;
+    padding:4px 6px;
+    text-align:left;
+    vertical-align:top;
+  }
+  #igdc-inflow-panel th{background:#f0f4ff;font-weight:600;font-size:.85rem;}
+  #igdc-inflow-panel td{font-size:.85rem;}
+
+  .igdc-srccell{display:flex;flex-direction:column;gap:2px;}
+  .igdc-srccell-time{font-size:11px;color:#666;}
+  .igdc-srccell-tag{display:inline-block;background:#ffe8d2;border-radius:999px;padding:1px 6px;font-size:11px;}
+
+  /* 화면 오른쪽 아래에 떠 있는 플로팅 모드 (백엔드 상태를 찾지 못했을 때) */
+  .igdc-inflow-float{
+    position:fixed;
+    right:16px;
+    bottom:16px;
+    max-width:420px;
+    max-height:70vh;
+    overflow:auto;
+    box-shadow:0 8px 20px rgba(0,0,0,.15);
+    z-index:1200;
+    background:#f7fbff;
+  }
 </style>
+
 <script>
 (function(){
-  // === Wallet (hooks only, background-controlled) ===
-  var bar = document.getElementById('igdc-wallet-ui');
-  var openBtn = document.getElementById('igdc-wallet-open');
-  var s = document.getElementById('igdc-wallet-status');
-  var n = document.getElementById('igdc-wallet-network');
-  var a = document.getElementById('igdc-wallet-address');
+  /* ============================================================
+   * 1) 지갑 스트립: 백엔드에서 IGDC_WALLET_SNAPSHOT 이벤트로 상태 주입
+   * ============================================================ */
+  var walletBar   = document.getElementById('igdc-wallet-ui');
+  var walletState = document.getElementById('igdc-wallet-status');
+  var walletNet   = document.getElementById('igdc-wallet-network');
+  var walletAddr  = document.getElementById('igdc-wallet-address');
+  var walletOpen  = document.getElementById('igdc-wallet-open');
 
-  // Show strip if background says so
   function applyWalletSnapshot(snap){
-    if(!bar) return;
-    bar.hidden = false;
-    s && (document.getElementById('igdc-wallet-status').textContent = snap.status || s.textContent);
-    n && (document.getElementById('igdc-wallet-network').textContent = snap.network || '-');
-    a && (document.getElementById('igdc-wallet-address').textContent = snap.address ? (snap.address.slice(0,6)+'…'+snap.address.slice(-4)) : '-');
+    if(!walletBar) return;
+    walletBar.hidden = false;
+    if(walletState) walletState.textContent = snap.status || walletState.textContent || '상태: -';
+    if(walletNet)   walletNet.textContent   = snap.network || '-';
+    if(walletAddr){
+      var a = snap.address || '';
+      if(a && a.length > 10){
+        walletAddr.textContent = a.slice(0,6) + '…' + a.slice(-4);
+      }else{
+        walletAddr.textContent = a || '-';
+      }
+    }
   }
 
-  // Background can hydrate via this event
+  // 백엔드에서 window.dispatchEvent(new CustomEvent('IGDC_WALLET_SNAPSHOT',{detail:{...}}))
   window.addEventListener('IGDC_WALLET_SNAPSHOT', function(ev){
-    try{ applyWalletSnapshot(ev.detail||{}); }catch(e){}
+    try{ applyWalletSnapshot(ev.detail || {}); }catch(e){}
   });
 
-  if(openBtn){
-    openBtn.addEventListener('click', function(){
-      // Delegate to background
-      if(typeof window.IGDC_WALLET_OPEN === 'function'){ window.IGDC_WALLET_OPEN(); return; }
+  if(walletOpen){
+    walletOpen.addEventListener('click', function(){
+      if(typeof window.IGDC_WALLET_OPEN === 'function'){
+        window.IGDC_WALLET_OPEN();
+        return;
+      }
       alert('백그라운드 지갑 뷰어와 연동됩니다.');
     });
   }
 
-  // === Inflow panel placement (right-half of "백엔드 상태" box) ===
+  /* ============================================================
+   * 2) 백엔드 유입 패널: /api/ledger 연동 + 도네이션 팝업 공유
+   * ============================================================ */
+
+  // 2-1. 패널 DOM 생성 (없으면 새로 만든다)
   var inflow = document.getElementById('igdc-inflow-panel');
-  function tryPlace(){
+  if(!inflow){
+    inflow = document.createElement('section');
+    inflow.id = 'igdc-inflow-panel';
+    inflow.setAttribute('aria-label','백엔드 유입 상황');
+    inflow.innerHTML = '' +
+      '<strong>📥 백엔드 유입 상황</strong>' +
+      '<div class="muted">최근 24시간 기준 유입 내역입니다. (현재는 데모/샘플 데이터 기준)</div>' +
+      '<div class="igdc-inflow-stats">' +
+        '<span id="igdc-inflow-cnt">건수(24h): -</span>' +
+        '<span id="igdc-inflow-amt">금액(원, 24h): -</span>' +
+        '<span id="igdc-inflow-last">최근: -</span>' +
+      '</div>' +
+      '<div class="igdc-inflow-table-wrap">' +
+        '<table>' +
+          '<thead>' +
+            '<tr>' +
+              '<th>출처 / 시각</th>' +
+              '<th>유형</th>' +
+              '<th>금액</th>' +
+              '<th>통화</th>' +
+              '<th>메모</th>' +
+            '</tr>' +
+          '</thead>' +
+          '<tbody id="igdc-inflow-tbody"></tbody>' +
+        '</table>' +
+      '</div>';
+  }
+
+  // 2-2. "백엔드 상태" 박스를 찾아 그 안에 패널을 꽂거나, 실패 시 플로팅
+  function placeInflowPanel(){
     if(!inflow) return false;
-    // Find a container that has a heading including "백엔드 상태"
+
+    // 텍스트에 "백엔드 상태"가 포함된 박스를 찾는다
     var candidates = Array.from(document.querySelectorAll('*')).filter(function(el){
       try{
-        var t = (el.textContent||'').trim();
+        var t = (el.textContent || '').trim();
         if(!t) return false;
         return t.includes('백엔드 상태');
       }catch(e){ return false; }
     });
+
     if(candidates.length){
       var target = candidates[0];
-      // Create a two-column wrapper if not present (non-destructive: wrap visually using CSS grid)
-      target.style.display = target.style.display || 'grid';
-      target.style.gridTemplateColumns = target.style.gridTemplateColumns || '1fr 1fr';
-      target.style.gap = target.style.gap || '12px';
+      // 간단한 2열 그리드 배치 (백엔드 상태 + 유입 패널)
+      if(!target.style.display) target.style.display = 'grid';
+      if(!target.style.gridTemplateColumns) target.style.gridTemplateColumns = '1fr 1fr';
+      if(!target.style.gap) target.style.gap = '12px';
+
       inflow.style.display = 'block';
       target.appendChild(inflow);
       return true;
@@ -948,105 +1250,113 @@ function openPopup(url){
     document.body.appendChild(inflow);
   }
 
-  if(!tryPlace()) fallbackFloat();
+  if(!placeInflowPanel()) fallbackFloat();
 
-  // === Inflow feed (lightweight; background may override) ===
-  var $tb = document.getElementById('igdc-inflow-tbody');
-  var $cnt = document.getElementById('igdc-inflow-cnt');
-  var $amt = document.getElementById('igdc-inflow-amt');
+  // 2-3. DOM 레퍼런스
+  var $tb   = document.getElementById('igdc-inflow-tbody');
+  var $cnt  = document.getElementById('igdc-inflow-cnt');
+  var $amt  = document.getElementById('igdc-inflow-amt');
   var $last = document.getElementById('igdc-inflow-last');
 
-  function fmtAmt(n,c){
-    try{ return Number(n).toLocaleString('ko-KR') + (c? ' '+c:''); }
-    catch(e){ return n + (c? ' '+c:''); }
-  }
-  function isoToKST(s){
-    try{ var d = new Date(s); return d.toLocaleString('ko-KR'); }
-    catch(e){ return s; }
-  }
-
-  function render(rows){
-    if(!$tb) return;
-    $tb.innerHTML = rows.map(function(r){
-      var dt = isoToKST(r.ts);
-      var src = r.source || '';
-      return '<tr>'
-        + '<td><div class="igdc-srccell"><span class="igdc-srccell-time">'+dt+'</span><span class="igdc-srccell-tag">'+src+'</span></div></td>'
-        + '<td>'+ (r.kind||'') +'</td>'
-        + '<td>'+ fmtAmt(r.amount, r.ccy) +'</td>'
-        + '<td>'+ (r.ccy||'') +'</td>'
-        + '<td>'+ (r.note||'') +'</td>'
-      + '</tr>';
-    }).join('');
-    var total = rows.reduce(function(acc,x){ return acc + (Number(x.amount)||0); }, 0);
-    if($cnt) $cnt.textContent = '건수(24h): ' + rows.length;
-    if($amt) $amt.textContent = '금액(원, 24h): ' + fmtAmt(total, 'KRW');
-    if($last) $last.textContent = '최근: ' + (rows[0] ? isoToKST(rows[0].ts) : '-');
-
-    // 전역 캐시 (도네이션 팝업에서 재사용)
+  function fmtAmt(n, ccy){
+    var num = Number(n);
+    if(!isFinite(num)) return (n || '0') + (ccy ? ' ' + ccy : '');
     try{
-      window.__IGDC_LEDGER_ROWS = rows.slice();
-    }catch(e){}
-  }
-
-  // --- 기본 fallback (지금까지 쓰던 더미) ---
-  function fallback(){
-    var base = Date.now(),
-        src  = ['wallet','donation','coupang','stripe','ads','youtube'],
-        kind = ['deposit','donation','sale','payout'];
-    var rows = [];
-    for(var i=0;i<8;i++){
-      rows.push({
-        ts: new Date(base - i*3600*1000).toISOString(),
-        source: src[i%src.length],
-        kind: kind[i%kind.length],
-        amount: (i%3===0? 80000 : i%3===1? 150000 : 35000),
-        ccy: 'KRW',
-        note: (i%2===0? 'auto':'manual')
-      });
+      return num.toLocaleString('ko-KR') + (ccy ? ' ' + ccy : '');
+    }catch(e){
+      return num + (ccy ? ' ' + ccy : '');
     }
-    render(rows);
   }
 
-  // --- /api/ledger 에서 직접 불러오기 ---
-  function hydrateFromLedger(){
-    fetch('/api/ledger', { cache: 'no-store' })
+  function isoToKST(s){
+    try{
+      return new Date(s).toLocaleString('ko-KR');
+    }catch(e){
+      return s || '';
+    }
+  }
+
+  function showEmpty(){
+    // 전역 캐시는 비어 있는 배열로 세팅 (도네이션 팝업에서 사용)
+    try{ window.__IGDC_LEDGER_ROWS = []; }catch(e){}
+    if($tb){
+      $tb.innerHTML = '<tr><td colspan="5">최근 유입 데이터가 없습니다.</td></tr>';
+    }
+    if($cnt)  $cnt.textContent  = '건수(24h): 0';
+    if($amt)  $amt.textContent  = '금액(원, 24h): 0';
+    if($last) $last.textContent = '최근: -';
+  }
+
+  // 핵심: 항상 먼저 전역 캐시를 채우고, 그 다음 테이블을 그림
+  function render(rows){
+    var safe = Array.isArray(rows) ? rows : [];
+
+    // 1) 도네이션 팝업용 전역 캐시
+    try{ window.__IGDC_LEDGER_ROWS = safe.slice(); }catch(e){}
+
+    // 2) 데이터가 없으면 빈 상태 표시
+    if(!safe.length){
+      showEmpty();
+      return;
+    }
+
+    // 3) 테이블 렌더링
+    if($tb){
+      $tb.innerHTML = safe.map(function(r){
+        var dt  = isoToKST(r.ts);
+        var src = r.source || '';
+        var note = r.note  || '';
+        return '' +
+          '<tr>' +
+            '<td>' +
+              '<div class="igdc-srccell">' +
+                '<span class="igdc-srccell-time">'+ dt +'</span>' +
+                '<span class="igdc-srccell-tag">'+ src +'</span>' +
+              '</div>' +
+            '</td>' +
+            '<td>'+ (r.kind || '') +'</td>' +
+            '<td>'+ fmtAmt(r.amount, r.ccy) +'</td>' +
+            '<td>'+ (r.ccy || '') +'</td>' +
+            '<td>'+ note +'</td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    // 4) 상단 배지(건수/합계/최근)
+    var total = safe.reduce(function(acc,x){
+      return acc + (Number(x.amount) || 0);
+    }, 0);
+
+    if($cnt)  $cnt.textContent  = '건수(24h): ' + safe.length;
+    if($amt)  $amt.textContent  = '금액(원, 24h): ' + fmtAmt(total, 'KRW');
+    if($last) $last.textContent = '최근: ' + (safe[0] ? isoToKST(safe[0].ts || '') : '-');
+  }
+
+  function loadFromLedger(){
+    fetch('/api/ledger', { cache:'no-store' })
       .then(function(res){
-        if(!res.ok) throw new Error('http ' + res.status);
+        if(!res.ok) throw new Error('HTTP ' + res.status);
         return res.json();
       })
       .then(function(data){
-        var rows = (data && data.rows) || [];
-        if(rows && rows.length){
-          // ts 기준 정렬(최근순)
-          rows.sort(function(a,b){
-            return String(b.ts||'').localeCompare(String(a.ts||''));
-          });
-          render(rows);
-        } else {
-          fallback();
-        }
+        var rows = Array.isArray(data.rows) ? data.rows : [];
+        // 최신 이벤트가 위로 오게 정렬
+        rows.sort(function(a,b){
+          return String(b.ts || '').localeCompare(String(a.ts || ''));
+        });
+        render(rows);
       })
       .catch(function(err){
-        console.warn('[IGDC] /api/ledger fetch failed:', err && err.message);
-        fallback();
+        console && console.warn && console.warn('[IGDC] /api/ledger 실패:', err && err.message);
+        showEmpty();
       });
   }
 
-  // Background-driven hydrate (이벤트로 rows가 들어오는 경우)
-  window.addEventListener('IGDC_INFLOW_SNAPSHOT', function(ev){
-    try{
-      var rows = (ev.detail && ev.detail.rows) || [];
-      if(rows && rows.length){
-        render(rows);
-      }
-    }catch(e){}
-  });
-
-  // 초기 로딩 시: /api/ledger 우선, 실패하면 fallback
-  hydrateFromLedger();
+  // 페이지 로드 후 1회 호출
+  loadFromLedger();
 })();
 </script>
+
 
 <!-- /IGDC minimal additions -->
 <style>
