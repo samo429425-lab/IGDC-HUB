@@ -492,29 +492,192 @@
 </div>
 </div>
 <div style="background-color: #e9f4ff; border: 1px solid #b0d4f0; border-radius: 8px; padding: 20px; margin-top: 20px;">
-<table class="income-table" style="width: 100%; border-collapse: collapse; margin-top: 20px;">
-<thead>
-<tr>
-<th>항목</th>
-<th>일별</th>
-<th>주별</th>
-<th>월별</th>
-<th>연별</th>
-<th>누적합계</th>
-</tr>
-</thead>
-<tbody>
-<tr><td>소셜 네트워크</td><td>$0.00</td><td>$0.00</td><td>$0.00</td><td>$0.00</td><td>$0.00</td></tr>
-<tr><td>영상 콘텐츠</td><td>$0.00</td><td>$0.00</td><td>$0.00</td><td>$0.00</td><td>$0.00</td></tr>
-<tr><td>플랫폼 연동</td><td>$0.00</td><td>$0.00</td><td>$0.00</td><td>$0.00</td><td>$0.00</td></tr>
-<tr><td>유통 수익</td><td>$0.00</td><td>$0.00</td><td>$0.00</td><td>$0.00</td><td>$0.00</td></tr>
-<tr><td>도네이션</td><td>$0.00</td><td>$0.00</td><td>$0.00</td><td>$0.00</td><td>$0.00</td></tr>
-<tr><td>관광 수익</td><td>$0.00</td><td>$0.00</td><td>$0.00</td><td>$0.00</td><td>$0.00</td></tr>
-<tr><td>클릭수 및 기타</td><td>$0.00</td><td>$0.00</td><td>$0.00</td><td>$0.00</td><td>$0.00</td></tr>
-<tr><td><strong>총합</strong></td><td><strong>$0.00</strong></td><td><strong>$0.00</strong></td><td><strong>$0.00</strong></td><td><strong>$0.00</strong></td><td><strong>$0.00</strong></td></tr>
-</tbody>
-</table>
+  <table class="income-table" style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+    <thead>
+      <tr>
+        <th>항목</th>
+        <th>일별</th>
+        <th>주별</th>
+        <th>월별</th>
+        <th>연별</th>
+        <th>누적합계</th>
+      </tr>
+    </thead>
+    <tbody id="incomeTableBody">
+      <tr data-key="social">
+        <td>소셜 네트워크</td>
+        <td data-col="day">$0.00</td>
+        <td data-col="week">$0.00</td>
+        <td data-col="month">$0.00</td>
+        <td data-col="year">$0.00</td>
+        <td data-col="total">$0.00</td>
+      </tr>
+      <tr data-key="video">
+        <td>영상 콘텐츠</td>
+        <td data-col="day">$0.00</td>
+        <td data-col="week">$0.00</td>
+        <td data-col="month">$0.00</td>
+        <td data-col="year">$0.00</td>
+        <td data-col="total">$0.00</td>
+      </tr>
+      <tr data-key="platform">
+        <td>플랫폼 연동</td>
+        <td data-col="day">$0.00</td>
+        <td data-col="week">$0.00</td>
+        <td data-col="month">$0.00</td>
+        <td data-col="year">$0.00</td>
+        <td data-col="total">$0.00</td>
+      </tr>
+      <tr data-key="distribution">
+        <td>유통 수익</td>
+        <td data-col="day">$0.00</td>
+        <td data-col="week">$0.00</td>
+        <td data-col="month">$0.00</td>
+        <td data-col="year">$0.00</td>
+        <td data-col="total">$0.00</td>
+      </tr>
+      <tr data-key="donation">
+        <td>도네이션</td>
+        <td data-col="day">$0.00</td>
+        <td data-col="week">$0.00</td>
+        <td data-col="month">$0.00</td>
+        <td data-col="year">$0.00</td>
+        <td data-col="total">$0.00</td>
+      </tr>
+      <tr data-key="tour">
+        <td>관광 수익</td>
+        <td data-col="day">$0.00</td>
+        <td data-col="week">$0.00</td>
+        <td data-col="month">$0.00</td>
+        <td data-col="year">$0.00</td>
+        <td data-col="total">$0.00</td>
+      </tr>
+      <tr data-key="ads">
+        <td>광고 수익</td>
+        <td data-col="day">$0.00</td>
+        <td data-col="week">$0.00</td>
+        <td data-col="month">$0.00</td>
+        <td data-col="year">$0.00</td>
+        <td data-col="total">$0.00</td>
+      </tr>
+      <tr data-key="misc">
+        <td>클릭수 및 기타</td>
+        <td data-col="day">$0.00</td>
+        <td data-col="week">$0.00</td>
+        <td data-col="month">$0.00</td>
+        <td data-col="year">$0.00</td>
+        <td data-col="total">$0.00</td>
+      </tr>
+      <tr data-key="total">
+        <td><strong>총합</strong></td>
+        <td data-col="day"><strong>$0.00</strong></td>
+        <td data-col="week"><strong>$0.00</strong></td>
+        <td data-col="month"><strong>$0.00</strong></td>
+        <td data-col="year"><strong>$0.00</strong></td>
+        <td data-col="total"><strong>$0.00</strong></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <script id="income-dashboard-script">
+    (function () {
+      var KEY_ORDER = [
+        "social",       // 소셜 네트워크
+        "video",        // 영상 콘텐츠
+        "platform",     // 플랫폼 연동
+        "distribution", // 유통 수익
+        "donation",     // 도네이션
+        "tour",         // 관광 수익
+        "ads",          // 광고 수익
+        "misc"          // 클릭수 및 기타
+      ];
+
+      var COLS = ["day", "week", "month", "year", "total"];
+
+      function fmtDollar(v) {
+        var n = Number(v);
+        if (!isFinite(n)) n = 0;
+        try {
+          return n.toLocaleString("en-US", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          });
+        } catch (e) {
+          return n.toFixed(2);
+        }
+      }
+
+      function setCell(rowKey, col, value) {
+        var row = document.querySelector(
+          '.income-table tbody tr[data-key="' + rowKey + '"]'
+        );
+        if (!row) return;
+        var cell = row.querySelector('td[data-col="' + col + '"]');
+        if (!cell) return;
+        var target = cell.querySelector("strong") || cell;
+        target.textContent = "$" + fmtDollar(value);
+      }
+
+      function applySummary(summary) {
+        summary = summary || {};
+        var totals = { day: 0, week: 0, month: 0, year: 0, total: 0 };
+
+        KEY_ORDER.forEach(function (key) {
+          var s = summary[key] || {};
+          COLS.forEach(function (col) {
+            var v = Number(s[col] || 0);
+            if (!isFinite(v)) v = 0;
+            totals[col] += v;
+            setCell(key, col, v);
+          });
+        });
+
+        COLS.forEach(function (col) {
+          setCell("total", col, totals[col]);
+        });
+      }
+
+      function fetchIncomeSummary() {
+        if (!window.fetch) return;
+
+        fetch("/api/igdc/income/summary", {
+          credentials: "same-origin",
+          cache: "no-store"
+        })
+          .then(function (res) {
+            if (!res.ok) throw new Error("http " + res.status);
+            return res.json();
+          })
+          .then(function (data) {
+            var raw = (data && (data.summary || data.items || data)) || {};
+
+            if (Array.isArray(raw)) {
+              var obj = {};
+              raw.forEach(function (row) {
+                if (row && row.key) obj[row.key] = row;
+              });
+              raw = obj;
+            }
+
+            applySummary(raw);
+          })
+          .catch(function (err) {
+            console.warn("[IGDC] income summary fetch failed:", err);
+          });
+      }
+
+      document.addEventListener("DOMContentLoaded", function () {
+        fetchIncomeSummary();
+      });
+
+      window.IGDCIncomeDashboard = {
+        refresh: fetchIncomeSummary,
+        applySummary: applySummary
+      };
+    })();
+  </script>
 </div>
+
 <div style="background-color: #fff4e0; border: 1px solid #f3d9b0; border-radius: 8px; padding: 10px 20px; margin: 20px auto; text-align: left; display: flex; justify-content: flex-start; align-items: center; gap: 30px; color: #804000; font-weight: bold; max-width: 760px;">
 <span>💠 블록체인<br/>/ Web3 연동 </span>
 <button onclick="try{connectWallet&&connectWallet();}catch(e){} __openIG();" style="padding: 8px 14px; font-size: 0.85rem; background-color: white; border: 1px solid #ccc; border-radius: 5px; cursor: pointer;">
@@ -1024,7 +1187,7 @@ function openPopup(url){
   };
 })();
 </script>
-
+<script>
 (function(){
   function el(html){ var d=document.createElement('div'); d.innerHTML=html; return d.firstElementChild; }
   function pill(s){ return '<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:#f0f0f0;margin-right:6px;font-size:12px;">'+s+'</span>'; }
@@ -1840,12 +2003,7 @@ window.connectWallet = window.connectWallet || function(){
   };
 })();
 </script>
-</body></html>`);
-    pop.document.close();
-    return pop;
-  };
-})();
-</script>
+
 <script>
 // === IGDC Safe Helpers (same-origin log + CSRF + Daum postcode) ===
 
