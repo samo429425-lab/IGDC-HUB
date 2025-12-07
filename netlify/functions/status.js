@@ -1,229 +1,202 @@
-// netlify/functions/wallets.js
-// IGDC 관리자 대시보드: "🪙 지갑 현황 (watch-only)" 엔드포인트
+// /.netlify/functions/status
+// IGDC 관리자 대시보드 상태 엔드포인트
 //
-// - ENV + api-key.json / API 키.json / api-key.env / API 키.env 에 들어 있는
-//   지갑 주소들을 읽어서 /api/wallets 요청 시 JSON으로 반환합니다.
+// - OPENAI / GOOGLE / NAVER / 기타 키들을 ENV + JSON 에서 모두 읽어서
+//   OK / MISSING 플래그와 마스킹된 값 목록을 내려줍니다.
 
-const fs = require("fs");
 const path = require("path");
 
-// 설정 로딩: JSON + .env 스타일 (status.js 와 동일한 방식)
-function loadConfig() {
-  const cfg  = {};
-  const base = __dirname;
-  const cwd  = process.cwd();
-
-  // 1) JSON 파일 후보들
-  const jsonCandidates = [
-    path.join(base, "api-key.json"),
-    path.join(base, "API 키.json"),
-    path.join(base, "..", "api-key.json"),
-    path.join(base, "..", "API 키.json"),
-    path.join(cwd, "api-key.json"),
-    path.join(cwd, "API 키.json"),
-    path.join(cwd, "netlify", "functions", "api-key.json"),
-    path.join(cwd, "netlify", "functions", "API 키.json")
-  ];
-
-  for (const p of jsonCandidates) {
+// 1) JSON 파일을 require 로 직접 불러오기
+//    (status.js 와 같은 폴더에 API 키.json 또는 api-key.json 이 있어야 함)
+function loadSecrets() {
+  try {
+    // 한글 파일명 우선
+    return require("./API 키.json");
+  } catch (e1) {
     try {
-      if (!fs.existsSync(p)) continue;
-      const raw  = fs.readFileSync(p, "utf8");
-      const json = JSON.parse(raw);
-      Object.assign(cfg, json);
-      break;
-    } catch (e) {
-      console.error("[wallets] api-key.json 읽기 오류:", p, e);
+      // 영문 파일명 fallback
+      return require("./api-key.json");
+    } catch (e2) {
+      console.error("[status] API 키.json / api-key.json 을 찾지 못했습니다.");
+      return {};
     }
   }
+}
 
-  // 2) env 스타일 파일 후보들
-  const envCandidates = [
-    path.join(base, "api-key.env"),
-    path.join(base, "API 키.env"),
-    path.join(base, "..", "api-key.env"),
-    path.join(base, "..", "API 키.env"),
-    path.join(cwd, "api-key.env"),
-    path.join(cwd, "API 키.env"),
-    path.join(cwd, "netlify", "functions", "api-key.env"),
-    path.join(cwd, "netlify", "functions", "API 키.env")
+const secrets = loadSecrets();
+
+// 값 마스킹: 앞 4글자 + 뒤 4글자만 노출
+function mask(val) {
+  if (!val) return "";
+  const s = String(val);
+  if (s.length <= 8) return s.replace(/.(?=.{4})/g, "*");
+  const head = s.slice(0, 4);
+  const tail = s.slice(-4);
+  return head + "..." + tail;
+}
+
+// ENV + JSON 을 모두 보는 getter
+function getVal(key) {
+  return process.env[key] || secrets[key] || "";
+}
+
+// 여러 키 중 하나라도 값이 있으면 true
+function anyPresent(keys) {
+  return keys.some((k) => !!getVal(k));
+}
+
+// psom.json (미디어 무료 개방 기간) – 선택
+function loadFreeWindow() {
+  const base = process.cwd();
+  const candidates = [
+    path.join(base, "assets", "hero", "psom.json"),
+    path.join(base, "psom.json")
   ];
 
-  for (const p of envCandidates) {
+  for (const p of candidates) {
     try {
+      const fs = require("fs");
       if (!fs.existsSync(p)) continue;
       const raw = fs.readFileSync(p, "utf8");
-      raw.split(/\r?\n/).forEach((line) => {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith("#")) return;
-        const idx = trimmed.indexOf("=");
-        if (idx <= 0) return;
-        const key = trimmed.slice(0, idx).trim();
-        const val = trimmed.slice(idx + 1).trim();
-        if (key && !cfg[key]) cfg[key] = val;
-      });
-      break;
+      const json = JSON.parse(raw);
+      return {
+        enabled: !!json.freeAccess,
+        until: json.freeAccess_until || null
+      };
     } catch (e) {
-      console.error("[wallets] api-key.env 읽기 오류:", p, e);
+      console.error("[status] psom.json 읽기 오류:", e);
     }
   }
-
-  return cfg;
+  return { enabled: false, until: null };
 }
 
-// config / 중첩 객체 / ENV 에서 순서대로 값 가져오기
-function getVal(cfg, key) {
-  if (cfg) {
-    if (Object.prototype.hasOwnProperty.call(cfg, key) && cfg[key]) {
-      return cfg[key];
-    }
-    if (cfg.secrets && cfg.secrets[key]) return cfg.secrets[key];
-    if (cfg.WALLETS && cfg.WALLETS[key]) return cfg.WALLETS[key];
+exports.handler = async function (event, context) {
+  try {
+    // 1) admin 에서 직접 쓰는 플래그들
+    const envFlags = {
+      // admin.html 의 renderStatus 에서 사용하는 4개
+      google: anyPresent(["GOOGLE_API_KEY", "GOOGLE_MAPS_API_KEY"]),
+      naver_id: anyPresent(["NAVER_CLIENT_ID", "NAVER_API_KEY"]),
+      naver_secret: !!getVal("NAVER_CLIENT_SECRET"),
+      openai: !!getVal("OPENAI_API_KEY"),
+
+      // 확장 플래그들 (필요하면 나중에 써도 됨)
+      google_oauth: anyPresent([
+        "GOOGLE_OAUTH_CLIENT_ID",
+        "GOOGLE_OAUTH_CLIENT_SECRET"
+      ]),
+      google_service_account: !!getVal("GOOGLE_SERVICE_ACCOUNT_JSON"),
+
+      auth0_main: anyPresent([
+        "AUTH0_DOMAIN",
+        "AUTH0_CLIENT_ID",
+        "AUTH0_CLIENT_SECRET"
+      ]),
+      auth0_m2m: anyPresent([
+        "AUTH0_M2M_DOMAIN",
+        "AUTH0_M2M_CLIENT_ID",
+        "AUTH0_M2M_CLIENT_SECRET",
+        "AUTH0_M2M_AUDIENCE"
+      ]),
+
+      facebook: anyPresent(["FACEBOOK_APP_ID", "FACEBOOK_APP_SECRET"]),
+      kakao: anyPresent(["KAKAO_APP_ID", "KAKAO_CLIENT_SECRET"]),
+      coupang_partners: anyPresent([
+        "COUPANG_PARTNERS_API_KEY",
+        "COUPANG_PARTNERS_SECRET"
+      ]),
+
+      stripe: !!getVal("STRIPE_SECRET_KEY"),
+      paypal: !!getVal("PAYPAL_CLIENT_ID"),
+
+      lbank: anyPresent(["LBANK_API_KEY", "LBANK_API_SECRET"]),
+
+      supabase_url: !!getVal("SUPABASE_URL"),
+      supabase_anon: !!getVal("SUPABASE_ANON_KEY"),
+      supabase_service: !!getVal("SUPABASE_SERVICE_ROLE_KEY"),
+      database_url: !!getVal("DATABASE_URL"),
+
+      sendgrid: !!getVal("SENDGRID_API_KEY"),
+      ga: !!getVal("GA_TRACKING_ID"),
+
+      wallets_any: anyPresent([
+        "BTC_ADDRESS",
+        "ETH_ADDRESS",
+        "XRP_ADDRESS",
+        "BNB_ADDRESS",
+        "XLM_ADDRESS",
+        "TRX_ADDRESS",
+        "USDT_ETH_ADDRESS",
+        "USDT_TRX_ADDRESS",
+        "USDC_ADDRESS",
+        "USDC_TRX_ADDRESS",
+        "ANKRMATIC_ADDRESS",
+        "DAI_ADDRESS"
+      ])
+    };
+
+    // 2) env_detail – JSON 에 있는 모든 키 + 주요 ENV 키들
+    const detailSet = new Set(Object.keys(secrets));
+    [
+      "OPENAI_API_KEY",
+      "GOOGLE_API_KEY",
+      "GOOGLE_MAPS_API_KEY",
+      "NAVER_CLIENT_ID",
+      "NAVER_API_KEY",
+      "NAVER_CLIENT_SECRET"
+    ].forEach((k) => detailSet.add(k));
+
+    const envDetail = {};
+    Array.from(detailSet)
+      .sort()
+      .forEach((key) => {
+        const raw = getVal(key);
+        if (!raw) return;
+        envDetail[key] = {
+          exists: true,
+          value: mask(raw)
+        };
+      });
+
+    // 3) 결제/후원 파이프라인 요약
+    const payments = {
+      card: envFlags.stripe || envFlags.paypal,
+      crypto: envFlags.wallets_any || envFlags.lbank,
+      affiliate: envFlags.coupang_partners,
+      bank_transfer: envFlags.supabase_service || envFlags.database_url
+    };
+
+    const free = loadFreeWindow();
+
+    const resp = {
+      ok: true,
+      ts: new Date().toISOString(),
+      env: envFlags,
+      env_detail: envDetail,
+      payments,
+      media: {
+        freeAccess: {
+          enabled: free.enabled,
+          until: free.until
+        }
+      }
+    };
+
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify(resp, null, 2)
+    };
+  } catch (err) {
+    console.error("[status] handler error:", err);
+    return {
+      statusCode: 500,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({
+        ok: false,
+        error: "status-failed",
+        message: err && err.message ? err.message : String(err)
+      })
+    };
   }
-  if (process.env && process.env[key]) {
-    return process.env[key];
-  }
-  return "";
-}
-
-exports.handler = async () => {
-  const cfg = loadConfig();
-  const wallets = [];
-
-  function addWallet(hasValue, data) {
-    if (!hasValue) return;
-    wallets.push({
-      chain: data.chain,        // 'btc', 'eth', 'trx', 'xrp', ...
-      network: data.network,    // 'Bitcoin mainnet' 등
-      address: data.address,    // 전체 주소 문자열 (공개 가능 주소만)
-      tokens: data.tokens || [],// ['BTC'], ['ETH','USDT'] 등
-      watch_only: true          // 현재는 전부 watch-only
-    });
-  }
-
-  // 1) 메인 체인 지갑들
-  const btc = getVal(cfg, "BTC_ADDRESS");
-  addWallet(!!btc, {
-    chain: "btc",
-    network: "Bitcoin mainnet",
-    address: btc,
-    tokens: ["BTC"]
-  });
-
-  const eth = getVal(cfg, "ETH_ADDRESS");
-  addWallet(!!eth, {
-    chain: "eth",
-    network: "Ethereum mainnet",
-    address: eth,
-    tokens: ["ETH"]
-  });
-
-  const xrp = getVal(cfg, "XRP_ADDRESS");
-  addWallet(!!xrp, {
-    chain: "xrp",
-    network: "XRP Ledger mainnet",
-    address: xrp,
-    tokens: ["XRP"]
-  });
-
-  const bnb = getVal(cfg, "BNB_ADDRESS");
-  addWallet(!!bnb, {
-    chain: "bsc",
-    network: "BNB Smart Chain mainnet",
-    address: bnb,
-    tokens: ["BNB"]
-  });
-
-  const xlm = getVal(cfg, "XLM_ADDRESS");
-  addWallet(!!xlm, {
-    chain: "xlm",
-    network: "Stellar mainnet",
-    address: xlm,
-    tokens: ["XLM"]
-  });
-
-  const trx = getVal(cfg, "TRX_ADDRESS");
-  addWallet(!!trx, {
-    chain: "trx",
-    network: "TRON mainnet",
-    address: trx,
-    tokens: ["TRX"]
-  });
-
-  // 2) 스테이블·토큰들
-  const usdtEth = getVal(cfg, "USDT_ETH_ADDRESS");
-  addWallet(!!usdtEth, {
-    chain: "eth",
-    network: "Ethereum mainnet",
-    address: usdtEth,
-    tokens: ["USDT"]
-  });
-
-  const usdtTrx = getVal(cfg, "USDT_TRX_ADDRESS");
-  addWallet(!!usdtTrx, {
-    chain: "trx",
-    network: "TRON mainnet",
-    address: usdtTrx,
-    tokens: ["USDT"]
-  });
-
-  const usdcEth = getVal(cfg, "USDC_ADDRESS");
-  addWallet(!!usdcEth, {
-    chain: "eth",
-    network: "Ethereum mainnet",
-    address: usdcEth,
-    tokens: ["USDC"]
-  });
-
-  const usdcTrx = getVal(cfg, "USDC_TRX_ADDRESS");
-  addWallet(!!usdcTrx, {
-    chain: "trx",
-    network: "TRON mainnet",
-    address: usdcTrx,
-    tokens: ["USDC"]
-  });
-
-  const ankrMatic = getVal(cfg, "ANKRMATIC_ADDRESS");
-  addWallet(!!ankrMatic, {
-    chain: "polygon",
-    network: "Polygon mainnet",
-    address: ankrMatic,
-    tokens: ["ANKR", "MATIC"]
-  });
-
-  const dai = getVal(cfg, "DAI_ADDRESS");
-  addWallet(!!dai, {
-    chain: "eth",
-    network: "Ethereum mainnet",
-    address: dai,
-    tokens: ["DAI"]
-  });
-
-  // 3) LBank (거래소 계정) – 주소 대신 "계정" 단위로 표기
-  const lbankKey = getVal(cfg, "LBANK_API_KEY");
-  if (lbankKey) {
-    wallets.push({
-      chain: "cex",
-      network: "LBank (account)",
-      address: "(API key configured; 주소는 거래소 내 계정으로 관리)",
-      tokens: ["various"],
-      watch_only: true
-    });
-  }
-
-  const ok = true; // HTTP 200 이고, 엔드포인트 자체는 정상
-
-  return {
-    statusCode: 200,
-    headers: { "content-type": "application/json; charset=utf-8" },
-    body: JSON.stringify(
-      {
-        endpoint: "/api/wallets",
-        ok,
-        wallets
-      },
-      null,
-      2
-    )
-  };
 };
