@@ -1,68 +1,16 @@
 // /.netlify/functions/status
 // IGDC 관리자 대시보드 상태 엔드포인트
 //
-// - process.env(네틀리파이 ENV) + API 키.json / api-key.json 에 들어 있는 키들을 읽어서
-//   admin 하단의 "백엔드 상태" 박스에 OK / MISSING 정보를 제공합니다.
-// - JSON 쪽은 "함수 파일과 같은 폴더"에 두는 것을 기본 전제로 합니다.
-//
-//   응답 형태 예시:
-//   {
-//     ok: true,
-//     ts: "...",
-//     env: {
-//       google: true/false,
-//       naver_id: true/false,
-//       naver_secret: true/false,
-//       openai: true/false,
-//       ... (추가 플래그)
-//     },
-//     env_detail: {
-//       GOOGLE_API_KEY: "abcd...wxyz", // 마스킹된 값 또는 false
-//       NAVER_API_KEY: "****...1234",
-//       ...
-//     },
-//     payments: { ... },
-//     media: { freeAccess: { enabled: bool, until: "..." } }
-//   }
+// - process.env(네틀리파이 ENV) + api-key.json / API 키.json / api-key.env / API 키.env 를 모두 읽어서
+//   admin 하단 "🔐 백엔드 상태" 박스를 위한 OK / MISSING 정보를 제공합니다.
+// - 실제 키 값은 그대로 노출하지 않고, 마스킹된 값만 env_detail 로 내려보냅니다.
 
+const fs = require("fs");
 const path = require("path");
 
 // ─────────────────────────────
-// 1. JSON 설정 불러오기 (require 기반, 경로 최소화)
+// 유틸: 값 마스킹 (앞 4글자 + 마지막 4글자만 노출)
 // ─────────────────────────────
-
-function loadSecrets() {
-  // status.js 기준 상대 경로
-  const candidates = [
-    "./API 키.json",
-    "./api-key.json",
-    "../API 키.json",
-    "../api-key.json"
-  ];
-
-  for (const rel of candidates) {
-    try {
-      // require 는 번들 기준 상대 경로로 처리되므로,
-      // 같은 폴더(또는 한 단계 위)에 JSON 이 있으면 자동으로 포함됩니다.
-      // (JSON 이 없으면 에러를 무시하고 다음 후보로 넘어감)
-      const secrets = require(rel);
-      if (secrets && typeof secrets === "object") {
-        return secrets;
-      }
-    } catch (e) {
-      // 찾지 못하면 조용히 넘어감
-    }
-  }
-
-  return {};
-}
-
-const secrets = loadSecrets();
-
-// ─────────────────────────────
-// 2. 유틸: 값 마스킹 (앞 4글자 + 마지막 4글자만 노출)
-// ─────────────────────────────
-
 function mask(val) {
   if (!val) return "";
   const s = String(val);
@@ -74,36 +22,108 @@ function mask(val) {
   return head + "..." + tail;
 }
 
-// ENV + JSON(secrets) 을 모두 보는 getter
-function getVal(key) {
+// ─────────────────────────────
+// 설정 파일 로딩 (JSON / .env 스타일)
+// ─────────────────────────────
+function loadConfig() {
+  const cfg = {};
+  const base = __dirname;       // 함수 파일이 실제로 위치한 폴더
+  const root = process.cwd();   // 함수 번들의 루트 (대부분 사이트 루트에 가깝게 매핑됨)
+
+  // 1) JSON 파일 후보들 (한글/영문 이름 + 여러 위치)
+  const jsonCandidates = [
+    // 함수 파일과 같은 폴더
+    path.join(base, "api-key.json"),
+    path.join(base, "API 키.json"),
+    // 한 단계 위
+    path.join(base, "..", "api-key.json"),
+    path.join(base, "..", "API 키.json"),
+    // 프로젝트 루트 쪽 (drag&drop 구조 대비)
+    path.join(root, "api-key.json"),
+    path.join(root, "API 키.json"),
+    // netlify/functions 폴더 바로 아래
+    path.join(root, "netlify", "functions", "api-key.json"),
+    path.join(root, "netlify", "functions", "API 키.json")
+  ];
+
+  for (const p of jsonCandidates) {
+    try {
+      if (!fs.existsSync(p)) continue;
+      const raw = fs.readFileSync(p, "utf8");
+      const json = JSON.parse(raw);
+      if (json && typeof json === "object") {
+        Object.assign(cfg, json);
+      }
+    } catch (e) {
+      console.error("[status] api-key.json 읽기 오류:", p, e);
+    }
+  }
+
+  // 2) .env 스타일 파일 후보들 (KEY=VALUE)
+  const envCandidates = [
+    path.join(base, "api-key.env"),
+    path.join(base, "API 키.env"),
+    path.join(base, "..", "api-key.env"),
+    path.join(base, "..", "API 키.env"),
+    path.join(root, "api-key.env"),
+    path.join(root, "API 키.env"),
+    path.join(root, "netlify", "functions", "api-key.env"),
+    path.join(root, "netlify", "functions", "API 키.env")
+  ];
+
+  for (const p of envCandidates) {
+    try {
+      if (!fs.existsSync(p)) continue;
+      const raw = fs.readFileSync(p, "utf8");
+      raw.split(/\r?\n/).forEach((line) => {
+        const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.+)\s*$/i);
+        if (!m) return;
+        const key = m[1];
+        const val = m[2];
+        if (!cfg[key]) {
+          cfg[key] = val;
+        }
+      });
+    } catch (e) {
+      console.error("[status] api-key.env 읽기 오류:", p, e);
+    }
+  }
+
+  return cfg;
+}
+
+// ─────────────────────────────
+// config + process.env 에서 키 값 가져오기
+// ─────────────────────────────
+function getVal(cfg, key) {
+  // 1순위: Netlify ENV
   if (process.env && Object.prototype.hasOwnProperty.call(process.env, key)) {
     return process.env[key];
   }
-  if (secrets && Object.prototype.hasOwnProperty.call(secrets, key)) {
-    return secrets[key];
+  // 2순위: JSON / env 에서 읽어온 평평한 키들
+  if (cfg && Object.prototype.hasOwnProperty.call(cfg, key)) {
+    return cfg[key];
   }
-  // secrets.secrets / secrets.WALLETS 구조도 지원
-  if (secrets && secrets.secrets && Object.prototype.hasOwnProperty.call(secrets.secrets, key)) {
-    return secrets.secrets[key];
+  // 3순위: JSON 구조 안의 중첩(secrets / WALLETS) 지원
+  if (cfg && cfg.secrets && Object.prototype.hasOwnProperty.call(cfg.secrets, key)) {
+    return cfg.secrets[key];
   }
-  if (secrets && secrets.WALLETS && Object.prototype.hasOwnProperty.call(secrets.WALLETS, key)) {
-    return secrets.WALLETS[key];
+  if (cfg && cfg.WALLETS && Object.prototype.hasOwnProperty.call(cfg.WALLETS, key)) {
+    return cfg.WALLETS[key];
   }
   return "";
 }
 
 // 여러 키 중 하나라도 값이 있으면 true
-function anyPresent(keys) {
-  return keys.some((k) => !!getVal(k));
+function anyPresent(cfg, keys) {
+  return keys.some((k) => !!getVal(cfg, k));
 }
 
 // ─────────────────────────────
-// 3. psom.json 에서 free-access 윈도우 읽기 (선택)
+// psom.json 에서 free-access 윈도우 읽기 (선택 사항)
 // ─────────────────────────────
-
 function loadFreeWindow() {
   const root = process.cwd();
-  const fs = require("fs");
   const candidates = [
     path.join(root, "assets", "hero", "psom.json"),
     path.join(root, "psom.json")
@@ -127,61 +147,61 @@ function loadFreeWindow() {
 }
 
 // ─────────────────────────────
-// 4. 메인 handler
+// 메인 handler
 // ─────────────────────────────
-
 exports.handler = async () => {
   try {
+    const cfg  = loadConfig();
     const free = loadFreeWindow();
 
-    // 4-1) admin 화면에서 직접 쓰는 핵심 플래그
+    // 1) admin 화면에서 직접 쓰는 핵심 플래그 (google/naver/openai)
     const envFlags = {
-      // admin.html 의 renderStatus 에서 사용하는 4개
-      google: anyPresent(["GOOGLE_API_KEY", "GOOGLE_MAPS_API_KEY"]),
-      naver_id: anyPresent(["NAVER_CLIENT_ID", "NAVER_API_KEY"]),
-      naver_secret: !!getVal("NAVER_CLIENT_SECRET"),
-      openai: !!getVal("OPENAI_API_KEY"),
+      // admin.html 의 renderStatus 가 여기 네 개를 씁니다.
+      google: anyPresent(cfg, ["GOOGLE_API_KEY", "GOOGLE_MAPS_API_KEY"]),
+      naver_id: anyPresent(cfg, ["NAVER_CLIENT_ID", "NAVER_API_KEY"]),
+      naver_secret: !!getVal(cfg, "NAVER_CLIENT_SECRET"),
+      openai: !!getVal(cfg, "OPENAI_API_KEY"),
 
-      // 확장 플래그들 (필요시 admin 다른 뷰에서 활용)
-      google_oauth: anyPresent([
+      // ─ 추가 플래그들 (필요시 다른 뷰에서 재사용 가능) ─
+      google_oauth: anyPresent(cfg, [
         "GOOGLE_OAUTH_CLIENT_ID",
         "GOOGLE_OAUTH_CLIENT_SECRET"
       ]),
-      google_service_account: !!getVal("GOOGLE_SERVICE_ACCOUNT_JSON"),
+      google_service_account: !!getVal(cfg, "GOOGLE_SERVICE_ACCOUNT_JSON"),
 
-      auth0_main: anyPresent([
+      auth0_main: anyPresent(cfg, [
         "AUTH0_DOMAIN",
         "AUTH0_CLIENT_ID",
         "AUTH0_CLIENT_SECRET"
       ]),
-      auth0_m2m: anyPresent([
+      auth0_m2m: anyPresent(cfg, [
         "AUTH0_M2M_DOMAIN",
         "AUTH0_M2M_CLIENT_ID",
         "AUTH0_M2M_CLIENT_SECRET",
         "AUTH0_M2M_AUDIENCE"
       ]),
 
-      facebook: anyPresent(["FACEBOOK_APP_ID", "FACEBOOK_APP_SECRET"]),
-      kakao: anyPresent(["KAKAO_APP_ID", "KAKAO_CLIENT_SECRET"]),
-      coupang_partners: anyPresent([
+      facebook: anyPresent(cfg, ["FACEBOOK_APP_ID", "FACEBOOK_APP_SECRET"]),
+      kakao: anyPresent(cfg, ["KAKAO_APP_ID", "KAKAO_CLIENT_SECRET"]),
+      coupang_partners: anyPresent(cfg, [
         "COUPANG_PARTNERS_API_KEY",
         "COUPANG_PARTNERS_SECRET"
       ]),
 
-      stripe: !!getVal("STRIPE_SECRET_KEY"),
-      paypal: !!getVal("PAYPAL_CLIENT_ID"),
+      stripe: !!getVal(cfg, "STRIPE_SECRET_KEY"),
+      paypal: !!getVal(cfg, "PAYPAL_CLIENT_ID"),
 
-      lbank: anyPresent(["LBANK_API_KEY", "LBANK_API_SECRET"]),
+      lbank: anyPresent(cfg, ["LBANK_API_KEY", "LBANK_API_SECRET"]),
 
-      supabase_url: !!getVal("SUPABASE_URL"),
-      supabase_anon: !!getVal("SUPABASE_ANON_KEY"),
-      supabase_service: !!getVal("SUPABASE_SERVICE_ROLE_KEY"),
-      database_url: !!getVal("DATABASE_URL"),
+      supabase_url: !!getVal(cfg, "SUPABASE_URL"),
+      supabase_anon: !!getVal(cfg, "SUPABASE_ANON_KEY"),
+      supabase_service: !!getVal(cfg, "SUPABASE_SERVICE_ROLE_KEY"),
+      database_url: !!getVal(cfg, "DATABASE_URL"),
 
-      sendgrid: !!getVal("SENDGRID_API_KEY"),
-      ga: !!getVal("GA_TRACKING_ID"),
+      sendgrid: !!getVal(cfg, "SENDGRID_API_KEY"),
+      ga: !!getVal(cfg, "GA_TRACKING_ID"),
 
-      wallets_any: anyPresent([
+      wallets_any: anyPresent(cfg, [
         "BTC_ADDRESS",
         "ETH_ADDRESS",
         "XRP_ADDRESS",
@@ -197,11 +217,11 @@ exports.handler = async () => {
       ])
     };
 
-    // 4-2) env_detail – JSON 안에 있는 모든 키 + 주요 ENV 키들
-    const detailSet = new Set([
-      // JSON 에 실제로 들어 있는 키들
-      ...Object.keys(secrets || {}),
-      // 추가로 꼭 보고 싶은 키들 (ENV 전용일 수도 있으니)
+    // 2) env_detail – JSON/ENV 안에 있는 모든 주요 키들의 상태 + 마스킹된 값
+    const detailKeys = new Set([
+      // JSON 에 직접 들어 있는 키들
+      ...Object.keys(cfg || {}),
+      // 추가로 ENV에서만 있을 수 있는 주요 키들
       "OPENAI_API_KEY",
       "GOOGLE_API_KEY",
       "GOOGLE_MAPS_API_KEY",
@@ -249,10 +269,10 @@ exports.handler = async () => {
     ]);
 
     const envDetail = {};
-    Array.from(detailSet)
+    Array.from(detailKeys)
       .sort()
       .forEach((key) => {
-        const v = getVal(key);
+        const v = getVal(cfg, key);
         if (v) {
           envDetail[key] = mask(v);
         } else {
@@ -260,7 +280,7 @@ exports.handler = async () => {
         }
       });
 
-    // 4-3) 결제/후원 파이프라인 요약
+    // 3) 결제/후원 파이프라인 요약
     const payments = {
       card: envFlags.stripe || envFlags.paypal,
       crypto: envFlags.wallets_any || envFlags.lbank,
@@ -271,8 +291,8 @@ exports.handler = async () => {
     const resp = {
       ok: true,
       ts: new Date().toISOString(),
-      env: envFlags,
-      env_detail: envDetail,
+      env: envFlags,         // admin 백엔드 상태 카드가 직접 쓰는 단순 플래그
+      env_detail: envDetail, // 필요시 admin 다른 뷰에서 확장 사용 가능
       payments,
       media: {
         freeAccess: {
@@ -289,8 +309,8 @@ exports.handler = async () => {
     };
   } catch (err) {
     console.error("[status] handler error:", err);
-    // 에러가 나더라도 500 대신 200 + ok:false 로 내려줘서
-    // admin 블록이 통째로 사라지지 않도록 방어
+
+    // 에러가 나더라도 admin 블럭이 통째로 사라지지 않도록, 500 대신 ok:false 로 내려줌
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json; charset=utf-8" },
@@ -302,7 +322,7 @@ exports.handler = async () => {
             google: false,
             naver_id: false,
             naver_secret: false,
-            openai: !!getVal("OPENAI_API_KEY")
+            openai: !!(process.env && process.env.OPENAI_API_KEY)
           },
           env_detail: {},
           payments: {
