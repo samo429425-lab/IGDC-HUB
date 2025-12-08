@@ -8,26 +8,20 @@
 const fs = require("fs");
 const path = require("path");
 
-// ─────────────────────────────
 // 1. 설정 로딩 (JSON + .env 스타일)
-// ─────────────────────────────
 function loadConfig() {
-  const cfg  = {};
-  const base = __dirname;      // 함수 파일이 실제 위치한 폴더
-  const root = process.cwd();  // 함수 번들 루트 (사이트 루트에 해당)
+  const cfg = {};
+  const base = __dirname;      // 함수 파일이 위치한 폴더
+  const root = process.cwd();  // 함수 번들 루트
 
   // 1) JSON 파일 후보들 (영문/한글 이름 + 여러 위치)
   const jsonCandidates = [
-    // 함수 파일과 같은 폴더
     path.join(base, "api-key.json"),
     path.join(base, "API 키.json"),
-    // 한 단계 위
     path.join(base, "..", "api-key.json"),
     path.join(base, "..", "API 키.json"),
-    // 프로젝트 루트
     path.join(root, "api-key.json"),
     path.join(root, "API 키.json"),
-    // netlify/functions 아래
     path.join(root, "netlify", "functions", "api-key.json"),
     path.join(root, "netlify", "functions", "API 키.json")
   ];
@@ -35,13 +29,13 @@ function loadConfig() {
   for (const p of jsonCandidates) {
     try {
       if (!fs.existsSync(p)) continue;
-      const raw  = fs.readFileSync(p, "utf8");
+      const raw = fs.readFileSync(p, "utf8");
       const json = JSON.parse(raw);
       if (json && typeof json === "object") {
         Object.assign(cfg, json);
       }
     } catch (e) {
-      console.error("[wallets] api-key.json 읽기 오류:", p, e);
+      console.error("[wallets] api-key.json 읽기 오류:", e);
     }
   }
 
@@ -73,176 +67,73 @@ function loadConfig() {
         }
       });
     } catch (e) {
-      console.error("[wallets] api-key.env 읽기 오류:", p, e);
+      console.error("[wallets] api-key.env 읽기 오류:", e);
     }
   }
 
   return cfg;
 }
 
-// ─────────────────────────────
 // 2. config / ENV 에서 값 가져오기
-// ─────────────────────────────
 function getVal(cfg, key) {
   // 1순위: Netlify ENV
-  if (process.env && Object.prototype.hasOwnProperty.call(process.env, key)) {
+  if (process.env && Object.prototype.hasOwnProperty.call(process.env, key) && process.env[key]) {
     return process.env[key];
   }
-  // 2순위: JSON / env 로부터 읽어온 값
+  // 2순위: JSON / env
   if (cfg) {
     if (Object.prototype.hasOwnProperty.call(cfg, key) && cfg[key]) {
       return cfg[key];
     }
-    // {secrets:{...}}, {WALLETS:{...}} 구조도 지원
     if (cfg.secrets && cfg.secrets[key]) return cfg.secrets[key];
     if (cfg.WALLETS && cfg.WALLETS[key]) return cfg.WALLETS[key];
   }
   return "";
 }
 
-// ─────────────────────────────
-// 3. 메인 handler
-// ─────────────────────────────
 exports.handler = async () => {
   const cfg = loadConfig();
   const wallets = [];
 
-  function addWallet(hasValue, data) {
-    if (!hasValue) return;
+  function addWallet(addressKey, meta) {
+    const addr = getVal(cfg, addressKey);
+    if (!addr) return;
     wallets.push({
-      chain: data.chain,         // 'btc', 'eth', 'trx', 'xrp', ...
-      network: data.network,     // 'Bitcoin mainnet' 등
-      address: data.address,     // 전체 주소 문자열 (공개 가능 주소만)
-      tokens: data.tokens || [], // ['BTC'], ['ETH','USDT'] 등
-      watch_only: true           // 현재는 전부 watch-only
+      chain: meta.chain,
+      network: meta.network,
+      address: addr,
+      tokens: meta.tokens || [],
+      watch_only: true
     });
   }
 
-  // ─────────────────────────────────────
-  // 1) 12개 지갑 주소 매핑 (ENV + api-key.* 기준)
-  // ─────────────────────────────────────
+  // 주요 온체인/토큰 지갑들
+  addWallet("BTC_ADDRESS",       { chain: "btc",     network: "Bitcoin mainnet",                       tokens: ["BTC"] });
+  addWallet("ETH_ADDRESS",       { chain: "eth",     network: "Ethereum mainnet",                      tokens: ["ETH"] });
+  addWallet("XRP_ADDRESS",       { chain: "xrp",     network: "XRP Ledger",                            tokens: ["XRP"] });
+  addWallet("BNB_ADDRESS",       { chain: "bsc",     network: "BNB Smart Chain (BEP-20)",              tokens: ["BNB"] });
+  addWallet("XLM_ADDRESS",       { chain: "xlm",     network: "Stellar",                               tokens: ["XLM"] });
+  addWallet("TRX_ADDRESS",       { chain: "trx",     network: "TRON mainnet",                          tokens: ["TRX"] });
+  addWallet("USDT_ETH_ADDRESS",  { chain: "eth",     network: "Ethereum mainnet",                      tokens: ["USDT"] });
+  addWallet("USDT_TRX_ADDRESS",  { chain: "trx",     network: "TRON mainnet",                          tokens: ["USDT"] });
+  addWallet("USDC_ADDRESS",      { chain: "eth",     network: "Ethereum mainnet / Stellar (mixed)",    tokens: ["USDC"] });
+  addWallet("USDC_TRX_ADDRESS",  { chain: "trx",     network: "TRON mainnet",                          tokens: ["USDC"] });
+  addWallet("ANKRMATIC_ADDRESS", { chain: "polygon", network: "Polygon mainnet (ANKR/MATIC 공유 주소)", tokens: ["ANKR", "MATIC"] });
+  addWallet("DAI_ADDRESS",       { chain: "eth",     network: "Ethereum mainnet",                      tokens: ["DAI"] });
 
-  const btc = getVal(cfg, "BTC_ADDRESS");
-  addWallet(!!btc, {
-    chain: "btc",
-    network: "Bitcoin mainnet",
-    address: btc,
-    tokens: ["BTC"]
-  });
-
-  const eth = getVal(cfg, "ETH_ADDRESS");
-  addWallet(!!eth, {
-    chain: "eth",
-    network: "Ethereum mainnet",
-    address: eth,
-    tokens: ["ETH"]
-  });
-
-  const xrp = getVal(cfg, "XRP_ADDRESS");
-  addWallet(!!xrp, {
-    chain: "xrp",
-    network: "XRP Ledger",
-    address: xrp,
-    tokens: ["XRP"]
-  });
-
-  const bnb = getVal(cfg, "BNB_ADDRESS");
-  addWallet(!!bnb, {
-    chain: "bsc",
-    network: "BNB Smart Chain (BEP-20)",
-    address: bnb,
-    tokens: ["BNB"]
-  });
-
-  const xlm = getVal(cfg, "XLM_ADDRESS");
-  addWallet(!!xlm, {
-    chain: "xlm",
-    network: "Stellar",
-    address: xlm,
-    tokens: ["XLM"]
-  });
-
-  const trx = getVal(cfg, "TRX_ADDRESS");
-  addWallet(!!trx, {
-    chain: "trx",
-    network: "TRON mainnet",
-    address: trx,
-    tokens: ["TRX"]
-  });
-
-  const usdtEth = getVal(cfg, "USDT_ETH_ADDRESS");
-  addWallet(!!usdtEth, {
-    chain: "eth",
-    network: "Ethereum mainnet",
-    address: usdtEth,
-    tokens: ["USDT"]
-  });
-
-  const usdtTrx = getVal(cfg, "USDT_TRX_ADDRESS");
-  addWallet(!!usdtTrx, {
-    chain: "trx",
-    network: "TRON mainnet",
-    address: usdtTrx,
-    tokens: ["USDT"]
-  });
-
-  const usdcEth = getVal(cfg, "USDC_ADDRESS");
-  addWallet(!!usdcEth, {
-    chain: "eth",
-    network: "Ethereum mainnet",
-    address: usdcEth,
-    tokens: ["USDC"]
-  });
-
-  const usdcTrx = getVal(cfg, "USDC_TRX_ADDRESS");
-  addWallet(!!usdcTrx, {
-    chain: "trx",
-    network: "TRON mainnet",
-    address: usdcTrx,
-    tokens: ["USDC"]
-  });
-
-  const ankrMatic = getVal(cfg, "ANKRMATIC_ADDRESS");
-  addWallet(!!ankrMatic, {
-    chain: "polygon",
-    network: "Polygon mainnet",
-    address: ankrMatic,
-    tokens: ["ANKR", "MATIC"]
-  });
-
-  const dai = getVal(cfg, "DAI_ADDRESS");
-  addWallet(!!dai, {
-    chain: "eth",
-    network: "Ethereum mainnet",
-    address: dai,
-    tokens: ["DAI"]
-  });
-
-  // 2) 대표 공개 주소 하나만 별도 관리하고 싶을 때 (옵션)
-  const pub = getVal(cfg, "WALLET_PUBLIC_ADDRESS");
-  if (pub && !wallets.length) {
-    addWallet(true, {
-      chain: "multi",
-      network: "Multi-chain",
-      address: pub,
-      tokens: []
-    });
-  }
-
-  // 3) LBank (CEX) 존재 여부만 표시 (API 키 존재 여부만 확인, 주소는 노출하지 않음)
-  const hasLbankKey =
-    !!getVal(cfg, "LBANK_API_KEY") && !!getVal(cfg, "LBANK_API_SECRET");
-
-  if (hasLbankKey) {
-    addWallet(true, {
+  // 중앙화 거래소(LBank) – API 키가 있으면 존재만 표시 (구체 주소는 거래소에서 관리)
+  const hasLbank = !!getVal(cfg, "LBANK_API_KEY") && !!getVal(cfg, "LBANK_API_SECRET");
+  if (hasLbank) {
+    wallets.push({
       chain: "lbank",
       network: "LBank (centralized exchange)",
-      address: "[API key configured – deposit addresses managed in exchange]",
-      tokens: ["USDT", "BTC", "ETH"]
+      address: "[LBank 계정/API 연동됨 – 입금 주소는 거래소에서 확인]",
+      tokens: ["USDT", "BTC", "ETH"],
+      watch_only: true
     });
   }
 
-  const ok = wallets.length > 0 || hasLbankKey;
+  const ok = wallets.length > 0 || hasLbank;
 
   return {
     statusCode: 200,
