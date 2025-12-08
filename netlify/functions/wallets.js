@@ -1,33 +1,35 @@
 // netlify/functions/wallets.js
 // IGDC 관리자 대시보드: "🪙 지갑 현황 (watch-only)" 엔드포인트
+//
+// - Netlify ENV + api-key.json / API 키.json 에 들어 있는 지갑·거래소 정보를 읽어서
+//   /api/wallets 요청 시 JSON으로 반환합니다.
+// - 실제 on-chain 잔액/트랜잭션 조회는 별도 함수에서 처리합니다.
 
 const fs = require("fs");
 const path = require("path");
 
-// ─────────────────────────────
-// 설정 로더: status.js 와 동일한 방식
-//  - api-key.json / API 키.json (여러 위치)
-//  - api-key.env / API 키.env (여러 위치)
-//  - 나중에 Netlify ENV 로 옮겨도 getVal 이 자동 처리
-// ─────────────────────────────
+// 설정 파일 로드 (status.js / secureEnvBridge.js 와 비슷한 패턴)
 function loadConfig() {
-  const base = __dirname;
-  const root = process.cwd();
   const cfg = {};
 
-  // 1) JSON 파일 우선 (한글/영문 파일명 + 여러 위치)
+  const base = __dirname;
+  const root = process.cwd();
+
+  // 1) JSON 파일 후보 (한글/영문 파일명 + 여러 위치)
   const jsonCandidates = [
-    // 함수 파일 근처
+    // 함수 빌드 폴더 주변
     path.join(base, "api-key.json"),
     path.join(base, "API 키.json"),
     path.join(base, "..", "api-key.json"),
     path.join(base, "..", "API 키.json"),
-    // 사이트 루트
-    path.join(root, "api-key.json"),
-    path.join(root, "API 키.json"),
-    // netlify/functions 밑에 따로 둔 경우
+
+    // Netlify deploy 루트 기준 (secureEnvBridge 와 동일)
     path.join(root, "netlify", "functions", "api-key.json"),
     path.join(root, "netlify", "functions", "API 키.json"),
+
+    // 루트 바로 아래
+    path.join(root, "api-key.json"),
+    path.join(root, "API 키.json"),
   ];
 
   for (const p of jsonCandidates) {
@@ -39,11 +41,11 @@ function loadConfig() {
         Object.assign(cfg, json);
       }
     } catch (e) {
-      console.error("[wallets] api-key.json 읽기 오류:", p, e);
+      console.error("[wallets] JSON load error:", p, e.message);
     }
   }
 
-  // 2) env 스타일 파일 (KEY=VALUE) – 선택
+  // 2) env 스타일 파일 (선택 사항)
   const envCandidates = [
     path.join(base, "api-key.env"),
     path.join(base, "API 키.env"),
@@ -60,25 +62,28 @@ function loadConfig() {
       if (!fs.existsSync(p)) continue;
       const raw = fs.readFileSync(p, "utf8");
       raw.split(/\r?\n/).forEach((line) => {
-        const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.+)\s*$/i);
-        if (!m) return;
-        const k = m[1];
-        const v = m[2];
-        if (!cfg[k]) {
-          cfg[k] = v;
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) return;
+        const idx = trimmed.indexOf("=");
+        if (idx <= 0) return;
+        const key = trimmed.slice(0, idx).trim();
+        const val = trimmed.slice(idx + 1).trim();
+        if (key && !cfg[key]) {
+          cfg[key] = val;
         }
       });
     } catch (e) {
-      console.error("[wallets] api-key.env 읽기 오류:", p, e);
+      console.error("[wallets] ENV-style load error:", p, e.message);
     }
   }
 
   return cfg;
 }
 
-// config + process.env 에서 키 값 가져오기
+// ENV + JSON 통합 조회
 function getVal(cfg, key) {
   if (
+    typeof process !== "undefined" &&
     process.env &&
     Object.prototype.hasOwnProperty.call(process.env, key) &&
     process.env[key]
@@ -88,124 +93,144 @@ function getVal(cfg, key) {
   if (cfg && Object.prototype.hasOwnProperty.call(cfg, key) && cfg[key]) {
     return cfg[key];
   }
-  if (cfg && cfg.secrets && cfg.secrets[key]) {
+  if (cfg && cfg.secrets && Object.prototype.hasOwnProperty.call(cfg.secrets, key)) {
     return cfg.secrets[key];
   }
-  if (cfg && cfg.WALLETS && cfg.WALLETS[key]) {
+  if (cfg && cfg.WALLETS && Object.prototype.hasOwnProperty.call(cfg.WALLETS, key)) {
     return cfg.WALLETS[key];
   }
   return "";
 }
 
-// ─────────────────────────────
-// /api/wallets 핸들러
-// ─────────────────────────────
 exports.handler = async () => {
   const cfg = loadConfig();
-
   const wallets = [];
 
-  function addWallet({ id, label, chain, symbol, key, network }) {
-    const address = getVal(cfg, key);
+  function addWallet(options) {
+    const address = getVal(cfg, options.key);
     if (!address) return;
     wallets.push({
-      id,
-      label,     // 화면용 이름
-      chain,     // 블록체인 이름
-      symbol,    // 대표 심볼
-      address,   // 실제 공개주소
-      network: network || "mainnet",
+      chain: options.chain,       // "btc", "eth" 등
+      network: options.network,   // "Bitcoin mainnet" 등
+      symbol: options.symbol,     // "BTC", "ETH" 등
+      address,
+      label: options.label || "", // 카드 제목
+      watch_only: true,
     });
   }
 
-  // 비트코인 / 이더리움 / 등등 – API 키.json 내 정의 기준
-  // (이미 JSON 안에 값이 들어있는 것 확인됨) :contentReference[oaicite:7]{index=7}
+  // 온체인 지갑들 (API 키.json 키 이름 기준)
+
   addWallet({
-    id: "btc",
-    label: "BTC (Bitcoin)",
-    chain: "Bitcoin",
-    symbol: "BTC",
     key: "BTC_ADDRESS",
-  });
-  addWallet({
-    id: "eth",
-    label: "ETH (Ethereum)",
-    chain: "Ethereum",
-    symbol: "ETH",
-    key: "ETH_ADDRESS",
-  });
-  addWallet({
-    id: "xrp",
-    label: "XRP (Ripple)",
-    chain: "XRP Ledger",
-    symbol: "XRP",
-    key: "XRP_ADDRESS",
-  });
-  addWallet({
-    id: "bnb",
-    label: "BNB (BSC)",
-    chain: "BNB Chain",
-    symbol: "BNB",
-    key: "BNB_ADDRESS",
-  });
-  addWallet({
-    id: "xlm",
-    label: "XLM (Stellar)",
-    chain: "Stellar",
-    symbol: "XLM",
-    key: "XLM_ADDRESS",
-  });
-  addWallet({
-    id: "trx",
-    label: "TRX (Tron)",
-    chain: "TRON",
-    symbol: "TRX",
-    key: "TRX_ADDRESS",
-  });
-  addWallet({
-    id: "usdt_eth",
-    label: "USDT (Ethereum)",
-    chain: "Ethereum",
-    symbol: "USDT",
-    key: "USDT_ETH_ADDRESS",
-  });
-  addWallet({
-    id: "usdt_trx",
-    label: "USDT (Tron)",
-    chain: "TRON",
-    symbol: "USDT",
-    key: "USDT_TRX_ADDRESS",
-  });
-  addWallet({
-    id: "usdc",
-    label: "USDC (Stellar/기타)",
-    chain: "Multi-chain",
-    symbol: "USDC",
-    key: "USDC_ADDRESS",
-  });
-  addWallet({
-    id: "usdc_trx",
-    label: "USDC (Tron)",
-    chain: "TRON",
-    symbol: "USDC",
-    key: "USDC_TRX_ADDRESS",
-  });
-  addWallet({
-    id: "ankr_matic",
-    label: "ANKR-MATIC",
-    chain: "Polygon",
-    symbol: "ANKR-MATIC",
-    key: "ANKRMATIC_ADDRESS",
-  });
-  addWallet({
-    id: "dai",
-    label: "DAI (Ethereum)",
-    chain: "Ethereum",
-    symbol: "DAI",
-    key: "DAI_ADDRESS",
+    chain: "btc",
+    network: "Bitcoin mainnet",
+    symbol: "BTC",
+    label: "BTC (Bitcoin)",
   });
 
-  // 중앙화 거래소(LBank) – 주소 대신 “있다/없다” 정도만 표시용
+  addWallet({
+    key: "ETH_ADDRESS",
+    chain: "eth",
+    network: "Ethereum mainnet",
+    symbol: "ETH",
+    label: "ETH (Ethereum)",
+  });
+
+  addWallet({
+    key: "XRP_ADDRESS",
+    chain: "xrp",
+    network: "XRP Ledger",
+    symbol: "XRP",
+    label: "XRP (Ripple)",
+  });
+
+  addWallet({
+    key: "BNB_ADDRESS",
+    chain: "bsc",
+    network: "BNB Smart Chain",
+    symbol: "BNB",
+    label: "BNB (BSC)",
+  });
+
+  addWallet({
+    key: "XLM_ADDRESS",
+    chain: "xlm",
+    network: "Stellar",
+    symbol: "XLM",
+    label: "XLM (Stellar)",
+  });
+
+  addWallet({
+    key: "TRX_ADDRESS",
+    chain: "trx",
+    network: "TRON mainnet",
+    symbol: "TRX",
+    label: "TRX (TRON)",
+  });
+
+  addWallet({
+    key: "USDT_ETH_ADDRESS",
+    chain: "eth",
+    network: "Ethereum mainnet",
+    symbol: "USDT",
+    label: "USDT (Ethereum)",
+  });
+
+  addWallet({
+    key: "USDT_TRX_ADDRESS",
+    chain: "trx",
+    network: "TRON mainnet",
+    symbol: "USDT",
+    label: "USDT (TRON)",
+  });
+
+  addWallet({
+    key: "USDC_ADDRESS",
+    chain: "multi",
+    network: "Ethereum/Stellar (mixed)",
+    symbol: "USDC",
+    label: "USDC",
+  });
+
+  addWallet({
+    key: "USDC_TRX_ADDRESS",
+    chain: "trx",
+    network: "TRON mainnet",
+    symbol: "USDC",
+    label: "USDC (TRON)",
+  });
+
+  addWallet({
+    key: "ANKRMATIC_ADDRESS",
+    chain: "polygon",
+    network: "Polygon",
+    symbol: "ANKR/MATIC",
+    label: "ANKR-MATIC (Polygon)",
+  });
+
+  addWallet({
+    key: "DAI_ADDRESS",
+    chain: "eth",
+    network: "Ethereum mainnet",
+    symbol: "DAI",
+    label: "DAI (Ethereum)",
+  });
+
+  // 대표 공개 주소 (여러 체인 공용)
+  const publicAddr = getVal(cfg, "WALLET_PUBLIC_ADDRESS");
+  if (publicAddr) {
+    wallets.push({
+      chain: "multi",
+      network: "Multi-chain",
+      symbol: "WALLET",
+      address: publicAddr,
+      label: "대표 공개 지갑",
+      watch_only: true,
+    });
+  }
+
+  // LBank 존재 여부만 별도 플래그로
   const hasLbank =
     !!getVal(cfg, "LBANK_API_KEY") || !!getVal(cfg, "LBANK_API_SECRET");
 
