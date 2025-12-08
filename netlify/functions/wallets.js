@@ -1,22 +1,36 @@
 // netlify/functions/wallets.js
 // IGDC 관리자 대시보드: "🪙 지갑 현황 (watch-only)" 엔드포인트
 //
-// - Netlify ENV + api-key.json / API 키.json 에 들어 있는 지갑·거래소 정보를 읽어서
+// - Netlify ENV + api-key.json / API 키.json / api-key.env / API 키.env 를 읽어서
 //   /api/wallets 요청 시 JSON으로 반환합니다.
 // - 실제 on-chain 잔액/트랜잭션 조회는 별도 함수에서 처리합니다.
 
 const fs = require("fs");
 const path = require("path");
 
-// 설정 파일 로드 (status.js / secureEnvBridge.js 와 비슷한 패턴)
+// 설정 파일 로드
 function loadConfig() {
   const cfg = {};
 
-  const base = __dirname;
-  const root = process.cwd();
+  const base = __dirname;       // 이 함수 파일이 있는 폴더
+  const root = process.cwd();   // 함수 번들의 루트(대부분 사이트 루트)
+  const serverEnvPath =
+    process.env.SERVER_ENV_PATH || process.env.SERVER_ENV_PATCH || "";
 
-  // 1) JSON 파일 후보 (한글/영문 파일명 + 여러 위치)
-  const jsonCandidates = [
+  // 1) JSON 파일 후보들
+  const jsonCandidates = [];
+
+  // (1) SERVER_ENV_PATH 가 지정된 경우: 파일 또는 디렉터리로 모두 시도
+  if (serverEnvPath) {
+    jsonCandidates.push(
+      serverEnvPath,                                   // 파일 경로일 수도 있음
+      path.join(serverEnvPath, "api-key.json"),
+      path.join(serverEnvPath, "API 키.json")
+    );
+  }
+
+  // (2) 기존 후보들
+  jsonCandidates.push(
     // 함수 빌드 폴더 주변
     path.join(base, "api-key.json"),
     path.join(base, "API 키.json"),
@@ -27,14 +41,14 @@ function loadConfig() {
     path.join(root, "netlify", "functions", "api-key.json"),
     path.join(root, "netlify", "functions", "API 키.json"),
 
-    // 루트 바로 아래
+    // 루트 바로 아래 (drag&drop 배포 대비)
     path.join(root, "api-key.json"),
-    path.join(root, "API 키.json"),
-  ];
+    path.join(root, "API 키.json")
+  );
 
   for (const p of jsonCandidates) {
     try {
-      if (!fs.existsSync(p)) continue;
+      if (!p || !fs.existsSync(p)) continue;
       const raw = fs.readFileSync(p, "utf8");
       const json = JSON.parse(raw);
       if (json && typeof json === "object") {
@@ -45,8 +59,19 @@ function loadConfig() {
     }
   }
 
-  // 2) env 스타일 파일 (선택 사항)
-  const envCandidates = [
+  // 2) .env 스타일 파일 후보들 (KEY=VALUE)
+  const envCandidates = [];
+
+  // (1) SERVER_ENV_PATH 아래
+  if (serverEnvPath) {
+    envCandidates.push(
+      path.join(serverEnvPath, "api-key.env"),
+      path.join(serverEnvPath, "API 키.env")
+    );
+  }
+
+  // (2) 기존 위치들
+  envCandidates.push(
     path.join(base, "api-key.env"),
     path.join(base, "API 키.env"),
     path.join(base, "..", "api-key.env"),
@@ -54,12 +79,12 @@ function loadConfig() {
     path.join(root, "api-key.env"),
     path.join(root, "API 키.env"),
     path.join(root, "netlify", "functions", "api-key.env"),
-    path.join(root, "netlify", "functions", "API 키.env"),
-  ];
+    path.join(root, "netlify", "functions", "API 키.env")
+  );
 
   for (const p of envCandidates) {
     try {
-      if (!fs.existsSync(p)) continue;
+      if (!p || !fs.existsSync(p)) continue;
       const raw = fs.readFileSync(p, "utf8");
       raw.split(/\r?\n/).forEach((line) => {
         const trimmed = line.trim();
@@ -82,6 +107,7 @@ function loadConfig() {
 
 // ENV + JSON 통합 조회
 function getVal(cfg, key) {
+  // 1순위: Netlify ENV
   if (
     typeof process !== "undefined" &&
     process.env &&
@@ -90,18 +116,24 @@ function getVal(cfg, key) {
   ) {
     return process.env[key];
   }
+
+  // 2순위: JSON / .env 에서 읽어온 평평한 키들
   if (cfg && Object.prototype.hasOwnProperty.call(cfg, key) && cfg[key]) {
     return cfg[key];
   }
+
+  // 3순위: 중첩 구조(secrets / WALLETS) 지원
   if (cfg && cfg.secrets && Object.prototype.hasOwnProperty.call(cfg.secrets, key)) {
     return cfg.secrets[key];
   }
   if (cfg && cfg.WALLETS && Object.prototype.hasOwnProperty.call(cfg.WALLETS, key)) {
     return cfg.WALLETS[key];
   }
+
   return "";
 }
 
+// 메인 핸들러
 exports.handler = async () => {
   const cfg = loadConfig();
   const wallets = [];
@@ -119,8 +151,7 @@ exports.handler = async () => {
     });
   }
 
-  // 온체인 지갑들 (API 키.json 키 이름 기준)
-
+  // ─ 각 체인별 지갑 카드 ─
   addWallet({
     key: "BTC_ADDRESS",
     chain: "btc",
