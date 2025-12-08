@@ -1,55 +1,53 @@
 // netlify/functions/wallets.js
 // IGDC 관리자 대시보드: "🪙 지갑 현황 (watch-only)" 엔드포인트
-//
-// - Netlify ENV + api-key.json / API 키.json / api-key.env / API 키.env 를 읽어서
-//   /api/wallets 요청 시 JSON으로 반환합니다.
-// - 실제 on-chain 잔액/트랜잭션 조회는 별도 함수에서 처리합니다.
 
-const fs = require("fs");
+const fs   = require("fs");
 const path = require("path");
 
-// 설정 파일 로드
+// ────────────────────────
+// 1. 설정 파일 로더
+// ────────────────────────
 function loadConfig() {
-  const cfg = {};
+  const cfg  = {};
+  const base = __dirname;
+  const root = process.cwd();
 
-  const base = __dirname;       // 이 함수 파일이 있는 폴더
-  const root = process.cwd();   // 함수 번들의 루트(대부분 사이트 루트)
+  // Netlify ENV에 설정해 둔 경로 (디렉터리 or 파일)
   const serverEnvPath =
-    process.env.SERVER_ENV_PATH || process.env.SERVER_ENV_PATCH || "";
+    process.env.SERVER_ENV_PATH ||
+    process.env.SERVER_ENV_PATCH ||
+    "";
 
-  // 1) JSON 파일 후보들
   const jsonCandidates = [];
 
-  // (1) SERVER_ENV_PATH 가 지정된 경우: 파일 또는 디렉터리로 모두 시도
+  // 1) SERVER_ENV_PATH가 지정된 경우
   if (serverEnvPath) {
+    // 만약 값 자체가 파일 경로라면 그대로 시도
+    jsonCandidates.push(serverEnvPath);
+    // 디렉터리일 경우를 대비해서 하위 파일들도 시도
     jsonCandidates.push(
-      serverEnvPath,                                   // 파일 경로일 수도 있음
-      path.join(serverEnvPath, "api-key.json"),
-      path.join(serverEnvPath, "API 키.json")
+      path.join(serverEnvPath, "API 키.json"),
+      path.join(serverEnvPath, "api-key.json")
     );
   }
 
-  // (2) 기존 후보들
+  // 2) 기존 후보들 (status.js / secureEnvBridge 와 동일 계열)
   jsonCandidates.push(
-    // 함수 빌드 폴더 주변
     path.join(base, "api-key.json"),
     path.join(base, "API 키.json"),
     path.join(base, "..", "api-key.json"),
     path.join(base, "..", "API 키.json"),
-
-    // Netlify deploy 루트 기준 (secureEnvBridge 와 동일)
-    path.join(root, "netlify", "functions", "api-key.json"),
-    path.join(root, "netlify", "functions", "API 키.json"),
-
-    // 루트 바로 아래 (drag&drop 배포 대비)
     path.join(root, "api-key.json"),
-    path.join(root, "API 키.json")
+    path.join(root, "API 키.json"),
+    path.join(root, "netlify", "functions", "api-key.json"),
+    path.join(root, "netlify", "functions", "API 키.json")
   );
 
+  // JSON 파일 로딩
   for (const p of jsonCandidates) {
     try {
       if (!p || !fs.existsSync(p)) continue;
-      const raw = fs.readFileSync(p, "utf8");
+      const raw  = fs.readFileSync(p, "utf8");
       const json = JSON.parse(raw);
       if (json && typeof json === "object") {
         Object.assign(cfg, json);
@@ -59,18 +57,16 @@ function loadConfig() {
     }
   }
 
-  // 2) .env 스타일 파일 후보들 (KEY=VALUE)
+  // 3) .env 스타일 파일 후보들
   const envCandidates = [];
 
-  // (1) SERVER_ENV_PATH 아래
   if (serverEnvPath) {
     envCandidates.push(
-      path.join(serverEnvPath, "api-key.env"),
-      path.join(serverEnvPath, "API 키.env")
+      path.join(serverEnvPath, "API 키.env"),
+      path.join(serverEnvPath, "api-key.env")
     );
   }
 
-  // (2) 기존 위치들
   envCandidates.push(
     path.join(base, "api-key.env"),
     path.join(base, "API 키.env"),
@@ -105,7 +101,9 @@ function loadConfig() {
   return cfg;
 }
 
-// ENV + JSON 통합 조회
+// ────────────────────────
+// 2. ENV + JSON 통합 조회
+// ────────────────────────
 function getVal(cfg, key) {
   // 1순위: Netlify ENV
   if (
@@ -117,7 +115,7 @@ function getVal(cfg, key) {
     return process.env[key];
   }
 
-  // 2순위: JSON / .env 에서 읽어온 평평한 키들
+  // 2순위: JSON / .env에서 평평하게 읽힌 키
   if (cfg && Object.prototype.hasOwnProperty.call(cfg, key) && cfg[key]) {
     return cfg[key];
   }
@@ -133,122 +131,41 @@ function getVal(cfg, key) {
   return "";
 }
 
-// 메인 핸들러
+// ────────────────────────
+// 3. 메인 핸들러
+// ────────────────────────
 exports.handler = async () => {
-  const cfg = loadConfig();
+  const cfg     = loadConfig();
   const wallets = [];
 
   function addWallet(options) {
     const address = getVal(cfg, options.key);
     if (!address) return;
     wallets.push({
-      chain: options.chain,       // "btc", "eth" 등
-      network: options.network,   // "Bitcoin mainnet" 등
-      symbol: options.symbol,     // "BTC", "ETH" 등
+      chain:      options.chain,
+      network:    options.network,
+      symbol:     options.symbol,
       address,
-      label: options.label || "", // 카드 제목
+      label:      options.label || "",
       watch_only: true,
     });
   }
 
-  // ─ 각 체인별 지갑 카드 ─
-  addWallet({
-    key: "BTC_ADDRESS",
-    chain: "btc",
-    network: "Bitcoin mainnet",
-    symbol: "BTC",
-    label: "BTC (Bitcoin)",
-  });
+  // 각 체인별 지갑
+  addWallet({ key: "BTC_ADDRESS",        chain: "btc",     network: "Bitcoin mainnet",             symbol: "BTC",        label: "BTC (Bitcoin)" });
+  addWallet({ key: "ETH_ADDRESS",        chain: "eth",     network: "Ethereum mainnet",            symbol: "ETH",        label: "ETH (Ethereum)" });
+  addWallet({ key: "XRP_ADDRESS",        chain: "xrp",     network: "XRP Ledger",                  symbol: "XRP",        label: "XRP (Ripple)" });
+  addWallet({ key: "BNB_ADDRESS",        chain: "bsc",     network: "BNB Smart Chain",             symbol: "BNB",        label: "BNB (BSC)" });
+  addWallet({ key: "XLM_ADDRESS",        chain: "xlm",     network: "Stellar",                     symbol: "XLM",        label: "XLM (Stellar)" });
+  addWallet({ key: "TRX_ADDRESS",        chain: "trx",     network: "TRON mainnet",                symbol: "TRX",        label: "TRX (TRON)" });
+  addWallet({ key: "USDT_ETH_ADDRESS",   chain: "eth",     network: "Ethereum mainnet",            symbol: "USDT",       label: "USDT (Ethereum)" });
+  addWallet({ key: "USDT_TRX_ADDRESS",   chain: "trx",     network: "TRON mainnet",                symbol: "USDT",       label: "USDT (TRON)" });
+  addWallet({ key: "USDC_ADDRESS",       chain: "multi",   network: "Ethereum/Stellar (mixed)",    symbol: "USDC",       label: "USDC" });
+  addWallet({ key: "USDC_TRX_ADDRESS",   chain: "trx",     network: "TRON mainnet",                symbol: "USDC",       label: "USDC (TRON)" });
+  addWallet({ key: "ANKRMATIC_ADDRESS",  chain: "polygon", network: "Polygon",                     symbol: "ANKR/MATIC", label: "ANKR-MATIC (Polygon)" });
+  addWallet({ key: "DAI_ADDRESS",        chain: "eth",     network: "Ethereum mainnet",            symbol: "DAI",        label: "DAI (Ethereum)" });
 
-  addWallet({
-    key: "ETH_ADDRESS",
-    chain: "eth",
-    network: "Ethereum mainnet",
-    symbol: "ETH",
-    label: "ETH (Ethereum)",
-  });
-
-  addWallet({
-    key: "XRP_ADDRESS",
-    chain: "xrp",
-    network: "XRP Ledger",
-    symbol: "XRP",
-    label: "XRP (Ripple)",
-  });
-
-  addWallet({
-    key: "BNB_ADDRESS",
-    chain: "bsc",
-    network: "BNB Smart Chain",
-    symbol: "BNB",
-    label: "BNB (BSC)",
-  });
-
-  addWallet({
-    key: "XLM_ADDRESS",
-    chain: "xlm",
-    network: "Stellar",
-    symbol: "XLM",
-    label: "XLM (Stellar)",
-  });
-
-  addWallet({
-    key: "TRX_ADDRESS",
-    chain: "trx",
-    network: "TRON mainnet",
-    symbol: "TRX",
-    label: "TRX (TRON)",
-  });
-
-  addWallet({
-    key: "USDT_ETH_ADDRESS",
-    chain: "eth",
-    network: "Ethereum mainnet",
-    symbol: "USDT",
-    label: "USDT (Ethereum)",
-  });
-
-  addWallet({
-    key: "USDT_TRX_ADDRESS",
-    chain: "trx",
-    network: "TRON mainnet",
-    symbol: "USDT",
-    label: "USDT (TRON)",
-  });
-
-  addWallet({
-    key: "USDC_ADDRESS",
-    chain: "multi",
-    network: "Ethereum/Stellar (mixed)",
-    symbol: "USDC",
-    label: "USDC",
-  });
-
-  addWallet({
-    key: "USDC_TRX_ADDRESS",
-    chain: "trx",
-    network: "TRON mainnet",
-    symbol: "USDC",
-    label: "USDC (TRON)",
-  });
-
-  addWallet({
-    key: "ANKRMATIC_ADDRESS",
-    chain: "polygon",
-    network: "Polygon",
-    symbol: "ANKR/MATIC",
-    label: "ANKR-MATIC (Polygon)",
-  });
-
-  addWallet({
-    key: "DAI_ADDRESS",
-    chain: "eth",
-    network: "Ethereum mainnet",
-    symbol: "DAI",
-    label: "DAI (Ethereum)",
-  });
-
-  // 대표 공개 주소 (여러 체인 공용)
+  // 대표 공개 주소
   const publicAddr = getVal(cfg, "WALLET_PUBLIC_ADDRESS");
   if (publicAddr) {
     wallets.push({
@@ -261,7 +178,7 @@ exports.handler = async () => {
     });
   }
 
-  // LBank 존재 여부만 별도 플래그로
+  // LBank 연동 여부
   const hasLbank =
     !!getVal(cfg, "LBANK_API_KEY") || !!getVal(cfg, "LBANK_API_SECRET");
 
@@ -269,9 +186,7 @@ exports.handler = async () => {
     endpoint: "/api/wallets",
     ok: wallets.length > 0 || hasLbank,
     wallets,
-    cex: {
-      lbank: hasLbank,
-    },
+    cex: { lbank: hasLbank },
   };
 
   return {
