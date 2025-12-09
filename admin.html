@@ -469,6 +469,119 @@
     cursor:pointer;
   }
 </style>
+
+<style id="igdc-traffic-mini-style">
+  /* 우측 패널 미니 트래픽 카드 */
+  .igdc-traffic-mini-card {
+    margin-top: 6px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid #e0cfb0;
+    background: #fffdf7;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .igdc-traffic-mini-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  .igdc-traffic-mini-title {
+    font-weight: 700;
+    color: #5a3c19;
+    font-size: 11px;
+  }
+  .igdc-traffic-mini-sub {
+    font-size: 10px;
+    color: #8a6d3b;
+    white-space: nowrap;
+  }
+  .igdc-traffic-mini-chart-wrap {
+    width: 100%;
+    height: 120px;
+  }
+  .igdc-traffic-mini-chart-wrap canvas {
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  /* 전체 팝업 모달 */
+  .igdc-traffic-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    display: none;
+    z-index: 1600;
+  }
+  .igdc-traffic-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    z-index: 1610;
+    place-items: center;
+  }
+  .igdc-traffic-sheet {
+    width: min(980px, 96vw);
+    max-height: 90vh;
+    background: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 18px 60px rgba(0,0,0,0.3);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-size: 12px;
+  }
+  .igdc-traffic-header {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e5e5e5;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #faf6ef;
+  }
+  .igdc-traffic-header h2 {
+    margin: 0;
+    font-size: 13px;
+    color: #5a3c19;
+  }
+  .igdc-traffic-header small {
+    font-size: 11px;
+    color: #8a6d3b;
+  }
+  .igdc-traffic-close-btn {
+    border: 1px solid #d8b894;
+    background: #fffaf3;
+    border-radius: 6px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 11px;
+  }
+  .igdc-traffic-body {
+    padding: 10px 12px;
+    overflow: auto;
+  }
+  .igdc-traffic-body p {
+    margin: 0 0 6px 0;
+    font-size: 11px;
+    color: #555;
+  }
+  .igdc-traffic-legend {
+    margin-bottom: 6px;
+    font-size: 11px;
+    color: #666;
+  }
+  .igdc-traffic-canvas-wrap {
+    width: 100%;
+    height: 320px;
+  }
+  .igdc-traffic-canvas-wrap canvas {
+    width: 100% !important;
+    height: 100% !important;
+  }
+</style>
+
+
 </head>
 <body>
 <script>(function(){document.addEventListener("DOMContentLoaded",function(){document.documentElement.classList.remove("prelayout");var s=document.getElementById("prelayout-guard"); if(s&&s.parentNode){s.parentNode.removeChild(s);}});})();</script>
@@ -1071,6 +1184,31 @@ function openPopup(url){
 
       <div style="margin-top:12px;text-align:right;">
         <button class="donation-close" onclick="closeDonationModal()">닫기</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- 유입 현황 (지역+연령) 전체 팝업 모달 -->
+<div id="igdc-traffic-backdrop" class="igdc-traffic-backdrop" aria-hidden="true"></div>
+<div id="igdc-traffic-modal" class="igdc-traffic-modal" aria-modal="true" role="dialog" aria-labelledby="igdcTrafficTitle">
+  <div class="igdc-traffic-sheet">
+    <div class="igdc-traffic-header">
+      <div>
+        <h2 id="igdcTrafficTitle">유입 현황 (지역 + 연령)</h2>
+        <small>현재는 샘플 데이터 기준 · GA4 연동 시 자동 반영</small>
+      </div>
+      <button type="button" class="igdc-traffic-close-btn" onclick="window.IGDC_TRAFFIC && IGDC_TRAFFIC.closeModal();">
+        닫기 ✕
+      </button>
+    </div>
+    <div class="igdc-traffic-body">
+      <p>대륙/지역별로 연령대(20·30·40·50대…) 분포를 한 도표 안에서 보여줍니다.</p>
+      <div class="igdc-traffic-legend">
+        · X축: 지역 버킷 (동아시아, 동남아시아, 유럽 등)<br>
+        · 막대 색: 연령대(20s, 30s, 40s, 50s 등)
+      </div>
+      <div class="igdc-traffic-canvas-wrap">
+        <canvas id="igdc-traffic-modal-canvas"></canvas>
       </div>
     </div>
   </div>
@@ -2832,6 +2970,224 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
   if(location.hash === '#inflow'){ openModal(); }
 })();
 </script>
+
+<script>
+(function(){
+  // ===== 기본 샘플 데이터 (지역 + 연령) =====
+  function buildDefaultTrafficData(){
+    return {
+      regions: [
+        {
+          code: 'east_asia',
+          label: '동아시아',
+          ages: { '20s': 120, '30s': 90, '40s': 60, '50s': 30 }
+        },
+        {
+          code: 'southeast_asia',
+          label: '동남아시아',
+          ages: { '20s': 80, '30s': 70, '40s': 40, '50s': 20 }
+        },
+        {
+          code: 'europe_west',
+          label: '서유럽',
+          ages: { '20s': 50, '30s': 60, '40s': 55, '50s': 25 }
+        },
+        {
+          code: 'europe_east',
+          label: '동유럽',
+          ages: { '20s': 40, '30s': 35, '40s': 30, '50s': 15 }
+        },
+        {
+          code: 'north_america_au',
+          label: '북미+호주',
+          ages: { '20s': 70, '30s': 65, '40s': 50, '50s': 30 }
+        }
+      ]
+    };
+  }
+
+  function normalizeTraffic(raw){
+    if(!raw || !Array.isArray(raw.regions) || !raw.regions.length){
+      return buildDefaultTrafficData();
+    }
+    return {
+      regions: raw.regions.map(function(r){
+        return {
+          code: r.code || '',
+          label: r.label || r.code || '',
+          ages: r.ages || {}
+        };
+      })
+    };
+  }
+
+  function collectAgeKeys(regions){
+    var set = {};
+    regions.forEach(function(r){
+      var ages = r.ages || {};
+      Object.keys(ages).forEach(function(k){ set[k] = true; });
+    });
+    var keys = Object.keys(set);
+    keys.sort(function(a,b){ return a.localeCompare(b); });
+    return keys;
+  }
+
+  var miniChart = null;
+  var modalChart = null;
+  var currentData = null;
+
+  function buildCharts(data){
+    currentData = normalizeTraffic(data || currentData || buildDefaultTrafficData());
+    var regions = currentData.regions;
+    if(!regions.length || typeof Chart === 'undefined') return;
+
+    var labels = regions.map(function(r){ return r.label; });
+    var ageKeys = collectAgeKeys(regions);
+
+    var palette = [
+      '#4a90e2','#50b36c','#f5a623','#d0021b',
+      '#7b33ff','#00a8a8','#b57255','#8085e9'
+    ];
+
+    var datasets = ageKeys.map(function(ageKey, idx){
+      return {
+        label: ageKey,
+        data: regions.map(function(r){
+          var v = (r.ages && r.ages[ageKey]) || 0;
+          return Number(v) || 0;
+        }),
+        backgroundColor: palette[idx % palette.length]
+      };
+    });
+
+    // 미니 차트
+    var miniCanvas = document.getElementById('igdc-traffic-mini-canvas');
+    if(miniCanvas){
+      if(miniChart){
+        miniChart.data.labels = labels;
+        miniChart.data.datasets = datasets;
+        miniChart.update();
+      } else {
+        miniChart = new Chart(miniCanvas.getContext('2d'), {
+          type: 'bar',
+          data: { labels: labels, datasets: datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: { enabled: true }
+            },
+            scales: {
+              x: { stacked: false, ticks: { display: false } },
+              y: { beginAtZero: true, ticks: { display: false } }
+            }
+          }
+        });
+      }
+    }
+
+    // 모달 차트
+    var modalCanvas = document.getElementById('igdc-traffic-modal-canvas');
+    if(modalCanvas){
+      if(modalChart){
+        modalChart.data.labels = labels;
+        modalChart.data.datasets = datasets;
+        modalChart.update();
+      } else {
+        modalChart = new Chart(modalCanvas.getContext('2d'), {
+          type: 'bar',
+          data: { labels: labels, datasets: datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: 'top' },
+              tooltip: {
+                callbacks: {
+                  label: function(ctx){
+                    var v = ctx.parsed.y || 0;
+                    try { return ctx.dataset.label + ': ' + v.toLocaleString('ko-KR') + ' 명'; }
+                    catch(e){ return ctx.dataset.label + ': ' + v + ' 명'; }
+                  }
+                }
+              }
+            },
+            scales: {
+              x: { stacked: false },
+              y: { beginAtZero: true }
+            }
+          }
+        });
+      }
+    }
+  }
+
+  function openModal(){
+    var b = document.getElementById('igdc-traffic-backdrop');
+    var m = document.getElementById('igdc-traffic-modal');
+    if(b) b.style.display = 'block';
+    if(m) m.style.display = 'grid';
+    buildCharts(currentData || buildDefaultTrafficData());
+    document.addEventListener('keydown', escHandler);
+  }
+
+  function closeModal(){
+    var b = document.getElementById('igdc-traffic-backdrop');
+    var m = document.getElementById('igdc-traffic-modal');
+    if(b) b.style.display = 'none';
+    if(m) m.style.display = 'none';
+    document.removeEventListener('keydown', escHandler);
+  }
+
+  function escHandler(ev){
+    if(ev.key === 'Escape'){
+      closeModal();
+    }
+  }
+
+  function injectMiniCard(){
+    var panel = document.getElementById('igdc-site-control');
+    if(!panel) return;
+    // 기존 렌더링이 끝난 뒤에도 안전하게 맨 아래에만 살짝 추가
+    var card = document.createElement('div');
+    card.className = 'igdc-traffic-mini-card';
+    card.innerHTML =
+      '<div class="igdc-traffic-mini-header">' +
+        '<span class="igdc-traffic-mini-title">유입 현황 (지역+연령)</span>' +
+        '<span class="igdc-traffic-mini-sub">클릭 시 전체 보기</span>' +
+      '</div>' +
+      '<div class="igdc-traffic-mini-chart-wrap">' +
+        '<canvas id="igdc-traffic-mini-canvas"></canvas>' +
+      '</div>';
+    card.addEventListener('click', function(e){
+      e.preventDefault();
+      openModal();
+    });
+    panel.appendChild(card);
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    try {
+      injectMiniCard();
+      // 초기 샘플 데이터로 바로 렌더링
+      buildCharts(buildDefaultTrafficData());
+    } catch(e){}
+  });
+
+  // GA4 / 백엔드에서 데이터를 넣을 수 있는 전역 API
+  window.IGDC_TRAFFIC = {
+    setData: function(payload){
+      try{
+        buildCharts(payload);
+      }catch(e){}
+    },
+    openModal: openModal,
+    closeModal: closeModal
+  };
+})();
+</script>
+
 
 <script src="assets/js/igdc-site-control.js"></script>
 
