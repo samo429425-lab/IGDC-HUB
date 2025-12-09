@@ -1,3 +1,15 @@
+// allow status to see the same key files at runtime
+exports.config = {
+  includedFiles: [
+    'netlify/functions/API 키.json',
+    'netlify/functions/api-key.json',
+    'netlify/functions/API 키.env',
+    'netlify/functions/api-key.env',
+    'netlify/functions/wallets.env',
+    'netlify/functions/wallets.json'
+  ]
+};
+
 // /.netlify/functions/status
 // IGDC 관리자 대시보드 상태 엔드포인트
 //

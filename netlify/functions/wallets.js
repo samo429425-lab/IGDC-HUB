@@ -1,3 +1,15 @@
+// ensure key files are packaged with this function
+exports.config = {
+  includedFiles: [
+    'netlify/functions/wallets.env',
+    'netlify/functions/wallets.json',
+    'netlify/functions/API 키.env',
+    'netlify/functions/API 키.json',
+    'netlify/functions/api-key.env',
+    'netlify/functions/api-key.json'
+  ]
+};
+
 // netlify/functions/wallets.js
 // Reads wallet keys from: process.env, *.env, *.json (function folder)
 // Caches on first call to reduce cold-start overhead (CommonJS export)
