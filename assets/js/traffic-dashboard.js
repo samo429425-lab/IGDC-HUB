@@ -104,15 +104,19 @@
   function ensureMiniCard() {
     if (miniCard) return;
 
+    // 여기서 우측 패널 전체 컨테이너를 1순위로 잡습니다.
+    // (header, 그리드, AI 실문보조, 점검영역 등 모든 블록의 맨 아래에 오게)
     var host =
-      document.querySelector('#igdc-site-control .igdc-sc-grid') ||
       document.querySelector('#igdc-site-control') ||
-      document.querySelector('.igdc-site-control');
+      document.querySelector('.igdc-site-control') ||
+      document.querySelector('#igdc-site-control .igdc-sc-grid');
+
     if (!host) return;
 
     miniCard = document.createElement('section');
     miniCard.className = 'igdc-sc-card igdc-traffic-mini-card';
-    miniCard.style.order = '999'; // 우측 카드들 중에서도 맨 뒤쪽
+    // flex 컨테이너에서 항상 맨 끝으로 보내기
+    miniCard.style.order = '999';
 
     miniCard.innerHTML =
       '<div class="igdc-sc-card-header" '+
@@ -139,7 +143,7 @@
       openModal();
     });
 
-    // 핵심: 별도 anchor 없이 host에 append → 항상 맨 마지막 카드로 배치
+    // 우측 패널 컨테이너의 자식들 중 항상 마지막으로 추가
     host.appendChild(miniCard);
   }
 
