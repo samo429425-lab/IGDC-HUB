@@ -119,7 +119,7 @@ var host = document.querySelector('.igdc-site-control .igdc-sc-grid');
 // AI 질문 보조 영역 바로 뒤로 붙이기
 var aiHelper = document.querySelector('#igdc-admin-ai-block');  // AI 질문보조 wrapper id
 if(aiHelper && aiHelper.parentNode){
-    aiHelper.parentNode.insertBefore(miniCard, aiHelper.nextSibling);
+    aiHelper.parentNode.appendChild(miniCard);
     return;  // 위치 강제 완료
 }
 
