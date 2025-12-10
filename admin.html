@@ -1090,65 +1090,81 @@ function openPopup(url){
 
 <script>
 (function(){
-  function el(html){ var d=document.createElement('div'); d.innerHTML=html; return d.firstElementChild; }
-  function pill(s){ return '<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:#f0f0f0;margin-right:6px;font-size:12px;">'+s+'</span>'; }
-
   var panel = document.getElementById('wallet-status-panel');
-  if(!panel) return;
+  if (!panel) return;
 
+  // 공개키(백엔드 env) 상태 요약
   function renderStatus(env){
     return [
-      'GOOGLE_API_KEY', env.google ? 'OK':'MISSING',
-      'NAVER_CLIENT_ID', env.naver_id ? 'OK':'MISSING',
-      'NAVER_CLIENT_SECRET', env.naver_secret ? 'OK':'MISSING',
-      'OPENAI_API_KEY', env.openai ? 'OK':'MISSING'
+      'GOOGLE_API_KEY',      env.google       ? 'OK' : 'MISSING',
+      'NAVER_CLIENT_ID',     env.naver_id     ? 'OK' : 'MISSING',
+      'NAVER_CLIENT_SECRET', env.naver_secret ? 'OK' : 'MISSING',
+      'OPENAI_API_KEY',      env.openai       ? 'OK' : 'MISSING'
     ];
   }
 
   function fmtStatus(rows){
-    var out = '<div style="background:#f7fbff;border:1px solid #cfe3ff;border-radius:12px;padding:12px 14px;margin-bottom:12px;">';
-    out += '<strong style="color:#004080">🔐 백엔드 상태</strong><div style="font-size:12px;color:#666;margin-top:4px;">(.env 키 값은 표시하지 않음)</div>';
-    out += '<ul style="margin:8px 0 0 16px;padding:0;list-style:square;">';
-    for(var i=0;i<rows.length;i+=2){
-      var k=rows[i], v=rows[i+1];
-      var cls = (v==='OK') ? 'color:#0a7' : 'color:#c00';
-      out += '<li><span style="font-weight:600">'+k+'</span>: <span style="'+cls+'">'+v+'</span></li>';
+    if (!rows || !rows.length) return '';
+    var out = '<div style="background:#f7fbff;border:1px solid #cfe3ff;border-radius:12px;padding:12px 14px;margin-bottom:10px;">'
+            + '<div style="font-weight:700;color:#004080;margin-bottom:6px;">🔐 주요 공개키 상태</div>';
+    for (var i = 0; i < rows.length; i += 2){
+      var k = rows[i], v = rows[i+1];
+      out += '<div style="display:flex;justify-content:space-between;gap:10px;margin:2px 0;">'
+           +   '<span style="font-size:12px;color:#555;">'+k+'</span>'
+           +   '<span style="font-size:12px;font-weight:700;color:'+(v === 'OK' ? '#006400' : '#c00')+';">'+v+'</span>'
+           + '</div>';
     }
-    out += '</ul></div>';
+    out += '</div>';
     return out;
   }
 
-  function fmtWallets(arr){
-    if(!arr || !arr.length) return '<div style="background:#fffef7;border:1px solid #f3d9b0;border-radius:12px;padding:12px 14px;">등록된 지갑이 없습니다.</div>';
-    var cards = arr.map(function(x){
-      var toks = (x.tokens||[]).map(pill).join('');
-      return '<div style="background:#fff;border:1px solid #eee;border-radius:12px;padding:12px 14px;margin:10px 0;">'
-        + '<div><strong>'+String(x.chain||'').toUpperCase()+'</strong> <span style="font-size:12px;color:#666">· '+(x.network||'')+'</span></div>'
-        + '<div style="font-family:ui-monospace,Menlo,Consolas,monospace;word-break:break-all;margin-top:6px;">'+(x.address||'')+'</div>'
-        + (toks ? '<div style="margin-top:6px">'+toks+'</div>' : '')
-        + '<div style="font-size:12px;color:#666;margin-top:6px;">watch-only: '+(x.watch_only? 'true':'false')+'</div>'
-        + '</div>';
-    }).join('');
-    return '<div style="background:#fdfdfd;border:1px solid #eee;border-radius:12px;padding:12px 14px;">'
-      + '<div style="font-weight:700;color:#804000;margin-bottom:6px;">🪙 지갑 현황 (watch-only)</div>'
-      + cards + '</div>';
+  // 지갑현황 박스 (메인에는 버튼만, 주소는 팝업으로)
+  function fmtWalletPanel(wallets){
+    var count = (wallets && wallets.length) ? wallets.length : 0;
+    var info  = count
+      ? ('등록된 지갑 ' + count + '개')
+      : '등록된 지갑이 없습니다.';
+
+    return ''
+      + '<div style="background:#fdfdfd;border:1px solid #eee;border-radius:12px;padding:12px 14px;">'
+      +   '<div style="font-weight:700;color:#804000;margin-bottom:6px;">🪙 지갑 현황 (watch-only)</div>'
+      +   '<div style="font-size:12px;color:#666;margin-bottom:8px;">'
+      +      info
+      +   '</div>'
+      +   '<button type="button"'
+      +           ' onclick="if(window.IGDC_WALLET_OPEN){window.IGDC_WALLET_OPEN();}else{alert(\\'지갑 팝업 모듈이 아직 연결되지 않았습니다.\\');}"'
+      +           ' style="padding:6px 12px;border-radius:8px;border:1px solid #d8b894;'
+      +                  'background:#fff7ec;cursor:pointer;font-size:13px;font-weight:600;">'
+      +      '지갑 현황 보기'
+      +   '</button>'
+      + '</div>';
   }
 
-  panel.innerHTML = '<div style="font-size:12px;color:#666">연결 확인 중…</div>';
+  // 초기 표시
+  panel.innerHTML = '<div style="font-size:12px;color:#666;">연결 확인 중…</div>';
 
   Promise.all([
-    fetch('/api/status').then(r=>r.json()).catch(()=>({ok:false,env:{}})),
-    fetch('/api/wallets').then(r=>r.json()).catch(()=>({wallets:[]}))
-  ]).then(function([st, ws]){
+    fetch('/api/status').then(function(r){ return r.json(); }).catch(function(){ return { ok:false, env:{} }; }),
+    fetch('/api/wallets').then(function(r){ return r.json(); }).catch(function(){ return { wallets:[] }; })
+  ]).then(function(results){
+    var st = results[0];
+    var ws = results[1];
     var parts = [];
-    if(st && st.env){ parts.push(fmtStatus(renderStatus(st.env))); }
-    if(ws && ws.wallets){ parts.push(fmtWallets(ws.wallets)); }
+
+    if (st && st.env){
+      parts.push(fmtStatus(renderStatus(st.env)));
+    }
+
+    var wallets = (ws && ws.wallets) || [];
+    parts.push(fmtWalletPanel(wallets));
+
     panel.innerHTML = parts.join('');
   }).catch(function(){
-    panel.innerHTML = '<div style="color:#c00">백엔드 연결 실패</div>';
+    panel.innerHTML = '<div style="color:#c00;font-size:12px;">백엔드 연결 실패</div>';
   });
 })();
 </script>
+
 <!-- IGDC minimal additions: wallet strip + backend inflow (hooks only) -->
 <style>
   /* ===== Wallet strip (상단 지갑 요약바, 이미 있으면 그대로 사용) ===== */
