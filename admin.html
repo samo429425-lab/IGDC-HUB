@@ -758,14 +758,24 @@
 </div>
 
 <div style="background-color: #fff4e0; border: 1px solid #f3d9b0; border-radius: 8px; padding: 10px 20px; margin: 20px auto; text-align: left; display: flex; justify-content: flex-start; align-items: center; gap: 30px; color: #804000; font-weight: bold; max-width: 760px;">
-<span>💠 블록체인<br/>/ Web3 연동 </span>
-<button onclick="try{connectWallet&&connectWallet();}catch(e){} __openIG();" style="padding: 8px 14px; font-size: 0.85rem; background-color: white; border: 1px solid #ccc; border-radius: 5px; cursor: pointer;">
-  🔌 지갑 연결
-</button>
-<span id="walletStatus" style="font-weight: bold;">상 태 -<br/>미연결</span>
-<span id="walletNetwork" style="font-weight:bold; margin-left:70px;">Network <br/>주 소 - </span>
-<span id="donationBox" onclick="return openDonationModal()" style="display:inline-block;margin-left:8px;padding:4px 10px;border:1px solid #d8b894;border-radius:8px;background:#ffffff; color:#000000;cursor:pointer;font-weight:700;user-select:none;">도네이션</span>
+  <span>💠 블록체인<br/>/ Web3 연동 </span>
+  <!-- 버튼: 이제 connectWallet / __openIG 대신 IGDC_WEB3_OPEN 전용 -->
+  <button
+    type="button"
+    onclick="if (window.IGDC_WEB3_OPEN) IGDC_WEB3_OPEN();"
+    style="padding: 8px 14px; font-size: 0.85rem; background-color: white; border: 1px solid #ccc; border-radius: 5px; cursor: pointer;">
+    🔍 블록체인 · Web3 상태
+  </button>
+  <!-- 상태 표시는 기존 id 유지 (백엔드 스냅샷 이벤트 그대로 사용) -->
+  <span id="walletStatus" style="font-weight: bold;">상 태 -<br/>미연결</span>
+  <span id="walletNetwork" style="font-weight:bold; margin-left:70px;">Network <br/>주 소 - </span>
+  <span id="donationBox"
+        onclick="return openDonationModal()"
+        style="display:inline-block;margin-left:8px;padding:4px 10px;border:1px solid #d8b894;border-radius:8px;background:#ffffff; color:#000000;cursor:pointer;font-weight:700;user-select:none;">
+    도네이션
+  </span>
 </div>
+
 <section id="igdc-core-link" style="border:1px solid #cfe3ff;background:#f6fbff;border-radius:12px;padding:14px 16px;margin:10px 0;text-align:left;">
 <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
 <strong style="color:#004080;">🔗 IGDC 핵심 링크</strong>
@@ -1080,69 +1090,120 @@ function openPopup(url){
 
 <script>
 (function(){
+  function el(html){ var d=document.createElement('div'); d.innerHTML=html; return d.firstElementChild; }
+  function pill(s){ return '<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:#f0f0f0;margin-right:6px;font-size:12px;">'+s+'</span>'; }
+
   var panel = document.getElementById('wallet-status-panel');
-  if (!panel) return;
+  if(!panel) return;
 
   function renderStatus(env){
     return [
-      'GOOGLE_API_KEY',      env.google       ? 'OK' : 'MISSING',
-      'NAVER_CLIENT_ID',     env.naver_id     ? 'OK' : 'MISSING',
-      'NAVER_CLIENT_SECRET', env.naver_secret ? 'OK' : 'MISSING',
-      'OPENAI_API_KEY',      env.openai       ? 'OK' : 'MISSING'
+      'GOOGLE_API_KEY', env.google ? 'OK':'MISSING',
+      'NAVER_CLIENT_ID', env.naver_id ? 'OK':'MISSING',
+      'NAVER_CLIENT_SECRET', env.naver_secret ? 'OK':'MISSING',
+      'OPENAI_API_KEY', env.openai ? 'OK':'MISSING'
     ];
   }
 
-  function fmtStatus(summary){
-    if (!summary || !summary.length) return '';
-    var items = [];
-    for (var i = 0; i < summary.length; i += 2){
-      var k = summary[i], v = summary[i+1];
-      items.push(
-        '<div style="display:flex;justify-content:space-between;gap:10px;">'
-        + '<span style="font-size:12px;color:#555;">' + k + '</span>'
-        + '<span style="font-size:12px;font-weight:700;color:' + (v === 'OK' ? '#006400' : '#c00') + ';">' + v + '</span>'
-        + '</div>'
-      );
+  function fmtStatus(rows){
+    var out = '<div style="background:#f7fbff;border:1px solid #cfe3ff;border-radius:12px;padding:12px 14px;margin-bottom:12px;">';
+    out += '<strong style="color:#004080">🔐 백엔드 상태</strong><div style="font-size:12px;color:#666;margin-top:4px;">(.env 키 값은 표시하지 않음)</div>';
+    out += '<ul style="margin:8px 0 0 16px;padding:0;list-style:square;">';
+    for(var i=0;i<rows.length;i+=2){
+      var k=rows[i], v=rows[i+1];
+      var cls = (v==='OK') ? 'color:#0a7' : 'color:#c00';
+      out += '<li><span style="font-weight:600">'+k+'</span>: <span style="'+cls+'">'+v+'</span></li>';
     }
-    return '<div style="background:#f5f7ff;border:1px solid #d0d7ff;border-radius:12px;padding:12px 14px;margin-bottom:10px;">'
-      + '<div style="font-weight:700;color:#003366;margin-bottom:6px;">🔐 주요 공개키 상태</div>'
-      + items.join('')
-      + '</div>';
+    out += '</ul></div>';
+    return out;
   }
 
-  function fmtWalletButton(wallets){
-    var n = (wallets && wallets.length) ? wallets.length : 0;
-    var info = n ? ('등록된 지갑 ' + n + '개') : '등록된 지갑이 없습니다.';
+  function fmtWallets(arr){
+    if(!arr || !arr.length) return '<div style="background:#fffef7;border:1px solid #f3d9b0;border-radius:12px;padding:12px 14px;">등록된 지갑이 없습니다.</div>';
+    var cards = arr.map(function(x){
+      var toks = (x.tokens||[]).map(pill).join('');
+      return '<div style="background:#fff;border:1px solid #eee;border-radius:12px;padding:12px 14px;margin:10px 0;">'
+        + '<div><strong>'+String(x.chain||'').toUpperCase()+'</strong> <span style="font-size:12px;color:#666">· '+(x.network||'')+'</span></div>'
+        + '<div style="font-family:ui-monospace,Menlo,Consolas,monospace;word-break:break-all;margin-top:6px;">'+(x.address||'')+'</div>'
+        + (toks ? '<div style="margin-top:6px">'+toks+'</div>' : '')
+        + '<div style="font-size:12px;color:#666;margin-top:6px;">watch-only: '+(x.watch_only? 'true':'false')+'</div>'
+        + '</div>';
+    }).join('');
     return '<div style="background:#fdfdfd;border:1px solid #eee;border-radius:12px;padding:12px 14px;">'
       + '<div style="font-weight:700;color:#804000;margin-bottom:6px;">🪙 지갑 현황 (watch-only)</div>'
-      + '<div style="font-size:12px;color:#666;margin-bottom:8px;">' + info + '</div>'
-      + '<button type="button"'
-      + ' onclick="if(window.IGDC_WALLET_OPEN){window.IGDC_WALLET_OPEN();}else{alert(\\'지갑 팝업 모듈이 아직 연결되지 않았습니다.\\');}"'
-      + ' style="padding:6px 12px;border-radius:8px;border:1px solid #ccc;background:#fff7ec;cursor:pointer;font-size:13px;">'
-      + '지갑 현황 보기'
-      + '</button>'
-      + '</div>';
+      + cards + '</div>';
   }
 
   panel.innerHTML = '<div style="font-size:12px;color:#666">연결 확인 중…</div>';
 
   Promise.all([
-    fetch('/api/status').then(function(r){ return r.json(); }).catch(function(){ return { ok:false, env:{} }; }),
-    fetch('/api/wallets').then(function(r){ return r.json(); }).catch(function(){ return { wallets:[] }; })
-  ]).then(function(results){
-    var st = results[0], ws = results[1];
+    fetch('/api/status').then(r=>r.json()).catch(()=>({ok:false,env:{}})),
+    fetch('/api/wallets').then(r=>r.json()).catch(()=>({wallets:[]}))
+  ]).then(function([st, ws]){
     var parts = [];
-    if (st && st.env){
-      parts.push(fmtStatus(renderStatus(st.env)));
-    }
-    parts.push(fmtWalletButton(ws && ws.wallets));
+    if(st && st.env){ parts.push(fmtStatus(renderStatus(st.env))); }
+    if(ws && ws.wallets){ parts.push(fmtWallets(ws.wallets)); }
     panel.innerHTML = parts.join('');
   }).catch(function(){
     panel.innerHTML = '<div style="color:#c00">백엔드 연결 실패</div>';
   });
 })();
 </script>
+<!-- IGDC minimal additions: wallet strip + backend inflow (hooks only) -->
+<style>
+  /* ===== Wallet strip (상단 지갑 요약바, 이미 있으면 그대로 사용) ===== */
+  .igdc-wallet-strip{
+    display:flex;gap:10px;align-items:center;
+    background:#fff7ec;border:1px solid #ffd9a6;
+    border-radius:12px;padding:8px 12px;margin:10px 0;
+    font-size:.9rem;
+  }
+  .igdc-wallet-label{font-weight:700;margin-right:4px;}
+  .igdc-wallet-tag{display:inline-block;padding:2px 8px;border-radius:999px;background:#f3f3f3;font-size:11px;}
 
+  /* ===== 백엔드 유입 패널 기본 스타일 ===== */
+  #igdc-inflow-panel{
+    background:#f7fbff;
+    border:1px solid #cfe3ff;
+    border-radius:12px;
+    padding:10px 12px;
+    display:none;
+    font-size:.9rem;
+  }
+  #igdc-inflow-panel strong{font-size:1rem;}
+  #igdc-inflow-panel .muted{color:#666;font-size:.85rem;margin-top:4px;}
+  #igdc-inflow-panel .igdc-inflow-stats{
+    margin-top:6px;margin-bottom:6px;
+    display:flex;flex-wrap:wrap;gap:10px;
+  }
+  #igdc-inflow-panel .igdc-inflow-stats span{background:#eef4ff;border-radius:999px;padding:2px 8px;}
+  #igdc-inflow-panel table{width:100%;border-collapse:collapse;margin-top:4px;}
+  #igdc-inflow-panel th,#igdc-inflow-panel td{
+    border-bottom:1px solid #eee;
+    padding:4px 6px;
+    text-align:left;
+    vertical-align:top;
+  }
+  #igdc-inflow-panel th{background:#f0f4ff;font-weight:600;font-size:.85rem;}
+  #igdc-inflow-panel td{font-size:.85rem;}
+
+  .igdc-srccell{display:flex;flex-direction:column;gap:2px;}
+  .igdc-srccell-time{font-size:11px;color:#666;}
+  .igdc-srccell-tag{display:inline-block;background:#ffe8d2;border-radius:999px;padding:1px 6px;font-size:11px;}
+
+  /* 화면 오른쪽 아래에 떠 있는 플로팅 모드 (백엔드 상태를 찾지 못했을 때) */
+  .igdc-inflow-float{
+    position:fixed;
+    right:16px;
+    bottom:16px;
+    max-width:420px;
+    max-height:70vh;
+    overflow:auto;
+    box-shadow:0 8px 20px rgba(0,0,0,.15);
+    z-index:1200;
+    background:#f7fbff;
+  }
+</style>
 
 <script>
 (function(){
@@ -1501,17 +1562,18 @@ function openPopup(url){
 })();
 </script>
 <script>
+// Fallback: 버튼 클릭 시 백엔드가 주입되었으면 해당 로직 실행, 아니면 안전 안내
+
 window.connectWallet = window.connectWallet || function(){
   try{
-    // 요청과 동시에 "연결 시도 중" 상태로 표시
-    var wsEl = document.getElementById('walletStatus');
-    if (wsEl) {
-      wsEl.textContent = '상태: 연결 시도 중';
+    if (typeof window.IGDC_WALLET_OPEN === 'function') {
+      // 요청과 동시에 "연결 시도 중" 상태로 표시
+      document.getElementById('walletStatus') && (document.getElementById('walletStatus').textContent = '상태: 연결 시도 중');
+      window.IGDC_WALLET_OPEN(); // 백엔드 지갑 뷰어/연결
+      return;
     }
     // 백엔드 리스너가 있다면 이 신호를 받아 연결을 수행하도록 함
-    if (typeof window.dispatchEvent === 'function') {
-      window.dispatchEvent(new CustomEvent('IGDC_WALLET_CONNECT_REQUEST', { detail:{ ts: Date.now() } }));
-    }
+    window.dispatchEvent(new CustomEvent('IGDC_WALLET_CONNECT_REQUEST', { detail:{ ts: Date.now() } }));
     alert('지갑 연결 요청을 보냈습니다. (백엔드 연동 후 자동 처리)');
   }catch(e){
     console && console.warn && console.warn('connectWallet fallback error:', e);
@@ -2070,6 +2132,169 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
   document.addEventListener('DOMContentLoaded', applyApproval);
 })();
 </script>
+<script id="igdc-blockchain-web3-ui">
+(function () {
+  // --- 1) Web3 모달 DOM 생성 (필요할 때 한 번만 만든다) ---
+  function ensureWeb3Modal() {
+    var backdrop = document.getElementById('igdc-web3-backdrop');
+    if (backdrop) return;
+
+    backdrop = document.createElement('div');
+    backdrop.id = 'igdc-web3-backdrop';
+    backdrop.style.cssText =
+      'position:fixed;inset:0;background:rgba(0,0,0,.35);' +
+      'display:none;z-index:1300;align-items:center;justify-content:center;';
+
+    var modal = document.createElement('div');
+    modal.id = 'igdc-web3-modal';
+    modal.style.cssText =
+      'background:#ffffff;border-radius:12px;max-width:720px;width:92vw;' +
+      'max-height:80vh;box-shadow:0 18px 60px rgba(0,0,0,.25);' +
+      'display:flex;flex-direction:column;overflow:hidden;font-size:13px;';
+
+    modal.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:space-between;' +
+      'padding:10px 14px;border-bottom:1px solid #e5e5e5;background:#fafafa;">' +
+        '<div style="font-weight:700;color:#333;">블록체인 / Web3 상태</div>' +
+        '<button type="button" onclick="IGDC_WEB3_CLOSE()" ' +
+          'style="border:1px solid #ddd;border-radius:8px;padding:4px 8px;' +
+                 'background:#fff;cursor:pointer;font-size:12px;">닫기</button>' +
+      '</div>' +
+      '<div id="igdc-web3-body" ' +
+           'style="padding:10px 14px;overflow:auto;flex:1 1 auto;">' +
+        '<p style="margin:4px 0 0;color:#555;font-size:12px;">' +
+        '블록체인/지갑 정보를 불러오는 중입니다…</p>' +
+      '</div>' +
+      '<div style="padding:6px 14px;border-top:1px solid #eee;' +
+                  'font-size:11px;color:#777;background:#fcfcfc;">' +
+        '※ 이 화면은 IGDC 프로젝트의 블록체인 네트워크·코인 종류를 요약해서 보여주는 관리자 전용 뷰입니다.' +
+      '</div>';
+
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+  }
+
+  // --- 2) Web3 코인/체인 목록 렌더링 (/api/wallets 재사용) ---
+  function renderWeb3List(list) {
+    var body = document.getElementById('igdc-web3-body');
+    if (!body) return;
+
+    var html = [];
+    if (!list || !list.length) {
+      html.push(
+        '<p style="margin:6px 0;color:#555;font-size:12px;">' +
+          '등록된 블록체인 지갑(입금 주소)이 없습니다.' +
+        '</p>'
+      );
+    } else {
+      html.push(
+        '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+          '<thead>' +
+            '<tr>' +
+              '<th style="text-align:left;border-bottom:1px solid #eee;padding:4px 6px;">체인</th>' +
+              '<th style="text-align:left;border-bottom:1px solid #eee;padding:4px 6px;">심볼</th>' +
+              '<th style="text-align:left;border-bottom:1px solid #eee;padding:4px 6px;">메모</th>' +
+            '</tr>' +
+          '</thead><tbody>'
+      );
+
+      list.forEach(function (w) {
+        html.push(
+          '<tr>' +
+            '<td style="padding:4px 6px;border-bottom:1px solid #f3f3f3;">' +
+              (w.chain || '') +
+            '</td>' +
+            '<td style="padding:4px 6px;border-bottom:1px solid #f3f3f3;">' +
+              (w.symbol || '') +
+            '</td>' +
+            '<td style="padding:4px 6px;border-bottom:1px solid #f3f3f3;color:#666;">' +
+              (w.note || '') +
+            '</td>' +
+          '</tr>'
+        );
+      });
+
+      html.push('</tbody></table>');
+      html.push(
+        '<p style="margin:8px 0 0;font-size:11px;color:#777;">' +
+        '※ 상세 지갑 주소(전체 문자열)는 아래 "지갑현황" 팝업에서 확인합니다.' +
+        '</p>'
+      );
+    }
+
+    body.innerHTML = html.join('');
+  }
+
+  function loadWeb3List() {
+    if (!window.fetch) {
+      renderWeb3List([]);
+      return;
+    }
+    fetch('/api/wallets', {
+      credentials: 'same-origin',
+      cache: 'no-store'
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error('http ' + res.status);
+        return res.json();
+      })
+      .then(function (data) {
+        var list = (data && (data.wallets || data.items || [])) || [];
+        renderWeb3List(list);
+      })
+      .catch(function (err) {
+        console && console.warn && console.warn('[IGDC] Web3 목록 로드 실패:', err);
+        renderWeb3List([]);
+      });
+  }
+
+  // --- 3) Global open/close 함수 (버튼에서 호출) ---
+  window.IGDC_WEB3_OPEN = function () {
+    ensureWeb3Modal();
+    var backdrop = document.getElementById('igdc-web3-backdrop');
+    if (backdrop) {
+      backdrop.style.display = 'flex';
+    }
+    loadWeb3List();
+  };
+
+  window.IGDC_WEB3_CLOSE = function () {
+    var backdrop = document.getElementById('igdc-web3-backdrop');
+    if (backdrop) {
+      backdrop.style.display = 'none';
+    }
+  };
+
+  // --- 4) 지갑현황 전용 팝업 래퍼 (아래 카드에서 사용) ---
+  window.IGDC_WALLETS_OPEN = function () {
+    if (typeof window.IGDC_WALLET_OPEN === 'function') {
+      window.IGDC_WALLET_OPEN();
+    } else {
+      alert('지갑 현황 팝업이 아직 준비되지 않았습니다.');
+    }
+  };
+
+  // --- 5) 맨 아래 "지갑현황" 카드: 본문 리스트 → 버튼 하나로 단순화 ---
+  document.addEventListener('DOMContentLoaded', function () {
+    var panel = document.getElementById('wallet-status-panel');
+    if (!panel) return;
+
+    panel.innerHTML =
+      '<strong style="display:block;margin-bottom:6px;">💼 지갑현황</strong>' +
+      '<div style="font-size:0.9rem;color:#555;margin-bottom:8px;">' +
+        'IGDC 공식 도네이션·입금 전용 지갑 주소 목록입니다. ' +
+        '아래 버튼을 눌러 전체 목록을 팝업으로 확인할 수 있습니다.' +
+      '</div>' +
+      '<button type="button" onclick="IGDC_WALLETS_OPEN()" ' +
+        'style="padding:6px 10px;border:1px solid #d8b894;border-radius:8px;' +
+               'background:#ffffff;cursor:pointer;font-weight:600;">' +
+        '지갑 현황 보기' +
+      '</button>';
+  });
+})();
+</script>
+
+
 <script src="/assets/js/igdc-core.min.js"></script>
 <script src="/assets/js/igdc-pay.min.js"></script>
 <script id="qna-launch-bind">
