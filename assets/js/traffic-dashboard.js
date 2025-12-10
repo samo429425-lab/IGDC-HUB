@@ -3,11 +3,8 @@
 // window.IGDC_TRAFFIC.setData(payload) 로 데이터 주입
 
 (function () {
-  if (window.IGDC_TRAFFIC) return;
+  if (window.IGDC_TRAFFIC) return; // 중복 방지
 
-  // -----------------------------------------------------------
-  // 상수
-  // -----------------------------------------------------------
   var REGION_ORDER = [
     'east_asia','southeast_asia','south_asia','central_asia','middle_east',
     'africa_north','africa_east','africa_west','africa_south',
@@ -25,9 +22,6 @@
     '10s':'10대','20s':'20대','30s':'30대','40s':'40대','50s':'50대','60s':'60대','70s':'70대','80s_plus':'80대 이상'
   };
 
-  // -----------------------------------------------------------
-  // 내부 상태
-  // -----------------------------------------------------------
   var state={ regions:[] };
   var miniCard=null, miniStatusEl=null, miniListEl=null;
   var backdropEl=null, modalEl=null, barCanvas=null, donutCanvas=null, barChart=null, donutChart=null;
@@ -37,9 +31,6 @@
   var lastBuildAt=0;
   var BUILD_THROTTLE_MS=1500;
 
-  // -----------------------------------------------------------
-  // payload 정규화
-  // -----------------------------------------------------------
   function normalizePayload(payload){
     var src=(payload&&payload.regions)||[];
     var map={};
@@ -56,29 +47,31 @@
         var v=ages[b];
         norm[b]=(typeof v==='number'&&isFinite(v))?v:0;
       });
-      return { code,
+      return {
+        code,
         label:f.label||REGION_LABELS[code]||code,
         ages:norm
       };
     });
     return {regions};
   }
+
   function buildDefaultState(){
     return normalizePayload({regions:[]});
   }
 
   function getTotalForRegion(r){
-    var sum=0; AGE_BUCKETS.forEach(function(b){ sum+=(r.ages[b]||0); });
+    var sum=0;
+    AGE_BUCKETS.forEach(function(b){ sum+=(r.ages[b]||0); });
     return sum;
   }
   function getTotalAll(){
-    var total=0; state.regions.forEach(function(r){ total+=getTotalForRegion(r); });
+    var total=0;
+    state.regions.forEach(function(r){ total+=getTotalForRegion(r); });
     return total;
   }
 
-  // -----------------------------------------------------------
-  // 미니카드 DOM
-  // -----------------------------------------------------------
+  // ---------------------- 미니카드 (위치 = host.appendChild 그대로 유지)
   function ensureMiniCard(){
     if(miniCard)return;
 
@@ -112,14 +105,8 @@
       openModal();
     });
 
-    // 핵심: 우측 마지막 section 뒤로 강제 배치
-    // 항상 마지막에 넣도록 조치
-    var anchor=document.querySelector('#igdc-site-control .igdc-sc-grid > section:last-child');
-    if(anchor && anchor.parentNode){
-      anchor.parentNode.appendChild(miniCard);
-    } else {
-      host.appendChild(miniCard);
-    }
+    // 위치 그대로 (원본): 우측 패널 맨 아래
+    host.appendChild(miniCard);
   }
 
   function renderMini(){
@@ -150,14 +137,12 @@
     miniListEl.innerHTML=html.join('');
   }
 
-  // -----------------------------------------------------------
-  // 모달
-  // -----------------------------------------------------------
+  // ---------------------- 모달
   function ensureModal(){
     if(modalEl && backdropEl && barCanvas && donutCanvas)return;
 
     backdropEl=document.getElementById('igdc-traffic-backdrop');
-    modalEl   =document.getElementById('igdc-traffic-modal');
+    modalEl=document.getElementById('igdc-traffic-modal');
 
     if(!backdropEl){
       backdropEl=document.createElement('div');
@@ -174,7 +159,7 @@
         ' <header style="padding:12px 16px;border-bottom:1px solid #e5e5e5;display:flex;justify-content:space-between;align-items:center;">'+
         '   <div>'+
         '     <div style="font-weight:bold;font-size:14px;">유입 대시보드 (지역/연령)</div>'+
-        '     <div style="font-size:11px;color:#a07040;">GA4 및 백엔드 지표를 기반.</div>'+
+        '     <div style="font-size:11px;color:#a07040;">유입 현황을 보여줍니다.</div>'+
         '   </div>'+
         '   <button id="igdc-traffic-modal-close" style="border:none;background:none;font-size:16px;cursor:pointer;">✕</button>'+
         ' </header>'+
@@ -193,138 +178,4 @@
         '         <canvas id="igdc-traffic-donut" style="width:100%;height:100%;"></canvas>'+
         '         <div id="igdc-traffic-donut-empty" style="position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:12px;color:#777;">아직 집계된 유입 데이터가 없습니다.</div>'+
         '       </div>'+
-        '     </div>'+
-        '   </div>'+
-        ' </section>'+
-        ' <footer style="padding:8px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:8px;font-size:12px;">'+
-        '   <button id="igdc-traffic-refresh" style="border:1px solid #d9b37c;background:#fffaf1;color:#a07040;padding:4px 10px;border-radius:4px;cursor:pointer;">데이터 새로고침</button>'+
-        '   <button id="igdc-traffic-close2" style="border:1px solid #ccc;background:#f5f5f5;padding:4px 10px;border-radius:4px;cursor:pointer;">닫기</button>'+
-        ' </footer>'+
-        '</div>';
-      document.body.appendChild(modalEl);
-    }
-    barCanvas   =modalEl.querySelector('#igdc-traffic-bar');
-    donutCanvas =modalEl.querySelector('#igdc-traffic-donut');
-    barEmptyEl  =modalEl.querySelector('#igdc-traffic-bar-empty');
-    donutEmptyEl=modalEl.querySelector('#igdc-traffic-donut-empty');
-
-    backdropEl.onclick=closeModal;
-    var closeBtn=modalEl.querySelector('#igdc-traffic-modal-close');
-    var closeBtn2=modalEl.querySelector('#igdc-traffic-close2');
-    var refreshBtn=modalEl.querySelector('#igdc-traffic-refresh');
-    if(closeBtn)closeBtn.onclick=closeModal;
-    if(closeBtn2)closeBtn2.onclick=closeModal;
-    if(refreshBtn){
-      refreshBtn.onclick=function(){
-        try{
-          if(window.IGDCAnalyticsLoader && typeof window.IGDCAnalyticsLoader.refresh==='function'){
-            window.IGDCAnalyticsLoader.refresh();
-          }
-        }catch(e){}
-      };
-    }
-  }
-
-  // -----------------------------------------------------------
-  // Chart.js
-  // -----------------------------------------------------------
-  function buildCharts(){
-    if(!window.Chart||!barCanvas||!donutCanvas) return;
-    lastBuildAt=Date.now();
-    var totalAll=getTotalAll();
-    if(barEmptyEl && donutEmptyEl){
-      if(totalAll<=0){
-        barEmptyEl.style.display='flex';
-        donutEmptyEl.style.display='flex';
-      } else{
-        barEmptyEl.style.display='none';
-        donutEmptyEl.style.display='none';
-      }
-    }
-
-    // 연령
-    var ageTotals=AGE_BUCKETS.map(function(b){
-      var s=0; state.regions.forEach(function(r){ s+=(r.ages[b]||0); }); return s;
-    });
-    if(barChart)barChart.destroy();
-    barChart=new Chart(barCanvas.getContext('2d'),{
-      type:'bar',
-      data:{ labels:AGE_BUCKETS.map(b=>AGE_LABELS[b]||b),
-        datasets:[{label:'연령대별 합계',data:ageTotals}] },
-      options:{
-        responsive:true,maintainAspectRatio:false,
-        scales:{ y:{beginAtZero:true,ticks:{precision:0}} }
-      }
-    });
-
-    // 지역
-    var regionLabels=state.regions.map(r=>r.label);
-    var regionTotals=state.regions.map(r=>getTotalForRegion(r));
-    if(donutChart)donutChart.destroy();
-    donutChart=new Chart(donutCanvas.getContext('2d'),{
-      type:'doughnut',
-      data:{ labels:regionLabels, datasets:[{label:'지역별 합계',data:regionTotals}] },
-      options:{ responsive:true, maintainAspectRatio:false }
-    });
-  }
-
-  // -----------------------------------------------------------
-  // 모달 열고닫기
-  // -----------------------------------------------------------
-  function openModal(){
-    ensureModal();
-    backdropEl.style.display='block';
-    modalEl.style.display='block';
-    buildCharts();
-  }
-  function closeModal(){
-    if(backdropEl)backdropEl.style.display='none';
-    if(modalEl)modalEl.style.display='none';
-  }
-
-  // -----------------------------------------------------------
-  // 전역 API
-  // -----------------------------------------------------------
-  window.IGDC_TRAFFIC={
-    setData:function(payload){
-      try{
-        var next=normalizePayload(payload);
-        var sign;
-        try{sign=JSON.stringify(next);}catch(_){}
-        var changed=sign?(sign!==lastDataSignature):true;
-        state=next; if(sign)lastDataSignature=sign;
-        renderMini();
-        if(modalEl && modalEl.style.display!=='none' && changed){
-          var now=Date.now();
-          if(!lastBuildAt || (now-lastBuildAt)>=BUILD_THROTTLE_MS){
-            buildCharts();
-          }
-        }
-      }catch(e){}
-    },
-    getState:function(){
-      return JSON.parse(JSON.stringify(state));
-    },
-    open:openModal,
-    close:closeModal,
-    refresh:function(){
-      try{
-        if(window.IGDCAnalyticsLoader && typeof window.IGDCAnalyticsLoader.refresh==='function'){
-          window.IGDCAnalyticsLoader.refresh();
-        }
-      }catch(e){}
-    }
-  };
-
-  // -----------------------------------------------------------
-  // init
-  // -----------------------------------------------------------
-  function init(){
-    state=buildDefaultState();
-    renderMini();
-  }
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',init);
-  } else init();
-
-})();
+        '     </
