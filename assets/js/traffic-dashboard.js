@@ -429,8 +429,15 @@
   function openModal() {
     ensureModal();
     if (!backdropEl || !modalEl) return;
+
     backdropEl.style.display = 'block';
     modalEl.style.display = 'block';
+
+    // 데이터가 전혀 없으면 차트 생성하지 않고 빈 모달만 띄움
+    if (getTotalAll() <= 0) {
+      return;
+    }
+
     buildCharts();
   }
 
@@ -448,7 +455,11 @@
       try {
         state = normalizePayload(payload);
         renderMini();
-        if (modalEl && modalEl.style.display !== 'none') {
+
+        // 모달이 열려있고, 실제 데이터가 있을 때만 차트 리빌드
+        if (modalEl &&
+            modalEl.style.display !== 'none' &&
+            getTotalAll() > 0) {
           buildCharts();
         }
       } catch (e) {
