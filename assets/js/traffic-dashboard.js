@@ -1,18 +1,13 @@
 // traffic-dashboard.js
 // IGDC Admin: 유입 현황(지역/연령) 미니 카드 + 전체 모달 대시보드
-// - window.IGDC_TRAFFIC.setData(payload) 로 데이터 주입
-// - payload 예:
-//   {
-//     regions: [
-//       { code: 'east_asia', label: '동아시아', ages: { '10s':0, '20s':0, ... } },
-//       ...
-//     ]
-//   }
+// window.IGDC_TRAFFIC.setData(payload) 로 데이터 주입
 
 (function () {
-  if (window.IGDC_TRAFFIC) return; // 중복 방지
+  if (window.IGDC_TRAFFIC) return;
 
-  // ------------------------------ 상수
+  // -----------------------------------------------------------
+  // 상수
+  // -----------------------------------------------------------
   var REGION_ORDER = [
     'east_asia','southeast_asia','south_asia','central_asia','middle_east',
     'africa_north','africa_east','africa_west','africa_south',
@@ -30,49 +25,63 @@
     '10s':'10대','20s':'20대','30s':'30대','40s':'40대','50s':'50대','60s':'60대','70s':'70대','80s_plus':'80대 이상'
   };
 
-  // ------------------------------ 내부 상태
-  var state = { regions: [] };
+  // -----------------------------------------------------------
+  // 내부 상태
+  // -----------------------------------------------------------
+  var state={ regions:[] };
   var miniCard=null, miniStatusEl=null, miniListEl=null;
   var backdropEl=null, modalEl=null, barCanvas=null, donutCanvas=null, barChart=null, donutChart=null;
   var barEmptyEl=null, donutEmptyEl=null;
 
   var lastDataSignature=null;
   var lastBuildAt=0;
-  var BUILD_THROTTLE_MS = 1500;
+  var BUILD_THROTTLE_MS=1500;
 
-  // ------------------------------ payload 정규화
+  // -----------------------------------------------------------
+  // payload 정규화
+  // -----------------------------------------------------------
   function normalizePayload(payload){
-    var src = (payload && payload.regions) || [];
+    var src=(payload&&payload.regions)||[];
     var map={};
     src.forEach(function(r){
-      var code = r.code||r.key;
+      var code=r.code||r.key;
       if(!code)return;
       map[code]=r;
     });
-
-    var regions = REGION_ORDER.map(function(code){
-      var found = map[code]||{};
-      var ages = found.ages||{};
+    var regions=REGION_ORDER.map(function(code){
+      var f=map[code]||{};
+      var ages=f.ages||{};
       var norm={};
       AGE_BUCKETS.forEach(function(b){
-        var v=ages[b]; norm[b]=(typeof v==='number'&&isFinite(v))?v:0;
+        var v=ages[b];
+        norm[b]=(typeof v==='number'&&isFinite(v))?v:0;
       });
-      return { code:code, label:found.label||REGION_LABELS[code]||code, ages:norm };
+      return { code,
+        label:f.label||REGION_LABELS[code]||code,
+        ages:norm
+      };
     });
-    return { regions };
+    return {regions};
   }
-  function buildDefaultState(){ return normalizePayload({regions:[]}); }
+  function buildDefaultState(){
+    return normalizePayload({regions:[]});
+  }
 
   function getTotalForRegion(r){
-    var sum=0; AGE_BUCKETS.forEach(function(b){ sum+=(r.ages[b]||0); }); return sum;
+    var sum=0; AGE_BUCKETS.forEach(function(b){ sum+=(r.ages[b]||0); });
+    return sum;
   }
   function getTotalAll(){
-    var total=0; state.regions.forEach(function(r){ total+=getTotalForRegion(r); }); return total;
+    var total=0; state.regions.forEach(function(r){ total+=getTotalForRegion(r); });
+    return total;
   }
 
-  // ------------------------------ 미니카드
+  // -----------------------------------------------------------
+  // 미니카드 DOM
+  // -----------------------------------------------------------
   function ensureMiniCard(){
     if(miniCard)return;
+
     var host=document.querySelector('#igdc-site-control .igdc-sc-grid')
            ||document.querySelector('#igdc-site-control')
            ||document.querySelector('.igdc-site-control');
@@ -80,54 +89,75 @@
 
     miniCard=document.createElement('section');
     miniCard.className='igdc-sc-card igdc-traffic-mini-card';
-    miniCard.style.order='99';
+    miniCard.style.order='999'; 
 
-    miniCard.innerHTML =
+    miniCard.innerHTML=
       '<div class="igdc-sc-card-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'+
-      '  <div>'+
-      '    <div style="font-weight:bold;font-size:13px;">유입 현황(지역/연령)</div>'+
-      '    <div style="font-size:11px;color:#a07040;">대륙·지역별 방문자 추이를 간단히 봅니다.</div>'+
-      '  </div>'+
-      '  <div id="igdc-traffic-mini-status" style="font-size:11px;color:#aa0000;white-space:nowrap;">대기(데이터 없음)</div>'+
+      ' <div>'+
+      '  <div style="font-weight:bold;font-size:13px;">유입 현황(지역/연령)</div>'+
+      '  <div style="font-size:11px;color:#a07040;">대륙·지역별 방문자 추이를 간단히 봅니다.</div>'+
+      ' </div>'+
+      ' <div id="igdc-traffic-mini-status" style="font-size:11px;color:#aa0000;white-space:nowrap;">대기(데이터 없음)</div>'+
       '</div>'+
       '<div class="igdc-traffic-mini-body" style="max-height:200px;overflow:auto;font-size:11px;line-height:1.4;border-top:1px dashed #ead1a5;padding-top:4px;">'+
-      '  <div id="igdc-traffic-mini-list"></div>'+
-      '  <div style="margin-top:4px;color:#777;">클릭하면 전체 대시보드를 팝업으로 엽니다.</div>'+
+      ' <div id="igdc-traffic-mini-list"></div>'+
+      ' <div style="margin-top:4px;color:#777;">클릭하면 전체 대시보드를 팝업으로 엽니다.</div>'+
       '</div>';
 
     miniStatusEl=miniCard.querySelector('#igdc-traffic-mini-status');
     miniListEl=miniCard.querySelector('#igdc-traffic-mini-list');
 
-    miniCard.addEventListener('click',function(e){ e.preventDefault(); openModal(); });
-    host.appendChild(miniCard);
+    miniCard.addEventListener('click',function(e){
+      e.preventDefault();
+      openModal();
+    });
+
+    // 핵심: 우측 마지막 section 뒤로 강제 배치
+    // 항상 마지막에 넣도록 조치
+    var anchor=document.querySelector('#igdc-site-control .igdc-sc-grid > section:last-child');
+    if(anchor && anchor.parentNode){
+      anchor.parentNode.appendChild(miniCard);
+    } else {
+      host.appendChild(miniCard);
+    }
   }
 
   function renderMini(){
     ensureMiniCard();
     if(!miniCard||!miniListEl||!miniStatusEl)return;
     var totalAll=getTotalAll();
-    if(totalAll<=0){ miniStatusEl.textContent='대기(데이터 없음)'; miniStatusEl.style.color='#aa0000'; }
-    else{ miniStatusEl.textContent='실시간 반영 중'; miniStatusEl.style.color='#0a7'; }
+    if(totalAll<=0){
+      miniStatusEl.textContent='대기(데이터 없음)';
+      miniStatusEl.style.color='#aa0000';
+    } else{
+      miniStatusEl.textContent='실시간 반영 중';
+      miniStatusEl.style.color='#0a7';
+    }
 
     var html=[];
     state.regions.forEach(function(r){
       var total=getTotalForRegion(r);
       html.push(
         '<div style="display:flex;justify-content:space-between;margin-bottom:2px;">'+
-        '<span>'+(r.label||r.code)+'</span>'+
-        '<span style="font-weight:bold;">'+total+'</span>'+
+        ' <span>'+(r.label||r.code)+'</span>'+
+        ' <span style="font-weight:bold;">'+total+'</span>'+
         '</div>'
       );
     });
-    if(!html.length){ html.push('<div style="color:#777;">아직 유입 데이터가 없습니다.</div>'); }
+    if(!html.length){
+      html.push('<div style="color:#777;">아직 유입 데이터가 없습니다.</div>');
+    }
     miniListEl.innerHTML=html.join('');
   }
 
-  // ------------------------------ 모달
+  // -----------------------------------------------------------
+  // 모달
+  // -----------------------------------------------------------
   function ensureModal(){
     if(modalEl && backdropEl && barCanvas && donutCanvas)return;
+
     backdropEl=document.getElementById('igdc-traffic-backdrop');
-    modalEl=document.getElementById('igdc-traffic-modal');
+    modalEl   =document.getElementById('igdc-traffic-modal');
 
     if(!backdropEl){
       backdropEl=document.createElement('div');
@@ -139,17 +169,19 @@
       modalEl=document.createElement('div');
       modalEl.id='igdc-traffic-modal';
       modalEl.style.cssText='position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9999;display:none;max-width:960px;width:96%;max-height:90vh;background:#fffdf7;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.28);overflow:hidden;';
-      modalEl.innerHTML=
-        '<div class="igdc-traffic-modal-inner" style="display:flex;flex-direction:column;height:100%;">'+
+      modalEl.innerHTML =
+        '<div style="display:flex;flex-direction:column;height:100%;">'+
         ' <header style="padding:12px 16px;border-bottom:1px solid #e5e5e5;display:flex;justify-content:space-between;align-items:center;">'+
-        '   <div><div style="font-weight:bold;font-size:14px;">유입 대시보드 (지역/연령)</div>'+
-        '   <div style="font-size:11px;color:#a07040;">GA4 및 백엔드 지표 기반. 현재 0 기준 준비 상태.</div></div>'+
+        '   <div>'+
+        '     <div style="font-weight:bold;font-size:14px;">유입 대시보드 (지역/연령)</div>'+
+        '     <div style="font-size:11px;color:#a07040;">GA4 및 백엔드 지표를 기반.</div>'+
+        '   </div>'+
         '   <button id="igdc-traffic-modal-close" style="border:none;background:none;font-size:16px;cursor:pointer;">✕</button>'+
         ' </header>'+
         ' <section style="padding:10px 16px;flex:1;overflow:auto;">'+
         '   <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:16px;">'+
         '     <div>'+
-        '       <div style="font-weight:bold;font-size:13px;margin-bottom:4px;">연령대별 합계(막대그래프)</div>'+
+        '       <div style="font-weight:bold;font-size:13px;margin-bottom:4px;">연령대별 합계(막대)</div>'+
         '       <div style="position:relative;height:260px;border:1px solid #f0e4c5;border-radius:6px;padding:6px;background:#fff7e8;">'+
         '         <canvas id="igdc-traffic-bar" style="width:100%;height:100%;"></canvas>'+
         '         <div id="igdc-traffic-bar-empty" style="position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:12px;color:#777;">아직 집계된 유입 데이터가 없습니다.</div>'+
@@ -171,17 +203,15 @@
         '</div>';
       document.body.appendChild(modalEl);
     }
+    barCanvas   =modalEl.querySelector('#igdc-traffic-bar');
+    donutCanvas =modalEl.querySelector('#igdc-traffic-donut');
+    barEmptyEl  =modalEl.querySelector('#igdc-traffic-bar-empty');
+    donutEmptyEl=modalEl.querySelector('#igdc-traffic-donut-empty');
 
-    barCanvas    = modalEl.querySelector('#igdc-traffic-bar');
-    donutCanvas  = modalEl.querySelector('#igdc-traffic-donut');
-    barEmptyEl   = modalEl.querySelector('#igdc-traffic-bar-empty');
-    donutEmptyEl = modalEl.querySelector('#igdc-traffic-donut-empty');
-
-    backdropEl.onclick = closeModal;
+    backdropEl.onclick=closeModal;
     var closeBtn=modalEl.querySelector('#igdc-traffic-modal-close');
     var closeBtn2=modalEl.querySelector('#igdc-traffic-close2');
     var refreshBtn=modalEl.querySelector('#igdc-traffic-refresh');
-
     if(closeBtn)closeBtn.onclick=closeModal;
     if(closeBtn2)closeBtn2.onclick=closeModal;
     if(refreshBtn){
@@ -190,14 +220,16 @@
           if(window.IGDCAnalyticsLoader && typeof window.IGDCAnalyticsLoader.refresh==='function'){
             window.IGDCAnalyticsLoader.refresh();
           }
-        } catch(e){ console.warn('[IGDC_TRAFFIC refresh] error:',e); }
+        }catch(e){}
       };
     }
   }
 
-  // ------------------------------ 차트
+  // -----------------------------------------------------------
+  // Chart.js
+  // -----------------------------------------------------------
   function buildCharts(){
-    if(!window.Chart||!barCanvas||!donutCanvas)return;
+    if(!window.Chart||!barCanvas||!donutCanvas) return;
     lastBuildAt=Date.now();
     var totalAll=getTotalAll();
     if(barEmptyEl && donutEmptyEl){
@@ -209,9 +241,10 @@
         donutEmptyEl.style.display='none';
       }
     }
-    // 연령 합계
+
+    // 연령
     var ageTotals=AGE_BUCKETS.map(function(b){
-      var sum=0; state.regions.forEach(function(r){ sum+=(r.ages[b]||0); }); return sum;
+      var s=0; state.regions.forEach(function(r){ s+=(r.ages[b]||0); }); return s;
     });
     if(barChart)barChart.destroy();
     barChart=new Chart(barCanvas.getContext('2d'),{
@@ -224,7 +257,7 @@
       }
     });
 
-    // 지역 합계
+    // 지역
     var regionLabels=state.regions.map(r=>r.label);
     var regionTotals=state.regions.map(r=>getTotalForRegion(r));
     if(donutChart)donutChart.destroy();
@@ -235,28 +268,43 @@
     });
   }
 
-  // ------------------------------ modal open/close
-  function openModal(){ ensureModal(); backdropEl.style.display='block'; modalEl.style.display='block'; buildCharts(); }
-  function closeModal(){ if(backdropEl)backdropEl.style.display='none'; if(modalEl)modalEl.style.display='none'; }
+  // -----------------------------------------------------------
+  // 모달 열고닫기
+  // -----------------------------------------------------------
+  function openModal(){
+    ensureModal();
+    backdropEl.style.display='block';
+    modalEl.style.display='block';
+    buildCharts();
+  }
+  function closeModal(){
+    if(backdropEl)backdropEl.style.display='none';
+    if(modalEl)modalEl.style.display='none';
+  }
 
-  // ------------------------------ 전역 API
+  // -----------------------------------------------------------
+  // 전역 API
+  // -----------------------------------------------------------
   window.IGDC_TRAFFIC={
     setData:function(payload){
       try{
         var next=normalizePayload(payload);
-        var sign=null;
-        try{ sign=JSON.stringify(next); }catch(_){}
-        var changed = sign?(sign!==lastDataSignature):true;
+        var sign;
+        try{sign=JSON.stringify(next);}catch(_){}
+        var changed=sign?(sign!==lastDataSignature):true;
         state=next; if(sign)lastDataSignature=sign;
-
         renderMini();
         if(modalEl && modalEl.style.display!=='none' && changed){
           var now=Date.now();
-          if(!lastBuildAt || (now-lastBuildAt)>=BUILD_THROTTLE_MS){ buildCharts(); }
+          if(!lastBuildAt || (now-lastBuildAt)>=BUILD_THROTTLE_MS){
+            buildCharts();
+          }
         }
-      } catch(e){ console.warn('[IGDC_TRAFFIC.setData] error:',e); }
+      }catch(e){}
     },
-    getState:function(){ return JSON.parse(JSON.stringify(state)); },
+    getState:function(){
+      return JSON.parse(JSON.stringify(state));
+    },
     open:openModal,
     close:closeModal,
     refresh:function(){
@@ -264,12 +312,17 @@
         if(window.IGDCAnalyticsLoader && typeof window.IGDCAnalyticsLoader.refresh==='function'){
           window.IGDCAnalyticsLoader.refresh();
         }
-      }catch(e){ console.warn('[IGDC_TRAFFIC.refresh] error:',e); }
+      }catch(e){}
     }
   };
 
-  // ------------------------------ init
-  function init(){ state=buildDefaultState(); renderMini(); }
+  // -----------------------------------------------------------
+  // init
+  // -----------------------------------------------------------
+  function init(){
+    state=buildDefaultState();
+    renderMini();
+  }
   if(document.readyState==='loading'){
     document.addEventListener('DOMContentLoaded',init);
   } else init();
