@@ -114,6 +114,8 @@
       + '  <div style="margin-top:4px;font-size:10px;color:#8a6d3b;">클릭하면 전체 대시보드를 팝업으로 엽니다.</div>'
       + '</div>';
 
+var host = document.querySelector('.igdc-site-control .igdc-sc-grid');
+
 // AI 질문 보조 영역 바로 뒤로 붙이기
 var aiHelper = document.querySelector('#igdc-admin-ai-block');  // AI 질문보조 wrapper id
 if(aiHelper && aiHelper.parentNode){
