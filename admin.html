@@ -1080,30 +1080,27 @@ function openPopup(url){
 
 <script>
 (function(){
-  function el(html){ var d=document.createElement('div'); d.innerHTML=html; return d.firstElementChild; }
-  function pill(s){ return '<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:#f0f0f0;margin-right:6px;font-size:12px;">'+s+'</span>'; }
-
   var panel = document.getElementById('wallet-status-panel');
-  if(!panel) return;
+  if (!panel) return;
 
   function renderStatus(env){
     return [
-      'GOOGLE_API_KEY', env.google ? 'OK':'MISSING',
-      'NAVER_CLIENT_ID', env.naver_id ? 'OK':'MISSING',
-      'NAVER_CLIENT_SECRET', env.naver_secret ? 'OK':'MISSING',
-      'OPENAI_API_KEY', env.openai ? 'OK':'MISSING'
+      'GOOGLE_API_KEY',      env.google       ? 'OK' : 'MISSING',
+      'NAVER_CLIENT_ID',     env.naver_id     ? 'OK' : 'MISSING',
+      'NAVER_CLIENT_SECRET', env.naver_secret ? 'OK' : 'MISSING',
+      'OPENAI_API_KEY',      env.openai       ? 'OK' : 'MISSING'
     ];
   }
 
   function fmtStatus(summary){
-    if(!summary || !summary.length) return '';
+    if (!summary || !summary.length) return '';
     var items = [];
-    for(var i=0;i<summary.length;i+=2){
+    for (var i = 0; i < summary.length; i += 2){
       var k = summary[i], v = summary[i+1];
       items.push(
         '<div style="display:flex;justify-content:space-between;gap:10px;">'
-        + '<span style="font-size:12px;color:#555;">'+k+'</span>'
-        + '<span style="font-size:12px;font-weight:700;color:'+(v==='OK'?'#006400':'#c00')+';">'+v+'</span>'
+        + '<span style="font-size:12px;color:#555;">' + k + '</span>'
+        + '<span style="font-size:12px;font-weight:700;color:' + (v === 'OK' ? '#006400' : '#c00') + ';">' + v + '</span>'
         + '</div>'
       );
     }
@@ -1113,26 +1110,32 @@ function openPopup(url){
       + '</div>';
   }
 
-  panel.innerHTML = '<div style="font-size:12px;color:#666">연결 확인 중…</div>';
-
-  Promise.all([
-    fetch('/api/status').then(r=>r.json()).catch(()=>({ok:false,env:{}})),
-    fetch('/api/wallets').then(r=>r.json()).catch(()=>({wallets:[]}))
-  ]).then(function([st, ws]){
-    var parts = [];
-    if(st && st.env){ parts.push(fmtStatus(renderStatus(st.env))); }
-
-    var hasWallets = !!(ws && ws.wallets && ws.wallets.length);
-    var label = hasWallets ? ' (' + ws.wallets.length + '개)' : '';
-    parts.push(
-      '<div style="margin-top:10px;">'
+  function fmtWalletButton(wallets){
+    var n = (wallets && wallets.length) ? wallets.length : 0;
+    var info = n ? ('등록된 지갑 ' + n + '개') : '등록된 지갑이 없습니다.';
+    return '<div style="background:#fdfdfd;border:1px solid #eee;border-radius:12px;padding:12px 14px;">'
+      + '<div style="font-weight:700;color:#804000;margin-bottom:6px;">🪙 지갑 현황 (watch-only)</div>'
+      + '<div style="font-size:12px;color:#666;margin-bottom:8px;">' + info + '</div>'
       + '<button type="button"'
       + ' onclick="if(window.IGDC_WALLET_OPEN){window.IGDC_WALLET_OPEN();}else{alert(\\'지갑 팝업 모듈이 아직 연결되지 않았습니다.\\');}"'
       + ' style="padding:6px 12px;border-radius:8px;border:1px solid #ccc;background:#fff7ec;cursor:pointer;font-size:13px;">'
-      + '🪙 지갑 현황 보기' + label +
-      '</button></div>'
-    );
+      + '지갑 현황 보기'
+      + '</button>'
+      + '</div>';
+  }
 
+  panel.innerHTML = '<div style="font-size:12px;color:#666">연결 확인 중…</div>';
+
+  Promise.all([
+    fetch('/api/status').then(function(r){ return r.json(); }).catch(function(){ return { ok:false, env:{} }; }),
+    fetch('/api/wallets').then(function(r){ return r.json(); }).catch(function(){ return { wallets:[] }; })
+  ]).then(function(results){
+    var st = results[0], ws = results[1];
+    var parts = [];
+    if (st && st.env){
+      parts.push(fmtStatus(renderStatus(st.env)));
+    }
+    parts.push(fmtWalletButton(ws && ws.wallets));
     panel.innerHTML = parts.join('');
   }).catch(function(){
     panel.innerHTML = '<div style="color:#c00">백엔드 연결 실패</div>';
@@ -1140,61 +1143,6 @@ function openPopup(url){
 })();
 </script>
 
-<!-- IGDC minimal additions: wallet strip + backend inflow (hooks only) -->
-<style>
-  /* ===== Wallet strip (상단 지갑 요약바, 이미 있으면 그대로 사용) ===== */
-  .igdc-wallet-strip{
-    display:flex;gap:10px;align-items:center;
-    background:#fff7ec;border:1px solid #ffd9a6;
-    border-radius:12px;padding:8px 12px;margin:10px 0;
-    font-size:.9rem;
-  }
-  .igdc-wallet-label{font-weight:700;margin-right:4px;}
-  .igdc-wallet-tag{display:inline-block;padding:2px 8px;border-radius:999px;background:#f3f3f3;font-size:11px;}
-
-  /* ===== 백엔드 유입 패널 기본 스타일 ===== */
-  #igdc-inflow-panel{
-    background:#f7fbff;
-    border:1px solid #cfe3ff;
-    border-radius:12px;
-    padding:10px 12px;
-    display:none;
-    font-size:.9rem;
-  }
-  #igdc-inflow-panel strong{font-size:1rem;}
-  #igdc-inflow-panel .muted{color:#666;font-size:.85rem;margin-top:4px;}
-  #igdc-inflow-panel .igdc-inflow-stats{
-    margin-top:6px;margin-bottom:6px;
-    display:flex;flex-wrap:wrap;gap:10px;
-  }
-  #igdc-inflow-panel .igdc-inflow-stats span{background:#eef4ff;border-radius:999px;padding:2px 8px;}
-  #igdc-inflow-panel table{width:100%;border-collapse:collapse;margin-top:4px;}
-  #igdc-inflow-panel th,#igdc-inflow-panel td{
-    border-bottom:1px solid #eee;
-    padding:4px 6px;
-    text-align:left;
-    vertical-align:top;
-  }
-  #igdc-inflow-panel th{background:#f0f4ff;font-weight:600;font-size:.85rem;}
-  #igdc-inflow-panel td{font-size:.85rem;}
-
-  .igdc-srccell{display:flex;flex-direction:column;gap:2px;}
-  .igdc-srccell-time{font-size:11px;color:#666;}
-  .igdc-srccell-tag{display:inline-block;background:#ffe8d2;border-radius:999px;padding:1px 6px;font-size:11px;}
-
-  /* 화면 오른쪽 아래에 떠 있는 플로팅 모드 (백엔드 상태를 찾지 못했을 때) */
-  .igdc-inflow-float{
-    position:fixed;
-    right:16px;
-    bottom:16px;
-    max-width:420px;
-    max-height:70vh;
-    overflow:auto;
-    box-shadow:0 8px 20px rgba(0,0,0,.15);
-    z-index:1200;
-    background:#f7fbff;
-  }
-</style>
 
 <script>
 (function(){
