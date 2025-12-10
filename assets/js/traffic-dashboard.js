@@ -114,7 +114,7 @@
       + '  <div style="margin-top:4px;font-size:10px;color:#8a6d3b;">클릭하면 전체 대시보드를 팝업으로 엽니다.</div>'
       + '</div>';
 
-    if (host) host.appendChild(miniCard);
+    if (host) host.insertAdjacentElement('beforeend', miniCard);
 
     miniList = miniCard.querySelector('#igdc-traffic-mini-list');
     miniCard.addEventListener('click', openModal);
