@@ -1439,11 +1439,13 @@ function openPopup(url){
 <!-- IGDC Wallet backend bridge: /api/wallets → IGDC_WALLET_SNAPSHOT + 팝업 -->
 <script>
 (function () {
+  // /api/wallets 에서 지갑 목록을 가져오고, 첫 번째 지갑으로 상단 스트립 상태를 업데이트
   async function loadWalletsAndSnapshot() {
     try {
       var res = await fetch('/api/wallets');
       var data = await res.json();
       var list = (data && data.wallets) ? data.wallets : [];
+
       if (!list.length) {
         // 등록된 지갑이 없을 때는 "미연결" 유지
         window.dispatchEvent(new CustomEvent('IGDC_WALLET_SNAPSHOT', {
@@ -1451,6 +1453,7 @@ function openPopup(url){
         }));
         return list;
       }
+
       // 첫 번째 지갑을 대표 지갑으로 사용
       var w = list[0];
       window.dispatchEvent(new CustomEvent('IGDC_WALLET_SNAPSHOT', {
@@ -1486,6 +1489,7 @@ function openPopup(url){
   });
 
   // Admin에서 지갑 현황 팝업을 띄우기 위한 함수
+  // ※ balance 필드가 없으면 0으로 표시, 나중에 백엔드에서 balance 값을 넣어주면 그대로 반영됨
   window.IGDC_WALLET_OPEN = async function () {
     var list = await loadWalletsAndSnapshot();
     var pop = window.open('', 'IGDC_WALLET_POP', 'width=640,height=600');
@@ -1493,8 +1497,10 @@ function openPopup(url){
       alert('팝업이 차단되었습니다. 브라우저 팝업 허용 설정을 확인해 주세요.');
       return;
     }
+
     var doc = pop.document;
     var html = [];
+
     html.push('<!doctype html><html lang="ko"><head><meta charset="utf-8">');
     html.push('<title>IGDC 지갑 현황</title>');
     html.push('<style>');
@@ -1502,29 +1508,47 @@ function openPopup(url){
     html.push('h1{font-size:18px;margin:0 0 12px;}');
     html.push('.card{background:#fff;border:1px solid #eee;border-radius:12px;padding:12px 14px;margin:10px 0;}');
     html.push('.addr{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;word-break:break-all;}');
+    html.push('.meta{font-size:12px;color:#555;margin-top:4px;}');
     html.push('</style></head><body>');
+
     html.push('<h1>IGDC 지갑 현황</h1>');
+
     if (!list.length) {
       html.push('<p>등록된 지갑이 없습니다.</p>');
     } else {
       list.forEach(function (w) {
+        var chain   = (w.chain  || '').toUpperCase();
+        var network = (w.network|| '') || (w.note || '');
+        var addr    = (w.address|| '');
+        var bal     = (w.balance == null ? 0 : w.balance);  // ← balance 없으면 0
+
         html.push('<div class="card">');
-        html.push('<div><strong>' + (w.chain || '').toUpperCase() + '</strong> <span style="font-size:12px;color:#666">· ' + (w.network || '') + '</span></div>');
-        html.push('<div class="addr">' + (w.address || '') + '</div>');
+        html.push('<div><strong>' + chain + '</strong>'
+                + (network ? '<span style="font-size:12px;color:#666"> · ' + network + '</span>' : '')
+                + '</div>');
+        html.push('<div class="addr">' + addr + '</div>');
+        html.push('<div class="meta">잔액: ' + bal + '</div>');
+
         if (w.tokens && w.tokens.length) {
-          html.push('<div style="margin-top:6px;font-size:12px;color:#555;">토큰: ' + w.tokens.join(', ') + '</div>');
+          html.push('<div class="meta">토큰: ' + w.tokens.join(', ') + '</div>');
         }
         html.push('</div>');
       });
     }
-    html.push('<p style="margin-top:18px;font-size:11px;color:#888;">※ 이 화면은 관리자용 watch-only 지갑 현황입니다. 실제 입출금은 각 거래소/지갑에서 처리됩니다.</p>');
+
+    html.push('<p style="margin-top:18px;font-size:11px;color:#888;">'
+            + '이 화면은 관리자용 watch-only 지갑 현황입니다. 실제 입출금은 각 거래소/지갑에서 처리됩니다.'
+            + '</p>');
+
     html.push('</body></html>');
+
     doc.open();
     doc.write(html.join(''));
     doc.close();
   };
 })();
 </script>
+
 
 
 <!-- /IGDC minimal additions -->
