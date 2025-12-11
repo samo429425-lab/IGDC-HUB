@@ -1,14 +1,37 @@
-// /.netlify/functions/listUsers.js
+// /.netlify/functions/listusers.js
+// IGDC Admin: Auth0 사용자 목록 + 역할 조회 (M2M 권한 기반)
+// 파일 전체 통짜 교체용 최종 버전
+
 import fetch from "node-fetch";
+
+// only OWNER 계정만 조회 허용
+function isOwner(event) {
+  try {
+    const claims = event.clientContext && event.clientContext.user;
+    if (!claims) return false;
+    return Array.isArray(claims.app_metadata?.roles) &&
+           claims.app_metadata.roles.includes("owner");
+  } catch (e) {
+    return false;
+  }
+}
 
 export async function handler(event, context) {
   try {
+    // 1) OWNER 검사
+    if (!isOwner(event)) {
+      return {
+        statusCode: 403,
+        body: "Forbidden: OWNER 권한 필요"
+      };
+    }
+
+    // 2) Auth0 관리 토큰(M2M) 발급
     const DOMAIN = process.env.AUTH0_DOMAIN;
     const CLIENT_ID = process.env.AUTH0_M2M_CLIENT_ID;
     const CLIENT_SECRET = process.env.AUTH0_M2M_CLIENT_SECRET;
     const AUDIENCE = `https://${DOMAIN}/api/v2/`;
 
-    // 1) M2M 토큰 발급
     const tokenRes = await fetch(`https://${DOMAIN}/oauth/token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -17,57 +40,59 @@ export async function handler(event, context) {
         client_secret: CLIENT_SECRET,
         audience: AUDIENCE,
         grant_type: "client_credentials"
-      })
+      }),
     });
 
     if (!tokenRes.ok) {
-      const e = await tokenRes.text();
-      return { statusCode: 500, body: `Auth0 token error: ${e}` };
+      return {
+        statusCode: 500,
+        body: "Auth0 M2M Token Error: " + (await tokenRes.text())
+      };
     }
 
     const { access_token } = await tokenRes.json();
 
-    // 2) 사용자 목록 가져오기
+    // 3) 사용자 목록 조회
     const usersRes = await fetch(`https://${DOMAIN}/api/v2/users`, {
-      headers: {
-        Authorization: `Bearer ${access_token}`
-      }
+      headers: { Authorization: `Bearer ${access_token}` }
     });
 
     if (!usersRes.ok) {
-      const e = await usersRes.text();
-      return { statusCode: usersRes.status, body: `Users fetch error: ${e}` };
+      return {
+        statusCode: usersRes.status,
+        body: "User list fetch error: " + (await usersRes.text())
+      };
     }
 
-    const rawUsers = await usersRes.json();
+    const raw = await usersRes.json();
 
-    // 3) 필요한 필드만 추출
-    const trimmed = rawUsers.map(u => ({
+    // 4) 필요한 필드만 뽑기 (Admin UI 요구 형식)
+    const trimmed = raw.map(u => ({
       user_id: u.user_id || "",
       name: u.name || "",
       email: u.email || "",
-      roles: [],       // 실제 역할은 아래에서 또 불러옴
-      blocked: !!u.blocked
+      blocked: !!u.blocked,
+      roles: []   // 아래에서 채움
     }));
 
-    // 4) 각 사용자 역할 가져오기
-    for (let user of trimmed) {
+    // 5) 각 사용자 역할 조회
+    for (let u of trimmed) {
       const rolesRes = await fetch(
-        `https://${DOMAIN}/api/v2/users/${encodeURIComponent(user.user_id)}/roles`,
+        `https://${DOMAIN}/api/v2/users/${encodeURIComponent(u.user_id)}/roles`,
         {
           headers: { Authorization: `Bearer ${access_token}` }
         }
       );
 
       if (rolesRes.ok) {
-        const roles = await rolesRes.json();
-        user.roles = roles.map(r => r.name);
+        const roleData = await rolesRes.json();
+        u.roles = roleData.map(r => r.name);
       } else {
-        user.roles = [];
+        u.roles = [];
       }
     }
 
-    // 최종 반환
+    // 6) 최종 반환
     return {
       statusCode: 200,
       body: JSON.stringify({ users: trimmed })
@@ -76,7 +101,7 @@ export async function handler(event, context) {
   } catch (err) {
     return {
       statusCode: 500,
-      body: `Internal error: ${err.message}`
+      body: "Internal Error: " + err.message
     };
   }
 }
