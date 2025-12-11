@@ -1,4 +1,62 @@
 {
+  "home": {
+    "title": "IGDC Home",
+    "sections": [
+      { "id": "main-1",   "title": "쇼핑 핫템 1" },
+      { "id": "main-2",   "title": "쇼핑 핫템 2" },
+      { "id": "main-3",   "title": "쇼핑 핫템 3" },
+      { "id": "main-4",   "title": "쇼핑 핫템 4" },
+      { "id": "main-5",   "title": "쇼핑 핫템 5" },
+      { "id": "ad-top",   "title": "우측 광고 상단" },
+      { "id": "ad-mid",   "title": "우측 광고 중단" },
+      { "id": "ad-bottom","title": "우측 광고 하단" }
+    ]
+  },
+
+  "distribution": {
+    "title": "Distribution Hub",
+    "sections": [
+      { "id": "recommend", "title": "오늘의 추천" },
+      { "id": "sponsored", "title": "스폰서 상품" },
+      { "id": "trending",  "title": "실시간 인기" },
+      { "id": "new",       "title": "신규 등록" },
+      { "id": "special",   "title": "특별 상품" },
+      { "id": "others",    "title": "기타 상품" },
+      { "id": "brand-ads", "title": "인기 브랜드 패널" }
+    ]
+  },
+
+  "social": {
+    "title": "Social Network Hub",
+    "sections": [
+      { "id": "sn-instagram-1",   "title": "인스타그램 뷰티·패션" },
+      { "id": "sn-instagram-2",   "title": "인스타그램 K-뷰티·문화예술" },
+      { "id": "sn-youtube-travel","title": "유튜브 여행·관광" },
+      { "id": "sn-youtube-food",  "title": "유튜브 먹방·푸드" },
+      { "id": "sn-youtube-life",  "title": "유튜브 생활·핫이슈" },
+      { "id": "sn-youtube-culture","title": "유튜브 문화·음악·힐링" },
+      { "id": "sn-youtube-world", "title": "유튜브 세계정세·교양" },
+      { "id": "sn-shorts",        "title": "틱톡·쇼츠 바이럴" },
+      { "id": "sn-fb-twitter",    "title": "페이스북·트위터 교육·지식" }
+    ]
+  },
+
+  "network": {
+    "title": "Network Hub (Market Hub)",
+    "sections": [
+      { "id": "network-main",  "title": "네트워크 메인 링크" },
+      { "id": "network-right", "title": "우측 마켓 추천" }
+    ]
+  },
+
+  "tourpage": {
+    "title": "Tour / Travel Hub",
+    "sections": [
+      { "id": "tour-main",  "title": "투어 메인 링크" },
+      { "id": "tour-right", "title": "우측 여행·브랜드 추천" }
+    ]
+  },
+
   "donation": {
     "whitelistDomains": [],
     "footerLinks": [
@@ -16,35 +74,28 @@
       }
     ],
     "sections": [
-      {
-        "id": "global",
-        "title": "지구촌 소식"
-      },
-      {
-        "id": "ngo",
-        "title": "NGO 단체"
-      },
-      {
-        "id": "mission",
-        "title": "선교 단체"
-      },
-      {
-        "id": "env",
-        "title": "환경 단체"
-      },
-      {
-        "id": "relief",
-        "title": "구제 단체"
-      },
-      {
-        "id": "children",
-        "title": "아동·교육"
-      },
-      {
-        "id": "medical",
-        "title": "의료·보건"
-      }
+      { "id": "global",   "title": "지구촌 소식" },
+      { "id": "ngo",      "title": "NGO 단체" },
+      { "id": "mission",  "title": "선교 단체" },
+      { "id": "env",      "title": "환경 단체" },
+      { "id": "relief",   "title": "구제 단체" },
+      { "id": "children", "title": "아동·교육" },
+      { "id": "medical",  "title": "의료·보건" },
+      { "id": "others",   "title": "기타 휴먼스토리" }
     ]
   },
+
+  "media": {
+    "title": "Media Hub",
+    "sections": [
+      { "id": "media-featured", "title": "오늘의 추천 콘텐츠" },
+      { "id": "media-local",    "title": "지역별 인기" },
+      { "id": "media-korea",    "title": "K-콘텐츠" },
+      { "id": "media-global",   "title": "글로벌 인기" },
+      { "id": "media-docu",     "title": "다큐·리얼리티" },
+      { "id": "media-free",     "title": "무료 공개 콘텐츠" }
+    ]
+  },
+
   "allowAuto": true
 }
