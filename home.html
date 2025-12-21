@@ -2065,6 +2065,22 @@ section.shopping-section, section.shopping-section .shopping-rows {
 <div class="desc desc2">세상의 모든 이들에게 행운이 있으시길 기원합니다.</div>
 </div>
 </div>
+
+<section id="global-search-section">
+  <div class="container">
+    <div class="global-search-bar">
+      <input
+        type="text"
+        id="globalSearchInput"
+        placeholder="Search the Maru Platform"
+        aria-label="Global Search"
+      />
+      <button id="globalSearchBtn" aria-label="Search">Search</button>
+    </div>
+  </div>
+</section>
+
+
 <!-- ========== NEWS (Middle) ========== -->
 <section aria-label="대륙별 뉴스" class="news-section">
 <div class="news-row-wrap" data-row="1">
@@ -4170,6 +4186,28 @@ window.addEventListener("message",function(ev){
   window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
 })();
 </script>
+<style>
+  /* Global Search Bar */
+  #global-search-section {
+    margin: 24px 0;
+  }
+  .global-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .global-search-bar input {
+    flex: 1;
+    padding: 12px 14px;
+    font-size: 16px;
+  }
+  .global-search-bar button {
+    padding: 12px 20px;
+    font-size: 16px;
+    cursor: pointer;
+  }
+</style>
+<script src="/assets/js/global-search.js"></script>
 </body>
 </html>
 
