@@ -490,6 +490,58 @@ html, body {
     .ad-panel { position: static !important; max-height: none !important; overflow: visible !important; }
   }
 </style>
+
+<style id="nh-right-rail-layout-v20251222">
+/* === Right rail layout skeleton (desktop only) ===
+   Scope: layout only. Card sizes/margins/padding remain untouched. */
+
+.right-rail{
+  grid-column: 3 !important;
+  align-self: start !important;
+  position: sticky !important;
+  top: 20px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  width: 100% !important;
+  max-height: calc(100vh - 40px) !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* headline: keep compact, no unitless margins */
+.right-rail .ad-headline{
+  margin: 3px 0 3px !important;
+  padding: 0 !important;
+  text-align: center !important;
+  line-height: 1 !important;
+  height: 1em !important;
+  white-space: nowrap !important;
+}
+
+/* panel scrolls; rail stays sticky */
+.right-rail .ad-panel{
+  position: relative !important;
+  top: auto !important;
+  grid-column: auto !important;
+  flex: 1 1 auto !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Desktop only: ensure panel visible */
+@media (min-width:1025px){
+  .ad-panel{ display:flex !important; }
+}
+
+/* Mobile: hide the desktop rail wrapper entirely; use #nh-mobile-rail only */
+@media (max-width:1024px){
+  .right-rail{ display:none !important; }
+}
+</style>
+
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
