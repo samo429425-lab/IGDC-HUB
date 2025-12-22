@@ -188,15 +188,7 @@ html, body { overflow-x: hidden !important; }
 })();
 </script>
 <style id="adpanel-visible-7">/* Show ~7 cards before scroll (7 full + 20% of 8th) */</style>
-<style id="responsive-main-first">:root{
-  --ad-slide: 0px;
-  --sidebar-slide: 0px;
-}
-.container{
-  display:flex !important;
-  align-items:flex-start !important;
-  gap:24px !important;
-}</style>
+
 <script id="responsive-main-first-js">
 (function(){
   var container = document.querySelector('.container');
@@ -260,33 +252,7 @@ function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
  /* keep left fixed (no shrinking) */</style>
 <style id="panel-slides-vars"></style>
-<style id="lock-panels-until-main-50">:root {
-    --left-col: 210px;
-    --right-col: 274px;
-    --grid-gap: 24px;
-  }
 
-  /* Use a grid so center column can enforce a 50vw floor */
-  .container {
-    display: grid !important;
-    grid-template-columns: var(--left-col) minmax(50vw, 1fr) var(--right-col) !important;
-    gap: var(--grid-gap) !important;
-    align-items: start !important;
-  }
-
-  /* Before threshold: keep both side panels fixed (do NOT shrink) */
-  
-  
-
-  /* Neutralize earlier fixed-flex that could fight us */
-  .main-content { min-width: 0 !important; }
-  #panel-slides-vars 
-    
-    
-  }
-
-  /* Safety: avoid horizontal scrolling due to column math */
-  html, body { overflow-x: hidden !important; }</style>
 <style id="both-panels-shrink-when-main-lt50">:root {
     --left-col: 210px;
     --right-col: 274px;
@@ -343,13 +309,13 @@ function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
   .link-btn:hover{ background:#e75480; color:#fff; border-color:#cc2d63; box-shadow:0 2px 6px rgba(0,0,0,.18) }
   
   .bc-tile:hover{background:#86efac}
-  .bc-tile.orange{background:#f97316;color:#fff}
+ /* --- Strong rules for right panel thumbnail boxes --- */ .bc-tile.orange{background:#f97316;color:#fff}
   .bc-tile.orange:hover{background:#fb923c}
   
   .ad-panel{ position:sticky; top:20px; background:#f7f9fb; border:1px solid #d6dce0; border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:12px; max-height:80vh; overflow:auto; box-shadow:0 1px 4px rgba(0,0,0,.08) }
   .ad-box{ background:#fff; border:1px solid #d7dce1; border-radius:8px; height:165px; display:flex; align-items:center; justify-content:center; font-weight:600; color:#444 }
 
-/* --- Strong rules for right panel thumbnail boxes --- */
+
 .ad-panel { grid-column: 3; }
 .ad-box{
   height:165px !important;
@@ -1692,7 +1658,7 @@ window.addEventListener("message",function(ev){
 (function(){
   const isMobile = matchMedia('(max-width:1100px)').matches || matchMedia('(pointer:coarse)').matches;
   const rail = document.querySelector('.right-rail .ad-panel, .right-panel .ad-panel, .ad-panel');
-  const mobileSec = document.getElementById('nh-mobile-ads');
+  const mobileSec = document.getElementById('nh-mobile-rail-list');
 
   // 1) Mobile: clone right rail cards to bottom (max 15)
   if(isMobile && rail && mobileSec){
@@ -1736,7 +1702,7 @@ window.addEventListener("message",function(ev){
   }
   function replaceWithFeed(rows){
     const railBox = document.querySelector('.right-rail .ad-panel, .right-panel .ad-panel, .ad-panel');
-    const mobile = document.getElementById('nh-mobile-ads');
+    const mobile = document.getElementById('nh-mobile-rail-list');
     if(mobile) mobile.innerHTML=''; if(railBox) railBox.innerHTML='';
     const cards=[]; (rows||[]).forEach(r => (r.items||r.cards||[]).forEach(c=>{ if(!blocked(c)) cards.push(c); }));
     const take = Math.min(cards.length, 15);
