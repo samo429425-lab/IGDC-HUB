@@ -2065,6 +2065,22 @@ section.shopping-section, section.shopping-section .shopping-rows {
 <div class="desc desc2">세상의 모든 이들에게 행운이 있으시길 기원합니다.</div>
 </div>
 </div>
+
+<section id="global-search-section">
+  <div class="container">
+    <div class="global-search-bar">
+      <input
+        type="text"
+        id="globalSearchInput"
+        placeholder="Search the Maru Platform"
+        aria-label="Global Search"
+      />
+      <button id="globalSearchBtn" aria-label="Search">Search</button>
+    </div>
+  </div>
+</section>
+
+
 <!-- ========== NEWS (Middle) ========== -->
 <section aria-label="대륙별 뉴스" class="news-section">
 <div class="news-row-wrap" data-row="1">
@@ -2250,6 +2266,8 @@ section.shopping-section, section.shopping-section .shopping-rows {
 </h4><div class="ad-scroll"><div class="ad-list"><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a></div></div></div></div>
 </div>
 <script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.home.json" data-interval="20000" src="/assets/js/hero.rotator.js"></script>
+
+<div class="thumb-grid thumb-scroller" data-psom-key="home"></div>
 <footer>
     IGDC Global Hub © 2025 | International General Distribution Company<br/>
     경기도 평택시 고덕갈평3로 50, <br/>
@@ -3924,7 +3942,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </script>
 <!-- removed stray text:  -->
 <script src="/assets/js/igdc-core.min.js"></script>
-<div class="thumb-grid thumb-scroller" data-psom-key="home"></div>
+
 <button aria-controls="news-stamp" aria-expanded="false" class="stamp-handle" title="뉴스 스탬프 표시/숨김" type="button"></button>
 <script>(()=>{const h=document.querySelector(".stamp-handle"),s=document.querySelector("#news-stamp")||document.querySelector(".news-stamp"),m=window.matchMedia("(orientation:portrait) and (max-width:900px) and (pointer:coarse)");if(!h||!s)return;let t=null;const open=a=>{clearTimeout(t);s.classList.add("is-open");h.setAttribute("aria-expanded","true");if(a)t=setTimeout(close,1200)},close=()=>{clearTimeout(t);s.classList.remove("is-open");h.setAttribute("aria-expanded","false")};h.addEventListener("click",()=>{if(!m.matches)return;s.classList.contains("is-open")?close():open(true)});document.addEventListener("click",e=>{if(!m.matches)return;const x=e.target; if(!h.contains(x)&&!s.contains(x))close()},{capture:true});m.addEventListener("change",()=>{m.matches?close():(clearTimeout(t),s.classList.add("is-open"),h.setAttribute("aria-expanded","true"))});})();</script>
 <script>
@@ -4170,6 +4188,28 @@ window.addEventListener("message",function(ev){
   window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
 })();
 </script>
+<style>
+  /* Global Search Bar */
+  #global-search-section {
+    margin: 24px 0;
+  }
+  .global-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .global-search-bar input {
+    flex: 1;
+    padding: 12px 14px;
+    font-size: 16px;
+  }
+  .global-search-bar button {
+    padding: 12px 20px;
+    font-size: 16px;
+    cursor: pointer;
+  }
+</style>
+<script src="/assets/js/global-search.js"></script>
 </body>
 </html>
 
