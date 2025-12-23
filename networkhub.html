@@ -490,39 +490,6 @@ html, body {
     .ad-panel { position: static !important; max-height: none !important; overflow: visible !important; }
   }
 </style>
-<style id="nh-rightpanel-layout-fix-20251223">
-/* Final fix: lock DESKTOP layout back to original flex; only stabilize right ad panel placement */
-@media (min-width:1025px){
-  .container{
-    display:flex !important;
-    flex-direction:row !important;
-    align-items:flex-start !important;
-    min-height:90vh !important;
-  }
-  /* Restore main-content baseline (do not alter content, only undo grid overrides) */
-  .main-content{
-    flex:1 !important;
-    background-color:#ffffff !important;
-    padding:40px 30px !important;
-    border-radius:10px !important;
-    max-width:900px !important;
-    margin:30px auto !important;
-    box-shadow:0 0 10px rgba(0,0,0,0.1) !important;
-    text-align:center !important;
-  }
-  /* Right panel: fixed column, independent scroll, no buttons */
-  .ad-panel{
-    flex:0 0 274px !important;
-    width:274px !important;
-    min-width:274px !important;
-    max-width:274px !important;
-    align-self:flex-start !important;
-    margin:30px 24px 30px 0 !important;
-  }
-}
-/* Safety: grid-column has no meaning in flex; neutralize to avoid confusing future merges */
-.ad-panel{ grid-column:auto !important; }
-</style>
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -1744,5 +1711,53 @@ window.addEventListener("message",function(ev){
   window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
 })();
 </script>
+
+<style id="nh-desktop-rightpanel-lock">
+/* Desktop lock: prevent late-loaded CSS/JS from collapsing the 3-column layout */
+@media (min-width:1025px){
+  .container{ 
+    display:grid !important;
+    grid-template-columns: var(--left,210px) minmax(0,1fr) var(--right,274px) !important;
+    gap: var(--gap,24px) !important;
+    align-items:start !important;
+  }
+  .right-rail{ display:block !important; grid-column:3 !important; }
+  .ad-panel{ display:flex !important; }
+}
+</style>
+<script id="nh-desktop-rightpanel-lock-js">
+(function(){
+  function lock(){
+    try{
+      var isDesktop = window.matchMedia('(min-width:1025px)').matches;
+      if(!isDesktop) return;
+      var c = document.querySelector('.container');
+      var rr = document.querySelector('.right-rail');
+      var ap = document.querySelector('.right-rail .ad-panel') || document.querySelector('.ad-panel');
+      if(c){
+        c.style.display='grid';
+        c.style.gridTemplateColumns='var(--left,210px) minmax(0,1fr) var(--right,274px)';
+        c.style.alignItems='start';
+      }
+      if(rr){
+        rr.style.display='block';
+        rr.style.gridColumn='3';
+      }
+      if(ap){
+        ap.style.display='flex';
+      }
+    }catch(e){}
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', lock, {once:true});
+    window.addEventListener('load', lock, {once:true});
+  } else {
+    lock();
+    window.addEventListener('load', lock, {once:true});
+  }
+  window.addEventListener('resize', lock);
+})();
+</script>
+
 </body>
 </html>
