@@ -63,14 +63,14 @@
       padding: 20px 15px;
       font-size: 0.9rem;
     }</style>
-<style id="adpanel-adbox-round8">/* Round only the right ad panel's thumbnail/card boxes (scoped) */
-.ad-panel .ad-box,
-.ad-panel .ad-box > a,
-.ad-panel .ad-box img { border-radius: 8px; }
-.ad-panel .ad-box > a,
-.ad-panel .ad-box img { display:block; }
-</style>
+<style id="adpanel-adbox-round8">/* Round only the right ad panel's thumbnail/card boxes */
+  .ad-panel 
+  .ad-panel .ad-box a, .ad-panel .ad-box img { border-radius: inherit; display: block; }</style>
 <style id="adpanel-override-v1">/* === Right AD panel: same "normal" as previous success === */
+
+
+.ad-panel 
+
 /* anchor fills the card */
 .ad-panel .ad-box > a{
   display: block !important;
@@ -89,65 +89,64 @@
 .container{ align-items: flex-start; }</style>
 <style id="adpanel-visible-7">/* Show ~7 cards before scroll (7 full + 20% of 8th) */</style>
 <style id="panel-slides-vars"></style>
-<style id="adpanel-core-from-en">/* Core right-panel rules ONLY (do not touch .container/.main-content/html/body) */
-.ad-panel{
-  position: sticky;
-  top: 20px;
-  background:#f7f9fb;
-  border:1px solid #d6dce0;
-  border-radius:8px;
-  padding:12px;
-  display:flex;
-  flex-direction:column;
-  gap:12px;
-  max-height:80vh;
-  overflow:auto;
-  box-shadow:0 1px 4px rgba(0,0,0,.08);
+<style id="adpanel-core-from-en">:root{ --left:210px; --right:274px; --gap:24px; --main-max:980px; }
+  *{ box-sizing:border-box }
+  html,body{ margin:0; background:#f2f2f2; font-family:sans-serif; overflow-x:hidden }
+  a{ color:inherit }
+  .container{ display:grid; grid-template-columns: var(--left) minmax(min(50vw,var(--main-max)),1fr) var(--right); gap:var(--gap); align-items:start; padding:28px var(--gap) }
+  
+  
+  
+  .main-content{ background:#fff; padding:26px 22px; border-radius:10px; max-width:var(--main-max); margin:0 auto; box-shadow:0 1px 8px rgba(0,0,0,.08) }
+  .intro{ background:#dfefff; padding:22px; border-radius:10px; box-shadow:0 1px 6px rgba(0,0,0,.06); text-align:center; margin-bottom:22px }
+  .intro h2{ margin:0 0 8px; color:#004080 }
+  .intro p{ margin:0; color:#334 }
+  .region-card{ border:1px solid #c8d6e5; background:linear-gradient(180deg,#f9fbff,#eef5ff); border-radius:14px; padding:18px 20px; margin:16px 0 22px; box-shadow:0 2px 6px rgba(0,0,0,.08) }
+  .region-title{ font-size:1.1rem; font-weight:800; color:#003366; margin:4px 0 14px; text-align:center }
+  .btn-grid{ display:flex; flex-wrap:wrap; gap:10px 12px; justify-content:center }
+  .link-btn{ flex:0 0 150px; height:40px; line-height:40px; text-align:center; border:1px solid #e3a5c7; border-radius:8px; background:#ffe6f0; color:#7a004c; text-decoration:none; font-weight:600; letter-spacing:.2px; box-shadow:0 1px 3px rgba(0,0,0,.08); font-size:.85rem; transition:.2s }
+  .link-btn:hover{ background:#e75480; color:#fff; border-color:#cc2d63; box-shadow:0 2px 6px rgba(0,0,0,.18) }
+  
+  .bc-tile:hover{background:#86efac}
+ /* --- Strong rules for right panel thumbnail boxes --- */ .bc-tile.orange{background:#f97316;color:#fff}
+  .bc-tile.orange:hover{background:#fb923c}
+  
+  .ad-panel{ position:sticky; top:20px; background:#f7f9fb; border:1px solid #d6dce0; border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:12px; max-height:80vh; overflow:auto; box-shadow:0 1px 4px rgba(0,0,0,.08) }
+  .ad-box{ background:#fff; border:1px solid #d7dce1; border-radius:8px; height:165px; display:flex; align-items:center; justify-content:center; font-weight:600; color:#444 }
+
+
+.ad-panel { grid-column: 3; }
+.ad-box{
+  height:165px !important;
+  min-height:165px !important;
+  max-height:165px !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  overflow:hidden !important;
+}
+.ad-box > a{
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  width:100% !important;
+  height:100% !important;
+  line-height:normal !important;
+  text-align:center !important;
+  padding:0 !important;
+}
+.ad-box img, .ad-box iframe, .ad-box video, .ad-box picture, .ad-box canvas{
+  width:100% !important;
+  height:100% !important;
+  object-fit:cover !important;
+  display:block !important;
+  border:0 !important;
 }
 
-.ad-panel .ad-box{
-  background:#fff;
-  border:1px solid #d7dce1;
-  border-radius:8px;
-  height:165px;
-  min-height:165px;
-  max-height:165px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  overflow:hidden;
-  font-weight:600;
-  color:#444;
-}
 
-.ad-panel .ad-box > a{
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  width:100%;
-  height:100%;
-  line-height:normal;
-  text-align:center;
-  padding:0;
-  text-decoration:none;
-  color:inherit;
-}
 
-.ad-panel .ad-box img,
-.ad-panel .ad-box iframe,
-.ad-panel .ad-box video,
-.ad-panel .ad-box picture,
-.ad-panel .ad-box canvas{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-  display:block;
-  border:0;
-}
-
-/* hide scrollbar - keep wheel/touch/drag */
-.ad-panel::-webkit-scrollbar { display:none; width:0; height:0; }
-</style><style id="adpanel-visible-8-kr">/* Right panel: 8 full cards + 20% of 9th; scrollbar hidden; wheel/touch/drag work */
+/* Right panel: 8 full cards + 20% of 9th; scrollbar hidden; wheel/touch/drag work */
+.ad-panel::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }</style><style id="adpanel-visible-8-kr">/* Right panel: 8 full cards + 20% of 9th; scrollbar hidden; wheel/touch/drag work */
 .ad-panel {
   gap: 7px !important;
   max-height: 1730px !important;
