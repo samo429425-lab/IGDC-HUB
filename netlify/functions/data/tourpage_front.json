@@ -8,7 +8,7 @@
       "url": "/tour/detail/global.html",
       "category": "tour",
       "region": "global",
-      "lang": "en",
+      "lang": "ko",
       "weight": 10
     },
     {
@@ -19,7 +19,7 @@
       "url": "/tour/detail/asia.html",
       "category": "tour",
       "region": "asia",
-      "lang": "en",
+      "lang": "ko",
       "weight": 9
     },
     {
@@ -30,7 +30,7 @@
       "url": "/tour/detail/europe.html",
       "category": "tour",
       "region": "europe",
-      "lang": "en",
+      "lang": "ko",
       "weight": 8
     }
   ],
