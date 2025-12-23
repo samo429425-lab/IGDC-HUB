@@ -1756,5 +1756,34 @@ window.addEventListener("message",function(ev){
   var obs = new MutationObserver(function(){ ensure(); });
   obs.observe(document.documentElement, {childList:true, subtree:true, attributes:true, attributeFilter:['class','style']});
 })();
-</script></body>
+</script>
+<style id="nh-right-rail-hardlock">
+/* HARDLOCK: keep right rail visible on desktop even if late CSS overrides */
+@media (min-width:1025px){
+  .right-rail{
+    display:block !important;
+    visibility:visible !important;
+    opacity:1 !important;
+    pointer-events:auto !important;
+    position:fixed !important;
+    top:16px !important;
+    right:24px !important;
+    width:274px !important;
+    z-index:999 !important;
+    transform:none !important;
+    filter:none !important;
+  }
+  .right-rail .ad-panel{
+    display:block !important;
+    visibility:visible !important;
+    opacity:1 !important;
+    max-height:calc(100vh - 32px) !important;
+    overflow:auto !important;
+  }
+  /* reserve space to prevent overlap */
+  .container{ margin-right:298px !important; }
+}
+</style>
+
+</body>
 </html>
