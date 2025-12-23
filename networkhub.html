@@ -746,7 +746,7 @@ html, body {
 </div>
 </section>
 </div>
-<div class="thumb-grid"><div class="thumb-list" data-psom-key="networkhub"></div></div>
+<div class="thumb-grid" data-psom-key="networkhub"></div>
 <section aria-label="인기 추천 상품(모바일)" id="nh-mobile-rail">
 <div class="wrap">
 <div class="title">💎 인기 추천 상품 💎</div>
@@ -1400,7 +1400,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 })();
 </script>
 <script src="/assets/js/igdc-core.min.js"></script>
-<div class="thumb-grid"><div class="thumb-list" data-psom-key="networkhub"></div></div>
+<div class="thumb-grid" data-psom-key="networkhub"></div>
 <!-- thumbnail auto-mapping (모든 프론트페이지 공통) -->
 <style id="igtc-mobile-instant-v2">
 @media (max-width:1024px){
@@ -1756,34 +1756,5 @@ window.addEventListener("message",function(ev){
   var obs = new MutationObserver(function(){ ensure(); });
   obs.observe(document.documentElement, {childList:true, subtree:true, attributes:true, attributeFilter:['class','style']});
 })();
-</script>
-<style id="nh-right-rail-hardlock">
-/* HARDLOCK: keep right rail visible on desktop even if late CSS overrides */
-@media (min-width:1025px){
-  .right-rail{
-    display:block !important;
-    visibility:visible !important;
-    opacity:1 !important;
-    pointer-events:auto !important;
-    position:fixed !important;
-    top:16px !important;
-    right:24px !important;
-    width:274px !important;
-    z-index:999 !important;
-    transform:none !important;
-    filter:none !important;
-  }
-  .right-rail .ad-panel{
-    display:block !important;
-    visibility:visible !important;
-    opacity:1 !important;
-    max-height:calc(100vh - 32px) !important;
-    overflow:auto !important;
-  }
-  /* reserve space to prevent overlap */
-  .container{ margin-right:298px !important; }
-}
-</style>
-
-</body>
+</script></body>
 </html>
