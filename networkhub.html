@@ -490,44 +490,6 @@ html, body {
     .ad-panel { position: static !important; max-height: none !important; overflow: visible !important; }
   }
 </style>
-
-<style id="nh-desktop-rightrail-lock">
-/* Desktop lock: prevent late-injected mobile CSS (width-only) from collapsing layout on desktop browsers.
-   Does NOT change card sizing/spacing; only restores desktop layout when pointer is fine (mouse/trackpad). */
-@media (pointer:fine) and (min-width: 640px){
-  /* restore 3-col grid even if other CSS later set block/flex */
-  .container{
-    display:grid !important;
-    grid-template-columns: 210px minmax(0, 1fr) 274px !important;
-    gap: 24px !important;
-    align-items:start !important;
-  }
-  .sidebar{
-    display:flex !important;
-    flex-direction:column !important;
-    width:210px !important;
-    min-width:210px !important;
-  }
-  /* force right rail visible and in 3rd column */
-  .right-rail{
-    display:block !important;
-    grid-column:3 !important;
-    width:274px !important;
-    min-width:274px !important;
-    position:sticky !important;
-    top:16px !important;
-  }
-  .right-rail .ad-headline{ display:block !important; }
-  .right-rail .ad-panel{
-    display:flex !important;
-    flex-direction:column !important;
-    max-height:80vh !important;
-    overflow-y:auto !important;
-  }
-  /* hide mobile rail on desktop */
-  #nh-mobile-rail{ display:none !important; }
-}
-</style>
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -1747,6 +1709,82 @@ window.addEventListener("message",function(ev){
   window.addEventListener("load", function(){ setTimeout(sendHeight, 400); });
   window.addEventListener("resize", function(){ setTimeout(sendHeight, 250); });
   window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
+})();
+</script>
+
+<style id="fix-right-rail-lock-v3">
+/* === Desktop right-rail hard lock (do not touch card sizing/margins) === */
+@media (min-width:1100px) and (pointer:fine){
+  .container{
+    display:grid !important;
+    grid-template-columns: 210px minmax(0, 1fr) 274px !important;
+    gap:24px !important;
+    align-items:start !important;
+  }
+  .sidebar{ grid-column:1 !important; }
+  #main{ grid-column:2 !important; min-width:0 !important; }
+  .right-rail{
+    grid-column:3 !important;
+    position:sticky !important;
+    top:16px !important;
+    align-self:start !important;
+    width:274px !important;
+  }
+  /* keep panel scroll behavior; do not alter ad-box sizing */
+  .right-rail .ad-panel{
+    max-height:80vh !important;
+    overflow-y:auto !important;
+  }
+}
+</style>
+
+<script id="fix-right-rail-lock-js-v3">
+/* Keep the existing .right-rail anchored inside .container even if other scripts rewrite parts of the DOM.
+   This does NOT change cards; it only restores the rail node position after mutations. */
+(function(){
+  function ready(fn){ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', fn, {once:true}); else fn(); }
+  ready(function(){
+    var rail = document.querySelector('.right-rail');
+    var container = document.querySelector('.container');
+    if(!rail || !container) return;
+
+    // Create a stable slot marker just before the rail (if not already present).
+    var slot = document.getElementById('right-rail-slot');
+    if(!slot){
+      slot = document.createElement('div');
+      slot.id = 'right-rail-slot';
+      slot.style.display = 'none';
+      // If rail currently in container, insert slot before it; otherwise append slot at end.
+      if(rail.parentNode === container) container.insertBefore(slot, rail);
+      else container.appendChild(slot);
+    }
+
+    function ensure(){
+      // Re-acquire in case scripts swapped nodes
+      var c = document.querySelector('.container');
+      var r = document.querySelector('.right-rail');
+      var s = document.getElementById('right-rail-slot');
+      if(!c || !s) return;
+      if(!r) return; // if removed entirely, we can't resurrect it
+      if(r.parentNode !== c){
+        c.appendChild(r);
+      }
+      // Place right after slot (end of container in grid order)
+      if(s.nextSibling !== r){
+        c.insertBefore(r, s.nextSibling);
+      }
+    }
+
+    // Run once after load + a couple of times to catch late scripts.
+    ensure();
+    window.addEventListener('load', function(){ ensure(); setTimeout(ensure, 50); setTimeout(ensure, 250); setTimeout(ensure, 800); });
+
+    // Observe DOM changes and re-anchor the rail when needed.
+    var mo = new MutationObserver(function(){
+      ensure();
+    });
+    mo.observe(document.body, {childList:true, subtree:true});
+  });
 })();
 </script>
 </body>
