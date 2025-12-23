@@ -746,9 +746,7 @@ html, body {
 </div>
 </section>
 </div>
-<div class="thumb-grid">
-  <div class="thumb-list" data-psom-key="networkhub"></div>
-</div>
+<div class="thumb-grid" data-psom-key="networkhub"></div>
 <section aria-label="인기 추천 상품(모바일)" id="nh-mobile-rail">
 <div class="wrap">
 <div class="title">💎 인기 추천 상품 💎</div>
@@ -761,6 +759,9 @@ html, body {
 <h3 class="ad-headline" style="margin:3 0 3px; text-align:center; line-height:1; height:1em; white-space:nowrap;">
   💎 인기 추천 상품 💎
 </h3>
+<!-- RIGHT RAIL THUMB HOST (safe): loader renders ONLY into this inner list -->
+<div class="thumb-grid" id="nh-right-thumb-grid"><div class="thumb-list" data-psom-key="networkhub"></div></div>
+
 <div class="ad-panel">
 <div class="ad-box"><a href="#ad1">광고 1 (📣 Ad 1)</a></div>
 <div class="ad-box"><a href="#ad2">광고 2 (📣 Ad 2)</a></div>
@@ -1402,9 +1403,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 })();
 </script>
 <script src="/assets/js/igdc-core.min.js"></script>
-<div class="thumb-grid">
-  <div class="thumb-list" data-psom-key="networkhub"></div>
-</div>
+<div class="thumb-grid" data-psom-key="networkhub"></div>
 <!-- thumbnail auto-mapping (모든 프론트페이지 공통) -->
 <style id="igtc-mobile-instant-v2">
 @media (max-width:1024px){
