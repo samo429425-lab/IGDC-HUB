@@ -87,301 +87,124 @@
 
 /* Make sure the main content doesn't stretch under the panel in flex layouts */
 .container{ align-items: flex-start; }</style>
-<style id="adpanel-independent-scroll">.container {
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: flex-start !important;
-  justify-content: space-between !important;
-  gap: 24px !important;
-}
 
 
-
-.ad-panel 
-
-.ad-panel .ad-box > a {
-  display: block !important;
-  width: 100% !important;
-  height: 100% !important;
-  line-height: 150px !important;
-  border-radius: 8px !important;
-  text-decoration: none !important;
-  color: inherit !important;
-}
-
-/* Auto-hide after 10: 11th partially visible */
-.ad-panel .ad-box:nth-child(n+11) {
-  opacity: 0.96;
-}
-.ad-panel .ad-box:nth-child(11) {
-  margin-bottom: auto;
-}</style>
-<style id="adpanel-independent-scroll-v2">html, body { overflow-x: hidden !important; }
-.container {
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: flex-start !important;
-  justify-content: flex-start !important;
-  gap: 24px !important;
-  padding-right: 16px !important; /* separation from right window edge */
-}
-
-.ad-panel 
-.ad-panel .ad-box > a {
-  display: block !important;
-  width: 100% !important;
-  height: 100% !important;
-  line-height: 150px !important;
-  border-radius: 8px !important;
-  text-decoration: none !important;
-  color: inherit !important;
-}
-/* Visual cue: items beyond the fold */
-.ad-panel .ad-box:nth-child(n+11){ opacity: 0.98; }</style>
-<style id="adpanel-fit-cards-hide-scroll">/* Keep panel inside window and separate from main */
-html, body { overflow-x: hidden !important; }
-.container {
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: flex-start !important;
-  gap: 24px !important;
-  padding-right: 16px !important;
-}
-
-/* AD panel as independent scroller */
-
-
-
-/* Cards fit exactly inside panel content box (250px) regardless of scrollbar */
-.ad-panel 
-.ad-panel .ad-box > a {
-  display: block !important;
-  width: 100% !important;
-  height: 100% !important;
-  line-height: 150px !important;
-  border-radius: 8px !important;
-  text-decoration: none !important;
-  color: inherit !important;
-}</style>
-<script id="adpanel-drag-scroll">
-(function(){
-  var panel = document.querySelector('.ad-panel');
-  if(!panel) return;
-  var isDown = false, startY = 0, startTop = 0;
-  panel.addEventListener('mousedown', function(e){
-    isDown = true;
-    startY = e.clientY;
-    startTop = panel.scrollTop;
-    panel.style.cursor = 'grabbing';
-    e.preventDefault();
-  });
-  window.addEventListener('mouseup', function(){
-    if(!isDown) return;
-    isDown = false;
-    panel.style.cursor = '';
-  });
-  window.addEventListener('mousemove', function(e){
-    if(!isDown) return;
-    var dy = e.clientY - startY;
-    panel.scrollTop = startTop - dy;  // drag to scroll
-  });
-})();
-</script>
 <style id="adpanel-visible-7">/* Show ~7 cards before scroll (7 full + 20% of 8th) */</style>
-<style id="responsive-main-first">:root{
-  --ad-slide: 0px;
-  --sidebar-slide: 0px;
-}
-.container{
-  display:flex !important;
-  align-items:flex-start !important;
-  gap:24px !important;
-}</style>
-<script id="responsive-main-first-js">
-(function(){
-  var container = document.querySelector('.container');
-  var sidebar = document.querySelector('.sidebar');
-  var main = document.querySelector('.main-content');
-  var ad = document.querySelector('.ad-panel');
-  if(!container || !sidebar || !main || !ad) return;
 
-  var SIDEBAR_BASE = sidebar.getBoundingClientRect().width || 210;
-  var AD_BASE = ad.getBoundingClientRect().width || 274;
-  var GAP = 24;
-  var MAIN_BASE = main.getBoundingClientRect().width;
-
-  var MAIN_MIN_30 = MAIN_BASE * 0.30;
-  document.documentElement.style.setProperty("--main-min-30", Math.max(200, Math.round(MAIN_MIN_30)) + "px");
-function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
-
-  function applyLayout(){
-    var W = container.getBoundingClientRect().width;
-    var mainAvail = W - (SIDEBAR_BASE + AD_BASE + GAP*2);
-    if (mainAvail < 0) mainAvail = 0;
-
-    var threshold = MAIN_BASE * 0.5; // panels start moving ONLY after this
-
-    if (mainAvail >= threshold){
-      // BEFORE threshold: panels DO NOT move at all
-      document.documentElement.style.setProperty('--ad-slide', '0px');
-      document.documentElement.style.setProperty('--sidebar-slide', '0px');
-      return;
-    }
-
-    // AFTER threshold: start sliding proportionally
-    var prog = (threshold === 0) ? 1 : clamp((threshold - mainAvail) / threshold, 0, 1);
-
-    // Right ad panel: slide outward, keep 20% visible (80% max slide)
-    var adMaxSlide = AD_BASE * 0.80;
-    var adSlide = clamp(adMaxSlide * prog, 0, adMaxSlide);
-    document.documentElement.style.setProperty('--ad-slide', adSlide.toFixed(1) + 'px');
-
-    // Left sidebar: stay fixed (no slide)
-    document.documentElement.style.setProperty('--sidebar-slide', '0px');
-  }
-
-  window.addEventListener('resize', applyLayout);
-  window.addEventListener('load', function(){
-    // Recompute bases when content/fonts settle
-    SIDEBAR_BASE = sidebar.getBoundingClientRect().width || SIDEBAR_BASE;
-    AD_BASE = ad.getBoundingClientRect().width || AD_BASE;
-    MAIN_BASE = main.getBoundingClientRect().width || MAIN_BASE;
-    MAIN_MIN_30 = MAIN_BASE * 0.30;
-    document.documentElement.style.setProperty("--main-min-30", Math.max(200, Math.round(MAIN_MIN_30)) + "px");
-    
-    applyLayout();
-  });
-  applyLayout();
-})();
-</script>
-<style id="main-min-guard-30">html, body { overflow-x: hidden !important; }
-.container { display: flex !important; align-items: flex-start !important; gap: 24px !important; }
-.main-content { min-width: var(--main-min-30, 320px) !important; flex: 1 1 auto !important; }
-
- /* keep left fixed (no shrinking) */</style>
 <style id="panel-slides-vars"></style>
-<style id="lock-panels-until-main-50">:root {
-    --left-col: 210px;
-    --right-col: 274px;
-    --grid-gap: 24px;
-  }
 
-  /* Use a grid so center column can enforce a 50vw floor */
-  .container {
-    display: grid !important;
-    grid-template-columns: var(--left-col) minmax(50vw, 1fr) var(--right-col) !important;
-    gap: var(--grid-gap) !important;
-    align-items: start !important;
-  }
+<style id="adpanel-core-from-en">
+:root{ --left:210px; --right:274px; --gap:24px; --main-max:980px; }
+*{ box-sizing:border-box }
+html,body{ margin:0; background:#f2f2f2; font-family:sans-serif; overflow-x:hidden }
+a{ color:inherit }
 
-  /* Before threshold: keep both side panels fixed (do NOT shrink) */
-  
-  
-
-  /* Neutralize earlier fixed-flex that could fight us */
-  .main-content { min-width: 0 !important; }
-  #panel-slides-vars 
-    
-    
-  }
-
-  /* Safety: avoid horizontal scrolling due to column math */
-  html, body { overflow-x: hidden !important; }</style>
-<style id="both-panels-shrink-when-main-lt50">:root {
-    --left-col: 210px;
-    --right-col: 274px;
-    --grid-gap: 24px;
-  }
-
-  /* Grid layout with main floor at 50vw */
-  .container {
-    display: grid !important;
-    grid-template-columns: var(--left-col) minmax(50vw, 1fr) var(--right-col) !important;
-    gap: var(--grid-gap) !important;
-    align-items: start !important;
-  }
-
-  /* Keep side panels fixed before threshold */
-  
-  
-
-  /* Neutralize legacy inline/fixed rules that may freeze the sidebar */
-  
-  
-
-  /* Threshold: when viewport cannot maintain MAIN >= 50vw,
-     let BOTH side panels shrink together (natural, smooth) */
-  @media (max-width: calc(var(--left-col) + var(--right-col) + (var(--grid-gap) * 2) + 50vw)) {
-    .container {
-      grid-template-columns:
-        clamp(120px, 14vw, var(--left-col))
-        minmax(50vw, 1fr)
-        clamp(220px, 28vw, var(--right-col)) !important;
-    }
-    
-    
-  }
-
-  /* Safety: prevent horizontal scroll */
-  html, body { overflow-x: hidden !important; }</style>
-<style id="adpanel-core-from-en">:root{ --left:210px; --right:274px; --gap:24px; --main-max:980px; }
-  *{ box-sizing:border-box }
-  html,body{ margin:0; background:#f2f2f2; font-family:sans-serif; overflow-x:hidden }
-  a{ color:inherit }
-  .container{ display:grid; grid-template-columns: var(--left) minmax(min(50vw,var(--main-max)),1fr) var(--right); gap:var(--gap); align-items:start; padding:28px var(--gap) }
-  
-  
-  
-  .main-content{ background:#fff; padding:26px 22px; border-radius:10px; max-width:var(--main-max); margin:0 auto; box-shadow:0 1px 8px rgba(0,0,0,.08) }
-  .intro{ background:#dfefff; padding:22px; border-radius:10px; box-shadow:0 1px 6px rgba(0,0,0,.06); text-align:center; margin-bottom:22px }
-  .intro h2{ margin:0 0 8px; color:#004080 }
-  .intro p{ margin:0; color:#334 }
-  .region-card{ border:1px solid #c8d6e5; background:linear-gradient(180deg,#f9fbff,#eef5ff); border-radius:14px; padding:18px 20px; margin:16px 0 22px; box-shadow:0 2px 6px rgba(0,0,0,.08) }
-  .region-title{ font-size:1.1rem; font-weight:800; color:#003366; margin:4px 0 14px; text-align:center }
-  .btn-grid{ display:flex; flex-wrap:wrap; gap:10px 12px; justify-content:center }
-  .link-btn{ flex:0 0 150px; height:40px; line-height:40px; text-align:center; border:1px solid #e3a5c7; border-radius:8px; background:#ffe6f0; color:#7a004c; text-decoration:none; font-weight:600; letter-spacing:.2px; box-shadow:0 1px 3px rgba(0,0,0,.08); font-size:.85rem; transition:.2s }
-  .link-btn:hover{ background:#e75480; color:#fff; border-color:#cc2d63; box-shadow:0 2px 6px rgba(0,0,0,.18) }
-  
-  .bc-tile:hover{background:#86efac}
-  .bc-tile.orange{background:#f97316;color:#fff}
-  .bc-tile.orange:hover{background:#fb923c}
-  
-  .ad-panel{ position:sticky; top:20px; background:#f7f9fb; border:1px solid #d6dce0; border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:12px; max-height:80vh; overflow:auto; box-shadow:0 1px 4px rgba(0,0,0,.08) }
-  .ad-box{ background:#fff; border:1px solid #d7dce1; border-radius:8px; height:165px; display:flex; align-items:center; justify-content:center; font-weight:600; color:#444 }
-
-/* --- Strong rules for right panel thumbnail boxes --- */
-.ad-panel { grid-column: 3; }
-.ad-box{
-  height:165px !important;
-  min-height:165px !important;
-  max-height:165px !important;
-  display:flex !important;
-  align-items:center !important;
-  justify-content:center !important;
-  overflow:hidden !important;
-}
-.ad-box > a{
-  display:flex !important;
-  align-items:center !important;
-  justify-content:center !important;
-  width:100% !important;
-  height:100% !important;
-  line-height:normal !important;
-  text-align:center !important;
-  padding:0 !important;
-}
-.ad-box img, .ad-box iframe, .ad-box video, .ad-box picture, .ad-box canvas{
-  width:100% !important;
-  height:100% !important;
-  object-fit:cover !important;
-  display:block !important;
-  border:0 !important;
+/* 3-column skeleton (left / main / right) */
+.container{
+  display:grid;
+  grid-template-columns: var(--left) minmax(min(50vw,var(--main-max)),1fr) var(--right);
+  gap:var(--gap);
+  align-items:start;
+  padding:28px var(--gap);
 }
 
+/* keep main look (existing) */
+.main-content{
+  background:#fff; padding:26px 22px; border-radius:10px;
+  max-width:var(--main-max); margin:0 auto;
+  box-shadow:0 1px 8px rgba(0,0,0,.08)
+}
+.intro{ background:#dfefff; padding:22px; border-radius:10px; box-shadow:0 1px 6px rgba(0,0,0,.06); text-align:center; margin-bottom:22px }
+.intro h2{ margin:0 0 8px; color:#004080 }
+.intro p{ margin:0; color:#334 }
+.region-card{ border:1px solid #c8d6e5; background:linear-gradient(180deg,#f9fbff,#eef5ff); border-radius:14px; padding:18px 20px; margin:16px 0 22px; box-shadow:0 2px 6px rgba(0,0,0,.08) }
+.region-title{ font-size:1.1rem; font-weight:800; color:#003366; margin:4px 0 14px; text-align:center }
+.btn-grid{ display:flex; flex-wrap:wrap; gap:10px 12px; justify-content:center }
+.link-btn{ flex:0 0 150px; height:40px; line-height:40px; text-align:center; border:1px solid #e3a5c7; border-radius:8px; background:#ffe6f0; color:#7a004c; text-decoration:none; font-weight:600; letter-spacing:.2px; box-shadow:0 1px 3px rgba(0,0,0,.08); font-size:.85rem; transition:.2s }
+.link-btn:hover{ background:#e75480; color:#fff; border-color:#cc2d63; box-shadow:0 2px 6px rgba(0,0,0,.18) }
+
+.bc-tile:hover{background:#86efac}
+.bc-tile.orange{background:#f97316;color:#fff}
+.bc-tile.orange:hover{background:#fb923c}
+
+/* === RIGHT RAIL (important) === */
+.right-rail{
+  width:var(--right);
+  min-width:var(--right);
+}
+
+/* Panel */
+.right-rail .ad-panel{
+  position:sticky;
+  top:20px;
+  background:#f7f9fb;
+  border:1px solid #d6dce0;
+  border-radius:8px;
+  padding:12px;
+
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+
+  /* prevent shrink */
+  align-items:stretch;
+
+  max-height:80vh;
+  overflow:auto;
+  box-shadow:0 1px 4px rgba(0,0,0,.08);
+}
+
+/* Cards */
+.right-rail .ad-box{
+  background:#fff;
+  border:1px solid #d7dce1;
+  border-radius:8px;
+
+  height:165px;
+  min-height:165px;
+  max-height:165px;
+
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  font-weight:600;
+  color:#444;
+  overflow:hidden;
+}
+
+/* anchor fills the card */
+.right-rail .ad-box > a{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:100%;
+  height:100%;
+  line-height:normal;
+  text-align:center;
+  padding:0;
+}
+
+/* media fills the card */
+.right-rail .ad-box img,
+.right-rail .ad-box iframe,
+.right-rail .ad-box video,
+.right-rail .ad-box picture,
+.right-rail .ad-box canvas{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+  border:0;
+}
+
+/* scrollbar hidden (wheel/touch/drag still works) */
+.right-rail .ad-panel::-webkit-scrollbar{ display:none !important; width:0 !important; height:0 !important; }
+</style>
 
 
-/* Right panel: 8 full cards + 20% of 9th; scrollbar hidden; wheel/touch/drag work */
-.ad-panel::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }</style><style id="adpanel-visible-8-kr">/* Right panel: 8 full cards + 20% of 9th; scrollbar hidden; wheel/touch/drag work */
+<style id="adpanel-visible-8-kr">/* Right panel: 8 full cards + 20% of 9th; scrollbar hidden; wheel/touch/drag work */
 .ad-panel {
   gap: 7px !important;
   max-height: 1730px !important;
@@ -508,7 +331,7 @@ html, body {
 <link href="/assets/css/thumbs.standard.css?v=20250914" rel="stylesheet"/>
 <link href="/assets/css/hero.css?v=20250914" rel="stylesheet"/>
 <!-- Mobile Optimization Patch v1 -->
-<!-- Mobile Ad Drawer v3 (push layout: stage shifts left while right drawer appears) -->
+<!-- Mobile 広告 Drawer v3 (push layout: stage shifts left while right drawer appears) -->
 <!-- Mobile Section Pager v1 (group sections into horizontal slides on mobile) -->
 <!-- Injected: exact blockchain styles cloned from socialnetwork.html -->
 <style id="bc-style-from-sn-20251013">
@@ -728,12 +551,12 @@ html, body {
 <div class="sidebar">
 <a href="home.html">🏠 ホーム</a>
 <a href="networkhub.html">🛒 マーケットハブ</a>
-<a href="distributionhub.html">🏭 流通ハブ</a>
+<a href="distributionhub.html">🏭 ディストリビューションハブ</a>
 <a href="socialnetwork.html">📢 ソーシャルネットワーク</a>
 <a href="mediahub.html">🎬 メディアハブ</a>
-<a href="tour.html">🧳 旅行・観光</a>
-<a href="literature_academic">📚 문학 학술교류</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&A / お問い合わせ</a></div><main id="main">
+<a href="tour.html">🧳 旅行・観光・宿泊</a>
+<a href="literature_academic">📚 文学・学術交流</a>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A お問い合わせ</a></div><main id="main">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
@@ -776,7 +599,7 @@ html, body {
 <!-- HERO -->
 <section aria-label="network-hero" class="hero">
 <h1>マーケットハブ</h1>
-<div class="hero-inline"><input aria-label="プラットフォーム／地域を検索" id="platform-region-search" placeholder="プラットフォーム／地域を検索" type="search"/><span class="subtext">地域を自動検出し、お住まいのエリアのサービスを優先表示します</span><span class="count"></span></div>
+<div class="hero-inline"><input aria-label="プラットフォーム／地域検索" id="platform-region-search" placeholder="プラットフォーム／地域を検索" type="search"/><span class="subtext">地域を自動検出 → 関連セクションを優先表示</span><span class="count"></span></div>
 <script>
 (function(){
   var root = document.getElementById('igdc-networkhub-main');
@@ -808,7 +631,7 @@ html, body {
       var anyVisible = Array.prototype.slice.call(card.querySelectorAll('a.link-btn')).some(function(a){ return a.style.display !== 'none'; });
       card.style.display = anyVisible ? '' : 'none';
     });
-    if(count){ count.textContent = q ? ('検索結果: ' + visibleCount + '件') : ''; }
+    if(count){ count.textContent = q ? ('검색 결과: ' + visibleCount + '개') : ''; }
   }
   if(input){
     input.addEventListener('input', filter);
@@ -818,9 +641,9 @@ html, body {
 })();</script></section>
 <!-- ASIA -->
 <section class="region-card" id="asia">
-<h2 class="region-title">アジア</h2>
+<h2 class="region-title">アジア (アジア)</h2>
 <div class="subregion" id="east-asia">
-<h3>East アジア</h3>
+<h3>東アジア (東アジア)</h3>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.coupang.com" target="_blank"><div>쿠팡</div><div class="en">Coupang</div></a>
 <a class="link-btn" href="https://www.gmarket.co.kr" target="_blank"><div>지마켓</div><div class="en">Gmarket</div></a>
@@ -835,7 +658,7 @@ html, body {
 </div>
 </div>
 <div class="subregion" id="southeast-asia">
-<h3>Southeast アジア</h3>
+<h3>東南アジア (東南アジア)</h3>
 <div class="btn-grid"><a class="link-btn" href="https://www.amazon.com" target="_blank">Amazon Global</a>
 <a class="link-btn" href="https://shopee.com" target="_blank">Shopee</a>
 <a class="link-btn" href="https://www.lazada.com" target="_blank">Lazada</a>
@@ -848,7 +671,7 @@ html, body {
 </div>
 </div>
 <div class="subregion" id="south-asia-india">
-<h3>South アジア / India</h3>
+<h3>南アジア／インド (南アジア／インド)</h3>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.amazon.in" target="_blank"><div>Amazon भारत</div><div class="en">Amazon India</div></a>
 <a class="link-btn" href="https://www.flipkart.com" target="_blank">Flipkart</a>
@@ -860,7 +683,7 @@ html, body {
 </div>
 </div>
 <div class="subregion" id="central-asia">
-<h3>Central アジア</h3>
+<h3>中央アジア (中央アジア)</h3>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.wildberries.ru" target="_blank"><div>Вайлдберриз</div><div class="en">Wildberries</div></a>
 <a class="link-btn" href="https://www.ozon.ru" target="_blank"><div>Озон</div><div class="en">Ozon</div></a>
@@ -873,9 +696,9 @@ html, body {
 </section>
 <!-- EUROPE -->
 <section class="region-card" id="europe">
-<h2 class="region-title">ヨーロッパ</h2>
+<h2 class="region-title">ヨーロッパ (ヨーロッパ)</h2>
 <div class="subregion" id="western-europe">
-<h3>Western ヨーロッパ</h3>
+<h3>西ヨーロッパ (西ヨーロッパ)</h3>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.amazon.de" target="_blank"><div>Amazon</div><div class="en">(EU/UK)</div></a>
 <a class="link-btn" href="https://www.zalando.de" target="_blank">Zalando</a>
@@ -889,7 +712,7 @@ html, body {
 </div>
 </div>
 <div class="subregion" id="eastern-europe">
-<h3>Eastern ヨーロッパ</h3>
+<h3>東ヨーロッパ (東ヨーロッパ)</h3>
 <div class="btn-grid">
 <a class="link-btn" href="https://allegro.pl" target="_blank">Allegro</a>
 <a class="link-btn" href="https://www.emag.ro" target="_blank">eMAG</a>
@@ -903,7 +726,7 @@ html, body {
 </section>
 <!-- NORTH AMERICA -->
 <section class="region-card" id="north-america">
-<h2 class="region-title">北米</h2>
+<h2 class="region-title">北アメリカ (北アメリカ)</h2>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.amazon.com" target="_blank">Amazon</a>
 <a class="link-btn" href="https://www.walmart.com" target="_blank">Walmart</a>
@@ -916,7 +739,7 @@ html, body {
 </section>
 <!-- SOUTH AMERICA -->
 <section class="region-card" id="south-america">
-<h2 class="region-title">南米</h2>
+<h2 class="region-title">南アメリカ (南アメリカ)</h2>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.mercadolibre.com" target="_blank">Mercado Libre</a>
 <a class="link-btn" href="https://www.americanas.com.br" target="_blank">Americanas</a>
@@ -929,7 +752,7 @@ html, body {
 </section>
 <!-- MIDDLE EAST -->
 <section class="region-card" id="middle-east">
-<h2 class="region-title">中東</h2>
+<h2 class="region-title">中東 (中東)</h2>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.noon.com" target="_blank"><div>نون</div><div class="en">Noon</div></a>
 <a class="link-btn" href="https://www.amazon.sa" target="_blank"><div>أمازون السعودية</div><div class="en">Amazon.sa</div></a>
@@ -941,7 +764,7 @@ html, body {
 </section>
 <!-- OCEANIA -->
 <section class="region-card" id="oceania">
-<h2 class="region-title">オセアニア</h2>
+<h2 class="region-title">オセアニア (オセアニア)</h2>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.amazon.com.au" target="_blank"><div>Amazon Australia</div><div class="en">Amazon AU</div></a>
 <a class="link-btn" href="https://www.catch.com.au" target="_blank">Catch</a>
@@ -953,7 +776,7 @@ html, body {
 </section>
 <!-- AFRICA -->
 <section class="region-card" id="africa">
-<h2 class="region-title">アフリカ</h2>
+<h2 class="region-title">アフリカ (アフリカ)</h2>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.jumia.com.ng" target="_blank">Jumia</a>
 <a class="link-btn" href="https://www.takealot.com" target="_blank">Takealot</a>
@@ -966,9 +789,9 @@ html, body {
 </div>
 <div class="thumb-grid" data-psom-key="networkhub"></div>
 
-<section id="nh-mobile-rail" aria-label="Featured products (mobile)">
+<section id="nh-mobile-rail" aria-label="おすすめ(모바일)">
   <div class="wrap">
-    <div class="title">💎 おすすめ商品 💎</div>
+    <div class="title">💎 おすすめ 💎</div>
     <div class="list" id="nh-mobile-rail-list" role="list"></div>
   </div>
 </section>
@@ -976,114 +799,114 @@ html, body {
 </main>
 <div class="right-rail">
 <h3 class="ad-headline" style="margin:3 0 3px; text-align:center; line-height:1; height:1em; white-space:nowrap;">
-  💎 おすすめ商品 💎
+  💎 おすすめ 💎
 </h3>
 <div class="ad-panel">
-<div class="ad-box"><a href="#ad1">Ad 1 (📣 Ad 1)</a></div>
-<div class="ad-box"><a href="#ad2">Ad 2 (📣 Ad 2)</a></div>
-<div class="ad-box"><a href="#ad3">Ad 3 (📣 Ad 3)</a></div>
-<div class="ad-box"><a href="#ad4">Ad 4 (📣 Ad 4)</a></div>
-<div class="ad-box"><a href="#ad5">Ad 5 (📣 Ad 5)</a></div>
-<div class="ad-box"><a href="#ad6">Ad 6 (📣 Ad 6)</a></div>
-<div class="ad-box"><a href="#ad7">Ad 7 (📣 Ad 7)</a></div>
-<div class="ad-box"><a href="#ad8">Ad 8 (📣 Ad 8)</a></div>
-<div class="ad-box"><a href="#ad9">Ad 9 (📣 Ad 9)</a></div>
-<div class="ad-box"><a href="#ad10">Ad 10 (📣 Ad 10)</a></div>
-<div class="ad-box"><a href="#ad11">Ad 11 (📣 Ad 11)</a></div>
-<div class="ad-box"><a href="#ad12">Ad 12 (📣 Ad 12)</a></div>
-<div class="ad-box"><a href="#ad13">Ad 13 (📣 Ad 13)</a></div>
-<div class="ad-box"><a href="#ad14">Ad 14 (📣 Ad 14)</a></div>
-<div class="ad-box"><a href="#ad15">Ad 15 (📣 Ad 15)</a></div>
-<div class="ad-box"><a href="#ad16">Ad 16 (📣 Ad 16)</a></div>
-<div class="ad-box"><a href="#ad17">Ad 17 (📣 Ad 17)</a></div>
-<div class="ad-box"><a href="#ad18">Ad 18 (📣 Ad 18)</a></div>
-<div class="ad-box"><a href="#ad19">Ad 19 (📣 Ad 19)</a></div>
-<div class="ad-box"><a href="#ad20">Ad 20 (📣 Ad 20)</a></div>
-<div class="ad-box"><a href="#ad21">Ad 21 (📣 Ad 21)</a></div>
-<div class="ad-box"><a href="#ad22">Ad 22 (📣 Ad 22)</a></div>
-<div class="ad-box"><a href="#ad23">Ad 23 (📣 Ad 23)</a></div>
-<div class="ad-box"><a href="#ad24">Ad 24 (📣 Ad 24)</a></div>
-<div class="ad-box"><a href="#ad25">Ad 25 (📣 Ad 25)</a></div>
-<div class="ad-box"><a href="#ad26">Ad 26 (📣 Ad 26)</a></div>
-<div class="ad-box"><a href="#ad27">Ad 27 (📣 Ad 27)</a></div>
-<div class="ad-box"><a href="#ad28">Ad 28 (📣 Ad 28)</a></div>
-<div class="ad-box"><a href="#ad29">Ad 29 (📣 Ad 29)</a></div>
-<div class="ad-box"><a href="#ad30">Ad 30 (📣 Ad 30)</a></div>
-<div class="ad-box"><a href="#ad31">Ad 31 (📣 Ad 31)</a></div>
-<div class="ad-box"><a href="#ad32">Ad 32 (📣 Ad 32)</a></div>
-<div class="ad-box"><a href="#ad33">Ad 33 (📣 Ad 33)</a></div>
-<div class="ad-box"><a href="#ad34">Ad 34 (📣 Ad 34)</a></div>
-<div class="ad-box"><a href="#ad35">Ad 35 (📣 Ad 35)</a></div>
-<div class="ad-box"><a href="#ad36">Ad 36 (📣 Ad 36)</a></div>
-<div class="ad-box"><a href="#ad37">Ad 37 (📣 Ad 37)</a></div>
-<div class="ad-box"><a href="#ad38">Ad 38 (📣 Ad 38)</a></div>
-<div class="ad-box"><a href="#ad39">Ad 39 (📣 Ad 39)</a></div>
-<div class="ad-box"><a href="#ad40">Ad 40 (📣 Ad 40)</a></div>
-<div class="ad-box"><a href="#ad41">Ad 41 (📣 Ad 41)</a></div>
-<div class="ad-box"><a href="#ad42">Ad 42 (📣 Ad 42)</a></div>
-<div class="ad-box"><a href="#ad43">Ad 43 (📣 Ad 43)</a></div>
-<div class="ad-box"><a href="#ad44">Ad 44 (📣 Ad 44)</a></div>
-<div class="ad-box"><a href="#ad45">Ad 45 (📣 Ad 45)</a></div>
-<div class="ad-box"><a href="#ad46">Ad 46 (📣 Ad 46)</a></div>
-<div class="ad-box"><a href="#ad47">Ad 47 (📣 Ad 47)</a></div>
-<div class="ad-box"><a href="#ad48">Ad 48 (📣 Ad 48)</a></div>
-<div class="ad-box"><a href="#ad49">Ad 49 (📣 Ad 49)</a></div>
-<div class="ad-box"><a href="#ad50">Ad 50 (📣 Ad 50)</a></div>
-<div class="ad-box"><a href="#ad51">Ad 51 (📣 Ad 51)</a></div>
-<div class="ad-box"><a href="#ad52">Ad 52 (📣 Ad 52)</a></div>
-<div class="ad-box"><a href="#ad53">Ad 53 (📣 Ad 53)</a></div>
-<div class="ad-box"><a href="#ad54">Ad 54 (📣 Ad 54)</a></div>
-<div class="ad-box"><a href="#ad55">Ad 55 (📣 Ad 55)</a></div>
-<div class="ad-box"><a href="#ad56">Ad 56 (📣 Ad 56)</a></div>
-<div class="ad-box"><a href="#ad57">Ad 57 (📣 Ad 57)</a></div>
-<div class="ad-box"><a href="#ad58">Ad 58 (📣 Ad 58)</a></div>
-<div class="ad-box"><a href="#ad59">Ad 59 (📣 Ad 59)</a></div>
-<div class="ad-box"><a href="#ad60">Ad 60 (📣 Ad 60)</a></div>
-<div class="ad-box"><a href="#ad61">Ad 61 (📣 Ad 61)</a></div>
-<div class="ad-box"><a href="#ad62">Ad 62 (📣 Ad 62)</a></div>
-<div class="ad-box"><a href="#ad63">Ad 63 (📣 Ad 63)</a></div>
-<div class="ad-box"><a href="#ad64">Ad 64 (📣 Ad 64)</a></div>
-<div class="ad-box"><a href="#ad65">Ad 65 (📣 Ad 65)</a></div>
-<div class="ad-box"><a href="#ad66">Ad 66 (📣 Ad 66)</a></div>
-<div class="ad-box"><a href="#ad67">Ad 67 (📣 Ad 67)</a></div>
-<div class="ad-box"><a href="#ad68">Ad 68 (📣 Ad 68)</a></div>
-<div class="ad-box"><a href="#ad69">Ad 69 (📣 Ad 69)</a></div>
-<div class="ad-box"><a href="#ad70">Ad 70 (📣 Ad 70)</a></div>
-<div class="ad-box"><a href="#ad71">Ad 71 (📣 Ad 71)</a></div>
-<div class="ad-box"><a href="#ad72">Ad 72 (📣 Ad 72)</a></div>
-<div class="ad-box"><a href="#ad73">Ad 73 (📣 Ad 73)</a></div>
-<div class="ad-box"><a href="#ad74">Ad 74 (📣 Ad 74)</a></div>
-<div class="ad-box"><a href="#ad75">Ad 75 (📣 Ad 75)</a></div>
-<div class="ad-box"><a href="#ad76">Ad 76 (📣 Ad 76)</a></div>
-<div class="ad-box"><a href="#ad77">Ad 77 (📣 Ad 77)</a></div>
-<div class="ad-box"><a href="#ad78">Ad 78 (📣 Ad 78)</a></div>
-<div class="ad-box"><a href="#ad79">Ad 79 (📣 Ad 79)</a></div>
-<div class="ad-box"><a href="#ad80">Ad 80 (📣 Ad 80)</a></div>
-<div class="ad-box"><a href="#ad81">Ad 81 (📣 Ad 81)</a></div>
-<div class="ad-box"><a href="#ad82">Ad 82 (📣 Ad 82)</a></div>
-<div class="ad-box"><a href="#ad83">Ad 83 (📣 Ad 83)</a></div>
-<div class="ad-box"><a href="#ad84">Ad 84 (📣 Ad 84)</a></div>
-<div class="ad-box"><a href="#ad85">Ad 85 (📣 Ad 85)</a></div>
-<div class="ad-box"><a href="#ad86">Ad 86 (📣 Ad 86)</a></div>
-<div class="ad-box"><a href="#ad87">Ad 87 (📣 Ad 87)</a></div>
-<div class="ad-box"><a href="#ad88">Ad 88 (📣 Ad 88)</a></div>
-<div class="ad-box"><a href="#ad89">Ad 89 (📣 Ad 89)</a></div>
-<div class="ad-box"><a href="#ad90">Ad 90 (📣 Ad 90)</a></div>
-<div class="ad-box"><a href="#ad91">Ad 91 (📣 Ad 91)</a></div>
-<div class="ad-box"><a href="#ad92">Ad 92 (📣 Ad 92)</a></div>
-<div class="ad-box"><a href="#ad93">Ad 93 (📣 Ad 93)</a></div>
-<div class="ad-box"><a href="#ad94">Ad 94 (📣 Ad 94)</a></div>
-<div class="ad-box"><a href="#ad95">Ad 95 (📣 Ad 95)</a></div>
-<div class="ad-box"><a href="#ad96">Ad 96 (📣 Ad 96)</a></div>
-<div class="ad-box"><a href="#ad97">Ad 97 (📣 Ad 97)</a></div>
-<div class="ad-box"><a href="#ad98">Ad 98 (📣 Ad 98)</a></div>
-<div class="ad-box"><a href="#ad99">Ad 99 (📣 Ad 99)</a></div>
-<div class="ad-box"><a href="#ad100">Ad 100 (📣 Ad 100)</a></div></div></div>
+<div class="ad-box"><a href="#ad1">広告 1 (📣 広告 1)</a></div>
+<div class="ad-box"><a href="#ad2">広告 2 (📣 広告 2)</a></div>
+<div class="ad-box"><a href="#ad3">広告 3 (📣 広告 3)</a></div>
+<div class="ad-box"><a href="#ad4">広告 4 (📣 広告 4)</a></div>
+<div class="ad-box"><a href="#ad5">広告 5 (📣 広告 5)</a></div>
+<div class="ad-box"><a href="#ad6">広告 6 (📣 広告 6)</a></div>
+<div class="ad-box"><a href="#ad7">広告 7 (📣 広告 7)</a></div>
+<div class="ad-box"><a href="#ad8">広告 8 (📣 広告 8)</a></div>
+<div class="ad-box"><a href="#ad9">広告 9 (📣 広告 9)</a></div>
+<div class="ad-box"><a href="#ad10">広告 10 (📣 広告 10)</a></div>
+<div class="ad-box"><a href="#ad11">広告 11 (📣 広告 11)</a></div>
+<div class="ad-box"><a href="#ad12">広告 12 (📣 広告 12)</a></div>
+<div class="ad-box"><a href="#ad13">広告 13 (📣 広告 13)</a></div>
+<div class="ad-box"><a href="#ad14">広告 14 (📣 広告 14)</a></div>
+<div class="ad-box"><a href="#ad15">広告 15 (📣 広告 15)</a></div>
+<div class="ad-box"><a href="#ad16">広告 16 (📣 広告 16)</a></div>
+<div class="ad-box"><a href="#ad17">広告 17 (📣 広告 17)</a></div>
+<div class="ad-box"><a href="#ad18">広告 18 (📣 広告 18)</a></div>
+<div class="ad-box"><a href="#ad19">広告 19 (📣 広告 19)</a></div>
+<div class="ad-box"><a href="#ad20">広告 20 (📣 広告 20)</a></div>
+<div class="ad-box"><a href="#ad21">広告 21 (📣 広告 21)</a></div>
+<div class="ad-box"><a href="#ad22">広告 22 (📣 広告 22)</a></div>
+<div class="ad-box"><a href="#ad23">広告 23 (📣 広告 23)</a></div>
+<div class="ad-box"><a href="#ad24">広告 24 (📣 広告 24)</a></div>
+<div class="ad-box"><a href="#ad25">広告 25 (📣 広告 25)</a></div>
+<div class="ad-box"><a href="#ad26">広告 26 (📣 広告 26)</a></div>
+<div class="ad-box"><a href="#ad27">広告 27 (📣 広告 27)</a></div>
+<div class="ad-box"><a href="#ad28">広告 28 (📣 広告 28)</a></div>
+<div class="ad-box"><a href="#ad29">広告 29 (📣 広告 29)</a></div>
+<div class="ad-box"><a href="#ad30">広告 30 (📣 広告 30)</a></div>
+<div class="ad-box"><a href="#ad31">広告 31 (📣 広告 31)</a></div>
+<div class="ad-box"><a href="#ad32">広告 32 (📣 広告 32)</a></div>
+<div class="ad-box"><a href="#ad33">広告 33 (📣 広告 33)</a></div>
+<div class="ad-box"><a href="#ad34">広告 34 (📣 広告 34)</a></div>
+<div class="ad-box"><a href="#ad35">広告 35 (📣 広告 35)</a></div>
+<div class="ad-box"><a href="#ad36">広告 36 (📣 広告 36)</a></div>
+<div class="ad-box"><a href="#ad37">広告 37 (📣 広告 37)</a></div>
+<div class="ad-box"><a href="#ad38">広告 38 (📣 広告 38)</a></div>
+<div class="ad-box"><a href="#ad39">広告 39 (📣 広告 39)</a></div>
+<div class="ad-box"><a href="#ad40">広告 40 (📣 広告 40)</a></div>
+<div class="ad-box"><a href="#ad41">広告 41 (📣 広告 41)</a></div>
+<div class="ad-box"><a href="#ad42">広告 42 (📣 広告 42)</a></div>
+<div class="ad-box"><a href="#ad43">広告 43 (📣 広告 43)</a></div>
+<div class="ad-box"><a href="#ad44">広告 44 (📣 広告 44)</a></div>
+<div class="ad-box"><a href="#ad45">広告 45 (📣 広告 45)</a></div>
+<div class="ad-box"><a href="#ad46">広告 46 (📣 広告 46)</a></div>
+<div class="ad-box"><a href="#ad47">広告 47 (📣 広告 47)</a></div>
+<div class="ad-box"><a href="#ad48">広告 48 (📣 広告 48)</a></div>
+<div class="ad-box"><a href="#ad49">広告 49 (📣 広告 49)</a></div>
+<div class="ad-box"><a href="#ad50">広告 50 (📣 広告 50)</a></div>
+<div class="ad-box"><a href="#ad51">広告 51 (📣 広告 51)</a></div>
+<div class="ad-box"><a href="#ad52">広告 52 (📣 広告 52)</a></div>
+<div class="ad-box"><a href="#ad53">広告 53 (📣 広告 53)</a></div>
+<div class="ad-box"><a href="#ad54">広告 54 (📣 広告 54)</a></div>
+<div class="ad-box"><a href="#ad55">広告 55 (📣 広告 55)</a></div>
+<div class="ad-box"><a href="#ad56">広告 56 (📣 広告 56)</a></div>
+<div class="ad-box"><a href="#ad57">広告 57 (📣 広告 57)</a></div>
+<div class="ad-box"><a href="#ad58">広告 58 (📣 広告 58)</a></div>
+<div class="ad-box"><a href="#ad59">広告 59 (📣 広告 59)</a></div>
+<div class="ad-box"><a href="#ad60">広告 60 (📣 広告 60)</a></div>
+<div class="ad-box"><a href="#ad61">広告 61 (📣 広告 61)</a></div>
+<div class="ad-box"><a href="#ad62">広告 62 (📣 広告 62)</a></div>
+<div class="ad-box"><a href="#ad63">広告 63 (📣 広告 63)</a></div>
+<div class="ad-box"><a href="#ad64">広告 64 (📣 広告 64)</a></div>
+<div class="ad-box"><a href="#ad65">広告 65 (📣 広告 65)</a></div>
+<div class="ad-box"><a href="#ad66">広告 66 (📣 広告 66)</a></div>
+<div class="ad-box"><a href="#ad67">広告 67 (📣 広告 67)</a></div>
+<div class="ad-box"><a href="#ad68">広告 68 (📣 広告 68)</a></div>
+<div class="ad-box"><a href="#ad69">広告 69 (📣 広告 69)</a></div>
+<div class="ad-box"><a href="#ad70">広告 70 (📣 広告 70)</a></div>
+<div class="ad-box"><a href="#ad71">広告 71 (📣 広告 71)</a></div>
+<div class="ad-box"><a href="#ad72">広告 72 (📣 広告 72)</a></div>
+<div class="ad-box"><a href="#ad73">広告 73 (📣 広告 73)</a></div>
+<div class="ad-box"><a href="#ad74">広告 74 (📣 広告 74)</a></div>
+<div class="ad-box"><a href="#ad75">広告 75 (📣 広告 75)</a></div>
+<div class="ad-box"><a href="#ad76">広告 76 (📣 広告 76)</a></div>
+<div class="ad-box"><a href="#ad77">広告 77 (📣 広告 77)</a></div>
+<div class="ad-box"><a href="#ad78">広告 78 (📣 広告 78)</a></div>
+<div class="ad-box"><a href="#ad79">広告 79 (📣 広告 79)</a></div>
+<div class="ad-box"><a href="#ad80">広告 80 (📣 広告 80)</a></div>
+<div class="ad-box"><a href="#ad81">広告 81 (📣 広告 81)</a></div>
+<div class="ad-box"><a href="#ad82">広告 82 (📣 広告 82)</a></div>
+<div class="ad-box"><a href="#ad83">広告 83 (📣 広告 83)</a></div>
+<div class="ad-box"><a href="#ad84">広告 84 (📣 広告 84)</a></div>
+<div class="ad-box"><a href="#ad85">広告 85 (📣 広告 85)</a></div>
+<div class="ad-box"><a href="#ad86">広告 86 (📣 広告 86)</a></div>
+<div class="ad-box"><a href="#ad87">広告 87 (📣 広告 87)</a></div>
+<div class="ad-box"><a href="#ad88">広告 88 (📣 広告 88)</a></div>
+<div class="ad-box"><a href="#ad89">広告 89 (📣 広告 89)</a></div>
+<div class="ad-box"><a href="#ad90">広告 90 (📣 広告 90)</a></div>
+<div class="ad-box"><a href="#ad91">広告 91 (📣 広告 91)</a></div>
+<div class="ad-box"><a href="#ad92">広告 92 (📣 広告 92)</a></div>
+<div class="ad-box"><a href="#ad93">広告 93 (📣 広告 93)</a></div>
+<div class="ad-box"><a href="#ad94">広告 94 (📣 広告 94)</a></div>
+<div class="ad-box"><a href="#ad95">広告 95 (📣 広告 95)</a></div>
+<div class="ad-box"><a href="#ad96">広告 96 (📣 広告 96)</a></div>
+<div class="ad-box"><a href="#ad97">広告 97 (📣 広告 97)</a></div>
+<div class="ad-box"><a href="#ad98">広告 98 (📣 広告 98)</a></div>
+<div class="ad-box"><a href="#ad99">広告 99 (📣 広告 99)</a></div>
+<div class="ad-box"><a href="#ad100">広告 100 (📣 広告 100)</a></div></div></div>
 </div>
 <script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.networkhub.json" data-interval="20000" src="/assets/js/hero.rotator.js"></script>
 <footer>
-    IGDC Global Hub © 2025 | International 一般 Distribution Company<br/>
-    50 Godeok-Galpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea<br/>
+    IGDC Global Hub © 2025 | International General Distribution Company<br/>
+    50 Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea, <br/>
 </footer>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- @SAFE-PATCH: hide '문학 학술교류' in sidebar -->
@@ -1216,7 +1039,7 @@ a[href^="mailto:"]:hover {
 }
 
 .igdc-qa-threads:empty::before{
-  content:"登録されたQ&Aはまだありません。";
+  content:"Q&Aはまだ投稿されていません";
   display:block; padding:10px 12px; color:#666;
   background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px;
   margin-top:4px; font-size:.95rem;
@@ -1321,7 +1144,7 @@ a[href^="mailto:"]:hover {
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      console.warn("[Q&A] Supabase credentials/library not configured: UI is visible, but saving is disabled.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -1348,23 +1171,23 @@ a[href^="mailto:"]:hover {
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
     const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","閉じる");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
     const lQ = el("label"); lQ.textContent="質問";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="ここに質問を入力してください…";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="質問を入力してください…";
     const lA = el("label"); lA.textContent="回答";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="回答を準備しています。少々お待ちください。";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="しばらくお待ちください。まもなく回答します。";
     const actions = el("div","igdc-qa-actions");
     const btn送信 = el("button","igdc-qa-btn primary"); btn送信.textContent="送信";
     const btnクリア = el("button","igdc-qa-btn muted"); btnクリア.textContent="クリア";
-    const note = el("div","igdc-qa-note"); note.textContent="※ シンプルな質問にはAIが即時に回答します。技術的な問題やエラー、運用に関する内容は管理者Q&Aに自動転送されます。";
+    const note = el("div","igdc-qa-note"); note.textContent="注：簡単な質問にはAIが即時回答する場合があります。技術的／エラー／運用に関する質問は管理者Q&Aに自動転送されます。";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
 	const ce = el("p","contact-email");
-    ce.innerHTML = '代表メール: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+    ce.innerHTML = '連絡先メール: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
     body.append(ce);
     actions.append(btn送信, btnクリア);
     panel.append(header, body);
@@ -1433,18 +1256,18 @@ a[href^="mailto:"]:hover {
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (대기중)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin ? "管理者依頼" : "一般";
+        const tag = el("span"); tag.textContent = row.is_admin? "관리요청":"일반";
         const actions = el("div","igdc-qa-thread-actions");
         const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
         if(canDelete){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="Delete";
+          const del = el("button","igdc-qa-btn muted"); del.textContent="삭제";
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("Delete failed (permission/policy)"); return; }
+            if(error){ alert("삭제 실패(권한/정책)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -1467,9 +1290,9 @@ a[href^="mailto:"]:hover {
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="質問s about operations will be reviewed and answered by an admin.";
-          else if(/가격|비용|요금/.test(text)) answer="料金や価格に関する情報は、このページ内の案内を確認してください。追加のご質問があればメッセージを残してください。";
-          else answer="お問い合わせありがとうございます。内容を確認し、順次対応いたします。";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 확인 후 회신됩니다.";
+          else if(/가격|비용|요금/.test(text)) answer="가격/요금 정보는 페이지 내 안내를 참고해주세요. 추가 문의는 남겨주세요.";
+          else answer="문의 감사합니다. 빠르게 확인하여 도와드리겠습니다.";
         }
       }
       return { technical, answer };
@@ -1483,7 +1306,7 @@ a[href^="mailto:"]:hover {
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("保存設定（Supabase URL / key）がまだ接続されていないため、サーバーへの保存は無効になっています。Web にデプロイするときに SUPER_VARSAR.url / anonKey を設定すると自動的に接続されます。");
+        alert("저장 설정(Supabase url/key)이 아직 연결되지 않아 서버 저장은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
         return;
       }
       const record = {
@@ -1493,7 +1316,7 @@ a[href^="mailto:"]:hover {
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("Failed to submit."); return; }
+      if(error){ alert("등록 실패"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -1589,11 +1412,11 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         h.appendChild(t); h.appendChild(x);
 
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">Supabase URL / key を接続すると、すべての機能が有効になります。</div>';
+        body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
 
         var ce = document.createElement('p');
         ce.className = 'contact-email';
-        ce.innerHTML = '代表メール: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+        ce.innerHTML = '連絡先メール: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
         body.appendChild(ce);
 
         p.appendChild(h); p.appendChild(body);
@@ -1655,7 +1478,7 @@ addEventListener('resize',function(){document.body.classList.remove('right-panel
 </script>
 <script defer="" src="/assets/js/auto-embed.instagram.js"></script>
 <script defer="" src="/assets/js/placeholder-sweeper.js"></script>
-<script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
+<script defer src="/assets/js/thumbnail-loader.compat.fixed.js"></script>
 <script id="bc-narrow-js">
 (function(){
   var tiles = document.querySelectorAll('.section-blockchain .bc-tile');
@@ -1692,7 +1515,7 @@ window.addEventListener("message",function(ev){
 (function(){
   const isMobile = matchMedia('(max-width:1100px)').matches || matchMedia('(pointer:coarse)').matches;
   const rail = document.querySelector('.right-rail .ad-panel, .right-panel .ad-panel, .ad-panel');
-  const mobileSec = document.getElementById('nh-mobile-ads');
+  const mobileSec = document.getElementById('nh-mobile-rail-list');
 
   // 1) Mobile: clone right rail cards to bottom (max 15)
   if(isMobile && rail && mobileSec){
@@ -1711,54 +1534,58 @@ window.addEventListener("message",function(ev){
       card.target = '_blank'; card.rel = 'noopener';
       if(src){
         const im = document.createElement('img');
-        im.src = src; im.loading='lazy'; im.decoding='async';
+        im.src = src;
+        im.loading='lazy'; im.decoding='async';
         im.style.width='100%'; im.style.height='auto'; im.style.objectFit='cover';
         card.appendChild(im);
       }else{
-        card.textContent = (a && a.textContent) || 'Item';
+        card.textContent = (a && a.textContent) || '상품';
         card.style.display='block'; card.style.padding='20px'; card.style.background='#fff';
       }
       mobileSec.appendChild(card);
     }
   }
 
-  // 2) Automap: replace dummies with feed (filters incl. harmful content); click opens product page
+  // 2) Automap: replace dummies with feed (filters incl. harmful content)
   function blocked(c){
-    const bad=[/도박|베팅|카지노|바카라|토토|먹튀/i,/성매매|성인용|19\+|야동|AV|porn|sex|escort/i,/마약|대마|코카인|필로폰|스테로이드/i,/총기|무기거래|테러/i,/보이스피싱|폰테크|작전주|묻지마 코인|러그풀|scam/i];
+    const bad=[/도박|베팅|카지노|바카라|토토|먹튀/i,/성매매|성인용|19\+|야동|AV|porn|sex/i,/마약|대마|코카인|필로폰|스테로이드/i,/총기|무기거래|테러/i,/보이스피싱|폰테크|작전주|묻지마 코인|러그풀|scam/i];
     const t=[c.title,c.brand,c.desc,c.url].filter(Boolean).join(' ');
     return bad.some(rx=>rx.test(t)) || !c.url || !c.thumb;
   }
   function cardHTML(c){
     const u = c.url || '#';
     return `<a class="card" href="${u}" target="_blank" rel="noopener">
-      <img src="${c.thumb}" alt="${(c.title||'Item').replace(/\\"/g,'')}" loading="lazy" decoding="async" style="width:100%;height:auto;object-fit:cover">
+      <img src="${c.thumb}" alt="${(c.title||'상품').replace(/\"/g,'')}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;display:block">
     </a>`;
   }
+
+  /* ✅ FIX: do NOT clear rail/mobile unless we have valid cards */
   function replaceWithFeed(rows){
     const railBox = document.querySelector('.right-rail .ad-panel, .right-panel .ad-panel, .ad-panel');
-    const mobile = document.getElementById('nh-mobile-ads');
-    if(mobile) mobile.innerHTML=''; if(railBox) railBox.innerHTML='';
-    const cards=[]; (rows||[]).forEach(r => (r.items||r.cards||[]).forEach(c=>{ if(!blocked(c)) cards.push(c); }));
+    const mobile = document.getElementById('nh-mobile-rail-list');
+
+    const cards=[];
+    (rows||[]).forEach(r => (r.items||r.cards||[]).forEach(c=>{ if(!blocked(c)) cards.push(c); }));
     const take = Math.min(cards.length, 15);
+
+    // 핵심: 피드가 0개면 기존(더미/기존맵핑) DOM을 유지
+    if(!take) return;
+
+    if(mobile) mobile.innerHTML='';
+    if(railBox) railBox.innerHTML='';
+
     for(let i=0;i<take;i++){
       const c = cards[i];
       if(mobile) mobile.insertAdjacentHTML('beforeend', cardHTML(c));
-      if(railBox){ const b=document.createElement('div'); b.className='ad-box'; b.innerHTML=cardHTML(c); railBox.appendChild(b); }
-    }
-    cleanupOrphans();
-  }
-  // Footer/garbage cleanup
-  function cleanupOrphans(){
-    const footer = document.querySelector('footer, .site-footer');
-    if(footer){
-      let n = footer.nextElementSibling; 
-      while(n){
-        const nx = n.nextElementSibling;
-        if(n.matches?.('.thumb-card,.ad,[data-card],[data-ad]') || n.querySelector?.('.thumb-card,[data-card],.ad')) n.remove();
-        n = nx;
+      if(railBox){
+        const b=document.createElement('div');
+        b.className='ad-box';
+        b.innerHTML=cardHTML(c);
+        railBox.appendChild(b);
       }
     }
   }
+
   // Try to load feed automatically (optional)
   (async function(){
     const tries=['/assets/data/ad_feed.network.json','/.netlify/functions/feed?page=networkhub'];
@@ -1767,23 +1594,17 @@ window.addEventListener("message",function(ev){
         const r=await fetch(u,{cache:'no-cache'});
         if(r.ok){
           const j=await r.json();
-          const rows=(j.rows||j.items||j.cards)? (j.rows||[{items:j.items||j.cards}]):[];
+          const rows = j.rows ? j.rows : (j.items||j.cards ? [{items:(j.items||j.cards)}] : []);
           replaceWithFeed(rows);
           break;
         }
-      }catch(_){}
+      }catch(e){}
     }
   })();
-  // External hook for dynamic updates
-  window.addEventListener('IGTC_FEED_UPDATE', (e)=>{
-    try{
-      const j = e.detail||{};
-      const rows=(j.rows||j.items||j.cards)? (j.rows||[{items:j.items||j.cards}]):[];
-      replaceWithFeed(rows);
-    }catch(err){ console.warn('[networkhub] feed update fail', err); }
-  });
 })();
-</script><script id="igtc-checkout-trigger-v1">
+</script>
+
+<script id="igtc-checkout-trigger-v1">
 (function(){
   if (window.__IGTC_CHECKOUT_READY__) return;
   window.IGTC = window.IGTC || {};
@@ -1810,8 +1631,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>決済用QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>결제 QR</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">닫기</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -1876,11 +1697,11 @@ window.addEventListener("message",function(ev){
   async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
     await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
-    ta.value=''; alert('Sent successfully.');
+    ta.value=''; alert('전송되었습니다.');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('Failed to send'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('전송 실패'));});
   const btn=document.querySelector('#qna送信Btn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('Failed to send'));});
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('전송 실패'));});
 })();
 </script>
 
@@ -1942,6 +1763,5 @@ window.addEventListener("message",function(ev){
   window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
 })();
 </script>
-<script src="/assets/js/nav-sidebar.js"></script>
 </body>
 </html>
