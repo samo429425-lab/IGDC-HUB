@@ -87,12 +87,8 @@
 
 /* Make sure the main content doesn't stretch under the panel in flex layouts */
 .container{ align-items: flex-start; }</style>
-
-
 <style id="adpanel-visible-7">/* Show ~7 cards before scroll (7 full + 20% of 8th) */</style>
-
 <style id="panel-slides-vars"></style>
-
 <style id="adpanel-core-from-en">:root{ --left:210px; --right:274px; --gap:24px; --main-max:980px; }
   *{ box-sizing:border-box }
   html,body{ margin:0; background:#f2f2f2; font-family:sans-serif; overflow-x:hidden }
@@ -368,11 +364,10 @@ html, body {
     }
   }
 </style>
-
 <style id="nh-mobile-rail-v1023">
 /* Mobile bottom rail from right panel (v10.2.3) */
 #nh-mobile-rail{ display:none; }
-@media (max-width:1024px) and (pointer:coarse){
+@media (max-width:1024px){
   .ad-panel{ display:none !important; }    /* hide original right rail on mobile */
   #nh-mobile-rail{ display:block; margin:14px 0 0; }
   #nh-mobile-rail .wrap{
@@ -398,8 +393,6 @@ html, body {
   #nh-mobile-rail .list{ scrollbar-width:none; }
 }
 </style>
-
-
 <style id="nh-mobile-portrait-ratio-v1">
 /* Mobile PORTRAIT only: expand height by original media ratio inside #nh-mobile-rail */
 @media (max-width:900px) and (orientation:portrait){
@@ -425,8 +418,6 @@ html, body {
   }
 }
 </style>
-
-
 <style id="bc-mobile-80-lock-gap3-final-20251113">
 @media (max-width: 900px){
   /* Normalize any prior width/transform so real box size applies */
@@ -464,7 +455,6 @@ html, body {
   }
 }
 </style>
-
 <style id="mobile-footer-guard">
   html, body { height: auto; min-height: 100% !important; }
   @supports (height: 100dvh) {
@@ -490,19 +480,30 @@ html, body {
     .ad-panel { position: static !important; max-height: none !important; overflow: visible !important; }
   }
 </style>
-
-<style id="nh-right-rail-lock-v1">
-/* Desktop right-rail lock: prevent late CSS from collapsing right panel */
-@media (min-width:1025px){
-  .container{ display:flex !important; flex-direction:row !important; align-items:flex-start !important; }
-  .sidebar{ flex:0 0 210px !important; }
-  main{ flex:1 1 auto !important; min-width:0 !important; }
-  .right-rail{ flex:0 0 274px !important; width:274px !important; min-width:274px !important; }
-  .right-rail .ad-panel{ position:sticky !important; top:20px !important; }
+<style id="nh-right-rail-safety-patch">
+/* === RIGHT RAIL SAFETY PATCH (desktop only) ===
+   Purpose: keep right-rail OUTSIDE .container so any late DOM rewrites/CSS flips on .container cannot drop the ad panel.
+   Constraints: does NOT touch card sizing/spacing; does NOT change main/sidebar DOM.
+*/
+@media (min-width:1025px) and (pointer:fine){
+  :root{ --nh-right-col:274px; --nh-gap:24px; --nh-top:16px; }
+  /* reserve space so main doesn't sit under fixed rail */
+  .container{ margin-right: calc(var(--nh-right-col) + var(--nh-gap)) !important; }
+  .right-rail{
+    position: fixed !important;
+    top: var(--nh-top) !important;
+    right: var(--nh-gap) !important;
+    width: var(--nh-right-col) !important;
+    z-index: 50 !important;
+  }
+  .right-rail .ad-panel{
+    max-height: calc(100vh - (var(--nh-top) * 2)) !important;
+  }
 }
-</style>
-
-</head>
+@media (max-width:1024px){
+  .right-rail{ display:none !important; }
+}
+</style></head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
 <div class="container">
@@ -746,16 +747,15 @@ html, body {
 </section>
 </div>
 <div class="thumb-grid" data-psom-key="networkhub"></div>
-
-<section id="nh-mobile-rail" aria-label="인기 추천 상품(모바일)">
-  <div class="wrap">
-    <div class="title">💎 인기 추천 상품 💎</div>
-    <div class="list" id="nh-mobile-rail-list" role="list"></div>
-  </div>
+<section aria-label="인기 추천 상품(모바일)" id="nh-mobile-rail">
+<div class="wrap">
+<div class="title">💎 인기 추천 상품 💎</div>
+<div class="list" id="nh-mobile-rail-list" role="list"></div>
+</div>
 </section>
-
 </main>
-<div class="right-rail">
+
+</div><div class="right-rail">
 <h3 class="ad-headline" style="margin:3 0 3px; text-align:center; line-height:1; height:1em; white-space:nowrap;">
   💎 인기 추천 상품 💎
 </h3>
@@ -860,7 +860,6 @@ html, body {
 <div class="ad-box"><a href="#ad98">광고 98 (📣 Ad 98)</a></div>
 <div class="ad-box"><a href="#ad99">광고 99 (📣 Ad 99)</a></div>
 <div class="ad-box"><a href="#ad100">광고 100 (📣 Ad 100)</a></div></div></div>
-</div>
 <script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.networkhub.json" data-interval="20000" src="/assets/js/hero.rotator.js"></script>
 <footer>
     IGDC Global Hub © 2025 | International General Distribution Company<br/>
@@ -918,7 +917,7 @@ html, body {
     display: block;
     clear: both;
   }</style>
-</div>
+
 <!-- === Top Gap Tighten (to ~6px) / no panel size changes === -->
 <style id="top-gap-6px-only">
   .container{ padding-top: 6px !important; }
@@ -1081,7 +1080,6 @@ a[href^="mailto:"]:hover {
       });
   })();
 </script>
-
 <script id="igdc-qa-script">
 (function(){
   if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
@@ -1405,16 +1403,17 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <div class="thumb-grid" data-psom-key="networkhub"></div>
 <!-- thumbnail auto-mapping (모든 프론트페이지 공통) -->
 <style id="igtc-mobile-instant-v2">
-@media (max-width:1024px) and (pointer:coarse){
+@media (max-width:1024px){
   .sidebar, [class*="left-sidebar"], [class*="leftbar"], [class*="left-panel"],
   #left, #leftbar, #left-panel, aside.left, aside.sidebar{display:none!important;width:0!important;min-width:0!important;max-width:0!important;margin:0!important;}
   .right-panel, .right-sidebar, [class*="right-panel"], .ad-panel, #right-panel,
   .ad-headline, .ad-title, .right-title, [class*="panel-title"]{display:none!important;}
   .container, .main-content, main, #main, .content, #content, .page, #page,
   .sidebar, .right-panel, .ad-panel{transition:none!important;}
-.main-content, main, #main, .content, #content, .page, #page{width:100%!important;max-width:100%!important;margin:0!important;padding:12px!important;box-shadow:none!important;}
+  .container{display:block!important;padding:0!important;margin:0!important;}
+  .main-content, main, #main, .content, #content, .page, #page{width:100%!important;max-width:100%!important;margin:0!important;padding:12px!important;box-shadow:none!important;}
 }
-@media (max-width:1024px) and (pointer:coarse){
+@media (max-width:1024px){
   body.right-panel-open .right-panel,
   body.right-panel-open .right-sidebar,
   body.right-panel-open [class*="right-panel"],
@@ -1435,7 +1434,7 @@ addEventListener('resize',function(){document.body.classList.remove('right-panel
 </script>
 <script defer="" src="/assets/js/auto-embed.instagram.js"></script>
 <script defer="" src="/assets/js/placeholder-sweeper.js"></script>
-<script defer src="/assets/js/thumbnail-loader.compat.fixed.js"></script>
+<script defer="" src="/assets/js/thumbnail-loader.compat.fixed.js"></script>
 <script id="bc-narrow-js">
 (function(){
   var tiles = document.querySelectorAll('.section-blockchain .bc-tile');
@@ -1618,7 +1617,6 @@ window.addEventListener("message",function(ev){
   window.__IGTC_CHECKOUT_READY__ = true;
 })();
 </script>
-
 <script id="nh-mobile-rail-js">
 (function(){
   var mounted=false;
@@ -1663,7 +1661,6 @@ window.addEventListener("message",function(ev){
   if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('전송 실패'));});
 })();
 </script>
-
 <style id="mobile-footer-guard-final">
   html, body { height: auto; min-height: 100% !important; }
   @supports (height: 100dvh) {
@@ -1722,5 +1719,42 @@ window.addEventListener("message",function(ev){
   window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
 })();
 </script>
-</body>
+<script id="nh-right-rail-safety-js">
+/* RIGHT RAIL SAFETY PATCH: re-anchor right rail if late scripts toggle/hide it */
+(function(){
+  var rail = document.querySelector('.right-rail');
+  if(!rail) return;
+  var railHTML = rail.outerHTML; // backup
+  function isDesktop(){
+    return window.matchMedia('(min-width:1025px) and (pointer:fine)').matches;
+  }
+  function ensure(){
+    if(!isDesktop()) return;
+    var existing = document.querySelector('.right-rail');
+    if(!existing){
+      // re-insert after container
+      var c = document.querySelector('.container');
+      if(!c) return;
+      c.insertAdjacentHTML('afterend', railHTML);
+      existing = document.querySelector('.right-rail');
+    }
+    if(existing){
+      existing.style.display = 'block';
+      existing.style.visibility = 'visible';
+      existing.style.opacity = '1';
+    }
+  }
+  // Run late (after other scripts) and on subsequent mutations
+  window.addEventListener('load', function(){
+    ensure();
+    setTimeout(ensure, 50);
+    setTimeout(ensure, 250);
+    setTimeout(ensure, 800);
+  });
+  window.addEventListener('resize', ensure);
+
+  var obs = new MutationObserver(function(){ ensure(); });
+  obs.observe(document.documentElement, {childList:true, subtree:true, attributes:true, attributeFilter:['class','style']});
+})();
+</script></body>
 </html>
