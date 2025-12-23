@@ -1,95 +1,64 @@
-/**
- * feed.js
- * Unified thumbnail feed resolver for Netlify Functions
- * Fixed alias handling (tour -> tourpage)
- * Safe, minimal, deterministic implementation
- */
+// netlify/functions/feed.js
+// Minimal, stable feed function for thumbnail-loader.compat
+// - Returns JSON with { items: [...] } (loader supports this schema)
+// - Reads functions/data/{page}_front.json first, then functions/data/{page}.json
+// - No PSOM filtering (prevents accidental empty results)
 
 import fs from "fs";
 import path from "path";
 
-const __dirname = new URL('.', import.meta.url).pathname;
-
-// ================= CONFIG =================
-
-// Page key aliases (HTML key -> data source key)
+// HTML page keys -> data file keys
 const PAGE_ALIAS = {
-  home: "homeproducts",
-  network: "networkhub",
-  networkhub: "networkhub",
-  media: "mediahub",
-  mediahub: "mediahub",
-  distribution: "distributionhub",
-  distributionhub: "distributionhub",
-  tour: "tourpage", // ★ FIXED
+  // keep tour as-is (loader calls page=tour)
+  tour: "tour",
+  // optional: accept tourpage too, map it to tour
+  tourpage: "tour",
 };
 
-// Data paths
 const DATA_ROOT = path.join(process.cwd(), "functions", "data");
-const PSOM_PATH = path.join(process.cwd(), "assets", "hero", "psom.json");
 
-// ================= HELPERS =================
-
-function resolvePageKey(rawKey = "") {
-  const key = String(rawKey).toLowerCase().trim();
-  return PAGE_ALIAS[key] || key;
+function resolveKey(raw = "") {
+  const k = String(raw || "").trim().toLowerCase();
+  return PAGE_ALIAS[k] || k;
 }
 
-function readJSONSafe(p) {
+function readJson(p) {
+  if (!fs.existsSync(p)) return null;
   try {
-    if (!fs.existsSync(p)) return null;
     return JSON.parse(fs.readFileSync(p, "utf-8"));
   } catch {
     return null;
   }
 }
 
-function loadPageData(pageKey) {
-  // Prefer *_front.json
-  let p = path.join(DATA_ROOT, `${pageKey}_front.json`);
-  let data = readJSONSafe(p);
-  if (data) return data;
+function loadItems(pageKey) {
+  const p1 = path.join(DATA_ROOT, `${pageKey}_front.json`);
+  const j1 = readJson(p1);
+  if (j1) return Array.isArray(j1) ? j1 : (Array.isArray(j1.items) ? j1.items : []);
 
-  // Fallback: pageKey.json
-  p = path.join(DATA_ROOT, `${pageKey}.json`);
-  data = readJSONSafe(p);
-  if (data) return data;
+  const p2 = path.join(DATA_ROOT, `${pageKey}.json`);
+  const j2 = readJson(p2);
+  if (j2) return Array.isArray(j2) ? j2 : (Array.isArray(j2.items) ? j2.items : []);
 
   return [];
 }
 
-function filterByPSOM(items, pageKey) {
-  const psom = readJSONSafe(PSOM_PATH);
-  if (!Array.isArray(psom)) return items;
-
-  const allowed = new Set(
-    psom.filter(p => p.page === pageKey).map(p => p.id)
-  );
-
-  if (!allowed.size) return items;
-  return items.filter(it => allowed.has(it.id));
-}
-
-// ================= HANDLER =================
-
 export async function handler(event) {
   const q = event.queryStringParameters || {};
-  const rawKey = q.page || q.key || "";
-  const pageKey = resolvePageKey(rawKey);
+  const raw = q.page || q.key || "";
+  const pageKey = resolveKey(raw);
 
-  let items = loadPageData(pageKey);
-  if (!Array.isArray(items)) items = [];
-
-  items = filterByPSOM(items, pageKey);
+  const items = loadItems(pageKey);
 
   return {
     statusCode: 200,
     headers: {
-      "Content-Type": "application/json",
+      "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
+      "Access-Control-Allow-Origin": "*",
     },
     body: JSON.stringify({
-      page: rawKey,
+      page: raw,
       resolvedPage: pageKey,
       count: items.length,
       items,
