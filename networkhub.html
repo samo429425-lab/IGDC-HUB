@@ -490,6 +490,44 @@ html, body {
     .ad-panel { position: static !important; max-height: none !important; overflow: visible !important; }
   }
 </style>
+
+<style id="nh-desktop-rightrail-lock">
+/* Desktop lock: prevent late-injected mobile CSS (width-only) from collapsing layout on desktop browsers.
+   Does NOT change card sizing/spacing; only restores desktop layout when pointer is fine (mouse/trackpad). */
+@media (pointer:fine) and (min-width: 640px){
+  /* restore 3-col grid even if other CSS later set block/flex */
+  .container{
+    display:grid !important;
+    grid-template-columns: 210px minmax(0, 1fr) 274px !important;
+    gap: 24px !important;
+    align-items:start !important;
+  }
+  .sidebar{
+    display:flex !important;
+    flex-direction:column !important;
+    width:210px !important;
+    min-width:210px !important;
+  }
+  /* force right rail visible and in 3rd column */
+  .right-rail{
+    display:block !important;
+    grid-column:3 !important;
+    width:274px !important;
+    min-width:274px !important;
+    position:sticky !important;
+    top:16px !important;
+  }
+  .right-rail .ad-headline{ display:block !important; }
+  .right-rail .ad-panel{
+    display:flex !important;
+    flex-direction:column !important;
+    max-height:80vh !important;
+    overflow-y:auto !important;
+  }
+  /* hide mobile rail on desktop */
+  #nh-mobile-rail{ display:none !important; }
+}
+</style>
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -1711,53 +1749,5 @@ window.addEventListener("message",function(ev){
   window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
 })();
 </script>
-
-<style id="nh-desktop-rightpanel-lock">
-/* Desktop lock: prevent late-loaded CSS/JS from collapsing the 3-column layout */
-@media (min-width:1025px){
-  .container{ 
-    display:grid !important;
-    grid-template-columns: var(--left,210px) minmax(0,1fr) var(--right,274px) !important;
-    gap: var(--gap,24px) !important;
-    align-items:start !important;
-  }
-  .right-rail{ display:block !important; grid-column:3 !important; }
-  .ad-panel{ display:flex !important; }
-}
-</style>
-<script id="nh-desktop-rightpanel-lock-js">
-(function(){
-  function lock(){
-    try{
-      var isDesktop = window.matchMedia('(min-width:1025px)').matches;
-      if(!isDesktop) return;
-      var c = document.querySelector('.container');
-      var rr = document.querySelector('.right-rail');
-      var ap = document.querySelector('.right-rail .ad-panel') || document.querySelector('.ad-panel');
-      if(c){
-        c.style.display='grid';
-        c.style.gridTemplateColumns='var(--left,210px) minmax(0,1fr) var(--right,274px)';
-        c.style.alignItems='start';
-      }
-      if(rr){
-        rr.style.display='block';
-        rr.style.gridColumn='3';
-      }
-      if(ap){
-        ap.style.display='flex';
-      }
-    }catch(e){}
-  }
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded', lock, {once:true});
-    window.addEventListener('load', lock, {once:true});
-  } else {
-    lock();
-    window.addEventListener('load', lock, {once:true});
-  }
-  window.addEventListener('resize', lock);
-})();
-</script>
-
 </body>
 </html>
