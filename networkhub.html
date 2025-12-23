@@ -372,7 +372,7 @@ html, body {
 <style id="nh-mobile-rail-v1023">
 /* Mobile bottom rail from right panel (v10.2.3) */
 #nh-mobile-rail{ display:none; }
-@media (max-width:1024px){
+@media (max-width:1024px) and (pointer:coarse){
   .ad-panel{ display:none !important; }    /* hide original right rail on mobile */
   #nh-mobile-rail{ display:block; margin:14px 0 0; }
   #nh-mobile-rail .wrap{
@@ -490,6 +490,18 @@ html, body {
     .ad-panel { position: static !important; max-height: none !important; overflow: visible !important; }
   }
 </style>
+
+<style id="nh-right-rail-lock-v1">
+/* Desktop right-rail lock: prevent late CSS from collapsing right panel */
+@media (min-width:1025px){
+  .container{ display:flex !important; flex-direction:row !important; align-items:flex-start !important; }
+  .sidebar{ flex:0 0 210px !important; }
+  main{ flex:1 1 auto !important; min-width:0 !important; }
+  .right-rail{ flex:0 0 274px !important; width:274px !important; min-width:274px !important; }
+  .right-rail .ad-panel{ position:sticky !important; top:20px !important; }
+}
+</style>
+
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -1393,17 +1405,16 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <div class="thumb-grid" data-psom-key="networkhub"></div>
 <!-- thumbnail auto-mapping (모든 프론트페이지 공통) -->
 <style id="igtc-mobile-instant-v2">
-@media (max-width:1024px){
+@media (max-width:1024px) and (pointer:coarse){
   .sidebar, [class*="left-sidebar"], [class*="leftbar"], [class*="left-panel"],
   #left, #leftbar, #left-panel, aside.left, aside.sidebar{display:none!important;width:0!important;min-width:0!important;max-width:0!important;margin:0!important;}
   .right-panel, .right-sidebar, [class*="right-panel"], .ad-panel, #right-panel,
   .ad-headline, .ad-title, .right-title, [class*="panel-title"]{display:none!important;}
   .container, .main-content, main, #main, .content, #content, .page, #page,
   .sidebar, .right-panel, .ad-panel{transition:none!important;}
-  .container{display:block!important;padding:0!important;margin:0!important;}
-  .main-content, main, #main, .content, #content, .page, #page{width:100%!important;max-width:100%!important;margin:0!important;padding:12px!important;box-shadow:none!important;}
+.main-content, main, #main, .content, #content, .page, #page{width:100%!important;max-width:100%!important;margin:0!important;padding:12px!important;box-shadow:none!important;}
 }
-@media (max-width:1024px){
+@media (max-width:1024px) and (pointer:coarse){
   body.right-panel-open .right-panel,
   body.right-panel-open .right-sidebar,
   body.right-panel-open [class*="right-panel"],
@@ -1709,82 +1720,6 @@ window.addEventListener("message",function(ev){
   window.addEventListener("load", function(){ setTimeout(sendHeight, 400); });
   window.addEventListener("resize", function(){ setTimeout(sendHeight, 250); });
   window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
-})();
-</script>
-
-<style id="fix-right-rail-lock-v3">
-/* === Desktop right-rail hard lock (do not touch card sizing/margins) === */
-@media (min-width:1100px) and (pointer:fine){
-  .container{
-    display:grid !important;
-    grid-template-columns: 210px minmax(0, 1fr) 274px !important;
-    gap:24px !important;
-    align-items:start !important;
-  }
-  .sidebar{ grid-column:1 !important; }
-  #main{ grid-column:2 !important; min-width:0 !important; }
-  .right-rail{
-    grid-column:3 !important;
-    position:sticky !important;
-    top:16px !important;
-    align-self:start !important;
-    width:274px !important;
-  }
-  /* keep panel scroll behavior; do not alter ad-box sizing */
-  .right-rail .ad-panel{
-    max-height:80vh !important;
-    overflow-y:auto !important;
-  }
-}
-</style>
-
-<script id="fix-right-rail-lock-js-v3">
-/* Keep the existing .right-rail anchored inside .container even if other scripts rewrite parts of the DOM.
-   This does NOT change cards; it only restores the rail node position after mutations. */
-(function(){
-  function ready(fn){ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', fn, {once:true}); else fn(); }
-  ready(function(){
-    var rail = document.querySelector('.right-rail');
-    var container = document.querySelector('.container');
-    if(!rail || !container) return;
-
-    // Create a stable slot marker just before the rail (if not already present).
-    var slot = document.getElementById('right-rail-slot');
-    if(!slot){
-      slot = document.createElement('div');
-      slot.id = 'right-rail-slot';
-      slot.style.display = 'none';
-      // If rail currently in container, insert slot before it; otherwise append slot at end.
-      if(rail.parentNode === container) container.insertBefore(slot, rail);
-      else container.appendChild(slot);
-    }
-
-    function ensure(){
-      // Re-acquire in case scripts swapped nodes
-      var c = document.querySelector('.container');
-      var r = document.querySelector('.right-rail');
-      var s = document.getElementById('right-rail-slot');
-      if(!c || !s) return;
-      if(!r) return; // if removed entirely, we can't resurrect it
-      if(r.parentNode !== c){
-        c.appendChild(r);
-      }
-      // Place right after slot (end of container in grid order)
-      if(s.nextSibling !== r){
-        c.insertBefore(r, s.nextSibling);
-      }
-    }
-
-    // Run once after load + a couple of times to catch late scripts.
-    ensure();
-    window.addEventListener('load', function(){ ensure(); setTimeout(ensure, 50); setTimeout(ensure, 250); setTimeout(ensure, 800); });
-
-    // Observe DOM changes and re-anchor the rail when needed.
-    var mo = new MutationObserver(function(){
-      ensure();
-    });
-    mo.observe(document.body, {childList:true, subtree:true});
-  });
 })();
 </script>
 </body>
