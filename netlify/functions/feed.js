@@ -1,67 +1,81 @@
 // netlify/functions/feed.js
-// Minimal, stable feed function for thumbnail-loader.compat
-// - Returns JSON with { items: [...] } (loader supports this schema)
-// - Reads functions/data/{page}_front.json first, then functions/data/{page}.json
-// - No PSOM filtering (prevents accidental empty results)
+// MARU Auto-Mapping Feed (정본)
+// 역할: pageKey를 받아 functions/data/*_front.json을 안전하게 매핑하여 반환
 
 import fs from "fs";
 import path from "path";
 
-// HTML page keys -> data file keys
+// 1. pageKey → data file key alias 테이블
 const PAGE_ALIAS = {
-  // keep tour as-is (loader calls page=tour)
+  // hub 계열
+  distributionhub: "distribution",
+  mediahub: "media",
+  networkhub: "network",
+  socialnetwork: "social",
+
+  // 기본
+  home: "home",
+  donation: "donation",
   tour: "tour",
-  // optional: accept tourpage too, map it to tour
-  tourpage: "tour",
 };
 
-const DATA_ROOT = path.join(process.cwd(), "functions", "data");
-
-function resolveKey(raw = "") {
-  const k = String(raw || "").trim().toLowerCase();
-  return PAGE_ALIAS[k] || k;
-}
-
-function readJson(p) {
-  if (!fs.existsSync(p)) return null;
-  try {
-    return JSON.parse(fs.readFileSync(p, "utf-8"));
-  } catch {
-    return null;
-  }
-}
-
-function loadItems(pageKey) {
-  const p1 = path.join(DATA_ROOT, `${pageKey}_front.json`);
-  const j1 = readJson(p1);
-  if (j1) return Array.isArray(j1) ? j1 : (Array.isArray(j1.items) ? j1.items : []);
-
-  const p2 = path.join(DATA_ROOT, `${pageKey}.json`);
-  const j2 = readJson(p2);
-  if (j2) return Array.isArray(j2) ? j2 : (Array.isArray(j2.items) ? j2.items : []);
-
-  return [];
+function resolveDataKey(pageKey = "") {
+  const key = String(pageKey).toLowerCase();
+  return PAGE_ALIAS[key] || key;
 }
 
 export async function handler(event) {
-  const q = event.queryStringParameters || {};
-  const raw = q.page || q.key || "";
-  const pageKey = resolveKey(raw);
+  try {
+    const params = event.queryStringParameters || {};
+    const pageKey = params.page || params.key || "home";
 
-  const items = loadItems(pageKey);
+    const dataKey = resolveDataKey(pageKey);
+    const dataDir = path.resolve("netlify/functions/data");
+    const filePath = path.join(dataDir, `${dataKey}_front.json`);
 
-  return {
-    statusCode: 200,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store",
-      "Access-Control-Allow-Origin": "*",
-    },
-    body: JSON.stringify({
-      page: raw,
-      resolvedPage: pageKey,
-      count: items.length,
-      items,
-    }),
-  };
+    if (!fs.existsSync(filePath)) {
+      return {
+        statusCode: 200,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ok: false,
+          page: pageKey,
+          resolved: dataKey,
+          count: 0,
+          items: [],
+          error: `data file not found: ${dataKey}_front.json`,
+        }),
+      };
+    }
+
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const json = JSON.parse(raw);
+
+    const items = Array.isArray(json.items)
+      ? json.items
+      : Array.isArray(json)
+      ? json
+      : [];
+
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ok: true,
+        page: pageKey,
+        resolved: dataKey,
+        count: items.length,
+        items,
+      }),
+    };
+  } catch (err) {
+    return {
+      statusCode: 500,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ok: false,
+        error: err.message || String(err),
+      }),
+    };
+  }
 }
