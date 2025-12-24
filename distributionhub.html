@@ -936,8 +936,7 @@ footer,.site-footer{position:static !important; clear:both !important; width:100
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
-<script>(function(){document.addEventListener("thumbs:ready",function(){document.documentElement.classList.remove("prelayout");
-
+<script>(function(){document.addEventListener("DOMContentLoaded",function(){document.documentElement.classList.remove("prelayout");var s=document.getElementById("prelayout-guard");if(s&&s.parentNode){s.parentNode.removeChild(s);}});})();</script>
 <div class="container">
 <div class="sidebar">
 <a href="home.html">🏠 홈</a>
