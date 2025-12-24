@@ -2,16 +2,66 @@
   "key": "distribution-recommend",
   "items": [
     {
-      "title": "Sample Item A for distribution-recommend",
+      "id": "distribution-recommend-001",
+      "title": "Recommend Item 1",
+      "thumb": "/assets/img/placeholder.png",
       "url": "#",
-      "thumbnail": "/assets/img/placeholder.png",
       "price": "",
       "tag": ""
     },
     {
-      "title": "Sample Item B for distribution-recommend",
+      "id": "distribution-recommend-002",
+      "title": "Recommend Item 2",
+      "thumb": "/assets/img/placeholder.png",
       "url": "#",
-      "thumbnail": "/assets/img/placeholder.png",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-recommend-003",
+      "title": "Recommend Item 3",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-recommend-004",
+      "title": "Recommend Item 4",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-recommend-005",
+      "title": "Recommend Item 5",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-recommend-006",
+      "title": "Recommend Item 6",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-recommend-007",
+      "title": "Recommend Item 7",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-recommend-008",
+      "title": "Recommend Item 8",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
       "price": "",
       "tag": ""
     }

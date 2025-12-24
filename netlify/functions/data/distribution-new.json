@@ -2,16 +2,66 @@
   "key": "distribution-new",
   "items": [
     {
-      "title": "Sample Item A for distribution-new",
+      "id": "distribution-new-001",
+      "title": "New Item 1",
+      "thumb": "/assets/img/placeholder.png",
       "url": "#",
-      "thumbnail": "/assets/img/placeholder.png",
       "price": "",
       "tag": ""
     },
     {
-      "title": "Sample Item B for distribution-new",
+      "id": "distribution-new-002",
+      "title": "New Item 2",
+      "thumb": "/assets/img/placeholder.png",
       "url": "#",
-      "thumbnail": "/assets/img/placeholder.png",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-new-003",
+      "title": "New Item 3",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-new-004",
+      "title": "New Item 4",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-new-005",
+      "title": "New Item 5",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-new-006",
+      "title": "New Item 6",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-new-007",
+      "title": "New Item 7",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-new-008",
+      "title": "New Item 8",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
       "price": "",
       "tag": ""
     }

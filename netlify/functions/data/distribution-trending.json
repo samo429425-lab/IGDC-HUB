@@ -2,16 +2,66 @@
   "key": "distribution-trending",
   "items": [
     {
-      "title": "Sample Item A for distribution-trending",
+      "id": "distribution-trending-001",
+      "title": "Trending Item 1",
+      "thumb": "/assets/img/placeholder.png",
       "url": "#",
-      "thumbnail": "/assets/img/placeholder.png",
       "price": "",
       "tag": ""
     },
     {
-      "title": "Sample Item B for distribution-trending",
+      "id": "distribution-trending-002",
+      "title": "Trending Item 2",
+      "thumb": "/assets/img/placeholder.png",
       "url": "#",
-      "thumbnail": "/assets/img/placeholder.png",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-trending-003",
+      "title": "Trending Item 3",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-trending-004",
+      "title": "Trending Item 4",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-trending-005",
+      "title": "Trending Item 5",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-trending-006",
+      "title": "Trending Item 6",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-trending-007",
+      "title": "Trending Item 7",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-trending-008",
+      "title": "Trending Item 8",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
       "price": "",
       "tag": ""
     }

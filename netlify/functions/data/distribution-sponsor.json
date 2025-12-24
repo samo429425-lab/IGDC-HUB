@@ -2,16 +2,66 @@
   "key": "distribution-sponsor",
   "items": [
     {
-      "title": "Sample Item A for distribution-sponsor",
+      "id": "distribution-sponsor-001",
+      "title": "Sponsor Item 1",
+      "thumb": "/assets/img/placeholder.png",
       "url": "#",
-      "thumbnail": "/assets/img/placeholder.png",
       "price": "",
       "tag": ""
     },
     {
-      "title": "Sample Item B for distribution-sponsor",
+      "id": "distribution-sponsor-002",
+      "title": "Sponsor Item 2",
+      "thumb": "/assets/img/placeholder.png",
       "url": "#",
-      "thumbnail": "/assets/img/placeholder.png",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-sponsor-003",
+      "title": "Sponsor Item 3",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-sponsor-004",
+      "title": "Sponsor Item 4",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-sponsor-005",
+      "title": "Sponsor Item 5",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-sponsor-006",
+      "title": "Sponsor Item 6",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-sponsor-007",
+      "title": "Sponsor Item 7",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "id": "distribution-sponsor-008",
+      "title": "Sponsor Item 8",
+      "thumb": "/assets/img/placeholder.png",
+      "url": "#",
       "price": "",
       "tag": ""
     }
