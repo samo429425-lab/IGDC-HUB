@@ -30,15 +30,7 @@
     const t=[x.title,x.brand,x.desc,x.url].filter(Boolean).join(' '); if(ban.some(rx=>rx.test(t))) return false;
     return !!(x.id && (x.thumb||x.photo) && (x.detailUrl||x.url)); }
   const DETAIL=(x)=> x.detailUrl || ('/product.html?id='+encodeURIComponent(x.id));
-  (function(){ if(!isMobile) return; if(document.getElementById('dh-mobile-css')) return;
-    const s=document.createElement('style'); s.id='dh-mobile-css';
-    s.textContent=`@media (max-width:600px) and (orientation:portrait){
-      .thumb-scroller,.thumb-list,.thumb-row{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;gap:12px!important}
-      .thumb-card{flex:0 0 calc(100vw - 28px)!important;max-width:calc(100vw - 28px)!important;scroll-snap-align:start}
-    }
-    @media (max-width:1024px) and (orientation:landscape){ .thumb-card{flex:0 0 48vw!important;max-width:48vw!important} }`;
-    document.head.appendChild(s);
-  })();
+  
   function cardHTML(x){const title=(x.title||'').replace(/"/g,'');
     const price=x.price?`<div class="thumb-price">${x.price}</div>`:'';
     return `<a class="thumb-card product-card" href="${DETAIL(x)}" data-product-id="${x.id}" data-title="${title}" rel="noopener">
