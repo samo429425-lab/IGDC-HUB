@@ -1,0 +1,19 @@
+{
+  "key": "home-shop-3",
+  "items": [
+    {
+      "title": "Sample Item A for home-shop-3",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "title": "Sample Item B for home-shop-3",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "price": "",
+      "tag": ""
+    }
+  ]
+}

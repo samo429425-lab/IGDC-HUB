@@ -1,0 +1,19 @@
+{
+  "key": "distribution-others",
+  "items": [
+    {
+      "title": "Sample Item A for distribution-others",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "title": "Sample Item B for distribution-others",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "price": "",
+      "tag": ""
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "key": "distribution-sponsor",
+  "items": [
+    {
+      "title": "Sample Item A for distribution-sponsor",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "title": "Sample Item B for distribution-sponsor",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "price": "",
+      "tag": ""
+    }
+  ]
+}

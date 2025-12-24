@@ -1,0 +1,19 @@
+{
+  "key": "distribution-new",
+  "items": [
+    {
+      "title": "Sample Item A for distribution-new",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "title": "Sample Item B for distribution-new",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "price": "",
+      "tag": ""
+    }
+  ]
+}

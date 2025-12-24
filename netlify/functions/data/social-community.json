@@ -1,0 +1,17 @@
+{
+  "key": "social-community",
+  "items": [
+    {
+      "title": "Sample social-community Item 1",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "meta": ""
+    },
+    {
+      "title": "Sample social-community Item 2",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "meta": ""
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "key": "social-facebook",
+  "items": [
+    {
+      "title": "Sample social-facebook Item 1",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "meta": ""
+    },
+    {
+      "title": "Sample social-facebook Item 2",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "meta": ""
+    }
+  ]
+}

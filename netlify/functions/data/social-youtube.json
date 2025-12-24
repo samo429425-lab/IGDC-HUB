@@ -1,0 +1,17 @@
+{
+  "key": "social-youtube",
+  "items": [
+    {
+      "title": "Sample social-youtube Item 1",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "meta": ""
+    },
+    {
+      "title": "Sample social-youtube Item 2",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "meta": ""
+    }
+  ]
+}

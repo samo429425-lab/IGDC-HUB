@@ -1,0 +1,17 @@
+{
+  "key": "donation-education",
+  "items": [
+    {
+      "title": "Sample Item A for donation-education",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "meta": ""
+    },
+    {
+      "title": "Sample Item B for donation-education",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "meta": ""
+    }
+  ]
+}

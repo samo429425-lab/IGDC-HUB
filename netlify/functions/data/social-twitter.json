@@ -1,0 +1,17 @@
+{
+  "key": "social-twitter",
+  "items": [
+    {
+      "title": "Sample social-twitter Item 1",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "meta": ""
+    },
+    {
+      "title": "Sample social-twitter Item 2",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "meta": ""
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "key": "donation-environment",
+  "items": [
+    {
+      "title": "Sample Item A for donation-environment",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "meta": ""
+    },
+    {
+      "title": "Sample Item B for donation-environment",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "meta": ""
+    }
+  ]
+}

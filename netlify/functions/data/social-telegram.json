@@ -1,0 +1,17 @@
+{
+  "key": "social-telegram",
+  "items": [
+    {
+      "title": "Sample social-telegram Item 1",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "meta": ""
+    },
+    {
+      "title": "Sample social-telegram Item 2",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "meta": ""
+    }
+  ]
+}

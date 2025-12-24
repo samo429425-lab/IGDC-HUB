@@ -1,0 +1,17 @@
+{
+  "key": "social-discord",
+  "items": [
+    {
+      "title": "Sample social-discord Item 1",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "meta": ""
+    },
+    {
+      "title": "Sample social-discord Item 2",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "meta": ""
+    }
+  ]
+}

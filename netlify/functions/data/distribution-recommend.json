@@ -1,0 +1,19 @@
+{
+  "key": "distribution-recommend",
+  "items": [
+    {
+      "title": "Sample Item A for distribution-recommend",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "title": "Sample Item B for distribution-recommend",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "price": "",
+      "tag": ""
+    }
+  ]
+}

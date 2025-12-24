@@ -1,0 +1,17 @@
+{
+  "key": "social-threads",
+  "items": [
+    {
+      "title": "Sample social-threads Item 1",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "meta": ""
+    },
+    {
+      "title": "Sample social-threads Item 2",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "meta": ""
+    }
+  ]
+}

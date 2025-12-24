@@ -1,0 +1,17 @@
+{
+  "key": "donation-others",
+  "items": [
+    {
+      "title": "Sample Item A for donation-others",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "meta": ""
+    },
+    {
+      "title": "Sample Item B for donation-others",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "meta": ""
+    }
+  ]
+}
