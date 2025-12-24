@@ -241,41 +241,7 @@
 .scroller-wrap{ position: relative !important; }
 .rscroll{ z-index: 5000 !important; }
 </style>
-<style id="igdc-final-like-social">
-/* === FINAL: Only 768 breakpoint + Social mobile layer === */
 
-/* Desktop/Tablet (>=769px): keep 3 columns; cancel any earlier collapse */
-@media (min-width: 769px){
-  .container{ display:grid !important; grid-template-columns: 220px minmax(0,1fr) 220px !important; column-gap:0 !important; align-items:start !important; }
-  .sidebar{ grid-column:1; display:block !important; position:static !important; transform:none !important; min-width:220px !important; max-width:220px !important; }
-  .main-content{ grid-column:2; margin:0 !important; max-width:none !important; width:auto !important; }
-  .brand-rail{ grid-column:3; display:flex !important; position:sticky !important; top:16px !important; right:auto !important; transform:none !important; width:220px !important; min-width:220px !important; max-width:220px !important; }
-  body{ padding-top:0 !important; }
-}
-
-  /* AD panel drops BELOW main, full width */
-  .brand-rail, .rightbar, .ads, .ad-right{
-    position:static !important; order:999;
-    width:100% !important; max-width:100% !important; margin:0 !important;
-    height:auto !important; max-height:none !important; overflow:visible !important;
-  }
-
-  /* Hamburger button & overlay base */
-  #mobile-nav-toggle{
-    position:fixed; top:8px; left:10px; width:36px; height:36px; z-index:10002;
-    border:0; border-radius:10px; background:rgba(20,25,35,.85); color:#e6ecff;
-    display:inline-flex; align-items:center; justify-content:center; font-size:20px; line-height:1;
-    cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.3);
-  }
-  #mobile-overlay{
-    position:fixed; inset:0; background:rgba(0,0,0,.45); backdrop-filter:blur(1px);
-    z-index:10000; opacity:0; pointer-events:none; transition:opacity .2s ease-in-out;
-  }
-  body.menu-open #mobile-overlay{ opacity:1; pointer-events:auto; }
-
-  body{ padding-top:46px; } /* room for floating hamburger */
-}
-</style>
 <style id="tour-adpanel-core">
 /* === TOUR AD PANEL CORE (conflict-free) === */
 .brand-rail{
