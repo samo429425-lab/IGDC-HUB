@@ -1,9 +1,11 @@
 // netlify/functions/feed.js
-// MARU Unified Feed (재설계본 - 2025-12-24)
-// 목표: HTML(정본) 기준 key를 그대로 받아, data 폴더의 JSON을 안정적으로 매핑/집계하여 반환
-// - 우선순위: {key}_front.json -> {key}.json -> (alias) 하이픈/언더바 치환 -> (aggregate) {key}-*.json / {key}_*.json
-// - 내부 json.key 값은 신뢰하지 않고, items만 사용(현재 데이터가 파일명/키와 다를 수 있음)
-// - 파일이 존재하나 items가 비어 있으면(0) 다음 후보를 계속 탐색 (front 껍데기 문제 대응)
+// MARU Unified Feed (정정본 - 2025-12-24)
+// 목적: HTML key(정본)를 받아 data 폴더 JSON을 안정적으로 반환
+// - 기본: {key}.json 우선
+// - 보조: {key}_front.json (단, key가 이미 *_front 인 경우 중복 front 방지)
+// - key가 *_front / *-front 로 들어오면 suffix를 제거한 base도 함께 탐색
+// - JSON 구조: items / sections(내부 items) 모두 지원
+// - 비어 있어도 정상 반환 (에러 없음)
 
 import fs from "fs";
 import path from "path";
@@ -12,105 +14,76 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 가능한 DATA_DIR 후보(배포/로컬 환경 차이 대응)
 const DATA_DIR_CANDIDATES = [
-  // 정석
   path.join(__dirname, "data"),
-  // 프로젝트 루트 기준
   path.resolve("netlify/functions/data"),
   path.resolve("./netlify/functions/data"),
-  // Netlify 런타임에서 cwd가 functions로 잡히는 경우
   path.resolve("./data"),
 ];
 
-function firstExistingDir(dirs) {
-  for (const d of dirs) {
+function resolveDataDir() {
+  for (const d of DATA_DIR_CANDIDATES) {
     try {
       if (fs.existsSync(d) && fs.statSync(d).isDirectory()) return d;
-    } catch (_) {}
+    } catch {}
   }
-  // 마지막 fallback: 첫 후보를 반환(읽기 시도는 하되, 없으면 null 처리)
-  return dirs[0];
+  return DATA_DIR_CANDIDATES[0];
 }
 
-const DATA_DIR = firstExistingDir(DATA_DIR_CANDIDATES);
+const DATA_DIR = resolveDataDir();
 
-function readJsonSafe(filePath) {
+function readJsonSafe(fp) {
   try {
-    if (!fs.existsSync(filePath)) return null;
-    const raw = fs.readFileSync(filePath, "utf-8");
-    return JSON.parse(raw);
-  } catch (_) {
+    if (!fs.existsSync(fp)) return null;
+    return JSON.parse(fs.readFileSync(fp, "utf-8"));
+  } catch {
     return null;
   }
 }
 
 function extractItems(json) {
-  if (!json) return null;
+  if (!json) return [];
   if (Array.isArray(json.items)) return json.items;
+  if (Array.isArray(json.sections)) {
+    const out = [];
+    for (const s of json.sections) {
+      if (s && Array.isArray(s.items)) out.push(...s.items);
+    }
+    return out;
+  }
   if (Array.isArray(json)) return json;
-  return null;
+  return [];
 }
 
 function normalizeKey(k) {
-  return String(k || "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "");
+  return String(k || "").trim().toLowerCase();
 }
 
-function keyAliases(key) {
-  const aliases = new Set();
-  aliases.add(key);
-
-  // 언더바/하이픈 상호 치환
-  aliases.add(key.replace(/_/g, "-"));
-  aliases.add(key.replace(/-/g, "_"));
-
-  // 일부 환경에서 URL encoding 영향 제거(안전)
-  aliases.add(decodeURIComponent(key));
-
-  return Array.from(aliases).filter(Boolean);
+function stripFrontSuffix(key) {
+  if (key.endsWith("_front")) return { base: key.slice(0, -6), had: true };
+  if (key.endsWith("-front")) return { base: key.slice(0, -6), had: true };
+  return { base: key, had: false };
 }
 
-function candidateFilesForKey(key) {
+function candidateFiles(key) {
   const files = [];
-  const aliases = keyAliases(key);
+  const k = normalizeKey(key);
+  const { base, had } = stripFrontSuffix(k);
 
-  for (const k of aliases) {
-    files.push(`${k}_front.json`);
-    files.push(`${k}.json`);
+  // 1) {key}.json 우선 (tour.json 같은 케이스)
+  files.push(`${k}.json`);
+
+  // 2) {key}_front.json (단, 이미 *_front면 중복 방지)
+  if (!had) files.push(`${k}_front.json`);
+
+  // 3) key가 *_front로 들어온 경우: base도 탐색
+  if (had && base) {
+    files.push(`${base}.json`);
+    files.push(`${base}_front.json`);
   }
+
+  // 중복 제거
   return Array.from(new Set(files));
-}
-
-function listFilesSafe() {
-  try {
-    if (!fs.existsSync(DATA_DIR)) return [];
-    return fs.readdirSync(DATA_DIR).filter((n) => n.toLowerCase().endsWith(".json"));
-  } catch (_) {
-    return [];
-  }
-}
-
-function aggregateByPrefix(prefix) {
-  const files = listFilesSafe();
-  // prefix-*.json 또는 prefix_*.json
-  const rx = new RegExp(`^${escapeRegExp(prefix)}[-_].+\\.json$`, "i");
-  const matched = files.filter((f) => rx.test(f)).sort((a, b) => a.localeCompare(b));
-  if (!matched.length) return null;
-
-  const items = [];
-  for (const f of matched) {
-    const j = readJsonSafe(path.join(DATA_DIR, f));
-    const arr = extractItems(j);
-    if (Array.isArray(arr) && arr.length) items.push(...arr);
-  }
-  return items;
-}
-
-function escapeRegExp(s) {
-  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export async function handler(event) {
@@ -123,61 +96,31 @@ export async function handler(event) {
       return {
         statusCode: 200,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ok: false, key: "", count: 0, items: [], error: "no key provided" }),
+        body: JSON.stringify({ ok: false, key: "", source: null, count: 0, items: [] }),
       };
     }
 
-    // 1) 직접 후보 파일 탐색(존재 + items non-empty 우선)
-    const candidates = candidateFilesForKey(key);
+    let source = null;
+    let items = [];
 
-    let best = null;
-    let bestSource = null;
-
-    for (const f of candidates) {
+    for (const f of candidateFiles(key)) {
       const fp = path.join(DATA_DIR, f);
-      const j = readJsonSafe(fp);
-      const items = extractItems(j);
-      if (Array.isArray(items) && items.length) {
-        best = items;
-        bestSource = f;
+      const json = readJsonSafe(fp);
+      if (json) {
+        source = f;
+        items = extractItems(json);
         break;
       }
-      // items가 0이라도 “파일은 존재”했다면 source는 기억(디버깅용)
-      if (j && !bestSource) bestSource = f;
     }
-
-    // 2) 후보에서 못 찾았거나 모두 빈값이면 prefix 집계 시도
-    if (!best) {
-      // key alias 기준으로도 prefix 집계
-      const prefixes = keyAliases(key);
-      for (const p of prefixes) {
-        const agg = aggregateByPrefix(p);
-        if (Array.isArray(agg) && agg.length) {
-          best = agg;
-          bestSource = `${p}[-_]*.json (aggregate)`;
-          break;
-        }
-      }
-    }
-
-    // 3) 그래도 없으면 빈 반환(에러 없음)
-    const itemsOut = Array.isArray(best) ? best : [];
 
     // 옵션: limit
     const limit = Number(params.limit || 0);
-    const sliced = limit > 0 ? itemsOut.slice(0, limit) : itemsOut;
+    const out = limit > 0 ? items.slice(0, limit) : items;
 
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ok: true,
-        key,
-        data_dir: DATA_DIR,
-        source: bestSource || "(none)",
-        count: sliced.length,
-        items: sliced,
-      }),
+      body: JSON.stringify({ ok: true, key, source, count: out.length, items: out }),
     };
   } catch (err) {
     return {
