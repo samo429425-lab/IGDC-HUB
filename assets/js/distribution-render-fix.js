@@ -1,28 +1,42 @@
-// distribution-render-fix.js
-// 목적: distribution 페이지에서 썸네일 통파일 렌더링 현상 방지
-// 방식: 렌더링 완료 전 숨김 → load 이후 표시 (HTML/CSS 수정 없음)
+// distribution-render-fix-desktop-v2.js
+// 데스크탑 전용 강제 안정화:
+// 1) thumb-grid 숨김
+// 2) 이미지 로드 완료 대기
+// 3) 강제 reflow 후 표시
 
 (function () {
   try {
-    // distribution 페이지 전체에서 thumb-grid만 대상
-    const grids = document.querySelectorAll('.thumb-grid');
-    if (!grids || grids.length === 0) return;
+    // 모바일 제외
+    if (window.matchMedia('(max-width: 768px)').matches) return;
 
-    // 최초 숨김
+    const grids = document.querySelectorAll('.thumb-grid');
+    if (!grids.length) return;
+
     grids.forEach(g => {
       g.style.visibility = 'hidden';
     });
 
-    // 모든 리소스 로드 후 한 프레임 뒤 표시
-    window.addEventListener('load', () => {
-      requestAnimationFrame(() => {
-        grids.forEach(g => {
-          g.style.visibility = 'visible';
+    function imagesLoaded(container) {
+      const imgs = Array.from(container.querySelectorAll('img'));
+      if (imgs.length === 0) return Promise.resolve();
+      return Promise.all(imgs.map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise(res => {
+          img.addEventListener('load', res, { once: true });
+          img.addEventListener('error', res, { once: true });
         });
-      });
+      }));
+    }
+
+    window.addEventListener('load', async () => {
+      for (const g of grids) {
+        await imagesLoaded(g);
+        // 강제 reflow
+        void g.offsetHeight;
+        g.style.visibility = 'visible';
+      }
     });
   } catch (e) {
-    // fail-safe: 오류 나도 화면은 복구
     const grids = document.querySelectorAll('.thumb-grid');
     grids.forEach(g => {
       g.style.visibility = 'visible';
