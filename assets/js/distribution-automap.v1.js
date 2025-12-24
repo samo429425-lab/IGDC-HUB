@@ -1,6 +1,14 @@
 
 (function(){
   'use strict';
+  // ===== Rendering Policy (Distribution Hub) =====
+  // initial: number of cards rendered at first paint
+  // batch  : number of cards rendered per subsequent load
+  const RENDER_POLICY = {
+    initial: 6,
+    batch: 8
+  };
+
   const isMobile = matchMedia('(max-width:768px), (pointer:coarse)').matches;
   (function(){ if(document.getElementById('dh-footer-fix')) return;
     const s=document.createElement('style'); s.id='dh-footer-fix';
@@ -44,43 +52,29 @@
       v.querySelector('.pv-b').addEventListener('click',()=>v.style.display='none'); document.addEventListener('keydown',(e)=>{if(e.key==='Escape') v.style.display='none';}); document.body.appendChild(v); }
     const c=v.querySelector('.pv-c'); const img=a.querySelector('img'); const title=a.getAttribute('data-title')||'';
     c.innerHTML=(img?`<img src="${img.src}" style="max-width:100%;height:auto;display:block;margin:0 auto 10px">`: '')+(title?`<div style="font-size:15px;padding:6px 2px">${title}</div>`:''); v.style.display='block'; }
-  function mountGrid(container, items){ const list=(items||[]).filter(isAllowed);
-    const grid=container.querySelector('.thumb-list,.thumb-scroller,.thumb-row,.cards-row')||container; grid.innerHTML='';
-    const B0=10,B=10; let i=0; const push=it=>grid.insertAdjacentHTML('beforeend', cardHTML(it));
+  
+  function mountGrid(container, items){
+    const MAX_ITEMS = 100;
+    const list = (items||[]).filter(isAllowed).slice(0, MAX_ITEMS);
+    const grid = container.querySelector('.thumb-list,.thumb-scroller,.thumb-row,.cards-row')||container;
+    grid.innerHTML='';
+    const B0 = RENDER_POLICY.initial, B = RENDER_POLICY.batch;
+    let i=0; const push=it=>grid.insertAdjacentHTML('beforeend', cardHTML(it));
     for(; i<Math.min(B0,list.length); i++) push(list[i]);
-    if('IntersectionObserver' in window && grid.lastElementChild){ const io=new IntersectionObserver((ents)=>{
-          ents.forEach(ent=>{ if(!ent.isIntersecting) return; io.unobserve(ent.target);
-            const s=i,e=Math.min(i+B,list.length); for(let k=s;k<e;k++) push(list[k]); i=e;
-            if(i<list.length) io.observe(grid.lastElementChild); }); },{rootMargin:'800px 0px'});
-      io.observe(grid.lastElementChild); } }
-  function cleanup(){ document.querySelectorAll('.product-card').forEach(a=>{
-      const href=(a.getAttribute('href')||'').trim(); const id=a.getAttribute('data-product-id');
-      const img=a.querySelector('img'); const ph=img && /placehold\.co|placeholder\.com|data:image\//.test(img.src||'');
-      if((!href||href==='#') && !id && ph){ a.remove(); }
-    });
-    const f=document.querySelector('footer,.site-footer'); if(f){ let n=f.nextElementSibling; while(n){ const nn=n.nextElementSibling;
-        if(n.querySelector?.('.product-card')||n.classList?.contains('product-card')) n.remove(); n=nn; } } }
-  document.addEventListener('click', function(e){ const a=e.target.closest('.thumb-card.product-card'); if(!a) return;
-    if(isMobile){ e.preventDefault(); openPhotoView(a); } }, {passive:false});
-  function mainSections(){ const ids=['sec-reco','sec-ads','sec-trend','sec-new','sec-special','sec-others'];
-    const out=[]; ids.forEach(id=>{ const el=document.getElementById(id); if(el) out.push({id,el}); }); return out; }
-  function adPanelToMobile7(){ if(!isMobile) return; const ad=document.querySelector('.ad-panel'); const main=document.querySelector('.main-content,main,.content,.page-main')||document.body;
-    if(!ad||!main) return; let wrap=document.getElementById('sec-mobile-ads');
-    if(!wrap){ wrap=document.createElement('section'); wrap.className='content-box'; wrap.id='sec-mobile-ads';
-      wrap.innerHTML='<h3>📣 인기 브랜드(모바일)</h3><div class="scroller-wrap"><div class="thumb-list thumb-scroller" data-source="mobile-ads"></div></div>'; main.appendChild(wrap); }
-    const list=wrap.querySelector('.thumb-list'); list.innerHTML=''; ad.querySelectorAll('.ad-box a').forEach((a,i)=>{
-      const img=a.querySelector('img'); const title=a.getAttribute('title')||('광고 '+(i+1));
-      const card={ id:'ad'+(i+1), title, thumb: img?img.src: 'https://via.placeholder.com/600x400?text=Ad', url: a.href, detailUrl:a.href, tag:'ad' };
-      list.insertAdjacentHTML('beforeend', cardHTML(card)); }); }
-  async function init(){
-    adPanelToMobile7();
-    const feed=await loadFeed();
-    const map={}; (feed.sections||feed.rows||[]).forEach(s=>{ map[(s.id||s.sectionId||'').toLowerCase()]=(s.items||s.cards||[]); });
-    const sections=mainSections(); const keys=['recommend','ads','trending','new','special','others'];
-    sections.forEach((slot,idx)=>{ const container=slot.el; const key=container.querySelector('.thumb-list,.thumb-scroller')?.getAttribute('data-source') || keys[idx] || ('sec'+(idx+1));
-      const items=map[key]||[]; mountGrid(container, items); });
-    cleanup(); syncFooterHeight(); setTimeout(syncFooterHeight,60); setTimeout(syncFooterHeight,300);
-    const mo=new MutationObserver(()=>{ cleanup(); }); mo.observe(document.documentElement,{subtree:true,childList:true});
+    if('IntersectionObserver' in window && grid.lastElementChild){
+      const io=new IntersectionObserver((ents)=>{
+        ents.forEach(ent=>{
+          if(!ent.isIntersecting) return;
+          io.unobserve(ent.target);
+          const s=i, e=Math.min(i+B, list.length);
+          for(let k=s;k<e;k++) push(list[k]);
+          i=e;
+          if(i<list.length) io.observe(grid.lastElementChild);
+        });
+      },{rootMargin:'800px 0px'});
+      io.observe(grid.lastElementChild);
+    }
   }
+
   (document.readyState==='loading')? document.addEventListener('DOMContentLoaded', init, {once:true}) : init();
 })();

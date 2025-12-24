@@ -50,12 +50,14 @@
     </a>`;
   }
 
-  function mountSection(sectionEl, cards){
-    // choose a grid container inside
+  
+  function mountSection(sectionEl, cards, maxItems){
     const grid = sectionEl.querySelector('.shopping-hot-item, .hot-today, .shopping-row, .shop-row, .grid, .row-grid') || sectionEl;
     grid.innerHTML='';
-    const list = cards.filter(isValid);
-    const B0=10, B=10; let i=0;
+    const list = cards.filter(isValid).slice(0, maxItems);
+    const B0 = Math.min(list.length, 10);
+    const B  = 10;
+    let i=0;
     const push = it => grid.insertAdjacentHTML('beforeend', cardHTML(it));
     for(; i<Math.min(B0, list.length); i++) push(list[i]);
     if('IntersectionObserver' in window && grid.lastElementChild){
@@ -70,6 +72,7 @@
       io.observe(grid.lastElementChild);
     }
   }
+
 
   function cleanup(){
     // Remove dummies
@@ -103,7 +106,8 @@
       // Match by id; otherwise distribute sequentially
       const key=(slot.id||'').toLowerCase();
       const list = dataMap[key] || dataMap['main-'+(idx+1)] || dataMap['section-'+(idx+1)] || [];
-      mountSection(slot.el, list);
+      const maxItems = (idx < 5) ? 100 : 50;
+      mountSection(slot.el, list, maxItems);
     });
 
     cleanup();
