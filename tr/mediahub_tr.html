@@ -1140,6 +1140,8 @@ body {
     main, .content-area { overflow: visible !important; }
   }
 </style>
+
+<link rel="stylesheet" href="/assets/css/thumbs.standard.css">
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -2700,10 +2702,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div');  -->
 <script>document.addEventListener("DOMContentLoaded",()=>{if(matchMedia("(max-width:768px)").matches){const p=document.querySelector(".platform-line");if(p)p.setAttribute("data-providers","");}});</script>
 
-<!-- thumbnail automapping -->
-<script defer="" src="/assets/js/auto-embed.instagram.js"></script>
-<script defer="" src="/assets/js/placeholder-sweeper.js"></script>
-<script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
 
 <script>
 window.IGDC_QA=window.IGDC_QA||{};
@@ -2895,6 +2893,10 @@ window.addEventListener("message",function(ev){
   window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
 })();
 </script>
-<script src="/assets/js/nav-sidebar.js"></script>
+
+<script defer src="/assets/js/auto-embed.instagram.js"></script>
+<script defer src="/assets/js/placeholder-sweeper.js"></script>
+<script defer src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
+
 </body>
 </html>

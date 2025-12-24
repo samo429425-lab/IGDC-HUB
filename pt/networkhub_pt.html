@@ -544,6 +544,8 @@ html, body {
     .ad-panel { position: static !important; max-height: none !important; overflow: visible !important; }
   }
 </style>
+
+<link rel="stylesheet" href="/assets/css/thumbs.standard.css">
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -1476,9 +1478,7 @@ if(!open&&dx<-MIN)document.body.classList.add('right-panel-open');else if(open&&
 {passive:true});
 addEventListener('resize',function(){document.body.classList.remove('right-panel-open');});})();
 </script>
-<script defer="" src="/assets/js/auto-embed.instagram.js"></script>
-<script defer="" src="/assets/js/placeholder-sweeper.js"></script>
-<script defer src="/assets/js/thumbnail-loader.compat.fixed.js"></script>
+
 <script id="bc-narrow-js">
 (function(){
   var tiles = document.querySelectorAll('.section-blockchain .bc-tile');
@@ -1763,5 +1763,10 @@ window.addEventListener("message",function(ev){
   window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
 })();
 </script>
+
+<script defer src="/assets/js/auto-embed.instagram.js"></script>
+<script defer src="/assets/js/placeholder-sweeper.js"></script>
+<script defer src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
+
 </body>
 </html>
