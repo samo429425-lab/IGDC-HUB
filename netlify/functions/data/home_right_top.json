@@ -1,0 +1,19 @@
+{
+  "key": "home-right-top",
+  "items": [
+    {
+      "title": "Sample Item A for home-right-top",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "price": "",
+      "tag": ""
+    },
+    {
+      "title": "Sample Item B for home-right-top",
+      "url": "#",
+      "thumbnail": "/assets/img/placeholder.png",
+      "price": "",
+      "tag": ""
+    }
+  ]
+}
