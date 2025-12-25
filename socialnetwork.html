@@ -1420,21 +1420,34 @@ html, body {
   panel.setAttribute('tabindex', panel.getAttribute('tabindex') || '0');
 })();
 </script>
-<style id="right-rail-unified-fix">
-  #rightRail,
-  .right-rail {
-    position: sticky;
-    top: 72px;
-    margin-right: 10px !important;
-    align-self: flex-start;
+<style id="social-desktop-grid-fix">
+@media (min-width:1024px){
+  .container{
+    display:grid !important;
+    grid-template-columns:220px minmax(0,1fr) 274px !important;
+    column-gap:10px !important;     /* 메인–우측 갭 10px */
+    padding-right:10px !important;  /* 우측 벽 여백 */
+    overflow:visible !important;
   }
 
-  #rightRail .ad-panel {
-    width: 100% !important;
-    height: auto !important;
-    max-height: calc(100dvh - 96px) !important;
-    overflow-y: auto;
+  .sidebar{
+    grid-column:1;
+    min-width:220px!important;
+    max-width:220px!important;
   }
+
+  .main-content{
+    grid-column:2;
+    min-width:0!important;
+    margin:0!important;
+    width:100%!important;
+    max-width:none!important;
+  }
+
+  .right-rail{
+    grid-column:3;
+  }
+}
 </style>
 
 <style id="BC_TILE_LOCK_V1">
