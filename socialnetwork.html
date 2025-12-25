@@ -1420,28 +1420,32 @@ html, body {
   panel.setAttribute('tabindex', panel.getAttribute('tabindex') || '0');
 })();
 </script>
-<style id="social-right-rail-final-fix">
+<style id="social-desktop-grid-fix">
 @media (min-width:1024px){
-  /* 전체 3컬럼 고정 + 메인-우측 갭 10px */
   .container{
     display:grid !important;
     grid-template-columns:220px minmax(0,1fr) 274px !important;
-    column-gap:10px !important;
-    padding:16px 10px 10px 10px !important;  /* 우측 벽 10px */
+    column-gap:10px !important;     /* 메인–우측 갭 10px */
+    padding-right:10px !important;  /* 우측 벽 여백 */
     overflow:visible !important;
   }
 
-  .sidebar{ grid-column:1; }
-  .main-content{ grid-column:2; min-width:0!important; margin:0!important; width:100%!important; }
-  .right-rail, #rightRail{ grid-column:3; margin-right:0!important; }
+  .sidebar{
+    grid-column:1;
+    min-width:220px!important;
+    max-width:220px!important;
+  }
 
-  /* AD 패널: 높이 고정(100vh) 금지, 스티키/스크롤만 */
-  #rightRail .ad-panel, .right-rail .ad-panel, .ad-panel{
-    position: sticky !important;
-    top: 16px !important;
-    height: auto !important;
-    max-height: calc(100dvh - 32px) !important;
-    overflow: auto !important;
+  .main-content{
+    grid-column:2;
+    min-width:0!important;
+    margin:0!important;
+    width:100%!important;
+    max-width:none!important;
+  }
+
+  .right-rail{
+    grid-column:3;
   }
 }
 </style>
