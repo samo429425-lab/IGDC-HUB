@@ -1017,6 +1017,8 @@ footer,.site-footer{position:static !important; clear:both !important; width:100
   const isMobile = matchMedia('(max-width: 768px), (pointer: coarse)').matches;
   if (!isMobile) return;
 
+if (document.querySelector('.thumb-list .thumb-card')) return;
+
   const SKELETON_COUNT = 7; // 초기 안정화용 카드 수
 
   function createSkeletonCard() {
