@@ -2835,46 +2835,7 @@ window.addEventListener("message",function(ev){
 </script>
 <script defer="" src="/assets/js/auto-embed.instagram.js"></script>
 <script defer="" src="/assets/js/placeholder-sweeper.js"></script>
-<script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
 
-<script>
-(function () {
-  const sections = Array.from(document.querySelectorAll('[data-psom-key]'));
-  if (!sections.length) return;
-
-  // 전역 automap이 이미 돌았으면 막음 (중복 실행 차단)
-  window.__DIST_MAIN_LOCK__ = true;
-
-  // feed 완료를 기다렸다가 해당 섹션만 automap 실행
-  async function runSection(section) {
-    const key = section.dataset.psomKey;
-    if (!key) return;
-
-    // feed.js가 데이터를 캐시에 올려놓을 때까지 대기
-    const waitFeed = () => new Promise(res => {
-      const t = setInterval(() => {
-        if (window.__FEED_CACHE__ && window.__FEED_CACHE__[key]) {
-          clearInterval(t); res(window.__FEED_CACHE__[key]);
-        }
-      }, 50);
-    });
-
-    await waitFeed();
-
-    // 해당 섹션만 대상으로 automap 실행
-    if (window.runAutomapFor) {
-      window.runAutomapFor(section);
-    }
-  }
-
-  // 섹션별 순차 실행 (경합 제거)
-  (async () => {
-    for (const s of sections) {
-      await runSection(s);
-    }
-  })();
-})();
-</script>
 
 </body>
 </html>
