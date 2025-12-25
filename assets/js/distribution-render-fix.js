@@ -1,20 +1,20 @@
-// distribution-render-fix.js
-// 역할: feed.js가 이미 렌더한 결과를 건드리지 않는다.
-// 금지: innerHTML 초기화, 재렌더 루프, setTimeout rerender
-// 기능: 레이아웃 안정화용 최소 가드만 수행
+
+// distribution-render-fix.js (SAFE / OPT-IN ONLY)
+// Default: DOES NOTHING
+// Enable only if window.__ENABLE_RENDER_FIX__ === true
 
 (function () {
-  try {
-    const grids = document.querySelectorAll('.thumb-grid[data-psom-key]');
-    if (!grids || grids.length === 0) return;
+  if (!window.__ENABLE_RENDER_FIX__) return;
 
-    grids.forEach(g => {
-      g.dataset.rendered = 'true';
+  const GRIDS = document.querySelectorAll('.thumb-grid');
+  if (!GRIDS.length) return;
+
+  // layout read-only stabilization
+  requestAnimationFrame(() => {
+    GRIDS.forEach(g => {
+      if (g.querySelector('.thumb-card')) {
+        void g.offsetHeight;
+      }
     });
-
-    const evt = new CustomEvent('thumbs:ready', { bubbles: true });
-    document.dispatchEvent(evt);
-  } catch (e) {
-    // noop
-  }
+  });
 })();
