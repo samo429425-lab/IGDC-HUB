@@ -389,72 +389,116 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
 /* === Mobile Optimization Patch — distributionhub-Q === */
 </style>
 <style id="igdc-q-mobile-kit">
-/* DistributionHub Mobile Kit — SAFE (single source of truth)
- * Goals:
- *  - Panels hide at <=1023 (same point as right panel collapse)
- *  - Thumb scrollers remain stable; never force 100vw on every child
- *  - Avoid layout thrash (no conflicting flex/grid toggles)
- */
-
-/* 0) Base guard */
-.thumb-grid.thumb-scroller.thumb-list{ min-height: 10px; }
-.thumb-card{ box-sizing: border-box; }
-
-/* 1) <=1023: hide side panels, full width main */
-@media (max-width:1023px){
-  .right-panel, .brand-rail, .right-ad-panel, .ad-panel{ display:none !important; }
-  .sidebar, .left-sidebar{ display:none !important; }
-  .container, .layout, .wrap{ display:block !important; }
-  .main-content, main, #main, .content, .page{
-    width:100% !important; max-width:100% !important;
-    margin:0 !important; padding:12px !important;
-    box-sizing:border-box !important;
+@media (max-width:768px){
+  .sidebar{ display:none !important; }
+  .content-box{
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 12px 0 !important;
   }
-  /* Title shrink starts here */
-  .page-title{ font-size:1.5em !important; }
-}
-
-/* 2) <=1023: per-section horizontal scrollers (stable) */
-@media (max-width:1023px){
+  .content-box > h3{
+    font-size: 0.95em !important;
+    font-weight: 600 !important;
+    color: #555 !important;
+    margin: 6px 8px 8px 8px !important;
+  }
   .content-box > .scroller-wrap > .thumb-scroller,
-  .content-box > .thumb-list,
-  .thumb-row, .cards-row, .hscroll{
-    display:flex !important;
-    flex-wrap:nowrap !important;
-    overflow-x:auto !important;
-    overflow-y:hidden !important;
-    gap:12px !important;
-    -webkit-overflow-scrolling:touch;
-    scroll-snap-type:x proximity;
+  .content-box > .thumb-list{
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    gap: 12px !important;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
   }
-  .thumb-card, .card{
-    flex:0 0 auto !important;
-    scroll-snap-align:start;
-  }
-  /* hide arrow buttons that can overlap/trigger reflow */
-  .igdc-scroll-left, .igdc-scroll-right, .ml-nav-left, .ml-nav-right,
-  .scroller-wrap .rscroll, nav button, nav .toggle, nav .collapse{
-    display:none !important;
+  .thumb-card{
+    flex: 0 0 auto !important;
+    scroll-snap-align: start;
   }
 }
-
-/* 3) Phones portrait: 1 card ~ viewport (not full 100vw hard-lock) */
 @media (max-width:600px) and (orientation:portrait){
-  .thumb-card, .card{
-    flex-basis: calc(92vw) !important;
-    max-width: calc(92vw) !important;
+  .thumb-card{
+    flex-basis: calc(100vw - 28px) !important;
+    max-width: calc(100vw - 28px) !important;
   }
 }
-
-/* 4) Phones landscape: 2 cards */
-@media (max-width:900px) and (orientation:landscape){
-  .thumb-card, .card{
-    flex-basis: 46vw !important;
-    max-width: 46vw !important;
+@media (max-width:600px) and (orientation:landscape){
+  .thumb-card{
+    flex-basis: 45vw !important;
+    max-width: 45vw !important;
   }
 }
 </style>
-<style id="mobile-overrides-20251009v2">/* deprecated in DistributionHub stable: handled by igdc-q-mobile-kit */</style>
+<style id="mobile-overrides-20251009v2">
+/* === Unified breakpoints: 1024 / 900 / 768 === */
+
+/* 1) Tablet & down: hide right/ad panel to free width */
+@media (max-width: 1024px){
+  .right-panel, .brand-rail, .right-ad-panel { display: none !important; }
+}
+
+/* 2) Small tablet & large phones: hide left sidebar too; main = 100% */
+@media (max-width: 1024px){
+  .sidebar, .left-sidebar { display: none !important; }
+  .container, .layout, .wrap { display: block !important; }
+  .main-content, main, #main, .content, .page {
+    width: 100% !important; max-width: 100% !important;
+    margin: 0 !important; padding: 12px !important; box-sizing: border-box !important;
+  }
+}
+
+/* 3) Mobile core: single-row scrollers, buttons hidden */
+@media (max-width: 768px){
+  /* hide any scroll/arrow buttons on mobile */
+  .igdc-scroll-left, .igdc-scroll-right, .ml-nav-left, .ml-nav-right,
+  .scroller-wrap .rscroll, nav button, nav .toggle, nav .collapse {
+    display: none !important;
+  }
+
+  /* horizontal scrollers per section */
+  .content-box > .scroller-wrap > .thumb-scroller,
+  .content-box > .thumb-list,
+  .thumb-row, .cards-row, .hscroll {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    gap: 12px !important;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .content-box > .scroller-wrap > .thumb-scroller::-webkit-scrollbar,
+  .content-box > .thumb-list::-webkit-scrollbar,
+  .thumb-row::-webkit-scrollbar, .cards-row::-webkit-scrollbar, .hscroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .thumb-card, .card {
+    flex: 0 0 auto !important;
+    scroll-snap-align: start;
+  }
+}
+
+/* Portrait phones: 1 card per viewport */
+@media (max-width: 600px) and (orientation: portrait){
+  .thumb-card, .card {
+    flex-basis: calc(100vw - 28px) !important;
+    max-width: calc(100vw - 28px) !important;
+  }
+}
+
+/* Mobile landscape: ~3 cards visible */
+@media (max-width: 1024px) and (orientation: landscape){
+  .thumb-card, .card {
+    flex-basis: 33.33vw !important;
+    max-width: 33.33vw !important;
+  }
+}
+</style>
 <style id="mobile-rightgap-fix-20251009">
 /* Remove transient right gap when the right panel hides */
 
@@ -505,7 +549,13 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
   }
 }
 </style>
-<style id="mobile-title-fontsize">@media (max-width:1023px){ .page-title{ font-size:1.5em !important; } }</style>
+<style id="mobile-title-fontsize">
+@media (max-width: 1023px){
+  .page-title {
+    font-size: 1.5em !important;
+  }
+}
+</style>
 <style id="main-always-100">
 /* Always fill: ensure main-content takes 100% of page width on narrow viewports */
 @media (max-width: 1200px){
@@ -883,8 +933,50 @@ footer,.site-footer{position:static !important; clear:both !important; width:100
 }
 </style>
 <link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
+
+<style id="distribution-main-stable-css">
+/* Distribution stable patch: prevent runtime layout flips (grid<->flex) that cause '통블록' and mobile blanking */
+#distributionMain .thumb-list[data-psom-key],
+#distributionMain .thumb-grid[data-psom-key],
+#distributionMain .thumb-scroller[data-psom-key]{
+  display:grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)) !important;
+  gap: 12px !important;
+  overflow: visible !important;
+}
+
+/* Horizontal scroller only when explicitly marked (do NOT apply to generic thumb-list) */
+#distributionMain .thumb-scroller[data-psom-key]{
+  display:flex !important;
+  flex-wrap:nowrap !important;
+  overflow-x:auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  scroll-snap-type: x mandatory !important;
+}
+#distributionMain .thumb-scroller[data-psom-key] > .thumb-card,
+#distributionMain .thumb-scroller[data-psom-key] > a.thumb-card{
+  flex: 0 0 auto !important;
+  min-width: 240px !important;
+  scroll-snap-align: start !important;
+}
+
+/* Mobile: keep grid stable; reduce card min width slightly to avoid overflow */
+@media (max-width: 1023px){
+  #distributionMain .thumb-list[data-psom-key],
+  #distributionMain .thumb-grid[data-psom-key]{
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important;
+  }
+}
+@media (max-width: 540px){
+  #distributionMain .thumb-list[data-psom-key],
+  #distributionMain .thumb-grid[data-psom-key]{
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+</style>
+
 </head>
-<body>
+<body data-page="distribution">
 <div id="hero"><div class="hero-title"></div></div>
 <script>(function(){document.addEventListener("DOMContentLoaded",function(){document.documentElement.classList.remove("prelayout");var s=document.getElementById("prelayout-guard");if(s&&s.parentNode){s.parentNode.removeChild(s);}});})();</script>
 <div class="container">
@@ -998,7 +1090,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   }
 
   function init() {
-    document.querySelectorAll('.thumb-list').forEach(mountSkeleton);
+    document.querySelectorAll('.thumb-list:not([data-psom-key])').forEach(mountSkeleton);
   }
 
   if (document.readyState === 'loading') {
@@ -1115,32 +1207,51 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
 })();
 </script>
 <script id="igdc-layout-hotfix-v2">
-/* IGDC Layout Hotfix v2 — DistributionHub SAFE
- * - DO NOT touch thumb lists/cards (automap owns them)
- * - Apply once only (no resize loop)
- */
 (function(){
   function applyHotfix(){
-    var container = document.querySelector('.container');
+    
+    // Distribution stable patch: thumb layout must be CSS-only; runtime thumb overrides are disabled.
+var container = document.querySelector('.container');
     var sidebar   = document.querySelector('.sidebar');
     var adpanel   = document.querySelector('.ad-panel');
     var main      = document.querySelector('.main-content');
-    if(!container || !main) return;
+    if(!container || !sidebar || !adpanel || !main) return;
 
-    // Keep basic desktop rails sizing if present
-    if (sidebar){
-      sidebar.style.flex = '0 0 220px';
-      sidebar.style.minWidth = '220px';
-      sidebar.style.maxWidth = '220px';
-    }
-    if (adpanel){
-      adpanel.style.flex = '0 0 220px';
-      adpanel.style.minWidth = '220px';
-      adpanel.style.maxWidth = '220px';
-    }
+    [sidebar, adpanel].forEach(function(el){
+      el.style.flex = '0 0 220px';
+      el.style.minWidth = '220px';
+      el.style.maxWidth = '220px';
+    });
 
     container.style.overflow = 'visible';
+
+    main.style.flex = '1 1 720px';
+    main.style.maxWidth = '920px';
+    main.style.minWidth = '360px';
+    main.style.margin = '30px';
     main.style.boxSizing = 'border-box';
+
+    /* [disabled on Distribution stable] document.querySelectorAll('.thumb-list:not(.thumb-scroller)').forEach(function(list){
+      list.style.display = 'grid';
+      list.style.gridTemplateColumns = 'repeat(auto-fill, minmax(240px, 1fr))';
+      list.style.gap = '12px';
+    });
+
+    */
+/* [disabled on Distribution stable] document.querySelectorAll('.thumb-scroller .thumb-card').forEach(function(card){
+      card.style.minWidth = '240px';
+    });
+    */
+/* [disabled on Distribution stable] document.querySelectorAll('.thumb-card').forEach(function(card){
+      if(!card.style.minWidth) card.style.minWidth = '240px';
+    });
+  */
+}
+
+  var _t;
+  function onResize(){
+    clearTimeout(_t);
+    _t = setTimeout(applyHotfix, 50);
   }
 
   if (document.readyState === 'loading'){
@@ -1148,6 +1259,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   } else {
     applyHotfix();
   }
+  window.addEventListener('resize', onResize);
 })();
 </script>
 <script id="igdc-scroller-position-fix-v1">// neutralized by igdc-scroller-outside-v1 (replaced igdc-scroller-position-fix-v1)</script>
