@@ -1420,50 +1420,23 @@ html, body {
   panel.setAttribute('tabindex', panel.getAttribute('tabindex') || '0');
 })();
 </script>
-<style id="sn-rail-size-override-20251011">
-#rightRail, .right-rail { width:274px !important; min-width:274px !important; max-width:274px !important; }
-#rightRail .ad-panel { width:100% !important; height:100vh !important; }
-#rightRail .ad-box, #rightRail .ad-card { height: 144px !important; line-height: 144px !important; }
-#rightRail .ad-box + .ad-box, #rightRail .ad-card + .ad-card { margin-top:10px !important; }
+<style id="right-rail-unified-fix">
+  #rightRail,
+  .right-rail {
+    position: sticky;
+    top: 72px;
+    margin-right: 10px !important;
+    align-self: flex-start;
+  }
+
+  #rightRail .ad-panel {
+    width: 100% !important;
+    height: auto !important;
+    max-height: calc(100dvh - 96px) !important;
+    overflow-y: auto;
+  }
 </style>
-<style id="EDGE_LOCK_V1">
-/* === EDGE LOCK V1 — single source of truth === */
-html, body { margin: 0 !important; }
-body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
 
-/* Left sidebar: flush to window left */
-.sidebar, .left-sidebar, #leftSidebar {
-  padding-left: 0 !important;
-  margin-left: -10px !important;
-}
-
-/* Right rail/panel: flush to window right (body right = 0 already) */
-.ad-panel, .right-panel, .right-rail, #rightRail, .right-ad-panel, .ad-offset {
-  padding-right: 0 !important;
-  margin-right: 0 !important;
-  padding-inline-end: 0 !important;
-  margin-inline-end: 0 !important;
-  box-sizing: border-box !important;
-}
-
-/* Remove residual right spacing from children */
-.ad-panel *, .right-panel *, .right-rail *, #rightRail * {
-  padding-right: 0 !important;
-  margin-right: 0 !important;
-  padding-inline-end: 0 !important;
-  margin-inline-end: 0 !important;
-}
-
-/* Kill theme variables and layout gaps that cause right space */
-:root { --ad-gap-right: 0 !important; }
-.page, .wrap, .wrapper, .container, .content, .main, .layout, .grid, .columns, .row, .flex, .flex-row {
-  column-gap: 0 !important; gap: 0 !important;
-  padding-right: 0 !important; margin-right: 0 !important;
-}
-
-/* Visual safety */
-:where(.right-rail, #rightRail, .right-panel, .ad-panel){ align-self: stretch; }
-</style>
 <style id="BC_TILE_LOCK_V1">
 /* --- Blockchain pills: narrow glyphs + lighter weight, no underline --- */
 
@@ -4228,7 +4201,7 @@ footer{
 <script defer="" src="/assets/js/auto-embed.instagram.js"></script>
 <script defer="" src="/assets/js/placeholder-sweeper.js"></script>
 <script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
-<script defer src="/assets/js/socialnetwork-automap.v1.js"></script>
+
 
 </body>
 </html>
