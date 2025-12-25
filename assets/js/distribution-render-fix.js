@@ -1,20 +1,37 @@
-// distribution-render-fix.js
-// 역할: feed.js가 이미 렌더한 결과를 건드리지 않는다.
-// 금지: innerHTML 초기화, 재렌더 루프, setTimeout rerender
-// 기능: 레이아웃 안정화용 최소 가드만 수행
+
+// distribution-render-fix.js (FIXED)
+// YES: Keep file
+// YES: Modify behavior
+// NO: Do not re-render or clear DOM
 
 (function () {
-  try {
-    const grids = document.querySelectorAll('.thumb-grid[data-psom-key]');
-    if (!grids || grids.length === 0) return;
+  const CONTAINER_SELECTOR = '.thumb-grid';
 
-    grids.forEach(g => {
-      g.dataset.rendered = 'true';
-    });
-
-    const evt = new CustomEvent('thumbs:ready', { bubbles: true });
-    document.dispatchEvent(evt);
-  } catch (e) {
-    // noop
+  function hasCards() {
+    const container = document.querySelector(CONTAINER_SELECTOR);
+    return !!(container && container.children.length > 0);
   }
+
+  function applyFix() {
+    const container = document.querySelector(CONTAINER_SELECTOR);
+    if (!container) return;
+    // layout-only fix (no DOM mutation)
+    container.style.willChange = 'transform';
+  }
+
+  // Initial load: do nothing if cards already exist
+  document.addEventListener('DOMContentLoaded', () => {
+    if (hasCards()) return;
+  });
+
+  // Only respond to actual layout changes
+  window.addEventListener('resize', () => {
+    if (!hasCards()) return;
+    applyFix();
+  });
+
+  window.addEventListener('orientationchange', () => {
+    if (!hasCards()) return;
+    applyFix();
+  });
 })();
