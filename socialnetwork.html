@@ -1185,28 +1185,29 @@ html, body {
 .container,.layout,.wrap,.page,.content,.main-content{grid-template-columns:unset!important}
 }
 </style>
-/* donor right-rail css — 정본 통합 (중복/충돌 제거)
+/* donor right-rail css — 정본 통합 + DESKTOP GAP LOCK
    목적:
    - 우측(ad-panel) 레이아웃/스크롤/타이틀 고정 안정화
-   - container/sidebar/main/ad-panel 상단 정렬(top-pad) 일원화
-   - 중복 :root / .ad-panel / .ad-stamp 정의 제거
-   - 스크롤바 유무로 인한 폭 흔들림 완화
+   - 화면 높이 변화(스크롤바 발생)에도 좌/우 갭 15px 고정
+   - container / sidebar / main / ad-panel 규칙 일원화
 */
 
 :root{
   --top-pad: 18px;   /* 상단 기준 패딩/스티키 오프셋 */
-  --gap: 15px;       /* 좌우 패딩(컨테이너) */
+  --gap: 15px;       /* 좌우 공통 갭 */
   --ad-bg: #eef7ff;
   --ad-border: #c6ddf5;
   --ad-title-bg: #f7f9fb;
   --ad-title-color: #0a4599;
 }
 
-/* 폭 흔들림(스크롤바 생성/소멸) 완화 */
+/* 스크롤바 유무로 인한 가로폭 흔들림 방지 */
 html{ scrollbar-gutter: stable; }
 body{ overflow-y: scroll; }
 
-/* ===== Layout anchors ===== */
+/* =========================
+   BASE LAYOUT ANCHORS
+   ========================= */
 .container{
   padding: var(--top-pad) var(--gap) !important;
 }
@@ -1221,7 +1222,9 @@ body{ overflow-y: scroll; }
   margin-top: 0 !important;
 }
 
-/* ===== Right rail (ad-panel) ===== */
+/* =========================
+   RIGHT RAIL (AD PANEL)
+   ========================= */
 .ad-panel{
   background: var(--ad-bg) !important;
   border: 1px solid var(--ad-border) !important;
@@ -1232,12 +1235,10 @@ body{ overflow-y: scroll; }
   top: var(--top-pad) !important;
   margin-top: 0 !important;
 
-  /* 스크롤: 자연 클리핑 + 터치 관성 */
   max-height: 1660px !important;
   overflow-y: auto !important;
   -webkit-overflow-scrolling: touch;
 
-  /* 드래그 스크롤 UX */
   cursor: grab;
 }
 .ad-panel.dragging{
@@ -1245,14 +1246,13 @@ body{ overflow-y: scroll; }
   user-select: none;
 }
 
-/* 스크롤바 숨김(시각적) */
+/* hide scrollbars visually */
 .ad-panel::-webkit-scrollbar{ width:0; height:0; }
-.ad-panel{ scrollbar-width: none !important; -ms-overflow-style: none !important; }
+.ad-panel{ scrollbar-width:none !important; -ms-overflow-style:none !important; }
 
-/* ===== Panel title (stamp) =====
-   - 패널 내부 스크롤 영역 상단에 고정
-   - top:0 으로 두고, 패널 padding 안에서만 고정되도록 구성
-*/
+/* =========================
+   PANEL TITLE (STAMP)
+   ========================= */
 .ad-panel .ad-stamp{
   position: sticky !important;
   top: 0 !important;
@@ -1277,82 +1277,107 @@ body{ overflow-y: scroll; }
 }
 .ad-panel .ad-stamp .emoji{ margin: 0 6px; }
 
-/* 선택: 타이틀 아래 간격을 별도 엘리먼트로 확보하고 싶을 때 사용 */
+/* optional spacer */
 .ad-panel .ad-offset{ height: 12px !important; }
 
-/* ===== Card boxes inside panel ===== */
+/* =========================
+   AD CARDS
+   ========================= */
 .ad-panel .ad-box{
-  height: 150px !important;
-  min-height: 150px !important;
-  max-height: 150px !important;
+  height:150px !important;
+  min-height:150px !important;
+  max-height:150px !important;
 
-  margin: 0 0 10px 0 !important;
+  margin:0 0 10px 0 !important;
 
-  background: #ffffff !important;
-  border-radius: 8px !important;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.10) !important;
+  background:#fff !important;
+  border-radius:8px !important;
+  box-shadow:0 1px 3px rgba(0,0,0,.1) !important;
 
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  overflow: hidden !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  overflow:hidden !important;
 }
 .ad-panel .ad-box > a{
-  width: 100% !important;
-  height: 100% !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
+  width:100% !important;
+  height:100% !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
 }
+.ad-panel .ad-box:first-of-type{ margin-top:4px !important; }
 
-/* 첫 카드가 타이틀에 살짝 먹히는 레거시 케이스 방어 */
-.ad-panel .ad-box:first-of-type{ margin-top: 4px !important; }
-
-/* ===== Row scroll arrows stabilizer (유지) ===== */
-.row, .card-row, .row-viewport, .row-scroller, .row-grid{ position: relative; }
+/* =========================
+   ROW SCROLL ARROWS (KEEP)
+   ========================= */
+.row, .card-row, .row-viewport, .row-scroller, .row-grid{ position:relative; }
 
 .row-arrow, .scroll-left, .scroll-right, .row-left, .row-right, [data-arrow], .arrow{
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 42px;
-  height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: rgba(0,0,0,0.35);
-  color: #fff;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.30);
-  z-index: 10000;
-  pointer-events: auto;
-  user-select: none;
+  position:absolute;
+  top:50%;
+  transform:translateY(-50%);
+  width:42px;
+  height:42px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:50%;
+  background:rgba(0,0,0,.35);
+  color:#fff;
+  box-shadow:0 2px 10px rgba(0,0,0,.3);
+  z-index:10000;
+  pointer-events:auto;
+  user-select:none;
 }
-.row-arrow.left, .scroll-left, .row-left{ left: 8px; }
-.row-arrow.right, .scroll-right, .row-right{ right: 8px; }
+.row-arrow.left, .scroll-left, .row-left{ left:8px; }
+.row-arrow.right, .scroll-right, .row-right{ right:8px; }
 
-/* 패널/사이드바가 화살표를 덮지 않도록 기본 z-index 낮춤 */
-.ad-panel, .right-pane, .sidebar, .left-pane{ z-index: 1; }
+/* keep arrows above panels */
+.ad-panel, .right-pane, .sidebar, .left-pane{ z-index:1; }
 
-/* ===== Q&A sidebar button theming only ===== */
+/* =========================
+   Q&A SIDEBAR BUTTON
+   ========================= */
 :root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
 .sidebar a#qnaOpenBtn,
 a#qnaOpenBtn.sidebar-item,
 #qnaOpenBtn{
-  display: block;
-  background: var(--qa-brand);
-  color: #fff !important;
-  border: 1px solid var(--qa-brand-border);
-  border-radius: 10px;
+  display:block;
+  background:var(--qa-brand);
+  color:#fff !important;
+  border:1px solid var(--qa-brand-border);
+  border-radius:10px;
 }
 .sidebar a#qnaOpenBtn:hover,
 #qnaOpenBtn:hover{ background:#004080; }
 
-/* ===== Misc ===== */
-.is-hidden-lit{ display:none !important; }
+/* =========================
+   DESKTOP LAYOUT GAP LOCK
+   ========================= */
+@media (min-width: 901px){
+  .container{
+    display:grid !important;
+    grid-template-columns: 220px 1fr 274px !important;
+    column-gap: var(--gap) !important;
+    padding-left: var(--gap) !important;
+    padding-right: var(--gap) !important;
+  }
 
-/* ad-panel 내부의 불필요한 화살표 UI는 숨김 */
-.ad-panel .rscroll{ z-index: 999 !important; display: none !important; }
+  .sidebar,
+  .main-content,
+  .ad-panel{
+    margin:0 !important;
+  }
+
+  .main-content{ min-width:0 !important; }
+}
+
+/* =========================
+   MISC
+   ========================= */
+.is-hidden-lit{ display:none !important; }
+.ad-panel .rscroll{ z-index:999 !important; display:none !important; }
 
 <script id="donor-adpanel-js">
 (function(){
