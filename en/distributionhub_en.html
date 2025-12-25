@@ -1002,175 +1002,84 @@ footer,.site-footer{position:static !important; clear:both !important; width:100
 </footer>
 <!-- 내부 로직은 숨김 처리(코드 최소 노출) -->
 <script>
-    // 컨텐츠 섹션: 초기 데이터(임시). 서버 바인딩 시 교체.
-    function buildPool(arr){
-      const MAX = 100;
-      if(!Array.isArray(arr) || arr.length===0) return [];
-      if(arr.length>=MAX) return arr.slice(0,MAX);
-      const out=[]; let i=0;
-      while(out.length<MAX){
-        const base = arr[i % arr.length];
-        out.push({
-          img: base.img + (base.img.includes('?') ? '&n=' : '?n=') + (out.length+1),
-          title: base.title + ' #' + (out.length+1),
-          price: base.price,
-          tag: base.tag
-        });
-        i++;
-      }
-      return out;
+/*
+  Distribution Hub – Mobile Skeleton Stabilizer (FULL REPLACE BLOCK)
+  목적:
+  1) 모바일 세로 화면에서 썸네일 영역 붕괴 방지
+  2) 초기 렌더링 시 빈 컨테이너로 인한 레이아웃 흔들림 제거
+
+  원칙:
+  - 이 스크립트는 '자리만' 만든다 (Skeleton)
+  - 실제 데이터 렌더링은 distribution-automap.v1.js 단독 담당
+  - innerHTML 초기화 / 실제 데이터 렌더링 금지
+*/
+
+(function () {
+  'use strict';
+
+  // 모바일/터치 환경에서만 동작
+  const isMobile = matchMedia('(max-width: 768px), (pointer: coarse)').matches;
+  if (!isMobile) return;
+
+if (document.querySelector('.thumb-list .thumb-card')) return;
+
+  const SKELETON_COUNT = 7; // 초기 안정화용 카드 수
+
+  function createSkeletonCard() {
+    const card = document.createElement('article');
+    card.className = 'thumb-card skeleton';
+    card.innerHTML = `
+      <div class="thumb-img sk-img"></div>
+      <div class="thumb-body">
+        <div class="thumb-title sk-text"></div>
+        <div class="thumb-meta">
+          <div class="thumb-price sk-text"></div>
+        </div>
+      </div>`;
+    return card;
+  }
+
+  function mountSkeleton(listEl) {
+    if (!listEl) return;
+    if (listEl.dataset.skeletonMounted === '1') return;
+    listEl.dataset.skeletonMounted = '1';
+
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < SKELETON_COUNT; i++) {
+      frag.appendChild(createSkeletonCard());
     }
+    listEl.appendChild(frag);
+  }
 
-    const DATA = {
-      recommend: [
-        { img:"https://via.placeholder.com/600x400?text=Reco+1", title:"Vitamin C 1000 (Large Pack)", price:"₩12,000", tag:"hot" },
-        { img:"https://via.placeholder.com/600x400?text=Reco+2", title:"Organic Moisturizing Hand Cream", price:"₩7,500", tag:"hot" },
-        { img:"https://via.placeholder.com/600x400?text=Reco+3", title:"Herbal Tea Gift Set", price:"₩15,000", tag:"hot" },
-        { img:"https://via.placeholder.com/600x400?text=Reco+4", title:"Family Pack Multivitamin", price:"₩19,900", tag:"hot" }
-      ],
-      ads: [
-        { img:"https://via.placeholder.com/600x400?text=AD+1", title:"Brand A Promotion", price:"", tag:"ad" },
-        { img:"https://via.placeholder.com/600x400?text=AD+2", title:"Brand B Weekly Deal", price:"", tag:"ad" },
-        { img:"https://via.placeholder.com/600x400?text=AD+3", title:"Brand C Launch", price:"", tag:"ad" },
-        { img:"https://via.placeholder.com/600x400?text=AD+4", title:"Brand D Exclusive Zone", price:"", tag:"ad" }
-      ],
-      trending: [
-        { img:"https://via.placeholder.com/600x400?text=Hot+1", title:"Turbo-Fan Mini Fan", price:"₩29,900", tag:"hot" },
-        { img:"https://via.placeholder.com/600x400?text=Hot+2", title:"Summer Cooling Body Mist", price:"₩9,900", tag:"hot" },
-        { img:"https://via.placeholder.com/600x400?text=Hot+3", title:"USB Desk Fan", price:"₩13,900", tag:"hot" },
-        { img:"https://via.placeholder.com/600x400?text=Hot+4", title:"Portable Mosquito Repellent", price:"₩8,900", tag:"hot" }
-      ],
-      new: [
-        { img:"https://via.placeholder.com/600x400?text=New+1", title:"New Natural Shampoo Bar", price:"₩11,900", tag:"new" },
-        { img:"https://via.placeholder.com/600x400?text=New+2", title:"Organic Lip Balm Duo", price:"₩6,500", tag:"new" },
-        { img:"https://via.placeholder.com/600x400?text=New+3", title:"Light Moisturizing Cream", price:"₩14,900", tag:"new" },
-        { img:"https://via.placeholder.com/600x400?text=New+4", title:"Aroma Diffuser Kit", price:"₩17,900", tag:"new" }
-      ],
-      special: [
-        { img:"https://via.placeholder.com/600x400?text=Special+1", title:"Special Item #1", price:"₩10,500".replace(",",","), tag:"special" },
-        { img:"https://via.placeholder.com/600x400?text=Special+2", title:"Special Item #2", price:"₩11,000".replace(",",","), tag:"special" },
-        { img:"https://via.placeholder.com/600x400?text=Special+3", title:"Special Item #3", price:"₩11,500".replace(",",","), tag:"special" },
-        { img:"https://via.placeholder.com/600x400?text=Special+4", title:"Special Item #4", price:"₩12,000".replace(",",","), tag:"special" },
-        { img:"https://via.placeholder.com/600x400?text=Special+5", title:"Special Item #5", price:"₩12,500".replace(",",","), tag:"special" },
-        { img:"https://via.placeholder.com/600x400?text=Special+6", title:"Special Item #6", price:"₩13,000".replace(",",","), tag:"special" },
-        { img:"https://via.placeholder.com/600x400?text=Special+7", title:"Special Item #7", price:"₩13,500".replace(",",","), tag:"special" },
-        { img:"https://via.placeholder.com/600x400?text=Special+8", title:"Special Item #8", price:"₩14,000".replace(",",","), tag:"special" },
-        { img:"https://via.placeholder.com/600x400?text=Special+9", title:"Special Item #9", price:"₩14,500".replace(",",","), tag:"special" },
-        { img:"https://via.placeholder.com/600x400?text=Special+10", title:"Special Item #10", price:"₩15,000".replace(",",","), tag:"special" },
-        { img:"https://via.placeholder.com/600x400?text=Special+11", title:"Special Item #11", price:"₩15,500".replace(",",","), tag:"special" },
-        { img:"https://via.placeholder.com/600x400?text=Special+12", title:"Special Item #12", price:"₩16,000".replace(",",","), tag:"special" },
-        { img:"https://via.placeholder.com/600x400?text=Special+13", title:"Special Item #13", price:"₩16,500".replace(",",","), tag:"special" },
-        { img:"https://via.placeholder.com/600x400?text=Special+14", title:"Special Item #14", price:"₩17,000".replace(",",","), tag:"special" },
-        { img:"https://via.placeholder.com/600x400?text=Special+15", title:"Special Item #15", price:"₩17,500".replace(",",","), tag:"special" },
-        { img:"https://via.placeholder.com/600x400?text=Special+16", title:"Special Item #16", price:"₩18,000".replace(",",","), tag:"special" },
-        { img:"https://via.placeholder.com/600x400?text=Special+17", title:"Special Item #17", price:"₩18,500".replace(",",","), tag:"special" },
-        { img:"https://via.placeholder.com/600x400?text=Special+18", title:"Special Item #18", price:"₩19,000".replace(",",","), tag:"special" },
-        { img:"https://via.placeholder.com/600x400?text=Special+19", title:"Special Item #19", price:"₩19,500".replace(",",","), tag:"special" },
-        { img:"https://via.placeholder.com/600x400?text=Special+20", title:"Special Item #20", price:"₩20,000".replace(",",","), tag:"special" }
-      ]
+  function init() {
+    document.querySelectorAll('.thumb-list').forEach(mountSkeleton);
+  }
 
-,      others: [
-        { img:"https://via.placeholder.com/600x400?text=Other+1", title:"Premium Dish Soap", price:"₩6,900", tag:"" },
-        { img:"https://via.placeholder.com/600x400?text=Other+2", title:"Eco-friendly Dishcloths (10 pcs)", price:"₩4,500", tag:"" },
-        { img:"https://via.placeholder.com/600x400?text=Other+3", title:"Multipurpose Sanitizing Wipes", price:"₩3,900", tag:"" },
-        { img:"https://via.placeholder.com/600x400?text=Other+4", title:"Natural Detergent Set", price:"₩12,900", tag:"" }
-      ]
-};
-
-    const MAX_POOL_ITEMS = 100;
-    const INITIAL_RENDER_ITEMS = 7;
-    const LOAD_MORE_BATCH = 7;
-
-    function _createThumbHTML_EN(items){
-      return items.map(it => `
-        <article class="thumb-card" role="button" tabindex="0" aria-label="${it.title}">
-          <img class="thumb-img" src="${it.img}" alt="${it.title} thumbnail"/>
-          <div class="thumb-body">
-            <div class="thumb-title">${it.title}</div>
-            <div class="thumb-meta">
-              <div class="thumb-price">${it.price || ""}</div>
-              <span class="thumb-tag ${it.tag ||""}">${(it.tag==="ad"?"AD":it.tag||"")}</span>
-            </div>
-          </div>
-        </article>
-      `).join("");
-    }
-
-    function _renderMoreThumbs(listEl, batch){
-      const pool = listEl._igdcPool || [];
-      const rendered = listEl._igdcRendered || 0;
-      if(rendered >= pool.length) return;
-      const nextEnd = Math.min(rendered + batch, pool.length);
-      const slice = pool.slice(rendered, nextEnd);
-      const html = _createThumbHTML_EN(slice);
-      if(rendered === 0){
-        listEl.innerHTML = html;
-      } else {
-        listEl.insertAdjacentHTML("beforeend", html);
-      }
-      listEl._igdcRendered = nextEnd;
-    }
-
-    document.querySelectorAll(".thumb-list").forEach(el => {
-      const key = el.getAttribute("data-source");
-      const baseArr = DATA[key] || [];
-      const pool = buildPool(baseArr).slice(0, MAX_POOL_ITEMS);
-      el._igdcPool = pool;
-      el._igdcRendered = 0;
-
-      _renderMoreThumbs(el, INITIAL_RENDER_ITEMS);
-
-      // Lazy load more items when user scrolls near the end of this section
-      const sentinel = document.createElement("div");
-      sentinel.className = "thumb-sentinel";
-      sentinel.style.width = "100%";
-      sentinel.style.height = "1px";
-      sentinel.style.pointerEvents = "none";
-      el.parentNode.insertBefore(sentinel, el.nextSibling);
-
-      const io = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-          if(!entry.isIntersecting) return;
-          _renderMoreThumbs(el, LOAD_MORE_BATCH);
-          if(el._igdcRendered >= pool.length){
-            io.unobserve(entry.target);
-            entry.target.remove();
-          }
-        });
-      }, { rootMargin: "0px 0px 200px 0px" });
-
-      io.observe(sentinel);
-    });
-// === 지역/언어 기반 10개 광고 슬롯 로딩(내부화, 최소 노출) ===
-    async function _loadLocalizedAdsSilently() {
-      try {
-        const userLang = (navigator.language || 'en').substring(0,2);
-        // 기본값 (프론트 단에서 노출 최소화)
-        let country = 'US';
-        try {
-          const geoRes = await fetch('https://ipapi.co/json/');
-          const geo = await geoRes.json();
-          if (geo && geo.country) country = geo.country;
-        } catch (_) {}
-
-        // 서버 프록시(예: /api/ads)로 위임. 서버에서 각 지역 광고 공급자 연동.
-        const adsRes = await fetch(`/api/ads?lang=${userLang}&country=${country}`);
-        const ads = await adsRes.json();
-
-        const boxes = document.querySelectorAll('.ad-box');
-        boxes.forEach((box, i) => {
-          const ad = ads[i];
-          if (!ad) return;
-          box.innerHTML = `<a href="${ad.link}" target="_blank" rel="noopener">
-            <img src="${ad.image}" alt="${ad.title}" style="width:100%;height:100%;object-fit:cover;" />
-          </a>`;
-        });
-      } catch (_) {
-        // Silent failure
-      }
-    }
-    window.addEventListener('DOMContentLoaded', _loadLocalizedAdsSilently);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
+})();
 </script>
+
+<!-- 필수 CSS (같이 추가) -->
+<style>
+  .thumb-card.skeleton { pointer-events: none; }
+  .thumb-card.skeleton .sk-img {
+    width: 100%;
+    aspect-ratio: 3 / 2;
+    background: #e5e7eb;
+    border-radius: 8px;
+  }
+  .thumb-card.skeleton .sk-text {
+    height: 12px;
+    margin: 6px 0;
+    background: #e5e7eb;
+    border-radius: 4px;
+  }
+</style>
+
 <script id="igdc-scroller-overlay">
 (function(){
   function scrollAmountFor(container){
