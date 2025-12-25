@@ -1,20 +1,25 @@
 
-// distribution-automap.v1.js (FINAL)
-// YES: Section-by-section mapping
-// YES: Fill ONLY empty sections
-// NO: Touch sections that already have real cards
+// distribution-automap.v1.js (FINAL STABLE)
+// 역할:
+// - 섹션 단위 자동 맵핑
+// - 비어 있는 섹션만 데이터 삽입
+// - 스켈레톤은 실카드 삽입 직후 즉시 제거
+// - 기존 DOM / 레이아웃 절대 파괴하지 않음
 
 (function () {
+  'use strict';
+
   const SECTION_SELECTOR = '.thumb-grid[data-psom-key]';
 
   function hasRealCard(section) {
-    return !!(section && section.querySelector('.thumb-card:not(.skeleton)'));
+    return !!section.querySelector('.thumb-card:not(.skeleton)');
   }
 
   function createCards(section, items) {
     if (!Array.isArray(items) || items.length === 0) return;
 
     const frag = document.createDocumentFragment();
+
     items.forEach(item => {
       const card = document.createElement('div');
       card.className = 'thumb-card';
@@ -26,6 +31,7 @@
       `;
       frag.appendChild(card);
     });
+
     section.appendChild(frag);
   }
 
@@ -40,7 +46,12 @@
     window.FeedAPI.get({ key })
       .then(res => {
         if (res && Array.isArray(res.items)) {
+
+          // 1) 실카드 생성
           createCards(section, res.items);
+
+          // 2) 같은 섹션의 스켈레톤 즉시 제거 (핵심)
+          section.querySelectorAll('.thumb-card.skeleton').forEach(el => el.remove());
         }
       })
       .catch(() => {});
