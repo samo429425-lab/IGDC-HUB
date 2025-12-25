@@ -1,48 +1,58 @@
 
-// distribution-automap.v1.js (FIXED)
-// YES: Create cards ONLY if none exist
-// NO: Re-render, clear, or touch existing DOM
+// distribution-automap.v1.js (FINAL)
+// YES: Section-by-section mapping
+// YES: Fill ONLY empty sections
+// NO: Touch sections that already have real cards
 
 (function () {
-  const CONTAINER_SELECTOR = '.thumb-grid';
+  const SECTION_SELECTOR = '.thumb-grid[data-psom-key]';
 
-  function hasCards() {
-    const container = document.querySelector(CONTAINER_SELECTOR);
-    return !!(container && container.children.length > 0);
+  function hasRealCard(section) {
+    return !!(section && section.querySelector('.thumb-card:not(.skeleton)'));
   }
 
-  function createCardsOnce(data) {
-    const container = document.querySelector(CONTAINER_SELECTOR);
-    if (!container) return;
+  function createCards(section, items) {
+    if (!Array.isArray(items) || items.length === 0) return;
 
-    // SAFETY: never touch if cards already exist
-    if (container.children.length > 0) return;
-
-    if (!Array.isArray(data)) return;
-
-    data.forEach(item => {
+    const frag = document.createDocumentFragment();
+    items.forEach(item => {
       const card = document.createElement('div');
       card.className = 'thumb-card';
       card.innerHTML = `
-        <img src="${item.thumbnail || ''}" alt="">
-        <div class="thumb-title">${item.title || ''}</div>
+        <img class="thumb-img" src="${item.thumbnail || ''}" alt="">
+        <div class="thumb-body">
+          <div class="thumb-title">${item.title || ''}</div>
+        </div>
       `;
-      container.appendChild(card);
+      frag.appendChild(card);
     });
+    section.appendChild(frag);
   }
 
-  // Initial run: ONLY if empty
-  document.addEventListener('DOMContentLoaded', () => {
-    if (hasCards()) return;
+  function mapSection(section) {
+    if (hasRealCard(section)) return;
 
-    if (window.FeedAPI && typeof window.FeedAPI.get === 'function') {
-      window.FeedAPI.get({ page: 'distribution' })
-        .then(res => {
-          if (res && res.items) {
-            createCardsOnce(res.items);
-          }
-        })
-        .catch(() => {});
-    }
-  });
+    const key = section.dataset.psomKey;
+    if (!key) return;
+
+    if (!window.FeedAPI || typeof window.FeedAPI.get !== 'function') return;
+
+    window.FeedAPI.get({ key })
+      .then(res => {
+        if (res && Array.isArray(res.items)) {
+          createCards(section, res.items);
+        }
+      })
+      .catch(() => {});
+  }
+
+  function init() {
+    document.querySelectorAll(SECTION_SELECTOR).forEach(mapSection);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
 })();
