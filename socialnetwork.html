@@ -1184,203 +1184,8 @@ html, body {
 #main,.main-content,main,.content{display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;margin:0!important;box-sizing:border-box!important}
 .container,.layout,.wrap,.page,.content,.main-content{grid-template-columns:unset!important}
 }
-</style><style id="donor-adpanel-css">
-/* donor right-rail css */
-
-:root{ --top-pad: 30px; --gap: 15px; }
-.container{ padding: var(--top-pad) var(--gap) !important; }
-.sidebar{ padding-top: 0 !important; position: sticky; top: var(--top-pad) !important; }
-.main-content{ margin-top: 0 !important; }
-.ad-panel{ position: sticky !important; top: var(--top-pad) !important; margin-top: 0 !important; }
-
-
-.ad-panel .ad-stamp{
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  padding: 10px 4px;
-  font-weight: 900;
-  font-size: 16px;
-  letter-spacing: .3px;
-  color: #0a4599;
-  background: #f7f9fb;
-  border-bottom: 1px solid #d6dce0;
-  text-align: center;
-}
-.ad-panel .ad-stamp .emoji{ margin: 0 6px; }
-
-
-.ad-panel{
-  background: #eef7ff !important;
-  border: 1px solid #c6ddf5 !important;
-  border-radius: 12px !important;
-  padding: 12px !important;
-  max-height: 1560px !important;
-  overflow-y: auto !important;
-  position: sticky !important;
-  top: var(--top-pad, 30px) !important;
-}
-
-/* hide scrollbars */
-.ad-panel::-webkit-scrollbar{ display:none !important; }
-.ad-panel{ scrollbar-width: none !important; -ms-overflow-style: none !important; }
-
-.ad-stamp{
-  position: sticky !important;
-  top: var(--top-pad, 30px) !important;
-  z-index: 2 !important;
-  width: 100%;
-  text-align: center;
-  font-weight: 900;
-  font-size: 15px;
-  color: #0a4599;
-  background: #eef7ff !important; /* blend with panel background */
-  border-bottom: 1px solid #c6ddf5;
-  padding: 8px 0;
-}
-
-/* Card boxes inside panel */
-.ad-box{
-  height:150px !important;
-  min-height:150px !important;
-  max-height:150px !important;
-  margin-bottom: 5px !important;
-  background: #ffffff !important;
-  border-radius: 8px !important;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
-  display:flex !important;
-  align-items:center !important;
-  justify-content:center !important;
-  overflow:hidden !important;
-}
-.ad-box > a{
-  width:100% !important;
-  height:100% !important;
-  display:flex !important;
-  align-items:center !important;
-  justify-content:center !important;
-}
-
-
-:root{ --top-pad: 18px !important; } /* pull everything up a bit */
-
-.container{ padding-top: var(--top-pad) !important; } /* align container start */
-
-.ad-panel{
-  position: sticky !important;
-  top: var(--top-pad) !important;
-  padding-top: 8px !important;   /* space above first card area */
-  overflow-y: auto !important;
-}
-
-/* Title inside panel stays pinned to the top of the panel's scroll area */
-.ad-panel .ad-stamp{
-  position: sticky !important;
-  top: 0 !important;
-  margin-bottom: 5px !important; /* gap under the title so first card never clips */
-  padding: 6px 0 !important;
-}
-
-/* Safety: if any legacy styles compress the first card, push a tiny gap */
-.ad-panel .ad-box:first-of-type{ margin-top: 4px !important; }
-
-
-:root{ --top-pad: 18px !important; }
-
-/* Title behavior */
-.ad-panel .ad-stamp{
-  position: sticky !important;
-  top: 0 !important;                 /* sticky inside the panel; keeps its own space */
-  z-index: 2 !important;
-  padding: 6px 0 !important;
-  margin: 0 !important;
-}
-
-/* Spacer directly under the title so first card never hides behind it */
-.ad-panel .ad-offset{ height: 12px !important; }
-
-/* Panel scroller height tuned for 10 full + ~40% of 11th (with ~10px gaps) */
-.ad-panel{
-  max-height: 1660px !important;
-  overflow-y: auto !important;
-  -ms-overflow-style: none !important;
-  scrollbar-width: none !important;
-}
-.ad-panel::-webkit-scrollbar{ display:none !important; }
-
-/* Card sizing safety */
-.ad-panel .ad-box{
-  height:150px !important;
-  min-height:150px !important;
-  max-height:150px !important;
-  margin-bottom:10px !important;
-}
-
-
-/* === Stabilizer v3: restore row scroll arrows above all UI === */
-.row, .card-row, .row-viewport, .row-scroller, .row-grid { position: relative; }
-
-/* common arrow selectors */
-.row-arrow, .scroll-left, .scroll-right, .row-left, .row-right, [data-arrow], .arrow {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 42px; height: 42px;
-  display: flex; align-items: center; justify-content: center;
-  border-radius: 50%;
-  background: rgba(0,0,0,0.35);
-  color: #fff;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-  z-index: 10000;              /* bring to front */
-  pointer-events: auto;
-  user-select: none;
-}
-
-/* left/right positioning fallbacks */
-.row-arrow.left, .scroll-left, .row-left { left: 8px; }
-.row-arrow.right, .scroll-right, .row-right { right: 8px; }
-
-/* ensure higher than ad/sidebar panels if they overlap */
-.ad-panel, .right-pane, .sidebar, .left-pane { z-index: 1; }
-
-
-/* === Q&A sidebar link color only (no other changes) === */
-:root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
-.sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
-  display:block;
-  background: var(--qa-brand);
-  color:#fff !important;
-  border:1px solid var(--qa-brand-border);
-  border-radius:10px;
-}
-.sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
-
-/* @ADPANEL: natural clipping + hidden scrollbar + drag scroll */
-.ad-panel{ overflow-y:auto; -webkit-overflow-scrolling:touch; cursor:grab; }
-.ad-panel.dragging{ cursor:grabbing; user-select:none; }
-.ad-panel::-webkit-scrollbar{ width:0; height:0; }
-.ad-panel{ scrollbar-width:none; -ms-overflow-style:none; }
-/* Ensure any arrow UI inside ad-panel remains hidden */
-.ad-panel .rscroll{ z-index:999 !important;  display:none !important; }
-
-
-
-/* visually hide targeted menu items without affecting layout calc */
-.is-hidden-lit{ display:none !important; }
-
-/* @ADPANEL: natural clipping + hidden scrollbar + drag scroll */
-.ad-panel{ overflow-y:auto; -webkit-overflow-scrolling:touch; cursor:grab; }
-.ad-panel.dragging{ cursor:grabbing; user-select:none; }
-.ad-panel::-webkit-scrollbar{ width:0; height:0; }
-.ad-panel{ scrollbar-width:none; -ms-overflow-style:none; }
-/* Ensure any arrow UI inside ad-panel remains hidden */
-.ad-panel .rscroll{ z-index:999 !important;  display:none !important; }
-
-</style><script id="donor-adpanel-js">
+</style>
+<script id="donor-adpanel-js">
 (function(){
   const panel = document.querySelector('.ad-panel');
   if(!panel) return;
@@ -1420,32 +1225,28 @@ html, body {
   panel.setAttribute('tabindex', panel.getAttribute('tabindex') || '0');
 })();
 </script>
-<style id="social-desktop-grid-fix">
+<style id="social-right-rail-final-fix">
 @media (min-width:1024px){
+  /* 전체 3컬럼 고정 + 메인-우측 갭 10px */
   .container{
     display:grid !important;
     grid-template-columns:220px minmax(0,1fr) 274px !important;
-    column-gap:10px !important;     /* 메인–우측 갭 10px */
-    padding-right:10px !important;  /* 우측 벽 여백 */
+    column-gap:10px !important;
+    padding:16px 10px 10px 10px !important;  /* 우측 벽 10px */
     overflow:visible !important;
   }
 
-  .sidebar{
-    grid-column:1;
-    min-width:220px!important;
-    max-width:220px!important;
-  }
+  .sidebar{ grid-column:1; }
+  .main-content{ grid-column:2; min-width:0!important; margin:0!important; width:100%!important; }
+  .right-rail, #rightRail{ grid-column:3; margin-right:0!important; }
 
-  .main-content{
-    grid-column:2;
-    min-width:0!important;
-    margin:0!important;
-    width:100%!important;
-    max-width:none!important;
-  }
-
-  .right-rail{
-    grid-column:3;
+  /* AD 패널: 높이 고정(100vh) 금지, 스티키/스크롤만 */
+  #rightRail .ad-panel, .right-rail .ad-panel, .ad-panel{
+    position: sticky !important;
+    top: 16px !important;
+    height: auto !important;
+    max-height: calc(100dvh - 32px) !important;
+    overflow: auto !important;
   }
 }
 </style>
