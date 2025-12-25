@@ -550,7 +550,7 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
 }
 </style>
 <style id="mobile-title-fontsize">
-@media (max-width: 1023px){
+@media (max-width: 1024px){
   .page-title {
     font-size: 1.5em !important;
   }
@@ -933,50 +933,8 @@ footer,.site-footer{position:static !important; clear:both !important; width:100
 }
 </style>
 <link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
-
-<style id="distribution-main-stable-css">
-/* Distribution stable patch: prevent runtime layout flips (grid<->flex) that cause '통블록' and mobile blanking */
-#distributionMain .thumb-list[data-psom-key],
-#distributionMain .thumb-grid[data-psom-key],
-#distributionMain .thumb-scroller[data-psom-key]{
-  display:grid !important;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)) !important;
-  gap: 12px !important;
-  overflow: visible !important;
-}
-
-/* Horizontal scroller only when explicitly marked (do NOT apply to generic thumb-list) */
-#distributionMain .thumb-scroller[data-psom-key]{
-  display:flex !important;
-  flex-wrap:nowrap !important;
-  overflow-x:auto !important;
-  -webkit-overflow-scrolling: touch !important;
-  scroll-snap-type: x mandatory !important;
-}
-#distributionMain .thumb-scroller[data-psom-key] > .thumb-card,
-#distributionMain .thumb-scroller[data-psom-key] > a.thumb-card{
-  flex: 0 0 auto !important;
-  min-width: 240px !important;
-  scroll-snap-align: start !important;
-}
-
-/* Mobile: keep grid stable; reduce card min width slightly to avoid overflow */
-@media (max-width: 1023px){
-  #distributionMain .thumb-list[data-psom-key],
-  #distributionMain .thumb-grid[data-psom-key]{
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important;
-  }
-}
-@media (max-width: 540px){
-  #distributionMain .thumb-list[data-psom-key],
-  #distributionMain .thumb-grid[data-psom-key]{
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  }
-}
-</style>
-
 </head>
-<body data-page="distribution">
+<body>
 <div id="hero"><div class="hero-title"></div></div>
 <script>(function(){document.addEventListener("DOMContentLoaded",function(){document.documentElement.classList.remove("prelayout");var s=document.getElementById("prelayout-guard");if(s&&s.parentNode){s.parentNode.removeChild(s);}});})();</script>
 <div class="container">
@@ -1090,7 +1048,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   }
 
   function init() {
-    document.querySelectorAll('.thumb-list:not([data-psom-key])').forEach(mountSkeleton);
+    document.querySelectorAll('.thumb-list').forEach(mountSkeleton);
   }
 
   if (document.readyState === 'loading') {
@@ -1209,9 +1167,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
 <script id="igdc-layout-hotfix-v2">
 (function(){
   function applyHotfix(){
-    
-    // Distribution stable patch: thumb layout must be CSS-only; runtime thumb overrides are disabled.
-var container = document.querySelector('.container');
+    var container = document.querySelector('.container');
     var sidebar   = document.querySelector('.sidebar');
     var adpanel   = document.querySelector('.ad-panel');
     var main      = document.querySelector('.main-content');
@@ -1231,22 +1187,19 @@ var container = document.querySelector('.container');
     main.style.margin = '30px';
     main.style.boxSizing = 'border-box';
 
-    /* [disabled on Distribution stable] document.querySelectorAll('.thumb-list:not(.thumb-scroller)').forEach(function(list){
+    document.querySelectorAll('.thumb-list:not(.thumb-scroller)').forEach(function(list){
       list.style.display = 'grid';
       list.style.gridTemplateColumns = 'repeat(auto-fill, minmax(240px, 1fr))';
       list.style.gap = '12px';
     });
 
-    */
-/* [disabled on Distribution stable] document.querySelectorAll('.thumb-scroller .thumb-card').forEach(function(card){
+    document.querySelectorAll('.thumb-scroller .thumb-card').forEach(function(card){
       card.style.minWidth = '240px';
     });
-    */
-/* [disabled on Distribution stable] document.querySelectorAll('.thumb-card').forEach(function(card){
+    document.querySelectorAll('.thumb-card').forEach(function(card){
       if(!card.style.minWidth) card.style.minWidth = '240px';
     });
-  */
-}
+  }
 
   var _t;
   function onResize(){
@@ -2884,6 +2837,44 @@ window.addEventListener("message",function(ev){
 <script defer="" src="/assets/js/placeholder-sweeper.js"></script>
 <script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
 
+<script>
+(function () {
+  const sections = Array.from(document.querySelectorAll('[data-psom-key]'));
+  if (!sections.length) return;
+
+  // 전역 automap이 이미 돌았으면 막음 (중복 실행 차단)
+  window.__DIST_MAIN_LOCK__ = true;
+
+  // feed 완료를 기다렸다가 해당 섹션만 automap 실행
+  async function runSection(section) {
+    const key = section.dataset.psomKey;
+    if (!key) return;
+
+    // feed.js가 데이터를 캐시에 올려놓을 때까지 대기
+    const waitFeed = () => new Promise(res => {
+      const t = setInterval(() => {
+        if (window.__FEED_CACHE__ && window.__FEED_CACHE__[key]) {
+          clearInterval(t); res(window.__FEED_CACHE__[key]);
+        }
+      }, 50);
+    });
+
+    await waitFeed();
+
+    // 해당 섹션만 대상으로 automap 실행
+    if (window.runAutomapFor) {
+      window.runAutomapFor(section);
+    }
+  }
+
+  // 섹션별 순차 실행 (경합 제거)
+  (async () => {
+    for (const s of sections) {
+      await runSection(s);
+    }
+  })();
+})();
+</script>
 
 </body>
 </html>
