@@ -1,27 +1,29 @@
 
-// distribution-automap.v1.js (FINAL LOCKED)
-// Rules:
-// 1. Section-based mapping only
-// 2. Real cards only once
-// 3. Skeleton removed immediately after real cards
-// 4. NEVER reflow / clear / reorder
+// distribution-automap.v1.js (REBUILT ENGINE)
+// 목표: "정상 1차 렌더"를 절대 무너뜨리지 않음
+// - 기존 카드가 있으면 절대 손대지 않음 (완성본 존중)
+// - 비어있는 섹션만 채움
+// - 필요한 섹션들의 데이터를 '전부' 받은 뒤 한 번에 DOM 반영
+// - 반영은 section 단위로 한 번에 append (중간 상태 노출 최소화)
+// - 스켈레톤은 실카드 반영 직후 해당 섹션에서만 제거
 
 (function () {
   'use strict';
 
-  const SELECTOR = '.thumb-grid[data-psom-key]';
+  const SECTION_SELECTOR = '.thumb-grid[data-psom-key]';
+  const REAL_CARD_SELECTOR = '.thumb-card:not(.skeleton)';
+  const SKELETON_SELECTOR = '.thumb-card.skeleton';
 
-  function hasRealCard(section) {
-    return !!section.querySelector('.thumb-card:not(.skeleton)');
+  function hasFeedAPI() {
+    return !!(window.FeedAPI && typeof window.FeedAPI.get === 'function');
   }
 
-  function removeSkeleton(section) {
-    section.querySelectorAll('.thumb-card.skeleton').forEach(el => el.remove());
+  function hasRealCards(section) {
+    return !!section.querySelector(REAL_CARD_SELECTOR);
   }
 
-  function createCards(section, items) {
+  function buildCardsFragment(items) {
     const frag = document.createDocumentFragment();
-
     items.forEach(item => {
       const card = document.createElement('div');
       card.className = 'thumb-card';
@@ -33,34 +35,65 @@
       `;
       frag.appendChild(card);
     });
-
-    section.appendChild(frag);
+    return frag;
   }
 
-  function mapSection(section) {
-    if (hasRealCard(section)) return;
+  function removeSkeleton(section) {
+    section.querySelectorAll(SKELETON_SELECTOR).forEach(el => el.remove());
+  }
 
-    const key = section.dataset.psomKey;
-    if (!key) return;
-    if (!window.FeedAPI || typeof window.FeedAPI.get !== 'function') return;
+  async function fetchSectionData(key) {
+    return window.FeedAPI.get({ key });
+  }
 
-    window.FeedAPI.get({ key })
-      .then(res => {
-        if (!res || !Array.isArray(res.items) || !res.items.length) return;
+  async function run() {
+    if (!hasFeedAPI()) return;
 
-        createCards(section, res.items);
+    const sections = Array.from(document.querySelectorAll(SECTION_SELECTOR));
+    if (!sections.length) return;
+
+    const targets = sections
+      .filter(sec => !hasRealCards(sec))
+      .map(sec => ({ section: sec, key: sec.dataset.psomKey }))
+      .filter(x => !!x.key);
+
+    if (!targets.length) return;
+
+    const results = await Promise.allSettled(
+      targets.map(t => fetchSectionData(t.key))
+    );
+
+    requestAnimationFrame(() => {
+      targets.forEach((t, idx) => {
+        const section = t.section;
+
+        if (hasRealCards(section)) return;
+
+        const r = results[idx];
+        if (!r || r.status !== 'fulfilled') return;
+
+        const payload = r.value || {};
+        const items = Array.isArray(payload.items) ? payload.items : null;
+        if (!items || items.length === 0) return;
+
+        const prevVisibility = section.style.visibility;
+        section.style.visibility = 'hidden';
+
+        section.appendChild(buildCardsFragment(items));
         removeSkeleton(section);
-      })
-      .catch(() => {});
+        section.dataset.automapDone = '1';
+
+        section.style.visibility = prevVisibility || '';
+      });
+    });
   }
 
-  function init() {
-    document.querySelectorAll(SELECTOR).forEach(mapSection);
-  }
+  if (window.__DISTRIBUTION_AUTOMAP_RAN__) return;
+  window.__DISTRIBUTION_AUTOMAP_RAN__ = true;
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init, { once: true });
+    document.addEventListener('DOMContentLoaded', run, { once: true });
   } else {
-    init();
+    run();
   }
 })();
