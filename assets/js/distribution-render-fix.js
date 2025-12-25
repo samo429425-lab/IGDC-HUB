@@ -1,37 +1,40 @@
 
-// distribution-render-fix.js (FIXED)
-// YES: Keep file
-// YES: Modify behavior
-// NO: Do not re-render or clear DOM
+// distribution-render-fix.js (FINAL HARDENED)
+// Purpose:
+// - NEVER trigger reflow that collapses cards into blocks
+// - NO DOM mutation, NO class toggle, NO style reset
+// - ONLY passive layout stabilization after paint
 
 (function () {
-  const CONTAINER_SELECTOR = '.thumb-grid';
+  'use strict';
 
-  function hasCards() {
-    const container = document.querySelector(CONTAINER_SELECTOR);
-    return !!(container && container.children.length > 0);
+  const GRID_SELECTOR = '.thumb-grid';
+
+  function hasCards(grid) {
+    return !!grid && grid.querySelector('.thumb-card');
   }
 
-  function applyFix() {
-    const container = document.querySelector(CONTAINER_SELECTOR);
-    if (!container) return;
-    // layout-only fix (no DOM mutation)
-    container.style.willChange = 'transform';
+  function stabilize(grid) {
+    // read-only operations to force layout settle
+    grid.offsetHeight; // force layout flush (read-only)
   }
 
-  // Initial load: do nothing if cards already exist
-  document.addEventListener('DOMContentLoaded', () => {
-    if (hasCards()) return;
+  function run() {
+    document.querySelectorAll(GRID_SELECTOR).forEach(grid => {
+      if (!hasCards(grid)) return;
+      stabilize(grid);
+    });
+  }
+
+  // Run AFTER everything else
+  window.addEventListener('load', () => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(run);
+    });
   });
 
-  // Only respond to actual layout changes
+  // Optional: re-stabilize on resize (no DOM touch)
   window.addEventListener('resize', () => {
-    if (!hasCards()) return;
-    applyFix();
-  });
-
-  window.addEventListener('orientationchange', () => {
-    if (!hasCards()) return;
-    applyFix();
+    requestAnimationFrame(run);
   });
 })();
