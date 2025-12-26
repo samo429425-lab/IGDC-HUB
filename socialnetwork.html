@@ -1071,34 +1071,8 @@ html, body {
 /* Ensure any arrow UI inside ad-panel remains hidden */
 .ad-panel .rscroll{ z-index:999 !important;  display:none !important; }
 
-</style><style data-origin="qna-btn-style">
-  @media (min-width:1024px){
-    .container{
-      display:flex;
-      align-items:flex-start;
-      column-gap:15px;
-    }
-    .sidebar{ flex:0 0 210px; max-width:210px; min-width:210px; }
-    .ad-panel{
-      box-sizing:border-box;
-      flex:0 0 220px; max-width:220px; min-width:220px; width:220px;
-      padding:6px !important;            /* was 15px */
-      gap:8px !important;                 /* was 15px */
-      overflow-y:auto;
-      /* ensure full-height column to maximize visible cards */
-      max-height: 100vh;
-    }
-    .main-content{
-      flex:1 1 auto;
-      max-width:none; 
-      margin:0 15px;
-    }
-    .ad-box{
-      height:144px !important;            /* +20% from 120px */
-      line-height:144px !important;
-    }
-  }
-</style><style data-origin="qna-btn-style">
+</style>
+<style data-origin="qna-btn-style">
   @media (min-width:1024px){
     .sidebar,
     .main-content,
