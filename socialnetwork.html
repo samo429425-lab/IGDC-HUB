@@ -1188,26 +1188,29 @@ html, body {
 
 <style id="donor-adpanel-css">
 /* =========================================================
-   donor right-rail css — FINAL STABLE VERSION
+   donor right-rail css — FINAL CENTERED STABLE VERSION
    목적:
-   - 메인 ↔ 우측 패널 ↔ 윈도우 우측 갭 완전 동일(15px)
-   - 화면 높이/스크롤 변화에도 레이아웃 흔들림 제거
-   - 12개 다국어 파일 공통 사용 가능
+   - 타이틀/패널 중앙 정렬 완전 일치
+   - 좌우 갭 균형 유지
+   - 카드/디자인/간격 유지
+   - 찌그러짐 최소화
    ========================================================= */
 
 /* =========================
-   ROOT VARIABLES
+   ROOT
    ========================= */
 :root{
-  --top-pad: 18px;     /* 상단 기준 */
-  --gap: 15px;         /* 모든 수평 갭의 유일 기준값 */
+  --top-pad: 18px;
+  --gap: 15px;
+  --ad-width: 274px;
+
   --ad-bg: #eef7ff;
   --ad-border: #c6ddf5;
   --ad-title-bg: #f7f9fb;
   --ad-title-color: #0a4599;
 }
 
-/* 스크롤바 생성/소멸로 인한 폭 흔들림 방지 */
+/* 스크롤 안정화 */
 html{ scrollbar-gutter: stable; }
 body{ overflow-y: scroll; }
 
@@ -1225,7 +1228,7 @@ body{ overflow-y: scroll; }
    ========================= */
 .sidebar{
   position: sticky;
-  top: var(--top-pad) !important;
+  top: var(--top-pad);
   padding-top: 0 !important;
 }
 
@@ -1235,30 +1238,38 @@ body{ overflow-y: scroll; }
 }
 
 /* =========================
-   RIGHT PANEL (AD)
+   RIGHT PANEL (CORE)
    ========================= */
 .ad-panel{
-  position: sticky !important;
-  top: var(--top-pad) !important;
+  /* 중앙 정렬 핵심 */
+  width: var(--ad-width) !important;
+  max-width: var(--ad-width) !important;
+  justify-self: center !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+
+  position: relative !important;
+  top: auto !important;
 
   background: var(--ad-bg) !important;
   border: 1px solid var(--ad-border) !important;
   border-radius: 12px !important;
   padding: 12px !important;
 
-  max-height: 1660px !important;
+  /* 세로 안정화 */
+  max-height: calc(100dvh - var(--top-pad) - 24px) !important;
   overflow-y: auto !important;
   -webkit-overflow-scrolling: touch;
 
-  margin: 0 !important;
   cursor: grab;
 }
+
 .ad-panel.dragging{
   cursor: grabbing;
   user-select: none;
 }
 
-/* scrollbar hidden (visual only) */
+/* 스크롤바 숨김 */
 .ad-panel::-webkit-scrollbar{ width:0; height:0; }
 .ad-panel{ scrollbar-width:none !important; -ms-overflow-style:none !important; }
 
@@ -1266,14 +1277,15 @@ body{ overflow-y: scroll; }
    PANEL TITLE
    ========================= */
 .ad-panel .ad-stamp{
-  position: sticky !important;
-  top: 0 !important;
-  z-index: 2 !important;
+  position: sticky;
+  top: 0;
+  z-index: 3;
 
   display: flex;
   align-items: center;
   justify-content: center;
 
+  width: 100%;
   padding: 8px 4px;
   margin-bottom: 10px;
 
@@ -1286,7 +1298,10 @@ body{ overflow-y: scroll; }
   border-bottom: 1px solid #d6dce0;
   text-align: center;
 }
-.ad-panel .ad-stamp .emoji{ margin: 0 6px; }
+
+.ad-panel .ad-stamp .emoji{
+  margin: 0 6px;
+}
 
 /* =========================
    AD CARDS
@@ -1307,6 +1322,7 @@ body{ overflow-y: scroll; }
   justify-content:center !important;
   overflow:hidden !important;
 }
+
 .ad-panel .ad-box > a{
   width:100% !important;
   height:100% !important;
@@ -1314,16 +1330,18 @@ body{ overflow-y: scroll; }
   align-items:center !important;
   justify-content:center !important;
 }
-.ad-panel .ad-box:first-of-type{ margin-top:4px !important; }
+
+.ad-panel .ad-box:first-of-type{
+  margin-top:4px !important;
+}
 
 /* =========================
-   DESKTOP LAYOUT LOCK
-   핵심: 모든 수평 갭 = var(--gap)
+   DESKTOP GRID
    ========================= */
 @media (min-width: 901px){
   .container{
     display: grid !important;
-    grid-template-columns: 220px 1fr 274px !important;
+    grid-template-columns: 220px 1fr var(--ad-width) !important;
     column-gap: var(--gap) !important;
   }
 
@@ -1335,13 +1353,14 @@ body{ overflow-y: scroll; }
 }
 
 /* =========================
-   ROW ARROWS / MISC
+   MISC / ROW UI
    ========================= */
 .row, .card-row, .row-viewport, .row-scroller, .row-grid{
   position: relative;
 }
 
-.row-arrow, .scroll-left, .scroll-right, .row-left, .row-right, [data-arrow], .arrow{
+.row-arrow, .scroll-left, .scroll-right,
+.row-left, .row-right, [data-arrow], .arrow{
   position:absolute;
   top:50%;
   transform:translateY(-50%);
@@ -1363,8 +1382,8 @@ body{ overflow-y: scroll; }
 
 .is-hidden-lit{ display:none !important; }
 .ad-panel .rscroll{ display:none !important; }
-
 </style>
+
 
 <script id="donor-adpanel-js">
 (function(){
