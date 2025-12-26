@@ -1345,9 +1345,6 @@ body{ overflow-y: scroll; }
   const panel = document.querySelector('.ad-panel');
   if(!panel) return;
 
-  // Ensure any earlier height locks are cleared (idempotent, safe)
-  panel.style.removeProperty('height');
-  panel.style.removeProperty('max-height');
 
   // Keep scroll within panel (prevents page scroll on wheel over panel)
   panel.addEventListener('wheel', (e)=>{
