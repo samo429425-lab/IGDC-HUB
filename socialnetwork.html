@@ -1078,14 +1078,7 @@ html, body {
 </style><style data-origin="qna-btn-style">
   .container{ box-sizing:border-box; }
 
-  /* Wide screens: strict 3-col grid to avoid overlap */
-  @media (min-width: 901px){
-    .container{
-      display:grid !important;
-      grid-template-columns: 220px minmax(0,1fr) 274px !important;
-      column-gap:15px !important;
-      overflow: clip;
-    }
+
     .sidebar{ grid-column:1; min-width:220px!important; max-width:220px!important; }
     .main-content{ grid-column:2; min-width:0!important; margin:0!important; }
     .right-rail, .ad-panel{ grid-column:3; }
