@@ -204,21 +204,6 @@
 /* Ensure any arrow UI inside ad-panel remains hidden */
 .ad-panel .rscroll{ z-index:999 !important;  display:none !important; }
 
-/* === @ADPANEL-INDEPENDENT (append-only, structure-safe) === */
-.main-content, .ad-panel{ min-height: 0; } /* allow internal overflow in flex row */
-
-.ad-panel{
-  position: sticky !important;
-  top: 16px !important;           /* free within page; not locked to full viewport */
-  align-self: flex-start !important;
-  max-height: calc(100dvh - 32px) !important; /* natural clipping; allows half-card at edges */
-  overflow-y: auto !important;    /* internal scroll */
-  -webkit-overflow-scrolling: touch !important;
-  overscroll-behavior: contain !important;
-  cursor: grab;
-  scrollbar-width: none !important;
-}
-.ad-panel::-webkit-scrollbar{ width:0 !important; height:0 !important; }
 
 /* Do NOT alter card sizing */
 .ad-panel .ad-box{ /* unchanged sizing; just ensure snap is off so partial cards show */
@@ -1071,59 +1056,14 @@ html, body {
 /* Ensure any arrow UI inside ad-panel remains hidden */
 .ad-panel .rscroll{ z-index:999 !important;  display:none !important; }
 
-</style><style data-origin="qna-btn-style">
-  @media (min-width:1024px){
-    .container{
-      display:flex;
-      align-items:flex-start;
-      column-gap:15px;
-    }
-    .sidebar{ flex:0 0 210px; max-width:210px; min-width:210px; }
-    .ad-panel{
-      box-sizing:border-box;
-      flex:0 0 220px; max-width:220px; min-width:220px; width:220px;
-      padding:6px !important;            /* was 15px */
-      gap:8px !important;                 /* was 15px */
-      overflow-y:auto;
-      /* ensure full-height column to maximize visible cards */
-      max-height: 100vh;
-    }
-    .main-content{
-      flex:1 1 auto;
-      max-width:none; 
-      margin:0 15px;
-    }
-    .ad-box{
-      height:144px !important;            /* +20% from 120px */
-      line-height:144px !important;
-    }
-  }
-</style><style data-origin="qna-btn-style">
-  @media (min-width:1024px){
-    .sidebar,
-    .main-content,
-    .ad-panel{
-      margin-top:16px !important;   /* 투어 페이지와 동일한 상단 여백 */
-      border-top-left-radius:10px !important;
-      border-top-right-radius:10px !important;
-      overflow:hidden;
-    }
-    .ad-panel{ top:16px !important; } /* sticky인 경우도 같은 위치에서 시작 */
-  }
-</style><style data-origin="qna-btn-style">
+</style>
+<style data-origin="qna-btn-style">
   .sidebar{ padding-top: 20px !important; }
   .sidebar a:first-child{ margin-top: 6px !important; }
 </style><style data-origin="qna-btn-style">
   .container{ box-sizing:border-box; }
 
-  /* Wide screens: strict 3-col grid to avoid overlap */
-  @media (min-width: 901px){
-    .container{
-      display:grid !important;
-      grid-template-columns: 220px minmax(0,1fr) 274px !important;
-      column-gap:15px !important;
-      overflow: clip;
-    }
+
     .sidebar{ grid-column:1; min-width:220px!important; max-width:220px!important; }
     .main-content{ grid-column:2; min-width:0!important; margin:0!important; }
     .right-rail, .ad-panel{ grid-column:3; }
@@ -1184,80 +1124,146 @@ html, body {
 #main,.main-content,main,.content{display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;margin:0!important;box-sizing:border-box!important}
 .container,.layout,.wrap,.page,.content,.main-content{grid-template-columns:unset!important}
 }
-</style><style id="donor-adpanel-css">
-/* donor right-rail css */
+</style>
 
-:root{ --top-pad: 30px; --gap: 15px; }
-.container{ padding: var(--top-pad) var(--gap) !important; }
-.sidebar{ padding-top: 0 !important; position: sticky; top: var(--top-pad) !important; }
-.main-content{ margin-top: 0 !important; }
-.ad-panel{ position: sticky !important; top: var(--top-pad) !important; margin-top: 0 !important; }
+<style id="donor-adpanel-css">
+/* =========================================================
+   donor right-rail css — FINAL CENTERED STABLE VERSION
+   목적:
+   - 타이틀/패널 중앙 정렬 완전 일치
+   - 좌우 갭 균형 유지
+   - 카드/디자인/간격 유지
+   - 찌그러짐 최소화
+   ========================================================= */
 
+/* =========================
+   ROOT
+   ========================= */
+:root{
+  --top-pad: 18px;
+  --gap: 15px;
+  --ad-width: 274px;
 
+  --ad-bg: #eef7ff;
+  --ad-border: #c6ddf5;
+  --ad-title-bg: #f7f9fb;
+  --ad-title-color: #0a4599;
+}
+
+/* 스크롤 안정화 */
+html{ scrollbar-gutter: stable; }
+body{ overflow-y: scroll; }
+
+/* =========================
+   BASE LAYOUT
+   ========================= */
+.container{
+  padding-top: var(--top-pad) !important;
+  padding-left: var(--gap) !important;
+  padding-right: var(--gap) !important;
+}
+
+/* =========================
+   SIDEBAR / MAIN
+   ========================= */
+.sidebar{
+  position: sticky;
+  top: var(--top-pad);
+  padding-top: 0 !important;
+}
+
+.main-content{
+  margin-top: 0 !important;
+  min-width: 0 !important;
+}
+
+/* =========================
+   RIGHT PANEL (CORE)
+   ========================= */
+.ad-panel{
+  /* 중앙 정렬 핵심 */
+  width: var(--ad-width) !important;
+  max-width: var(--ad-width) !important;
+  justify-self: center !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+
+  position: relative !important;
+  top: auto !important;
+
+  background: var(--ad-bg) !important;
+  border: 1px solid var(--ad-border) !important;
+  border-radius: 12px !important;
+  padding: 12px !important;
+
+  /* 세로 안정화 */
+  max-height: calc(100dvh - var(--top-pad) - 24px) !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+
+  cursor: grab;
+}
+
+.ad-panel.dragging{
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* 스크롤바 숨김 */
+.ad-panel::-webkit-scrollbar{ width:0; height:0; }
+.ad-panel{ scrollbar-width:none !important; -ms-overflow-style:none !important; }
+
+/* =========================
+   PANEL TITLE
+   ========================= */
 .ad-panel .ad-stamp{
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: 3;
+
   display: flex;
   align-items: center;
   justify-content: center;
+
   width: 100%;
-  padding: 10px 4px;
+  padding: 8px 4px;
+  margin-bottom: 10px;
+
   font-weight: 900;
   font-size: 16px;
   letter-spacing: .3px;
-  color: #0a4599;
-  background: #f7f9fb;
+  color: var(--ad-title-color);
+
+  background: var(--ad-title-bg);
   border-bottom: 1px solid #d6dce0;
   text-align: center;
 }
-.ad-panel .ad-stamp .emoji{ margin: 0 6px; }
 
-
-.ad-panel{
-  background: #eef7ff !important;
-  border: 1px solid #c6ddf5 !important;
-  border-radius: 12px !important;
-  padding: 12px !important;
-  max-height: 1560px !important;
-  overflow-y: auto !important;
-  position: sticky !important;
-  top: var(--top-pad, 30px) !important;
+.ad-panel .ad-stamp .emoji{
+  margin: 0 6px;
 }
 
-/* hide scrollbars */
-.ad-panel::-webkit-scrollbar{ display:none !important; }
-.ad-panel{ scrollbar-width: none !important; -ms-overflow-style: none !important; }
-
-.ad-stamp{
-  position: sticky !important;
-  top: var(--top-pad, 30px) !important;
-  z-index: 2 !important;
-  width: 100%;
-  text-align: center;
-  font-weight: 900;
-  font-size: 15px;
-  color: #0a4599;
-  background: #eef7ff !important; /* blend with panel background */
-  border-bottom: 1px solid #c6ddf5;
-  padding: 8px 0;
-}
-
-/* Card boxes inside panel */
-.ad-box{
+/* =========================
+   AD CARDS
+   ========================= */
+.ad-panel .ad-box{
   height:150px !important;
   min-height:150px !important;
   max-height:150px !important;
-  margin-bottom: 5px !important;
-  background: #ffffff !important;
-  border-radius: 8px !important;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+
+  margin-bottom: 10px !important;
+
+  background:#fff !important;
+  border-radius:8px !important;
+  box-shadow:0 1px 3px rgba(0,0,0,.1) !important;
+
   display:flex !important;
   align-items:center !important;
   justify-content:center !important;
   overflow:hidden !important;
 }
-.ad-box > a{
+
+.ad-panel .ad-box > a{
   width:100% !important;
   height:100% !important;
   display:flex !important;
@@ -1265,129 +1271,65 @@ html, body {
   justify-content:center !important;
 }
 
-
-:root{ --top-pad: 18px !important; } /* pull everything up a bit */
-
-.container{ padding-top: var(--top-pad) !important; } /* align container start */
-
-.ad-panel{
-  position: sticky !important;
-  top: var(--top-pad) !important;
-  padding-top: 8px !important;   /* space above first card area */
-  overflow-y: auto !important;
+.ad-panel .ad-box:first-of-type{
+  margin-top:4px !important;
 }
 
-/* Title inside panel stays pinned to the top of the panel's scroll area */
-.ad-panel .ad-stamp{
-  position: sticky !important;
-  top: 0 !important;
-  margin-bottom: 5px !important; /* gap under the title so first card never clips */
-  padding: 6px 0 !important;
+/* =========================
+   DESKTOP GRID
+   ========================= */
+@media (min-width: 901px){
+  .container{
+    display: grid !important;
+    grid-template-columns: 220px 1fr var(--ad-width) !important;
+    column-gap: var(--gap) !important;
+  }
+
+  .sidebar,
+  .main-content,
+  .ad-panel{
+    margin: 0 !important;
+  }
 }
 
-/* Safety: if any legacy styles compress the first card, push a tiny gap */
-.ad-panel .ad-box:first-of-type{ margin-top: 4px !important; }
-
-
-:root{ --top-pad: 18px !important; }
-
-/* Title behavior */
-.ad-panel .ad-stamp{
-  position: sticky !important;
-  top: 0 !important;                 /* sticky inside the panel; keeps its own space */
-  z-index: 2 !important;
-  padding: 6px 0 !important;
-  margin: 0 !important;
+/* =========================
+   MISC / ROW UI
+   ========================= */
+.row, .card-row, .row-viewport, .row-scroller, .row-grid{
+  position: relative;
 }
 
-/* Spacer directly under the title so first card never hides behind it */
-.ad-panel .ad-offset{ height: 12px !important; }
-
-/* Panel scroller height tuned for 10 full + ~40% of 11th (with ~10px gaps) */
-.ad-panel{
-  max-height: 1660px !important;
-  overflow-y: auto !important;
-  -ms-overflow-style: none !important;
-  scrollbar-width: none !important;
-}
-.ad-panel::-webkit-scrollbar{ display:none !important; }
-
-/* Card sizing safety */
-.ad-panel .ad-box{
-  height:150px !important;
-  min-height:150px !important;
-  max-height:150px !important;
-  margin-bottom:10px !important;
+.row-arrow, .scroll-left, .scroll-right,
+.row-left, .row-right, [data-arrow], .arrow{
+  position:absolute;
+  top:50%;
+  transform:translateY(-50%);
+  width:42px;
+  height:42px;
+  border-radius:50%;
+  background:rgba(0,0,0,.35);
+  color:#fff;
+  z-index:10000;
+  display:flex;
+  align-items:center;
+  justify-content:center;
 }
 
+.row-arrow.left, .scroll-left, .row-left{ left:8px; }
+.row-arrow.right, .scroll-right, .row-right{ right:8px; }
 
-/* === Stabilizer v3: restore row scroll arrows above all UI === */
-.row, .card-row, .row-viewport, .row-scroller, .row-grid { position: relative; }
+.ad-panel, .right-pane, .sidebar, .left-pane{ z-index:1; }
 
-/* common arrow selectors */
-.row-arrow, .scroll-left, .scroll-right, .row-left, .row-right, [data-arrow], .arrow {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 42px; height: 42px;
-  display: flex; align-items: center; justify-content: center;
-  border-radius: 50%;
-  background: rgba(0,0,0,0.35);
-  color: #fff;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-  z-index: 10000;              /* bring to front */
-  pointer-events: auto;
-  user-select: none;
-}
-
-/* left/right positioning fallbacks */
-.row-arrow.left, .scroll-left, .row-left { left: 8px; }
-.row-arrow.right, .scroll-right, .row-right { right: 8px; }
-
-/* ensure higher than ad/sidebar panels if they overlap */
-.ad-panel, .right-pane, .sidebar, .left-pane { z-index: 1; }
-
-
-/* === Q&A sidebar link color only (no other changes) === */
-:root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
-.sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
-  display:block;
-  background: var(--qa-brand);
-  color:#fff !important;
-  border:1px solid var(--qa-brand-border);
-  border-radius:10px;
-}
-.sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
-
-/* @ADPANEL: natural clipping + hidden scrollbar + drag scroll */
-.ad-panel{ overflow-y:auto; -webkit-overflow-scrolling:touch; cursor:grab; }
-.ad-panel.dragging{ cursor:grabbing; user-select:none; }
-.ad-panel::-webkit-scrollbar{ width:0; height:0; }
-.ad-panel{ scrollbar-width:none; -ms-overflow-style:none; }
-/* Ensure any arrow UI inside ad-panel remains hidden */
-.ad-panel .rscroll{ z-index:999 !important;  display:none !important; }
-
-
-
-/* visually hide targeted menu items without affecting layout calc */
 .is-hidden-lit{ display:none !important; }
+.ad-panel .rscroll{ display:none !important; }
+</style>
 
-/* @ADPANEL: natural clipping + hidden scrollbar + drag scroll */
-.ad-panel{ overflow-y:auto; -webkit-overflow-scrolling:touch; cursor:grab; }
-.ad-panel.dragging{ cursor:grabbing; user-select:none; }
-.ad-panel::-webkit-scrollbar{ width:0; height:0; }
-.ad-panel{ scrollbar-width:none; -ms-overflow-style:none; }
-/* Ensure any arrow UI inside ad-panel remains hidden */
-.ad-panel .rscroll{ z-index:999 !important;  display:none !important; }
 
-</style><script id="donor-adpanel-js">
+<script id="donor-adpanel-js">
 (function(){
   const panel = document.querySelector('.ad-panel');
   if(!panel) return;
 
-  // Ensure any earlier height locks are cleared (idempotent, safe)
-  panel.style.removeProperty('height');
-  panel.style.removeProperty('max-height');
 
   // Keep scroll within panel (prevents page scroll on wheel over panel)
   panel.addEventListener('wheel', (e)=>{
@@ -1420,50 +1362,7 @@ html, body {
   panel.setAttribute('tabindex', panel.getAttribute('tabindex') || '0');
 })();
 </script>
-<style id="sn-rail-size-override-20251011">
-#rightRail, .right-rail { width:274px !important; min-width:274px !important; max-width:274px !important; }
-#rightRail .ad-panel { width:100% !important; height:100vh !important; }
-#rightRail .ad-box, #rightRail .ad-card { height: 144px !important; line-height: 144px !important; }
-#rightRail .ad-box + .ad-box, #rightRail .ad-card + .ad-card { margin-top:10px !important; }
-</style>
-<style id="EDGE_LOCK_V1">
-/* === EDGE LOCK V1 — single source of truth === */
-html, body { margin: 0 !important; }
-body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
 
-/* Left sidebar: flush to window left */
-.sidebar, .left-sidebar, #leftSidebar {
-  padding-left: 0 !important;
-  margin-left: -10px !important;
-}
-
-/* Right rail/panel: flush to window right (body right = 0 already) */
-.ad-panel, .right-panel, .right-rail, #rightRail, .right-ad-panel, .ad-offset {
-  padding-right: 0 !important;
-  margin-right: 0 !important;
-  padding-inline-end: 0 !important;
-  margin-inline-end: 0 !important;
-  box-sizing: border-box !important;
-}
-
-/* Remove residual right spacing from children */
-.ad-panel *, .right-panel *, .right-rail *, #rightRail * {
-  padding-right: 0 !important;
-  margin-right: 0 !important;
-  padding-inline-end: 0 !important;
-  margin-inline-end: 0 !important;
-}
-
-/* Kill theme variables and layout gaps that cause right space */
-:root { --ad-gap-right: 0 !important; }
-.page, .wrap, .wrapper, .container, .content, .main, .layout, .grid, .columns, .row, .flex, .flex-row {
-  column-gap: 0 !important; gap: 0 !important;
-  padding-right: 0 !important; margin-right: 0 !important;
-}
-
-/* Visual safety */
-:where(.right-rail, #rightRail, .right-panel, .ad-panel){ align-self: stretch; }
-</style>
 <style id="BC_TILE_LOCK_V1">
 /* --- Blockchain pills: narrow glyphs + lighter weight, no underline --- */
 
@@ -1693,7 +1592,7 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
   #rpMobileBox{
     display:block !important;
     width:100%; max-width:100%;
-    margin: 0px 0 0 0;           /* 섹션 간격 수준으로 축소 */
+    margin: 0px 0 0 0;           /* Section 간격 수준으로 축소 */
     padding: 0 12px 12px 0px;
     box-sizing: border-box;
     clear: both;
@@ -1720,7 +1619,7 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
 }
 </style>
 <style id="hide-row-arrows-mobile-1100">
-  /* 모바일·세로태블릿(<=1100px): 섹션 좌/우 스크롤 버튼 숨김 */
+  /* 모바일·세로태블릿(<=1100px): Section 좌/우 스크롤 버튼 숨김 */
   @media (max-width:1023px){
     .rscroll,
     .row-arrow,
@@ -2119,9 +2018,9 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
     }
   }
 
-  /* 2) 모바일 가로(landscape): 메인 9섹션 + 우측 패널 카드 크기 통일 */
+  /* 2) 모바일 가로(landscape): 메인 9Section + 우측 패널 카드 크기 통일 */
   @media (max-width: 1023px) and (orientation: landscape){
-    /* 메인 9섹션 (row-grid / thumb-grid 공통) */
+    /* 메인 9Section (row-grid / thumb-grid 공통) */
     .row-grid,
     .thumb-grid{
       --card-min: 240px;
@@ -2136,6 +2035,18 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
     }
   }
 </style>
+<style id="qna-brand-only">
+/* === Q&A sidebar link color only (no other changes) === */
+:root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
+.sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
+  display:block;
+  background: var(--qa-brand);
+  color:#fff !important;
+  border:1px solid var(--qa-brand-border);
+  border-radius:10px;
+}
+.sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
+</style>
 <link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
 </head>
 <body>
@@ -2147,9 +2058,9 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
 <a href="distributionhub.html">🏭 Distribution Hub</a>
 <a href="socialnetwork.html">📢 Social Network</a>
 <a href="mediahub.html">🎬 Media Hub</a>
-<a href="tour.html">🧳 Travel &amp; Tourism</a>
-<a href="literature_academic" style="display:none">📚 Literature &amp; Academic Exchange</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A / Contact</a></div>
+<a href="tour.html">🧳 Travel · Tourism · Accommodation</a>
+<a href="literature_academic">📚 Literature & Academic Exchange</a>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A Support</a></div>
 <div class="main-content">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
@@ -2215,7 +2126,7 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "No Q&A has been registered yet";
+  content: "There are no Q&A entries yet.";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -2232,7 +2143,7 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "No Q&A has been registered yet";
+  content: "There are no Q&A entries yet.";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -2243,8 +2154,8 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
   font-size: 0.95rem;
 }
 </style></div><div class="right-rail" id="rightRail">
-<h3 class="ad-headline" style="display:block; margin:0 auto; text-align:center;transform:translateX(12px); width:clamp(230px,100%,274px); margin:0 0 10px; text-align:center; line-height:1; height:1em; white-space:nowrap;">
-  💎 Featured Items 💎
+<h3 class="ad-headline" style="display:block; margin:0 auto; text-align:center; width:clamp(230px,100%,274px); margin:0 0 10px; text-align:center; line-height:1; height:1em; white-space:nowrap;">
+  💎 Popular Items 💎
 </h3>
 <div class="ad-panel"><div class="ad-offset"></div>
 <div class="thumb-grid thumb-scroller" data-psom-key="socialnetwork"></div>
@@ -2436,7 +2347,7 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
         var a = links[i];
         var txt = (a.textContent || '').trim();
         var href = (a.getAttribute('href') || '').trim();
-        if (href.includes('literature_academic') || (txt.includes('문학') && txt.includes('학술'))) {
+        if (href.includes('literature_academic') || (txt.includes('Literature') && txt.includes('Academic'))) {
           a.setAttribute('aria-hidden','true');
           a.setAttribute('tabindex','-1');
           a.classList.add('is-hidden-lit');
@@ -2492,9 +2403,10 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
   window.addEventListener("popstate", run);
 })();
 </script><script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.socialnetwork.json" data-interval="20000" src="/assets/js/hero.rotator.js"></script>
+
 <footer>
     IGDC Global Hub © 2025 | International General Distribution Company<br/>
-    50, Godeok Galpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea<br/>
+    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, <br/>
 </footer>
 <script>
 // Ensures the Q&A popup opens when clicking the sidebar link,
@@ -2522,7 +2434,7 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">All features will be enabled after connecting the saving settings (Supabase URL/key).</div>';
+        body.innerHTML = '<div class="igdc-qa-note">Full functionality will be enabled after connecting the save settings (Supabase URL/key).</div>';
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
         document.body.appendChild(m);
@@ -2561,7 +2473,7 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase credentials/library not configured: UI is visible but saving is disabled.");
+      console.warn("[Q&A] Supabase credentials/library not configured: the UI is shown, but saving is disabled.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -2588,18 +2500,18 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
     const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","닫기");
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
     const lQ = el("label"); lQ.textContent="Question";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Type your question here...";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Type your question...";
     const lA = el("label"); lA.textContent="Answer";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Please wait a moment while we prepare an answer.";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Please wait a moment — we will respond shortly.";
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Submit";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Simple questions are answered instantly by AI. Technical, error, or operations issues are automatically forwarded to the admin Q&A.";
+    const note = el("div","igdc-qa-note"); note.textContent="Note: Simple questions may be answered instantly by AI. Technical/errors/operations topics are automatically forwarded to Admin Q&A.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -2670,10 +2582,10 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (대기중)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "Admin request":"General";
+        const tag = el("span"); tag.textContent = row.is_admin? "Request Admin Review":"General";
         const actions = el("div","igdc-qa-thread-actions");
         const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
         if(canDelete){
@@ -2681,7 +2593,7 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("Delete failed (permission/policy)"); return; }
+            if(error){ alert("Delete 실패(권한/정책)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -2704,9 +2616,9 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="Questions about operations will be reviewed and answered by an admin.";
-          else if(/가격|비용|요금/.test(text)) answer="For price or fee information, please refer to the guidance on this page. Leave a message if you have any additional questions.";
-          else answer="Thank you for your inquiry. We will review it shortly and assist you.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="Operational inquiries will be reviewed by an administrator and answered.";
+          else if(/가격|비용|요금/.test(text)) answer="For pricing information, please refer to the guidance on this page. Feel free to leave a follow-up question.";
+          else answer="Thank you for your question. We will review it and assist you shortly.";
         }
       }
       return { technical, answer };
@@ -2720,7 +2632,7 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Saving settings (Supabase URL/key) are not connected yet, so server-side saving is disabled. When you deploy to the web, set SUPER_VARSAR.url/anonKey to enable automatic connection.");
+        alert("Save settings (Supabase URL/key) are not connected yet, so server-side saving is currently disabled. When deploying to the web, set SUPER_VARSAR.url/anonKey to enable automatic connection.");
         return;
       }
       const record = {
@@ -2730,7 +2642,7 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("등록 실패"); return; }
+      if(error){ alert("Submission failed"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -2753,7 +2665,7 @@ body { padding: 0 0 10px 10px !important; box-sizing: border-box !important; }
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] Auth initialization failed:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -2774,12 +2686,12 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       h.appendChild(t); h.appendChild(x);
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
-      body.innerHTML = '<div class="igdc-qa-note">All features will be enabled after connecting the saving settings (Supabase URL/key).</div>';
+      body.innerHTML = '<div class="igdc-qa-note">Full functionality will be enabled after connecting the save settings (Supabase URL/key).</div>';
 
-      // ensure the "Primary email" is shown only inside the modal
+      // ensure the "Primary Email" is shown only inside the modal
       var ce = document.createElement('p');
       ce.className = 'contact-email';
-      ce.innerHTML = 'Primary email: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+      ce.innerHTML = 'Primary Email: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
       body.appendChild(ce);
 
       p.appendChild(h); p.appendChild(body);
@@ -2799,7 +2711,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       if(body && !body.querySelector('.contact-email')){
         var ce = document.createElement('p');
         ce.className = 'contact-email';
-        ce.innerHTML = 'Primary email: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+        ce.innerHTML = 'Primary Email: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
         body.appendChild(ce);
       }
     }
@@ -2814,12 +2726,12 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
           if(parent){
             parent.removeChild(a);
             var html = parent.innerHTML;
-            html = html.replace(/Primary\s*email\s*:\s*/g, '');
+            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
             html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
             parent.innerHTML = html;
           }
         });
-        f.innerHTML = f.innerHTML.replace(/Primary\s*email\s*:[^<]*<br\s*\/?>?/gi, '');
+        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
       });
     }catch(e){}
   }
@@ -2839,7 +2751,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   if (window.__IGDC_QA_EMAIL_ENSURE__) return;
   window.__IGDC_QA_EMAIL_ENSURE__ = true;
 
-  var CONTACT_HTML = 'Primary email: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+  var CONTACT_HTML = 'Primary Email: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
 
   function stripFooterEmail(){
     try{
@@ -2851,13 +2763,13 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
           if(parent){
             parent.removeChild(a);
             var html = parent.innerHTML;
-            html = html.replace(/Primary\s*email\s*:\s*/g, '');
+            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
             html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
             parent.innerHTML = html;
           }
         });
-        // Remove any plain-text "Primary email: ..." remnants
-        f.innerHTML = f.innerHTML.replace(/Primary\s*email\s*:[^<]*<br\s*\/?>?/gi, '');
+        // Remove any plain-text "Primary Email: ..." remnants
+        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
       });
     }catch(e){}
   }
@@ -2876,7 +2788,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
       var note = document.createElement('div'); note.className='igdc-qa-note';
-      note.textContent = 'All features will be enabled after connecting the saving settings (Supabase URL/key).';
+      note.textContent = 'Full functionality will be enabled after connecting the save settings (Supabase URL/key).';
       body.appendChild(note);
 
       // (1) Inject the contact email in creation path
@@ -3286,11 +3198,19 @@ function positionAllLeftArrows(){
     enhanceFeed();
     enhanceAdPanel();
   }
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', onReady, {once:true});
-  } else { onReady(); }
-  window.addEventListener('resize', onReady);
-})();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', onReady, { once: true });
+} else {
+  onReady();
+}
+
+/* resize에서는 절대 onReady() 호출하지 않음 */
+window.addEventListener('resize', () => {
+  if (typeof enhanceFeed === 'function') {
+    enhanceFeed();
+  }
+});
+
 </script>
 <!-- ==== BEGIN: Influencer lanes + product/detail-ready cards (minimal, non-intrusive) ==== -->
 <section aria-label="Influencer Lanes" id="influencer-sections"></section>
@@ -3306,8 +3226,8 @@ function positionAllLeftArrows(){
 </article>
 </template>
 <!-- Fullscreen viewer (mobile portrait: single card full) -->
-<div aria-hidden="true" aria-label="콘텐츠 뷰어" class="infv infv-hidden" id="inf-viewer" role="dialog" tabindex="-1">
-<button aria-label="닫기" class="infv-close">✕</button>
+<div aria-hidden="true" aria-label="Content Viewer" class="infv infv-hidden" id="inf-viewer" role="dialog" tabindex="-1">
+<button aria-label="Close" class="infv-close">✕</button>
 <div class="infv-stage">
 <div class="infv-track"></div>
 </div>
@@ -3573,7 +3493,7 @@ function positionAllLeftArrows(){
       flatList = [];
       flatIndexMap.clear();
       sections.forEach((sec, sidx)=>{
-        const {wrap, grid} = sectionEl(sec.title || sec.name || ('섹션 '+(sidx+1)));
+        const {wrap, grid} = sectionEl(sec.title || sec.name || ('Section '+(sidx+1)));
         const items = Array.isArray(sec.items) ? sec.items : [];
         // Initial slice only; further batches can be appended by external scroll handler if needed
         const initial = items.slice(0, INITIAL);
@@ -3634,8 +3554,8 @@ function positionAllLeftArrows(){
   const ready = (fn)=> (document.readyState === 'loading') ? document.addEventListener('DOMContentLoaded', fn, {once:true}) : fn();
   const qs = (sel)=> document.querySelector(sel);
   function isMobileLandscape(){
-    return matchMedia('(orientation: landscape) and (max-height: 600px)').matches;
-  }
+     return matchMedia('(max-width:1023px) and (orientation: landscape)').matches;
+}
   function ensureHScroll(container){
     if(!container) return;
     // wrap children into rp-hscroll if not already
@@ -4031,35 +3951,7 @@ function positionAllLeftArrows(){
   window.__PV_DECORATE__ = function(){ decorate(document); };
 })();
 </script>
-<script id="sn-rightpanel-ensure100-v2">
-(function(){
-  var W=window, D=document;
-  function ready(fn){ if(D.readyState==='loading') D.addEventListener('DOMContentLoaded', fn, {once:true}); else fn(); }
-  function ensure100(){
-    var grid = D.querySelector('#rpMobileGrid');
-    if(!grid) return;
-    if(grid.children.length === 0){ setTimeout(ensure100, 200); return; }
-    var base = Array.prototype.slice.call(grid.children).filter(Boolean);
-    if(base.length === 0) return;
-    var i = 0;
-    while(grid.children.length < 100){
-      var src = base[i % base.length];
-      var n = src.cloneNode(true);
-      if(n.removeAttribute) n.removeAttribute('id');
-      Array.prototype.forEach.call(n.querySelectorAll('[id]'), function(el){ el.removeAttribute('id'); });
-      grid.appendChild(n);
-      i++; if(i>300) break;
-    }
-  }
-  function schedule(){
-    [60, 240, 600, 1200].forEach(function(t){ setTimeout(ensure100, t); });
-    W.addEventListener('load', ensure100, {once:true});
-    W.addEventListener('orientationchange', ensure100, {passive:true});
-    W.addEventListener('resize', ensure100, {passive:true});
-  }
-  ready(schedule);
-})();
-</script>
+
 <style id="sn-desktop-antisquish-v2">
 @media (min-width: 1024px) {
   .thumb-card img, .thumb-card video, .card img, .card video {
@@ -4121,7 +4013,7 @@ function positionAllLeftArrows(){
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
                   + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>결제 QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">닫기</button></div>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -4155,11 +4047,11 @@ function positionAllLeftArrows(){
   async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
     await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
-    ta.value=''; alert('전송되었습니다.');
+    ta.value=''; alert('Sent successfully.');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('전송 실패'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('Send failed'));});
   const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('전송 실패'));});
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('Send failed'));});
 })();
 </script>
 <style id="sn-container-minheight-fix-20251124">
@@ -4175,6 +4067,7 @@ footer{
   margin-bottom: 0 !important;
 }
 </style>
+
 <script id="sn-iframe-height-bridge-20251124">
 // IGDC: report socialnetwork page height to parent index for iframe resizing
 (function(){
@@ -4227,7 +4120,7 @@ footer{
 <script defer="" src="/assets/js/auto-embed.instagram.js"></script>
 <script defer="" src="/assets/js/placeholder-sweeper.js"></script>
 <script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
-<script defer src="/assets/js/socialnetwork-automap.v1.js"></script>
+
 
 </body>
 </html>
