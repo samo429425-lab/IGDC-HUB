@@ -1188,154 +1188,182 @@ html, body {
 
 <style id="donor-adpanel-css">
 /* =========================================================
-   RIGHT PANEL – FINAL REBUILD (FULL REPLACEMENT)
+   donor right-rail css — FINAL STABLE VERSION
    목적:
-   - 우측 패널 전용 독립 레이아웃
-   - 카드 100개 이상 대응
-   - 내부 스크롤만 발생
-   - 스크롤바 숨김
-   - 타이틀 고정
-   - 중앙 정렬
-   - wrapper / container 영향 제거
+   - 메인 ↔ 우측 패널 ↔ 윈도우 우측 갭 완전 동일(15px)
+   - 화면 높이/스크롤 변화에도 레이아웃 흔들림 제거
+   - 12개 다국어 파일 공통 사용 가능
    ========================================================= */
 
-/* ===============================
-   VARIABLES
-   =============================== */
-:root {
-  --rp-gap: 15px;
-  --rp-width: 280px;
-  --rp-top: 120px;
-
-  --rp-bg: #eef7ff;
-  --rp-border: #c6ddf5;
-
-  --rp-title-bg: #f7f9fb;
-  --rp-title-color: #0a4599;
+/* =========================
+   ROOT VARIABLES
+   ========================= */
+:root{
+  --top-pad: 18px;     /* 상단 기준 */
+  --gap: 15px;         /* 모든 수평 갭의 유일 기준값 */
+  --ad-bg: #eef7ff;
+  --ad-border: #c6ddf5;
+  --ad-title-bg: #f7f9fb;
+  --ad-title-color: #0a4599;
 }
 
-/* ===============================
-   OUTER PANEL (viewport-based)
-   =============================== */
-.right-panel {
-  position: fixed;
-  top: var(--rp-top);
-  right: var(--rp-gap);
+/* 스크롤바 생성/소멸로 인한 폭 흔들림 방지 */
+html{ scrollbar-gutter: stable; }
+body{ overflow-y: scroll; }
 
-  width: var(--rp-width);
-  height: calc(100vh - var(--rp-top) - 20px);
+/* =========================
+   BASE LAYOUT
+   ========================= */
+.container{
+  padding-top: var(--top-pad) !important;
+  padding-left: var(--gap) !important;
+  padding-right: var(--gap) !important;
+}
+
+/* =========================
+   SIDEBAR / MAIN
+   ========================= */
+.sidebar{
+  position: sticky;
+  top: var(--top-pad) !important;
+  padding-top: 0 !important;
+}
+
+.main-content{
+  margin-top: 0 !important;
+  min-width: 0 !important;
+}
+
+/* =========================
+   RIGHT PANEL (AD)
+   ========================= */
+.ad-panel{
+  position: sticky !important;
+  top: var(--top-pad) !important;
+
+  background: var(--ad-bg) !important;
+  border: 1px solid var(--ad-border) !important;
+  border-radius: 12px !important;
+  padding: 12px !important;
+
+  max-height: 1660px !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+
+  margin: 0 !important;
+  cursor: grab;
+}
+.ad-panel.dragging{
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* scrollbar hidden (visual only) */
+.ad-panel::-webkit-scrollbar{ width:0; height:0; }
+.ad-panel{ scrollbar-width:none !important; -ms-overflow-style:none !important; }
+
+/* =========================
+   PANEL TITLE
+   ========================= */
+.ad-panel .ad-stamp{
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 2 !important;
 
   display: flex;
+  align-items: center;
   justify-content: center;
 
-  z-index: 999;
-  pointer-events: auto;
-}
-
-/* ===============================
-   INNER PANEL WRAPPER
-   =============================== */
-.right-panel-inner {
-  width: 100%;
-  max-width: var(--rp-width);
-
-  display: flex;
-  flex-direction: column;
-
-  background: var(--rp-bg);
-  border: 1px solid var(--rp-border);
-  border-radius: 12px;
-
-  overflow: hidden;
-}
-
-/* ===============================
-   TITLE BAR
-   =============================== */
-.right-panel-title {
-  flex: 0 0 auto;
-
-  position: sticky;
-  top: 0;
-
-  padding: 10px 6px;
-  text-align: center;
+  padding: 8px 4px;
+  margin-bottom: 10px;
 
   font-weight: 900;
   font-size: 16px;
-  letter-spacing: 0.3px;
+  letter-spacing: .3px;
+  color: var(--ad-title-color);
 
-  color: var(--rp-title-color);
-  background: var(--rp-title-bg);
-
+  background: var(--ad-title-bg);
   border-bottom: 1px solid #d6dce0;
-  z-index: 2;
+  text-align: center;
 }
+.ad-panel .ad-stamp .emoji{ margin: 0 6px; }
 
-/* ===============================
-   SCROLL AREA
-   =============================== */
-.right-panel-scroll {
-  flex: 1 1 auto;
+/* =========================
+   AD CARDS
+   ========================= */
+.ad-panel .ad-box{
+  height:150px !important;
+  min-height:150px !important;
+  max-height:150px !important;
 
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  margin-bottom: 10px !important;
 
-  padding: 10px;
+  background:#fff !important;
+  border-radius:8px !important;
+  box-shadow:0 1px 3px rgba(0,0,0,.1) !important;
 
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  overflow:hidden !important;
 }
-
-/* hide scrollbar */
-.right-panel-scroll::-webkit-scrollbar {
-  width: 0;
-  height: 0;
+.ad-panel .ad-box > a{
+  width:100% !important;
+  height:100% !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
 }
-.right-panel-scroll {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
+.ad-panel .ad-box:first-of-type{ margin-top:4px !important; }
 
-/* ===============================
-   THUMBNAIL CARD DESIGN
-   =============================== */
-.ad-box {
-  width: 100%;
-  height: 150px;
-  margin-bottom: 10px;
+/* =========================
+   DESKTOP LAYOUT LOCK
+   핵심: 모든 수평 갭 = var(--gap)
+   ========================= */
+@media (min-width: 901px){
+  .container{
+    display: grid !important;
+    grid-template-columns: 220px 1fr 274px !important;
+    column-gap: var(--gap) !important;
+  }
 
-  background: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,.12);
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  overflow: hidden;
-}
-
-.ad-box a {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* ===============================
-   MOBILE FALLBACK
-   =============================== */
-@media (max-width: 900px) {
-  .right-panel {
-    position: static;
-    width: 100%;
-    height: auto;
-    margin-top: 16px;
+  .sidebar,
+  .main-content,
+  .ad-panel{
+    margin: 0 !important;
   }
 }
+
+/* =========================
+   ROW ARROWS / MISC
+   ========================= */
+.row, .card-row, .row-viewport, .row-scroller, .row-grid{
+  position: relative;
+}
+
+.row-arrow, .scroll-left, .scroll-right, .row-left, .row-right, [data-arrow], .arrow{
+  position:absolute;
+  top:50%;
+  transform:translateY(-50%);
+  width:42px;
+  height:42px;
+  border-radius:50%;
+  background:rgba(0,0,0,.35);
+  color:#fff;
+  z-index:10000;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.row-arrow.left, .scroll-left, .row-left{ left:8px; }
+.row-arrow.right, .scroll-right, .row-right{ right:8px; }
+
+.ad-panel, .right-pane, .sidebar, .left-pane{ z-index:1; }
+
+.is-hidden-lit{ display:none !important; }
+.ad-panel .rscroll{ display:none !important; }
+
 </style>
 
 <script id="donor-adpanel-js">
