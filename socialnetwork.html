@@ -204,21 +204,6 @@
 /* Ensure any arrow UI inside ad-panel remains hidden */
 .ad-panel .rscroll{ z-index:999 !important;  display:none !important; }
 
-/* === @ADPANEL-INDEPENDENT (append-only, structure-safe) === */
-.main-content, .ad-panel{ min-height: 0; } /* allow internal overflow in flex row */
-
-.ad-panel{
-  position: sticky !important;
-  top: 16px !important;           /* free within page; not locked to full viewport */
-  align-self: flex-start !important;
-  max-height: calc(100dvh - 32px) !important; /* natural clipping; allows half-card at edges */
-  overflow-y: auto !important;    /* internal scroll */
-  -webkit-overflow-scrolling: touch !important;
-  overscroll-behavior: contain !important;
-  cursor: grab;
-  scrollbar-width: none !important;
-}
-.ad-panel::-webkit-scrollbar{ width:0 !important; height:0 !important; }
 
 /* Do NOT alter card sizing */
 .ad-panel .ad-box{ /* unchanged sizing; just ensure snap is off so partial cards show */
@@ -597,9 +582,291 @@ html, body {
 /* Ensure any arrow UI inside ad-panel remains hidden */
 .ad-panel .rscroll{ z-index:999 !important;  display:none !important; }
 
-</style>
+</style><style data-origin="qna-btn-style">
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background-color: #f2f2f2;
+    }
 
-<style data-origin="qna-btn-style">
+    .container {
+      align-items: stretch;
+      display: flex;
+      flex-direction: row;
+      min-height: 90vh;
+    }
+
+     .sidebar {
+      width: 210px;
+      background-color: #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      padding-top: 30px; /* 중간쯤 위치 조정 */
+    
+      min-width: clamp(180px, 30vw, 260px);
+      flex: 0 0 auto}
+
+    .sidebar a {
+  display: block;
+  background-color: #fff4e0;
+  color: #804000;
+  text-decoration: none;
+  padding: 10px 12px;
+  font-weight: bold;
+  font-size: 1rem;
+  border: 1px solid #f3d9b0;
+  border-radius: 8px;
+  margin: 10px 12px;
+  transition: background-color 0.3s, text-decoration 0.3s;
+}
+.sidebar a:hover {
+  background-color: #ffe5b4;
+  text-decoration: underline;
+}
+
+    .main-content {
+      flex: 1 1 auto; /* allow shrinking/growing within JS limits */
+      flex: 1;
+      background-color: #ffffff;
+      padding: 40px 30px;
+      max-width: 950px;
+      margin: 30px auto;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      text-align: center;
+    
+      min-width: 25vw}
+
+    .main-content h2 {
+      color: #004080;
+      margin-bottom: 20px;
+    }
+
+    .main-content p {
+      font-size: 1rem;
+      line-height: 1.8;
+      color: #333;
+    }
+
+    .ad-panel {
+      overflow-y: auto; 
+      width: 274px; min-width: 274px; max-width: 274px;
+      background-color: #e0e0e0;
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    
+
+/* @SAFE-PATCH: visually hide ad-panel scrollbars without layout impact */
+.ad-panel::-webkit-scrollbar{ width:0; height:0; }
+.ad-panel{ scrollbar-width: none; -ms-overflow-style: none; }
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+    .ad-box {
+      background-color: white;
+      height: 144px;
+      border: 1px solid #ccc;
+      text-align: center;
+      font-size: 0.9em;
+      color: #444;
+      cursor: pointer;
+    
+      border-radius: 12px; /* subtle rounded corners */
+      overflow: hidden;
+    }
+
+    .ad-box a {
+      text-decoration: none;
+      color: inherit;
+      display: block;
+      height: 100%;
+      line-height: 144px;
+    }
+
+    footer {
+      background-color: #004080;
+      color: white;
+      text-align: center;
+      padding: 10px 15px;
+      font-size: 0.9rem;
+    }
+  
+/* === SOCIAL THUMB GRID (additive; layout preserved) === */
+/* viewport with overlay arrows */
+.thumb-viewport{position:relative;margin-top:10px}
+.thumb-scroller{overflow-x:auto;overflow-y:hidden;scroll-behavior:smooth;padding-bottom:4px}
+.thumb-scroller::-webkit-scrollbar{height:8px}
+.thumb-scroller::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:8px}
+
+/* 6-row horizontal grid, 4 cards per line baseline */
+:root{
+  --card-min: 200px;   /* 200 * 0.7 */
+  --card-max: 260px;   /* 260 * 0.7 */
+  --pic-h: 84px;       /* 120 * 0.7 */
+  --gap: 12px;
+}
+.thumb-grid{
+  display:grid;
+  grid-auto-flow:column;
+  grid-template-rows:repeat(6,minmax(0,1fr));
+  grid-auto-columns:minmax(var(--card-min),var(--card-max));
+  gap:var(--gap);
+}
+.card{
+  border:1px solid #e6e6e6;border-radius:10px;overflow:hidden;background:#fff;
+  display:flex;flex-direction:column;text-decoration:none;color:inherit;
+  min-width:var(--card-min);max-width:var(--card-max)
+}
+.pic{
+  height:var(--pic-h);background:linear-gradient(135deg,#e8f1ff,#fdf6e8);
+  display:flex;align-items:center;justify-content:center;font-size:32px
+}
+.meta{padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.title{font-weight:700;font-size:.9rem;color:#222}
+.desc{font-size:.8rem;color:#555;min-height:32px}
+.cta{margin-top:auto;display:inline-block;text-align:center;padding:6px 8px;background:#004080;color:#fff;border-radius:8px;text-decoration:none;font-weight:700}
+
+.status{margin:14px 0 8px;font-size:.85rem;color:#666;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.chip{background:#eef5ff;color:#004080;border:1px solid #cfe2ff;padding:4px 8px;border-radius:99px;font-weight:600}
+
+/* overlay arrows (on top of cards) */
+.hscroll{
+  position:absolute;top:50%;transform:translateY(-50%);z-index:5;border:none;
+  background:rgba(0,0,0,.35);color:#fff;font-size:24px;line-height:1;
+  padding:8px 10px;border-radius:10px;cursor:pointer;cursor:default}
+
+/* Responsive optimization */
+@media (max-width:980px){ :root{ --pic-h: 84px; }  /* mobile-ish reduce to 4 rows */
+}
+@media (max-width:720px){ :root{ --pic-h: 84px; }  /* small phones */
+} 
+/* keep sidebar/ad layout intact; grid stays inside main-content and scrolls horizontally */
+
+/* viewport + overlay arrows */
+
+/* 6x5 grid, width unchanged, height reduced 30% */
+:root{ --card-min:200px; --card-max:260px; --pic-h:84px; --gap:12px; }
+
+.card{border:1px solid #e6e6e6;border-radius:10px;overflow:hidden;background:#fff;display:flex;flex-direction:column;text-decoration:none;color:inherit;min-width:var(--card-min);max-width:var(--card-max)}
+.pic{height:var(--pic-h);background:linear-gradient(135deg,#e8f1ff,#fdf6e8);display:flex;align-items:center;justify-content:center;font-size:32px}
+.meta{padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.title{font-weight:700;font-size:.9rem;color:#222}
+.desc{font-size:.8rem;color:#555;min-height:32px}
+.cta{margin-top:auto;display:inline-block;text-align:center;padding:6px 8px;background:#004080;color:#fff;border-radius:8px;text-decoration:none;font-weight:700}
+.hscroll{position:absolute;top:50%;transform:translateY(-50%);z-index:5;border:none;background:rgba(0,0,0,.35);color:#fff;font-size:24px;line-height:1;padding:8px 10px;border-radius:10px;cursor:pointer;cursor:default}
+
+/* Ensure arrows are always visible; disable via opacity/pointer-events */
+.hscroll{display:block}
+.hscroll.disabled{opacity:.35;pointer-events:none}
+
+/* === per-row horizontal scrollers (added) === */
+.rows{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.row-viewport{position:relative}
+.row-scroller{overflow-x:auto;overflow-y:hidden;scroll-behavior:smooth;padding-bottom:4px}
+.row-scroller::-webkit-scrollbar{height:8px}
+.row-scroller::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:8px}
+:root{ --card-min:200px; --card-max:260px; --pic-h:84px; --gap:12px; }
+.row-grid{display:grid;grid-auto-flow:column;grid-template-rows:repeat(1,minmax(0,1fr));grid-auto-columns:minmax(var(--card-min),var(--card-max));gap:var(--gap)}
+.rscroll{ z-index:999 !important; position:absolute;top:50%;transform:translateY(-50%);z-index:5;border:none;background:rgba(0,0,0,.35);color:#fff;font-size:24px;line-height:1;padding:8px 10px;border-radius:10px;cursor:pointer;display:block;opacity:0;}
+.rscroll.disabled{opacity:.35;pointer-events:none}
+
+/* --- Jitter-free arrow positioning --- */
+.rscroll{ z-index:999 !important;  transition: left .12s linear, right .12s linear, opacity .12s linear; will-change: left,right; }
+
+/* @ADPANEL: natural clipping + hidden scrollbar + drag scroll */
+.ad-panel{ overflow-y:auto; -webkit-overflow-scrolling:touch; cursor:grab; }
+.ad-panel.dragging{ cursor:grabbing; user-select:none; }
+.ad-panel::-webkit-scrollbar{ width:0; height:0; }
+.ad-panel{ scrollbar-width:none; -ms-overflow-style:none; }
+/* Ensure any arrow UI inside ad-panel remains hidden */
+.ad-panel .rscroll{ z-index:999 !important;  display:none !important; }
+
+/* === @ADPANEL-INDEPENDENT (append-only, structure-safe) === */
+.container{ align-items: stretch; }
+.main-content, .ad-panel{ min-height: 0; } /* allow internal overflow in flex row */
+
+.ad-panel{
+  position: sticky !important;
+  top: 16px !important;           /* free within page; not locked to full viewport */
+  align-self: flex-start !important;
+  max-height: calc(100dvh - 32px) !important; /* natural clipping; allows half-card at edges */
+  overflow-y: auto !important;    /* internal scroll */
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain !important;
+  cursor: grab;
+  scrollbar-width: none !important;
+}
+.ad-panel::-webkit-scrollbar{ width:0 !important; height:0 !important; }
+
+/* keep existing width; ensure it doesn't collapse */
+.ad-panel{ flex: 0 0 auto !important; }
+
+/* Do NOT alter card sizing */
+.ad-panel .ad-box{ /* unchanged sizing; just ensure snap is off so partial cards show */
+  scroll-snap-align: unset !important;
+}
+
+/* === AD-PANEL SIZE OVERRIDE (syntax-safe, high specificity) === */
+.container .ad-panel{
+  box-sizing: border-box !important;
+  width: clamp(220px, 28vw, 320px) !important;
+  max-width: 360px !important;
+  padding: 15px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 15px !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain !important;
+  align-self: flex-start !important;
+  position: sticky !important;
+  top: 16px !important;
+}
+.container .ad-panel::-webkit-scrollbar{ width:0 !important; height:0 !important; }
+.container .ad-panel{ scrollbar-width: none !important; -ms-overflow-style: none !important; }
+
+/* Explicit card box sizing so it doesn't collapse to a bar */
+.container .ad-panel .ad-box{
+  box-sizing: border-box !important;
+  width: 230px !important;
+  height: 120px !important;
+  line-height: 120px !important;
+  border-radius: 12px !important;
+  display: block !important;
+}
+
+/* === AD PANEL: decouple from right wall & viewport (append-only override) === */
+:root{ --ad-gap-right: 15px; }
+.ad-panel{
+  position: sticky !important;   /* not fixed to viewport */
+  top: 16px !important;          /* gentle stick within page flow */
+  right: auto !important;        /* detach from right:0 */
+  left: auto !important;
+  margin-left: auto !important;  /* push to the right in flex row */
+  margin-right: var(--ad-gap-right) !important; /* leave gap from the wall */
+  max-height: calc(100dvh - 32px) !important;  /* internal scroll space */
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain !important;
+  scrollbar-width: none !important;
+}
+.ad-panel::-webkit-scrollbar{ width:0 !important; height:0 !important; }
+ 
+/* Main content should not reserve extra right gutter anymore */
+.main-content{ margin-right: 0 !important; }
+
+/* Ensure ad-box tiles keep their intended size inside panel */
+.ad-panel .ad-box{
+  width: 230px !important;
+  min-height: 120px !important;
+  height: 120px !important;
+  border-radius: 12px !important;
+  display: block !important;
+}
+
+</style><style data-origin="qna-btn-style">
   @media (min-width:1024px){
     .container{
       display:flex;
@@ -2919,11 +3186,19 @@ function positionAllLeftArrows(){
     enhanceFeed();
     enhanceAdPanel();
   }
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', onReady, {once:true});
-  } else { onReady(); }
-  window.addEventListener('resize', onReady);
-})();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', onReady, { once: true });
+} else {
+  onReady();
+}
+
+/* resize에서는 절대 onReady() 호출하지 않음 */
+window.addEventListener('resize', () => {
+  if (typeof enhanceFeed === 'function') {
+    enhanceFeed();
+  }
+});
+
 </script>
 <!-- ==== BEGIN: Influencer lanes + product/detail-ready cards (minimal, non-intrusive) ==== -->
 <section aria-label="Influencer Lanes" id="influencer-sections"></section>
@@ -3267,8 +3542,8 @@ function positionAllLeftArrows(){
   const ready = (fn)=> (document.readyState === 'loading') ? document.addEventListener('DOMContentLoaded', fn, {once:true}) : fn();
   const qs = (sel)=> document.querySelector(sel);
   function isMobileLandscape(){
-    return matchMedia('(orientation: landscape) and (max-height: 600px)').matches;
-  }
+     return matchMedia('(max-width:1023px) and (orientation: landscape)').matches;
+}
   function ensureHScroll(container){
     if(!container) return;
     // wrap children into rp-hscroll if not already
@@ -3664,35 +3939,7 @@ function positionAllLeftArrows(){
   window.__PV_DECORATE__ = function(){ decorate(document); };
 })();
 </script>
-<script id="sn-rightpanel-ensure100-v2">
-(function(){
-  var W=window, D=document;
-  function ready(fn){ if(D.readyState==='loading') D.addEventListener('DOMContentLoaded', fn, {once:true}); else fn(); }
-  function ensure100(){
-    var grid = D.querySelector('#rpMobileGrid');
-    if(!grid) return;
-    if(grid.children.length === 0){ setTimeout(ensure100, 200); return; }
-    var base = Array.prototype.slice.call(grid.children).filter(Boolean);
-    if(base.length === 0) return;
-    var i = 0;
-    while(grid.children.length < 100){
-      var src = base[i % base.length];
-      var n = src.cloneNode(true);
-      if(n.removeAttribute) n.removeAttribute('id');
-      Array.prototype.forEach.call(n.querySelectorAll('[id]'), function(el){ el.removeAttribute('id'); });
-      grid.appendChild(n);
-      i++; if(i>300) break;
-    }
-  }
-  function schedule(){
-    [60, 240, 600, 1200].forEach(function(t){ setTimeout(ensure100, t); });
-    W.addEventListener('load', ensure100, {once:true});
-    W.addEventListener('orientationchange', ensure100, {passive:true});
-    W.addEventListener('resize', ensure100, {passive:true});
-  }
-  ready(schedule);
-})();
-</script>
+
 <style id="sn-desktop-antisquish-v2">
 @media (min-width: 1024px) {
   .thumb-card img, .thumb-card video, .card img, .card video {
@@ -3808,6 +4055,7 @@ footer{
   margin-bottom: 0 !important;
 }
 </style>
+
 <script id="sn-iframe-height-bridge-20251124">
 // IGDC: report socialnetwork page height to parent index for iframe resizing
 (function(){
