@@ -1073,20 +1073,54 @@ html, body {
 
 </style>
 <style data-origin="qna-btn-style">
-  @media (min-width:1024px){
-    .sidebar,
-    .main-content,
-    .ad-panel{
-      margin-top:16px !important;   /* 투어 페이지와 동일한 상단 여백 */
-      border-top-left-radius:10px !important;
-      border-top-right-radius:10px !important;
-      overflow:hidden;
-    }
-    .ad-panel{ top:16px !important; } /* sticky인 경우도 같은 위치에서 시작 */
-  }
-</style><style data-origin="qna-btn-style">
   .sidebar{ padding-top: 20px !important; }
   .sidebar a:first-child{ margin-top: 6px !important; }
+</style><style data-origin="qna-btn-style">
+  .container{ box-sizing:border-box; }
+
+  /* Wide screens: strict 3-col grid to avoid overlap */
+  @media (min-width: 901px){
+    .container{
+      display:grid !important;
+      grid-template-columns: 220px minmax(0,1fr) 274px !important;
+      column-gap:15px !important;
+      overflow: clip;
+    }
+    .sidebar{ grid-column:1; min-width:220px!important; max-width:220px!important; }
+    .main-content{ grid-column:2; min-width:0!important; margin:0!important; }
+    .right-rail, .ad-panel{ grid-column:3; }
+    .ad-panel{
+      position: sticky !important; top:16px !important;
+      width:274px!important; min-width:274px!important; max-width:274px!important;
+      right:auto!important; transform:none!important;
+    }
+  }
+
+  /* Mobile & narrow tablets: main takes 100%, sidebar off, ad -> drawer */
+  @media (max-width: 900px){
+    .container{ display:block!important; width:100%!important; max-width:100%!important; overflow-x:hidden!important; }
+    .sidebar{ display:none!important; }
+    .right-rail{ display:none!important; } /* host of ad-panel on desktop */
+    /* Drawer shell */
+    #ad-drawer{ position: fixed; top:0; right:-84vw; width:84vw; max-width:420px;
+                height:100vh; background:#fff; box-shadow:-2px 0 12px rgba(0,0,0,.15);
+                transition:right .25s ease; z-index:10020; overflow:auto; }
+    body.ad-open #ad-drawer{ right:0; }
+    /* Visible tab */
+    #ad-tab{ position:fixed; top:40%; right:0; transform:translateY(-50%);
+             padding:.5rem .6rem; writing-mode:vertical-rl; text-orientation:mixed;
+             background:#111; color:#fff; font-size:.9rem; letter-spacing:.04em;
+             border-top-left-radius:.5rem; border-bottom-left-radius:.5rem;
+             z-index:10021; }
+    #ad-drawer .drawer-head{ position:sticky; top:0; padding:.75rem 1rem; background:#f7f7f9;
+                              border-bottom:1px solid #e9e9ef; }
+    #ad-drawer .drawer-body{ padding: .5rem .75rem 1rem; }
+    /* Ensure main content occupies full width */
+    .main-content{ width:100%!important; max-width:100%!important; margin:0!important; }
+  }
+
+  /* Arrow focus visibility for accessibility */
+  .rscroll:focus-visible{ outline:2px solid #3b82f6; outline-offset:2px; }
 </style><style data-origin="qna-btn-style">
 @media (max-width: 900px){
   .container, .layout, .wrap, .page{
