@@ -62,18 +62,9 @@
   const computeRevenueSlots = (N)=>({min: Math.max(1, Math.floor(N/10)), max: Math.floor(N/10)*2});
 
   async function resolveSections(){
-    try{
-      const r = await fetch('/assets/data/pages.json', {cache:'no-cache'});
-      if(r.ok){ const pj = await r.json();
-        const ids = [];
-        (pj.sections||pj.rows||[]).forEach(s=>{ if(s && (s.type==='socialnetwork'||/social/.test(s.id||s.type||''))) ids.push(s.id||'socialnetwork'); });
-        const maps = ids.map(id=>({id, el: document.getElementById(id) || document.querySelector(`[data-section-id=\"${id}\"]`) || document.querySelector('.row-grid')}));
-        return maps.filter(m=>m.el);
-      }
-    }catch(e){}
-    const g = document.querySelector('.row-grid') || document.querySelector('[data-grid=\"social\"]');
-    return g? [{id:'socialnetwork', el:g}] : [];
-  }
+  const g = document.querySelector('.row-grid') || document.querySelector('[data-grid="social"]');
+  return g ? [{id:'socialnetwork', el:g}] : [];
+}
 
   const cardHTML = (c)=>{
     const lab = c.revenue? '<span class=\"sn-label-badge sn-badge-sponsored\">스폰서</span>':'';
@@ -111,11 +102,7 @@
   });
 
   async function loadFeed(){
-    const tries = [
-      '/assets/data/social_feed.json',
-      '/.netlify/functions/feed?page=socialnetwork',
-      '/assets/hero/psom.json',
-    ];
+    const tries = ['/.netlify/functions/feed?page=socialnetwork'];
     for(const u of tries){
       try{ const r = await fetch(u,{cache:'no-cache'}); if(r.ok) return await r.json(); }catch(e){}
     }

@@ -14,7 +14,14 @@
       "engine",
       "global"
     ],
-    "weight": 5
+    "weight": 5,
+    "enabled": true,
+    "order": 5,
+    "lang": [
+      "ko"
+    ],
+    "version": "1.1",
+    "updated": "2025-12-27"
   },
   {
     "id": "distribution-hub",
@@ -30,7 +37,14 @@
       "content",
       "global"
     ],
-    "weight": 4
+    "weight": 4,
+    "enabled": true,
+    "order": 4,
+    "lang": [
+      "ko"
+    ],
+    "version": "1.1",
+    "updated": "2025-12-27"
   },
   {
     "id": "media-hub",
@@ -46,7 +60,14 @@
       "audio",
       "content"
     ],
-    "weight": 4
+    "weight": 4,
+    "enabled": true,
+    "order": 4,
+    "lang": [
+      "ko"
+    ],
+    "version": "1.1",
+    "updated": "2025-12-27"
   },
   {
     "id": "literature-academic",
@@ -62,7 +83,14 @@
       "research",
       "text"
     ],
-    "weight": 4
+    "weight": 4,
+    "enabled": true,
+    "order": 4,
+    "lang": [
+      "ko"
+    ],
+    "version": "1.1",
+    "updated": "2025-12-27"
   },
   {
     "id": "social-network",
@@ -78,7 +106,14 @@
       "community",
       "connect"
     ],
-    "weight": 4
+    "weight": 4,
+    "enabled": true,
+    "order": 4,
+    "lang": [
+      "ko"
+    ],
+    "version": "1.1",
+    "updated": "2025-12-27"
   },
   {
     "id": "donation-platform",
@@ -94,6 +129,13 @@
       "blockchain",
       "wallet"
     ],
-    "weight": 3
+    "weight": 3,
+    "enabled": true,
+    "order": 3,
+    "lang": [
+      "ko"
+    ],
+    "version": "1.1",
+    "updated": "2025-12-27"
   }
 ]

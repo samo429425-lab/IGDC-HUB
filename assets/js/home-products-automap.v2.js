@@ -5,7 +5,7 @@
   const isMobile = matchMedia('(max-width:768px), (pointer:coarse)').matches;
 
   async function loadFeed(){
-    const tries=['/assets/data/products_feed.json','/.netlify/functions/feed?page=homeproducts','/assets/hero/psom.json'];
+    const tries=['/.netlify/functions/feed?page=homeproducts'];
     for(const u of tries){ try{ const r=await fetch(u,{cache:'no-cache'}); if(r.ok) return await r.json(); }catch(_){ } }
     return { sections: [] };
   }
