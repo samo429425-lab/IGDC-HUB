@@ -213,7 +213,27 @@ exports.handler = async (event) => {
   const debug = String(params.debug || "0") === "1";
 
   const snapshot = safeLoadSnapshot();
-  const baseItems = Array.isArray(snapshot.items) ? snapshot.items : [];
+  // Support BOTH snapshot.items (legacy) and snapshot.sections[].items (new)
+  const flatFromSections = (snap) => {
+    try {
+      if (!snap || !Array.isArray(snap.sections)) return [];
+      const out = [];
+      for (const sec of snap.sections) {
+        const sid = (sec && (sec.id || sec.sectionId) || '').toString();
+        const arr = Array.isArray(sec?.items) ? sec.items : (Array.isArray(sec?.cards) ? sec.cards : []);
+        for (const it of arr) {
+          if (!it) continue;
+          // annotate section id for routing/debug
+          if (!it.sectionId && sid) it.sectionId = sid;
+          out.push(it);
+        }
+      }
+      return out;
+    } catch (_) { return []; }
+  };
+
+  const baseItems = (Array.isArray(snapshot.items) ? snapshot.items : []).concat(flatFromSections(snapshot));
+
 
   let normalized = baseItems.map(normalizeItem).filter((i) => i.active !== false);
 
@@ -313,10 +333,39 @@ exports.handler = async (event) => {
   // ---------- RECOMMEND MODE ----------
   let recommended = normalized;
   if (domain) {
-    recommended = normalized.filter((i) =>
-      (i.type && i.type === domain) ||
-      (Array.isArray(i.tags) && i.tags.includes(domain))
-    );
+    // 1) Exact section match (preferred): snapshot.sections[].id === domain (or domain variants)
+    const d = String(domain).toLowerCase();
+    const variants = new Set([
+      d,
+      d.replace(/_/g, "-"),
+      d.replace(/-/g, "_"),
+      d.replace(/^homeproducts$/i, "home-1"),
+      d.replace(/^homeproducts$/i, "home_1")
+    ]);
+
+    let secItems = [];
+    if (snapshot && Array.isArray(snapshot.sections)) {
+      for (const sec of snapshot.sections) {
+        const sid = String((sec && (sec.id || sec.sectionId) || "")).toLowerCase();
+        if (!sid) continue;
+        if (variants.has(sid)) {
+          const arr = Array.isArray(sec.items) ? sec.items : (Array.isArray(sec.cards) ? sec.cards : []);
+          secItems = arr;
+          break;
+        }
+      }
+    }
+
+    if (secItems.length) {
+      recommended = secItems.map(normalizeItem).filter((i) => i.url);
+    } else {
+      // 2) Fallback: type/tags match in flattened items
+      recommended = normalized.filter((i) =>
+        (i.sectionId && variants.has(String(i.sectionId).toLowerCase())) ||
+        (i.type && variants.has(String(i.type).toLowerCase())) ||
+        (Array.isArray(i.tags) && i.tags.some(t => variants.has(String(t).toLowerCase())))
+      );
+    }
   }
 
   if (USE_OPENAI && OPENAI_KEY) {
