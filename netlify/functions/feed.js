@@ -1,13 +1,19 @@
 /**
- * feed.js — v4 PRO (final unified loader)
+ * feed.js — v5 MARU-ENABLED (FINAL)
  * IGDC / MARU Platform
+ *
+ * Behavior:
+ * 1. Try MARU engine first (/.netlify/functions/maru-search)
+ * 2. If MARU fails, fallback to legacy feed endpoint
+ * 3. Cache + language aware
  */
 
 (function () {
-  if (window.__FEED_V4_LOADED__) return;
-  window.__FEED_V4_LOADED__ = true;
+  if (window.__FEED_V5_LOADED__) return;
+  window.__FEED_V5_LOADED__ = true;
 
-  const ENDPOINT = "/.netlify/functions/feed";
+  const MARU_ENDPOINT = "/.netlify/functions/maru-search";
+  const FALLBACK_ENDPOINT = "/.netlify/functions/feed";
   const DEFAULT_TTL = 60 * 1000;
 
   const cache = new Map();
@@ -56,8 +62,15 @@
     return res.json();
   }
 
-  async function loadFromFeed(key) {
-    const url = new URL(ENDPOINT, location.origin);
+  async function loadFromMaru(key) {
+    const url = new URL(MARU_ENDPOINT, location.origin);
+    url.searchParams.set("domain", key);
+    url.searchParams.set("lang", normalizeLang());
+    return fetchJSON(url.toString());
+  }
+
+  async function loadFromFallback(key) {
+    const url = new URL(FALLBACK_ENDPOINT, location.origin);
     url.searchParams.set("category", key);
     url.searchParams.set("lang", normalizeLang());
     return fetchJSON(url.toString());
@@ -78,15 +91,24 @@
 
     const task = (async () => {
       try {
-        const raw = await loadFromFeed(key);
-        const normalized = normalizePayload(key, raw);
+        // Try MARU engine first
+        const maru = await loadFromMaru(key);
+        const normalized = normalizePayload(key, maru);
         cache.set(key, { ts: now(), data: normalized });
         return normalized;
-      } catch (err) {
-        return {
-          meta: { category: key, error: true },
-          items: []
-        };
+      } catch (e) {
+        try {
+          // fallback to legacy feed
+          const legacy = await loadFromFallback(key);
+          const normalized = normalizePayload(key, legacy);
+          cache.set(key, { ts: now(), data: normalized });
+          return normalized;
+        } catch (err) {
+          return {
+            meta: { category: key, error: true },
+            items: []
+          };
+        }
       }
     })();
 
