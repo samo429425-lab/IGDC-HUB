@@ -1,118 +1,161 @@
 
-/* home-products-automap.v2.js — 8 sections product injection (initial 10 each, lazy add) */
-(function(){
+/**
+ * home-products-automap.v3.js
+ * Safe version: prevents layout collapse when no data
+ * - If no items: keep DOM + show placeholder
+ * - If items exist: clear and render
+ */
+
+(function () {
   'use strict';
-  const isMobile = matchMedia('(max-width:768px), (pointer:coarse)').matches;
 
-  async function loadFeed(){
-    const tries=['/.netlify/functions/feed?page=homeproducts'];
-    for(const u of tries){ try{ const r=await fetch(u,{cache:'no-cache'}); if(r.ok) return await r.json(); }catch(_){ } }
-    return { sections: [] };
-  }
+  if (window.__HOME_AUTOMAP_V3__) return;
+  window.__HOME_AUTOMAP_V3__ = true;
 
-  function isValid(c){
-    if(!c) return false;
-    const bad=[/도박|베팅|카지노|토토/i,/성인|19\+|porn|sex/i,/범죄|마약|총기/i,/스캠|피싱|scam/i];
-    const t=[c.title,c.brand,c.desc,c.url].filter(Boolean).join(' ');
-    if(bad.some(rx=>rx.test(t))) return false;
-    return !!(c.id && c.url && (c.thumb||c.photo));
-  }
+  const FEED_TRIES = [
+    '/.netlify/functions/feed?page=homeproducts',
+    '/.netlify/functions/feed?category=homeproducts',
+    '/.netlify/functions/feed?category=home-shop-1'
+  ];
 
-  const DETAIL=(c)=> c.detailUrl || ('/product.html?id='+encodeURIComponent(c.id));
-
-  function el(q){ return document.querySelector(q); }
-  function els(q){ return Array.from(document.querySelectorAll(q)); }
-
-  function findMainSections(){
-    // Try explicit ids first
-    const ids=['section-1','section-2','section-3','section-4','section-5'];
-    const found = ids.map(id=>({id, el: document.getElementById(id)})).filter(x=>x.el);
-    if(found.length>=4) return found;
-    // Fallback: first five shopping sections/grids on page
-    const grids = els('.shopping-section, .hot-section, .shopping-row, .shop-row, .shopping-hot-item')
-                  .filter((n,i,self)=> self.indexOf(n)===i).slice(0,5);
-    return grids.map((el,idx)=>({ id:'main-'+(idx+1), el }));
-  }
-  function findRightPanelSections(){
-    const ad = el('.ad-panel');
-    if(!ad) return [];
-    const subs = els('.ad-panel .ad-section');
-    if(subs.length) return subs.slice(0,3).map((el,idx)=>({ id:'ad-'+(idx+1), el }));
-    return [];
-  }
-
-  function cardHTML(c){
-    const title=(c.title||'').replace(/\"/g,'');
-    const price = c.price ? `<div class="p">${c.price}</div>` : '';
-    return `<a class="product-card" href="${DETAIL(c)}" data-product-id="${c.id}" target="_blank" rel="noopener">
-      <img loading="lazy" decoding="async" src="${c.thumb||c.photo}" alt="${title}">
-      <div class="meta"><div class="t">${title}</div>${price}</div>
-    </a>`;
-  }
-
-  
-  function mountSection(sectionEl, cards, maxItems){
-    const grid = sectionEl.querySelector('.shopping-hot-item, .hot-today, .shopping-row, .shop-row, .grid, .row-grid') || sectionEl;
-    grid.innerHTML='';
-    const list = cards.filter(isValid).slice(0, maxItems);
-    const B0 = Math.min(list.length, 10);
-    const B  = 10;
-    let i=0;
-    const push = it => grid.insertAdjacentHTML('beforeend', cardHTML(it));
-    for(; i<Math.min(B0, list.length); i++) push(list[i]);
-    if('IntersectionObserver' in window && grid.lastElementChild){
-      const io = new IntersectionObserver((ents)=>{
-        ents.forEach(ent=>{
-          if(!ent.isIntersecting) return; io.unobserve(ent.target);
-          const s=i, e=Math.min(i+B, list.length);
-          for(let k=s;k<e;k++) push(list[k]); i=e;
-          if(i<list.length) io.observe(grid.lastElementChild);
-        });
-      },{ rootMargin:'800px 0px' });
-      io.observe(grid.lastElementChild);
+  async function loadFeed() {
+    for (const url of FEED_TRIES) {
+      try {
+        const res = await fetch(url, { cache: 'no-store' });
+        if (res.ok) return await res.json();
+      } catch (_) {}
     }
+    return { sections: [], rows: [], items: [] };
   }
 
+  function isValid(item) {
+    if (!item) return false;
+    const thumb = item.thumb || item.photo || item.image;
+    if (!thumb) return false;
+    if (!item.id) return false;
 
-  function cleanup(){
-    // Remove dummies
-    els('.product-card').forEach(a=>{
-      const href=(a.getAttribute('href')||'').trim();
-      const id=a.getAttribute('data-product-id');
-      const img=a.querySelector('img');
-      const ph=img && /placehold\.co|data:image\/gif;base64/.test(img.src||'');
-      if((!href||href==='#') && !id && ph){ a.remove(); }
-    });
-    // Below footer
-    const f=el('footer, .site-footer');
-    if(f){
-      let n=f.nextElementSibling;
-      while(n){ const nn=n.nextElementSibling;
-        if(n.querySelector?.('.product-card')||n.classList?.contains('product-card')) n.remove();
-        n=nn;
+    const bad = /도박|베팅|카지노|토토|성인|19\+|porn|sex|마약|총기|scam/i;
+    const txt = [item.title, item.desc, item.url].join(' ');
+    if (bad.test(txt)) return false;
+
+    return true;
+  }
+
+  function placeholderHTML(msg) {
+    return `
+      <div class="maru-empty" style="
+        padding:18px;
+        border-radius:12px;
+        background:#f7f7f7;
+        text-align:center;
+        color:#666;
+        font-size:14px;
+        line-height:1.6;
+      ">
+        <div style="font-size:20px;margin-bottom:8px;">📦</div>
+        <div>${msg || '콘텐츠 준비 중입니다.'}</div>
+      </div>
+    `;
+  }
+
+  function cardHTML(c) {
+    const title = (c.title || '').replace(/"/g, '');
+    const img = c.thumb || c.photo || c.image || '';
+    const link = c.detailUrl || ('/product.html?id=' + encodeURIComponent(c.id));
+
+    return `
+      <a class="product-card" href="${link}" data-product-id="${c.id}" target="_blank" rel="noopener">
+        <img loading="lazy" decoding="async" src="${img}" alt="${title}">
+        <div class="meta">
+          <div class="t">${title}</div>
+        </div>
+      </a>
+    `;
+  }
+
+  function mountSection(sectionEl, items, maxItems, message) {
+    const grid =
+      sectionEl.querySelector('.shopping-hot-item, .hot-today, .shopping-row, .shop-row, .grid, .row-grid')
+      || sectionEl;
+
+    const list = (items || []).filter(isValid).slice(0, maxItems);
+
+    if (!list.length) {
+      if (!grid.querySelector('.maru-empty')) {
+        grid.insertAdjacentHTML('beforeend', placeholderHTML(message));
       }
+      return;
     }
+
+    grid.innerHTML = '';
+
+    list.forEach(it => {
+      grid.insertAdjacentHTML('beforeend', cardHTML(it));
+    });
   }
 
-  async function init(){
-    const feed = await loadFeed();
-    const main = findMainSections();
-    const right = findRightPanelSections();
-    const all = main.concat(right).slice(0,8);
-    const dataMap = {};
-    (feed.sections||feed.rows||[]).forEach(s=>{ dataMap[(s.id||s.sectionId||'').toLowerCase()] = (s.items||s.cards||[]); });
+  function findMainSections() {
+    const ids = ['section-1','section-2','section-3','section-4','section-5'];
+    const found = ids
+      .map(id => document.getElementById(id))
+      .filter(Boolean)
+      .map((el,i)=>({ el, key:'main-'+(i+1) }));
 
-    all.forEach((slot, idx)=>{
-      // Match by id; otherwise distribute sequentially
-      const key=(slot.id||'').toLowerCase();
-      const list = dataMap[key] || dataMap['main-'+(idx+1)] || dataMap['section-'+(idx+1)] || [];
-      const maxItems = (idx < 5) ? 100 : 50;
-      mountSection(slot.el, list, maxItems);
+    if (found.length) return found;
+
+    const fallback = Array.from(document.querySelectorAll(
+      '.shopping-section, .shopping-row, .shop-row, .hot-section'
+    )).slice(0,5);
+
+    return fallback.map((el,i)=>({ el, key:'main-'+(i+1) }));
+  }
+
+  function findRightPanels() {
+    const base = document.querySelector('.ad-panel');
+    if (!base) return [];
+    const subs = Array.from(base.querySelectorAll('.ad-section'));
+    return subs.slice(0,3).map((el,i)=>({ el, key:'right-'+(i+1) }));
+  }
+
+  async function init() {
+    const feed = await loadFeed();
+
+    const sections = [];
+    const main = findMainSections();
+    const right = findRightPanels();
+
+    main.forEach(x => sections.push(x));
+    right.forEach(x => sections.push(x));
+
+    const dataMap = {};
+
+    (feed.sections || feed.rows || []).forEach(s => {
+      const k = (s.id || s.sectionId || '').toLowerCase();
+      if (k) dataMap[k] = s.items || s.cards || [];
     });
 
-    cleanup();
+    if ((!feed.sections && !feed.rows) && Array.isArray(feed.items)) {
+      dataMap['main-1'] = feed.items;
+    }
+
+    sections.forEach((slot, idx) => {
+      const key = slot.key.toLowerCase();
+      const items =
+        dataMap[key] ||
+        dataMap['main-' + (idx + 1)] ||
+        [];
+
+      mountSection(
+        slot.el,
+        items,
+        idx < 5 ? 100 : 50,
+        idx < 5 ? '상품 준비 중입니다.' : '콘텐츠 준비 중입니다.'
+      );
+    });
   }
 
-  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', init, {once:true}); }
-  else { init(); }
+  window.addEventListener('load', () => {
+    setTimeout(init, 50);
+    setTimeout(init, 300);
+  });
 })();
