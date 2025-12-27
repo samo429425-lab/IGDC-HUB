@@ -1,0 +1,30 @@
+{
+  "version": "v1",
+  "ts": "2025-12-21T21:29:21.834053Z",
+  "items": [
+    {
+      "id": "home-1",
+      "title": "MARU Platform Home",
+      "url": "https://example.com",
+      "site": "home",
+      "tags": [
+        "igdc",
+        "maru"
+      ],
+      "thumb": "",
+      "source": "snapshot"
+    },
+    {
+      "id": "don-1",
+      "title": "Donation Hub",
+      "url": "https://example.com/donation",
+      "site": "donation",
+      "tags": [
+        "donation",
+        "ngo"
+      ],
+      "thumb": "",
+      "source": "snapshot"
+    }
+  ]
+}
