@@ -1,0 +1,38 @@
+{
+  "version": "v1",
+  "type": "object",
+  "required": [
+    "q"
+  ],
+  "properties": {
+    "q": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "internal",
+        "general",
+        "academic"
+      ],
+      "default": "internal"
+    },
+    "site": {
+      "type": "string",
+      "description": "optional site id (e.g., home, distribution, social, network, tour, donation)"
+    },
+    "locale": {
+      "type": "string",
+      "default": "ko-KR"
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50,
+      "default": 20
+    }
+  },
+  "additionalProperties": false
+}
