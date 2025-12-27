@@ -714,7 +714,6 @@ nav{transition:transform .1s ease;}
 }
 </style>
 
-<script src="/assets/js/autoBootstrap.js" defer></script>
 
 <style>
 /* Q&A mobile visibility fix: ensure visible on mobile in both orientations */
@@ -3035,28 +3034,6 @@ function setActive(i){
 })();
 </script>
 
-
-<!-- IGDC pay config start -->
-<script id="igdc-pay-config">
-(function(){
-  var ORIGIN = location.origin;
-  window.IGDC_PAY_CONFIG = {
-    currencyDefault: "KRW",
-    returnUrl: ORIGIN + "/pay/return",
-    failUrl:   ORIGIN + "/pay/fail",
-    endpoints: {
-      intent:        "/api/payments/intent",
-      confirm:       "/api/payments/confirm",
-      webhook:       "/api/payments/webhook",
-      cryptoInvoice: "/api/crypto/invoice",
-      cryptoConfirm: "/api/crypto/confirm",
-      giftRedeem:    "/api/giftcards/redeem",
-      checkout:      "/api/payment/checkout"
-    },
-    enable: { card:true, mobile:true, crypto:true, giftcard:true }
-  };
-})();
-</script>
 <!-- IGDC pay config end -->
 
 <!-- IGDC pay alias start -->
