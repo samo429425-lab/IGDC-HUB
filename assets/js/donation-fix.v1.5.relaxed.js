@@ -1,79 +1,88 @@
 
-/*! donation-fix.v1.7.placeholder.js
- * - NEVER deletes cards
- * - If no real content → injects "콘텐츠 준비 중입니다"
- * - Auto-replaced when real cards appear
- * - Safe for home / donation / media
+/**
+ * donation-fix.v1.8.i18n.js
+ * - Built-in language placeholder
+ * - Never deletes real cards
+ * - Auto replaces placeholder when data appears
  */
 
 (function () {
   'use strict';
 
-  if (window.__DON_FIX_V17__) return;
-  window.__DON_FIX_V17__ = true;
+  if (window.__DON_FIX_V18__) return;
+  window.__DON_FIX_V18__ = true;
 
-  const PLACEHOLDER_HTML = (msg) => `
-    <div class="maru-empty" style="
-      padding:18px;
-      border-radius:12px;
-      background:#f7f7f7;
-      text-align:center;
-      color:#666;
-      font-size:14px;
-      line-height:1.6;
-    ">
-      <div style="font-size:20px;margin-bottom:8px;">📦</div>
-      <div>${msg || '콘텐츠 준비 중입니다.'}</div>
-    </div>
-  `;
+  const LANG_MAP = {
+    en: "Content coming soon.",
+    de: "Inhalt folgt in Kürze.",
+    es: "Contenido disponible próximamente.",
+    fr: "Contenu disponible prochainement.",
+    id: "Konten akan segera tersedia.",
+    ja: "コンテンツは準備中です。",
+    pt: "Conteúdo em breve.",
+    ru: "Контент скоро появится.",
+    th: "เนื้อหาจะพร้อมใช้งานเร็ว ๆ นี้",
+    tr: "İçerik yakında hazır olacak.",
+    vi: "Nội dung sẽ sớm được cập nhật.",
+    zh: "内容正在准备中。",
+    ko: "콘텐츠 준비 중입니다."
+  };
 
-  function hasRealCard(container) {
-    if (!container) return false;
-    return !!container.querySelector(
-      'a.product-card, .thumb-card, .card, img[src]:not([src^="data:"])'
-    );
+  function lang() {
+    return (document.documentElement.lang || navigator.language || "en")
+      .toLowerCase()
+      .slice(0, 2);
   }
 
-  function ensurePlaceholder(container, message) {
-    if (!container) return;
-    if (hasRealCard(container)) {
-      const ph = container.querySelector('.maru-empty');
-      if (ph) ph.remove();
+  function t() {
+    return LANG_MAP[lang()] || LANG_MAP.en;
+  }
+
+  function hasRealCard(el) {
+    return !!el.querySelector("a.product-card, .thumb-card, .card, img[src]:not([src^='data:'])");
+  }
+
+  function placeholderHTML() {
+    return `
+      <div class="maru-empty" style="
+        padding:18px;
+        border-radius:12px;
+        background:#f7f7f7;
+        text-align:center;
+        color:#666;
+        font-size:14px;
+        line-height:1.6;">
+        <div style="font-size:20px;margin-bottom:8px;">📦</div>
+        <div>${t()}</div>
+      </div>`;
+  }
+
+  function ensure(el) {
+    if (!el) return;
+
+    if (hasRealCard(el)) {
+      const p = el.querySelector(".maru-empty");
+      if (p) p.remove();
       return;
     }
-    if (!container.querySelector('.maru-empty')) {
-      container.insertAdjacentHTML('beforeend', PLACEHOLDER_HTML(message));
+
+    if (!el.querySelector(".maru-empty")) {
+      el.insertAdjacentHTML("beforeend", placeholderHTML());
     }
   }
 
   function scan() {
-    const targets = document.querySelectorAll(
-      '.thumb-grid, .row-grid, .cards-row, .shopping-row, .shop-row, .hot-section, .media-grid'
-    );
-
-    targets.forEach(el => {
-      const label =
-        el.closest('[data-section]')?.getAttribute('data-section') ||
-        el.id || '';
-
-      let msg = '콘텐츠 준비 중입니다.';
-      if (/donat|기부/i.test(label)) msg = '후원 콘텐츠 준비 중입니다.';
-      if (/media/i.test(label)) msg = '미디어 콘텐츠 준비 중입니다.';
-
-      ensurePlaceholder(el, msg);
-    });
+    document.querySelectorAll(
+      ".thumb-grid, .row-grid, .cards-row, .shopping-row, .shop-row, .hot-section, .media-grid"
+    ).forEach(ensure);
   }
 
   function observe() {
-    const obs = new MutationObserver(() => {
-      clearTimeout(window.__donFixTimer);
-      window.__donFixTimer = setTimeout(scan, 120);
+    const mo = new MutationObserver(() => {
+      clearTimeout(window.__don_i18n_timer);
+      window.__don_i18n_timer = setTimeout(scan, 120);
     });
-
-    obs.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
+    mo.observe(document.body, { childList: true, subtree: true });
   }
 
   function init() {
@@ -81,8 +90,8 @@
     observe();
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
   } else {
     init();
   }

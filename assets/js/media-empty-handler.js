@@ -1,86 +1,104 @@
+
 /**
- * media-empty-handler.js (i18n)
- * 다국어 "콘텐츠 준비중" 자동 처리
- * 지원 언어: DE, EN, ES, FR, ID, JA, PT, RU, TH, TR, VI, ZH (+ KO)
+ * media-empty-handler.v1.2.i18n.js
+ * - Multilingual placeholder (13 langs)
+ * - Fallback to English for all others
+ * - Safe: never removes real content
+ * - Auto updates when media loads
  */
+
 (function () {
-  const EMPTY_TEXT_MAP = {
-    ko: "콘텐츠를 준비 중입니다.",
-    en: "Content is being prepared.",
-    de: "Inhalte werden vorbereitet.",
-    es: "El contenido se está preparando.",
-    fr: "Le contenu est en cours de préparation.",
-    id: "Konten sedang dipersiapkan.",
-    ja: "コンテンツを準備しています。",
-    pt: "O conteúdo está sendo preparado.",
-    ru: "Контент готовится.",
-    th: "กำลังเตรียมเนื้อหาอยู่",
-    tr: "İçerik hazırlanıyor.",
-    vi: "Nội dung đang được chuẩn bị.",
-    zh: "内容正在准备中。"
+  'use strict';
+
+  if (window.__MEDIA_EMPTY_I18N__) return;
+  window.__MEDIA_EMPTY_I18N__ = true;
+
+  const LANG_MAP = {
+    en: "Content coming soon.",
+    de: "Inhalt folgt in Kürze.",
+    es: "Contenido disponible próximamente.",
+    fr: "Contenu disponible prochainement.",
+    id: "Konten akan segera tersedia.",
+    ja: "コンテンツは準備中です。",
+    pt: "Conteúdo em breve.",
+    ru: "Контент скоро появится.",
+    th: "เนื้อหาจะพร้อมใช้งานเร็ว ๆ นี้",
+    tr: "İçerik yakında hazır olacak.",
+    vi: "Nội dung sẽ sớm được cập nhật.",
+    zh: "内容正在准备中。",
+    ko: "콘텐츠 준비 중입니다."
   };
 
   function getLang() {
-    const raw =
-      (document.documentElement && document.documentElement.lang) ||
-      (document.body && document.body.getAttribute("lang")) ||
-      "";
-
-    if (raw) return raw.toLowerCase().split("-")[0].trim();
-
-    const m = (location.pathname || "").toLowerCase().match(/[_-]([a-z]{2})(?:\.\w+)?$/);
-    if (m && m[1]) return m[1];
-
-    return "en";
+    return (
+      document.documentElement.lang ||
+      navigator.language ||
+      "en"
+    ).toLowerCase().slice(0, 2);
   }
 
-  function getEmptyText() {
-    const lang = getLang();
-    return EMPTY_TEXT_MAP[lang] || EMPTY_TEXT_MAP.en;
+  function text() {
+    return LANG_MAP[getLang()] || LANG_MAP.en;
   }
 
-  function ensureEmptyState(container) {
-    if (!container.querySelector(".empty-state")) {
-      const el = document.createElement("div");
-      el.className = "empty-state";
-      el.textContent = getEmptyText();
-      el.style.padding = "20px";
-      el.style.textAlign = "center";
-      el.style.color = "#999";
-      el.style.fontSize = "14px";
-      container.appendChild(el);
+  function hasRealContent(el) {
+    return !!el.querySelector(
+      "a, img[src]:not([src^='data:']), video, iframe"
+    );
+  }
+
+  function placeholderHTML() {
+    return `
+      <div class="maru-empty" style="
+        padding:20px;
+        border-radius:12px;
+        background:#f7f7f7;
+        text-align:center;
+        color:#666;
+        font-size:14px;
+        line-height:1.6;">
+        <div style="font-size:20px;margin-bottom:8px;">📦</div>
+        <div>${text()}</div>
+      </div>
+    `;
+  }
+
+  function ensure(container) {
+    if (!container) return;
+
+    if (hasRealContent(container)) {
+      const p = container.querySelector(".maru-empty");
+      if (p) p.remove();
+      return;
+    }
+
+    if (!container.querySelector(".maru-empty")) {
+      container.insertAdjacentHTML("beforeend", placeholderHTML());
     }
   }
 
-  function removeEmptyState(container) {
-    const el = container.querySelector(".empty-state");
-    if (el) el.remove();
+  function scan() {
+    document.querySelectorAll(
+      ".media-grid, .media-list, .media-wrap, .video-grid, .gallery, .content-grid"
+    ).forEach(ensure);
   }
 
-  async function handle(container) {
-    const key = container.dataset.psomKey;
-    if (!key) return;
-
-    ensureEmptyState(container);
-
-    try {
-      const res = await fetch(`/.netlify/functions/feed?category=${encodeURIComponent(key)}`);
-      if (!res.ok) return;
-
-      const data = await res.json();
-      if (!data.items || data.items.length === 0) return;
-
-      removeEmptyState(container);
-
-      if (window.renderCards) {
-        window.renderCards(container, data.items);
-      }
-    } catch (e) {
-      console.warn("media empty handler error:", e);
-    }
+  function observe() {
+    const mo = new MutationObserver(() => {
+      clearTimeout(window.__media_i18n_timer);
+      window.__media_i18n_timer = setTimeout(scan, 120);
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
   }
 
-  document.addEventListener("DOMContentLoaded", () => {
-    document.querySelectorAll("[data-psom-key]").forEach(handle);
-  });
+  function init() {
+    scan();
+    observe();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
 })();
