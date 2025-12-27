@@ -1588,7 +1588,7 @@ window.addEventListener("message",function(ev){
 
   // Try to load feed automatically (optional)
   (async function(){
-    const tries=['/assets/data/ad_feed.network.json','/.netlify/functions/feed?page=networkhub'];
+    const tries=['/.netlify/functions/feed?page=networkhub'];
     for(const u of tries){
       try{
         const r=await fetch(u,{cache:'no-cache'});
@@ -1767,6 +1767,10 @@ window.addEventListener("message",function(ev){
 <script defer src="/assets/js/auto-embed.instagram.js"></script>
 <script defer src="/assets/js/placeholder-sweeper.js"></script>
 <script defer src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
+
+<script defer src="/assets/js/feed.js"></script>
+
+<script defer src="/assets/js/network-rightpanel-automap.js"></script>
 
 </body>
 </html>
