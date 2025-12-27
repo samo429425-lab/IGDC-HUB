@@ -1,19 +1,42 @@
 {
-  "key": "home-right-middle",
+  "meta": {
+    "category": "home-right-middle",
+    "version": "2.0",
+    "updated": "2025-12-27",
+    "lang": "all",
+    "active": true,
+    "schema": "v1"
+  },
   "items": [
     {
+      "id": "home-right-middle-1",
       "title": "Sample Item A for home-right-middle",
-      "url": "#",
-      "thumbnail": "/assets/img/placeholder.png",
+      "summary": "",
+      "description": "",
       "price": "",
-      "tag": ""
+      "currency": "USD",
+      "cta": "View",
+      "url": "#",
+      "image": "/assets/img/placeholder.png",
+      "tags": [
+        "home-right-middle"
+      ],
+      "priority": 1
     },
     {
+      "id": "home-right-middle-2",
       "title": "Sample Item B for home-right-middle",
-      "url": "#",
-      "thumbnail": "/assets/img/placeholder.png",
+      "summary": "",
+      "description": "",
       "price": "",
-      "tag": ""
+      "currency": "USD",
+      "cta": "View",
+      "url": "#",
+      "image": "/assets/img/placeholder.png",
+      "tags": [
+        "home-right-middle"
+      ],
+      "priority": 2
     }
   ]
 }

@@ -1,17 +1,52 @@
 {
-  "key": "social-tiktok",
+  "meta": {
+    "category": "social-tiktok",
+    "version": "2.0",
+    "updated": "2025-12-27",
+    "lang": "all",
+    "active": true,
+    "schema": "v1"
+  },
   "items": [
     {
+      "id": "social-tiktok-1",
       "title": "Sample social-tiktok Item 1",
+      "summary": "",
+      "description": "",
+      "platform": "tiktok",
       "url": "#",
       "thumbnail": "/assets/img/placeholder.png",
-      "meta": ""
+      "likes": 0,
+      "followers": 0,
+      "subscribers": 0,
+      "cta": "Follow",
+      "monetize": true,
+      "currency": "USD",
+      "price": "",
+      "tags": [
+        "tiktok"
+      ],
+      "priority": 1
     },
     {
+      "id": "social-tiktok-2",
       "title": "Sample social-tiktok Item 2",
+      "summary": "",
+      "description": "",
+      "platform": "tiktok",
       "url": "#",
       "thumbnail": "/assets/img/placeholder.png",
-      "meta": ""
+      "likes": 0,
+      "followers": 0,
+      "subscribers": 0,
+      "cta": "Follow",
+      "monetize": true,
+      "currency": "USD",
+      "price": "",
+      "tags": [
+        "tiktok"
+      ],
+      "priority": 2
     }
   ]
 }

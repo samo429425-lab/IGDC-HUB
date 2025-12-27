@@ -1,17 +1,52 @@
 {
-  "key": "social-facebook",
+  "meta": {
+    "category": "social-facebook",
+    "version": "2.0",
+    "updated": "2025-12-27",
+    "lang": "all",
+    "active": true,
+    "schema": "v1"
+  },
   "items": [
     {
+      "id": "social-facebook-1",
       "title": "Sample social-facebook Item 1",
+      "summary": "",
+      "description": "",
+      "platform": "facebook",
       "url": "#",
       "thumbnail": "/assets/img/placeholder.png",
-      "meta": ""
+      "likes": 0,
+      "followers": 0,
+      "subscribers": 0,
+      "cta": "Follow",
+      "monetize": true,
+      "currency": "USD",
+      "price": "",
+      "tags": [
+        "facebook"
+      ],
+      "priority": 1
     },
     {
+      "id": "social-facebook-2",
       "title": "Sample social-facebook Item 2",
+      "summary": "",
+      "description": "",
+      "platform": "facebook",
       "url": "#",
       "thumbnail": "/assets/img/placeholder.png",
-      "meta": ""
+      "likes": 0,
+      "followers": 0,
+      "subscribers": 0,
+      "cta": "Follow",
+      "monetize": true,
+      "currency": "USD",
+      "price": "",
+      "tags": [
+        "facebook"
+      ],
+      "priority": 2
     }
   ]
 }

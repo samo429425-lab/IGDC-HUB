@@ -1,17 +1,52 @@
 {
-  "key": "donation-education",
+  "meta": {
+    "category": "donation-education",
+    "version": "2.0",
+    "updated": "2025-12-27",
+    "lang": "all",
+    "active": true,
+    "schema": "v1"
+  },
   "items": [
     {
+      "id": "donation-education-1",
       "title": "Sample Item A for donation-education",
+      "summary": "",
+      "description": "",
+      "amounts": [
+        5,
+        10,
+        25,
+        50
+      ],
+      "currency": "USD",
+      "cta": "Donate",
       "url": "#",
-      "thumbnail": "/assets/img/placeholder.png",
-      "meta": ""
+      "image": "/assets/img/placeholder.png",
+      "tags": [
+        "education"
+      ],
+      "priority": 1
     },
     {
+      "id": "donation-education-2",
       "title": "Sample Item B for donation-education",
+      "summary": "",
+      "description": "",
+      "amounts": [
+        5,
+        10,
+        25,
+        50
+      ],
+      "currency": "USD",
+      "cta": "Donate",
       "url": "#",
-      "thumbnail": "/assets/img/placeholder.png",
-      "meta": ""
+      "image": "/assets/img/placeholder.png",
+      "tags": [
+        "education"
+      ],
+      "priority": 2
     }
   ]
 }

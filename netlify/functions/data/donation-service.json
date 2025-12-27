@@ -1,6 +1,6 @@
 {
   "meta": {
-    "category": "home-shop-2",
+    "category": "donation-volunteer",
     "version": "2.0",
     "updated": "2025-12-27",
     "lang": "all",
@@ -9,32 +9,42 @@
   },
   "items": [
     {
-      "id": "home-shop-2-1",
-      "title": "Sample Item A for home-shop-2",
+      "id": "donation-volunteer-1",
+      "title": "Sample Item A for donation-volunteer",
       "summary": "",
       "description": "",
-      "price": "",
+      "amounts": [
+        5,
+        10,
+        25,
+        50
+      ],
       "currency": "USD",
-      "cta": "View",
+      "cta": "Donate",
       "url": "#",
       "image": "/assets/img/placeholder.png",
       "tags": [
-        "home-shop-2"
+        "volunteer"
       ],
       "priority": 1
     },
     {
-      "id": "home-shop-2-2",
-      "title": "Sample Item B for home-shop-2",
+      "id": "donation-volunteer-2",
+      "title": "Sample Item B for donation-volunteer",
       "summary": "",
       "description": "",
-      "price": "",
+      "amounts": [
+        5,
+        10,
+        25,
+        50
+      ],
       "currency": "USD",
-      "cta": "View",
+      "cta": "Donate",
       "url": "#",
       "image": "/assets/img/placeholder.png",
       "tags": [
-        "home-shop-2"
+        "volunteer"
       ],
       "priority": 2
     }

@@ -1,17 +1,52 @@
 {
-  "key": "social-telegram",
+  "meta": {
+    "category": "social-telegram",
+    "version": "2.0",
+    "updated": "2025-12-27",
+    "lang": "all",
+    "active": true,
+    "schema": "v1"
+  },
   "items": [
     {
+      "id": "social-telegram-1",
       "title": "Sample social-telegram Item 1",
+      "summary": "",
+      "description": "",
+      "platform": "telegram",
       "url": "#",
       "thumbnail": "/assets/img/placeholder.png",
-      "meta": ""
+      "likes": 0,
+      "followers": 0,
+      "subscribers": 0,
+      "cta": "Follow",
+      "monetize": true,
+      "currency": "USD",
+      "price": "",
+      "tags": [
+        "telegram"
+      ],
+      "priority": 1
     },
     {
+      "id": "social-telegram-2",
       "title": "Sample social-telegram Item 2",
+      "summary": "",
+      "description": "",
+      "platform": "telegram",
       "url": "#",
       "thumbnail": "/assets/img/placeholder.png",
-      "meta": ""
+      "likes": 0,
+      "followers": 0,
+      "subscribers": 0,
+      "cta": "Follow",
+      "monetize": true,
+      "currency": "USD",
+      "price": "",
+      "tags": [
+        "telegram"
+      ],
+      "priority": 2
     }
   ]
 }

@@ -1,69 +1,132 @@
 {
-  "key": "distribution-new",
+  "meta": {
+    "category": "distribution-new",
+    "version": "2.0",
+    "updated": "2025-12-27",
+    "lang": "all",
+    "active": true,
+    "schema": "v1"
+  },
   "items": [
     {
       "id": "distribution-new-001",
       "title": "New Item 1",
-      "thumb": "/assets/img/placeholder.png",
-      "url": "#",
+      "summary": "",
+      "description": "",
       "price": "",
-      "tag": ""
+      "currency": "USD",
+      "cta": "View",
+      "url": "#",
+      "image": "/assets/img/placeholder.png",
+      "tags": [
+        "new"
+      ],
+      "priority": 1
     },
     {
       "id": "distribution-new-002",
       "title": "New Item 2",
-      "thumb": "/assets/img/placeholder.png",
-      "url": "#",
+      "summary": "",
+      "description": "",
       "price": "",
-      "tag": ""
+      "currency": "USD",
+      "cta": "View",
+      "url": "#",
+      "image": "/assets/img/placeholder.png",
+      "tags": [
+        "new"
+      ],
+      "priority": 2
     },
     {
       "id": "distribution-new-003",
       "title": "New Item 3",
-      "thumb": "/assets/img/placeholder.png",
-      "url": "#",
+      "summary": "",
+      "description": "",
       "price": "",
-      "tag": ""
+      "currency": "USD",
+      "cta": "View",
+      "url": "#",
+      "image": "/assets/img/placeholder.png",
+      "tags": [
+        "new"
+      ],
+      "priority": 3
     },
     {
       "id": "distribution-new-004",
       "title": "New Item 4",
-      "thumb": "/assets/img/placeholder.png",
-      "url": "#",
+      "summary": "",
+      "description": "",
       "price": "",
-      "tag": ""
+      "currency": "USD",
+      "cta": "View",
+      "url": "#",
+      "image": "/assets/img/placeholder.png",
+      "tags": [
+        "new"
+      ],
+      "priority": 4
     },
     {
       "id": "distribution-new-005",
       "title": "New Item 5",
-      "thumb": "/assets/img/placeholder.png",
-      "url": "#",
+      "summary": "",
+      "description": "",
       "price": "",
-      "tag": ""
+      "currency": "USD",
+      "cta": "View",
+      "url": "#",
+      "image": "/assets/img/placeholder.png",
+      "tags": [
+        "new"
+      ],
+      "priority": 5
     },
     {
       "id": "distribution-new-006",
       "title": "New Item 6",
-      "thumb": "/assets/img/placeholder.png",
-      "url": "#",
+      "summary": "",
+      "description": "",
       "price": "",
-      "tag": ""
+      "currency": "USD",
+      "cta": "View",
+      "url": "#",
+      "image": "/assets/img/placeholder.png",
+      "tags": [
+        "new"
+      ],
+      "priority": 6
     },
     {
       "id": "distribution-new-007",
       "title": "New Item 7",
-      "thumb": "/assets/img/placeholder.png",
-      "url": "#",
+      "summary": "",
+      "description": "",
       "price": "",
-      "tag": ""
+      "currency": "USD",
+      "cta": "View",
+      "url": "#",
+      "image": "/assets/img/placeholder.png",
+      "tags": [
+        "new"
+      ],
+      "priority": 7
     },
     {
       "id": "distribution-new-008",
       "title": "New Item 8",
-      "thumb": "/assets/img/placeholder.png",
-      "url": "#",
+      "summary": "",
+      "description": "",
       "price": "",
-      "tag": ""
+      "currency": "USD",
+      "cta": "View",
+      "url": "#",
+      "image": "/assets/img/placeholder.png",
+      "tags": [
+        "new"
+      ],
+      "priority": 8
     }
   ]
 }

@@ -1,17 +1,52 @@
 {
-  "key": "donation-ngo",
+  "meta": {
+    "category": "donation-ngo",
+    "version": "2.0",
+    "updated": "2025-12-27",
+    "lang": "all",
+    "active": true,
+    "schema": "v1"
+  },
   "items": [
     {
+      "id": "donation-ngo-1",
       "title": "Sample Item A for donation-ngo",
+      "summary": "",
+      "description": "",
+      "amounts": [
+        5,
+        10,
+        25,
+        50
+      ],
+      "currency": "USD",
+      "cta": "Donate",
       "url": "#",
-      "thumbnail": "/assets/img/placeholder.png",
-      "meta": ""
+      "image": "/assets/img/placeholder.png",
+      "tags": [
+        "ngo"
+      ],
+      "priority": 1
     },
     {
+      "id": "donation-ngo-2",
       "title": "Sample Item B for donation-ngo",
+      "summary": "",
+      "description": "",
+      "amounts": [
+        5,
+        10,
+        25,
+        50
+      ],
+      "currency": "USD",
+      "cta": "Donate",
       "url": "#",
-      "thumbnail": "/assets/img/placeholder.png",
-      "meta": ""
+      "image": "/assets/img/placeholder.png",
+      "tags": [
+        "ngo"
+      ],
+      "priority": 2
     }
   ]
 }

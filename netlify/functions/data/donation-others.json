@@ -1,17 +1,52 @@
 {
-  "key": "donation-others",
+  "meta": {
+    "category": "donation-others",
+    "version": "2.0",
+    "updated": "2025-12-27",
+    "lang": "all",
+    "active": true,
+    "schema": "v1"
+  },
   "items": [
     {
+      "id": "donation-others-1",
       "title": "Sample Item A for donation-others",
+      "summary": "",
+      "description": "",
+      "amounts": [
+        5,
+        10,
+        25,
+        50
+      ],
+      "currency": "USD",
+      "cta": "Donate",
       "url": "#",
-      "thumbnail": "/assets/img/placeholder.png",
-      "meta": ""
+      "image": "/assets/img/placeholder.png",
+      "tags": [
+        "others"
+      ],
+      "priority": 1
     },
     {
+      "id": "donation-others-2",
       "title": "Sample Item B for donation-others",
+      "summary": "",
+      "description": "",
+      "amounts": [
+        5,
+        10,
+        25,
+        50
+      ],
+      "currency": "USD",
+      "cta": "Donate",
       "url": "#",
-      "thumbnail": "/assets/img/placeholder.png",
-      "meta": ""
+      "image": "/assets/img/placeholder.png",
+      "tags": [
+        "others"
+      ],
+      "priority": 2
     }
   ]
 }

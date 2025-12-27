@@ -1,5 +1,10 @@
 {
   "sections": [],
-  "meta": {},
+  "meta": {
+    "lang": "all",
+    "active": true,
+    "schema": "v1",
+    "updated": "2025-12-27"
+  },
   "config": {}
 }

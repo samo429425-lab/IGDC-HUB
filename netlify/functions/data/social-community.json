@@ -1,17 +1,52 @@
 {
-  "key": "social-community",
+  "meta": {
+    "category": "social-community",
+    "version": "2.0",
+    "updated": "2025-12-27",
+    "lang": "all",
+    "active": true,
+    "schema": "v1"
+  },
   "items": [
     {
+      "id": "social-community-1",
       "title": "Sample social-community Item 1",
+      "summary": "",
+      "description": "",
+      "platform": "community",
       "url": "#",
       "thumbnail": "/assets/img/placeholder.png",
-      "meta": ""
+      "likes": 0,
+      "followers": 0,
+      "subscribers": 0,
+      "cta": "Follow",
+      "monetize": true,
+      "currency": "USD",
+      "price": "",
+      "tags": [
+        "community"
+      ],
+      "priority": 1
     },
     {
+      "id": "social-community-2",
       "title": "Sample social-community Item 2",
+      "summary": "",
+      "description": "",
+      "platform": "community",
       "url": "#",
       "thumbnail": "/assets/img/placeholder.png",
-      "meta": ""
+      "likes": 0,
+      "followers": 0,
+      "subscribers": 0,
+      "cta": "Follow",
+      "monetize": true,
+      "currency": "USD",
+      "price": "",
+      "tags": [
+        "community"
+      ],
+      "priority": 2
     }
   ]
 }
