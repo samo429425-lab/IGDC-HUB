@@ -1,132 +1,97 @@
+
 /**
- * feed.js — v5 MARU-ENABLED (FINAL)
- * IGDC / MARU Platform
- *
- * Behavior:
- * 1. Try MARU engine first (/.netlify/functions/maru-search)
- * 2. If MARU fails, fallback to legacy feed endpoint
- * 3. Cache + language aware
+ * feed.js — v6 FINAL (SNAPSHOT + MARU HYBRID)
+ * Purpose:
+ * 1) Serve snapshot.internal.v1.json FIRST (guaranteed data)
+ * 2) Fallback to maru-search if snapshot empty
+ * 3) Always return { sections, items }
  */
 
-(function () {
-  if (window.__FEED_V5_LOADED__) return;
-  window.__FEED_V5_LOADED__ = true;
+const path = require("path");
+const fs = require("fs");
 
-  const MARU_ENDPOINT = "/.netlify/functions/maru-search";
-  const FALLBACK_ENDPOINT = "/.netlify/functions/feed";
-  const DEFAULT_TTL = 60 * 1000;
+const SNAPSHOT_PATH = path.join(__dirname, "data", "snapshot.internal.v1.json");
+const MARU_ENDPOINT = "/.netlify/functions/maru-search";
 
-  const cache = new Map();
-  const inflight = new Map();
+function loadSnapshot() {
+  try {
+    if (fs.existsSync(SNAPSHOT_PATH)) {
+      const raw = fs.readFileSync(SNAPSHOT_PATH, "utf-8");
+      return JSON.parse(raw);
+    }
+  } catch (e) {}
+  return null;
+}
 
-  function now() {
-    return Date.now();
+function normalizeFromSnapshot(snapshot, key) {
+  if (!snapshot) return { meta: { category: key }, items: [] };
+
+  if (Array.isArray(snapshot.sections)) {
+    const found = snapshot.sections.find(
+      s => (s.id || "").toLowerCase() === key.toLowerCase()
+    );
+    if (found && Array.isArray(found.items)) {
+      return { meta: { category: key }, items: found.items };
+    }
   }
 
-  function normalizeLang() {
-    const raw =
-      document.documentElement?.lang ||
-      navigator.language ||
-      "en";
-
-    const l = raw.toLowerCase();
-
-    if (l.startsWith("ko")) return "ko";
-    if (l.startsWith("en")) return "en";
-    if (l.startsWith("ja")) return "ja";
-    if (l.startsWith("zh")) return "zh";
-    if (l.startsWith("vi")) return "vi";
-    if (l.startsWith("th")) return "th";
-    if (l.startsWith("ru")) return "ru";
-    if (l.startsWith("de")) return "de";
-    if (l.startsWith("fr")) return "fr";
-    if (l.startsWith("es")) return "es";
-    if (l.startsWith("pt")) return "pt";
-    if (l.startsWith("id")) return "id";
-    if (l.startsWith("tr")) return "tr";
-
-    return l.slice(0, 2);
+  if (Array.isArray(snapshot.items)) {
+    return { meta: { category: key }, items: snapshot.items };
   }
 
-  function normalizePayload(key, raw) {
-    const safe = raw || {};
+  return { meta: { category: key }, items: [] };
+}
+
+async function fetchMaru(event, key) {
+  try {
+    const url = new URL(MARU_ENDPOINT, "http://localhost");
+    url.searchParams.set("domain", key);
+    const res = await fetch(url.toString());
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+exports.handler = async function (event) {
+  const key =
+    event.queryStringParameters?.category ||
+    event.queryStringParameters?.page ||
+    "home-1";
+
+  // 1️⃣ SNAPSHOT FIRST (authoritative)
+  const snapshot = loadSnapshot();
+  const snapResult = normalizeFromSnapshot(snapshot, key);
+
+  if (snapResult.items && snapResult.items.length > 0) {
     return {
-      meta: safe.meta || { category: key },
-      items: Array.isArray(safe.items) ? safe.items : []
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(snapResult)
     };
   }
 
-  async function fetchJSON(url) {
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    return res.json();
+  // 2️⃣ MARU SEARCH FALLBACK
+  const maru = await fetchMaru(event, key);
+  if (maru && Array.isArray(maru.items) && maru.items.length) {
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        meta: { category: key, source: "maru" },
+        items: maru.items
+      })
+    };
   }
 
-  async function loadFromMaru(key) {
-    const url = new URL(MARU_ENDPOINT, location.origin);
-    url.searchParams.set("domain", key);
-    url.searchParams.set("lang", normalizeLang());
-    return fetchJSON(url.toString());
-  }
-
-  async function loadFromFallback(key) {
-    const url = new URL(FALLBACK_ENDPOINT, location.origin);
-    url.searchParams.set("category", key);
-    url.searchParams.set("lang", normalizeLang());
-    return fetchJSON(url.toString());
-  }
-
-  async function getFeed(key, options = {}) {
-    if (!key) throw new Error("feed key required");
-
-    const ttl = typeof options.ttlMs === "number" ? options.ttlMs : DEFAULT_TTL;
-    const noCache = !!options.noCache;
-
-    const cached = cache.get(key);
-    if (!noCache && cached && now() - cached.ts < ttl) {
-      return cached.data;
-    }
-
-    if (inflight.has(key)) return inflight.get(key);
-
-    const task = (async () => {
-      try {
-        // Try MARU engine first
-        const maru = await loadFromMaru(key);
-        const normalized = normalizePayload(key, maru);
-        cache.set(key, { ts: now(), data: normalized });
-        return normalized;
-      } catch (e) {
-        try {
-          // fallback to legacy feed
-          const legacy = await loadFromFallback(key);
-          const normalized = normalizePayload(key, legacy);
-          cache.set(key, { ts: now(), data: normalized });
-          return normalized;
-        } catch (err) {
-          return {
-            meta: { category: key, error: true },
-            items: []
-          };
-        }
-      }
-    })();
-
-    inflight.set(key, task);
-
-    try {
-      return await task;
-    } finally {
-      inflight.delete(key);
-    }
-  }
-
-  // Public API
-  window.FeedAPI = window.FeedAPI || {};
-  window.FeedAPI.get = getFeed;
-
-  window.PSOM = window.PSOM || {};
-  window.PSOM.fetchJSON = getFeed;
-  window.PSOM.lang = normalizeLang;
-  window.PSOM._cache = cache;
-})();
+  // 3️⃣ EMPTY SAFE RESPONSE
+  return {
+    statusCode: 200,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      meta: { category: key, empty: true },
+      items: []
+    })
+  };
+};
