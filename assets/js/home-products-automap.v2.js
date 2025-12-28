@@ -1,195 +1,257 @@
 /**
- * home-products-automap.v2.js (MARU Home Automap - DOM matched)
- * - Targets 8 slots via data-psom-key:
- *   home_1..home_5, home_right_top/middle/bottom
- * - Fetches: /.netlify/functions/feed?page=homeproducts
- * - Renders thumbnail cards INSIDE the existing slot containers (no page layout changes)
+ * home-products-automap.v2.js (HOME + RIGHT PANEL DOM-fit)
+ * Goals:
+ *  - Do NOT modify home.html
+ *  - When real items exist: hide placeholder blocks (shop-row / ad-box) and show real cards with image
+ *  - When items missing: show localized "컨텐츠 준비 중입니다" (12 langs), else fallback to EN
+ *  - Keys (home.html data-psom-key): home_1..home_5, home_right_top/middle/bottom
+ *
+ * Data source:
+ *  - /.netlify/functions/feed?page=homeproducts   -> { itemsByKey: { home_1:[...], ... } } OR flat map
+ *  - Fallback: /.netlify/functions/feed?page=<key> for each key
  */
-
 (function () {
-  'use strict';
-
+  "use strict";
   if (window.__HOME_AUTOMAP_V2__) return;
   window.__HOME_AUTOMAP_V2__ = true;
 
-  const FEED_URL = '/.netlify/functions/feed?page=homeproducts';
-  const KEYS_MAIN = ['home_1','home_2','home_3','home_4','home_5'];
-  const KEYS_RIGHT = ['home_right_top','home_right_middle','home_right_bottom'];
-  const ALL_KEYS = KEYS_MAIN.concat(KEYS_RIGHT);
+  const FEED_BULK = "/.netlify/functions/feed?page=homeproducts";
+  const FEED_ONE = (key) => "/.netlify/functions/feed?page=" + encodeURIComponent(key);
 
-  function qs(sel, root){ return (root||document).querySelector(sel); }
-  function qsa(sel, root){ return Array.prototype.slice.call((root||document).querySelectorAll(sel)); }
+  const MAIN_KEYS = ["home_1","home_2","home_3","home_4","home_5"];
+  const RIGHT_KEYS = ["home_right_top","home_right_middle","home_right_bottom"];
+  const ALL_KEYS = MAIN_KEYS.concat(RIGHT_KEYS);
 
-  function pick(o, keys){
-    for (const k of keys){
-      const v = o && o[k];
-      if (typeof v === 'string' && v.trim()) return v.trim();
+  const EMPTY_I18N = {
+    DE: "Inhalt wird vorbereitet.",
+    EN: "Content is being prepared.",
+    ES: "El contenido está en preparación.",
+    FR: "Le contenu est en préparation.",
+    ID: "Konten sedang dipersiapkan.",
+    JA: "コンテンツを準備中です。",
+    KO: "컨텐츠 준비 중입니다.",
+    PT: "O conteúdo está sendo preparado.",
+    RU: "Контент готовится.",
+    TH: "กำลังเตรียมเนื้อหาอยู่",
+    TR: "İçerik hazırlanıyor.",
+    VI: "Nội dung đang được chuẩn bị.",
+    ZH: "内容正在准备中。"
+  };
+
+  function guessLang() {
+    try {
+      const l = (document.documentElement.getAttribute("lang") || "").trim();
+      if (l) return l;
+    } catch (_) {}
+    // index.html might set window.__IGDC_LANG or similar
+    try {
+      const w = (window.__IGDC_LANG || window.IGDC_LANG || "").trim();
+      if (w) return w;
+    } catch (_) {}
+    return "ko";
+  }
+
+  function emptyText() {
+    const raw = String(guessLang() || "en").toUpperCase();
+    // normalize (e.g., "ko-KR" -> "KO")
+    const k = raw.split("-")[0];
+    if (EMPTY_I18N[k]) return EMPTY_I18N[k];
+    // for "other 8 languages" rule -> EN
+    return EMPTY_I18N.EN;
+  }
+
+  function safeText(s) {
+    return (s == null ? "" : String(s))
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function pick(o, keys) {
+    for (let i = 0; i < keys.length; i++) {
+      const v = o && o[keys[i]];
+      if (v != null && String(v).trim() !== "") return v;
     }
-    return '';
+    return "";
   }
 
-  function normItem(it){
-    it = it || {};
-    return {
-      id: String(it.id || it.uid || it.key || '').trim(),
-      title: pick(it, ['title','name','label','caption']) || 'Item',
-      thumb: pick(it, ['thumb','image','img','photo','thumbnail','cover']) ,
-      url: pick(it, ['checkoutUrl','productUrl','url','href','link','detailUrl']) || '#'
-    };
+  function normalizeItem(x) {
+    if (!x || typeof x !== "object") return null;
+    const title = safeText(pick(x, ["title","name","label"]));
+    const href  = String(pick(x, ["url","href","link"]) || "#").trim() || "#";
+    const img   = String(pick(x, ["image","img","thumb","thumbnail","photo"]) || "").trim();
+    const price = safeText(pick(x, ["price","amount"]));
+    const cur   = safeText(pick(x, ["currency"]) || "");
+    const cta   = safeText(pick(x, ["cta","buttonText"]) || "");
+    return { title, href, img, price, cur, cta };
   }
 
-  function ensureScrollerStyle(container, isRight){
-    // Containers are .thumb-grid.thumb-scroller in home.html; ensure it behaves like a row scroller
-    container.style.display = isRight ? 'grid' : 'flex';
-    container.style.gap = isRight ? '12px' : '12px';
-    container.style.alignItems = 'stretch';
-    container.style.padding = '0';
-    container.style.margin = '0';
-    container.style.listStyle = 'none';
-    container.style.overflowX = isRight ? 'hidden' : 'auto';
-    container.style.overflowY = 'hidden';
-    container.style.scrollSnapType = isRight ? 'none' : 'x mandatory';
+  function buildCard(it) {
+    const img = it.img
+      ? '<div class="thumb-img"><img loading="lazy" decoding="async" src="' + it.img + '" alt=""/></div>'
+      : '<div class="thumb-img thumb-img--empty"></div>';
+    const price = it.price ? '<div class="thumb-price">' + it.price + (it.cur ? " " + it.cur : "") + "</div>" : "";
+    const cta = it.cta ? '<div class="thumb-cta">' + it.cta + "</div>" : "";
+    return (
+      '<a class="thumb-card" href="' + it.href + '" target="_blank" rel="noopener noreferrer">' +
+        img +
+        '<div class="thumb-meta">' +
+          '<div class="thumb-title">' + (it.title || "") + "</div>" +
+          price +
+          cta +
+        "</div>" +
+      "</a>"
+    );
   }
 
-  function cardNode(item){
-    const d = document.createElement('div');
-    d.className = 'thumb-card product-card';
-    d.dataset.href = item.url;
-    d.dataset.productUrl = item.url;
-    d.style.height = '160px';
-    d.style.border = '1px solid #dadada';
-    d.style.borderRadius = '6px';
-    d.style.background = '#fff';
-    d.style.overflow = 'hidden';
-    d.style.cursor = 'pointer';
-    d.style.scrollSnapAlign = 'start';
-    d.style.display = 'grid';
-    d.style.gridTemplateRows = '1fr auto';
-
-    const thumb = document.createElement('div');
-    thumb.className = 'thumb';
-    thumb.style.height = '120px';
-    thumb.style.background = item.thumb ? `#ddd center/cover no-repeat url("${item.thumb.replace(/"/g,'\\"')}")` : '#eee';
-
-    const meta = document.createElement('div');
-    meta.style.padding = '8px 10px';
-    meta.style.fontSize = '0.92rem';
-    meta.style.lineHeight = '1.2';
-    meta.style.fontWeight = '700';
-    meta.style.color = '#222';
-    meta.style.whiteSpace = 'nowrap';
-    meta.style.overflow = 'hidden';
-    meta.style.textOverflow = 'ellipsis';
-    meta.textContent = item.title || 'Item';
-
-    d.appendChild(thumb);
-    d.appendChild(meta);
-    return d;
+  function buildEmptyBlock() {
+    return '<div class="thumb-empty" role="note">' + safeText(emptyText()) + "</div>";
   }
 
-  function adBoxNode(item){
-    const a = document.createElement('a');
-    a.className = 'ad-box';
-    a.href = item.url || '#';
-    a.target = '_blank';
-    a.rel = 'noopener';
+  function normalizeFeedPayload(json) {
+    // Accept:
+    // 1) { itemsByKey: { home_1:[...], ... } }
+    // 2) { home_1:[...], home_2:[...] }
+    // 3) { data: { itemsByKey: ... } }
+    if (!json) return {};
+    if (json.data && typeof json.data === "object") json = json.data;
 
-    const thumb = document.createElement('div');
-    thumb.className = 'thumb';
-    thumb.style.height = '160px';
-    thumb.style.background = item.thumb ? `#ddd center/cover no-repeat url("${item.thumb.replace(/"/g,'\\"')}")` : '#eee';
+    if (json.itemsByKey && typeof json.itemsByKey === "object") return json.itemsByKey;
+    if (json.sections && typeof json.sections === "object") return json.sections;
 
-    a.appendChild(thumb);
-    return a;
+    // direct map heuristic
+    const out = {};
+    for (const k of ALL_KEYS) {
+      if (Array.isArray(json[k])) out[k] = json[k];
+    }
+    return out;
   }
 
-  function placeholder(container, text){
-    const p = document.createElement('div');
-    p.className = 'maru-empty';
-    p.style.padding = '14px';
-    p.style.borderRadius = '12px';
-    p.style.background = '#f7f7f7';
-    p.style.textAlign = 'center';
-    p.style.color = '#666';
-    p.style.fontSize = '14px';
-    p.style.lineHeight = '1.6';
-    p.textContent = text || '콘텐츠 준비 중입니다.';
-    container.appendChild(p);
+  function fetchJson(url) {
+    return fetch(url, { cache: "no-store", credentials: "omit" })
+      .then((r) => {
+        if (!r.ok) throw new Error("HTTP_" + r.status);
+        return r.json();
+      });
   }
 
-  function renderSlot(key, items){
-    const container = qs(`[data-psom-key="${key}"]`);
-    if (!container) return;
+  function fetchBulk() {
+    return fetchJson(FEED_BULK)
+      .then(normalizeFeedPayload)
+      .catch(() => ({}));
+  }
 
-    const isRight = key.indexOf('home_right_') === 0;
+  function fetchOne(key) {
+    return fetchJson(FEED_ONE(key))
+      .then((j) => {
+        // accept array or {items:[]}
+        if (Array.isArray(j)) return j;
+        if (j && Array.isArray(j.items)) return j.items;
+        if (j && j.data && Array.isArray(j.data.items)) return j.data.items;
+        return [];
+      })
+      .catch(() => []);
+  }
 
-    // clean
-    container.innerHTML = '';
-    ensureScrollerStyle(container, isRight);
+  // --- DOM helpers (HOME MAIN) ---
+  function findMainWrapByKey(key) {
+    const host = document.querySelector('[data-psom-key="' + key + '"]');
+    if (!host) return null;
+    const wrap = host.closest(".shop-row-wrap");
+    if (!wrap) return null;
+    const row = wrap.querySelector(".shop-row");
+    return { host, wrap, row };
+  }
 
-    const list = (items || []).map(normItem).filter(x => x.url && x.thumb);
+  // --- DOM helpers (RIGHT PANEL) ---
+  function findRightWrapByKey(key) {
+    const host = document.querySelector('[data-psom-key="' + key + '"]');
+    if (!host) return null;
+    const section = host.closest(".ad-section");
+    const list = host.closest(".ad-list") || (section ? section.querySelector(".ad-list") : null);
+    const boxes = list ? Array.prototype.slice.call(list.querySelectorAll(".ad-box")) : [];
+    return { host, section, list, boxes };
+  }
 
-    if (!list.length){
-      placeholder(container, '콘텐츠 준비 중입니다.');
+  function hideEl(el) { if (el) el.style.display = "none"; }
+  function showEl(el) { if (el) el.style.display = ""; }
+
+  function renderIntoHost(host, items) {
+    if (!host) return;
+    const norm = Array.isArray(items) ? items.map(normalizeItem).filter(Boolean) : [];
+    if (norm.length === 0) {
+      host.innerHTML = buildEmptyBlock();
       return;
     }
-
-    for (const it of list){
-      container.appendChild(isRight ? adBoxNode(it) : cardNode(it));
-    }
+    host.innerHTML = norm.map(buildCard).join("");
   }
 
-  function indexSections(payload){
-    const map = {};
-    if (!payload) return map;
-    if (Array.isArray(payload.sections)){
-      for (const s of payload.sections){
-        const id = String((s && (s.id || s.sectionId) || '')).trim();
-        if (!id) continue;
-        map[id] = Array.isArray(s.items) ? s.items : (Array.isArray(s.cards) ? s.cards : []);
-      }
+  function applyMain(key, items) {
+    const ref = findMainWrapByKey(key);
+    if (!ref) return;
+
+    const has = Array.isArray(items) && items.length > 0;
+
+    // Placeholder row exists in HTML; ensure real data "wins"
+    if (ref.row) {
+      if (has) hideEl(ref.row);
+      else showEl(ref.row);
     }
-    // also accept direct keys {home_1:[...]}
-    for (const k of ALL_KEYS){
-      if (Array.isArray(payload[k])) map[k] = payload[k];
-    }
-    return map;
+
+    // Render real cards (or empty message) into host
+    renderIntoHost(ref.host, items);
   }
 
-  async function load(){
-    try{
-      const r = await fetch(FEED_URL, { cache: 'no-store' });
-      const payload = await r.json();
-      const byId = indexSections(payload);
+  function applyRight(key, items) {
+    const ref = findRightWrapByKey(key);
+    if (!ref) return;
 
-      for (const key of ALL_KEYS){
-        // support variants: home-1 vs home_1
-        const alt = key.replace(/_/g,'-');
-        renderSlot(key, byId[key] || byId[alt] || []);
-      }
-    }catch(e){
-      // if feed fails, keep placeholders stable
-      for (const key of ALL_KEYS){
-        const c = qs(`[data-psom-key="${key}"]`);
-        if (c && !c.querySelector('.maru-empty')) {
-          c.innerHTML = '';
-          ensureScrollerStyle(c, key.indexOf('home_right_')===0);
-          placeholder(c, '콘텐츠 준비 중입니다.');
-        }
+    const has = Array.isArray(items) && items.length > 0;
+
+    // Right panel uses .ad-box placeholders.
+// - If real data exists: hide placeholders (so cards are not duplicated)
+// - If data missing: hide placeholders too and show the localized empty message (avoid gray blanks)
+    if (ref.boxes && ref.boxes.length) {
+      for (const b of ref.boxes) {
+        hideEl(b);
       }
     }
+
+    renderIntoHost(ref.host, items);
   }
 
-  function boot(){
+  function applyAll(map) {
+    for (const k of MAIN_KEYS) applyMain(k, map[k] || []);
+    for (const k of RIGHT_KEYS) applyRight(k, map[k] || []);
+  }
+
+  function load() {
+    // 1) Try bulk
+    fetchBulk().then((map) => {
+      // if bulk missing some keys, backfill with per-key fetch
+      const missing = ALL_KEYS.filter((k) => !Array.isArray(map[k]));
+      if (missing.length === 0) {
+        applyAll(map);
+        return;
+      }
+      const tasks = missing.map((k) => fetchOne(k).then((arr) => (map[k] = arr)));
+      Promise.all(tasks).then(() => applyAll(map));
+    });
+  }
+
+  function boot() {
     load();
-    // keep in sync if DOM updates later
+
+    // Re-apply on lang changes or DOM updates
     const mo = new MutationObserver(() => {
       clearTimeout(window.__home_automap_t);
-      window.__home_automap_t = setTimeout(load, 200);
+      window.__home_automap_t = setTimeout(load, 250);
     });
     mo.observe(document.body, { childList: true, subtree: true });
+
+    // If a global language switcher fires a custom event, listen
+    window.addEventListener("IGDC_LANG_CHANGED", () => load());
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();
