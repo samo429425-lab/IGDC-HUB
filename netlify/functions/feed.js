@@ -1,12 +1,12 @@
-
 const fs = require("fs");
 const path = require("path");
 
 /**
- * feed.js (patched: homeproducts underscore-normalized)
- * - Keeps original structure
- * - Only adjusts HOME branch
- * - Normalizes section id to underscore
+ * feed.home.js
+ * HOME snapshot compiler (non-destructive)
+ * - Only handles ?page=homeproducts
+ * - Reads snapshot.internal.v1.json
+ * - Other routes remain untouched when you merge manually
  */
 
 const SNAPSHOT_PATH = path.join(__dirname, "data", "snapshot.internal.v1.json");
@@ -19,12 +19,7 @@ function safeReadJSON(p) {
   }
 }
 
-function normalizeId(id) {
-  if (!id) return "";
-  return String(id).trim().replace(/-/g, "_");
-}
-
-function normalizeItems(section) {
+function normalizeSectionItems(section) {
   if (!section) return [];
   if (Array.isArray(section.items)) return section.items;
   if (Array.isArray(section.cards)) return section.cards;
@@ -35,20 +30,21 @@ exports.handler = async function (event) {
   const qs = event.queryStringParameters || {};
   const page = String(qs.page || "").toLowerCase();
 
-  // === HOME PRODUCTS PATCH (SAFE EXTENSION) ===
+  // ===============================
+  // HOME SNAPSHOT COMPILER
+  // ===============================
   if (page === "homeproducts") {
     const snapshot = safeReadJSON(SNAPSHOT_PATH) || {};
     const sections = [];
 
     if (Array.isArray(snapshot.sections)) {
       for (const sec of snapshot.sections) {
-        const rawId = sec.id || "";
-        const id = normalizeId(rawId);
+        const id = String(sec.id || "").trim();
         if (!id) continue;
 
         sections.push({
           id,
-          items: normalizeItems(sec)
+          items: normalizeSectionItems(sec)
         });
       }
     }
@@ -63,14 +59,14 @@ exports.handler = async function (event) {
         meta: {
           page: "homeproducts",
           source: "snapshot",
-          normalized: true
+          compiled: true
         },
         sections
       })
     };
   }
 
-  // fallback – keep existing behavior
+  // fallback (leave existing behavior intact)
   return {
     statusCode: 200,
     headers: { "Content-Type": "application/json; charset=utf-8" },
