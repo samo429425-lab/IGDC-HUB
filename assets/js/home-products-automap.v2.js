@@ -16,7 +16,7 @@
   const FEED_URL = "/.netlify/functions/feed?page=homeproducts";
 
   const MAIN_KEYS = ["home_1","home_2","home_3","home_4","home_5"];
-  const RIGHT_KEYS = ["home-right-top","home-right-middle","home-right-bottom"];
+  const RIGHT_KEYS = ["home_right_top","home_right_middle","home_right_bottom"];
 
   const MAIN_LIMIT = 100;
   const MAIN_BATCH = 7;
@@ -82,25 +82,6 @@
       map[id] = Array.isArray(sec.items) ? sec.items : [];
     }
     return map;
-  }
-
-  function altKeys(key){
-    const k = String(key || "").trim();
-    if (!k) return [];
-    const a = new Set([k]);
-    a.add(k.replace(/_/g, "-"));
-    a.add(k.replace(/-/g, "_"));
-    return Array.from(a);
-  }
-
-  function pickItems(sections, key){
-    const tries = altKeys(key);
-    for (const t of tries){
-      const items = sections && sections[t];
-      if (Array.isArray(items) && items.length) return items;
-    }
-    // If nothing found, fall back to empty array (do NOT throw)
-    return [];
   }
 
   /* ---------- MAIN (unchanged behavior) ---------- */
@@ -212,14 +193,27 @@
     });
   }
 
-  async function boot() {
+  
+  function getSectionItems(sections, key) {
+    // Accept both underscore and hyphen ids, because feed/snapshot ids may differ.
+    // Priority: exact key -> hyphenized -> underscored
+    if (!sections) return [];
+    if (Array.isArray(sections[key])) return sections[key];
+    const hy = key.replace(/_/g, "-");
+    if (Array.isArray(sections[hy])) return sections[hy];
+    const us = key.replace(/-/g, "_");
+    if (Array.isArray(sections[us])) return sections[us];
+    return [];
+  }
+
+async function boot() {
     try {
       const res = await fetch(FEED_URL, { cache: "no-store" });
       const data = await res.json();
       const sections = indexSections(data);
 
-      MAIN_KEYS.forEach(k => renderMain(k, pickItems(sections, k)));
-      RIGHT_KEYS.forEach(k => renderRight(k, pickItems(sections, k)));
+      MAIN_KEYS.forEach(k => renderMain(k, getSectionItems(sections, k)));
+      RIGHT_KEYS.forEach(k => renderRight(k, getSectionItems(sections, k)));
     } catch (e) {
       // silent fail
     }
