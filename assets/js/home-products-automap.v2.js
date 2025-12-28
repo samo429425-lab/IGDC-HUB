@@ -1,214 +1,195 @@
-
 /**
- * home-products-automap.v2.right-final.js
- * FINAL VERSION
- *
- * Main: keeps existing behavior
- * Right panel: dedicated renderer
- * - shows placeholder if no data
- * - renders cards only when data exists
+ * home-products-automap.v2.js (MARU Home Automap - DOM matched)
+ * - Targets 8 slots via data-psom-key:
+ *   home_1..home_5, home_right_top/middle/bottom
+ * - Fetches: /.netlify/functions/feed?page=homeproducts
+ * - Renders thumbnail cards INSIDE the existing slot containers (no page layout changes)
  */
 
 (function () {
-  if (window.__HOME_AUTOMAP_RIGHT_FINAL__) return;
-  window.__HOME_AUTOMAP_RIGHT_FINAL__ = true;
+  'use strict';
 
-  const FEED_URL = "/.netlify/functions/feed?page=homeproducts";
+  if (window.__HOME_AUTOMAP_V2__) return;
+  window.__HOME_AUTOMAP_V2__ = true;
 
-  const MAIN_KEYS = ["home_1","home_2","home_3","home_4","home_5"];
-  const RIGHT_KEYS = ["home_right_top","home_right_middle","home_right_bottom"];
+  const FEED_URL = '/.netlify/functions/feed?page=homeproducts';
+  const KEYS_MAIN = ['home_1','home_2','home_3','home_4','home_5'];
+  const KEYS_RIGHT = ['home_right_top','home_right_middle','home_right_bottom'];
+  const ALL_KEYS = KEYS_MAIN.concat(KEYS_RIGHT);
 
-  const MAIN_LIMIT = 100;
-  const MAIN_BATCH = 7;
-  const RIGHT_LIMIT = 80;
-  const RIGHT_BATCH = 5;
+  function qs(sel, root){ return (root||document).querySelector(sel); }
+  function qsa(sel, root){ return Array.prototype.slice.call((root||document).querySelectorAll(sel)); }
 
-  const LANG_TEXT = {
-    ko: "콘텐츠 준비 중입니다.",
-    en: "Content is being prepared.",
-    ja: "コンテンツ準備中です。",
-    zh: "内容正在准备中。",
-    fr: "Contenu en cours de préparation.",
-    es: "El contenido se está preparando.",
-    de: "Inhalt wird vorbereitet.",
-    pt: "Conteúdo em preparação.",
-    ru: "Контент готовится.",
-    th: "กำลังเตรียมเนื้อหาอยู่",
-    tr: "İçerik hazırlanıyor.",
-    vi: "Nội dung đang được chuẩn bị."
-  };
-
-  function getLang() {
-    const v =
-      localStorage.getItem("igdc_lang") ||
-      document.documentElement.lang ||
-      navigator.language ||
-      "en";
-    const k = v.toLowerCase().split("-")[0];
-    return LANG_TEXT[k] ? k : "en";
+  function pick(o, keys){
+    for (const k of keys){
+      const v = o && o[k];
+      if (typeof v === 'string' && v.trim()) return v.trim();
+    }
+    return '';
   }
 
-  function emptyText() {
-    return LANG_TEXT[getLang()] || LANG_TEXT.en;
-  }
-
-  function normalize(item) {
+  function normItem(it){
+    it = it || {};
     return {
-      title: item.title || item.name || item.label || "",
-      thumb:
-        item.thumb ||
-        item.image ||
-        item.image_url ||
-        item.thumbnail ||
-        item.cover ||
-        "",
-      url:
-        item.url ||
-        item.href ||
-        item.link ||
-        item.path ||
-        "#",
-      priority:
-        typeof item.priority === "number" ? item.priority : 999999
+      id: String(it.id || it.uid || it.key || '').trim(),
+      title: pick(it, ['title','name','label','caption']) || 'Item',
+      thumb: pick(it, ['thumb','image','img','photo','thumbnail','cover']) ,
+      url: pick(it, ['checkoutUrl','productUrl','url','href','link','detailUrl']) || '#'
     };
   }
 
-  function indexSections(payload) {
+  function ensureScrollerStyle(container, isRight){
+    // Containers are .thumb-grid.thumb-scroller in home.html; ensure it behaves like a row scroller
+    container.style.display = isRight ? 'grid' : 'flex';
+    container.style.gap = isRight ? '12px' : '12px';
+    container.style.alignItems = 'stretch';
+    container.style.padding = '0';
+    container.style.margin = '0';
+    container.style.listStyle = 'none';
+    container.style.overflowX = isRight ? 'hidden' : 'auto';
+    container.style.overflowY = 'hidden';
+    container.style.scrollSnapType = isRight ? 'none' : 'x mandatory';
+  }
+
+  function cardNode(item){
+    const d = document.createElement('div');
+    d.className = 'thumb-card product-card';
+    d.dataset.href = item.url;
+    d.dataset.productUrl = item.url;
+    d.style.height = '160px';
+    d.style.border = '1px solid #dadada';
+    d.style.borderRadius = '6px';
+    d.style.background = '#fff';
+    d.style.overflow = 'hidden';
+    d.style.cursor = 'pointer';
+    d.style.scrollSnapAlign = 'start';
+    d.style.display = 'grid';
+    d.style.gridTemplateRows = '1fr auto';
+
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    thumb.style.height = '120px';
+    thumb.style.background = item.thumb ? `#ddd center/cover no-repeat url("${item.thumb.replace(/"/g,'\\"')}")` : '#eee';
+
+    const meta = document.createElement('div');
+    meta.style.padding = '8px 10px';
+    meta.style.fontSize = '0.92rem';
+    meta.style.lineHeight = '1.2';
+    meta.style.fontWeight = '700';
+    meta.style.color = '#222';
+    meta.style.whiteSpace = 'nowrap';
+    meta.style.overflow = 'hidden';
+    meta.style.textOverflow = 'ellipsis';
+    meta.textContent = item.title || 'Item';
+
+    d.appendChild(thumb);
+    d.appendChild(meta);
+    return d;
+  }
+
+  function adBoxNode(item){
+    const a = document.createElement('a');
+    a.className = 'ad-box';
+    a.href = item.url || '#';
+    a.target = '_blank';
+    a.rel = 'noopener';
+
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    thumb.style.height = '160px';
+    thumb.style.background = item.thumb ? `#ddd center/cover no-repeat url("${item.thumb.replace(/"/g,'\\"')}")` : '#eee';
+
+    a.appendChild(thumb);
+    return a;
+  }
+
+  function placeholder(container, text){
+    const p = document.createElement('div');
+    p.className = 'maru-empty';
+    p.style.padding = '14px';
+    p.style.borderRadius = '12px';
+    p.style.background = '#f7f7f7';
+    p.style.textAlign = 'center';
+    p.style.color = '#666';
+    p.style.fontSize = '14px';
+    p.style.lineHeight = '1.6';
+    p.textContent = text || '콘텐츠 준비 중입니다.';
+    container.appendChild(p);
+  }
+
+  function renderSlot(key, items){
+    const container = qs(`[data-psom-key="${key}"]`);
+    if (!container) return;
+
+    const isRight = key.indexOf('home_right_') === 0;
+
+    // clean
+    container.innerHTML = '';
+    ensureScrollerStyle(container, isRight);
+
+    const list = (items || []).map(normItem).filter(x => x.url && x.thumb);
+
+    if (!list.length){
+      placeholder(container, '콘텐츠 준비 중입니다.');
+      return;
+    }
+
+    for (const it of list){
+      container.appendChild(isRight ? adBoxNode(it) : cardNode(it));
+    }
+  }
+
+  function indexSections(payload){
     const map = {};
-    if (!payload || !Array.isArray(payload.sections)) return map;
-    for (const sec of payload.sections) {
-      const id = String(sec.id || "").trim();
-      if (!id) continue;
-      map[id] = Array.isArray(sec.items) ? sec.items : [];
+    if (!payload) return map;
+    if (Array.isArray(payload.sections)){
+      for (const s of payload.sections){
+        const id = String((s && (s.id || s.sectionId) || '')).trim();
+        if (!id) continue;
+        map[id] = Array.isArray(s.items) ? s.items : (Array.isArray(s.cards) ? s.cards : []);
+      }
+    }
+    // also accept direct keys {home_1:[...]}
+    for (const k of ALL_KEYS){
+      if (Array.isArray(payload[k])) map[k] = payload[k];
     }
     return map;
   }
 
-  /* ---------- MAIN (unchanged behavior) ---------- */
-  function renderMain(key, items) {
-    const anchor = document.querySelector(`[data-psom-key="${key}"]`);
-    if (!anchor) return;
+  async function load(){
+    try{
+      const r = await fetch(FEED_URL, { cache: 'no-store' });
+      const payload = await r.json();
+      const byId = indexSections(payload);
 
-    const scroller = anchor.closest(".shop-scroller");
-    const row = scroller && scroller.querySelector(".shop-row");
-    if (!row) return;
-
-    const list = items.map(normalize).filter(x => x.thumb);
-    if (!list.length) return;
-
-    row.innerHTML = "";
-    let offset = 0;
-
-    function renderMore() {
-      const end = Math.min(offset + MAIN_BATCH, list.length, MAIN_LIMIT);
-      for (let i = offset; i < end; i++) {
-        const it = list[i];
-        const a = document.createElement("a");
-        a.className = "shop-card";
-        a.href = it.url;
-        a.style.background = `center/cover no-repeat url("${it.thumb}")`;
-
-        const cap = document.createElement("div");
-        cap.className = "shop-card-cap";
-        cap.textContent = it.title;
-
-        a.appendChild(cap);
-        row.appendChild(a);
+      for (const key of ALL_KEYS){
+        // support variants: home-1 vs home_1
+        const alt = key.replace(/_/g,'-');
+        renderSlot(key, byId[key] || byId[alt] || []);
       }
-      offset = end;
+    }catch(e){
+      // if feed fails, keep placeholders stable
+      for (const key of ALL_KEYS){
+        const c = qs(`[data-psom-key="${key}"]`);
+        if (c && !c.querySelector('.maru-empty')) {
+          c.innerHTML = '';
+          ensureScrollerStyle(c, key.indexOf('home_right_')===0);
+          placeholder(c, '콘텐츠 준비 중입니다.');
+        }
+      }
     }
+  }
 
-    renderMore();
-
-    scroller.addEventListener("scroll", () => {
-      if (
-        scroller.scrollLeft + scroller.clientWidth >=
-        scroller.scrollWidth - 20
-      ) {
-        renderMore();
-      }
+  function boot(){
+    load();
+    // keep in sync if DOM updates later
+    const mo = new MutationObserver(() => {
+      clearTimeout(window.__home_automap_t);
+      window.__home_automap_t = setTimeout(load, 200);
     });
+    mo.observe(document.body, { childList: true, subtree: true });
   }
 
-  /* ---------- RIGHT PANEL (dedicated renderer) ---------- */
-  function renderRight(key, items) {
-    const anchor = document.querySelector(`[data-psom-key="${key}"]`);
-    if (!anchor) return;
-
-    const section = anchor.closest(".ad-section");
-    if (!section) return;
-
-    const listBox = section.querySelector(".ad-list");
-
-    const list = items.map(normalize).filter(x => x.thumb);
-
-    if (!list.length) {
-      // show placeholder
-      anchor.style.display = "block";
-      anchor.textContent = emptyText();
-      anchor.style.padding = "12px";
-      anchor.style.background = "#f7f7f7";
-      anchor.style.borderRadius = "12px";
-      anchor.style.textAlign = "center";
-      if (listBox) listBox.style.display = "none";
-      return;
-    }
-
-    // hide placeholder
-    anchor.style.display = "none";
-    if (!listBox) return;
-
-    listBox.style.display = "";
-    listBox.innerHTML = "";
-
-    let offset = 0;
-
-    function renderMore() {
-      const end = Math.min(offset + RIGHT_BATCH, list.length, RIGHT_LIMIT);
-      for (let i = offset; i < end; i++) {
-        const it = list[i];
-        const a = document.createElement("a");
-        a.className = "ad-box";
-        a.href = it.url;
-
-        const thumb = document.createElement("div");
-        thumb.className = "thumb";
-        thumb.style.background = `center/cover no-repeat url("${it.thumb}")`;
-
-        a.appendChild(thumb);
-        listBox.appendChild(a);
-      }
-      offset = end;
-    }
-
-    renderMore();
-
-    listBox.addEventListener("scroll", () => {
-      if (
-        listBox.scrollTop + listBox.clientHeight >=
-        listBox.scrollHeight - 20
-      ) {
-        renderMore();
-      }
-    });
-  }
-
-  async function boot() {
-    try {
-      const res = await fetch(FEED_URL, { cache: "no-store" });
-      const data = await res.json();
-      const sections = indexSections(data);
-
-      MAIN_KEYS.forEach(k => renderMain(k, sections[k] || []));
-      RIGHT_KEYS.forEach(k => renderRight(k, sections[k] || []));
-    } catch (e) {
-      // silent fail
-    }
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", boot);
-  } else {
-    boot();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();
