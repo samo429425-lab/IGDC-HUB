@@ -1,24 +1,65 @@
 /**
- * home-products-automap.v2.js (MARU Home Automap - DOM matched)
- * - Targets 8 slots via data-psom-key:
- *   home_1..home_5, home_right_top/middle/bottom
- * - Fetches: /.netlify/functions/feed?page=homeproducts
- * - Renders thumbnail cards INSIDE the existing slot containers (no page layout changes)
+ * home-products-automap.v2.domfit.js
+ * Baseline: user's v2 behavior (empty message must show on MAIN + RIGHT)
+ * Fixes:
+ * 1) Render into the REAL DOM containers used by home.html:
+ *    - MAIN: .shop-row inside the same .shop-scroller (NOT the psom div)
+ *    - RIGHT: .ad-list inside the same .ad-section (NOT the psom div)
+ * 2) Empty state: show multilingual message in psom div AND hide the list area
+ * 3) Data state: hide psom div, show list area, and batch-render (MAIN 100/7, RIGHT 80/5)
+ * 4) Accept legacy section ids if feed passes through
+ *
+ * Fetch: /.netlify/functions/feed?page=homeproducts
  */
 
 (function () {
   'use strict';
-
-  if (window.__HOME_AUTOMAP_V2__) return;
-  window.__HOME_AUTOMAP_V2__ = true;
+  if (window.__HOME_AUTOMAP_DOMFIT__) return;
+  window.__HOME_AUTOMAP_DOMFIT__ = true;
 
   const FEED_URL = '/.netlify/functions/feed?page=homeproducts';
-  const KEYS_MAIN = ['home_1','home_2','home_3','home_4','home_5'];
+
+  const KEYS_MAIN  = ['home_1','home_2','home_3','home_4','home_5'];
   const KEYS_RIGHT = ['home_right_top','home_right_middle','home_right_bottom'];
-  const ALL_KEYS = KEYS_MAIN.concat(KEYS_RIGHT);
+  const ALL_KEYS   = KEYS_MAIN.concat(KEYS_RIGHT);
+
+  const MAIN_LIMIT = 100, MAIN_BATCH = 7;
+  const RIGHT_LIMIT = 80, RIGHT_BATCH = 5;
+
+  const EMPTY_I18N = {
+    de: 'Inhalte werden vorbereitet.',
+    en: 'Content is being prepared.',
+    es: 'El contenido está en preparación.',
+    fr: 'Contenu en cours de préparation.',
+    id: 'Konten sedang disiapkan.',
+    ja: 'コンテンツ準備中です。',
+    ko: '콘텐츠 준비 중입니다.',
+    pt: 'Conteúdo em preparação.',
+    ru: 'Контент готовится.',
+    th: 'กำลังเตรียมเนื้อหาอยู่',
+    tr: 'İçerik hazırlanıyor.',
+    vi: 'Nội dung đang được chuẩn bị.',
+    zh: '内容正在准备中。'
+  };
+  const SUPPORTED_12 = new Set(['de','en','es','fr','id','ja','pt','ru','th','tr','vi','zh']);
+
+  function getLangCode(){
+    try{
+      const raw = String(
+        (localStorage && localStorage.getItem('igdc_lang')) ||
+        (document.documentElement && document.documentElement.getAttribute('lang')) ||
+        (navigator && (navigator.language || (navigator.languages && navigator.languages[0]))) ||
+        'en'
+      ).trim().toLowerCase();
+      const base = raw.split('-')[0];
+      if (SUPPORTED_12.has(base)) return base;
+      if (base === 'ko') return 'ko';
+      return 'en';
+    }catch(e){ return 'en'; }
+  }
+  function emptyText(){ return EMPTY_I18N[getLangCode()] || EMPTY_I18N.en; }
 
   function qs(sel, root){ return (root||document).querySelector(sel); }
-  function qsa(sel, root){ return Array.prototype.slice.call((root||document).querySelectorAll(sel)); }
 
   function pick(o, keys){
     for (const k of keys){
@@ -31,121 +72,109 @@
   function normItem(it){
     it = it || {};
     return {
-      id: String(it.id || it.uid || it.key || '').trim(),
       title: pick(it, ['title','name','label','caption']) || 'Item',
-      thumb: pick(it, ['thumb','image','img','photo','thumbnail','cover']) ,
-      url: pick(it, ['checkoutUrl','productUrl','url','href','link','detailUrl']) || '#'
+      thumb: pick(it, ['thumb','image','image_url','img','photo','thumbnail','thumbnailUrl','cover','coverUrl']),
+      url:   pick(it, ['checkoutUrl','productUrl','url','href','link','path','detailUrl']) || '#',
+      priority: (typeof it.priority === 'number' ? it.priority : null)
     };
   }
 
-  function ensureScrollerStyle(container, isRight){
-    // Containers are .thumb-grid.thumb-scroller in home.html; ensure it behaves like a row scroller
-    container.style.display = isRight ? 'grid' : 'flex';
-    container.style.gap = isRight ? '12px' : '12px';
-    container.style.alignItems = 'stretch';
-    container.style.padding = '0';
-    container.style.margin = '0';
-    container.style.listStyle = 'none';
-    container.style.overflowX = isRight ? 'hidden' : 'auto';
-    container.style.overflowY = isRight ? 'auto' : 'hidden';
-    if (isRight) container.style.minHeight = '60px';
-    container.style.scrollSnapType = isRight ? 'none' : 'x mandatory';
+  function isExternal(url){ return /^https?:\/\//i.test(url); }
+
+  // ===== DOM target resolution =====
+  function resolveTargets(psomEl, key){
+    const isRight = key.indexOf('home_right_') === 0;
+
+    if (isRight){
+      const section = psomEl.closest('.ad-section');
+      const scroll = section && section.querySelector('.ad-scroll');
+      const list = section && section.querySelector('.ad-list');
+      return { isRight: true, section, scroller: scroll, list, psomEl };
+    }
+
+    // MAIN
+    const scroller = psomEl.closest('.shop-scroller');
+    const row = scroller && scroller.querySelector('.shop-row');
+    return { isRight: false, section: scroller, scroller, list: row, psomEl };
   }
 
-  function cardNode(item){
-    const d = document.createElement('div');
-    d.className = 'thumb-card product-card';
-    d.dataset.href = item.url;
-    d.dataset.productUrl = item.url;
-    d.style.height = '160px';
-    d.style.border = '1px solid #dadada';
-    d.style.borderRadius = '6px';
-    d.style.background = '#fff';
-    d.style.overflow = 'hidden';
-    d.style.cursor = 'pointer';
-    d.style.scrollSnapAlign = 'start';
-    d.style.display = 'grid';
-    d.style.gridTemplateRows = '1fr auto';
+  function showEmpty(t){
+    // Show message in psom element; hide real list so it doesn't look "blank"
+    t.psomEl.style.display = 'block';
+    t.psomEl.textContent = emptyText();
+    t.psomEl.style.padding = '12px';
+    t.psomEl.style.borderRadius = '12px';
+    t.psomEl.style.background = '#f7f7f7';
+    t.psomEl.style.color = '#666';
+    t.psomEl.style.textAlign = 'center';
+    t.psomEl.style.fontSize = '14px';
+    t.psomEl.style.lineHeight = '1.6';
+    t.psomEl.style.minHeight = '44px';
 
-    const thumb = document.createElement('div');
-    thumb.className = 'thumb';
-    thumb.style.height = '120px';
-    thumb.style.background = item.thumb ? `#ddd center/cover no-repeat url("${item.thumb.replace(/"/g,'\\"')}")` : '#eee';
-
-    const meta = document.createElement('div');
-    meta.style.padding = '8px 10px';
-    meta.style.fontSize = '0.92rem';
-    meta.style.lineHeight = '1.2';
-    meta.style.fontWeight = '700';
-    meta.style.color = '#222';
-    meta.style.whiteSpace = 'nowrap';
-    meta.style.overflow = 'hidden';
-    meta.style.textOverflow = 'ellipsis';
-    meta.textContent = item.title || 'Item';
-
-    d.appendChild(thumb);
-    d.appendChild(meta);
-    return d;
+    if (t.scroller) t.scroller.style.display = 'none';
   }
 
-  function adBoxNode(item){
+  function showData(t){
+    t.psomEl.style.display = 'none';
+    if (t.scroller) t.scroller.style.display = '';
+  }
+
+  // ===== Card builders that match home.html CSS =====
+  function buildMainCard(item){
     const a = document.createElement('a');
-    a.className = 'ad-box';
+    a.className = 'shop-card';
     a.href = item.url || '#';
-    a.target = '_blank';
-    a.rel = 'noopener';
+    if (isExternal(item.url)) { a.target = '_blank'; a.rel = 'noopener'; }
 
-    const thumb = document.createElement('div');
-    thumb.className = 'thumb';
-    thumb.style.height = '160px';
-    thumb.style.background = item.thumb ? `#ddd center/cover no-repeat url("${item.thumb.replace(/"/g,'\\"')}")` : '#eee';
+    // image background (cover)
+    if (item.thumb){
+      a.style.background = `center/cover no-repeat url("${String(item.thumb).replace(/"/g,'\\"')}")`;
+    }
 
-    a.appendChild(thumb);
+    // title overlay
+    const cap = document.createElement('div');
+    cap.className = 'shop-card-cap';
+    cap.textContent = item.title || '';
+    cap.style.alignSelf = 'end';
+    cap.style.width = '100%';
+    cap.style.background = 'rgba(255,255,255,.88)';
+    cap.style.padding = '6px 8px';
+    cap.style.fontWeight = '700';
+    cap.style.fontSize = '14px';
+    cap.style.color = '#222';
+    cap.style.whiteSpace = 'nowrap';
+    cap.style.overflow = 'hidden';
+    cap.style.textOverflow = 'ellipsis';
+
+    a.style.display = 'grid';
+    a.style.gridTemplateRows = '1fr auto';
+    a.style.alignItems = 'stretch';
+    a.style.justifyItems = 'stretch';
+
+    a.appendChild(cap);
     return a;
   }
 
-  function placeholder(container, text){
-    const p = document.createElement('div');
-    p.className = 'maru-empty';
-    p.style.padding = '14px';
-    p.style.borderRadius = '12px';
-    p.style.background = '#f7f7f7';
-    p.style.textAlign = 'center';
-    p.style.color = '#666';
-    p.style.fontSize = '14px';
-    p.style.lineHeight = '1.6';
-    p.textContent = text || '콘텐츠 준비 중입니다.';
-    container.appendChild(p);
-  }
+  function buildRightCard(item){
+    const a = document.createElement('a');
+    a.className = 'ad-box';
+    a.href = item.url || '#';
+    if (isExternal(item.url)) { a.target = '_blank'; a.rel = 'noopener'; }
+    else { a.target = '_self'; }
 
-  function renderSlot(key, items){
-    const container = qs(`[data-psom-key="${key}"]`);
-    if (!container) return;
-
-    const isRight = key.indexOf('home_right_') === 0;
-    // NOTE: Do NOT clear container until we confirm we have real items.
-    ensureScrollerStyle(container, isRight);
-
-    const list = (items || []).map(normItem).filter(x => x.url && x.thumb);
-
-    if (!list.length){
-      // Keep any existing right-panel message if present; otherwise show placeholder.
-      if (!container.querySelector('.maru-empty')) placeholder(container, '콘텐츠 준비 중입니다.');
-      return;
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    if (item.thumb){
+      thumb.style.background = `center/cover no-repeat url("${String(item.thumb).replace(/"/g,'\\"')}")`;
     }
-
-    // Now we have real items -> clear and render (HTML yields to real data)
-    container.innerHTML = '';
-    ensureScrollerStyle(container, isRight);
-
-    for (const it of list){
-      container.appendChild(isRight ? adBoxNode(it) : cardNode(it));
-    }
+    a.appendChild(thumb);
+    return a;
   }
 
   function indexSections(payload){
     const map = {};
     if (!payload) return map;
+
     if (Array.isArray(payload.sections)){
       for (const s of payload.sections){
         const id = String((s && (s.id || s.sectionId) || '')).trim();
@@ -153,46 +182,107 @@
         map[id] = Array.isArray(s.items) ? s.items : (Array.isArray(s.cards) ? s.cards : []);
       }
     }
-    // also accept direct keys {home_1:[...]}
+
+    // also accept direct keys (defensive)
     for (const k of ALL_KEYS){
       if (Array.isArray(payload[k])) map[k] = payload[k];
     }
     return map;
   }
 
+  function legacyKey(key){
+    // Accept snapshot legacy ids too (if feed isn't mapped)
+    if (key.startsWith('home_right_')) return key.replace('home_right_','home-right-');
+    return key.replace('home_','home-shop-');
+  }
+
+  function bindIncremental(t, items){
+    const isRight = t.isRight;
+    const limit = isRight ? RIGHT_LIMIT : MAIN_LIMIT;
+    const batch = isRight ? RIGHT_BATCH : MAIN_BATCH;
+
+    let offset = 0;
+
+    function renderMore(){
+      const end = Math.min(offset + batch, limit, items.length);
+      const frag = document.createDocumentFragment();
+      for (let i = offset; i < end; i++){
+        const it = items[i];
+        frag.appendChild(isRight ? buildRightCard(it) : buildMainCard(it));
+      }
+      t.list.appendChild(frag);
+      offset = end;
+    }
+
+    // clear existing visuals inside REAL list
+    t.list.innerHTML = '';
+    renderMore();
+
+    // attach scroll on the REAL scroller
+    const sc = t.scroller;
+    if (!sc) return;
+
+    sc.addEventListener('scroll', function(){
+      if (offset >= items.length || offset >= limit) return;
+
+      const nearEnd = isRight
+        ? (sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 20)
+        : (sc.scrollLeft + sc.clientWidth >= sc.scrollWidth - 20);
+
+      if (nearEnd) renderMore();
+    }, { passive: true });
+  }
+
+  function renderSlot(key, rawItems){
+    const psomEl = qs(`[data-psom-key="${key}"]`);
+    if (!psomEl) return;
+
+    const t = resolveTargets(psomEl, key);
+    if (!t.list) return;
+
+    // normalize and keep only items with at least title+thumb; url may be '#'
+    let list = (rawItems || []).map(normItem).filter(x => x && x.thumb);
+
+    // priority sort (stable)
+    list.sort((a,b) => {
+      const pa = (a.priority == null ? 999999 : a.priority);
+      const pb = (b.priority == null ? 999999 : b.priority);
+      return pa - pb;
+    });
+
+    if (!list.length){
+      showEmpty(t);
+      return;
+    }
+
+    showData(t);
+    bindIncremental(t, list);
+  }
+
   async function load(){
     try{
       const r = await fetch(FEED_URL, { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
       const payload = await r.json();
       const byId = indexSections(payload);
 
       for (const key of ALL_KEYS){
-        // support variants: home-1 vs home_1
         const alt = key.replace(/_/g,'-');
-        const legacy = (key.startsWith('home_right_') ? key.replace('home_right_','home-right-') : key.replace('home_','home-shop-'));
-        renderSlot(key, byId[key] || byId[alt] || byId[legacy] || []);
+        renderSlot(key, byId[key] || byId[alt] || byId[legacyKey(key)] || []);
       }
     }catch(e){
-      // if feed fails, keep placeholders stable
+      // On fail, keep existing layout and show message in psom elements
       for (const key of ALL_KEYS){
-        const c = qs(`[data-psom-key="${key}"]`);
-        if (c && !c.querySelector('.maru-empty')) {
-          c.innerHTML = '';
-          ensureScrollerStyle(c, key.indexOf('home_right_')===0);
-          placeholder(c, '콘텐츠 준비 중입니다.');
-        }
+        const psomEl = qs(`[data-psom-key="${key}"]`);
+        if (!psomEl) continue;
+        const t = resolveTargets(psomEl, key);
+        showEmpty(t);
       }
     }
   }
 
   function boot(){
     load();
-    // keep in sync if DOM updates later
-    const mo = new MutationObserver(() => {
-      clearTimeout(window.__home_automap_t);
-      window.__home_automap_t = setTimeout(load, 200);
-    });
-    mo.observe(document.body, { childList: true, subtree: true });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
