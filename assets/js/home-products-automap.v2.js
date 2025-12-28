@@ -1,6 +1,6 @@
 
 /**
- * home-products-automap.v3.3.js
+ * home-products-automap.v3.4.js
  * - Built-in i18n placeholder (no external script)
  * - Main 5 sections + right panel
  * - Auto replace when real data arrives
@@ -75,13 +75,19 @@
   function cardHTML(c) {
     const img = c.thumb || c.photo || c.image || "";
     const title = (c.title || "").replace(/"/g, "");
-    const link = c.detailUrl || ("/product.html?id=" + encodeURIComponent(c.id));
+    const href = (c.url || c.detailUrl || c.checkoutUrl || ("/product.html?id=" + encodeURIComponent(c.id))).trim();
+    // Use both classes to match legacy CSS rules across pages
     return `
-      <a class="product-card" href="${link}" data-product-id="${c.id}" target="_blank" rel="noopener">
-        <img loading="lazy" src="${img}" alt="${title}">
-        <div class="meta"><div class="t">${title}</div></div>
+      <a class="thumb-card product-card" href="${href}" data-product-id="${c.id}" data-href="${href}" target="_blank" rel="noopener">
+        <div class="thumb">
+          <img loading="lazy" decoding="async" src="${img}" alt="${title}">
+        </div>
+        <div class="meta">
+          <div class="t">${title || " "}</div>
+        </div>
       </a>`;
   }
+
 
   function ensure(container, items) {
     if (!container) return;
