@@ -1,97 +1,147 @@
-
 /**
- * feed.js — v6 FINAL (SNAPSHOT + MARU HYBRID)
- * Purpose:
- * 1) Serve snapshot.internal.v1.json FIRST (guaranteed data)
- * 2) Fallback to maru-search if snapshot empty
- * 3) Always return { sections, items }
+ * netlify/functions/feed.js — v7 (SNAPSHOT-FIRST, HOME PRODUCTS SUPPORT)
+ * - Reads ./data/snapshot.internal.v1.json
+ * - If page/homeproducts requested: returns sections home-1..home-5 (and any matching home_* keys)
+ * - If category=<id>: returns { meta, items } for that section
+ * - Optional maru-search fallback with proper absolute URL (no localhost)
  */
 
-const path = require("path");
 const fs = require("fs");
+const path = require("path");
 
 const SNAPSHOT_PATH = path.join(__dirname, "data", "snapshot.internal.v1.json");
-const MARU_ENDPOINT = "/.netlify/functions/maru-search";
+const MARU_FN_PATH = "/.netlify/functions/maru-search";
 
-function loadSnapshot() {
+function readJsonSafe(p) {
   try {
-    if (fs.existsSync(SNAPSHOT_PATH)) {
-      const raw = fs.readFileSync(SNAPSHOT_PATH, "utf-8");
-      return JSON.parse(raw);
-    }
-  } catch (e) {}
+    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf-8"));
+  } catch (_) {}
   return null;
 }
 
-function normalizeFromSnapshot(snapshot, key) {
-  if (!snapshot) return { meta: { category: key }, items: [] };
-
-  if (Array.isArray(snapshot.sections)) {
-    const found = snapshot.sections.find(
-      s => (s.id || "").toLowerCase() === key.toLowerCase()
-    );
-    if (found && Array.isArray(found.items)) {
-      return { meta: { category: key }, items: found.items };
-    }
-  }
-
-  if (Array.isArray(snapshot.items)) {
-    return { meta: { category: key }, items: snapshot.items };
-  }
-
-  return { meta: { category: key }, items: [] };
+function normKey(k) {
+  return String(k || "").trim();
 }
 
-async function fetchMaru(event, key) {
+function keyVariants(key) {
+  const k = String(key || "").toLowerCase();
+  const vars = new Set([k, k.replace(/_/g, "-"), k.replace(/-/g, "_")]);
+  // common aliases
+  if (k === "homeproducts") {
+    vars.add("home-1"); vars.add("home_1"); vars.add("main-1"); vars.add("main_1");
+  }
+  return vars;
+}
+
+function getSectionItems(snapshot, sectionId) {
+  if (!snapshot) return [];
+  const vars = keyVariants(sectionId);
+  // sections preferred
+  if (Array.isArray(snapshot.sections)) {
+    for (const sec of snapshot.sections) {
+      const sid = String((sec && (sec.id || sec.sectionId) || "")).toLowerCase();
+      if (!sid) continue;
+      if (vars.has(sid)) {
+        const arr = Array.isArray(sec.items) ? sec.items : (Array.isArray(sec.cards) ? sec.cards : []);
+        return arr || [];
+      }
+    }
+  }
+  // legacy
+  if (Array.isArray(snapshot.items)) return snapshot.items;
+  return [];
+}
+
+function getHomeProductsPayload(snapshot) {
+  // return 5 main rows as sections so automap can map them
+  const out = { meta: { page: "homeproducts", source: "snapshot" }, sections: [] };
+  for (let i = 1; i <= 5; i++) {
+    // try home_1, home-1, main-1 etc.
+    const items =
+      getSectionItems(snapshot, `home_${i}`) ||
+      getSectionItems(snapshot, `home-${i}`) ||
+      [];
+    out.sections.push({ id: `home_${i}`, items: items || [] });
+  }
+  // also include anything that already matches right panel keys if present in snapshot
+  // (harmless if empty)
+  ["home-right-top","home-right-middle","home-right-bottom"].forEach(id=>{
+    const items = getSectionItems(snapshot, id);
+    if (items && items.length) out.sections.push({ id, items });
+  });
+  return out;
+}
+
+async function fetchMaru(host, proto, domainKey) {
   try {
-    const url = new URL(MARU_ENDPOINT, "http://localhost");
-    url.searchParams.set("domain", key);
-    const res = await fetch(url.toString());
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
+    const base = `${proto}://${host}`;
+    const u = new URL(MARU_FN_PATH, base);
+    u.searchParams.set("domain", domainKey);
+    const r = await fetch(u.toString(), { headers: { "cache-control": "no-store" } });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch (_) {
     return null;
   }
 }
 
 exports.handler = async function (event) {
-  const key =
-    event.queryStringParameters?.category ||
-    event.queryStringParameters?.page ||
-    "home-1";
+  const qs = event.queryStringParameters || {};
+  const page = normKey(qs.page);
+  const category = normKey(qs.category);
+  const key = category || page || "homeproducts";
 
-  // 1️⃣ SNAPSHOT FIRST (authoritative)
-  const snapshot = loadSnapshot();
-  const snapResult = normalizeFromSnapshot(snapshot, key);
+  const snapshot = readJsonSafe(SNAPSHOT_PATH);
 
-  if (snapResult.items && snapResult.items.length > 0) {
+  // HOME PRODUCTS special: return 5 sections
+  if ((page && page.toLowerCase() === "homeproducts") || key.toLowerCase() === "homeproducts") {
+    const payload = getHomeProductsPayload(snapshot);
     return {
       statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(snapResult)
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store"
+      },
+      body: JSON.stringify(payload)
     };
   }
 
-  // 2️⃣ MARU SEARCH FALLBACK
-  const maru = await fetchMaru(event, key);
-  if (maru && Array.isArray(maru.items) && maru.items.length) {
+  // Single category/section
+  const items = getSectionItems(snapshot, key);
+  if (items && items.length) {
     return {
       statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        meta: { category: key, source: "maru" },
-        items: maru.items
-      })
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store"
+      },
+      body: JSON.stringify({ meta: { category: key, source: "snapshot" }, items })
     };
   }
 
-  // 3️⃣ EMPTY SAFE RESPONSE
+  // Optional maru fallback (only if host is available)
+  const host = (event.headers && (event.headers["x-forwarded-host"] || event.headers.host)) || "";
+  const proto = (event.headers && (event.headers["x-forwarded-proto"])) || "https";
+  if (host) {
+    const maru = await fetchMaru(host, proto, key);
+    if (maru && Array.isArray(maru.items) && maru.items.length) {
+      return {
+        statusCode: 200,
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store"
+        },
+        body: JSON.stringify({ meta: { category: key, source: "maru" }, items: maru.items })
+      };
+    }
+  }
+
   return {
     statusCode: 200,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      meta: { category: key, empty: true },
-      items: []
-    })
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store"
+    },
+    body: JSON.stringify({ meta: { category: key, empty: true }, items: [] })
   };
 };
