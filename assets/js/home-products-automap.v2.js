@@ -1,257 +1,290 @@
 /**
- * home-products-automap.v2.js (HOME + RIGHT PANEL DOM-fit)
- * Goals:
- *  - Do NOT modify home.html
- *  - When real items exist: hide placeholder blocks (shop-row / ad-box) and show real cards with image
- *  - When items missing: show localized "컨텐츠 준비 중입니다" (12 langs), else fallback to EN
- *  - Keys (home.html data-psom-key): home_1..home_5, home_right_top/middle/bottom
+ * home-products-automap.v2.domfit.js
+ * Baseline: user's v2 behavior (empty message must show on MAIN + RIGHT)
+ * Fixes:
+ * 1) Render into the REAL DOM containers used by home.html:
+ *    - MAIN: .shop-row inside the same .shop-scroller (NOT the psom div)
+ *    - RIGHT: .ad-list inside the same .ad-section (NOT the psom div)
+ * 2) Empty state: show multilingual message in psom div AND hide the list area
+ * 3) Data state: hide psom div, show list area, and batch-render (MAIN 100/7, RIGHT 80/5)
+ * 4) Accept legacy section ids if feed passes through
  *
- * Data source:
- *  - /.netlify/functions/feed?page=homeproducts   -> { itemsByKey: { home_1:[...], ... } } OR flat map
- *  - Fallback: /.netlify/functions/feed?page=<key> for each key
+ * Fetch: /.netlify/functions/feed?page=homeproducts
  */
+
 (function () {
-  "use strict";
-  if (window.__HOME_AUTOMAP_V2__) return;
-  window.__HOME_AUTOMAP_V2__ = true;
+  'use strict';
+  if (window.__HOME_AUTOMAP_DOMFIT__) return;
+  window.__HOME_AUTOMAP_DOMFIT__ = true;
 
-  const FEED_BULK = "/.netlify/functions/feed?page=homeproducts";
-  const FEED_ONE = (key) => "/.netlify/functions/feed?page=" + encodeURIComponent(key);
+  const FEED_URL = '/.netlify/functions/feed?page=homeproducts';
 
-  const MAIN_KEYS = ["home_1","home_2","home_3","home_4","home_5"];
-  const RIGHT_KEYS = ["home_right_top","home_right_middle","home_right_bottom"];
-  const ALL_KEYS = MAIN_KEYS.concat(RIGHT_KEYS);
+  const KEYS_MAIN  = ['home_1','home_2','home_3','home_4','home_5'];
+  const KEYS_RIGHT = ['home_right_top','home_right_middle','home_right_bottom'];
+  const ALL_KEYS   = KEYS_MAIN.concat(KEYS_RIGHT);
+
+  const MAIN_LIMIT = 100, MAIN_BATCH = 7;
+  const RIGHT_LIMIT = 80, RIGHT_BATCH = 5;
 
   const EMPTY_I18N = {
-    DE: "Inhalt wird vorbereitet.",
-    EN: "Content is being prepared.",
-    ES: "El contenido está en preparación.",
-    FR: "Le contenu est en préparation.",
-    ID: "Konten sedang dipersiapkan.",
-    JA: "コンテンツを準備中です。",
-    KO: "컨텐츠 준비 중입니다.",
-    PT: "O conteúdo está sendo preparado.",
-    RU: "Контент готовится.",
-    TH: "กำลังเตรียมเนื้อหาอยู่",
-    TR: "İçerik hazırlanıyor.",
-    VI: "Nội dung đang được chuẩn bị.",
-    ZH: "内容正在准备中。"
+    de: 'Inhalte werden vorbereitet.',
+    en: 'Content is being prepared.',
+    es: 'El contenido está en preparación.',
+    fr: 'Contenu en cours de préparation.',
+    id: 'Konten sedang disiapkan.',
+    ja: 'コンテンツ準備中です。',
+    ko: '콘텐츠 준비 중입니다.',
+    pt: 'Conteúdo em preparação.',
+    ru: 'Контент готовится.',
+    th: 'กำลังเตรียมเนื้อหาอยู่',
+    tr: 'İçerik hazırlanıyor.',
+    vi: 'Nội dung đang được chuẩn bị.',
+    zh: '内容正在准备中。'
   };
+  const SUPPORTED_12 = new Set(['de','en','es','fr','id','ja','pt','ru','th','tr','vi','zh']);
 
-  function guessLang() {
-    try {
-      const l = (document.documentElement.getAttribute("lang") || "").trim();
-      if (l) return l;
-    } catch (_) {}
-    // index.html might set window.__IGDC_LANG or similar
-    try {
-      const w = (window.__IGDC_LANG || window.IGDC_LANG || "").trim();
-      if (w) return w;
-    } catch (_) {}
-    return "ko";
+  function getLangCode(){
+    try{
+      const raw = String(
+        (localStorage && localStorage.getItem('igdc_lang')) ||
+        (document.documentElement && document.documentElement.getAttribute('lang')) ||
+        (navigator && (navigator.language || (navigator.languages && navigator.languages[0]))) ||
+        'en'
+      ).trim().toLowerCase();
+      const base = raw.split('-')[0];
+      if (SUPPORTED_12.has(base)) return base;
+      if (base === 'ko') return 'ko';
+      return 'en';
+    }catch(e){ return 'en'; }
   }
+  function emptyText(){ return EMPTY_I18N[getLangCode()] || EMPTY_I18N.en; }
 
-  function emptyText() {
-    const raw = String(guessLang() || "en").toUpperCase();
-    // normalize (e.g., "ko-KR" -> "KO")
-    const k = raw.split("-")[0];
-    if (EMPTY_I18N[k]) return EMPTY_I18N[k];
-    // for "other 8 languages" rule -> EN
-    return EMPTY_I18N.EN;
-  }
+  function qs(sel, root){ return (root||document).querySelector(sel); }
 
-  function safeText(s) {
-    return (s == null ? "" : String(s))
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-  }
-
-  function pick(o, keys) {
-    for (let i = 0; i < keys.length; i++) {
-      const v = o && o[keys[i]];
-      if (v != null && String(v).trim() !== "") return v;
+  function pick(o, keys){
+    for (const k of keys){
+      const v = o && o[k];
+      if (typeof v === 'string' && v.trim()) return v.trim();
     }
-    return "";
+    return '';
   }
 
-  function normalizeItem(x) {
-    if (!x || typeof x !== "object") return null;
-    const title = safeText(pick(x, ["title","name","label"]));
-    const href  = String(pick(x, ["url","href","link"]) || "#").trim() || "#";
-    const img   = String(pick(x, ["image","img","thumb","thumbnail","photo"]) || "").trim();
-    const price = safeText(pick(x, ["price","amount"]));
-    const cur   = safeText(pick(x, ["currency"]) || "");
-    const cta   = safeText(pick(x, ["cta","buttonText"]) || "");
-    return { title, href, img, price, cur, cta };
+  function normItem(it){
+    it = it || {};
+    return {
+      title: pick(it, ['title','name','label','caption']) || 'Item',
+      thumb: pick(it, ['thumb','image','image_url','img','photo','thumbnail','thumbnailUrl','cover','coverUrl']),
+      url:   pick(it, ['checkoutUrl','productUrl','url','href','link','path','detailUrl']) || '#',
+      priority: (typeof it.priority === 'number' ? it.priority : null)
+    };
   }
 
-  function buildCard(it) {
-    const img = it.img
-      ? '<div class="thumb-img"><img loading="lazy" decoding="async" src="' + it.img + '" alt=""/></div>'
-      : '<div class="thumb-img thumb-img--empty"></div>';
-    const price = it.price ? '<div class="thumb-price">' + it.price + (it.cur ? " " + it.cur : "") + "</div>" : "";
-    const cta = it.cta ? '<div class="thumb-cta">' + it.cta + "</div>" : "";
-    return (
-      '<a class="thumb-card" href="' + it.href + '" target="_blank" rel="noopener noreferrer">' +
-        img +
-        '<div class="thumb-meta">' +
-          '<div class="thumb-title">' + (it.title || "") + "</div>" +
-          price +
-          cta +
-        "</div>" +
-      "</a>"
-    );
-  }
+  function isExternal(url){ return /^https?:\/\//i.test(url); }
 
-  function buildEmptyBlock() {
-    return '<div class="thumb-empty" role="note">' + safeText(emptyText()) + "</div>";
-  }
+  // ===== DOM target resolution =====
+  function resolveTargets(psomEl, key){
+    const isRight = key.indexOf('home_right_') === 0;
 
-  function normalizeFeedPayload(json) {
-    // Accept:
-    // 1) { itemsByKey: { home_1:[...], ... } }
-    // 2) { home_1:[...], home_2:[...] }
-    // 3) { data: { itemsByKey: ... } }
-    if (!json) return {};
-    if (json.data && typeof json.data === "object") json = json.data;
-
-    if (json.itemsByKey && typeof json.itemsByKey === "object") return json.itemsByKey;
-    if (json.sections && typeof json.sections === "object") return json.sections;
-
-    // direct map heuristic
-    const out = {};
-    for (const k of ALL_KEYS) {
-      if (Array.isArray(json[k])) out[k] = json[k];
+    if (isRight){
+      const section = psomEl.closest('.ad-section');
+      const scroll = section && section.querySelector('.ad-scroll');
+      const list = section && section.querySelector('.ad-list');
+      return { isRight: true, section, scroller: scroll, list, psomEl };
     }
-    return out;
+
+    // MAIN
+    const scroller = psomEl.closest('.shop-scroller');
+    const row = scroller && scroller.querySelector('.shop-row');
+    return { isRight: false, section: scroller, scroller, list: row, psomEl };
   }
 
-  function fetchJson(url) {
-    return fetch(url, { cache: "no-store", credentials: "omit" })
-      .then((r) => {
-        if (!r.ok) throw new Error("HTTP_" + r.status);
-        return r.json();
-      });
+  function showEmpty(t){
+    // Show message in psom element; hide real list so it doesn't look "blank"
+    t.psomEl.style.display = 'block';
+    t.psomEl.textContent = emptyText();
+    t.psomEl.style.padding = '12px';
+    t.psomEl.style.borderRadius = '12px';
+    t.psomEl.style.background = '#f7f7f7';
+    t.psomEl.style.color = '#666';
+    t.psomEl.style.textAlign = 'center';
+    t.psomEl.style.fontSize = '14px';
+    t.psomEl.style.lineHeight = '1.6';
+    t.psomEl.style.minHeight = '44px';
+
+    if (t.scroller) t.scroller.style.display = 'none';
   }
 
-  function fetchBulk() {
-    return fetchJson(FEED_BULK)
-      .then(normalizeFeedPayload)
-      .catch(() => ({}));
+  function showData(t){
+    t.psomEl.style.display = 'none';
+    if (t.scroller) t.scroller.style.display = '';
   }
 
-  function fetchOne(key) {
-    return fetchJson(FEED_ONE(key))
-      .then((j) => {
-        // accept array or {items:[]}
-        if (Array.isArray(j)) return j;
-        if (j && Array.isArray(j.items)) return j.items;
-        if (j && j.data && Array.isArray(j.data.items)) return j.data.items;
-        return [];
-      })
-      .catch(() => []);
+  // ===== Card builders that match home.html CSS =====
+  function buildMainCard(item){
+    const a = document.createElement('a');
+    a.className = 'shop-card';
+    a.href = item.url || '#';
+    if (isExternal(item.url)) { a.target = '_blank'; a.rel = 'noopener'; }
+
+    // image background (cover)
+    if (item.thumb){
+      a.style.background = `center/cover no-repeat url("${String(item.thumb).replace(/"/g,'\\"')}")`;
+    }
+
+    // title overlay
+    const cap = document.createElement('div');
+    cap.className = 'shop-card-cap';
+    cap.textContent = item.title || '';
+    cap.style.alignSelf = 'end';
+    cap.style.width = '100%';
+    cap.style.background = 'rgba(255,255,255,.88)';
+    cap.style.padding = '6px 8px';
+    cap.style.fontWeight = '700';
+    cap.style.fontSize = '14px';
+    cap.style.color = '#222';
+    cap.style.whiteSpace = 'nowrap';
+    cap.style.overflow = 'hidden';
+    cap.style.textOverflow = 'ellipsis';
+
+    a.style.display = 'grid';
+    a.style.gridTemplateRows = '1fr auto';
+    a.style.alignItems = 'stretch';
+    a.style.justifyItems = 'stretch';
+
+    a.appendChild(cap);
+    return a;
   }
 
-  // --- DOM helpers (HOME MAIN) ---
-  function findMainWrapByKey(key) {
-    const host = document.querySelector('[data-psom-key="' + key + '"]');
-    if (!host) return null;
-    const wrap = host.closest(".shop-row-wrap");
-    if (!wrap) return null;
-    const row = wrap.querySelector(".shop-row");
-    return { host, wrap, row };
+  function buildRightCard(item){
+    const a = document.createElement('a');
+    a.className = 'ad-box';
+    a.href = item.url || '#';
+    if (isExternal(item.url)) { a.target = '_blank'; a.rel = 'noopener'; }
+    else { a.target = '_self'; }
+
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    if (item.thumb){
+      thumb.style.background = `center/cover no-repeat url("${String(item.thumb).replace(/"/g,'\\"')}")`;
+    }
+    a.appendChild(thumb);
+    return a;
   }
 
-  // --- DOM helpers (RIGHT PANEL) ---
-  function findRightWrapByKey(key) {
-    const host = document.querySelector('[data-psom-key="' + key + '"]');
-    if (!host) return null;
-    const section = host.closest(".ad-section");
-    const list = host.closest(".ad-list") || (section ? section.querySelector(".ad-list") : null);
-    const boxes = list ? Array.prototype.slice.call(list.querySelectorAll(".ad-box")) : [];
-    return { host, section, list, boxes };
+  function indexSections(payload){
+    const map = {};
+    if (!payload) return map;
+
+    if (Array.isArray(payload.sections)){
+      for (const s of payload.sections){
+        const id = String((s && (s.id || s.sectionId) || '')).trim();
+        if (!id) continue;
+        map[id] = Array.isArray(s.items) ? s.items : (Array.isArray(s.cards) ? s.cards : []);
+      }
+    }
+
+    // also accept direct keys (defensive)
+    for (const k of ALL_KEYS){
+      if (Array.isArray(payload[k])) map[k] = payload[k];
+    }
+    return map;
   }
 
-  function hideEl(el) { if (el) el.style.display = "none"; }
-  function showEl(el) { if (el) el.style.display = ""; }
+  function legacyKey(key){
+    // Accept snapshot legacy ids too (if feed isn't mapped)
+    if (key.startsWith('home_right_')) return key.replace('home_right_','home-right-');
+    return key.replace('home_','home-shop-');
+  }
 
-  function renderIntoHost(host, items) {
-    if (!host) return;
-    const norm = Array.isArray(items) ? items.map(normalizeItem).filter(Boolean) : [];
-    if (norm.length === 0) {
-      host.innerHTML = buildEmptyBlock();
+  function bindIncremental(t, items){
+    const isRight = t.isRight;
+    const limit = isRight ? RIGHT_LIMIT : MAIN_LIMIT;
+    const batch = isRight ? RIGHT_BATCH : MAIN_BATCH;
+
+    let offset = 0;
+
+    function renderMore(){
+      const end = Math.min(offset + batch, limit, items.length);
+      const frag = document.createDocumentFragment();
+      for (let i = offset; i < end; i++){
+        const it = items[i];
+        frag.appendChild(isRight ? buildRightCard(it) : buildMainCard(it));
+      }
+      t.list.appendChild(frag);
+      offset = end;
+    }
+
+    // clear existing visuals inside REAL list
+    t.list.innerHTML = '';
+    renderMore();
+
+    // attach scroll on the REAL scroller
+    const sc = t.scroller;
+    if (!sc) return;
+
+    sc.addEventListener('scroll', function(){
+      if (offset >= items.length || offset >= limit) return;
+
+      const nearEnd = isRight
+        ? (sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 20)
+        : (sc.scrollLeft + sc.clientWidth >= sc.scrollWidth - 20);
+
+      if (nearEnd) renderMore();
+    }, { passive: true });
+  }
+
+  function renderSlot(key, rawItems){
+    const psomEl = qs(`[data-psom-key="${key}"]`);
+    if (!psomEl) return;
+
+    const t = resolveTargets(psomEl, key);
+    if (!t.list) return;
+
+    // normalize and keep only items with at least title+thumb; url may be '#'
+    let list = (rawItems || []).map(normItem).filter(x => x && x.thumb);
+
+    // priority sort (stable)
+    list.sort((a,b) => {
+      const pa = (a.priority == null ? 999999 : a.priority);
+      const pb = (b.priority == null ? 999999 : b.priority);
+      return pa - pb;
+    });
+
+    if (!list.length){
+      showEmpty(t);
       return;
     }
-    host.innerHTML = norm.map(buildCard).join("");
+
+    showData(t);
+    bindIncremental(t, list);
   }
 
-  function applyMain(key, items) {
-    const ref = findMainWrapByKey(key);
-    if (!ref) return;
+  async function load(){
+    try{
+      const r = await fetch(FEED_URL, { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const payload = await r.json();
+      const byId = indexSections(payload);
 
-    const has = Array.isArray(items) && items.length > 0;
-
-    // Placeholder row exists in HTML; ensure real data "wins"
-    if (ref.row) {
-      if (has) hideEl(ref.row);
-      else showEl(ref.row);
-    }
-
-    // Render real cards (or empty message) into host
-    renderIntoHost(ref.host, items);
-  }
-
-  function applyRight(key, items) {
-    const ref = findRightWrapByKey(key);
-    if (!ref) return;
-
-    const has = Array.isArray(items) && items.length > 0;
-
-    // Right panel uses .ad-box placeholders.
-// - If real data exists: hide placeholders (so cards are not duplicated)
-// - If data missing: hide placeholders too and show the localized empty message (avoid gray blanks)
-    if (ref.boxes && ref.boxes.length) {
-      for (const b of ref.boxes) {
-        hideEl(b);
+      for (const key of ALL_KEYS){
+        const alt = key.replace(/_/g,'-');
+        renderSlot(key, byId[key] || byId[alt] || byId[legacyKey(key)] || []);
+      }
+    }catch(e){
+      // On fail, keep existing layout and show message in psom elements
+      for (const key of ALL_KEYS){
+        const psomEl = qs(`[data-psom-key="${key}"]`);
+        if (!psomEl) continue;
+        const t = resolveTargets(psomEl, key);
+        showEmpty(t);
       }
     }
-
-    renderIntoHost(ref.host, items);
   }
 
-  function applyAll(map) {
-    for (const k of MAIN_KEYS) applyMain(k, map[k] || []);
-    for (const k of RIGHT_KEYS) applyRight(k, map[k] || []);
-  }
-
-  function load() {
-    // 1) Try bulk
-    fetchBulk().then((map) => {
-      // if bulk missing some keys, backfill with per-key fetch
-      const missing = ALL_KEYS.filter((k) => !Array.isArray(map[k]));
-      if (missing.length === 0) {
-        applyAll(map);
-        return;
-      }
-      const tasks = missing.map((k) => fetchOne(k).then((arr) => (map[k] = arr)));
-      Promise.all(tasks).then(() => applyAll(map));
-    });
-  }
-
-  function boot() {
+  function boot(){
     load();
-
-    // Re-apply on lang changes or DOM updates
-    const mo = new MutationObserver(() => {
-      clearTimeout(window.__home_automap_t);
-      window.__home_automap_t = setTimeout(load, 250);
-    });
-    mo.observe(document.body, { childList: true, subtree: true });
-
-    // If a global language switcher fires a custom event, listen
-    window.addEventListener("IGDC_LANG_CHANGED", () => load());
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
 })();
