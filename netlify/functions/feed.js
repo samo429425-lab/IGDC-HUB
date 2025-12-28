@@ -1,60 +1,53 @@
-/**
- * feed.js — HOME mapping enabled (safe additive version)
- * Only handles ?page=homeproducts
- * Other pages fall through with empty payload
- */
-
 const fs = require("fs");
 const path = require("path");
 
-const SNAPSHOT_PATH = path.join(__dirname, "data", "snapshot.json");
+/**
+ * feed.home.js
+ * HOME snapshot compiler (non-destructive)
+ * - Only handles ?page=homeproducts
+ * - Reads snapshot.internal.v1.json
+ * - Other routes remain untouched when you merge manually
+ */
 
-function readJsonSafe(p) {
+const SNAPSHOT_PATH = path.join(__dirname, "data", "snapshot.internal.v1.json");
+
+function safeReadJSON(p) {
   try {
     return JSON.parse(fs.readFileSync(p, "utf8"));
   } catch (e) {
-    return {};
+    return null;
   }
 }
 
-function toArray(v) {
-  if (Array.isArray(v)) return v;
-  if (!v) return [];
+function normalizeSectionItems(section) {
+  if (!section) return [];
+  if (Array.isArray(section.items)) return section.items;
+  if (Array.isArray(section.cards)) return section.cards;
   return [];
 }
 
-function getSection(snapshot, id) {
-  if (!snapshot) return [];
-  if (Array.isArray(snapshot.sections)) {
-    const s = snapshot.sections.find(x => String(x.id) === id);
-    if (s) return toArray(s.items);
-  }
-  return [];
-}
-
-exports.handler = async function(event) {
+exports.handler = async function (event) {
   const qs = event.queryStringParameters || {};
   const page = String(qs.page || "").toLowerCase();
 
-  // === HOME ONLY ===
+  // ===============================
+  // HOME SNAPSHOT COMPILER
+  // ===============================
   if (page === "homeproducts") {
-    const snapshot = readJsonSafe(SNAPSHOT_PATH);
+    const snapshot = safeReadJSON(SNAPSHOT_PATH) || {};
+    const sections = [];
 
-    const keys = [
-      "home_1",
-      "home_2",
-      "home_3",
-      "home_4",
-      "home_5",
-      "home_right_top",
-      "home_right_middle",
-      "home_right_bottom"
-    ];
+    if (Array.isArray(snapshot.sections)) {
+      for (const sec of snapshot.sections) {
+        const id = String(sec.id || "").trim();
+        if (!id) continue;
 
-    const sections = keys.map(id => ({
-      id,
-      items: getSection(snapshot, id)
-    }));
+        sections.push({
+          id,
+          items: normalizeSectionItems(sec)
+        });
+      }
+    }
 
     return {
       statusCode: 200,
@@ -63,16 +56,20 @@ exports.handler = async function(event) {
         "Cache-Control": "no-store"
       },
       body: JSON.stringify({
-        meta: { page: "homeproducts", source: "snapshot" },
+        meta: {
+          page: "homeproducts",
+          source: "snapshot",
+          compiled: true
+        },
         sections
       })
     };
   }
 
-  // fallback (do not break other logic)
+  // fallback (leave existing behavior intact)
   return {
     statusCode: 200,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json; charset=utf-8" },
     body: JSON.stringify({})
   };
 };
