@@ -12,7 +12,46 @@
   if (window.__HOME_AUTOMAP_V2__) return;
   window.__HOME_AUTOMAP_V2__ = true;
 
-  const FEED_URL = '/.netlify/functions/feed?page=homeproducts';
+  
+  // i18n: placeholder message (12 supported languages; others fallback to English)
+  const __PLACEHOLDER_I18N__ = {
+    de: 'Inhalte werden vorbereitet.',
+    en: 'Content is being prepared.',
+    es: 'El contenido está en preparación.',
+    fr: 'Contenu en cours de préparation.',
+    id: 'Konten sedang disiapkan.',
+    ja: 'コンテンツ準備中です。',
+    ko: '콘텐츠 준비 중입니다.',
+    pt: 'Conteúdo em preparação.',
+    ru: 'Контент готовится.',
+    th: 'กำลังเตรียมเนื้อหาอยู่',
+    tr: 'İçerik hazırlanıyor.',
+    vi: 'Nội dung đang được chuẩn bị.',
+    zh: '内容正在准备中。'
+  };
+
+  const __SUPPORTED_PLACEHOLDER_LANGS__ = new Set(['de','en','es','fr','id','ja','pt','ru','th','tr','vi','zh','ko']);
+
+  function getLangCode(){
+    try{
+      const ls = (typeof localStorage !== 'undefined' && localStorage.getItem('igdc_lang')) || '';
+      const doc = (document && document.documentElement && document.documentElement.getAttribute('lang')) || '';
+      const nav = (navigator && (navigator.language || (navigator.languages && navigator.languages[0])) ) || '';
+      const raw = String(ls || doc || nav || 'en').trim().toLowerCase();
+      const base = raw.split('-')[0]; // e.g., 'pt-br' -> 'pt'
+      if (__SUPPORTED_PLACEHOLDER_LANGS__.has(base)) return base;
+      return 'en';
+    }catch(e){
+      return 'en';
+    }
+  }
+
+  function placeholderText(){
+    const lang = getLangCode();
+    return __PLACEHOLDER_I18N__[lang] || __PLACEHOLDER_I18N__.en;
+  }
+
+const FEED_URL = '/.netlify/functions/feed?page=homeproducts';
   const KEYS_MAIN = ['home_1','home_2','home_3','home_4','home_5'];
   const KEYS_RIGHT = ['home_right_top','home_right_middle','home_right_bottom'];
   const ALL_KEYS = KEYS_MAIN.concat(KEYS_RIGHT);
@@ -113,7 +152,7 @@
     p.style.color = '#666';
     p.style.fontSize = '14px';
     p.style.lineHeight = '1.6';
-    p.textContent = text || '콘텐츠 준비 중입니다.';
+    p.textContent = text || placeholderText();
     container.appendChild(p);
   }
 
@@ -130,7 +169,7 @@
     const list = (items || []).map(normItem).filter(x => x.url && x.thumb);
 
     if (!list.length){
-      placeholder(container, '콘텐츠 준비 중입니다.');
+      placeholder(container, placeholderText());
       return;
     }
 
@@ -174,7 +213,7 @@
         if (c && !c.querySelector('.maru-empty')) {
           c.innerHTML = '';
           ensureScrollerStyle(c, key.indexOf('home_right_')===0);
-          placeholder(c, '콘텐츠 준비 중입니다.');
+          placeholder(c, placeholderText());
         }
       }
     }
