@@ -1,57 +1,60 @@
+/**
+ * feed.js — HOME mapping enabled (safe additive version)
+ * Only handles ?page=homeproducts
+ * Other pages fall through with empty payload
+ */
 
 const fs = require("fs");
 const path = require("path");
 
-/**
- * feed.js (patched: homeproducts underscore-normalized)
- * - Keeps original structure
- * - Only adjusts HOME branch
- * - Normalizes section id to underscore
- */
+const SNAPSHOT_PATH = path.join(__dirname, "data", "snapshot.json");
 
-const SNAPSHOT_PATH = path.join(__dirname, "data", "snapshot.internal.v1.json");
-
-function safeReadJSON(p) {
+function readJsonSafe(p) {
   try {
     return JSON.parse(fs.readFileSync(p, "utf8"));
   } catch (e) {
-    return null;
+    return {};
   }
 }
 
-function normalizeId(id) {
-  if (!id) return "";
-  return String(id).trim().replace(/-/g, "_");
-}
-
-function normalizeItems(section) {
-  if (!section) return [];
-  if (Array.isArray(section.items)) return section.items;
-  if (Array.isArray(section.cards)) return section.cards;
+function toArray(v) {
+  if (Array.isArray(v)) return v;
+  if (!v) return [];
   return [];
 }
 
-exports.handler = async function (event) {
+function getSection(snapshot, id) {
+  if (!snapshot) return [];
+  if (Array.isArray(snapshot.sections)) {
+    const s = snapshot.sections.find(x => String(x.id) === id);
+    if (s) return toArray(s.items);
+  }
+  return [];
+}
+
+exports.handler = async function(event) {
   const qs = event.queryStringParameters || {};
   const page = String(qs.page || "").toLowerCase();
 
-  // === HOME PRODUCTS PATCH (SAFE EXTENSION) ===
+  // === HOME ONLY ===
   if (page === "homeproducts") {
-    const snapshot = safeReadJSON(SNAPSHOT_PATH) || {};
-    const sections = [];
+    const snapshot = readJsonSafe(SNAPSHOT_PATH);
 
-    if (Array.isArray(snapshot.sections)) {
-      for (const sec of snapshot.sections) {
-        const rawId = sec.id || "";
-        const id = normalizeId(rawId);
-        if (!id) continue;
+    const keys = [
+      "home_1",
+      "home_2",
+      "home_3",
+      "home_4",
+      "home_5",
+      "home_right_top",
+      "home_right_middle",
+      "home_right_bottom"
+    ];
 
-        sections.push({
-          id,
-          items: normalizeItems(sec)
-        });
-      }
-    }
+    const sections = keys.map(id => ({
+      id,
+      items: getSection(snapshot, id)
+    }));
 
     return {
       statusCode: 200,
@@ -60,20 +63,16 @@ exports.handler = async function (event) {
         "Cache-Control": "no-store"
       },
       body: JSON.stringify({
-        meta: {
-          page: "homeproducts",
-          source: "snapshot",
-          normalized: true
-        },
+        meta: { page: "homeproducts", source: "snapshot" },
         sections
       })
     };
   }
 
-  // fallback – keep existing behavior
+  // fallback (do not break other logic)
   return {
     statusCode: 200,
-    headers: { "Content-Type": "application/json; charset=utf-8" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({})
   };
 };
