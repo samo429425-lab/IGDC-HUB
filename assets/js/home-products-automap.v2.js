@@ -16,7 +16,7 @@
   const FEED_URL = "/.netlify/functions/feed?page=homeproducts";
 
   const MAIN_KEYS = ["home_1","home_2","home_3","home_4","home_5"];
-  const RIGHT_KEYS = ["home_right_top","home_right_middle","home_right_bottom"];
+  const RIGHT_KEYS = ["home-right-top","home-right-middle","home-right-bottom"];
 
   const MAIN_LIMIT = 100;
   const MAIN_BATCH = 7;
