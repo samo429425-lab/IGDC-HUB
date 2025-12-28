@@ -84,6 +84,25 @@
     return map;
   }
 
+  function altKeys(key){
+    const k = String(key || "").trim();
+    if (!k) return [];
+    const a = new Set([k]);
+    a.add(k.replace(/_/g, "-"));
+    a.add(k.replace(/-/g, "_"));
+    return Array.from(a);
+  }
+
+  function pickItems(sections, key){
+    const tries = altKeys(key);
+    for (const t of tries){
+      const items = sections && sections[t];
+      if (Array.isArray(items) && items.length) return items;
+    }
+    // If nothing found, fall back to empty array (do NOT throw)
+    return [];
+  }
+
   /* ---------- MAIN (unchanged behavior) ---------- */
   function renderMain(key, items) {
     const anchor = document.querySelector(`[data-psom-key="${key}"]`);
@@ -199,8 +218,8 @@
       const data = await res.json();
       const sections = indexSections(data);
 
-      MAIN_KEYS.forEach(k => renderMain(k, sections[k] || []));
-      RIGHT_KEYS.forEach(k => renderRight(k, sections[k] || []));
+      MAIN_KEYS.forEach(k => renderMain(k, pickItems(sections, k)));
+      RIGHT_KEYS.forEach(k => renderRight(k, pickItems(sections, k)));
     } catch (e) {
       // silent fail
     }
