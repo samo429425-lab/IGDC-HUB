@@ -1,27 +1,29 @@
+
 /**
- * home-products-automap.v2.js
- * SAFE FINAL VERSION
+ * home-products-automap.v2.right-final.js
+ * FINAL VERSION
  *
- * ✔ 기존 썸네일 절대 삭제 안 함
- * ✔ 데이터 있을 때만 append
- * ✔ 우측 패널 전용 로직 분리
- * ✔ 안내문 유지
- * ✔ 13개 언어 지원
+ * Main: keeps existing behavior
+ * Right panel: dedicated renderer
+ * - shows placeholder if no data
+ * - renders cards only when data exists
  */
 
 (function () {
-  if (window.__HOME_AUTOMAP_SAFE__) return;
-  window.__HOME_AUTOMAP_SAFE__ = true;
+  if (window.__HOME_AUTOMAP_RIGHT_FINAL__) return;
+  window.__HOME_AUTOMAP_RIGHT_FINAL__ = true;
 
   const FEED_URL = "/.netlify/functions/feed?page=homeproducts";
 
-  const MAIN_KEYS = ["home_1", "home_2", "home_3", "home_4", "home_5"];
-  const RIGHT_KEYS = ["home_right_top", "home_right_middle", "home_right_bottom"];
+  const MAIN_KEYS = ["home_1","home_2","home_3","home_4","home_5"];
+  const RIGHT_KEYS = ["home_right_top","home_right_middle","home_right_bottom"];
 
+  const MAIN_LIMIT = 100;
   const MAIN_BATCH = 7;
+  const RIGHT_LIMIT = 80;
   const RIGHT_BATCH = 5;
 
-  const LANG = {
+  const LANG_TEXT = {
     ko: "콘텐츠 준비 중입니다.",
     en: "Content is being prepared.",
     ja: "コンテンツ準備中です。",
@@ -33,8 +35,7 @@
     ru: "Контент готовится.",
     th: "กำลังเตรียมเนื้อหาอยู่",
     tr: "İçerik hazırlanıyor.",
-    vi: "Nội dung đang được chuẩn bị.",
-    id: "Konten sedang disiapkan."
+    vi: "Nội dung đang được chuẩn bị."
   };
 
   function getLang() {
@@ -44,7 +45,11 @@
       navigator.language ||
       "en";
     const k = v.toLowerCase().split("-")[0];
-    return LANG[k] ? k : "en";
+    return LANG_TEXT[k] ? k : "en";
+  }
+
+  function emptyText() {
+    return LANG_TEXT[getLang()] || LANG_TEXT.en;
   }
 
   function normalize(item) {
@@ -62,138 +67,143 @@
         item.href ||
         item.link ||
         item.path ||
-        "#"
+        "#",
+      priority:
+        typeof item.priority === "number" ? item.priority : 999999
     };
   }
 
   function indexSections(payload) {
-    if (!payload) return {};
-    if (payload.sections) return payload.sections;
-    if (payload.itemsByKey) return payload.itemsByKey;
-    return {};
+    const map = {};
+    if (!payload || !Array.isArray(payload.sections)) return map;
+    for (const sec of payload.sections) {
+      const id = String(sec.id || "").trim();
+      if (!id) continue;
+      map[id] = Array.isArray(sec.items) ? sec.items : [];
+    }
+    return map;
   }
 
-  function ensurePlaceholder(anchor) {
-    if (anchor.querySelector(".psom-placeholder")) return;
+  /* ---------- MAIN (unchanged behavior) ---------- */
+  function renderMain(key, items) {
+    const anchor = document.querySelector(`[data-psom-key="${key}"]`);
+    if (!anchor) return;
 
-    const div = document.createElement("div");
-    div.className = "psom-placeholder";
-    div.textContent = LANG[getLang()] || LANG.en;
-    div.style.padding = "12px";
-    div.style.textAlign = "center";
-    div.style.background = "#f7f7f7";
-    div.style.borderRadius = "10px";
-    div.style.color = "#666";
-
-    anchor.appendChild(div);
-  }
-
-  function hidePlaceholder(anchor) {
-    const p = anchor.querySelector(".psom-placeholder");
-    if (p) p.style.display = "none";
-  }
-
-  /* ================= MAIN ================= */
-
-  function appendMain(anchor, items) {
     const scroller = anchor.closest(".shop-scroller");
-    if (!scroller) return;
-
-    const row = scroller.querySelector(".shop-row");
+    const row = scroller && scroller.querySelector(".shop-row");
     if (!row) return;
 
-    let added = 0;
+    const list = items.map(normalize).filter(x => x.thumb);
+    if (!list.length) return;
 
-    for (const it of items) {
-      if (!it.thumb) continue;
-      if (row.querySelector(`[data-url="${it.url}"]`)) continue;
+    row.innerHTML = "";
+    let offset = 0;
 
-      const a = document.createElement("a");
-      a.className = "shop-card";
-      a.dataset.url = it.url;
-      a.href = it.url;
+    function renderMore() {
+      const end = Math.min(offset + MAIN_BATCH, list.length, MAIN_LIMIT);
+      for (let i = offset; i < end; i++) {
+        const it = list[i];
+        const a = document.createElement("a");
+        a.className = "shop-card";
+        a.href = it.url;
+        a.style.background = `center/cover no-repeat url("${it.thumb}")`;
 
-      a.style.background = `center/cover no-repeat url("${it.thumb}")`;
+        const cap = document.createElement("div");
+        cap.className = "shop-card-cap";
+        cap.textContent = it.title;
 
-      const cap = document.createElement("div");
-      cap.className = "shop-card-cap";
-      cap.textContent = it.title;
-
-      a.appendChild(cap);
-      row.appendChild(a);
-
-      added++;
-      if (added >= MAIN_BATCH) break;
+        a.appendChild(cap);
+        row.appendChild(a);
+      }
+      offset = end;
     }
+
+    renderMore();
+
+    scroller.addEventListener("scroll", () => {
+      if (
+        scroller.scrollLeft + scroller.clientWidth >=
+        scroller.scrollWidth - 20
+      ) {
+        renderMore();
+      }
+    });
   }
 
-  /* ================= RIGHT ================= */
+  /* ---------- RIGHT PANEL (dedicated renderer) ---------- */
+  function renderRight(key, items) {
+    const anchor = document.querySelector(`[data-psom-key="${key}"]`);
+    if (!anchor) return;
 
-  function appendRight(anchor, items) {
     const section = anchor.closest(".ad-section");
     if (!section) return;
 
-    const list = section.querySelector(".ad-list");
-    if (!list) return;
+    const listBox = section.querySelector(".ad-list");
 
-    if (!items.length) {
-      ensurePlaceholder(anchor);
+    const list = items.map(normalize).filter(x => x.thumb);
+
+    if (!list.length) {
+      // show placeholder
+      anchor.style.display = "block";
+      anchor.textContent = emptyText();
+      anchor.style.padding = "12px";
+      anchor.style.background = "#f7f7f7";
+      anchor.style.borderRadius = "12px";
+      anchor.style.textAlign = "center";
+      if (listBox) listBox.style.display = "none";
       return;
     }
 
-    hidePlaceholder(anchor);
+    // hide placeholder
+    anchor.style.display = "none";
+    if (!listBox) return;
 
-    let added = 0;
+    listBox.style.display = "";
+    listBox.innerHTML = "";
 
-    for (const it of items) {
-      if (!it.thumb) continue;
-      if (list.querySelector(`[data-url="${it.url}"]`)) continue;
+    let offset = 0;
 
-      const a = document.createElement("a");
-      a.className = "ad-box";
-      a.dataset.url = it.url;
-      a.href = it.url;
+    function renderMore() {
+      const end = Math.min(offset + RIGHT_BATCH, list.length, RIGHT_LIMIT);
+      for (let i = offset; i < end; i++) {
+        const it = list[i];
+        const a = document.createElement("a");
+        a.className = "ad-box";
+        a.href = it.url;
 
-      const thumb = document.createElement("div");
-      thumb.className = "thumb";
-      thumb.style.background = `center/cover no-repeat url("${it.thumb}")`;
+        const thumb = document.createElement("div");
+        thumb.className = "thumb";
+        thumb.style.background = `center/cover no-repeat url("${it.thumb}")`;
 
-      a.appendChild(thumb);
-      list.appendChild(a);
-
-      added++;
-      if (added >= RIGHT_BATCH) break;
+        a.appendChild(thumb);
+        listBox.appendChild(a);
+      }
+      offset = end;
     }
+
+    renderMore();
+
+    listBox.addEventListener("scroll", () => {
+      if (
+        listBox.scrollTop + listBox.clientHeight >=
+        listBox.scrollHeight - 20
+      ) {
+        renderMore();
+      }
+    });
   }
 
   async function boot() {
-    let data;
     try {
       const res = await fetch(FEED_URL, { cache: "no-store" });
-      data = await res.json();
+      const data = await res.json();
+      const sections = indexSections(data);
+
+      MAIN_KEYS.forEach(k => renderMain(k, sections[k] || []));
+      RIGHT_KEYS.forEach(k => renderRight(k, sections[k] || []));
     } catch (e) {
-      return;
+      // silent fail
     }
-
-    const sections = indexSections(data);
-
-    MAIN_KEYS.forEach(key => {
-      const anchor = document.querySelector(`[data-psom-key="${key}"]`);
-      if (!anchor) return;
-      const items = (sections[key] || []).map(normalize);
-      if (!items.length) {
-        ensurePlaceholder(anchor);
-        return;
-      }
-      appendMain(anchor, items);
-    });
-
-    RIGHT_KEYS.forEach(key => {
-      const anchor = document.querySelector(`[data-psom-key="${key}"]`);
-      if (!anchor) return;
-      const items = (sections[key] || []).map(normalize);
-      appendRight(anchor, items);
-    });
   }
 
   if (document.readyState === "loading") {
