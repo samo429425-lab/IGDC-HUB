@@ -1,109 +1,283 @@
 {
-  "version": "v1-temp",
-  "generated": "2025-12-28T00:14:43.178947Z",
+  "version": "snapshot.v1",
   "sections": [
     {
-      "id": "home_1",
+      "id": "home-shop-1",
       "items": [
         {
-          "id": "temp-home-1-1",
-          "title": "Sample Item 1-1",
-          "thumb": "https://via.placeholder.com/480x320.png?text=Sample",
-          "url": "/product.html?id=temp-home",
-          "type": "temp",
-          "source": "snapshot"
+          "id": "home-shop-1-1",
+          "title": "Sample Item A for home-shop-1",
+          "summary": "",
+          "description": "",
+          "price": "",
+          "currency": "USD",
+          "cta": "View",
+          "url": "#",
+          "image": "/assets/img/placeholder.png",
+          "tags": [
+            "home-shop-1"
+          ],
+          "priority": 1
         },
         {
-          "id": "temp-home-1-2",
-          "title": "Sample Item 1-2",
-          "thumb": "https://via.placeholder.com/480x320.png?text=Sample",
-          "url": "/product.html?id=temp-home",
-          "type": "temp",
-          "source": "snapshot"
+          "id": "home-shop-1-2",
+          "title": "Sample Item B for home-shop-1",
+          "summary": "",
+          "description": "",
+          "price": "",
+          "currency": "USD",
+          "cta": "View",
+          "url": "#",
+          "image": "/assets/img/placeholder.png",
+          "tags": [
+            "home-shop-1"
+          ],
+          "priority": 2
         }
       ]
     },
     {
-      "id": "home_2",
+      "id": "home-shop-2",
       "items": [
         {
-          "id": "temp-home-2-1",
-          "title": "Sample Item 2-1",
-          "thumb": "https://via.placeholder.com/480x320.png?text=Sample",
-          "url": "/product.html?id=temp-home",
-          "type": "temp",
-          "source": "snapshot"
+          "id": "home-shop-2-1",
+          "title": "Sample Item A for home-shop-2",
+          "summary": "",
+          "description": "",
+          "price": "",
+          "currency": "USD",
+          "cta": "View",
+          "url": "#",
+          "image": "/assets/img/placeholder.png",
+          "tags": [
+            "home-shop-2"
+          ],
+          "priority": 1
         },
         {
-          "id": "temp-home-2-2",
-          "title": "Sample Item 2-2",
-          "thumb": "https://via.placeholder.com/480x320.png?text=Sample",
-          "url": "/product.html?id=temp-home",
-          "type": "temp",
-          "source": "snapshot"
+          "id": "home-shop-2-2",
+          "title": "Sample Item B for home-shop-2",
+          "summary": "",
+          "description": "",
+          "price": "",
+          "currency": "USD",
+          "cta": "View",
+          "url": "#",
+          "image": "/assets/img/placeholder.png",
+          "tags": [
+            "home-shop-2"
+          ],
+          "priority": 2
         }
       ]
     },
     {
-      "id": "home_3",
+      "id": "home-shop-3",
       "items": [
         {
-          "id": "temp-home-3-1",
-          "title": "Sample Item 3-1",
-          "thumb": "https://via.placeholder.com/480x320.png?text=Sample",
-          "url": "/product.html?id=temp-home",
-          "type": "temp",
-          "source": "snapshot"
+          "id": "home-shop-3-1",
+          "title": "Sample Item A for home-shop-3",
+          "summary": "",
+          "description": "",
+          "price": "",
+          "currency": "USD",
+          "cta": "View",
+          "url": "#",
+          "image": "/assets/img/placeholder.png",
+          "tags": [
+            "home-shop-3"
+          ],
+          "priority": 1
         },
         {
-          "id": "temp-home-3-2",
-          "title": "Sample Item 3-2",
-          "thumb": "https://via.placeholder.com/480x320.png?text=Sample",
-          "url": "/product.html?id=temp-home",
-          "type": "temp",
-          "source": "snapshot"
+          "id": "home-shop-3-2",
+          "title": "Sample Item B for home-shop-3",
+          "summary": "",
+          "description": "",
+          "price": "",
+          "currency": "USD",
+          "cta": "View",
+          "url": "#",
+          "image": "/assets/img/placeholder.png",
+          "tags": [
+            "home-shop-3"
+          ],
+          "priority": 2
         }
       ]
     },
     {
-      "id": "home_4",
+      "id": "home-shop-4",
       "items": [
         {
-          "id": "temp-home-4-1",
-          "title": "Sample Item 4-1",
-          "thumb": "https://via.placeholder.com/480x320.png?text=Sample",
-          "url": "/product.html?id=temp-home",
-          "type": "temp",
-          "source": "snapshot"
+          "id": "home-shop-4-1",
+          "title": "Sample Item A for home-shop-4",
+          "summary": "",
+          "description": "",
+          "price": "",
+          "currency": "USD",
+          "cta": "View",
+          "url": "#",
+          "image": "/assets/img/placeholder.png",
+          "tags": [
+            "home-shop-4"
+          ],
+          "priority": 1
         },
         {
-          "id": "temp-home-4-2",
-          "title": "Sample Item 4-2",
-          "thumb": "https://via.placeholder.com/480x320.png?text=Sample",
-          "url": "/product.html?id=temp-home",
-          "type": "temp",
-          "source": "snapshot"
+          "id": "home-shop-4-2",
+          "title": "Sample Item B for home-shop-4",
+          "summary": "",
+          "description": "",
+          "price": "",
+          "currency": "USD",
+          "cta": "View",
+          "url": "#",
+          "image": "/assets/img/placeholder.png",
+          "tags": [
+            "home-shop-4"
+          ],
+          "priority": 2
         }
       ]
     },
     {
-      "id": "home_5",
+      "id": "home-shop-5",
       "items": [
         {
-          "id": "temp-home-5-1",
-          "title": "Sample Item 5-1",
-          "thumb": "https://via.placeholder.com/480x320.png?text=Sample",
-          "url": "/product.html?id=temp-home",
-          "type": "temp",
-          "source": "snapshot"
+          "id": "home-shop-5-1",
+          "title": "Sample Item A for home-shop-5",
+          "summary": "",
+          "description": "",
+          "price": "",
+          "currency": "USD",
+          "cta": "View",
+          "url": "#",
+          "image": "/assets/img/placeholder.png",
+          "tags": [
+            "home-shop-5"
+          ],
+          "priority": 1
         },
         {
-          "id": "temp-home-5-2",
-          "title": "Sample Item 5-2",
-          "thumb": "https://via.placeholder.com/480x320.png?text=Sample",
-          "url": "/product.html?id=temp-home",
-          "type": "temp",
-          "source": "snapshot"
+          "id": "home-shop-5-2",
+          "title": "Sample Item B for home-shop-5",
+          "summary": "",
+          "description": "",
+          "price": "",
+          "currency": "USD",
+          "cta": "View",
+          "url": "#",
+          "image": "/assets/img/placeholder.png",
+          "tags": [
+            "home-shop-5"
+          ],
+          "priority": 2
+        }
+      ]
+    },
+    {
+      "id": "home-right-top",
+      "items": [
+        {
+          "id": "home-right-top-1",
+          "title": "Sample Item A for home-right-top",
+          "summary": "",
+          "description": "",
+          "price": "",
+          "currency": "USD",
+          "cta": "View",
+          "url": "#",
+          "image": "/assets/img/placeholder.png",
+          "tags": [
+            "home-right-top"
+          ],
+          "priority": 1
+        },
+        {
+          "id": "home-right-top-2",
+          "title": "Sample Item B for home-right-top",
+          "summary": "",
+          "description": "",
+          "price": "",
+          "currency": "USD",
+          "cta": "View",
+          "url": "#",
+          "image": "/assets/img/placeholder.png",
+          "tags": [
+            "home-right-top"
+          ],
+          "priority": 2
+        }
+      ]
+    },
+    {
+      "id": "home-right-middle",
+      "items": [
+        {
+          "id": "home-right-middle-1",
+          "title": "Sample Item A for home-right-middle",
+          "summary": "",
+          "description": "",
+          "price": "",
+          "currency": "USD",
+          "cta": "View",
+          "url": "#",
+          "image": "/assets/img/placeholder.png",
+          "tags": [
+            "home-right-middle"
+          ],
+          "priority": 1
+        },
+        {
+          "id": "home-right-middle-2",
+          "title": "Sample Item B for home-right-middle",
+          "summary": "",
+          "description": "",
+          "price": "",
+          "currency": "USD",
+          "cta": "View",
+          "url": "#",
+          "image": "/assets/img/placeholder.png",
+          "tags": [
+            "home-right-middle"
+          ],
+          "priority": 2
+        }
+      ]
+    },
+    {
+      "id": "home-right-bottom",
+      "items": [
+        {
+          "id": "home-right-bottom-1",
+          "title": "Sample Item A for home-right-bottom",
+          "summary": "",
+          "description": "",
+          "price": "",
+          "currency": "USD",
+          "cta": "View",
+          "url": "#",
+          "image": "/assets/img/placeholder.png",
+          "tags": [
+            "home-right-bottom"
+          ],
+          "priority": 1
+        },
+        {
+          "id": "home-right-bottom-2",
+          "title": "Sample Item B for home-right-bottom",
+          "summary": "",
+          "description": "",
+          "price": "",
+          "currency": "USD",
+          "cta": "View",
+          "url": "#",
+          "image": "/assets/img/placeholder.png",
+          "tags": [
+            "home-right-bottom"
+          ],
+          "priority": 2
         }
       ]
     }
