@@ -327,6 +327,6 @@
   }, true);
 
   // expose for manual call
-  global.IGDC_RUN_DIAGNOSTIC = runAndRender;
+  window.IGDC_RUN_DIAGNOSTIC = runAndRender;
 
 })(window);
