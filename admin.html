@@ -2690,11 +2690,57 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
 })();
 </script>
 
+<script>
+(function () {
+  // "수익 썸네일 상품 맵핑" 버튼 클릭 시 실행
+  const btn = document.getElementById("checkRevenueMapping");
+
+  if (!btn) return;
+
+  btn.addEventListener("click", async () => {
+    if (!window.IGDC_DIAG) {
+      alert("진단 모듈이 로드되지 않았습니다.");
+      return;
+    }
+
+    const result = await IGDC_DIAG.run("home");
+
+    renderDiagResult(result);
+  });
+
+  function renderDiagResult(list) {
+    const box = document.getElementById("igdcServerPanel");
+    if (!box) return;
+
+    const html = list.map(r => `
+      <div style="margin:6px 0; padding:6px;
+        border-left:4px solid ${
+          r.level === "error" ? "#dc2626" :
+          r.level === "warn" ? "#f59e0b" : "#22c55e"
+        };">
+        <b>[${r.level.toUpperCase()}]</b>
+        <code>${r.scope}</code> →
+        <b>${r.target}</b><br/>
+        <small>${r.message}</small>
+      </div>
+    `).join("");
+
+    box.innerHTML = `
+      <h4>📦 수익 썸네일 상품 맵핑 점검 결과</h4>
+      ${html || "<p>결과 없음</p>"}
+    `;
+  }
+})();
+</script>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="assets/js/traffic-dashboard.js"></script>
 <script src="assets/js/analytics-loader.js"></script>
 <script src="assets/js/igdc-site-control.js"></script>
 
+<script src="/assets/js/diagnostics/igdc-system-checker.js"></script>
+<script src="/assets/js/diagnostics/igdc-diag-admin-bridge.js"></script>
+<script src="/assets/js/diagnostics/igdc-system-diagnostic-full.js"></script>
 
 </body>
 </html>
