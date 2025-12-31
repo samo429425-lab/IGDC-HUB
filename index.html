@@ -1573,13 +1573,15 @@ function applyRoleUI(role) {
     if (!roles || roles.length===0) return "member";
 
     // if Auth0 didn't include known roles but something exists, still prefer 'member'
-    const known = ["admin","director","site_manager","special_member","member","guest"];
+    const known = ["owner","admin","coordinator_director","director","site_manager","special_member","member","guest"];
     const hasKnown = roles.some(r => known.includes(r) || r.startsWith("site_manager.") || r.startsWith("member.") || r.startsWith("commerce_manager."));
     if (!hasKnown) return "member";
 
     // normal mapping
+	if (roles.includes("owner")) return "owner";
     if (roles.includes("admin")) return "admin";
     if (roles.includes("director")) return "director";
+	if (roles.includes("coordinator_director")) return "coordinator_director";
     if (roles.includes("site_manager") || roles.some(r=>r.startsWith("site_manager."))) return "site_manager";
     if (roles.includes("special_member")) return "special_member";
     if (roles.includes("member") || roles.some(r=>r.startsWith("member."))) return "member";
