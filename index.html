@@ -1597,19 +1597,12 @@ function applyRoleUI(role) {
   if (window.__IGTC_ROLE_INLINE3__) return;
   window.__IGTC_ROLE_INLINE3__ = true;
 
-  function topRole(r){
-    return String(r||"guest").toLowerCase().trim().split(".")[0];
-  }
-
-  function getDisplayRole(){
-    // 1️⃣ Auth0 roles 배열
+  function getRawRole(){
+    // 1️⃣ Auth0 roles 배열 (가장 정확)
     try{
       if (window.osauth && window.osauth.claims && Array.isArray(window.osauth.claims.roles)){
-        // 여러 개여도, owner면 owner / admin이면 admin
-        const roles = window.osauth.claims.roles.map(topRole);
-        if (roles.includes("owner")) return "owner";
-        if (roles.includes("admin")) return "admin";
-        return roles[0] || "guest";
+        // 여러 개면 첫 번째를 그대로 표시
+        return window.osauth.claims.roles[0];
       }
     }catch(e){}
 
@@ -1617,14 +1610,14 @@ function applyRoleUI(role) {
     try{
       if (window.osauth){
         if (window.osauth.user && window.osauth.user.role)
-          return topRole(window.osauth.user.role);
+          return window.osauth.user.role;
         if (window.osauth.role)
-          return topRole(window.osauth.role);
+          return window.osauth.role;
       }
     }catch(e){}
 
     // 3️⃣ fallback
-    if (window.__IGDC_ROLE) return topRole(window.__IGDC_ROLE);
+    if (window.__IGDC_ROLE) return window.__IGDC_ROLE;
 
     return "guest";
   }
@@ -1636,7 +1629,7 @@ function applyRoleUI(role) {
       document.getElementById("userRole");
 
     if (!el) return;
-    el.textContent = getDisplayRole();
+    el.textContent = getRawRole();
   }
 
   if (document.readyState === "loading"){
@@ -1644,7 +1637,6 @@ function applyRoleUI(role) {
   } else {
     render();
   }
-
   document.addEventListener("osauth:ready", render);
 })();
 </script>
@@ -2761,20 +2753,16 @@ function setActive(i){
 
 <script id="igdc-admin-bridge">
 (function(){
-  function topRole(r){
-    return String(r||"guest").toLowerCase().trim().split(".")[0];
-  }
-
   try{
-    var role = topRole(window.__IGDC_ROLE || "guest");
+    var role = window.__IGDC_ROLE || "";
 
-    // 관리자 페이지 접근 가능 여부
-    // owner는 owner, admin은 admin으로 그대로 두되
-    // 접근 권한만 둘 다 허용
-    window.__IGDC_IS_ADMIN = (role === "owner" || role === "admin");
+    // 관리자 접근 판단만 (문자열 그대로)
+    window.__IGDC_IS_ADMIN =
+      role === "owner" ||
+      role === "admin" ||
+      role.startsWith("owner.") ||
+      role.startsWith("admin.");
 
-    // role 값은 절대 변형하지 않음
-    window.__IGDC_ROLE = role;
   }catch(e){}
 })();
 </script>
