@@ -1522,140 +1522,7 @@ function applyRoleUI(role) {
 })();</script>
 <!-- IGTC_ROLE_INLINE_V3 -->
 <div id="igtcRoleInline3"><span id="igtcRoleText3">guest</span></div>
-<script>
-(function(){
-  'use strict';
 
-  // ====== 설정: 토큰 클레임 키 후보 ======
-  const ROLE_KEYS = [
-    "https://roles",
-    "https://app/roles",
-    "roles",
-    "role"
-  ];
-
-  function norm(s){ return String(s||"").trim().toLowerCase(); }
-
-  function parseJwtPayload(token){
-    try{
-      const parts = String(token||"").split(".");
-      if(parts.length < 2) return null;
-      const b64 = parts[1].replace(/-/g,'+').replace(/_/g,'/');
-      const json = decodeURIComponent(atob(b64).split('').map(c => '%' + ('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''));
-      return JSON.parse(json);
-    }catch(e){
-      return null;
-    }
-  }
-
-  function getIdToken(){
-    // 우선순위: osAuth v2 저장형 / 일반 저장형들
-    const keys = ["osauth.tokens.v2","osauth.id_token","id_token","osauth_id_token","auth0.id_token"];
-    for(const k of keys){
-      try{
-        if(k === "osauth.tokens.v2"){
-          const obj = JSON.parse(localStorage.getItem(k)||"null") || {};
-          const t = obj && obj.id_token;
-          if(t && String(t).split(".").length>=2) return t;
-        }else{
-          const t = localStorage.getItem(k);
-          if(t && String(t).split(".").length>=2) return t;
-        }
-      }catch(_){}
-    }
-    // 전역 객체가 있으면 마지막으로 시도
-    try{
-      if(window.osAuth && typeof window.osAuth.getIdToken === "function"){
-        const t = window.osAuth.getIdToken();
-        if(t && String(t).split(".").length>=2) return t;
-      }
-    }catch(_){}
-    return "";
-  }
-
-  function extractRoles(payload){
-    let roles=[];
-    for(const key of ROLE_KEYS){
-      const v = payload && payload[key];
-      if(!v) continue;
-      if(Array.isArray(v)) roles = roles.concat(v);
-      else if(typeof v === "string") roles = roles.concat(v.split(",").map(s=>s.trim()));
-      else roles = roles.concat([String(v)]);
-    }
-    roles = roles.map(norm).filter(Boolean);
-    return Array.from(new Set(roles));
-  }
-
-  // ====== 1:1 맵핑 규칙(정이사장님 기준) ======
-  function resolveRole(roles){
-    roles = (roles || []).map(norm).filter(Boolean);
-    if(!roles.length) return "member";
-
-    // 1) 최상위
-    if(roles.includes("owner")) return "owner";
-    if(roles.includes("coordinator_director")) return "coordinator_director";
-    if(roles.includes("director")) return "director";
-
-    // 2) site_manager.**site 우선
-    const sm = roles.find(r => r.startsWith("site_manager."));
-    if(sm) return sm;
-    if(roles.includes("site_manager")) return "site_manager";
-
-    // 3) commerce_manager.**(site/section) 우선
-    const cm = roles.find(r => r.startsWith("commerce_manager."));
-    if(cm) return cm;
-    if(roles.includes("commerce_manager")) return "commerce_manager";
-
-    // 4) special/member
-    if(roles.includes("special_member")) return "special_member";
-
-    const m = roles.find(r => r.startsWith("member."));
-    if(m) return m;
-    if(roles.includes("member")) return "member";
-
-    // 최종: 첫 번째 역할(있으면)
-    return roles[0] || "member";
-  }
-
-  function paint(roleText){
-    const txt = roleText || "guest";
-
-    // 표시 요소 후보들(기존 UI 유지)
-    const el =
-      document.getElementById("roleStatusBtn") ||
-      document.getElementById("igtcRoleInline3") ||
-      document.getElementById("userRole") ||
-      document.querySelector(".role-display");
-
-    if(el) el.textContent = txt;
-
-    // 다른 블럭들이 참조하는 전역값도 같이 고정
-    try{ window.__IGDC_ROLE = txt; }catch(_){}
-    try{ document.documentElement.dataset.role = txt; }catch(_){}
-  }
-
-  function run(){
-    const token = getIdToken();
-    if(!token){
-      paint("guest");
-      return;
-    }
-    const payload = parseJwtPayload(token);
-	if (window.__IGDC_ROLE) {
-  paint(String(window.__IGDC_ROLE).toLowerCase());
-  return;
-}
-    const roles = extractRoles(payload);
-    const roleText = resolveRole(roles);
-    paint(roleText);
-  }
-
-  document.addEventListener("DOMContentLoaded", run);
-  document.addEventListener("osauth:ready", run);
-  document.addEventListener("osauth:done", run, true);
-  window.addEventListener("focus", run);
-})();
-</script>
 
 <script>
 /* ===== Refined Login UI Patch ===== */
@@ -2787,53 +2654,84 @@ function setActive(i){
 </script>
 <script defer="" src="assets/js/loadpage-role-guard.min.js"></script>
 <!-- IGDC SAFE LOCK: keep pre-login look -->
+
 <script id="igdc-admin-bridge">
 (function(){
   "use strict";
 
-  // 단일 기준: ROLE RESOLVER가 이미 세팅한 전역 role만 사용
+  /* =========================================================
+     ROLE SOURCE
+  ========================================================= */
   function getRole(){
-    return String(window.__IGDC_ROLE || "guest").trim().toLowerCase();
+    try {
+      return String(window.__IGDC_ROLE || "guest").trim().toLowerCase();
+    } catch(e){
+      return "guest";
+    }
   }
 
-  // 정책: owner는 항상 admin 권한 포함
   function isAdminOrOwner(){
     const r = getRole();
     return (r === "admin" || r === "owner");
   }
 
+  /* =========================================================
+     ROLE TEXT OUTPUT (login 옆 표시)
+  ========================================================= */
+  function applyRoleText(){
+    try {
+      const span = document.getElementById("igtcRoleText3");
+      if (!span) return;
+      span.textContent = getRole();
+    } catch(e){}
+  }
+
+  /* =========================================================
+     ADMIN UI TOGGLE
+  ========================================================= */
   function applyAdminUI(){
     const ok = isAdminOrOwner();
 
-    // 1) 관리자 보호막(어둠 레이어) 처리
+    // admin overlay / shield
     try{
       const hide = document.getElementById("igdc-admin-hide");
-      if(hide) hide.style.display = ok ? "none" : "";
-    }catch(_){}
+      if (hide) hide.style.display = ok ? "none" : "";
+    }catch(e){}
 
-// 2) 관리자 전용 UI 토글 (CSS에 위임)
-try {
-  document.documentElement.classList.toggle("admin-enabled", ok);
-} catch (_) {}
+    // html class toggle
+    try{
+      document.documentElement.classList.toggle("admin-enabled", ok);
+    }catch(e){}
 
-    // 3) (선택) 관리자 메뉴 버튼이 따로 있으면 같이 제어
-    // - id가 다를 수 있어 "존재하면"만 처리
+    // optional admin buttons
     try{
       const adminBtn =
         document.getElementById("adminBtn") ||
         document.getElementById("adminMenuBtn") ||
         document.querySelector('[data-admin-btn="1"]');
-      if(adminBtn) adminBtn.style.display = ok ? "" : "none";
-    }catch(_){}
+
+      if (adminBtn) adminBtn.style.display = ok ? "" : "none";
+    }catch(e){}
   }
 
-  document.addEventListener("DOMContentLoaded", applyAdminUI);
-  document.addEventListener("osauth:ready", applyAdminUI);
-  document.addEventListener("osauth:done", applyAdminUI, true);
-  window.addEventListener("focus", applyAdminUI);
+  /* =========================================================
+     RUNNER
+  ========================================================= */
+  function run(){
+    applyRoleText();
+    applyAdminUI();
+  }
+
+  /* =========================================================
+     EVENTS
+  ========================================================= */
+  document.addEventListener("DOMContentLoaded", run);
+  document.addEventListener("osauth:ready", run);
+  document.addEventListener("osauth:done", run);
+  window.addEventListener("focus", run);
+
 })();
 </script>
-
 
 <!-- Robust language persistence handler (injected) -->
 <script>
