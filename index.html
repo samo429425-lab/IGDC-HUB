@@ -1623,10 +1623,14 @@ function applyRoleUI(role) {
   }
 
   function render(){
-    const el =
-      document.getElementById("igtcRoleText3") ||
-      document.getElementById("roleStatusBtn") ||
-      document.querySelector(".role-display");
+
+  // ✅ 로그아웃 직후에는 role 계산 중단
+  if (sessionStorage.getItem("IGDC_LOGOUT") === "1") return;
+
+  const el =
+    document.getElementById("igtcRoleText3") ||
+    document.getElementById("roleStatusBtn") ||
+    document.querySelector(".role-display");
 
     if (!el) return;
 
