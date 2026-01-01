@@ -2804,6 +2804,9 @@ function setActive(i){
 (function () {
   "use strict";
 
+  if (window.__IGTC_ROLE_INLINE3__) return;
+  window.__IGTC_ROLE_INLINE3__ = true;
+
   function lower(v) {
     return String(v || "").trim().toLowerCase();
   }
@@ -2858,8 +2861,7 @@ function setActive(i){
     const cm = prefix("commerce_manager");
     if (cm) return cm;
 
-    if (has("special_menber")) return "special_menber";
-    if (has("special_member")) return "special_menber";
+    if (has("special_member")) return "special_member";
 
     const mem = prefix("member");
     if (mem) return mem;
@@ -2867,44 +2869,80 @@ function setActive(i){
     return "guest";
   }
 
+  function ensureAdminBlock(role) {
+    let blocker = document.getElementById("igdc-admin-hide");
+
+    if (role === "admin" || role === "owner") {
+      if (blocker && blocker.parentNode) {
+        blocker.parentNode.removeChild(blocker);
+      }
+      return;
+    }
+
+    // non-admin → 반드시 차단 유지
+    if (!blocker) {
+      blocker = document.createElement("div");
+      blocker.id = "igdc-admin-hide";
+      blocker.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: #fff;
+        z-index: 999999;
+      `;
+      document.body.appendChild(blocker);
+    }
+  }
+
   function applyRole() {
     try {
       const claims = getClaims();
-      const roles = readRolesFromClaims(claims);
-      const role = pickRole(roles);
 
-      // ✅ 기존 흐름을 깨지 않도록 "주입만" 한다
+      // 로그아웃 / 토큰 없음 → guest
+      let role = "guest";
+      if (claims && Object.keys(claims).length > 0) {
+        const roles = readRolesFromClaims(claims);
+        role = pickRole(roles);
+      }
+
+      // 전역 동기화
       window.__IGDC_ROLE = role;
-
-      document.documentElement.dataset.role = role;
 
       try {
         localStorage.setItem("igdc_role", role);
       } catch (e) {}
 
-      // 기존 코드들과의 호환 유지
+      // 기존 코드 호환
       window.osauth = window.osauth || {};
       window.osauth.role = role;
       window.osauth.userRole = role;
       window.osauth.claims = Object.assign({}, window.osauth.claims || {}, {
-        roles: roles
+        roles: readRolesFromClaims(claims)
       });
       window.osauth.idTokenClaims = claims;
 
-      // admin / owner만 관리자 영역 허용
-      if (role === "admin" || role === "owner") {
-        try {
-          var hide = document.getElementById("igdc-admin-hide");
-          if (hide && hide.parentNode) hide.parentNode.removeChild(hide);
-        } catch (e) {}
-      }
+      // 관리자 차단 처리
+      ensureAdminBlock(role);
+
+      // UI 반영
+      const el =
+        document.getElementById("igtcRoleText3") ||
+        document.getElementById("roleStatusBtn") ||
+        document.querySelector(".role-display");
+
+      if (el) el.textContent = role;
 
     } catch (e) {
-      // 의도적으로 무시 (기존 흐름 보호)
+      // 절대 throw 하지 않음 (페이지 백화 방지)
     }
   }
 
-  document.addEventListener("DOMContentLoaded", applyRole);
+  // 실행 타이밍
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", applyRole);
+  } else {
+    applyRole();
+  }
+
   document.addEventListener("osauth:ready", applyRole);
   document.addEventListener("osauth:done", applyRole, true);
   window.addEventListener("focus", applyRole);
