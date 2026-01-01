@@ -1487,24 +1487,6 @@ function applyRoleUI(role) {
     document.addEventListener('DOMContentLoaded', applyGate);
   } else { applyGate(); }
 
-  // Strong logout intercept (capture phase)
-  document.addEventListener('click', async function(ev){
-    const t = ev.target.closest(logoutBtnSelectorList.join(','));
-    if(!t) return;
-    ev.preventDefault(); ev.stopImmediatePropagation(); ev.stopPropagation();
-    const ok = await confirmLogout();
-    if(!ok) return;
-    try{
-      if (window.osAuth && typeof window.osAuth.logout === 'function') window.osAuth.logout();
-      if (window.osauth && typeof window.osauth.logout === 'function') window.osauth.logout();
-      localStorage.removeItem('id_token');
-      localStorage.removeItem('os_id_token');
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('os_access_token');
-    }catch(_){}
-    showToast('Logged out');
-    setTimeout(()=>location.reload(), 600);
-  }, true);
 
   // Mark existing login button for accurate toast position (if present)
   try{
