@@ -2011,21 +2011,7 @@ function applyRoleUI(role) {
       });
     })();
 
-    // Soft-block rapid redirect loop to "/index.html" immediately after token exchange
-    (function(){
-      var origAssign = location.assign.bind(location);
-      var origReplace= location.replace.bind(location);
-      function shouldBlock(url){
-        try{
-          var u = new URL(url, location.href);
-          return (u.pathname === "/index.html" && (performance.now() < 2000));
-        }catch(_){ return false; }
-      }
-      location.assign = function(url){ if(shouldBlock(url)) return; return origAssign(url); };
-      location.replace= function(url){ if(shouldBlock(url)) return; return origReplace(url); };
-    })();
-  })();
-})();
+    
 </script>
 <!-- IGDC Unified Token/Role + Payment Bridge (inline, single-file) -->
 <script>
