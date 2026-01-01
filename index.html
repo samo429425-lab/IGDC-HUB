@@ -1246,9 +1246,7 @@ window.addEventListener('DOMContentLoaded', function() {
   window.addEventListener("message", function(ev){
     if (!ev) return;
     if (ev.data === "osauth:done"){
-      if (window.__IGDC_LOGGING_OUT__) return; // 로그아웃 중이면 무시
-      try{ applyLoginButton(); }catch(e){}
-      // 필요시 여기서 role 렌더/표시 업데이트만 수행 (reload 금지)
+    
     }
   });
 })();
@@ -1288,7 +1286,13 @@ window.addEventListener('DOMContentLoaded', function() {
     isAuthenticated(){ const t=load(STORAGE.TOKENS); return !!t && (Math.floor(Date.now()/1000) < Number(t.exp||0)); },
     getIdTokenPayload(){ const t=load(STORAGE.TOKENS); if(!t) return null; const p=(t.id_token||"").split("."); if(p.length<2) return null; try{ return JSON.parse(atob(p[1].replace(/-/g,"+").replace(/_/g,"/"))); }catch(_){ return null; } },
     getAccessToken(){ const t=load(STORAGE.TOKENS); return t ? (t.access_token||null) : null; },
-    logout(to){ del(STORAGE.TOKENS); if(to) location.href=to; else location.reload(); }
+    logout(to){
+  del(STORAGE.TOKENS);
+  // reload 절대 금지
+  if (to) location.href = to;
+  else location.href = "/index.html";
+}
+
   };
 
   window.osLogin = async function(){
