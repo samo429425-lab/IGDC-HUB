@@ -1526,39 +1526,146 @@ function applyRoleUI(role) {
 <div id="igtcRoleInline3"><span id="igtcRoleText3">guest</span></div>
 
 <script>
-(function () {
-  "use strict";
+(function(){
   if (window.__IGTC_ROLE_INLINE3__) return;
   window.__IGTC_ROLE_INLINE3__ = true;
 
-  function getRole() {
-    return String(window.__IGDC_ROLE || "").trim().toLowerCase();
+  const ROLE_KEYS = [
+    "https://example.com/roles",
+    "https://osu/roles",
+    "roles",
+    "permissions"
+  ];
+
+  function b64uDecode(s){
+    try{
+      s=(s||"").replace(/-/g,"+").replace(/_/g,"/");
+      const pad=s.length%4;
+      if(pad) s+="=".repeat(4-pad);
+      const bin=atob(s);
+      try{
+        return new TextDecoder("utf-8").decode(
+          Uint8Array.from(bin,c=>c.charCodeAt(0))
+        );
+      }catch(_){
+        return bin;
+      }
+    }catch(e){
+      return "{}";
+    }
   }
 
-  function getTarget() {
-    return (
+  function parseJwtPayload(t){
+    if(!t || typeof t!=="string") return {};
+    const p=t.split(".");
+    if(p.length<2) return {};
+    try{
+      return JSON.parse(b64uDecode(p[1]));
+    }catch(e){
+      return {};
+    }
+  }
+
+  function getIdToken(){
+    try{
+      if(window.osAuth && typeof window.osAuth.getIdTokenPayload==="function"){
+        const p = window.osAuth.getIdTokenPayload();
+        if(p && p.__raw) return p.__raw;
+      }
+    }catch(_){}
+
+    const keys=[
+      "osauth.tokens.v2",
+      "osauth:id_token",
+      "id_token",
+      "auth0:id_token"
+    ];
+
+    for(const k of keys){
+      try{
+        const v = (k==="osauth.tokens.v2")
+          ? (JSON.parse(localStorage.getItem(k)||"null")||{}).id_token
+          : localStorage.getItem(k);
+        if(v && v.split(".").length>=2) return v;
+      }catch(_){}
+    }
+    return "";
+  }
+
+  function extractRoles(payload){
+    let roles=[];
+    for(const key of ROLE_KEYS){
+      const v = payload && payload[key];
+      if(!v) continue;
+      if(Array.isArray(v)) roles = roles.concat(v);
+      else if(typeof v==="string") roles = roles.concat(v.split(",").map(s=>s.trim()));
+    }
+    return Array.from(new Set(
+      roles.map(r=>String(r||"").toLowerCase())
+    ));
+  }
+
+  function computeRole(){
+    const token = getIdToken();
+    if(!token) return "guest";
+
+    const payload = parseJwtPayload(token);
+    const roles = extractRoles(payload);
+
+    // 로그인은 되었지만 role이 없으면 member
+    if(!roles || roles.length===0) return "member";
+
+    // ===== 정식 우선순위 매핑 =====
+    if (roles.includes("owner")) return "owner";
+    if (roles.includes("admin")) return "admin";
+    if (roles.includes("director")) return "director";
+    if (roles.includes("coordinator_director")) return "coordinator_director";
+
+    if (
+      roles.includes("site_manager") ||
+      roles.some(r => r.startsWith("site_manager."))
+    ) return "site_manager";
+
+    if (
+      roles.includes("commerce_manager") ||
+      roles.some(r => r.startsWith("commerce_manager."))
+    ) return "commerce_manager";
+
+    if (roles.includes("special_member")) return "special_member";
+
+    if (
+      roles.includes("member") ||
+      roles.some(r => r.startsWith("member."))
+    ) return "member";
+
+    return "guest";
+  }
+
+  function render(){
+    const el =
       document.getElementById("igtcRoleText3") ||
       document.getElementById("roleStatusBtn") ||
-      document.querySelector(".role-display") ||
-      null
-    );
-  }
+      document.querySelector(".role-display");
 
-  function render() {
-    const el = getTarget();
-    if (!el) return;
+    if(!el) return;
 
-    const role = getRole() || "guest";
+    const role = computeRole();
     el.textContent = role;
+
+    // 전역 동기화 (기존 코드들과 호환)
+    window.__IGDC_ROLE = role;
+    try {
+      localStorage.setItem("igdc_role", role);
+    } catch(e){}
   }
 
-  function renderSoon() {
+  function renderSoon(){
     render();
     setTimeout(render, 50);
     setTimeout(render, 150);
   }
 
-  if (document.readyState === "loading") {
+  if(document.readyState === "loading"){
     document.addEventListener("DOMContentLoaded", renderSoon);
   } else {
     renderSoon();
@@ -1567,8 +1674,10 @@ function applyRoleUI(role) {
   document.addEventListener("osauth:ready", renderSoon);
   document.addEventListener("osauth:done", renderSoon, true);
   window.addEventListener("focus", renderSoon);
+
 })();
 </script>
+
 
 <script>
 /* ===== Refined Login UI Patch ===== */
