@@ -1529,73 +1529,131 @@ function applyRoleUI(role) {
   if (window.__IGTC_ROLE_INLINE3__) return;
   window.__IGTC_ROLE_INLINE3__ = true;
 
-  try {
-    // ===============================
-    // 1. 원본 role 가져오기
-    // ===============================
-    const rawRole =
-      window.__IGDC_ROLE ||
-      window.IGDC_ROLE ||
-      window.userRole ||
-      "guest";
-
-    const role = String(rawRole).toLowerCase();
-
-    // ===============================
-    // 2. role 정규화 + 우선순위 규칙
-    // owner > admin > coordinator > manager > staff > user > guest
-    // ===============================
-    let displayRole = "GUEST";
-
-    if (["owner", "super", "superadmin", "root"].includes(role)) {
-      displayRole = "OWNER";
-    } 
-    else if (["admin", "administrator"].includes(role)) {
-      displayRole = "ADMIN";
-    }
-    else if (["coordinator", "director"].includes(role)) {
-      displayRole = "COORDINATOR";
-    }
-    else if (["manager", "commerce_manager", "site_manager"].includes(role)) {
-      displayRole = "MANAGER";
-    }
-    else if (["staff", "operator", "editor"].includes(role)) {
-      displayRole = "STAFF";
-    }
-    else if (["user", "member"].includes(role)) {
-      displayRole = "USER";
-    }
-
-    // ===============================
-    // 3. owner / admin 통합 규칙
-    // - owner가 있으면 admin은 표시하지 않음
-    // ===============================
-    if (displayRole === "ADMIN" && role === "owner") {
-      displayRole = "OWNER";
-    }
-
-    // ===============================
-    // 4. DOM 표시 대상 확보
-    // ===============================
-    let el =
-      document.getElementById("igtcRoleInline3") ||
-      document.getElementById("roleStatusBtn");
-
-    if (!el) {
-      el = document.createElement("div");
-      el.id = "igtcRoleInline3";
-      document.body.appendChild(el);
-    }
-
-    // ===============================
-    // 5. 표시 적용
-    // ===============================
-    el.textContent = displayRole;
-    el.setAttribute("data-role", displayRole.toLowerCase());
-
-  } catch (e) {
-    console.warn("[IGTC ROLE INLINE] failed:", e);
+  /* -------------------------------
+   * 공통 유틸
+   * ------------------------------- */
+  function norm(v){
+    return String(v || "").trim().toLowerCase();
   }
+
+  function first(arr){
+    return Array.isArray(arr) && arr.length ? arr[0] : null;
+  }
+
+  /* -------------------------------
+   * ROLE RESOLVER (정이사장님 기준)
+   * ------------------------------- */
+  function resolveRole(roles){
+    roles = (roles || []).map(norm).filter(Boolean);
+    if (!roles.length) return "guest";
+
+    // 1. 최상위
+    if (roles.includes("owner")) return "owner";
+    if (roles.includes("admin")) return "admin";
+
+    // 2. director 계열
+    if (roles.includes("director")) return "director";
+    if (roles.includes("coordinator_director")) return "coordinator_director";
+
+    // 3. site / commerce manager
+    const sm = roles.find(r => r.startsWith("site_manager."));
+    if (sm) return sm;
+    if (roles.includes("site_manager")) return "site_manager";
+
+    const cm = roles.find(r => r.startsWith("commerce_manager."));
+    if (cm) return cm;
+    if (roles.includes("commerce_manager")) return "commerce_manager";
+
+    // 4. special member
+    if (roles.includes("special_member")) return "special_member";
+
+    // 5. member.*
+    const mem = roles.find(r => r.startsWith("member."));
+    if (mem) return mem;
+    if (roles.includes("member")) return "member";
+
+    // fallback
+    return roles[0] || "guest";
+  }
+
+  /* -------------------------------
+   * 토큰 → role 추출
+   * (기존 구조 존중)
+   * ------------------------------- */
+  function getIdToken(){
+    try {
+      return (
+        window.id_token ||
+        window.ID_TOKEN ||
+        localStorage.getItem("id_token") ||
+        null
+      );
+    } catch(e){
+      return null;
+    }
+  }
+
+  function parseJwtPayload(token){
+    try {
+      const part = token.split(".")[1];
+      return JSON.parse(atob(part.replace(/-/g,"+").replace(/_/g,"/")));
+    } catch(e){
+      return {};
+    }
+  }
+
+  function extractRoles(payload){
+    if (!payload) return [];
+
+    // Auth0 / custom claim 대응
+    if (Array.isArray(payload.roles)) return payload.roles;
+    if (Array.isArray(payload["https://roles"])) return payload["https://roles"];
+    if (Array.isArray(payload.role)) return payload.role;
+
+    return [];
+  }
+
+  /* -------------------------------
+   * 표시 처리
+   * ------------------------------- */
+  function paint(roleText){
+    const txt = roleText || "guest";
+
+    const el =
+      document.getElementById("roleStatusBtn") ||
+      document.getElementById("igtcRoleInline3") ||
+      document.getElementById("userRole") ||
+      document.querySelector(".role-display");
+
+    if (el) el.textContent = txt;
+
+    // 전역 공유 (다른 스크립트들이 참조)
+    try { window.__IGDC_ROLE = txt; } catch(e){}
+    try { document.documentElement.dataset.role = txt; } catch(e){}
+  }
+
+  /* -------------------------------
+   * 실행
+   * ------------------------------- */
+  function run(){
+    const token = getIdToken();
+    if (!token) {
+      paint("guest");
+      return;
+    }
+
+    const payload = parseJwtPayload(token);
+    const roles = extractRoles(payload);
+    const resolved = resolveRole(roles);
+
+    paint(resolved);
+  }
+
+  document.addEventListener("DOMContentLoaded", run);
+  document.addEventListener("osauth:ready", run);
+  document.addEventListener("osauth:done", run, true);
+  window.addEventListener("focus", run);
+
 })();
 </script>
 
@@ -2720,163 +2778,65 @@ function setActive(i){
 <script defer="" src="assets/js/loadpage-role-guard.min.js"></script>
 <!-- IGDC SAFE LOCK: keep pre-login look -->
 <script id="igdc-admin-bridge">
-(function () {
+(function(){
   "use strict";
 
   /**
-   * ROLE NORMALIZATION & POLICY
-   * ===========================
-   * 이 블록은 "역할 해석"만 담당한다.
-   * UI / 레이아웃 / 메뉴 로직은 절대 건드리지 않는다.
+   * 단일 기준 role 값
+   * (IGTC_ROLE_INLINE 쪽에서 확정된 값 사용)
    */
-
-  // ─────────────────────────────────────────────
-  // 1. 역할 정규화 테이블
-  // ─────────────────────────────────────────────
-  const ROLE_ALIASES = {
-    owner: [
-      "owner", "super", "superadmin", "root"
-    ],
-
-    admin: [
-      "admin", "administrator"
-    ],
-
-    coordinator: [
-      "coordinator", "director", "co-ordinator"
-    ],
-
-    manager: [
-      "manager",
-      "commerce_manager",
-      "site_manager",
-      "content_manager",
-      "shop_manager"
-    ],
-
-    staff: [
-      "staff", "operator", "editor"
-    ],
-
-    user: [
-      "user", "member"
-    ],
-
-    guest: [
-      "guest", "", null, undefined
-    ]
-  };
-
-  // ─────────────────────────────────────────────
-  // 2. 역할 정규화 함수
-  // ─────────────────────────────────────────────
-  function normalizeRole(raw) {
-    const v = String(raw || "").trim().toLowerCase();
-
-    for (const key in ROLE_ALIASES) {
-      if (ROLE_ALIASES[key].includes(v)) return key;
-    }
-    return "guest";
+  function getRole(){
+    return String(window.__IGDC_ROLE || "guest").trim().toLowerCase();
   }
 
-  // ─────────────────────────────────────────────
-  // 3. 상속 규칙 (권한 포함 관계)
-  // owner ⟶ admin ⟶ coordinator ⟶ manager ⟶ staff ⟶ user
-  // ─────────────────────────────────────────────
-  const ROLE_LEVEL = {
-    owner: 100,
-    admin: 90,
-    coordinator: 70,
-    manager: 60,
-    staff: 40,
-    user: 20,
-    guest: 0
-  };
-
-  function hasAtLeast(role, required) {
-    return (ROLE_LEVEL[role] || 0) >= (ROLE_LEVEL[required] || 0);
+  /**
+   * ✅ 관리자 페이지 접근 허용 규칙 (최종 확정)
+   * 허용: owner, admin
+   * 그 외 전부 차단
+   */
+  function canAccessAdmin(){
+    const role = getRole();
+    return role === "owner" || role === "admin";
   }
 
-  // ─────────────────────────────────────────────
-  // 4. 현재 로그인된 역할 결정
-  // (Auth / 외부 주입 / 기존 값 우선)
-  // ─────────────────────────────────────────────
-  let detectedRole =
-    window.__IGDC_ROLE ||
-    window.IGDC_ROLE ||
-    window.userRole ||
-    window.role ||
-    "guest";
+  // 외부 공용 API (기존 코드 호환)
+  window.IGDC_AUTH = window.IGDC_AUTH || {};
+  window.IGDC_AUTH.getRole = getRole;
+  window.IGDC_AUTH.canAccessAdmin = canAccessAdmin;
 
-  const normalizedRole = normalizeRole(detectedRole);
+  // 레거시 호환
+  window.IGDC_AUTH.isAdminOrOwner = canAccessAdmin;
 
-  // 전역 단일 기준값
-  window.__IGDC_ROLE = normalizedRole;
+  /**
+   * UI 반영 (기존 구조 유지)
+   * → 관리자 전용 영역 표시/비표시만 제어
+   */
+  function applyAdminVisibility(){
+    const ok = canAccessAdmin();
 
-  // ─────────────────────────────────────────────
-  // 5. 권한 헬퍼 API (다른 스크립트에서 사용)
-  // ─────────────────────────────────────────────
-  window.IGDC_AUTH = {
-    role: normalizedRole,
+    try {
+      const hideLayer = document.getElementById("igdc-admin-hide");
+      if (hideLayer) hideLayer.style.display = ok ? "none" : "";
+    } catch(e){}
 
-    isOwner() {
-      return normalizedRole === "owner";
-    },
+    try {
+      document.documentElement.classList.toggle("admin-enabled", ok);
+    } catch(e){}
 
-    isAdmin() {
-      return hasAtLeast(normalizedRole, "admin");
-    },
+    try {
+      const btn =
+        document.getElementById("adminBtn") ||
+        document.getElementById("adminMenuBtn") ||
+        document.querySelector('[data-admin-btn="1"]');
 
-    isCoordinator() {
-      return hasAtLeast(normalizedRole, "coordinator");
-    },
-
-    isManager() {
-      return hasAtLeast(normalizedRole, "manager");
-    },
-
-    isStaff() {
-      return hasAtLeast(normalizedRole, "staff");
-    },
-
-    canAccessAdmin() {
-      return hasAtLeast(normalizedRole, "admin");
-    },
-
-    hasRole(r) {
-      return hasAtLeast(normalizedRole, r);
-    }
-  };
-
-  // ─────────────────────────────────────────────
-  // 6. DOM 표시용 role badge (기존 호환)
-  // ─────────────────────────────────────────────
-  try {
-    window.__IGTC_ROLE_INLINE3__ = true;
-
-    const label =
-      normalizedRole === "owner" ? "OWNER" :
-      normalizedRole === "admin" ? "ADMIN" :
-      normalizedRole === "coordinator" ? "COORDINATOR" :
-      normalizedRole === "manager" ? "MANAGER" :
-      normalizedRole === "staff" ? "STAFF" :
-      normalizedRole === "user" ? "USER" : "GUEST";
-
-    let el = document.getElementById("roleStatusBtn") ||
-             document.getElementById("igtcRoleInline3");
-
-    if (!el) {
-      el = document.createElement("div");
-      el.id = "igtcRoleInline3";
-      document.body.appendChild(el);
-    }
-
-    el.textContent = label;
-    el.setAttribute("data-role", normalizedRole);
-
-  } catch (e) {
-    console.warn("[IGDC role bridge] UI attach skipped:", e);
+      if (btn) btn.style.display = ok ? "" : "none";
+    } catch(e){}
   }
+
+  document.addEventListener("DOMContentLoaded", applyAdminVisibility);
+  document.addEventListener("osauth:ready", applyAdminVisibility);
+  document.addEventListener("osauth:done", applyAdminVisibility, true);
+  window.addEventListener("focus", applyAdminVisibility);
 
 })();
 </script>
