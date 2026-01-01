@@ -1594,27 +1594,20 @@ function applyRoleUI(role) {
 
 <script>
 (function(){
-  // UI 표시 전용 ROLE 렌더러
-  // - Auth0 롤 25개 자동 대응
-  // - site_manager.xxx → site_manager
-  // - commerce_manager.xxx → commerce_manager
-  // - member.xxx → member
-  // - owner/admin 그대로 표시
-
   if (window.__IGTC_ROLE_INLINE3__) return;
   window.__IGTC_ROLE_INLINE3__ = true;
 
-  function topRoleFromValue(v){
-    if (!v) return "";
+  function normalizeTopRole(v){
+    if (!v) return "guest";
     return String(v).toLowerCase().trim().split(".")[0];
   }
 
   function getDisplayRole(){
-    // 1순위: osauth claims 배열 (Auth0 원본)
+    // 1순위: osauth claims (Auth0 원본)
     try{
       if (window.osauth && window.osauth.claims && Array.isArray(window.osauth.claims.roles)){
         if (window.osauth.claims.roles.length > 0){
-          return topRoleFromValue(window.osauth.claims.roles[0]);
+          return normalizeTopRole(window.osauth.claims.roles[0]);
         }
       }
     }catch(e){}
@@ -1623,24 +1616,29 @@ function applyRoleUI(role) {
     try{
       if (window.osauth){
         if (window.osauth.user && window.osauth.user.role){
-          return topRoleFromValue(window.osauth.user.role);
+          return normalizeTopRole(window.osauth.user.role);
         }
         if (window.osauth.role){
-          return topRoleFromValue(window.osauth.role);
+          return normalizeTopRole(window.osauth.role);
         }
       }
     }catch(e){}
 
-    // 3순위: igdc-admin-bridge가 세팅한 전역 role
+    // 3순위: 전역 role
     if (window.__IGDC_ROLE){
-      return topRoleFromValue(window.__IGDC_ROLE);
+      return normalizeTopRole(window.__IGDC_ROLE);
     }
 
     return "guest";
   }
 
   function render(){
-    var el = document.getElementById("igtcRoleText3");
+    // 🔴 여기 중요: 실제 존재하는 DOM만 사용
+    var el =
+      document.getElementById("roleStatusBtn") ||
+      document.getElementById("igtcRoleInline3") ||
+      document.getElementById("userRole");
+
     if (!el) return;
     el.textContent = getDisplayRole();
   }
@@ -1654,6 +1652,7 @@ function applyRoleUI(role) {
   document.addEventListener("osauth:ready", render);
 })();
 </script>
+
 
 <script>
 /* ===== Refined Login UI Patch ===== */
