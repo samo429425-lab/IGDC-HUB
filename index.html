@@ -1535,22 +1535,22 @@ function applyRoleUI(role) {
 
   function getRoles(){
     try{
-      if (window.osAuth && window.osAuth.getIdTokenPayload) {
-        const p = window.osAuth.getIdTokenPayload();
-        let out = [];
+      if (!window.osAuth || !osAuth.getIdTokenPayload) return [];
+      const p = osAuth.getIdTokenPayload() || {};
+      let r = [];
 
-        if (Array.isArray(p.roles)) out.push(...p.roles);
-        if (Array.isArray(p["https://roles"])) out.push(...p["https://roles"]);
-        if (Array.isArray(p["https://app/roles"])) out.push(...p["https://app/roles"]);
-        if (typeof p.role === "string") out.push(p.role);
-        if (Array.isArray(p.permissions)) out.push(...p.permissions);
+      if (Array.isArray(p.roles)) r.push(...p.roles);
+      if (Array.isArray(p["https://roles"])) r.push(...p["https://roles"]);
+      if (Array.isArray(p["https://app/roles"])) r.push(...p["https://app/roles"]);
+      if (typeof p.role === "string") r.push(p.role);
 
-        return out.map(norm).filter(Boolean);
-      }
-    } catch(e){}
-    return [];
+      return r.map(norm).filter(Boolean);
+    }catch(e){
+      return [];
+    }
   }
 
+  // ✅ 공식 롤 우선순위 (고정)
   function resolveRole(roles){
     if (!roles.length) return "guest";
 
@@ -1570,28 +1570,30 @@ function applyRoleUI(role) {
 
     if (roles.includes("special_member")) return "special_member";
 
-    const mem = roles.find(r => r.startsWith("member."));
-    if (mem) return mem;
+    const m = roles.find(r => r.startsWith("member."));
+    if (m) return m;
     if (roles.includes("member")) return "member";
 
-    return roles[0];
+    return "guest";
   }
 
   function apply(role){
-    const txt = role || "guest";
+    const val = role || "guest";
 
+    // 🔑 단일 진실 소스
+    window.__IGDC_ROLE = val;
+    document.documentElement.dataset.role = val;
+
+    try { localStorage.setItem("igdc_role", val); } catch(e){}
+
+    // 화면 표시
     const el =
       document.getElementById("roleStatusBtn") ||
       document.getElementById("igtcRoleInline3") ||
       document.getElementById("userRole") ||
       document.querySelector(".role-display");
 
-    if (el) el.textContent = txt;
-
-    window.__IGDC_ROLE = txt;
-    document.documentElement.dataset.role = txt;
-
-    try { localStorage.setItem("igdc_role", txt); } catch(e){}
+    if (el) el.textContent = val;
   }
 
   function run(){
@@ -1604,9 +1606,9 @@ function applyRoleUI(role) {
   document.addEventListener("osauth:ready", run);
   document.addEventListener("osauth:done", run, true);
   window.addEventListener("focus", run);
+
 })();
 </script>
-
 
 <script>
 /* ===== Refined Login UI Patch ===== */
@@ -2732,92 +2734,23 @@ function setActive(i){
 (function(){
   "use strict";
 
-  if (window.__IGDC_ROLE_LOCKED__) return;
-  window.__IGDC_ROLE_LOCKED__ = true;
-
-  function norm(v){
-    return String(v || "").trim().toLowerCase();
+  function getRole(){
+    return String(window.__IGDC_ROLE || "guest").toLowerCase();
   }
 
-  function getRolesFromToken(){
-    try{
-      const p = window.osAuth?.getIdTokenPayload?.();
-      if(!p) return [];
-
-      let out = [];
-
-      if (Array.isArray(p.roles)) out.push(...p.roles);
-      if (Array.isArray(p["https://roles"])) out.push(...p["https://roles"]);
-      if (Array.isArray(p["https://app/roles"])) out.push(...p["https://app/roles"]);
-      if (typeof p.role === "string") out.push(p.role);
-      if (Array.isArray(p.permissions)) out.push(...p.permissions);
-
-      return out.map(norm).filter(Boolean);
-    }catch(e){
-      return [];
-    }
+  // ✅ admin 접근 허용: owner, admin 만
+  function canAccessAdmin(){
+    const r = getRole();
+    return (r === "owner" || r === "admin");
   }
 
-  // ✅ 정이사장님 기준 최종 서열
-  function resolveRole(roles){
-    if (!roles || !roles.length) return "guest";
-
-    if (roles.includes("owner")) return "owner";
-    if (roles.includes("admin")) return "admin";
-
-    if (roles.includes("director")) return "director";
-    if (roles.includes("coordinator_director")) return "coordinator_director";
-
-    const sm = roles.find(r => r.startsWith("site_manager."));
-    if (sm) return sm;
-    if (roles.includes("site_manager")) return "site_manager";
-
-    const cm = roles.find(r => r.startsWith("commerce_manager."));
-    if (cm) return cm;
-    if (roles.includes("commerce_manager")) return "commerce_manager";
-
-    if (roles.includes("special_member")) return "special_member";
-
-    const m = roles.find(r => r.startsWith("member."));
-    if (m) return m;
-    if (roles.includes("member")) return "member";
-
-    return roles[0];
-  }
-
-  function apply(){
-    let role = "guest";
-
-    const roles = getRolesFromToken();
-    if (roles.length) role = resolveRole(roles);
-
-    // ✅ 단일 진실 소스 (모든 코드가 이걸 보게 됨)
-    window.__IGDC_ROLE = role;
-    document.documentElement.dataset.role = role;
-
-    try { localStorage.setItem("igdc_role", role); } catch(e){}
-
-    // admin / owner 전용 플래그
-    const isAdmin = (role === "admin" || role === "owner");
-
-    document.documentElement.classList.toggle("admin-enabled", isAdmin);
-    document.documentElement.classList.toggle("owner-enabled", role === "owner");
-
-    // admin 가림막 처리
-    try {
-      const hide = document.getElementById("igdc-admin-hide");
-      if (hide) hide.style.display = isAdmin ? "none" : "";
-    } catch(e){}
-  }
-
-  document.addEventListener("DOMContentLoaded", apply);
-  document.addEventListener("osauth:ready", apply);
-  document.addEventListener("osauth:done", apply, true);
-  window.addEventListener("focus", apply);
+  window.IGDC_AUTH = window.IGDC_AUTH || {};
+  window.IGDC_AUTH.getRole = getRole;
+  window.IGDC_AUTH.canAccessAdmin = canAccessAdmin;
+  window.IGDC_AUTH.isAdminOrOwner = canAccessAdmin;
 
 })();
 </script>
-
 
 <!-- Robust language persistence handler (injected) -->
 <script>
