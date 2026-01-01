@@ -283,11 +283,10 @@
 
     function loadPage(index){
   try{
-  var role = (window.__IGDC_ROLE || "guest").toLowerCase();
-  if (index === 7 && !(role === "admin" || role === "owner")) {
-    return;
-  }
-}
+    var role = (window.__IGDC_ROLE || "guest").toLowerCase();
+    if (index === 7 && !(role === "admin" || role === "owner")) {
+	return;
+    }
   }catch(e){}
   currentPageIndex = index;
       let pageList = pageMap[currentLang] || pageMap["en"];
@@ -1533,122 +1532,42 @@ function applyRoleUI(role) {
   if (window.__IGTC_ROLE_INLINE3__) return;
   window.__IGTC_ROLE_INLINE3__ = true;
 
-  function lower(v) {
-    return String(v || "").trim().toLowerCase();
+  function getRole() {
+    return String(window.__IGDC_ROLE || "").trim().toLowerCase();
   }
 
-  function getClaims() {
-    try {
-      if (window.osAuth && typeof window.osAuth.getIdTokenPayload === "function") {
-        return window.osAuth.getIdTokenPayload() || {};
-      }
-    } catch (e) {}
-    try {
-      if (window.osauth && window.osauth.idTokenClaims) {
-        return window.osauth.idTokenClaims;
-      }
-    } catch (e) {}
-    return {};
-  }
-
-  function readRolesFromClaims(claims) {
-    if (!claims) return [];
-
-    const keys = [
-      "https://example.com/roles",
-      "https://roles",
-      "https://app/roles",
-      "roles",
-      "role",
-      "permissions"
-    ];
-
-    let raw = null;
-    for (const k of keys) {
-      if (claims[k] != null) {
-        raw = claims[k];
-        break;
-      }
-    }
-
-    if (!raw) return [];
-    if (Array.isArray(raw)) return raw.map(lower).filter(Boolean);
-    return String(raw).split(",").map(lower).filter(Boolean);
-  }
-
-  function pickRole(roles) {
-    const has = (r) => roles.includes(r);
-    const prefix = (p) => roles.find(r => r === p || r.startsWith(p + "."));
-
-    if (has("owner")) return "owner";
-    if (has("admin")) return "admin";
-    if (has("director")) return "director";
-    if (has("coordinator_director")) return "coordinator_director";
-
-    const sm = prefix("site_manager");
-    if (sm) return sm;
-
-    const cm = prefix("commerce_manager");
-    if (cm) return cm;
-
-    if (has("special_menber")) return "special_menber";
-    if (has("special_member")) return "special_menber";
-
-    const mem = prefix("member");
-    if (mem) return mem;
-
-    return "guest";
-  }
-
-  function findRoleTarget() {
+  function getTarget() {
     return (
       document.getElementById("igtcRoleText3") ||
       document.getElementById("roleStatusBtn") ||
-      document.getElementById("userRole") ||
+      document.querySelector(".role-display") ||
       null
     );
   }
 
-  function resolveRole() {
-    // 1순위: 이미 계산된 전역 role
-    if (window.__IGDC_ROLE) return lower(window.__IGDC_ROLE);
-
-    // 2순위: 토큰 기반 계산
-    const claims = getClaims();
-    const roles = readRolesFromClaims(claims);
-    return pickRole(roles);
-  }
-
   function render() {
-    const el = findRoleTarget();
+    const el = getTarget();
     if (!el) return;
 
-    const role = resolveRole();
-    if (!role) return;
-
+    const role = getRole() || "guest";
     el.textContent = role;
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", render);
-  } else {
+  function renderSoon() {
     render();
+    setTimeout(render, 50);
+    setTimeout(render, 150);
   }
 
-  document.addEventListener("osauth:ready", render);
-  document.addEventListener("osauth:done", render, true);
-  window.addEventListener("focus", render);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", renderSoon);
+  } else {
+    renderSoon();
+  }
 
-  // DOM 교체 / 로그인 직후 갱신 대비
-  try {
-    new MutationObserver(function () {
-      render();
-    }).observe(document.documentElement, {
-      childList: true,
-      subtree: true
-    });
-  } catch (e) {}
-
+  document.addEventListener("osauth:ready", renderSoon);
+  document.addEventListener("osauth:done", renderSoon, true);
+  window.addEventListener("focus", renderSoon);
 })();
 </script>
 
