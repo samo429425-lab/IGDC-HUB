@@ -285,6 +285,8 @@
   try{
     var role = (window.__IGDC_ROLE || "guest").toLowerCase();
     if (index === 7 && !(role === "admin" || role === "owner")) {
+	 index = 0;
+  try { localStorage.setItem("igdc_last_page_index", "0"); } catch(e) {}
     }
   }catch(e){}
   currentPageIndex = index;
