@@ -282,6 +282,7 @@
 }
 
     function loadPage(index){
+	if (window.__IGDC_LOGGING_OUT__) return;
   try{
     var role = (window.__IGDC_ROLE || "guest").toLowerCase();
     if (index === 7 && !(role === "admin" || role === "owner")) {
@@ -353,7 +354,11 @@
   }
   document.addEventListener('DOMContentLoaded', bootstrapLang);
   document.addEventListener('osauth:ready', bootstrapLang);
-  document.addEventListener('osauth:done', bootstrapLang, true);
+  document.addEventListener('osauth:done', function (ev) {
+  if (window.__IGDC_LOGGING_OUT__) return;
+  bootstrapLang(ev);
+}, true);
+
 })();
 </script>
 <style>
@@ -1244,6 +1249,7 @@ window.addEventListener('DOMContentLoaded', function() {
   // osauth:done 메시지를 받더라도 "reload"는 절대 하지 않고,
   // 버튼/역할 표시만 갱신하는 쪽으로 처리
   window.addEventListener("message", function(ev){
+    if (window.__IGDC_LOGGING_OUT__) return;
     if (!ev) return;
     if (ev.data === "osauth:done"){
     
@@ -2049,6 +2055,7 @@ function applyRoleUI(role) {
     var doneOnce = false;
     // Stop duplicate 'message' events bubbling 'osauth:done'
     window.addEventListener("message", function(ev){
+	if (window.__IGDC_LOGGING_OUT__) return;
       try{
         if (ev && ev.data === "osauth:done"){
           if (doneOnce){ ev.stopImmediatePropagation && ev.stopImmediatePropagation(); ev.stopPropagation && ev.stopPropagation(); return; }
@@ -2239,6 +2246,7 @@ function applyRoleUI(role) {
 
   // Iframe message bridge for front pages
   window.addEventListener("message", async (ev)=>{
+  if (window.__IGDC_LOGGING_OUT__) return;
     try{
       const d = ev && ev.data || {};
       if (d && d.type === "IGDC_REQUEST_PAYMENT"){
@@ -3366,6 +3374,7 @@ function setActive(i){
   }
   if(window.addEventListener){
     window.addEventListener("message", handleFrameHeight, false);
+	if (window.__IGDC_LOGGING_OUT__) return;
   }
 })();
 </script>
