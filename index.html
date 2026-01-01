@@ -285,7 +285,6 @@
   try{
     var role = (window.__IGDC_ROLE || "guest").toLowerCase();
     if (index === 7 && !(role === "admin" || role === "owner")) {
-	return;
     }
   }catch(e){}
   currentPageIndex = index;
