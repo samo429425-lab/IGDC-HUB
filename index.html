@@ -1530,15 +1530,23 @@ function applyRoleUI(role) {
   if (window.__IGTC_ROLE_INLINE3__) return;
   window.__IGTC_ROLE_INLINE3__ = true;
 
-  const ROLE_KEYS = ["https://example.com/roles","https://osu/roles","https://roles","https://app/roles","roles","permissions","role"];
+  const ROLE_KEYS = [
+    "https://example.com/roles",
+    "https://roles",
+    "https://app/roles",
+    "roles",
+    "role",
+    "permissions"
+  ];
 
   function b64uDecode(s){
     try{
       s=(s||"").replace(/-/g,"+").replace(/_/g,"/");
       const pad=s.length%4; if(pad) s+="=".repeat(4-pad);
       const bin=atob(s);
-      try{ return new TextDecoder("utf-8").decode(Uint8Array.from(bin,c=>c.charCodeAt(0))); }catch(_){ return bin; }
-    } catch(e){ return "{}"; }
+      try{ return new TextDecoder("utf-8").decode(Uint8Array.from(bin,c=>c.charCodeAt(0))); }
+      catch(_){ return bin; }
+    }catch(e){ return "{}"; }
   }
 
   function parseJwtPayload(t){
@@ -1549,7 +1557,6 @@ function applyRoleUI(role) {
   }
 
   function getIdToken(){
-    // 1) osAuth payload에서 raw
     try{
       if(window.osAuth && typeof window.osAuth.getIdTokenPayload==="function"){
         const p=window.osAuth.getIdTokenPayload();
@@ -1557,8 +1564,7 @@ function applyRoleUI(role) {
       }
     }catch(_){}
 
-    // 2) localStorage 후보
-    const keys=["osauth.tokens.v2","osauth:id_token","id_token","auth0:id_token","auth.idToken","os_id_token"];
+    const keys=["osauth.tokens.v2","osauth:id_token","id_token","auth0:id_token"];
     for(const k of keys){
       try{
         const v=(k==="osauth.tokens.v2")
@@ -1576,15 +1582,14 @@ function applyRoleUI(role) {
       const v=payload && payload[key];
       if(!v) continue;
       if(Array.isArray(v)) roles=roles.concat(v);
-      else if(typeof v==="string") roles=roles.concat(v.split(",").map(s=>s.trim()));
+      else if(typeof v==="string") roles=roles.concat(v.split(","));
     }
-    roles = roles.map(r=>String(r||"").trim().toLowerCase()).filter(Boolean);
-    return Array.from(new Set(roles));
+    return roles.map(r=>String(r||"").toLowerCase()).filter(Boolean);
   }
 
-  function pickRoleFromRoles(roles){
-    const has = (r) => roles.includes(r);
-    const pref = (p) => roles.find(r => r === p || r.startsWith(p + "."));
+  function pickRole(roles){
+    const has = (r)=>roles.includes(r);
+    const pref = (p)=>roles.find(r=>r===p || r.startsWith(p+"."));
 
     if (has("owner")) return "owner";
     if (has("admin")) return "admin";
@@ -1598,55 +1603,44 @@ function applyRoleUI(role) {
     if (cm) return cm;
 
     if (has("special_menber")) return "special_menber";
-    if (has("special_member")) return "special_menber";
 
     const mem = pref("member");
     if (mem) return mem;
-    if (has("member")) return "member";
 
     return "guest";
   }
 
-  function computeText(){
+  function render(){
+    const el =
+      document.getElementById("igtcRoleText3") ||
+      document.getElementById("roleStatusBtn") ||
+      document.querySelector(".role-display");
+
+    if (!el) return;
+
     const token = getIdToken();
-    if (!token) return "guest"; // not logged in
+    if (!token) {
+      el.textContent = "guest";
+      return;
+    }
 
     const payload = parseJwtPayload(token);
     const roles = extractRoles(payload);
-
-    // logged-in fallback: roles 비었으면 member (기존 동작 유지)
-    if (!roles || roles.length===0) return "member";
-
-    // 정상 매핑
-    return pickRoleFromRoles(roles);
-  }
-
-  function render(){
-    const el = document.getElementById("igtcRoleText3") || document.getElementById("roleStatusBtn") || document.querySelector(".role-display");
-    if (!el) return;
-
-    const roleText = computeText();
-    el.textContent = roleText;
-
-    // ✅ role 텍스트 표시와 동시에 전역 role도 맞춰줌(표시-파이프라인 불일치 방지)
-    try{
-      window.__IGDC_ROLE = roleText;
-      document.documentElement.dataset.role = roleText;
-    }catch(e){}
+    el.textContent = roles.length ? pickRole(roles) : "member";
   }
 
   function renderSoon(){
     render();
-    setTimeout(render, 50);
-    setTimeout(render, 150);
+    setTimeout(render,50);
+    setTimeout(render,150);
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", renderSoon);
+  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",renderSoon);
   else renderSoon();
 
-  document.addEventListener("osauth:ready", renderSoon);
-  document.addEventListener("osauth:done", renderSoon, true);
-  window.addEventListener("focus", renderSoon);
+  document.addEventListener("osauth:ready",renderSoon);
+  document.addEventListener("osauth:done",renderSoon,true);
+  window.addEventListener("focus",renderSoon);
 })();
 </script>
 
@@ -2775,11 +2769,9 @@ function setActive(i){
 (function () {
   "use strict";
 
-  // ✅ 다른 스크립트와 가드 충돌 금지 (중요)
-  if (window.__IGDC_ADMIN_BRIDGE__) return;
-  window.__IGDC_ADMIN_BRIDGE__ = true;
-
-  function lower(v) { return String(v || "").trim().toLowerCase(); }
+  function lower(v) {
+    return String(v || "").trim().toLowerCase();
+  }
 
   function getClaims() {
     try {
@@ -2793,9 +2785,8 @@ function setActive(i){
   function readRolesFromClaims(claims) {
     if (!claims) return [];
 
-    const keys = [
+    const KEYS = [
       "https://example.com/roles",
-      "https://osu/roles",
       "https://roles",
       "https://app/roles",
       "roles",
@@ -2804,41 +2795,39 @@ function setActive(i){
     ];
 
     let raw = null;
-    for (const k of keys) {
-      if (claims[k] != null) { raw = claims[k]; break; }
+    for (const k of KEYS) {
+      if (claims[k] != null) {
+        raw = claims[k];
+        break;
+      }
     }
+
     if (!raw) return [];
 
-    let roles = [];
-    if (Array.isArray(raw)) roles = raw;
-    else roles = String(raw).split(",");
-
-    return roles.map(lower).filter(Boolean);
+    if (Array.isArray(raw)) return raw.map(lower);
+    return String(raw).split(",").map(lower);
   }
 
   function pickRole(roles) {
     const has = (r) => roles.includes(r);
     const pref = (p) => roles.find(r => r === p || r.startsWith(p + "."));
 
-    // ✅ 우선순위: owner → ... → guest
+    // ✅ 우선순위 기반 롤 결정
     if (has("owner")) return "owner";
     if (has("admin")) return "admin";
     if (has("director")) return "director";
     if (has("coordinator_director")) return "coordinator_director";
 
     const sm = pref("site_manager");
-    if (sm) return sm; // site_manager.* 그대로 유지
+    if (sm) return sm;
 
     const cm = pref("commerce_manager");
-    if (cm) return cm; // commerce_manager.* 그대로 유지
+    if (cm) return cm;
 
-    // ✅ special_menber(오타 롤) 정식 지원 + 과거 special_member도 흡수
     if (has("special_menber")) return "special_menber";
-    if (has("special_member")) return "special_menber";
 
     const mem = pref("member");
-    if (mem) return mem; // member.* 그대로 유지
-    if (has("member")) return "member";
+    if (mem) return mem;
 
     return "guest";
   }
@@ -2848,46 +2837,26 @@ function setActive(i){
       const claims = getClaims();
       const roles = readRolesFromClaims(claims);
 
-      // ✅ "로그인 되었는데 roles 클레임이 비어있으면" member로 본다 (기존 동작 유지)
-      const isAuthed = (() => {
-        try {
-          if (window.osAuth && typeof window.osAuth.isAuthenticated === "function") {
-            return !!window.osAuth.isAuthenticated();
-          }
-        } catch(e) {}
-        // 토큰이 있으면 로그인으로 간주(보수적)
-        try {
-          const v = localStorage.getItem("id_token") || localStorage.getItem("osauth:id_token");
-          return !!v;
-        } catch(e) {}
-        return false;
-      })();
+      let role = "guest";
+      if (roles.length > 0) role = pickRole(roles);
 
-      const role = isAuthed ? (roles.length ? pickRole(roles) : "member") : "guest";
-
-      // ✅ 기존 흐름 깨지 않게 "주입만"
+      // ✅ 기존 파이프라인 유지 (읽기 전용)
       window.__IGDC_ROLE = role;
-      document.documentElement.dataset.role = role;
 
-      try { localStorage.setItem("igdc_role", role); } catch (e) {}
+      try {
+        localStorage.setItem("igdc_role", role);
+      } catch (e) {}
 
-      // 기존 코드들과의 호환 유지
+      // 기존 코드와의 호환용
       window.osauth = window.osauth || {};
       window.osauth.role = role;
       window.osauth.userRole = role;
-      window.osauth.claims = Object.assign({}, window.osauth.claims || {}, { roles: roles });
-      window.osauth.idTokenClaims = claims;
-
-      // ✅ admin/owner만 관리자 영역 허용
-      if (role === "admin" || role === "owner") {
-        try {
-          var hide = document.getElementById("igdc-admin-hide");
-          if (hide && hide.parentNode) hide.parentNode.removeChild(hide);
-        } catch (e) {}
-      }
+      window.osauth.claims = Object.assign({}, window.osauth.claims || {}, {
+        roles: roles
+      });
 
     } catch (e) {
-      // 기존 흐름 보호: 에러 무시
+      // 절대 throw 금지
     }
   }
 
