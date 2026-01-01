@@ -1641,6 +1641,10 @@ function applyRoleUI(role) {
       return;
     }
     const payload = parseJwtPayload(token);
+	if (window.__IGDC_ROLE) {
+  paint(String(window.__IGDC_ROLE).toLowerCase());
+  return;
+}
     const roles = extractRoles(payload);
     const roleText = resolveRole(roles);
     paint(roleText);
