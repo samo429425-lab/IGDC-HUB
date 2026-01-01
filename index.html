@@ -1154,21 +1154,49 @@ window.addEventListener('DOMContentLoaded', function() {
   }
 
   function applyLoginButton(){
-    try{
-      var btn = document.getElementById("osLoginBtn");
-      if(!btn) return;
-      if (window.osAuth && window.osAuth.isAuthenticated && window.osAuth.isAuthenticated()){
-        btn.textContent = "Logout";
-        btn.onclick = function(){
-          try{ window.osAuth.logout("/logout"); showToast("Logged out"); setTimeout(()=>location.reload(), 120); }
-          catch(e){ location.href="/logout"; }
-        };
-      } else {
-        btn.textContent = "OS‑Login";
-        btn.onclick = function(){ try{ window.osLogin(); }catch(e){} };
+  try{
+    var btn = document.getElementById("osLoginBtn");
+    if(!btn) return;
+
+    var isLoggedIn = false;
+    try {
+      if (window.osAuth && typeof window.osAuth.isAuthenticated === "function") {
+        isLoggedIn = !!window.osAuth.isAuthenticated();
       }
-    }catch(_){}
-  }
+    } catch(e){}
+
+    if (isLoggedIn) {
+      btn.textContent = "Logout";
+
+      btn.onclick = function(){
+        try {
+          if (window.osAuth && typeof window.osAuth.logout === "function") {
+            window.osAuth.logout();
+          }
+        } catch(e){}
+
+        try {
+          localStorage.removeItem("id_token");
+          localStorage.removeItem("os_id_token");
+          localStorage.removeItem("access_token");
+          localStorage.removeItem("os_access_token");
+        } catch(e){}
+
+        // ✅ reload 금지, 홈으로 이동
+        location.href = "/index.html";
+      };
+
+    } else {
+      btn.textContent = "OS-Login";
+      btn.onclick = function(){
+        try {
+          if (window.osLogin) window.osLogin();
+        } catch(e){}
+      };
+    }
+
+  } catch(e){}
+}
 
   document.addEventListener("osauth:ready", function(ev){
     applyLoginButton();
