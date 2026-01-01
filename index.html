@@ -1597,43 +1597,39 @@ function applyRoleUI(role) {
   if (window.__IGTC_ROLE_INLINE3__) return;
   window.__IGTC_ROLE_INLINE3__ = true;
 
-  function normalizeTopRole(v){
-    if (!v) return "guest";
-    return String(v).toLowerCase().trim().split(".")[0];
+  function topRole(r){
+    return String(r||"guest").toLowerCase().trim().split(".")[0];
   }
 
   function getDisplayRole(){
-    // 1순위: osauth claims (Auth0 원본)
+    // 1️⃣ Auth0 roles 배열
     try{
       if (window.osauth && window.osauth.claims && Array.isArray(window.osauth.claims.roles)){
-        if (window.osauth.claims.roles.length > 0){
-          return normalizeTopRole(window.osauth.claims.roles[0]);
-        }
+        // 여러 개여도, owner면 owner / admin이면 admin
+        const roles = window.osauth.claims.roles.map(topRole);
+        if (roles.includes("owner")) return "owner";
+        if (roles.includes("admin")) return "admin";
+        return roles[0] || "guest";
       }
     }catch(e){}
 
-    // 2순위: osauth 단일 role
+    // 2️⃣ 단일 role
     try{
       if (window.osauth){
-        if (window.osauth.user && window.osauth.user.role){
-          return normalizeTopRole(window.osauth.user.role);
-        }
-        if (window.osauth.role){
-          return normalizeTopRole(window.osauth.role);
-        }
+        if (window.osauth.user && window.osauth.user.role)
+          return topRole(window.osauth.user.role);
+        if (window.osauth.role)
+          return topRole(window.osauth.role);
       }
     }catch(e){}
 
-    // 3순위: 전역 role
-    if (window.__IGDC_ROLE){
-      return normalizeTopRole(window.__IGDC_ROLE);
-    }
+    // 3️⃣ fallback
+    if (window.__IGDC_ROLE) return topRole(window.__IGDC_ROLE);
 
     return "guest";
   }
 
   function render(){
-    // 🔴 여기 중요: 실제 존재하는 DOM만 사용
     var el =
       document.getElementById("roleStatusBtn") ||
       document.getElementById("igtcRoleInline3") ||
@@ -1652,7 +1648,6 @@ function applyRoleUI(role) {
   document.addEventListener("osauth:ready", render);
 })();
 </script>
-
 
 <script>
 /* ===== Refined Login UI Patch ===== */
@@ -2766,20 +2761,20 @@ function setActive(i){
 
 <script id="igdc-admin-bridge">
 (function(){
-  // 이 블럭의 역할:
-  // - 이미 계산된 role을 기준으로
-  // - admin 급인지(owner 포함)만 판별
-  // - 다른 기능 절대 개입 안 함
-
-  function normalize(r){
-    return String(r||"guest").toLowerCase().trim().replace(/\.\*$/,'');
+  function topRole(r){
+    return String(r||"guest").toLowerCase().trim().split(".")[0];
   }
 
   try{
-    var role = normalize(window.__IGDC_ROLE || "guest");
+    var role = topRole(window.__IGDC_ROLE || "guest");
 
-    // admin 사이트 접근 판단용 (기존 로직이 이 값을 씀)
-    window.__IGDC_IS_ADMIN = (role === "admin" || role === "owner");
+    // 관리자 페이지 접근 가능 여부
+    // owner는 owner, admin은 admin으로 그대로 두되
+    // 접근 권한만 둘 다 허용
+    window.__IGDC_IS_ADMIN = (role === "owner" || role === "admin");
+
+    // role 값은 절대 변형하지 않음
+    window.__IGDC_ROLE = role;
   }catch(e){}
 })();
 </script>
