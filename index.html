@@ -1572,21 +1572,54 @@ function applyRoleUI(role) {
     // logged-in fallback: if roles missing/empty => 'member'
     if (!roles || roles.length===0) return "member";
 
-    // if Auth0 didn't include known roles but something exists, still prefer 'member'
-    const known = ["owner","admin","coordinator_director","director","site_manager","special_member","member","guest"];
-    const hasKnown = roles.some(r => known.includes(r) || r.startsWith("site_manager.") || r.startsWith("member.") || r.startsWith("commerce_manager."));
-    if (!hasKnown) return "member";
+    function computeText() {
+  const token = getIdToken();
+  if (!token) return "guest";
 
-    // normal mapping
-	if (roles.includes("owner")) return "owner";
-    if (roles.includes("admin")) return "admin";
-    if (roles.includes("director")) return "director";
-	if (roles.includes("coordinator_director")) return "coordinator_director";
-    if (roles.includes("site_manager") || roles.some(r=>r.startsWith("site_manager."))) return "site_manager";
-    if (roles.includes("special_member")) return "special_member";
-    if (roles.includes("member") || roles.some(r=>r.startsWith("member."))) return "member";
-    return "guest";
-  }
+  const payload = parseJwtPayload(token);
+  const roles = extractRoles(payload) || [];
+
+  if (!roles.length) return "member";
+
+  // =========================
+  // 1. 최상위 권한
+  // =========================
+  if (roles.includes("owner")) return "owner";
+  if (roles.includes("coordinator_director")) return "coordinator_director";
+  if (roles.includes("director")) return "director";
+
+  // =========================
+  // 2. Site Manager (사이트별 1:1 유지)
+  // =========================
+  const siteManager = roles.find(r => r.startsWith("site_manager."));
+  if (siteManager) return siteManager;
+
+  if (roles.includes("site_manager")) return "site_manager";
+
+  // =========================
+  // 3. Commerce Manager (OA / OB / OC 등)
+  // =========================
+  const commerceManager = roles.find(r => r.startsWith("commerce_manager."));
+  if (commerceManager) return commerceManager;
+
+  if (roles.includes("commerce_manager")) return "commerce_manager";
+
+  // =========================
+  // 4. Special / Member 계열
+  // =========================
+  if (roles.includes("special_member")) return "special_member";
+
+  const member = roles.find(r => r.startsWith("member."));
+  if (member) return member;
+
+  if (roles.includes("member")) return "member";
+
+  // =========================
+  // 5. 최종 fallback
+  // =========================
+  return "guest";
+}
+
 
   function render(){
     const el = document.getElementById("igtcRoleText3");
