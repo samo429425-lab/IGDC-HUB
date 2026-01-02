@@ -282,12 +282,9 @@
 }
 
     function loadPage(index){
-	if (window.__IGDC_LOGGING_OUT__) return;
   try{
     var role = (window.__IGDC_ROLE || "guest").toLowerCase();
-    if (index === 7 && !(role === "admin" || role === "owner")) {
-	 index = 0;
-  try { localStorage.setItem("igdc_last_page_index", "0"); } catch(e) {}
+    if (index === 7 && role !== "admin") {
     }
   }catch(e){}
   currentPageIndex = index;
@@ -354,11 +351,7 @@
   }
   document.addEventListener('DOMContentLoaded', bootstrapLang);
   document.addEventListener('osauth:ready', bootstrapLang);
-  document.addEventListener('osauth:done', function (ev) {
-  if (window.__IGDC_LOGGING_OUT__) return;
-  bootstrapLang(ev);
-}, true);
-
+  document.addEventListener('osauth:done', bootstrapLang, true);
 })();
 </script>
 <style>
@@ -1144,120 +1137,48 @@ window.addEventListener('DOMContentLoaded', function() {
 (function(){
   function showToast(msg){
     try{
-      var t = document.getElementById("igdc-toast");
+      var t = document.getElementById("oslogin-toast");
       if(!t){
         t = document.createElement("div");
-        t.id = "igdc-toast";
-        t.style.position = "fixed";
-        t.style.left = "50%";
-        t.style.bottom = "26px";
-        t.style.transform = "translateX(-50%)";
-        t.style.background = "rgba(0,0,0,0.8)";
-        t.style.color = "#fff";
-        t.style.padding = "8px 14px";
-        t.style.borderRadius = "8px";
-        t.style.zIndex = "2000";
-        t.style.fontSize = "14px";
-        document.body.appendChild(t);
+        t.id = "oslogin-toast";
+        t.style.position = "fixed"; t.style.top = "12px"; t.style.left = "50%";
+        t.style.transform = "translateX(-50%)"; t.style.background = "rgba(0,0,0,0.8)";
+        t.style.color = "#fff"; t.style.padding = "8px 14px"; t.style.borderRadius = "8px";
+        t.style.zIndex = "2000"; t.style.fontSize = "14px"; document.body.appendChild(t);
       }
-      t.textContent = msg;
-      t.style.opacity = "1";
+      t.textContent = msg; t.style.opacity = "1";
       setTimeout(()=>{ t.style.transition="opacity .4s"; t.style.opacity="0"; }, 1200);
     }catch(_){}
-  }
-
-  function clearAuthLocal(){
-    try{
-      // OS/Auth0 계열 토큰들
-      localStorage.removeItem("id_token");
-      localStorage.removeItem("os_id_token");
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("os_access_token");
-      localStorage.removeItem("auth0:id_token");
-      localStorage.removeItem("osauth:id_token");
-      localStorage.removeItem("osauth.tokens.v2");
-      // 역할/마지막 페이지도 초기화 (Admin 잔상 방지)
-      localStorage.removeItem("igdc_role");
-      localStorage.removeItem("igdc_last_page_index");
-    }catch(e){}
-    try{
-      window.__IGDC_ROLE = "guest";
-      window.osauth = window.osauth || {};
-      window.osauth.role = "guest";
-      window.osauth.userRole = "guest";
-    }catch(e){}
-  }
-
-  function goHomeNoReload(){
-    try{
-      // iframe이 있으면 먼저 홈으로 돌려놓고
-      var f = document.getElementById("mainFrame");
-      if (f) f.src = "home.html";
-    }catch(e){}
-    // 그리고 top을 /index.html로 (replace로 히스토리 꼬임 방지)
-    try{ location.replace("/index.html"); }
-    catch(e){ location.href = "/index.html"; }
   }
 
   function applyLoginButton(){
     try{
       var btn = document.getElementById("osLoginBtn");
       if(!btn) return;
-
-      var isLoggedIn = false;
-      try{
-        if (window.osAuth && typeof window.osAuth.isAuthenticated === "function"){
-          isLoggedIn = !!window.osAuth.isAuthenticated();
-        }
-      }catch(e){}
-
-      if (isLoggedIn){
+      if (window.osAuth && window.osAuth.isAuthenticated && window.osAuth.isAuthenticated()){
         btn.textContent = "Logout";
         btn.onclick = function(){
-          // 로그아웃 중 플래그 (message 이벤트에서 reload 막기)
-          window.__IGDC_LOGGING_OUT__ = true;
-
-          try{
-            if (window.osAuth && typeof window.osAuth.logout === "function"){
-              // 가능하면 SDK 로그아웃 호출 (리다이렉트는 우리가 통제)
-              window.osAuth.logout();
-            }
-          }catch(e){}
-
-          clearAuthLocal();
-          showToast("Logged out");
-
-          // Admin iframe에서 postMessage(osauth:done) 날아와도 reload하지 않게 하고
-          // 확실히 홈으로 이동
-          setTimeout(goHomeNoReload, 50);
+          try{ window.osAuth.logout("/logout"); showToast("Logged out"); setTimeout(()=>location.reload(), 120); }
+          catch(e){ location.href="/logout"; }
         };
       } else {
-        btn.textContent = "OS-Login";
-        btn.onclick = function(){ try{ if(window.osLogin) window.osLogin(); }catch(e){} };
+        btn.textContent = "OS‑Login";
+        btn.onclick = function(){ try{ window.osLogin(); }catch(e){} };
       }
-    }catch(e){}
+    }catch(_){}
   }
 
-  // 로그인/초기 로드 시 버튼 상태 반영
   document.addEventListener("osauth:ready", function(ev){
     applyLoginButton();
     if (ev && ev.detail && ev.detail.tokens && ev.detail.payload){ showToast("Logged in"); }
   });
   document.addEventListener("DOMContentLoaded", applyLoginButton);
 
-  // 핵심 수정:
-  // osauth:done 메시지를 받더라도 "reload"는 절대 하지 않고,
-  // 버튼/역할 표시만 갱신하는 쪽으로 처리
   window.addEventListener("message", function(ev){
-    if (window.__IGDC_LOGGING_OUT__) return;
-    if (!ev) return;
-    if (ev.data === "osauth:done"){
-    
-    }
+    if (ev && ev.data === "osauth:done"){ try{ location.reload(); }catch(_){} }
   });
 })();
 </script>
-
 <script>
 (function(){
   const AUTH0_DOMAIN = "dev-lq8s88j3xb5xgghc.us.auth0.com";
@@ -1292,13 +1213,7 @@ window.addEventListener('DOMContentLoaded', function() {
     isAuthenticated(){ const t=load(STORAGE.TOKENS); return !!t && (Math.floor(Date.now()/1000) < Number(t.exp||0)); },
     getIdTokenPayload(){ const t=load(STORAGE.TOKENS); if(!t) return null; const p=(t.id_token||"").split("."); if(p.length<2) return null; try{ return JSON.parse(atob(p[1].replace(/-/g,"+").replace(/_/g,"/"))); }catch(_){ return null; } },
     getAccessToken(){ const t=load(STORAGE.TOKENS); return t ? (t.access_token||null) : null; },
-    logout(to){
-  del(STORAGE.TOKENS);
-  // reload 절대 금지
-  if (to) location.href = to;
-  else location.href = "/index.html";
-}
-
+    logout(to){ del(STORAGE.TOKENS); if(to) location.href=to; else location.reload(); }
   };
 
   window.osLogin = async function(){
@@ -1570,6 +1485,24 @@ function applyRoleUI(role) {
     document.addEventListener('DOMContentLoaded', applyGate);
   } else { applyGate(); }
 
+  // Strong logout intercept (capture phase)
+  document.addEventListener('click', async function(ev){
+    const t = ev.target.closest(logoutBtnSelectorList.join(','));
+    if(!t) return;
+    ev.preventDefault(); ev.stopImmediatePropagation(); ev.stopPropagation();
+    const ok = await confirmLogout();
+    if(!ok) return;
+    try{
+      if (window.osAuth && typeof window.osAuth.logout === 'function') window.osAuth.logout();
+      if (window.osauth && typeof window.osauth.logout === 'function') window.osauth.logout();
+      localStorage.removeItem('id_token');
+      localStorage.removeItem('os_id_token');
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('os_access_token');
+    }catch(_){}
+    showToast('Logged out');
+    setTimeout(()=>location.reload(), 600);
+  }, true);
 
   // Mark existing login button for accurate toast position (if present)
   try{
@@ -1591,7 +1524,6 @@ function applyRoleUI(role) {
   }
 </style>
 <div id="igtcRoleInline3"><span id="igtcRoleText3">guest</span></div>
-
 <script>
 (function(){
   if (window.__IGTC_ROLE_INLINE3__) return;
@@ -1714,7 +1646,6 @@ function applyRoleUI(role) {
   window.addEventListener("focus",renderSoon);
 })();
 </script>
-
 <script>
 /* ===== Refined Login UI Patch ===== */
 (function(){
@@ -2055,7 +1986,6 @@ function applyRoleUI(role) {
     var doneOnce = false;
     // Stop duplicate 'message' events bubbling 'osauth:done'
     window.addEventListener("message", function(ev){
-	if (window.__IGDC_LOGGING_OUT__) return;
       try{
         if (ev && ev.data === "osauth:done"){
           if (doneOnce){ ev.stopImmediatePropagation && ev.stopImmediatePropagation(); ev.stopPropagation && ev.stopPropagation(); return; }
@@ -2081,7 +2011,21 @@ function applyRoleUI(role) {
       });
     })();
 
-    
+    // Soft-block rapid redirect loop to "/index.html" immediately after token exchange
+    (function(){
+      var origAssign = location.assign.bind(location);
+      var origReplace= location.replace.bind(location);
+      function shouldBlock(url){
+        try{
+          var u = new URL(url, location.href);
+          return (u.pathname === "/index.html" && (performance.now() < 2000));
+        }catch(_){ return false; }
+      }
+      location.assign = function(url){ if(shouldBlock(url)) return; return origAssign(url); };
+      location.replace= function(url){ if(shouldBlock(url)) return; return origReplace(url); };
+    })();
+  })();
+})();
 </script>
 <!-- IGDC Unified Token/Role + Payment Bridge (inline, single-file) -->
 <script>
@@ -2246,7 +2190,6 @@ function applyRoleUI(role) {
 
   // Iframe message bridge for front pages
   window.addEventListener("message", async (ev)=>{
-  if (window.__IGDC_LOGGING_OUT__) return;
     try{
       const d = ev && ev.data || {};
       if (d && d.type === "IGDC_REQUEST_PAYMENT"){
@@ -2822,7 +2765,6 @@ function setActive(i){
 })();
 </script>
 <script defer="" src="assets/js/loadpage-role-guard.min.js"></script>
-
 <!-- IGDC SAFE LOCK: keep pre-login look -->
 <script id="igdc-admin-bridge">
 (function(){
@@ -2900,8 +2842,6 @@ function setActive(i){
   document.addEventListener("osauth:ready", applyRole);
 })();
 </script>
-
-
 <!-- Robust language persistence handler (injected) -->
 <script>
 (function(){
@@ -3350,7 +3290,6 @@ function setActive(i){
   }
   if(window.addEventListener){
     window.addEventListener("message", handleFrameHeight, false);
-	if (window.__IGDC_LOGGING_OUT__) return;
   }
 })();
 </script>
