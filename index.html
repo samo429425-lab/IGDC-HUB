@@ -1597,47 +1597,121 @@ function applyRoleUI(role) {
   if (window.__IGTC_ROLE_INLINE3__) return;
   window.__IGTC_ROLE_INLINE3__ = true;
 
-  function getRawRole(){
-    // 1️⃣ Auth0 roles 배열 (가장 정확)
-    try{
-      if (window.osauth && window.osauth.claims && Array.isArray(window.osauth.claims.roles)){
-        // 여러 개면 첫 번째를 그대로 표시
-        return window.osauth.claims.roles[0];
-      }
-    }catch(e){}
+  const ROLE_KEYS = [
+    "https://example.com/roles",
+    "https://roles",
+    "https://app/roles",
+    "roles",
+    "role",
+    "permissions"
+  ];
 
-    // 2️⃣ 단일 role
+  function b64uDecode(s){
     try{
-      if (window.osauth){
-        if (window.osauth.user && window.osauth.user.role)
-          return window.osauth.user.role;
-        if (window.osauth.role)
-          return window.osauth.role;
-      }
-    }catch(e){}
+      s=(s||"").replace(/-/g,"+").replace(/_/g,"/");
+      const pad=s.length%4; if(pad) s+="=".repeat(4-pad);
+      const bin=atob(s);
+      try{ return new TextDecoder("utf-8").decode(Uint8Array.from(bin,c=>c.charCodeAt(0))); }
+      catch(_){ return bin; }
+    }catch(e){ return "{}"; }
+  }
 
-    // 3️⃣ fallback
-    if (window.__IGDC_ROLE) return window.__IGDC_ROLE;
+  function parseJwtPayload(t){
+    if(!t||typeof t!=="string") return {};
+    const p=t.split(".");
+    if(p.length<2) return {};
+    try{ return JSON.parse(b64uDecode(p[1])); }catch(e){ return {}; }
+  }
+
+  function getIdToken(){
+    try{
+      if(window.osAuth && typeof window.osAuth.getIdTokenPayload==="function"){
+        const p=window.osAuth.getIdTokenPayload();
+        if(p && p.__raw) return p.__raw;
+      }
+    }catch(_){}
+
+    const keys=["osauth.tokens.v2","osauth:id_token","id_token","auth0:id_token"];
+    for(const k of keys){
+      try{
+        const v=(k==="osauth.tokens.v2")
+          ? (JSON.parse(localStorage.getItem(k)||"null")||{}).id_token
+          : localStorage.getItem(k);
+        if(v && v.split(".").length>=2) return v;
+      }catch(_){}
+    }
+    return "";
+  }
+
+  function extractRoles(payload){
+    let roles=[];
+    for(const key of ROLE_KEYS){
+      const v=payload && payload[key];
+      if(!v) continue;
+      if(Array.isArray(v)) roles=roles.concat(v);
+      else if(typeof v==="string") roles=roles.concat(v.split(","));
+    }
+    return roles.map(r=>String(r||"").toLowerCase()).filter(Boolean);
+  }
+
+  function pickRole(roles){
+    const has = (r)=>roles.includes(r);
+    const pref = (p)=>roles.find(r=>r===p || r.startsWith(p+"."));
+
+    if (has("owner")) return "owner";
+    if (has("admin")) return "admin";
+    if (has("director")) return "director";
+    if (has("coordinator_director")) return "coordinator_director";
+
+    const sm = pref("site_manager");
+    if (sm) return sm;
+
+    const cm = pref("commerce_manager");
+    if (cm) return cm;
+
+    if (has("special_menber")) return "special_menber";
+
+    const mem = pref("member");
+    if (mem) return mem;
 
     return "guest";
   }
 
   function render(){
-    var el =
-      document.getElementById("roleStatusBtn") ||
-      document.getElementById("igtcRoleInline3") ||
-      document.getElementById("userRole");
+
+  // ✅ 로그아웃 직후에는 role 계산 중단
+  if (sessionStorage.getItem("IGDC_LOGOUT") === "1") return;
+
+  const el =
+    document.getElementById("igtcRoleText3") ||
+    document.getElementById("roleStatusBtn") ||
+    document.querySelector(".role-display");
 
     if (!el) return;
-    el.textContent = getRawRole();
+
+    const token = getIdToken();
+    if (!token) {
+      el.textContent = "guest";
+      return;
+    }
+
+    const payload = parseJwtPayload(token);
+    const roles = extractRoles(payload);
+    el.textContent = roles.length ? pickRole(roles) : "member";
   }
 
-  if (document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", render);
-  } else {
+  function renderSoon(){
     render();
+    setTimeout(render,50);
+    setTimeout(render,150);
   }
-  document.addEventListener("osauth:ready", render);
+
+  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",renderSoon);
+  else renderSoon();
+
+  document.addEventListener("osauth:ready",renderSoon);
+  document.addEventListener("osauth:done",renderSoon,true);
+  window.addEventListener("focus",renderSoon);
 })();
 </script>
 
@@ -2750,22 +2824,83 @@ function setActive(i){
 <script defer="" src="assets/js/loadpage-role-guard.min.js"></script>
 
 <!-- IGDC SAFE LOCK: keep pre-login look -->
-
 <script id="igdc-admin-bridge">
 (function(){
-  try{
-    var role = window.__IGDC_ROLE || "";
+  function lower(x){ return String(x||'').trim().toLowerCase(); }
 
-    // 관리자 접근 판단만 (문자열 그대로)
-    window.__IGDC_IS_ADMIN =
-      role === "owner" ||
-      role === "admin" ||
-      role.startsWith("owner.") ||
-      role.startsWith("admin.");
+  function getRoles(){
+    try{
+      const p = window.osAuth?.getIdTokenPayload?.();
+      if(!p) return [];
+      const raw =
+        p["https://roles"] ||
+        p["https://app/roles"] ||
+        p.roles ||
+        [];
+      return Array.isArray(raw)
+        ? raw.map(lower)
+        : String(raw).split(",").map(lower);
+    }catch(e){
+      return [];
+    }
+  }
 
-  }catch(e){}
+  function resolvePrimaryRole(roles){
+    // 우선순위 고정 (정이사장님이 준 기준)
+    const ORDER = [
+      "owner",
+      "admin",
+      "director",
+      "coordinator_director",
+      "site_manager",
+      "commerce_manager",
+      "special_member",
+      "member",
+      "guest"
+    ];
+
+    for (const key of ORDER){
+      if (
+        roles.includes(key) ||
+        roles.some(r => r.startsWith(key + "."))
+      ){
+        return key;
+      }
+    }
+    return "guest";
+  }
+
+  function applyRole(){
+    // 🔒 로그아웃 중이면 절대 실행 금지
+    if (window.__IGDC_LOGGING_OUT__) return;
+
+    const roles = getRoles();
+    const role  = resolvePrimaryRole(roles);
+
+    // 전역 공유 (기존 가드와 100% 호환)
+    window.__IGDC_ROLE = role;
+    try{ localStorage.setItem("igdc_role", role); }catch(e){}
+
+    window.osauth = window.osauth || {};
+    window.osauth.role = role;
+    window.osauth.userRole = role;
+    window.osauth.roles = roles;
+
+    // Admin UI 접근 허용: owner + admin
+    if (role === "admin" || role === "owner"){
+      try{
+        document
+          .querySelectorAll('[data-role="admin"]')
+          .forEach(el => el.style.display = "");
+      }catch(e){}
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", applyRole);
+  document.addEventListener("osauth:ready", applyRole);
 })();
 </script>
+
 
 <!-- Robust language persistence handler (injected) -->
 <script>
