@@ -604,7 +604,52 @@ nav{transition:transform .1s ease;}
  iframe#mainFrame{min-height:0;height:calc(100dvh - var(--igdc-head-h,0px) - var(--igdc-nav-h,48px) + 85px) !important;display:block}</style>
 <style>a.js-seller-modal-trigger:hover { background-color:#FFFFFA; } </style>
 <script>(function(){try{var s=(localStorage.getItem('igdc_lang')||'').toLowerCase();if(s){document.documentElement.setAttribute('lang',s);window.IGTC_CURRENT_LANG=s;}}catch(e){}})();</script>
-<script>(function(){try{var r=(localStorage.getItem('igdc_role')||'').toLowerCase();if(!r&&window.osAuth&&osAuth.getIdTokenPayload){var c=osAuth.getIdTokenPayload()||{};var roles=(c['https://example.com/roles']||[]).map(String);if(roles.indexOf('admin')>-1)r='admin';}if(r){window.__IGDC_ROLE=r;document.documentElement.dataset.role=r;}}catch(e){}document.addEventListener('osauth:ready',function(){try{var r2=(window.__IGDC_ROLE||'').toLowerCase();if(!r2&&window.osAuth&&osAuth.getIdTokenPayload){var c=osAuth.getIdTokenPayload()||{};var roles=(c['https://example.com/roles']||[]).map(String);if(roles.indexOf('admin')>-1){window.__IGDC_ROLE='admin';document.documentElement.dataset.role='admin';}}}catch(e){}});})();</script>
+<script>
+(function(){
+  try{
+    var r = (localStorage.getItem('igdc_role')||'').toLowerCase();
+
+    if(!r && window.osAuth && osAuth.getIdTokenPayload){
+      var c = osAuth.getIdTokenPayload() || {};
+      var roles = (c['https://example.com/roles'] || []).map(String);
+
+      // ✅ 핵심 수정: 점(.) 앞의 베이스 롤만 추출
+      var baseRoles = roles.map(function(v){
+        return String(v).toLowerCase().split('.')[0];
+      });
+
+      if(baseRoles.indexOf('admin') > -1) r = 'admin';
+    }
+
+    if(r){
+      window.__IGDC_ROLE = r;
+      document.documentElement.dataset.role = r;
+    }
+  }catch(e){}
+
+  document.addEventListener('osauth:ready', function(){
+    try{
+      var r2 = (window.__IGDC_ROLE || '').toLowerCase();
+
+      if(!r2 && window.osAuth && osAuth.getIdTokenPayload){
+        var c = osAuth.getIdTokenPayload() || {};
+        var roles = (c['https://example.com/roles'] || []).map(String);
+
+        // ✅ 동일한 처리 (중요)
+        var baseRoles = roles.map(function(v){
+          return String(v).toLowerCase().split('.')[0];
+        });
+
+        if(baseRoles.indexOf('admin') > -1){
+          window.__IGDC_ROLE = 'admin';
+          document.documentElement.dataset.role = 'admin';
+        }
+      }
+    }catch(e){}
+  });
+})();
+</script>
+
 <script src="/igtc-language-role-bridge.min.js"></script>
 <script id="igdc-admin-post-btn">
 (function(){
