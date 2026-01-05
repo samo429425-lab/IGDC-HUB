@@ -2,6 +2,9 @@
   "name": "igtc-site",
   "private": true,
   "version": "1.0.0",
+  "scripts": {
+    "start": "echo \"Netlify build OK\""
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.0.0",
     "node-fetch": "^2.7.0"
