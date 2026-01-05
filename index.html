@@ -606,64 +606,7 @@ nav{transition:transform .1s ease;}
 <script>(function(){try{var s=(localStorage.getItem('igdc_lang')||'').toLowerCase();if(s){document.documentElement.setAttribute('lang',s);window.IGTC_CURRENT_LANG=s;}}catch(e){}})();</script>
 <script>(function(){try{var r=(localStorage.getItem('igdc_role')||'').toLowerCase();if(!r&&window.osAuth&&osAuth.getIdTokenPayload){var c=osAuth.getIdTokenPayload()||{};var roles=(c['https://example.com/roles']||[]).map(String);if(roles.indexOf('admin')>-1)r='admin';}if(r){window.__IGDC_ROLE=r;document.documentElement.dataset.role=r;}}catch(e){}document.addEventListener('osauth:ready',function(){try{var r2=(window.__IGDC_ROLE||'').toLowerCase();if(!r2&&window.osAuth&&osAuth.getIdTokenPayload){var c=osAuth.getIdTokenPayload()||{};var roles=(c['https://example.com/roles']||[]).map(String);if(roles.indexOf('admin')>-1){window.__IGDC_ROLE='admin';document.documentElement.dataset.role='admin';}}}catch(e){}});})();</script>
 <script src="/igtc-language-role-bridge.min.js"></script>
-<script id="igdc-admin-post-btn">
-(function(){
-  // 허용 롤
-  const OK = /^(admin|director|sitemanager[_-]?director)$/i;
 
-  function getRoles(){
-    try{
-      const p = (window.osAuth && osAuth.getIdTokenPayload && osAuth.getIdTokenPayload()) || {};
-      const arr = (p['https://example.com/roles'] || []).map(String);
-      return arr.map(r=>r.toLowerCase());
-    }catch(e){ return []; }
-  }
-
-  function hasPrivilege(){
-    const roles = getRoles();
-    return roles.some(r => OK.test(r));
-  }
-
-  function insertButton(){
-    if (!hasPrivilege()) return;
-
-    // 모달 DOM이 뜨면 상단 액션 바를 찾아서 버튼 삽입
-    const dialog = document.querySelector(
-      '[role="dialog"], .modal-content, .seller-modal, .os-modal'
-    );
-    if (!dialog || dialog.__adminPostBtn) return;
-
-    // '공지사항' 헤더/툴바 근처 추적 (fallback로 모달 본문 상단)
-    const header = dialog.querySelector('.modal-header, header, .head, .title, h2, h3') || dialog;
-    const bar = dialog.querySelector('.btn-area, .actions, .toolbar') || header;
-
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'btn btn-primary admin-post-btn';
-    btn.textContent = '운영자 공지 쓰기';
-    btn.style.marginLeft = '8px';
-    btn.addEventListener('click', function(){
-      const lang = (document.documentElement.lang || 'en').toLowerCase();
-      const url = '/admin-post.html?lang=' + encodeURIComponent(lang);
-      window.open(url, '_blank', 'noopener');
-    });
-
-    (bar || header).appendChild(btn);
-    dialog.__adminPostBtn = true;
-  }
-
-  // 회원전용 모달 트리거(예: #mo-btn, .js-seller-modal-trigger) 클릭 후 삽입 시도
-  document.addEventListener('click', function(e){
-    const t = e.target && e.target.closest('.js-seller-modal-trigger, #mo-btn');
-    if (t) setTimeout(insertButton, 150);
-  });
-
-  // 혹시 모달이 비동기로 붙을 수 있어 MutationObserver로 백업
-  try{
-    new MutationObserver(insertButton).observe(document.body, {childList:true, subtree:true});
-  }catch(e){}
-})();
-</script>
 <script id="igdc-igtc-adapter">
 // IGDC-first adapter: expose IGDC API that delegates to existing IGTC bridge.
 (function(){
@@ -1181,7 +1124,7 @@ window.addEventListener('DOMContentLoaded', function() {
 </script>
 <script>
 (function(){
-  const AUTH0_DOMAIN = "dev-lq8s88j3xb5xgghc.us.auth0.com";
+  const AUTH0_DOMAIN = "login.igdcglobal.com";
   const CLIENT_ID    = "4JeT1FdyDZaN7nEODVsKe2Sx8kKMWagj";
   const REDIRECT_URI = window.location.origin + "/callback.html";
   const SCOPE        = "openid profile email";
@@ -3255,6 +3198,8 @@ function setActive(i){
     return window.USER_ROLE || "guest";
   };
 </script>
+
+<script src="/assets/js/member-admin-modal.js"></script>
 
 </body>
 
