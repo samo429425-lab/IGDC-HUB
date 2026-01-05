@@ -420,35 +420,6 @@
     return box;
   }
 
-function renderMaruGlobalInsightBox(){
-    const box = el('div', 'igdc-sc-ai');
-
-    const title = el('p', 'igdc-sc-ai-title', '글로벌 상황 · 성향 분석');
-    const hint  = el('p', 'igdc-sc-ai-hint', 'MARU Global Insight · 전세계 권역·국가 흐름 요약');
-
-    const textarea = el('textarea', 'igdc-sc-ai-textarea');
-    textarea.readOnly = true;
-    textarea.value =
-`전세계 유통·미디어·소비 트렌드를
-마루 엔진 기반으로 요약합니다.
-
-AI 글로벌 인사이트 실행을 통해
-권역별 → 국가별 분석을 확인할 수 있습니다.`;
-
-    const actions = el('div', 'igdc-sc-ai-actions');
-    const btnRun = el('button', '', 'AI 글로벌 인사이트 실행');
-    btnRun.id = 'btnMaruGlobalInsight';
-    actions.appendChild(btnRun);
-
-    box.appendChild(title);
-    box.appendChild(textarea);
-    box.appendChild(actions);
-    box.appendChild(hint);
-
-    return box;
-}
-
-
   async function runAllChecks(){
     lastReport.device = getDeviceInfo();
 
@@ -495,3 +466,32 @@ AI 글로벌 인사이트 실행을 통해
 
   renderPanel();
 })();
+
+function renderMaruGlobalInsightBox(){
+    const box = el('div', 'igdc-sc-ai');
+
+    const title = el('p', 'igdc-sc-ai-title', '글로벌 상황 · 성향 분석');
+    const hint  = el('p', 'igdc-sc-ai-hint', 'MARU Global Insight · 전세계 권역·국가 흐름 요약');
+
+    const textarea = el('textarea', 'igdc-sc-ai-textarea');
+    textarea.readOnly = true;
+    textarea.value =
+`전세계 유통·미디어·소비 트렌드를
+마루 엔진 기반으로 요약합니다.
+
+AI 글로벌 인사이트 실행을 통해
+권역별 → 국가별 분석을 확인할 수 있습니다.`;
+
+    const actions = el('div', 'igdc-sc-ai-actions');
+    const btnRun = el('button', '', 'AI 글로벌 인사이트 실행');
+    btnRun.id = 'btnMaruGlobalInsight';
+    actions.appendChild(btnRun);
+
+    box.appendChild(title);
+    box.appendChild(textarea);
+    box.appendChild(actions);
+    box.appendChild(hint);
+
+    return box;
+}
+
