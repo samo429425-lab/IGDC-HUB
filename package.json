@@ -1,15 +1,9 @@
 {
   "name": "igtc-site",
   "private": true,
-  "type": "module",
   "version": "1.0.0",
   "dependencies": {
-    "esbuild": "^0.27.0",
-    "jsonwebtoken": "^9.0.2",
+    "@supabase/supabase-js": "^2.0.0",
     "node-fetch": "^2.7.0"
-  },
-  "scripts": {
-    "build": "echo 'Build complete'",
-    "start": "npm run build"
   }
 }
