@@ -1,54 +1,41 @@
-
 /**
- * igdc-diag-admin-bridge.js (SAFE VERSION)
- * - 운영 환경 안전 패치
- * - 진단 모듈(IGDC_DIAG) 미존재/실패 시에도
- *   어드민 기능을 절대 차단하지 않음
- * - 진단은 선택적(optional) 보조 기능
+ * igdc-diag-admin-bridge.js (FINAL)
+ * - 전체 헬스체크 버튼을 실제 진단 엔진에 연결
+ * - 차단/alert 없음
+ * - 진단 실패해도 UI 동작 유지
  */
-
 (function () {
   'use strict';
 
-  function log(msg, data) {
-    try {
-      console.warn('[IGDC-DIAG-BRIDGE]', msg, data || '');
-    } catch (e) {}
-  }
-
-  function runDiagnosticSafely() {
+  function safeRunAll() {
     if (window.IGDC_DIAG && typeof window.IGDC_DIAG.runAll === 'function') {
       try {
         return window.IGDC_DIAG.runAll();
       } catch (e) {
-        log('Diagnostic execution failed', e);
+        console.error('[IGDC][BRIDGE] runAll failed', e);
       }
     } else {
-      log('IGDC_DIAG not loaded – diagnostic skipped');
+      console.warn('[IGDC][BRIDGE] IGDC_DIAG not ready');
     }
     return null;
   }
 
-  function bindAdminButtons() {
-    const selectors = [
-      '[data-action="run-diagnostic"]',
-      '.btn-run-diagnostic',
-      '#runDiagnostic'
-    ];
-
-    selectors.forEach(sel => {
-      document.querySelectorAll(sel).forEach(btn => {
-        btn.addEventListener('click', function () {
-          runDiagnosticSafely();
-        });
+  function bind() {
+    // 우측 패널 "전체 헬스체크" 버튼
+    const btns = document.querySelectorAll(
+      '#runAllHealthCheck, .btn-run-all-health, [data-action="run-all-health"]'
+    );
+    btns.forEach(btn => {
+      btn.addEventListener('click', function () {
+        safeRunAll();
       });
     });
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bindAdminButtons);
+    document.addEventListener('DOMContentLoaded', bind);
   } else {
-    bindAdminButtons();
+    bind();
   }
 
   window.IGDC_DIAG_BRIDGE_READY = true;
