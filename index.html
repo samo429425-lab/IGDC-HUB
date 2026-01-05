@@ -3243,5 +3243,20 @@ function setActive(i){
   }
 })();
 </script>
+
+<script type="module">
+  import * as RolePerm from "/assets/js/role-permission-map.js";
+
+  // 1. 전역 권한 엔진 등록
+  window.IGDC_ROLE_PERM = RolePerm;
+
+  // 2. 전역 사용자 롤 getter
+  window.getUserRole = function () {
+    return window.USER_ROLE || "guest";
+  };
+</script>
+
 </body>
+
+
 </html>
