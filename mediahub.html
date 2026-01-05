@@ -2805,5 +2805,154 @@ window.addEventListener("message",function(ev){
 <script defer src="/assets/js/mediahub-automap.v1.js"></script>
 <script defer src="/assets/js/media-empty-handler.js"></script>
 
+<script id="igdc-media-access-script">
+/*
+ IGDC Media Access Script
+ ----------------------------------------
+ - MediaHub 전용 (Netflix / KT / Amazon 스타일)
+ - 썸네일 클릭 → 상세 오버레이
+ - 시청 / 대여 / 소장 / 찜하기
+ - 외부 PG 결제 트리거 연동
+ ----------------------------------------
+ 전제:
+  - 썸네일 카드에 data-media-id 존재
+  - IGTC.checkout() 존재
+  - window.__IGDC_ROLE, window.__IGDC_USER 존재
+*/
+
+(function (window, document) {
+  'use strict';
+
+  const MediaAccess = {
+    state: {
+      role: 'guest',
+      user: null,
+      activeMediaId: null
+    },
+
+    init() {
+      this.state.role = window.__IGDC_ROLE || 'guest';
+      this.state.user = window.__IGDC_USER || null;
+      this.bindThumbnailClick();
+    },
+
+    /* 1️⃣ 썸네일 클릭 */
+    bindThumbnailClick() {
+      document.addEventListener('click', (e) => {
+        const card = e.target.closest('[data-media-id]');
+        if (!card) return;
+
+        const mediaId = card.dataset.mediaId;
+        if (!mediaId) return;
+
+        this.openDetail(mediaId, card);
+      });
+    },
+
+    /* 2️⃣ 상세 오버레이 */
+    openDetail(mediaId, card) {
+      this.state.activeMediaId = mediaId;
+
+      this.closeDetail();
+
+      const overlay = document.createElement('div');
+      overlay.id = 'igdc-media-overlay';
+      overlay.innerHTML = `
+        <div class="media-modal">
+          <button class="media-close">✕</button>
+          <h2>${card.dataset.title || 'Media Content'}</h2>
+          <p>${card.dataset.description || ''}</p>
+
+          <div class="media-actions">
+            <button data-action="play">▶ 시청하기</button>
+            <button data-action="rent">💳 대여하기</button>
+            <button data-action="own">💳 소장하기</button>
+            <button data-action="wish">⭐ 찜하기</button>
+          </div>
+
+          <div class="media-review">
+            <textarea placeholder="한 줄 리뷰 (선택)" maxlength="200"></textarea>
+            <button data-action="review">리뷰 등록</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(overlay);
+
+      overlay.querySelector('.media-close').onclick = () => this.closeDetail();
+      overlay.onclick = (e) => { if (e.target === overlay) this.closeDetail(); };
+
+      overlay.querySelectorAll('[data-action]').forEach(btn => {
+        btn.onclick = () => this.handleAction(btn.dataset.action);
+      });
+    },
+
+    /* 3️⃣ 버튼 액션 */
+    handleAction(action) {
+      const mediaId = this.state.activeMediaId;
+
+      switch (action) {
+        case 'play':
+          alert('시청 권한 확인 후 재생');
+          break;
+
+        case 'rent':
+        case 'own':
+          IGTC.checkout({
+            type: 'media',
+            mediaId,
+            mode: action, // rent | own
+            user: this.state.user
+          });
+          break;
+
+        case 'wish':
+          alert('찜 목록에 추가되었습니다');
+          break;
+
+        case 'review':
+          alert('리뷰가 등록되었습니다');
+          break;
+      }
+    },
+
+    closeDetail() {
+      const el = document.getElementById('igdc-media-overlay');
+      if (el) el.remove();
+    }
+  };
+
+  /* 기본 스타일 */
+  const style = document.createElement('style');
+  style.textContent = `
+    #igdc-media-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.6);
+      z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .media-modal {
+      background: #fff; padding: 20px;
+      border-radius: 12px; width: 420px;
+    }
+    .media-actions button {
+      margin: 6px 4px;
+    }
+    .media-close {
+      float: right; border: none; background: none; font-size: 18px;
+    }
+    .media-review textarea {
+      width: 100%; margin-top: 10px;
+    }
+  `;
+  document.head.appendChild(style);
+
+  MediaAccess.init();
+  window.IGDCMediaAccess = MediaAccess;
+
+})(window, document);
+</script>
+
+
 </body>
 </html>
