@@ -541,104 +541,107 @@ function renderMaruGlobalInsightBox() {
     return box;
   }
 
-function renderMaruGlobalInsightBox(){
-    const box = el('div', 'igdc-sc-ai');
+function renderMaruGlobalInsightBox() {
 
-    const title = el('p', 'igdc-sc-ai-title', '글로벌 상황 · 성향 분석');
-    const hint  = el('p', 'igdc-sc-ai-hint', 'MARU Global Insight · 전세계 권역·국가 흐름 요약');
+  /* === AI 질문 보조 요약 영역과 동일한 외곽 카드 === */
+  const card = el('div', 'igdc-side-card');
 
-    const textarea = el('textarea', 'igdc-sc-ai-textarea');
-    textarea.readOnly = true;
-    textarea.value =
-`전세계 유통·미디어·소비 트렌드를
-마루 엔진 기반으로 요약합니다.
+  /* === 헤더 === */
+  const header = el('div', 'igdc-side-card-header');
+  header.textContent = 'MARU Global Insights';
 
-AI 글로벌 인사이트 실행을 통해
-권역별 → 국가별 분석을 확인할 수 있습니다.`;
+  /* === 바디 (스크롤 영역) === */
+  const body = el('div', 'igdc-side-card-body');
+  body.style.maxHeight = '320px';
+  body.style.overflowY = 'auto';
 
-    const actions = el('div', 'igdc-sc-ai-actions');
-    const btnRun = el('button', '', 'AI 글로벌 인사이트 실행');
-    btnRun.id = 'btnMaruGlobalInsight';
-    actions.appendChild(btnRun);
+  /* === 요약 텍스트 영역 === */
+  const summary = el('div', 'igdc-ai-summary');
+  summary.style.fontSize = '13px';
+  summary.style.color = '#1f2f5c';
+  summary.style.lineHeight = '1.6';
+  summary.style.whiteSpace = 'pre-wrap';
 
-    box.appendChild(title);
-    box.appendChild(textarea);
-    box.appendChild(actions);
-    box.appendChild(hint);
+  summary.textContent =
+`AI 글로벌 인사이트 실행을 누르면
+전 세계 뉴스 · 트렌드 · 데이터를 취합하여
+이 영역에 간단 요약을 표시합니다.
 
-    return box;
+이 카드를 클릭하면
+권역별 상세 분석 화면이 열립니다.`;
+
+  /* 카드 클릭 → 레기온 모달 */
+  summary.addEventListener('click', function () {
+    if (typeof window.openMaruGlobalRegionModal === 'function') {
+      window.openMaruGlobalRegionModal();
+    }
+  });
+
+  /* === 버튼 영역 (AI 질문 보조와 동일 구조) === */
+  const actions = el('div', 'igdc-ai-actions');
+
+  const btnRealtime = el('button', 'igdc-ai-btn', '실시간 이슈');
+  const btnCopy = el('button', 'igdc-ai-btn', '텍스트 복사');
+  const btnRun = el('button', 'igdc-ai-btn primary', 'AI 글로벌 인사이트 실행');
+
+  /* AI 글로벌 인사이트 실행 → MARU 엔진 */
+  btnRun.addEventListener('click', async function (e) {
+    e.stopPropagation();
+    summary.textContent = '전 세계 데이터를 취합 중입니다...';
+
+    try {
+      const res = await fetch('/api/maru-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'global-full' })
+      });
+      const data = await res.json();
+
+      summary.textContent =
+        data.summary ||
+        '글로벌 인사이트 요약 데이터를 받지 못했습니다.';
+
+      window.MARU_GLOBAL_DATA = data;
+
+    } catch (err) {
+      summary.textContent =
+        '글로벌 인사이트 취합 중 오류가 발생했습니다.';
+    }
+  });
+
+  /* 실시간 이슈 */
+  btnRealtime.addEventListener('click', async function (e) {
+    e.stopPropagation();
+    summary.textContent = '실시간 글로벌 이슈를 취합 중...';
+
+    try {
+      const res = await fetch('/api/maru-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'realtime-global' })
+      });
+      const data = await res.json();
+      summary.textContent = data.summary || '실시간 이슈가 없습니다.';
+    } catch (err) {
+      summary.textContent = '실시간 이슈 취합 중 오류가 발생했습니다.';
+    }
+  });
+
+  /* 텍스트 복사 */
+  btnCopy.addEventListener('click', function (e) {
+    e.stopPropagation();
+    navigator.clipboard.writeText(summary.textContent || '');
+  });
+
+  actions.appendChild(btnRealtime);
+  actions.appendChild(btnCopy);
+  actions.appendChild(btnRun);
+
+  body.appendChild(summary);
+  body.appendChild(actions);
+
+  card.appendChild(header);
+  card.appendChild(body);
+
+  return card;
 }
-
-
-  async function runAllChecks(){
-    lastReport.device = getDeviceInfo();
-
-    const [front, api, env] = await Promise.all([
-      checkFront(),
-      checkApi(),
-      checkEnv()
-    ]);
-    lastReport.front = front;
-    lastReport.api = api;
-    lastReport.env = env;
-    lastReport.ts = new Date().toISOString();
-
-    const cards = container.querySelectorAll('.igdc-sc-card');
-    if(cards.length >= 1){
-      const sFront = summarizeStatus(front);
-      applyCardStatus(cards[0], sFront);
-    }
-    if(cards.length >= 2){
-      const sApi = summarizeStatus(api);
-      const sEnv = env.summary || { ok:0,warn:0,error:0 };
-      const combined = {
-        ok: (sApi.ok + sEnv.ok),
-        warn: (sApi.warn + sEnv.warn),
-        error: (sApi.error + sEnv.error)
-      };
-      applyCardStatus(cards[1], combined);
-    }
-    if(cards.length >= 3){
-      applyCardStatus(cards[2], { ok:0, warn:0, error:0 });
-    }
-    if(cards.length >= 4){
-      applyCardStatus(cards[3], { ok:1, warn:0, error:0 });
-    }
-  }
-
-  function applyCardStatus(card, summary){
-    const st = statusLabel(summary);
-    const elStatus = card.__statusEl;
-    if(!elStatus) return;
-    elStatus.textContent = st.text;
-    elStatus.className = 'igdc-sc-card-status '+(st.cls||'');
-  }
-
-
-
-  // ---- MARU Global Insight wiring (Region -> Country -> Voice) ----
-  document.addEventListener('click', function(e){
-    const t = e.target;
-    if(!t) return;
-    if(t.id === 'btnMaruGlobalInsight'){
-      e.preventDefault();
-      // 1) open region modal (1st)
-      if(typeof window.openMaruGlobalRegionModal === 'function'){
-        window.openMaruGlobalRegionModal();
-      } else if (window.MARU_GLOBAL_REGION_MODAL && typeof window.MARU_GLOBAL_REGION_MODAL.open === 'function'){
-        window.MARU_GLOBAL_REGION_MODAL.open();
-      } else {
-        alert('Region modal 호출 함수를 찾지 못했습니다: openMaruGlobalRegionModal');
-      }
-      // 2) voice engine standby
-      if(window.MaruVoice && typeof window.MaruVoice.stop === 'function'){
-        // ensure engine is present; do not auto-play here
-      }
-      return;
-    }
-  }, true);
-  // ---------------------------------------------------------------
-
-  renderPanel();
-})();
-
