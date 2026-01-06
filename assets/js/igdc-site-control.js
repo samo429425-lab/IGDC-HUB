@@ -344,14 +344,14 @@
 function renderMaruGlobalInsightBox() {
 
   /* === 패널 외곽 (AI 질문 보조와 동일한 창) === */
-  const panel = el('div', 'igdc-panel-box');
+  const panel = el('div', 'igdc-side-card');
 
   /* === 패널 헤더 === */
-  const header = el('div', 'igdc-panel-header');
+  const header = el('div', 'igdc-side-card-header');
   header.textContent = 'MARU Global Insights';
 
   /* === 패널 바디 === */
-  const body = el('div', 'igdc-panel-body');
+  const body = el('div', 'igdc-side-card-body');
 
   /* === 요약 카드 (모달 트리거) === */
   const card = el('div', 'igdc-maru-card');
