@@ -1,5 +1,6 @@
 // /assets/js/igdc-site-control.js
 // IGTC / IGDC 사이트 관리 창 (우측 패널) 실전 버전
+console.log('[IGDC SITE CONTROL] LOADED');
 
 (function(){
   const container = document.getElementById('igdc-site-control');
@@ -343,51 +344,65 @@
 
 function renderMaruGlobalInsightBox() {
 
-  /* === AI 질문 보조 요약 영역과 동일한 외곽 카드 === */
-  const card = el('div', 'igdc-side-card');
+  /* === 패널 외곽 (AI 질문 보조와 동일한 창) === */
+  const panel = el('div', 'igdc-panel-box');
 
-  /* === 헤더 === */
-  const header = el('div', 'igdc-side-card-header');
+  /* === 패널 헤더 === */
+  const header = el('div', 'igdc-panel-header');
   header.textContent = 'MARU Global Insights';
 
-  /* === 바디 (스크롤 영역) === */
-  const body = el('div', 'igdc-side-card-body');
-  body.style.maxHeight = '320px';
-  body.style.overflowY = 'auto';
+  /* === 패널 바디 === */
+  const body = el('div', 'igdc-panel-body');
 
-  /* === 요약 텍스트 영역 === */
-  const summary = el('div', 'igdc-ai-summary');
-  summary.style.fontSize = '13px';
-  summary.style.color = '#1f2f5c';
-  summary.style.lineHeight = '1.6';
-  summary.style.whiteSpace = 'pre-wrap';
+  /* === 요약 카드 (모달 트리거) === */
+  const card = el('div', 'igdc-maru-card');
 
-  summary.textContent =
+  const cardTitle = el(
+    'div',
+    'igdc-maru-card-title',
+    '글로벌 상황 · 성향 분석'
+  );
+
+  const cardBody = el('div', 'igdc-maru-card-body');
+  cardBody.style.whiteSpace = 'pre-wrap';
+  cardBody.style.fontSize = '13px';     // AI 질문 보조와 통일
+  cardBody.style.color = '#1f2f5c';     // 곤색
+  cardBody.style.lineHeight = '1.6';
+
+  cardBody.textContent =
 `AI 글로벌 인사이트 실행을 누르면
-전 세계 뉴스 · 트렌드 · 데이터를 취합하여
+전 세계 뉴스와 데이터를 취합하여
 이 영역에 간단 요약을 표시합니다.
 
-이 카드를 클릭하면
+카드를 클릭하면
 권역별 상세 분석 화면이 열립니다.`;
 
-  /* 카드 클릭 → 레기온 모달 */
-  summary.addEventListener('click', function () {
+  card.appendChild(cardTitle);
+  card.appendChild(cardBody);
+
+  /* 카드 클릭 = 레기온 모달 */
+  card.addEventListener('click', function () {
     if (typeof window.openMaruGlobalRegionModal === 'function') {
       window.openMaruGlobalRegionModal();
     }
   });
 
-  /* === 버튼 영역 (AI 질문 보조와 동일 구조) === */
-  const actions = el('div', 'igdc-ai-actions');
+  /* === 버튼 영역 === */
+  const actions = el('div', 'igdc-sc-ai-actions');
+  actions.style.display = 'flex';
+  actions.style.gap = '6px';
 
-  const btnRealtime = el('button', 'igdc-ai-btn', '실시간 이슈');
-  const btnCopy = el('button', 'igdc-ai-btn', '텍스트 복사');
-  const btnRun = el('button', 'igdc-ai-btn primary', 'AI 글로벌 인사이트 실행');
+  const btnRealtime = el('button', '', '실시간 이슈');
+  const btnCopy = el('button', '', '텍스트 복사');
+  const btnRun = el('button', '', 'AI 글로벌 인사이트 실행');
 
-  /* AI 글로벌 인사이트 실행 → MARU 엔진 */
+  /* 오른쪽 정렬 */
+  btnRun.style.marginLeft = 'auto';
+
+  /* AI 글로벌 인사이트 실행 = MARU 엔진 기동 */
   btnRun.addEventListener('click', async function (e) {
     e.stopPropagation();
-    summary.textContent = '전 세계 데이터를 취합 중입니다...';
+    cardBody.textContent = '전 세계 데이터를 취합 중입니다...';
 
     try {
       const res = await fetch('/api/maru-search', {
@@ -397,22 +412,20 @@ function renderMaruGlobalInsightBox() {
       });
       const data = await res.json();
 
-      summary.textContent =
-        data.summary ||
-        '글로벌 인사이트 요약 데이터를 받지 못했습니다.';
+      cardBody.textContent =
+        data.summary || '글로벌 인사이트 요약 데이터를 받지 못했습니다.';
 
       window.MARU_GLOBAL_DATA = data;
 
     } catch (err) {
-      summary.textContent =
-        '글로벌 인사이트 취합 중 오류가 발생했습니다.';
+      cardBody.textContent = '글로벌 인사이트 취합 중 오류가 발생했습니다.';
     }
   });
 
   /* 실시간 이슈 */
   btnRealtime.addEventListener('click', async function (e) {
     e.stopPropagation();
-    summary.textContent = '실시간 글로벌 이슈를 취합 중...';
+    cardBody.textContent = '실시간 글로벌 이슈를 취합 중...';
 
     try {
       const res = await fetch('/api/maru-search', {
@@ -421,27 +434,27 @@ function renderMaruGlobalInsightBox() {
         body: JSON.stringify({ mode: 'realtime-global' })
       });
       const data = await res.json();
-      summary.textContent = data.summary || '실시간 이슈가 없습니다.';
+      cardBody.textContent = data.summary || '실시간 이슈가 없습니다.';
     } catch (err) {
-      summary.textContent = '실시간 이슈 취합 중 오류가 발생했습니다.';
+      cardBody.textContent = '실시간 이슈 취합 중 오류가 발생했습니다.';
     }
   });
 
   /* 텍스트 복사 */
   btnCopy.addEventListener('click', function (e) {
     e.stopPropagation();
-    navigator.clipboard.writeText(summary.textContent || '');
+    navigator.clipboard.writeText(cardBody.textContent || '');
   });
 
   actions.appendChild(btnRealtime);
   actions.appendChild(btnCopy);
   actions.appendChild(btnRun);
 
-  body.appendChild(summary);
+  body.appendChild(card);
   body.appendChild(actions);
 
-  card.appendChild(header);
-  card.appendChild(body);
+  panel.appendChild(header);
+  panel.appendChild(body);
 
-  return card;
+  return panel;
 }
