@@ -341,6 +341,118 @@
     container.appendChild(renderMaruGlobalInsightBox());
 
 
+function renderMaruGlobalInsightBox() {
+  const box = el('div', 'igdc-sc-ai');
+
+  /* ===== 블록 타이틀 ===== */
+  const title = el('p', 'igdc-sc-ai-title', 'MARU Global Insights');
+
+  /* ===== 카드 (요약 표시 + 모달 트리거) ===== */
+  const card = el('div', 'igdc-maru-card');
+
+  const cardTitle = el(
+    'div',
+    'igdc-maru-card-title',
+    '글로벌 상황 · 성향 분석'
+  );
+
+  const cardBody = el('div', 'igdc-maru-card-body');
+  cardBody.style.whiteSpace = 'pre-wrap';
+  cardBody.textContent =
+`AI 글로벌 인사이트 실행을 누르면
+전 세계 뉴스와 데이터를 취합하여
+이 영역에 요약 결과를 표시합니다.
+
+카드를 클릭하면
+권역별 상세 분석 화면이 열립니다.`;
+
+  card.appendChild(cardTitle);
+  card.appendChild(cardBody);
+
+  /* 카드 클릭 = 레기온 모달 (유일한 트리거) */
+  card.addEventListener('click', function () {
+    if (typeof window.openMaruGlobalRegionModal === 'function') {
+      window.openMaruGlobalRegionModal();
+    }
+  });
+
+  /* ===== 버튼 영역 ===== */
+  const actions = el('div', 'igdc-sc-ai-actions');
+
+  const btnRun = el('button', 'igdc-btn-run', 'AI 글로벌 인사이트 실행');
+  const btnRealtime = el('button', 'igdc-btn-realtime', '실시간 이슈');
+  const btnCopy = el('button', 'igdc-btn-copy', '텍스트 복사');
+
+  /* 1️⃣ MARU 엔진 전체 기동 */
+  btnRun.addEventListener('click', async function (e) {
+    e.stopPropagation();
+    cardBody.textContent = '전 세계 데이터를 취합 중입니다...';
+
+    try {
+      const res = await fetch('/api/maru-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'global-full'
+        })
+      });
+
+      const data = await res.json();
+
+      /* 요약 표시 */
+      cardBody.textContent =
+        data.summary ||
+        '글로벌 인사이트 요약 데이터를 받지 못했습니다.';
+
+      /* 레기온/컨츄리 모달용 데이터 캐시 */
+      window.MARU_GLOBAL_DATA = data;
+
+    } catch (err) {
+      cardBody.textContent =
+        '글로벌 인사이트 취합 중 오류가 발생했습니다.';
+    }
+  });
+
+  /* 2️⃣ 실시간 글로벌 이슈 요약 */
+  btnRealtime.addEventListener('click', async function (e) {
+    e.stopPropagation();
+    cardBody.textContent = '실시간 글로벌 이슈를 취합 중입니다...';
+
+    try {
+      const res = await fetch('/api/maru-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'realtime-global'
+        })
+      });
+
+      const data = await res.json();
+      cardBody.textContent =
+        data.summary || '실시간 글로벌 이슈가 없습니다.';
+    } catch (err) {
+      cardBody.textContent =
+        '실시간 이슈 취합 중 오류가 발생했습니다.';
+    }
+  });
+
+  /* 3️⃣ 텍스트 복사 */
+  btnCopy.addEventListener('click', function (e) {
+    e.stopPropagation();
+    navigator.clipboard.writeText(cardBody.textContent || '');
+  });
+
+  actions.appendChild(btnRun);
+  actions.appendChild(btnRealtime);
+  actions.appendChild(btnCopy);
+
+  /* ===== 조립 ===== */
+  box.appendChild(title);
+  box.appendChild(card);
+  box.appendChild(actions);
+
+  return box;
+}
 
 
 
@@ -527,53 +639,3 @@ AI 글로벌 인사이트 실행을 통해
   renderPanel();
 })();
 
-/* =========================================================
- * MARU GLOBAL INSIGHT TRIGGER (SAFE INJECTION)
- * - 기존 블럭 무영향
- * - 버튼 역할 전용
- * ========================================================= */
-(function () {
-  try {
-    // 1. 기준 블럭 (AI 질문 보조 / 요약 영역)
-    const aiSummaryBlock = document.querySelector(
-      '.igdc-sc-ai, [data-role="igdc-ai-summary"], #igdc-ai-summary'
-    );
-    if (!aiSummaryBlock) return;
-
-    // 2. 중복 방지
-    if (document.getElementById('maru-global-insight-trigger')) return;
-
-    // 3. 트리거 블럭 생성
-    const trigger = document.createElement('div');
-    trigger.id = 'maru-global-insight-trigger';
-    trigger.style.cssText = `
-      margin-top:8px;
-      padding:8px 10px;
-      border:1px dashed #d8b894;
-      border-radius:8px;
-      background:#fffaf2;
-      cursor:pointer;
-      font-size:12px;
-      color:#6b4a1f;
-    `;
-
-    trigger.innerHTML = `
-      <strong>🌍 MARU Global Insights</strong><br/>
-      <span style="font-size:11px;opacity:.85">
-        글로벌 권역·국가 인사이트 요약 보기
-      </span>
-    `;
-
-    // 4. 클릭 → Region 모달
-    trigger.addEventListener('click', function () {
-      if (typeof window.openMaruGlobalRegionModal === 'function') {
-        window.openMaruGlobalRegionModal();
-      }
-    });
-
-    // 5. 기준 블럭 바로 아래에 삽입
-    aiSummaryBlock.insertAdjacentElement('afterend', trigger);
-  } catch (e) {
-    console.warn('[MARU][INSIGHT][SAFE-INJECT] skipped', e);
-  }
-})();
