@@ -339,51 +339,6 @@
     container.appendChild(grid);
     container.appendChild(aiBox);
 
-// === MARU GLOBAL INSIGHT (DESIGN-SAFE, CLONED FROM AI BOX) ===
-(function(){
-  // clone AI box to preserve identical design tokens/classes
-  const maruBox = aiBox.cloneNode(true);
-
-  // title
-  const title = maruBox.querySelector('.igdc-sc-ai-title');
-  if(title) title.textContent = '🧭 MARU GLOBAL INSIGHT';
-
-  // textarea
-  const ta = maruBox.querySelector('textarea');
-  if(ta){
-    ta.readOnly = true;
-    ta.value =
-      'MARU 엔진을 통해 전세계 권역·국가별 흐름, 트렌드, 이슈를 요약 표시합니다.\n' +
-      'AI 글로벌 인사이트 실행을 누르면 최신 분석이 반영됩니다.';
-  }
-
-  // actions: keep layout, replace main button label
-  const btns = maruBox.querySelectorAll('button');
-  btns.forEach(function(b){
-    if(b.textContent && b.textContent.indexOf('AI 자동 진단 실행')>-1){
-      b.textContent = 'AI 글로벌 인사이트 실행';
-      b.onclick = async function(){
-        try{
-          b.disabled = true;
-          b.textContent = '분석 중...';
-          const res = await fetch('/api/ai-diagnose', { method:'POST' });
-          const data = await res.json();
-          if(ta){
-            ta.value = data.summary || JSON.stringify(data, null, 2);
-          }
-        }catch(e){
-          if(ta) ta.value = '글로벌 인사이트 호출 오류: ' + e.message;
-        }finally{
-          b.disabled = false;
-          b.textContent = 'AI 글로벌 인사이트 실행';
-        }
-      };
-    }
-  });
-
-  container.appendChild(maruBox);
-})();
-// === END MARU GLOBAL INSIGHT ===
 
 
 
@@ -418,7 +373,7 @@
     textarea.value = buildAiHelperDefaultText();
 
     const actions = el('div', 'igdc-sc-ai-actions');
-    const btnReset = el('button', '', '실시간 이슈');
+    const btnReset = el('button', '', '사이트 상황');
     const btnCopy = el('button', '', '텍스트 복사');
     const btnAi = el('button', '', 'AI 자동 진단 실행(β)');
     actions.appendChild(btnReset);
@@ -542,6 +497,31 @@ AI 글로벌 인사이트 실행을 통해
     elStatus.textContent = st.text;
     elStatus.className = 'igdc-sc-card-status '+(st.cls||'');
   }
+
+
+
+  // ---- MARU Global Insight wiring (Region -> Country -> Voice) ----
+  document.addEventListener('click', function(e){
+    const t = e.target;
+    if(!t) return;
+    if(t.id === 'btnMaruGlobalInsight'){
+      e.preventDefault();
+      // 1) open region modal (1st)
+      if(typeof window.openMaruGlobalRegionModal === 'function'){
+        window.openMaruGlobalRegionModal();
+      } else if (window.MARU_GLOBAL_REGION_MODAL && typeof window.MARU_GLOBAL_REGION_MODAL.open === 'function'){
+        window.MARU_GLOBAL_REGION_MODAL.open();
+      } else {
+        alert('Region modal 호출 함수를 찾지 못했습니다: openMaruGlobalRegionModal');
+      }
+      // 2) voice engine standby
+      if(window.MaruVoice && typeof window.MaruVoice.stop === 'function'){
+        // ensure engine is present; do not auto-play here
+      }
+      return;
+    }
+  }, true);
+  // ---------------------------------------------------------------
 
   renderPanel();
 })();

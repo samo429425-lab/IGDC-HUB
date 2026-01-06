@@ -1,5 +1,5 @@
 /* =========================================================
- * MARU GLOBAL COUNTRY MODAL (v1.0 – ADMIN ONLY)
+ * MARU GLOBAL COUNTRY MODAL (v1.1 – ADMIN ONLY)
  * 2차 팝업: 권역 → 국가 단계
  * - maru-global-region-modal.js 에서 호출
  * - 6개 권역 전체를 단일 파일에서 처리
