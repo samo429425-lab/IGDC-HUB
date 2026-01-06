@@ -340,7 +340,7 @@ console.log('[IGDC SITE CONTROL] LOADED');
     container.appendChild(grid);
     container.appendChild(aiBox);
     container.appendChild(renderMaruGlobalInsightBox());
-
+  });
 
 function renderMaruGlobalInsightBox() {
 
