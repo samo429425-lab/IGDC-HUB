@@ -342,12 +342,18 @@
 
 
 function renderMaruGlobalInsightBox() {
-  const box = el('div', 'igdc-sc-ai');
 
-  /* ===== 블록 타이틀 ===== */
-  const title = el('p', 'igdc-sc-ai-title', 'MARU Global Insights');
+  /* === 패널 외곽 (AI 질문 보조와 동일한 창) === */
+  const panel = el('div', 'igdc-panel-box');
 
-  /* ===== 카드 (요약 표시 + 모달 트리거) ===== */
+  /* === 패널 헤더 === */
+  const header = el('div', 'igdc-panel-header');
+  header.textContent = 'MARU Global Insights';
+
+  /* === 패널 바디 === */
+  const body = el('div', 'igdc-panel-body');
+
+  /* === 요약 카드 (모달 트리거) === */
   const card = el('div', 'igdc-maru-card');
 
   const cardTitle = el(
@@ -358,10 +364,14 @@ function renderMaruGlobalInsightBox() {
 
   const cardBody = el('div', 'igdc-maru-card-body');
   cardBody.style.whiteSpace = 'pre-wrap';
+  cardBody.style.fontSize = '13px';     // AI 질문 보조와 통일
+  cardBody.style.color = '#1f2f5c';     // 곤색
+  cardBody.style.lineHeight = '1.6';
+
   cardBody.textContent =
 `AI 글로벌 인사이트 실행을 누르면
 전 세계 뉴스와 데이터를 취합하여
-이 영역에 요약 결과를 표시합니다.
+이 영역에 간단 요약을 표시합니다.
 
 카드를 클릭하면
 권역별 상세 분석 화면이 열립니다.`;
@@ -369,21 +379,26 @@ function renderMaruGlobalInsightBox() {
   card.appendChild(cardTitle);
   card.appendChild(cardBody);
 
-  /* 카드 클릭 = 레기온 모달 (유일한 트리거) */
+  /* 카드 클릭 = 레기온 모달 */
   card.addEventListener('click', function () {
     if (typeof window.openMaruGlobalRegionModal === 'function') {
       window.openMaruGlobalRegionModal();
     }
   });
 
-  /* ===== 버튼 영역 ===== */
+  /* === 버튼 영역 === */
   const actions = el('div', 'igdc-sc-ai-actions');
+  actions.style.display = 'flex';
+  actions.style.gap = '6px';
 
-  const btnRun = el('button', 'igdc-btn-run', 'AI 글로벌 인사이트 실행');
-  const btnRealtime = el('button', 'igdc-btn-realtime', '실시간 이슈');
-  const btnCopy = el('button', 'igdc-btn-copy', '텍스트 복사');
+  const btnRealtime = el('button', '', '실시간 이슈');
+  const btnCopy = el('button', '', '텍스트 복사');
+  const btnRun = el('button', '', 'AI 글로벌 인사이트 실행');
 
-  /* 1️⃣ MARU 엔진 전체 기동 */
+  /* 오른쪽 정렬 */
+  btnRun.style.marginLeft = 'auto';
+
+  /* AI 글로벌 인사이트 실행 = MARU 엔진 기동 */
   btnRun.addEventListener('click', async function (e) {
     e.stopPropagation();
     cardBody.textContent = '전 세계 데이터를 취합 중입니다...';
@@ -392,68 +407,56 @@ function renderMaruGlobalInsightBox() {
       const res = await fetch('/api/maru-search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'global-full'
-        })
+        body: JSON.stringify({ mode: 'global-full' })
       });
-
       const data = await res.json();
 
-      /* 요약 표시 */
       cardBody.textContent =
-        data.summary ||
-        '글로벌 인사이트 요약 데이터를 받지 못했습니다.';
+        data.summary || '글로벌 인사이트 요약 데이터를 받지 못했습니다.';
 
-      /* 레기온/컨츄리 모달용 데이터 캐시 */
       window.MARU_GLOBAL_DATA = data;
 
     } catch (err) {
-      cardBody.textContent =
-        '글로벌 인사이트 취합 중 오류가 발생했습니다.';
+      cardBody.textContent = '글로벌 인사이트 취합 중 오류가 발생했습니다.';
     }
   });
 
-  /* 2️⃣ 실시간 글로벌 이슈 요약 */
+  /* 실시간 이슈 */
   btnRealtime.addEventListener('click', async function (e) {
     e.stopPropagation();
-    cardBody.textContent = '실시간 글로벌 이슈를 취합 중입니다...';
+    cardBody.textContent = '실시간 글로벌 이슈를 취합 중...';
 
     try {
       const res = await fetch('/api/maru-search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'realtime-global'
-        })
+        body: JSON.stringify({ mode: 'realtime-global' })
       });
-
       const data = await res.json();
-      cardBody.textContent =
-        data.summary || '실시간 글로벌 이슈가 없습니다.';
+      cardBody.textContent = data.summary || '실시간 이슈가 없습니다.';
     } catch (err) {
-      cardBody.textContent =
-        '실시간 이슈 취합 중 오류가 발생했습니다.';
+      cardBody.textContent = '실시간 이슈 취합 중 오류가 발생했습니다.';
     }
   });
 
-  /* 3️⃣ 텍스트 복사 */
+  /* 텍스트 복사 */
   btnCopy.addEventListener('click', function (e) {
     e.stopPropagation();
     navigator.clipboard.writeText(cardBody.textContent || '');
   });
 
-  actions.appendChild(btnRun);
   actions.appendChild(btnRealtime);
   actions.appendChild(btnCopy);
+  actions.appendChild(btnRun);
 
-  /* ===== 조립 ===== */
-  box.appendChild(title);
-  box.appendChild(card);
-  box.appendChild(actions);
+  body.appendChild(card);
+  body.appendChild(actions);
 
-  return box;
+  panel.appendChild(header);
+  panel.appendChild(body);
+
+  return panel;
 }
-
 
 
 
