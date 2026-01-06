@@ -525,3 +525,104 @@ AI 글로벌 인사이트 실행을 통해
 
   renderPanel();
 })();
+
+/* =========================================================
+ * MARU GLOBAL INSIGHT TRIGGER (SAFE INJECTION)
+ * - 기존 블럭 무영향
+ * - 버튼 역할 전용
+ * ========================================================= */
+(function () {
+  try {
+    // 1. 기준 블럭 (AI 질문 보조 / 요약 영역)
+    const aiSummaryBlock = document.querySelector(
+      '.igdc-sc-ai, [data-role="igdc-ai-summary"], #igdc-ai-summary'
+    );
+    if (!aiSummaryBlock) return;
+
+    // 2. 중복 방지
+    if (document.getElementById('maru-global-insight-trigger')) return;
+
+    // 3. 트리거 블럭 생성
+    const trigger = document.createElement('div');
+    trigger.id = 'maru-global-insight-trigger';
+    trigger.style.cssText = `
+      margin-top:8px;
+      padding:8px 10px;
+      border:1px dashed #d8b894;
+      border-radius:8px;
+      background:#fffaf2;
+      cursor:pointer;
+      font-size:12px;
+      color:#6b4a1f;
+    `;
+
+    trigger.innerHTML = `
+      <strong>🌍 MARU Global Insights</strong><br/>
+      <span style="font-size:11px;opacity:.85">
+        글로벌 권역·국가 인사이트 요약 보기
+      </span>
+    `;
+
+    // 4. 클릭 → Region 모달
+    trigger.addEventListener('click', function () {
+      if (typeof window.openMaruGlobalRegionModal === 'function') {
+        window.openMaruGlobalRegionModal();
+      }
+    });
+
+    // 5. 기준 블럭 바로 아래에 삽입
+    aiSummaryBlock.insertAdjacentElement('afterend', trigger);
+  } catch (e) {
+    console.warn('[MARU][INSIGHT][SAFE-INJECT] skipped', e);
+  }
+})();
+/* =========================================================
+ * MARU GLOBAL INSIGHT TRIGGER (SAFE INJECTION)
+ * - 기존 블럭 무영향
+ * - 버튼 역할 전용
+ * ========================================================= */
+(function () {
+  try {
+    // 1. 기준 블럭 (AI 질문 보조 / 요약 영역)
+    const aiSummaryBlock = document.querySelector(
+      '.igdc-sc-ai, [data-role="igdc-ai-summary"], #igdc-ai-summary'
+    );
+    if (!aiSummaryBlock) return;
+
+    // 2. 중복 방지
+    if (document.getElementById('maru-global-insight-trigger')) return;
+
+    // 3. 트리거 블럭 생성
+    const trigger = document.createElement('div');
+    trigger.id = 'maru-global-insight-trigger';
+    trigger.style.cssText = `
+      margin-top:8px;
+      padding:8px 10px;
+      border:1px dashed #d8b894;
+      border-radius:8px;
+      background:#fffaf2;
+      cursor:pointer;
+      font-size:12px;
+      color:#6b4a1f;
+    `;
+
+    trigger.innerHTML = `
+      <strong>🌍 MARU Global Insights</strong><br/>
+      <span style="font-size:11px;opacity:.85">
+        글로벌 권역·국가 인사이트 요약 보기
+      </span>
+    `;
+
+    // 4. 클릭 → Region 모달
+    trigger.addEventListener('click', function () {
+      if (typeof window.openMaruGlobalRegionModal === 'function') {
+        window.openMaruGlobalRegionModal();
+      }
+    });
+
+    // 5. 기준 블럭 바로 아래에 삽입
+    aiSummaryBlock.insertAdjacentElement('afterend', trigger);
+  } catch (e) {
+    console.warn('[MARU][INSIGHT][SAFE-INJECT] skipped', e);
+  }
+})();
