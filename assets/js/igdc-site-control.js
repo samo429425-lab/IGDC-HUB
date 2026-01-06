@@ -340,7 +340,11 @@ console.log('[IGDC SITE CONTROL] LOADED');
     container.appendChild(grid);
     container.appendChild(aiBox);
     container.appendChild(renderMaruGlobalInsightBox());
-  });
+  }
+
+  // 🔥 반드시 호출 (이게 빠져서 계속 안 떴던 것)
+  renderPanel();
+})();
 
 
 function renderMaruGlobalInsightBox() {
@@ -459,3 +463,4 @@ function renderMaruGlobalInsightBox() {
 
   return panel;
 }
+
