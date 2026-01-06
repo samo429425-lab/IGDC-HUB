@@ -2736,14 +2736,19 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="assets/js/traffic-dashboard.js"></script>
 <script src="assets/js/analytics-loader.js"></script>
-<script src="assets/js/igdc-site-control.js"></script>
 
-<!-- 🔽 MARU 글로벌 인사이트 모듈 (여기 추가) -->
-<script src="/assets/js/maru-global-region-modal.js"></script>
-<script src="/assets/js/maru-global-country-modal.js"></script>
+<!-- MARU 글로벌 인사이트 (선로드) -->
 <script src="/assets/js/maru-voice-insight.js"></script>
+<script src="/assets/js/maru-global-country-modal.js"></script>
+<script src="/assets/js/maru-global-region-modal.js"></script>
+
+<!-- 사이트 점검 애드온 -->
 <script src="/assets/js/maru-site-control-addon.js"></script>
 
+<!-- 우측 패널 관문 (맨 마지막) -->
+<script src="assets/js/igdc-site-control.js"></script>
+
+<!-- 진단 / 관리자 -->
 <script src="/assets/js/diagnostics/igdc-system-checker.js"></script>
 <script src="/assets/js/diagnostics/igdc-diag-admin-bridge.js"></script>
 <script src="/assets/js/diagnostics/igdc-system-diagnostic-full.js"></script>
