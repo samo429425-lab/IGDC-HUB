@@ -1,19 +1,20 @@
 /* =========================================================
- * MARU GLOBAL REGION MODAL (v1.1 – ADMIN ONLY) — FIXED
- * 1차 팝업: 권역 선택
- * - 선택 시 2차(국가) 팝업: openMaruGlobalCountryModal(regionId)
- * - 보이스: MaruVoice.play({level:'region', region, depth:1}) (존재 시)
+ * MARU GLOBAL REGION MODAL — LARGE BRIEFING LAYOUT
+ * 목적: 6개 권역을 '뉴스 브리핑 패널'로 크게 표시
+ * - 선택 UI 아님
+ * - 더미 텍스트 없음
+ * - 트리거 / 로직 / 엔진 연계는 기존 유지
  * ========================================================= */
 (function () {
   'use strict';
 
   const REGIONS = [
-    { id: 'asia',          label: '아시아' },
-    { id: 'europe',        label: '유럽' },
+    { id: 'asia', label: '아시아' },
+    { id: 'europe', label: '유럽' },
     { id: 'north_america', label: '북미' },
     { id: 'south_america', label: '남미' },
-    { id: 'middle_east',   label: '중동' },
-    { id: 'africa',        label: '아프리카' },
+    { id: 'middle_east', label: '중동' },
+    { id: 'africa', label: '아프리카' }
   ];
 
   let backdrop = null;
@@ -31,16 +32,47 @@
     const style = el('style');
     style.id = 'maru-region-style';
     style.textContent = `
-      .maru-region-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:99998}
-      .maru-region-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
-        width:min(720px,92vw);max-height:85vh;overflow:auto;background:#fff;border-radius:14px;
-        z-index:99999;box-shadow:0 12px 36px rgba(0,0,0,.25)}
-      .maru-region-header{padding:14px 18px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
-      .maru-region-body{padding:16px 18px;display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
-      .maru-region-btn{padding:12px 12px;border:1px solid #ddd;border-radius:12px;background:#fff;cursor:pointer;font-size:14px;text-align:left}
-      .maru-region-btn:hover{background:#fafafa}
-      .maru-region-close{border:1px solid #ddd;background:#fff;border-radius:10px;padding:6px 10px;cursor:pointer}
-      @media (max-width:520px){.maru-region-body{grid-template-columns:1fr}}
+      .maru-region-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99998}
+      .maru-region-modal{
+        position:fixed;inset:4%;
+        background:#fffaf4; /* soft ivory */
+        border-radius:18px;
+        z-index:99999;
+        box-shadow:0 20px 60px rgba(0,0,0,.35);
+        display:flex;flex-direction:column;overflow:hidden
+      }
+      .maru-region-header{
+        padding:18px 22px;border-bottom:1px solid #eee;
+        display:flex;justify-content:space-between;align-items:center
+      }
+      .maru-region-header strong{font-size:18px}
+      .maru-region-close{border:1px solid #ddd;background:#fff;border-radius:10px;padding:6px 12px;cursor:pointer}
+      .maru-region-body{
+        flex:1;overflow:auto;padding:18px;
+        display:grid;grid-template-columns:repeat(2,1fr);gap:18px
+      }
+      .maru-region-card{
+        border:1px solid #e6d9c9;
+        border-radius:16px;
+        padding:18px;
+        min-height:260px;
+        cursor:pointer;
+        display:flex;
+        flex-direction:column;
+        background:#fff3f6; /* soft cherry blossom */
+      }
+      .maru-region-card:hover{
+        background:#ffe9ef;
+        border-color:#d8b4c4
+      }
+      .maru-region-card h3{margin:0 0 10px;font-size:16px}
+      .maru-region-brief{
+        flex:1;font-size:13px;line-height:1.6;color:#444;
+        white-space:pre-line
+      }
+      @media (max-width:900px){
+        .maru-region-body{grid-template-columns:1fr}
+      }
     `;
     document.head.appendChild(style);
   }
@@ -61,45 +93,35 @@
     modal = el('div', 'maru-region-modal');
 
     const header = el('div', 'maru-region-header', `
-      <strong>🌍 MARU GLOBAL INSIGHT — 권역 선택</strong>
+      <strong>🌍 MARU GLOBAL INSIGHT — REGION BRIEFING</strong>
       <button class="maru-region-close" type="button">닫기</button>
     `);
-
     header.querySelector('.maru-region-close').addEventListener('click', close);
 
     const body = el('div', 'maru-region-body');
+
     body.innerHTML = REGIONS.map(r => `
-      <button class="maru-region-btn" type="button" data-region="${r.id}">
-        <div style="font-weight:700">${r.label}</div>
-        <div style="font-size:12px;opacity:.75;margin-top:2px">권역 요약 → 국가 상세</div>
-      </button>
+      <div class="maru-region-card" data-region="${r.id}">
+        <h3>${r.label}</h3>
+        <div class="maru-region-brief"></div>
+      </div>
     `).join('');
 
-    body.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-region]');
-      if (!btn) return;
-      const region = btn.getAttribute('data-region');
-      close();
-
-      // Voice summary (optional)
-      if (window.MaruVoice && typeof window.MaruVoice.play === 'function') {
-        try { window.MaruVoice.play({ level: 'region', region, depth: 1 }); } catch (_) {}
-      }
-
-      // Open 2nd modal (country)
+    body.addEventListener('click', function (e) {
+      const card = e.target.closest('.maru-region-card');
+      if (!card) return;
+      const regionId = card.getAttribute('data-region');
       if (typeof window.openMaruGlobalCountryModal === 'function') {
-        window.openMaruGlobalCountryModal(region);
-      } else {
-        alert('Country modal 호출 함수를 찾지 못했습니다: openMaruGlobalCountryModal');
+        window.openMaruGlobalCountryModal(regionId);
       }
     });
 
-    document.body.appendChild(backdrop);
-    document.body.appendChild(modal);
     modal.appendChild(header);
     modal.appendChild(body);
+
+    document.body.appendChild(backdrop);
+    document.body.appendChild(modal);
   }
 
-  // expose
   window.openMaruGlobalRegionModal = open;
 })();
