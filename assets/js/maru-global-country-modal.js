@@ -83,70 +83,7 @@
 
   let backdrop = null;
   let modal = null;
-
-
-    /* ================= STATE ================= */
-  let backdrop = null;
-  let modal = null;
-  let voiceEnabled = true;
-  let expandedCountry = null;
-
-  /* ================= EXPORT ================= */
-  window.openMaruGlobalCountryModal = function(regionId){
-    // 기존 로직과의 호환성만 보장 (구조 변경 없음)
-    const countries = COUNTRY_MAP[regionId] || [];
-    // 실제 카드 생성/음성/확장 로직은 기존 코드 그대로 이어서 사용
-    // (이 파일에서는 데이터 구조만 담당)
-    return countries;
-  };
-
-
-  /* ================= STATE ================= */
-  let backdrop = null;
-  let modal = null;
-  let voiceEnabled = true;
-  let expandedCountry = null;
-
-  /* ================= UTIL ================= */
-  function el(tag, cls, html) {
-    const e = document.createElement(tag);
-    if (cls) e.className = cls;
-    if (html != null) e.innerHTML = html;
-    return e;
-  }
-
-  /* ================= STYLE ================= */
-  function injectStyle() {
-    if (document.getElementById('maru-country-style')) return;
-    const style = el('style');
-    style.id = 'maru-country-style';
-    style.textContent = `
-      .maru-country-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99998}
-      .maru-country-modal{position:fixed;inset:4%;background:#fff6f8;border-radius:20px;z-index:99999;box-shadow:0 30px 80px rgba(0,0,0,.4);display:flex;flex-direction:column;overflow:hidden}
-      .maru-country-header{padding:18px 22px;border-bottom:1px solid #eee;display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:14px}
-      .maru-country-header strong{font-size:18px;color:#1f3a5f}
-      .maru-country-issuebar{display:flex;align-items:center;gap:8px;background:#fff1f4;border:1px solid #e2c6cf;border-radius:10px;padding:6px 10px;font-size:12px;white-space:nowrap;overflow:hidden}
-      .maru-country-issuebar .label{font-weight:600;color:#8b2f4a}
-      .maru-country-issuebar .text{text-overflow:ellipsis;overflow:hidden}
-      .maru-country-voice-toggle{border:1px solid #d6c7b5;background:#fff;border-radius:10px;padding:6px 10px;font-size:12px;cursor:pointer}
-      .maru-country-voice-toggle.off{opacity:.45}
-      .maru-country-close{border:1px solid #ddd;background:#fff;border-radius:10px;padding:6px 12px;cursor:pointer}
-      .maru-country-body{flex:1;overflow:auto;padding:18px;display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-      @media(max-width:900px){.maru-country-body{grid-template-columns:1fr}}
-      .maru-country-card{border:1px solid #cfe3f2;border-radius:18px;padding:16px;background:#eef7ff;cursor:pointer;display:flex;flex-direction:column;transition:.2s}
-      .maru-country-card:hover{background:#e2f1ff}
-      .maru-country-card h3{margin:0 0 8px;font-size:15px;color:#1f3a5f}
-      .maru-country-brief{font-size:13px;line-height:1.6;color:#000;white-space:pre-line}
-      .maru-country-empty{font-size:12px;color:#777;font-style:italic}
-      .maru-country-card.expanded{grid-column:1 / -1;background:#ffffff;border:2px solid #7aaad9}
-      .maru-country-card.expanded h3{font-size:18px}
-      .maru-country-video{display:none;grid-column:1 / -1;min-height:420px;border-radius:18px;border:1px solid #ddd;background:#000}
-      .maru-country-video.active{display:block}
-      .maru-country-video iframe{width:100%;height:100%;border:0;border-radius:18px}
-    `;
-    document.head.appendChild(style);
-  }
-
+  
   
 /* ======================================================
  * MARU GLOBAL COUNTRY MODAL UI + VOICE UPGRADE BLOCK
@@ -315,6 +252,69 @@ function openCountryDetail(countryName) {
 }
 
 
+
+
+  /* ================= STATE ================= */
+  let backdrop = null;
+  let modal = null;
+  let voiceEnabled = true;
+  let expandedCountry = null;
+
+  /* ================= EXPORT ================= */
+  window.openMaruGlobalCountryModal = function(regionId){
+    // 기존 로직과의 호환성만 보장 (구조 변경 없음)
+    const countries = COUNTRY_MAP[regionId] || [];
+    // 실제 카드 생성/음성/확장 로직은 기존 코드 그대로 이어서 사용
+    // (이 파일에서는 데이터 구조만 담당)
+    return countries;
+  };
+
+
+  /* ================= STATE ================= */
+  let backdrop = null;
+  let modal = null;
+  let voiceEnabled = true;
+  let expandedCountry = null;
+
+  /* ================= UTIL ================= */
+  function el(tag, cls, html) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (html != null) e.innerHTML = html;
+    return e;
+  }
+
+  /* ================= STYLE ================= */
+  function injectStyle() {
+    if (document.getElementById('maru-country-style')) return;
+    const style = el('style');
+    style.id = 'maru-country-style';
+    style.textContent = `
+      .maru-country-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99998}
+      .maru-country-modal{position:fixed;inset:4%;background:#fff6f8;border-radius:20px;z-index:99999;box-shadow:0 30px 80px rgba(0,0,0,.4);display:flex;flex-direction:column;overflow:hidden}
+      .maru-country-header{padding:18px 22px;border-bottom:1px solid #eee;display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:14px}
+      .maru-country-header strong{font-size:18px;color:#1f3a5f}
+      .maru-country-issuebar{display:flex;align-items:center;gap:8px;background:#fff1f4;border:1px solid #e2c6cf;border-radius:10px;padding:6px 10px;font-size:12px;white-space:nowrap;overflow:hidden}
+      .maru-country-issuebar .label{font-weight:600;color:#8b2f4a}
+      .maru-country-issuebar .text{text-overflow:ellipsis;overflow:hidden}
+      .maru-country-voice-toggle{border:1px solid #d6c7b5;background:#fff;border-radius:10px;padding:6px 10px;font-size:12px;cursor:pointer}
+      .maru-country-voice-toggle.off{opacity:.45}
+      .maru-country-close{border:1px solid #ddd;background:#fff;border-radius:10px;padding:6px 12px;cursor:pointer}
+      .maru-country-body{flex:1;overflow:auto;padding:18px;display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+      @media(max-width:900px){.maru-country-body{grid-template-columns:1fr}}
+      .maru-country-card{border:1px solid #cfe3f2;border-radius:18px;padding:16px;background:#eef7ff;cursor:pointer;display:flex;flex-direction:column;transition:.2s}
+      .maru-country-card:hover{background:#e2f1ff}
+      .maru-country-card h3{margin:0 0 8px;font-size:15px;color:#1f3a5f}
+      .maru-country-brief{font-size:13px;line-height:1.6;color:#000;white-space:pre-line}
+      .maru-country-empty{font-size:12px;color:#777;font-style:italic}
+      .maru-country-card.expanded{grid-column:1 / -1;background:#ffffff;border:2px solid #7aaad9}
+      .maru-country-card.expanded h3{font-size:18px}
+      .maru-country-video{display:none;grid-column:1 / -1;min-height:420px;border-radius:18px;border:1px solid #ddd;background:#000}
+      .maru-country-video.active{display:block}
+      .maru-country-video iframe{width:100%;height:100%;border:0;border-radius:18px}
+    `;
+    document.head.appendChild(style);
+  }
 
   /* ================= CORE ================= */
   function close() {
