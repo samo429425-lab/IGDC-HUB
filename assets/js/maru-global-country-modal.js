@@ -127,54 +127,341 @@
     document.head.appendChild(style);
   }
 
-  /* ================= RENDER ================= */
-  function renderCountryCard(country, data) {
-    const d = data || {};
-    return `
-      <div class="maru-country-card">
-        <h4>${country}</h4>
-        <p><strong>유입 흐름</strong>: ${d.flow || '분석 중'}</p>
-        <p><strong>트렌드</strong>: ${d.trend || '확인 중'}</p>
-        <p class="risk"><strong>주의</strong>: ${d.risk || '특이사항 없음'}</p>
-        <p class="opportunity"><strong>기회</strong>: ${d.opportunity || '관망'}</p>
-        <p><em>${d.comment || 'MARU 코멘트 대기 중'}</em></p>
-      </div>`;
+/* ======================================================
+ * MARU GLOBAL COUNTRY MODAL UI + VOICE UPGRADE BLOCK
+ * (1) Header UI (Voice Toggle + Issue Bar)
+ * (2) Country Card UI (Color / Font)
+ * (3) Voice Read (Summary / Detail)
+ * (4) Detail Expansion Hook
+ * ====================================================== */
+
+/* ============== STATE ============== */
+let voiceEnabled = true;
+let activeRegionId = null;
+let activeCountryName = null;
+
+/* ============== UTILS ============== */
+function el(tag, cls, html) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html != null) e.innerHTML = html;
+  return e;
+}
+
+/* ============== STYLE ============== */
+function injectCountryUIStyle() {
+  if (document.getElementById('maru-country-ui-style')) return;
+
+  const style = el('style');
+  style.id = 'maru-country-ui-style';
+  style.textContent = `
+    .maru-country-modal{
+      background:#fff6f4;
+      border-radius:20px;
+    }
+    .maru-country-header{
+      padding:16px 20px;
+      display:grid;
+      grid-template-columns:auto 1fr auto auto;
+      gap:12px;
+      align-items:center;
+      border-bottom:1px solid #eee;
+    }
+    .maru-country-title{
+      font-weight:600;
+    }
+    .maru-country-issuebar{
+      background:#fff1f4;
+      border:1px solid #e2c6cf;
+      border-radius:10px;
+      padding:6px 10px;
+      font-size:12px;
+      display:flex;
+      gap:8px;
+      white-space:nowrap;
+      overflow:hidden;
+    }
+    .maru-country-issuebar .label{
+      color:#8b2f4a;
+      font-weight:600;
+    }
+    .maru-country-voice-toggle{
+      border:1px solid #d6c7b5;
+      background:#fff;
+      border-radius:10px;
+      padding:6px 10px;
+      font-size:12px;
+      cursor:pointer;
+    }
+    .maru-country-voice-toggle.off{
+      opacity:.45;
+    }
+    .maru-country-card{
+      background:#eef7ff;
+      border:1px solid #cfe3f2;
+      border-radius:18px;
+      padding:16px;
+      cursor:pointer;
+      transition:.2s;
+    }
+    .maru-country-card:hover{
+      background:#e2f1ff;
+    }
+    .maru-country-name{
+      color:#1f3a5f; /* 곤색/군청 */
+      margin:0 0 6px;
+      font-weight:600;
+    }
+    .maru-country-summary{
+      color:#000;
+      margin:0;
+      font-size:13px;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+/* ============== HEADER ============== */
+function buildCountryHeader(regionId) {
+  activeRegionId = regionId;
+
+  const header = el('div', 'maru-country-header');
+
+  const title = el(
+    'strong',
+    'maru-country-title',
+    `🌐 MARU GLOBAL INSIGHT — 국가 분석 (${regionId.toUpperCase()})`
+  );
+
+  const issueBar = el(
+    'div',
+    'maru-country-issuebar',
+    `<span class="label">국가별 중요 이슈</span>
+     <span class="text">주요 이슈 요약 대기 중</span>`
+  );
+
+  const voiceToggle = el(
+    'button',
+    'maru-country-voice-toggle',
+    'VOICE ON'
+  );
+  voiceToggle.onclick = () => {
+    voiceEnabled = !voiceEnabled;
+    voiceToggle.classList.toggle('off', !voiceEnabled);
+    voiceToggle.textContent = voiceEnabled ? 'VOICE ON' : 'VOICE OFF';
+  };
+
+  const closeBtn = el('button', 'maru-country-close', '닫기');
+  closeBtn.onclick = closeModal;
+
+  header.append(title, issueBar, voiceToggle, closeBtn);
+  return header;
+}
+
+/* ============== COUNTRY CARD ============== */
+function renderCountryCard(countryName, summaryText = '') {
+  const card = el(
+    'div',
+    'maru-country-card',
+    `
+      <h4 class="maru-country-name">${countryName}</h4>
+      <p class="maru-country-summary">
+        ${summaryText || '요약 정보 준비 중'}
+      </p>
+    `
+  );
+
+  card.onclick = () => {
+    activeCountryName = countryName;
+    openCountryDetail(countryName);
+  };
+
+  return card;
+}
+
+/* ============== DETAIL + VOICE ============== */
+function openCountryDetail(countryName) {
+  // 기존 업그레이드 파일에 있던 상세 확장 로직 연결 지점
+  if (window.openMaruCountryDetail) {
+    window.openMaruCountryDetail(countryName);
   }
 
-  /* ================= OPEN ================= */
-  async function open(regionId) {
-    if (modal) return;
-
-    injectStyle();
-
-    backdrop = el('div', 'maru-country-backdrop');
-    backdrop.onclick = closeModal;
-
-    modal = el('div', 'maru-country-modal');
-
-    const header = el('div', 'maru-country-header', `
-      <strong>🌐 MARU GLOBAL INSIGHT — 국가 분석 (${regionId})</strong>
-      <button id="maruCountryClose">닫기</button>
-    `);
-
-    const body = el('div', 'maru-country-body', '<p>국가별 글로벌 인사이트 수집 중…</p>');
-
-    modal.appendChild(header);
-    modal.appendChild(body);
-
-    document.body.appendChild(backdrop);
-    document.body.appendChild(modal);
-
-    document.getElementById('maruCountryClose').onclick = closeModal;
-
-    const apiData = await fetchCountryInsight(regionId);
-    const countries = REGION_COUNTRY_MAP[regionId] || [];
-    const countryData = apiData?.countries || {};
-
-    body.innerHTML = countries
-      .map(c => renderCountryCard(c, countryData[c]))
-      .join('');
+  if (voiceEnabled && window.maruVoiceSpeak) {
+    window.maruVoiceSpeak(
+      `${countryName}에 대한 상세 브리핑을 시작합니다.`
+    );
   }
+}
+
+
+
+/* ======================================================
+ * MARU COUNTRY MODAL – VIDEO CONTROL BLOCK
+ * 역할:
+ * 1. Add-on이 던져준 영상 데이터 수신
+ * 2. 영상 리스트(3~4개) 표시
+ * 3. 클릭/음성 선택
+ * 4. 선택 영상 확대 표시
+ * ====================================================== */
+
+/* ============== VIDEO STATE ============== */
+let countryVideos = [];
+let activeVideoIndex = null;
+
+/* ============== VIDEO STYLE ============== */
+function injectCountryVideoStyle() {
+  if (document.getElementById('maru-country-video-style')) return;
+
+  const style = document.createElement('style');
+  style.id = 'maru-country-video-style';
+  style.textContent = `
+    .maru-country-video-section{
+      margin-top:20px;
+      padding-top:14px;
+      border-top:1px solid #ddd;
+    }
+    .maru-country-video-list{
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:14px;
+    }
+    .maru-country-video-card{
+      border:1px solid #ccc;
+      border-radius:12px;
+      overflow:hidden;
+      cursor:pointer;
+      background:#fff;
+    }
+    .maru-country-video-card img{
+      width:100%;
+      display:block;
+    }
+    .maru-country-video-card h5{
+      margin:8px;
+      font-size:13px;
+    }
+    .maru-video-overlay{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.8);
+      z-index:100000;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .maru-video-player{
+      width:80%;
+      max-width:960px;
+      background:#000;
+      border-radius:12px;
+      overflow:hidden;
+      position:relative;
+    }
+    .maru-video-player video,
+    .maru-video-player iframe{
+      width:100%;
+      height:540px;
+    }
+    .maru-video-close{
+      position:absolute;
+      top:8px;
+      right:12px;
+      background:#fff;
+      border:none;
+      border-radius:8px;
+      padding:6px 10px;
+      cursor:pointer;
+      z-index:1;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+/* ============== VIDEO INJECT (FROM ADD-ON) ============== */
+/**
+ * Add-on에서 호출:
+ * window.injectMaruCountryVideos({
+ *   country: '베트남',
+ *   videos: [
+ *     { title, thumbnail, src },
+ *     ...
+ *   ]
+ * })
+ */
+window.injectMaruCountryVideos = function(payload){
+  if (!payload || !Array.isArray(payload.videos)) return;
+
+  countryVideos = payload.videos.slice(0,4);
+  activeVideoIndex = null;
+
+  injectCountryVideoStyle();
+  renderCountryVideoList();
+};
+
+/* ============== VIDEO LIST RENDER ============== */
+function renderCountryVideoList(){
+  const modal = document.querySelector('.maru-country-modal');
+  if (!modal) return;
+
+  let section = modal.querySelector('.maru-country-video-section');
+  if (!section) {
+    section = document.createElement('div');
+    section.className = 'maru-country-video-section';
+    modal.appendChild(section);
+  }
+
+  section.innerHTML = `
+    <h4>관련 영상 자료</h4>
+    <div class="maru-country-video-list"></div>
+  `;
+
+  const list = section.querySelector('.maru-country-video-list');
+
+  countryVideos.forEach((v, i) => {
+    const card = document.createElement('div');
+    card.className = 'maru-country-video-card';
+    card.innerHTML = `
+      <img src="${v.thumbnail || ''}" alt="">
+      <h5>${String.fromCharCode(65+i)}. ${v.title || ''}</h5>
+    `;
+    card.onclick = () => openCountryVideo(i);
+    list.appendChild(card);
+  });
+}
+
+/* ============== VIDEO OPEN (EXPAND) ============== */
+function openCountryVideo(index){
+  const v = countryVideos[index];
+  if (!v) return;
+
+  activeVideoIndex = index;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'maru-video-overlay';
+
+  const player = document.createElement('div');
+  player.className = 'maru-video-player';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'maru-video-close';
+  closeBtn.textContent = '닫기';
+  closeBtn.onclick = () => overlay.remove();
+
+  player.appendChild(closeBtn);
+
+  // iframe or video
+  if (v.src.includes('youtube') || v.src.includes('iframe')) {
+    player.innerHTML += `<iframe src="${v.src}" frameborder="0" allowfullscreen></iframe>`;
+  } else {
+    player.innerHTML += `<video src="${v.src}" controls autoplay></video>`;
+  }
+
+  overlay.appendChild(player);
+  document.body.appendChild(overlay);
+}
+
+
+
 
   /* ================= EXPOSE ================= */
   window.openMaruGlobalCountryModal = open;
