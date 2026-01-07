@@ -1,6 +1,5 @@
 // /assets/js/igdc-site-control.js
 // IGTC / IGDC 사이트 관리 창 (우측 패널) 실전 버전
-console.log('[IGDC SITE CONTROL] LOADED');
 
 (function(){
   const container = document.getElementById('igdc-site-control');
@@ -339,128 +338,210 @@ console.log('[IGDC SITE CONTROL] LOADED');
     container.appendChild(header);
     container.appendChild(grid);
     container.appendChild(aiBox);
-    container.appendChild(renderMaruGlobalInsightBox());
+
+// === MARU GLOBAL INSIGHT (DESIGN-SAFE, CLONED FROM AI BOX) ===
+(function(){
+  // clone AI box to preserve identical design tokens/classes
+  const maruBox = aiBox.cloneNode(true);
+
+  // title
+  const title = maruBox.querySelector('.igdc-sc-ai-title');
+  if(title) title.textContent = '🧭 MARU GLOBAL INSIGHT';
+
+  // textarea
+  const ta = maruBox.querySelector('textarea');
+  if(ta){
+    ta.readOnly = true;
+    ta.value =
+      'MARU 엔진을 통해 전세계 권역·국가별 흐름, 트렌드, 이슈를 요약 표시합니다.\n' +
+      'AI 글로벌 인사이트 실행을 누르면 최신 분석이 반영됩니다.';
   }
 
-  // 🔥 반드시 호출 (이게 빠져서 계속 안 떴던 것)
-  renderPanel();
+  // actions: keep layout, replace main button label
+  const btns = maruBox.querySelectorAll('button');
+  btns.forEach(function(b){
+    if(b.textContent && b.textContent.indexOf('AI 자동 진단 실행')>-1){
+      b.textContent = 'AI 글로벌 인사이트 실행';
+      b.onclick = async function(){
+        try{
+          b.disabled = true;
+          b.textContent = '분석 중...';
+          const res = await fetch('/api/ai-diagnose', { method:'POST' });
+          const data = await res.json();
+          if(ta){
+            ta.value = data.summary || JSON.stringify(data, null, 2);
+          }
+        }catch(e){
+          if(ta) ta.value = '글로벌 인사이트 호출 오류: ' + e.message;
+        }finally{
+          b.disabled = false;
+          b.textContent = 'AI 글로벌 인사이트 실행';
+        }
+      };
+    }
+  });
+
+  container.appendChild(maruBox);
 })();
+// === END MARU GLOBAL INSIGHT ===
 
 
-function renderMaruGlobalInsightBox() {
 
-  /* === 패널 외곽 (AI 질문 보조와 동일한 창) === */
-  const panel = el('div', 'igdc-side-card');
 
-  /* === 패널 헤더 === */
-  const header = el('div', 'igdc-side-card-header');
-  header.textContent = 'MARU Global Insights';
 
-  /* === 패널 바디 === */
-  const body = el('div', 'igdc-side-card-body');
+    btnRunAll.addEventListener('click', runAllChecks);
+  }
 
-  /* === 요약 카드 (모달 트리거) === */
-  const card = el('div', 'igdc-maru-card');
+  function makeCard(title, desc, onClick){
+    const card = el('div', 'igdc-sc-card');
+    const header = el('div', 'igdc-sc-card-header');
+    const hTitle = el('div', 'igdc-sc-card-title', title);
+    const hStatus = el('div', 'igdc-sc-card-status', '-');
+    header.appendChild(hTitle);
+    header.appendChild(hStatus);
+    const body = el('div', 'igdc-sc-card-body', desc);
+    card.appendChild(header);
+    card.appendChild(body);
+    card.addEventListener('click', function(e){
+      onClick && onClick();
+      e.stopPropagation();
+    });
+    card.__statusEl = hStatus;
+    return card;
+  }
 
-  const cardTitle = el(
-    'div',
-    'igdc-maru-card-title',
-    '글로벌 상황 · 성향 분석'
-  );
+  function renderAiBox(){
+    const box = el('div', 'igdc-sc-ai');
+    const title = el('p', 'igdc-sc-ai-title', 'AI 질문 보조 / 요약 영역');
+    const textarea = el('textarea', 'igdc-sc-ai-textarea');
+    textarea.id = 'igdc-sc-ai-input';
+    textarea.value = buildAiHelperDefaultText();
 
-  const cardBody = el('div', 'igdc-maru-card-body');
-  cardBody.style.whiteSpace = 'pre-wrap';
-  cardBody.style.fontSize = '13px';     // AI 질문 보조와 통일
-  cardBody.style.color = '#1f2f5c';     // 곤색
-  cardBody.style.lineHeight = '1.6';
+    const actions = el('div', 'igdc-sc-ai-actions');
+    const btnReset = el('button', '', '실시간 이슈');
+    const btnCopy = el('button', '', '텍스트 복사');
+    const btnAi = el('button', '', 'AI 자동 진단 실행(β)');
+    actions.appendChild(btnReset);
+    actions.appendChild(btnCopy);
+    actions.appendChild(btnAi);
 
-  cardBody.textContent =
-`AI 글로벌 인사이트 실행을 누르면
-전 세계 뉴스와 데이터를 취합하여
-이 영역에 간단 요약을 표시합니다.
+    const hint = el('p', 'igdc-sc-ai-hint', '※ 이 텍스트를 복사해서 ChatGPT 대화창에 붙여넣고, 추가로 궁금한 내용을 덧붙이면 분석·상담에 활용할 수 있습니다.');
 
-카드를 클릭하면
-권역별 상세 분석 화면이 열립니다.`;
+    btnReset.addEventListener('click', function(){
+      textarea.value = buildAiHelperDefaultText();
+    });
 
-  card.appendChild(cardTitle);
-  card.appendChild(cardBody);
+    btnCopy.addEventListener('click', function(){
+      try{
+        textarea.select();
+        document.execCommand('copy');
+      }catch(e){}
+    });
 
-  /* 카드 클릭 = 레기온 모달 */
-  card.addEventListener('click', function () {
-    if (typeof window.openMaruGlobalRegionModal === 'function') {
-      window.openMaruGlobalRegionModal();
-    }
-  });
 
-  /* === 버튼 영역 === */
-  const actions = el('div', 'igdc-sc-ai-actions');
-  actions.style.display = 'flex';
-  actions.style.gap = '6px';
+    btnAi.addEventListener('click', async function(){
+      try{
+        btnAi.disabled = true;
+        btnAi.textContent = 'AI 진단 실행 중...';
+        const res = await fetch('/api/ai-diagnose', { method: 'POST' });
+        if(!res.ok){
+          throw new Error('HTTP '+res.status);
+        }
+        const data = await res.json();
+        if(data && data.summary){
+          textarea.value = data.summary;
+        }else if(data && data.raw){
+          textarea.value = JSON.stringify(data.raw, null, 2);
+        }else{
+          textarea.value = 'AI 진단 응답을 받았지만, 요약 내용을 찾을 수 없습니다.\n'+JSON.stringify(data, null, 2);
+        }
+      }catch(e){
+        alert('AI 진단 호출 중 오류가 발생했습니다: '+ (e && e.message ? e.message : String(e)));
+      }finally{
+        btnAi.disabled = false;
+        btnAi.textContent = 'AI 자동 진단 실행(β)';
+      }
+    });
 
-  const btnRealtime = el('button', '', '실시간 이슈');
-  const btnCopy = el('button', '', '텍스트 복사');
-  const btnRun = el('button', '', 'AI 글로벌 인사이트 실행');
+    box.appendChild(title);
+    box.appendChild(textarea);
+    box.appendChild(actions);
+    box.appendChild(hint);
+    return box;
+  }
 
-  /* 오른쪽 정렬 */
-  btnRun.style.marginLeft = 'auto';
+function renderMaruGlobalInsightBox(){
+    const box = el('div', 'igdc-sc-ai');
 
-  /* AI 글로벌 인사이트 실행 = MARU 엔진 기동 */
-  btnRun.addEventListener('click', async function (e) {
-    e.stopPropagation();
-    cardBody.textContent = '전 세계 데이터를 취합 중입니다...';
+    const title = el('p', 'igdc-sc-ai-title', '글로벌 상황 · 성향 분석');
+    const hint  = el('p', 'igdc-sc-ai-hint', 'MARU Global Insight · 전세계 권역·국가 흐름 요약');
 
-    try {
-      const res = await fetch('/api/maru-search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'global-full' })
-      });
-      const data = await res.json();
+    const textarea = el('textarea', 'igdc-sc-ai-textarea');
+    textarea.readOnly = true;
+    textarea.value =
+`전세계 유통·미디어·소비 트렌드를
+마루 엔진 기반으로 요약합니다.
 
-      cardBody.textContent =
-        data.summary || '글로벌 인사이트 요약 데이터를 받지 못했습니다.';
+AI 글로벌 인사이트 실행을 통해
+권역별 → 국가별 분석을 확인할 수 있습니다.`;
 
-      window.MARU_GLOBAL_DATA = data;
+    const actions = el('div', 'igdc-sc-ai-actions');
+    const btnRun = el('button', '', 'AI 글로벌 인사이트 실행');
+    btnRun.id = 'btnMaruGlobalInsight';
+    actions.appendChild(btnRun);
 
-    } catch (err) {
-      cardBody.textContent = '글로벌 인사이트 취합 중 오류가 발생했습니다.';
-    }
-  });
+    box.appendChild(title);
+    box.appendChild(textarea);
+    box.appendChild(actions);
+    box.appendChild(hint);
 
-  /* 실시간 이슈 */
-  btnRealtime.addEventListener('click', async function (e) {
-    e.stopPropagation();
-    cardBody.textContent = '실시간 글로벌 이슈를 취합 중...';
-
-    try {
-      const res = await fetch('/api/maru-search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'realtime-global' })
-      });
-      const data = await res.json();
-      cardBody.textContent = data.summary || '실시간 이슈가 없습니다.';
-    } catch (err) {
-      cardBody.textContent = '실시간 이슈 취합 중 오류가 발생했습니다.';
-    }
-  });
-
-  /* 텍스트 복사 */
-  btnCopy.addEventListener('click', function (e) {
-    e.stopPropagation();
-    navigator.clipboard.writeText(cardBody.textContent || '');
-  });
-
-  actions.appendChild(btnRealtime);
-  actions.appendChild(btnCopy);
-  actions.appendChild(btnRun);
-
-  body.appendChild(card);
-  body.appendChild(actions);
-
-  panel.appendChild(header);
-  panel.appendChild(body);
-
-  return panel;
+    return box;
 }
 
+
+  async function runAllChecks(){
+    lastReport.device = getDeviceInfo();
+
+    const [front, api, env] = await Promise.all([
+      checkFront(),
+      checkApi(),
+      checkEnv()
+    ]);
+    lastReport.front = front;
+    lastReport.api = api;
+    lastReport.env = env;
+    lastReport.ts = new Date().toISOString();
+
+    const cards = container.querySelectorAll('.igdc-sc-card');
+    if(cards.length >= 1){
+      const sFront = summarizeStatus(front);
+      applyCardStatus(cards[0], sFront);
+    }
+    if(cards.length >= 2){
+      const sApi = summarizeStatus(api);
+      const sEnv = env.summary || { ok:0,warn:0,error:0 };
+      const combined = {
+        ok: (sApi.ok + sEnv.ok),
+        warn: (sApi.warn + sEnv.warn),
+        error: (sApi.error + sEnv.error)
+      };
+      applyCardStatus(cards[1], combined);
+    }
+    if(cards.length >= 3){
+      applyCardStatus(cards[2], { ok:0, warn:0, error:0 });
+    }
+    if(cards.length >= 4){
+      applyCardStatus(cards[3], { ok:1, warn:0, error:0 });
+    }
+  }
+
+  function applyCardStatus(card, summary){
+    const st = statusLabel(summary);
+    const elStatus = card.__statusEl;
+    if(!elStatus) return;
+    elStatus.textContent = st.text;
+    elStatus.className = 'igdc-sc-card-status '+(st.cls||'');
+  }
+
+  renderPanel();
+})();
