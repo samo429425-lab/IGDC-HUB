@@ -470,135 +470,174 @@
     return box;
   }
 
-function renderMaruGlobalInsightBox() {
-  // === 외곽 카드 (AI 질문 보조 요약 영역과 동일한 디자인 계열) ===
-  const panel = document.createElement('div');
-  panel.className = 'igdc-side-card';
+function renderMaruGlobalInsightBox(){
+    const box = el('div', 'igdc-sc-ai');
 
-  // === 헤더 ===
-  const header = document.createElement('div');
-  header.className = 'igdc-side-card-header';
+    const title = el('p', 'igdc-sc-ai-title', '글로벌 상황 · 성향 분석');
+    const hint  = el('p', 'igdc-sc-ai-hint', 'MARU Global Insight · 전세계 권역·국가 흐름 요약');
 
-  header.textContent = 'MARU Global Insights';
+    const textarea = el('textarea', 'igdc-sc-ai-textarea');
+    textarea.readOnly = true;
+    textarea.value =
+`전세계 유통·미디어·소비 트렌드를
+마루 엔진 기반으로 요약합니다.
 
-  // === 바디 ===
-  const body = document.createElement('div');
-  body.className = 'igdc-side-card-body';
-  // === 요약 카드 (※ 이 카드 자체가 레기온 모달 트리거) ===
-  const card = el('div', 'igdc-maru-card');
+AI 글로벌 인사이트 실행을 통해
+권역별 → 국가별 분석을 확인할 수 있습니다.`;
 
-  const cardTitle = el(
-    'div',
-    'igdc-maru-card-title',
-    '글로벌 상황 · 성향 분석'
-  );
+    const actions = el('div', 'igdc-sc-ai-actions');
+    const btnRun = el('button', '', 'AI 글로벌 인사이트 실행');
+    btnRun.id = 'btnMaruGlobalInsight';
+    actions.appendChild(btnRun);
 
-  const cardBody = el('div', 'igdc-maru-card-body');
-  cardBody.style.whiteSpace = 'pre-wrap';
-  cardBody.style.fontSize = '13px';
-  cardBody.style.color = '#1f2f5c';
-  cardBody.style.lineHeight = '1.6';
+    box.appendChild(title);
+    box.appendChild(textarea);
+    box.appendChild(actions);
+    box.appendChild(hint);
 
-  cardBody.textContent =
-`AI 글로벌 인사이트 실행을 누르면
-전 세계 데이터를 취합하여
-글로벌 정세를 요약 표시합니다.
-
-이 요약 영역을 클릭하면
-권역별 상세 분석 화면이 열립니다.`;
-
-  card.appendChild(cardTitle);
-  card.appendChild(cardBody);
-
-  // 🔹 요약 카드 클릭 = 마루 글로벌 레기온 모달
-  card.addEventListener('click', function () {
-    if (typeof window.openMaruGlobalRegionModal === 'function') {
-      window.openMaruGlobalRegionModal();
-    }
-  });
-
-  // === 버튼 영역 ===
-  const actions = el('div', 'igdc-sc-ai-actions');
-  actions.style.display = 'flex';
-  actions.style.gap = '6px';
-
-  const btnRealtime = el('button', '', '실시간 이슈');
-  const btnCopy = el('button', '', '텍스트 복사');
-  const btnRun = el('button', '', 'AI 글로벌 인사이트 실행');
-
-  // 실행 버튼 우측 정렬
-  btnRun.style.marginLeft = 'auto';
-
-  // 🔹 AI 글로벌 인사이트 실행 = MARU 엔진 실행
-  btnRun.addEventListener('click', async function (e) {
-    e.stopPropagation();
-    cardBody.textContent = '전 세계 데이터를 취합 중입니다...';
-
-    try {
-      const res = await fetch('/api/maru-search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'global-full' })
-      });
-      const data = await res.json();
-
-      // 1) 우측 패널 요약 표시
-      cardBody.textContent =
-        data.summary ||
-        '글로벌 인사이트 요약 데이터를 받지 못했습니다.';
-
-      // 2) 전역 데이터 저장 (레기온/컨트리 모달 공용)
-      window.MARU_GLOBAL_DATA = data;
-
-      // 3) 레기온 / 컨트리 모달에 데이터 주입
-      if (typeof window.injectMaruGlobalRegionData === 'function') {
-        window.injectMaruGlobalRegionData(data);
-      }
-      if (typeof window.injectMaruGlobalCountryData === 'function') {
-        window.injectMaruGlobalCountryData(data);
-      }
-
-    } catch (err) {
-      cardBody.textContent =
-        '글로벌 인사이트 취합 중 오류가 발생했습니다.';
-    }
-  });
-
-  // 🔹 실시간 이슈 = 전세계 동향 요약
-  btnRealtime.addEventListener('click', async function (e) {
-    e.stopPropagation();
-    cardBody.textContent = '실시간 글로벌 이슈를 취합 중...';
-
-    try {
-      const res = await fetch('/api/maru-search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'realtime-global' })
-      });
-      const data = await res.json();
-      cardBody.textContent =
-        data.summary || '실시간 이슈가 없습니다.';
-    } catch (err) {
-      cardBody.textContent =
-        '실시간 이슈 취합 중 오류가 발생했습니다.';
-    }
-  });
-
-  // 🔹 텍스트 복사
-  btnCopy.addEventListener('click', function (e) {
-    e.stopPropagation();
-    navigator.clipboard.writeText(cardBody.textContent || '');
-  });
-
-  actions.appendChild(btnRealtime);
-  actions.appendChild(btnCopy);
-  actions.appendChild(btnRun);
-
-  body.appendChild(card);
-  body.appendChild(actions);
-
-  panel.appendChild(header);
-  panel.appendChild(body);
-
-  return panel;
+    return box;
 }
+
+
+  async function runAllChecks(){
+    lastReport.device = getDeviceInfo();
+
+    const [front, api, env] = await Promise.all([
+      checkFront(),
+      checkApi(),
+      checkEnv()
+    ]);
+    lastReport.front = front;
+    lastReport.api = api;
+    lastReport.env = env;
+    lastReport.ts = new Date().toISOString();
+
+    const cards = container.querySelectorAll('.igdc-sc-card');
+    if(cards.length >= 1){
+      const sFront = summarizeStatus(front);
+      applyCardStatus(cards[0], sFront);
+    }
+    if(cards.length >= 2){
+      const sApi = summarizeStatus(api);
+      const sEnv = env.summary || { ok:0,warn:0,error:0 };
+      const combined = {
+        ok: (sApi.ok + sEnv.ok),
+        warn: (sApi.warn + sEnv.warn),
+        error: (sApi.error + sEnv.error)
+      };
+      applyCardStatus(cards[1], combined);
+    }
+    if(cards.length >= 3){
+      applyCardStatus(cards[2], { ok:0, warn:0, error:0 });
+    }
+    if(cards.length >= 4){
+      applyCardStatus(cards[3], { ok:1, warn:0, error:0 });
+    }
+  }
+
+  function applyCardStatus(card, summary){
+    const st = statusLabel(summary);
+    const elStatus = card.__statusEl;
+    if(!elStatus) return;
+    elStatus.textContent = st.text;
+    elStatus.className = 'igdc-sc-card-status '+(st.cls||'');
+  }
+
+  renderPanel();
+})();
+
+
+/* =========================================================
+ * MARU GLOBAL INSIGHT — POST-RENDER TRIGGER FIX
+ * (Do not change existing DOM / layout)
+ * ========================================================= */
+(function () {
+  try {
+    const root = document.getElementById('igdc-site-control');
+    if (!root) return;
+
+    // Find MARU card & body
+    const maruCard =
+      root.querySelector('.igdc-maru-card') ||
+      root.querySelector('[data-maru="global-insight"]') ||
+      root.querySelector('.maru-global-insight');
+
+    if (!maruCard) return;
+
+    const body =
+      maruCard.querySelector('.igdc-maru-card-body') ||
+      maruCard.querySelector('.igdc-side-card-body') ||
+      maruCard.querySelector('textarea') ||
+      maruCard;
+
+    // 1) Card click -> Region Modal
+    maruCard.addEventListener('click', function () {
+      if (typeof window.openMaruGlobalRegionModal === 'function') {
+        window.openMaruGlobalRegionModal();
+      }
+    });
+
+    // 2) Buttons mapping
+    const btns = root.querySelectorAll('button');
+    let btnRun=null, btnRealtime=null, btnCopy=null;
+
+    btns.forEach(b=>{
+      const t=(b.textContent||'').trim();
+      if (t.includes('AI 글로벌') || t.includes('글로벌 인사이트 실행')) btnRun=b;
+      else if (t.includes('실시간')) btnRealtime=b;
+      else if (t.includes('복사')) btnCopy=b;
+    });
+
+    // 3) AI Global Insight Run -> MARU engine
+    if (btnRun) {
+      btnRun.onclick = async function(e){
+        e.stopPropagation();
+        if (body) body.textContent = '전 세계 데이터를 취합 중입니다...';
+        try{
+          const res = await fetch('/api/maru-search',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({mode:'global-full'})
+          });
+          const data = await res.json();
+          if (body) body.textContent = data.summary || '요약 데이터를 받지 못했습니다.';
+          window.MARU_GLOBAL_DATA = data;
+          if (typeof window.injectMaruGlobalRegionData==='function') window.injectMaruGlobalRegionData(data);
+          if (typeof window.injectMaruGlobalCountryData==='function') window.injectMaruGlobalCountryData(data);
+        }catch(err){
+          if (body) body.textContent = '글로벌 인사이트 취합 중 오류가 발생했습니다.';
+        }
+      }
+    }
+
+    // 4) Realtime issue
+    if (btnRealtime) {
+      btnRealtime.onclick = async function(e){
+        e.stopPropagation();
+        if (body) body.textContent = '실시간 글로벌 이슈를 취합 중...';
+        try{
+          const res = await fetch('/api/maru-search',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({mode:'realtime-global'})
+          });
+          const data = await res.json();
+          if (body) body.textContent = data.summary || '실시간 이슈가 없습니다.';
+        }catch(err){
+          if (body) body.textContent = '실시간 이슈 취합 중 오류가 발생했습니다.';
+        }
+      }
+    }
+
+    // 5) Copy
+    if (btnCopy) {
+      btnCopy.onclick = function(e){
+        e.stopPropagation();
+        if (!body) return;
+        const text = body.value || body.textContent || '';
+        navigator.clipboard.writeText(text);
+      }
+    }
+  } catch (e) {}
+})();
+
