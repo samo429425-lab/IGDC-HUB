@@ -23,116 +23,125 @@
 (function(){
   'use strict';
 
-  /* =======================================================
-   * COUNTRY DATA (ALL VERIFIED, NO SYNTAX ERRORS)
-   * ===================================================== */
   const COUNTRY_MAP = {
 
     /* ---------------- ASIA ---------------- */
-    Asia: [
-      { key:'KR', label:'대한민국 (Korea)' },
-      { key:'JP', label:'일본 (Japan)' },
-      { key:'CN', label:'중국 (China)' },
-      { key:'TW', label:'타이완 (Taiwan)' },
-      { key:'PH', label:'필리핀 (Philippines)' },
-      { key:'MY', label:'말레이시아 (Malaysia)' },
-      { key:'SG', label:'싱가포르 (Singapore)' },
-      { key:'BD', label:'방글라데시 (Bangladesh)' },
-      { key:'PK', label:'파키스탄 (Pakistan)' },
-      { key:'AF', label:'아프가니스탄 (Afghanistan)' },
-      { key:'LK', label:'스리랑카 (Sri Lanka)' },
-      { key:'KH', label:'캄보디아 (Cambodia)' },
+    asia: [
+      { code:'KR', label:'대한민국 (Korea)' },
+      { code:'JP', label:'일본 (Japan)' },
+      { code:'CN', label:'중국 (China)' },
+      { code:'TW', label:'타이완 (Taiwan)' },
+      { code:'PH', label:'필리핀 (Philippines)' },
+      { code:'MY', label:'말레이시아 (Malaysia)' },
+      { code:'SG', label:'싱가포르 (Singapore)' },
+      { code:'BD', label:'방글라데시 (Bangladesh)' },
+      { code:'PK', label:'파키스탄 (Pakistan)' },
+      { code:'AF', label:'아프가니스탄 (Afghanistan)' },
+      { code:'LK', label:'스리랑카 (Sri Lanka)' },
+      { code:'KH', label:'캄보디아 (Cambodia)' },
+      { code:'VN', label:'베트남 (Vietnam)' },
+      { code:'TH', label:'태국 (Thailand)' },
+      { code:'ID', label:'인도네시아 (Indonesia)' },
+      { code:'IN', label:'인도 (India)' },
+      { code:'NP', label:'네팔 (Nepal)' }
     ],
 
     /* ---------------- EUROPE ---------------- */
-    Europe: [
-      { key:'DE', label:'독일 (Germany)' },
-      { key:'FR', label:'프랑스 (France)' },
-      { key:'UK', label:'영국 (United Kingdom)' },
-      { key:'ES', label:'스페인 (Spain)' },
-      { key:'PT', label:'포르투갈 (Portugal)' },
-      { key:'IT', label:'이탈리아 (Italy)' },
-      { key:'NL', label:'네덜란드 (Netherlands)' },
-      { key:'SE', label:'스웨덴 (Sweden)' },
-      { key:'NO', label:'노르웨이 (Norway)' },
-      { key:'CH', label:'스위스 (Switzerland)' },
-      { key:'AT', label:'오스트리아 (Austria)' },
-      { key:'PL', label:'폴란드 (Poland)' },
-      { key:'HU', label:'헝가리 (Hungary)' },
+    europe: [
+      { code:'DE', label:'독일 (Germany)' },
+      { code:'FR', label:'프랑스 (France)' },
+      { code:'UK', label:'영국 (United Kingdom)' },
+      { code:'ES', label:'스페인 (Spain)' },
+      { code:'PT', label:'포르투갈 (Portugal)' },
+      { code:'IT', label:'이탈리아 (Italy)' },
+      { code:'NL', label:'네덜란드 (Netherlands)' },
+      { code:'SE', label:'스웨덴 (Sweden)' },
+      { code:'NO', label:'노르웨이 (Norway)' },
+      { code:'CH', label:'스위스 (Switzerland)' },
+      { code:'AT', label:'오스트리아 (Austria)' },
+      { code:'PL', label:'폴란드 (Poland)' },
+      { code:'HU', label:'헝가리 (Hungary)' },
+      { code:'CZ', label:'체코 (Czech Republic)' },
+      { code:'SK', label:'슬로바키아 (Slovakia)' }
     ],
 
     /* ---------------- MIDDLE EAST ---------------- */
-    Middle_East: [
-      { key:'IL', label:'이스라엘 (Israel)' },
-      { key:'SA', label:'사우디아라비아 (Saudi Arabia)' },
-      { key:'IR', label:'이란 (Iran)' },
-      { key:'IQ', label:'이라크 (Iraq)' },
-      { key:'TR', label:'튀르키예 (Turkey)' },
-      { key:'QA', label:'카타르 (Qatar)' },
-      { key:'JO', label:'요르단 (Jordan)' },
-      { key:'SY', label:'시리아 (Syria)' },
-      { key:'LB', label:'레바논 (Lebanon)' },
-      { key:'YE', label:'예멘 (Yemen)' },
-      { key:'OM', label:'오만 (Oman)' },
-      { key:'KW', label:'쿠웨이트 (Kuwait)' },
-      { key:'BH', label:'바레인 (Bahrain)' },
+    middle_east: [
+      { code:'IR', label:'이란 (Iran)' },
+      { code:'IQ', label:'이라크 (Iraq)' },
+      { code:'IL', label:'이스라엘 (Israel)' },
+      { code:'SA', label:'사우디아라비아 (Saudi Arabia)' },
+      { code:'TR', label:'튀르키예 (Turkey)' },
+      { code:'QA', label:'카타르 (Qatar)' },
+      { code:'JO', label:'요르단 (Jordan)' },
+      { code:'SY', label:'시리아 (Syria)' },
+      { code:'LB', label:'레바논 (Lebanon)' },
+      { code:'YE', label:'예멘 (Yemen)' },
+      { code:'OM', label:'오만 (Oman)' },
+      { code:'KW', label:'쿠웨이트 (Kuwait)' },
+      { code:'BH', label:'바레인 (Bahrain)' }
     ],
 
     /* ---------------- AFRICA ---------------- */
-    Africa: [
-      { key:'NG', label:'나이지리아 (Nigeria)' },
-      { key:'ZA', label:'남아프리카공화국 (South Africa)' },
-      { key:'KE', label:'케냐 (Kenya)' },
-      { key:'TZ', label:'탄자니아 (Tanzania)' },
-      { key:'UG', label:'우간다 (Uganda)' },
-      { key:'EG', label:'이집트 (Egypt)' },
-      { key:'LY', label:'리비아 (Libya)' },
-      { key:'GH', label:'가나 (Ghana)' },
-      { key:'CD', label:'콩고민주공화국 (DR Congo)' },
-      { key:'ET', label:'에티오피아 (Ethiopia)' },
-      { key:'MA', label:'모로코 (Morocco)' },
+    africa: [
+      { code:'NG', label:'나이지리아 (Nigeria)' },
+      { code:'ZA', label:'남아프리카공화국 (South Africa)' },
+      { code:'KE', label:'케냐 (Kenya)' },
+      { code:'TZ', label:'탄자니아 (Tanzania)' },
+      { code:'UG', label:'우간다 (Uganda)' },
+      { code:'EG', label:'이집트 (Egypt)' },
+      { code:'LY', label:'리비아 (Libya)' },
+      { code:'GH', label:'가나 (Ghana)' },
+      { code:'CD', label:'콩고민주공화국 (DR Congo)' },
+      { code:'ET', label:'에티오피아 (Ethiopia)' },
+      { code:'MA', label:'모로코 (Morocco)' },
+      { code:'DZ', label:'알제리 (Algeria)' },
+      { code:'TN', label:'튀니지 (Tunisia)' },
+      { code:'SN', label:'세네갈 (Senegal)' }
     ],
 
-    /* ---------------- AMERICAS ---------------- */
-    Americas: [
-      { key:'US', label:'미국 (United States)' },
-      { key:'CA', label:'캐나다 (Canada)' },
-      { key:'MX', label:'멕시코 (Mexico)' },
-      { key:'GT', label:'과테말라 (Guatemala)' },
-      { key:'BR', label:'브라질 (Brazil)' },
-      { key:'AR', label:'아르헨티나 (Argentina)' },
-      { key:'CL', label:'칠레 (Chile)' },
-      { key:'PE', label:'페루 (Peru)' },
-      { key:'CO', label:'콜롬비아 (Colombia)' },
-      { key:'VE', label:'베네수엘라 (Venezuela)' },
-      { key:'UY', label:'우루과이 (Uruguay)' },
-      { key:'PY', label:'파라과이 (Paraguay)' },
-      { key:'BO', label:'볼리비아 (Bolivia)' },
-      { key:'SV', label:'엘살바도르 (El Salvador)' },
-      { key:'HN', label:'온두라스 (Honduras)' },
-      { key:'CR', label:'코스타리카 (Costa Rica)' },
+    /* ---------------- NORTH AMERICA ---------------- */
+    north_america: [
+      { code:'US', label:'미국 (United States)' },
+      { code:'CA', label:'캐나다 (Canada)' },
+      { code:'MX', label:'멕시코 (Mexico)' },
+      { code:'AU', label:'호주 (Australia)' },
+      { code:'GT', label:'과테말라 (Guatemala)' }
+    ],
+
+    /* ---------------- SOUTH AMERICA ---------------- */
+    south_america: [
+      { code:'BR', label:'브라질 (Brazil)' },
+      { code:'AR', label:'아르헨티나 (Argentina)' },
+      { code:'CL', label:'칠레 (Chile)' },
+      { code:'PE', label:'페루 (Peru)' },
+      { code:'CO', label:'콜롬비아 (Colombia)' },
+      { code:'VE', label:'베네수엘라 (Venezuela)' },
+      { code:'UY', label:'우루과이 (Uruguay)' },
+      { code:'PY', label:'파라과이 (Paraguay)' },
+      { code:'BO', label:'볼리비아 (Bolivia)' },
+      { code:'SV', label:'엘살바도르 (El Salvador)' },
+      { code:'HN', label:'온두라스 (Honduras)' },
+      { code:'CR', label:'코스타리카 (Costa Rica)' }
     ],
 
     /* ---------------- EURASIA ---------------- */
-    Eurasia: [
-      { key:'RU', label:'러시아 (Russia)' },
-      { key:'KZ', label:'카자흐스탄 (Kazakhstan)' },
-      { key:'UZ', label:'우즈베키스탄 (Uzbekistan)' },
-      { key:'TM', label:'투르크메니스탄 (Turkmenistan)' },
-      { key:'KG', label:'키르기스스탄 (Kyrgyzstan)' },
-      { key:'TJ', label:'타지키스탄 (Tajikistan)' },
-      { key:'MN', label:'몽골 (Mongolia)' },
-      { key:'AZ', label:'아제르바이잔 (Azerbaijan)' },
-      { key:'GE', label:'조지아 (Georgia)' },
-      { key:'AM', label:'아르메니아 (Armenia)' },
-      { key:'BY', label:'벨라루스 (Belarus)' },
-      { key:'UA', label:'우크라이나 (Ukraine)' },
+    eurasia: [
+      { code:'RU', label:'러시아 (Russia)' },
+      { code:'KZ', label:'카자흐스탄 (Kazakhstan)' },
+      { code:'UZ', label:'우즈베키스탄 (Uzbekistan)' },
+      { code:'TM', label:'투르크메니스탄 (Turkmenistan)' },
+      { code:'KG', label:'키르기스스탄 (Kyrgyzstan)' },
+      { code:'TJ', label:'타지키스탄 (Tajikistan)' },
+      { code:'MN', label:'몽골 (Mongolia)' },
+      { code:'AZ', label:'아제르바이잔 (Azerbaijan)' },
+      { code:'GE', label:'조지아 (Georgia)' },
+      { code:'AM', label:'아르메니아 (Armenia)' },
+      { code:'BY', label:'벨라루스 (Belarus)' },
+      { code:'UA', label:'우크라이나 (Ukraine)' }
     ]
   };
 
-  /* =======================================================
-   * PUBLIC EXPORT
-   * ===================================================== */
   window.MARU_COUNTRY_MAP = COUNTRY_MAP;
 
 })();
