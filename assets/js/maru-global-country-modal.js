@@ -546,7 +546,6 @@ function openCountryVideo(index){
 
 window.MARU_COUNTRY_VOICE_READY = true;
 
-    injectStyle();
 
     backdrop = el('div', 'maru-country-backdrop');
     backdrop.onclick = closeModal;
