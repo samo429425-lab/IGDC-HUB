@@ -462,6 +462,54 @@ function openCountryVideo(index){
 
 
 
+  /* ================= RENDER ================= */
+  function renderCountryCard(country, data) {
+    const d = data || {};
+    return `
+      <div class="maru-country-card">
+        <h4>${country}</h4>
+        <p><strong>유입 흐름</strong>: ${d.flow || '분석 중'}</p>
+        <p><strong>트렌드</strong>: ${d.trend || '확인 중'}</p>
+        <p class="risk"><strong>주의</strong>: ${d.risk || '특이사항 없음'}</p>
+        <p class="opportunity"><strong>기회</strong>: ${d.opportunity || '관망'}</p>
+        <p><em>${d.comment || 'MARU 코멘트 대기 중'}</em></p>
+      </div>`;
+  }
+
+  /* ================= OPEN ================= */
+  async function open(regionId) {
+    if (modal) return;
+
+    injectStyle();
+
+    backdrop = el('div', 'maru-country-backdrop');
+    backdrop.onclick = closeModal;
+
+    modal = el('div', 'maru-country-modal');
+
+    const header = el('div', 'maru-country-header', `
+      <strong>🌐 MARU GLOBAL INSIGHT — 국가 분석 (${regionId})</strong>
+      <button id="maruCountryClose">닫기</button>
+    `);
+
+    const body = el('div', 'maru-country-body', '<p>국가별 글로벌 인사이트 수집 중…</p>');
+
+    modal.appendChild(header);
+    modal.appendChild(body);
+
+    document.body.appendChild(backdrop);
+    document.body.appendChild(modal);
+
+    document.getElementById('maruCountryClose').onclick = closeModal;
+
+    const apiData = await fetchCountryInsight(regionId);
+    const countries = REGION_COUNTRY_MAP[regionId] || [];
+    const countryData = apiData?.countries || {};
+
+    body.innerHTML = countries
+      .map(c => renderCountryCard(c, countryData[c]))
+      .join('');
+  }
 
   /* ================= EXPOSE ================= */
   window.openMaruGlobalCountryModal = open;
