@@ -20,17 +20,14 @@
  * FINAL SAFE BUILD (2026-01)
  * ========================================================= */
 
-(function(){
+(function () {
   'use strict';
 
   /* ================= CONFIG ================= */
   const API_ENDPOINT = '/api/ai-diagnose'; // 추후 /api/maru-global-insight?level=country
 
-  /* ================= COUNTRY MAP ================= */
-  // ※ 기존 정상 동작 구조 유지: 문자열 배열
-  // ※ 요구사항: 한글 + 괄호 영문 표기만 추가
-
-  const COUNTRY_MAP = {
+  // 권역별 국가 기본 맵 (확장 가능)
+  const REGION_COUNTRY_MAP = {
 
     /* ---------------- ASIA ---------------- */
     asia: [
@@ -84,8 +81,8 @@
     ]
   };
 
-  // 외부 접근용 (기존 패턴 유지)
-  window.MARU_COUNTRY_MAP = COUNTRY_MAP;
+  let backdrop = null;
+  let modal = null;
 
   /* ================= STATE ================= */
   let backdrop = null;
