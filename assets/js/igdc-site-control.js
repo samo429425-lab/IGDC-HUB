@@ -472,15 +472,18 @@
 
 function renderMaruGlobalInsightBox() {
   // === 외곽 카드 (AI 질문 보조 요약 영역과 동일한 디자인 계열) ===
-  const panel = el('div', 'igdc-side-card');
+  const panel = document.createElement('div');
+  panel.className = 'igdc-side-card';
 
   // === 헤더 ===
-  const header = el('div', 'igdc-side-card-header');
+  const header = document.createElement('div');
+  header.className = 'igdc-side-card-header';
+
   header.textContent = 'MARU Global Insights';
 
   // === 바디 ===
-  const body = el('div', 'igdc-side-card-body');
-
+  const body = document.createElement('div');
+  body.className = 'igdc-side-card-body';
   // === 요약 카드 (※ 이 카드 자체가 레기온 모달 트리거) ===
   const card = el('div', 'igdc-maru-card');
 
