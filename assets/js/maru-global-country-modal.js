@@ -555,59 +555,27 @@ window.MARU_COUNTRY_VOICE_READY = true;
  /* ================= HEADER + ISSUE + STYLE (INTEGRATED) ================= */
 
 
-/* ======================================================
- * COUNTRY HEADER (REGION HEADER STRUCTURE MATCHED)
- * - 레기온 모달 헤더와 레이아웃 100% 동일
- * - 내용만 Country 전용
- * - 통째 교체용 정본 블록
- * ====================================================== */
-
-/* ---------- HEADER ---------- */
+/* ---------- HEADER UI ---------- */
 const header = el('div', 'maru-country-header');
 
 header.innerHTML = `
-  <strong class="maru-country-title">
-    🌐 MARU GLOBAL INSIGHT — 국가 분석
-  </strong>
-  <div class="spacer"></div>
-  <button class="maru-country-voice-toggle">VOICE ON</button>
-  <button class="maru-country-close">닫기</button>
+  <strong>🌐 MARU GLOBAL INSIGHT — 국가 분석 (${regionId})</strong>
+
+  <div class="maru-country-issuebar">
+    <span class="text">국가별 중요 이슈 요약 대기 중…</span>
+  </div>
+
+  <label class="maru-country-voice-toggle">
+    <input type="checkbox" id="maruCountryVoiceToggle" checked />
+    <span>음성</span>
+  </label>
+
+  <button id="maruCountryClose">닫기</button>
 `;
 
-/* 음성 토글 */
-const voiceBtn = header.querySelector('.maru-country-voice-toggle');
-voiceBtn.onclick = () => {
-  voiceEnabled = !voiceEnabled;
-  voiceBtn.classList.toggle('off', !voiceEnabled);
-  voiceBtn.textContent = voiceEnabled ? 'VOICE ON' : 'VOICE OFF';
+header.querySelector('#maruCountryVoiceToggle').onchange = (e)=>{
+  voiceEnabled = e.target.checked;
 };
-
-/* 닫기 */
-header.querySelector('.maru-country-close').onclick = closeModal;
-
-/* ---------- ISSUE BAR (HEADER 바로 아래, 단일 1개) ---------- */
-const issueBar = el(
-  'div',
-  'maru-country-issuebar',
-  `
-    <span class="label">국가별 중요 이슈</span>
-    <span class="text"></span>
-  `
-);
-
-/* ---------- BODY ---------- */
-const body = el(
-  'div',
-  'maru-country-body',
-  '<p>국가별 글로벌 인사이트 수집 중…</p>'
-);
-
-/* ---------- DOM 조립 순서 (중요) ---------- */
-modal.appendChild(header);
-modal.appendChild(issueBar);
-modal.appendChild(body);
-
-
 
 /* ================= HEADER + ISSUE + BODY (UPGRADED) ================= */
 
@@ -620,7 +588,14 @@ const body = el(
 /* header → issue bar → body 순서로 구성 */
 modal.appendChild(header);
 
-
+/* 국가별 중요 이슈 바 */
+const issueBar = el(
+  'div',
+  'maru-country-issuebar',
+  `<span class="label">국가별 중요 이슈</span>
+   <span class="text">요약 정보 준비 중</span>`
+);
+modal.appendChild(issueBar);
 
 modal.appendChild(body);
 
