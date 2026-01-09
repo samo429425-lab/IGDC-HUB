@@ -578,32 +578,18 @@ window.MARU_COUNTRY_VOICE_READY = true;
 const header = el('div', 'maru-country-header');
 
 header.innerHTML = `
+  <strong>🌐 MARU GLOBAL INSIGHT — 국가 분석 (${regionId})</strong>
 
+  class="maru-country-issuebar">
+    <span class="text">국가별 중요 이슈 요약 대기 중…</span>
+  
 
-    modal = el('div', 'maru-region-modal');
+  <label class="maru-country-voice-toggle">
+    <input type="checkbox" id="maruCountryVoiceToggle" checked />
+    <span>음성</span>
+  </label>
 
-    const header = el('div', 'maru-region-header');
-    const title = el('strong', null, '🌍 MARU GLOBAL INSIGHT — REGION');
-    const issueBar = el(
-    'div',
-    'maru-region-issuebar',
-    '<span>세계 주요 이슈</span><span class="text" data-mode="summary">현재 세계적 중요 이슈 요약 데이터가 준비되지 않았습니다.</span>'
-);
-
-    header.appendChild(issueBar);
-
-    const voiceBtn = el('button', 'maru-region-voice-toggle', 'VOICE ON');
-    voiceBtn.addEventListener('click', () => {
-      voiceEnabled = !voiceEnabled;
-      voiceBtn.classList.toggle('off', !voiceEnabled);
-      voiceBtn.textContent = voiceEnabled ? 'VOICE ON' : 'VOICE OFF';
-    });
-
-    const closeBtn = el('button', 'maru-region-close', '닫기');
-    closeBtn.addEventListener('click', closeAll);
-
-    header.append(title, issueBar, voiceBtn, closeBtn);
-
+  <button id="maruCountryClose">닫기</button>
 `;
 
 header.querySelector('#maruCountryVoiceToggle').onchange = (e)=>{
