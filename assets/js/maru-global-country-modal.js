@@ -261,17 +261,18 @@ function injectCountryUIStyle() {
   flex: 1 1 auto;
   text-align: center;
   margin: 0 auto;
+  margin top:10
 }
 
 /* 우측 컨트롤 영역 */
 .maru-country-voice-toggle {
   flex: 0 0 auto;
-  margin-left: auto;
+  margin-right: auto;
 }
 
 .maru-country-close {
   flex: 0 0 auto;
-  margin-left: 6px;
+  margin-right: 6px;
 }
   `;
   document.head.appendChild(style);
