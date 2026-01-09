@@ -328,38 +328,45 @@ function injectCountryUIStyle() {
 function buildCountryHeader(regionId) {
   activeRegionId = regionId;
 
-  const header = el('div', 'maru-country-header');
+const header = el('div', 'maru-country-header');
 
-  const title = el(
-    'strong',
-    'maru-country-title',
-    `🌐 MARU GLOBAL INSIGHT — 국가 분석 (${regionId.toUpperCase()})`
-  );
+// 좌측: 타이틀
+const left = el(
+  'div',
+  'maru-country-header-left',
+  title.textContent || '🌐 MARU GLOBAL INSIGHT — 국가 분석'
+);
 
-  const issueBar = el(
-    'div',
-    'maru-country-issuebar',
-    `<span class="label">국가별 중요 이슈</span>
-     <span class="text">주요 이슈 요약 대기 중</span>`
-  );
+// 중앙: 국가별 중요 이슈 (Region과 동일한 버튼형 바)
+const center = el(
+  'div',
+  'maru-country-issuebar',
+  `<span class="label">국가별 중요 이슈</span>
+   <span class="text">국가별 중요 이슈 요약 대기 중</span>`
+);
 
-  const voiceToggle = el(
-    'button',
-    'maru-country-voice-toggle',
-    'VOICE ON'
-  );
-  voiceToggle.onclick = () => {
-    voiceEnabled = !voiceEnabled;
-    voiceToggle.classList.toggle('off', !voiceEnabled);
-    voiceToggle.textContent = voiceEnabled ? 'VOICE ON' : 'VOICE OFF';
-  };
+// 우측: 음성 / 닫기
+const right = el('div', 'maru-country-header-right');
 
-  const closeBtn = el('button', 'maru-country-close', '닫기');
-  closeBtn.onclick = closeModal;
+const voiceToggle = el('button', 'maru-country-voice-toggle', 'VOICE ON');
+voiceToggle.onclick = () => {
+  voiceEnabled = !voiceEnabled;
+  voiceToggle.classList.toggle('off', !voiceEnabled);
+  voiceToggle.textContent = voiceEnabled ? 'VOICE ON' : 'VOICE OFF';
+};
 
-  header.append(title, issueBar, voiceToggle, closeBtn);
-  return header;
-}
+const closeBtn = el('button', 'maru-country-close', '닫기');
+closeBtn.onclick = closeModal;
+
+right.appendChild(voiceToggle);
+right.appendChild(closeBtn);
+
+// 최종 조립
+header.appendChild(left);
+header.appendChild(center);
+header.appendChild(right);
+
+return header;
 
 
 /* ============== DETAIL + VOICE ============== */
