@@ -211,28 +211,7 @@
   .maru-country-video iframe{
     width:100%; height:360px; border:0; border-radius:12px
   }
-  /* === COUNTRY HEADER LAYOUT FIX (SAFE) === */
-.maru-country-header{
-  display:grid !important;
-  grid-template-columns:auto 1fr auto auto !important;
-  align-items:center !important;
-  gap:12px !important;
-}
-
-/* issue bar는 헤더에서 밀어내기 */
-.maru-country-header .maru-country-issuebar{
-  grid-column:1 / -1;
-  margin-top:8px;
-}
-
-/* voice toggle / close 높이 맞춤 */
-.maru-country-voice-toggle,
-#maruCountryClose{
-  height:32px;
-  display:flex;
-  align-items:center;
-}
-
+ 
   `;
   document.head.appendChild(style);
 })();
