@@ -430,55 +430,7 @@ function injectCountryVideoStyle() {
       cursor:pointer;
       z-index:1;
     }
-	
-	/* =====================================================
- * COUNTRY HEADER + ISSUE BAR FINAL FIX (REGION MATCH)
- * - 중복 이슈바 제거
- * - 헤더 우측 상단 정렬
- * - 이슈바 중앙 정렬
- * - JS 구조 전혀 손대지 않음
- * ===================================================== */
 
-/* 1) body 쪽 중복 이슈바 제거 */
-.maru-country-body > .maru-country-issuebar{
-  display:none !important;
-}
-
-/* 2) 헤더를 레기온과 동일한 가로 구조로 */
-.maru-country-header{
-  display:flex !important;
-  align-items:center !important;
-  justify-content:space-between !important;
-  gap:12px !important;
-  flex-wrap:wrap !important;
-}
-
-/* 타이틀 (좌측) */
-.maru-country-header > strong{
-  white-space:nowrap;
-}
-
-/* 우측 컨트롤 (음성 / 닫기) */
-.maru-country-voice-toggle,
-#maruCountryClose{
-  height:32px;
-  display:flex;
-  align-items:center;
-}
-
-/* 3) 헤더 안 이슈바는 한 줄 아래, 가운데 정렬 */
-.maru-country-header .maru-country-issuebar{
-  width:100%;
-  margin-top:10px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  text-align:center;
-}
-
-  `;
-  document.head.appendChild(style);
-}
 
 /* ============== VIDEO INJECT (FROM ADD-ON) ============== */
 /**
