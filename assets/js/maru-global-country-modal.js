@@ -578,12 +578,12 @@ window.MARU_COUNTRY_VOICE_READY = true;
 const header = el('div', 'maru-country-header');
 
 header.innerHTML = `
- 
+
 
     modal = el('div', 'maru-region-modal');
 
     const header = el('div', 'maru-region-header');
-    const title = el <strong>🌐 MARU GLOBAL INSIGHT — 국가 분석 (${regionId})</strong>;
+    const title = el('strong', null, '🌍 MARU GLOBAL INSIGHT — REGION');
     const issueBar = el(
     'div',
     'maru-region-issuebar',
