@@ -129,15 +129,47 @@
     box-shadow:0 20px 60px rgba(0,0,0,.35)
   }
 
-      .maru-region-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99998}
-      .maru-region-modal{position:fixed;inset:4%;background:#fffaf4;border-radius:20px;z-index:99999;box-shadow:0 30px 80px rgba(0,0,0,.4);display:flex;flex-direction:column;overflow:hidden}
-      .maru-region-header{padding:18px 22px;border-bottom:1px solid #eee;display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:14px}
-      .maru-region-header strong{font-size:18px;color:#1f3a5f}
-      .maru-region-voice-toggle{border:1px solid #d6c7b5;background:#fff;border-radius:10px;padding:6px 10px;font-size:12px;cursor:pointer}
-      .maru-region-voice-toggle.off{opacity:.45}
-      .maru-region-issuebar{display:flex;align-items:center;gap:8px;background:#fff1f4;border:1px solid #e2c6cf;border-radius:10px;padding:6px 10px;font-size:12px;white-space:nowrap;overflow:hidden}
-      .maru-region-close{border:1px solid #ddd;background:#fff;border-radius:10px;padding:6px 12px;cursor:pointer}
+  /* header */
+  .maru-country-header{
+    padding:14px 20px;
+    border-bottom:1px solid #eadfd7;
+    display:flex; align-items:center; gap:12px
+  }
+  .maru-country-header .title{
+    font-weight:700
+  }
+  .maru-country-header .spacer{
+    flex:1
+  }
+  .maru-country-header .voice-toggle{
+    cursor:pointer;
+    padding:6px 10px;
+    border-radius:999px;
+    border:1px solid #ccc;
+    background:#fff
+  }
+  .maru-country-header .voice-toggle.off{
+    opacity:.5
+  }
 
+  /* issue bar */
+  .maru-country-issuebar{
+    margin:0 20px 10px;
+    padding:8px 12px;
+    border-radius:10px;
+    background:#fff;
+    border:1px solid #e6d9cf;
+    display:flex; align-items:center; gap:10px
+  }
+  .maru-country-issuebar .label{
+    font-weight:600
+  }
+  .maru-country-issuebar .text{
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis
+  }
+  .maru-country-issuebar.expanded{
+    white-space:normal
+  }
 
   /* body */
   .maru-country-body{
@@ -546,18 +578,32 @@ window.MARU_COUNTRY_VOICE_READY = true;
 const header = el('div', 'maru-country-header');
 
 header.innerHTML = `
-  <strong>🌐 MARU GLOBAL INSIGHT — 국가 분석 (${regionId})</strong>
+ 
 
-  <div class="maru-country-issuebar">
-    <span class="text">국가별 중요 이슈 요약 대기 중…</span>
-  </div>
+    modal = el('div', 'maru-region-modal');
 
-  <label class="maru-country-voice-toggle">
-    <input type="checkbox" id="maruCountryVoiceToggle" checked />
-    <span>음성</span>
-  </label>
+    const header = el('div', 'maru-region-header');
+    const title = el <strong>🌐 MARU GLOBAL INSIGHT — 국가 분석 (${regionId})</strong>;
+    const issueBar = el(
+    'div',
+    'maru-region-issuebar',
+    '<span>세계 주요 이슈</span><span class="text" data-mode="summary">현재 세계적 중요 이슈 요약 데이터가 준비되지 않았습니다.</span>'
+);
 
-  <button id="maruCountryClose">닫기</button>
+    header.appendChild(issueBar);
+
+    const voiceBtn = el('button', 'maru-region-voice-toggle', 'VOICE ON');
+    voiceBtn.addEventListener('click', () => {
+      voiceEnabled = !voiceEnabled;
+      voiceBtn.classList.toggle('off', !voiceEnabled);
+      voiceBtn.textContent = voiceEnabled ? 'VOICE ON' : 'VOICE OFF';
+    });
+
+    const closeBtn = el('button', 'maru-region-close', '닫기');
+    closeBtn.addEventListener('click', closeAll);
+
+    header.append(title, issueBar, voiceBtn, closeBtn);
+
 `;
 
 header.querySelector('#maruCountryVoiceToggle').onchange = (e)=>{
