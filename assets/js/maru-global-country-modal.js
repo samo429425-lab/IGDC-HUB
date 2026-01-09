@@ -431,28 +431,36 @@ function injectCountryVideoStyle() {
       z-index:1;
     }
 	
-	/* =====================================================
- * COUNTRY HEADER + ISSUE BAR FINAL FIX (REGION MATCH)
- * - 중복 이슈바 제거
- * - 헤더 우측 상단 정렬
- * - 이슈바 중앙 정렬
- * - JS 구조 전혀 손대지 않음
- * ===================================================== */
-
-/* 1) body 쪽 중복 이슈바 제거 */
-.maru-country-body > .maru-country-issuebar{
-  display:none !important;
+/* ===== Country Header : SINGLE ROW FIX ===== */
+.maru-country-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
 }
 
-      .maru-region-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99998}
-      .maru-region-modal{position:fixed;inset:4%;background:#fffaf4;border-radius:20px;z-index:99999;box-shadow:0 30px 80px rgba(0,0,0,.4);display:flex;flex-direction:column;overflow:hidden}
-      .maru-region-header{padding:18px 22px;border-bottom:1px solid #eee;display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:14px}
-      .maru-region-header strong{font-size:18px;color:#1f3a5f}
-      .maru-region-voice-toggle{border:1px solid #d6c7b5;background:#fff;border-radius:10px;padding:6px 10px;font-size:12px;cursor:pointer}
-      .maru-region-voice-toggle.off{opacity:.45}
-      .maru-region-issuebar{display:flex;align-items:center;gap:8px;background:#fff1f4;border:1px solid #e2c6cf;border-radius:10px;padding:6px 10px;font-size:12px;white-space:nowrap;overflow:hidden}
-      .maru-region-close{border:1px solid #ddd;background:#fff;border-radius:10px;padding:6px 12px;cursor:pointer}
- 
+/* header 직계 자식은 모두 한 줄 요소로 */
+.maru-country-header > * {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 중앙 이슈바만 반응형 */
+.maru-country-issuebar {
+  flex: 1 1 auto;
+  justify-content: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 좌/우 고정 */
+.maru-country-header strong,
+.maru-country-voice-toggle,
+#maruCountryClose {
+  flex: 0 0 auto;
+}
+
   `;
   document.head.appendChild(style);
 }
@@ -570,7 +578,6 @@ window.MARU_COUNTRY_VOICE_READY = true;
     backdrop.onclick = closeModal;
 
     modal = el('div', 'maru-country-modal');
-
 
 /* ---------- HEADER UI ---------- */
 const header = el('div', 'maru-country-header');
