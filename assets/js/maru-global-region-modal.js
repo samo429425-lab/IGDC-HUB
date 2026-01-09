@@ -102,7 +102,13 @@
 
     const header = el('div', 'maru-region-header');
     const title = el('strong', null, '🌍 MARU GLOBAL INSIGHT — REGION');
-    const issueBar = el('div', 'maru-region-issuebar', '<span>중요 이슈</span><span class="text">현재 중요 이슈 없음</span>');
+    const issueBar = el(
+    'div',
+    'maru-region-issuebar',
+    '<span>세계 주요 이슈</span><span class="text" data-mode="summary">현재 세계적 중요 이슈 요약 데이터가 준비되지 않았습니다.</span>'
+);
+
+    header.appendChild(issueBar);
 
     const voiceBtn = el('button', 'maru-region-voice-toggle', 'VOICE ON');
     voiceBtn.addEventListener('click', () => {
@@ -139,20 +145,49 @@
 
   /* ================= VOICE BRIDGE ================= */
   window.MaruRegionVoice = {
-    readRegion: function (regionId) {
-      if (!voiceEnabled) return null;
-      const card = document.querySelector(`.maru-region-card[data-region="${regionId}"] .maru-region-brief`);
-      return card ? card.textContent.trim() : null;
-    },
-    readRegionDetail: function (regionId) {
-      if (!voiceEnabled) return null;
-      return openDetail(regionId);
-    },
-    readCritical: function () {
-      if (!voiceEnabled) return null;
-      const el = document.querySelector('.maru-region-issuebar .text');
-      return el ? el.textContent.trim() : null;
+  readRegion: function (regionId) {
+    if (!voiceEnabled) return null;
+
+    const card = document.querySelector(
+      `.maru-region-card[data-region="${regionId}"] .maru-region-brief`
+    );
+    const text = card ? card.textContent.trim() : '';
+
+    if (text) {
+      return text;
     }
-  };
+
+    return '해당 권역에 대한 요약 분석 자료가 아직 준비되지 않았습니다.';
+  },
+
+  readRegionDetail: function (regionId) {
+    if (!voiceEnabled) return null;
+
+    const card = document.querySelector(
+      `.maru-region-card[data-region="${regionId}"] .maru-region-detail`
+    );
+    const text = card ? card.textContent.trim() : '';
+
+    if (text) {
+      return text;
+    }
+
+    return '현재 해당 권역에 대한 상세 브리핑 자료가 준비되지 않았습니다.';
+  },
+
+  readCritical: function () {
+    if (!voiceEnabled) return null;
+
+    const el = document.querySelector('.maru-region-issuebar .text');
+    const text = el ? el.textContent.trim() : '';
+
+    if (text) {
+      return text;
+    }
+
+    return '현재 권역 차원의 중요 이슈는 확인되지 않고 있습니다.';
+  }
+};
+
 
 })();
