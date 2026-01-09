@@ -230,55 +230,6 @@ let activeRegionId = null;
 let activeCountryName = null;
 let voiceEnabled = true;
 
-/* ============== STYLE ============== */
-/* ===== Country Modal Header Layout FIX ===== */
-function injectCountryUIStyle() {
-  if (document.getElementById('maru-country-ui-style')) return;
-
-  const style = el('style');
-  style.id = 'maru-country-ui-style';
-  style.textContent = `
-    .maru-country-modal{
-      background:#fff6f4;
-      border-radius:20px;
-    }
-
-.maru-country-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-}
-
-/* 좌측 타이틀 */
-.maru-country-title {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
-/* 중앙: 국가별 중요 이슈 */
-.maru-country-issuebar {
-  flex: 1 1 auto;
-  text-align: center;
-  margin: 0 auto;
-  margin top:10
-}
-
-/* 우측 컨트롤 영역 */
-.maru-country-voice-toggle {
-  flex: 0 0 auto;
-  margin-right: auto;
-}
-
-.maru-country-close {
-  flex: 0 0 auto;
-  margin-right: 6px;
-}
-  `;
-  document.head.appendChild(style);
-}
-
-
 
 /* ============== DETAIL + VOICE ============== */
 function openCountryDetail(countryName) {
