@@ -429,38 +429,7 @@ function injectCountryVideoStyle() {
       padding:6px 10px;
       cursor:pointer;
       z-index:1;
-    }
-	
-/* ===== Country Header : SINGLE ROW FIX ===== */
-.maru-country-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-}
-
-/* header 직계 자식은 모두 한 줄 요소로 */
-.maru-country-header > * {
-  display: inline-flex;
-  align-items: center;
-}
-
-/* 중앙 이슈바만 반응형 */
-.maru-country-issuebar {
-  flex: 1 1 auto;
-  justify-content: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* 좌/우 고정 */
-.maru-country-header strong,
-.maru-country-voice-toggle,
-#maruCountryClose {
-  flex: 0 0 auto;
-}
-
+    }	
   `;
   document.head.appendChild(style);
 }
@@ -548,6 +517,35 @@ function openCountryVideo(index){
   document.body.appendChild(overlay);
 }
 
+/* ===== Country Header : SINGLE ROW FIX ===== */
+.maru-country-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+/* header 직계 자식은 모두 한 줄 요소로 */
+.maru-country-header > * {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 중앙 이슈바만 반응형 */
+.maru-country-issuebar {
+  flex: 1 1 auto;
+  justify-content: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 좌/우 고정 */
+.maru-country-header strong,
+.maru-country-voice-toggle,
+#maruCountryClose {
+  flex: 0 0 auto;
+}
 
 
   /* ================= RENDER ================= */
