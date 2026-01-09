@@ -580,8 +580,9 @@ const header = el('div', 'maru-country-header');
 header.innerHTML = `
   <strong>🌐 MARU GLOBAL INSIGHT — 국가 분석 (${regionId})</strong>
 
-  <class="maru-country-issuebar">
+  <div class="maru-country-issuebar">
     <span class="text">국가별 중요 이슈 요약 대기 중…</span>
+  </div>
 
   <label class="maru-country-voice-toggle">
     <input type="checkbox" id="maruCountryVoiceToggle" checked />
