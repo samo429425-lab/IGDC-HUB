@@ -430,7 +430,53 @@ function injectCountryVideoStyle() {
       cursor:pointer;
       z-index:1;
     }
+	
+	/* =====================================================
+ * COUNTRY HEADER + ISSUE BAR FINAL FIX (REGION MATCH)
+ * - 중복 이슈바 제거
+ * - 헤더 우측 상단 정렬
+ * - 이슈바 중앙 정렬
+ * - JS 구조 전혀 손대지 않음
+ * ===================================================== */
 
+/* 1) body 쪽 중복 이슈바 제거 */
+.maru-country-body > .maru-country-issuebar{
+  display:none !important;
+}
+
+maru-country-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+}
+
+/* 좌측 타이틀 */
+.maru-country-title {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* 중앙: 국가별 중요 이슈 */
+.maru-country-issuebar {
+  flex: 1 1 auto;
+  text-align: center;
+  margin: 0 auto;
+}
+
+/* 우측 컨트롤 영역 */
+.maru-country-voice-toggle {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.maru-country-close {
+  flex: 0 0 auto;
+  margin-left: 6px;
+}
+  `;
+  document.head.appendChild(style);
+}
 
 /* ============== VIDEO INJECT (FROM ADD-ON) ============== */
 /**
