@@ -571,8 +571,6 @@ window.MARU_COUNTRY_VOICE_READY = true;
 
     modal = el('div', 'maru-country-modal');
 
- /* ================= HEADER + ISSUE + STYLE (INTEGRATED) ================= */
-
 
 /* ---------- HEADER UI ---------- */
 const header = el('div', 'maru-country-header');
@@ -595,6 +593,7 @@ header.innerHTML = `
 header.querySelector('#maruCountryVoiceToggle').onchange = (e)=>{
   voiceEnabled = e.target.checked;
 };
+
 
 /* ================= HEADER + ISSUE + BODY (UPGRADED) ================= */
 
