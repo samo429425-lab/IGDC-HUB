@@ -252,6 +252,7 @@ let activeCountryName = null;
 let voiceEnabled = true;
 
 /* ============== STYLE ============== */
+/* ===== Country Modal Header Layout FIX ===== */
 function injectCountryUIStyle() {
   if (document.getElementById('maru-country-ui-style')) return;
 
@@ -262,64 +263,37 @@ function injectCountryUIStyle() {
       background:#fff6f4;
       border-radius:20px;
     }
-    .maru-country-header{
-      padding:16px 20px;
-      display:grid;
-      grid-template-columns:auto 1fr auto auto;
-      gap:12px;
-      align-items:center;
-      border-bottom:1px solid #eee;
-    }
-    .maru-country-title{
-      font-weight:600;
-    }
-    .maru-country-issuebar{
-      background:#fff1f4;
-      border:1px solid #e2c6cf;
-      border-radius:10px;
-      padding:6px 10px;
-      font-size:12px;
-      display:flex;
-      gap:8px;
-      white-space:nowrap;
-      overflow:hidden;
-    }
-    .maru-country-issuebar .label{
-      color:#8b2f4a;
-      font-weight:600;
-    }
-    .maru-country-voice-toggle{
-      border:1px solid #d6c7b5;
-      background:#fff;
-      border-radius:10px;
-      padding:6px 10px;
-      font-size:12px;
-      cursor:pointer;
-    }
-    .maru-country-voice-toggle.off{
-      opacity:.45;
-    }
-    .maru-country-card{
-      background:#eef7ff;
-      border:1px solid #cfe3f2;
-      border-radius:18px;
-      padding:16px;
-      cursor:pointer;
-      transition:.2s;
-    }
-    .maru-country-card:hover{
-      background:#e2f1ff;
-    }
-    .maru-country-name{
-      color:#1f3a5f; /* 곤색/군청 */
-      margin:0 0 6px;
-      font-weight:600;
-    }
-    .maru-country-summary{
-      color:#000;
-      margin:0;
-      font-size:13px;
-    }
+
+.maru-country-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+}
+
+/* 좌측 타이틀 */
+.maru-country-title {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* 중앙: 국가별 중요 이슈 */
+.maru-country-issuebar {
+  flex: 1 1 auto;
+  text-align: center;
+  margin: 0 auto;
+}
+
+/* 우측 컨트롤 영역 */
+.maru-country-voice-toggle {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.maru-country-close {
+  flex: 0 0 auto;
+  margin-left: 6px;
+}
   `;
   document.head.appendChild(style);
 }
