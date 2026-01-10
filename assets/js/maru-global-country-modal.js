@@ -131,7 +131,7 @@
 
  /* ===== Country Header (Region Header Layout Applied) ===== */
 .maru-country-header{
-  padding:14px 22px 12PX;
+  padding:18px 22px;
   border-bottom:1px solid #eee;
   display:grid;
   grid-template-columns:auto 1fr auto auto;
@@ -157,7 +157,7 @@
   padding:4px 10px;        /* ⬅ 세로 padding 줄임 */
   font-size:12px;
   line-height:1.2;         /* ⬅ 핵심 */
-  height:28px;             /* ⬅ 타이틀/토글과 높이 고정 */
+  height:22px;             /* ⬅ 타이틀/토글과 높이 고정 */
 
   white-space:nowrap;
   overflow:hidden;
