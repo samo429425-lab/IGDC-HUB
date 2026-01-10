@@ -192,4 +192,20 @@
     }
   };
 
+// ▶ Region / Country 음성 토글 → 정식 STT 엔진 브리지
+document.addEventListener('change', function (e) {
+  if (!e.target) return;
+
+  if (
+    e.target.id === 'maruRegionVoiceToggle' ||
+    e.target.id === 'maruCountryVoiceToggle'
+  ) {
+    if (e.target.checked) {
+      window.startMaruMic?.();
+    } else {
+      window.stopMaruMic?.();
+    }
+  }
+});
+
 })();

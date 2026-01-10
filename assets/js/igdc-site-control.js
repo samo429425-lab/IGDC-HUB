@@ -344,14 +344,29 @@
 function renderMaruGlobalInsightPanel(){
   const box = el('div', 'igdc-sc-ai maru-global-insight');
 
-// ▶ 요약 카드 클릭 → 글로벌 레기온 모달 오픈 (단일 트리거, 최종)
-  box.addEventListener('click', function () {
-    if (typeof window.openMaruGlobalRegionModal === 'function') {
-      window.openMaruGlobalRegionModal();
-    } else {
-      alert('글로벌 레기온 모달 함수가 아직 준비되지 않았습니다.');
+box.addEventListener('click', function () {
+  // 1) VOICE 자동 ON 플래그
+  window.MARU_AUTO_VOICE_ON = true;
+
+  // 2) Region 모달 오픈 가능 여부 안내
+  if (typeof window.openMaruGlobalRegionModal !== 'function') {
+    alert('글로벌 레기온 모달 함수가 아직 준비되지 않았습니다.');
+    return;
+  }
+
+  // 3) 모달 오픈
+  window.openMaruGlobalRegionModal();
+
+  // 4) (안전) 모달 뜬 직후, VOICE 버튼이 OFF면 ON으로 전환
+  setTimeout(() => {
+    const voiceBtn = document.querySelector('.maru-region-voice-toggle');
+    if (!voiceBtn) return;
+    if (String(voiceBtn.textContent || '').includes('OFF')) {
+      voiceBtn.click();
     }
-  });
+  }, 0);
+});
+
   
   // 제목
   const title = el('p', 'igdc-sc-ai-title', 'MARU Global Insight');
@@ -398,23 +413,6 @@ btnRun.onclick = () => {
     'igdc-sc-ai-hint',
     '※ MARU 엔진을 통해 취합된 데이터는 권역별·국가별 분석 모달과 연동됩니다.'
   );
-
-// ▶ 카드 전체 클릭 → 글로벌 레기온 모달 (+ VOICE ON)
-box.addEventListener('click', function(){
-  window.MARU_AUTO_VOICE_ON = true;
-
-  if (typeof window.openMaruGlobalRegionModal === 'function') {
-    window.openMaruGlobalRegionModal();
-
-    // 모달 뜬 직후, VOICE 버튼이 OFF면 1회 클릭해서 ON으로 전환
-    setTimeout(() => {
-      const voiceBtn = document.querySelector('.maru-region-voice-toggle');
-      if (voiceBtn && String(voiceBtn.textContent || '').includes('OFF')) {
-        voiceBtn.click();
-      }
-    }, 0);
-  }
-});
 
 
   // ▶ AI 글로벌 인사이트 실행 (MARU 엔진 기동)
@@ -665,11 +663,20 @@ AI 글로벌 인사이트 실행을 통해
       maruCard.querySelector('textarea') ||
       maruCard;
 
-// 1) Card click -> Region Modal (+ VOICE ON)
-  maruCard.addEventListener('click', function () {
-  window.MARU_AUTO_VOICE_ON = true;
+if (!window.__MARU_SUMMARY_CARD_BOUND__) {
+  window.__MARU_SUMMARY_CARD_BOUND__ = true;
+  
+  if (maruCard.dataset.bound === '1') return;
+maruCard.dataset.bound = '1';
 
-  if (typeof window.openMaruGlobalRegionModal === 'function') {
+  maruCard.addEventListener('click', function () {
+    window.MARU_AUTO_VOICE_ON = true;
+
+    if (typeof window.openMaruGlobalRegionModal !== 'function') {
+      alert('글로벌 레기온 모달 함수가 아직 준비되지 않았습니다.');
+      return;
+    }
+
     window.openMaruGlobalRegionModal();
 
     setTimeout(() => {
@@ -678,8 +685,10 @@ AI 글로벌 인사이트 실행을 통해
         voiceBtn.click();
       }
     }, 0);
-  }
-});
+  });
+
+}
+
 
 
     // 2) Buttons mapping
