@@ -371,19 +371,26 @@ MARU 엔진 기반으로 요약합니다.
 이 영역을 클릭하면
 권역별 상세 분석 화면이 열립니다.`;
 
-  // 버튼 영역
-  const actions = el('div', 'igdc-sc-ai-actions');
+// AI 액션 버튼 영역
+const actions = el('div', 'igdc-sc-ai-actions');
 
-  const btnRealtime = el('button', '', '실시간 이슈');
-  const btnCopy     = el('button', '', '텍스트 복사');
-  const btnRun      = el('button', '', 'AI 글로벌 인사이트 실행');
+const btnRealtime = el('button', '', '실시간 이슈');
+const btnCopy     = el('button', '', '텍스트 복사');
+const btnRun      = el('button', '', 'AI 글로벌 인사이트 실행');
 
-  // 실행 버튼 우측 정렬
-  btnRun.style.marginLeft = 'auto';
+btnRun.style.marginLeft = 'auto';
 
-  actions.appendChild(btnRealtime);
-  actions.appendChild(btnCopy);
-  actions.appendChild(btnRun);
+actions.appendChild(btnRealtime);
+actions.appendChild(btnCopy);
+actions.appendChild(btnRun);
+
+// 버튼 동작
+btnRun.onclick = () => {
+  if (window.MaruAddon?.runGlobalInsight) {
+    window.MaruAddon.runGlobalInsight();
+  }
+};
+
 
   // 안내 문구
   const hint = el(
@@ -392,12 +399,23 @@ MARU 엔진 기반으로 요약합니다.
     '※ MARU 엔진을 통해 취합된 데이터는 권역별·국가별 분석 모달과 연동됩니다.'
   );
 
-  // ▶ 카드 전체 클릭 → 글로벌 레기온 모달
-  box.addEventListener('click', function(){
-    if (typeof window.openMaruGlobalRegionModal === 'function') {
-      window.openMaruGlobalRegionModal();
-    }
-  });
+// ▶ 카드 전체 클릭 → 글로벌 레기온 모달 (+ VOICE ON)
+box.addEventListener('click', function(){
+  window.MARU_AUTO_VOICE_ON = true;
+
+  if (typeof window.openMaruGlobalRegionModal === 'function') {
+    window.openMaruGlobalRegionModal();
+
+    // 모달 뜬 직후, VOICE 버튼이 OFF면 1회 클릭해서 ON으로 전환
+    setTimeout(() => {
+      const voiceBtn = document.querySelector('.maru-region-voice-toggle');
+      if (voiceBtn && String(voiceBtn.textContent || '').includes('OFF')) {
+        voiceBtn.click();
+      }
+    }, 0);
+  }
+});
+
 
   // ▶ AI 글로벌 인사이트 실행 (MARU 엔진 기동)
   btnRun.addEventListener('click', async function(e){
@@ -647,12 +665,22 @@ AI 글로벌 인사이트 실행을 통해
       maruCard.querySelector('textarea') ||
       maruCard;
 
-    // 1) Card click -> Region Modal
-    maruCard.addEventListener('click', function () {
-      if (typeof window.openMaruGlobalRegionModal === 'function') {
-        window.openMaruGlobalRegionModal();
+// 1) Card click -> Region Modal (+ VOICE ON)
+  maruCard.addEventListener('click', function () {
+  window.MARU_AUTO_VOICE_ON = true;
+
+  if (typeof window.openMaruGlobalRegionModal === 'function') {
+    window.openMaruGlobalRegionModal();
+
+    setTimeout(() => {
+      const voiceBtn = document.querySelector('.maru-region-voice-toggle');
+      if (voiceBtn && String(voiceBtn.textContent || '').includes('OFF')) {
+        voiceBtn.click();
       }
-    });
+    }, 0);
+  }
+});
+
 
     // 2) Buttons mapping
     const btns = root.querySelectorAll('button');

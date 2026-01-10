@@ -227,28 +227,89 @@
     }
   };
 
- /* =====================================================
- * MARU ADDON – CENTRAL BRAIN (FINAL)
- * ===================================================== */
+window.VoiceSession = VoiceSession;
 
-const ADDON_STATE = {
-  active: false,
-  context: null // { type: 'region' | 'country' | 'global', id }
+/* =======================================================
+ * VOICE ROUTER (SINGLE ENTRY + ROLE DISPATCH)
+ * ======================================================= */
+
+window.MaruAddon = window.MaruAddon || {};
+
+/**
+ * 단일 공식 음성 진입점
+ * - 외부(STT)는 무조건 여기만 호출
+ */
+window.MaruAddon.handleVoiceQuery = function (text) {
+  if (!text) return;
+  VoiceRouter(text);
 };
 
-/* ---------- internal helpers ---------- */
+/**
+ * 음성 분기 라우터
+ * - UI 명령
+ * - 자유 질의
+ * - 엔진/인사이트
+ */
+function VoiceRouter(text) {
+  const t = text.toLowerCase();
 
-function isSnapshotSufficient({ context }) {
-  if (!window.__MARU_SNAPSHOT__) return false;
-  if (!context) return false;
+  /* ---------- 1) UI 제어 분기 ---------- */
+  if (
+    t.includes('입력') ||
+    t.includes('문자') ||
+    t.includes('타이핑')
+  ) {
+    // 기존 TEXT INPUT BAR CONTROL 함수 그대로 사용
+    if (typeof openTextInputBar === 'function') {
+      openTextInputBar();
+      return;
+    }
+  }
 
-  return Boolean(
-    window.__MARU_SNAPSHOT__[context.type] &&
-    window.__MARU_SNAPSHOT__[context.type][context.id]
-  );
+  if (
+    t.includes('닫아') ||
+    t.includes('입력창 닫아')
+  ) {
+    if (typeof closeTextInputBar === 'function') {
+      closeTextInputBar();
+      return;
+    }
+  }
+
+  /* ---------- 2) 자유 질의 분기 ---------- */
+  if (
+    t.startsWith('질문') ||
+    t.startsWith('자유') ||
+    t.startsWith('설명')
+  ) {
+    if (typeof window.MaruFreeQuery === 'function') {
+      window.MaruFreeQuery(text);
+      return;
+    }
+  }
+
+  /* ---------- 3) 엔진 / 인사이트 분기 ---------- */
+
+  // 스냅샷 부족 시 레거시 보강 루트
+  if (
+    typeof isSnapshotSufficient === 'function' &&
+    !isSnapshotSufficient({ context: ADDON_STATE?.context })
+  ) {
+    if (typeof rerunGlobalInsightLegacy === 'function') {
+      rerunGlobalInsightLegacy();
+      return;
+    }
+  }
+
+  // 기본 엔진 처리
+  if (window.VoiceSession && typeof VoiceSession.handle === 'function') {
+    VoiceSession.handle(text);
+    return;
+  }
 }
 
-async function rerunGlobalInsight() {
+
+async function rerunGlobalInsightLegacy() {
   try {
     const res = await fetch('/api/maru-search', {
       method: 'POST',
@@ -279,35 +340,53 @@ window.MaruAddon = {
     ADDON_STATE.context = context;
 
     if (!isSnapshotSufficient({ context })) {
-      rerunGlobalInsight();
+      this.runMaruInsight({ mode: 'global-full' });
     }
   },
 
-  /* AI 글로벌 인사이트 수동 재실행 (보조 버튼용) */
+  /* 🌍 AI 글로벌 인사이트 수동 재실행 */
   runGlobalInsight() {
     if (!ADDON_STATE.active) return;
-    rerunGlobalInsight();
+    return this.runMaruInsight({ mode: 'global-full' });
   },
 
-  /* 음성 입력 연결 */
+  /* 🎙 음성 입력 → 통합 엔진 */
   handleVoiceQuery(text) {
     if (!ADDON_STATE.active) return;
-
-    if (window.VoiceSession && typeof window.VoiceSession.handle === 'function') {
-      window.VoiceSession.handle(text, {
-        context: ADDON_STATE.context
-      });
-    }
+    return this.runMaruInsight({
+      mode: 'voice',
+      text,
+      source: 'voice'
+    });
   },
 
-  /* 외부 snapshot 주입 */
+  /* 🚀 단일 통합 호출 허브 */
+  runMaruInsight(payload = {}) {
+    return fetch('/api/maru-search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ai: true,
+        source: 'addon',
+        context: ADDON_STATE.context || null,
+        ...payload
+      })
+    })
+    .then(r => r.json())
+    .then(data => {
+      this.setSnapshot(data);
+      return data;
+    });
+  },
+
+  /* 📦 외부 snapshot 주입 */
   setSnapshot(data) {
     if (typeof window.setMaruSnapshot === 'function') {
       window.setMaruSnapshot(data);
     }
   },
 
-  /* 상태 확인용 */
+  /* 🧭 상태 확인 */
   getState() {
     return { ...ADDON_STATE };
   }
@@ -382,40 +461,6 @@ document.addEventListener('maru:expand', function(e){
     </div>
   `;
 
-/* =======================================================
- * VOICE INPUT HANDLER (ADD-ON BRAIN)
- * ===================================================== */
-(function () {
-  if (!window.MaruAddon) window.MaruAddon = {};
-
-  MaruAddon.handleVoiceInput = function (text) {
-    if (!text) return;
-
-    const t = text.toLowerCase();
-
-    // ▶ 국가 이름 감지 (단순 매칭)
-    if (window.openCountryDetail) {
-      const countryMatch = t.match(/한국|대한민국|일본|중국|미국|프랑스|독일/);
-      if (countryMatch) {
-        const country = countryMatch[0];
-        window.activeCountryName = country;
-        openCountryDetail(country);
-        return;
-      }
-    }
-
-    // ▶ 권역 감지
-    if (window.openMaruGlobalRegionModal) {
-      if (t.includes('아시아')) return openMaruGlobalRegionModal('asia');
-      if (t.includes('유럽')) return openMaruGlobalRegionModal('europe');
-      if (t.includes('아프리카')) return openMaruGlobalRegionModal('africa');
-    }
-
-    // ▶ 데이터 부족 시 AI 글로벌 인사이트 실행
-    if (typeof window.runGlobalInsight === 'function') {
-      window.runGlobalInsight(text);
-    }
-  };
   
   /* =======================================================
  * LLM FREE QUERY ENGINE (Target-Scoped Conversation)
@@ -527,14 +572,7 @@ You must:
     }
   }
 
-  /* ================= PUBLIC HOOK ================= */
-  MaruAddon.handleVoiceInput = async function (text) {
-    try {
-      await handleFreeQuery(text);
-    } catch (e) {
-      console.error('[LLM QUERY ERROR]', e);
-    }
-  };
+window.MaruFreeQuery = handleFreeQuery;
 
 /* =======================================================
  * TEXT INPUT BAR CONTROL (VOICE COMMAND)
@@ -557,8 +595,6 @@ You must:
     bar.classList.add('hidden');
   }
 
-  // 음성 명령 감지용 훅
-  const prevHandle = MaruAddon.handleVoiceInput;
 
   MaruAddon.handleVoiceInput = function (text) {
     if (!text) return;
@@ -583,9 +619,7 @@ You must:
     }
 
     // 기존 로직 유지
-    if (typeof prevHandle === 'function') {
-      prevHandle(text);
-    }
+
   };
 
 /* =======================================================
@@ -651,16 +685,10 @@ You must:
   }
 
   /* 기존 음성 핸들러 확장 */
-  const prevHandle = MaruAddon.handleVoiceInput;
 
   MaruAddon.handleVoiceInput = function (text) {
     if (!text) return;
 
-    // 기존 snapshot 처리 먼저
-    if (typeof prevHandle === 'function') {
-      const handled = prevHandle(text);
-      if (handled) return;
-    }
 
     // snapshot에서 못 찾았을 경우 → LLM fallback
     requestLLMFallback(text, {

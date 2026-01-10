@@ -29,7 +29,7 @@
   let backdrop = null;
   let modal = null;
   let detailOverlay = null;
-  let voiceEnabled = true;
+  let voiceEnabled = false;
 
   /* ================= UTIL ================= */
   function el(tag, cls, html) {
@@ -131,6 +131,8 @@
  function open(regionId) {
     if (modal) return;
     injectStyle();
+	window.MaruAddon?.activate({ type: 'region', id: regionId });
+
     window.MARU_REGION_VOICE_READY = true;
 
     backdrop = el('div', 'maru-region-backdrop');
@@ -148,7 +150,20 @@
 
     header.appendChild(issueBar);
 
-const voiceBtn = el('button', 'maru-region-voice-toggle', 'VOICE ON');
+const voiceBtn = el('button', 'maru-region-voice-toggle', 'VOICE OFF');
+
+// 🔑 외부(요약카드 등)에서 음성 ON 요청이 있었으면 자동 ON
+if (window.MARU_AUTO_VOICE_ON === true) {
+  regionVoiceEnabled = true;
+  voiceBtn.classList.remove('off');
+  voiceBtn.textContent = 'VOICE ON';
+
+  // 마이크 자동 시작 (사용자 제스처는 요약카드 클릭에서 확보됨)
+  if (typeof window.startMaruMic === 'function') {
+    window.startMaruMic();
+  }
+}
+
 
 let regionVoiceEnabled = false;
 

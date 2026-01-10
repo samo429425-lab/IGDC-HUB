@@ -79,6 +79,7 @@
   }
 
   function closeModal() {
+	window.MARU_COUNTRY_VOICE_READY = false; 
     if (modal) modal.remove();
     if (backdrop) backdrop.remove();
     modal = backdrop = null;
@@ -510,9 +511,6 @@ function openCountryVideo(index){
   async function open(regionId) {
     if (modal) return;
 
-window.MARU_COUNTRY_VOICE_READY = true;
-
-
     backdrop = el('div', 'maru-country-backdrop');
     backdrop.onclick = closeModal;
 
@@ -535,9 +533,44 @@ const issueBar = el(
 
 const voiceToggle = el('label', 'maru-country-voice-toggle');
 voiceToggle.innerHTML = `
-  <input type="checkbox" id="maruCountryVoiceToggle" checked />
+  <input type="checkbox" id="maruCountryVoiceToggle" />
   <span>음성</span>
 `;
+
+const countryVoiceCheckbox = voiceToggle.querySelector('#maruCountryVoiceToggle');
+
+// 🔑 Region에서 음성 ON 상태로 진입한 경우 Country도 자동 ON
+if (window.MARU_AUTO_VOICE_ON === true) {
+  countryVoiceCheckbox.checked = true;
+
+  // Country 내부 음성 허용
+  if (window.MaruCountryVoice) {
+    window.MaruCountryVoice.enabled = true;
+  }
+
+  // 마이크 즉시 활성화 (Region에서 사용자 제스처 확보됨)
+  if (typeof window.startMaruMic === 'function') {
+    window.startMaruMic();
+  }
+}
+
+countryVoiceCheckbox.addEventListener('change', () => {
+  const enabled = countryVoiceCheckbox.checked;
+
+  // 🔑 전역 음성(STT) 실제 제어
+  if (enabled) {
+    if (typeof window.startMaruMic === 'function') {
+      window.startMaruMic();
+    } else {
+      console.error('[COUNTRY VOICE] startMaruMic not found');
+    }
+  } else {
+    if (typeof window.stopMaruMic === 'function') {
+      window.stopMaruMic();
+    }
+  }
+});
+
 
 const closeBtn = el('button', null, '닫기');
 closeBtn.id = 'maruCountryClose';
@@ -546,14 +579,6 @@ header.appendChild(title);
 header.appendChild(issueBar);
 header.appendChild(voiceToggle);
 header.appendChild(closeBtn);
-
-/* header 부착 */
-modal.appendChild(header);
-
-
-header.querySelector('#maruCountryVoiceToggle').onchange = (e)=>{
-  voiceEnabled = e.target.checked;
-};
 
 // ===== STEP 3: Issue Bar 클릭 바인딩 =====
 issueBar.style.cursor = 'pointer';
@@ -565,8 +590,11 @@ issueBar.addEventListener('click', () => {
   if (window.MaruAddon && MaruAddon.criticalDetail) {
     MaruAddon.criticalDetail('country', activeCountryName);
   }
-    openCountryCriticalOverlay(activeCountryName);
+    window.openCountryCriticalOverlay?.(activeCountryName);
+
 });
+
+window.openCountryCriticalOverlay = openCountryCriticalOverlay;
 
 /* ================= HEADER + ISSUE + BODY (UPGRADED) ================= */
 
@@ -596,6 +624,8 @@ modal.appendChild(body);
 /* DOM 부착 */
 document.body.appendChild(backdrop);
 document.body.appendChild(modal);
+
+window.MARU_COUNTRY_VOICE_READY = true;
 
 /* 닫기 */
 document.getElementById('maruCountryClose').onclick = closeModal;
@@ -630,7 +660,7 @@ window.MARU_COUNTRY_VOICE_READY = true;
  * ============================================ */
 
 window.MaruCountryVoice = (function () {
-  let enabled = true;
+  let enabled = false;
 
   /* ---------- CONTROL ---------- */
   function enable() { enabled = true; }
