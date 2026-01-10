@@ -681,6 +681,9 @@ AI 글로벌 인사이트 실행을 통해
           window.MARU_GLOBAL_DATA = data;
           if (typeof window.injectMaruGlobalRegionData==='function') window.injectMaruGlobalRegionData(data);
           if (typeof window.injectMaruGlobalCountryData==='function') window.injectMaruGlobalCountryData(data);
+          if (window.MaruAddon && typeof MaruAddon.setSnapshot === 'function') {
+           MaruAddon.setSnapshot(data);
+        }
         }catch(err){
           if (body) body.textContent = '글로벌 인사이트 취합 중 오류가 발생했습니다.';
         }
