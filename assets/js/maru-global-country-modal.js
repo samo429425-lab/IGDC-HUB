@@ -147,15 +147,22 @@
 .maru-country-issuebar{
   display:flex;
   align-items:center;
-  gap:8px;
+  justify-content:center;
+  gap:6px;
+
   background:#fff1f4;
   border:1px solid #e2c6cf;
   border-radius:10px;
-  padding:6px 10px;
+
+  padding:4px 10px;        /* ⬅ 세로 padding 줄임 */
   font-size:12px;
+  line-height:1.2;         /* ⬅ 핵심 */
+  height:28px;             /* ⬅ 타이틀/토글과 높이 고정 */
+
   white-space:nowrap;
   overflow:hidden;
 }
+
 
 .maru-country-issuebar .text{
   overflow:hidden;
