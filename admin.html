@@ -2733,41 +2733,28 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
 })();
 </script>
 
-<!-- =========================================================
-     1. 공용 라이브러리 / 대시보드 (의존성 없음)
-========================================================= -->
+<!-- 1. libs -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="assets/js/traffic-dashboard.js"></script>
 <script src="assets/js/analytics-loader.js"></script>
 
-<!-- =========================================================
-     2. MARU Voice 엔진 (가장 먼저 전역 등록)
-========================================================= -->
+<!-- 2. maru voice -->
 <script src="/assets/js/maru-voice-insight.js"></script>
 
-<!-- =========================================================
-     3. MARU 글로벌 인사이트 모달     - Region / Country     - 내부에서 Voice 사용
-========================================================= -->
+<!-- 3. maru modals -->
 <script src="/assets/js/maru-global-region-modal.js"></script>
 <script src="/assets/js/maru-global-country-modal.js"></script>
 
-<!-- =========================================================
-     4. IGDC 우측 패널 (DOM 생성 주체)    - Maru Global Insights 트리거 블록 포함
-========================================================= -->
+<!-- 4. right panel -->
 <script src="assets/js/igdc-site-control.js"></script>
 
-<!-- =========================================================
-     5. MARU Site Control Add-on    - igdc-site-control.js가 만든 DOM을 후킹
-========================================================= -->
+<!-- 5. maru addon -->
 <script src="/assets/js/maru-site-control-addon.js"></script>
 
-<!-- =========================================================
-     6. 진단 / 관리자 브릿지 (패널 이후 실행)
-========================================================= -->
+<!-- 6. diagnostics -->
 <script src="/assets/js/diagnostics/igdc-system-checker.js"></script>
 <script src="/assets/js/diagnostics/igdc-diag-admin-bridge.js"></script>
 <script src="/assets/js/diagnostics/igdc-system-diagnostic-full.js"></script>
-
 
 </body>
 </html>
