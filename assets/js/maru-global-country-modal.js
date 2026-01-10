@@ -131,12 +131,12 @@
 
  /* ===== Country Header (Region Header Layout Applied) ===== */
 .maru-country-header{
-  padding:18px 22px;
+  padding:14px 22px 12PX;
   border-bottom:1px solid #eee;
   display:grid;
   grid-template-columns:auto 1fr auto auto;
   align-items:center;
-  gap:14px;
+  gap:10px;
 }
 
 .maru-country-header strong{
