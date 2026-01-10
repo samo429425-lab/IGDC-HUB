@@ -227,26 +227,92 @@
     }
   };
 
-  /* =====================================================
-   * PUBLIC API (STABLE)
-   * ===================================================== */
-  window.MaruAddon = {
-    setSnapshot,
-    handleVoiceQuery(text) {
-      VoiceSession.handle(text);
-    },
-    criticalDetail: requestCriticalDetail,
-    get snapshot() {
-      return SNAPSHOT.raw;
-    },
-    get status() {
-      return SNAPSHOT.status;
-    },
-    get ts() {
-      return SNAPSHOT.ts;
+ /* =====================================================
+ * MARU ADDON – CENTRAL BRAIN (FINAL)
+ * ===================================================== */
+
+const ADDON_STATE = {
+  active: false,
+  context: null // { type: 'region' | 'country' | 'global', id }
+};
+
+/* ---------- internal helpers ---------- */
+
+function isSnapshotSufficient({ context }) {
+  if (!window.__MARU_SNAPSHOT__) return false;
+  if (!context) return false;
+
+  return Boolean(
+    window.__MARU_SNAPSHOT__[context.type] &&
+    window.__MARU_SNAPSHOT__[context.type][context.id]
+  );
+}
+
+async function rerunGlobalInsight() {
+  try {
+    const res = await fetch('/api/maru-search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'global-full',
+        context: ADDON_STATE.context
+      })
+    });
+
+    const data = await res.json();
+
+    if (data && typeof window.setMaruSnapshot === 'function') {
+      window.setMaruSnapshot(data);
     }
-  };
-  
+  } catch (err) {
+    console.error('[MARU ADDON] Global insight error:', err);
+  }
+}
+
+/* ---------- PUBLIC API (SINGLE SOURCE OF TRUTH) ---------- */
+
+window.MaruAddon = {
+
+  /* 🔑 ADDON 시동 */
+  activate(context) {
+    ADDON_STATE.active = true;
+    ADDON_STATE.context = context;
+
+    if (!isSnapshotSufficient({ context })) {
+      rerunGlobalInsight();
+    }
+  },
+
+  /* AI 글로벌 인사이트 수동 재실행 (보조 버튼용) */
+  runGlobalInsight() {
+    if (!ADDON_STATE.active) return;
+    rerunGlobalInsight();
+  },
+
+  /* 음성 입력 연결 */
+  handleVoiceQuery(text) {
+    if (!ADDON_STATE.active) return;
+
+    if (window.VoiceSession && typeof window.VoiceSession.handle === 'function') {
+      window.VoiceSession.handle(text, {
+        context: ADDON_STATE.context
+      });
+    }
+  },
+
+  /* 외부 snapshot 주입 */
+  setSnapshot(data) {
+    if (typeof window.setMaruSnapshot === 'function') {
+      window.setMaruSnapshot(data);
+    }
+  },
+
+  /* 상태 확인용 */
+  getState() {
+    return { ...ADDON_STATE };
+  }
+};
+
 /* =========================================================
  * REGION MODAL — VOICE / ADDON FULL INTEGRATION BLOCK
  * (APPEND ONCE, DO NOT SPLIT)
