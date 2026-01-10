@@ -15,6 +15,11 @@
 
 (function () {
   'use strict';
+  // 🔑 ADDON 전역 상태
+  const ADDON_STATE = {
+    active: false,
+    context: null
+  };
 
   /* =====================================================
    * SNAPSHOT STATE (Single Source of Truth)
@@ -373,10 +378,17 @@ window.MaruAddon = {
       })
     })
     .then(r => r.json())
-    .then(data => {
-      this.setSnapshot(data);
-      return data;
-    });
+.then(data => {
+  this.setSnapshot(data);
+
+  // 🔊 TTS 출력 (음성 읽어주기)
+  if (data && data.voiceText && typeof window.maruVoiceSpeak === 'function') {
+    window.maruVoiceSpeak(data.voiceText);
+  }
+
+  return data;
+  });
+
   },
 
   /* 📦 외부 snapshot 주입 */
