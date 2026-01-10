@@ -129,28 +129,60 @@
     box-shadow:0 20px 60px rgba(0,0,0,.35)
   }
 
-  /* header */
-  .maru-country-header{
-    padding:14px 20px;
-    border-bottom:1px solid #eadfd7;
-    display:flex; align-items:center; gap:12px
-  }
-  .maru-country-header .title{
-    font-weight:700
-  }
-  .maru-country-header .spacer{
-    flex:1
-  }
-  .maru-country-header .voice-toggle{
-    cursor:pointer;
-    padding:6px 10px;
-    border-radius:999px;
-    border:1px solid #ccc;
-    background:#fff
-  }
-  .maru-country-header .voice-toggle.off{
-    opacity:.5
-  }
+ /* ===== Country Header (Region Header Layout Applied) ===== */
+.maru-country-header{
+  padding:18px 22px;
+  border-bottom:1px solid #eee;
+  display:grid;
+  grid-template-columns:auto 1fr auto auto;
+  align-items:center;
+  gap:14px;
+}
+
+.maru-country-header strong{
+  font-size:18px;
+  color:#1f3a5f;
+}
+
+.maru-country-issuebar{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  background:#fff1f4;
+  border:1px solid #e2c6cf;
+  border-radius:10px;
+  padding:6px 10px;
+  font-size:12px;
+  white-space:nowrap;
+  overflow:hidden;
+}
+
+.maru-country-issuebar .text{
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.maru-country-voice-toggle{
+  border:1px solid #d6c7b5;
+  background:#fff;
+  border-radius:10px;
+  padding:6px 10px;
+  font-size:12px;
+  cursor:pointer;
+}
+
+.maru-country-voice-toggle.off{
+  opacity:.45;
+}
+
+.maru-country-close{
+  border:1px solid #ddd;
+  background:#fff;
+  border-radius:10px;
+  padding:6px 12px;
+  cursor:pointer;
+}
+
 
   /* issue bar */
   .maru-country-issuebar{
@@ -445,25 +477,52 @@ window.MARU_COUNTRY_VOICE_READY = true;
 /* ---------- HEADER UI ---------- */
 const header = el('div', 'maru-country-header');
 
-header.innerHTML = `
-  <strong>🌐 MARU GLOBAL INSIGHT — 국가 분석 (${regionId})</strong>
+const title = el(
+  'strong',
+  null,
+  `🌐 MARU GLOBAL INSIGHT — 국가 분석 (${regionId})`
+);
 
-  <div class="maru-country-issuebar">
-    <span class="text">국가별 중요 이슈 요약 대기 중…</span>
-  </div>
+const issueBar = el(
+  'div',
+  'maru-country-issuebar',
+  '<span class="text">국가별 중요 이슈 요약 대기 중…</span>'
+);
 
-  <label class="maru-country-voice-toggle">
-    <input type="checkbox" id="maruCountryVoiceToggle" checked />
-    <span>음성</span>
-  </label>
-
-  <button id="maruCountryClose">닫기</button>
+const voiceToggle = el('label', 'maru-country-voice-toggle');
+voiceToggle.innerHTML = `
+  <input type="checkbox" id="maruCountryVoiceToggle" checked />
+  <span>음성</span>
 `;
+
+const closeBtn = el('button', null, '닫기');
+closeBtn.id = 'maruCountryClose';
+
+header.appendChild(title);
+header.appendChild(issueBar);
+header.appendChild(voiceToggle);
+header.appendChild(closeBtn);
+
+/* header 부착 */
+modal.appendChild(header);
+
 
 header.querySelector('#maruCountryVoiceToggle').onchange = (e)=>{
   voiceEnabled = e.target.checked;
 };
 
+// ===== STEP 3: Issue Bar 클릭 바인딩 =====
+issueBar.style.cursor = 'pointer';
+
+issueBar.addEventListener('click', () => {
+  if (!activeCountryName) return;
+
+  // Add-on의 중요 이슈 상세 + 음성 호출
+  if (window.MaruAddon && MaruAddon.criticalDetail) {
+    MaruAddon.criticalDetail('country', activeCountryName);
+  }
+    openCountryCriticalOverlay(activeCountryName);
+});
 
 /* ================= HEADER + ISSUE + BODY (UPGRADED) ================= */
 
@@ -546,6 +605,44 @@ window.MaruCountryVoice = (function () {
 
   // fallback 안내 (자료 없음)
   return '현재 유의미한 분석 자료가 준비되지 않았습니다.';
+}
+
+// ===== STEP 4: Country Critical Issue Overlay =====
+let countryDetailOverlay = null;
+
+function openCountryCriticalOverlay(countryName) {
+  if (countryDetailOverlay) countryDetailOverlay.remove();
+
+  const crit =
+    window.MaruAddon &&
+    MaruAddon.snapshot &&
+    MaruAddon.snapshot.view &&
+    MaruAddon.snapshot.view.critical &&
+    MaruAddon.snapshot.view.critical.countries &&
+    MaruAddon.snapshot.view.critical.countries[countryName];
+
+  const text = crit
+    ? (crit.detail || crit.summary || '상세 이슈 정보가 없습니다.')
+    : '현재 해당 국가에 대한 중요 이슈 데이터가 없습니다.';
+
+  countryDetailOverlay = document.createElement('div');
+  countryDetailOverlay.className = 'maru-country-detail';
+
+  countryDetailOverlay.innerHTML = `
+    <button class="maru-country-detail-close">닫기</button>
+    <h2>${countryName} — 중요 이슈 상세</h2>
+    <p>${text}</p>
+  `;
+
+  countryDetailOverlay
+    .querySelector('.maru-country-detail-close')
+    .onclick = () => countryDetailOverlay.remove();
+
+  countryDetailOverlay.addEventListener('click', e => {
+    if (e.target === countryDetailOverlay) countryDetailOverlay.remove();
+  });
+
+  document.body.appendChild(countryDetailOverlay);
 }
 
   /* ---------- REQUEST BUILDERS ---------- */
