@@ -15,6 +15,43 @@
 (function () {
   'use strict';
 
+// ===============================
+// 🎤 STT 시작 함수 (GLOBAL)
+// ===============================
+window.startMaruMic = function () {
+  const SpeechRecognition =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognition) {
+    console.error('[MARU][VOICE] SpeechRecognition not supported');
+    return;
+  }
+
+  const recognition = new SpeechRecognition();
+  recognition.lang = 'ko-KR';
+  recognition.continuous = false;
+  recognition.interimResults = false;
+
+  recognition.onresult = function (event) {
+    const text = event.results[0][0].transcript;
+    console.log('[MARU][VOICE] Heard:', text);
+
+    if (
+      window.MaruAddon &&
+      typeof window.MaruAddon.handleVoiceQuery === 'function'
+    ) {
+      window.MaruAddon.handleVoiceQuery(text);
+    }
+  };
+
+  recognition.onerror = function (e) {
+    console.warn('[MARU][VOICE] Mic error', e);
+  };
+
+  recognition.start();
+};
+
+
   /* =======================
    * CONFIG
    * ======================= */
