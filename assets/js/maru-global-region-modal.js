@@ -148,12 +148,30 @@
 
     header.appendChild(issueBar);
 
-    const voiceBtn = el('button', 'maru-region-voice-toggle', 'VOICE ON');
-    voiceBtn.addEventListener('click', () => {
-      voiceEnabled = !voiceEnabled;
-      voiceBtn.classList.toggle('off', !voiceEnabled);
-      voiceBtn.textContent = voiceEnabled ? 'VOICE ON' : 'VOICE OFF';
-    });
+const voiceBtn = el('button', 'maru-region-voice-toggle', 'VOICE ON');
+
+let regionVoiceEnabled = false;
+
+voiceBtn.addEventListener('click', () => {
+  regionVoiceEnabled = !regionVoiceEnabled;
+
+  voiceBtn.classList.toggle('off', !regionVoiceEnabled);
+  voiceBtn.textContent = regionVoiceEnabled ? 'VOICE ON' : 'VOICE OFF';
+
+  // 🔑 실제 브라우저 음성(STT) 제어
+  if (regionVoiceEnabled) {
+    if (typeof window.startMaruMic === 'function') {
+      window.startMaruMic();
+    } else {
+      console.error('[REGION VOICE] startMaruMic not found');
+    }
+  } else {
+    if (typeof window.stopMaruMic === 'function') {
+      window.stopMaruMic();
+    }
+  }
+});
+
 
     const closeBtn = el('button', 'maru-region-close', '닫기');
     closeBtn.addEventListener('click', closeAll);
