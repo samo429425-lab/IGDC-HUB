@@ -246,4 +246,74 @@
       return SNAPSHOT.ts;
     }
   };
+  
+/* =========================================================
+ * REGION MODAL — VOICE / ADDON FULL INTEGRATION BLOCK
+ * (APPEND ONCE, DO NOT SPLIT)
+ * ========================================================= */
+
+/* ---------------------------------------------------------
+ * 1) 레기온 컨텍스트 세터
+ *    - 레기온 모달이 열릴 때 반드시 호출되어야 함
+ *    - Addon이 음성 질문의 기준을 판단하는 핵심 상태값
+ * --------------------------------------------------------- */
+window.setActiveRegionContext = function(regionId){
+  window.activeRegionId = regionId;
+  window.activeCountryCode = null;
+};
+
+
+/* ---------------------------------------------------------
+ * 2) 레기온 모달 OPEN 트리거 브리지
+ *    - 기존 igdc-site-control / 요약카드 트리거 유지
+ *    - 모달이 열릴 때 컨텍스트를 자동으로 세팅
+ * --------------------------------------------------------- */
+(function(){
+  const _openRegionModal = window.openRegionModal;
+
+  window.openRegionModal = function(regionId, regionName){
+    // 🔴 핵심: 모달이 열리는 순간 컨텍스트 확정
+    window.setActiveRegionContext(regionId);
+
+    // 기존 동작 유지
+    if (typeof _openRegionModal === 'function') {
+      _openRegionModal(regionId, regionName);
+    }
+  };
+})();
+
+
+/* ---------------------------------------------------------
+ * 3) Addon → 레기온 상단 이슈바 업데이트 콜백
+ *    - 음성 요약 / AI 재요청 결과 표시
+ * --------------------------------------------------------- */
+window.updateRegionIssueBar = function(text){
+  const el = document.querySelector('.maru-region-issuebar .text');
+  if(el){
+    el.textContent = text;
+  }
+};
+
+
+/* ---------------------------------------------------------
+ * 4) 상세 설명 확장 이벤트 수신
+ *    - "자세히 설명해줘" 대응
+ * --------------------------------------------------------- */
+document.addEventListener('maru:expand', function(e){
+  if(!e || !e.detail) return;
+  if(e.detail.type !== 'region') return;
+  if(e.detail.id !== window.activeRegionId) return;
+
+  const body = document.querySelector('.maru-region-body');
+  if(!body) return;
+
+  const data = e.detail.data || {};
+  const text = data.detail || data.summary || '상세 분석 자료가 없습니다.';
+
+  body.innerHTML = `
+    <div class="maru-region-detail">
+      <p>${text}</p>
+    </div>
+  `;
+
 })();
