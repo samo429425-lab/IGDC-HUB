@@ -65,6 +65,44 @@
       .maru-region-detail h2{margin:0 0 14px;font-size:20px;color:#1f3a5f}
       .maru-region-detail p{font-size:14px;line-height:1.8;color:#000}
       .maru-region-detail-close{position:absolute;top:18px;right:18px;border:1px solid #ddd;background:#fff;border-radius:10px;padding:6px 12px;cursor:pointer}
+
+/* ================= INPUT BAR ================= */
+
+.maru-input-bar {
+  position: sticky;
+  bottom: 0;
+  width: 100%;
+  padding: 6px 10px;
+  background: #fff9f4;
+  border-top: 1px solid #e6dcd3;
+  box-sizing: border-box;
+  z-index: 5;
+}
+
+.maru-input-bar.hidden {
+  display: none;
+}
+
+.maru-input-text {
+  width: 100%;
+  height: 30px;              /* 중요 이슈 바와 유사 */
+  padding: 4px 10px;
+  font-size: 12px;
+  line-height: 1.2;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  outline: none;
+  box-sizing: border-box;
+}
+
+/* 모바일 대응 */
+@media (max-width: 640px) {
+  .maru-input-text {
+    height: 32px;
+    font-size: 13px;
+  }
+}
+
     `;
     document.head.appendChild(style);
   }
@@ -137,6 +175,20 @@
     });
 
     modal.append(header, body);
+	                              
+/* ---------- INPUT BAR SLOT ---------- */
+const inputBar = document.createElement('div');
+inputBar.className = 'maru-input-bar hidden';
+inputBar.innerHTML = `
+  <input
+    type="text"
+    class="maru-input-text"
+    placeholder="질문을 입력하세요… (Enter)"
+  />
+`;
+modal.appendChild(inputBar);
+
+
     document.body.append(backdrop, modal);
   }
 
@@ -151,7 +203,6 @@ window.openMaruGlobalRegionModal = function(regionId, regionName){
   };
 
 
-  /* ================= VOICE BRIDGE ================= */
  /* ================= VOICE BRIDGE ================= */
 window.MaruRegionVoice = {
 

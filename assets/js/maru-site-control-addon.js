@@ -316,4 +316,294 @@ document.addEventListener('maru:expand', function(e){
     </div>
   `;
 
+/* =======================================================
+ * VOICE INPUT HANDLER (ADD-ON BRAIN)
+ * ===================================================== */
+(function () {
+  if (!window.MaruAddon) window.MaruAddon = {};
+
+  MaruAddon.handleVoiceInput = function (text) {
+    if (!text) return;
+
+    const t = text.toLowerCase();
+
+    // ▶ 국가 이름 감지 (단순 매칭)
+    if (window.openCountryDetail) {
+      const countryMatch = t.match(/한국|대한민국|일본|중국|미국|프랑스|독일/);
+      if (countryMatch) {
+        const country = countryMatch[0];
+        window.activeCountryName = country;
+        openCountryDetail(country);
+        return;
+      }
+    }
+
+    // ▶ 권역 감지
+    if (window.openMaruGlobalRegionModal) {
+      if (t.includes('아시아')) return openMaruGlobalRegionModal('asia');
+      if (t.includes('유럽')) return openMaruGlobalRegionModal('europe');
+      if (t.includes('아프리카')) return openMaruGlobalRegionModal('africa');
+    }
+
+    // ▶ 데이터 부족 시 AI 글로벌 인사이트 실행
+    if (typeof window.runGlobalInsight === 'function') {
+      window.runGlobalInsight(text);
+    }
+  };
+  
+  /* =======================================================
+ * LLM FREE QUERY ENGINE (Target-Scoped Conversation)
+ * ===================================================== */
+(function () {
+
+  const LLM_ENDPOINT = '/.netlify/functions/maru-llm'; // 서버리스 LLM 엔드포인트
+  const MAX_CONTEXT_LEN = 6;
+
+  let conversationMemory = [];
+
+  function getActiveTarget() {
+    if (window.expandedCountry) {
+      return {
+        type: 'country',
+        id: window.expandedCountry,
+        label: window.activeCountryName || window.expandedCountry
+      };
+    }
+    if (window.activeRegionId) {
+      return {
+        type: 'region',
+        id: window.activeRegionId,
+        label: window.activeRegionId
+      };
+    }
+    return null;
+  }
+
+  function buildSystemPrompt(target) {
+    return `
+You are a world-class geopolitical, economic, social, and environmental analyst.
+Your scope is strictly limited to the following target:
+
+TYPE: ${target.type.toUpperCase()}
+TARGET: ${target.label}
+
+You must:
+- Stay within the target scope
+- Provide concise but deep analysis
+- Avoid speculation beyond reasonable inference
+- Structure answers clearly
+- Be suitable for voice narration
+`;
+  }
+
+  async function queryLLM(prompt, target) {
+    const payload = {
+      system: buildSystemPrompt(target),
+      messages: conversationMemory.slice(-MAX_CONTEXT_LEN),
+      user: prompt
+    };
+
+    const res = await fetch(LLM_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) throw new Error('LLM request failed');
+    const data = await res.json();
+    return data.text;
+  }
+
+  async function handleFreeQuery(text) {
+    const target = getActiveTarget();
+    if (!target) return;
+
+    conversationMemory.push({ role: 'user', content: text });
+
+    // 1️⃣ 스냅샷 우선 확인
+    let snapshotText = null;
+    try {
+      if (target.type === 'region' && SNAPSHOT?.view?.regions?.[target.id]) {
+        snapshotText = SNAPSHOT.view.regions[target.id].detail;
+      }
+      if (target.type === 'country' && SNAPSHOT?.view?.countries?.[target.id]) {
+        snapshotText = SNAPSHOT.view.countries[target.id].detail;
+      }
+    } catch (e) {}
+
+    let answer;
+    if (snapshotText && snapshotText.length > 200) {
+      answer = snapshotText;
+    } else {
+      // 2️⃣ LLM 자유 질의
+      answer = await queryLLM(text, target);
+    }
+
+    conversationMemory.push({ role: 'assistant', content: answer });
+
+    // 3️⃣ UI 반영
+    document.dispatchEvent(new CustomEvent('maru:expand', {
+      detail: {
+        type: target.type,
+        id: target.id,
+        data: { detail: answer }
+      }
+    }));
+
+    // 4️⃣ 음성 출력
+    if (window.MaruVoice && typeof MaruVoice.play === 'function') {
+      MaruVoice.play({
+        level: target.type,
+        id: target.id,
+        depth: 3,
+        text: answer
+      });
+    }
+  }
+
+  /* ================= PUBLIC HOOK ================= */
+  MaruAddon.handleVoiceInput = async function (text) {
+    try {
+      await handleFreeQuery(text);
+    } catch (e) {
+      console.error('[LLM QUERY ERROR]', e);
+    }
+  };
+
+/* =======================================================
+ * TEXT INPUT BAR CONTROL (VOICE COMMAND)
+ * ===================================================== */
+(function () {
+
+  function openTextInputBar() {
+    const bar = document.querySelector('.maru-input-bar');
+    if (!bar) return;
+
+    bar.classList.remove('hidden');
+    const input = bar.querySelector('input');
+    if (input) input.focus();
+  }
+
+  function closeTextInputBar() {
+    const bar = document.querySelector('.maru-input-bar');
+    if (!bar) return;
+
+    bar.classList.add('hidden');
+  }
+
+  // 음성 명령 감지용 훅
+  const prevHandle = MaruAddon.handleVoiceInput;
+
+  MaruAddon.handleVoiceInput = function (text) {
+    if (!text) return;
+
+    // 🔊 입력창 열기 명령
+    if (
+      text.includes('입력창 열어') ||
+      text.includes('문자로 질문') ||
+      text.includes('타이핑')
+    ) {
+      openTextInputBar();
+      return;
+    }
+
+    // 🔊 입력창 닫기 명령
+    if (
+      text.includes('입력창 닫아') ||
+      text.includes('그만 입력')
+    ) {
+      closeTextInputBar();
+      return;
+    }
+
+    // 기존 로직 유지
+    if (typeof prevHandle === 'function') {
+      prevHandle(text);
+    }
+  };
+
+/* =======================================================
+ * LLM FALLBACK BRIDGE (SNAPSHOT → MARU SEARCH)
+ * ===================================================== */
+(function () {
+
+  async function requestLLMFallback(query, context) {
+    if (!query) return;
+
+    // context: { type: 'region' | 'country', id: 'asia' | 'kr' ... }
+    const payload = {
+      query,
+      context: context || {},
+      source: 'maru-addon'
+    };
+
+    try {
+      // maru-search는 전역 fetch 엔진으로 가정
+      const res = await fetch('/.netlify/functions/maru-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (!data || !data.text) return;
+
+      // 1) 화면 반영 (확대 영역 or body)
+      if (context?.type === 'region') {
+        document.dispatchEvent(new CustomEvent('maru:expand', {
+          detail: {
+            type: 'region',
+            id: context.id,
+            data: { detail: data.text }
+          }
+        }));
+      }
+
+      if (context?.type === 'country') {
+        document.dispatchEvent(new CustomEvent('maru:expand', {
+          detail: {
+            type: 'country',
+            id: context.id,
+            data: { detail: data.text }
+          }
+        }));
+      }
+
+      // 2) 음성 읽기
+      if (window.MaruVoice) {
+        MaruVoice.play({
+          level: context?.type || 'global',
+          id: context?.id || null,
+          depth: 3,
+          text: data.text
+        });
+      }
+
+    } catch (err) {
+      console.warn('[MaruAddon] LLM fallback failed', err);
+    }
+  }
+
+  /* 기존 음성 핸들러 확장 */
+  const prevHandle = MaruAddon.handleVoiceInput;
+
+  MaruAddon.handleVoiceInput = function (text) {
+    if (!text) return;
+
+    // 기존 snapshot 처리 먼저
+    if (typeof prevHandle === 'function') {
+      const handled = prevHandle(text);
+      if (handled) return;
+    }
+
+    // snapshot에서 못 찾았을 경우 → LLM fallback
+    requestLLMFallback(text, {
+      type: window.activeRegionId ? 'region'
+           : window.activeCountryId ? 'country'
+           : 'global',
+      id: window.activeRegionId || window.activeCountryId || null
+    });
+  };
+
+
 })();
