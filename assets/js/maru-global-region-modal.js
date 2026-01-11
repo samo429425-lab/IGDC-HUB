@@ -1,14 +1,18 @@
 /* =========================================================
- * MARU GLOBAL REGION MODAL — FINAL MASTER EDITION (UPGRADED)
+ * MARU GLOBAL REGION MODAL — FINAL MASTER EDITION (UPGRADED, RESTORED)
  * ---------------------------------------------------------
- * Added:
- *  - 7th Region: Eurasia (Central Asia & Russia)
+ * Restored:
+ *  - Proper open() scope (was broken by top-level refs to header/title/modal)
+ * Preserved (from upgraded original):
+ *  - 7 Regions incl. Eurasia
+ *  - Region cards -> Country modal
+ *  - Issue bar + external updater hook (updateRegionIssueBar)
+ *  - Voice toggle (manual) + Voice bridge (read / detail / critical)
  *  - Voice-only Detail Briefing Overlay (NO button conflict)
- *
- * Rules:
- *  - Click region card → Country Modal
- *  - Voice "read" → read visible brief
- *  - Voice "detail" → open DETAIL overlay + detailed voice
+ *  - Input bar slot (hidden)
+ *  - Addon expand event bridge (maru:expand)
+ *  - Legacy open entry: window.openMaruGlobalRegion()
+ *  - Site-control entry: window.openMaruGlobalRegionModal(...)
  * ========================================================= */
 
 (function () {
@@ -29,7 +33,8 @@
   let backdrop = null;
   let modal = null;
   let detailOverlay = null;
-  let voiceEnabled = false;
+  let voiceEnabled = false;     // global gate for voice-bridge reads
+  let regionVoiceEnabled = false; // UI toggle state
 
   /* ================= UTIL ================= */
   function el(tag, cls, html) {
@@ -66,217 +71,220 @@
       .maru-region-detail p{font-size:14px;line-height:1.8;color:#000}
       .maru-region-detail-close{position:absolute;top:18px;right:18px;border:1px solid #ddd;background:#fff;border-radius:10px;padding:6px 12px;cursor:pointer}
 
-/* ================= INPUT BAR ================= */
-
-.maru-input-bar {
-  position: sticky;
-  bottom: 0;
-  width: 100%;
-  padding: 6px 10px;
-  background: #fff9f4;
-  border-top: 1px solid #e6dcd3;
-  box-sizing: border-box;
-  z-index: 5;
-}
-
-.maru-input-bar.hidden {
-  display: none;
-}
-
-.maru-input-text {
-  width: 100%;
-  height: 30px;              /* 중요 이슈 바와 유사 */
-  padding: 4px 10px;
-  font-size: 12px;
-  line-height: 1.2;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-  outline: none;
-  box-sizing: border-box;
-}
-
-/* 모바일 대응 */
-@media (max-width: 640px) {
-  .maru-input-text {
-    height: 32px;
-    font-size: 13px;
-  }
-}
-
+      /* ================= INPUT BAR ================= */
+      .maru-input-bar{position:sticky;bottom:0;width:100%;padding:6px 10px;background:#fff9f4;border-top:1px solid #e6dcd3;box-sizing:border-box;z-index:5}
+      .maru-input-bar.hidden{display:none}
+      .maru-input-text{width:100%;height:30px;padding:4px 10px;font-size:12px;line-height:1.2;border-radius:6px;border:1px solid #ccc;outline:none;box-sizing:border-box}
+      @media (max-width:640px){.maru-input-text{height:32px;font-size:13px}}
     `;
     document.head.appendChild(style);
   }
 
   /* ================= CORE ================= */
   function closeAll() {
+    try {
+      if (typeof window.stopMaruMic === 'function') window.stopMaruMic();
+    } catch (e) {}
+
     if (detailOverlay) detailOverlay.remove();
     if (modal) modal.remove();
     if (backdrop) backdrop.remove();
-    detailOverlay = modal = backdrop = null;
+
+    detailOverlay = null;
+    modal = null;
+    backdrop = null;
+
+    regionVoiceEnabled = false;
+    voiceEnabled = false;
     window.MARU_REGION_VOICE_READY = false;
   }
 
   function openDetail(regionId) {
     if (detailOverlay) detailOverlay.remove();
+
     const card = document.querySelector(`.maru-region-card[data-region="${regionId}"] .maru-region-brief`);
     const text = card ? card.textContent.trim() : '아직 상세 브리핑 데이터가 없습니다.';
 
     detailOverlay = el('div', 'maru-region-detail');
-    detailOverlay.innerHTML = `<button class="maru-region-detail-close">닫기</button><h2>${regionId.toUpperCase()} — 상세 브리핑</h2><p>${text}</p>`;
+    detailOverlay.innerHTML =
+      `<button class="maru-region-detail-close">닫기</button>` +
+      `<h2>${String(regionId || '').toUpperCase()} — 상세 브리핑</h2>` +
+      `<p>${text}</p>`;
+
     detailOverlay.querySelector('button').addEventListener('click', () => detailOverlay.remove());
     document.body.appendChild(detailOverlay);
     return text;
   }
 
-let regionVoiceEnabled = false;
+  function open(regionId, regionName) {
+    if (modal) return;
 
-const voiceBtn = el(
-  'button',
-  'maru-region-voice-toggle off',
-  'VOICE OFF'
-);
+    injectStyle();
 
-// 🔊 음성은 오직 토글 클릭으로만 제어
-voiceBtn.addEventListener('click', () => {
-  regionVoiceEnabled = !regionVoiceEnabled;
+    // Ready flag for downstream integrations
+    window.MARU_REGION_VOICE_READY = true;
 
-  voiceBtn.classList.toggle('off', !regionVoiceEnabled);
-  voiceBtn.textContent = regionVoiceEnabled ? 'VOICE ON' : 'VOICE OFF';
+    backdrop = el('div', 'maru-region-backdrop');
+    backdrop.addEventListener('click', closeAll);
 
-  if (regionVoiceEnabled) {
-    if (typeof window.startMaruMic === 'function') {
-      window.startMaruMic();
-    } else {
-      console.error('[REGION VOICE] startMaruMic not found');
+    modal = el('div', 'maru-region-modal');
+
+    // ---------- HEADER ----------
+    const header = el('div', 'maru-region-header');
+    const title = el('strong', null, '🌍 MARU GLOBAL INSIGHT — REGION');
+
+    const issueBar = el(
+      'div',
+      'maru-region-issuebar',
+      '<span>세계 주요 이슈</span><span class="text" data-mode="summary">현재 세계적 중요 이슈 요약 데이터가 준비되지 않았습니다.</span>'
+    );
+
+    // VOICE toggle (manual)
+    const voiceBtn = el('button', 'maru-region-voice-toggle off', 'VOICE OFF');
+
+    function setVoice(on) {
+      regionVoiceEnabled = !!on;
+      voiceEnabled = !!on;
+
+      voiceBtn.classList.toggle('off', !regionVoiceEnabled);
+      voiceBtn.textContent = regionVoiceEnabled ? 'VOICE ON' : 'VOICE OFF';
+
+      if (regionVoiceEnabled) {
+        if (typeof window.startMaruMic === 'function') {
+          window.startMaruMic();
+        }
+      } else {
+        if (typeof window.stopMaruMic === 'function') {
+          window.stopMaruMic();
+        }
+      }
     }
-  } else {
-    if (typeof window.stopMaruMic === 'function') {
-      window.stopMaruMic();
-    }
-  }
-});
 
+    voiceBtn.addEventListener('click', () => setVoice(!regionVoiceEnabled));
 
     const closeBtn = el('button', 'maru-region-close', '닫기');
     closeBtn.addEventListener('click', closeAll);
 
     header.append(title, issueBar, voiceBtn, closeBtn);
 
+    // ---------- BODY ----------
     const body = el('div', 'maru-region-body');
 
     REGIONS.forEach(r => {
       const card = el('div', 'maru-region-card');
       card.dataset.region = r.id;
-      card.innerHTML = `<h3>${r.label}</h3><div class="maru-region-brief"><div class="maru-region-empty">아직 올라온 데이터가 없습니다.</div></div>`;
+      card.innerHTML =
+        `<h3>${r.label}</h3>` +
+        `<div class="maru-region-brief"><div class="maru-region-empty">아직 올라온 데이터가 없습니다.</div></div>`;
+
       card.addEventListener('click', () => {
+        // click region card → country modal
         if (typeof window.openMaruGlobalCountryModal === 'function') {
           window.openMaruGlobalCountryModal(r.id);
         }
       });
+
       body.appendChild(card);
     });
 
     modal.append(header, body);
-	                              
-/* ---------- INPUT BAR SLOT ---------- */
-const inputBar = document.createElement('div');
-inputBar.className = 'maru-input-bar hidden';
-inputBar.innerHTML = `
-  <input
-    type="text"
-    class="maru-input-text"
-    placeholder="질문을 입력하세요… (Enter)"
-  />
-`;
-modal.appendChild(inputBar);
 
+    /* ---------- INPUT BAR SLOT ---------- */
+    const inputBar = document.createElement('div');
+    inputBar.className = 'maru-input-bar hidden';
+    inputBar.innerHTML = `
+      <input
+        type="text"
+        class="maru-input-text"
+        placeholder="질문을 입력하세요… (Enter)"
+      />
+    `;
+    modal.appendChild(inputBar);
 
     document.body.append(backdrop, modal);
+
+    // Context set (preserve original intent)
+    window.activeRegionId = regionId || window.activeRegionId || null;
+    window.activeCountryCode = null;
+
+    // Optional: activate addon AFTER mount (safe)
+    try {
+      if (window.MaruAddon && typeof window.MaruAddon.activate === 'function') {
+        window.MaruAddon.activate({ type: 'region', id: window.activeRegionId });
+      }
+    } catch (e) {
+      // swallow to avoid killing modal open
+    }
   }
 
   /* ================= PUBLIC ================= */
-window.openMaruGlobalRegionModal = function(regionId, regionName){
-    // 🔹 음성/애드온 컨텍스트 세팅 (추가)
-    window.activeRegionId = regionId;
+  // site-control calls this
+  window.openMaruGlobalRegionModal = function (regionId, regionName) {
+    window.activeRegionId = regionId || null;
     window.activeCountryCode = null;
-
-    // 🔹 기존 동작 그대로 유지
     open(regionId, regionName);
   };
 
+  /* ================= VOICE BRIDGE ================= */
+  window.MaruRegionVoice = {
+    readRegion: function (regionId) {
+      if (!voiceEnabled) return null;
 
- /* ================= VOICE BRIDGE ================= */
-window.MaruRegionVoice = {
+      // Addon preferred (original upgraded behavior)
+      if (window.MaruAddon && typeof window.MaruAddon.handleVoiceQuery === 'function') {
+        window.MaruAddon.handleVoiceQuery('이 권역에 대해 설명해줘');
+        return null;
+      }
 
-  readRegion: function(regionId){
-    if (!voiceEnabled) return null;
+      const card = document.querySelector(`.maru-region-card[data-region="${regionId}"] .maru-region-brief`);
+      return card ? card.textContent.trim()
+        : '해당 권역에 대한 요약 분석 자료가 아직 준비되지 않았습니다.';
+    },
 
-    // 🔹 Addon 우선 (정식 경로)
-    if (window.MaruAddon && typeof MaruAddon.handleVoiceQuery === 'function') {
-      MaruAddon.handleVoiceQuery('이 권역에 대해 설명해줘');
-      return null;
+    readRegionDetail: function (regionId) {
+      if (!voiceEnabled) return null;
+
+      if (window.MaruAddon && typeof window.MaruAddon.handleVoiceQuery === 'function') {
+        window.MaruAddon.handleVoiceQuery('이 권역에 대해 자세히 설명해줘');
+        return null;
+      }
+
+      // fallback overlay
+      return openDetail(regionId);
+    },
+
+    readCritical: function () {
+      if (!voiceEnabled) return null;
+
+      if (window.MaruAddon && typeof window.MaruAddon.handleVoiceQuery === 'function') {
+        window.MaruAddon.handleVoiceQuery('이 권역의 주요 이슈를 설명해줘');
+        return null;
+      }
+
+      const t = document.querySelector('.maru-region-issuebar .text');
+      return t ? t.textContent.trim()
+        : '현재 권역 차원의 중요 이슈는 확인되지 않고 있습니다.';
     }
+  };
 
-    // 🔹 fallback (예전 방식 유지)
-    const card = document.querySelector(
-      `.maru-region-card[data-region="${regionId}"] .maru-region-brief`
-    );
-    return card ? card.textContent.trim()
-      : '해당 권역에 대한 요약 분석 자료가 아직 준비되지 않았습니다.';
-  },
+  // Addon → issue bar update hook (original)
+  window.updateRegionIssueBar = function (text) {
+    const t = document.querySelector('.maru-region-issuebar .text');
+    if (t) t.textContent = text;
+  };
 
+  // Addon → expand event bridge (original)
+  document.addEventListener('maru:expand', function (e) {
+    if (!e || !e.detail) return;
+    if (e.detail.type !== 'region') return;
+    if (e.detail.id !== window.activeRegionId) return;
 
-  readRegionDetail: function(regionId){
-    if (!voiceEnabled) return null;
+    openDetail(e.detail.id);
+  });
 
-    if (window.MaruAddon && typeof MaruAddon.handleVoiceQuery === 'function') {
-      MaruAddon.handleVoiceQuery('이 권역에 대해 자세히 설명해줘');
-      return null;
-    }
-
-    const card = document.querySelector(
-      `.maru-region-card[data-region="${regionId}"] .maru-region-detail`
-    );
-    return card ? card.textContent.trim()
-      : '현재 해당 권역에 대한 상세 브리핑 자료가 준비되지 않았습니다.';
-  },
-
-
-  readCritical: function(){
-    if (!voiceEnabled) return null;
-
-    if (window.MaruAddon && typeof MaruAddon.handleVoiceQuery === 'function') {
-      MaruAddon.handleVoiceQuery('이 권역의 주요 이슈를 설명해줘');
-      return null;
-    }
-
-    const el = document.querySelector('.maru-region-issuebar .text');
-    return el ? el.textContent.trim()
-      : '현재 권역 차원의 중요 이슈는 확인되지 않고 있습니다.';
-  }
-};
-
-// 1) Addon → 이슈바 업데이트
-window.updateRegionIssueBar = function(text){
-  const el = document.querySelector('.maru-region-issuebar .text');
-  if(el) el.textContent = text;
-};
-
-// 2) Addon → 상세 확장 이벤트 수신
-document.addEventListener('maru:expand', function(e){
-  if(!e || !e.detail) return;
-  if(e.detail.type !== 'region') return;
-  if(e.detail.id !== window.activeRegionId) return;
-
-if (typeof openDetail === 'function') {
-  openDetail(e.detail.id);
-}
-});
-
-// 외부에서 Region 모달을 열기 위한 진입점
-window.openMaruGlobalRegion = function () {
-  open();
-};
+  // Legacy: direct entry used elsewhere (original "last call")
+  window.openMaruGlobalRegion = function () {
+    open(window.activeRegionId || null);
+  };
 
 })();
-
