@@ -718,3 +718,33 @@ AI 글로벌 인사이트 실행을 통해
   } catch (e) {}
 })();
 
+
+/* ===== PATCH: AI GLOBAL INSIGHT EXECUTION BRIDGE =====
+ * Purpose:
+ *  - Trigger Maru engine data collection from the existing
+ *    "AI 글로벌 인사이트 실행" button.
+ *  - DOES NOT modify or replace any existing functions.
+ *  - Safe no-op if engine is unavailable.
+ * =================================================== */
+
+(function(){
+  try {
+    document.addEventListener('click', function(e){
+      const btn = e.target.closest('[data-action="run-ai-global-insight"], #run-ai-global-insight, .run-ai-global-insight');
+      if (!btn) return;
+
+      // 🔑 Engine trigger (single entry)
+      if (window.MaruEngine && typeof window.MaruEngine.runGlobalInsight === 'function') {
+        window.MaruEngine.runGlobalInsight();
+      } else if (window.MaruAddon && typeof window.MaruAddon.requestInsight === 'function') {
+        // fallback: addon-mediated request
+        window.MaruAddon.requestInsight('global');
+      } else {
+        console.warn('[AI GLOBAL INSIGHT] engine entry not found');
+      }
+    }, true);
+  } catch(e) {
+    console.error('[AI GLOBAL INSIGHT] bridge error', e);
+  }
+})();
+
