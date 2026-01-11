@@ -174,8 +174,6 @@ voiceBtn.addEventListener('click', () => {
   voiceBtn.classList.toggle('off', !regionVoiceEnabled);
   voiceBtn.textContent = regionVoiceEnabled ? 'VOICE ON' : 'VOICE OFF';
   
-  window.MARU_REGION_VOICE_READY = regionVoiceEnabled;
-  window.MARU_AUTO_VOICE_ON = regionVoiceEnabled;
 
   // 🔑 실제 브라우저 음성(STT) 제어
   if (regionVoiceEnabled) {

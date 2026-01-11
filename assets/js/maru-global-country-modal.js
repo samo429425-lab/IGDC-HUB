@@ -9,21 +9,6 @@
 
 (function () {
   'use strict';
-  
-    // =======================================================
-  // GLOBAL VOICE STATE (SINGLE SOURCE OF TRUTH)
-  // =======================================================
-  window.MARU_VOICE_ENABLED = false;
-
-  window.MaruVoiceState = {
-    set(on){
-      window.MARU_VOICE_ENABLED = on === true;
-    },
-    get(){
-      return window.MARU_VOICE_ENABLED === true;
-    }
-  };
-
 
   /* ================= CONFIG ================= */
   const API_ENDPOINT = '/api/ai-diagnose'; // 추후 /api/maru-global-insight?level=country
@@ -554,21 +539,6 @@ voiceToggle.innerHTML = `
 
 const countryVoiceCheckbox = voiceToggle.querySelector('#maruCountryVoiceToggle');
 
-// 🔗 Region → Country 음성 상태 동기화
-if (window.MARU_REGION_VOICE_READY === true || window.MARU_AUTO_VOICE_ON === true) {
-  countryVoiceCheckbox.checked = true;
-
-  if (window.MaruCountryVoice) {
-    window.MaruCountryVoice.enable();
-  }
-
-  // Region에서 이미 사용자 제스처 확보됨
-  if (typeof window.startMaruMic === 'function') {
-    window.startMaruMic();
-  }
-}
-
-
 // 🔑 Region에서 음성 ON 상태로 진입한 경우 Country도 자동 ON
 if (window.MARU_AUTO_VOICE_ON === true) {
   countryVoiceCheckbox.checked = true;
@@ -586,17 +556,6 @@ if (window.MARU_AUTO_VOICE_ON === true) {
 
 countryVoiceCheckbox.addEventListener('change', () => {
   const enabled = countryVoiceCheckbox.checked;
-  
-  // 🌐 전역 음성 상태 동기화 (Region / Site Control과 공유)
-     
-	window.MARU_REGION_VOICE_READY = enabled;
-    window.MARU_AUTO_VOICE_ON = enabled;
-
-
-if (window.MaruCountryVoice) {
-  enabled ? window.MaruCountryVoice.enable() : window.MaruCountryVoice.disable();
-}
-
 
   // 🔑 전역 음성(STT) 실제 제어
   if (enabled) {
