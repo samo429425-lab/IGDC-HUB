@@ -159,12 +159,15 @@ async function openaiJson(prompt) {
         model: OPENAI_MODEL,
         temperature: 0.6,
         messages: [
-    {
-        role: "system",
-        content: MARU_SYSTEM_PROMPT
-    },
-    { role: "user", content: prompt }
-
+          {
+            role: "system",
+            content:
+              "You are MARU, a strict recommendation/search engine. " +
+              "Return ONLY valid JSON (no markdown, no commentary). " +
+              "Never invent copyrighted media downloads. Prefer CC0/public-domain sources and official pages. " +
+              "Output items as an array of objects with: title, summary, url, thumb(optional), type, platform(optional), license(optional), tags(optional), lang(optional)."
+          },
+          { role: "user", content: prompt }
         ]
       }),
       signal: controller.signal
