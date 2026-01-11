@@ -589,7 +589,9 @@ countryVoiceCheckbox.addEventListener('change', () => {
   
   // 🌐 전역 음성 상태 동기화 (Region / Site Control과 공유)
      
-	 MaruVoiceState.set(enabled);
+	window.MARU_REGION_VOICE_READY = enabled;
+    window.MARU_AUTO_VOICE_ON = enabled;
+
 
 if (window.MaruCountryVoice) {
   enabled ? window.MaruCountryVoice.enable() : window.MaruCountryVoice.disable();
