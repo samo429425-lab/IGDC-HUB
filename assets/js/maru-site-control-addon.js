@@ -212,7 +212,15 @@
     get status(){ return SNAPSHOT.status; },
     get snapshot(){ return SNAPSHOT.raw; },
     get ts(){ return SNAPSHOT.ts; },
-    criticalDetail: requestCriticalDetail
+    criticalDetail: requestCriticalDetail,
+	
+	handleVoiceQuery(text){
+  if(!text) return;
+  if (typeof runGlobalInsight === 'function') {
+    runGlobalInsight();
+    }
+   }
+
   };
 
   /* =======================================================

@@ -150,11 +150,14 @@
 
     header.appendChild(issueBar);
 
+let regionVoiceEnabled = false;
+
 const voiceBtn = el('button', 'maru-region-voice-toggle', 'VOICE OFF');
 
 // 🔑 외부(요약카드 등)에서 음성 ON 요청이 있었으면 자동 ON
 if (window.MARU_AUTO_VOICE_ON === true) {
   regionVoiceEnabled = true;
+  voiceEnabled = true;
   voiceBtn.classList.remove('off');
   voiceBtn.textContent = 'VOICE ON';
 
@@ -165,13 +168,12 @@ if (window.MARU_AUTO_VOICE_ON === true) {
 }
 
 
-let regionVoiceEnabled = false;
-
 voiceBtn.addEventListener('click', () => {
   regionVoiceEnabled = !regionVoiceEnabled;
 
   voiceBtn.classList.toggle('off', !regionVoiceEnabled);
   voiceBtn.textContent = regionVoiceEnabled ? 'VOICE ON' : 'VOICE OFF';
+  
 
   // 🔑 실제 브라우저 음성(STT) 제어
   if (regionVoiceEnabled) {
