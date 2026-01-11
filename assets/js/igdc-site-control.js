@@ -748,3 +748,42 @@ AI 글로벌 인사이트 실행을 통해
   }
 })();
 
+
+/* =====================================================================
+ * ALIGNMENT PATCH: AI GLOBAL INSIGHT → ADD-ON SINGLE ENTRY
+ * ---------------------------------------------------------------------
+ * Rules:
+ *  - Do NOT remove or edit existing functions
+ *  - Do NOT touch Region/Country/Summary logic
+ *  - Force the AI Global Insight button to use Add-on as the ONLY engine
+ * ===================================================================== */
+(function(){
+  function alignAIGlobalInsight(){
+    const btn = document.querySelector(
+      '[data-action="run-ai-global-insight"], #run-ai-global-insight, .run-ai-global-insight'
+    );
+    if (!btn || !btn.parentNode) return;
+
+    // Remove existing handlers safely by node replacement
+    const cleanBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(cleanBtn, btn);
+
+    cleanBtn.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      if (window.MaruAddon && typeof window.MaruAddon.runGlobalInsight === 'function') {
+        window.MaruAddon.runGlobalInsight();
+      } else {
+        console.error('[AI GLOBAL INSIGHT] MaruAddon.runGlobalInsight not found');
+      }
+    }, true);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', alignAIGlobalInsight);
+  } else {
+    alignAIGlobalInsight();
+  }
+})();
+
