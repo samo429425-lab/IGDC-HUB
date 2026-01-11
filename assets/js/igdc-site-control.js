@@ -344,29 +344,14 @@
 function renderMaruGlobalInsightPanel(){
   const box = el('div', 'igdc-sc-ai maru-global-insight');
 
-box.addEventListener('click', function () {
-  // 1) VOICE 자동 ON 플래그
-  window.MARU_AUTO_VOICE_ON = true;
-
-  // 2) Region 모달 오픈 가능 여부 안내
-  if (typeof window.openMaruGlobalRegionModal !== 'function') {
-    alert('글로벌 레기온 모달 함수가 아직 준비되지 않았습니다.');
-    return;
-  }
-
-  // 3) 모달 오픈
-  window.openMaruGlobalRegionModal();
-
-  // 4) (안전) 모달 뜬 직후, VOICE 버튼이 OFF면 ON으로 전환
-  setTimeout(() => {
-    const voiceBtn = document.querySelector('.maru-region-voice-toggle');
-    if (!voiceBtn) return;
-    if (String(voiceBtn.textContent || '').includes('OFF')) {
-      voiceBtn.click();
+// ▶ 요약 카드 클릭 → 글로벌 레기온 모달 오픈 (단일 트리거, 최종)
+  box.addEventListener('click', function () {
+    if (typeof window.openMaruGlobalRegionModal === 'function') {
+      window.openMaruGlobalRegionModal();
+    } else {
+      alert('글로벌 레기온 모달 함수가 아직 준비되지 않았습니다.');
     }
-  }, 0);
-});
-
+  });
   
   // 제목
   const title = el('p', 'igdc-sc-ai-title', 'MARU Global Insight');
@@ -386,26 +371,19 @@ MARU 엔진 기반으로 요약합니다.
 이 영역을 클릭하면
 권역별 상세 분석 화면이 열립니다.`;
 
-// AI 액션 버튼 영역
-const actions = el('div', 'igdc-sc-ai-actions');
+  // 버튼 영역
+  const actions = el('div', 'igdc-sc-ai-actions');
 
-const btnRealtime = el('button', '', '실시간 이슈');
-const btnCopy     = el('button', '', '텍스트 복사');
-const btnRun      = el('button', '', 'AI 글로벌 인사이트 실행');
+  const btnRealtime = el('button', '', '실시간 이슈');
+  const btnCopy     = el('button', '', '텍스트 복사');
+  const btnRun      = el('button', '', 'AI 글로벌 인사이트 실행');
 
-btnRun.style.marginLeft = 'auto';
+  // 실행 버튼 우측 정렬
+  btnRun.style.marginLeft = 'auto';
 
-actions.appendChild(btnRealtime);
-actions.appendChild(btnCopy);
-actions.appendChild(btnRun);
-
-// 버튼 동작
-btnRun.onclick = () => {
-  if (window.MaruAddon?.runGlobalInsight) {
-    window.MaruAddon.runGlobalInsight();
-  }
-};
-
+  actions.appendChild(btnRealtime);
+  actions.appendChild(btnCopy);
+  actions.appendChild(btnRun);
 
   // 안내 문구
   const hint = el(
@@ -414,6 +392,12 @@ btnRun.onclick = () => {
     '※ MARU 엔진을 통해 취합된 데이터는 권역별·국가별 분석 모달과 연동됩니다.'
   );
 
+  // ▶ 카드 전체 클릭 → 글로벌 레기온 모달
+  box.addEventListener('click', function(){
+    if (typeof window.openMaruGlobalRegionModal === 'function') {
+      window.openMaruGlobalRegionModal();
+    }
+  });
 
   // ▶ AI 글로벌 인사이트 실행 (MARU 엔진 기동)
   btnRun.addEventListener('click', async function(e){
@@ -663,33 +647,12 @@ AI 글로벌 인사이트 실행을 통해
       maruCard.querySelector('textarea') ||
       maruCard;
 
-if (!window.__MARU_SUMMARY_CARD_BOUND__) {
-  window.__MARU_SUMMARY_CARD_BOUND__ = true;
-  
-  if (maruCard.dataset.bound === '1') return;
-maruCard.dataset.bound = '1';
-
-  maruCard.addEventListener('click', function () {
-    window.MARU_AUTO_VOICE_ON = true;
-
-    if (typeof window.openMaruGlobalRegionModal !== 'function') {
-      alert('글로벌 레기온 모달 함수가 아직 준비되지 않았습니다.');
-      return;
-    }
-
-    window.openMaruGlobalRegionModal();
-
-    setTimeout(() => {
-      const voiceBtn = document.querySelector('.maru-region-voice-toggle');
-      if (voiceBtn && String(voiceBtn.textContent || '').includes('OFF')) {
-        voiceBtn.click();
+    // 1) Card click -> Region Modal
+    maruCard.addEventListener('click', function () {
+      if (typeof window.openMaruGlobalRegionModal === 'function') {
+        window.openMaruGlobalRegionModal();
       }
-    }, 0);
-  });
-
-}
-
-
+    });
 
     // 2) Buttons mapping
     const btns = root.querySelectorAll('button');
@@ -718,9 +681,6 @@ maruCard.dataset.bound = '1';
           window.MARU_GLOBAL_DATA = data;
           if (typeof window.injectMaruGlobalRegionData==='function') window.injectMaruGlobalRegionData(data);
           if (typeof window.injectMaruGlobalCountryData==='function') window.injectMaruGlobalCountryData(data);
-          if (window.MaruAddon && typeof MaruAddon.setSnapshot === 'function') {
-           MaruAddon.setSnapshot(data);
-        }
         }catch(err){
           if (body) body.textContent = '글로벌 인사이트 취합 중 오류가 발생했습니다.';
         }
