@@ -539,20 +539,10 @@ voiceToggle.innerHTML = `
 
 const countryVoiceCheckbox = voiceToggle.querySelector('#maruCountryVoiceToggle');
 
-// 🔑 Region에서 음성 ON 상태로 진입한 경우 Country도 자동 ON
-if (window.MARU_AUTO_VOICE_ON === true) {
-  countryVoiceCheckbox.checked = true;
+// 초기 상태: OFF (설계상 기본값)
+countryVoiceCheckbox.checked = false;
+if (window.MaruCountryVoice) window.MaruCountryVoice.disable?.();
 
-  // Country 내부 음성 허용
-  if (window.MaruCountryVoice) {
-    window.MaruCountryVoice.enabled = true;
-  }
-
-  // 마이크 즉시 활성화 (Region에서 사용자 제스처 확보됨)
-  if (typeof window.startMaruMic === 'function') {
-    window.startMaruMic();
-  }
-}
 
 countryVoiceCheckbox.addEventListener('change', () => {
   const enabled = countryVoiceCheckbox.checked;
@@ -594,7 +584,7 @@ issueBar.addEventListener('click', () => {
 
 });
 
-window.openCountryCriticalOverlay = openCountryCriticalOverlay;
+
 
 /* ================= HEADER + ISSUE + BODY (UPGRADED) ================= */
 
