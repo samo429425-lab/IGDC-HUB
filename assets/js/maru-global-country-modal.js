@@ -79,6 +79,7 @@
   }
 
   function closeModal() {
+	window.MARU_COUNTRY_VOICE_READY = false; 
     if (modal) modal.remove();
     if (backdrop) backdrop.remove();
     modal = backdrop = null;
@@ -129,28 +130,67 @@
     box-shadow:0 20px 60px rgba(0,0,0,.35)
   }
 
-  /* header */
-  .maru-country-header{
-    padding:14px 20px;
-    border-bottom:1px solid #eadfd7;
-    display:flex; align-items:center; gap:12px
-  }
-  .maru-country-header .title{
-    font-weight:700
-  }
-  .maru-country-header .spacer{
-    flex:1
-  }
-  .maru-country-header .voice-toggle{
-    cursor:pointer;
-    padding:6px 10px;
-    border-radius:999px;
-    border:1px solid #ccc;
-    background:#fff
-  }
-  .maru-country-header .voice-toggle.off{
-    opacity:.5
-  }
+ /* ===== Country Header (Region Header Layout Applied) ===== */
+.maru-country-header{
+  padding:18px 22px;
+  border-bottom:1px solid #eee;
+  display:grid;
+  grid-template-columns:auto 1fr auto auto;
+  align-items:center;
+  gap:10px;
+}
+
+.maru-country-header strong{
+  font-size:18px;
+  color:#1f3a5f;
+}
+
+.maru-country-issuebar{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+
+  background:#fff1f4;
+  border:1px solid #e2c6cf;
+  border-radius:10px;
+
+  padding:4px 10px;        /* ⬅ 세로 padding 줄임 */
+  font-size:12px;
+  line-height:1.2;         /* ⬅ 핵심 */
+  height:22px;             /* ⬅ 타이틀/토글과 높이 고정 */
+
+  white-space:nowrap;
+  overflow:hidden;
+}
+
+
+.maru-country-issuebar .text{
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.maru-country-voice-toggle{
+  border:1px solid #d6c7b5;
+  background:#fff;
+  border-radius:10px;
+  padding:6px 10px;
+  font-size:12px;
+  cursor:pointer;
+}
+
+.maru-country-voice-toggle.off{
+  opacity:.45;
+}
+
+.maru-country-close{
+  border:1px solid #ddd;
+  background:#fff;
+  border-radius:10px;
+  padding:6px 12px;
+  cursor:pointer;
+}
+
 
   /* issue bar */
   .maru-country-issuebar{
@@ -211,6 +251,44 @@
   .maru-country-video iframe{
     width:100%; height:360px; border:0; border-radius:12px
   }
+
+ /* ================= INPUT BAR ================= */
+
+.maru-input-bar {
+  position: sticky;
+  bottom: 0;
+  width: 100%;
+  padding: 6px 10px;
+  background: #fff9f4;
+  border-top: 1px solid #e6dcd3;
+  box-sizing: border-box;
+  z-index: 5;
+}
+
+.maru-input-bar.hidden {
+  display: none;
+}
+
+.maru-input-text {
+  width: 100%;
+  height: 30px;              /* 중요 이슈 바와 유사 */
+  padding: 4px 10px;
+  font-size: 12px;
+  line-height: 1.2;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  outline: none;
+  box-sizing: border-box;
+}
+
+/* 모바일 대응 */
+@media (max-width: 640px) {
+  .maru-input-text {
+    height: 32px;
+    font-size: 13px;
+  }
+}
+
   `;
   document.head.appendChild(style);
 })();
@@ -228,116 +306,6 @@
 let activeRegionId = null;
 let activeCountryName = null;
 let voiceEnabled = true;
-
-/* ============== STYLE ============== */
-function injectCountryUIStyle() {
-  if (document.getElementById('maru-country-ui-style')) return;
-
-  const style = el('style');
-  style.id = 'maru-country-ui-style';
-  style.textContent = `
-    .maru-country-modal{
-      background:#fff6f4;
-      border-radius:20px;
-    }
-    .maru-country-header{
-      padding:16px 20px;
-      display:grid;
-      grid-template-columns:auto 1fr auto auto;
-      gap:12px;
-      align-items:center;
-      border-bottom:1px solid #eee;
-    }
-    .maru-country-title{
-      font-weight:600;
-    }
-    .maru-country-issuebar{
-      background:#fff1f4;
-      border:1px solid #e2c6cf;
-      border-radius:10px;
-      padding:6px 10px;
-      font-size:12px;
-      display:flex;
-      gap:8px;
-      white-space:nowrap;
-      overflow:hidden;
-    }
-    .maru-country-issuebar .label{
-      color:#8b2f4a;
-      font-weight:600;
-    }
-    .maru-country-voice-toggle{
-      border:1px solid #d6c7b5;
-      background:#fff;
-      border-radius:10px;
-      padding:6px 10px;
-      font-size:12px;
-      cursor:pointer;
-    }
-    .maru-country-voice-toggle.off{
-      opacity:.45;
-    }
-    .maru-country-card{
-      background:#eef7ff;
-      border:1px solid #cfe3f2;
-      border-radius:18px;
-      padding:16px;
-      cursor:pointer;
-      transition:.2s;
-    }
-    .maru-country-card:hover{
-      background:#e2f1ff;
-    }
-    .maru-country-name{
-      color:#1f3a5f; /* 곤색/군청 */
-      margin:0 0 6px;
-      font-weight:600;
-    }
-    .maru-country-summary{
-      color:#000;
-      margin:0;
-      font-size:13px;
-    }
-  `;
-  document.head.appendChild(style);
-}
-
-/* ============== HEADER ============== */
-function buildCountryHeader(regionId) {
-  activeRegionId = regionId;
-
-  const header = el('div', 'maru-country-header');
-
-  const title = el(
-    'strong',
-    'maru-country-title',
-    `🌐 MARU GLOBAL INSIGHT — 국가 분석 (${regionId.toUpperCase()})`
-  );
-
-  const issueBar = el(
-    'div',
-    'maru-country-issuebar',
-    `<span class="label">국가별 중요 이슈</span>
-     <span class="text">주요 이슈 요약 대기 중</span>`
-  );
-
-  const voiceToggle = el(
-    'button',
-    'maru-country-voice-toggle',
-    'VOICE ON'
-  );
-  voiceToggle.onclick = () => {
-    voiceEnabled = !voiceEnabled;
-    voiceToggle.classList.toggle('off', !voiceEnabled);
-    voiceToggle.textContent = voiceEnabled ? 'VOICE ON' : 'VOICE OFF';
-  };
-
-  const closeBtn = el('button', 'maru-country-close', '닫기');
-  closeBtn.onclick = closeModal;
-
-  header.append(title, issueBar, voiceToggle, closeBtn);
-  return header;
-}
 
 
 /* ============== DETAIL + VOICE ============== */
@@ -433,7 +401,7 @@ function injectCountryVideoStyle() {
       padding:6px 10px;
       cursor:pointer;
       z-index:1;
-    }
+    }	
   `;
   document.head.appendChild(style);
 }
@@ -522,7 +490,6 @@ function openCountryVideo(index){
 }
 
 
-
   /* ================= RENDER ================= */
   function renderCountryCard(country, data) {
     const d = data || {};
@@ -544,38 +511,90 @@ function openCountryVideo(index){
   async function open(regionId) {
     if (modal) return;
 
-window.MARU_COUNTRY_VOICE_READY = true;
-
-
     backdrop = el('div', 'maru-country-backdrop');
     backdrop.onclick = closeModal;
 
     modal = el('div', 'maru-country-modal');
 
- /* ================= HEADER + ISSUE + STYLE (INTEGRATED) ================= */
-
-
 /* ---------- HEADER UI ---------- */
 const header = el('div', 'maru-country-header');
 
-header.innerHTML = `
-  <strong>🌐 MARU GLOBAL INSIGHT — 국가 분석 (${regionId})</strong>
+const title = el(
+  'strong',
+  null,
+  `🌐 MARU GLOBAL INSIGHT — 국가 분석 (${regionId})`
+);
 
-  <div class="maru-country-issuebar">
-    <span class="text">국가별 중요 이슈 요약 대기 중…</span>
-  </div>
+const issueBar = el(
+  'div',
+  'maru-country-issuebar',
+  '<span class="text">국가별 중요 이슈 요약 대기 중…</span>'
+);
 
-  <label class="maru-country-voice-toggle">
-    <input type="checkbox" id="maruCountryVoiceToggle" checked />
-    <span>음성</span>
-  </label>
-
-  <button id="maruCountryClose">닫기</button>
+const voiceToggle = el('label', 'maru-country-voice-toggle');
+voiceToggle.innerHTML = `
+  <input type="checkbox" id="maruCountryVoiceToggle" />
+  <span>음성</span>
 `;
 
-header.querySelector('#maruCountryVoiceToggle').onchange = (e)=>{
-  voiceEnabled = e.target.checked;
-};
+const countryVoiceCheckbox = voiceToggle.querySelector('#maruCountryVoiceToggle');
+
+// 🔑 Region에서 음성 ON 상태로 진입한 경우 Country도 자동 ON
+if (window.MARU_AUTO_VOICE_ON === true) {
+  countryVoiceCheckbox.checked = true;
+
+  // Country 내부 음성 허용
+  if (window.MaruCountryVoice) {
+    window.MaruCountryVoice.enabled = true;
+  }
+
+  // 마이크 즉시 활성화 (Region에서 사용자 제스처 확보됨)
+  if (typeof window.startMaruMic === 'function') {
+    window.startMaruMic();
+  }
+}
+
+countryVoiceCheckbox.addEventListener('change', () => {
+  const enabled = countryVoiceCheckbox.checked;
+
+  // 🔑 전역 음성(STT) 실제 제어
+  if (enabled) {
+    if (typeof window.startMaruMic === 'function') {
+      window.startMaruMic();
+    } else {
+      console.error('[COUNTRY VOICE] startMaruMic not found');
+    }
+  } else {
+    if (typeof window.stopMaruMic === 'function') {
+      window.stopMaruMic();
+    }
+  }
+});
+
+
+const closeBtn = el('button', null, '닫기');
+closeBtn.id = 'maruCountryClose';
+
+header.appendChild(title);
+header.appendChild(issueBar);
+header.appendChild(voiceToggle);
+header.appendChild(closeBtn);
+
+// ===== STEP 3: Issue Bar 클릭 바인딩 =====
+issueBar.style.cursor = 'pointer';
+
+issueBar.addEventListener('click', () => {
+  if (!activeCountryName) return;
+
+  // Add-on의 중요 이슈 상세 + 음성 호출
+  if (window.MaruAddon && MaruAddon.criticalDetail) {
+    MaruAddon.criticalDetail('country', activeCountryName);
+  }
+    window.openCountryCriticalOverlay?.(activeCountryName);
+
+});
+
+window.openCountryCriticalOverlay = openCountryCriticalOverlay;
 
 /* ================= HEADER + ISSUE + BODY (UPGRADED) ================= */
 
@@ -588,20 +607,25 @@ const body = el(
 /* header → issue bar → body 순서로 구성 */
 modal.appendChild(header);
 
-/* 국가별 중요 이슈 바 */
-const issueBar = el(
-  'div',
-  'maru-country-issuebar',
-  `<span class="label">국가별 중요 이슈</span>
-   <span class="text">요약 정보 준비 중</span>`
-);
-modal.appendChild(issueBar);
+/* ---------- INPUT BAR SLOT ---------- */
+const inputBar = document.createElement('div');
+inputBar.className = 'maru-input-bar hidden';
+inputBar.innerHTML = `
+  <input
+    type="text"
+    class="maru-input-text"
+    placeholder="질문을 입력하세요… (Enter)"
+  />
+`;
+modal.appendChild(inputBar);
 
 modal.appendChild(body);
 
 /* DOM 부착 */
 document.body.appendChild(backdrop);
 document.body.appendChild(modal);
+
+window.MARU_COUNTRY_VOICE_READY = true;
 
 /* 닫기 */
 document.getElementById('maruCountryClose').onclick = closeModal;
@@ -616,6 +640,14 @@ body.innerHTML = countries
   .map(c => renderCountryCard(c, countryData[c]))
   .join('');
 
+/* 국가 카드 클릭 → 활성 국가 지정 */
+document.querySelectorAll('.maru-country-card').forEach(card => {
+  card.addEventListener('click', () => {
+    activeCountryName = card.dataset.country;
+	openCountryDetail(activeCountryName);
+  });
+});
+
 /* 음성 대기 상태 보장 */
 window.MARU_COUNTRY_VOICE_READY = true;
 }
@@ -628,7 +660,7 @@ window.MARU_COUNTRY_VOICE_READY = true;
  * ============================================ */
 
 window.MaruCountryVoice = (function () {
-  let enabled = true;
+  let enabled = false;
 
   /* ---------- CONTROL ---------- */
   function enable() { enabled = true; }
@@ -638,13 +670,19 @@ window.MaruCountryVoice = (function () {
 
   /* ---------- READ HELPERS ---------- */
 
-  function readCountry(countryKey) {
-    if (!enabled) return null;
-    const el = document.querySelector(
-      `.maru-country-card[data-country="${countryKey}"] .maru-country-brief`
-    );
-    return el ? el.textContent.trim() : null;
+function readCountry(countryKey) {
+  if (!enabled) return null;
+
+  // 🔹 음성 호출 시에도 상세 오버레이 열기
+  if (typeof openCountryDetail === 'function') {
+    openCountryDetail(countryKey);
   }
+
+  const el = document.querySelector(
+    `.maru-country-card[data-country="${countryKey}"] .maru-country-brief`
+  );
+  return el ? el.textContent.trim() : null;
+}
 
   function readExpanded() {
     if (!enabled || !window.expandedCountry) return null;
@@ -655,10 +693,56 @@ window.MaruCountryVoice = (function () {
   }
 
   function readCriticalIssue() {
-    if (!enabled) return null;
-    const el = document.querySelector('.maru-country-issuebar .text');
-    return el ? el.textContent.trim() : null;
+  if (!enabled) return null;
+
+  const el = document.querySelector('.maru-country-issuebar .text');
+  const text = el ? el.textContent.trim() : '';
+
+  if (text) {
+    return text;
   }
+
+  // fallback 안내 (자료 없음)
+  return '현재 유의미한 분석 자료가 준비되지 않았습니다.';
+}
+
+// ===== STEP 4: Country Critical Issue Overlay =====
+let countryDetailOverlay = null;
+
+function openCountryCriticalOverlay(countryName) {
+  if (countryDetailOverlay) countryDetailOverlay.remove();
+
+  const crit =
+    window.MaruAddon &&
+    MaruAddon.snapshot &&
+    MaruAddon.snapshot.view &&
+    MaruAddon.snapshot.view.critical &&
+    MaruAddon.snapshot.view.critical.countries &&
+    MaruAddon.snapshot.view.critical.countries[countryName];
+
+  const text = crit
+    ? (crit.detail || crit.summary || '상세 이슈 정보가 없습니다.')
+    : '현재 해당 국가에 대한 중요 이슈 데이터가 없습니다.';
+
+  countryDetailOverlay = document.createElement('div');
+  countryDetailOverlay.className = 'maru-country-detail';
+
+  countryDetailOverlay.innerHTML = `
+    <button class="maru-country-detail-close">닫기</button>
+    <h2>${countryName} — 중요 이슈 상세</h2>
+    <p>${text}</p>
+  `;
+
+  countryDetailOverlay
+    .querySelector('.maru-country-detail-close')
+    .onclick = () => countryDetailOverlay.remove();
+
+  countryDetailOverlay.addEventListener('click', e => {
+    if (e.target === countryDetailOverlay) countryDetailOverlay.remove();
+  });
+
+  document.body.appendChild(countryDetailOverlay);
+}
 
   /* ---------- REQUEST BUILDERS ---------- */
   // 👉 판단은 Add-on, 이건 요청 포맷만 만든다
