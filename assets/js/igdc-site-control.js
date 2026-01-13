@@ -333,11 +333,9 @@
     grid.appendChild(cardBiz);
     grid.appendChild(cardDevice);
 
-    const aiBox = renderAiBox();
-
+    // [STABILIZE] AI 질문 보조/요약 영역(renderAiBox) 제거
     container.appendChild(header);
     container.appendChild(grid);
-    container.appendChild(aiBox);
     container.appendChild(renderMaruGlobalInsightPanel());
 
 
@@ -655,7 +653,7 @@ AI 글로벌 인사이트 실행을 통해
     });
 
     // 2) Buttons mapping
-    const btns = root.querySelectorAll('button');
+    const btns = maruCard.querySelectorAll('button');
     let btnRun=null, btnRealtime=null, btnCopy=null;
 
     btns.forEach(b=>{
