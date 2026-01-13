@@ -485,65 +485,6 @@ MARU 엔진 기반으로 요약합니다.
     return card;
   }
 
-  function renderAiBox(){
-    const box = el('div', 'igdc-sc-ai');
-    const title = el('p', 'igdc-sc-ai-title', 'AI 질문 보조 / 요약 영역');
-    const textarea = el('textarea', 'igdc-sc-ai-textarea');
-    textarea.id = 'igdc-sc-ai-input';
-    textarea.value = buildAiHelperDefaultText();
-
-    const actions = el('div', 'igdc-sc-ai-actions');
-    const btnReset = el('button', '', '사이트 상태');
-    const btnCopy = el('button', '', '텍스트 복사');
-    const btnAi = el('button', '', 'AI 자동 진단 실행(β)');
-    actions.appendChild(btnReset);
-    actions.appendChild(btnCopy);
-    actions.appendChild(btnAi);
-
-    const hint = el('p', 'igdc-sc-ai-hint', '※ 이 텍스트를 복사해서 ChatGPT 대화창에 붙여넣고, 추가로 궁금한 내용을 덧붙이면 분석·상담에 활용할 수 있습니다.');
-
-    btnReset.addEventListener('click', function(){
-      textarea.value = buildAiHelperDefaultText();
-    });
-
-    btnCopy.addEventListener('click', function(){
-      try{
-        textarea.select();
-        document.execCommand('copy');
-      }catch(e){}
-    });
-
-
-    btnAi.addEventListener('click', async function(){
-      try{
-        btnAi.disabled = true;
-        btnAi.textContent = 'AI 진단 실행 중...';
-        const res = await fetch('/api/ai-diagnose', { method: 'POST' });
-        if(!res.ok){
-          throw new Error('HTTP '+res.status);
-        }
-        const data = await res.json();
-        if(data && data.summary){
-          textarea.value = data.summary;
-        }else if(data && data.raw){
-          textarea.value = JSON.stringify(data.raw, null, 2);
-        }else{
-          textarea.value = 'AI 진단 응답을 받았지만, 요약 내용을 찾을 수 없습니다.\n'+JSON.stringify(data, null, 2);
-        }
-      }catch(e){
-        alert('AI 진단 호출 중 오류가 발생했습니다: '+ (e && e.message ? e.message : String(e)));
-      }finally{
-        btnAi.disabled = false;
-        btnAi.textContent = 'AI 자동 진단 실행(β)';
-      }
-    });
-
-    box.appendChild(title);
-    box.appendChild(textarea);
-    box.appendChild(actions);
-    box.appendChild(hint);
-    return box;
-  }
 
 function renderMaruGlobalInsightBox(){
     const box = el('div', 'igdc-sc-ai');
