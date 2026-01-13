@@ -1,101 +1,131 @@
 /**
- * MARU Voice Insight (FULL, STABLE)
- * - Keeps existing structure
- * - Corrected STT state logic
- *   · idle: indicator blink
- *   · speaking: indicator solid
- *   · no auto-restart loop
+ * MARU Voice Insight — STATEFUL FIX (v1.2)
+ * -------------------------------------------------
+ * POLICY (ChatGPT-like):
+ *  - OFF        : mic inactive
+ *  - LISTENING  : mic active, waiting (indicator blink)
+ *  - SPEAKING   : actual voice detected (indicator solid)
+ *
+ * RULES:
+ *  - Toggle ON  -> LISTENING (never SPEAKING immediately)
+ *  - Voice start -> SPEAKING
+ *  - Voice end   -> LISTENING
+ *  - Toggle OFF  -> OFF
+ *
+ * NOTE:
+ *  - This file ONLY fixes voice state handling.
+ *  - No changes to addon, region/country modal, or engine calls.
  */
 
-(function () {
+(function(){
   'use strict';
 
-  const SpeechRecognition =
-    window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (window.MaruVoice) return;
 
+  const STATE = {
+    OFF: 'OFF',
+    LISTENING: 'LISTENING',
+    SPEAKING: 'SPEAKING'
+  };
+
+  let currentState = STATE.OFF;
   let recognition = null;
-  let micEnabled = false;
-  let speaking = false;
+  let silenceTimer = null;
 
-  function initTTS() {
-    if (!('speechSynthesis' in window)) return null;
-    return window.speechSynthesis;
+  const SILENCE_TIMEOUT = 1200; // ms
+
+  function setIndicator(state){
+    currentState = state;
+
+    try{
+      window.MARU_VOICE_READY = (state !== STATE.OFF);
+      window.MARU_VOICE_SPEAKING = (state === STATE.SPEAKING);
+
+      const mic = document.querySelector('.maru-voice-indicator');
+      if(!mic) return;
+
+      mic.classList.remove('listening','speaking','off');
+      if(state === STATE.LISTENING) mic.classList.add('listening');
+      else if(state === STATE.SPEAKING) mic.classList.add('speaking');
+      else mic.classList.add('off');
+    }catch(_){}
   }
-  const tts = initTTS();
 
-  function initSTT() {
-    if (!SpeechRecognition || recognition) return;
+  function initRecognition(){
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if(!SR) return null;
 
-    recognition = new SpeechRecognition();
-    recognition.lang = 'ko-KR';
-    recognition.continuous = true;
-    recognition.interimResults = true;
+    const r = new SR();
+    r.lang = 'ko-KR';
+    r.continuous = true;
+    r.interimResults = false;
 
-    let maruFinalText = '';
-
-    // === idle (armed) ===
-    recognition.onstart = () => {
-      speaking = false;
+    r.onstart = () => {
+      setIndicator(STATE.LISTENING);
     };
 
-    // === speaking ===
-    recognition.onspeechstart = () => {
-      speaking = true;
-      maruFinalText = '';
+    r.onspeechstart = () => {
+      clearTimeout(silenceTimer);
+      setIndicator(STATE.SPEAKING);
     };
 
-    recognition.onresult = (event) => {
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          maruFinalText += event.results[i][0].transcript;
+    r.onspeechend = () => {
+      clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(() => {
+        if (currentState !== STATE.OFF) {
+          setIndicator(STATE.LISTENING);
         }
+      }, SILENCE_TIMEOUT);
+    };
+
+    r.onresult = (e) => {
+      try{
+        const last = e.results[e.results.length - 1];
+        const text = last[0].transcript.trim();
+        if(text && window.MaruAddon && typeof window.MaruAddon.handleVoiceQuery === 'function'){
+          window.MaruAddon.handleVoiceQuery(text);
+        }
+      }catch(_){}
+    };
+
+    r.onerror = () => {
+      if (currentState !== STATE.OFF) {
+        setIndicator(STATE.LISTENING);
       }
     };
 
-    // === speech end → back to idle ===
-    recognition.onspeechend = () => {
-      speaking = false;
-      const text = maruFinalText.trim();
-      maruFinalText = '';
-
-      if (!text) return;
-
-      // deliver to addon
-      if (
-        window.MaruAddon &&
-        typeof window.MaruAddon.handleVoiceQuery === 'function'
-      ) {
-        window.MaruAddon.handleVoiceQuery(text);
+    r.onend = () => {
+      if (currentState !== STATE.OFF) {
+        setIndicator(STATE.LISTENING);
+        try { r.start(); } catch(_) {}
       }
     };
 
-    // === hard stop, NO auto-restart ===
-    recognition.onend = () => {
-      speaking = false;
-    };
-
-    recognition.onerror = () => {
-      speaking = false;
-    };
+    return r;
   }
 
-  // === public control ===
-  window.startMaruMic = function () {
-    initSTT();
-    micEnabled = true;
-    try { recognition.start(); } catch (e) {}
-  };
+  function start(){
+    if(!recognition) recognition = initRecognition();
+    if(!recognition) return;
 
-  window.stopMaruMic = function () {
-    micEnabled = false;
-    if (recognition) {
-      try { recognition.stop(); } catch (e) {}
-    }
-  };
+    try{
+      recognition.start();
+      setIndicator(STATE.LISTENING);
+    }catch(_){}
+  }
 
-  // === optional debug ===
-  window.__maruVoiceState = function () {
-    return { micEnabled, speaking };
+  function stop(){
+    try{
+      if(recognition) recognition.stop();
+    }catch(_){}
+    clearTimeout(silenceTimer);
+    setIndicator(STATE.OFF);
+  }
+
+  window.MaruVoice = {
+    start,
+    stop,
+    get state(){ return currentState; }
   };
 
 })();
