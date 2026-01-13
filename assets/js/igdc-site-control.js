@@ -277,20 +277,6 @@
     return html;
   }
 
-  function buildAiHelperDefaultText(){
-    const d = lastReport.device;
-    const ts = lastReport.ts || new Date().toISOString();
-    const lines = [];
-    lines.push('[IGDC 사이트 관리 질문 템플릿]');
-    lines.push('time='+ts);
-    if(d){
-      lines.push('device='+d.type+', os='+d.os+', browser='+d.browser+', size='+d.width+'x'+d.height+', dpr='+d.dpr);
-    }
-    lines.push('요청내용: (여기에 궁금한 점을 적어주세요)');
-    lines.push('');
-    lines.push('※ 이 텍스트를 복사해서 ChatGPT 대화창에 붙여넣으면, 현재 상태를 설명하는 기본 골격으로 사용할 수 있습니다.');
-    return lines.join('\n');
-  }
 
   function statusLabel(summary){
     if(summary.error > 0) return { text:'ERROR', cls:'igdc-sc-badge-error' };
