@@ -146,9 +146,7 @@
       regionVoiceEnabled = !!on;
       voiceEnabled = !!on;
 
-      
-      try { if (inputBar) inputBar.classList.toggle('hidden', voiceEnabled); } catch (e) {}
-voiceBtn.classList.toggle('off', !regionVoiceEnabled);
+      voiceBtn.classList.toggle('off', !regionVoiceEnabled);
       voiceBtn.textContent = regionVoiceEnabled ? 'VOICE ON' : 'VOICE OFF';
 
       if (regionVoiceEnabled) {
@@ -193,7 +191,7 @@ voiceBtn.classList.toggle('off', !regionVoiceEnabled);
 
     /* ---------- INPUT BAR SLOT ---------- */
     const inputBar = document.createElement('div');
-    inputBar.className = 'maru-input-bar';
+    inputBar.className = 'maru-input-bar hidden';
     inputBar.innerHTML = `
       <input
         type="text"
@@ -202,21 +200,6 @@ voiceBtn.classList.toggle('off', !regionVoiceEnabled);
       />
     `;
     modal.appendChild(inputBar);
-
-    // ---------- TEXT INPUT WIRING ----------
-    const inputEl = inputBar.querySelector('.maru-input-text');
-    if (inputEl) {
-      inputEl.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter') return;
-        const text = (inputEl.value || '').trim();
-        if (!text) return;
-        inputEl.value = '';
-        if (window.MaruAddon && typeof window.MaruAddon.handleTextQuery === 'function') {
-          try { window.MaruAddon.handleTextQuery({ text, context: { type: 'region', id: window.activeRegionId || null } }); }
-          catch (_) { window.MaruAddon.handleTextQuery(text, { type: 'region', id: window.activeRegionId || null }); }
-        }
-      });
-    }
 
     document.body.append(backdrop, modal);
 

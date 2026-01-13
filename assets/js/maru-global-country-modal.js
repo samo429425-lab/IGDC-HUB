@@ -735,46 +735,31 @@ function openCountryCriticalOverlay(countryName) {
 }
 
   /* ---------- REQUEST BUILDERS ---------- */
-/*
- * 역할:
- * - Country 모달에서 발생한 요청을
- *   1) Add-on으로 실제 전달하고
- *   2) 기존 요청 포맷 객체는 그대로 반환
- * 판단/실행은 전부 Add-on에서 처리
- */
+  // 👉 판단은 Add-on, 이건 요청 포맷만 만든다
 
-function requestDetail(countryKey) {
-  return {
-    type: 'country-detail',
-    country: countryKey
-  };
-}
-
-function requestVideo(countryKey, topic = null) {
-  return {
-    type: 'country-video',
-    country: countryKey,
-    topic
-  };
-}
-
-function requestTopic(countryKey, topic, depth = 'summary') {
-
-  // ★ Add-on으로 실제 질문 전달 (핵심)
-  if (window.MaruAddon && typeof window.MaruAddon.handleVoiceQuery === 'function') {
-    window.MaruAddon.handleVoiceQuery(
-      `${countryKey}의 ${topic}에 대해 ${depth === 'summary' ? '설명해줘' : '자세히 설명해줘'}`
-    );
+  function requestDetail(countryKey) {
+    return {
+      type: 'country-detail',
+      country: countryKey
+    };
   }
 
-  // ★ 요청 포맷은 그대로 유지
-  return {
-    type: 'country-topic',
-    country: countryKey,
-    topic,
-    depth
-  };
-}
+  function requestVideo(countryKey, topic = null) {
+    return {
+      type: 'country-video',
+      country: countryKey,
+      topic
+    };
+  }
+
+  function requestTopic(countryKey, topic, depth = 'summary') {
+    return {
+      type: 'country-topic',
+      country: countryKey,
+      topic,
+      depth
+    };
+  }
 
   /* ---------- PUBLIC ---------- */
   return {

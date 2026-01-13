@@ -1,131 +1,211 @@
-/**
- * MARU Voice Insight — STATEFUL FIX (v1.2)
- * -------------------------------------------------
- * POLICY (ChatGPT-like):
- *  - OFF        : mic inactive
- *  - LISTENING  : mic active, waiting (indicator blink)
- *  - SPEAKING   : actual voice detected (indicator solid)
+/* =========================================================
+ * MARU VOICE INSIGHT ENGINE (CANONICAL)
+ * ---------------------------------------------------------
+ * Role:
+ *  - STT: receive any voice input (no topic restriction)
+ *  - Pass raw text to Addon
+ *  - TTS: read exactly what Addon returns
  *
- * RULES:
- *  - Toggle ON  -> LISTENING (never SPEAKING immediately)
- *  - Voice start -> SPEAKING
- *  - Voice end   -> LISTENING
- *  - Toggle OFF  -> OFF
- *
- * NOTE:
- *  - This file ONLY fixes voice state handling.
- *  - No changes to addon, region/country modal, or engine calls.
- */
+ * Policy:
+ *  - NO topic classification here
+ *  - NO country/region logic here
+ *  - Voice is a pure pipe (input/output)
+ * ========================================================= */
 
-(function(){
+(function () {
   'use strict';
 
-  if (window.MaruVoice) return;
+  /* =======================
+   * CONFIG
+   * ======================= */
+  const DEFAULT_LANG = 'ko-KR';
 
-  const STATE = {
-    OFF: 'OFF',
-    LISTENING: 'LISTENING',
-    SPEAKING: 'SPEAKING'
-  };
+  /* =======================
+   * TTS STATE
+   * ======================= */
+  let synth = null;
+  let speaking = false;
+  let currentUtterance = null;
 
-  let currentState = STATE.OFF;
+  /* =======================
+   * STT STATE
+   * ======================= */
+  const SpeechRecognition =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
+
   let recognition = null;
-  let silenceTimer = null;
+  let micEnabled = false;
+  let listening = false;
+  let lastResultTime = 0;
 
-  const SILENCE_TIMEOUT = 1200; // ms
-
-  function setIndicator(state){
-    currentState = state;
-
-    try{
-      window.MARU_VOICE_READY = (state !== STATE.OFF);
-      window.MARU_VOICE_SPEAKING = (state === STATE.SPEAKING);
-
-      const mic = document.querySelector('.maru-voice-indicator');
-      if(!mic) return;
-
-      mic.classList.remove('listening','speaking','off');
-      if(state === STATE.LISTENING) mic.classList.add('listening');
-      else if(state === STATE.SPEAKING) mic.classList.add('speaking');
-      else mic.classList.add('off');
-    }catch(_){}
+  /* =======================
+   * INIT TTS
+   * ======================= */
+  function initTTS() {
+    if (!('speechSynthesis' in window)) {
+      console.warn('[MARU][VOICE] TTS not supported');
+      return null;
+    }
+    return window.speechSynthesis;
   }
 
-  function initRecognition(){
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if(!SR) return null;
+  /* =======================
+   * INIT STT
+   * ======================= */
+  function initSTT() {
+    if (!SpeechRecognition) {
+      console.warn('[MARU][VOICE] STT not supported');
+      return;
+    }
+    if (recognition) return;
 
-    const r = new SR();
-    r.lang = 'ko-KR';
-    r.continuous = true;
-    r.interimResults = false;
+    recognition = new SpeechRecognition();
+    recognition.lang = DEFAULT_LANG;
+    recognition.continuous = false;
+    recognition.interimResults = false;
 
-    r.onstart = () => {
-      setIndicator(STATE.LISTENING);
+    recognition.onstart = () => {
+      listening = true;
+      console.log('[MARU][VOICE] Mic listening');
     };
 
-    r.onspeechstart = () => {
-      clearTimeout(silenceTimer);
-      setIndicator(STATE.SPEAKING);
-    };
+    recognition.onend = () => {
+      listening = false;
+      console.log('[MARU][VOICE] Mic stopped');
 
-    r.onspeechend = () => {
-      clearTimeout(silenceTimer);
-      silenceTimer = setTimeout(() => {
-        if (currentState !== STATE.OFF) {
-          setIndicator(STATE.LISTENING);
-        }
-      }, SILENCE_TIMEOUT);
-    };
-
-    r.onresult = (e) => {
-      try{
-        const last = e.results[e.results.length - 1];
-        const text = last[0].transcript.trim();
-        if(text && window.MaruAddon && typeof window.MaruAddon.handleVoiceQuery === 'function'){
-          window.MaruAddon.handleVoiceQuery(text);
-        }
-      }catch(_){}
-    };
-
-    r.onerror = () => {
-      if (currentState !== STATE.OFF) {
-        setIndicator(STATE.LISTENING);
+      // 자동 재대기 (토글 ON 상태)
+      if (micEnabled) {
+        setTimeout(() => {
+          try {
+            recognition.start();
+          } catch (e) {}
+        }, 700);
       }
     };
 
-    r.onend = () => {
-      if (currentState !== STATE.OFF) {
-        setIndicator(STATE.LISTENING);
-        try { r.start(); } catch(_) {}
-      }
+    recognition.onerror = (e) => {
+      console.warn('[MARU][VOICE] Mic error', e);
+      listening = false;
     };
 
-    return r;
+    recognition.onresult = (event) => {
+      const text = event.results[0][0].transcript.trim();
+      const now = Date.now();
+
+      // 중복/노이즈 방지
+      if (now - lastResultTime < 800) return;
+      lastResultTime = now;
+
+      console.log('[MARU][VOICE] Heard:', text);
+
+      // ❗ 판단하지 않고 그대로 Addon에 전달
+      if (window.MaruAddon && typeof MaruAddon.handleVoiceQuery === 'function') {
+        MaruAddon.handleVoiceQuery(text);
+      } else {
+        console.warn('[MARU][VOICE] MaruAddon.handleVoiceQuery not found');
+      }
+    };
   }
 
-  function start(){
-    if(!recognition) recognition = initRecognition();
-    if(!recognition) return;
-
-    try{
-      recognition.start();
-      setIndicator(STATE.LISTENING);
-    }catch(_){}
-  }
-
-  function stop(){
-    try{
-      if(recognition) recognition.stop();
-    }catch(_){}
-    clearTimeout(silenceTimer);
-    setIndicator(STATE.OFF);
-  }
-
-  window.MaruVoice = {
-    start,
-    stop,
-    get state(){ return currentState; }
+  /* =======================
+   * PUBLIC STT API
+   * ======================= */
+  window.startMaruMic = function () {
+    micEnabled = true;
+    initSTT();
+    if (recognition && !listening) {
+      try {
+        recognition.start();
+      } catch (e) {}
+    }
   };
+
+  window.stopMaruMic = function () {
+    micEnabled = false;
+    if (recognition && listening) {
+      recognition.stop();
+    }
+  };
+
+  /* =======================
+   * TTS CORE
+   * ======================= */
+  function speak(text, opts = {}) {
+    if (!synth) synth = initTTS();
+    if (!synth || !text) return;
+
+    stop();
+
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = opts.lang || DEFAULT_LANG;
+    u.rate = opts.rate || 0.95;
+    u.pitch = opts.pitch || 1.0;
+    u.volume = opts.volume || 1.0;
+
+    u.onend = () => {
+      speaking = false;
+      currentUtterance = null;
+    };
+
+    speaking = true;
+    currentUtterance = u;
+    synth.speak(u);
+  }
+
+  function stop() {
+    if (synth && synth.speaking) synth.cancel();
+    speaking = false;
+    currentUtterance = null;
+  }
+
+  /* =======================
+   * PUBLIC TTS API
+   * ======================= */
+  window.MaruVoice = {
+    /**
+     * Addon이 정리한 "최종 텍스트"만 읽는다
+     * @param {string|object} payload
+     *  - string: 바로 읽기
+     *  - { text, lang?, rate?, pitch? }
+     */
+    play(payload) {
+      if (!payload) return;
+
+      if (typeof payload === 'string') {
+        speak(payload);
+        return;
+      }
+
+      if (payload.text) {
+        speak(payload.text, payload);
+      }
+    },
+
+    stop,
+
+    get status() {
+      return {
+        speaking,
+        micEnabled,
+        listening
+      };
+    }
+  };
+
+// ▶ Region / Country 음성 토글 → 정식 STT 엔진 브리지
+document.addEventListener('change', function (e) {
+  if (!e.target) return;
+
+  if (
+    e.target.id === 'maruRegionVoiceToggle' ||
+    e.target.id === 'maruCountryVoiceToggle'
+  ) {
+    if (e.target.checked) {
+      window.startMaruMic?.();
+    } else {
+      window.stopMaruMic?.();
+    }
+  }
+});
 
 })();
