@@ -128,4 +128,51 @@
     get state(){ return currentState; }
   };
 
+  // === Voice Bridge (Compatibility Layer) ===
+  // Region / Country / Addon 에서 호출하는 함수명과 연결
+
+  window.startMaruMic = function () {
+    try {
+      window.MaruVoice?.start?.();
+    } catch (e) {
+      console.error('[MaruVoice] start failed', e);
+    }
+  };
+
+  window.stopMaruMic = function () {
+    try {
+      window.MaruVoice?.stop?.();
+    } catch (e) {
+      console.error('[MaruVoice] stop failed', e);
+    }
+  };
+
+// TTS (Text To Speech)
+window.maruVoiceSpeak = function (text) {
+  try {
+    if (!text) return;
+
+    // 🔊 읽기 시작 → SPEAKING(표시)
+    setIndicator(STATE.SPEAKING);
+
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ko-KR';
+    u.rate = 1.0;
+    u.pitch = 1.0;
+
+    // 🔊 읽기 종료 → LISTENING 복귀(토글 ON 상태일 때만)
+    u.onend = () => {
+      if (window.MaruVoice?.state !== STATE.OFF) {
+        setIndicator(STATE.LISTENING);
+      }
+    };
+
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  } catch (e) {
+    console.error('[MaruVoice] TTS failed', e);
+  }
+};
+
+
 })();
