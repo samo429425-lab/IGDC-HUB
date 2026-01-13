@@ -1,7 +1,10 @@
 /**
  * MARU Voice Insight (FULL, STABLE)
  * - Keeps existing structure
- * - Adds conversation-grade STT
+ * - Corrected STT state logic
+ *   · idle: indicator blink
+ *   · speaking: indicator solid
+ *   · no auto-restart loop
  */
 
 (function () {
@@ -12,7 +15,7 @@
 
   let recognition = null;
   let micEnabled = false;
-  let listening = false;
+  let speaking = false;
 
   function initTTS() {
     if (!('speechSynthesis' in window)) return null;
@@ -30,11 +33,14 @@
 
     let maruFinalText = '';
 
+    // === idle (armed) ===
     recognition.onstart = () => {
-      listening = true;
+      speaking = false;
     };
 
+    // === speaking ===
     recognition.onspeechstart = () => {
+      speaking = true;
       maruFinalText = '';
     };
 
@@ -46,24 +52,34 @@
       }
     };
 
+    // === speech end → back to idle ===
     recognition.onspeechend = () => {
-      recognition.stop();
+      speaking = false;
       const text = maruFinalText.trim();
+      maruFinalText = '';
+
       if (!text) return;
-      if (window.MaruAddon && typeof window.MaruAddon.handleVoiceQuery === 'function') {
+
+      // deliver to addon
+      if (
+        window.MaruAddon &&
+        typeof window.MaruAddon.handleVoiceQuery === 'function'
+      ) {
         window.MaruAddon.handleVoiceQuery(text);
       }
-      maruFinalText = '';
     };
 
+    // === hard stop, NO auto-restart ===
     recognition.onend = () => {
-      listening = false;
-      if (micEnabled) {
-        try { recognition.start(); } catch (e) {}
-      }
+      speaking = false;
+    };
+
+    recognition.onerror = () => {
+      speaking = false;
     };
   }
 
+  // === public control ===
   window.startMaruMic = function () {
     initSTT();
     micEnabled = true;
@@ -72,7 +88,14 @@
 
   window.stopMaruMic = function () {
     micEnabled = false;
-    if (recognition) recognition.stop();
+    if (recognition) {
+      try { recognition.stop(); } catch (e) {}
+    }
+  };
+
+  // === optional debug ===
+  window.__maruVoiceState = function () {
+    return { micEnabled, speaking };
   };
 
 })();

@@ -1,9 +1,14 @@
 /**
- * MARU Conversation Modal
- * - Unified conversation UI for Region / Country / Free topics
- * - Text input always anchored to bottom of Region/Country modal
- * - Voice toggle aware (show/hide text input)
- * - Receives voice input events and renders message log
+ * MARU Conversation Modal (FULL, STABLE)
+ * --------------------------------------
+ * 역할:
+ * - 문자 입력 UI 제공 (AI / Addon / Engine 공통)
+ * - 음성 모드와 문자 모드 명확 분리
+ *
+ * 정책:
+ * - voiceMode = false (기본): 문자 입력창 항상 표시
+ * - voiceMode = true  : 문자 입력창 숨김
+ * - 외부에서 show / hide / setVoiceMode 제어 가능
  */
 
 (function () {
@@ -11,136 +16,117 @@
 
   if (window.MaruConversationModal) return;
 
-  const STATE = {
-    visible: false,
-    voiceOn: false,
-    context: null
-  };
+  let container = null;
+  let inputWrap = null;
+  let inputEl = null;
+  let sendBtn = null;
 
-  let container, logArea, inputArea, textInput, sendBtn;
+  let mounted = false;
+  let voiceMode = false;
+  let context = null;
 
   function createUI() {
     container = document.createElement('div');
-    container.id = 'maru-conversation-modal';
+    container.className = 'maru-conversation-container';
     container.style.cssText = `
-      position: relative;
-      width: 100%;
-      border-top: 1px solid #ddd;
-      background: #fff;
-      display: none;
-      box-sizing: border-box;
-    `;
-
-    logArea = document.createElement('div');
-    logArea.style.cssText = `
-      padding: 12px;
-      max-height: 220px;
-      overflow-y: auto;
-      font-size: 14px;
-    `;
-
-    inputArea = document.createElement('div');
-    inputArea.style.cssText = `
-      position: sticky;
+      position: absolute;
+      left: 0;
+      right: 0;
       bottom: 0;
-      display: flex;
-      gap: 8px;
-      padding: 10px;
-      border-top: 1px solid #eee;
-      background: #fafafa;
+      padding: 12px;
+      background: #fff;
+      border-top: 1px solid #ddd;
+      z-index: 10;
     `;
 
-    textInput = document.createElement('textarea');
-    textInput.placeholder = '질문을 입력하세요…';
-    textInput.rows = 2;
-    textInput.style.cssText = `
+    inputWrap = document.createElement('div');
+    inputWrap.style.display = 'flex';
+    inputWrap.style.gap = '8px';
+
+    inputEl = document.createElement('input');
+    inputEl.type = 'text';
+    inputEl.placeholder = '질문을 입력하세요';
+    inputEl.style.cssText = `
       flex: 1;
-      resize: none;
-      padding: 6px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
       font-size: 14px;
     `;
 
     sendBtn = document.createElement('button');
     sendBtn.textContent = '전송';
     sendBtn.style.cssText = `
-      padding: 6px 12px;
+      padding: 10px 14px;
+      border: none;
+      background: #1f3a5f;
+      color: #fff;
+      border-radius: 6px;
       cursor: pointer;
+      font-size: 13px;
     `;
 
-    sendBtn.addEventListener('click', () => {
-      const text = textInput.value.trim();
-      if (!text) return;
-      appendMessage('user', text);
-      textInput.value = '';
-      dispatchQuery(text);
+    inputWrap.appendChild(inputEl);
+    inputWrap.appendChild(sendBtn);
+    container.appendChild(inputWrap);
+
+    sendBtn.addEventListener('click', submitText);
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') submitText();
     });
-
-    inputArea.appendChild(textInput);
-    inputArea.appendChild(sendBtn);
-
-    container.appendChild(logArea);
-    container.appendChild(inputArea);
   }
 
-  function mount(targetEl) {
-    if (!container) createUI();
-    if (!targetEl || container.parentNode === targetEl) return;
-    targetEl.appendChild(container);
-  }
+  function submitText() {
+    const text = inputEl.value.trim();
+    if (!text) return;
+    inputEl.value = '';
 
-  function show() {
-    if (!container) return;
-    container.style.display = 'block';
-    STATE.visible = true;
-  }
-
-  function hide() {
-    if (!container) return;
-    container.style.display = 'none';
-    STATE.visible = false;
-  }
-
-  function appendMessage(role, text) {
-    const div = document.createElement('div');
-    div.style.marginBottom = '8px';
-    div.textContent = (role === 'user' ? '▶ ' : '◀ ') + text;
-    logArea.appendChild(div);
-    logArea.scrollTop = logArea.scrollHeight;
-  }
-
-  function dispatchQuery(text) {
     if (window.MaruAddon && typeof window.MaruAddon.handleTextQuery === 'function') {
-      window.MaruAddon.handleTextQuery({
-        text,
-        context: STATE.context
-      });
+      window.MaruAddon.handleTextQuery(text, context);
     }
   }
 
-  window.addEventListener('maru:voice:input', (e) => {
-    const text = e.detail.text;
-    appendMessage('user', text);
-    dispatchQuery(text);
-  });
+  function mountTo(target) {
+    if (!container) createUI();
+    if (mounted) return;
 
+    target.appendChild(container);
+    mounted = true;
+
+    applyVisibility();
+  }
+
+  function applyVisibility() {
+    if (!inputWrap) return;
+    inputWrap.style.display = voiceMode ? 'none' : 'flex';
+  }
+
+  function showInput() {
+    voiceMode = false;
+    applyVisibility();
+  }
+
+  function hideInput() {
+    voiceMode = true;
+    applyVisibility();
+  }
+
+  function setVoiceMode(on) {
+    voiceMode = !!on;
+    applyVisibility();
+  }
+
+  function setContext(ctx) {
+    context = ctx || null;
+  }
+
+  // expose
   window.MaruConversationModal = {
-    mountTo(targetEl) {
-      mount(targetEl);
-      show();
-    },
-    setContext(ctx) {
-      STATE.context = ctx;
-    },
-    setVoice(on) {
-      STATE.voiceOn = on;
-      inputArea.style.display = on ? 'none' : 'flex';
-      if (!on) show();
-    },
-    show,
-    hide,
-    appendAssistant(text) {
-      appendMessage('assistant', text);
-    }
+    mountTo,
+    showInput,
+    hideInput,
+    setVoiceMode,
+    setContext
   };
 
 })();

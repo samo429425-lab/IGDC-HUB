@@ -75,7 +75,7 @@
     };
 
     try{
-      const res = await fetch('/api/maru-search',{
+      const res = await fetch('/api/maru-global-insight',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify(order),
@@ -197,7 +197,7 @@
       rtBtn.onclick = async()=>{
         renderSummary('전 세계 실시간 핵심 이슈 취합 중…');
         try{
-          const r = await fetch('/api/maru-search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({context:'realtime-issue',scope:'global'})});
+          const r = await fetch('/api/maru-global-insight',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({context:'realtime-issue',scope:'global'})});
           const j = await r.json();
           renderSummary(j.summary||'현재 주요 실시간 이슈가 없습니다.');
         }catch(_){ renderSummary('※ 실시간 이슈 취합 실패'); }
