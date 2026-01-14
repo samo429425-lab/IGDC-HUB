@@ -203,7 +203,11 @@ window.injectRegionContextResult = function (regionId, result) {
 }
 
 
-    voiceBtn.addEventListener('click', () => setVoice(!regionVoiceEnabled));
+    voiceBtn.addEventListener('click', () => {
+  regionVoiceEnabled = !regionVoiceEnabled;
+  setVoice(regionVoiceEnabled);
+});
+
 
     const closeBtn = el('button', 'maru-region-close', '닫기');
     closeBtn.addEventListener('click', closeAll);
@@ -241,8 +245,12 @@ window.injectRegionContextResult = function (regionId, result) {
         const text = (inputEl.value || '').trim();
         if (!text) return;
         inputEl.value = '';
-        if (window.MaruAddon && typeof window.MaruAddon.handleTextQuery === 'function') {
-          try { window.MaruAddon.handleTextQuery({ text, context: { type: 'region', id: window.activeRegionId || null } }); }
+if (window.MaruAddon && typeof window.MaruAddon.handleTextQuery === 'function') {
+  window.MaruAddon.handleTextQuery({
+    text,
+    context: { level: 'region', id: window.activeRegionId || null }
+  });
+}
           catch (_) { window.MaruAddon.handleTextQuery(text, { type: 'region', id: window.activeRegionId || null }); }
         }
       });

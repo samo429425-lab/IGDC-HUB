@@ -49,11 +49,39 @@ function getCurrentMaruContext(){
 
     };
     r.onerror=()=>{ if(currentState!==STATE.OFF) setState(STATE.LISTENING); };
-    r.onend=()=>{ if(currentState!==STATE.OFF){ try{r.start();}catch(_){} setState(STATE.LISTENING);} };
+r.onend = () => {
+  if (
+    currentState !== STATE.OFF &&
+    window.MaruAddon?.isVoiceEnabled?.() &&
+    window.MARU_REGION_VOICE_READY !== false
+  ) {
+    try { r.start(); } catch (_) {}
+    setState(STATE.LISTENING);
+  }
+};
+
     return r;
   }
 
-  function start(){ if(!recognition) recognition=initRecognition(); try{recognition?.start(); setState(STATE.LISTENING);}catch(_){} }
+function start(){
+  // ⬇️ 반드시 여기 (함수 시작 직후, 맨 위)
+  if (
+    window.MaruAddon &&
+    MaruAddon.isVoiceEnabled &&
+    !MaruAddon.isVoiceEnabled()
+  ) {
+    return;
+  }
+
+  if (window.MARU_REGION_VOICE_READY === false) return;
+
+  if(!recognition) recognition = initRecognition();
+  try{
+    recognition?.start();
+    setState(STATE.LISTENING);
+  }catch(_){}
+}
+
   function stop(){ try{recognition?.stop();}catch(_){} clearTimeout(silenceTimer); setState(STATE.OFF); }
 
   window.MaruVoice={ start, stop, get state(){return currentState;} };

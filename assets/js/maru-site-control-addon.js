@@ -69,14 +69,21 @@ const ENGINE_DEBOUNCE_DELAY = 400; // ms (권장 300~500)
   };
 
   // 텍스트 입력
-  MaruAddon.handleTextQuery = function (text, context = {}) {
-    routeInbound({ input: 'text', text, context });
-  };
+MaruAddon.handleTextQuery = function (payload, context = {}) {
+  // payload: {text, context} or text(string)
+  if (payload && typeof payload === 'object') {
+    return routeInbound({ input: 'text', text: payload.text || '', context: payload.context || null });
+  }
+  return routeInbound({ input: 'text', text: payload || '', context });
+};
+  // 음성 입력
+MaruAddon.handleVoiceQuery = function (payload, context = {}) {
+  if (payload && typeof payload === 'object') {
+    return routeInbound({ input: 'voice', text: payload.text || '', context: payload.context || null });
+  }
+  return routeInbound({ input: 'voice', text: payload || '', context });
+};
 
-  // 음성(STT) 입력
-  MaruAddon.handleVoiceQuery = function (text, context = {}) {
-    routeInbound({ input: 'voice', text, context });
-  };
 
   /* =====================================================
    * 3. SINGLE VOICE CONTROL + TEXT INPUT RULES
@@ -391,8 +398,6 @@ function dispatchCommand(req) {
 
     // 7-6) 영상 intent일 때: 리스트가 이미 있으면 선택 오픈(음성/문자)
     if (req.intent === 'video') {
-      // 1) 이미 카드가 렌더돼 있으면, “첫번째”를 기본으로 오픈
-	  MEDIA_PLAYING = true;
 
       const idx = parseVideoPick(req.text);
       const openIdx = (idx != null) ? idx : 0;

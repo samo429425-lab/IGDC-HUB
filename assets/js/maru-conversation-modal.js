@@ -31,7 +31,8 @@
     if(!text) return;
     inputEl.value='';
     if(window.MaruAddon?.handleTextQuery){
-      window.MaruAddon.handleTextQuery(text,context);
+      window.MaruAddon.handleTextQuery({text, context});
+
     }
   }
 
