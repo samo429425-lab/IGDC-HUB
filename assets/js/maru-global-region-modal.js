@@ -29,49 +29,6 @@
     { id: 'africa', label: 'Africa' }
   ];
 
-/* =========================================================
- * ADDON → REGION MODAL DATA INJECTORS
- * ========================================================= */
-
-// 1) 1차 글로벌 인사이트 결과 주입 (전체 Region 요약)
-window.injectMaruGlobalRegionData = function (regions) {
-  if (!Array.isArray(regions)) return;
-
-  regions.forEach(r => {
-    // Region 카드 요약 텍스트 주입
-    const brief = document.querySelector(
-      `.maru-region-card[data-region="${r.id}"] .maru-region-brief`
-    );
-    if (brief && r.summary) {
-      brief.textContent = r.summary;
-    }
-
-    // Issue Bar 갱신 (현재 열려 있는 Region만)
-    if (window.activeRegionId === r.id && r.issues && window.updateRegionIssueBar) {
-      window.updateRegionIssueBar(r.issues);
-    }
-  });
-};
-
-// 2) 특정 Region 컨텍스트 질의 응답 주입 (대화/보이스 결과)
-window.injectRegionContextResult = function (regionId, result) {
-  if (!regionId || !result) return;
-  if (regionId !== window.activeRegionId) return;
-
-  // 요약 갱신
-  if (result.summary) {
-    const brief = document.querySelector(
-      `.maru-region-card[data-region="${regionId}"] .maru-region-brief`
-    );
-    if (brief) brief.textContent = result.summary;
-  }
-
-  // 이슈 갱신
-  if (result.issues && window.updateRegionIssueBar) {
-    window.updateRegionIssueBar(result.issues);
-  }
-};
-
   /* ================= STATE ================= */
   let backdrop = null;
   let modal = null;
@@ -186,38 +143,26 @@ window.injectRegionContextResult = function (regionId, result) {
     const voiceBtn = el('button', 'maru-region-voice-toggle off', 'VOICE OFF');
 
     function setVoice(on) {
-  // 1) 실제 음성 제어는 애드온에 위임
- function setVoice(on) {
-  // 1) 음성 상태는 애드온이 단일 관리
-  if (window.MaruAddon && typeof window.MaruAddon.setVoiceEnabled === 'function') {
-    window.MaruAddon.setVoiceEnabled(!!on);
-  }
+      regionVoiceEnabled = !!on;
+      voiceEnabled = !!on;
 
-  const enabled = (window.MaruAddon && typeof window.MaruAddon.isVoiceEnabled === 'function')
-    ? window.MaruAddon.isVoiceEnabled()
-    : false;
+      
+      try { if (inputBar) inputBar.classList.toggle('hidden', voiceEnabled); } catch (e) {}
+voiceBtn.classList.toggle('off', !regionVoiceEnabled);
+      voiceBtn.textContent = regionVoiceEnabled ? 'VOICE ON' : 'VOICE OFF';
 
-  // 2) 입력창 제어는 ConversationModal에만 맡긴다
-  if (window.MaruConversationModal) {
-    if (enabled) {
-      window.MaruConversationModal.setVoiceMode(true);
-      window.MaruConversationModal.hideInput();
-    } else {
-      window.MaruConversationModal.setVoiceMode(false);
-      window.MaruConversationModal.showInput();
+      if (regionVoiceEnabled) {
+        if (typeof window.startMaruMic === 'function') {
+          window.startMaruMic();
+        }
+      } else {
+        if (typeof window.stopMaruMic === 'function') {
+          window.stopMaruMic();
+        }
+      }
     }
-  }
 
-  // 3) 버튼 UI 반영
-  voiceBtn.classList.toggle('off', !enabled);
-  voiceBtn.textContent = enabled ? 'VOICE ON' : 'VOICE OFF';
-}
-
-    voiceBtn.addEventListener('click', () => {
-  regionVoiceEnabled = !regionVoiceEnabled;
-  setVoice(regionVoiceEnabled);
-});
-
+    voiceBtn.addEventListener('click', () => setVoice(!regionVoiceEnabled));
 
     const closeBtn = el('button', 'maru-region-close', '닫기');
     closeBtn.addEventListener('click', closeAll);
@@ -247,19 +192,36 @@ window.injectRegionContextResult = function (regionId, result) {
     modal.append(header, body);
 
 
-// === Conversation Input Mount (Region) — FIXED ===
-// === Conversation Input Mount (Region) — FIXED / SAFE ===
-if (window.MaruConversationModal) {
-  window.MaruConversationModal.mountTo(modal);
+    // ---------- TEXT INPUT WIRING ----------
+    const inputEl = inputBar.querySelector('.maru-input-text');
+    if (inputEl) {
+      inputEl.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        const text = (inputEl.value || '').trim();
+        if (!text) return;
+        inputEl.value = '';
+        if (window.MaruAddon && typeof window.MaruAddon.handleTextQuery === 'function') {
+          try { window.MaruAddon.handleTextQuery({ text, context: { type: 'region', id: window.activeRegionId || null } }); }
+          catch (_) { window.MaruAddon.handleTextQuery(text, { type: 'region', id: window.activeRegionId || null }); }
+        }
+      });
+    }
 
-  window.MaruConversationModal.setContext({
+    document.body.append(backdrop, modal);
+	
+// === Conversation Input Mount (Region) — FIXED ===
+if (window.MaruConversationModal) {
+  MaruConversationModal.mountTo(modal);
+
+  // 컨텍스트 명확화
+  MaruConversationModal.setContext({
     level: 'region',
-    id: regionId || window.activeRegionId || null
+    id: regionId || null
   });
 
-  // 텍스트 입력 우선 보장 (음성 기능과 분리)
-  window.MaruConversationModal.setVoiceMode(false);
-  window.MaruConversationModal.showInput();
+  // 음성 상태와 무관하게 텍스트 입력 우선 보장
+  MaruConversationModal.setVoiceMode(false);
+  MaruConversationModal.showInput();
 }
 
 
