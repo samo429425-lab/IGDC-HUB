@@ -413,10 +413,9 @@ box.appendChild(textarea);
      EVENTS
      ===================================================== */
 
- box.addEventListener('click', function () {
-  if (typeof window.openMaruGlobalRegion === 'function') {
-    window.openMaruGlobalRegion();
-  }
+// === SUMMARY CARD → REGION MODAL (DIRECT) ===
+box.addEventListener('click', () => {
+  window.openMaruGlobalRegionModal?.();
 });
 
 

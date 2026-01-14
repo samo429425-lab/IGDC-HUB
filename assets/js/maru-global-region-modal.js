@@ -245,13 +245,24 @@ window.injectRegionContextResult = function (regionId, result) {
         const text = (inputEl.value || '').trim();
         if (!text) return;
         inputEl.value = '';
-if (window.MaruAddon && typeof window.MaruAddon.handleTextQuery === 'function') {
-  window.MaruAddon.handleTextQuery({
-    text,
-    context: { level: 'region', id: window.activeRegionId || null }
+// ---------- TEXT INPUT WIRING ----------
+const inputEl = inputBar.querySelector('.maru-input-text');
+if (inputEl) {
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const text = (inputEl.value || '').trim();
+    if (!text) return;
+    inputEl.value = '';
+
+    if (window.MaruAddon && typeof window.MaruAddon.handleTextQuery === 'function') {
+      window.MaruAddon.handleTextQuery({
+        text,
+        context: { level: 'region', id: window.activeRegionId || null }
+      });
+    }
   });
 }
-          catch (_) { window.MaruAddon.handleTextQuery(text, { type: 'region', id: window.activeRegionId || null }); }
+
         }
       });
     }
