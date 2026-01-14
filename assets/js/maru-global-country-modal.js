@@ -307,51 +307,6 @@ let activeRegionId = null;
 let activeCountryName = null;
 let voiceEnabled = true;
 
-/* =========================================================
- * ADDON → COUNTRY MODAL DATA INJECTORS
- * ========================================================= */
-
-// 1) 1차 글로벌 인사이트 결과 주입 (전체 국가 데이터)
-window.injectMaruGlobalCountryData = function (countries) {
-  if (!Array.isArray(countries)) return;
-
-  countries.forEach(c => {
-    if (!c.name) return;
-
-    // 현재 열려 있는 국가일 때만 상세 반영
-    if (activeCountryName === c.name) {
-      if (c.summary) updateCountrySummary(c.summary);
-      if (c.issues && window.updateCountryIssueBar) {
-        window.updateCountryIssueBar(c.issues);
-      }
-      if (c.videos && window.injectMaruCountryVideos) {
-        window.injectMaruCountryVideos({
-          country: c.name,
-          videos: c.videos
-        });
-      }
-    }
-  });
-};
-
-// 2) 특정 국가 컨텍스트 질의 응답 주입 (음성/문자)
-window.injectCountryContextResult = function (countryName, result) {
-  if (!countryName || !result) return;
-  if (countryName !== activeCountryName) return;
-
-  if (result.summary) updateCountrySummary(result.summary);
-
-  if (result.issues && window.updateCountryIssueBar) {
-    window.updateCountryIssueBar(result.issues);
-  }
-
-  if (result.videos && window.injectMaruCountryVideos) {
-    window.injectMaruCountryVideos({
-      country: countryName,
-      videos: result.videos
-    });
-  }
-};
 
 /* ============== DETAIL + VOICE ============== */
 function openCountryDetail(countryName) {
@@ -515,24 +470,11 @@ function openCountryVideo(index){
 
   const player = document.createElement('div');
   player.className = 'maru-video-player';
-  
-  // 🔹 Add-on에 "영상 재생 시작" 알림
-if (window.MaruAddon && typeof MaruAddon.setMediaPlaying === 'function') {
-  MaruAddon.setMediaPlaying(true);
-}
 
   const closeBtn = document.createElement('button');
   closeBtn.className = 'maru-video-close';
   closeBtn.textContent = '닫기';
-  closeBtn.onclick = () => {
-  overlay.remove();
-
-  // 🔹 Add-on에 "영상 재생 종료" 알림
-  if (window.MaruAddon && typeof MaruAddon.setMediaPlaying === 'function') {
-    MaruAddon.setMediaPlaying(false);
-  }
-};
-
+  closeBtn.onclick = () => overlay.remove();
 
   player.appendChild(closeBtn);
 
@@ -545,19 +487,7 @@ if (window.MaruAddon && typeof MaruAddon.setMediaPlaying === 'function') {
 
   overlay.appendChild(player);
   document.body.appendChild(overlay);
-  
-  overlay.addEventListener('click', e => {
-  if (e.target === overlay) {
-    overlay.remove();
-
-    if (window.MaruAddon && typeof MaruAddon.setMediaPlaying === 'function') {
-      MaruAddon.setMediaPlaying(false);
-    }
-  }
-});
-
 }
-
 
 
   /* ================= RENDER ================= */
@@ -617,28 +547,21 @@ if (window.MaruCountryVoice) window.MaruCountryVoice.disable?.();
 countryVoiceCheckbox.addEventListener('change', () => {
   const enabled = countryVoiceCheckbox.checked;
 
-// === VOICE TOGGLE ON/OFF (Country) : delegated to Addon ===
+  // === VOICE TOGGLE ON/OFF (Country) ===
+  window.MARU_COUNTRY_VOICE_READY = (enabled === true);
 
-// UI 토글 상태만 애드온에 전달
-if (window.MaruAddon && typeof MaruAddon.setVoiceEnabled === 'function') {
-  MaruAddon.setVoiceEnabled(enabled);
-}
-
-// 애드온의 단일 음성 상태를 기준으로 UI 동기화
-const voiceOn =
-  window.MaruAddon && typeof MaruAddon.isVoiceEnabled === 'function'
-    ? MaruAddon.isVoiceEnabled()
-    : false;
-
-// 컨버세이션 모달 UI만 반영 (엔진 직접 제어 ❌)
-if (window.MaruConversationModal) {
-  MaruConversationModal.setVoiceMode(voiceOn);
-
-  if (!voiceOn) {
-    MaruConversationModal.showInput(); // 음성 OFF 시 문자 입력 복귀
+  if (enabled) {
+    if (typeof window.startMaruMic === 'function') window.startMaruMic();
+    if (window.MaruConversationModal) {
+      MaruConversationModal.setVoiceMode(true);
+    }
+  } else {
+    if (typeof window.stopMaruMic === 'function') window.stopMaruMic();
+    if (window.MaruConversationModal) {
+      MaruConversationModal.setVoiceMode(false);
+      MaruConversationModal.showInput(); // 문자 입력창 복귀
+    }
   }
-}
-
 
 });
 
@@ -875,19 +798,6 @@ function requestTopic(countryKey, topic, depth = 'summary') {
   };
 
 })();
-
-window.openMaruCountryVideoByIndex = function (idx) {
-  const cards = document.querySelectorAll('.maru-country-video-card');
-  if (!cards || !cards.length) return false;
-  if (idx < 0 || idx >= cards.length) return false;
-  try {
-    cards[idx].click();
-    return true;
-  } catch (e) {
-    return false;
-  }
-};
-
 
   /* ================= EXPOSE ================= */
   window.openMaruGlobalCountryModal = open;

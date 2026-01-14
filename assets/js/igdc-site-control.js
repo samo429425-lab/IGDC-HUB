@@ -342,13 +342,15 @@
 function renderMaruGlobalInsightPanel(){
   const box = el('div', 'igdc-sc-ai maru-global-insight');
 
-  /* ▶ 카드 클릭 → 글로벌 레기온 모달 */
+// ▶ 요약 카드 클릭 → 글로벌 레기온 모달 오픈 (단일 트리거, 최종)
   box.addEventListener('click', function () {
     if (typeof window.openMaruGlobalRegionModal === 'function') {
       window.openMaruGlobalRegionModal();
+    } else {
+      alert('글로벌 레기온 모달 함수가 아직 준비되지 않았습니다.');
     }
   });
-
+  
   // 제목
   const title = el('p', 'igdc-sc-ai-title', 'MARU Global Insight');
 
@@ -374,10 +376,7 @@ MARU 엔진 기반으로 요약합니다.
   const btnCopy     = el('button', '', '텍스트 복사');
   const btnRun      = el('button', '', 'AI 글로벌 인사이트 실행');
 
-  // ▶ 애드온이 버튼을 잡을 수 있도록 ID 부여
-  btnRealtime.id = 'btn-realtime-issue';
-  btnRun.id      = 'btn-ai-global-insight';
-
+  // 실행 버튼 우측 정렬
   btnRun.style.marginLeft = 'auto';
 
   actions.appendChild(btnRealtime);
@@ -391,52 +390,77 @@ MARU 엔진 기반으로 요약합니다.
     '※ MARU 엔진을 통해 취합된 데이터는 권역별·국가별 분석 모달과 연동됩니다.'
   );
 
-  /* ▶ AI 글로벌 인사이트 실행 → MARU Addon */
-  btnRun.addEventListener('click', function(e){
+  // ▶ 카드 전체 클릭 → 글로벌 레기온 모달
+  box.addEventListener('click', function(){
+    if (typeof window.openMaruGlobalRegionModal === 'function') {
+      window.openMaruGlobalRegionModal();
+    }
+  });
+
+  // ▶ AI 글로벌 인사이트 실행 (MARU 엔진 기동)
+  btnRun.addEventListener('click', async function(e){
     e.stopPropagation();
     textarea.value = '전 세계 데이터를 취합 중입니다...';
 
-    if (window.MaruAddon && typeof window.MaruAddon.requestInsight === 'function') {
-      window.MaruAddon.setScope?.('global');
-      window.MaruAddon.requestInsight({
-        mode: 'global',
-        depth: 'summary'
+    try{
+      const res = await fetch('/api/igdc-site-control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'global-full' })
       });
-    } else {
-      textarea.value = 'MARU 애드온이 아직 준비되지 않았습니다.';
+      const data = await res.json();
+
+      textarea.value =
+        data.summary ||
+        '글로벌 인사이트 요약 데이터를 받지 못했습니다.';
+
+      // 전역 저장 (레기온/컨츄리 모달 공용)
+      window.MARU_GLOBAL_DATA = data;
+
+      if (typeof window.injectMaruGlobalRegionData === 'function') {
+        window.injectMaruGlobalRegionData(data);
+      }
+      if (typeof window.injectMaruGlobalCountryData === 'function') {
+        window.injectMaruGlobalCountryData(data);
+      }
+
+    }catch(err){
+      textarea.value = '글로벌 인사이트 취합 중 오류가 발생했습니다.';
     }
   });
 
-  /* ▶ 실시간 이슈 → MARU Addon */
-  btnRealtime.addEventListener('click', function(e){
+  // ▶ 실시간 이슈
+  btnRealtime.addEventListener('click', async function(e){
     e.stopPropagation();
     textarea.value = '실시간 글로벌 이슈를 취합 중...';
 
-    if (window.MaruAddon && typeof window.MaruAddon.requestInsight === 'function') {
-      window.MaruAddon.requestInsight({
-        mode: 'realtime'
+    try{
+      const res = await fetch('/api/igdc-site-control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'realtime-global' })
       });
-    } else {
-      textarea.value = 'MARU 애드온이 아직 준비되지 않았습니다.';
+      const data = await res.json();
+      textarea.value = data.summary || '실시간 이슈가 없습니다.';
+    }catch(err){
+      textarea.value = '실시간 이슈 취합 중 오류가 발생했습니다.';
     }
   });
 
-  /* ▶ 텍스트 복사 */
+  // ▶ 텍스트 복사
   btnCopy.addEventListener('click', function(e){
     e.stopPropagation();
-    textarea.select();
-    document.execCommand('copy');
+    navigator.clipboard.writeText(textarea.value || '');
   });
 
-  // 조립
   box.appendChild(title);
   box.appendChild(textarea);
   box.appendChild(actions);
   box.appendChild(hint);
+  
 
   return box;
 }
-
 
 
 
