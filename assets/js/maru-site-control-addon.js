@@ -73,71 +73,52 @@
     }
   }
 
+  /* =========================
+     SERVER RESPONSE (호환)
+  ========================= */
+  function handleServerResponse(res){
+    if (!res || !res.ok) return;
 
- /* =========================
-   SERVER RESPONSE — FIXED (Q/A 분리)
-========================= */
-function handleServerResponse(res){
-  // --- FAIL SAFE ---
-  if (!res || !res.ok) {
-    renderSummary('글로벌 인사이트 데이터를 불러오지 못했습니다.\n다시 실행해 주세요.');
+    renderSummary(res.text || '');
 
-    if (window.MaruConversationModal?.showInput) {
-      window.MaruConversationModal.showInput();
+    if (res.mode === 'expand' && typeof Prev.openExpandedInsight === 'function') {
+      Prev.openExpandedInsight(res);
+      return;
     }
 
-    console.warn('[MARU][INSIGHT][FAIL]', res);
-    return;
+    if (res.speech && isVoiceEnabled() && typeof window.maruVoiceSpeak === 'function') {
+      window.maruVoiceSpeak(res.speech);
+    }
+
+    // Conversation 복귀
+    if (window.MaruConversationModal && typeof window.MaruConversationModal.showInput === 'function') {
+      window.MaruConversationModal.showInput();
+    }
   }
 
-  // --- RESULT LABEL ---
-let resultLabel = '';
-if (res.mode === 'realtime') {
-  resultLabel = '🟠 실시간 이슈 요약';
-} else if (res.mode === 'global') {
-  resultLabel = '🔵 AI 글로벌 인사이트';
-} else if (res.mode === 'expand') {
-  resultLabel = '🟣 상세 인사이트';
-}
-
-// --- SUMMARY (라벨 포함) ---
-renderSummary(
-  (resultLabel ? resultLabel + '\n\n' : '') +
-  (res.text || '')
-);
-
-  // --- EXPAND HANDOFF ---
-  if (res.mode === 'expand' && typeof Prev.openExpandedInsight === 'function') {
-    Prev.openExpandedInsight(res);
-    return;
+  /* =========================
+     LEGACY ENTRY POINTS (핵심)
+  ========================= */
+  function handleTextQuery(text, context){
+    return requestInsight({
+      text: String(text || ''),
+      scope: CURRENT_SCOPE,
+      depth: 'summary',
+      context
+    });
   }
 
-  // --- SPEECH OUTPUT (답변만 읽기) ---
-  const hasSpeech =
-    typeof res.speech === 'string' &&
-    res.speech.trim().length > 0;
-
-  const isQuestionEcho =
-    typeof res.text === 'string' &&
-    hasSpeech &&
-    res.speech.trim() === res.text.trim();
-
-  if (
-    hasSpeech &&
-    !isQuestionEcho &&                    // 질문 echo 차단
-    isVoiceEnabled() &&
-    typeof window.maruVoiceSpeak === 'function'
-  ) {
-    window.maruVoiceSpeak(res.speech);    // 답변만 읽기
+  function handleVoiceQuery(text, context){
+    if (!isVoiceEnabled()) return;
+    const t = String(text || '');
+    const expand = t.length > 80 || /자세히|상세|브리핑|프리핑|expand/i.test(t);
+    return requestInsight({
+      text: t,
+      scope: CURRENT_SCOPE,
+      depth: expand ? 'expand' : 'summary',
+      context
+    });
   }
-
-  // --- INPUT RECOVER ---
-  if (window.MaruConversationModal?.showInput) {
-    window.MaruConversationModal.showInput();
-  }
-}
-
-
 
   /* =========================
      BUTTON BIND (보존)
