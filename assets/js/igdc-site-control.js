@@ -277,6 +277,20 @@
     return html;
   }
 
+  function buildAiHelperDefaultText(){
+    const d = lastReport.device;
+    const ts = lastReport.ts || new Date().toISOString();
+    const lines = [];
+    lines.push('[IGDC 사이트 관리 질문 템플릿]');
+    lines.push('time='+ts);
+    if(d){
+      lines.push('device='+d.type+', os='+d.os+', browser='+d.browser+', size='+d.width+'x'+d.height+', dpr='+d.dpr);
+    }
+    lines.push('요청내용: (여기에 궁금한 점을 적어주세요)');
+    lines.push('');
+    lines.push('※ 이 텍스트를 복사해서 ChatGPT 대화창에 붙여넣으면, 현재 상태를 설명하는 기본 골격으로 사용할 수 있습니다.');
+    return lines.join('\n');
+  }
 
   function statusLabel(summary){
     if(summary.error > 0) return { text:'ERROR', cls:'igdc-sc-badge-error' };
@@ -318,6 +332,11 @@
     grid.appendChild(cardApi);
     grid.appendChild(cardBiz);
     grid.appendChild(cardDevice);
+
+    // [STABILIZE] AI 질문 보조/요약 영역(renderAiBox) 제거
+    container.appendChild(header);
+    container.appendChild(grid);
+    container.appendChild(renderMaruGlobalInsightPanel());
 
 
 function renderMaruGlobalInsightPanel(){
@@ -465,6 +484,35 @@ MARU 엔진 기반으로 요약합니다.
     card.__statusEl = hStatus;
     return card;
   }
+
+
+function renderMaruGlobalInsightBox(){
+    const box = el('div', 'igdc-sc-ai');
+
+    const title = el('p', 'igdc-sc-ai-title', '글로벌 상황 · 성향 분석');
+    const hint  = el('p', 'igdc-sc-ai-hint', 'MARU Global Insight · 전세계 권역·국가 흐름 요약');
+
+    const textarea = el('textarea', 'igdc-sc-ai-textarea');
+    textarea.readOnly = true;
+    textarea.value =
+`전세계 유통·미디어·소비 트렌드를
+마루 엔진 기반으로 요약합니다.
+
+AI 글로벌 인사이트 실행을 통해
+권역별 → 국가별 분석을 확인할 수 있습니다.`;
+
+    const actions = el('div', 'igdc-sc-ai-actions');
+    const btnRun = el('button', '', 'AI 글로벌 인사이트 실행');
+    btnRun.id = 'btnMaruGlobalInsight';
+    actions.appendChild(btnRun);
+
+    box.appendChild(title);
+    box.appendChild(textarea);
+    box.appendChild(actions);
+    box.appendChild(hint);
+
+    return box;
+}
 
 
   async function runAllChecks(){
@@ -639,4 +687,42 @@ MARU 엔진 기반으로 요약합니다.
   }
 })();
 
+
+/* =====================================================================
+ * ALIGNMENT PATCH: AI GLOBAL INSIGHT → ADD-ON SINGLE ENTRY
+ * ---------------------------------------------------------------------
+ * Rules:
+ *  - Do NOT remove or edit existing functions
+ *  - Do NOT touch Region/Country/Summary logic
+ *  - Force the AI Global Insight button to use Add-on as the ONLY engine
+ * ===================================================================== */
+(function(){
+  function alignAIGlobalInsight(){
+    const btn = document.querySelector(
+      '[data-action="run-ai-global-insight"], #run-ai-global-insight, .run-ai-global-insight'
+    );
+    if (!btn || !btn.parentNode) return;
+
+    // Remove existing handlers safely by node replacement
+    const cleanBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(cleanBtn, btn);
+
+    cleanBtn.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      if (window.MaruAddon && typeof window.MaruAddon.runGlobalInsight === 'function') {
+        window.MaruAddon.runGlobalInsight();
+      } else {
+        console.error('[AI GLOBAL INSIGHT] MaruAddon.runGlobalInsight not found');
+      }
+    }, true);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', alignAIGlobalInsight);
+  } else {
+    alignAIGlobalInsight();
+  }
+})();
 
