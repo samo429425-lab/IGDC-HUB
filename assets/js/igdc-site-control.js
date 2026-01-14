@@ -604,46 +604,6 @@ AI 글로벌 인사이트 실행을 통해
       else if (t.includes('복사')) btnCopy=b;
     });
 
-    // 3) AI Global Insight Run -> MARU engine
-    if (btnRun) {
-      btnRun.onclick = async function(e){
-        e.stopPropagation();
-        if (body) body.textContent = '전 세계 데이터를 취합 중입니다...';
-        try{
-          const res = await fetch('/api/igdc-site-control',{
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({mode:'global-full'})
-          });
-          const data = await res.json();
-          if (body) body.textContent = data.summary || '요약 데이터를 받지 못했습니다.';
-          window.MARU_GLOBAL_DATA = data;
-          if (typeof window.injectMaruGlobalRegionData==='function') window.injectMaruGlobalRegionData(data);
-          if (typeof window.injectMaruGlobalCountryData==='function') window.injectMaruGlobalCountryData(data);
-        }catch(err){
-          if (body) body.textContent = '글로벌 인사이트 취합 중 오류가 발생했습니다.';
-        }
-      }
-    }
-
-    // 4) Realtime issue
-    if (btnRealtime) {
-      btnRealtime.onclick = async function(e){
-        e.stopPropagation();
-        if (body) body.textContent = '실시간 글로벌 이슈를 취합 중...';
-        try{
-          const res = await fetch('/api/igdc-site-control',{
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({mode:'realtime-global'})
-          });
-          const data = await res.json();
-          if (body) body.textContent = data.summary || '실시간 이슈가 없습니다.';
-        }catch(err){
-          if (body) body.textContent = '실시간 이슈 취합 중 오류가 발생했습니다.';
-        }
-      }
-    }
 
     // 5) Copy
     if (btnCopy) {

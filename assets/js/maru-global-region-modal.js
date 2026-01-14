@@ -191,17 +191,6 @@ voiceBtn.classList.toggle('off', !regionVoiceEnabled);
 
     modal.append(header, body);
 
-    /* ---------- INPUT BAR SLOT ---------- */
-    const inputBar = document.createElement('div');
-    inputBar.className = 'maru-input-bar';
-    inputBar.innerHTML = `
-      <input
-        type="text"
-        class="maru-input-text"
-        placeholder="질문을 입력하세요… (Enter)"
-      />
-    `;
-    modal.appendChild(inputBar);
 
     // ---------- TEXT INPUT WIRING ----------
     const inputEl = inputBar.querySelector('.maru-input-text');
@@ -220,12 +209,21 @@ voiceBtn.classList.toggle('off', !regionVoiceEnabled);
 
     document.body.append(backdrop, modal);
 	
-	// === Conversation Input Mount (Region) ===
+// === Conversation Input Mount (Region) — FIXED ===
 if (window.MaruConversationModal) {
   MaruConversationModal.mountTo(modal);
-  MaruConversationModal.setContext({ level: 'region', id: regionId });
-  MaruConversationModal.setVoiceMode(regionVoiceEnabled === true);
+
+  // 컨텍스트 명확화
+  MaruConversationModal.setContext({
+    level: 'region',
+    id: regionId || null
+  });
+
+  // 음성 상태와 무관하게 텍스트 입력 우선 보장
+  MaruConversationModal.setVoiceMode(false);
+  MaruConversationModal.showInput();
 }
+
 
     // Context set (preserve original intent)
     window.activeRegionId = regionId || window.activeRegionId || null;

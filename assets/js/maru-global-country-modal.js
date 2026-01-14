@@ -601,17 +601,6 @@ const body = el(
 /* header → issue bar → body 순서로 구성 */
 modal.appendChild(header);
 
-/* ---------- INPUT BAR SLOT ---------- */
-const inputBar = document.createElement('div');
-inputBar.className = 'maru-input-bar hidden';
-inputBar.innerHTML = `
-  <input
-    type="text"
-    class="maru-input-text"
-    placeholder="질문을 입력하세요… (Enter)"
-  />
-`;
-modal.appendChild(inputBar);
 
 modal.appendChild(body);
 
@@ -619,11 +608,18 @@ modal.appendChild(body);
 document.body.appendChild(backdrop);
 document.body.appendChild(modal);
 
-// === Conversation Input Mount (Country) ===
+// === Conversation Input Mount (Country) — FIXED ===
 if (window.MaruConversationModal) {
   MaruConversationModal.mountTo(modal);
-  MaruConversationModal.setContext({ level: 'country', id: (activeCountryName || regionId || null) });
-  MaruConversationModal.setVoiceMode(countryVoiceCheckbox.checked === true);
+
+  MaruConversationModal.setContext({
+    level: 'country',
+    id: activeCountryName || null
+  });
+
+  // 음성 상태와 무관하게 문자 입력창 우선 표시
+  MaruConversationModal.setVoiceMode(false);
+  MaruConversationModal.showInput();
 }
 
 /* 닫기 */
