@@ -338,43 +338,46 @@
     container.appendChild(grid);
     container.appendChild(renderMaruGlobalInsightPanel());
 
-// FIXED VERSION: igdc-site-control.js
-// NOTE: Only MARU GLOBAL INSIGHT BLOCK was modified.
-// All other blocks are preserved as-is.
 
-(function(){
-  const container = document.getElementById('igdc-site-control');
-  if(!container) return;
+/* =========================================================
+ * MARU GLOBAL INSIGHT BLOCK — IGDC SITE CONTROL (FINAL)
+ * 역할 요약
+ * 1. 요약 카드 클릭 → 글로벌 레기온 모달 오픈
+ * 2. AI 글로벌 인사이트 실행 → 애드온에 1차 데이터 수집 신호
+ * 3. 실시간 이슈 → 애드온에 실시간 이슈 요청 신호
+ * 4. 복사 → 요약 카드 텍스트 복사
+ * ========================================================= */
 
-  /* ===== 기존 코드 전부 유지 ===== */
+function renderMaruGlobalInsightPanel() {
+  const box = document.createElement('div');
+  box.className = 'igdc-sc-ai maru-global-insight';
 
-  /* ---------------------------------------------------------
-   * MARU GLOBAL INSIGHT BLOCK — IGDC SITE CONTROL (FINAL FIX)
-   * --------------------------------------------------------- */
+  /* ---------- TITLE ---------- */
+  const title = document.createElement('p');
+  title.className = 'igdc-sc-ai-title';
+  title.textContent = 'MARU Global Insight';
+  box.appendChild(title);
 
-  function renderMaruGlobalInsightPanel() {
-    const box = document.createElement('div');
-    box.className = 'igdc-sc-ai maru-global-insight';
+/* ---------- SUMMARY (CARD) ---------- */
 
-    const title = document.createElement('p');
-    title.className = 'igdc-sc-ai-title';
-    title.textContent = 'MARU Global Insight';
-    box.appendChild(title);
+// === GLOBAL SUMMARY INJECTOR (for MaruAddon) ===
+window.renderSummary = function(text){
+  const el = document.querySelector('#maru-global-summary-text');
+  if(!el) return;
+  el.value =
+    typeof text === 'string'
+      ? text
+      : JSON.stringify(text, null, 2);
+};
 
-    // === SUMMARY INJECTOR ===
-    window.renderSummary = function(text){
-      const el = document.querySelector('#maru-global-summary-text');
-      if(!el) return;
-      el.value = typeof text === 'string' ? text : JSON.stringify(text, null, 2);
-    };
-
-    const textarea = document.createElement('textarea');
-    textarea.id = 'maru-global-summary-text';
-    textarea.className = 'igdc-sc-ai-textarea';
-    textarea.readOnly = true;
-    textarea.style.pointerEvents = 'auto';
-    textarea.style.cursor = 'pointer';
-    textarea.value = `MARU 엔진 기반 글로벌 인사이트 요약 영역입니다.
+// === Summary Textarea ===
+const textarea = document.createElement('textarea');
+textarea.id = 'maru-global-summary-text';        // ★ 핵심
+textarea.className = 'igdc-sc-ai-textarea';
+textarea.readOnly = true;
+textarea.style.pointerEvents = 'none';
+textarea.value =
+`MARU 엔진 기반 글로벌 인사이트 요약 영역입니다.
 
 이 요약 카드를 클릭하면
 권역별(Region) 상세 분석 모달이 열립니다.
@@ -384,66 +387,272 @@
 
 • 실시간 이슈 :
   현재 시점 글로벌 이슈 요약`;
-    box.appendChild(textarea);
 
-    const actions = document.createElement('div');
-    actions.className = 'igdc-sc-ai-actions';
+box.appendChild(textarea);
 
-    const btnRealtime = document.createElement('button');
-    btnRealtime.textContent = '실시간 이슈';
+  /* ---------- ACTION BUTTONS ---------- */
+  const actions = document.createElement('div');
+  actions.className = 'igdc-sc-ai-actions';
 
-    const btnCopy = document.createElement('button');
-    btnCopy.textContent = '텍스트 복사';
+  const btnRealtime = document.createElement('button');
+  btnRealtime.textContent = '실시간 이슈';
 
-    const btnRun = document.createElement('button');
-    btnRun.textContent = 'AI 글로벌 인사이트 실행';
-    btnRun.style.marginLeft = 'auto';
+  const btnCopy = document.createElement('button');
+  btnCopy.textContent = '텍스트 복사';
 
-    actions.appendChild(btnRealtime);
-    actions.appendChild(btnCopy);
-    actions.appendChild(btnRun);
-    box.appendChild(actions);
+  const btnRun = document.createElement('button');
+  btnRun.textContent = 'AI 글로벌 인사이트 실행';
+  btnRun.style.marginLeft = 'auto';
 
-    /* ===== EVENTS (SINGLE SOURCE OF TRUTH) ===== */
+  actions.appendChild(btnRealtime);
+  actions.appendChild(btnCopy);
+  actions.appendChild(btnRun);
+  box.appendChild(actions);
 
-    textarea.addEventListener('click', function(e){
-      e.preventDefault();
-      e.stopPropagation();
-      if (typeof window.openMaruGlobalRegionModal === 'function') {
-        window.openMaruGlobalRegionModal();
-      }
+/* =====================================================
+   EVENTS — FINAL FIX (NO CONFLICT)
+   ===================================================== */
+
+// 1) 요약 카드 클릭 → 레기온 모달
+textarea.addEventListener('click', function (e) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  if (typeof window.openMaruGlobalRegionModal === 'function') {
+    window.openMaruGlobalRegionModal();
+  }
+});
+
+// 2) AI 글로벌 인사이트 실행
+btnRun.addEventListener('click', function (e) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  textarea.value = '전 세계 1차 데이터를 취합 중입니다…';
+
+  if (window.MaruAddon && typeof window.MaruAddon.bootstrapGlobalInsight === 'function') {
+    window.MaruAddon.bootstrapGlobalInsight();
+  }
+});
+
+// 3) 실시간 이슈
+btnRealtime.addEventListener('click', function (e) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  textarea.value = '실시간 글로벌 이슈를 취합 중입니다…';
+
+  if (window.MaruAddon && typeof window.MaruAddon.requestInsight === 'function') {
+    window.MaruAddon.requestInsight({
+      source: 'panel',
+      mode: 'realtime-global'
     });
+  }
+});
 
-    btnRun.addEventListener('click', function(e){
-      e.preventDefault();
-      e.stopPropagation();
-      textarea.value = '전 세계 1차 데이터를 취합 중입니다…';
-      if (window.MaruAddon && typeof window.MaruAddon.bootstrapGlobalInsight === 'function') {
-        window.MaruAddon.bootstrapGlobalInsight();
-      }
-    });
+// 4) 텍스트 복사
+btnCopy.addEventListener('click', function (e) {
+  e.preventDefault();
+  e.stopPropagation();
 
-    btnRealtime.addEventListener('click', function(e){
-      e.preventDefault();
-      e.stopPropagation();
-      textarea.value = '실시간 글로벌 이슈를 취합 중입니다…';
-      if (window.MaruAddon && typeof window.MaruAddon.requestInsight === 'function') {
-        window.MaruAddon.requestInsight({ source:'panel', mode:'realtime-global' });
-      }
-    });
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+  document.execCommand('copy');
+});
 
-    btnCopy.addEventListener('click', function(e){
-      e.preventDefault();
-      e.stopPropagation();
-      textarea.select();
-      textarea.setSelectionRange(0, textarea.value.length);
-      document.execCommand('copy');
-    });
 
-    return box;
+  // 2️⃣ AI 글로벌 인사이트 실행 → 애드온에 1차 전체 데이터 수집 신호
+  btnRun.addEventListener('click', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    textarea.value = '전 세계 1차 데이터를 취합 중입니다…';
+
+    if (window.MaruAddon && typeof window.MaruAddon.bootstrapGlobalInsight === 'function') {
+      window.MaruAddon.bootstrapGlobalInsight();
+    } else {
+      console.warn('[MARU] MaruAddon.bootstrapGlobalInsight not ready');
+    }
+  });
+
+  // 3️⃣ 실시간 이슈 → 애드온에 실시간 이슈 요청 신호
+  btnRealtime.addEventListener('click', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    textarea.value = '실시간 글로벌 이슈를 취합 중입니다…';
+
+    if (window.MaruAddon && typeof window.MaruAddon.requestInsight === 'function') {
+      window.MaruAddon.requestInsight({
+        mode: 'realtime-global',
+        source: 'panel'
+      });
+    } else {
+      console.warn('[MARU] MaruAddon.requestInsight not ready');
+    }
+  });
+
+  // 4️⃣ 텍스트 복사 (요약 카드 내용)
+  btnCopy.addEventListener('click', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+    document.execCommand('copy');
+  });
+
+  return box;
+}
+
+
+
+
+    btnRunAll.addEventListener('click', runAllChecks);
   }
 
-  /* ===== 기존 renderPanel() 흐름 유지 ===== */
+  function makeCard(title, desc, onClick){
+    const card = el('div', 'igdc-sc-card');
+    const header = el('div', 'igdc-sc-card-header');
+    const hTitle = el('div', 'igdc-sc-card-title', title);
+    const hStatus = el('div', 'igdc-sc-card-status', '-');
+    header.appendChild(hTitle);
+    header.appendChild(hStatus);
+    const body = el('div', 'igdc-sc-card-body', desc);
+    card.appendChild(header);
+    card.appendChild(body);
+    card.addEventListener('click', function(e){
+      onClick && onClick();
+      e.stopPropagation();
+    });
+    card.__statusEl = hStatus;
+    return card;
+  }
 
+
+function renderMaruGlobalInsightBox(){
+    const box = el('div', 'igdc-sc-ai');
+
+    const title = el('p', 'igdc-sc-ai-title', '글로벌 상황 · 성향 분석');
+    const hint  = el('p', 'igdc-sc-ai-hint', 'MARU Global Insight · 전세계 권역·국가 흐름 요약');
+
+    const textarea = el('textarea', 'igdc-sc-ai-textarea');
+    textarea.readOnly = true;
+    textarea.value =
+`전세계 유통·미디어·소비 트렌드를
+마루 엔진 기반으로 요약합니다.
+
+AI 글로벌 인사이트 실행을 통해
+권역별 → 국가별 분석을 확인할 수 있습니다.`;
+
+    const actions = el('div', 'igdc-sc-ai-actions');
+    const btnRun = el('button', '', 'AI 글로벌 인사이트 실행');
+    btnRun.id = 'btnMaruGlobalInsight';
+    actions.appendChild(btnRun);
+
+    box.appendChild(title);
+    box.appendChild(textarea);
+    box.appendChild(actions);
+    box.appendChild(hint);
+
+    return box;
+}
+
+
+  async function runAllChecks(){
+    lastReport.device = getDeviceInfo();
+
+    const [front, api, env] = await Promise.all([
+      checkFront(),
+      checkApi(),
+      checkEnv()
+    ]);
+    lastReport.front = front;
+    lastReport.api = api;
+    lastReport.env = env;
+    lastReport.ts = new Date().toISOString();
+
+    const cards = container.querySelectorAll('.igdc-sc-card');
+    if(cards.length >= 1){
+      const sFront = summarizeStatus(front);
+      applyCardStatus(cards[0], sFront);
+    }
+    if(cards.length >= 2){
+      const sApi = summarizeStatus(api);
+      const sEnv = env.summary || { ok:0,warn:0,error:0 };
+      const combined = {
+        ok: (sApi.ok + sEnv.ok),
+        warn: (sApi.warn + sEnv.warn),
+        error: (sApi.error + sEnv.error)
+      };
+      applyCardStatus(cards[1], combined);
+    }
+    if(cards.length >= 3){
+      applyCardStatus(cards[2], { ok:0, warn:0, error:0 });
+    }
+    if(cards.length >= 4){
+      applyCardStatus(cards[3], { ok:1, warn:0, error:0 });
+    }
+  }
+
+  function applyCardStatus(card, summary){
+    const st = statusLabel(summary);
+    const elStatus = card.__statusEl;
+    if(!elStatus) return;
+    elStatus.textContent = st.text;
+    elStatus.className = 'igdc-sc-card-status '+(st.cls||'');
+  }
+
+  renderPanel();
 })();
+
+
+/* =========================================================
+ * MARU GLOBAL INSIGHT — POST-RENDER TRIGGER FIX
+ * (Do not change existing DOM / layout)
+ * ========================================================= */
+(function () {
+  try {
+    const root = document.getElementById('igdc-site-control');
+    if (!root) return;
+
+    // Find MARU card & body
+    const maruCard =
+      root.querySelector('.igdc-maru-card') ||
+      root.querySelector('[data-maru="global-insight"]') ||
+      root.querySelector('.maru-global-insight');
+
+    if (!maruCard) return;
+
+    const body =
+      maruCard.querySelector('.igdc-maru-card-body') ||
+      maruCard.querySelector('.igdc-side-card-body') ||
+      maruCard.querySelector('textarea') ||
+      maruCard;
+
+
+    // 2) Buttons mapping
+    const btns = maruCard.querySelectorAll('button');
+    let btnRun=null, btnRealtime=null, btnCopy=null;
+
+    btns.forEach(b=>{
+      const t=(b.textContent||'').trim();
+      if (t.includes('AI 글로벌') || t.includes('글로벌 인사이트 실행')) btnRun=b;
+      else if (t.includes('실시간')) btnRealtime=b;
+      else if (t.includes('복사')) btnCopy=b;
+    });
+
+
+    // 5) Copy
+    if (btnCopy) {
+      btnCopy.onclick = function(e){
+        e.stopPropagation();
+        if (!body) return;
+        const text = body.value || body.textContent || '';
+        navigator.clipboard.writeText(text);
+      }
+    }
+  } catch (e) {}
+})();
+
 
