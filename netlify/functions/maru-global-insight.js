@@ -1,31 +1,13 @@
 /**
- * Netlify Function: maru-global-insight.js
- * -------------------------------------------------
- * ROLE
- *  - Execute MARU Global Insight on explicit request
- *  - Server-side engine endpoint for Add-on
+ * MARU GLOBAL INSIGHT — STEP 4 STABLE
+ * ---------------------------------
+ * 역할:
+ * - MARU 엔진 결과를 프론트가 바로 쓸 수 있는 형태로 정규화
+ * - 확장 여부 판단을 서버에서 명시적으로 결정
  *
- * METHOD
- *  - POST only
- *
- * INPUT (JSON body)
- * {
- *   context: 'global-insight',
- *   scope: 'global' | 'region' | 'country',
- *   timeline: ['year','month','week','today','integrated'],
- *   include: ['summary','regions','countries','critical','videos','voice'],
- *   locale: 'ko-KR'
- * }
- *
- * OUTPUT (JSON)
- * {
- *   today,
- *   globalSummary,
- *   regions: [{ id, today, critical }],
- *   countries: [{ code, today, critical }],
- *   meta: { ts, request_id }
- * }
- * -------------------------------------------------
+ * 핵심:
+ * - mode: summary | expand | general
+ * - 프론트(애드온)는 mode만 보고 실행
  */
 
 const { nowIso, requestId } = require('../maru/core');
@@ -36,64 +18,70 @@ exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return json(405, {
       ok: false,
-      meta: { ts: nowIso(), request_id: rid },
-      error: { code: 'METHOD_NOT_ALLOWED', message: 'POST only' }
+      meta: meta(rid),
+      error: 'POST_ONLY'
     });
   }
 
-  let order = {};
+  let req = {};
   try {
-    order = JSON.parse(event.body || '{}');
+    req = JSON.parse(event.body || '{}');
   } catch (e) {
     return json(400, {
       ok: false,
-      meta: { ts: nowIso(), request_id: rid },
-      error: { code: 'BAD_JSON', message: 'Invalid JSON body' }
+      meta: meta(rid),
+      error: 'BAD_JSON'
     });
   }
 
-  if (order.context !== 'global-insight') {
-    return json(400, {
-      ok: false,
-      meta: { ts: nowIso(), request_id: rid },
-      error: { code: 'BAD_CONTEXT', message: 'Invalid context' }
-    });
+  const {
+    text = '',
+    scope = 'global',
+    depth = 'summary' // summary | expand
+  } = req;
+
+  // -------------------------------
+  // STEP 4: 서버 단 판단 규칙
+  // -------------------------------
+  let mode = 'summary';
+
+  if (depth === 'expand') {
+    mode = 'expand';
+  } else if (text.length > 120) {
+    mode = 'expand';
   }
 
-  // -------------------------------------------------
-  // PLACEHOLDER ENGINE LOGIC
-  // (Replace later with OpenAI / crawler / pipeline)
-  // -------------------------------------------------
+  // -------------------------------
+  // PLACEHOLDER: MARU ENGINE CALL
+  // (실제 엔진 연결 시 이 부분 교체)
+  // -------------------------------
+  const engineResult = mockEngine(text, scope, mode);
 
-  const todaySummary =
-    '현재 전 세계 주요 이슈는 경제 불확실성, 지정학적 긴장, 기술 패권 경쟁을 중심으로 전개되고 있습니다.';
+  // -------------------------------
+  // STEP 4: 응답 정규화 (항상 동일 shape)
+  // -------------------------------
+  const response = {
+    ok: true,
+    mode,
+    scope,
+    speech: engineResult.speech || '',
+    text: engineResult.text || '',
+    data: engineResult.data || {},
+    meta: meta(rid)
+  };
 
-  const regions = [
-    { id: 'asia', today: '아시아는 반도체·AI 산업 중심의 경쟁이 심화되고 있습니다.' },
-    { id: 'europe', today: '유럽은 에너지 전환과 경기 둔화 대응에 집중하고 있습니다.' },
-    { id: 'north_america', today: '북미는 금리 정책과 기술 규제 이슈가 핵심입니다.' },
-    { id: 'middle_east', today: '중동은 지정학적 리스크와 에너지 시장 변동성이 큽니다.' },
-    { id: 'africa', today: '아프리카는 인프라 투자와 정치 안정성이 주요 변수입니다.' }
-  ];
-
-  const countries = [
-    { code: 'KR', today: '한국은 반도체 수출 회복과 내수 부진이 동시에 나타나고 있습니다.' },
-    { code: 'US', today: '미국은 금리 정책과 대선 국면이 경제에 영향을 주고 있습니다.' },
-    { code: 'CN', today: '중국은 성장 둔화 속에서 내수 진작 정책을 강화하고 있습니다.' },
-    { code: 'JP', today: '일본은 엔화 약세와 통화 정책 정상화가 이슈입니다.' }
-  ];
-
-  return json(200, {
-    today: todaySummary,
-    globalSummary: todaySummary,
-    regions,
-    countries,
-    meta: {
-      ts: nowIso(),
-      request_id: rid
-    }
-  });
+  return json(200, response);
 };
+
+// -------------------------------
+// Helpers
+// -------------------------------
+function meta(rid) {
+  return {
+    ts: nowIso(),
+    request_id: rid
+  };
+}
 
 function json(statusCode, body) {
   return {
@@ -103,5 +91,24 @@ function json(statusCode, body) {
       'cache-control': 'no-store'
     },
     body: JSON.stringify(body)
+  };
+}
+
+// -------------------------------
+// Mock Engine (교체 대상)
+// -------------------------------
+function mockEngine(text, scope, mode) {
+  if (mode === 'expand') {
+    return {
+      speech: `확장 주제에 대한 상세 설명입니다: ${text}`,
+      text: `확장 분석 (${scope})\n\n${text}`,
+      data: {}
+    };
+  }
+
+  return {
+    speech: `요약입니다: ${text}`,
+    text: `요약 (${scope}): ${text}`,
+    data: {}
   };
 }
