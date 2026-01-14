@@ -339,168 +339,100 @@
     container.appendChild(renderMaruGlobalInsightPanel());
 
 
-/* =========================================================
- * MARU GLOBAL INSIGHT BLOCK — IGDC SITE CONTROL (FINAL)
- * 역할 요약
- * 1. 요약 카드 클릭 → 글로벌 레기온 모달 오픈
- * 2. AI 글로벌 인사이트 실행 → 애드온에 1차 데이터 수집 신호
- * 3. 실시간 이슈 → 애드온에 실시간 이슈 요청 신호
- * 4. 복사 → 요약 카드 텍스트 복사
- * ========================================================= */
+function renderMaruGlobalInsightPanel(){
+  const box = el('div', 'igdc-sc-ai maru-global-insight');
 
-function renderMaruGlobalInsightPanel() {
-  const box = document.createElement('div');
-  box.className = 'igdc-sc-ai maru-global-insight';
+  /* ▶ 카드 클릭 → 글로벌 레기온 모달 */
+  box.addEventListener('click', function () {
+    if (typeof window.openMaruGlobalRegionModal === 'function') {
+      window.openMaruGlobalRegionModal();
+    }
+  });
 
-  /* ---------- TITLE ---------- */
-  const title = document.createElement('p');
-  title.className = 'igdc-sc-ai-title';
-  title.textContent = 'MARU Global Insight';
-  box.appendChild(title);
+  // 제목
+  const title = el('p', 'igdc-sc-ai-title', 'MARU Global Insight');
 
-/* ---------- SUMMARY (CARD) ---------- */
+  // 요약 영역
+  const textarea = el('textarea', 'igdc-sc-ai-textarea');
+  textarea.readOnly = true;
+  textarea.value =
+`전 세계 주요 이슈 · 트렌드 · 흐름을
+MARU 엔진 기반으로 요약합니다.
 
-// === GLOBAL SUMMARY INJECTOR (for MaruAddon) ===
-window.renderSummary = function(text){
-  const el = document.querySelector('#maru-global-summary-text');
-  if(!el) return;
-  el.value =
-    typeof text === 'string'
-      ? text
-      : JSON.stringify(text, null, 2);
-};
+아래 버튼을 통해
+① 실시간 이슈 요약
+② 글로벌 인사이트 전체 분석
+을 실행할 수 있습니다.
 
-// === Summary Textarea ===
-const textarea = document.createElement('textarea');
-textarea.id = 'maru-global-summary-text';        // ★ 핵심
-textarea.className = 'igdc-sc-ai-textarea';
-textarea.readOnly = true;
-textarea.style.pointerEvents = 'none';
-textarea.value =
-`MARU 엔진 기반 글로벌 인사이트 요약 영역입니다.
+이 영역을 클릭하면
+권역별 상세 분석 화면이 열립니다.`;
 
-이 요약 카드를 클릭하면
-권역별(Region) 상세 분석 모달이 열립니다.
+  // 버튼 영역
+  const actions = el('div', 'igdc-sc-ai-actions');
 
-• AI 글로벌 인사이트 실행 :
-  전 세계 1차 데이터 전체 수집
+  const btnRealtime = el('button', '', '실시간 이슈');
+  const btnCopy     = el('button', '', '텍스트 복사');
+  const btnRun      = el('button', '', 'AI 글로벌 인사이트 실행');
 
-• 실시간 이슈 :
-  현재 시점 글로벌 이슈 요약`;
+  // ▶ 애드온이 버튼을 잡을 수 있도록 ID 부여
+  btnRealtime.id = 'btn-realtime-issue';
+  btnRun.id      = 'btn-ai-global-insight';
 
-box.appendChild(textarea);
-
-  /* ---------- ACTION BUTTONS ---------- */
-  const actions = document.createElement('div');
-  actions.className = 'igdc-sc-ai-actions';
-
-  const btnRealtime = document.createElement('button');
-  btnRealtime.textContent = '실시간 이슈';
-
-  const btnCopy = document.createElement('button');
-  btnCopy.textContent = '텍스트 복사';
-
-  const btnRun = document.createElement('button');
-  btnRun.textContent = 'AI 글로벌 인사이트 실행';
   btnRun.style.marginLeft = 'auto';
 
   actions.appendChild(btnRealtime);
   actions.appendChild(btnCopy);
   actions.appendChild(btnRun);
-  box.appendChild(actions);
 
-/* =====================================================
-   EVENTS — FINAL FIX (NO CONFLICT)
-   ===================================================== */
+  // 안내 문구
+  const hint = el(
+    'p',
+    'igdc-sc-ai-hint',
+    '※ MARU 엔진을 통해 취합된 데이터는 권역별·국가별 분석 모달과 연동됩니다.'
+  );
 
-// 1) 요약 카드 클릭 → 레기온 모달
-textarea.addEventListener('click', function (e) {
-  e.preventDefault();
-  e.stopPropagation();
-
-  if (typeof window.openMaruGlobalRegionModal === 'function') {
-    window.openMaruGlobalRegionModal();
-  }
-});
-
-// 2) AI 글로벌 인사이트 실행
-btnRun.addEventListener('click', function (e) {
-  e.preventDefault();
-  e.stopPropagation();
-
-  textarea.value = '전 세계 1차 데이터를 취합 중입니다…';
-
-  if (window.MaruAddon && typeof window.MaruAddon.bootstrapGlobalInsight === 'function') {
-    window.MaruAddon.bootstrapGlobalInsight();
-  }
-});
-
-// 3) 실시간 이슈
-btnRealtime.addEventListener('click', function (e) {
-  e.preventDefault();
-  e.stopPropagation();
-
-  textarea.value = '실시간 글로벌 이슈를 취합 중입니다…';
-
-  if (window.MaruAddon && typeof window.MaruAddon.requestInsight === 'function') {
-    window.MaruAddon.requestInsight({
-      source: 'panel',
-      mode: 'realtime-global'
-    });
-  }
-});
-
-// 4) 텍스트 복사
-btnCopy.addEventListener('click', function (e) {
-  e.preventDefault();
-  e.stopPropagation();
-
-  textarea.select();
-  textarea.setSelectionRange(0, textarea.value.length);
-  document.execCommand('copy');
-});
-
-
-  // 2️⃣ AI 글로벌 인사이트 실행 → 애드온에 1차 전체 데이터 수집 신호
-  btnRun.addEventListener('click', function (e) {
-    e.preventDefault();
+  /* ▶ AI 글로벌 인사이트 실행 → MARU Addon */
+  btnRun.addEventListener('click', function(e){
     e.stopPropagation();
+    textarea.value = '전 세계 데이터를 취합 중입니다...';
 
-    textarea.value = '전 세계 1차 데이터를 취합 중입니다…';
-
-    if (window.MaruAddon && typeof window.MaruAddon.bootstrapGlobalInsight === 'function') {
-      window.MaruAddon.bootstrapGlobalInsight();
+    if (window.MaruAddon && typeof window.MaruAddon.requestInsight === 'function') {
+      window.MaruAddon.setScope?.('global');
+      window.MaruAddon.requestInsight({
+        mode: 'global',
+        depth: 'summary'
+      });
     } else {
-      console.warn('[MARU] MaruAddon.bootstrapGlobalInsight not ready');
+      textarea.value = 'MARU 애드온이 아직 준비되지 않았습니다.';
     }
   });
 
-  // 3️⃣ 실시간 이슈 → 애드온에 실시간 이슈 요청 신호
-  btnRealtime.addEventListener('click', function (e) {
-    e.preventDefault();
+  /* ▶ 실시간 이슈 → MARU Addon */
+  btnRealtime.addEventListener('click', function(e){
     e.stopPropagation();
-
-    textarea.value = '실시간 글로벌 이슈를 취합 중입니다…';
+    textarea.value = '실시간 글로벌 이슈를 취합 중...';
 
     if (window.MaruAddon && typeof window.MaruAddon.requestInsight === 'function') {
       window.MaruAddon.requestInsight({
-        mode: 'realtime-global',
-        source: 'panel'
+        mode: 'realtime'
       });
     } else {
-      console.warn('[MARU] MaruAddon.requestInsight not ready');
+      textarea.value = 'MARU 애드온이 아직 준비되지 않았습니다.';
     }
   });
 
-  // 4️⃣ 텍스트 복사 (요약 카드 내용)
-  btnCopy.addEventListener('click', function (e) {
-    e.preventDefault();
+  /* ▶ 텍스트 복사 */
+  btnCopy.addEventListener('click', function(e){
     e.stopPropagation();
-
     textarea.select();
-    textarea.setSelectionRange(0, textarea.value.length);
     document.execCommand('copy');
   });
+
+  // 조립
+  box.appendChild(title);
+  box.appendChild(textarea);
+  box.appendChild(actions);
+  box.appendChild(hint);
 
   return box;
 }
@@ -630,6 +562,12 @@ AI 글로벌 인사이트 실행을 통해
       maruCard.querySelector('textarea') ||
       maruCard;
 
+    // 1) Card click -> Region Modal
+    maruCard.addEventListener('click', function () {
+      if (typeof window.openMaruGlobalRegionModal === 'function') {
+        window.openMaruGlobalRegionModal();
+      }
+    });
 
     // 2) Buttons mapping
     const btns = maruCard.querySelectorAll('button');
@@ -655,4 +593,72 @@ AI 글로벌 인사이트 실행을 통해
   } catch (e) {}
 })();
 
+
+/* ===== PATCH: AI GLOBAL INSIGHT EXECUTION BRIDGE =====
+ * Purpose:
+ *  - Trigger Maru engine data collection from the existing
+ *    "AI 글로벌 인사이트 실행" button.
+ *  - DOES NOT modify or replace any existing functions.
+ *  - Safe no-op if engine is unavailable.
+ * =================================================== */
+
+(function(){
+  try {
+    document.addEventListener('click', function(e){
+      const btn = e.target.closest('[data-action="run-ai-global-insight"], #run-ai-global-insight, .run-ai-global-insight');
+      if (!btn) return;
+
+      // 🔑 Engine trigger (single entry)
+      if (window.MaruEngine && typeof window.MaruEngine.runGlobalInsight === 'function') {
+        window.MaruEngine.runGlobalInsight();
+      } else if (window.MaruAddon && typeof window.MaruAddon.requestInsight === 'function') {
+        // fallback: addon-mediated request
+        window.MaruAddon.requestInsight('global');
+      } else {
+        console.warn('[AI GLOBAL INSIGHT] engine entry not found');
+      }
+    }, true);
+  } catch(e) {
+    console.error('[AI GLOBAL INSIGHT] bridge error', e);
+  }
+})();
+
+
+/* =====================================================================
+ * ALIGNMENT PATCH: AI GLOBAL INSIGHT → ADD-ON SINGLE ENTRY
+ * ---------------------------------------------------------------------
+ * Rules:
+ *  - Do NOT remove or edit existing functions
+ *  - Do NOT touch Region/Country/Summary logic
+ *  - Force the AI Global Insight button to use Add-on as the ONLY engine
+ * ===================================================================== */
+(function(){
+  function alignAIGlobalInsight(){
+    const btn = document.querySelector(
+      '[data-action="run-ai-global-insight"], #run-ai-global-insight, .run-ai-global-insight'
+    );
+    if (!btn || !btn.parentNode) return;
+
+    // Remove existing handlers safely by node replacement
+    const cleanBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(cleanBtn, btn);
+
+    cleanBtn.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      if (window.MaruAddon && typeof window.MaruAddon.runGlobalInsight === 'function') {
+        window.MaruAddon.runGlobalInsight();
+      } else {
+        console.error('[AI GLOBAL INSIGHT] MaruAddon.runGlobalInsight not found');
+      }
+    }, true);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', alignAIGlobalInsight);
+  } else {
+    alignAIGlobalInsight();
+  }
+})();
 
