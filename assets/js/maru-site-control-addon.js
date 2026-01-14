@@ -1,20 +1,19 @@
 /**
- * MARU SITE CONTROL ADDON — STEP 5 FINAL PLUS
- * -----------------------------------------
- * 추가 개선:
- * 1) 우측 패널 요약 카드 다중 라인 요약 표시
- * 2) AI 글로벌 인사이트 버튼 → 서버 재요청 확실 연결
- * 3) 실시간 이슈 버튼 → 글로벌 핫 이슈 요약 카드 표시
- * 4) Region / Country 요청 → Netlify Function 전달 경로 점검
- *
- * 전제:
- * - 서버 응답은 STEP 4 스키마를 따른다.
+ * MARU SITE CONTROL ADDON — CONNECTOR FIX
+ * -------------------------------------
+ * 목적:
+ * - 기존 애드온/보이스/컨버세이션/사이트컨트롤이 기대하는
+ *   엔트리 포인트(handleTextQuery/handleVoiceQuery)를 100% 복원
+ * - 내부 로직은 현재 Netlify Function(maru-global-insight) 기반 유지
+ * - 기존 파일 수정 없이 '연결 고리'만 정상화
  */
 
 (function(){
   'use strict';
 
-  if (window.MaruAddon) return;
+  // 기존 MaruAddon이 있더라도 엔트리 포인트만 병합
+  const Prev = window.MaruAddon || {};
+  const Addon = {};
 
   let CURRENT_SCOPE = 'global';
 
@@ -30,149 +29,138 @@
   }
 
   /* =========================
-     SUMMARY CARD RENDER
+     SUMMARY RENDER (호환)
   ========================= */
-  function renderSummaryCard(res){
-    const box = document.querySelector('#maru-global-insight-summary');
+  function renderSummary(text){
+    const box =
+      document.querySelector('.igdc-sc-ai.maru-global-insight textarea') ||
+      document.querySelector('.igdc-sc-ai textarea') ||
+      document.querySelector('#maru-global-insight-summary');
+
     if (!box) return;
 
-    box.innerHTML = '';
-    const pre = document.createElement('pre');
-    pre.style.whiteSpace = 'pre-wrap';
-    pre.style.lineHeight = '1.5';
-    pre.style.maxHeight = '160px';
-    pre.style.overflowY = 'auto';
-    pre.textContent = res.text || '';
-    box.appendChild(pre);
+    if (box.tagName === 'TEXTAREA') {
+      box.value = text || '';
+    } else {
+      box.innerHTML = '';
+      const pre = document.createElement('pre');
+      pre.style.whiteSpace='pre-wrap';
+      pre.style.lineHeight='1.5';
+      pre.style.maxHeight='160px';
+      pre.style.overflowY='auto';
+      pre.textContent = text || '';
+      box.appendChild(pre);
+    }
   }
 
   /* =========================
-     SERVER RESPONSE HANDLER
+     NETLIFY INSIGHT CALL
+  ========================= */
+  async function requestInsight(payload){
+    const body = payload || {};
+    try{
+      const res = await fetch('/.netlify/functions/maru-global-insight', {
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body: JSON.stringify(body)
+      });
+      const json = await res.json();
+      handleServerResponse(json);
+      return json;
+    }catch(e){
+      console.error('[MARU] insight request failed', e);
+      return null;
+    }
+  }
+
+  /* =========================
+     SERVER RESPONSE (호환)
   ========================= */
   function handleServerResponse(res){
     if (!res || !res.ok) return;
 
-    // 요약 카드 우선 반영
-    renderSummaryCard(res);
+    renderSummary(res.text || '');
 
-    if (res.mode === 'expand') {
-      openExpandedInsight(res);
+    if (res.mode === 'expand' && typeof Prev.openExpandedInsight === 'function') {
+      Prev.openExpandedInsight(res);
       return;
     }
 
-    if (res.speech && isVoiceEnabled() && window.maruVoiceSpeak) {
+    if (res.speech && isVoiceEnabled() && typeof window.maruVoiceSpeak === 'function') {
       window.maruVoiceSpeak(res.speech);
+    }
+
+    // Conversation 복귀
+    if (window.MaruConversationModal && typeof window.MaruConversationModal.showInput === 'function') {
+      window.MaruConversationModal.showInput();
     }
   }
 
   /* =========================
-     BUTTON WIRING CHECK
+     LEGACY ENTRY POINTS (핵심)
+  ========================= */
+  function handleTextQuery(text, context){
+    return requestInsight({
+      text: String(text || ''),
+      scope: CURRENT_SCOPE,
+      depth: 'summary',
+      context
+    });
+  }
+
+  function handleVoiceQuery(text, context){
+    if (!isVoiceEnabled()) return;
+    const t = String(text || '');
+    const expand = t.length > 80 || /자세히|상세|브리핑|프리핑|expand/i.test(t);
+    return requestInsight({
+      text: t,
+      scope: CURRENT_SCOPE,
+      depth: expand ? 'expand' : 'summary',
+      context
+    });
+  }
+
+  /* =========================
+     BUTTON BIND (보존)
   ========================= */
   function bindButtons(){
-    const aiBtn = document.querySelector('#btn-ai-global-insight');
-    if (aiBtn) {
-      aiBtn.onclick = () => {
-        requestInsight({ scope: CURRENT_SCOPE, depth: 'expand' });
-      };
-    }
+    const aiBtn =
+      document.getElementById('btn-ai-global-insight') ||
+      document.querySelector('button[data-maru="ai-global"]');
 
-    const issueBtn = document.querySelector('#btn-realtime-issue');
-    if (issueBtn) {
-      issueBtn.onclick = () => {
-        requestInsight({ scope: 'global', depth: 'summary', issue: true });
-      };
-    }
-  }
-
-  /* =========================
-     REQUEST TO NETLIFY FUNCTION
-  ========================= */
-  async function requestInsight(payload){
-    try {
-      const res = await fetch('/.netlify/functions/maru-global-insight', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(payload)
+    if (aiBtn && !aiBtn.dataset.maruBound) {
+      aiBtn.dataset.maruBound = '1';
+      aiBtn.addEventListener('click', ()=>{
+        requestInsight({ scope: CURRENT_SCOPE, depth:'expand' });
       });
-      const json = await res.json();
-      handleServerResponse(json);
-    } catch (e) {
-      console.error('[MARU] insight request failed', e);
+    }
+
+    const issueBtn =
+      document.getElementById('btn-realtime-issue') ||
+      document.querySelector('button[data-maru="realtime-issue"]');
+
+    if (issueBtn && !issueBtn.dataset.maruBound) {
+      issueBtn.dataset.maruBound = '1';
+      issueBtn.addEventListener('click', ()=>{
+        requestInsight({ scope:'global', depth:'summary', issue:true });
+      });
     }
   }
 
-  /* =========================
-     EXPANDED INSIGHT UI
-  ========================= */
-  let expandedEl = null;
-
-  function openExpandedInsight(res){
-    if (!expandedEl) {
-      expandedEl = document.createElement('div');
-      expandedEl.id = 'maru-expanded-insight';
-      expandedEl.innerHTML = `
-        <div class="mei-overlay"></div>
-        <div class="mei-panel">
-          <div class="mei-header">
-            <span class="mei-title">MARU Insight</span>
-            <button class="mei-close">×</button>
-          </div>
-          <div class="mei-body">
-            <pre class="mei-text"></pre>
-          </div>
-        </div>
-      `;
-      document.body.appendChild(expandedEl);
-      expandedEl.querySelector('.mei-close').onclick = closeExpandedInsight;
-      expandedEl.querySelector('.mei-overlay').onclick = closeExpandedInsight;
-      injectStyle();
-    }
-
-    expandedEl.querySelector('.mei-text').textContent = res.text || '';
-    expandedEl.style.display = 'block';
-
-    if (res.speech && isVoiceEnabled() && window.maruVoiceSpeak) {
-      window.maruVoiceSpeak(res.speech);
-    }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindButtons);
+  } else {
+    bindButtons();
+    setTimeout(bindButtons, 500);
   }
 
-  function closeExpandedInsight(){
-    if (expandedEl) expandedEl.style.display = 'none';
-  }
-
-  function injectStyle(){
-    if (document.getElementById('mei-style')) return;
-    const s = document.createElement('style');
-    s.id = 'mei-style';
-    s.textContent = `
-      #maru-expanded-insight { position: fixed; inset:0; z-index:9999; display:none; }
-      .mei-overlay { position:absolute; inset:0; background:rgba(0,0,0,.45); }
-      .mei-panel {
-        position:absolute; top:5%; left:50%; transform:translateX(-50%);
-        width:80%; max-width:960px; height:90%;
-        background:#fff; border-radius:10px; display:flex; flex-direction:column;
-      }
-      .mei-header {
-        padding:12px 16px; border-bottom:1px solid #ddd;
-        display:flex; justify-content:space-between; align-items:center;
-        font-weight:bold;
-      }
-      .mei-close { background:none; border:0; font-size:22px; cursor:pointer; }
-      .mei-body { padding:16px; overflow:auto; }
-      .mei-text { white-space:pre-wrap; line-height:1.6; }
-    `;
-    document.head.appendChild(s);
-  }
-
-  /* =========================
-     INIT
-  ========================= */
-  document.addEventListener('DOMContentLoaded', bindButtons);
-
-  window.MaruAddon = {
+  // 병합 공개
+  window.MaruAddon = Object.assign({}, Prev, {
     setScope,
+    handleTextQuery,
+    handleVoiceQuery,
     handleServerResponse,
     requestInsight
-  };
+  });
 
 })();

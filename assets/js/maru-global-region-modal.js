@@ -219,6 +219,13 @@ voiceBtn.classList.toggle('off', !regionVoiceEnabled);
     }
 
     document.body.append(backdrop, modal);
+	
+	// === Conversation Input Mount (Region) ===
+if (window.MaruConversationModal) {
+  MaruConversationModal.mountTo(modal);
+  MaruConversationModal.setContext({ level: 'region', id: regionId });
+  MaruConversationModal.setVoiceMode(regionVoiceEnabled === true);
+}
 
     // Context set (preserve original intent)
     window.activeRegionId = regionId || window.activeRegionId || null;
