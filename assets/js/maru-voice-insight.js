@@ -8,6 +8,18 @@
   let recognition = null;
   let silenceTimer = null;
   const SILENCE_TIMEOUT = 1200;
+  
+  // === MARU Context Helper ===
+function getCurrentMaruContext(){
+  if (
+    window.MaruConversationModal &&
+    typeof window.MaruConversationModal.getContext === 'function'
+  ) {
+    return window.MaruConversationModal.getContext();
+  }
+  return null;
+}
+
 
   function setState(state){
     currentState = state;
@@ -31,8 +43,10 @@
       const last=e.results[e.results.length-1];
       const text=last[0].transcript.trim();
       if(text && window.MaruAddon?.handleVoiceQuery){
-        window.MaruAddon.handleVoiceQuery(text);
-      }
+      const context = getCurrentMaruContext();
+      window.MaruAddon.handleVoiceQuery(text, context);
+    }
+
     };
     r.onerror=()=>{ if(currentState!==STATE.OFF) setState(STATE.LISTENING); };
     r.onend=()=>{ if(currentState!==STATE.OFF){ try{r.start();}catch(_){} setState(STATE.LISTENING);} };

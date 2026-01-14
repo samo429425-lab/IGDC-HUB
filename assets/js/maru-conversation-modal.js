@@ -49,5 +49,7 @@
   function setVoiceMode(on){ voiceMode=!!on; applyVisibility(); }
   function setContext(ctx){ context=ctx||null; }
 
-  window.MaruConversationModal={ mountTo, showInput, hideInput, setVoiceMode, setContext };
+  function getContext(){ return context; }
+  window.MaruConversationModal={ mountTo, showInput, hideInput, setVoiceMode, setContext, getContext };
+
 })();
