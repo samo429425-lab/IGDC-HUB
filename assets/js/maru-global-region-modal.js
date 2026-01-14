@@ -187,21 +187,31 @@ window.injectRegionContextResult = function (regionId, result) {
 
     function setVoice(on) {
   // 1) 실제 음성 제어는 애드온에 위임
-  if (window.MaruAddon && typeof MaruAddon.setVoiceEnabled === 'function') {
-    MaruAddon.setVoiceEnabled(!!on);
+ function setVoice(on) {
+  // 1) 음성 상태는 애드온이 단일 관리
+  if (window.MaruAddon && typeof window.MaruAddon.setVoiceEnabled === 'function') {
+    window.MaruAddon.setVoiceEnabled(!!on);
   }
 
-  // 2) UI는 애드온의 단일 상태를 기준으로 반영
-  const enabled = (window.MaruAddon && typeof MaruAddon.isVoiceEnabled === 'function')
-    ? MaruAddon.isVoiceEnabled()
+  const enabled = (window.MaruAddon && typeof window.MaruAddon.isVoiceEnabled === 'function')
+    ? window.MaruAddon.isVoiceEnabled()
     : false;
 
-  try { if (inputBar) inputBar.classList.toggle('hidden', enabled); } catch (e) {}
+  // 2) 입력창 제어는 ConversationModal에만 맡긴다
+  if (window.MaruConversationModal) {
+    if (enabled) {
+      window.MaruConversationModal.setVoiceMode(true);
+      window.MaruConversationModal.hideInput();
+    } else {
+      window.MaruConversationModal.setVoiceMode(false);
+      window.MaruConversationModal.showInput();
+    }
+  }
 
+  // 3) 버튼 UI 반영
   voiceBtn.classList.toggle('off', !enabled);
   voiceBtn.textContent = enabled ? 'VOICE ON' : 'VOICE OFF';
 }
-
 
     voiceBtn.addEventListener('click', () => {
   regionVoiceEnabled = !regionVoiceEnabled;
@@ -237,51 +247,19 @@ window.injectRegionContextResult = function (regionId, result) {
     modal.append(header, body);
 
 
-    // ---------- TEXT INPUT WIRING ----------
-    const inputEl = inputBar.querySelector('.maru-input-text');
-    if (inputEl) {
-      inputEl.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter') return;
-        const text = (inputEl.value || '').trim();
-        if (!text) return;
-        inputEl.value = '';
-// ---------- TEXT INPUT WIRING ----------
-const inputEl = inputBar.querySelector('.maru-input-text');
-if (inputEl) {
-  inputEl.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter') return;
-    const text = (inputEl.value || '').trim();
-    if (!text) return;
-    inputEl.value = '';
-
-    if (window.MaruAddon && typeof window.MaruAddon.handleTextQuery === 'function') {
-      window.MaruAddon.handleTextQuery({
-        text,
-        context: { level: 'region', id: window.activeRegionId || null }
-      });
-    }
-  });
-}
-
-        }
-      });
-    }
-
-    document.body.append(backdrop, modal);
-	
 // === Conversation Input Mount (Region) — FIXED ===
+// === Conversation Input Mount (Region) — FIXED / SAFE ===
 if (window.MaruConversationModal) {
-  MaruConversationModal.mountTo(modal);
+  window.MaruConversationModal.mountTo(modal);
 
-  // 컨텍스트 명확화
-  MaruConversationModal.setContext({
+  window.MaruConversationModal.setContext({
     level: 'region',
-    id: regionId || null
+    id: regionId || window.activeRegionId || null
   });
 
-  // 음성 상태와 무관하게 텍스트 입력 우선 보장
-  MaruConversationModal.setVoiceMode(false);
-  MaruConversationModal.showInput();
+  // 텍스트 입력 우선 보장 (음성 기능과 분리)
+  window.MaruConversationModal.setVoiceMode(false);
+  window.MaruConversationModal.showInput();
 }
 
 
