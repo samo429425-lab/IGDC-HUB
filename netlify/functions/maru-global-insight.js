@@ -97,48 +97,18 @@ function json(statusCode, body) {
 // -------------------------------
 // Mock Engine (교체 대상)
 // -------------------------------
-function mockEngine(prompt, scope) {
-  // 엔진은 "형태만" 보장한다.
-  // 실제 데이터는 이후 실엔진(OpenAI/크롤러/리서치)에서 채워진다.
-
-  if (scope === 'global') {
+function mockEngine(text, scope, mode) {
+  if (mode === 'expand') {
     return {
-      speech: '',
-      text: '',
-      data: {
-        regions: [],
-        countries: []
-      }
-    };
-  }
-
-  if (scope === 'region') {
-    return {
-      speech: '',
-      text: '',
-      data: {
-        summary: '',
-        issues: '',
-        countries: []
-      }
-    };
-  }
-
-  if (scope === 'country') {
-    return {
-      speech: '',
-      text: '',
-      data: {
-        summary: '',
-        issues: '',
-        videos: []
-      }
+      speech: `확장 주제에 대한 상세 설명입니다: ${text}`,
+      text: `확장 분석 (${scope})\n\n${text}`,
+      data: {}
     };
   }
 
   return {
-    speech: '',
-    text: '',
+    speech: `요약입니다: ${text}`,
+    text: `요약 (${scope}): ${text}`,
     data: {}
   };
 }
