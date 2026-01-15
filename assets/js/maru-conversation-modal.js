@@ -31,7 +31,8 @@
     if(!text) return;
     inputEl.value='';
     if(window.MaruAddon?.handleTextQuery){
-      window.MaruAddon.handleTextQuery(text,context);
+      window.MaruAddon.handleTextQuery({text, context});
+
     }
   }
 
@@ -49,5 +50,7 @@
   function setVoiceMode(on){ voiceMode=!!on; applyVisibility(); }
   function setContext(ctx){ context=ctx||null; }
 
-  window.MaruConversationModal={ mountTo, showInput, hideInput, setVoiceMode, setContext };
+  function getContext(){ return context; }
+  window.MaruConversationModal={ mountTo, showInput, hideInput, setVoiceMode, setContext, getContext };
+
 })();

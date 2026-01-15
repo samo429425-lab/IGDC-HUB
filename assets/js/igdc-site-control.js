@@ -375,7 +375,6 @@ const textarea = document.createElement('textarea');
 textarea.id = 'maru-global-summary-text';        // ★ 핵심
 textarea.className = 'igdc-sc-ai-textarea';
 textarea.readOnly = true;
-textarea.style.pointerEvents = 'none';
 textarea.value =
 `MARU 엔진 기반 글로벌 인사이트 요약 영역입니다.
 
