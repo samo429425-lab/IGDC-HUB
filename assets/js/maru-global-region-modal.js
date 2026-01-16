@@ -29,6 +29,49 @@
     { id: 'africa', label: 'Africa' }
   ];
 
+/* =========================================================
+ * ADDON → REGION MODAL DATA INJECTORS
+ * ========================================================= */
+
+// 1) 1차 글로벌 인사이트 결과 주입 (전체 Region 요약)
+window.injectMaruGlobalRegionData = function (regions) {
+  if (!Array.isArray(regions)) return;
+
+  regions.forEach(r => {
+    // Region 카드 요약 텍스트 주입
+    const brief = document.querySelector(
+      `.maru-region-card[data-region="${r.id}"] .maru-region-brief`
+    );
+    if (brief && r.summary) {
+      brief.textContent = r.summary;
+    }
+
+    // Issue Bar 갱신 (현재 열려 있는 Region만)
+    if (window.activeRegionId === r.id && r.issues && window.updateRegionIssueBar) {
+      window.updateRegionIssueBar(r.issues);
+    }
+  });
+};
+
+// 2) 특정 Region 컨텍스트 질의 응답 주입 (대화/보이스 결과)
+window.injectRegionContextResult = function (regionId, result) {
+  if (!regionId || !result) return;
+  if (window.activeRegionId && regionId !== window.activeRegionId) return;
+
+  // 요약 갱신
+  if (result.summary) {
+    const brief = document.querySelector(
+      `.maru-region-card[data-region="${regionId}"] .maru-region-brief`
+    );
+    if (brief) brief.textContent = result.summary;
+  }
+
+  // 이슈 갱신
+  if (result.issues && window.updateRegionIssueBar) {
+    window.updateRegionIssueBar(result.issues);
+  }
+};
+
   /* ================= STATE ================= */
   let backdrop = null;
   let modal = null;
@@ -143,26 +186,31 @@
     const voiceBtn = el('button', 'maru-region-voice-toggle off', 'VOICE OFF');
 
     function setVoice(on) {
-      regionVoiceEnabled = !!on;
-      voiceEnabled = !!on;
-
-      
-      try { if (inputBar) inputBar.classList.toggle('hidden', voiceEnabled); } catch (e) {}
-voiceBtn.classList.toggle('off', !regionVoiceEnabled);
-      voiceBtn.textContent = regionVoiceEnabled ? 'VOICE ON' : 'VOICE OFF';
-
-      if (regionVoiceEnabled) {
-        if (typeof window.startMaruMic === 'function') {
-          window.startMaruMic();
-        }
-      } else {
-        if (typeof window.stopMaruMic === 'function') {
-          window.stopMaruMic();
-        }
+      // 음성 상태는 Addon이 단일 관리
+      if (window.MaruAddon && typeof window.MaruAddon.setVoiceEnabled === 'function') {
+        window.MaruAddon.setVoiceEnabled(!!on);
       }
+
+    const enabled =
+    (window.MaruAddon && typeof window.MaruAddon.isVoiceEnabled === 'function')
+    ? window.MaruAddon.isVoiceEnabled()
+    : !!on;   // ← ★ 이 한 부분만 다름
+
+    voiceEnabled = enabled;
+	window.MARU_REGION_VOICE_READY = enabled;
+
+
+      // 버튼 UI 반영
+      voiceBtn.classList.toggle('off', !enabled);
+      voiceBtn.textContent = enabled ? 'VOICE ON' : 'VOICE OFF';
     }
 
-    voiceBtn.addEventListener('click', () => setVoice(!regionVoiceEnabled));
+
+    voiceBtn.addEventListener('click', () => {
+  regionVoiceEnabled = !regionVoiceEnabled;
+  setVoice(regionVoiceEnabled);
+});
+
 
     const closeBtn = el('button', 'maru-region-close', '닫기');
     closeBtn.addEventListener('click', closeAll);
@@ -190,35 +238,16 @@ voiceBtn.classList.toggle('off', !regionVoiceEnabled);
     });
 
     modal.append(header, body);
+   document.body.append(backdrop, modal);
+   const convoSlot = el('div', 'maru-conversation-slot');
+   modal.appendChild(convoSlot);
 
-    /* ---------- INPUT BAR SLOT ---------- */
-    const inputBar = document.createElement('div');
-    inputBar.className = 'maru-input-bar';
-    inputBar.innerHTML = `
-      <input
-        type="text"
-        class="maru-input-text"
-        placeholder="질문을 입력하세요… (Enter)"
-      />
-    `;
-    modal.appendChild(inputBar);
+   window.MaruConversationModal?.mountTo(convoSlot);
 
-    // ---------- TEXT INPUT WIRING ----------
-    const inputEl = inputBar.querySelector('.maru-input-text');
-    if (inputEl) {
-      inputEl.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter') return;
-        const text = (inputEl.value || '').trim();
-        if (!text) return;
-        inputEl.value = '';
-        if (window.MaruAddon && typeof window.MaruAddon.handleTextQuery === 'function') {
-          try { window.MaruAddon.handleTextQuery({ text, context: { type: 'region', id: window.activeRegionId || null } }); }
-          catch (_) { window.MaruAddon.handleTextQuery(text, { type: 'region', id: window.activeRegionId || null }); }
-        }
-      });
-    }
-
-    document.body.append(backdrop, modal);
+  // === FIX: set conversation context (REGION) ===
+  if (window.MaruConversationModal && typeof window.MaruConversationModal.setContext === 'function') {
+    window.MaruConversationModal.setContext({ level: 'region', id: regionId });
+ }
 
     // Context set (preserve original intent)
     window.activeRegionId = regionId || window.activeRegionId || null;
