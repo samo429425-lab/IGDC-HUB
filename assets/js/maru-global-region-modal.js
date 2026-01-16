@@ -242,12 +242,25 @@ window.injectRegionContextResult = function (regionId, result) {
    const convoSlot = el('div', 'maru-conversation-slot');
    modal.appendChild(convoSlot);
 
-   window.MaruConversationModal?.mountTo(convoSlot);
+// === Conversation mount (AFTER DOM attach & structure ready) ===
+if (window.MaruConversationModal) {
+  try {
 
-  // === FIX: set conversation context (REGION) ===
-  if (window.MaruConversationModal && typeof window.MaruConversationModal.setContext === 'function') {
-    window.MaruConversationModal.setContext({ level: 'region', id: regionId });
- }
+    // === Prevent duplicate Conversation mount ===
+    if (window.MaruConversationModal.__mounted) {
+      window.MaruConversationModal.unmount?.();
+      window.MaruConversationModal.__mounted = false;
+    }
+
+    window.MaruConversationModal.mountTo(convoSlot);
+    window.MaruConversationModal.__mounted = true;
+	
+	window.MaruConversationModal.setContext?.({ level: 'region', id: regionId });
+
+  } catch (e) {
+    console.warn('[MARU][REGION] Conversation mount failed', e);
+  }
+}
 
     // Context set (preserve original intent)
     window.activeRegionId = regionId || window.activeRegionId || null;
