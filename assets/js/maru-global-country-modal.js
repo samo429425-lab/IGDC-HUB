@@ -666,9 +666,6 @@ function expandCountrySection(countryName, data = {}) {
 
     modal = el('div', 'maru-country-modal');
 	
-	document.body.appendChild(backdrop);
-    document.body.appendChild(modal);
-
 
 /* ---------- HEADER UI ---------- */
 const header = el('div', 'maru-country-header');
