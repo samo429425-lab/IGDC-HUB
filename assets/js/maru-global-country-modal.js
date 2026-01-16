@@ -659,7 +659,8 @@ function expandCountrySection(countryName, data = {}) {
 
   /* ================= OPEN ================= */
   async function open(regionId) {
-    if (modal) return;
+
+    closeModal();
 
     backdrop = el('div', 'maru-country-backdrop');
     backdrop.onclick = closeModal;
