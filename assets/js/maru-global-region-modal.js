@@ -56,7 +56,7 @@ window.injectMaruGlobalRegionData = function (regions) {
 // 2) 특정 Region 컨텍스트 질의 응답 주입 (대화/보이스 결과)
 window.injectRegionContextResult = function (regionId, result) {
   if (!regionId || !result) return;
-  if (regionId !== window.activeRegionId) return;
+  if (window.activeRegionId && regionId !== window.activeRegionId) return;
 
   // 요약 갱신
   if (result.summary) {
@@ -197,6 +197,8 @@ window.injectRegionContextResult = function (regionId, result) {
     : !!on;   // ← ★ 이 한 부분만 다름
 
     voiceEnabled = enabled;
+	window.MARU_REGION_VOICE_READY = enabled;
+
 
       // 버튼 UI 반영
       voiceBtn.classList.toggle('off', !enabled);
@@ -242,6 +244,10 @@ window.injectRegionContextResult = function (regionId, result) {
 
    window.MaruConversationModal?.mountTo(convoSlot);
 
+  // === FIX: set conversation context (REGION) ===
+  if (window.MaruConversationModal && typeof window.MaruConversationModal.setContext === 'function') {
+    window.MaruConversationModal.setContext({ level: 'region', id: regionId });
+ }
 
     // Context set (preserve original intent)
     window.activeRegionId = regionId || window.activeRegionId || null;

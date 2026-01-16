@@ -702,6 +702,7 @@ countryVoiceCheckbox.addEventListener('change', () => {
 // UI 토글 상태만 애드온에 전달
 if (window.MaruAddon && typeof MaruAddon.setVoiceEnabled === 'function') {
   MaruAddon.setVoiceEnabled(enabled);
+  window.MARU_REGION_VOICE_READY = enabled;
 }
 
 // 애드온의 단일 음성 상태를 기준으로 UI 동기화
@@ -754,6 +755,14 @@ modal.appendChild(convoSlot);
 
 window.MaruConversationModal?.mountTo(convoSlot);
 
+// === FIX: set conversation context (COUNTRY default = region) ===
+if (window.MaruConversationModal && typeof window.MaruConversationModal.setContext === 'function') {
+  window.MaruConversationModal.setContext({
+    level: 'region',
+    id: regionId
+  });
+}
+
 /* DOM 부착 */
 document.body.appendChild(backdrop);
 document.body.appendChild(modal);
@@ -776,10 +785,16 @@ body.innerHTML = countries
 document.querySelectorAll('.maru-country-card').forEach(card => {
   card.addEventListener('click', () => {
     activeCountryName = card.dataset.country;
+	// === FIX: set conversation context (COUNTRY selected) ===
+if (window.MaruConversationModal && typeof window.MaruConversationModal.setContext === 'function') {
+  window.MaruConversationModal.setContext({
+    level: 'country',
+    id: activeCountryName
+  });
+}
+
   });
 });
-
-}
 
 
 /* ================= VOICE HUB =================

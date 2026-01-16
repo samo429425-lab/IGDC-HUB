@@ -51,6 +51,11 @@
   function setContext(ctx){ context=ctx||null; }
 
   function getContext(){ return context; }
+  function applyVisibility(){
+    if(!inputWrap) return;
+    // voiceMode=true면 숨김, false면 표시
+    inputWrap.style.display = voiceMode ? 'none' : 'flex';
+  }
 
  window.MaruConversationModal={
   mountTo,

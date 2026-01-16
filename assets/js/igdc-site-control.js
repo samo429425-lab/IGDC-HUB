@@ -430,7 +430,7 @@ btnRun.addEventListener('click', function (e) {
   textarea.value = '전 세계 1차 데이터를 취합 중입니다…';
 
   if (window.MaruAddon && typeof window.MaruAddon.bootstrapGlobalInsight === 'function') {
-    window.MaruAddon.bootstrapGlobalInsight();
+    window.MaruAddon.bootstrapGlobalInsight({ refresh: true });
   }
 });
 
@@ -458,48 +458,6 @@ btnCopy.addEventListener('click', function (e) {
   textarea.setSelectionRange(0, textarea.value.length);
   document.execCommand('copy');
 });
-
-
-  // 2️⃣ AI 글로벌 인사이트 실행 → 애드온에 1차 전체 데이터 수집 신호
-  btnRun.addEventListener('click', function (e) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    textarea.value = '전 세계 1차 데이터를 취합 중입니다…';
-
-    if (window.MaruAddon && typeof window.MaruAddon.bootstrapGlobalInsight === 'function') {
-      window.MaruAddon.bootstrapGlobalInsight();
-    } else {
-      console.warn('[MARU] MaruAddon.bootstrapGlobalInsight not ready');
-    }
-  });
-
-  // 3️⃣ 실시간 이슈 → 애드온에 실시간 이슈 요청 신호
-  btnRealtime.addEventListener('click', function (e) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    textarea.value = '실시간 글로벌 이슈를 취합 중입니다…';
-
-    if (window.MaruAddon && typeof window.MaruAddon.requestInsight === 'function') {
-      window.MaruAddon.requestInsight({
-        mode: 'realtime-global',
-        source: 'panel'
-      });
-    } else {
-      console.warn('[MARU] MaruAddon.requestInsight not ready');
-    }
-  });
-
-  // 4️⃣ 텍스트 복사 (요약 카드 내용)
-  btnCopy.addEventListener('click', function (e) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    textarea.select();
-    textarea.setSelectionRange(0, textarea.value.length);
-    document.execCommand('copy');
-  });
 
   return box;
 }
@@ -603,55 +561,6 @@ AI 글로벌 인사이트 실행을 통해
   }
 
   renderPanel();
-})();
-
-
-/* =========================================================
- * MARU GLOBAL INSIGHT — POST-RENDER TRIGGER FIX
- * (Do not change existing DOM / layout)
- * ========================================================= */
-(function () {
-  try {
-    const root = document.getElementById('igdc-site-control');
-    if (!root) return;
-
-    // Find MARU card & body
-    const maruCard =
-      root.querySelector('.igdc-maru-card') ||
-      root.querySelector('[data-maru="global-insight"]') ||
-      root.querySelector('.maru-global-insight');
-
-    if (!maruCard) return;
-
-    const body =
-      maruCard.querySelector('.igdc-maru-card-body') ||
-      maruCard.querySelector('.igdc-side-card-body') ||
-      maruCard.querySelector('textarea') ||
-      maruCard;
-
-
-    // 2) Buttons mapping
-    const btns = maruCard.querySelectorAll('button');
-    let btnRun=null, btnRealtime=null, btnCopy=null;
-
-    btns.forEach(b=>{
-      const t=(b.textContent||'').trim();
-      if (t.includes('AI 글로벌') || t.includes('글로벌 인사이트 실행')) btnRun=b;
-      else if (t.includes('실시간')) btnRealtime=b;
-      else if (t.includes('복사')) btnCopy=b;
-    });
-
-
-    // 5) Copy
-    if (btnCopy) {
-      btnCopy.onclick = function(e){
-        e.stopPropagation();
-        if (!body) return;
-        const text = body.value || body.textContent || '';
-        navigator.clipboard.writeText(text);
-      }
-    }
-  } catch (e) {}
 })();
 
 

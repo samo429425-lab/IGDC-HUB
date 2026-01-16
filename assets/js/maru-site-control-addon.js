@@ -138,6 +138,11 @@ MaruAddon.handleVoiceQuery = function (payload, context = {}) {
   return routeInbound({ input: 'voice', text: payload || '', context });
 };
 
+// topic 추출 (간단 1차)
+function extractTopic(t) {
+  const m = (t || '').match(/(?:에 대해서|관련해서|부분|항목|주제)\s*([^\s]+)/);
+  return m ? m[1] : null;
+}
 
   /* =====================================================
    * 3. SINGLE VOICE CONTROL + TEXT INPUT RULES
@@ -316,6 +321,27 @@ function tryOpenCountryVideoByIndex(idx) {
       target = context.id || null;
     }
 
+// === MIXED REFRESH TRIGGER (A + B) ===
+const rawText = (text || '').trim();
+const voiceIntent = detectVoiceIntent(rawText);
+
+const topic = extractTopic(rawText);
+
+const FORCE_KEYWORDS = /(다시|재조사|재수집|최신|갱신|업데이트|추가 조사)/;
+const NO_REFRESH_KEYWORDS = /(요약|정리|설명|비교)/;
+
+let refresh = false;
+
+// B안: 명시적 재조사
+if (FORCE_KEYWORDS.test(rawText)) refresh = true;
+
+// A안: Expand + topic (단, 요약/설명은 제외)
+if (voiceIntent === 'expand' && topic && !NO_REFRESH_KEYWORDS.test(rawText)) refresh = true;
+
+// req에 반영될 값을 return 오브젝트에 넣기 위해 변수로 남김
+const refreshFlag = refresh;
+const focusTopic = topic;
+
     return {
       source: 'user',
       input,
@@ -323,7 +349,11 @@ function tryOpenCountryVideoByIndex(idx) {
       scope,
       target,
       intent: detectIntent(text),
-      voiceWanted: (input === 'voice') ? true : false
+      voiceWanted: (input === 'voice') ? true : false,
+	  
+	  refresh: refreshFlag,
+      focus: focusTopic,
+
     };
   }
 
@@ -381,7 +411,9 @@ function dispatchCommand(req) {
       body: JSON.stringify({
         text: req.text,
         scope: req.scope,
-        depth: req.intent // summary | expand | realtime | video
+        depth: req.intent, // summary | expand | realtime | video
+		refresh: !!req.refresh,
+        focus: req.focus || null
       })
     }).then(r => r.json());
   }
@@ -460,12 +492,16 @@ function dispatchCommand(req) {
       }
     }
 
+// === Base text ===
+const text = req.text || '';
+
 // === Voice Intent → Expand Flag ===
 const intent = detectVoiceIntent(text);
 
 if (intent === 'expand') {
   res.mode = 'expand';
 }
+
 
     // 7-7) 상세(expand) 오버레이
     if (res.mode === 'expand' && typeof window.openMaruDetailOverlay === 'function') {
@@ -494,7 +530,7 @@ if (say) {
 }
 
 }
-
+  }
   /* =====================================================
    * 8. EXPORT
    * ===================================================== */

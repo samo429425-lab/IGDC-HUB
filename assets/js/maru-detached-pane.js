@@ -39,11 +39,18 @@
     return pane;
   }
 
-  function bindClose(pane) {
-    pane.querySelector('.maru-pane-close').onclick = () => {
-      pane.remove();
-    };
-  }
+function bindClose(pane) {
+  pane.querySelector('.maru-pane-close').onclick = () => {
+
+    // === FIX: media state OFF ===
+    if (window.MaruAddon && typeof window.MaruAddon.setMediaState === 'function') {
+      window.MaruAddon.setMediaState('video', false);
+    }
+
+    pane.remove();
+  };
+}
+
 
   function makeDraggable(pane) {
     const header = pane.querySelector('.maru-pane-header');
@@ -81,27 +88,30 @@
   }
 
   function openVideo({ title, videoSrc, audioSrc }) {
-    let html = '';
-    if (videoSrc) {
-      html += `<video src="${videoSrc}" controls autoplay></video>`;
-    }
-    if (audioSrc) {
-      html += `<audio src="${audioSrc}" controls autoplay></audio>`;
-    }
+  let html = '';
 
-    createPane({ title, content: html });
-
-    window.MaruAddon?.setMediaState?.('video', true);
+  if (videoSrc) {
+    html += `<video src="${videoSrc}" controls></video>`;
+  }
+  if (audioSrc) {
+    html += `<audio src="${audioSrc}" controls></audio>`;
   }
 
-  function openMusic({ title, audioSrc }) {
-    createPane({
-      title,
-      content: `<audio src="${audioSrc}" controls autoplay></audio>`
-    });
+  createPane({ title, content: html });
 
-    window.MaruAddon?.setMediaState?.('music', true);
-  }
+  // media ON (영상/오디오 재생 중 → TTS 차단)
+  window.MaruAddon?.setMediaState?.('video', true);
+}
+
+function openMusic({ title, audioSrc }) {
+  createPane({
+    title,
+    content: `<audio src="${audioSrc}" controls></audio>`
+  });
+
+  // media ON (음악도 video 상태로 통일)
+  window.MaruAddon?.setMediaState?.('video', true);
+}
 
   function openIframe({ title, iframeSrc }) {
     createPane({
