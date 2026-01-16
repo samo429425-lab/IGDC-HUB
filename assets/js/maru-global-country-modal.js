@@ -231,6 +231,20 @@
   .maru-country-card.expanded{
     grid-column:1 / -1
   }
+  /* ===== EXPANDED SECTION UI ===== */
+.maru-country-expanded{
+  max-height:0;
+  overflow:hidden;
+  opacity:0;
+  transition:
+    max-height .35s ease,
+    opacity .25s ease;
+}
+
+.maru-country-card.expanded .maru-country-expanded{
+  max-height:600px;   /* 충분히 큰 값 */
+  opacity:1;
+}  
   .maru-country-name{
     color:#1f2f5c; /* 곤/군청 */
     margin:0 0 6px;
@@ -307,6 +321,51 @@ let activeRegionId = null;
 let activeCountryName = null;
 let voiceEnabled = true;
 
+/* =========================================================
+ * ADDON → COUNTRY MODAL DATA INJECTORS
+ * ========================================================= */
+
+// 1) 1차 글로벌 인사이트 결과 주입 (전체 국가 데이터)
+window.injectMaruGlobalCountryData = function (countries) {
+  if (!Array.isArray(countries)) return;
+
+  countries.forEach(c => {
+    if (!c.name) return;
+
+    // 현재 열려 있는 국가일 때만 상세 반영
+    if (activeCountryName === c.name) {
+      if (c.summary) updateCountrySummary(c.summary);
+      if (c.issues && window.updateCountryIssueBar) {
+        window.updateCountryIssueBar(c.issues);
+      }
+      if (c.videos && window.injectMaruCountryVideos) {
+        window.injectMaruCountryVideos({
+          country: c.name,
+          videos: c.videos
+        });
+      }
+    }
+  });
+};
+
+// 2) 특정 국가 컨텍스트 질의 응답 주입 (음성/문자)
+window.injectCountryContextResult = function (countryName, result) {
+  if (!countryName || !result) return;
+  if (countryName !== activeCountryName) return;
+
+  if (result.summary) updateCountrySummary(result.summary);
+
+  if (result.issues && window.updateCountryIssueBar) {
+    window.updateCountryIssueBar(result.issues);
+  }
+
+  if (result.videos && window.injectMaruCountryVideos) {
+    window.injectMaruCountryVideos({
+      country: countryName,
+      videos: result.videos
+    });
+  }
+};
 
 /* ============== DETAIL + VOICE ============== */
 function openCountryDetail(countryName) {
@@ -470,24 +529,59 @@ function openCountryVideo(index){
 
   const player = document.createElement('div');
   player.className = 'maru-video-player';
+  
+  // 🔹 Add-on에 "영상 재생 시작" 알림
+if (window.MaruAddon && typeof MaruAddon.setMediaPlaying === 'function') {
+  MaruAddon.setMediaPlaying(true);
+}
 
   const closeBtn = document.createElement('button');
   closeBtn.className = 'maru-video-close';
   closeBtn.textContent = '닫기';
-  closeBtn.onclick = () => overlay.remove();
+  closeBtn.onclick = () => {
+  overlay.remove();
+
+  // 🔹 Add-on에 "영상 재생 종료" 알림
+  if (window.MaruAddon && typeof MaruAddon.setMediaPlaying === 'function') {
+    MaruAddon.setMediaPlaying(false);
+  }
+};
+
 
   player.appendChild(closeBtn);
 
-  // iframe or video
-  if (v.src.includes('youtube') || v.src.includes('iframe')) {
-    player.innerHTML += `<iframe src="${v.src}" frameborder="0" allowfullscreen></iframe>`;
-  } else {
-    player.innerHTML += `<video src="${v.src}" controls autoplay></video>`;
+ // iframe or video
+if (v.src.includes('youtube') || v.src.includes('iframe')) {
+  player.innerHTML += `<iframe src="${v.src}" frameborder="0" allowfullscreen></iframe>`;
+} else {
+  player.innerHTML += `<video src="${v.src}" controls autoplay></video>`;
+
+  const videoEl = player.querySelector('video');
+  if (videoEl) {
+    videoEl.addEventListener('ended', () => {
+      if (window.MaruAddon && typeof MaruAddon.setMediaPlaying === 'function') {
+        MaruAddon.setMediaPlaying(false);
+      }
+    });
   }
+}
+
 
   overlay.appendChild(player);
   document.body.appendChild(overlay);
+  
+  overlay.addEventListener('click', e => {
+  if (e.target === overlay) {
+    overlay.remove();
+
+    if (window.MaruAddon && typeof MaruAddon.setMediaPlaying === 'function') {
+      MaruAddon.setMediaPlaying(false);
+    }
+  }
+});
+
 }
+
 
 
   /* ================= RENDER ================= */
@@ -506,6 +600,62 @@ function openCountryVideo(index){
       </div>
     </div>`;
   }
+  
+/* ================= EXPAND ================= */
+/* 국가 카드 클릭 시, 모달 내부에서 확장되는 섹션 */
+
+function expandCountrySection(countryName, data = {}) {
+  const body = document.querySelector('.maru-country-body');
+  if (!body) return;
+
+  const card = body.querySelector(
+    `.maru-country-card[data-country="${countryName}"]`
+  );
+  if (!card) return;
+
+  // ✅ 이미 열려 있으면 접기 (토글)
+  if (card.classList.contains('expanded')) {
+    card.classList.remove('expanded');
+    return;
+  }
+
+  // ✅ 다른 카드들 접기
+  document
+    .querySelectorAll('.maru-country-card.expanded')
+    .forEach(c => c.classList.remove('expanded'));
+
+  // ✅ 현재 카드 열기
+  card.classList.add('expanded');
+
+  // ✅ 확장 영역 생성 (1회만)
+  let detail = card.querySelector('.maru-country-expanded');
+  if (!detail) {
+    detail = document.createElement('div');
+    detail.className = 'maru-country-expanded';
+    detail.innerHTML = `
+      <hr>
+      <p><strong>국가 심화 요약</strong></p>
+      <p>${data.detail || '현재 심화 분석 데이터가 준비 중입니다.'}</p>
+      <button class="maru-country-detail-btn">
+        AI 글로벌 인사이트 실행
+      </button>
+    `;
+    card.appendChild(detail);
+
+    // 상세 분석은 버튼 클릭 시에만 실행
+    const btn = detail.querySelector('.maru-country-detail-btn');
+    if (btn) {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation(); // 카드 토글 방지
+        if (window.MaruAddon && typeof MaruAddon.handleVoiceQuery === 'function') {
+          window.MaruAddon.handleVoiceQuery(
+            `${countryName}에 대한 글로벌 인사이트 상세 분석을 수행해줘`
+          );
+        }
+      });
+    }
+  }
+}
 
   /* ================= OPEN ================= */
   async function open(regionId) {
@@ -547,18 +697,20 @@ if (window.MaruCountryVoice) window.MaruCountryVoice.disable?.();
 countryVoiceCheckbox.addEventListener('change', () => {
   const enabled = countryVoiceCheckbox.checked;
 
-  // 🔑 전역 음성(STT) 실제 제어
-  if (enabled) {
-    if (typeof window.startMaruMic === 'function') {
-      window.startMaruMic();
-    } else {
-      console.error('[COUNTRY VOICE] startMaruMic not found');
-    }
-  } else {
-    if (typeof window.stopMaruMic === 'function') {
-      window.stopMaruMic();
-    }
-  }
+// === VOICE TOGGLE ON/OFF (Country) : delegated to Addon ===
+
+// UI 토글 상태만 애드온에 전달
+if (window.MaruAddon && typeof MaruAddon.setVoiceEnabled === 'function') {
+  MaruAddon.setVoiceEnabled(enabled);
+  window.MARU_REGION_VOICE_READY = enabled;
+}
+
+// 애드온의 단일 음성 상태를 기준으로 UI 동기화
+const voiceOn =
+  window.MaruAddon && typeof MaruAddon.isVoiceEnabled === 'function'
+    ? MaruAddon.isVoiceEnabled()
+    : false;
+
 });
 
 
@@ -596,26 +748,25 @@ const body = el(
 
 /* header → issue bar → body 순서로 구성 */
 modal.appendChild(header);
-
-/* ---------- INPUT BAR SLOT ---------- */
-const inputBar = document.createElement('div');
-inputBar.className = 'maru-input-bar hidden';
-inputBar.innerHTML = `
-  <input
-    type="text"
-    class="maru-input-text"
-    placeholder="질문을 입력하세요… (Enter)"
-  />
-`;
-modal.appendChild(inputBar);
-
 modal.appendChild(body);
+
+const convoSlot = el('div', 'maru-conversation-slot');
+modal.appendChild(convoSlot);
+
+window.MaruConversationModal?.mountTo(convoSlot);
+
+// === FIX: set conversation context (COUNTRY default = region) ===
+if (window.MaruConversationModal && typeof window.MaruConversationModal.setContext === 'function') {
+  window.MaruConversationModal.setContext({
+    level: 'region',
+    id: regionId
+  });
+}
 
 /* DOM 부착 */
 document.body.appendChild(backdrop);
 document.body.appendChild(modal);
 
-window.MARU_COUNTRY_VOICE_READY = true;
 
 /* 닫기 */
 document.getElementById('maruCountryClose').onclick = closeModal;
@@ -634,13 +785,16 @@ body.innerHTML = countries
 document.querySelectorAll('.maru-country-card').forEach(card => {
   card.addEventListener('click', () => {
     activeCountryName = card.dataset.country;
-	openCountryDetail(activeCountryName);
+	// === FIX: set conversation context (COUNTRY selected) ===
+if (window.MaruConversationModal && typeof window.MaruConversationModal.setContext === 'function') {
+  window.MaruConversationModal.setContext({
+    level: 'country',
+    id: activeCountryName
+  });
+}
+
   });
 });
-
-/* 음성 대기 상태 보장 */
-window.MARU_COUNTRY_VOICE_READY = true;
-}
 
 
 /* ================= VOICE HUB =================
@@ -795,6 +949,19 @@ function requestTopic(countryKey, topic, depth = 'summary') {
   };
 
 })();
+
+window.openMaruCountryVideoByIndex = function (idx) {
+  const cards = document.querySelectorAll('.maru-country-video-card');
+  if (!cards || !cards.length) return false;
+  if (idx < 0 || idx >= cards.length) return false;
+  try {
+    cards[idx].click();
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
 
   /* ================= EXPOSE ================= */
   window.openMaruGlobalCountryModal = open;
