@@ -51,6 +51,25 @@
   function setContext(ctx){ context=ctx||null; }
 
   function getContext(){ return context; }
-  window.MaruConversationModal={ mountTo, showInput, hideInput, setVoiceMode, setContext, getContext };
+
+ window.MaruConversationModal={
+  mountTo,
+  ensureReady,
+  showInput,
+  hideInput,
+  setVoiceMode,
+  setContext,
+  getContext
+};
+
+  function ensureReady(target){
+    if(!container) createUI();
+    if(target && (!mounted || container.parentNode!==target)){
+      if(container.parentNode) container.parentNode.removeChild(container);
+      target.appendChild(container);
+      mounted=true;
+    }
+    applyVisibility();
+  }
 
 })();

@@ -21,7 +21,12 @@
    * ===================================================== */
 
   let VOICE_ENABLED = false;
-  let MEDIA_PLAYING = false;
+  const MEDIA_STATE = {
+  video: false,
+  music: false,
+  narration: false
+};
+
 
   const STATE = {
     lastRequest: null,
@@ -114,7 +119,12 @@ MaruAddon.handleVoiceQuery = function (payload, context = {}) {
 
 // 영상 재생 상태 제어 (UX 충돌 방지)
 MaruAddon.setMediaPlaying = function (on) {
-  MEDIA_PLAYING = !!on;
+  MEDIA_STATE.video = !!on;
+};
+
+MaruAddon.setMediaState = function (type, on) {
+  if (!MEDIA_STATE.hasOwnProperty(type)) return;
+  MEDIA_STATE[type] = !!on;
 };
 
   // 규칙:
@@ -284,27 +294,12 @@ function tryOpenCountryVideoByIndex(idx) {
 function normalizeEngineResponse(raw) {
   return {
     ok: raw?.ok === true,
-
-    text:
-      raw?.text ??
-      raw?.summary ??
-      '',
-
-    mode:
-      raw?.mode ??
-      'summary',
-
-    data: {
-      issues:
-        raw?.data?.issues ?? null,
-
-      videos:
-        Array.isArray(raw?.data?.videos)
-          ? raw.data.videos
-          : []
-    }
+    text: raw?.text ?? raw?.summary ?? '',
+    mode: raw?.mode ?? 'summary',
+    data: raw?.data ?? {}   // ✅ regions/countries/issues/videos 전부 보존
   };
 }
+
 
 function dispatchCommand(req) {
   STATE.lastRequest = req;
@@ -429,15 +424,16 @@ function dispatchCommand(req) {
     // 7-8) 음성 읽기(요청이 어떤 것이든, 토글 ON이면 읽어줌)
     // - 보이스 요청은 반드시 읽기
     // - 텍스트 요청도 토글 ON이면 읽기 가능
-   if (VOICE_ENABLED && !MEDIA_PLAYING && typeof window.maruVoiceSpeak === 'function') {
-      // 엔진이 speech를 주면 speech 우선, 없으면 text
-      const say = (res.speech || res.text || '').trim();
-      if (say) {
-        // UI 제어 응답(문자창 열기/닫기)은 위에서 이미 처리했으므로 여기선 엔진 응답만
-        window.maruVoiceSpeak(say);
-      }
-    }
+ if (
+  VOICE_ENABLED &&
+  !MEDIA_STATE.video &&
+  typeof window.maruVoiceSpeak === 'function'
+) {
+  const say = (res.speech || res.text || '').trim();
+  if (say) {
+    window.maruVoiceSpeak(say);
   }
+}
 
   /* =====================================================
    * 8. EXPORT
