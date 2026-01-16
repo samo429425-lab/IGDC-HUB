@@ -64,22 +64,16 @@ r.onend = () => {
   }
 
 function start(){
-  // 음성 OFF 상태라도 상태 동기화는 반드시 수행
-if (
-  window.MaruAddon &&
-  MaruAddon.isVoiceEnabled &&
-  !MaruAddon.isVoiceEnabled()
-) {
-  setState(STATE.OFF);
-  return;
-}
+  // ⬇️ 반드시 여기 (함수 시작 직후, 맨 위)
+  if (
+    window.MaruAddon &&
+    MaruAddon.isVoiceEnabled &&
+    !MaruAddon.isVoiceEnabled()
+  ) {
+    return;
+  }
 
-// REGION READY가 false여도 음성 상태는 초기화한다
-if (window.MARU_REGION_VOICE_READY === false) {
-  setState(STATE.OFF);
-  return;
-}
-
+  if (window.MARU_REGION_VOICE_READY === false) return;
 
   if(!recognition) recognition = initRecognition();
   try{
