@@ -195,6 +195,8 @@ window.injectRegionContextResult = function (regionId, result) {
         ? window.MaruAddon.isVoiceEnabled()
         : false;
 
+      voiceEnabled = enabled; 
+	  
       // 버튼 UI 반영
       voiceBtn.classList.toggle('off', !enabled);
       voiceBtn.textContent = enabled ? 'VOICE ON' : 'VOICE OFF';
