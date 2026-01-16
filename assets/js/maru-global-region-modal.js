@@ -191,12 +191,13 @@ window.injectRegionContextResult = function (regionId, result) {
         window.MaruAddon.setVoiceEnabled(!!on);
       }
 
-      const enabled = (window.MaruAddon && typeof window.MaruAddon.isVoiceEnabled === 'function')
-        ? window.MaruAddon.isVoiceEnabled()
-        : false;
+    const enabled =
+    (window.MaruAddon && typeof window.MaruAddon.isVoiceEnabled === 'function')
+    ? window.MaruAddon.isVoiceEnabled()
+    : !!on;   // ← ★ 이 한 부분만 다름
 
-      voiceEnabled = enabled; 
-	  
+    voiceEnabled = enabled;
+
       // 버튼 UI 반영
       voiceBtn.classList.toggle('off', !enabled);
       voiceBtn.textContent = enabled ? 'VOICE ON' : 'VOICE OFF';
