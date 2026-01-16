@@ -31,23 +31,50 @@
     if(!text) return;
     inputEl.value='';
     if(window.MaruAddon?.handleTextQuery){
-      window.MaruAddon.handleTextQuery(text,context);
+      window.MaruAddon.handleTextQuery({text, context});
+
     }
   }
 
   function mountTo(target){
     if(!container) createUI();
-    if(mounted) return;
     target.appendChild(container);
     mounted=true;
     applyVisibility();
   }
 
-  function applyVisibility(){ inputWrap.style.display = voiceMode ? 'none':'flex'; }
+
   function showInput(){ inputWrap.style.display='flex'; }
-  function hideInput(){ if(voiceMode) inputWrap.style.display='none'; }
+  function hideInput(){ inputWrap.style.display='none'; }
+  
   function setVoiceMode(on){ voiceMode=!!on; applyVisibility(); }
   function setContext(ctx){ context=ctx||null; }
 
-  window.MaruConversationModal={ mountTo, showInput, hideInput, setVoiceMode, setContext };
+  function getContext(){ return context; }
+  function applyVisibility(){
+    if(!inputWrap) return;
+    // voiceMode=true면 숨김, false면 표시
+    inputWrap.style.display = voiceMode ? 'none' : 'flex';
+  }
+
+ window.MaruConversationModal={
+  mountTo,
+  ensureReady,
+  showInput,
+  hideInput,
+  setVoiceMode,
+  setContext,
+  getContext
+};
+
+  function ensureReady(target){
+    if(!container) createUI();
+    if(target && (!mounted || container.parentNode!==target)){
+      if(container.parentNode) container.parentNode.removeChild(container);
+      target.appendChild(container);
+      mounted=true;
+    }
+    applyVisibility();
+  }
+
 })();

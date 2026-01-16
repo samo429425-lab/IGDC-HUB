@@ -8,6 +8,18 @@
   let recognition = null;
   let silenceTimer = null;
   const SILENCE_TIMEOUT = 1200;
+  
+  // === MARU Context Helper ===
+function getCurrentMaruContext(){
+  if (
+    window.MaruConversationModal &&
+    typeof window.MaruConversationModal.getContext === 'function'
+  ) {
+    return window.MaruConversationModal.getContext();
+  }
+  return null;
+}
+
 
   function setState(state){
     currentState = state;
@@ -31,15 +43,51 @@
       const last=e.results[e.results.length-1];
       const text=last[0].transcript.trim();
       if(text && window.MaruAddon?.handleVoiceQuery){
-        window.MaruAddon.handleVoiceQuery(text);
-      }
+      const context = getCurrentMaruContext();
+      window.MaruAddon.handleVoiceQuery(text, context);
+    }
+
     };
     r.onerror=()=>{ if(currentState!==STATE.OFF) setState(STATE.LISTENING); };
-    r.onend=()=>{ if(currentState!==STATE.OFF){ try{r.start();}catch(_){} setState(STATE.LISTENING);} };
+r.onend = () => {
+  if (
+    currentState !== STATE.OFF &&
+    window.MaruAddon?.isVoiceEnabled?.() &&
+    window.MARU_REGION_VOICE_READY !== false
+  ) {
+    try { r.start(); } catch (_) {}
+    setState(STATE.LISTENING);
+  }
+};
+
     return r;
   }
 
-  function start(){ if(!recognition) recognition=initRecognition(); try{recognition?.start(); setState(STATE.LISTENING);}catch(_){} }
+function start(){
+  // 음성 OFF 상태라도 상태 동기화는 반드시 수행
+if (
+  window.MaruAddon &&
+  MaruAddon.isVoiceEnabled &&
+  !MaruAddon.isVoiceEnabled()
+) {
+  setState(STATE.OFF);
+  return;
+}
+
+// REGION READY가 false여도 음성 상태는 초기화한다
+if (window.MARU_REGION_VOICE_READY === false) {
+  setState(STATE.OFF);
+  return;
+}
+
+
+  if(!recognition) recognition = initRecognition();
+  try{
+    recognition?.start();
+    setState(STATE.LISTENING);
+  }catch(_){}
+}
+
   function stop(){ try{recognition?.stop();}catch(_){} clearTimeout(silenceTimer); setState(STATE.OFF); }
 
   window.MaruVoice={ start, stop, get state(){return currentState;} };
