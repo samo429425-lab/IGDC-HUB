@@ -27,6 +27,55 @@
   narration: false
 };
 
+// === Voice Intent Detection ===
+function detectVoiceIntent(text) {
+  const t = text || '';
+
+  if (
+    t.includes('자세히') ||
+    t.includes('상세') ||
+    t.includes('더 알려') ||
+    t.includes('더 보여')
+  ) {
+    return 'expand';
+  }
+
+  if (
+    t.includes('요약') ||
+    t.includes('간단히') ||
+    t.includes('짧게')
+  ) {
+    return 'summary';
+  }
+
+  if (
+    t.includes('읽어') ||
+    t.includes('말해')
+  ) {
+    return 'read';
+  }
+
+  return 'general';
+}
+
+function routeVoiceByIntent(intent, text, context) {
+  switch (intent) {
+    case 'expand':
+      if (context) {
+        window.openMaruDetailOverlay?.(context);
+      }
+      return { mode: 'expand' };
+
+    case 'summary':
+      return { mode: 'summary' };
+
+    case 'read':
+      return { mode: 'read' };
+
+    default:
+      return { mode: 'general' };
+  }
+}
 
   const STATE = {
     lastRequest: null,
@@ -411,6 +460,13 @@ function dispatchCommand(req) {
       }
     }
 
+// === Voice Intent → Expand Flag ===
+const intent = detectVoiceIntent(text);
+
+if (intent === 'expand') {
+  res.mode = 'expand';
+}
+
     // 7-7) 상세(expand) 오버레이
     if (res.mode === 'expand' && typeof window.openMaruDetailOverlay === 'function') {
       window.openMaruDetailOverlay({
@@ -429,10 +485,14 @@ function dispatchCommand(req) {
   !MEDIA_STATE.video &&
   typeof window.maruVoiceSpeak === 'function'
 ) {
-  const say = (res.speech || res.text || '').trim();
-  if (say) {
-    window.maruVoiceSpeak(say);
-  }
+const say = (res.speech || res.text || '').trim();
+
+if (say) {
+  window.maruVoiceSpeak(say);
+} else {
+  window.maruVoiceSpeak('준비된 자료가 없습니다.');
+}
+
 }
 
   /* =====================================================

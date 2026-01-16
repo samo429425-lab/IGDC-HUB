@@ -38,15 +38,15 @@
 
   function mountTo(target){
     if(!container) createUI();
-    if(mounted) return;
     target.appendChild(container);
     mounted=true;
     applyVisibility();
   }
 
-  function applyVisibility(){ inputWrap.style.display = voiceMode ? 'none':'flex'; }
+
   function showInput(){ inputWrap.style.display='flex'; }
-  function hideInput(){ if(voiceMode) inputWrap.style.display='none'; }
+  function hideInput(){ inputWrap.style.display='none'; }
+  
   function setVoiceMode(on){ voiceMode=!!on; applyVisibility(); }
   function setContext(ctx){ context=ctx||null; }
 

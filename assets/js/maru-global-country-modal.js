@@ -710,16 +710,6 @@ const voiceOn =
     ? MaruAddon.isVoiceEnabled()
     : false;
 
-// 컨버세이션 모달 UI만 반영 (엔진 직접 제어 ❌)
-if (window.MaruConversationModal) {
-  MaruConversationModal.setVoiceMode(voiceOn);
-
-  if (!voiceOn) {
-    MaruConversationModal.showInput(); // 음성 OFF 시 문자 입력 복귀
-  }
-}
-
-
 });
 
 
@@ -757,27 +747,17 @@ const body = el(
 
 /* header → issue bar → body 순서로 구성 */
 modal.appendChild(header);
-
-
 modal.appendChild(body);
+
+const convoSlot = el('div', 'maru-conversation-slot');
+modal.appendChild(convoSlot);
+
+window.MaruConversationModal?.mountTo(convoSlot);
 
 /* DOM 부착 */
 document.body.appendChild(backdrop);
 document.body.appendChild(modal);
 
-// === Conversation Input Mount (Country) — FIXED ===
-if (window.MaruConversationModal) {
-  MaruConversationModal.mountTo(modal);
-
-  MaruConversationModal.setContext({
-    level: 'country',
-    id: activeCountryName || null
-  });
-
-  // 음성 상태와 무관하게 문자 입력창 우선 표시
-  MaruConversationModal.setVoiceMode(false);
-  MaruConversationModal.showInput();
-}
 
 /* 닫기 */
 document.getElementById('maruCountryClose').onclick = closeModal;
