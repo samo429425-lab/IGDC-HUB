@@ -21,61 +21,7 @@
    * ===================================================== */
 
   let VOICE_ENABLED = false;
-  const MEDIA_STATE = {
-  video: false,
-  music: false,
-  narration: false
-};
-
-// === Voice Intent Detection ===
-function detectVoiceIntent(text) {
-  const t = text || '';
-
-  if (
-    t.includes('자세히') ||
-    t.includes('상세') ||
-    t.includes('더 알려') ||
-    t.includes('더 보여')
-  ) {
-    return 'expand';
-  }
-
-  if (
-    t.includes('요약') ||
-    t.includes('간단히') ||
-    t.includes('짧게')
-  ) {
-    return 'summary';
-  }
-
-  if (
-    t.includes('읽어') ||
-    t.includes('말해')
-  ) {
-    return 'read';
-  }
-
-  return 'general';
-}
-
-function routeVoiceByIntent(intent, text, context) {
-  switch (intent) {
-    case 'expand':
-      if (context) {
-        window.openMaruDetailOverlay?.(context);
-      }
-      return { mode: 'expand' };
-
-    case 'summary':
-      return { mode: 'summary' };
-
-    case 'read':
-      return { mode: 'read' };
-
-    default:
-      return { mode: 'general' };
-  }
-}
+  let MEDIA_PLAYING = false;
 
   const STATE = {
     lastRequest: null,
@@ -138,11 +84,6 @@ MaruAddon.handleVoiceQuery = function (payload, context = {}) {
   return routeInbound({ input: 'voice', text: payload || '', context });
 };
 
-// topic 추출 (간단 1차)
-function extractTopic(t) {
-  const m = (t || '').match(/(?:에 대해서|관련해서|부분|항목|주제)\s*([^\s]+)/);
-  return m ? m[1] : null;
-}
 
   /* =====================================================
    * 3. SINGLE VOICE CONTROL + TEXT INPUT RULES
@@ -173,12 +114,7 @@ function extractTopic(t) {
 
 // 영상 재생 상태 제어 (UX 충돌 방지)
 MaruAddon.setMediaPlaying = function (on) {
-  MEDIA_STATE.video = !!on;
-};
-
-MaruAddon.setMediaState = function (type, on) {
-  if (!MEDIA_STATE.hasOwnProperty(type)) return;
-  MEDIA_STATE[type] = !!on;
+  MEDIA_PLAYING = !!on;
 };
 
   // 규칙:
@@ -321,27 +257,6 @@ function tryOpenCountryVideoByIndex(idx) {
       target = context.id || null;
     }
 
-// === MIXED REFRESH TRIGGER (A + B) ===
-const rawText = (text || '').trim();
-const voiceIntent = detectVoiceIntent(rawText);
-
-const topic = extractTopic(rawText);
-
-const FORCE_KEYWORDS = /(다시|재조사|재수집|최신|갱신|업데이트|추가 조사)/;
-const NO_REFRESH_KEYWORDS = /(요약|정리|설명|비교)/;
-
-let refresh = false;
-
-// B안: 명시적 재조사
-if (FORCE_KEYWORDS.test(rawText)) refresh = true;
-
-// A안: Expand + topic (단, 요약/설명은 제외)
-if (voiceIntent === 'expand' && topic && !NO_REFRESH_KEYWORDS.test(rawText)) refresh = true;
-
-// req에 반영될 값을 return 오브젝트에 넣기 위해 변수로 남김
-const refreshFlag = refresh;
-const focusTopic = topic;
-
     return {
       source: 'user',
       input,
@@ -349,11 +264,7 @@ const focusTopic = topic;
       scope,
       target,
       intent: detectIntent(text),
-      voiceWanted: (input === 'voice') ? true : false,
-	  
-	  refresh: refreshFlag,
-      focus: focusTopic,
-
+      voiceWanted: (input === 'voice') ? true : false
     };
   }
 
@@ -373,12 +284,27 @@ const focusTopic = topic;
 function normalizeEngineResponse(raw) {
   return {
     ok: raw?.ok === true,
-    text: raw?.text ?? raw?.summary ?? '',
-    mode: raw?.mode ?? 'summary',
-    data: raw?.data ?? {}   // ✅ regions/countries/issues/videos 전부 보존
+
+    text:
+      raw?.text ??
+      raw?.summary ??
+      '',
+
+    mode:
+      raw?.mode ??
+      'summary',
+
+    data: {
+      issues:
+        raw?.data?.issues ?? null,
+
+      videos:
+        Array.isArray(raw?.data?.videos)
+          ? raw.data.videos
+          : []
+    }
   };
 }
-
 
 function dispatchCommand(req) {
   STATE.lastRequest = req;
@@ -411,9 +337,7 @@ function dispatchCommand(req) {
       body: JSON.stringify({
         text: req.text,
         scope: req.scope,
-        depth: req.intent, // summary | expand | realtime | video
-		refresh: !!req.refresh,
-        focus: req.focus || null
+        depth: req.intent // summary | expand | realtime | video
       })
     }).then(r => r.json());
   }
@@ -492,17 +416,6 @@ function dispatchCommand(req) {
       }
     }
 
-// === Base text ===
-const text = req.text || '';
-
-// === Voice Intent → Expand Flag ===
-const intent = detectVoiceIntent(text);
-
-if (intent === 'expand') {
-  res.mode = 'expand';
-}
-
-
     // 7-7) 상세(expand) 오버레이
     if (res.mode === 'expand' && typeof window.openMaruDetailOverlay === 'function') {
       window.openMaruDetailOverlay({
@@ -516,21 +429,16 @@ if (intent === 'expand') {
     // 7-8) 음성 읽기(요청이 어떤 것이든, 토글 ON이면 읽어줌)
     // - 보이스 요청은 반드시 읽기
     // - 텍스트 요청도 토글 ON이면 읽기 가능
- if (
-  VOICE_ENABLED &&
-  !MEDIA_STATE.video &&
-  typeof window.maruVoiceSpeak === 'function'
-) {
-const say = (res.speech || res.text || '').trim();
-
-if (say) {
-  window.maruVoiceSpeak(say);
-} else {
-  window.maruVoiceSpeak('준비된 자료가 없습니다.');
-}
-
-}
+   if (VOICE_ENABLED && !MEDIA_PLAYING && typeof window.maruVoiceSpeak === 'function') {
+      // 엔진이 speech를 주면 speech 우선, 없으면 text
+      const say = (res.speech || res.text || '').trim();
+      if (say) {
+        // UI 제어 응답(문자창 열기/닫기)은 위에서 이미 처리했으므로 여기선 엔진 응답만
+        window.maruVoiceSpeak(say);
+      }
+    }
   }
+
   /* =====================================================
    * 8. EXPORT
    * ===================================================== */
