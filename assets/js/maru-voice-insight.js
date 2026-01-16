@@ -49,12 +49,15 @@ function getCurrentMaruContext(){
 
     };
     r.onerror=()=>{ if(currentState!==STATE.OFF) setState(STATE.LISTENING); };
-r.onend = () => {
-  if (
-    currentState !== STATE.OFF &&
-    window.MaruAddon?.isVoiceEnabled?.() &&
-    window.MARU_REGION_VOICE_READY !== false
-  ) {
+
+ r.onend = () => {
+  // 사용자가 OFF한 경우에는 절대 자동 재시작하지 않음
+  if (currentState === STATE.OFF) {
+    return;
+  }
+
+  // Addon 기준으로 voice enabled일 때만 재시작
+  if (window.MaruAddon?.isVoiceEnabled?.()) {
     try { r.start(); } catch (_) {}
     setState(STATE.LISTENING);
   }
@@ -64,21 +67,6 @@ r.onend = () => {
   }
 
 function start(){
-  // 음성 OFF 상태라도 상태 동기화는 반드시 수행
-if (
-  window.MaruAddon &&
-  MaruAddon.isVoiceEnabled &&
-  !MaruAddon.isVoiceEnabled()
-) {
-  setState(STATE.OFF);
-  return;
-}
-
-// REGION READY가 false여도 음성 상태는 초기화한다
-if (window.MARU_REGION_VOICE_READY === false) {
-  setState(STATE.OFF);
-  return;
-}
 
 
   if(!recognition) recognition = initRecognition();
