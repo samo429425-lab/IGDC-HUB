@@ -72,12 +72,26 @@ window.injectRegionContextResult = function (regionId, result) {
   }
 };
 
-  /* ================= STATE ================= */
-  let backdrop = null;
-  let modal = null;
-  let detailOverlay = null;
-  let voiceEnabled = false;     // global gate for voice-bridge reads
-  let regionVoiceEnabled = false; // UI toggle state
+ /* ================= STATE ================= */
+let backdrop = null;
+let modal = null;
+let detailOverlay = null;
+
+/*
+ * 음성 상태는 단일 기준(MaruAddon)만 사용
+ * - 레기온/컨트리 독립 상태 제거
+ * - UI는 항상 Addon 상태를 반영
+ */
+const isVoiceEnabled = () =>
+  window.MaruAddon && typeof window.MaruAddon.isVoiceEnabled === 'function'
+    ? window.MaruAddon.isVoiceEnabled()
+    : false;
+
+/*
+ * 레기온 UI용 READY 플래그 (표시/동기화 목적)
+ * 실제 음성 ON/OFF 판단은 절대 여기서 하지 않음
+ */
+let regionVoiceReady = false;
 
   /* ================= UTIL ================= */
   function el(tag, cls, html) {
@@ -174,6 +188,55 @@ window.injectRegionContextResult = function (regionId, result) {
 
     // ---------- HEADER ----------
     const header = el('div', 'maru-region-header');
+	
+	/* ================= REGION VOICE TOGGLE (FINAL) ================= */
+
+const voiceToggle = el('label', 'maru-region-voice-toggle');
+voiceToggle.innerHTML = `
+  <input type="checkbox" id="maruRegionVoiceToggle" />
+  <span>음성</span>
+`;
+
+const regionVoiceCheckbox = voiceToggle.querySelector('#maruRegionVoiceToggle');
+
+// 초기 상태: Addon 기준
+const initialVoice =
+  window.MaruAddon && typeof window.MaruAddon.isVoiceEnabled === 'function'
+    ? window.MaruAddon.isVoiceEnabled()
+    : false;
+
+regionVoiceCheckbox.checked = initialVoice;
+window.MARU_REGION_VOICE_READY = initialVoice;
+
+// 토글 이벤트
+regionVoiceCheckbox.addEventListener('change', () => {
+  const enabled = regionVoiceCheckbox.checked;
+
+  // 🔑 단일 음성 기준: Addon
+  window.MaruAddon?.setVoiceEnabled?.(enabled);
+
+  // READY 플래그 동기화
+  window.MARU_REGION_VOICE_READY = enabled;
+  window.MARU_COUNTRY_VOICE_READY = enabled;
+
+  // 컨버세이션 입력창 규칙
+  if (!enabled) {
+    window.MaruConversationModal?.showInput?.();
+  } else {
+    window.MaruConversationModal?.hideInput?.();
+  }
+
+  // 마이크 제어
+  if (enabled) {
+    window.startMaruMic?.();
+  } else {
+    window.stopMaruMic?.();
+  }
+});
+
+// ✅ HEADER에 부착 (이 줄 중요)
+header.appendChild(voiceToggle);
+
     const title = el('strong', null, '🌍 MARU GLOBAL INSIGHT — REGION');
 
     const issueBar = el(
@@ -260,21 +323,41 @@ if (window.MaruConversationModal) {
   } catch (e) {
     console.warn('[MARU][REGION] Conversation mount failed', e);
   }
+  
+ /* ===== CONVERSATION INPUT VISIBILITY (REGION FINAL) ===== */
+
+// 초기 진입 시: 음성 상태 기준으로 입력창 표시/숨김
+(function syncConversationInputOnOpen() {
+  const voiceOn =
+    window.MaruAddon && typeof window.MaruAddon.isVoiceEnabled === 'function'
+      ? window.MaruAddon.isVoiceEnabled()
+      : false;
+
+  if (!voiceOn) {
+    window.MaruConversationModal?.showInput?.();
+  } else {
+    window.MaruConversationModal?.hideInput?.();
+  }
+})();
+
+// 음성 ON 상태에서도 "문자 입력창 띄워줘" 요청 시 강제 표시
+window.forceShowConversationInput = function () {
+  window.MaruConversationModal?.showInput?.();
+};
+
+// Context set (preserve original intent) — 반드시 open(regionId) 안
+window.activeRegionId = regionId || window.activeRegionId || null;
+window.activeCountryCode = null;
+
+// Optional: activate addon AFTER mount (safe) — 반드시 open(regionId) 안
+try {
+  if (window.MaruAddon && typeof window.MaruAddon.activate === 'function') {
+    window.MaruAddon.activate({ type: 'region', id: window.activeRegionId });
+  }
+} catch (e) {
+  // swallow to avoid killing modal open
 }
 
-    // Context set (preserve original intent)
-    window.activeRegionId = regionId || window.activeRegionId || null;
-    window.activeCountryCode = null;
-
-    // Optional: activate addon AFTER mount (safe)
-    try {
-      if (window.MaruAddon && typeof window.MaruAddon.activate === 'function') {
-        window.MaruAddon.activate({ type: 'region', id: window.activeRegionId });
-      }
-    } catch (e) {
-      // swallow to avoid killing modal open
-    }
-  }
 
   /* ================= PUBLIC ================= */
   // site-control calls this

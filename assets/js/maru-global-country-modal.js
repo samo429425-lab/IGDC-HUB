@@ -690,33 +690,57 @@ voiceToggle.innerHTML = `
   <span>음성</span>
 `;
 
+/* ================= COUNTRY VOICE TOGGLE (FINAL) ================= */
+
+// === UI ===
+const voiceToggle = el('label', 'maru-country-voice-toggle');
+voiceToggle.innerHTML = `
+  <input type="checkbox" id="maruCountryVoiceToggle" />
+  <span>음성</span>
+`;
+
 const countryVoiceCheckbox = voiceToggle.querySelector('#maruCountryVoiceToggle');
 
-// 초기 상태: OFF (설계상 기본값)
-countryVoiceCheckbox.checked = false;
-if (window.MaruCountryVoice) window.MaruCountryVoice.disable?.();
-
-
-countryVoiceCheckbox.addEventListener('change', () => {
-  const enabled = countryVoiceCheckbox.checked;
-
-// === VOICE TOGGLE ON/OFF (Country) : delegated to Addon ===
-
-// UI 토글 상태만 애드온에 전달
-if (window.MaruAddon && typeof MaruAddon.setVoiceEnabled === 'function') {
-  MaruAddon.setVoiceEnabled(enabled);
-  window.MARU_COUNTRY_VOICE_READY = enabled;
-}
-
-// 애드온의 단일 음성 상태를 기준으로 UI 동기화
-const voiceOn =
+// === 초기 상태 : Addon 기준으로 통일 ===
+const initialVoice =
   window.MaruAddon && typeof MaruAddon.isVoiceEnabled === 'function'
     ? MaruAddon.isVoiceEnabled()
     : false;
 
+countryVoiceCheckbox.checked = initialVoice;
+window.MARU_COUNTRY_VOICE_READY = initialVoice;
+
+// === 음성 토글 변경 ===
+countryVoiceCheckbox.addEventListener('change', () => {
+  const enabled = countryVoiceCheckbox.checked;
+
+  /* 1️⃣ 단일 음성 상태 기준 : MaruAddon */
+  if (window.MaruAddon && typeof MaruAddon.setVoiceEnabled === 'function') {
+    MaruAddon.setVoiceEnabled(enabled);
+  }
+
+  /* 2️⃣ READY 플래그 동기화 (Region / Country 공통) */
+  window.MARU_COUNTRY_VOICE_READY = enabled;
+  window.MARU_REGION_VOICE_READY = enabled;
+
+  /* 3️⃣ 컨버세이션 입력창 처리 */
+  if (!enabled) {
+    // 음성 OFF → 문자 입력 반드시 표시
+    window.MaruConversationModal?.showInput?.();
+  } else {
+    // 음성 ON → 문자 입력 숨김
+    window.MaruConversationModal?.hideInput?.();
+  }
+
+  /* 4️⃣ 마이크 제어 (대기 상태 복귀 포함) */
+  if (enabled) {
+    window.startMaruMic?.();   // 🎤 대기 상태 (indicator blinking)
+  } else {
+    window.stopMaruMic?.();    // 🎤 완전 정지
+  }
 });
 
-
+// === 헤더 버튼 ===
 const closeBtn = el('button', null, '닫기');
 closeBtn.id = 'maruCountryClose';
 
@@ -724,6 +748,7 @@ header.appendChild(title);
 header.appendChild(issueBar);
 header.appendChild(voiceToggle);
 header.appendChild(closeBtn);
+
 
 // ===== STEP 3: Issue Bar 클릭 바인딩 =====
 issueBar.style.cursor = 'pointer';
@@ -774,10 +799,29 @@ if (window.MaruConversationModal) {
     window.MaruConversationModal.__mounted = true;
 
     // 기본 컨텍스트: region
-    window.MaruConversationModal.setContext?.({ level: 'region', id: regionId });
+   window.MaruConversationModal.setContext?.({ level: 'region', id: regionId });
   } catch (e) {
     console.warn('[MARU][COUNTRY] Conversation mount failed', e);
   }
+  /* ===== CONVERSATION INPUT VISIBILITY (COUNTRY FINAL) ===== */
+
+(function syncConversationInputOnOpen() {
+  const voiceOn =
+    window.MaruAddon && typeof window.MaruAddon.isVoiceEnabled === 'function'
+      ? window.MaruAddon.isVoiceEnabled()
+      : false;
+
+  if (!voiceOn) {
+    window.MaruConversationModal?.showInput?.();
+  } else {
+    window.MaruConversationModal?.hideInput?.();
+  }
+})();
+
+// 음성 ON 상태에서도 "문자 입력창 띄워줘" 요청 시 강제 표시
+window.forceShowConversationInput = function () {
+  window.MaruConversationModal?.showInput?.();
+};
 }
 
 
