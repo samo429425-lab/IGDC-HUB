@@ -322,7 +322,6 @@
 /* ============== STATE ============== */
 let activeRegionId = null;
 let activeCountryName = null;
-let voiceEnabled = true;
 
 /* =========================================================
  * ADDON → COUNTRY MODAL DATA INJECTORS
@@ -376,14 +375,6 @@ function openCountryDetail(countryName) {
   if (window.openMaruCountryDetail) {
     window.openMaruCountryDetail(countryName);
   }
-
-  if (voiceEnabled && window.maruVoiceSpeak) {
-    window.maruVoiceSpeak(
-      `${countryName}에 대한 상세 브리핑을 시작합니다.`
-    );
-  }
-}
-
 
 
 /* ======================================================
@@ -684,6 +675,9 @@ const issueBar = el(
   '<span class="text">국가별 중요 이슈 요약 대기 중…</span>'
 );
 
+/* ================= COUNTRY VOICE TOGGLE (FINAL) ================= */
+
+// === UI ===
 const voiceToggle = el('label', 'maru-country-voice-toggle');
 voiceToggle.innerHTML = `
   <input type="checkbox" id="maruCountryVoiceToggle" />
@@ -692,31 +686,46 @@ voiceToggle.innerHTML = `
 
 const countryVoiceCheckbox = voiceToggle.querySelector('#maruCountryVoiceToggle');
 
-// 초기 상태: OFF (설계상 기본값)
-countryVoiceCheckbox.checked = false;
-if (window.MaruCountryVoice) window.MaruCountryVoice.disable?.();
-
-
-countryVoiceCheckbox.addEventListener('change', () => {
-  const enabled = countryVoiceCheckbox.checked;
-
-// === VOICE TOGGLE ON/OFF (Country) : delegated to Addon ===
-
-// UI 토글 상태만 애드온에 전달
-if (window.MaruAddon && typeof MaruAddon.setVoiceEnabled === 'function') {
-  MaruAddon.setVoiceEnabled(enabled);
-  window.MARU_COUNTRY_VOICE_READY = enabled;
-}
-
-// 애드온의 단일 음성 상태를 기준으로 UI 동기화
-const voiceOn =
+// === 초기 상태 : Addon 기준으로 통일 ===
+const initialVoice =
   window.MaruAddon && typeof MaruAddon.isVoiceEnabled === 'function'
     ? MaruAddon.isVoiceEnabled()
     : false;
 
+countryVoiceCheckbox.checked = initialVoice;
+window.MARU_COUNTRY_VOICE_READY = initialVoice;
+
+// === 음성 토글 변경 ===
+countryVoiceCheckbox.addEventListener('change', () => {
+  const enabled = countryVoiceCheckbox.checked;
+
+  /* 1️⃣ 단일 음성 상태 기준 : MaruAddon */
+  if (window.MaruAddon && typeof MaruAddon.setVoiceEnabled === 'function') {
+    MaruAddon.setVoiceEnabled(enabled);
+  }
+
+  /* 2️⃣ READY 플래그 동기화 (Region / Country 공통) */
+  window.MARU_COUNTRY_VOICE_READY = enabled;
+  window.MARU_REGION_VOICE_READY = enabled;
+
+  /* 3️⃣ 컨버세이션 입력창 처리 */
+  if (!enabled) {
+    // 음성 OFF → 문자 입력 반드시 표시
+    window.MaruConversationModal?.showInput?.();
+  } else {
+    // 음성 ON → 문자 입력 숨김
+    window.MaruConversationModal?.hideInput?.();
+  }
+
+  /* 4️⃣ 마이크 제어 (대기 상태 복귀 포함) */
+  if (enabled) {
+    window.startMaruMic?.();   // 🎤 대기 상태 (indicator blinking)
+  } else {
+    window.stopMaruMic?.();    // 🎤 완전 정지
+  }
 });
 
-
+// === 헤더 버튼 ===
 const closeBtn = el('button', null, '닫기');
 closeBtn.id = 'maruCountryClose';
 
@@ -724,6 +733,7 @@ header.appendChild(title);
 header.appendChild(issueBar);
 header.appendChild(voiceToggle);
 header.appendChild(closeBtn);
+
 
 // ===== STEP 3: Issue Bar 클릭 바인딩 =====
 issueBar.style.cursor = 'pointer';
@@ -774,10 +784,29 @@ if (window.MaruConversationModal) {
     window.MaruConversationModal.__mounted = true;
 
     // 기본 컨텍스트: region
-    window.MaruConversationModal.setContext?.({ level: 'region', id: regionId });
+   window.MaruConversationModal.setContext?.({ level: 'region', id: regionId });
   } catch (e) {
     console.warn('[MARU][COUNTRY] Conversation mount failed', e);
   }
+  /* ===== CONVERSATION INPUT VISIBILITY (COUNTRY FINAL) ===== */
+
+(function syncConversationInputOnOpen() {
+  const voiceOn =
+    window.MaruAddon && typeof window.MaruAddon.isVoiceEnabled === 'function'
+      ? window.MaruAddon.isVoiceEnabled()
+      : false;
+
+  if (!voiceOn) {
+    window.MaruConversationModal?.showInput?.();
+  } else {
+    window.MaruConversationModal?.hideInput?.();
+  }
+})();
+
+// 음성 ON 상태에서도 "문자 입력창 띄워줘" 요청 시 강제 표시
+window.forceShowConversationInput = function () {
+  window.MaruConversationModal?.showInput?.();
+};
 }
 
 
@@ -803,27 +832,9 @@ window.MaruConversationModal?.setContext?.({ level: 'country', id: activeCountry
   });
 });
 
-/* 대화 모달이 붙을 DOM 지정 (이 줄이 빠져 있으면 입력창/음성 불안정) */
-window.MaruConversationModal?.ensureReady?.(modal);
-
 /* 음성 대기 상태 보장 (구버전도 이 위치) */
 window.MARU_COUNTRY_VOICE_READY = true;
  }
-
-/* ================= VOICE HUB =================
- * Country Modal 전용 단일 음성 인터페이스
- * - UI / Add-on / Voice Engine 연결 허브
- * - 음성 판단 ❌, 읽기 대상 제공 ⭕
- * ============================================ */
-
-window.MaruCountryVoice = (function () {
-  let enabled = false;
-
-  /* ---------- CONTROL ---------- */
-  function enable() { enabled = true; }
-  function disable() { enabled = false; }
-  function toggle() { enabled = !enabled; }
-  function isEnabled() { return enabled; }
 
   /* ---------- READ HELPERS ---------- */
 
@@ -943,24 +954,42 @@ function requestTopic(countryKey, topic, depth = 'summary') {
   };
 }
 
-  /* ---------- PUBLIC ---------- */
-  return {
-    enable,
-    disable,
-    toggle,
-    isEnabled,
+  /* ================= VOICE HUB (COUNTRY) — SAFE EDITION =================
+ * - 단일 상태 기준은 MaruAddon (UI는 Addon 상태를 반영)
+ * - 이 파일 내부 참조들이 깨지지 않도록 최소 API를 제공합니다.
+ * ==================================================================== */
+(function () {
+  // 내부 플래그 (addon이 없을 때만 사용)
+  let enabled = false;
 
-    // 읽기
-    readCountry,
-    readExpanded,
-    readCriticalIssue,
+  function isAddonVoiceOn() {
+    return window.MaruAddon && typeof window.MaruAddon.isVoiceEnabled === 'function'
+      ? !!window.MaruAddon.isVoiceEnabled()
+      : enabled;
+  }
 
-    // Add-on 요청
-    requestDetail,
-    requestVideo,
-    requestTopic
-  };
+  function setEnabled(on) {
+    enabled = !!on;
+    if (window.MaruAddon && typeof window.MaruAddon.setVoiceEnabled === 'function') {
+      window.MaruAddon.setVoiceEnabled(enabled);
+    }
+  }
 
+  window.MaruCountryVoice = window.MaruCountryVoice || {};
+  window.MaruCountryVoice.enable = () => setEnabled(true);
+  window.MaruCountryVoice.disable = () => setEnabled(false);
+  window.MaruCountryVoice.toggle = () => setEnabled(!isAddonVoiceOn());
+  window.MaruCountryVoice.isEnabled = () => isAddonVoiceOn();
+
+  // 읽기(있을 때만): 기존 함수가 정의돼 있으면 연결
+  window.MaruCountryVoice.readCountry = (countryKey) => (typeof readCountry === 'function' ? readCountry(countryKey) : null);
+  window.MaruCountryVoice.readExpanded = () => (typeof readExpanded === 'function' ? readExpanded() : null);
+  window.MaruCountryVoice.readCriticalIssue = () => (typeof readCriticalIssue === 'function' ? readCriticalIssue() : null);
+
+  // 요청(있을 때만)
+  window.MaruCountryVoice.requestDetail = (countryKey) => (typeof requestDetail === 'function' ? requestDetail(countryKey) : ({ type: 'country-detail', country: countryKey }));
+  window.MaruCountryVoice.requestVideo = (countryKey, topic) => (typeof requestVideo === 'function' ? requestVideo(countryKey, topic) : ({ type: 'country-video', country: countryKey, topic }));
+  window.MaruCountryVoice.requestTopic = (countryKey, topic, depth) => (typeof requestTopic === 'function' ? requestTopic(countryKey, topic, depth) : ({ type: 'country-topic', country: countryKey, topic, depth }));
 })();
 
 window.openMaruCountryVideoByIndex = function (idx) {
