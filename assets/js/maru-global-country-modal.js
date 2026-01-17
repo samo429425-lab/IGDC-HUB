@@ -83,6 +83,9 @@
     if (modal) modal.remove();
     if (backdrop) backdrop.remove();
     modal = backdrop = null;
+	
+	window.MaruConversationModal?.unmount?.();
+    window.MaruConversationModal && (window.MaruConversationModal.__mounted = false);
   }
 
   /* ================= API ================= */
@@ -231,6 +234,20 @@
   .maru-country-card.expanded{
     grid-column:1 / -1
   }
+  /* ===== EXPANDED SECTION UI ===== */
+.maru-country-expanded{
+  max-height:0;
+  overflow:hidden;
+  opacity:0;
+  transition:
+    max-height .35s ease,
+    opacity .25s ease;
+}
+
+.maru-country-card.expanded .maru-country-expanded{
+  max-height:600px;   /* 충분히 큰 값 */
+  opacity:1;
+}  
   .maru-country-name{
     color:#1f2f5c; /* 곤/군청 */
     margin:0 0 6px;
@@ -536,12 +553,22 @@ if (window.MaruAddon && typeof MaruAddon.setMediaPlaying === 'function') {
 
   player.appendChild(closeBtn);
 
-  // iframe or video
-  if (v.src.includes('youtube') || v.src.includes('iframe')) {
-    player.innerHTML += `<iframe src="${v.src}" frameborder="0" allowfullscreen></iframe>`;
-  } else {
-    player.innerHTML += `<video src="${v.src}" controls autoplay></video>`;
+ // iframe or video
+if (v.src.includes('youtube') || v.src.includes('iframe')) {
+  player.innerHTML += `<iframe src="${v.src}" frameborder="0" allowfullscreen></iframe>`;
+} else {
+  player.innerHTML += `<video src="${v.src}" controls autoplay></video>`;
+
+  const videoEl = player.querySelector('video');
+  if (videoEl) {
+    videoEl.addEventListener('ended', () => {
+      if (window.MaruAddon && typeof MaruAddon.setMediaPlaying === 'function') {
+        MaruAddon.setMediaPlaying(false);
+      }
+    });
   }
+}
+
 
   overlay.appendChild(player);
   document.body.appendChild(overlay);
@@ -576,15 +603,71 @@ if (window.MaruAddon && typeof MaruAddon.setMediaPlaying === 'function') {
       </div>
     </div>`;
   }
+  
+/* ================= EXPAND ================= */
+/* 국가 카드 클릭 시, 모달 내부에서 확장되는 섹션 */
+
+function expandCountrySection(countryName, data = {}) {
+  const body = document.querySelector('.maru-country-body');
+  if (!body) return;
+
+  const card = body.querySelector(
+    `.maru-country-card[data-country="${countryName}"]`
+  );
+  if (!card) return;
+
+  // ✅ 이미 열려 있으면 접기 (토글)
+  if (card.classList.contains('expanded')) {
+    card.classList.remove('expanded');
+    return;
+  }
+
+  // ✅ 다른 카드들 접기
+  document
+    .querySelectorAll('.maru-country-card.expanded')
+    .forEach(c => c.classList.remove('expanded'));
+
+  // ✅ 현재 카드 열기
+  card.classList.add('expanded');
+
+  // ✅ 확장 영역 생성 (1회만)
+  let detail = card.querySelector('.maru-country-expanded');
+  if (!detail) {
+    detail = document.createElement('div');
+    detail.className = 'maru-country-expanded';
+    detail.innerHTML = `
+      <hr>
+      <p><strong>국가 심화 요약</strong></p>
+      <p>${data.detail || '현재 심화 분석 데이터가 준비 중입니다.'}</p>
+      <button class="maru-country-detail-btn">
+        AI 글로벌 인사이트 실행
+      </button>
+    `;
+    card.appendChild(detail);
+
+    // 상세 분석은 버튼 클릭 시에만 실행
+    const btn = detail.querySelector('.maru-country-detail-btn');
+    if (btn) {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation(); // 카드 토글 방지
+        if (window.MaruAddon && typeof MaruAddon.handleVoiceQuery === 'function') {
+          window.MaruAddon.handleVoiceQuery(
+            `${countryName}에 대한 글로벌 인사이트 상세 분석을 수행해줘`
+          );
+        }
+      });
+    }
+  }
+}
 
   /* ================= OPEN ================= */
-  async function open(regionId) {
-    if (modal) return;
+ async function open(regionId) {
 
     backdrop = el('div', 'maru-country-backdrop');
     backdrop.onclick = closeModal;
 
     modal = el('div', 'maru-country-modal');
+	
 
 /* ---------- HEADER UI ---------- */
 const header = el('div', 'maru-country-header');
@@ -622,6 +705,7 @@ countryVoiceCheckbox.addEventListener('change', () => {
 // UI 토글 상태만 애드온에 전달
 if (window.MaruAddon && typeof MaruAddon.setVoiceEnabled === 'function') {
   MaruAddon.setVoiceEnabled(enabled);
+  window.MARU_COUNTRY_VOICE_READY = enabled;
 }
 
 // 애드온의 단일 음성 상태를 기준으로 UI 동기화
@@ -629,16 +713,6 @@ const voiceOn =
   window.MaruAddon && typeof MaruAddon.isVoiceEnabled === 'function'
     ? MaruAddon.isVoiceEnabled()
     : false;
-
-// 컨버세이션 모달 UI만 반영 (엔진 직접 제어 ❌)
-if (window.MaruConversationModal) {
-  MaruConversationModal.setVoiceMode(voiceOn);
-
-  if (!voiceOn) {
-    MaruConversationModal.showInput(); // 음성 OFF 시 문자 입력 복귀
-  }
-}
-
 
 });
 
@@ -677,27 +751,35 @@ const body = el(
 
 /* header → issue bar → body 순서로 구성 */
 modal.appendChild(header);
-
-
 modal.appendChild(body);
+
+const convoSlot = el('div', 'maru-conversation-slot');
+modal.appendChild(convoSlot);
+
 
 /* DOM 부착 */
 document.body.appendChild(backdrop);
 document.body.appendChild(modal);
 
-// === Conversation Input Mount (Country) — FIXED ===
+/* === Conversation mount (FINAL) === */
 if (window.MaruConversationModal) {
-  MaruConversationModal.mountTo(modal);
+  try {
+    // 중복 mount 방지(레기온과 동일 패턴)
+    if (window.MaruConversationModal.__mounted) {
+      window.MaruConversationModal.unmount?.();
+      window.MaruConversationModal.__mounted = false;
+    }
 
-  MaruConversationModal.setContext({
-    level: 'country',
-    id: activeCountryName || null
-  });
+    window.MaruConversationModal.mountTo(convoSlot);
+    window.MaruConversationModal.__mounted = true;
 
-  // 음성 상태와 무관하게 문자 입력창 우선 표시
-  MaruConversationModal.setVoiceMode(false);
-  MaruConversationModal.showInput();
+    // 기본 컨텍스트: region
+    window.MaruConversationModal.setContext?.({ level: 'region', id: regionId });
+  } catch (e) {
+    console.warn('[MARU][COUNTRY] Conversation mount failed', e);
+  }
 }
+
 
 /* 닫기 */
 document.getElementById('maruCountryClose').onclick = closeModal;
@@ -716,12 +798,17 @@ body.innerHTML = countries
 document.querySelectorAll('.maru-country-card').forEach(card => {
   card.addEventListener('click', () => {
     activeCountryName = card.dataset.country;
-	openCountryDetail(activeCountryName);
+window.MaruConversationModal?.setContext?.({ level: 'country', id: activeCountryName });
+    expandCountrySection(activeCountryName);
   });
 });
 
-}
+/* 대화 모달이 붙을 DOM 지정 (이 줄이 빠져 있으면 입력창/음성 불안정) */
+window.MaruConversationModal?.ensureReady?.(modal);
 
+/* 음성 대기 상태 보장 (구버전도 이 위치) */
+window.MARU_COUNTRY_VOICE_READY = true;
+ }
 
 /* ================= VOICE HUB =================
  * Country Modal 전용 단일 음성 인터페이스
