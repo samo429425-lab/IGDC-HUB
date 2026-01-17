@@ -798,11 +798,17 @@ body.innerHTML = countries
 document.querySelectorAll('.maru-country-card').forEach(card => {
   card.addEventListener('click', () => {
     activeCountryName = card.dataset.country;
-    window.MaruConversationModal.setContext?.({ level: 'country', id: activeCountryName });
-
+window.MaruConversationModal?.setContext?.({ level: 'country', id: activeCountryName });
+    expandCountrySection(activeCountryName);
   });
 });
 
+/* 대화 모달이 붙을 DOM 지정 (이 줄이 빠져 있으면 입력창/음성 불안정) */
+window.MaruConversationModal?.ensureReady?.(modal);
+
+/* 음성 대기 상태 보장 (구버전도 이 위치) */
+window.MARU_COUNTRY_VOICE_READY = true;
+ }
 
 /* ================= VOICE HUB =================
  * Country Modal 전용 단일 음성 인터페이스
