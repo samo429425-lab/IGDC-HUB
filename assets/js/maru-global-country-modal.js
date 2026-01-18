@@ -979,3 +979,15 @@ window.openMaruCountryVideoByIndex = function (idx) {
   /* ================= EXPOSE ================= */
   window.openMaruGlobalCountryModal = open;
 })();
+
+
+// === Conversation Mount (FINAL PATCH) ===
+try {
+  if (window.MaruConversationModal && typeof MaruConversationModal.ensureReady === 'function') {
+    const body = document.querySelector('.maru-modal-body') || document.body;
+    MaruConversationModal.ensureReady(body);
+    MaruConversationModal.showInput && MaruConversationModal.showInput();
+  }
+} catch (e) {
+  console.warn('[MARU][ConversationMount] failed', e);
+}
