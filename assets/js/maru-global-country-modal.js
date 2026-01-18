@@ -771,7 +771,12 @@ if (window.MaruConversationModal) {
     }
 
     window.MaruConversationModal.mountTo(convoSlot);
-    window.MaruConversationModal.__mounted = true;
+    
+    // [PATCH] Ensure conversation input is visible (typing-first)
+    window.MaruConversationModal.ensureReady?.(convoSlot);
+    window.MaruConversationModal.setVoiceMode?.(false);
+    window.MaruConversationModal.showInput?.();
+window.MaruConversationModal.__mounted = true;
 
     // 기본 컨텍스트: region
     window.MaruConversationModal.setContext?.({ level: 'region', id: regionId });
