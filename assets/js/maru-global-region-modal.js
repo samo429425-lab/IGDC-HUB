@@ -259,20 +259,26 @@ header.append(title, issueBar, voiceToggle, closeBtn);
    const convoSlot = el('div', 'maru-conversation-slot');
    modal.appendChild(convoSlot);
 
-// === Conversation mount (FINAL — modal-anchored) ===
+// === Conversation mount (AFTER DOM attach & structure ready) ===
 if (window.MaruConversationModal) {
   try {
-    // Anchor to modal (position:fixed) so container's absolute-bottom is inside modal
-    window.MaruConversationModal.ensureReady?.(modal);
-    window.MaruConversationModal.setVoiceMode?.(false); // show by default
-    window.MaruConversationModal.showInput?.();
-    window.MaruConversationModal.setContext?.({ level: 'region', id: regionId });
+
+    // === Prevent duplicate Conversation mount ===
+    if (window.MaruConversationModal.__mounted) {
+      window.MaruConversationModal.unmount?.();
+      window.MaruConversationModal.__mounted = false;
+    }
+
+    window.MaruConversationModal.mountTo(convoSlot);
+    window.MaruConversationModal.__mounted = true;
+	
+	window.MaruConversationModal.setContext?.({ level: 'region', id: regionId });
+
   } catch (e) {
     console.warn('[MARU][REGION] Conversation mount failed', e);
   }
-}
-
-/* ===== CONVERSATION INPUT VISIBILITY (REGION FINAL) ===== */
+  
+ /* ===== CONVERSATION INPUT VISIBILITY (REGION FINAL) ===== */
 
 // 초기 진입 시: 음성 상태 기준으로 입력창 표시/숨김
 (function syncConversationInputOnOpen() {
@@ -376,3 +382,43 @@ window.openMaruGlobalRegionModal = function (regionId, regionName) {
   };
 
 })();
+
+
+
+/* === MARU Conversation Late Mount (Safe) === */
+(function(){
+  function mountConversation(modalRoot){
+    try{
+      if (!window.MaruConversationModal) return;
+      var body = modalRoot.querySelector('[data-maru-body]') || modalRoot.querySelector('.maru-body') || modalRoot;
+      var slot = body.querySelector('.maru-conversation-slot');
+      if (!slot){
+        slot = document.createElement('div');
+        slot.className = 'maru-conversation-slot';
+        body.appendChild(slot);
+      }
+      MaruConversationModal.mountTo(slot);
+      MaruConversationModal.showInput && MaruConversationModal.showInput();
+    }catch(e){ console.warn('[MARU][LateMount] failed', e); }
+  }
+
+  function tryAttach(){
+    var modal = document.querySelector('.maru-global-modal');
+    if (modal) mountConversation(modal);
+  }
+
+  // Custom hook if emitted by opener
+  document.addEventListener('maru:modal:opened', function(e){
+    if (e && e.detail && e.detail.modal) mountConversation(e.detail.modal);
+  });
+
+  // Fallback observer
+  var obs = new MutationObserver(function(){
+    tryAttach();
+  });
+  obs.observe(document.body, { childList:true, subtree:true });
+
+  // Initial try
+  setTimeout(tryAttach, 0);
+})();
+/* === END MARU Conversation Late Mount === */

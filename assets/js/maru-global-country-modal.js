@@ -771,17 +771,44 @@ modal.appendChild(convoSlot);
 document.body.appendChild(backdrop);
 document.body.appendChild(modal);
 
-/* === Conversation mount (FINAL — modal-anchored) === */
+/* === Conversation mount (FINAL) === */
 if (window.MaruConversationModal) {
   try {
-    window.MaruConversationModal.ensureReady?.(modal);
-    window.MaruConversationModal.setVoiceMode?.(false);
-    window.MaruConversationModal.showInput?.();
-    window.MaruConversationModal.setContext?.({ level: 'region', id: regionId });
+    // 중복 mount 방지(레기온과 동일 패턴)
+    if (window.MaruConversationModal.__mounted) {
+      window.MaruConversationModal.unmount?.();
+      window.MaruConversationModal.__mounted = false;
+    }
+
+    window.MaruConversationModal.mountTo(convoSlot);
+    window.MaruConversationModal.__mounted = true;
+
+    // 기본 컨텍스트: region
+   window.MaruConversationModal.setContext?.({ level: 'region', id: regionId });
   } catch (e) {
     console.warn('[MARU][COUNTRY] Conversation mount failed', e);
   }
+  /* ===== CONVERSATION INPUT VISIBILITY (COUNTRY FINAL) ===== */
+
+(function syncConversationInputOnOpen() {
+  const voiceOn =
+    window.MaruAddon && typeof window.MaruAddon.isVoiceEnabled === 'function'
+      ? window.MaruAddon.isVoiceEnabled()
+      : false;
+
+  if (!voiceOn) {
+    window.MaruConversationModal?.showInput?.();
+  } else {
+    window.MaruConversationModal?.hideInput?.();
+  }
+})();
+
+// 음성 ON 상태에서도 "문자 입력창 띄워줘" 요청 시 강제 표시
+window.forceShowConversationInput = function () {
+  window.MaruConversationModal?.showInput?.();
+};
 }
+
 
 /* 닫기 */
 document.getElementById('maruCountryClose').onclick = closeModal;
@@ -963,3 +990,42 @@ window.openMaruCountryVideoByIndex = function (idx) {
   /* ================= EXPOSE ================= */
   window.openMaruGlobalCountryModal = open;
 })();
+
+
+/* === MARU Conversation Late Mount (Safe) === */
+(function(){
+  function mountConversation(modalRoot){
+    try{
+      if (!window.MaruConversationModal) return;
+      var body = modalRoot.querySelector('[data-maru-body]') || modalRoot.querySelector('.maru-body') || modalRoot;
+      var slot = body.querySelector('.maru-conversation-slot');
+      if (!slot){
+        slot = document.createElement('div');
+        slot.className = 'maru-conversation-slot';
+        body.appendChild(slot);
+      }
+      MaruConversationModal.mountTo(slot);
+      MaruConversationModal.showInput && MaruConversationModal.showInput();
+    }catch(e){ console.warn('[MARU][LateMount] failed', e); }
+  }
+
+  function tryAttach(){
+    var modal = document.querySelector('.maru-global-modal');
+    if (modal) mountConversation(modal);
+  }
+
+  // Custom hook if emitted by opener
+  document.addEventListener('maru:modal:opened', function(e){
+    if (e && e.detail && e.detail.modal) mountConversation(e.detail.modal);
+  });
+
+  // Fallback observer
+  var obs = new MutationObserver(function(){
+    tryAttach();
+  });
+  obs.observe(document.body, { childList:true, subtree:true });
+
+  // Initial try
+  setTimeout(tryAttach, 0);
+})();
+/* === END MARU Conversation Late Mount === */
