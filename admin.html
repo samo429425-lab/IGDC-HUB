@@ -825,6 +825,22 @@
     var __lastMetrics = null;
     var __lastProfit = null;
 
+async function refresh(){
+  try{
+    const sb = await window.ensureSupabase();
+    const { data, error } = await sb
+      .from('igdc_core_status')
+      .select('*')
+      .limit(1);
+
+    __lastStatus = { registered: !error, raw: data };
+    setStatusText(!error);
+  }catch(e){
+    __lastStatus = { registered: false, raw: null };
+    setStatusText(false);
+  }
+}
+
     // tiny API (no globals)
     root.igdc = {
       refresh: function(){ refresh(); },
@@ -933,18 +949,16 @@
 
     async function refresh(){
       // status
-      try{
-        var r = await fetch('/api/igdc/core/status', {credentials:'same-origin'});
-        var s = await r.json();
-        var reg = !!(s && (s.registered || s.status==='registered'));
-        __lastStatus = { registered: reg, raw: s };
-        setStatusText(reg);
-        emit('igdc:status', __lastStatus);
-      }catch(e){
-        __lastStatus = { registered: false, raw: null };
-        setStatusText(false);
-        emit('igdc:status', __lastStatus);
-      }
+try{
+  const r = await fetch('/.netlify/functions/igdc-ledger');
+  const s = await r.json();
+  __lastStatus = { registered: true, raw: s };
+  setStatusText(true);
+}catch(e){
+  __lastStatus = { registered: false, raw: null };
+  setStatusText(false);
+}
+
 
       // metrics (and profit)
       try{
