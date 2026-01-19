@@ -349,13 +349,14 @@ if (window.MaruConversationModal) {
 })();
 
 
-/* ===== MARU Conversation Slot (FINAL, minimal) ===== */
+/* ===== MARU Conversation Slot (FINAL FIX, always visible) ===== */
 (function(){
   if (window.__MARU_CONVERSATION_SLOT__) return;
   window.__MARU_CONVERSATION_SLOT__ = true;
 
-  function ensureBar(){
+  function createBar(){
     if (document.getElementById('maru-conversation-bar')) return;
+
     var bar = document.createElement('div');
     bar.id = 'maru-conversation-bar';
     bar.style.cssText = [
@@ -396,12 +397,19 @@ if (window.MaruConversationModal) {
     btn.onclick = send;
     input.addEventListener('keydown', function(e){ if(e.key==='Enter') send(); });
 
-    bar.appendChild(input); bar.appendChild(btn);
+    bar.appendChild(input);
+    bar.appendChild(btn);
     document.body.appendChild(bar);
   }
 
+  // ALWAYS create on load
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', createBar);
+  } else {
+    createBar();
+  }
+
   window.MaruConversation = {
-    show: function(){ ensureBar(); },
     setContext: function(ctx){ window.__MARU_CONTEXT__ = ctx || null; }
   };
 })();
