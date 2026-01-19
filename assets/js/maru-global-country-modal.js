@@ -754,6 +754,11 @@ modal.appendChild(header);
 modal.appendChild(body);
 
 const convoSlot = el('div', 'maru-conversation-slot');
+
+   // [PATCH] Slot layout for conversation input (bottom, visible)
+   try {
+     convoSlot.style.cssText = 'width:100%;flex:0 0 auto;position:relative;z-index:100004;';
+   } catch(e) {}
 modal.appendChild(convoSlot);
 
 

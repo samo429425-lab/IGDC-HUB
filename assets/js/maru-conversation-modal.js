@@ -11,7 +11,7 @@
   function createUI(){
     container=document.createElement('div');
     container.className='maru-conversation-container';
-    container.style.cssText='position:absolute;left:0;right:0;bottom:0;padding:12px;background:#fff;border-top:1px solid #ddd;z-index:10';
+    container.style.cssText='position:sticky;left:0;right:0;bottom:0;width:100%;padding:12px;background:#fff;border-top:1px solid #ddd;z-index:100005;box-sizing:border-box';
     inputWrap=document.createElement('div');
     inputWrap.style.display='flex'; inputWrap.style.gap='8px';
     inputEl=document.createElement('input');
@@ -38,14 +38,26 @@
 
   function mountTo(target){
     if(!container) createUI();
+
+// [PATCH] Ensure target can host sticky input reliably inside modals
+try{
+  if (target && target.style) {
+    if (!target.style.position) target.style.position = 'relative';
+    target.style.width = target.style.width || '100%';
+    // Keep slot above modal content
+    if (!target.style.zIndex) target.style.zIndex = '100004';
+    // For flex-column modals
+    if (!target.style.flex) target.style.flex = '0 0 auto';
+  }
+}catch(_){}
     target.appendChild(container);
     mounted=true;
     applyVisibility();
   }
 
 
-  function showInput(){ inputWrap.style.display='flex'; }
-  function hideInput(){ inputWrap.style.display='none'; }
+  function showInput(){ if(inputWrap) inputWrap.style.display='flex'; }
+  function hideInput(){ if(inputWrap) inputWrap.style.display='none'; }
   
   function setVoiceMode(on){ voiceMode=!!on; applyVisibility(); }
   function setContext(ctx){ context=ctx||null; }

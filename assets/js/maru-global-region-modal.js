@@ -240,7 +240,12 @@ window.injectRegionContextResult = function (regionId, result) {
     modal.append(header, body);
    document.body.append(backdrop, modal);
    const convoSlot = el('div', 'maru-conversation-slot');
-   modal.appendChild(convoSlot);
+   
+   // [PATCH] Slot layout for conversation input (bottom, visible)
+   try {
+     convoSlot.style.cssText = 'width:100%;flex:0 0 auto;position:relative;z-index:100004;';
+   } catch(e) {}
+modal.appendChild(convoSlot);
 
 // === Conversation mount (AFTER DOM attach & structure ready) ===
 if (window.MaruConversationModal) {
