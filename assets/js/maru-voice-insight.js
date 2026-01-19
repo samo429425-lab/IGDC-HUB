@@ -11,13 +11,21 @@
   
   // === MARU Context Helper ===
 function getCurrentMaruContext(){
-  if (
-    window.MaruConversationModal &&
-    typeof window.MaruConversationModal.getContext === 'function'
-  ) {
-    return window.MaruConversationModal.getContext();
-  }
-  return null;
+  // Prefer ConversationModal context, fall back to global dock/context
+  try {
+    if (
+      window.MaruConversationModal &&
+      typeof window.MaruConversationModal.getContext === 'function'
+    ) {
+      return window.MaruConversationModal.getContext();
+    }
+  } catch (_) {}
+  try {
+    if (window.MaruConversationDock && typeof window.MaruConversationDock.getContext === 'function') {
+      return window.MaruConversationDock.getContext();
+    }
+  } catch (_) {}
+  return window.__MARU_CONTEXT__ || null;
 }
 
 
@@ -49,15 +57,12 @@ function getCurrentMaruContext(){
 
     };
     r.onerror=()=>{ if(currentState!==STATE.OFF) setState(STATE.LISTENING); };
-
- r.onend = () => {
-  // 사용자가 OFF한 경우에는 절대 자동 재시작하지 않음
-  if (currentState === STATE.OFF) {
-    return;
-  }
-
-  // Addon 기준으로 voice enabled일 때만 재시작
-  if (window.MaruAddon?.isVoiceEnabled?.()) {
+r.onend = () => {
+  if (
+    currentState !== STATE.OFF &&
+    window.MaruAddon?.isVoiceEnabled?.() &&
+    true
+  ) {
     try { r.start(); } catch (_) {}
     setState(STATE.LISTENING);
   }
@@ -67,7 +72,14 @@ function getCurrentMaruContext(){
   }
 
 function start(){
-
+  // ⬇️ 반드시 여기 (함수 시작 직후, 맨 위)
+  if (
+    window.MaruAddon &&
+    MaruAddon.isVoiceEnabled &&
+    !MaruAddon.isVoiceEnabled()
+  ) {
+    return;
+  }
 
   if(!recognition) recognition = initRecognition();
   try{

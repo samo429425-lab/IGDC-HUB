@@ -86,6 +86,12 @@
 	
 	window.MaruConversationModal?.unmount?.();
     window.MaruConversationModal && (window.MaruConversationModal.__mounted = false);
+
+    // Hide global conversation dock when Country modal closes
+    try {
+      window.__MARU_CONTEXT__ = null;
+      window.MaruConversationDock?.hide?.();
+    } catch (e) {}
   }
 
   /* ================= API ================= */
@@ -761,6 +767,15 @@ modal.appendChild(convoSlot);
 document.body.appendChild(backdrop);
 document.body.appendChild(modal);
 
+// Conversation input is handled by a global fixed dock (document.body).
+// Keep Country modal UI intact; only update context + visibility.
+try {
+  const ctx = { level: 'region', id: regionId || null };
+  window.__MARU_CONTEXT__ = ctx;
+  window.MaruConversationDock?.setContext?.(ctx);
+  window.MaruConversationDock?.show?.();
+} catch (e) {}
+
 /* === Conversation mount (FINAL) === */
 if (window.MaruConversationModal) {
   try {
@@ -798,6 +813,13 @@ body.innerHTML = countries
 document.querySelectorAll('.maru-country-card').forEach(card => {
   card.addEventListener('click', () => {
     activeCountryName = card.dataset.country;
+    // expose for global dock / addon routing
+    window.activeCountryName = activeCountryName;
+    try {
+      const ctx = { level: 'country', id: activeCountryName };
+      window.__MARU_CONTEXT__ = ctx;
+      window.MaruConversationDock?.setContext?.(ctx);
+    } catch (e) {}
 window.MaruConversationModal?.setContext?.({ level: 'country', id: activeCountryName });
     expandCountrySection(activeCountryName);
   });

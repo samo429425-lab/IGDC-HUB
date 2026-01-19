@@ -1,45 +1,75 @@
+/* =========================================================
+ * MARU Conversation Dock — FINAL (Body Fixed)
+ * ---------------------------------------------------------
+ * Goal:
+ * - Always-visible text input dock that follows Region/Country modals
+ * - Does NOT live inside modal/backdrop (prevents z-index/stacking issues)
+ * - Routes text → MaruAddon.handleTextQuery({text, context})
+ * - Context is updated by Region/Country and also self-heals by DOM observation
+ * ========================================================= */
 
-/* MARU Conversation Bar (One-line Dock) */
 (function(){
-  if (window.MaruConversationBar) return;
+  'use strict';
 
-  let bar, input, sendBtn;
-  let context = null;
+  if (window.MaruConversationDock) return;
 
-  function create(){
+  let bar = null;
+  let input = null;
+  let sendBtn = null;
+  let _ctx = null;
+
+  function ensureBar(){
+    if (bar) return;
+
     bar = document.createElement('div');
-    bar.id = 'maru-conversation-bar';
+    bar.id = 'maru-conversation-dock';
     bar.style.cssText = [
       'position:fixed',
       'left:0',
       'right:0',
       'bottom:0',
-      'height:60px',
-      'display:flex',
+      'height:58px',
+      'display:none',
       'align-items:center',
-      'gap:8px',
+      'gap:10px',
       'padding:0 12px',
       'background:#ffffff',
       'border-top:1px solid #ddd',
-      'z-index:100010'
+      'box-sizing:border-box',
+      // must be higher than region modal (99999) and country modal (100001)
+      'z-index:100200'
     ].join(';');
 
     input = document.createElement('input');
     input.type = 'text';
+    input.autocomplete = 'off';
     input.placeholder = 'Ask MARU…';
     input.style.cssText = [
       'flex:1',
       'height:36px',
+      'padding:0 10px',
       'font-size:14px',
-      'padding:0 10px'
+      'border:1px solid #ccc',
+      'border-radius:8px',
+      'outline:none',
+      'box-sizing:border-box'
     ].join(';');
 
     sendBtn = document.createElement('button');
+    sendBtn.type = 'button';
     sendBtn.textContent = 'Send';
-    sendBtn.style.cssText = 'height:36px;';
+    sendBtn.style.cssText = [
+      'height:36px',
+      'padding:0 14px',
+      'border:none',
+      'border-radius:8px',
+      'background:#1f3a5f',
+      'color:#fff',
+      'cursor:pointer'
+    ].join(';');
 
-    sendBtn.onclick = send;
-    input.addEventListener('keydown', e => {
+    sendBtn.addEventListener('click', send);
+    input.addEventListener('keydown', function(e){
       if (e.key === 'Enter') send();
     });
 
@@ -48,26 +78,122 @@
     document.body.appendChild(bar);
   }
 
-  function send(){
-    const text = input.value.trim();
-    if (!text) return;
-    console.log('[MARU][Conversation]', { text, context });
-    // Hook to addon / engine later
+  function normalizeContext(ctx){
+    if (!ctx || typeof ctx !== 'object') return null;
+    if (!ctx.level) return null;
+    return {
+      level: ctx.level,
+      id: (ctx.id != null) ? ctx.id : null
+    };
+  }
+
+  function getBestContext(){
+    // 1) Conversation modal context (if exists)
+    try {
+      if (window.MaruConversationModal && typeof window.MaruConversationModal.getContext === 'function') {
+        const c = window.MaruConversationModal.getContext();
+        const nc = normalizeContext(c);
+        if (nc) return nc;
+      }
+    } catch (_) {}
+
+    // 2) Global shared context
+    const g = normalizeContext(window.__MARU_CONTEXT__);
+    if (g) return g;
+
+    // 3) Fallback to global active ids
+    if (window.activeCountryName) return { level: 'country', id: window.activeCountryName };
+    if (window.activeRegionId) return { level: 'region', id: window.activeRegionId };
+
+    return null;
+  }
+
+  function setContext(ctx){
+    _ctx = normalizeContext(ctx) || getBestContext();
+    window.__MARU_CONTEXT__ = _ctx;
+  }
+
+  function show(){
+    ensureBar();
+    bar.style.display = 'flex';
+  }
+
+  function hide(){
+    if (!bar) return;
+    bar.style.display = 'none';
+  }
+
+  function focus(){
+    ensureBar();
+    try { input.focus(); } catch (_) {}
+  }
+
+  function clear(){
+    if (!input) return;
     input.value = '';
   }
 
-  window.MaruConversationBar = {
-    show(){
-      if (!bar) create();
-      bar.style.display = 'flex';
-      input.focus();
-    },
-    hide(){
-      if (bar) bar.style.display = 'none';
-    },
-    setContext(ctx){
-      context = ctx;
-      console.log('[MARU][Context]', ctx);
+  function send(){
+    ensureBar();
+    const text = (input.value || '').trim();
+    if (!text) return;
+
+    const ctx = _ctx || getBestContext();
+    setContext(ctx);
+
+    try {
+      if (window.MaruAddon && typeof window.MaruAddon.handleTextQuery === 'function') {
+        window.MaruAddon.handleTextQuery({ text, context: ctx || null });
+      } else {
+        console.log('[MARU][DockText]', { text, context: ctx || null });
+      }
+    } catch (e) {
+      console.warn('[MARU][Dock] send failed', e);
     }
+
+    clear();
+  }
+
+  // Self-heal: show/hide based on modal presence (NO timers)
+  function syncByDom(){
+    const hasRegion = !!document.querySelector('.maru-region-modal');
+    const hasCountry = !!document.querySelector('.maru-country-modal');
+    if (hasRegion || hasCountry) {
+      show();
+      setContext(getBestContext());
+    } else {
+      hide();
+    }
+  }
+
+  function initObserver(){
+    try {
+      const mo = new MutationObserver(function(){
+        syncByDom();
+      });
+      mo.observe(document.documentElement || document.body, { childList: true, subtree: true });
+    } catch (_) {}
+  }
+
+  // Public API
+  window.MaruConversationDock = {
+    show,
+    hide,
+    focus,
+    clear,
+    send,
+    setContext,
+    getContext: function(){ return _ctx || getBestContext(); }
   };
+
+  // Initial boot
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function(){
+      syncByDom();
+      initObserver();
+    });
+  } else {
+    syncByDom();
+    initObserver();
+  }
 })();
