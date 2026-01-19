@@ -347,3 +347,61 @@ if (window.MaruConversationModal) {
   };
 
 })();
+
+
+/* ===== MARU Conversation Slot (FINAL, minimal) ===== */
+(function(){
+  if (window.__MARU_CONVERSATION_SLOT__) return;
+  window.__MARU_CONVERSATION_SLOT__ = true;
+
+  function ensureBar(){
+    if (document.getElementById('maru-conversation-bar')) return;
+    var bar = document.createElement('div');
+    bar.id = 'maru-conversation-bar';
+    bar.style.cssText = [
+      'position:fixed','left:0','right:0','bottom:0',
+      'height:56px','display:flex','gap:8px','align-items:center',
+      'padding:0 12px','background:#fff','border-top:1px solid #ddd',
+      'z-index:100010','box-sizing:border-box'
+    ].join(';');
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'Ask MARU…';
+    input.style.cssText = [
+      'flex:1','height:34px','padding:0 10px','font-size:14px',
+      'border:1px solid #ccc','border-radius:6px','outline:none'
+    ].join(';');
+
+    var btn = document.createElement('button');
+    btn.textContent = 'Send';
+    btn.style.cssText = [
+      'height:34px','padding:0 14px','border:none','border-radius:6px',
+      'background:#1f3a5f','color:#fff','cursor:pointer'
+    ].join(';');
+
+    function send(){
+      var text = input.value.trim();
+      if (!text) return;
+      try{
+        if (window.MaruAddon && typeof window.MaruAddon.handleTextQuery === 'function') {
+          window.MaruAddon.handleTextQuery({ text:text, context: window.__MARU_CONTEXT__ || null });
+        } else {
+          console.log('[MARU][Conversation]', text, window.__MARU_CONTEXT__ || null);
+        }
+      }catch(e){ console.warn(e); }
+      input.value='';
+    }
+
+    btn.onclick = send;
+    input.addEventListener('keydown', function(e){ if(e.key==='Enter') send(); });
+
+    bar.appendChild(input); bar.appendChild(btn);
+    document.body.appendChild(bar);
+  }
+
+  window.MaruConversation = {
+    show: function(){ ensureBar(); },
+    setContext: function(ctx){ window.__MARU_CONTEXT__ = ctx || null; }
+  };
+})();
