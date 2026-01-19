@@ -2758,21 +2758,29 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
   }
 })();
 </script>
-<script>
-function IGDC_CORE_CLICK(){
-  var btn = document.getElementById('igdc-open-core');
-  if(btn){
-    btn.style.opacity = '0.5';
-    setTimeout(function(){
-      btn.style.opacity = '1';
-    }, 300);
-  }
-
-  // 기존 코어 동작 호출 (이미 있으면 그대로 실행됨)
-  if (typeof IGDC_CORE_LINK === 'function') {
-    IGDC_CORE_LINK();
-  }
+<style>
+@keyframes igdcBlink {
+  0%   { opacity: 1; }
+  50%  { opacity: 0.3; }
+  100% { opacity: 1; }
 }
+.igdc-blink {
+  animation: igdcBlink 0.4s ease-in-out 2;
+}
+</style>
+
+<script>
+(function(){
+  var btn = document.getElementById('igdc-open-core');
+  if(!btn) return;
+
+  btn.addEventListener('click', function(){
+    btn.classList.add('igdc-blink');
+    setTimeout(function(){
+      btn.classList.remove('igdc-blink');
+    }, 800);
+  });
+})();
 </script>
 
 
