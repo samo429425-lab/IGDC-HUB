@@ -791,9 +791,12 @@
 <section id="igdc-core-link" style="border:1px solid #cfe3ff;background:#f6fbff;border-radius:12px;padding:14px 16px;margin:10px 0;text-align:left;">
 <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
 <strong style="color:#004080;">🔗 IGDC 핵심 링크</strong>
-<button id="igdc-open-core" style="padding:6px 10px;border:1px solid #99c2ff;border-radius:8px;background:#fff;cursor:pointer;">
-      컨텍스트 불러오기
-    </button>
+<button id="igdc-open-core"
+  onclick="IGDC_CORE_CLICK()"
+  style="padding:6px 10px;border:1px solid #99c2ff;border-radius:8px;background:#fff;cursor:pointer;">
+  컨텍스트 불러오기
+</button>
+
 <span id="igdc-core-status" style="font-size:12px;color:#555;">상태: 확인 중…</span>
 </div>
 <div id="igdc-core-help" style="font-size:12px;color:#666;margin-top:6px;">
@@ -2755,6 +2758,23 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
   }
 })();
 </script>
+<script>
+function IGDC_CORE_CLICK(){
+  var btn = document.getElementById('igdc-open-core');
+  if(btn){
+    btn.style.opacity = '0.5';
+    setTimeout(function(){
+      btn.style.opacity = '1';
+    }, 300);
+  }
+
+  // 기존 코어 동작 호출 (이미 있으면 그대로 실행됨)
+  if (typeof IGDC_CORE_LINK === 'function') {
+    IGDC_CORE_LINK();
+  }
+}
+</script>
+
 
 <!-- 1. libs -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
