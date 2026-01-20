@@ -249,7 +249,12 @@
     if (!t.list) return;
 
     // normalize and keep only items with at least title+thumb; url may be '#'
-    let list = (rawItems || []).map(normItem).filter(x => x && x.thumb);
+
+let list = (rawItems || []).map(normItem).filter(x => {
+  if (!x) return false;
+  if (key.indexOf('home_right_') === 0) return true; // RIGHT는 이미지 없어도 허용
+  return !!x.thumb; // MAIN은 기존 그대로
+});
 
     // priority sort (stable)
     list.sort((a,b) => {
