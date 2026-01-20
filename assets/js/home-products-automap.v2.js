@@ -126,13 +126,9 @@
     a.href = item.url || '#';
     if (isExternal(item.url)) { a.target = '_blank'; a.rel = 'noopener'; }
 
-    // image background (cover) - explicit props (more robust than shorthand)
+    // image background (cover)
     if (item.thumb){
-      const u = String(item.thumb).replace(/"/g,'\\"');
-      a.style.backgroundImage = `url("${u}")`;
-      a.style.backgroundPosition = 'center';
-      a.style.backgroundSize = 'cover';
-      a.style.backgroundRepeat = 'no-repeat';
+      a.style.background = `center/cover no-repeat url("${String(item.thumb).replace(/"/g,'\\"')}")`;
     }
 
     // title overlay
@@ -169,11 +165,7 @@
     const thumb = document.createElement('div');
     thumb.className = 'thumb';
     if (item.thumb){
-      const u = String(item.thumb).replace(/"/g,'\\"');
-      thumb.style.backgroundImage = `url("${u}")`;
-      thumb.style.backgroundPosition = 'center';
-      thumb.style.backgroundSize = 'cover';
-      thumb.style.backgroundRepeat = 'no-repeat';
+      thumb.style.background = `center/cover no-repeat url("${String(item.thumb).replace(/"/g,'\\"')}")`;
     }
     a.appendChild(thumb);
     return a;
@@ -249,12 +241,7 @@
     if (!t.list) return;
 
     // normalize and keep only items with at least title+thumb; url may be '#'
-
-let list = (rawItems || []).map(normItem).filter(x => {
-  if (!x) return false;
-  if (key.indexOf('home_right_') === 0) return true; // RIGHT는 이미지 없어도 허용
-  return !!x.thumb; // MAIN은 기존 그대로
-});
+    let list = (rawItems || []).map(normItem).filter(x => x && x.thumb);
 
     // priority sort (stable)
     list.sort((a,b) => {
@@ -278,6 +265,12 @@ let list = (rawItems || []).map(normItem).filter(x => {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const payload = await r.json();
       const byId = indexSections(payload);
+	  
+	  // ===== RIGHT PANEL ALIAS (MINIMAL PATCH) =====
+      // existing name 우선, 없으면 home_6~8 사용
+    byId.home_right_top    = byId.home_right_top    || byId.home_6 || [];
+    byId.home_right_middle = byId.home_right_middle || byId.home_7 || [];
+    byId.home_right_bottom = byId.home_right_bottom || byId.home_8 || [];
 
       for (const key of ALL_KEYS){
         const alt = key.replace(/_/g,'-');
