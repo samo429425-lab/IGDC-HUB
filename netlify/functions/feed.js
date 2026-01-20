@@ -13,11 +13,35 @@ const path = require("path");
  * - If you have an existing multi-page feed.js, merge ONLY the homeproducts branch.
  */
 
-const SNAPSHOT_PATH = path.join(__dirname, "data", "snapshot.internal.v1.json");
+const DATA_DIR = path.join(__dirname, "data");
+const SNAPSHOT_PATH = path.join(DATA_DIR, "snapshot.internal.v1.json");
+
+// Optional per-section data files (when snapshot doesn't include them)
+const SECTION_FILES = {
+  home_1: "home_1.json",
+  home_2: "home_2.json",
+  home_3: "home_3.json",
+  home_4: "home_4.json",
+  home_5: "home_5.json",
+  home_right_top: "home_right_top.json",
+  home_right_middle: "home_right_middle.json",
+  home_right_bottom: "home_right_bottom.json",
+};
 
 function readJsonSafe(p) {
   try { return JSON.parse(fs.readFileSync(p, "utf8")); }
   catch (e) { return {}; }
+}
+
+function extractItems(obj){
+  // Accept {items:[...]}, {cards:[...]}, or raw array
+  if (Array.isArray(obj)) return obj;
+  if (!obj || typeof obj !== 'object') return [];
+  if (Array.isArray(obj.items)) return obj.items;
+  if (Array.isArray(obj.cards)) return obj.cards;
+  if (Array.isArray(obj.data)) return obj.data;
+  if (Array.isArray(obj.list)) return obj.list;
+  return [];
 }
 
 function toArr(v){ return Array.isArray(v) ? v : []; }
@@ -59,6 +83,17 @@ function compileHome(snapshot){
 
     if (!target) continue;
     out[target] = normalizeItems(sec);
+  }
+
+  // Fallback: if any section is missing from snapshot, try per-section JSON files
+  for (const k of Object.keys(out)){
+    if (out[k] && out[k].length) continue;
+    const fn = SECTION_FILES[k];
+    if (!fn) continue;
+    const p = path.join(DATA_DIR, fn);
+    const j = readJsonSafe(p);
+    const items = extractItems(j);
+    if (items && items.length) out[k] = items;
   }
 
   // Emit in strict order
