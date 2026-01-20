@@ -126,9 +126,13 @@
     a.href = item.url || '#';
     if (isExternal(item.url)) { a.target = '_blank'; a.rel = 'noopener'; }
 
-    // image background (cover)
+    // image background (cover) - explicit props (more robust than shorthand)
     if (item.thumb){
-      a.style.background = `center/cover no-repeat url("${String(item.thumb).replace(/"/g,'\\"')}")`;
+      const u = String(item.thumb).replace(/"/g,'\\"');
+      a.style.backgroundImage = `url("${u}")`;
+      a.style.backgroundPosition = 'center';
+      a.style.backgroundSize = 'cover';
+      a.style.backgroundRepeat = 'no-repeat';
     }
 
     // title overlay
@@ -165,7 +169,11 @@
     const thumb = document.createElement('div');
     thumb.className = 'thumb';
     if (item.thumb){
-      thumb.style.background = `center/cover no-repeat url("${String(item.thumb).replace(/"/g,'\\"')}")`;
+      const u = String(item.thumb).replace(/"/g,'\\"');
+      thumb.style.backgroundImage = `url("${u}")`;
+      thumb.style.backgroundPosition = 'center';
+      thumb.style.backgroundSize = 'cover';
+      thumb.style.backgroundRepeat = 'no-repeat';
     }
     a.appendChild(thumb);
     return a;
@@ -265,12 +273,6 @@
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const payload = await r.json();
       const byId = indexSections(payload);
-	  
-	  // ===== RIGHT PANEL ALIAS (MINIMAL PATCH) =====
-      // existing name 우선, 없으면 home_6~8 사용
-    byId.home_right_top    = byId.home_right_top    || byId.home_6 || [];
-    byId.home_right_middle = byId.home_right_middle || byId.home_7 || [];
-    byId.home_right_bottom = byId.home_right_bottom || byId.home_8 || [];
 
       for (const key of ALL_KEYS){
         const alt = key.replace(/_/g,'-');
