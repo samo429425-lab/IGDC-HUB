@@ -85,6 +85,34 @@
       return 'summary';
     }
 
+    function shouldOpenDetailPane(req) {
+      if (!req) return false;
+      // Voice inputs should always surface responses in the detail pane
+      if (req.input === 'voice') return true;
+      // Explicit expand/detail requests
+      if (req.intent === 'expand') return true;
+      const t = String(req.text || '');
+      // Heuristic: analytical / conversational prompts should go to detail pane
+      return /(왜|어떻게|전반|전체|상황|전망|분석|비교|영향|리스크|기회|추세|배경|원인|정리|설명|경제|정치|사회|기술|외교|전쟁|금리|환율|물가|실업|성장)/.test(t);
+    }
+
+    function openDetailPane(title, text) {
+      const t = String(title || 'MARU DETAIL');
+      const body = String(text || '');
+      try {
+        if (window.MaruDetachedPane && typeof window.MaruDetachedPane.open === 'function') {
+          window.MaruDetachedPane.open({ type: 'detail', title: t, text: body });
+          return;
+        }
+      } catch (_) {}
+      try {
+        if (typeof window.openMaruDetailOverlay === 'function') {
+          window.openMaruDetailOverlay({ title: t, text: body });
+          return;
+        }
+      } catch (_) {}
+    }
+
     function normalizeContext(ctx) {
       if (!ctx || typeof ctx !== 'object') return null;
       if (!ctx.level) return null;
@@ -102,15 +130,18 @@
       if (ctx && ctx.level === 'region') { scope = 'region'; target = ctx.id || null; }
       if (ctx && ctx.level === 'country') { scope = 'country'; target = ctx.id || null; }
 
-      return {
+      const req = {
         source: 'user',
         input: input || 'text',
         text: raw,
         scope,
         target,
         intent: detectIntent(raw),
-        voiceWanted: (input === 'voice')
+        voiceWanted: (input === 'voice'),
+        openDetail: false
       };
+      req.openDetail = shouldOpenDetailPane(req);
+      return req;
     }
 
     function dispatchCommand(req) {
@@ -158,7 +189,14 @@
     function routeResponse(req, res) {
       // Even if ok=false, we still speak a minimal response when voice is on
       if (!res || !res.ok) {
-        ttsSpeak('준비된 자료가 없습니다.');
+        const msg = '준비된 자료가 없습니다.';
+        // If the query is conversational (or voice), surface it in detail pane
+        if (req && req.openDetail) {
+          try {
+            openDetailPane('MARU DETAIL', 'Q: ' + (req.text || '') + '\n\nA: ' + msg);
+          } catch (_) {}
+        }
+        ttsSpeak(msg);
         return;
       }
 
@@ -204,6 +242,19 @@
           STATE.videoPool.country = req.target;
           STATE.videoPool.list = res.data.videos;
           window.injectMaruCountryVideos({ country: req.target, videos: res.data.videos });
+        } catch (_) {}
+      }
+
+      // Detail pane: show conversational/analytical responses (voice default)
+      if (req && req.openDetail) {
+        try {
+          const title = (req.scope === 'country')
+            ? ('COUNTRY DETAIL — ' + (req.target || ''))
+            : (req.scope === 'region')
+              ? ('REGION DETAIL — ' + (req.target || ''))
+              : 'GLOBAL DETAIL';
+          const body = 'Q: ' + (req.text || '') + '\n\nA: ' + (res.text || '');
+          openDetailPane(title, body);
         } catch (_) {}
       }
 
@@ -254,6 +305,11 @@
 
     MaruAddon.requestInsight = function () {
       dispatchCommand({ source: 'panel', input: 'system', text: '실시간 글로벌 이슈', scope: 'global', target: null, intent: 'realtime', voiceWanted: VOICE_ENABLED });
+    };
+
+    // Optional external hook
+    MaruAddon.openDetailPane = function (title, text) {
+      try { openDetailPane(title, text); } catch (_) {}
     };
 
     try { console.log('[MaruAddon] READY'); } catch (_) {}

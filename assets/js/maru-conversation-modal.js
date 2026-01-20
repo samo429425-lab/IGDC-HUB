@@ -77,7 +77,8 @@
 
     sendBtn = document.createElement('button');
     sendBtn.type = 'button';
-    sendBtn.textContent = 'Send';
+    // 2-state UX: WAIT(default) <-> SEND(when text exists)
+    sendBtn.textContent = '웨이트';
     sendBtn.style.cssText = [
       'height:40px',
       'padding:0 14px',
@@ -88,14 +89,34 @@
       'cursor:pointer'
     ].join(';');
 
-    sendBtn.addEventListener('click', send);
-    input.addEventListener('keydown', function(e){
-      if (e.key === 'Enter') send();
+    function updateButton(){
+      var hasText = !!String(input.value || '').trim();
+      sendBtn.textContent = hasText ? '전송' : '웨이트';
+      // prevent meaningless clicks
+      sendBtn.disabled = !hasText;
+      sendBtn.style.opacity = hasText ? '1' : '0.55';
+      sendBtn.style.cursor = hasText ? 'pointer' : 'default';
+    }
+
+    sendBtn.addEventListener('click', function(){
+      // Allow click only when active
+      if (sendBtn.disabled) return;
+      send();
     });
+    input.addEventListener('keydown', function(e){
+      if (e.key === 'Enter') {
+        if (!sendBtn.disabled) send();
+      }
+    });
+    input.addEventListener('input', updateButton);
+
+    // initialize
+    updateButton();
 
     bar.appendChild(input);
     bar.appendChild(sendBtn);
     document.body.appendChild(bar);
+
   }
 
   function normalizeContext(ctx){
@@ -146,6 +167,15 @@
   function clear(){
     if (!input) return;
     input.value = '';
+    // keep UI state consistent
+    try {
+      if (sendBtn) {
+        sendBtn.textContent = '웨이트';
+        sendBtn.disabled = true;
+        sendBtn.style.opacity = '0.55';
+        sendBtn.style.cursor = 'default';
+      }
+    } catch (_) {}
   }
 
   function send(){
@@ -171,6 +201,16 @@
     }
 
     clear();
+    // Ensure button returns to WAIT state after sending
+    try {
+      if (sendBtn && input) {
+        var hasText = !!String(input.value || '').trim();
+        sendBtn.textContent = hasText ? '전송' : '웨이트';
+        sendBtn.disabled = !hasText;
+        sendBtn.style.opacity = hasText ? '1' : '0.55';
+        sendBtn.style.cursor = hasText ? 'pointer' : 'default';
+      }
+    } catch (_) {}
   }
 
   function findActiveModal(){
@@ -302,6 +342,31 @@
     getContext: getContext,
     // Useful for debugging
     _sync: scheduleLayout
+  };
+
+  // UI helper for voice-to-text and button state sync
+  // Voice engine can call: window.MaruConversationUI.setInputText(...)
+  window.MaruConversationUI = {
+    setInputText: function (text) {
+      ensureBar();
+      if (!input) return;
+      input.value = String(text || '');
+      try {
+        input.dispatchEvent(new Event('input'));
+      } catch (_) {}
+      // keep dock visible and aligned
+      try { show(); } catch (_) {}
+      try { scheduleLayout(); } catch (_) {}
+    },
+    clearInput: function () {
+      ensureBar();
+      if (!input) return;
+      input.value = '';
+      try { input.dispatchEvent(new Event('input')); } catch (_) {}
+    },
+    focus: function () {
+      try { focus(); } catch (_) {}
+    }
   };
 
   // Boot

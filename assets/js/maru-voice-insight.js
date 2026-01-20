@@ -10,15 +10,21 @@
   const SILENCE_TIMEOUT = 1200;
   
   // === MARU Context Helper ===
-function getCurrentMaruContext(){
-  if (
-    window.MaruConversationModal &&
-    typeof window.MaruConversationModal.getContext === 'function'
-  ) {
-    return window.MaruConversationModal.getContext();
+  function getCurrentMaruContext(){
+    try {
+      if (window.MaruConversationDock && typeof window.MaruConversationDock.getContext === 'function') {
+        const c = window.MaruConversationDock.getContext();
+        if (c) return c;
+      }
+    } catch (_) {}
+    try {
+      if (window.MaruConversationModal && typeof window.MaruConversationModal.getContext === 'function') {
+        const c = window.MaruConversationModal.getContext();
+        if (c) return c;
+      }
+    } catch (_) {}
+    return window.__MARU_CONTEXT__ || null;
   }
-  return null;
-}
 
 
   function setState(state){
@@ -32,7 +38,7 @@ function getCurrentMaruContext(){
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if(!SR) return null;
     const r = new SR();
-    r.lang='ko-KR'; r.continuous=true; r.interimResults=false;
+    r.lang='ko-KR'; r.continuous=true; r.interimResults=true;
     r.onstart=()=>setState(STATE.LISTENING);
     r.onspeechstart=()=>{clearTimeout(silenceTimer); setState(STATE.SPEAKING);};
     r.onspeechend=()=>{
@@ -40,25 +46,35 @@ function getCurrentMaruContext(){
       silenceTimer=setTimeout(()=>{ if(currentState!==STATE.OFF) setState(STATE.LISTENING);},SILENCE_TIMEOUT);
     };
     r.onresult=e=>{
-      const last=e.results[e.results.length-1];
-      const text=last[0].transcript.trim();
-      if(text && window.MaruAddon?.handleVoiceQuery){
-      const context = getCurrentMaruContext();
-      window.MaruAddon.handleVoiceQuery(text, context);
-    }
+      try {
+        // Build transcript from the latest result
+        const last = e.results[e.results.length-1];
+        const transcript = String(last[0].transcript || '').trim();
+        if (!transcript) return;
 
+        // Show voice transcript in the text input (ChatGPT-style)
+        if (window.MaruConversationUI && typeof window.MaruConversationUI.setInputText === 'function') {
+          window.MaruConversationUI.setInputText(transcript);
+        }
+
+        // Only dispatch to engine on FINAL result
+        if (last.isFinal && window.MaruAddon && typeof window.MaruAddon.handleVoiceQuery === 'function') {
+          const context = getCurrentMaruContext();
+          window.MaruAddon.handleVoiceQuery({ text: transcript, context: context });
+          // After dispatch, clear input back to WAIT
+          if (window.MaruConversationUI && typeof window.MaruConversationUI.clearInput === 'function') {
+            window.MaruConversationUI.clearInput();
+          }
+        }
+      } catch (_) {}
     };
     r.onerror=()=>{ if(currentState!==STATE.OFF) setState(STATE.LISTENING); };
-r.onend = () => {
-  if (
-    currentState !== STATE.OFF &&
-    window.MaruAddon?.isVoiceEnabled?.() &&
-    window.MARU_REGION_VOICE_READY !== false
-  ) {
-    try { r.start(); } catch (_) {}
-    setState(STATE.LISTENING);
-  }
-};
+    r.onend = () => {
+      if (currentState !== STATE.OFF && window.MaruAddon?.isVoiceEnabled?.()) {
+        try { r.start(); } catch (_) {}
+        setState(STATE.LISTENING);
+      }
+    };
 
     return r;
   }
