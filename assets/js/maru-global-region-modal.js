@@ -199,6 +199,12 @@ window.injectRegionContextResult = function (regionId, result) {
     voiceEnabled = enabled;
 	window.MARU_REGION_VOICE_READY = enabled;
 
+      // Direct mic start/stop fallback (ensures user-gesture starts recognition)
+      try {
+        if (enabled && typeof window.startMaruMic === 'function') window.startMaruMic();
+        if (!enabled && typeof window.stopMaruMic === 'function') window.stopMaruMic();
+      } catch (_) {}
+
 
       // 버튼 UI 반영
       voiceBtn.classList.toggle('off', !enabled);
@@ -239,97 +245,14 @@ window.injectRegionContextResult = function (regionId, result) {
 
     modal.append(header, body);
    document.body.append(backdrop, modal);
-   
 
-try{
-  if (modal && modal.style) {
-    // make room for the dock bar
-    modal.style.paddingBottom = '56px';
-  }
-}catch(e){}
-
-
-/* === MARU Conversation Bar (Dock inside Backdrop) === */
-try {
-  if (!document.getElementById('maru-conversation-bar')) {
-    const bar = document.createElement('div');
-    bar.id = 'maru-conversation-bar';
-    bar.style.cssText = [
-      'position:absolute','left:0','right:0','bottom:0',
-      'height:56px','display:flex','gap:8px','align-items:center',
-      'padding:0 12px','background:#fff','border-top:1px solid #ddd',
-      'box-sizing:border-box','z-index:100010'
-    ].join(';');
-
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.placeholder = 'Ask MARU…';
-    input.autocomplete = 'off';
-    input.style.cssText = [
-      'flex:1','height:34px','padding:0 10px','font-size:14px',
-      'border:1px solid #ccc','border-radius:6px','outline:none'
-    ].join(';');
-
-    const btn = document.createElement('button');
-    btn.textContent = 'Send';
-    btn.style.cssText = [
-      'height:34px','padding:0 14px','border:none','border-radius:6px',
-      'background:#1f3a5f','color:#fff','cursor:pointer'
-    ].join(';');
-
-    function send(){
-      const text = (input.value || '').trim();
-      if (!text) return;
-      try{
-        if (window.MaruAddon && typeof window.MaruAddon.handleTextQuery === 'function') {
-          window.MaruAddon.handleTextQuery({ text, context: window.__MARU_CONTEXT__ || null });
-        } else if (window.MaruAddon && typeof window.MaruAddon.handleVoiceQuery === 'function') {
-          window.MaruAddon.handleVoiceQuery(text, window.__MARU_CONTEXT__ || null);
-        } else {
-          console.log('[MARU][Text]', text, window.__MARU_CONTEXT__ || null);
-        }
-      }catch(e){ console.warn(e); }
-      input.value='';
-    }
-
-    btn.onclick = send;
-    input.addEventListener('keydown', (e)=>{ if(e.key==='Enter') send(); });
-
-    bar.appendChild(input);
-    bar.appendChild(btn);
-
-    // Attach to backdrop (which is already visible and fixed)
-    (backdrop || document.body).appendChild(bar);
-  } else {
-    // ensure visible if already exists
-    const bar = document.getElementById('maru-conversation-bar');
-    if (bar) bar.style.display = 'flex';
-  }
-} catch(e) { console.warn('[MARU][ConversationBar] init failed', e); }
-
-const convoSlot = el('div', 'maru-conversation-slot');
-   modal.appendChild(convoSlot);
-
-// === Conversation mount (AFTER DOM attach & structure ready) ===
-if (window.MaruConversationModal) {
-  try {
-
-    // === Prevent duplicate Conversation mount ===
-    if (window.MaruConversationModal.__mounted) {
-      window.MaruConversationModal.unmount?.();
-      window.MaruConversationModal.__mounted = false;
-    }
-
-    window.MaruConversationModal.mountTo(convoSlot);
-    window.MaruConversationModal.__mounted = true;
-	
-	window.MaruConversationModal.setContext?.({ level: 'region', id: regionId });
-
-  } catch (e) {
-    console.warn('[MARU][REGION] Conversation mount failed', e);
-  }
-}
-
+    // Conversation overlay (Addon-owned) — show and bind context
+    try {
+      const ctx = { level: 'region', id: regionId || null };
+      window.__MARU_CONTEXT__ = ctx;
+      window.MaruConversationDock?.setContext?.(ctx);
+      window.MaruConversationDock?.show?.();
+    } catch (e) {}
     // Context set (preserve original intent)
     window.activeRegionId = regionId || window.activeRegionId || null;
     window.activeCountryCode = null;
