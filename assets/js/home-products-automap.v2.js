@@ -110,7 +110,6 @@
   }
 
   function showEmpty(t){
-(t){
     // Show message in psom element; hide real list so it doesn't look "blank"
     t.psomEl.style.display = 'block';
     t.psomEl.textContent = emptyText();
