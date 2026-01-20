@@ -86,27 +86,16 @@
     const isRight = key.indexOf('home_right_') === 0;
 
     if (isRight){
-      // Case A (preferred): <div data-psom-key> lives inside .ad-section > .ad-scroll > .ad-list
       const section = psomEl.closest('.ad-section');
-      const scrollA = section && (section.querySelector('.ad-scroll') || section);
-      const listA = section && section.querySelector('.ad-list');
-
-      if (listA) {
-        return { isRight: true, section, scroller: scrollA, list: listA, psomEl, mode: 'ad-section' };
-      }
-
-      // Case B (legacy/home.html current): data-psom-key is itself the list container (.ad-list)
-      // In this case, we render directly into psomEl and use the nearest panel as scroller (vertical).
-      const panel = psomEl.closest('.right-panel') || psomEl.closest('.ad-panel') || null;
-      const scrollB = psomEl.closest('.ad-scroll') || panel || null;
-      const listB = psomEl; // render directly into psom placeholder node
-      return { isRight: true, section: panel, scroller: scrollB, list: listB, psomEl, mode: 'direct' };
+      const scroll = section && section.querySelector('.ad-scroll');
+      const list = section && section.querySelector('.ad-list');
+      return { isRight: true, section, scroller: scroll, list, psomEl };
     }
 
     // MAIN
     const scroller = psomEl.closest('.shop-scroller');
     const row = scroller && scroller.querySelector('.shop-row');
-    return { isRight: false, section: scroller, scroller, list: row, psomEl, mode: 'shop' };
+    return { isRight: false, section: scroller, scroller, list: row, psomEl };
   }
 
   function showEmpty(t){
@@ -122,22 +111,12 @@
     t.psomEl.style.lineHeight = '1.6';
     t.psomEl.style.minHeight = '44px';
 
-    if (t.scroller) {
-      // MAIN: hide scroller to avoid "blank list" look
-      // RIGHT(direct): do NOT hide the whole panel; only hide if scroller is the list container's parent scroll area (ad-scroll)
-      if (!t.isRight || t.mode === 'ad-section') {
-        t.scroller.style.display = 'none';
-      }
-    }
+    if (t.scroller) t.scroller.style.display = 'none';
   }
 
   function showData(t){
     t.psomEl.style.display = 'none';
-    if (t.scroller) {
-      if (!t.isRight || t.mode === 'ad-section') {
-        t.scroller.style.display = '';
-      }
-    }
+    if (t.scroller) t.scroller.style.display = '';
   }
 
   // ===== Card builders that match home.html CSS =====
