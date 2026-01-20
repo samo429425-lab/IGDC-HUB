@@ -1,21 +1,23 @@
 /**
- * home-products-automap.v2.domfit.js
- * Baseline: user's v2 behavior (empty message must show on MAIN + RIGHT)
- * Fixes:
- * 1) Render into the REAL DOM containers used by home.html:
- *    - MAIN: .shop-row inside the same .shop-scroller (NOT the psom div)
- *    - RIGHT: .ad-list inside the same .ad-section (NOT the psom div)
- * 2) Empty state: show multilingual message in psom div AND hide the list area
- * 3) Data state: hide psom div, show list area, and batch-render (MAIN 100/7, RIGHT 80/5)
- * 4) Accept legacy section ids if feed passes through
+ * home-products-automap.v2.js  (RIGHT-PANEL SAFE)
+ * Purpose:
+ *  - Keep MAIN (home_1..home_5) behavior unchanged.
+ *  - Enable RIGHT panel (home_right_top/middle/bottom) rendering for BOTH DOM layouts:
+ *      A) .ad-section > .ad-scroll > .ad-list  (structured)
+ *      B) data-psom-key is directly on .ad-list (direct/legacy)
  *
- * Fetch: /.netlify/functions/feed?page=homeproducts
+ * Data source:
+ *  - /.netlify/functions/feed?page=homeproducts
+ *  - Expects payload.sections = [{id, items:[...]} ...]
+ *
+ * Notes:
+ *  - No global CSS/zoom/transform changes.
+ *  - No deletion of existing features: empty-state i18n, incremental rendering, priority sort.
  */
-
 (function () {
   'use strict';
-  if (window.__HOME_AUTOMAP_DOMFIT__) return;
-  window.__HOME_AUTOMAP_DOMFIT__ = true;
+  if (window.__HOME_PRODUCTS_AUTOMAP_V2__) return;
+  window.__HOME_PRODUCTS_AUTOMAP_V2__ = true;
 
   const FEED_URL = '/.netlify/functions/feed?page=homeproducts';
 
@@ -46,7 +48,7 @@
   function getLangCode(){
     try{
       const raw = String(
-        (localStorage && localStorage.getItem('igdc_lang')) ||
+        (window.localStorage && localStorage.getItem('igdc_lang')) ||
         (document.documentElement && document.documentElement.getAttribute('lang')) ||
         (navigator && (navigator.language || (navigator.languages && navigator.languages[0]))) ||
         'en'
@@ -86,20 +88,28 @@
     const isRight = key.indexOf('home_right_') === 0;
 
     if (isRight){
+      // Layout A: structured ad-section
       const section = psomEl.closest('.ad-section');
-      const scroll = section && section.querySelector('.ad-scroll');
-      const list = section && section.querySelector('.ad-list');
-      return { isRight: true, section, scroller: scroll, list, psomEl };
+      const scrollA = section && (section.querySelector('.ad-scroll') || section);
+      const listA = section && section.querySelector('.ad-list');
+      if (listA) {
+        return { isRight: true, mode: 'ad-section', section, scroller: scrollA, list: listA, psomEl };
+      }
+
+      // Layout B: direct list (data-psom-key is on .ad-list itself)
+      const panel = psomEl.closest('.right-panel') || psomEl.closest('.ad-panel') || null;
+      const scrollB = psomEl.closest('.ad-scroll') || panel || null;
+      const listB = psomEl; // render directly into psom node
+      return { isRight: true, mode: 'direct', section: panel, scroller: scrollB, list: listB, psomEl };
     }
 
     // MAIN
     const scroller = psomEl.closest('.shop-scroller');
     const row = scroller && scroller.querySelector('.shop-row');
-    return { isRight: false, section: scroller, scroller, list: row, psomEl };
+    return { isRight: false, mode: 'shop', section: scroller, scroller, list: row, psomEl };
   }
 
   function showEmpty(t){
-    // Show message in psom element; hide real list so it doesn't look "blank"
     t.psomEl.style.display = 'block';
     t.psomEl.textContent = emptyText();
     t.psomEl.style.padding = '12px';
@@ -111,22 +121,36 @@
     t.psomEl.style.lineHeight = '1.6';
     t.psomEl.style.minHeight = '44px';
 
-    if (t.scroller) t.scroller.style.display = 'none';
+    if (t.scroller) {
+      if (!t.isRight) {
+        t.scroller.style.display = 'none';
+      } else if (t.mode === 'ad-section') {
+        t.scroller.style.display = 'none';
+      } else {
+        // RIGHT direct: keep panel visible
+      }
+    }
   }
 
   function showData(t){
     t.psomEl.style.display = 'none';
-    if (t.scroller) t.scroller.style.display = '';
+    if (t.scroller) {
+      if (!t.isRight) {
+        t.scroller.style.display = '';
+      } else if (t.mode === 'ad-section') {
+        t.scroller.style.display = '';
+      } else {
+        // RIGHT direct: keep panel visible
+      }
+    }
   }
 
-  // ===== Card builders that match home.html CSS =====
   function buildMainCard(item){
     const a = document.createElement('a');
     a.className = 'shop-card';
     a.href = item.url || '#';
     if (isExternal(item.url)) { a.target = '_blank'; a.rel = 'noopener'; }
 
-    // image background (cover) - explicit props (more robust than shorthand)
     if (item.thumb){
       const u = String(item.thumb).replace(/"/g,'\\"');
       a.style.backgroundImage = `url("${u}")`;
@@ -135,7 +159,6 @@
       a.style.backgroundRepeat = 'no-repeat';
     }
 
-    // title overlay
     const cap = document.createElement('div');
     cap.className = 'shop-card-cap';
     cap.textContent = item.title || '';
@@ -191,15 +214,14 @@
       }
     }
 
-    // also accept direct keys (defensive)
     for (const k of ALL_KEYS){
       if (Array.isArray(payload[k])) map[k] = payload[k];
     }
+
     return map;
   }
 
   function legacyKey(key){
-    // Accept snapshot legacy ids too (if feed isn't mapped)
     if (key.startsWith('home_right_')) return key.replace('home_right_','home-right-');
     return key.replace('home_','home-shop-');
   }
@@ -222,11 +244,9 @@
       offset = end;
     }
 
-    // clear existing visuals inside REAL list
     t.list.innerHTML = '';
     renderMore();
 
-    // attach scroll on the REAL scroller
     const sc = t.scroller;
     if (!sc) return;
 
@@ -248,15 +268,14 @@
     const t = resolveTargets(psomEl, key);
     if (!t.list) return;
 
-    // normalize and keep only items with at least title+thumb; url may be '#'
+    const isRight = t.isRight;
 
-let list = (rawItems || []).map(normItem).filter(x => {
-  if (!x) return false;
-  if (key.indexOf('home_right_') === 0) return true; // RIGHT는 이미지 없어도 허용
-  return !!x.thumb; // MAIN은 기존 그대로
-});
+    let list = (rawItems || []).map(normItem).filter(x => {
+      if (!x) return false;
+      if (isRight) return true;
+      return !!x.thumb;
+    });
 
-    // priority sort (stable)
     list.sort((a,b) => {
       const pa = (a.priority == null ? 999999 : a.priority);
       const pb = (b.priority == null ? 999999 : b.priority);
@@ -284,7 +303,6 @@ let list = (rawItems || []).map(normItem).filter(x => {
         renderSlot(key, byId[key] || byId[alt] || byId[legacyKey(key)] || []);
       }
     }catch(e){
-      // On fail, keep existing layout and show message in psom elements
       for (const key of ALL_KEYS){
         const psomEl = qs(`[data-psom-key="${key}"]`);
         if (!psomEl) continue;
@@ -294,9 +312,7 @@ let list = (rawItems || []).map(normItem).filter(x => {
     }
   }
 
-  function boot(){
-    load();
-  }
+  function boot(){ load(); }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
