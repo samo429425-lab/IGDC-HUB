@@ -84,13 +84,9 @@
     if (backdrop) backdrop.remove();
     modal = backdrop = null;
 	
-    // Hide global conversation dock when Country modal closes
-    try {
-      window.__MARU_CONTEXT__ = null;
-      window.MaruConversationDock?.hide?.();
-    } catch (e) {}
-
-	  }
+	window.MaruConversationModal?.unmount?.();
+    window.MaruConversationModal && (window.MaruConversationModal.__mounted = false);
+  }
 
   /* ================= API ================= */
   async function fetchCountryInsight(regionId) {
@@ -712,14 +708,6 @@ if (window.MaruAddon && typeof MaruAddon.setVoiceEnabled === 'function') {
   window.MARU_COUNTRY_VOICE_READY = enabled;
 }
 
-// Fallback: if Addon is not present, control mic directly
-if (!window.MaruAddon) {
-  try {
-    if (enabled) { window.startMaruMic?.(); } else { window.stopMaruMic?.(); }
-  } catch (_) {}
-}
-
-
 // 애드온의 단일 음성 상태를 기준으로 UI 동기화
 const voiceOn =
   window.MaruAddon && typeof MaruAddon.isVoiceEnabled === 'function'
@@ -765,17 +753,32 @@ const body = el(
 modal.appendChild(header);
 modal.appendChild(body);
 
+const convoSlot = el('div', 'maru-conversation-slot');
+modal.appendChild(convoSlot);
+
+
 /* DOM 부착 */
 document.body.appendChild(backdrop);
 document.body.appendChild(modal);
 
-// === Conversation input: global fixed Dock (body) ===
-try {
-  const ctx = { level: 'region', id: regionId || null };
-  window.__MARU_CONTEXT__ = ctx;
-  window.MaruConversationDock?.setContext?.(ctx);
-  window.MaruConversationDock?.show?.();
-} catch (e) {}
+/* === Conversation mount (FINAL) === */
+if (window.MaruConversationModal) {
+  try {
+    // 중복 mount 방지(레기온과 동일 패턴)
+    if (window.MaruConversationModal.__mounted) {
+      window.MaruConversationModal.unmount?.();
+      window.MaruConversationModal.__mounted = false;
+    }
+
+    window.MaruConversationModal.mountTo(convoSlot);
+    window.MaruConversationModal.__mounted = true;
+
+    // 기본 컨텍스트: region
+    window.MaruConversationModal.setContext?.({ level: 'region', id: regionId });
+  } catch (e) {
+    console.warn('[MARU][COUNTRY] Conversation mount failed', e);
+  }
+}
 
 
 /* 닫기 */
@@ -795,11 +798,14 @@ body.innerHTML = countries
 document.querySelectorAll('.maru-country-card').forEach(card => {
   card.addEventListener('click', () => {
     activeCountryName = card.dataset.country;
+window.MaruConversationModal?.setContext?.({ level: 'country', id: activeCountryName });
     expandCountrySection(activeCountryName);
   });
 });
 
 /* 대화 모달이 붙을 DOM 지정 (이 줄이 빠져 있으면 입력창/음성 불안정) */
+window.MaruConversationModal?.ensureReady?.(modal);
+
 /* 음성 대기 상태 보장 (구버전도 이 위치) */
 window.MARU_COUNTRY_VOICE_READY = true;
  }

@@ -64,16 +64,8 @@ r.onend = () => {
   }
 
 function start(){
-  // ⬇️ 반드시 여기 (함수 시작 직후, 맨 위)
-  if (
-    window.MaruAddon &&
-    MaruAddon.isVoiceEnabled &&
-    !MaruAddon.isVoiceEnabled()
-  ) {
-    return;
-  }
-
-  if (window.MARU_REGION_VOICE_READY === false) return;
+  // Start is called only from explicit user-gesture (voice toggle).
+  // Do not block start by additional global flags; Addon controls when to call.
 
   if(!recognition) recognition = initRecognition();
   try{

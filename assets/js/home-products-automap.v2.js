@@ -1,148 +1,290 @@
 /**
- * home-products-automap.v2.js
- * FINAL – append only / right panel fixed
+ * home-products-automap.v2.domfit.js
+ * Baseline: user's v2 behavior (empty message must show on MAIN + RIGHT)
+ * Fixes:
+ * 1) Render into the REAL DOM containers used by home.html:
+ *    - MAIN: .shop-row inside the same .shop-scroller (NOT the psom div)
+ *    - RIGHT: .ad-list inside the same .ad-section (NOT the psom div)
+ * 2) Empty state: show multilingual message in psom div AND hide the list area
+ * 3) Data state: hide psom div, show list area, and batch-render (MAIN 100/7, RIGHT 80/5)
+ * 4) Accept legacy section ids if feed passes through
+ *
+ * Fetch: /.netlify/functions/feed?page=homeproducts
  */
 
 (function () {
-  if (window.__HOME_AUTOMAP_FIXED__) return;
-  window.__HOME_AUTOMAP_FIXED__ = true;
+  'use strict';
+  if (window.__HOME_AUTOMAP_DOMFIT__) return;
+  window.__HOME_AUTOMAP_DOMFIT__ = true;
 
-  const FEED_URL = "/.netlify/functions/feed?page=homeproducts";
+  const FEED_URL = '/.netlify/functions/feed?page=homeproducts';
 
-  const MAIN_KEYS = ["home_1","home_2","home_3","home_4","home_5"];
-  const RIGHT_KEYS = ["home_right_top","home_right_middle","home_right_bottom"];
+  const KEYS_MAIN  = ['home_1','home_2','home_3','home_4','home_5'];
+  const KEYS_RIGHT = ['home_right_top','home_right_middle','home_right_bottom'];
+  const ALL_KEYS   = KEYS_MAIN.concat(KEYS_RIGHT);
 
-  const MAIN_BATCH = 7;
-  const RIGHT_BATCH = 5;
+  const MAIN_LIMIT = 100, MAIN_BATCH = 7;
+  const RIGHT_LIMIT = 80, RIGHT_BATCH = 5;
 
-  const LANG = {
-    ko:"콘텐츠 준비 중입니다.", en:"Content is being prepared.",
-    ja:"コンテンツ準備中です。", zh:"内容正在准备中。",
-    fr:"Contenu en cours de préparation.", es:"El contenido se está preparando.",
-    de:"Inhalt wird vorbereitet.", pt:"Conteúdo em preparação.",
-    ru:"Контент готовится.", th:"กำลังเตรียมเนื้อหาอยู่",
-    tr:"İçerik hazırlanıyor.", vi:"Nội dung đang được chuẩn bị.",
-    id:"Konten sedang disiapkan."
+  const EMPTY_I18N = {
+    de: 'Inhalte werden vorbereitet.',
+    en: 'Content is being prepared.',
+    es: 'El contenido está en preparación.',
+    fr: 'Contenu en cours de préparation.',
+    id: 'Konten sedang disiapkan.',
+    ja: 'コンテンツ準備中です。',
+    ko: '콘텐츠 준비 중입니다.',
+    pt: 'Conteúdo em preparação.',
+    ru: 'Контент готовится.',
+    th: 'กำลังเตรียมเนื้อหาอยู่',
+    tr: 'İçerik hazırlanıyor.',
+    vi: 'Nội dung đang được chuẩn bị.',
+    zh: '内容正在准备中。'
   };
+  const SUPPORTED_12 = new Set(['de','en','es','fr','id','ja','pt','ru','th','tr','vi','zh']);
 
-  const getLang = () => {
-    const v = localStorage.getItem("igdc_lang") || document.documentElement.lang || navigator.language || "en";
-    const k = v.toLowerCase().split("-")[0];
-    return LANG[k] ? k : "en";
-  };
+  function getLangCode(){
+    try{
+      const raw = String(
+        (localStorage && localStorage.getItem('igdc_lang')) ||
+        (document.documentElement && document.documentElement.getAttribute('lang')) ||
+        (navigator && (navigator.language || (navigator.languages && navigator.languages[0]))) ||
+        'en'
+      ).trim().toLowerCase();
+      const base = raw.split('-')[0];
+      if (SUPPORTED_12.has(base)) return base;
+      if (base === 'ko') return 'ko';
+      return 'en';
+    }catch(e){ return 'en'; }
+  }
+  function emptyText(){ return EMPTY_I18N[getLangCode()] || EMPTY_I18N.en; }
 
-  const normalize = (it) => ({
-    title: it.title || it.name || it.label || "",
-    thumb: it.thumb || it.image || it.image_url || it.thumbnail || it.cover || "",
-    url: it.url || it.href || it.link || "#"
-  });
+  function qs(sel, root){ return (root||document).querySelector(sel); }
 
-  const indexSections = (p) => p?.sections || p?.itemsByKey || {};
-
-  const ensurePlaceholder = (host) => {
-    if (host.querySelector(".psom-placeholder")) return;
-    const d = document.createElement("div");
-    d.className = "psom-placeholder";
-    d.textContent = LANG[getLang()];
-    d.style.cssText = "padding:12px;text-align:center;background:#f7f7f7;border-radius:10px;color:#666;";
-    host.appendChild(d);
-  };
-
-  const hidePlaceholder = (host) => {
-    const p = host.querySelector(".psom-placeholder");
-    if (p) p.style.display = "none";
-  };
-
-  // MAIN: append only to .shop-row
-  const appendMain = (anchor, items) => {
-    const scroller = anchor.closest(".shop-scroller");
-    const row = scroller && scroller.querySelector(".shop-row");
-    if (!row) return;
-
-    let added = 0;
-    for (const it of items) {
-      if (!it.thumb) continue;
-      if (row.querySelector(`[data-url="${it.url}"]`)) continue;
-
-      const a = document.createElement("a");
-      a.className = "shop-card";
-      a.dataset.url = it.url;
-      a.href = it.url;
-      a.style.background = `center/cover no-repeat url("${it.thumb}")`;
-
-      const cap = document.createElement("div");
-      cap.className = "shop-card-cap";
-      cap.textContent = it.title;
-
-      a.appendChild(cap);
-      row.appendChild(a);
-
-      if (++added >= MAIN_BATCH) break;
+  function pick(o, keys){
+    for (const k of keys){
+      const v = o && o[k];
+      if (typeof v === 'string' && v.trim()) return v.trim();
     }
-  };
+    return '';
+  }
 
-  // RIGHT: append only to .ad-section .ad-list (핵심 수정)
-  const appendRight = (anchor, items) => {
-    const section = anchor.closest(".ad-section");
-    const list = section && section.querySelector(".ad-list");
-    if (!list) return;
+  function normItem(it){
+    it = it || {};
+    return {
+      title: pick(it, ['title','name','label','caption']) || 'Item',
+      thumb: pick(it, ['thumb','image','image_url','img','photo','thumbnail','thumbnailUrl','cover','coverUrl']),
+      url:   pick(it, ['checkoutUrl','productUrl','url','href','link','path','detailUrl']) || '#',
+      priority: (typeof it.priority === 'number' ? it.priority : null)
+    };
+  }
 
-    if (!items.length) {
-      ensurePlaceholder(anchor);
+  function isExternal(url){ return /^https?:\/\//i.test(url); }
+
+  // ===== DOM target resolution =====
+  function resolveTargets(psomEl, key){
+    const isRight = key.indexOf('home_right_') === 0;
+
+    if (isRight){
+      const section = psomEl.closest('.ad-section');
+      const scroll = section && section.querySelector('.ad-scroll');
+      const list = section && section.querySelector('.ad-list');
+      return { isRight: true, section, scroller: scroll, list, psomEl };
+    }
+
+    // MAIN
+    const scroller = psomEl.closest('.shop-scroller');
+    const row = scroller && scroller.querySelector('.shop-row');
+    return { isRight: false, section: scroller, scroller, list: row, psomEl };
+  }
+
+  function showEmpty(t){
+    // Show message in psom element; hide real list so it doesn't look "blank"
+    t.psomEl.style.display = 'block';
+    t.psomEl.textContent = emptyText();
+    t.psomEl.style.padding = '12px';
+    t.psomEl.style.borderRadius = '12px';
+    t.psomEl.style.background = '#f7f7f7';
+    t.psomEl.style.color = '#666';
+    t.psomEl.style.textAlign = 'center';
+    t.psomEl.style.fontSize = '14px';
+    t.psomEl.style.lineHeight = '1.6';
+    t.psomEl.style.minHeight = '44px';
+
+    if (t.scroller) t.scroller.style.display = 'none';
+  }
+
+  function showData(t){
+    t.psomEl.style.display = 'none';
+    if (t.scroller) t.scroller.style.display = '';
+  }
+
+  // ===== Card builders that match home.html CSS =====
+  function buildMainCard(item){
+    const a = document.createElement('a');
+    a.className = 'shop-card';
+    a.href = item.url || '#';
+    if (isExternal(item.url)) { a.target = '_blank'; a.rel = 'noopener'; }
+
+    // image background (cover)
+    if (item.thumb){
+      a.style.background = `center/cover no-repeat url("${String(item.thumb).replace(/"/g,'\\"')}")`;
+    }
+
+    // title overlay
+    const cap = document.createElement('div');
+    cap.className = 'shop-card-cap';
+    cap.textContent = item.title || '';
+    cap.style.alignSelf = 'end';
+    cap.style.width = '100%';
+    cap.style.background = 'rgba(255,255,255,.88)';
+    cap.style.padding = '6px 8px';
+    cap.style.fontWeight = '700';
+    cap.style.fontSize = '14px';
+    cap.style.color = '#222';
+    cap.style.whiteSpace = 'nowrap';
+    cap.style.overflow = 'hidden';
+    cap.style.textOverflow = 'ellipsis';
+
+    a.style.display = 'grid';
+    a.style.gridTemplateRows = '1fr auto';
+    a.style.alignItems = 'stretch';
+    a.style.justifyItems = 'stretch';
+
+    a.appendChild(cap);
+    return a;
+  }
+
+  function buildRightCard(item){
+    const a = document.createElement('a');
+    a.className = 'ad-box';
+    a.href = item.url || '#';
+    if (isExternal(item.url)) { a.target = '_blank'; a.rel = 'noopener'; }
+    else { a.target = '_self'; }
+
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    if (item.thumb){
+      thumb.style.background = `center/cover no-repeat url("${String(item.thumb).replace(/"/g,'\\"')}")`;
+    }
+    a.appendChild(thumb);
+    return a;
+  }
+
+  function indexSections(payload){
+    const map = {};
+    if (!payload) return map;
+
+    if (Array.isArray(payload.sections)){
+      for (const s of payload.sections){
+        const id = String((s && (s.id || s.sectionId) || '')).trim();
+        if (!id) continue;
+        map[id] = Array.isArray(s.items) ? s.items : (Array.isArray(s.cards) ? s.cards : []);
+      }
+    }
+
+    // also accept direct keys (defensive)
+    for (const k of ALL_KEYS){
+      if (Array.isArray(payload[k])) map[k] = payload[k];
+    }
+    return map;
+  }
+
+  function legacyKey(key){
+    // Accept snapshot legacy ids too (if feed isn't mapped)
+    if (key.startsWith('home_right_')) return key.replace('home_right_','home-right-');
+    return key.replace('home_','home-shop-');
+  }
+
+  function bindIncremental(t, items){
+    const isRight = t.isRight;
+    const limit = isRight ? RIGHT_LIMIT : MAIN_LIMIT;
+    const batch = isRight ? RIGHT_BATCH : MAIN_BATCH;
+
+    let offset = 0;
+
+    function renderMore(){
+      const end = Math.min(offset + batch, limit, items.length);
+      const frag = document.createDocumentFragment();
+      for (let i = offset; i < end; i++){
+        const it = items[i];
+        frag.appendChild(isRight ? buildRightCard(it) : buildMainCard(it));
+      }
+      t.list.appendChild(frag);
+      offset = end;
+    }
+
+    // clear existing visuals inside REAL list
+    t.list.innerHTML = '';
+    renderMore();
+
+    // attach scroll on the REAL scroller
+    const sc = t.scroller;
+    if (!sc) return;
+
+    sc.addEventListener('scroll', function(){
+      if (offset >= items.length || offset >= limit) return;
+
+      const nearEnd = isRight
+        ? (sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 20)
+        : (sc.scrollLeft + sc.clientWidth >= sc.scrollWidth - 20);
+
+      if (nearEnd) renderMore();
+    }, { passive: true });
+  }
+
+  function renderSlot(key, rawItems){
+    const psomEl = qs(`[data-psom-key="${key}"]`);
+    if (!psomEl) return;
+
+    const t = resolveTargets(psomEl, key);
+    if (!t.list) return;
+
+    // normalize and keep only items with at least title+thumb; url may be '#'
+    let list = (rawItems || []).map(normItem).filter(x => x && x.thumb);
+
+    // priority sort (stable)
+    list.sort((a,b) => {
+      const pa = (a.priority == null ? 999999 : a.priority);
+      const pb = (b.priority == null ? 999999 : b.priority);
+      return pa - pb;
+    });
+
+    if (!list.length){
+      showEmpty(t);
       return;
     }
 
-    hidePlaceholder(anchor);
+    showData(t);
+    bindIncremental(t, list);
+  }
 
-    let added = 0;
-    for (const it of items) {
-      if (!it.thumb) continue;
-      if (list.querySelector(`[data-url="${it.url}"]`)) continue;
+  async function load(){
+    try{
+      const r = await fetch(FEED_URL, { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const payload = await r.json();
+      const byId = indexSections(payload);
 
-      const a = document.createElement("a");
-      a.className = "ad-box";
-      a.dataset.url = it.url;
-      a.href = it.url;
-
-      const t = document.createElement("div");
-      t.className = "thumb";
-      t.style.background = `center/cover no-repeat url("${it.thumb}")`;
-
-      a.appendChild(t);
-      list.appendChild(a);
-
-      if (++added >= RIGHT_BATCH) break;
+      for (const key of ALL_KEYS){
+        const alt = key.replace(/_/g,'-');
+        renderSlot(key, byId[key] || byId[alt] || byId[legacyKey(key)] || []);
+      }
+    }catch(e){
+      // On fail, keep existing layout and show message in psom elements
+      for (const key of ALL_KEYS){
+        const psomEl = qs(`[data-psom-key="${key}"]`);
+        if (!psomEl) continue;
+        const t = resolveTargets(psomEl, key);
+        showEmpty(t);
+      }
     }
-  };
-
-  async function boot() {
-    let data;
-    try {
-      const r = await fetch(FEED_URL, { cache: "no-store" });
-      data = await r.json();
-    } catch { return; }
-
-    const sections = indexSections(data);
-
-    MAIN_KEYS.forEach(k => {
-      const a = document.querySelector(`[data-psom-key="${k}"]`);
-      if (!a) return;
-      const items = (sections[k] || []).map(normalize);
-      if (!items.length) { ensurePlaceholder(a); return; }
-      appendMain(a, items);
-    });
-
-    RIGHT_KEYS.forEach(k => {
-      const a = document.querySelector(`[data-psom-key="${k}"]`);
-      if (!a) return;
-      const items = (sections[k] || []).map(normalize);
-      appendRight(a, items);
-    });
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", boot);
-  } else {
-    boot();
+  function boot(){
+    load();
   }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();
