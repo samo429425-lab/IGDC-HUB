@@ -2458,6 +2458,11 @@ function reorderRow(rowId){
 <!-- removed stray text:  -->
 <script>
 (function(){
+
+  // ===== GUARD: Automap이 활성화되면 이 placeholder 스크립트는 실행하지 않음 =====
+  // (Automap이 메인/우측 패널을 렌더링하므로, 여기서 fillRows로 덮어쓰면 카드가 사라짐)
+  if (window.__HOME_AUTOMAP_DOMFIT__) return;
+
   const ROWS = 5;
   const ITEMS_PER_ROW = 80; // can be increased
 
@@ -2515,6 +2520,7 @@ function reorderRow(rowId){
   window.addEventListener('DOMContentLoaded', run);
 })();
 </script>
+
 <!-- removed stray text:  -->
 <script>
 (function(){
