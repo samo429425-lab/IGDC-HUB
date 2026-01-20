@@ -2772,6 +2772,8 @@ function reorderRow(rowId){
 <!-- removed stray text:  -->
 <script id="ad-panel-rotator">
 (function(){
+if (window.__HOME_AUTOMAP_DOMFIT__) return;
+
   const ROTATE_SECONDS = 8;           // rotation interval
   const VISIBLE_COUNT = 3;            // show 3 at a time
   const FETCH_TIMEOUT = 1500;         // ms
