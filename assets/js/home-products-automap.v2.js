@@ -1,139 +1,296 @@
 /**
- * home-products-automap.v2.js (EXTENDED STABLE)
- * - Sections unified: home_1 ~ home_8
- * - 1~5  : MAIN sections
- * - 6~8  : RIGHT panel (top / middle / bottom)
- * - No change to home.html / feed / snapshot / maru-search
- * - Deterministic routing by section index (NO special-casing)
+ * home-products-automap.v2.domfit.js
+ * Baseline: user's v2 behavior (empty message must show on MAIN + RIGHT)
+ * Fixes:
+ * 1) Render into the REAL DOM containers used by home.html:
+ *    - MAIN: .shop-row inside the same .shop-scroller (NOT the psom div)
+ *    - RIGHT: .ad-list inside the same .ad-section (NOT the psom div)
+ * 2) Empty state: show multilingual message in psom div AND hide the list area
+ * 3) Data state: hide psom div, show list area, and batch-render (MAIN 100/7, RIGHT 80/5)
+ * 4) Accept legacy section ids if feed passes through
+ *
+ * Fetch: /.netlify/functions/feed?page=homeproducts
  */
 
 (function () {
   'use strict';
-  if (window.__HOME_AUTOMAP_EXTENDED__) return;
-  window.__HOME_AUTOMAP_EXTENDED__ = true;
+  if (window.__HOME_AUTOMAP_DOMFIT__) return;
+  window.__HOME_AUTOMAP_DOMFIT__ = true;
 
   const FEED_URL = '/.netlify/functions/feed?page=homeproducts';
 
-  // Unified section keys (EXTENDED)
-  const SECTION_KEYS = [
-    'home_1','home_2','home_3','home_4','home_5',
-    'home_6','home_7','home_8'
-  ];
+  const KEYS_MAIN  = ['home_1','home_2','home_3','home_4','home_5'];
+  const KEYS_RIGHT = ['home_right_top','home_right_middle','home_right_bottom'];
+  const ALL_KEYS   = KEYS_MAIN.concat(KEYS_RIGHT);
 
-  // Right panel DOM mapping by section index
-  const RIGHT_DOM_MAP = {
-    6: 'top',
-    7: 'middle',
-    8: 'bottom'
-  };
-
-  const MAIN_BATCH = 7;
-  const RIGHT_BATCH = 5;
+  const MAIN_LIMIT = 100, MAIN_BATCH = 7;
+  const RIGHT_LIMIT = 80, RIGHT_BATCH = 5;
 
   const EMPTY_I18N = {
-    de:'Inhalte werden vorbereitet.',
-    en:'Content is being prepared.',
-    es:'El contenido está en preparación.',
-    fr:'Contenu en cours de préparation.',
-    id:'Konten sedang disiapkan.',
-    ja:'コンテンツ準備中です。',
-    ko:'콘텐츠 준비 중입니다.',
-    pt:'Conteúdo em preparação.',
-    ru:'Контент готовится.',
-    th:'กำลังเตรียมเนื้อหาอยู่',
-    tr:'İçerik hazırlanıyor.',
-    vi:'Nội dung đang được chuẩn bị.',
-    zh:'内容正在准备中。'
+    de: 'Inhalte werden vorbereitet.',
+    en: 'Content is being prepared.',
+    es: 'El contenido está en preparación.',
+    fr: 'Contenu en cours de préparation.',
+    id: 'Konten sedang disiapkan.',
+    ja: 'コンテンツ準備中です。',
+    ko: '콘텐츠 준비 중입니다.',
+    pt: 'Conteúdo em preparação.',
+    ru: 'Контент готовится.',
+    th: 'กำลังเตรียมเนื้อหาอยู่',
+    tr: 'İçerik hazırlanıyor.',
+    vi: 'Nội dung đang được chuẩn bị.',
+    zh: '内容正在准备中。'
   };
+  const SUPPORTED_12 = new Set(['de','en','es','fr','id','ja','pt','ru','th','tr','vi','zh']);
 
-  function getLang(){
+  function getLangCode(){
     try{
-      const raw =
-        localStorage.getItem('igdc_lang') ||
-        document.documentElement.getAttribute('lang') ||
-        navigator.language || 'en';
-      return raw.split('-')[0].toLowerCase();
+      const raw = String(
+        (localStorage && localStorage.getItem('igdc_lang')) ||
+        (document.documentElement && document.documentElement.getAttribute('lang')) ||
+        (navigator && (navigator.language || (navigator.languages && navigator.languages[0]))) ||
+        'en'
+      ).trim().toLowerCase();
+      const base = raw.split('-')[0];
+      if (SUPPORTED_12.has(base)) return base;
+      if (base === 'ko') return 'ko';
+      return 'en';
     }catch(e){ return 'en'; }
   }
-  function emptyText(){
-    const l = getLang();
-    return EMPTY_I18N[l] || EMPTY_I18N.en;
-  }
+  function emptyText(){ return EMPTY_I18N[getLangCode()] || EMPTY_I18N.en; }
 
   function qs(sel, root){ return (root||document).querySelector(sel); }
-  function qsa(sel, root){ return Array.from((root||document).querySelectorAll(sel)); }
 
-  function normalizeItem(it){
+  function pick(o, keys){
+    for (const k of keys){
+      const v = o && o[k];
+      if (typeof v === 'string' && v.trim()) return v.trim();
+    }
+    return '';
+  }
+
+  function normItem(it){
     it = it || {};
     return {
-      title: it.title || it.name || it.label || 'Item',
-      thumb: it.thumb || it.image || it.image_url || it.thumbnail || '',
-      url: it.url || it.link || '#'
+      title: pick(it, ['title','name','label','caption']) || 'Item',
+      thumb: pick(it, ['thumb','image','image_url','img','photo','thumbnail','thumbnailUrl','cover','coverUrl']),
+      url:   pick(it, ['checkoutUrl','productUrl','url','href','link','path','detailUrl']) || '#',
+      priority: (typeof it.priority === 'number' ? it.priority : null)
     };
   }
 
-  function renderCard(item){
+  function isExternal(url){ return /^https?:\/\//i.test(url); }
+
+  // ===== DOM target resolution =====
+  function resolveTargets(psomEl, key){
+    const isRight = key.indexOf('home_right_') === 0;
+
+    if (isRight){
+      const section = psomEl.closest('.ad-section');
+      const scroll = section && section.querySelector('.ad-scroll');
+      const list = section && section.querySelector('.ad-list');
+      return { isRight: true, section, scroller: scroll, list, psomEl };
+    }
+
+    // MAIN
+    const scroller = psomEl.closest('.shop-scroller');
+    const row = scroller && scroller.querySelector('.shop-row');
+    return { isRight: false, section: scroller, scroller, list: row, psomEl };
+  }
+
+  function showEmpty(t){
+    // Show message in psom element; hide real list so it doesn't look "blank"
+    t.psomEl.style.display = 'block';
+    t.psomEl.textContent = emptyText();
+    t.psomEl.style.padding = '12px';
+    t.psomEl.style.borderRadius = '12px';
+    t.psomEl.style.background = '#f7f7f7';
+    t.psomEl.style.color = '#666';
+    t.psomEl.style.textAlign = 'center';
+    t.psomEl.style.fontSize = '14px';
+    t.psomEl.style.lineHeight = '1.6';
+    t.psomEl.style.minHeight = '44px';
+
+    if (t.scroller) t.scroller.style.display = 'none';
+  }
+
+  function showData(t){
+    t.psomEl.style.display = 'none';
+    if (t.scroller) t.scroller.style.display = '';
+  }
+
+  // ===== Card builders that match home.html CSS =====
+  function buildMainCard(item){
     const a = document.createElement('a');
     a.className = 'shop-card';
-    a.href = item.url;
-    a.innerHTML = item.thumb
-      ? `<img src="${item.thumb}" alt="">`
-      : `<span>${item.title}</span>`;
+    a.href = item.url || '#';
+    if (isExternal(item.url)) { a.target = '_blank'; a.rel = 'noopener'; }
+
+    // image background (cover)
+    if (item.thumb){
+      a.style.background = `center/cover no-repeat url("${String(item.thumb).replace(/"/g,'\\"')}")`;
+    }
+
+    // title overlay
+    const cap = document.createElement('div');
+    cap.className = 'shop-card-cap';
+    cap.textContent = item.title || '';
+    cap.style.alignSelf = 'end';
+    cap.style.width = '100%';
+    cap.style.background = 'rgba(255,255,255,.88)';
+    cap.style.padding = '6px 8px';
+    cap.style.fontWeight = '700';
+    cap.style.fontSize = '14px';
+    cap.style.color = '#222';
+    cap.style.whiteSpace = 'nowrap';
+    cap.style.overflow = 'hidden';
+    cap.style.textOverflow = 'ellipsis';
+
+    a.style.display = 'grid';
+    a.style.gridTemplateRows = '1fr auto';
+    a.style.alignItems = 'stretch';
+    a.style.justifyItems = 'stretch';
+
+    a.appendChild(cap);
     return a;
   }
 
-  function clear(el){ while(el && el.firstChild) el.removeChild(el.firstChild); }
+  function buildRightCard(item){
+    const a = document.createElement('a');
+    a.className = 'ad-box';
+    a.href = item.url || '#';
+    if (isExternal(item.url)) { a.target = '_blank'; a.rel = 'noopener'; }
+    else { a.target = '_self'; }
 
-  function resolveMainTarget(sectionIndex){
-    // main: nth shop-row
-    const rows = qsa('.shop-row');
-    return rows[sectionIndex - 1] || null;
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    if (item.thumb){
+      thumb.style.background = `center/cover no-repeat url("${String(item.thumb).replace(/"/g,'\\"')}")`;
+    }
+    a.appendChild(thumb);
+    return a;
   }
 
-  function resolveRightTarget(sectionIndex){
-    const key = RIGHT_DOM_MAP[sectionIndex];
-    if (!key) return null;
-    const section = qs(`.ad-section[data-section="${key}"]`);
-    return section ? qs('.ad-list', section) : null;
+  function indexSections(payload){
+    const map = {};
+    if (!payload) return map;
+
+    if (Array.isArray(payload.sections)){
+      for (const s of payload.sections){
+        const id = String((s && (s.id || s.sectionId) || '')).trim();
+        if (!id) continue;
+        map[id] = Array.isArray(s.items) ? s.items : (Array.isArray(s.cards) ? s.cards : []);
+      }
+    }
+
+    // also accept direct keys (defensive)
+    for (const k of ALL_KEYS){
+      if (Array.isArray(payload[k])) map[k] = payload[k];
+    }
+    return map;
   }
 
-  function renderSection(sectionIndex, items){
-    const isRight = sectionIndex >= 6;
-    const target = isRight
-      ? resolveRightTarget(sectionIndex)
-      : resolveMainTarget(sectionIndex);
+  function legacyKey(key){
+    // Accept snapshot legacy ids too (if feed isn't mapped)
+    if (key.startsWith('home_right_')) return key.replace('home_right_','home-right-');
+    return key.replace('home_','home-shop-');
+  }
 
-    if (!target) return;
+  function bindIncremental(t, items){
+    const isRight = t.isRight;
+    const limit = isRight ? RIGHT_LIMIT : MAIN_LIMIT;
+    const batch = isRight ? RIGHT_BATCH : MAIN_BATCH;
 
-    clear(target);
+    let offset = 0;
 
-    if (!items || !items.length){
-      const msg = document.createElement('div');
-      msg.className = 'psom-empty';
-      msg.textContent = emptyText();
-      target.appendChild(msg);
+    function renderMore(){
+      const end = Math.min(offset + batch, limit, items.length);
+      const frag = document.createDocumentFragment();
+      for (let i = offset; i < end; i++){
+        const it = items[i];
+        frag.appendChild(isRight ? buildRightCard(it) : buildMainCard(it));
+      }
+      t.list.appendChild(frag);
+      offset = end;
+    }
+
+    // clear existing visuals inside REAL list
+    t.list.innerHTML = '';
+    renderMore();
+
+    // attach scroll on the REAL scroller
+    const sc = t.scroller;
+    if (!sc) return;
+
+    sc.addEventListener('scroll', function(){
+      if (offset >= items.length || offset >= limit) return;
+
+      const nearEnd = isRight
+        ? (sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 20)
+        : (sc.scrollLeft + sc.clientWidth >= sc.scrollWidth - 20);
+
+      if (nearEnd) renderMore();
+    }, { passive: true });
+  }
+
+  function renderSlot(key, rawItems){
+    const psomEl = qs(`[data-psom-key="${key}"]`);
+    if (!psomEl) return;
+
+    const t = resolveTargets(psomEl, key);
+    if (!t.list) return;
+
+    // normalize and keep only items with at least title+thumb; url may be '#'
+    let list = (rawItems || []).map(normItem).filter(x => x && x.thumb);
+
+    // priority sort (stable)
+    list.sort((a,b) => {
+      const pa = (a.priority == null ? 999999 : a.priority);
+      const pb = (b.priority == null ? 999999 : b.priority);
+      return pa - pb;
+    });
+
+    if (!list.length){
+      showEmpty(t);
       return;
     }
 
-    const batch = isRight ? RIGHT_BATCH : MAIN_BATCH;
-    items.slice(0, batch).forEach(it => {
-      target.appendChild(renderCard(normalizeItem(it)));
-    });
+    showData(t);
+    bindIncremental(t, list);
   }
 
-  fetch(FEED_URL)
-    .then(r => r.json())
-    .then(data => {
-      if (!data) return;
+  async function load(){
+    try{
+      const r = await fetch(FEED_URL, { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const payload = await r.json();
+      const byId = indexSections(payload);
+	  
+	  // ===== RIGHT PANEL ALIAS (MINIMAL PATCH) =====
+      // existing name 우선, 없으면 home_6~8 사용
+    byId.home_right_top    = byId.home_right_top    || byId.home_6 || [];
+    byId.home_right_middle = byId.home_right_middle || byId.home_7 || [];
+    byId.home_right_bottom = byId.home_right_bottom || byId.home_8 || [];
 
-      SECTION_KEYS.forEach((key, idx) => {
-        const sectionIndex = idx + 1;
-        const items = data[key]?.items || [];
-        renderSection(sectionIndex, items);
-      });
-    })
-    .catch(err => {
-      console.error('[HOME AUTOMAP EXTENDED ERROR]', err);
-    });
+      for (const key of ALL_KEYS){
+        const alt = key.replace(/_/g,'-');
+        renderSlot(key, byId[key] || byId[alt] || byId[legacyKey(key)] || []);
+      }
+    }catch(e){
+      // On fail, keep existing layout and show message in psom elements
+      for (const key of ALL_KEYS){
+        const psomEl = qs(`[data-psom-key="${key}"]`);
+        if (!psomEl) continue;
+        const t = resolveTargets(psomEl, key);
+        showEmpty(t);
+      }
+    }
+  }
 
+  function boot(){
+    load();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();
