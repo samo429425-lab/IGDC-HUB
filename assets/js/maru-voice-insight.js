@@ -11,13 +11,21 @@
   
   // === MARU Context Helper ===
 function getCurrentMaruContext(){
-  if (
-    window.MaruConversationModal &&
-    typeof window.MaruConversationModal.getContext === 'function'
-  ) {
-    return window.MaruConversationModal.getContext();
-  }
-  return null;
+  // Prefer ConversationModal context, fall back to global dock/context
+  try {
+    if (
+      window.MaruConversationModal &&
+      typeof window.MaruConversationModal.getContext === 'function'
+    ) {
+      return window.MaruConversationModal.getContext();
+    }
+  } catch (_) {}
+  try {
+    if (window.MaruConversationDock && typeof window.MaruConversationDock.getContext === 'function') {
+      return window.MaruConversationDock.getContext();
+    }
+  } catch (_) {}
+  return window.__MARU_CONTEXT__ || null;
 }
 
 
@@ -53,7 +61,7 @@ r.onend = () => {
   if (
     currentState !== STATE.OFF &&
     window.MaruAddon?.isVoiceEnabled?.() &&
-    window.MARU_REGION_VOICE_READY !== false
+    true
   ) {
     try { r.start(); } catch (_) {}
     setState(STATE.LISTENING);
@@ -72,8 +80,6 @@ function start(){
   ) {
     return;
   }
-
-  if (window.MARU_REGION_VOICE_READY === false) return;
 
   if(!recognition) recognition = initRecognition();
   try{

@@ -196,12 +196,6 @@ window.injectRegionContextResult = function (regionId, result) {
       if (window.MaruAddon && typeof window.MaruAddon.setVoiceEnabled === 'function') {
         window.MaruAddon.setVoiceEnabled(!!on);
       }
-      // Fallback: if Addon is not present, control mic directly
-      if (!window.MaruAddon) {
-        try {
-          if (!!on) { window.startMaruMic?.(); } else { window.stopMaruMic?.(); }
-        } catch (_) {}
-      }
 
     const enabled =
     (window.MaruAddon && typeof window.MaruAddon.isVoiceEnabled === 'function')
@@ -251,24 +245,39 @@ window.injectRegionContextResult = function (regionId, result) {
 
     modal.append(header, body);
    document.body.append(backdrop, modal);
-
-    // === Conversation input: global fixed Dock (body) ===
-    try {
-      const ctx = { level: 'region', id: regionId || null };
-      window.__MARU_CONTEXT__ = ctx;
-      window.MaruConversationDock?.setContext?.(ctx);
-      window.MaruConversationDock?.show?.();
-    } catch (e) {}
-
    
 
-try{
-  if (modal && modal.style) {
-    // make room for the dock bar
-    modal.style.paddingBottom = '56px';
-  }
-}catch(e){}
+// Conversation input is handled by a global fixed dock (document.body).
+// Keep Region modal UI intact; only update context + visibility.
+try {
+  const ctx = { level: 'region', id: regionId || null };
+  window.__MARU_CONTEXT__ = ctx;
+  window.MaruConversationDock?.setContext?.(ctx);
+  window.MaruConversationDock?.show?.();
+} catch (e) {}
 
+const convoSlot = el('div', 'maru-conversation-slot');
+   modal.appendChild(convoSlot);
+
+// === Conversation mount (AFTER DOM attach & structure ready) ===
+if (window.MaruConversationModal) {
+  try {
+
+    // === Prevent duplicate Conversation mount ===
+    if (window.MaruConversationModal.__mounted) {
+      window.MaruConversationModal.unmount?.();
+      window.MaruConversationModal.__mounted = false;
+    }
+
+    window.MaruConversationModal.mountTo(convoSlot);
+    window.MaruConversationModal.__mounted = true;
+	
+	window.MaruConversationModal.setContext?.({ level: 'region', id: regionId });
+
+  } catch (e) {
+    console.warn('[MARU][REGION] Conversation mount failed', e);
+  }
+}
 
     // Context set (preserve original intent)
     window.activeRegionId = regionId || window.activeRegionId || null;
