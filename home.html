@@ -2449,6 +2449,9 @@ function reorderRow(rowId){
     reorderRow('newsRow3');
     reorderRow('newsRow4');
   }
+  
+  if (window.__HOME_AUTOMAP_DOMFIT__ || window.__HOME_AUTOMAP_V2__ || window.__HOME_AUTOMAP__) return;
+
   window.addEventListener('DOMContentLoaded', run);
 })();
 </script>
