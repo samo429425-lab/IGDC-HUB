@@ -1030,8 +1030,6 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
 @media (max-width: 768px){
   .sidebar,
   .right,
-  .right-panel,
-  .ad-panel,
   .bottom-nav,
   .bottom-bar,
   .mobile-dock { display:none !important; }
@@ -1054,6 +1052,17 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
     grid-template-columns:repeat(2, minmax(0,1fr)) !important;
     gap:10px 10px !important;
   }
+  /* RIGHT PANEL -> Sections 6/7/8 on mobile (keep titles/sections) */
+  .ad-panel{
+    display: flex !important;
+    width: 100% !important;
+    margin-top: 18px !important;
+    padding: 12px !important;
+    background: #e0e0e0 !important;
+  }
+  /* stack sidebar + main + ad sections */
+  .container{ display:block !important; }
+
 }
 @media (max-width: 768px) and (orientation: landscape){
   .grid { grid-template-columns:repeat(3, minmax(0,1fr)) !important; }
@@ -2038,6 +2047,40 @@ section.shopping-section, section.shopping-section .shopping-rows {
   footer { padding-bottom: max(24px, env(safe-area-inset-bottom)) !important; position: static !important; }
 </style>
 <link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
+
+<style id="hero-search-style">
+  .hero-search{ padding: 14px 0 18px; }
+  .hero-search-inner{ max-width: 1100px; margin: 0 auto; padding: 0 14px; }
+  .hero-search-bar{
+    display:flex; gap:10px; align-items:center;
+    background:#fff; border:1px solid #d7dde6; border-radius: 14px;
+    padding: 10px 12px;
+    box-shadow: 0 8px 18px rgba(0,0,0,.06);
+  }
+  #homeSearchInput{ flex:1; border:none; outline:none; font-size: 16px; padding: 8px 6px; background:transparent; }
+  #homeSearchBtn{ border:none; cursor:pointer; padding: 10px 14px; border-radius: 12px; background:#2563eb; color:#fff; font-weight:700; }
+  .hero-search-hint{ margin-top: 8px; color:#6b7280; font-size: 12.5px; }
+</style>
+<style id="home-search-overlay-style">
+  .home-search-overlay{ position:fixed; inset:0; z-index:100500; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.38); padding:7vh 6vw; }
+  .home-search-overlay.is-open{ display:flex; }
+  .home-search-modal{ width:min(1100px, 88vw); height:min(74vh, 760px); background:#fff; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.35); overflow:hidden; display:flex; flex-direction:column; }
+  .home-search-modal-header{ display:flex; gap:10px; align-items:center; padding:12px 14px; border-bottom:1px solid #eee; background:#f8fafc; }
+  .home-search-modal-title{ font-weight:800; color:#111; }
+  .home-search-modal-close{ margin-left:auto; border:none; background:transparent; font-size:20px; cursor:pointer; line-height:1; padding:6px 10px; border-radius:10px; }
+  .home-search-modal-close:hover{ background:#eef2ff; }
+  .home-search-modal-body{ padding:14px; overflow:auto; }
+  .home-search-grid{ display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; }
+  .home-search-card{ display:block; border:1px solid #e5e7eb; border-radius:14px; overflow:hidden; text-decoration:none; color:inherit; background:#fff; }
+  .home-search-thumb{ width:100%; aspect-ratio:16/9; background:#f3f4f6; background-size:cover; background-position:center; }
+  .home-search-card-body{ padding:10px 10px 12px; }
+  .home-search-card-title{ font-weight:800; font-size:14px; margin:0 0 6px; }
+  .home-search-card-summary{ margin:0; font-size:12.5px; color:#4b5563; line-height:1.4; }
+  .home-search-empty{ color:#6b7280; font-size:14px; padding:10px; }
+  @media (max-width:900px){ .home-search-grid{ grid-template-columns:repeat(2, 1fr); } }
+  @media (max-width:560px){ .home-search-modal{ width:95vw; height:84vh; } .home-search-grid{ grid-template-columns:1fr; } }
+</style>
+
 </head>
 <body>
 <div class="container">
@@ -2061,6 +2104,17 @@ section.shopping-section, section.shopping-section .shopping-rows {
 <div class="desc desc2">세상의 모든 이들에게 행운이 있으시길 기원합니다.</div>
 </div>
 </div>
+<!-- ========== HERO SEARCH BAR (INSERT HERE) ========== -->
+<section class="hero-search" aria-label="사이트 검색">
+  <div class="hero-search-inner">
+    <div class="hero-search-bar" role="search">
+      <input id="homeSearchInput" type="search" placeholder="검색어를 입력하세요" autocomplete="off" />
+      <button id="homeSearchBtn" type="button" aria-label="검색 실행">검색</button>
+    </div>
+    <div class="hero-search-hint">검색 결과는 팝업 창으로 표시됩니다.</div>
+  </div>
+</section>
+
 <!-- ========== NEWS (Middle) ========== -->
 <section aria-label="대륙별 뉴스" class="news-section">
 <div class="news-row-wrap" data-row="1">
@@ -2237,19 +2291,13 @@ section.shopping-section, section.shopping-section .shopping-rows {
 </div>
 </div>
 </section>
-<!-- RIGHT PANEL ROOT -->
-<aside class="right-panel ad-panel">
-<div id="home_right_top" class="ad-list" data-psom-key="home_right_top"></div>
-<div id="home_right_middle" class="ad-list" data-psom-key="home_right_middle"></div>
-<div id="home_right_bottom" class="ad-list" data-psom-key="home_right_bottom"></div>
-</aside>
 </div>
 <!-- 우측 광고 패널 (unchanged width) -->
-<div class="ad-panel"><div class="ad-section" data-max="10" data-section="top" data-visible="4"><h4 class="ad-title" style="text-align:center; width:100%; margin:0; padding:0; font-weight:600; font-size:1rem;">자동차 · 웹툰 · 패션</h4><div class="ad-scroll"><div class="ad-list"><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a></div></div><div class="thumb-grid thumb-scroller" data-psom-key="home_right_top"></div></div><div class="ad-section" data-max="10" data-section="middle" data-visible="4"><h4 class="ad-title" style="text-align:center; width:100%; margin:0; padding:0; font-weight:600; font-size:1rem;">
+<div class="ad-panel"><div class="ad-section" data-max="10" data-section="top" data-visible="4"><h4 class="ad-title" style="text-align:center; width:100%; margin:0; padding:0; font-weight:600; font-size:1rem;">자동차 · 웹툰 · 패션</h4><div class="ad-scroll"><div class="ad-list"><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a></div></div><div class="ad-scroll"><div class="ad-list" data-psom-key="home_right_top"></div></div></div><div class="ad-section" data-max="10" data-section="middle" data-visible="4"><h4 class="ad-title" style="text-align:center; width:100%; margin:0; padding:0; font-weight:600; font-size:1rem;">
   푸드 · 리빙 · 책방
-</h4><div class="ad-scroll"><div class="ad-list"><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a></div></div><div class="thumb-grid thumb-scroller" data-psom-key="home_right_middle"></div></div><div class="ad-section" data-max="7" data-section="bottom" data-visible="4"><h4 class="ad-title" style="text-align:center; width:100%; margin:0; padding:0; font-weight:600; font-size:1rem;">
+</h4><div class="ad-scroll"><div class="ad-list"><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a></div></div><div class="ad-scroll"><div class="ad-list" data-psom-key="home_right_middle"></div></div></div><div class="ad-section" data-max="7" data-section="bottom" data-visible="4"><h4 class="ad-title" style="text-align:center; width:100%; margin:0; padding:0; font-weight:600; font-size:1rem;">
   지식 · 건강 · 기타
-</h4><div class="ad-scroll"><div class="ad-list"><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a></div></div><div class="thumb-grid thumb-scroller" data-psom-key="home_right_bottom"></div></div></div>
+</h4><div class="ad-scroll"><div class="ad-list"><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a></div></div><div class="ad-scroll"><div class="ad-list" data-psom-key="home_right_bottom"></div></div></div></div>
 </div>
 <script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.home.json" data-interval="20000" src="/assets/js/hero.rotator.js"></script>
 
@@ -3952,9 +4000,24 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }, {passive:true});
 })();
 </script>
+
+<!-- HOME SEARCH OVERLAY (NEW) -->
+<div id="homeSearchOverlay" class="home-search-overlay" aria-hidden="true">
+  <div class="home-search-modal" role="dialog" aria-modal="true" aria-label="검색 결과">
+    <div class="home-search-modal-header">
+      <div class="home-search-modal-title">검색 결과</div>
+      <button class="home-search-modal-close" type="button" id="homeSearchClose" aria-label="닫기">×</button>
+    </div>
+    <div class="home-search-modal-body">
+      <div id="homeSearchResult" class="home-search-empty">검색어를 입력하고 실행하세요.</div>
+    </div>
+  </div>
+</div>
+
 <script defer="" src="/assets/js/auto-embed.instagram.js"></script>
 <script defer="" src="/assets/js/placeholder-sweeper.js"></script>
 <script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
+<script defer src="/assets/js/home-search-overlay.js"></script>
 <!-- IGTC SIMPLE QNA AUTO-OPENER (Home) -->
 <style id="mobile-hide-row-arrows">
 /* Desktop은 기존 상태 유지, Mobile만 버튼 숨김 */
