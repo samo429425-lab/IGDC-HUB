@@ -30,7 +30,6 @@
     if (!ov) return;
     ov.classList.add('is-open');
     ov.setAttribute('aria-hidden','false');
-    try{ document.body.style.overflow = 'hidden'; }catch(e){}
   }
   function closeOverlay(){
     var ov = qs('#homeSearchOverlay');
