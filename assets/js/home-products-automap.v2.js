@@ -287,6 +287,11 @@
       return;
     }
 
+    // RIGHT panel: 기존 카드 제거 (데이터 1개라도 오면 교체)
+    if (t.isRight) {
+      t.list.innerHTML = '';
+    }
+
     showData(t);
     bindIncremental(t, list);
   }
