@@ -1,35 +1,47 @@
+
 /**
- * home-search-overlay.js
- * - Adds "hero search bar" behavior (homeSearchInput + homeSearchBtn).
- * - Opens a medium-size page-like overlay (not full screen).
- * - Calls Netlify function maru-search in SEARCH mode: /.netlify/functions/maru-search?q=...&lang=...
- * - Renders results as cards.
+ * home-search-overlay.js (GLOBAL ADVANCED SEARCH)
+ * - Layout unchanged (overlay UI preserved)
+ * - Global search like Google/Naver/MS
+ * - Policy: Platform assets first, external results blended naturally
+ * - Engine: Netlify Function maru-search (helper search engine)
  *
  * Safe:
- * - No global CSS/zoom/transform changes
- * - No interference with existing home scripts
+ * - No global CSS changes
+ * - No dependency on other home scripts
  */
 (function(){
   'use strict';
-  if (window.__HOME_SEARCH_OVERLAY__) return;
-  window.__HOME_SEARCH_OVERLAY__ = true;
+  if (window.__HOME_SEARCH_OVERLAY_ADV__) return;
+  window.__HOME_SEARCH_OVERLAY_ADV__ = true;
 
   function qs(sel, root){ return (root||document).querySelector(sel); }
+  function qsa(sel, root){ return Array.prototype.slice.call((root||document).querySelectorAll(sel)); }
   function esc(s){ return String(s||'').replace(/[<>]/g,''); }
+
   function getLang(){
     try{
-      var raw = (localStorage && localStorage.getItem('igdc_lang')) ||
-                (document.documentElement && document.documentElement.getAttribute('lang')) ||
-                (navigator.language || 'en');
+      var raw =
+        (window.localStorage && localStorage.getItem('igdc_lang')) ||
+        (document.documentElement && document.documentElement.getAttribute('lang')) ||
+        (navigator.language || 'en');
       raw = String(raw||'en').toLowerCase();
       return raw.split('-')[0] || 'en';
     }catch(e){ return 'en'; }
   }
+
+  var searchState = {
+    scope: 'all',
+    mode: 'search',
+    limit: 24
+  };
+
   function openOverlay(){
     var ov = qs('#homeSearchOverlay');
     if (!ov) return;
     ov.classList.add('is-open');
     ov.setAttribute('aria-hidden','false');
+    try{ document.body.style.overflow = 'hidden'; }catch(e){}
   }
   function closeOverlay(){
     var ov = qs('#homeSearchOverlay');
@@ -39,25 +51,19 @@
     try{ document.body.style.overflow = ''; }catch(e){}
   }
 
-  function renderLoading(q){
+  function setEmpty(msg){
     var box = qs('#homeSearchResult');
     if (!box) return;
     box.className = 'home-search-empty';
-    box.textContent = '검색 중... "' + q + '"';
+    box.textContent = msg;
   }
 
-  function renderEmpty(q){
-    var box = qs('#homeSearchResult');
-    if (!box) return;
-    box.className = 'home-search-empty';
-    box.textContent = '검색 결과가 없습니다: "' + q + '"';
+  function renderLoading(q){
+    setEmpty('검색 중… "' + esc(q) + '"');
   }
 
   function renderError(msg){
-    var box = qs('#homeSearchResult');
-    if (!box) return;
-    box.className = 'home-search-empty';
-    box.textContent = msg || '검색을 불러오지 못했습니다.';
+    setEmpty(msg || '검색을 불러오지 못했습니다.');
   }
 
   function renderItems(items){
@@ -65,15 +71,14 @@
     if (!box) return;
 
     if (!Array.isArray(items) || items.length === 0){
-      box.className = 'home-search-empty';
-      box.textContent = '검색 결과가 없습니다.';
+      setEmpty('검색 결과가 없습니다.');
       return;
     }
 
     var wrap = document.createElement('div');
     wrap.className = 'home-search-grid';
 
-    items.slice(0, 24).forEach(function(it){
+    items.slice(0, searchState.limit).forEach(function(it){
       var a = document.createElement('a');
       a.className = 'home-search-card';
       a.href = it.url || '#';
@@ -81,14 +86,16 @@
 
       var th = document.createElement('div');
       th.className = 'home-search-thumb';
-      if (it.thumb) th.style.backgroundImage = 'url("' + String(it.thumb).replace(/"/g,'\\"') + '")';
+      if (it.thumb){
+        th.style.backgroundImage = 'url("' + String(it.thumb).replace(/"/g,'\\"') + '")';
+      }
 
       var body = document.createElement('div');
       body.className = 'home-search-card-body';
 
       var h = document.createElement('div');
       h.className = 'home-search-card-title';
-      h.textContent = (it.title || 'Item');
+      h.textContent = it.title || 'Item';
 
       var p = document.createElement('p');
       p.className = 'home-search-card-summary';
@@ -108,27 +115,54 @@
 
   async function doSearch(q){
     q = String(q||'').trim();
-    if (!q) return;
+    searchState.mode = q ? 'search' : 'recommend';
 
     openOverlay();
-    renderLoading(q);
+
+    if (searchState.mode === 'search') renderLoading(q);
+    else setEmpty('추천 콘텐츠를 불러오는 중…');
 
     var lang = getLang();
-    var url = '/.netlify/functions/maru-search?q=' + encodeURIComponent(q) + '&lang=' + encodeURIComponent(lang) + '&limit=24';
+
+    var url = '/.netlify/functions/maru-search'
+      + (searchState.mode === 'search'
+          ? '?q=' + encodeURIComponent(q)
+          : '?domain=' + encodeURIComponent(searchState.scope))
+      + '&lang=' + encodeURIComponent(lang)
+      + '&limit=' + encodeURIComponent(searchState.limit)
+      + '&prefer=platform';
+
+    if (searchState.mode === 'search' && searchState.scope !== 'all'){
+      url += '&domain=' + encodeURIComponent(searchState.scope);
+    }
 
     try{
       var r = await fetch(url, { cache: 'no-store' });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       var payload = await r.json();
       var items = payload && (payload.items || payload.results || payload.data) || [];
-      if (!Array.isArray(items) || items.length === 0){
-        renderEmpty(q);
-        return;
-      }
       renderItems(items);
     }catch(e){
-      renderError('검색 실패: ' + (e && e.message ? e.message : 'unknown'));
+      renderError('검색 실패');
     }
+  }
+
+  function bindScope(){
+    var scopeWrap = qs('#homeSearchScope');
+    if (!scopeWrap) return;
+
+    qsa('[data-scope]', scopeWrap).forEach(function(btn){
+      btn.addEventListener('click', function(){
+        qsa('[data-scope]', scopeWrap).forEach(function(b){ b.classList.remove('is-active'); });
+        btn.classList.add('is-active');
+        searchState.scope = btn.getAttribute('data-scope') || 'all';
+
+        var input = qs('#homeSearchInput');
+        if (input && input.value.trim()){
+          doSearch(input.value);
+        }
+      });
+    });
   }
 
   function bind(){
@@ -136,6 +170,7 @@
     var btn = qs('#homeSearchBtn');
     var closeBtn = qs('#homeSearchClose');
     var ov = qs('#homeSearchOverlay');
+
     if (!input || !btn || !closeBtn || !ov) return;
 
     btn.addEventListener('click', function(){ doSearch(input.value); });
@@ -149,6 +184,8 @@
     document.addEventListener('keydown', function(e){
       if (e.key === 'Escape') closeOverlay();
     });
+
+    bindScope();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
