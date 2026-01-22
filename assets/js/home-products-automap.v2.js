@@ -182,7 +182,7 @@
     return a;
   }
 
-  function buildRightCard(item){
+   function buildRightCard(item){
     const a = document.createElement('a');
     a.className = 'ad-box';
     a.href = item.url || '#';
@@ -198,9 +198,32 @@
       thumb.style.backgroundSize = 'cover';
       thumb.style.backgroundRepeat = 'no-repeat';
     }
+
+    // ✅ 우측 패널도 “실데이터 카드”처럼 보이도록 캡션 추가
+    const cap = document.createElement('div');
+    cap.className = 'ad-cap';
+    cap.textContent = item.title || item.name || '';
+    cap.style.width = '100%';
+    cap.style.background = 'rgba(255,255,255,.88)';
+    cap.style.padding = '6px 8px';
+    cap.style.fontWeight = '700';
+    cap.style.fontSize = '13px';
+    cap.style.color = '#222';
+    cap.style.whiteSpace = 'nowrap';
+    cap.style.overflow = 'hidden';
+    cap.style.textOverflow = 'ellipsis';
+
+    a.style.display = 'grid';
+    a.style.gridTemplateRows = '1fr auto';
+    a.style.alignItems = 'stretch';
+    a.style.justifyItems = 'stretch';
+
     a.appendChild(thumb);
+    if (cap.textContent) a.appendChild(cap);
+
     return a;
   }
+
 
   function indexSections(payload){
     const map = {};
