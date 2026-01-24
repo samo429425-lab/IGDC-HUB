@@ -1,193 +1,143 @@
-
 /**
- * home-search-overlay.js (GLOBAL ADVANCED SEARCH)
- * - Layout unchanged (overlay UI preserved)
- * - Global search like Google/Naver/MS
- * - Policy: Platform assets first, external results blended naturally
- * - Engine: Netlify Function maru-search (helper search engine)
+ * home-search-overlay.js
+ * SEARCH CONTROLLER / GATEWAY (v1)
  *
- * Safe:
- * - No global CSS changes
- * - No dependency on other home scripts
+ * - Internal search first (maru-search)
+ * - Global / future search engine ready
+ * - Layout & UI unchanged
+ * - Engine-neutral design
  */
-(function(){
+(function () {
   'use strict';
-  if (window.__HOME_SEARCH_OVERLAY_ADV__) return;
-  window.__HOME_SEARCH_OVERLAY_ADV__ = true;
 
-  function qs(sel, root){ return (root||document).querySelector(sel); }
-  function qsa(sel, root){ return Array.prototype.slice.call((root||document).querySelectorAll(sel)); }
-  function esc(s){ return String(s||'').replace(/[<>]/g,''); }
+  if (window.__HOME_SEARCH_CONTROLLER__) return;
+  window.__HOME_SEARCH_CONTROLLER__ = true;
 
-  function getLang(){
-    try{
-      var raw =
-        (window.localStorage && localStorage.getItem('igdc_lang')) ||
-        (document.documentElement && document.documentElement.getAttribute('lang')) ||
-        (navigator.language || 'en');
-      raw = String(raw||'en').toLowerCase();
-      return raw.split('-')[0] || 'en';
-    }catch(e){ return 'en'; }
-  }
+  const qs = (s, r = document) => r.querySelector(s);
 
-  var searchState = {
-    scope: 'all',
-    mode: 'search',
-    limit: 24
+  const SEARCH_ENGINES = {
+    internal: { endpoint: '/.netlify/functions/maru-search', enabled: true },
+    global:   { endpoint: '/.netlify/functions/global-search', enabled: false }
   };
 
-  function openOverlay(){
-    var ov = qs('#homeSearchOverlay');
+  let activeEngine = 'internal';
+
+  function openOverlay() {
+    const ov = qs('#homeSearchOverlay');
     if (!ov) return;
     ov.classList.add('is-open');
-    ov.setAttribute('aria-hidden','false');
-    try{ document.body.style.overflow = 'hidden'; }catch(e){}
+    ov.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
   }
-  function closeOverlay(){
-    var ov = qs('#homeSearchOverlay');
+
+  function closeOverlay() {
+    const ov = qs('#homeSearchOverlay');
     if (!ov) return;
     ov.classList.remove('is-open');
-    ov.setAttribute('aria-hidden','true');
-    try{ document.body.style.overflow = ''; }catch(e){}
+    ov.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
   }
 
-  function setEmpty(msg){
-    var box = qs('#homeSearchResult');
+  function renderMessage(msg) {
+    const box = qs('#homeSearchResult');
     if (!box) return;
-    box.className = 'home-search-empty';
-    box.textContent = msg;
+    box.innerHTML = `<div class="home-search-message">${msg}</div>`;
   }
 
-  function renderLoading(q){
-    setEmpty('검색 중… "' + esc(q) + '"');
-  }
-
-  function renderError(msg){
-    setEmpty(msg || '검색을 불러오지 못했습니다.');
-  }
-
-  function renderItems(items){
-    var box = qs('#homeSearchResult');
+  function renderResults(items = []) {
+    const box = qs('#homeSearchResult');
     if (!box) return;
 
-    if (!Array.isArray(items) || items.length === 0){
-      setEmpty('검색 결과가 없습니다.');
+    if (!items.length) {
+      renderMessage('검색 결과가 없습니다.');
       return;
     }
 
-    var wrap = document.createElement('div');
-    wrap.className = 'home-search-grid';
+    const grid = document.createElement('div');
+    grid.className = 'home-search-grid';
 
-    items.slice(0, searchState.limit).forEach(function(it){
-      var a = document.createElement('a');
-      a.className = 'home-search-card';
-      a.href = it.url || '#';
-      if (/^https?:\/\//i.test(it.url||'')) { a.target = '_blank'; a.rel = 'noopener'; }
+    items.forEach(item => {
+      const card = document.createElement('a');
+      card.className = 'home-search-card';
+      card.href = item.url || '#';
+      card.target = '_blank';
+      card.rel = 'noopener';
 
-      var th = document.createElement('div');
-      th.className = 'home-search-thumb';
-      if (it.thumb){
-        th.style.backgroundImage = 'url("' + String(it.thumb).replace(/"/g,'\\"') + '")';
-      }
+      const title = document.createElement('div');
+      title.className = 'home-search-title';
+      title.textContent = item.title || 'Untitled';
 
-      var body = document.createElement('div');
-      body.className = 'home-search-card-body';
+      const summary = document.createElement('div');
+      summary.className = 'home-search-summary';
+      summary.textContent = item.summary || '';
 
-      var h = document.createElement('div');
-      h.className = 'home-search-card-title';
-      h.textContent = it.title || 'Item';
-
-      var p = document.createElement('p');
-      p.className = 'home-search-card-summary';
-      p.textContent = (it.summary || '').slice(0, 140);
-
-      body.appendChild(h);
-      body.appendChild(p);
-
-      a.appendChild(th);
-      a.appendChild(body);
-      wrap.appendChild(a);
+      card.appendChild(title);
+      card.appendChild(summary);
+      grid.appendChild(card);
     });
 
-    box.replaceWith(wrap);
-    wrap.id = 'homeSearchResult';
+    box.innerHTML = '';
+    box.appendChild(grid);
   }
 
-  async function doSearch(q){
-    q = String(q||'').trim();
-    searchState.mode = q ? 'search' : 'recommend';
-
+  async function dispatchSearch(query) {
     openOverlay();
 
-    if (searchState.mode === 'search') renderLoading(q);
-    else setEmpty('추천 콘텐츠를 불러오는 중…');
-
-    var lang = getLang();
-
-    var url = '/.netlify/functions/maru-search'
-      + (searchState.mode === 'search'
-          ? '?q=' + encodeURIComponent(q)
-          : '?domain=' + encodeURIComponent(searchState.scope))
-      + '&lang=' + encodeURIComponent(lang)
-      + '&limit=' + encodeURIComponent(searchState.limit)
-      + '&prefer=platform';
-
-    if (searchState.mode === 'search' && searchState.scope !== 'all'){
-      url += '&domain=' + encodeURIComponent(searchState.scope);
+    if (!query) {
+      renderMessage('검색어를 입력하세요.');
+      return;
     }
 
-    try{
-      var r = await fetch(url, { cache: 'no-store' });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      var payload = await r.json();
-      var items = payload && (payload.items || payload.results || payload.data) || [];
-      renderItems(items);
-    }catch(e){
-      renderError('검색 실패');
+    const engine = SEARCH_ENGINES[activeEngine];
+    if (!engine || !engine.enabled) {
+      renderMessage('검색 엔진이 준비되지 않았습니다.');
+      return;
+    }
+
+    renderMessage('검색 중입니다...');
+
+    try {
+      const res = await fetch(
+        `${engine.endpoint}?q=${encodeURIComponent(query)}`,
+        { cache: 'no-store' }
+      );
+      if (!res.ok) throw new Error();
+
+      const data = await res.json();
+      renderResults(data.items || data.results || []);
+    } catch (e) {
+      renderMessage('검색 중 오류가 발생했습니다.');
     }
   }
 
-  function bindScope(){
-    var scopeWrap = qs('#homeSearchScope');
-    if (!scopeWrap) return;
-
-    qsa('[data-scope]', scopeWrap).forEach(function(btn){
-      btn.addEventListener('click', function(){
-        qsa('[data-scope]', scopeWrap).forEach(function(b){ b.classList.remove('is-active'); });
-        btn.classList.add('is-active');
-        searchState.scope = btn.getAttribute('data-scope') || 'all';
-
-        var input = qs('#homeSearchInput');
-        if (input && input.value.trim()){
-          doSearch(input.value);
-        }
-      });
-    });
-  }
-
-  function bind(){
-    var input = qs('#homeSearchInput');
-    var btn = qs('#homeSearchBtn');
-    var closeBtn = qs('#homeSearchClose');
-    var ov = qs('#homeSearchOverlay');
+  function bind() {
+    const input = qs('#homeSearchInput');
+    const btn = qs('#homeSearchBtn');
+    const closeBtn = qs('#homeSearchClose');
+    const ov = qs('#homeSearchOverlay');
 
     if (!input || !btn || !closeBtn || !ov) return;
 
-    btn.addEventListener('click', function(){ doSearch(input.value); });
-    input.addEventListener('keydown', function(e){
-      if (e.key === 'Enter'){ e.preventDefault(); doSearch(input.value); }
+    btn.addEventListener('click', () => dispatchSearch(input.value.trim()));
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') dispatchSearch(input.value.trim());
     });
+
     closeBtn.addEventListener('click', closeOverlay);
-    ov.addEventListener('click', function(e){
+
+    ov.addEventListener('click', e => {
       if (e.target === ov) closeOverlay();
     });
-    document.addEventListener('keydown', function(e){
+
+    document.addEventListener('keydown', e => {
       if (e.key === 'Escape') closeOverlay();
     });
-
-    bindScope();
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
-  else bind();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bind);
+  } else {
+    bind();
+  }
 })();
