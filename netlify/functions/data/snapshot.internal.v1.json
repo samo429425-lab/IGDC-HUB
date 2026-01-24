@@ -1,37 +1,21 @@
 {
-  "version": "snapshot.v1",
+  "version": "snapshot.home.v1",
   "sections": [
     {
       "id": "home-shop-1",
       "items": [
         {
-          "id": "home-shop-1-1",
-          "title": "Sample Item A for home-shop-1",
-          "summary": "",
-          "description": "",
-          "price": "",
-          "currency": "USD",
-          "cta": "View",
-          "url": "#",
-          "image": "/assets/img/placeholder.png",
-          "tags": [
-            "home-shop-1"
-          ],
+          "id": "beauty-1",
+          "title": "COSRX Advanced Snail 96 Mucin Power Essence",
+          "image": "https://cdn.cosrx.com/web/product/medium/202303/0b6b6c8c0c6f7a2c7b3b.jpg",
+          "url": "https://www.cosrx.com/products/advanced-snail-96-mucin-power-essence",
           "priority": 1
         },
         {
-          "id": "home-shop-1-2",
-          "title": "Sample Item B for home-shop-1",
-          "summary": "",
-          "description": "",
-          "price": "",
-          "currency": "USD",
-          "cta": "View",
-          "url": "#",
-          "image": "/assets/img/placeholder.png",
-          "tags": [
-            "home-shop-1"
-          ],
+          "id": "beauty-2",
+          "title": "Innisfree Green Tea Seed Serum",
+          "image": "https://www.innisfree.com/kr/ko/resources/images/og/og_innisfree.png",
+          "url": "https://www.innisfree.com/kr/ko/ProductView.do?prdSeq=29062",
           "priority": 2
         }
       ]
@@ -40,33 +24,17 @@
       "id": "home-shop-2",
       "items": [
         {
-          "id": "home-shop-2-1",
-          "title": "Sample Item A for home-shop-2",
-          "summary": "",
-          "description": "",
-          "price": "",
-          "currency": "USD",
-          "cta": "View",
-          "url": "#",
-          "image": "/assets/img/placeholder.png",
-          "tags": [
-            "home-shop-2"
-          ],
+          "id": "daily-1",
+          "title": "Method All-Purpose Cleaner",
+          "image": "https://methodhome.com/wp-content/uploads/2020/09/Method-APC.jpg",
+          "url": "https://methodhome.com/products/all-purpose-cleaner/",
           "priority": 1
         },
         {
-          "id": "home-shop-2-2",
-          "title": "Sample Item B for home-shop-2",
-          "summary": "",
-          "description": "",
-          "price": "",
-          "currency": "USD",
-          "cta": "View",
-          "url": "#",
-          "image": "/assets/img/placeholder.png",
-          "tags": [
-            "home-shop-2"
-          ],
+          "id": "daily-2",
+          "title": "Seventh Generation Dish Liquid",
+          "image": "https://www.seventhgeneration.com/sites/default/files/2022-03/dish-liquid-free-clear.png",
+          "url": "https://www.seventhgeneration.com/dish-liquid-free-clear",
           "priority": 2
         }
       ]
@@ -75,33 +43,17 @@
       "id": "home-shop-3",
       "items": [
         {
-          "id": "home-shop-3-1",
-          "title": "Sample Item A for home-shop-3",
-          "summary": "",
-          "description": "",
-          "price": "",
-          "currency": "USD",
-          "cta": "View",
-          "url": "#",
-          "image": "/assets/img/placeholder.png",
-          "tags": [
-            "home-shop-3"
-          ],
+          "id": "food-1",
+          "title": "Nature Valley Crunchy Granola Bars",
+          "image": "https://www.naturevalley.com/uploads/images/products/crunchy-oats-honey.jpg",
+          "url": "https://www.naturevalley.com/products/crunchy-oats-honey/",
           "priority": 1
         },
         {
-          "id": "home-shop-3-2",
-          "title": "Sample Item B for home-shop-3",
-          "summary": "",
-          "description": "",
-          "price": "",
-          "currency": "USD",
-          "cta": "View",
-          "url": "#",
-          "image": "/assets/img/placeholder.png",
-          "tags": [
-            "home-shop-3"
-          ],
+          "id": "food-2",
+          "title": "KIND Healthy Grains Bars",
+          "image": "https://www.kindsnacks.com/on/demandware.static/-/Sites-masterCatalog_KIND/default/dw2a6b8c8a/images/primary/100000.png",
+          "url": "https://www.kindsnacks.com/healthy-grains-bars.html",
           "priority": 2
         }
       ]
@@ -110,33 +62,17 @@
       "id": "home-shop-4",
       "items": [
         {
-          "id": "home-shop-4-1",
-          "title": "Sample Item A for home-shop-4",
-          "summary": "",
-          "description": "",
-          "price": "",
-          "currency": "USD",
-          "cta": "View",
-          "url": "#",
-          "image": "/assets/img/placeholder.png",
-          "tags": [
-            "home-shop-4"
-          ],
+          "id": "fashion-1",
+          "title": "Uniqlo AIRism T-Shirt",
+          "image": "https://www.uniqlo.com/jp/ja/contents/feature/airism/common/img/airism_kv.jpg",
+          "url": "https://www.uniqlo.com/kr/ko/product/airism",
           "priority": 1
         },
         {
-          "id": "home-shop-4-2",
-          "title": "Sample Item B for home-shop-4",
-          "summary": "",
-          "description": "",
-          "price": "",
-          "currency": "USD",
-          "cta": "View",
-          "url": "#",
-          "image": "/assets/img/placeholder.png",
-          "tags": [
-            "home-shop-4"
-          ],
+          "id": "fashion-2",
+          "title": "Adidas Essentials Hoodie",
+          "image": "https://assets.adidas.com/images/w_600,f_auto,q_auto/hoodie.jpg",
+          "url": "https://www.adidas.com/us/essentials-hoodie",
           "priority": 2
         }
       ]
@@ -145,69 +81,31 @@
       "id": "home-shop-5",
       "items": [
         {
-          "id": "home-shop-5-1",
-          "title": "Sample Item A for home-shop-5",
-          "summary": "",
-          "description": "",
-          "price": "",
-          "currency": "USD",
-          "cta": "View",
-          "url": "#",
-          "image": "/assets/img/placeholder.png",
-          "tags": [
-            "home-shop-5"
-          ],
+          "id": "health-1",
+          "title": "Centrum Multivitamin",
+          "image": "https://www.centrum.com/content/dam/cf-consumer-healthcare/centrum/en_US/images/products/centrum-adults.png",
+          "url": "https://www.centrum.com/products/centrum-adults/",
           "priority": 1
         },
         {
-          "id": "home-shop-5-2",
-          "title": "Sample Item B for home-shop-5",
-          "summary": "",
-          "description": "",
-          "price": "",
-          "currency": "USD",
-          "cta": "View",
-          "url": "#",
-          "image": "/assets/img/placeholder.png",
-          "tags": [
-            "home-shop-5"
-          ],
+          "id": "health-2",
+          "title": "Nature Made Vitamin D3",
+          "image": "https://www.naturemade.com/cdn/shop/products/vitamin-d3.jpg",
+          "url": "https://www.naturemade.com/products/vitamin-d3",
           "priority": 2
         }
       ]
     },
+
     {
       "id": "home-right-top",
       "items": [
         {
-          "id": "home-right-top-1",
-          "title": "Sample Item A for home-right-top",
-          "summary": "",
-          "description": "",
-          "price": "",
-          "currency": "USD",
-          "cta": "View",
-          "url": "#",
-          "image": "/assets/img/placeholder.png",
-          "tags": [
-            "home-right-top"
-          ],
+          "id": "right-top-1",
+          "title": "Trending Beauty & Lifestyle",
+          "image": "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9",
+          "url": "https://www.google.com/search?q=trending+beauty+products",
           "priority": 1
-        },
-        {
-          "id": "home-right-top-2",
-          "title": "Sample Item B for home-right-top",
-          "summary": "",
-          "description": "",
-          "price": "",
-          "currency": "USD",
-          "cta": "View",
-          "url": "#",
-          "image": "/assets/img/placeholder.png",
-          "tags": [
-            "home-right-top"
-          ],
-          "priority": 2
         }
       ]
     },
@@ -215,34 +113,11 @@
       "id": "home-right-middle",
       "items": [
         {
-          "id": "home-right-middle-1",
-          "title": "Sample Item A for home-right-middle",
-          "summary": "",
-          "description": "",
-          "price": "",
-          "currency": "USD",
-          "cta": "View",
-          "url": "#",
-          "image": "/assets/img/placeholder.png",
-          "tags": [
-            "home-right-middle"
-          ],
+          "id": "right-mid-1",
+          "title": "Daily Essentials Picks",
+          "image": "https://images.unsplash.com/photo-1581578731548-c64695cc6952",
+          "url": "https://www.google.com/search?q=best+daily+essentials",
           "priority": 1
-        },
-        {
-          "id": "home-right-middle-2",
-          "title": "Sample Item B for home-right-middle",
-          "summary": "",
-          "description": "",
-          "price": "",
-          "currency": "USD",
-          "cta": "View",
-          "url": "#",
-          "image": "/assets/img/placeholder.png",
-          "tags": [
-            "home-right-middle"
-          ],
-          "priority": 2
         }
       ]
     },
@@ -250,34 +125,11 @@
       "id": "home-right-bottom",
       "items": [
         {
-          "id": "home-right-bottom-1",
-          "title": "Sample Item A for home-right-bottom",
-          "summary": "",
-          "description": "",
-          "price": "",
-          "currency": "USD",
-          "cta": "View",
-          "url": "#",
-          "image": "/assets/img/placeholder.png",
-          "tags": [
-            "home-right-bottom"
-          ],
+          "id": "right-bot-1",
+          "title": "Health & Wellness Focus",
+          "image": "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d",
+          "url": "https://www.google.com/search?q=health+wellness+products",
           "priority": 1
-        },
-        {
-          "id": "home-right-bottom-2",
-          "title": "Sample Item B for home-right-bottom",
-          "summary": "",
-          "description": "",
-          "price": "",
-          "currency": "USD",
-          "cta": "View",
-          "url": "#",
-          "image": "/assets/img/placeholder.png",
-          "tags": [
-            "home-right-bottom"
-          ],
-          "priority": 2
         }
       ]
     }
