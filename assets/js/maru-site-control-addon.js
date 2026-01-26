@@ -897,19 +897,74 @@ document.addEventListener('click', function(e){
     };
   }
 
+
+// =====================================================
+// 9.9) Global Insight Summary Card -> Region Modal (SAFE DIRECT TRIGGER)
+// -----------------------------------------------------
+// - Never throws (guards all ops)
+// - Avoids double-open loops (reentrancy guard)
+// - Uses existing region modal entry points:
+//     openMaruGlobalRegionModal(regionId, label?) OR openMaruGlobalRegion(regionId) OR openMaruGlobalRegion()
+// =====================================================
+(function installInsightSummaryDirectTrigger(){
+  if (window.__MARU_INSIGHT_SUMMARY_TRIGGER_INSTALLED__) return;
+  window.__MARU_INSIGHT_SUMMARY_TRIGGER_INSTALLED__ = true;
+
+  let busy = false;
+
+  function extractRegionId(el){
+    if (!el) return null;
+    try {
+      const rid =
+        el.getAttribute('data-region') ||
+        (el.dataset ? (el.dataset.region || el.dataset.regionId) : null) ||
+        el.getAttribute('data-region-id');
+      return rid ? String(rid).trim() : null;
+    } catch (_) { return null; }
+  }
+
+  document.addEventListener('click', function(e){
+    if (busy) return;
+
+    const t = e.target;
+    if (!t || !t.closest) return;
+
+    // Support multiple possible card selectors (do NOT assume single class name)
+    const card =
+      t.closest('.maru-insight-summary-card') ||
+      t.closest('.maru-global-insight-summary-card') ||
+      t.closest('[data-maru-open-region]') ||
+      t.closest('[data-region]') ||
+      null;
+
+    if (!card) return;
+
+    const regionId = extractRegionId(card);
+    // If no explicit region id, do not attempt to open (avoid calling open() with undefined)
+    if (!regionId) return;
+
+    try {
+      busy = true;
+
+      // Prefer dedicated modal entry points from region modal file
+      if (typeof window.openMaruGlobalRegionModal === 'function') {
+        window.openMaruGlobalRegionModal(regionId);
+      } else if (typeof window.openMaruGlobalRegion === 'function') {
+        window.openMaruGlobalRegion(regionId);
+      } else if (typeof window.openRegionModal === 'function') {
+        // legacy / site-specific alias if present
+        window.openRegionModal(regionId);
+      } else {
+        // no-op if entry not present (do not throw)
+      }
+    } catch (err) {
+      try { console.error('[MARU][Addon] Summary trigger failed', err); } catch(_) {}
+    } finally {
+      // release guard next tick (prevents reentrancy loops)
+      setTimeout(function(){ busy = false; }, 0);
+    }
+  }, false);
 })();
 
-    // ===== INSIGHT SUMMARY DIRECT OPEN (restored) =====
-    document.addEventListener('click', function(e){
-      const card = e.target && e.target.closest && e.target.closest('.maru-insight-summary-card');
-      if (!card) return;
-      const regionId = card.getAttribute('data-region') || card.dataset.region;
-      if (!regionId) return;
-      try {
-        if (typeof window.openRegionModal === 'function') {
-          window.openRegionModal(regionId);
-        }
-      } catch(_) {}
-    }, true);
-    // ===== END RESTORE =====
+})();
     
