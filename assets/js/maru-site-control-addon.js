@@ -290,71 +290,50 @@
     MaruAddon.setInputDisplayMode = setInputMode;
     MaruAddon.getInputDisplayMode = function(){ return INPUT_MODE; };
 
-    // ------------------------------
-    // 2.6 Voice toggle UI sync + handlers
-    // ------------------------------
-    function setVoiceEnabled(on, reason){
-      VOICE_ENABLED = !!on;
+// ===================================================
+// VOICE TOGGLE : REGION / COUNTRY 완전 동기화 (정본)
+// ===================================================
 
-      if (VOICE_ENABLED) {
-        try { if (typeof window.startMaruMic === 'function') window.startMaruMic(); } catch(_) {}
-      } else {
-        try { if (typeof window.stopMaruMic === 'function') window.stopMaruMic(); } catch(_) {}
-      }
+// ✅ 유일한 전역 상태 (이것 하나만!)
+var VOICE_ENABLED = false;
 
-      // show dock whenever voice ON (for typing/confirm)
-      try {
-        window.MaruConversationDock && window.MaruConversationDock.show && window.MaruConversationDock.show();
-      } catch(_) {}
+// ✅ UI 동기화
+function syncVoiceToggleUI(enabled) {
+  VOICE_ENABLED = enabled;
 
-      syncVoiceToggleUi();
-      syncInputModeUi();
-    }
+  document.querySelectorAll(
+    '.maru-region-voice-toggle, .maru-country-voice-toggle'
+  ).forEach(btn => {
+    btn.classList.toggle('on', enabled);
+    btn.classList.toggle('off', !enabled);
+    btn.textContent = enabled ? '🎙 음성 ON' : '🎙 음성 OFF';
+  });
+}
 
-    MaruAddon.setVoiceEnabled = setVoiceEnabled;
-    MaruAddon.isVoiceEnabled = function(){ return VOICE_ENABLED; };
+// ✅ 클릭 핸들러
+function handleVoiceToggleClick(e) {
+  e.preventDefault();
 
-    function syncVoiceToggleUi(){
-      // Region + Country toggles are mirrored
-      const btns = Array.prototype.slice.call(document.querySelectorAll('.maru-region-voice-toggle, .maru-country-voice-toggle'));
-      btns.forEach(btn => {
-        btn.classList.toggle('off', !VOICE_ENABLED);
-        // keep text compact
-        try {
-          const base = btn.textContent.replace(/\s+/g,' ').trim();
-          // preserve original language if any
-          if (/voice/i.test(base) || /음성/.test(base)) {
-            // do nothing
-          }
-        } catch(_) {}
-      });
-      // expose for other scripts
-      window.__MARU_VOICE_TOGGLE__ = VOICE_ENABLED;
-    }
+  const next = !VOICE_ENABLED;
+  syncVoiceToggleUI(next);
 
-    // Click delegation for voice toggles
-    document.addEventListener('click', function(e){
-      const t = e.target;
-      if (!t) return;
-      const btn = t.closest && t.closest('.maru-region-voice-toggle, .maru-country-voice-toggle');
-      if (!btn) return;
-      e.preventDefault();
-      setVoiceEnabled(!VOICE_ENABLED, 'ui');
-    }, true);
+  if (next) {
+    window.maruVoiceStart && window.maruVoiceStart();
+  } else {
+    window.maruVoiceStop && window.maruVoiceStop();
+  }
+}
 
-    // Region modal close: must force voice off
-    // We hook by capturing clicks on known close buttons
-    document.addEventListener('click', function(e){
-      const t = e.target;
-      if (!t) return;
-      const btn = t.closest && t.closest('.maru-region-close');
-      if (!btn) return;
-      // region close -> voice off + ui sync
-      setVoiceEnabled(false, 'region_close');
-      setInputMode('realtime');
-    }, true);
+// ✅ 버튼 바인딩
+function bindVoiceToggleButtons() {
+  document.querySelectorAll(
+    '.maru-region-voice-toggle, .maru-country-voice-toggle'
+  ).forEach(btn => {
+    btn.onclick = handleVoiceToggleClick;
+  });
+}
 
-    // Install close button positioning: ensure it sits right of voice toggle
+document.addEventListener('DOMContentLoaded', bindVoiceToggleButtons);
     function normalizeHeaderButtons(){
       // Region
       const rh = document.querySelector('.maru-region-header');
@@ -597,48 +576,65 @@
       ttsSpeak(res.text || '');
     }
 
-    function dispatchCommand(req) {
-      if (!req || !req.text) return;
-      STATE.lastRequest = req;
-      STATE.commandHistory.push({ role: 'user', text: req.text });
+function dispatchCommand(req) {
+  if (!req || !req.text) return;
 
-      // Rule: if existing item but no data (and not detail) -> speak "없습니다", no engine call
-      if (existingItemButNoData(req)) {
-        const msg = buildNoDataMessage(req);
-        // show message in pane? 규칙상 X
-        ttsSpeak(msg);
-        return;
-      }
+  STATE.lastRequest = req;
+  STATE.commandHistory.push({ role: 'user', text: req.text });
 
-      const openPane = shouldOpenPane(req);
+  // 1) 확장창 오픈 여부를 가장 먼저 판단
+  const openPane = !!shouldOpenPane(req);
 
-      if (ENGINE_DEBOUNCE_TIMER) clearTimeout(ENGINE_DEBOUNCE_TIMER);
-      ENGINE_DEBOUNCE_TIMER = setTimeout(function () {
-        callInsightEngine(req)
-          .then(function (raw) {
-            const res = normalizeEngineResponse(raw);
-            STATE.lastResponse = res;
-            STATE.commandHistory.push({ role: 'assistant', text: res.text || '' });
+  // 2) 기존 항목 + 데이터 없음 + 상세 아님 → 말만 하고 종료
+  if (existingItemButNoData(req) && !openPane) {
+    const msg = buildNoDataMessage(req);
+    ttsSpeak(msg);
+    return;
+  }
 
-            // If engine failed: speak fallback + if pane rule says open -> open pane with fallback
-            if (!res.ok) {
-              const fb = (openPane ? (res.text || '준비된 자료가 없습니다.') : buildNoDataMessage(req));
-              if (openPane) openDetailPane('MARU', fb);
-              ttsSpeak(fb);
-              return;
-            }
+  // 3) 확장창 조건이면 엔진 호출 전에 무조건 먼저 띄움
+  if (openPane) {
+    try {
+      openDetailPane('MARU', '데이터를 불러오는 중입니다.');
+    } catch (_) {}
+    ttsSpeak('추가 정보를 확장해서 안내합니다.');
+  }
 
-            routeResponse(req, res, openPane);
-          })
-          .catch(function (err) {
-            try { console.error('[MaruAddon] engine error', err); } catch (_) {}
-            const fb = '현재 엔진 응답을 가져오지 못했습니다.';
-            if (openPane) openDetailPane('MARU', fb);
-            ttsSpeak(fb);
-          });
-      }, ENGINE_DEBOUNCE_DELAY);
-    }
+  // 4) 엔진 호출 (디바운스)
+  if (ENGINE_DEBOUNCE_TIMER) clearTimeout(ENGINE_DEBOUNCE_TIMER);
 
+  ENGINE_DEBOUNCE_TIMER = setTimeout(function () {
+    callInsightEngine(req)
+      .then(function (raw) {
+        const res = normalizeEngineResponse(raw);
+        STATE.lastResponse = res;
+        STATE.commandHistory.push({ role: 'assistant', text: res.text || '' });
+
+        // 엔진 실패/무응답
+        if (!res || !res.ok) {
+          const fb = openPane
+            ? ((res && res.text) || '준비된 자료가 없습니다.')
+            : buildNoDataMessage(req);
+
+          if (openPane) {
+            try { openDetailPane('MARU', fb); } catch (_) {}
+          }
+          ttsSpeak(fb);
+          return;
+        }
+
+        // 정상 응답
+        routeResponse(req, res, openPane);
+      })
+      .catch(function () {
+        const fb = '현재 엔진 응답을 가져오지 못했습니다.';
+        if (openPane) {
+          try { openDetailPane('MARU', fb); } catch (_) {}
+        }
+        ttsSpeak(fb);
+      });
+  }, ENGINE_DEBOUNCE_DELAY);
+}
     // ------------------------------
     // 2.9 Public APIs (text / voice)
     // ------------------------------
