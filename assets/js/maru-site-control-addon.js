@@ -240,93 +240,110 @@ function openDetachedDetail(title, text) {
       }).then(function (r) { return r.json(); });
     }
 
-    function routeResponse(req, res) {
-      // Even if ok=false, we still speak a minimal response when voice is on
-      if (!res || !res.ok) {
-        ttsSpeak('준비된 자료가 없습니다.');
-        return;
-      }
-
-      // Global summary hook (optional)
-      if (req.scope === 'global' && typeof window.renderSummary === 'function') {
-        try { window.renderSummary(res.text || ''); } catch (_) {}
-      }
-
-// =====================================================
-// [PATCH-3B] NO DATA => OPEN DETACHED DETAIL
-// =====================================================
-try {
-  const scope = req && req.scope ? req.scope : 'global';
-
-  const hasIssues =
-    !!(res && res.data && res.data.issues && res.data.issues.length);
-
-  const hasVideos =
-    !!(res && res.data && res.data.videos && res.data.videos.length);
-
-  const hasText =
-    !!(res && res.text && String(res.text).trim().length);
-
-  const needDetail =
-    (scope === 'region'  && !hasIssues && !hasText) ||
-    (scope === 'country' && !hasIssues && !hasVideos && !hasText) ||
-    (req && req.intent === 'expand');
-
-  if (needDetail) {
-    const title =
-      scope === 'region'
-        ? 'REGION DETAIL'
-        : scope === 'country'
-          ? 'COUNTRY DETAIL'
-          : 'DETAIL';
-
-    openDetachedDetail(title, res.text || '상세 응답을 생성 중입니다.');
-  }
-} catch (_) {}
-
-      // Injectors
-      if (req.scope === 'global') {
-        if (typeof window.injectMaruGlobalRegionData === 'function') {
-          try { window.injectMaruGlobalRegionData(res.data && res.data.regions ? res.data.regions : (res.data || [])); } catch (_) {}
-        }
-        if (typeof window.injectMaruGlobalCountryData === 'function') {
-          try { window.injectMaruGlobalCountryData(res.data && res.data.countries ? res.data.countries : (res.data || [])); } catch (_) {}
-        }
-      }
-
-      if (req.scope === 'region' && typeof window.injectRegionContextResult === 'function') {
-        try {
-          window.injectRegionContextResult(req.target, {
-            summary: res.text || '',
-            issues: (res.data && res.data.issues) ? res.data.issues : null,
-            raw: res
-          });
-        } catch (_) {}
-      }
-
-      if (req.scope === 'country' && typeof window.injectCountryContextResult === 'function') {
-        try {
-          window.injectCountryContextResult(req.target, {
-            summary: res.text || '',
-            issues: (res.data && res.data.issues) ? res.data.issues : null,
-            videos: (res.data && res.data.videos) ? res.data.videos : null,
-            raw: res
-          });
-        } catch (_) {}
-      }
-
-      // Videos
-      if (req.scope === 'country' && res.data && Array.isArray(res.data.videos) && typeof window.injectMaruCountryVideos === 'function') {
-        try {
-          STATE.videoPool.country = req.target;
-          STATE.videoPool.list = res.data.videos;
-          window.injectMaruCountryVideos({ country: req.target, videos: res.data.videos });
-        } catch (_) {}
-      }
-
-      // Speak
-      ttsSpeak(res.text || '');
+function routeResponse(req, res) {
+  // =====================================================
+  // 1. 엔진 응답 자체가 없거나 실패한 경우
+  // =====================================================
+    if (!res) {
+      ttsSpeak('준비된 자료가 없습니다.');
+      return;
     }
+
+  // =====================================================
+  // 2. Global summary hook (반드시 함수 안)
+  // =====================================================
+  if (req.scope === 'global' && typeof window.renderSummary === 'function') {
+    try {
+      window.renderSummary(res.text || '');
+    } catch (_) {}
+  }
+
+  // =====================================================
+  // 3. [PATCH-3B] NO DATA → OPEN DETACHED DETAIL
+  // =====================================================
+  try {
+    const scope = req && req.scope ? req.scope : 'global';
+
+    const hasIssues =
+      !!(res.data && res.data.issues && res.data.issues.length);
+
+    const hasVideos =
+      !!(res.data && res.data.videos && res.data.videos.length);
+
+    const hasText =
+      !!(res.text && String(res.text).trim().length);
+
+    const needDetail =
+      (scope === 'region'  && !hasIssues && !hasText) ||
+      (scope === 'country' && !hasIssues && !hasVideos && !hasText) ||
+      (req.intent === 'expand');
+
+    if (needDetail && typeof openDetachedDetail === 'function') {
+      const title =
+        scope === 'region'
+          ? 'REGION DETAIL'
+          : scope === 'country'
+            ? 'COUNTRY DETAIL'
+            : 'DETAIL';
+
+        openDetachedDetail(
+        title,
+        res.text || '상세 응답을 생성 중입니다.'
+      );
+    }
+  } catch (_) {}
+
+  // =====================================================
+  // 4. Injectors
+  // =====================================================
+  if (req.scope === 'global') {
+    if (typeof window.injectMaruGlobalRegionData === 'function') {
+      try {
+        window.injectMaruGlobalRegionData(
+          res.data && res.data.regions
+            ? res.data.regions
+            : (res.data || [])
+        );
+      } catch (_) {}
+    }
+
+    if (typeof window.injectMaruGlobalCountryData === 'function') {
+      try {
+        window.injectMaruGlobalCountryData(
+          res.data && res.data.countries
+            ? res.data.countries
+            : (res.data || [])
+        );
+      } catch (_) {}
+    }
+  }
+
+  if (req.scope === 'region' && typeof window.injectRegionContextResult === 'function') {
+    try {
+      window.injectRegionContextResult(req.target, {
+        summary: res.text || '',
+        issues: res.data?.issues || null,
+        raw: res
+      });
+    } catch (_) {}
+  }
+
+  if (req.scope === 'country' && typeof window.injectCountryContextResult === 'function') {
+    try {
+      window.injectCountryContextResult(req.target, {
+        summary: res.text || '',
+        issues: res.data?.issues || null,
+        videos: res.data?.videos || null,
+        raw: res
+      });
+    } catch (_) {}
+  }
+
+  // =====================================================
+  // 5. Speak (마지막)
+  // =====================================================
+  ttsSpeak(res.text || '');
+}
 
     // =====================================================
     // 3) PUBLIC API (STABLE)
@@ -379,13 +396,35 @@ MaruAddon.setVoiceEnabled = function (on) {
       dispatchCommand(req);
     };
 
-    MaruAddon.handleVoiceQuery = function (payload, context) {
-      const text = (payload && typeof payload === 'object') ? (payload.text || '') : (payload || '');
-      const ctx = (payload && typeof payload === 'object') ? payload.context : context;
-      const req = normalizeCommand({ input: 'voice', text: text, context: ctx });
-      if (!req) return;
-      dispatchCommand(req);
-    };
+MaruAddon.handleVoiceQuery = function (payload, context) {
+  const text = (payload && typeof payload === 'object')
+    ? (payload.text || '')
+    : (payload || '');
+
+  const ctx = (payload && typeof payload === 'object')
+    ? payload.context
+    : context;
+
+  const req = normalizeCommand({ input: 'voice', text: text, context: ctx });
+  if (!req) return;
+
+  // [VOICE-BRIDGE] realtime voice typing
+  try {
+    if (typeof req.text === 'string' && req.text.length) {
+      const inputEl =
+        document.querySelector('#conversation-input') ||
+        document.querySelector('.conversation-input') ||
+        document.querySelector('textarea');
+
+      if (inputEl) {
+        inputEl.value = req.text;
+        inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }
+  } catch (_) {}
+
+  dispatchCommand(req);
+};
 
     MaruAddon.bootstrapGlobalInsight = function () {
       dispatchCommand({ source: 'panel', input: 'system', text: '글로벌 인사이트 전체 수집', scope: 'global', target: null, intent: 'summary', voiceWanted: VOICE_ENABLED });
