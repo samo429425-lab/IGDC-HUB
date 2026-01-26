@@ -290,54 +290,71 @@
     MaruAddon.setInputDisplayMode = setInputMode;
     MaruAddon.getInputDisplayMode = function(){ return INPUT_MODE; };
 
+    // ------------------------------
+    // 2.6 Voice toggle UI sync + handlers
+    // ------------------------------
+    function setVoiceEnabled(on, reason){
+      VOICE_ENABLED = !!on;
 
+      if (VOICE_ENABLED) {
+        try { if (typeof window.startMaruMic === 'function') window.startMaruMic(); } catch(_) {}
+      } else {
+        try { if (typeof window.stopMaruMic === 'function') window.stopMaruMic(); } catch(_) {}
+      }
+
+      // show dock whenever voice ON (for typing/confirm)
+      try {
+        window.MaruConversationDock && window.MaruConversationDock.show && window.MaruConversationDock.show();
+      } catch(_) {}
+
+      syncVoiceToggleUi();
+      syncInputModeUi();
+    }
+
+    MaruAddon.setVoiceEnabled = setVoiceEnabled;
+    MaruAddon.isVoiceEnabled = function(){ return VOICE_ENABLED; };
+
+    function syncVoiceToggleUi(){
+      // Region + Country toggles are mirrored
+      const btns = Array.prototype.slice.call(document.querySelectorAll('.maru-region-voice-toggle, .maru-country-voice-toggle'));
+      btns.forEach(btn => {
+        btn.classList.toggle('off', !VOICE_ENABLED);
+        // keep text compact
+        try {
+          const base = btn.textContent.replace(/\s+/g,' ').trim();
+          // preserve original language if any
+          if (/voice/i.test(base) || /음성/.test(base)) {
+            // do nothing
+          }
+        } catch(_) {}
+      });
+      // expose for other scripts
+      window.__MARU_VOICE_TOGGLE__ = VOICE_ENABLED;
+    }
+
+    // Click delegation for voice toggles
+    document.addEventListener('click', function(e){
+      const t = e.target;
+      if (!t) return;
+      const btn = t.closest && t.closest('.maru-region-voice-toggle, .maru-country-voice-toggle');
+      if (!btn) return;
+      e.preventDefault();
+      setVoiceEnabled(!VOICE_ENABLED, 'ui');
+    }, true);
+
+    // Region modal close: must force voice off
+    // We hook by capturing clicks on known close buttons
+    document.addEventListener('click', function(e){
+      const t = e.target;
+      if (!t) return;
+      const btn = t.closest && t.closest('.maru-region-close');
+      if (!btn) return;
+      // region close -> voice off + ui sync
+      setVoiceEnabled(false, 'region_close');
+      setInputMode('realtime');
+    }, true);
 
     // Install close button positioning: ensure it sits right of voice toggle
-	// ===================================================
-    // VOICE TOGGLE : REGION / COUNTRY 완전 동기화 (정본)
-    // ===================================================
-
-// 단일 전역 상태
-window.__MARU_VOICE_ENABLED__ = false;
-
-// UI 동기화 (Region / Country 공통)
-function syncVoiceToggleUI(enabled) {
-  window.__MARU_VOICE_ENABLED__ = enabled;
-
-  document.querySelectorAll(
-    '.maru-region-voice-toggle, .maru-country-voice-toggle'
-  ).forEach(btn => {
-    btn.classList.toggle('on', enabled);
-    btn.classList.toggle('off', !enabled);
-    btn.textContent = enabled ? '🎙 음성 ON' : '🎙 음성 OFF';
-  });
-}
-
-// 클릭 핸들러 (누르는 쪽이 기준)
-function handleVoiceToggleClick(e) {
-  e.preventDefault();
-  const next = !window.__MARU_VOICE_ENABLED__;
-  syncVoiceToggleUI(next);
-
-  // 음성 엔진 연동 (기존 함수 사용)
-  if (next) {
-    window.maruVoiceStart && window.maruVoiceStart();
-  } else {
-    window.maruVoiceStop && window.maruVoiceStop();
-  }
-}
-
-// 버튼 바인딩
-function bindVoiceToggleButtons() {
-  document.querySelectorAll(
-    '.maru-region-voice-toggle, .maru-country-voice-toggle'
-  ).forEach(btn => {
-    btn.onclick = handleVoiceToggleClick;
-  });
-}
-
-// DOM 준비 후 바인딩
-document.addEventListener('DOMContentLoaded', bindVoiceToggleButtons);
     function normalizeHeaderButtons(){
       // Region
       const rh = document.querySelector('.maru-region-header');
