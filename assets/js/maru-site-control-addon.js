@@ -270,7 +270,7 @@
           wrap.style.opacity = VOICE_ENABLED ? '1' : '.45';
         }
         r1.addEventListener('change', function(){ if (r1.checked) setInputMode('realtime'); });
-r2.addEventListener('change', function(){ if (r2.checked) setInputMode('confirm'); });
+        r2.addEventListener('change', function(){ if (r2.checked) setInputMode('confirm'); });
         syncRadios();
         // store
         wrap.__syncRadios = syncRadios;
@@ -315,51 +315,34 @@ r2.addEventListener('change', function(){ if (r2.checked) setInputMode('confirm'
     MaruAddon.isVoiceEnabled = function(){ return VOICE_ENABLED; };
 
     function syncVoiceToggleUi(){
-  // Region + Country toggles are mirrored
-  const btns = Array.prototype.slice.call(
-    document.querySelectorAll('.maru-region-voice-toggle, .maru-country-voice-toggle')
-  );
-
-  btns.forEach(btn => {
-    const on = !!VOICE_ENABLED;
-    btn.classList.toggle('off', !on);
-
-    // Ensure visible state is unambiguous (check mark on ON)
-    // Preserve base label if custom text exists.
-    const isRegion = btn.classList.contains('maru-region-voice-toggle');
-    const base = isRegion ? 'VOICE' : 'VOICE';
-    btn.textContent = on ? (base + ' ON ✓') : (base + ' OFF');
-  });
-
-  // expose for other scripts (Voice engine onend restart gate)
-  window.__MARU_VOICE_TOGGLE__ = VOICE_ENABLED;
-}
-
-    // Click delegation for voice toggles (safe: avoids double-toggle with modal-local handlers)
-document.addEventListener('click', function(e){
-  const t = e.target;
-  if (!t) return;
-  const btn = t.closest && t.closest('.maru-region-voice-toggle, .maru-country-voice-toggle');
-  if (!btn) return;
-
-  // Let modal-local handler run first if it exists.
-  // After the event cycle, if VOICE state didn't change, we toggle as a fallback.
-  const before = VOICE_ENABLED;
-
-  // prevent default click side-effects (but do NOT stop propagation; modal may rely on it)
-  try { e.preventDefault(); } catch(_) {}
-
-  setTimeout(function(){
-    if (VOICE_ENABLED === before) {
-      setVoiceEnabled(!before, 'ui_fallback');
-    } else {
-      syncVoiceToggleUi();
-      syncInputModeUi();
+      // Region + Country toggles are mirrored
+      const btns = Array.prototype.slice.call(document.querySelectorAll('.maru-region-voice-toggle, .maru-country-voice-toggle'));
+      btns.forEach(btn => {
+        btn.classList.toggle('off', !VOICE_ENABLED);
+        // keep text compact
+        try {
+          const base = btn.textContent.replace(/\s+/g,' ').trim();
+          // preserve original language if any
+          if (/voice/i.test(base) || /음성/.test(base)) {
+            // do nothing
+          }
+        } catch(_) {}
+      });
+      // expose for other scripts
+      window.__MARU_VOICE_TOGGLE__ = VOICE_ENABLED;
     }
-  }, 0);
-}, false);
 
-// Region modal close: must force voice off
+    // Click delegation for voice toggles
+    document.addEventListener('click', function(e){
+      const t = e.target;
+      if (!t) return;
+      const btn = t.closest && t.closest('.maru-region-voice-toggle, .maru-country-voice-toggle');
+      if (!btn) return;
+      e.preventDefault();
+      setVoiceEnabled(!VOICE_ENABLED, 'ui');
+    }, true);
+
+    // Region modal close: must force voice off
     // We hook by capturing clicks on known close buttons
     document.addEventListener('click', function(e){
       const t = e.target;
@@ -371,8 +354,7 @@ document.addEventListener('click', function(e){
       setInputMode('realtime');
     }, true);
 
-
-// Country modal close: force voice off (prevents stale mic state)
+// Country modal close: must force voice off (prevents mic auto-restart after close)
 document.addEventListener('click', function(e){
   const t = e.target;
   if (!t) return;
@@ -382,7 +364,7 @@ document.addEventListener('click', function(e){
   setInputMode('realtime');
 }, true);
 
-// Backdrop close: force voice off safely
+// Backdrop click (region/country) can close modals — force voice off safely
 document.addEventListener('click', function(e){
   const t = e.target;
   if (!t) return;
@@ -391,6 +373,7 @@ document.addEventListener('click', function(e){
     setInputMode('realtime');
   }
 }, true);
+
 
     // Install close button positioning: ensure it sits right of voice toggle
     function normalizeHeaderButtons(){
@@ -418,8 +401,6 @@ document.addEventListener('click', function(e){
             if (toggle.nextSibling !== close) {
               ch.insertBefore(close, toggle.nextSibling);
             }
-            // ensure close is last (right edge in grid)
-            try { ch.appendChild(close); } catch(_) {}
           } catch(_) {}
         }
       }
@@ -431,8 +412,6 @@ document.addEventListener('click', function(e){
         installInputModeSelector();
         normalizeHeaderButtons();
         syncVoiceToggleUi();
-        // ensure mic is running when voice is enabled
-        try { if (VOICE_ENABLED && typeof window.startMaruMic === 'function') window.startMaruMic(); } catch(_) {}
       }catch(_){}
     });
     try { mo.observe(document.documentElement, { childList:true, subtree:true }); } catch(_) {}
@@ -532,9 +511,9 @@ document.addEventListener('click', function(e){
         return false;
       }
       if (kind === 'region') {
-        const mentioned = findMentionedRegion(q);
-        // Only treat as existing when a region keyword is explicitly mentioned.
-        if (!mentioned) return true;
+        const regionId = findMentionedRegion(q) || req.target;
+        // if they mention a region keyword, treat as existing; otherwise missing item
+        if (!regionId) return true;
         if (detail) return true;
         return false;
       }
@@ -577,10 +556,11 @@ document.addEventListener('click', function(e){
         return name + '에 대한 데이터가 없습니다.';
       }
       if (kind === 'region') {
-        const mentioned = findMentionedRegion(q);
-        if (!mentioned) return '해당 질문에 대한 데이터가 없습니다.';
-        const labelMap = { europe:'유럽', asia:'아시아', eurasia:'유라시아', north_america:'북미', south_america:'남미', middle_east:'중동', africa:'아프리카' };
-        const nm = labelMap[mentioned] || '해당 권역';
+        const regionId = findMentionedRegion(q) || req.target;
+        const labelMap = {
+          europe:'유럽', asia:'아시아', eurasia:'유라시아', north_america:'북미', south_america:'남미', middle_east:'중동', africa:'아프리카'
+        };
+        const nm = labelMap[regionId] || '해당 권역';
         return nm + '에 대한 데이터가 없습니다.';
       }
       return '준비된 자료가 없습니다.';
@@ -747,7 +727,7 @@ document.addEventListener('click', function(e){
   // 3) INLINE: Detached Pane (only if missing)
   // =====================================================
   function ensureDetachedPane() {
-    // If another script already provided MaruDetachedPane, augment it instead of returning.
+    if (window.MaruDetachedPane) return;
 
     let zIndexBase = 250000; // above Region/Country modals
 
@@ -756,7 +736,7 @@ document.addEventListener('click', function(e){
       const text = (opts && opts.text) ? opts.text : '';
       const pane = document.createElement('div');
       pane.className = 'maru-detached-pane';
-      pane.style.cssText = 'position:fixed;left:50%;top:10%;transform:translateX(-50%);width:min(900px,92vw);max-height:80vh;background:#fff;border:1px solid #ddd;border-radius:14px;box-shadow:0 22px 70px rgba(0,0,0,.25);z-index:'+ (zIndexBase++) +';overflow:hidden;display:flex;flex-direction:column;';
+      pane.style.cssText = 'position:fixed;left:120px;top:120px;width:min(900px,92vw);max-height:80vh;background:#fff;border:1px solid #ddd;border-radius:14px;box-shadow:0 22px 70px rgba(0,0,0,.25);z-index:'+ (zIndexBase++) +';overflow:hidden;display:flex;flex-direction:column;';
       pane.innerHTML = ''
         + '<div class="maru-pane-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #eee;background:#fafafa;">'
         +   '<span class="maru-pane-title" style="font-weight:800;color:#1f3a5f;">'+ escapeHtml(title) +'</span>'
@@ -772,24 +752,6 @@ document.addEventListener('click', function(e){
       makeDraggable(pane);
       return pane;
     }
-
-
-// Bind/augment global MaruDetachedPane (safe even if already exists)
-window.MaruDetachedPane = window.MaruDetachedPane || {};
-if (!window.MaruDetachedPane.__externalOpen && typeof window.MaruDetachedPane.open === 'function') {
-  window.MaruDetachedPane.__externalOpen = window.MaruDetachedPane.open;
-}
-window.MaruDetachedPane.__openInternal = function(opts){
-  const o = opts || {};
-  return createPane({ title: o.title || 'MARU', text: o.text || '' });
-};
-window.MaruDetachedPane.open = function(opts){
-  try {
-    const ext = window.MaruDetachedPane.__externalOpen;
-    if (ext && typeof ext === 'function') return ext(opts);
-  } catch (_) {}
-  try { return window.MaruDetachedPane.__openInternal(opts); } catch (_) { return null; }
-};
 
     function bindClose(pane){
       const btn = pane.querySelector('.maru-pane-close');
@@ -926,14 +888,4 @@ window.MaruDetachedPane.open = function(opts){
     };
   }
 
-
-// =====================================================
-// 9.9) Global Insight Summary Card -> Region Modal (SAFE DIRECT TRIGGER)
-// -----------------------------------------------------
-// - Never throws (guards all ops)
-// - Avoids double-open loops (reentrancy guard)
-// - Uses existing region modal entry points:
-//     openMaruGlobalRegionModal(regionId, label?) OR openMaruGlobalRegion(regionId) OR openMaruGlobalRegion()
-// =====================================================
 })();
-    
