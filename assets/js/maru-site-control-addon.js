@@ -290,16 +290,19 @@
     MaruAddon.setInputDisplayMode = setInputMode;
     MaruAddon.getInputDisplayMode = function(){ return INPUT_MODE; };
 
-// ===================================================
-// VOICE TOGGLE : REGION / COUNTRY 완전 동기화 (정본)
-// ===================================================
 
-// ✅ 유일한 전역 상태 (이것 하나만!)
-var VOICE_ENABLED = false;
 
-// ✅ UI 동기화
+    // Install close button positioning: ensure it sits right of voice toggle
+	// ===================================================
+    // VOICE TOGGLE : REGION / COUNTRY 완전 동기화 (정본)
+    // ===================================================
+
+// 단일 전역 상태
+window.__MARU_VOICE_ENABLED__ = false;
+
+// UI 동기화 (Region / Country 공통)
 function syncVoiceToggleUI(enabled) {
-  VOICE_ENABLED = enabled;
+  window.__MARU_VOICE_ENABLED__ = enabled;
 
   document.querySelectorAll(
     '.maru-region-voice-toggle, .maru-country-voice-toggle'
@@ -310,13 +313,13 @@ function syncVoiceToggleUI(enabled) {
   });
 }
 
-// ✅ 클릭 핸들러
+// 클릭 핸들러 (누르는 쪽이 기준)
 function handleVoiceToggleClick(e) {
   e.preventDefault();
-
-  const next = !VOICE_ENABLED;
+  const next = !window.__MARU_VOICE_ENABLED__;
   syncVoiceToggleUI(next);
 
+  // 음성 엔진 연동 (기존 함수 사용)
   if (next) {
     window.maruVoiceStart && window.maruVoiceStart();
   } else {
@@ -324,7 +327,7 @@ function handleVoiceToggleClick(e) {
   }
 }
 
-// ✅ 버튼 바인딩
+// 버튼 바인딩
 function bindVoiceToggleButtons() {
   document.querySelectorAll(
     '.maru-region-voice-toggle, .maru-country-voice-toggle'
@@ -333,6 +336,7 @@ function bindVoiceToggleButtons() {
   });
 }
 
+// DOM 준비 후 바인딩
 document.addEventListener('DOMContentLoaded', bindVoiceToggleButtons);
     function normalizeHeaderButtons(){
       // Region
