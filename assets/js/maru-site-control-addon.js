@@ -68,82 +68,6 @@
 
     let ENGINE_DEBOUNCE_TIMER = null;
     const ENGINE_DEBOUNCE_DELAY = 350;
-	
-	// =====================================================
-// [PATCH-STEP1] VOICE SYNC (Region <-> Country) + VoiceMode State
-// - 삭제 없음 / 기존 파이프라인 유지
-// =====================================================
-const PATCH = {
-  voiceMode: 'realtime', // 'realtime' | 'final' (표시 방식 옵션)
-};
-
-function emitEvent(name, detail){
-  try { document.dispatchEvent(new CustomEvent(name, { detail: detail || {} })); } catch (_) {}
-}
-
-function syncRegionVoiceButtonUI(enabled){
-  const btn = document.querySelector('.maru-region-voice-toggle');
-  if(!btn) return;
-  btn.classList.toggle('off', !enabled);
-  btn.textContent = enabled ? 'VOICE ON' : 'VOICE OFF';
-}
-
-function syncCountryVoiceHub(enabled){
-  // Country 모달은 MaruCountryVoice 허브가 있음(있으면 그걸 동기화)
-  // (Country 파일에 존재) :contentReference[oaicite:2]{index=2}
-  try{
-    if(window.MaruCountryVoice){
-      if(enabled && typeof window.MaruCountryVoice.enable === 'function') window.MaruCountryVoice.enable();
-      if(!enabled && typeof window.MaruCountryVoice.disable === 'function') window.MaruCountryVoice.disable();
-    }
-  }catch(_){}
-}
-
-function ensureVoiceModeOptionUI(){
-  // Region/Country 헤더에 LIVE/FINAL 모드 버튼을 동시 부착 (동기화)
-  const targets = [
-    { header: '.maru-region-header', anchor: '.maru-region-voice-toggle' },
-    { header: '.maru-country-header', anchor: '.maru-country-voice-toggle' }
-  ];
-
-  function setAllLabels(){
-    const label = (PATCH.voiceMode === 'realtime') ? 'LIVE' : 'FINAL';
-    document.querySelectorAll('.maru-voice-mode-opt').forEach(b => { try{ b.textContent = label; }catch(_){ } });
-  }
-
-  targets.forEach(t => {
-    const header = document.querySelector(t.header);
-    const voiceBtn = document.querySelector(t.anchor);
-    if(!header || !voiceBtn) return;
-
-    let opt = header.querySelector('.maru-voice-mode-opt');
-    if(!opt){
-      opt = document.createElement('button');
-      opt.className = 'maru-voice-mode-opt';
-      opt.style.border = '1px solid #d6c7b5';
-      opt.style.background = '#fff';
-      opt.style.borderRadius = '10px';
-      opt.style.padding = '6px 10px';
-      opt.style.fontSize = '12px';
-      opt.style.cursor = 'pointer';
-
-      // voiceBtn 바로 뒤에 삽입
-      voiceBtn.insertAdjacentElement('afterend', opt);
-
-      opt.addEventListener('click', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-
-        // DEFAULT: LIVE(실시간 타이핑) → FINAL(자동 확정 전송)
-        PATCH.voiceMode = (PATCH.voiceMode === 'realtime') ? 'final' : 'realtime';
-        setAllLabels();
-        emitEvent('maru:voice-mode', { mode: PATCH.voiceMode });
-      });
-    }
-  });
-
-  setAllLabels();
-}
 
     function ttsSpeak(text) {
       if (!text) return;
@@ -211,25 +135,6 @@ function ensureVoiceModeOptionUI(){
       }, ENGINE_DEBOUNCE_DELAY);
     }
 
-// =====================================================
-// [PATCH-3A] Detached Detail Pane helper
-// =====================================================
-function openDetachedDetail(title, text) {
-  try {
-    if (
-      window.MaruDetachedPane &&
-      typeof window.MaruDetachedPane.open === 'function'
-    ) {
-      window.MaruDetachedPane.open({
-        type: 'detail',
-        title: String(title || 'DETAIL'),
-        text: String(text || '')
-      });
-      return true;
-    }
-  } catch (_) {}
-  return false;
-}
     function normalizeEngineResponse(raw) {
       const ok = !!(raw && raw.ok === true);
       const text = (raw && (raw.text || raw.summary)) ? String(raw.text || raw.summary) : '';
@@ -250,144 +155,73 @@ function openDetachedDetail(title, text) {
       }).then(function (r) { return r.json(); });
     }
 
-function routeResponse(req, res) {
-  // =====================================================
-  // 1. 엔진 응답 자체가 없거나 실패한 경우
-  // =====================================================
-    if (!res) {
-      ttsSpeak('준비된 자료가 없습니다.');
-      return;
+    function routeResponse(req, res) {
+      // Even if ok=false, we still speak a minimal response when voice is on
+      if (!res || !res.ok) {
+        ttsSpeak('준비된 자료가 없습니다.');
+        return;
+      }
+
+      // Global summary hook (optional)
+      if (req.scope === 'global' && typeof window.renderSummary === 'function') {
+        try { window.renderSummary(res.text || ''); } catch (_) {}
+      }
+
+      // Injectors
+      if (req.scope === 'global') {
+        if (typeof window.injectMaruGlobalRegionData === 'function') {
+          try { window.injectMaruGlobalRegionData(res.data && res.data.regions ? res.data.regions : (res.data || [])); } catch (_) {}
+        }
+        if (typeof window.injectMaruGlobalCountryData === 'function') {
+          try { window.injectMaruGlobalCountryData(res.data && res.data.countries ? res.data.countries : (res.data || [])); } catch (_) {}
+        }
+      }
+
+      if (req.scope === 'region' && typeof window.injectRegionContextResult === 'function') {
+        try {
+          window.injectRegionContextResult(req.target, {
+            summary: res.text || '',
+            issues: (res.data && res.data.issues) ? res.data.issues : null,
+            raw: res
+          });
+        } catch (_) {}
+      }
+
+      if (req.scope === 'country' && typeof window.injectCountryContextResult === 'function') {
+        try {
+          window.injectCountryContextResult(req.target, {
+            summary: res.text || '',
+            issues: (res.data && res.data.issues) ? res.data.issues : null,
+            videos: (res.data && res.data.videos) ? res.data.videos : null,
+            raw: res
+          });
+        } catch (_) {}
+      }
+
+      // Videos
+      if (req.scope === 'country' && res.data && Array.isArray(res.data.videos) && typeof window.injectMaruCountryVideos === 'function') {
+        try {
+          STATE.videoPool.country = req.target;
+          STATE.videoPool.list = res.data.videos;
+          window.injectMaruCountryVideos({ country: req.target, videos: res.data.videos });
+        } catch (_) {}
+      }
+
+      // Speak
+      ttsSpeak(res.text || '');
     }
-
-  // =====================================================
-  // 2. Global summary hook (반드시 함수 안)
-  // =====================================================
-  if (req.scope === 'global' && typeof window.renderSummary === 'function') {
-    try {
-      window.renderSummary(res.text || '');
-    } catch (_) {}
-  }
-
-  // =====================================================
-  // 3. [PATCH-3B] NO DATA → OPEN DETACHED DETAIL
-  // =====================================================
-  try {
-    const scope = req && req.scope ? req.scope : 'global';
-
-    const hasIssues =
-      !!(res.data && res.data.issues && res.data.issues.length);
-
-    const hasVideos =
-      !!(res.data && res.data.videos && res.data.videos.length);
-
-    const hasText =
-      !!(res.text && String(res.text).trim().length);
-
-    const needDetail =
-      (scope === 'region'  && !hasIssues && !hasText) ||
-      (scope === 'country' && !hasIssues && !hasVideos && !hasText) ||
-      (req.intent === 'expand');
-
-    if (needDetail && typeof openDetachedDetail === 'function') {
-      const title =
-        scope === 'region'
-          ? 'REGION DETAIL'
-          : scope === 'country'
-            ? 'COUNTRY DETAIL'
-            : 'DETAIL';
-
-        openDetachedDetail(
-        title,
-        res.text || '상세 응답을 생성 중입니다.'
-      );
-    }
-  } catch (_) {}
-
-  // =====================================================
-  // 4. Injectors
-  // =====================================================
-  if (req.scope === 'global') {
-    if (typeof window.injectMaruGlobalRegionData === 'function') {
-      try {
-        window.injectMaruGlobalRegionData(
-          res.data && res.data.regions
-            ? res.data.regions
-            : (res.data || [])
-        );
-      } catch (_) {}
-    }
-
-    if (typeof window.injectMaruGlobalCountryData === 'function') {
-      try {
-        window.injectMaruGlobalCountryData(
-          res.data && res.data.countries
-            ? res.data.countries
-            : (res.data || [])
-        );
-      } catch (_) {}
-    }
-  }
-
-  if (req.scope === 'region' && typeof window.injectRegionContextResult === 'function') {
-    try {
-      window.injectRegionContextResult(req.target, {
-        summary: res.text || '',
-        issues: res.data?.issues || null,
-        raw: res
-      });
-    } catch (_) {}
-  }
-
-  if (req.scope === 'country' && typeof window.injectCountryContextResult === 'function') {
-    try {
-      window.injectCountryContextResult(req.target, {
-        summary: res.text || '',
-        issues: res.data?.issues || null,
-        videos: res.data?.videos || null,
-        raw: res
-      });
-    } catch (_) {}
-  }
-
-  // =====================================================
-  // 5. Speak (마지막)
-  // =====================================================
-  ttsSpeak(res.text || '');
-}
 
     // =====================================================
     // 3) PUBLIC API (STABLE)
     // =====================================================
-MaruAddon.setVoiceEnabled = function (on) {
-  const enabled = !!on;
-  if (enabled === VOICE_ENABLED) {
-    // UI만 재동기화
-    syncRegionVoiceButtonUI(VOICE_ENABLED);
-    syncCountryVoiceHub(VOICE_ENABLED);
-    ensureVoiceModeOptionUI();
-    emitEvent('maru:voice-sync', { enabled: VOICE_ENABLED });
-    return;
-  }
-
-  VOICE_ENABLED = enabled;
-
-  // Region 모달은 이 플래그를 음성엔진 재시작 조건으로도 씀 :contentReference[oaicite:4]{index=4}
-  try { window.MARU_REGION_VOICE_READY = VOICE_ENABLED; } catch (_) {}
-  try { window.MARU_COUNTRY_VOICE_READY = VOICE_ENABLED; } catch (_) {}
-
-  // 음성엔진 start/stop (기존 동작 유지)
-  try {
-    if (VOICE_ENABLED && typeof window.startMaruMic === 'function') window.startMaruMic();
-    if (!VOICE_ENABLED && typeof window.stopMaruMic === 'function') window.stopMaruMic();
-  } catch (_) {}
-
-  // UI/허브 동기화 (Region <-> Country)
-  syncRegionVoiceButtonUI(VOICE_ENABLED);
-  syncCountryVoiceHub(VOICE_ENABLED);
-  ensureVoiceModeOptionUI();
-
-  emitEvent('maru:voice-sync', { enabled: VOICE_ENABLED });
-};
+    MaruAddon.setVoiceEnabled = function (on) {
+      VOICE_ENABLED = !!on;
+      // Start/stop recognition if available
+      try {
+        if (VOICE_ENABLED && typeof window.startMaruMic === 'function') window.startMaruMic();
+        if (!VOICE_ENABLED && typeof window.stopMaruMic === 'function') window.stopMaruMic();
+      } catch (_) {}
+    };
 
     MaruAddon.isVoiceEnabled = function () { return VOICE_ENABLED; };
 
@@ -406,50 +240,13 @@ MaruAddon.setVoiceEnabled = function (on) {
       dispatchCommand(req);
     };
 
-MaruAddon.handleVoiceQuery = function (payload, context) {
-  const text = (payload && typeof payload === 'object')
-    ? (payload.text || '')
-    : (payload || '');
-
-  const ctx = (payload && typeof payload === 'object')
-    ? payload.context
-    : context;
-
-  const req = normalizeCommand({ input: 'voice', text: text, context: ctx });
-  if (!req) return;
-
-  // [VOICE-BRIDGE] 실시간 타이핑 (Dock 우선)
-  try {
-    if (typeof req.text === 'string' && req.text.length) {
-      const inputEl =
-        document.querySelector('#maru-conversation-dock input[type="text"]') ||
-        document.querySelector('#maru-conversation-dock input') ||
-        document.querySelector('#conversation-input') ||
-        document.querySelector('.conversation-input') ||
-        document.querySelector('textarea');
-
-      if (inputEl) {
-        inputEl.value = req.text;
-        inputEl.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-    }
-  } catch (_) {}
-
-  // LIVE(realtime) 모드: 타이핑만 (사용자가 Send로 확정)
-  if (PATCH.voiceMode === 'realtime') {
-    // 안내 멘트는 과도하게 반복되지 않게 최소화
-    try {
-      if (VOICE_ENABLED && typeof window.__MARU_VOICE_LIVE_HINTED__ === 'undefined') {
-        window.__MARU_VOICE_LIVE_HINTED__ = true;
-        ttsSpeak('실시간 입력 모드입니다. 전송은 Send로 확정하세요.');
-      }
-    } catch (_) {}
-    return;
-  }
-
-  // FINAL 모드: 음성 입력 즉시 확정 전송
-  dispatchCommand(req);
-};
+    MaruAddon.handleVoiceQuery = function (payload, context) {
+      const text = (payload && typeof payload === 'object') ? (payload.text || '') : (payload || '');
+      const ctx = (payload && typeof payload === 'object') ? payload.context : context;
+      const req = normalizeCommand({ input: 'voice', text: text, context: ctx });
+      if (!req) return;
+      dispatchCommand(req);
+    };
 
     MaruAddon.bootstrapGlobalInsight = function () {
       dispatchCommand({ source: 'panel', input: 'system', text: '글로벌 인사이트 전체 수집', scope: 'global', target: null, intent: 'summary', voiceWanted: VOICE_ENABLED });
