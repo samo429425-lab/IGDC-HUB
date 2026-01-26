@@ -1,11 +1,12 @@
 /**
- * home-search-overlay.js
- * SEARCH CONTROLLER / GATEWAY (v1)
+ * home-search-overlay.js — v1.1 (Merged Upgrade)
  *
- * - Internal search first (maru-search)
- * - Global / future search engine ready
- * - Layout & UI unchanged
- * - Engine-neutral design
+ * BASE: original working overlay (open/close preserved 100%)
+ * ADD: search scope / quality options + paramized dispatch
+ *
+ * - UI trigger behavior unchanged
+ * - Overlay open/close unchanged
+ * - Engine-neutral, future-ready
  */
 (function () {
   'use strict';
@@ -15,13 +16,19 @@
 
   const qs = (s, r = document) => r.querySelector(s);
 
+  /* =========================
+     SEARCH ENGINE DEFINITIONS
+  ========================= */
   const SEARCH_ENGINES = {
     internal: { endpoint: '/.netlify/functions/maru-search', enabled: true },
-    global:   { endpoint: '/.netlify/functions/global-search', enabled: false }
+    global:   { endpoint: '/.netlify/functions/global-search', enabled: false } // future
   };
 
   let activeEngine = 'internal';
 
+  /* =========================
+     OVERLAY CORE (UNCHANGED)
+  ========================= */
   function openOverlay() {
     const ov = qs('#homeSearchOverlay');
     if (!ov) return;
@@ -38,6 +45,9 @@
     document.body.style.overflow = '';
   }
 
+  /* =========================
+     RENDERING
+  ========================= */
   function renderMessage(msg) {
     const box = qs('#homeSearchResult');
     if (!box) return;
@@ -80,8 +90,11 @@
     box.appendChild(grid);
   }
 
+  /* =========================
+     DISPATCH (UPGRADED)
+  ========================= */
   async function dispatchSearch(query) {
-    openOverlay();
+    openOverlay(); // 핵심: 기존 동작 유지
 
     if (!query) {
       renderMessage('검색어를 입력하세요.');
@@ -94,13 +107,19 @@
       return;
     }
 
+    // 확장 파라미터 (범위/품질)
+    const params = new URLSearchParams({
+      q: query,
+      scope: qs('#homeSearchScope')?.value || 'all',
+      quality: qs('#homeSearchQuality')?.value || 'standard'
+    });
+
     renderMessage('검색 중입니다...');
 
     try {
-      const res = await fetch(
-        `${engine.endpoint}?q=${encodeURIComponent(query)}`,
-        { cache: 'no-store' }
-      );
+      const res = await fetch(`${engine.endpoint}?${params.toString()}`, {
+        cache: 'no-store'
+      });
       if (!res.ok) throw new Error();
 
       const data = await res.json();
@@ -110,6 +129,9 @@
     }
   }
 
+  /* =========================
+     BINDINGS (UNCHANGED + SAFE ADD)
+  ========================= */
   function bind() {
     const input = qs('#homeSearchInput');
     const btn = qs('#homeSearchBtn');
