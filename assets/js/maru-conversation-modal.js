@@ -297,7 +297,10 @@
     hide: hide,
     focus: focus,
     clear: clear,
-    send: send,
+        // Added for Voice typing integration (Addon expects these)
+    setText: function(t){ ensureBar(); input.value = String(t||''); },
+    appendText: function(t){ ensureBar(); input.value = String(input.value||'') + String(t||''); },
+send: send,
     setContext: setContext,
     getContext: getContext,
     // Useful for debugging
