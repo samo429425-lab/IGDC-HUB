@@ -354,27 +354,6 @@
       setInputMode('realtime');
     }, true);
 
-// Country modal close: must force voice off (prevents mic auto-restart after close)
-document.addEventListener('click', function(e){
-  const t = e.target;
-  if (!t) return;
-  const btn = t.closest && t.closest('.maru-country-close');
-  if (!btn) return;
-  setVoiceEnabled(false, 'country_close');
-  setInputMode('realtime');
-}, true);
-
-// Backdrop click (region/country) can close modals — force voice off safely
-document.addEventListener('click', function(e){
-  const t = e.target;
-  if (!t) return;
-  if (t.classList && (t.classList.contains('maru-country-backdrop') || t.classList.contains('maru-region-backdrop'))) {
-    setVoiceEnabled(false, 'backdrop_close');
-    setInputMode('realtime');
-  }
-}, true);
-
-
     // Install close button positioning: ensure it sits right of voice toggle
     function normalizeHeaderButtons(){
       // Region
@@ -511,11 +490,11 @@ document.addEventListener('click', function(e){
         return false;
       }
       if (kind === 'region') {
-        const regionId = findMentionedRegion(q) || req.target;
-        // if they mention a region keyword, treat as existing; otherwise missing item
-        if (!regionId) return true;
-        if (detail) return true;
-        return false;
+        const mentioned = findMentionedRegion(q);
+        // Only treat as existing when a region keyword is explicitly mentioned.
+        if (!mentioned) return true;          // other topic -> pane
+        if (detail) return true;              // detail request -> pane
+        return false;                         // existing region summary -> no pane
       }
       // No modal: any global question -> pane (acts as search window)
       return true;
@@ -556,11 +535,12 @@ document.addEventListener('click', function(e){
         return name + '에 대한 데이터가 없습니다.';
       }
       if (kind === 'region') {
-        const regionId = findMentionedRegion(q) || req.target;
+        const mentioned = findMentionedRegion(q);
+        if (!mentioned) return '해당 질문에 대한 데이터가 없습니다.';
         const labelMap = {
           europe:'유럽', asia:'아시아', eurasia:'유라시아', north_america:'북미', south_america:'남미', middle_east:'중동', africa:'아프리카'
         };
-        const nm = labelMap[regionId] || '해당 권역';
+        const nm = labelMap[mentioned] || '해당 권역';
         return nm + '에 대한 데이터가 없습니다.';
       }
       return '준비된 자료가 없습니다.';
@@ -736,7 +716,7 @@ document.addEventListener('click', function(e){
       const text = (opts && opts.text) ? opts.text : '';
       const pane = document.createElement('div');
       pane.className = 'maru-detached-pane';
-      pane.style.cssText = 'position:fixed;left:120px;top:120px;width:min(900px,92vw);max-height:80vh;background:#fff;border:1px solid #ddd;border-radius:14px;box-shadow:0 22px 70px rgba(0,0,0,.25);z-index:'+ (zIndexBase++) +';overflow:hidden;display:flex;flex-direction:column;';
+      pane.style.cssText = 'position:fixed;left:50%;top:10%;transform:translateX(-50%);width:min(900px,92vw);max-height:80vh;background:#fff;border:1px solid #ddd;border-radius:14px;box-shadow:0 22px 70px rgba(0,0,0,.25);z-index:'+ (zIndexBase++) +';overflow:hidden;display:flex;flex-direction:column;';
       pane.innerHTML = ''
         + '<div class="maru-pane-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #eee;background:#fafafa;">'
         +   '<span class="maru-pane-title" style="font-weight:800;color:#1f3a5f;">'+ escapeHtml(title) +'</span>'
