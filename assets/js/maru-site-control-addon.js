@@ -100,39 +100,49 @@ function syncCountryVoiceHub(enabled){
 }
 
 function ensureVoiceModeOptionUI(){
-  // Region 헤더에 "LIVE/FINAL" 옵션 버튼 1개만 붙임 (토글 옆)
-  const header = document.querySelector('.maru-region-header');
-  const voiceBtn = document.querySelector('.maru-region-voice-toggle');
-  if(!header || !voiceBtn) return;
+  // Region/Country 헤더에 LIVE/FINAL 모드 버튼을 동시 부착 (동기화)
+  const targets = [
+    { header: '.maru-region-header', anchor: '.maru-region-voice-toggle' },
+    { header: '.maru-country-header', anchor: '.maru-country-voice-toggle' }
+  ];
 
-  let opt = header.querySelector('.maru-voice-mode-opt');
-  if(!opt){
-    opt = document.createElement('button');
-    opt.className = 'maru-voice-mode-opt';
-    opt.style.border = '1px solid #d6c7b5';
-    opt.style.background = '#fff';
-    opt.style.borderRadius = '10px';
-    opt.style.padding = '6px 10px';
-    opt.style.fontSize = '12px';
-    opt.style.cursor = 'pointer';
-    opt.style.opacity = '0.9';
-    opt.title = '음성 입력 표시 방식 (실시간/확정)';
-
-    // voiceBtn 바로 뒤에 삽입
-    voiceBtn.insertAdjacentElement('afterend', opt);
-
-    opt.addEventListener('click', function(e){
-      e.preventDefault();
-      e.stopPropagation();
-      PATCH.voiceMode = (PATCH.voiceMode === 'realtime') ? 'final' : 'realtime';
-      opt.textContent = (PATCH.voiceMode === 'realtime') ? 'LIVE' : 'FINAL';
-      emitEvent('maru:voice-mode', { mode: PATCH.voiceMode });
-    });
+  function setAllLabels(){
+    const label = (PATCH.voiceMode === 'realtime') ? 'LIVE' : 'FINAL';
+    document.querySelectorAll('.maru-voice-mode-opt').forEach(b => { try{ b.textContent = label; }catch(_){ } });
   }
 
-  opt.textContent = (PATCH.voiceMode === 'realtime') ? 'LIVE' : 'FINAL';
-  // 음성 ON일 때만 보이게(합의)
-  opt.style.display = VOICE_ENABLED ? '' : 'none';
+  targets.forEach(t => {
+    const header = document.querySelector(t.header);
+    const voiceBtn = document.querySelector(t.anchor);
+    if(!header || !voiceBtn) return;
+
+    let opt = header.querySelector('.maru-voice-mode-opt');
+    if(!opt){
+      opt = document.createElement('button');
+      opt.className = 'maru-voice-mode-opt';
+      opt.style.border = '1px solid #d6c7b5';
+      opt.style.background = '#fff';
+      opt.style.borderRadius = '10px';
+      opt.style.padding = '6px 10px';
+      opt.style.fontSize = '12px';
+      opt.style.cursor = 'pointer';
+
+      // voiceBtn 바로 뒤에 삽입
+      voiceBtn.insertAdjacentElement('afterend', opt);
+
+      opt.addEventListener('click', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+
+        // DEFAULT: LIVE(실시간 타이핑) → FINAL(자동 확정 전송)
+        PATCH.voiceMode = (PATCH.voiceMode === 'realtime') ? 'final' : 'realtime';
+        setAllLabels();
+        emitEvent('maru:voice-mode', { mode: PATCH.voiceMode });
+      });
+    }
+  });
+
+  setAllLabels();
 }
 
     function ttsSpeak(text) {
@@ -408,10 +418,12 @@ MaruAddon.handleVoiceQuery = function (payload, context) {
   const req = normalizeCommand({ input: 'voice', text: text, context: ctx });
   if (!req) return;
 
-  // [VOICE-BRIDGE] realtime voice typing
+  // [VOICE-BRIDGE] 실시간 타이핑 (Dock 우선)
   try {
     if (typeof req.text === 'string' && req.text.length) {
       const inputEl =
+        document.querySelector('#maru-conversation-dock input[type="text"]') ||
+        document.querySelector('#maru-conversation-dock input') ||
         document.querySelector('#conversation-input') ||
         document.querySelector('.conversation-input') ||
         document.querySelector('textarea');
@@ -423,6 +435,19 @@ MaruAddon.handleVoiceQuery = function (payload, context) {
     }
   } catch (_) {}
 
+  // LIVE(realtime) 모드: 타이핑만 (사용자가 Send로 확정)
+  if (PATCH.voiceMode === 'realtime') {
+    // 안내 멘트는 과도하게 반복되지 않게 최소화
+    try {
+      if (VOICE_ENABLED && typeof window.__MARU_VOICE_LIVE_HINTED__ === 'undefined') {
+        window.__MARU_VOICE_LIVE_HINTED__ = true;
+        ttsSpeak('실시간 입력 모드입니다. 전송은 Send로 확정하세요.');
+      }
+    } catch (_) {}
+    return;
+  }
+
+  // FINAL 모드: 음성 입력 즉시 확정 전송
   dispatchCommand(req);
 };
 
