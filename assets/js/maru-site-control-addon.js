@@ -898,3 +898,18 @@ document.addEventListener('click', function(e){
   }
 
 })();
+
+    // ===== INSIGHT SUMMARY DIRECT OPEN (restored) =====
+    document.addEventListener('click', function(e){
+      const card = e.target && e.target.closest && e.target.closest('.maru-insight-summary-card');
+      if (!card) return;
+      const regionId = card.getAttribute('data-region') || card.dataset.region;
+      if (!regionId) return;
+      try {
+        if (typeof window.openRegionModal === 'function') {
+          window.openRegionModal(regionId);
+        }
+      } catch(_) {}
+    }, true);
+    // ===== END RESTORE =====
+    
