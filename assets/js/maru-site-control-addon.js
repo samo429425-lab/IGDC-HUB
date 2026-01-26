@@ -270,17 +270,6 @@
           wrap.style.opacity = VOICE_ENABLED ? '1' : '.45';
         }
         r1.addEventListener('change', function(){ if (r1.checked) setInputMode('realtime'); });
-
-// Backdrop click (region/country) can close modals — force voice off safely
-document.addEventListener('click', function(e){
-  const t = e.target;
-  if (!t) return;
-  if (t.classList && (t.classList.contains('maru-country-backdrop') || t.classList.contains('maru-region-backdrop'))) {
-    setVoiceEnabled(false, 'backdrop_close');
-    setInputMode('realtime');
-  }
-}, true);
-
         r2.addEventListener('change', function(){ if (r2.checked) setInputMode('confirm'); });
         syncRadios();
         // store
@@ -327,22 +316,21 @@ document.addEventListener('click', function(e){
 
     function syncVoiceToggleUi(){
   // Region + Country toggles are mirrored
-  const btns = Array.prototype.slice.call(
-    document.querySelectorAll('.maru-region-voice-toggle, .maru-country-voice-toggle')
-  );
-
+  const btns = Array.prototype.slice.call(document.querySelectorAll('.maru-region-voice-toggle, .maru-country-voice-toggle'));
   btns.forEach(btn => {
     const on = !!VOICE_ENABLED;
     btn.classList.toggle('off', !on);
 
-    // Ensure visible state is unambiguous (check mark on ON)
-    // Preserve base label if custom text exists.
-    const isRegion = btn.classList.contains('maru-region-voice-toggle');
-    const base = isRegion ? 'VOICE' : 'VOICE';
-    btn.textContent = on ? (base + ' ON ✓') : (base + ' OFF');
+    // Keep any existing label prefix but ensure ON/OFF is visible
+    // If the modal already sets its own label, we only append a small marker.
+    try {
+      const txt = (btn.getAttribute('data-maru-label') || btn.textContent || '').trim();
+      const base = txt ? txt.replace(/\s*(ON|OFF)(\s*✓)?$/i, '').trim() : 'VOICE';
+      btn.textContent = on ? (base + ' ON ✓') : (base + ' OFF');
+      btn.setAttribute('data-maru-label', base);
+    } catch(_) {}
   });
-
-  // expose for other scripts (Voice engine onend restart gate)
+  // expose for other scripts
   window.__MARU_VOICE_TOGGLE__ = VOICE_ENABLED;
 }
 
@@ -353,13 +341,10 @@ document.addEventListener('click', function(e){
   const btn = t.closest && t.closest('.maru-region-voice-toggle, .maru-country-voice-toggle');
   if (!btn) return;
 
-  // Let modal-local handler run first if it exists.
-  // After the event cycle, if VOICE state didn't change, we toggle as a fallback.
   const before = VOICE_ENABLED;
 
-  // prevent default click side-effects (but do NOT stop propagation; modal may rely on it)
-  try { e.preventDefault(); } catch(_) {}
-
+  // Do NOT stop propagation. Modal-local handler (if any) should run.
+  // After the current tick, if state did not change, toggle as a fallback.
   setTimeout(function(){
     if (VOICE_ENABLED === before) {
       setVoiceEnabled(!before, 'ui_fallback');
@@ -381,6 +366,27 @@ document.addEventListener('click', function(e){
       setVoiceEnabled(false, 'region_close');
       setInputMode('realtime');
     }, true);
+
+// Country modal close: must force voice off
+document.addEventListener('click', function(e){
+  const t = e.target;
+  if (!t) return;
+  const btn = t.closest && t.closest('.maru-country-close');
+  if (!btn) return;
+  setVoiceEnabled(false, 'country_close');
+  setInputMode('realtime');
+}, true);
+
+// Backdrop click (region/country) can close modals — force voice off safely
+document.addEventListener('click', function(e){
+  const t = e.target;
+  if (!t) return;
+  if (t.classList && (t.classList.contains('maru-country-backdrop') || t.classList.contains('maru-region-backdrop'))) {
+    setVoiceEnabled(false, 'backdrop_close');
+    setInputMode('realtime');
+  }
+}, true);
+
 
     // Install close button positioning: ensure it sits right of voice toggle
     function normalizeHeaderButtons(){
@@ -408,8 +414,6 @@ document.addEventListener('click', function(e){
             if (toggle.nextSibling !== close) {
               ch.insertBefore(close, toggle.nextSibling);
             }
-            // ensure close is last (right edge in grid)
-            try { ch.appendChild(close); } catch(_) {}
           } catch(_) {}
         }
       }
@@ -520,9 +524,9 @@ document.addEventListener('click', function(e){
         return false;
       }
       if (kind === 'region') {
-        const mentioned = findMentionedRegion(q);
-        // Only treat as existing when a region keyword is explicitly mentioned.
-        if (!mentioned) return true;
+        const regionId = findMentionedRegion(q) || req.target;
+        // if they mention a region keyword, treat as existing; otherwise missing item
+        if (!regionId) return true;
         if (detail) return true;
         return false;
       }
@@ -728,6 +732,64 @@ document.addEventListener('click', function(e){
       routeInbound({ input:'system', text:'실시간 글로벌 이슈', context: { level:'global', id:null }});
     };
 
+
+// ------------------------------
+// 2.11 Global Insight summary card -> Region modal (SAFE direct trigger)
+// ------------------------------
+(function installInsightSummaryDirectTrigger(){
+  if (window.__MARU_INSIGHT_SUMMARY_TRIGGER_INSTALLED__) return;
+  window.__MARU_INSIGHT_SUMMARY_TRIGGER_INSTALLED__ = true;
+
+  let busy = false;
+
+  function extractRegionId(el){
+    if (!el) return null;
+    try {
+      const rid =
+        el.getAttribute('data-region') ||
+        el.getAttribute('data-region-id') ||
+        (el.dataset ? (el.dataset.region || el.dataset.regionId) : null);
+      return rid ? String(rid).trim() : null;
+    } catch (_) { return null; }
+  }
+
+  document.addEventListener('click', function(e){
+    if (busy) return;
+
+    const t = e.target;
+    if (!t || !t.closest) return;
+
+    // Try a few known patterns without assuming a single class name
+    const card =
+      t.closest('.maru-insight-summary-card') ||
+      t.closest('.maru-global-insight-summary-card') ||
+      t.closest('.maru-insight-summary') ||
+      t.closest('[data-maru-open-region]') ||
+      null;
+
+    if (!card) return;
+
+    // Optional explicit region id; if missing, still open the region modal (default view)
+    const regionId = extractRegionId(card);
+
+    try {
+      busy = true;
+
+      if (typeof window.openMaruGlobalRegionModal === 'function') {
+        window.openMaruGlobalRegionModal(regionId || undefined);
+      } else if (typeof window.openMaruGlobalRegion === 'function') {
+        window.openMaruGlobalRegion(regionId || undefined);
+      } else if (typeof window.openRegionModal === 'function') {
+        window.openRegionModal(regionId || undefined);
+      }
+    } catch (err) {
+      try { console.error('[MaruAddon] Summary trigger failed', err); } catch(_) {}
+    } finally {
+      setTimeout(function(){ busy = false; }, 0);
+    }
+  }, false);
+})();
+
     // Expose minimal diagnostics
     MaruAddon.__state = STATE;
   }
@@ -897,74 +959,4 @@ document.addEventListener('click', function(e){
     };
   }
 
-
-// =====================================================
-// 9.9) Global Insight Summary Card -> Region Modal (SAFE DIRECT TRIGGER)
-// -----------------------------------------------------
-// - Never throws (guards all ops)
-// - Avoids double-open loops (reentrancy guard)
-// - Uses existing region modal entry points:
-//     openMaruGlobalRegionModal(regionId, label?) OR openMaruGlobalRegion(regionId) OR openMaruGlobalRegion()
-// =====================================================
-(function installInsightSummaryDirectTrigger(){
-  if (window.__MARU_INSIGHT_SUMMARY_TRIGGER_INSTALLED__) return;
-  window.__MARU_INSIGHT_SUMMARY_TRIGGER_INSTALLED__ = true;
-
-  let busy = false;
-
-  function extractRegionId(el){
-    if (!el) return null;
-    try {
-      const rid =
-        el.getAttribute('data-region') ||
-        (el.dataset ? (el.dataset.region || el.dataset.regionId) : null) ||
-        el.getAttribute('data-region-id');
-      return rid ? String(rid).trim() : null;
-    } catch (_) { return null; }
-  }
-
-  document.addEventListener('click', function(e){
-    if (busy) return;
-
-    const t = e.target;
-    if (!t || !t.closest) return;
-
-    // Support multiple possible card selectors (do NOT assume single class name)
-    const card =
-      t.closest('.maru-insight-summary-card') ||
-      t.closest('.maru-global-insight-summary-card') ||
-      t.closest('[data-maru-open-region]') ||
-      t.closest('[data-region]') ||
-      null;
-
-    if (!card) return;
-
-    const regionId = extractRegionId(card);
-    // If no explicit region id, do not attempt to open (avoid calling open() with undefined)
-    if (!regionId) return;
-
-    try {
-      busy = true;
-
-      // Prefer dedicated modal entry points from region modal file
-      if (typeof window.openMaruGlobalRegionModal === 'function') {
-        window.openMaruGlobalRegionModal(regionId);
-      } else if (typeof window.openMaruGlobalRegion === 'function') {
-        window.openMaruGlobalRegion(regionId);
-      } else if (typeof window.openRegionModal === 'function') {
-        // legacy / site-specific alias if present
-        window.openRegionModal(regionId);
-      } else {
-        // no-op if entry not present (do not throw)
-      }
-    } catch (err) {
-      try { console.error('[MARU][Addon] Summary trigger failed', err); } catch(_) {}
-    } finally {
-      // release guard next tick (prevents reentrancy loops)
-      setTimeout(function(){ busy = false; }, 0);
-    }
-  }, false);
 })();
-
-})();
-    
