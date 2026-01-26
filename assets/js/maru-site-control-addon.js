@@ -597,6 +597,19 @@
       ttsSpeak(res.text || '');
     }
 
+    function dispatchCommand(req) {
+      if (!req || !req.text) return;
+      STATE.lastRequest = req;
+      STATE.commandHistory.push({ role: 'user', text: req.text });
+
+      // Rule: if existing item but no data (and not detail) -> speak "없습니다", no engine call
+      if (existingItemButNoData(req)) {
+        const msg = buildNoDataMessage(req);
+        // show message in pane? 규칙상 X
+        ttsSpeak(msg);
+        return;
+      }
+
 function dispatchCommand(req) {
   if (!req || !req.text) return;
 
