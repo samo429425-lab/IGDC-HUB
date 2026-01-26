@@ -56,6 +56,7 @@
     // 2.1 State
     // ------------------------------
     let VOICE_ENABLED = false;                 // actual voice service flag
+    let ACTIVE_VOICE_SCOPE = null;          // null | 'region' | 'country' (prevents cross-modal voice conflicts)
     let INPUT_MODE = 'realtime';              // 'realtime' | 'confirm'
     const MEDIA_STATE = { video: false, music: false, narration: false };
 
@@ -130,6 +131,33 @@
       if (hasRegion) return 'region';
       return null;
     }
+// ------------------------------
+// 2.4.0 Voice scope gate (prevents Region/Country voice conflict)
+// ------------------------------
+function updateActiveVoiceScope(trigger){
+  const kind = getOpenModalKind();
+  const next = (kind === 'country' || kind === 'region') ? kind : null;
+
+  // If scope is leaving an active modal, force voice OFF to avoid stale mic restart
+  if (ACTIVE_VOICE_SCOPE && !next && VOICE_ENABLED) {
+    setVoiceEnabled(false, 'modal_closed');
+  }
+
+  ACTIVE_VOICE_SCOPE = next;
+
+  // When a modal opens while voice is already ON, ensure mic + dock are ready
+  if (ACTIVE_VOICE_SCOPE && VOICE_ENABLED) {
+    try { window.MaruConversationDock && window.MaruConversationDock.show && window.MaruConversationDock.show(); } catch(_) {}
+    try { if (typeof window.startMaruMic === 'function') window.startMaruMic(); } catch(_) {}
+  }
+}
+
+function voiceScopeAllows(ctx){
+  if (!ACTIVE_VOICE_SCOPE) return true;
+  if (!ctx || !ctx.level) return false;
+  return ctx.level === ACTIVE_VOICE_SCOPE;
+}
+
 
     function getCountryItemsFromDom(){
       const cards = Array.prototype.slice.call(document.querySelectorAll('.maru-country-card[data-country]'));
@@ -308,6 +336,7 @@
       } catch(_) {}
 
       syncVoiceToggleUi();
+    updateActiveVoiceScope('init');
       syncInputModeUi();
     }
 
@@ -354,6 +383,28 @@
       setInputMode('realtime');
     }, true);
 
+
+// Country modal close: must force voice off (prevents mic auto-restart on close)
+document.addEventListener('click', function(e){
+  const t = e.target;
+  if (!t) return;
+  const btn = t.closest && t.closest('.maru-country-close');
+  if (!btn) return;
+  setVoiceEnabled(false, 'country_close');
+  setInputMode('realtime');
+  updateActiveVoiceScope('country_close');
+}, true);
+
+// Backdrop click (region/country) can close modals — force voice off safely
+document.addEventListener('click', function(e){
+  const t = e.target;
+  if (!t) return;
+  if (t.classList && (t.classList.contains('maru-country-backdrop') || t.classList.contains('maru-region-backdrop'))) {
+    setVoiceEnabled(false, 'backdrop_close');
+    setInputMode('realtime');
+    updateActiveVoiceScope('backdrop_close');
+  }
+}, true);
     // Install close button positioning: ensure it sits right of voice toggle
     function normalizeHeaderButtons(){
       // Region
@@ -391,6 +442,7 @@
         installInputModeSelector();
         normalizeHeaderButtons();
         syncVoiceToggleUi();
+        updateActiveVoiceScope('mutation');
       }catch(_){}
     });
     try { mo.observe(document.documentElement, { childList:true, subtree:true }); } catch(_) {}
@@ -418,7 +470,12 @@
 
     MaruAddon.previewVoice = function(text, context){
       if (!VOICE_ENABLED) return;
-      // realtime typing: update input only
+
+      const ctx = normalizeContext(context) || getBestContext() || null;
+      if (!voiceScopeAllows(ctx)) return;
+
+      // Realtime typing should always be visible in the input box (ChatGPT-like)
+      // Confirm mode: still show the live transcript so user can edit before Send
       setTypingText(text);
     };
 
@@ -490,11 +547,12 @@
         return false;
       }
       if (kind === 'region') {
-        const regionId = findMentionedRegion(q) || req.target;
-        // if they mention a region keyword, treat as existing; otherwise missing item
-        if (!regionId) return true;
-        if (detail) return true;
-        return false;
+        const mentioned = findMentionedRegion(q);
+        // Only treat as "existing item" when a region keyword is explicitly mentioned.
+        // This prevents generic questions (with req.target set) from being misclassified as existing.
+        if (!mentioned) return true;          // missing item / other topic -> pane
+        if (detail) return true;              // detail request -> pane
+        return false;                         // existing region summary -> no pane
       }
       // No modal: any global question -> pane (acts as search window)
       return true;
@@ -674,7 +732,11 @@
       text = String(text || '').trim();
       if (!text) return;
 
+      // Resolve context + apply voice scope gate (prevents Region/Country conflict)
+      const resolvedCtx = normalizeContext(ctx) || getBestContext() || null;
+      if (!voiceScopeAllows(resolvedCtx)) return;
       // show typing always
+      if (resolvedCtx) window.__MARU_CONTEXT__ = resolvedCtx;
       setTypingText(text);
 
       // mode
@@ -685,7 +747,7 @@
       }
 
       // realtime: auto dispatch
-      routeInbound({ input:'voice', text, context: ctx });
+      routeInbound({ input:'voice', text, context: resolvedCtx });
     };
 
     // ------------------------------
