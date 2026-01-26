@@ -354,27 +354,6 @@
       setInputMode('realtime');
     }, true);
 
-// Country modal close: must force voice off (prevents mic auto-restart after close)
-document.addEventListener('click', function(e){
-  const t = e.target;
-  if (!t) return;
-  const btn = t.closest && t.closest('.maru-country-close');
-  if (!btn) return;
-  setVoiceEnabled(false, 'country_close');
-  setInputMode('realtime');
-}, true);
-
-// Backdrop click (region/country) can close modals — force voice off safely
-document.addEventListener('click', function(e){
-  const t = e.target;
-  if (!t) return;
-  if (t.classList && (t.classList.contains('maru-country-backdrop') || t.classList.contains('maru-region-backdrop'))) {
-    setVoiceEnabled(false, 'backdrop_close');
-    setInputMode('realtime');
-  }
-}, true);
-
-
     // Install close button positioning: ensure it sits right of voice toggle
     function normalizeHeaderButtons(){
       // Region
@@ -729,7 +708,7 @@ document.addEventListener('click', function(e){
   function ensureDetachedPane() {
     if (window.MaruDetachedPane) return;
 
-    let zIndexBase = 250000; // above Region/Country modals
+    let zIndexBase = 3000;
 
     function createPane(opts){
       const title = (opts && opts.title) ? opts.title : '';
