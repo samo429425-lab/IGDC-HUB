@@ -616,25 +616,23 @@ function dispatchCommand(req) {
   STATE.lastRequest = req;
   STATE.commandHistory.push({ role: 'user', text: req.text });
 
-  // 1) 확장창 오픈 여부를 가장 먼저 판단
+  // 1) 확장창 오픈 여부는 항상 먼저 판단
   const openPane = !!shouldOpenPane(req);
 
-  // 2) 기존 항목 + 데이터 없음 + 상세 아님 → 말만 하고 종료
+  // 2) "있는 항목 + 데이터 없음(일반)"은 엔진 호출 없이 말만 하고 종료
   if (existingItemButNoData(req) && !openPane) {
     const msg = buildNoDataMessage(req);
     ttsSpeak(msg);
     return;
   }
 
-  // 3) 확장창 조건이면 엔진 호출 전에 무조건 먼저 띄움
+  // 3) 확장창 조건이면 엔진 호출 전에 즉시 확장창 먼저 띄움(핵심)
   if (openPane) {
-    try {
-      openDetailPane('MARU', '데이터를 불러오는 중입니다.');
-    } catch (_) {}
+    try { openDetailPane('MARU', '데이터를 불러오는 중입니다.'); } catch (_) {}
     ttsSpeak('추가 정보를 확장해서 안내합니다.');
   }
 
-  // 4) 엔진 호출 (디바운스)
+  // 4) 디바운스 엔진 호출
   if (ENGINE_DEBOUNCE_TIMER) clearTimeout(ENGINE_DEBOUNCE_TIMER);
 
   ENGINE_DEBOUNCE_TIMER = setTimeout(function () {
@@ -644,7 +642,7 @@ function dispatchCommand(req) {
         STATE.lastResponse = res;
         STATE.commandHistory.push({ role: 'assistant', text: res.text || '' });
 
-        // 엔진 실패/무응답
+        // 엔진 실패/무응답 → 확장창이면 확장창에 표시, 아니면 no-data 메시지로 음성 처리
         if (!res || !res.ok) {
           const fb = openPane
             ? ((res && res.text) || '준비된 자료가 없습니다.')
@@ -657,10 +655,11 @@ function dispatchCommand(req) {
           return;
         }
 
-        // 정상 응답
+        // 정상 응답 라우팅 (openPane 여부는 그대로 전달)
         routeResponse(req, res, openPane);
       })
-      .catch(function () {
+      .catch(function (err) {
+        try { console.error('[MaruAddon] engine error', err); } catch (_) {}
         const fb = '현재 엔진 응답을 가져오지 못했습니다.';
         if (openPane) {
           try { openDetailPane('MARU', fb); } catch (_) {}
