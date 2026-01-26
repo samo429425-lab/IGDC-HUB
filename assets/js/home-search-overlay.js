@@ -1,43 +1,143 @@
 /**
- * home-search-overlay.js — v1.5
+ * home-search-overlay.js
+ * SEARCH CONTROLLER / GATEWAY (v1)
+ *
+ * - Internal search first (maru-search)
+ * - Global / future search engine ready
+ * - Layout & UI unchanged
+ * - Engine-neutral design
  */
-
 (function () {
-  if (window.__HOME_SEARCH_READY__) return;
-  window.__HOME_SEARCH_READY__ = true;
+  'use strict';
 
-  const input = document.getElementById("homeSearchInput");
-  const btn = document.getElementById("homeSearchBtn");
-  const resultBox = document.getElementById("homeSearchResult");
+  if (window.__HOME_SEARCH_CONTROLLER__) return;
+  window.__HOME_SEARCH_CONTROLLER__ = true;
 
-  async function runSearch(q) {
-    if (!q) return;
-    resultBox.innerHTML = "<p>Searching...</p>";
-    try {
-      const res = await fetch(`/.netlify/functions/maru-search?q=${encodeURIComponent(q)}`);
-      const data = await res.json();
-      render(data.items || []);
-    } catch {
-      resultBox.innerHTML = "<p>Error occurred</p>";
-    }
+  const qs = (s, r = document) => r.querySelector(s);
+
+  const SEARCH_ENGINES = {
+    internal: { endpoint: '/.netlify/functions/maru-search', enabled: true },
+    global:   { endpoint: '/.netlify/functions/global-search', enabled: false }
+  };
+
+  let activeEngine = 'internal';
+
+  function openOverlay() {
+    const ov = qs('#homeSearchOverlay');
+    if (!ov) return;
+    ov.classList.add('is-open');
+    ov.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
   }
 
-  function render(items) {
+  function closeOverlay() {
+    const ov = qs('#homeSearchOverlay');
+    if (!ov) return;
+    ov.classList.remove('is-open');
+    ov.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  }
+
+  function renderMessage(msg) {
+    const box = qs('#homeSearchResult');
+    if (!box) return;
+    box.innerHTML = `<div class="home-search-message">${msg}</div>`;
+  }
+
+  function renderResults(items = []) {
+    const box = qs('#homeSearchResult');
+    if (!box) return;
+
     if (!items.length) {
-      resultBox.innerHTML = "<p>No results</p>";
+      renderMessage('검색 결과가 없습니다.');
       return;
     }
-    resultBox.innerHTML = items.map(i => `
-      <div class="search-item">
-        <strong>[${i.type}]</strong>
-        <a href="${i.url}" target="_blank">${i.title}</a>
-        <p>${i.summary || ""}</p>
-      </div>
-    `).join("");
+
+    const grid = document.createElement('div');
+    grid.className = 'home-search-grid';
+
+    items.forEach(item => {
+      const card = document.createElement('a');
+      card.className = 'home-search-card';
+      card.href = item.url || '#';
+      card.target = '_blank';
+      card.rel = 'noopener';
+
+      const title = document.createElement('div');
+      title.className = 'home-search-title';
+      title.textContent = item.title || 'Untitled';
+
+      const summary = document.createElement('div');
+      summary.className = 'home-search-summary';
+      summary.textContent = item.summary || '';
+
+      card.appendChild(title);
+      card.appendChild(summary);
+      grid.appendChild(card);
+    });
+
+    box.innerHTML = '';
+    box.appendChild(grid);
   }
 
-  btn && btn.addEventListener("click", () => runSearch(input.value.trim()));
-  input && input.addEventListener("keydown", e => {
-    if (e.key === "Enter") runSearch(input.value.trim());
-  });
+  async function dispatchSearch(query) {
+    openOverlay();
+
+    if (!query) {
+      renderMessage('검색어를 입력하세요.');
+      return;
+    }
+
+    const engine = SEARCH_ENGINES[activeEngine];
+    if (!engine || !engine.enabled) {
+      renderMessage('검색 엔진이 준비되지 않았습니다.');
+      return;
+    }
+
+    renderMessage('검색 중입니다...');
+
+    try {
+      const res = await fetch(
+        `${engine.endpoint}?q=${encodeURIComponent(query)}`,
+        { cache: 'no-store' }
+      );
+      if (!res.ok) throw new Error();
+
+      const data = await res.json();
+      renderResults(data.items || data.results || []);
+    } catch (e) {
+      renderMessage('검색 중 오류가 발생했습니다.');
+    }
+  }
+
+  function bind() {
+    const input = qs('#homeSearchInput');
+    const btn = qs('#homeSearchBtn');
+    const closeBtn = qs('#homeSearchClose');
+    const ov = qs('#homeSearchOverlay');
+
+    if (!input || !btn || !closeBtn || !ov) return;
+
+    btn.addEventListener('click', () => dispatchSearch(input.value.trim()));
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') dispatchSearch(input.value.trim());
+    });
+
+    closeBtn.addEventListener('click', closeOverlay);
+
+    ov.addEventListener('click', e => {
+      if (e.target === ov) closeOverlay();
+    });
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeOverlay();
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bind);
+  } else {
+    bind();
+  }
 })();
