@@ -1,0 +1,14 @@
+{
+  "meta": {
+    "snapshot_id": "front.core.v1.sample",
+    "generated_at": "2026-01-27T01:04:38Z"
+  },
+  "views": {
+    "home": {
+      "slots": 100
+    },
+    "distribution": {
+      "slots": 100
+    }
+  }
+}
