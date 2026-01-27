@@ -1,12 +1,3 @@
-
-function __syncVoiceToggles(enabled){
-  document.querySelectorAll('.maru-region-voice-toggle, .maru-country-voice-toggle')
-    .forEach(t => {
-      if (t && t.type === 'checkbox') t.checked = !!enabled;
-      if (t && t.classList) t.classList.toggle('active', !!enabled);
-    });
-}
-
 /* =========================================================
  * MARU Site Control Addon — INTEGRATED FIX (v6.3)
  * ---------------------------------------------------------
@@ -96,7 +87,7 @@ function __syncVoiceToggles(enabled){
 
     function ttsSpeak(text) {
       if (!text) return;
-      if (VOICE_ENABLED) return;
+      if (!VOICE_ENABLED) return;
       if (MEDIA_STATE.video) return;
       if (typeof window.maruVoiceSpeak !== 'function') return;
       try { window.maruVoiceSpeak(String(text)); } catch (_) {}
@@ -274,8 +265,8 @@ function __syncVoiceToggles(enabled){
           r1.checked = (INPUT_MODE === 'realtime');
           r2.checked = (INPUT_MODE === 'confirm');
           // only active when voice is enabled
-          r1.disabled = VOICE_ENABLED;
-          r2.disabled = VOICE_ENABLED;
+          r1.disabled = !VOICE_ENABLED;
+          r2.disabled = !VOICE_ENABLED;
           wrap.style.opacity = VOICE_ENABLED ? '1' : '.45';
         }
         r1.addEventListener('change', function(){ if (r1.checked) setInputMode('realtime'); });
@@ -327,7 +318,7 @@ function __syncVoiceToggles(enabled){
       // Region + Country toggles are mirrored
       const btns = Array.prototype.slice.call(document.querySelectorAll('.maru-region-voice-toggle, .maru-country-voice-toggle'));
       btns.forEach(btn => {
-        btn.classList.toggle('off', VOICE_ENABLED);
+        btn.classList.toggle('off', !VOICE_ENABLED);
         // keep text compact
         try {
           const base = btn.textContent.replace(/\s+/g,' ').trim();
@@ -348,7 +339,7 @@ function __syncVoiceToggles(enabled){
       const btn = t.closest && t.closest('.maru-region-voice-toggle, .maru-country-voice-toggle');
       if (!btn) return;
       e.preventDefault();
-      setVoiceEnabled(VOICE_ENABLED, 'ui');
+      setVoiceEnabled(!VOICE_ENABLED, 'ui');
     }, true);
 
     // Region modal close: must force voice off
@@ -447,7 +438,7 @@ document.addEventListener('click', function(e){
     }
 
     MaruAddon.previewVoice = function(text, context){
-      if (VOICE_ENABLED) return;
+      if (!VOICE_ENABLED) return;
       // realtime typing: update input only
       setTypingText(text);
     };
@@ -689,7 +680,7 @@ document.addEventListener('click', function(e){
     };
 
     MaruAddon.handleVoiceQuery = function (payload, context = {}) {
-      if (VOICE_ENABLED) return;
+      if (!VOICE_ENABLED) return;
 
       let text = '';
       let ctx = context;
