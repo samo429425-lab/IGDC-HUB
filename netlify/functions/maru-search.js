@@ -1,42 +1,34 @@
 /**
  * netlify/functions/maru-search.js
  * -------------------------------------------------
- * MARU SEARCH FUNCTION (FINAL, COMPAT + STANDARD)
+ * MARU SEARCH FUNCTION (FIXED EXPORTS)
  *
- * Fixes: Home search overlay "검색 중 오류" by providing a real Netlify handler.
- * Keeps: maru-search-bridge.js compatibility (exports.maruSearchDispatcher).
+ * Fix:
+ * - Do NOT overwrite module.exports after defining exports.handler
+ * - Export BOTH: handler + maruSearchDispatcher
  *
- * Response schema (STANDARD):
- * {
- *   status: "ok",
- *   engine: "maru-search",
- *   version: "1.2.0",
- *   mode: "search|snapshot|insight|ai",
- *   query: "...",
- *   timestamp: 0000000000,
- *   items: [...],
- *   meta: { count, limit, context, sources }
- * }
+ * Overlay endpoint:
+ *   /.netlify/functions/maru-search?q=...&scope=...&quality=...
+ *
+ * Returns STANDARD:
+ *   { status:'ok', items:[...], meta:{...} }
  */
 
 'use strict';
 
 const DEFAULT_LIMIT = 20;
-const VERSION = '1.2.0';
+const VERSION = '1.2.1';
 
 function normalizeQuery(q) {
   if (!q) return '';
   return String(q).trim().slice(0, 300);
 }
-
 function toInt(v, d) {
   const n = parseInt(v, 10);
   return Number.isFinite(n) && n > 0 ? n : d;
 }
-
-function now() {
-  return Date.now();
-}
+function now() { return Date.now(); }
+function safeJsonParse(s) { try { return JSON.parse(s); } catch (_) { return null; } }
 
 function baseResponse({ mode, query, limit, context }) {
   return {
@@ -56,14 +48,7 @@ function baseResponse({ mode, query, limit, context }) {
   };
 }
 
-function safeJsonParse(s) {
-  try { return JSON.parse(s); } catch (_) { return null; }
-}
-
-/**
- * Core dispatcher (used by other engines via require("./maru-search"))
- * NOTE: Keep this named export for maru-search-bridge.js
- */
+/** Core dispatcher (used by maru-search-bridge.js / global-insight-engine) */
 async function maruSearchDispatcher(params = {}) {
   const mode = String(params.mode || 'search').toLowerCase();
   const q = normalizeQuery(params.q || params.query || '');
@@ -71,12 +56,9 @@ async function maruSearchDispatcher(params = {}) {
   const context = params.context || null;
 
   const res = baseResponse({ mode, query: q, limit, context });
-
-  // No query => return empty but valid schema
   if (!q) return res;
 
-  // === PLACEHOLDER IMPLEMENTATION ===
-  // Guarantees schema stability. Extend later with snapshot + trust + AI + external providers.
+  // Placeholder result (schema-stable)
   res.items = [
     {
       id: `sample-${now()}`,
@@ -86,37 +68,18 @@ async function maruSearchDispatcher(params = {}) {
       score: 1.0,
       source: 'internal',
       url: '',
-      payload: {}
+      payload: { scope: params.scope || null, quality: params.quality || null }
     }
   ].slice(0, limit);
 
   res.meta.count = res.items.length;
   res.meta.sources.push('internal');
 
-  // Non-breaking mode flags
-  if (mode === 'insight') {
-    res.meta.sources.push('insight');
-    res.insight = true;
-    res.summary = `Insight generated for query: ${q}`;
-  }
-  if (mode === 'ai') {
-    res.meta.sources.push('ai');
-    res.ai = true;
-    res.note = 'AI expansion hook ready';
-  }
-  if (mode === 'snapshot') {
-    res.meta.sources.push('snapshot');
-    res.snapshot = true;
-  }
-
   return res;
 }
 
-/**
- * Netlify Function handler
- * Endpoint: /.netlify/functions/maru-search?q=...&mode=...&limit=...
- */
-exports.handler = async function handler(event) {
+/** Netlify Function handler */
+async function handler(event) {
   try {
     const qs = event.queryStringParameters || {};
     const mode = qs.mode || 'search';
@@ -124,7 +87,11 @@ exports.handler = async function handler(event) {
     const limit = qs.limit;
     const context = qs.context ? safeJsonParse(qs.context) : null;
 
-    const data = await maruSearchDispatcher({ mode, q, limit, context });
+    // pass-through optional params so we can introspect later
+    const scope = qs.scope || null;
+    const quality = qs.quality || null;
+
+    const data = await maruSearchDispatcher({ mode, q, limit, context, scope, quality });
 
     return {
       statusCode: 200,
@@ -136,7 +103,7 @@ exports.handler = async function handler(event) {
     };
   } catch (e) {
     return {
-      statusCode: 200,
+      statusCode: 500,
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
         'Cache-Control': 'no-store'
@@ -150,7 +117,7 @@ exports.handler = async function handler(event) {
       })
     };
   }
-};
+}
 
-// Export for internal require() usage
-module.exports = { maruSearchDispatcher };
+exports.handler = handler;
+exports.maruSearchDispatcher = maruSearchDispatcher;
