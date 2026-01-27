@@ -1,20 +1,19 @@
 /**
  * netlify/functions/maru-search.js
- * A-1 REAL FETCH (NAVER first, GOOGLE fallback)
+ * A-1 REAL FETCH (NAVER first, GOOGLE fallback) — SCHEMA FIX
  *
- * Requires Netlify env:
- * - NAVER_API_KEY
+ * FIX:
+ * - Return BOTH: items[] (standard) and results[] (legacy) so front search.js won't show "No results"
+ *
+ * Requires env:
+ * - NAVER_API_KEY (Naver Client ID)
  * - NAVER_CLIENT_SECRET
- * - GOOGLE_API_KEY
- * - GOOGLE_CSE_ID   (Custom Search Engine cx)
- *
- * Output (simple):
- * { status:'ok', query:'...', source:'naver|google', results:[{title,link,snippet}] }
+ * - (optional) GOOGLE_API_KEY + GOOGLE_CSE_ID
  */
 
 'use strict';
 
-const VERSION = 'A1.1';
+const VERSION = 'A1.2';
 const DEFAULT_LIMIT = 10;
 
 function ok(body) {
@@ -50,6 +49,19 @@ function stripHtml(s) {
   return String(s || '').replace(/<[^>]*>/g, '');
 }
 
+function toStandardItems(arr, source) {
+  return (Array.isArray(arr) ? arr : []).map((r, idx) => ({
+    id: r.link || r.url || r.title || `${source}-${idx}`,
+    type: r.type || 'web',
+    title: r.title || '',
+    summary: r.snippet || r.summary || '',
+    url: r.link || r.url || '',
+    source,
+    score: 0.9,
+    payload: {}
+  }));
+}
+
 async function naverSearch(q, limit) {
   const id = process.env.NAVER_API_KEY;
   const secret = process.env.NAVER_CLIENT_SECRET;
@@ -71,6 +83,7 @@ async function naverSearch(q, limit) {
     title: stripHtml(it.title),
     link: it.link || '',
     snippet: stripHtml(it.description),
+    type: 'web'
   }));
 
   return { source: 'naver', results };
@@ -91,36 +104,77 @@ async function googleSearch(q, limit) {
     title: it.title || '',
     link: it.link || '',
     snippet: it.snippet || '',
+    type: 'web'
   }));
 
   return { source: 'google', results };
 }
 
-exports.handler = async function(event) {
+exports.handler = async function (event) {
   try {
     const { q, limit } = pickQ(event);
-    if (!q) return ok({ status: 'ok', query: q, source: null, results: [], meta: { count: 0, limit } });
+    if (!q) {
+      return ok({
+        status: 'ok',
+        engine: 'maru-search',
+        version: VERSION,
+        query: q,
+        source: null,
+        items: [],
+        results: [],
+        meta: { count: 0, limit },
+      });
+    }
 
     // NAVER first
     const n = await naverSearch(q, limit);
     if (n && n.results && n.results.length) {
-      return ok({ status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: n.source, results: n.results, meta: { count: n.results.length, limit } });
+      const items = toStandardItems(n.results, n.source);
+      return ok({
+        status: 'ok',
+        engine: 'maru-search',
+        version: VERSION,
+        query: q,
+        source: n.source,
+        items,
+        results: n.results,   // legacy alias
+        meta: { count: items.length, limit },
+      });
     }
 
     // GOOGLE fallback
     const g = await googleSearch(q, limit);
     if (g && g.results && g.results.length) {
-      return ok({ status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: g.source, results: g.results, meta: { count: g.results.length, limit } });
+      const items = toStandardItems(g.results, g.source);
+      return ok({
+        status: 'ok',
+        engine: 'maru-search',
+        version: VERSION,
+        query: q,
+        source: g.source,
+        items,
+        results: g.results,   // legacy alias
+        meta: { count: items.length, limit },
+      });
     }
 
-    // If both not configured or no results
     if (!n && !g) {
       return fail('Missing env', 'Set NAVER_API_KEY+NAVER_CLIENT_SECRET or GOOGLE_API_KEY+GOOGLE_CSE_ID');
     }
 
-    return ok({ status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: (n ? 'naver' : 'google'), results: [], meta: { count: 0, limit } });
+    // configured but empty
+    return ok({
+      status: 'ok',
+      engine: 'maru-search',
+      version: VERSION,
+      query: q,
+      source: (n ? 'naver' : 'google'),
+      items: [],
+      results: [],
+      meta: { count: 0, limit },
+    });
 
   } catch (e) {
-    return fail('Search failed', String(e && e.message || e));
+    return fail('Search failed', String((e && e.message) || e));
   }
 };
