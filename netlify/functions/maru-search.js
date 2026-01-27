@@ -1,121 +1,156 @@
 /**
- * maru-search.js
+ * netlify/functions/maru-search.js
  * -------------------------------------------------
- * MARU SEARCH CORE (FINAL)
+ * MARU SEARCH FUNCTION (FINAL, COMPAT + STANDARD)
  *
- * Purpose:
- * - Single, universal search execution engine
- * - Supports: search | snapshot | insight | ai
- * - Dependency-safe for Netlify Functions
- * - No UI / no layout / no hard external coupling
+ * Fixes: Home search overlay "검색 중 오류" by providing a real Netlify handler.
+ * Keeps: maru-search-bridge.js compatibility (exports.maruSearchDispatcher).
+ *
+ * Response schema (STANDARD):
+ * {
+ *   status: "ok",
+ *   engine: "maru-search",
+ *   version: "1.2.0",
+ *   mode: "search|snapshot|insight|ai",
+ *   query: "...",
+ *   timestamp: 0000000000,
+ *   items: [...],
+ *   meta: { count, limit, context, sources }
+ * }
  */
 
+'use strict';
+
 const DEFAULT_LIMIT = 20;
+const VERSION = '1.2.0';
 
 function normalizeQuery(q) {
-  if (!q) return "";
+  if (!q) return '';
   return String(q).trim().slice(0, 300);
+}
+
+function toInt(v, d) {
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) && n > 0 ? n : d;
 }
 
 function now() {
   return Date.now();
 }
 
-async function executeSearch({ query, mode, limit, context }) {
-  const q = normalizeQuery(query);
-  const l = limit || DEFAULT_LIMIT;
-
-  const result = {
-    engine: "maru-search",
-    version: "1.0.0-final",
+function baseResponse({ mode, query, limit, context }) {
+  return {
+    status: 'ok',
+    engine: 'maru-search',
+    version: VERSION,
     mode,
-    query: q,
+    query,
     timestamp: now(),
-    results: [],
+    items: [],
     meta: {
-      limit: l,
-      context: context || null
+      count: 0,
+      limit,
+      context: context || null,
+      sources: []
     }
   };
-
-  if (!q) return result;
-
-  result.results = [
-    {
-      type: "text",
-      title: `Result for: ${q}`,
-      score: 1.0,
-      source: "internal"
-    }
-  ].slice(0, l);
-
-  return result;
 }
 
-async function handleSearch(params) {
-  return executeSearch({
-    query: params.q || params.query,
-    mode: "search",
-    limit: params.limit,
-    context: params.context
-  });
+function safeJsonParse(s) {
+  try { return JSON.parse(s); } catch (_) { return null; }
 }
 
-async function handleSnapshot(params) {
-  return executeSearch({
-    query: params.q || params.query,
-    mode: "snapshot",
-    limit: params.limit,
-    context: params.context
-  });
-}
-
-async function handleInsight(params) {
-  const base = await executeSearch({
-    query: params.q || params.query,
-    mode: "search",
-    limit: params.limit,
-    context: params.context
-  });
-
-  return {
-    ...base,
-    insight: true,
-    summary: `Insight generated for query: ${base.query}`
-  };
-}
-
-async function handleAI(params) {
-  const base = await executeSearch({
-    query: params.q || params.query,
-    mode: "ai",
-    limit: params.limit,
-    context: params.context
-  });
-
-  return {
-    ...base,
-    ai: true,
-    note: "AI expansion hook ready"
-  };
-}
-
+/**
+ * Core dispatcher (used by other engines via require("./maru-search"))
+ * NOTE: Keep this named export for maru-search-bridge.js
+ */
 async function maruSearchDispatcher(params = {}) {
-  const mode = params.mode || "search";
+  const mode = String(params.mode || 'search').toLowerCase();
+  const q = normalizeQuery(params.q || params.query || '');
+  const limit = toInt(params.limit, DEFAULT_LIMIT);
+  const context = params.context || null;
 
-  switch (mode) {
-    case "snapshot":
-      return handleSnapshot(params);
-    case "insight":
-      return handleInsight(params);
-    case "ai":
-      return handleAI(params);
-    case "search":
-    default:
-      return handleSearch(params);
+  const res = baseResponse({ mode, query: q, limit, context });
+
+  // No query => return empty but valid schema
+  if (!q) return res;
+
+  // === PLACEHOLDER IMPLEMENTATION ===
+  // Guarantees schema stability. Extend later with snapshot + trust + AI + external providers.
+  res.items = [
+    {
+      id: `sample-${now()}`,
+      type: 'text',
+      title: `Result for: ${q}`,
+      summary: `Maru Search Engine normalized result (mode: ${mode}).`,
+      score: 1.0,
+      source: 'internal',
+      url: '',
+      payload: {}
+    }
+  ].slice(0, limit);
+
+  res.meta.count = res.items.length;
+  res.meta.sources.push('internal');
+
+  // Non-breaking mode flags
+  if (mode === 'insight') {
+    res.meta.sources.push('insight');
+    res.insight = true;
+    res.summary = `Insight generated for query: ${q}`;
   }
+  if (mode === 'ai') {
+    res.meta.sources.push('ai');
+    res.ai = true;
+    res.note = 'AI expansion hook ready';
+  }
+  if (mode === 'snapshot') {
+    res.meta.sources.push('snapshot');
+    res.snapshot = true;
+  }
+
+  return res;
 }
 
-module.exports = {
-  maruSearchDispatcher
+/**
+ * Netlify Function handler
+ * Endpoint: /.netlify/functions/maru-search?q=...&mode=...&limit=...
+ */
+exports.handler = async function handler(event) {
+  try {
+    const qs = event.queryStringParameters || {};
+    const mode = qs.mode || 'search';
+    const q = qs.q || qs.query || '';
+    const limit = qs.limit;
+    const context = qs.context ? safeJsonParse(qs.context) : null;
+
+    const data = await maruSearchDispatcher({ mode, q, limit, context });
+
+    return {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store'
+      },
+      body: JSON.stringify(data)
+    };
+  } catch (e) {
+    return {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store'
+      },
+      body: JSON.stringify({
+        status: 'error',
+        engine: 'maru-search',
+        version: VERSION,
+        message: 'Search function failed',
+        timestamp: now()
+      })
+    };
+  }
 };
+
+// Export for internal require() usage
+module.exports = { maruSearchDispatcher };
