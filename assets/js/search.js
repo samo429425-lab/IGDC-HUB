@@ -1,80 +1,128 @@
-
 /**
- * assets/js/search.js
- * MARU Search UI Controller v1.0
- * - Renders clickable results
- * - Opens links in new tab
- * - Handles empty / error states
+ * assets/js/search.js — IGDC Search Page Controller (v1.1)
+ * Matches current search.html IDs:
+ * - #searchInput, #searchBtn, #results, #searchMeta, #externalLinks, #googleTranslateLink
+ * Behavior:
+ * - Reads ?q= from URL and auto-runs
+ * - Renders clickable links (url/link)
  */
 
-'use strict';
-
 (function () {
-  const params = new URLSearchParams(window.location.search);
-  const query = params.get('q') || '';
-  const container = document.getElementById('search-results');
-  const input = document.getElementById('search-input');
-  const form = document.getElementById('search-form');
+  'use strict';
 
-  if (input) input.value = query;
+  const input = document.getElementById('searchInput');
+  const btn = document.getElementById('searchBtn');
+  const resultsEl = document.getElementById('results');
+  const metaEl = document.getElementById('searchMeta');
+  const externalEl = document.getElementById('externalLinks');
+  const translateLink = document.getElementById('googleTranslateLink');
 
-  if (form) {
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const q = input.value.trim();
-      if (!q) return;
-      window.location.href = `/search.html?q=${encodeURIComponent(q)}`;
-    });
+  function qp(name) {
+    return new URLSearchParams(window.location.search).get(name) || '';
   }
 
-  async function runSearch(q) {
-    if (!q) {
-      renderEmpty('검색어를 입력하세요.');
+  function esc(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function setStatus(text) {
+    if (!resultsEl) return;
+    resultsEl.innerHTML = `<div class="status">${esc(text)}</div>`;
+  }
+
+  function render(items) {
+    if (!resultsEl) return;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      setStatus('No results.');
       return;
     }
 
-    try {
-      const res = await fetch(`/.netlify/functions/maru-search?q=${encodeURIComponent(q)}`);
-      const data = await res.json();
+    resultsEl.innerHTML = '';
+    items.forEach((it) => {
+      const title = it.title || '(제목 없음)';
+      const summary = it.summary || it.snippet || '';
+      const url = it.url || it.link || '';
 
-      const items = data.items || data.results || [];
-      if (!items.length) {
-        renderEmpty('검색 결과가 없습니다.');
-        return;
+      const card = document.createElement('div');
+      card.className = 'result-item';
+
+      if (url) {
+        card.innerHTML = `
+          <a class="result-title" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(title)}</a>
+          <div class="result-summary">${esc(summary)}</div>
+        `;
+      } else {
+        card.innerHTML = `
+          <div class="result-title">${esc(title)}</div>
+          <div class="result-summary">${esc(summary)}</div>
+        `;
       }
 
-      renderItems(items);
-    } catch (err) {
-      renderEmpty('검색 중 오류가 발생했습니다.');
-    }
-  }
-
-  function renderItems(items) {
-    container.innerHTML = '';
-    items.forEach(item => {
-      const card = document.createElement('div');
-      card.className = 'search-item';
-
-      const title = document.createElement('a');
-      title.href = item.url || item.link || '#';
-      title.target = '_blank';
-      title.rel = 'noopener noreferrer';
-      title.textContent = item.title || '(제목 없음)';
-      title.className = 'search-title';
-
-      const snippet = document.createElement('p');
-      snippet.className = 'search-snippet';
-      snippet.textContent = item.summary || item.snippet || '';
-
-      card.appendChild(title);
-      card.appendChild(snippet);
-      container.appendChild(card);
+      resultsEl.appendChild(card);
     });
   }
 
-  function renderEmpty(msg) {
-    container.innerHTML = `<div class="search-empty">${msg}</div>`;
+  async function run(q) {
+    q = String(q || '').trim();
+    if (!q) {
+      setStatus('Enter a search term.');
+      return;
+    }
+
+    if (metaEl) metaEl.textContent = `Results for: "${q}"`;
+    if (translateLink) {
+      translateLink.href = 'https://translate.google.com/translate?u=' + encodeURIComponent(window.location.href);
+    }
+
+    setStatus('Searching...');
+
+    try {
+      const res = await fetch(`/.netlify/functions/maru-search?q=${encodeURIComponent(q)}`, { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP_' + res.status);
+      const data = await res.json();
+
+      const items = data.items || data.results || [];
+      render(items);
+
+      if (externalEl) {
+        externalEl.style.display = 'block';
+        externalEl.innerHTML = `
+          <strong>External search:</strong><br/>
+          <a href="https://www.google.com/search?q=${encodeURIComponent(q)}" target="_blank" rel="noopener noreferrer">Google</a>
+          <a href="https://www.bing.com/search?q=${encodeURIComponent(q)}" target="_blank" rel="noopener noreferrer">Bing</a>
+          <a href="https://search.naver.com/search.naver?query=${encodeURIComponent(q)}" target="_blank" rel="noopener noreferrer">Naver</a>
+        `;
+      }
+    } catch (e) {
+      console.error(e);
+      setStatus('Search error occurred.');
+    }
   }
 
-  runSearch(query);
+  function trigger() {
+    const q = (input && input.value ? input.value : '').trim();
+    if (!q) return;
+    window.history.replaceState(null, '', `?q=${encodeURIComponent(q)}`);
+    run(q);
+  }
+
+  if (btn) btn.addEventListener('click', trigger);
+  if (input) {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        trigger();
+      }
+    });
+  }
+
+  const initial = qp('q');
+  if (input) input.value = initial;
+  run(initial);
 })();
