@@ -2104,16 +2104,60 @@ section.shopping-section, section.shopping-section .shopping-rows {
 <div class="desc desc2">세상의 모든 이들에게 행운이 있으시길 기원합니다.</div>
 </div>
 </div>
-<!-- ========== HERO SEARCH BAR (INSERT HERE) ========== -->
+<!-- ========== HERO SEARCH BAR (FINAL) ========== -->
 <section class="hero-search" aria-label="사이트 검색">
   <div class="hero-search-inner">
     <div class="hero-search-bar" role="search">
-      <input id="homeSearchInput" type="search" placeholder="검색어를 입력하세요" autocomplete="off" />
-      <button id="homeSearchBtn" type="button" aria-label="검색 실행">검색</button>
+      <input
+        id="homeSearchInput"
+        type="search"
+        placeholder="검색어를 입력하세요"
+        autocomplete="off"
+      />
+      <button
+        id="homeSearchBtn"
+        type="button"
+        aria-label="검색 실행"
+      >
+        검색
+      </button>
     </div>
-    <div class="hero-search-hint">검색 결과는 팝업 창으로 표시됩니다.</div>
+    <div class="hero-search-hint">검색 결과는 새 창으로 표시됩니다.</div>
   </div>
 </section>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const input = document.getElementById('homeSearchInput');
+  const btn = document.getElementById('homeSearchBtn');
+
+  if (!input || !btn) return;
+
+  const openSearchWindow = () => {
+    const q = input.value.trim();
+    if (!q) return;
+
+    window.open(
+      `/search.html?q=${encodeURIComponent(q)}`,
+      'maru_search',
+      'noopener,noreferrer,width=1200,height=800'
+    );
+  };
+
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openSearchWindow();
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      openSearchWindow();
+    }
+  });
+});
+</script>
 
 <!-- ========== NEWS (Middle) ========== -->
 <section aria-label="대륙별 뉴스" class="news-section">
