@@ -1,6 +1,4 @@
-// search.js
-// IGDC Unified Search Page Logic (Merged & Final)
-
+// search.js — v3.1 (IGDC Unified Search Page)
 (function () {
   const input = document.getElementById("searchInput");
   const btn = document.getElementById("searchBtn");
@@ -9,7 +7,7 @@
   const externalEl = document.getElementById("externalLinks");
   const translateLink = document.getElementById("googleTranslateLink");
 
-  function getQueryParam() {
+  function qp() {
     const params = new URLSearchParams(window.location.search);
     return params.get("q") || "";
   }
@@ -18,19 +16,32 @@
     resultsEl.innerHTML = `<div class="status">${text}</div>`;
   }
 
-  function renderItems(items) {
-    if (!items || items.length === 0) {
+  function esc(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function render(items) {
+    if (!Array.isArray(items) || items.length === 0) {
       setStatus("No internal results found.");
       return;
     }
     resultsEl.innerHTML = "";
-    items.forEach(item => {
+    items.forEach((item) => {
       const div = document.createElement("div");
       div.className = "result-item";
-      div.innerHTML = `
-        <div class="result-title">${item.title || "Untitled"}</div>
-        <div class="result-summary">${item.summary || ""}</div>
-      `;
+      const title = esc(item.title || "Untitled");
+      const summary = esc(item.summary || "");
+      const url = item.url ? String(item.url) : "";
+      const linkHtml = url
+        ? `<a class="result-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${title}</a>`
+        : `<div class="result-title">${title}</div>`;
+
+      div.innerHTML = `${linkHtml}<div class="result-summary">${summary}</div>`;
       resultsEl.appendChild(div);
     });
   }
@@ -41,46 +52,62 @@
       return;
     }
 
-    metaEl.textContent = `Results for: "${q}"`;
-    translateLink.href = "https://translate.google.com/translate?u=" + encodeURIComponent(window.location.href);
+    if (metaEl) metaEl.textContent = `Results for: "${q}"`;
+    if (translateLink) {
+      translateLink.href =
+        "https://translate.google.com/translate?u=" +
+        encodeURIComponent(window.location.href);
+    }
+
     setStatus("Searching...");
 
     try {
-      const res = await fetch(`/.netlify/functions/maru-search?q=${encodeURIComponent(q)}`);
+      const res = await fetch(
+        `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}`,
+        { cache: "no-store" }
+      );
+      if (!res.ok) throw new Error("HTTP error");
       const data = await res.json();
 
-      if (data.status !== "ok" || !Array.isArray(data.items)) {
-        throw new Error("Invalid search response");
+      if (!data || data.status !== "ok" || !Array.isArray(data.items)) {
+        throw new Error("Invalid schema");
       }
 
-      renderItems(data.items);
+      render(data.items);
 
-      externalEl.style.display = "block";
-      externalEl.innerHTML = `
-        <strong>External search:</strong><br/>
-        <a href="https://www.google.com/search?q=${encodeURIComponent(q)}" target="_blank">Google</a>
-        <a href="https://www.bing.com/search?q=${encodeURIComponent(q)}" target="_blank">Bing</a>
-        <a href="https://search.naver.com/search.naver?query=${encodeURIComponent(q)}" target="_blank">Naver</a>
-      `;
+      if (externalEl) {
+        externalEl.style.display = "block";
+        externalEl.innerHTML = `
+          <strong>External search:</strong><br/>
+          <a href="https://www.google.com/search?q=${encodeURIComponent(q)}" target="_blank">Google</a>
+          <a href="https://www.bing.com/search?q=${encodeURIComponent(q)}" target="_blank">Bing</a>
+          <a href="https://search.naver.com/search.naver?query=${encodeURIComponent(q)}" target="_blank">Naver</a>
+        `;
+      }
     } catch (e) {
       console.error(e);
       setStatus("Search error occurred.");
     }
   }
 
-  function triggerSearch() {
-    const q = input.value.trim();
+  function trigger() {
+    const q = (input && input.value ? input.value : "").trim();
     if (!q) return;
     window.history.replaceState(null, "", `?q=${encodeURIComponent(q)}`);
     runSearch(q);
   }
 
-  btn.addEventListener("click", triggerSearch);
-  input.addEventListener("keydown", e => { if (e.key === "Enter") triggerSearch(); });
-
-  const initialQuery = getQueryParam();
-  if (initialQuery) {
-    input.value = initialQuery;
-    runSearch(initialQuery);
+  if (btn) btn.addEventListener("click", trigger);
+  if (input) {
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        trigger();
+      }
+    });
   }
+
+  const initial = qp();
+  if (input && initial) input.value = initial;
+  if (initial) runSearch(initial);
 })();
