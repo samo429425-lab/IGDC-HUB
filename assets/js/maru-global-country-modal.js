@@ -729,7 +729,7 @@ const voiceOn =
 });
 
 
-const closeBtn = el('button', null, '닫기');
+const closeBtn = el('button', 'maru-country-close', '닫기');
 closeBtn.id = 'maruCountryClose';
 
 header.appendChild(title);
