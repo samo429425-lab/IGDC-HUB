@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <title>IGDC 통합 검색</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex,nofollow" />
+
   <style>
     body {
       margin: 0;
@@ -66,20 +68,21 @@
     }
   </style>
 </head>
+
 <body>
+  <header>
+    <div class="search-bar">
+      <input id="searchInput" type="search" placeholder="검색어를 입력하세요" autocomplete="off" />
+      <button id="searchBtn" type="button">검색</button>
+    </div>
+  </header>
 
-<header>
-  <div class="search-bar">
-    <input id="searchInput" type="search" placeholder="검색어를 입력하세요" />
-    <button id="searchBtn">검색</button>
-  </div>
-</header>
+  <main>
+    <div id="searchStatus">검색어를 입력하세요.</div>
+    <div id="searchResults"></div>
+  </main>
 
-<main>
-  <div id="searchStatus"></div>
-  <div id="searchResults"></div>
-</main>
-
-<script src="/assets/js/search.js"></script>
+  <!-- 검색 전용 JS (페이지 이동 없음) -->
+  <script src="/assets/js/search.js"></script>
 </body>
 </html>
