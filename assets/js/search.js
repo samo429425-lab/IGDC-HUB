@@ -1,76 +1,181 @@
-// IGDC Search.js — FINAL A+ (NON-DESTRUCTIVE PATCH)
-// Fix: external link click opens in new tab (no iframe/embed)
-// All existing logic preserved
+
+/* ================= IGDC Search.js — RICH CARDS CANONICAL v2 =================
+ * GUARANTEES:
+ * 1) NO result limiting (no slice/pageSize)
+ * 2) NO source pruning (all multi-source fan-out preserved)
+ * 3) NO pipeline changes (engine/bridge/snapshot/feed untouched)
+ * 4) ADAPTER-ONLY: accepts every known result shape, never deletes fields
+ * ========================================================================== */
 
 document.addEventListener('DOMContentLoaded', () => {
   if (!location.pathname.endsWith('/search.html')) return;
 
-  const input = document.getElementById('searchInput') || document.getElementById('q');
-  const btn = document.getElementById('searchBtn');
-  const status = document.getElementById('searchStatus') || document.getElementById('status');
-  const results = document.getElementById('searchResults') || document.getElementById('results');
+  const input =
+    document.getElementById('searchInput') ||
+    document.getElementById('q');
+
+  const btn =
+    document.getElementById('searchBtn');
+
+  const status =
+    document.getElementById('searchStatus') ||
+    document.getElementById('status');
+
+  const results =
+    document.getElementById('searchResults') ||
+    document.getElementById('results');
+
   if (!input || !btn || !status || !results) return;
 
-  // ===== Same-page detail view (NO external navigation) =====
-  let __LAST_ITEMS__ = [];
-  let __IN_DETAIL__ = false;
+  let __ALL_ITEMS__ = [];
 
-  function renderList(items){
-    __IN_DETAIL__ = false;
-    results.innerHTML = '';
-    status.textContent = items.length ? `${items.length} results` : 'No results.';
-    items.forEach(render);
+  /* ---------- ADAPTERS (non-destructive) ---------- */
+  function unwrapResponse(x){
+    if (!x) return {};
+    if (Array.isArray(x.items) || Array.isArray(x.results)) return x;
+    if (x.data && (Array.isArray(x.data.items) || Array.isArray(x.data.results))) return x.data;
+    if (x.baseResult) {
+      if (Array.isArray(x.baseResult.items) || Array.isArray(x.baseResult.results)) return x.baseResult;
+      if (x.baseResult.data) return x.baseResult.data;
+    }
+    return x;
   }
 
-  function showDetail(it){
-    __IN_DETAIL__ = true;
-    results.innerHTML = '';
-    status.textContent = 'Result detail';
+  async function fetchMaru(q){
+    const endpoints = [
+      '/.netlify/functions/maru-search',
+      '/netlify/functions/maru-search'
+    ];
+    let lastErr;
+    for (const ep of endpoints){
+      try{
+        const r = await fetch(`${ep}?q=${encodeURIComponent(q)}`, { cache: 'no-store' });
+        if (!r.ok) { lastErr = new Error(r.status); continue; }
+        return await r.json();
+      }catch(e){ lastErr = e; }
+    }
+    throw lastErr;
+  }
 
-    const wrap = document.createElement('div');
-    wrap.className = 'card';
-    wrap.style.cursor = 'default';
+  /* ---------- HELPERS ---------- */
+  function domainOf(url){
+    try { return new URL(url).hostname.replace(/^www\./,''); }
+    catch(e){ return ''; }
+  }
+
+  function faviconOf(url){
+    const d = domainOf(url);
+    return d ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64` : '';
+  }
+
+  function sourceBadge(url){
+    const u = (url || '').toLowerCase();
+    if (u.includes('wikipedia.org')) return { t:'Wikipedia', i:'📘' };
+    if (u.includes('youtube.com') || u.includes('youtu.be')) return { t:'YouTube', i:'▶️' };
+    if (u.includes('naver.')) return { t:'NAVER', i:'🟢' };
+    if (u.includes('google.')) return { t:'Google', i:'🔵' };
+    if (u.includes('bing.') || u.includes('microsoft.')) return { t:'Bing/MS', i:'🟦' };
+    if (u.includes('reuters.') || u.includes('nytimes.') || u.includes('bbc.')) return { t:'News', i:'📰' };
+    return { t:'Web', i:'🌐' };
+  }
+
+  /* ---------- RENDER ---------- */
+  function clear(){
+    results.innerHTML = '';
+  }
+
+  function renderAll(items){
+    clear();
+    status.textContent = items.length ? `${items.length} results` : 'No results';
+    items.forEach(renderCard);
+  }
+
+  function renderCard(it){
+    const url = it.url || it.link || it.href || '';
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const thumb = it.thumbnail || it.image || it.ogImage || it.previewImage;
+    if (thumb){
+      const img = document.createElement('img');
+      img.className = 'thumb';
+      img.src = thumb;
+      img.loading = 'lazy';
+      img.onerror = () => img.remove();
+      card.appendChild(img);
+    }
+
+    const body = document.createElement('div');
 
     const title = document.createElement('div');
     title.className = 'title';
-    title.textContent = (it.title || it.name || 'Untitled').trim();
+    title.textContent = it.title || it.name || 'Untitled';
 
     const desc = document.createElement('div');
     desc.className = 'desc';
-    desc.textContent = (it.summary || it.description || it.snippet || '').trim();
+    desc.textContent = it.summary || it.description || it.snippet || '';
 
-    const url = it.url || it.link || '';
-    const link = document.createElement('a');
-    link.href = url || '#';
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    link.textContent = url ? 'Open original in new tab' : '';
-    link.style.display = url ? 'inline-block' : 'none';
-    link.style.marginTop = '10px';
-    link.style.fontSize = '14px';
+    const meta = document.createElement('div');
+    meta.className = 'meta';
 
-    wrap.appendChild(title);
-    if (desc.textContent) wrap.appendChild(desc);
-    wrap.appendChild(link);
-    results.appendChild(wrap);
+    const fav = document.createElement('img');
+    fav.className = 'favicon';
+    const f = faviconOf(url);
+    if (f){ fav.src = f; fav.loading = 'lazy'; } else fav.style.display='none';
+
+    const badge = document.createElement('span');
+    const sb = sourceBadge(url);
+    badge.className = 'badge';
+    badge.textContent = `${sb.i} ${sb.t}`;
+
+    const dom = document.createElement('span');
+    dom.className = 'domain';
+    dom.textContent = domainOf(url);
+
+    meta.appendChild(fav);
+    meta.appendChild(badge);
+    meta.appendChild(dom);
+
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    if (url){
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = 'Open';
+      actions.appendChild(a);
+    }
+
+    body.appendChild(title);
+    if (desc.textContent) body.appendChild(desc);
+    body.appendChild(meta);
+    body.appendChild(actions);
+
+    card.appendChild(body);
+    results.appendChild(card);
   }
 
-  window.addEventListener('popstate', () => {
-    const st = history.state;
-    if (st && st.view === 'detail' && st.url) {
-      const found = (__LAST_ITEMS__ || []).find(x => (x.url || x.link) === st.url);
-      if (found) showDetail(found);
-      else if (__LAST_ITEMS__.length) renderList(__LAST_ITEMS__);
-    } else if (__LAST_ITEMS__.length) {
-      renderList(__LAST_ITEMS__);
+  /* ---------- SEARCH FLOW ---------- */
+  async function run(q){
+    status.textContent = 'Searching…';
+    clear();
+    try{
+      const raw = await fetchMaru(q);
+      const data = unwrapResponse(raw) || {};
+      const items = data.items || data.results || [];
+      __ALL_ITEMS__ = items.map(x => ({ ...x })); // copy, no filter
+      renderAll(__ALL_ITEMS__);
+    }catch(e){
+      console.error(e);
+      status.textContent = 'Search error';
     }
-  });
-  // ===== /Same-page detail view =====
+  }
 
-  const params = new URLSearchParams(location.search);
-  const q0 = (params.get('q') || '').trim();
-  if (q0) { input.value = q0; runSearch(q0); }
-  else status.textContent = '';
+  /* ---------- INIT ---------- */
+  const p = new URLSearchParams(location.search);
+  const q0 = (p.get('q') || '').trim();
+  if (q0){ input.value = q0; run(q0); }
 
   btn.onclick = () => {
     const q = input.value.trim();
@@ -78,105 +183,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const u = new URL(location.href);
     u.searchParams.set('q', q);
     history.pushState(null, '', u.toString());
-    runSearch(q);
+    run(q);
   };
 
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') btn.click(); });
-
-  function unwrap(x){
-    if (!x) return x;
-    if (x.data && (Array.isArray(x.data.items) || Array.isArray(x.data.results))) return x.data;
-    if (x.baseResult && (Array.isArray(x.baseResult.items) || Array.isArray(x.baseResult.results))) return x.baseResult;
-    if (x.baseResult && x.baseResult.data && (Array.isArray(x.baseResult.data.items) || Array.isArray(x.baseResult.data.results))) return x.baseResult.data;
-    return x;
-  }
-
-  async function fetchMaru(q){
-    const urls = [
-      `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}`,
-      `/netlify/functions/maru-search?q=${encodeURIComponent(q)}`
-    ];
-    let lastErr;
-    for (const u of urls){
-      try{
-        const r = await fetch(u, { cache: 'no-store' });
-        if (!r.ok) { lastErr = new Error('HTTP '+r.status); continue; }
-        return await r.json();
-      }catch(e){ lastErr = e; }
-    }
-    throw lastErr;
-  }
-
-  async function runSearch(q){
-    status.textContent = 'Searching…';
-    results.innerHTML = '';
-    try{
-      const j0 = await fetchMaru(q);
-      const d = unwrap(j0) || {};
-      const items = d.items || d.results || [];
-      __LAST_ITEMS__ = items.map(x => ({...x}));
-      if (!__LAST_ITEMS__.length) { status.textContent = 'No results.'; return; }
-      renderList(__LAST_ITEMS__);
-      }catch(e){
-      console.error(e);
-      status.textContent = 'Search error';
-    }
-  }
-
-  function detectSourceByUrl(url){
-    const u = (url || '').toLowerCase();
-    if (u.includes('wikipedia.org')) return { n:'Wikipedia', i:'📘' };
-    if (u.includes('youtube.com') || u.includes('youtu.be')) return { n:'YouTube', i:'▶️' };
-    if (u.includes('google.')) return { n:'Google', i:'🔵' };
-    if (u.includes('bing.') || u.includes('microsoft.com')) return { n:'Bing/MS', i:'🟦' };
-    if (u.includes('naver.')) return { n:'NAVER', i:'🟢' };
-    if (u.includes('reuters.com')) return { n:'Reuters', i:'📰' };
-    if (u.includes('nytimes.com')) return { n:'NYTimes', i:'📰' };
-    return { n:'Web', i:'🌐' };
-  }
-
-  function render(it){
-    const url = it.url || it.link || '';
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.style.cursor = url ? 'pointer' : 'default';
-
-    // 🔴 FIX: open external link directly (new tab)
-    if (url) {
-      card.onclick = () => { window.location.href = url; };
-    }
-
-    if (it.thumbnail || it.image){
-      const img = document.createElement('img');
-      img.className = 'thumb';
-      img.src = it.thumbnail || it.image;
-      img.onerror = () => img.remove();
-      card.appendChild(img);
-    }
-
-    const body = document.createElement('div');
-
-    const t = document.createElement('div');
-    t.className = 'title';
-    t.textContent = (it.title || it.name || 'Untitled').trim();
-
-    const d = document.createElement('div');
-    d.className = 'desc';
-    d.textContent = (it.summary || it.description || it.snippet || '').trim();
-
-    const m = document.createElement('div');
-    m.className = 'meta';
-    const src = detectSourceByUrl(url);
-    const b = document.createElement('span');
-    b.className = 'badge';
-    b.textContent = `${src.i} ${src.n}`;
-    m.appendChild(b);
-
-    body.appendChild(t);
-    if (d.textContent) body.appendChild(d);
-    body.appendChild(m);
-
-    card.appendChild(body);
-    results.appendChild(card);
-  }
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') btn.click();
+  });
 });
