@@ -3,55 +3,6 @@
 // All existing logic preserved
 
 document.addEventListener('DOMContentLoaded', () => {
-
-  // ===== INLINE VIEW HELPERS (non-destructive) =====
-  const __INLINE__ = {
-    iframe: null,
-    container: null
-  };
-
-  function ensureInlineContainer(){
-    if (__INLINE__.container) return __INLINE__.container;
-    const c = document.createElement('div');
-    c.id = 'inlineView';
-    c.style.position = 'fixed';
-    c.style.top = '0';
-    c.style.left = '0';
-    c.style.width = '100%';
-    c.style.height = '100%';
-    c.style.background = '#fff';
-    c.style.zIndex = '9999';
-    c.style.display = 'none';
-    c.innerHTML = '<div style="height:48px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;padding:0 12px;font-weight:600">← Back</div>';
-    c.firstChild.onclick = () => history.back();
-    document.body.appendChild(c);
-    __INLINE__.container = c;
-    return c;
-  }
-
-  function openInline(url){
-    const c = ensureInlineContainer();
-    c.style.display = 'block';
-    if (__INLINE__.iframe) __INLINE__.iframe.remove();
-    const f = document.createElement('iframe');
-    f.src = url;
-    f.style.border = '0';
-    f.style.width = '100%';
-    f.style.height = 'calc(100% - 48px)';
-    c.appendChild(f);
-    __INLINE__.iframe = f;
-  }
-
-  function closeInline(){
-    if (__INLINE__.container) __INLINE__.container.style.display = 'none';
-    if (__INLINE__.iframe) { __INLINE__.iframe.remove(); __INLINE__.iframe = null; }
-  }
-
-  window.addEventListener('popstate', () => {
-    closeInline();
-  });
-  // ===== /INLINE VIEW HELPERS =====
-
   if (!location.pathname.endsWith('/search.html')) return;
 
   const input = document.getElementById('searchInput');
@@ -136,7 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 🔴 FIX: open external link directly (new tab)
     if (url) {
-      card.onclick = () => { history.pushState({ inline: true }, '', '?q=' + encodeURIComponent(input.value.trim()) + '&u=' + encodeURIComponent(url)); openInline(url); };
+      card.onclick = () => window.open(url, '_blank', 'noopener,noreferrer');
     }
 
     if (it.thumbnail || it.image){
