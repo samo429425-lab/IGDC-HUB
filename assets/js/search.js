@@ -1,105 +1,77 @@
 /* =========================================================
    IGDC / MARU SEARCH
-   search.js  (v2.0 – No Redirect / Standalone)
-   =========================================================
-   역할:
-   - search.html 전용
-   - 페이지 이동 없음
-   - URL ?q= 파라미터 읽어서 검색 실행
-   - 버튼/엔터 = 재검색(fetch만)
+   search.js  (Standalone v2.1)
    ========================================================= */
 
 document.addEventListener('DOMContentLoaded', () => {
   const params = new URLSearchParams(window.location.search);
-  const initialQuery = params.get('q') || '';
+  const q = params.get('q') || '';
 
   const input = document.getElementById('searchInput');
-  const button = document.getElementById('searchBtn');
-  const resultArea = document.getElementById('searchResults');
-  const statusArea = document.getElementById('searchStatus');
+  const btn = document.getElementById('searchBtn');
+  const status = document.getElementById('searchStatus');
+  const results = document.getElementById('searchResults');
 
-  if (!input || !button || !resultArea || !statusArea) {
-    console.error('[MARU SEARCH] 필수 DOM 요소 누락');
-    return;
-  }
+  if (input && q) input.value = q;
 
-  input.value = initialQuery;
+  async function runSearch(keyword) {
+    if (!status || !results) return;
 
-  if (initialQuery) {
-    runSearch(initialQuery);
-  } else {
-    setStatus('검색어를 입력하세요.');
-  }
-
-  button.addEventListener('click', (e) => {
-    e.preventDefault();
-    const q = input.value.trim();
-    if (!q) return;
-    runSearch(q);
-  });
-
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const q = input.value.trim();
-      if (!q) return;
-      runSearch(q);
-    }
-  });
-
-  async function runSearch(q) {
-    setStatus('검색 중입니다…');
-    resultArea.innerHTML = '';
+    status.textContent = '검색 중...';
+    results.innerHTML = '';
 
     try {
       const res = await fetch(
-        `/netlify/functions/maru-search?q=${encodeURIComponent(q)}`
+        `/.netlify/functions/maru-search?q=${encodeURIComponent(keyword)}`
       );
 
-      if (!res.ok) throw new Error('Search API Error');
+      if (!res.ok) throw new Error('Netlify Function Error');
 
       const data = await res.json();
-      renderResults(data?.results || []);
-    } catch (err) {
-      console.error('[MARU SEARCH ERROR]', err);
-      setStatus('검색 중 오류가 발생했습니다.');
-    }
-  }
+      const list = data.results || [];
 
-  function renderResults(results) {
-    resultArea.innerHTML = '';
-
-    if (!Array.isArray(results) || results.length === 0) {
-      setStatus('검색 결과가 없습니다.');
-      return;
-    }
-
-    setStatus(`${results.length}개의 검색 결과`);
-
-    results.forEach(item => {
-      const card = document.createElement('div');
-      card.className = 'search-result-item';
-
-      const title = document.createElement('a');
-      title.textContent = item.title || '제목 없음';
-      title.href = item.url || '#';
-
-      if (item.external) {
-        title.target = '_blank';
-        title.rel = 'noopener noreferrer';
+      if (list.length === 0) {
+        status.textContent = '검색 결과가 없습니다.';
+        return;
       }
 
-      const desc = document.createElement('div');
-      desc.className = 'search-result-desc';
-      desc.textContent = item.description || '';
+      status.textContent = `${list.length}건의 결과`;
 
-      card.appendChild(title);
-      card.appendChild(desc);
-      resultArea.appendChild(card);
-    });
+      list.forEach(item => {
+        const wrap = document.createElement('div');
+        wrap.className = 'search-item';
+
+        const a = document.createElement('a');
+        a.textContent = item.title || '제목 없음';
+        a.href = item.url || '#';
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+
+        const p = document.createElement('p');
+        p.textContent = item.description || '';
+
+        wrap.appendChild(a);
+        wrap.appendChild(p);
+        results.appendChild(wrap);
+      });
+
+    } catch (err) {
+      console.error(err);
+      status.textContent = '검색 중 오류가 발생했습니다.';
+    }
   }
 
-  function setStatus(text) {
-    statusArea.textContent = text;
+  if (q) runSearch(q);
+
+  if (btn && input) {
+    btn.addEventListener('click', () => {
+      const keyword = input.value.trim();
+      if (!keyword) return;
+      window.location.search = `?q=${encodeURIComponent(keyword)}`;
+    });
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') btn.click();
+    });
   }
 });
