@@ -1,134 +1,151 @@
+
+/**
+ * feed.js — MARU FUTURE FEED ENGINE (v2.0)
+ * ------------------------------------------------------------
+ * ROLE:
+ * - Unified feed compiler for MARU Platform
+ * - Primary inputs:
+ *    1) front.snapshot.json
+ *    2) page-level JSONs (future extension)
+ *    3) psom.json (priority / weighting / enable control)
+ * - Secondary linkage:
+ *    - core.js (validation / scoring hooks)
+ *    - maru-global-insight-engine (indirect caller)
+ *
+ * PRINCIPLES:
+ * - No dependency on snapshot.internal.v1.json
+ * - Forward-compatible, non-breaking
+ * - Expand-only architecture
+ */
+
+"use strict";
+
 const fs = require("fs");
 const path = require("path");
 
-/**
- * feed.js (HOME compiler - fixed mapping)
- * - Handles: ?page=homeproducts
- * - Reads: netlify/functions/data/snapshot.internal.v1.json
- * - Compiles sections into keys expected by home automap:
- *   home_1..home_5, home_right_top/middle/bottom
- *
- * NOTE:
- * - Other pages: returns {} (non-breaking for HOME-only phase).
- * - If you have an existing multi-page feed.js, merge ONLY the homeproducts branch.
- */
-
-const DATA_DIR = path.join(__dirname, "data");
-const SNAPSHOT_PATH = path.join(DATA_DIR, "snapshot.internal.v1.json");
-
-// Optional per-section data files (when snapshot doesn't include them)
-const SECTION_FILES = {
-  home_1: "home_1.json",
-  home_2: "home_2.json",
-  home_3: "home_3.json",
-  home_4: "home_4.json",
-  home_5: "home_5.json",
-  home_right_top: "home_right_top.json",
-  home_right_middle: "home_right_middle.json",
-  home_right_bottom: "home_right_bottom.json",
-};
-
-function readJsonSafe(p) {
-  try { return JSON.parse(fs.readFileSync(p, "utf8")); }
-  catch (e) { return {}; }
+// ---- CORE ENGINE HOOK (optional, safe-load) -----------------
+let Core = null;
+try {
+  Core = require("./core");
+} catch (e) {
+  Core = null;
 }
 
-function extractItems(obj){
-  // Accept {items:[...]}, {cards:[...]}, or raw array
-  if (Array.isArray(obj)) return obj;
-  if (!obj || typeof obj !== 'object') return [];
-  if (Array.isArray(obj.items)) return obj.items;
-  if (Array.isArray(obj.cards)) return obj.cards;
-  if (Array.isArray(obj.data)) return obj.data;
-  if (Array.isArray(obj.list)) return obj.list;
-  return [];
+// ---- PATH RESOLUTION ----------------------------------------
+const DATA_ROOT = path.join(__dirname, "data");
+
+const FRONT_SNAPSHOT_PATH = path.join(DATA_ROOT, "front.snapshot.json");
+const PSOM_PATH = path.join(DATA_ROOT, "psom.json");
+
+// ---- UTIL ---------------------------------------------------
+function safeReadJSON(p) {
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf-8"));
+  } catch (e) {
+    return null;
+  }
 }
 
-function toArr(v){ return Array.isArray(v) ? v : []; }
-
-function normalizeItems(sec){
-  if (!sec) return [];
-  if (Array.isArray(sec.items)) return sec.items;
-  if (Array.isArray(sec.cards)) return sec.cards;
-  return [];
-}
-
-// Map snapshot section ids (meta.category) -> home keys (data-psom-key)
-const ID_MAP = {
-  "home-shop-1": "home_1",
-  "home-shop-2": "home_2",
-  "home-shop-3": "home_3",
-  "home-shop-4": "home_4",
-  "home-shop-5": "home_5",
-  "home-right-top": "home_right_top",
-  "home-right-middle": "home_right_middle",
-  "home-right-bottom": "home_right_bottom"
-};
-
-function compileHome(snapshot){
-  const out = {
-    home_1: [], home_2: [], home_3: [], home_4: [], home_5: [],
-    home_right_top: [], home_right_middle: [], home_right_bottom: []
+function normalizeItem(item) {
+  if (!item || typeof item !== "object") return null;
+  return {
+    id: item.id,
+    page: item.page,
+    section: item.section,
+    title: item.title,
+    category: item.category,
+    type: item.type || "thumbnail",
+    url: item.url,
+    keywords: item.keywords || [],
+    weight: item.weight || 0,
+    enabled: item.enabled !== false,
+    order: item.order || 0,
+    lang: item.lang || [],
+    version: item.version || "1.0",
+    updated: item.updated || null,
   };
-
-  const secs = toArr(snapshot.sections);
-  for (const sec of secs){
-    const sid = String(sec && (sec.id || sec.sectionId) || "").trim().toLowerCase();
-    if (!sid) continue;
-
-    // Accept either already-standard keys OR mapped legacy ids
-    const target =
-      out[sid] !== undefined ? sid :
-      ID_MAP[sid] || "";
-
-    if (!target) continue;
-    out[target] = normalizeItems(sec);
-  }
-
-  // Fallback: if any section is missing from snapshot, try per-section JSON files
-  for (const k of Object.keys(out)){
-    if (out[k] && out[k].length) continue;
-    const fn = SECTION_FILES[k];
-    if (!fn) continue;
-    const p = path.join(DATA_DIR, fn);
-    const j = readJsonSafe(p);
-    const items = extractItems(j);
-    if (items && items.length) out[k] = items;
-  }
-
-  // Emit in strict order
-  const keys = [
-    "home_1","home_2","home_3","home_4","home_5",
-    "home_right_top","home_right_middle","home_right_bottom"
-  ];
-
-  return keys.map(k => ({ id: k, items: toArr(out[k]) }));
 }
 
-exports.handler = async function(event){
-  const qs = event.queryStringParameters || {};
-  const page = String(qs.page || "").toLowerCase();
+// ---- PSOM APPLICATION ---------------------------------------
+function applyPSOM(items, psom) {
+  if (!Array.isArray(items) || !Array.isArray(psom)) return items;
 
-  if (page === "homeproducts"){
-    const snapshot = readJsonSafe(SNAPSHOT_PATH);
-    const sections = compileHome(snapshot);
+  const map = new Map(psom.map(p => [p.id, p]));
 
+  return items
+    .map(it => {
+      const rule = map.get(it.id);
+      if (!rule) return it;
+
+      return {
+        ...it,
+        weight: rule.weight ?? it.weight,
+        enabled: rule.enabled ?? it.enabled,
+        order: rule.order ?? it.order,
+        lang: rule.lang ?? it.lang,
+      };
+    })
+    .filter(it => it.enabled !== false);
+}
+
+// ---- CORE SCORING (OPTIONAL) --------------------------------
+function applyCoreScore(items) {
+  if (!Core || typeof Core.scoreItem !== "function") return items;
+  return items.map(it => ({
+    ...it,
+    _score: Core.scoreItem(it),
+  }));
+}
+
+// ---- MAIN COMPILER ------------------------------------------
+function compileFeed() {
+  const frontSnapshot = safeReadJSON(FRONT_SNAPSHOT_PATH) || [];
+  const psom = safeReadJSON(PSOM_PATH) || [];
+
+  let items = Array.isArray(frontSnapshot)
+    ? frontSnapshot.map(normalizeItem).filter(Boolean)
+    : [];
+
+  items = applyPSOM(items, psom);
+  items = applyCoreScore(items);
+
+  // Sort priority: score > weight > order
+  items.sort((a, b) => {
+    const sa = a._score || 0;
+    const sb = b._score || 0;
+    if (sb !== sa) return sb - sa;
+    if ((b.weight || 0) !== (a.weight || 0)) return (b.weight || 0) - (a.weight || 0);
+    return (a.order || 0) - (b.order || 0);
+  });
+
+  return {
+    status: "ok",
+    version: "feed.v2",
+    generated: new Date().toISOString(),
+    count: items.length,
+    items,
+  };
+}
+
+// ---- NETLIFY HANDLER ----------------------------------------
+exports.handler = async function () {
+  try {
+    const data = compileFeed();
     return {
       statusCode: 200,
       headers: {
-        "Content-Type": "application/json; charset=utf-8",
-        "Cache-Control": "no-store"
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
       },
-      body: JSON.stringify({
-        meta: { page: "homeproducts", source: "snapshot.internal.v1", compiled: true },
-        sections
-      })
+      body: JSON.stringify(data),
+    };
+  } catch (e) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ status: "fail", message: e.message }),
     };
   }
-
-  return {
-    statusCode: 200,
-    headers: { "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify({})
-  };
 };
+
+// ---- INTERNAL CALL (ENGINE / INSIGHT) -----------------------
+exports.compileFeed = compileFeed;

@@ -1,74 +1,120 @@
+
 /**
  * maru-global-insight-engine.js
- * --------------------------------------------
- * Always-on Global Insight Engine (FINAL)
+ * ------------------------------------------------------------
+ * MARU Global Insight Engine (Upgraded / Expanded Edition)
  *
- * Role:
- * - Core-linked, always-on orchestration layer
- * - Central decision hub for search/snapshot/insight
- * - Delegates execution to maru-search
+ * ROLE:
+ * - Central orchestrator between:
+ *   maru-search  →  insight logic  →  core engine
+ *
+ * PRINCIPLES:
+ * - Expand-only (no feature removal)
+ * - Backward compatible
+ * - Future-ready
  */
 
-const { callMaruSearch } = require("./maru-search-bridge");
+"use strict";
 
-let initialized = false;
+// -------------------------------------------------------------
+// Dependencies (Safe Load)
+// -------------------------------------------------------------
+let Core = null;
+try {
+  Core = require("./core");
+} catch (e) {
+  Core = null;
+}
 
-const InsightEngine = {
-  version: "1.0.0",
-  status: "idle",
-  bootTime: null,
+let Bridge = null;
+try {
+  Bridge = require("./maru-search-bridge");
+} catch (e) {
+  Bridge = null;
+}
 
-  init() {
-    if (initialized) return;
-    initialized = true;
-    this.status = "ready";
-    this.bootTime = Date.now();
-  },
+// -------------------------------------------------------------
+// Utility
+// -------------------------------------------------------------
+function normalizeQuery(q) {
+  if (!q) return "";
+  return String(q).trim();
+}
 
-  async dispatch(req = {}) {
-    const mode = req.mode || "search";
-    const params = req.params || {};
+// -------------------------------------------------------------
+// MAIN INSIGHT PIPELINE
+// -------------------------------------------------------------
+async function runGlobalInsight(params = {}) {
+  const query = normalizeQuery(params.q || params.query);
+  const mode = params.mode || "search";
 
-    switch (mode) {
-      case "search":
-        return this.handleSearch(params);
-      case "snapshot":
-        return this.handleSnapshot(params);
-      case "insight":
-        return this.handleInsight(params);
-      default:
-        return this.handleSearch(params);
+  if (!query && mode === "search") {
+    return { status: "fail", message: "EMPTY_QUERY" };
+  }
+
+  // ---------------------------------------------------------
+  // 1) MARU SEARCH (Central Processing)
+  // ---------------------------------------------------------
+  let searchResult = null;
+  if (Bridge && typeof Bridge.dispatch === "function") {
+    searchResult = await Bridge.dispatch({ q: query, mode });
+  } else {
+    return { status: "fail", message: "SEARCH_BRIDGE_UNAVAILABLE" };
+  }
+
+  // ---------------------------------------------------------
+  // 2) CORE ENGINE (Optional Enrichment)
+  // ---------------------------------------------------------
+  let enriched = searchResult;
+  if (Core && typeof Core.validateQuery === "function") {
+    const valid = Core.validateQuery(query);
+    if (!valid) {
+      return { status: "fail", message: "INVALID_QUERY" };
     }
-  },
+  }
 
-  async handleSearch(params) {
-    return callMaruSearch({
-      ...params,
-      mode: "search"
-    });
-  },
+  if (Core && typeof Core.normalizeResult === "function") {
+    enriched = Core.normalizeResult(searchResult);
+  }
 
-  async handleSnapshot(params) {
-    return callMaruSearch({
-      ...params,
-      mode: "snapshot"
-    });
-  },
+  // ---------------------------------------------------------
+  // 3) GLOBAL INSIGHT WRAP
+  // ---------------------------------------------------------
+  return {
+    status: "ok",
+    engine: "maru-global-insight",
+    timestamp: Date.now(),
+    query,
+    mode,
+    data: enriched,
+  };
+}
 
-  async handleInsight(params) {
-    const baseResult = await callMaruSearch({
-      ...params,
-      mode: "search"
-    });
+// -------------------------------------------------------------
+// HTTP HANDLER (Netlify / External)
+// -------------------------------------------------------------
+exports.handler = async function (event) {
+  try {
+    const params = event.queryStringParameters || {};
+    const res = await runGlobalInsight(params);
 
     return {
-      insight: true,
-      source: "maru-global-insight-engine",
-      baseResult
+      statusCode: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+      },
+      body: JSON.stringify(res),
+    };
+  } catch (e) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ status: "fail", message: e.message }),
     };
   }
 };
 
-InsightEngine.init();
-
-module.exports = InsightEngine;
+// -------------------------------------------------------------
+// INTERNAL EXPORT (Engine-to-Engine)
+// -------------------------------------------------------------
+exports.runGlobalInsight = runGlobalInsight;

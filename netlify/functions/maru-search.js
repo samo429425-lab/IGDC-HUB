@@ -13,6 +13,16 @@
 
 'use strict';
 
+
+// ===== CORE ENGINE INTEGRATION (EXPAND ONLY) =====
+let Core = null;
+try {
+  Core = require("./core");
+} catch (e) {
+  Core = null;
+}
+
+
 const VERSION = 'A1.2';
 const DEFAULT_LIMIT = 10;
 
@@ -178,3 +188,46 @@ exports.handler = async function (event) {
     return fail('Search failed', String((e && e.message) || e));
   }
 };
+
+// ===== Internal dispatcher for bridge (non-HTTP call) =====
+async function maruSearchDispatcher(req = {}) {
+  const q = String(req.q || req.query || "").trim();
+  const limit = req.limit;
+
+  const event = { queryStringParameters: { q, limit } };
+  const res = await exports.handler(event);
+  try {
+    const parsed = JSON.parse(res.body || "{}");
+    if (parsed && parsed.items) {
+      parsed.items = await applyCorePipeline(q, parsed.items);
+      parsed.results = parsed.items;
+    }
+    return parsed;
+  } catch (e) {
+    return { status: "fail", message: "BAD_JSON" };
+  }
+}
+
+exports.maruSearchDispatcher = maruSearchDispatcher;
+
+
+// ===== CORE PIPELINE APPLY (NON-DESTRUCTIVE) =====
+async function applyCorePipeline(query, items) {
+  let q = query;
+  if (Core && typeof Core.validateQuery === "function") {
+    if (!Core.validateQuery(q)) {
+      return { status: "fail", message: "INVALID_QUERY" };
+    }
+  }
+
+  let results = items;
+
+  if (Core && typeof Core.scoreItem === "function" && Array.isArray(results)) {
+    results = results.map(it => ({
+      ...it,
+      _coreScore: Core.scoreItem(it),
+    })).sort((a,b) => (b._coreScore||0)-(a._coreScore||0));
+  }
+
+  return results;
+}
