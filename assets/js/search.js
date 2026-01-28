@@ -1,4 +1,7 @@
-// IGDC Search.js — FINAL A+ (safe, no filter, correct source labels, robust unwrap)
+// IGDC Search.js — FINAL A+ (NON-DESTRUCTIVE PATCH)
+// Fix: external link click opens in new tab (no iframe/embed)
+// All existing logic preserved
+
 document.addEventListener('DOMContentLoaded', () => {
   if (!location.pathname.endsWith('/search.html')) return;
 
@@ -81,7 +84,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const card = document.createElement('div');
     card.className = 'card';
     card.style.cursor = url ? 'pointer' : 'default';
-    if (url) card.onclick = () => location.href = `/search-view.html?q=${encodeURIComponent(input.value.trim())}&u=${encodeURIComponent(url)}`;
+
+    // 🔴 FIX: open external link directly (new tab)
+    if (url) {
+      card.onclick = () => window.open(url, '_blank', 'noopener,noreferrer');
+    }
 
     if (it.thumbnail || it.image){
       const img = document.createElement('img');
