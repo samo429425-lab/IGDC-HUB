@@ -2061,25 +2061,6 @@ section.shopping-section, section.shopping-section .shopping-rows {
   #homeSearchBtn{ border:none; cursor:pointer; padding: 10px 14px; border-radius: 12px; background:#2563eb; color:#fff; font-weight:700; }
   .hero-search-hint{ margin-top: 8px; color:#6b7280; font-size: 12.5px; }
 </style>
-<style id="home-search-overlay-style">
-  .home-search-overlay{ position:fixed; inset:0; z-index:100500; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.38); padding:7vh 6vw; }
-  .home-search-overlay.is-open{ display:flex; }
-  .home-search-modal{ width:min(1100px, 88vw); height:min(74vh, 760px); background:#fff; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.35); overflow:hidden; display:flex; flex-direction:column; }
-  .home-search-modal-header{ display:flex; gap:10px; align-items:center; padding:12px 14px; border-bottom:1px solid #eee; background:#f8fafc; }
-  .home-search-modal-title{ font-weight:800; color:#111; }
-  .home-search-modal-close{ margin-left:auto; border:none; background:transparent; font-size:20px; cursor:pointer; line-height:1; padding:6px 10px; border-radius:10px; }
-  .home-search-modal-close:hover{ background:#eef2ff; }
-  .home-search-modal-body{ padding:14px; overflow:auto; }
-  .home-search-grid{ display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; }
-  .home-search-card{ display:block; border:1px solid #e5e7eb; border-radius:14px; overflow:hidden; text-decoration:none; color:inherit; background:#fff; }
-  .home-search-thumb{ width:100%; aspect-ratio:16/9; background:#f3f4f6; background-size:cover; background-position:center; }
-  .home-search-card-body{ padding:10px 10px 12px; }
-  .home-search-card-title{ font-weight:800; font-size:14px; margin:0 0 6px; }
-  .home-search-card-summary{ margin:0; font-size:12.5px; color:#4b5563; line-height:1.4; }
-  .home-search-empty{ color:#6b7280; font-size:14px; padding:10px; }
-  @media (max-width:900px){ .home-search-grid{ grid-template-columns:repeat(2, 1fr); } }
-  @media (max-width:560px){ .home-search-modal{ width:95vw; height:84vh; } .home-search-grid{ grid-template-columns:1fr; } }
-</style>
 
 </head>
 <body>
@@ -2130,31 +2111,27 @@ section.shopping-section, section.shopping-section .shopping-rows {
 document.addEventListener('DOMContentLoaded', () => {
   const input = document.getElementById('homeSearchInput');
   const btn = document.getElementById('homeSearchBtn');
-
   if (!input || !btn) return;
 
-  const openSearchWindow = () => {
+  const openSearch = () => {
     const q = input.value.trim();
     if (!q) return;
+
+    const w = Math.min(window.outerWidth * 0.8, 980);
+    const h = Math.min(window.outerHeight * 0.8, 680);
+    const left = window.screenX + (window.outerWidth - w) / 2;
+    const top = window.screenY + (window.outerHeight - h) / 2;
 
     window.open(
       `/search.html?q=${encodeURIComponent(q)}`,
       'maru_search',
-      'noopener,noreferrer,width=1200,height=800'
+      `popup=yes,noopener,noreferrer,width=${w},height=${h},left=${left},top=${top}`
     );
   };
 
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    openSearchWindow();
-  });
-
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      openSearchWindow();
-    }
+  btn.addEventListener('click', openSearch);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') openSearch();
   });
 });
 </script>
