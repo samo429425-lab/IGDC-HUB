@@ -16,15 +16,13 @@
     button{padding:10px 16px;font-size:15px;font-weight:600;border:none;border-radius:6px;
       background:#4f46e5;color:#fff;cursor:pointer}
     button:hover{background:#4338ca}
-    .toggle{display:flex;align-items:center;gap:6px;font-size:13px;color:#333}
-    #status{padding:12px 24px;font-size:14px;color:#555}
-    #results{padding:0 24px 24px;display:flex;flex-direction:column;gap:14px}
+    #searchStatus{padding:12px 24px;font-size:14px;color:#555}
+    #searchResults{padding:0 24px 24px;display:flex;flex-direction:column;gap:14px}
     .card{border:1px solid #e5e7eb;border-radius:8px;padding:14px;cursor:pointer}
     .card:hover{background:#fafafa}
     .title{font-size:17px;font-weight:600;color:#1a0dab;margin-bottom:6px}
     .desc{font-size:14px;color:#444;margin-bottom:8px;line-height:1.4}
     .meta{font-size:12px;color:#777}
-    footer{text-align:center;font-size:12px;color:#999;padding:16px}
   </style>
 </head>
 <body>
@@ -32,42 +30,20 @@
 <header>
   <div class="brand">IGDC Global Search</div>
   <div class="search-box">
-    <input id="q" type="text" placeholder="Search the world…" />
+    <!-- IDs aligned to existing search.js -->
+    <input id="searchInput" type="text" placeholder="Search the world…" />
     <button id="searchBtn">Search</button>
   </div>
-  <label class="toggle">
-    <input type="checkbox" id="autoTranslate"> Auto Translate
-  </label>
 </header>
 
-<div id="status"></div>
-<div id="results"></div>
-<footer>Powered by IGDC · Global Unified Search</footer>
+<div id="searchStatus"></div>
+<div id="searchResults"></div>
 
-<script>
-const input=document.getElementById('q');
-const btn=document.getElementById('searchBtn');
-const toggle=document.getElementById('autoTranslate');
+<footer style="text-align:center;font-size:12px;color:#999;padding:16px">
+  Powered by IGDC · Global Unified Search
+</footer>
 
-function go(){
-  const q=input.value.trim();
-  if(!q)return;
-  const p=new URLSearchParams();
-  p.set('q',q);
-  if(toggle.checked)p.set('translate','1');
-  history.replaceState(null,'','?'+p.toString());
-  if(window.runMaruSearch)window.runMaruSearch(q,{translate:toggle.checked});
-}
-btn.onclick=go;
-input.onkeydown=e=>{if(e.key==='Enter')go();};
-
-const sp=new URLSearchParams(location.search);
-if(sp.get('q')){
-  input.value=sp.get('q');
-  if(sp.get('translate')==='1')toggle.checked=true;
-}
-</script>
-
+<!-- Keep original JS path -->
 <script src="/assets/js/search.js"></script>
 </body>
 </html>
