@@ -5,67 +5,11 @@
 document.addEventListener('DOMContentLoaded', () => {
   if (!location.pathname.endsWith('/search.html')) return;
 
-  const input = document.getElementById('searchInput') || document.getElementById('q');
+  const input = document.getElementById('searchInput');
   const btn = document.getElementById('searchBtn');
-  const status = document.getElementById('searchStatus') || document.getElementById('status');
-  const results = document.getElementById('searchResults') || document.getElementById('results');
+  const status = document.getElementById('searchStatus');
+  const results = document.getElementById('searchResults');
   if (!input || !btn || !status || !results) return;
-
-  // ===== Same-page detail view (NO external navigation) =====
-  let __LAST_ITEMS__ = [];
-  let __IN_DETAIL__ = false;
-
-  function renderList(items){
-    __IN_DETAIL__ = false;
-    results.innerHTML = '';
-    status.textContent = items.length ? `${items.length} results` : 'No results.';
-    items.forEach(render);
-  }
-
-  function showDetail(it){
-    __IN_DETAIL__ = true;
-    results.innerHTML = '';
-    status.textContent = 'Result detail';
-
-    const wrap = document.createElement('div');
-    wrap.className = 'card';
-    wrap.style.cursor = 'default';
-
-    const title = document.createElement('div');
-    title.className = 'title';
-    title.textContent = (it.title || it.name || 'Untitled').trim();
-
-    const desc = document.createElement('div');
-    desc.className = 'desc';
-    desc.textContent = (it.summary || it.description || it.snippet || '').trim();
-
-    const url = it.url || it.link || '';
-    const link = document.createElement('a');
-    link.href = url || '#';
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    link.textContent = url ? 'Open original in new tab' : '';
-    link.style.display = url ? 'inline-block' : 'none';
-    link.style.marginTop = '10px';
-    link.style.fontSize = '14px';
-
-    wrap.appendChild(title);
-    if (desc.textContent) wrap.appendChild(desc);
-    wrap.appendChild(link);
-    results.appendChild(wrap);
-  }
-
-  window.addEventListener('popstate', () => {
-    const st = history.state;
-    if (st && st.view === 'detail' && st.url) {
-      const found = (__LAST_ITEMS__ || []).find(x => (x.url || x.link) === st.url);
-      if (found) showDetail(found);
-      else if (__LAST_ITEMS__.length) renderList(__LAST_ITEMS__);
-    } else if (__LAST_ITEMS__.length) {
-      renderList(__LAST_ITEMS__);
-    }
-  });
-  // ===== /Same-page detail view =====
 
   const params = new URLSearchParams(location.search);
   const q0 = (params.get('q') || '').trim();
@@ -77,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!q) return;
     const u = new URL(location.href);
     u.searchParams.set('q', q);
-    history.replaceState(null, '', u.toString());
+    history.pushState(null, '', u.toString());
     runSearch(q);
   };
 
@@ -114,10 +58,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const j0 = await fetchMaru(q);
       const d = unwrap(j0) || {};
       const items = d.items || d.results || [];
-      __LAST_ITEMS__ = items.map(x => ({...x}));
-      if (!__LAST_ITEMS__.length) { status.textContent = 'No results.'; return; }
-      renderList(__LAST_ITEMS__);
-      }catch(e){
+      if (!items.length) { status.textContent = 'No results.'; return; }
+      status.textContent = `${items.length} results`;
+      items.forEach(render);
+    }catch(e){
       console.error(e);
       status.textContent = 'Search error';
     }
@@ -143,13 +87,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 🔴 FIX: open external link directly (new tab)
     if (url) {
-      card.onclick = () => {
-        const u = new URL(location.href);
-        u.searchParams.set('q', input.value.trim());
-        u.searchParams.set('u', url);
-        history.pushState({ view: 'detail', url }, '', u.toString());
-        showDetail(it);
-      };
+      card.onclick = () => { window.location.href = url; };
+    };
     }
 
     if (it.thumbnail || it.image){
