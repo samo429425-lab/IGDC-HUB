@@ -1,18 +1,11 @@
 /**
  * netlify/functions/maru-search.js
  * ------------------------------------------------------------
- * MARU SEARCH v2.1 (Request-driven Fetching 강화 / Future-ready)
+ * MARU SEARCH v2 (Aggregator / Future-ready)
  *
- * ✅ Backward compatible (NO BREAKING CHANGES):
- * - exports.handler (HTTP)
- * - exports.maruSearchDispatcher (bridge internal call)
- * - legacy outputs: items/results (search.js 호환)
- *
- * ✅ Upgrade focus (Step 1: 요청 기반 수집 완성도 강화)
- * - 모든 수집은 "요청이 왔을 때" 즉시 호출 (request-driven)
- * - 타임아웃/AbortController로 Netlify 안정성 강화
- * - 병렬 수집(Promise.allSettled) + 부분 성공 허용
- * - 가벼운 인메모리 캐시(콜드스타트/재사용 구간)로 속도/안정성 강화
+ * Goals:
+ * - Expand-only, backward compatible with search.js (items/results)
+ * - Produce rich aggregated result: entity/knowledge/media/signals/actions
  *
  * Primary web sources:
  * - NAVER Search API (preferred when configured)
@@ -32,17 +25,9 @@
 
 'use strict';
 
-const VERSION = '2.1.0';
+const VERSION = '2.0.0';
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 20;
-
-// Per-fetch timeout (ms). Netlify 환경에서 과도한 대기 방지.
-const FETCH_TIMEOUT_MS = 6500;
-
-// Lightweight in-memory cache (persists during warm function instances)
-const CACHE_TTL_MS = 60 * 1000; // 60s
-const CACHE_MAX = 60;
-const __CACHE__ = globalThis.__MARU_SEARCH_CACHE__ || (globalThis.__MARU_SEARCH_CACHE__ = new Map());
 
 let Core = null;
 try { Core = require("./core"); } catch (_) { Core = null; }
@@ -63,9 +48,30 @@ function json(statusCode, obj) {
 }
 
 function ok(obj) { return json(200, obj); }
-
 function fail(message, detail) {
-  return ok({
+  return ok(
+
+// ===== FAN-OUT 5 hook (source-specific + RU) =====
+try{
+  if (typeof fanoutCollect === 'function') {
+    const baseQ = query || q;
+    const stratQueries = expandSourceStrategies(baseQ);
+    const tasks = stratQueries.map(sq => fanoutCollect(sq));
+    const settled = await Promise.allSettled(tasks);
+    const merged = [];
+    for (const s of settled){
+      if (s.status === 'fulfilled' && Array.isArray(s.value)){
+        merged.push(...s.value);
+      }
+    }
+    if (merged.length){
+      items = dedupeByUrl([...(items || []), ...merged]);
+      results = items;
+    }
+  }
+}catch(e){}
+// ===== /FAN-OUT 5 hook =====
+{
     status: 'error',
     engine: 'maru-search',
     version: VERSION,
@@ -90,6 +96,11 @@ function pickParams(event) {
   const limit = clampLimit(qs.limit);
   const mode = String(qs.mode || 'search').trim();
   return { q, limit, mode, qs };
+}
+
+async function safeJson(res) {
+  const txt = await res.text();
+  try { return JSON.parse(txt); } catch (_) { return null; }
 }
 
 function toWebItem(r, source) {
@@ -120,49 +131,6 @@ function normalizeQuery(q) {
   return String(q || '').trim().replace(/\s+/g, ' ');
 }
 
-function nowMs() { return Date.now(); }
-
-function cacheKey(prefix, obj) {
-  // small stable key
-  try { return `${prefix}:${JSON.stringify(obj)}`; } catch (_) { return `${prefix}:${String(obj)}`; }
-}
-
-function cacheGet(key) {
-  const hit = __CACHE__.get(key);
-  if (!hit) return null;
-  const { exp, val } = hit;
-  if (exp < nowMs()) {
-    __CACHE__.delete(key);
-    return null;
-  }
-  return val;
-}
-
-function cacheSet(key, val, ttl = CACHE_TTL_MS) {
-  __CACHE__.set(key, { exp: nowMs() + ttl, val });
-  // prune
-  if (__CACHE__.size > CACHE_MAX) {
-    const firstKey = __CACHE__.keys().next().value;
-    if (firstKey) __CACHE__.delete(firstKey);
-  }
-}
-
-async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { ...options, signal: controller.signal });
-    return res;
-  } finally {
-    clearTimeout(id);
-  }
-}
-
-async function safeJson(res) {
-  const txt = await res.text();
-  try { return JSON.parse(txt); } catch (_) { return null; }
-}
-
 // ------------------------------
 // Web search collectors
 // ------------------------------
@@ -172,7 +140,7 @@ async function naverSearch(q, limit) {
   if (!id || !secret) return null;
 
   const url = `https://openapi.naver.com/v1/search/webkr.json?query=${encodeURIComponent(q)}&display=${limit}`;
-  const res = await fetchWithTimeout(url, {
+  const res = await fetch(url, {
     headers: { 'X-Naver-Client-Id': id, 'X-Naver-Client-Secret': secret },
   });
   if (!res.ok) throw new Error(`NAVER_HTTP_${res.status}`);
@@ -195,7 +163,7 @@ async function googleCseSearch(q, limit) {
   if (!key || !cx) return null;
 
   const url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(key)}&cx=${encodeURIComponent(cx)}&q=${encodeURIComponent(q)}&num=${limit}`;
-  const res = await fetchWithTimeout(url);
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`GOOGLE_HTTP_${res.status}`);
   const data = await res.json();
 
@@ -215,7 +183,7 @@ async function googleCseSearch(q, limit) {
 // ------------------------------
 async function wikidataSearchEntity(q, lang = 'en') {
   const url = `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(q)}&language=${encodeURIComponent(lang)}&format=json&limit=5&origin=*`;
-  const res = await fetchWithTimeout(url, { headers: { 'accept': 'application/json' }});
+  const res = await fetch(url, { headers: { 'accept': 'application/json' }});
   if (!res.ok) return null;
   const data = await res.json();
   const list = (data && data.search) || [];
@@ -232,7 +200,7 @@ async function wikidataSearchEntity(q, lang = 'en') {
 async function wikidataEntityData(id) {
   if (!id) return null;
   const url = `https://www.wikidata.org/wiki/Special:EntityData/${encodeURIComponent(id)}.json`;
-  const res = await fetchWithTimeout(url, { headers: { 'accept': 'application/json' }});
+  const res = await fetch(url, { headers: { 'accept': 'application/json' }});
   if (!res.ok) return null;
   const data = await res.json();
   const ent = data && data.entities && data.entities[id];
@@ -272,7 +240,7 @@ function extractWikidataBasics(ent, lang = 'en') {
 async function wikipediaSummary(title, lang = 'en') {
   if (!title) return null;
   const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
-  const res = await fetchWithTimeout(url, { headers: { 'accept': 'application/json' }});
+  const res = await fetch(url, { headers: { 'accept': 'application/json' }});
   if (!res.ok) return null;
   const data = await res.json();
   return {
@@ -286,7 +254,7 @@ async function wikipediaSummary(title, lang = 'en') {
 async function wikimediaPageImage(title, lang = 'en') {
   if (!title) return null;
   const url = `https://${lang}.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=pageimages&format=json&pithumbsize=640&origin=*`;
-  const res = await fetchWithTimeout(url, { headers: { 'accept': 'application/json' }});
+  const res = await fetch(url, { headers: { 'accept': 'application/json' }});
   if (!res.ok) return null;
   const data = await res.json();
   const pages = data && data.query && data.query.pages ? Object.values(data.query.pages) : [];
@@ -300,12 +268,7 @@ async function wikimediaPageImage(title, lang = 'en') {
 // ------------------------------
 async function nominatimGeocode(q) {
   const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`;
-  const res = await fetchWithTimeout(url, {
-    headers: {
-      'accept': 'application/json',
-      'user-agent': 'maru-search/2.1 (netlify)'
-    }
-  });
+  const res = await fetch(url, { headers: { 'accept': 'application/json', 'user-agent': 'maru-search/2.0 (netlify)' }});
   if (!res.ok) return null;
   const data = await res.json();
   if (!Array.isArray(data) || !data.length) return null;
@@ -325,7 +288,7 @@ async function nominatimGeocode(q) {
 async function openMeteoWeather(lat, lon) {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}&current=temperature_2m,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto`;
-  const res = await fetchWithTimeout(url, { headers: { 'accept': 'application/json' }});
+  const res = await fetch(url, { headers: { 'accept': 'application/json' }});
   if (!res.ok) return null;
   const data = await res.json();
   return data || null;
@@ -335,21 +298,26 @@ async function openMeteoWeather(lat, lon) {
 // Entity type heuristics + actions
 // ------------------------------
 function guessEntityType(q, wikidataBasics) {
+  // Simple heuristics: will evolve; keep backward compatible
   const s = q.toLowerCase();
   if (/(weather|날씨|기온)/i.test(s)) return 'weather_query';
   if (/(map|지도|위치|how to get|route|길찾기)/i.test(s)) return 'map_query';
 
+  // If wikidata instanceOf available, keep generic mapping (expand later)
   if (wikidataBasics && wikidataBasics.instanceOf) {
+    // Q515 = city, Q6256 = country, Q5 = human, Q43229 = organization (not exhaustive)
     const i = wikidataBasics.instanceOf;
     if (i === 'Q515') return 'city';
     if (i === 'Q6256') return 'country';
     if (i === 'Q5') return 'person';
     if (i === 'Q43229') return 'organization';
   }
+  // fallback
   return 'unknown';
 }
 
 function buildActions(entityType, q) {
+  // Keep short; front can render later
   const base = [
     { type: 'web', label: 'Open web results', query: q },
   ];
@@ -363,25 +331,17 @@ function buildActions(entityType, q) {
 }
 
 // ------------------------------
-// Aggregation pipeline (request-driven)
+// Aggregation pipeline
 // ------------------------------
-async function aggregateV21(q, limit, mode) {
+async function aggregateV2(q, limit, mode) {
   const query = normalizeQuery(q);
   const meta = { version: VERSION, limit, mode, ts: new Date().toISOString() };
 
-  // Cache fast-path (per query/limit/mode)
-  const ck = cacheKey("agg", { query, limit, mode });
-  const cached = cacheGet(ck);
-  if (cached) return cached;
-
-  const t0 = nowMs();
-
-  // 1) Web results (primary) - keep the same fallback behavior, but safer
+  // 1) Web results (primary)
   const webSourcesTried = [];
   let webRaw = [];
   let usedSource = null;
 
-  // Web search with sequential fallback, but protected by timeout and try/catch
   try {
     const n = await naverSearch(query, limit);
     if (n && n.results) {
@@ -415,77 +375,51 @@ async function aggregateV21(q, limit, mode) {
     it => it.url
   );
 
-  // 2) Knowledge/entity + 3) Signals in parallel (request-driven)
-  //    (부분 성공 허용: allSettled)
-  const settled = await Promise.allSettled([
-    // Wikidata -> Wikipedia summaries/images
-    (async () => {
-      const wdTop = await wikidataSearchEntity(query, 'en').catch(() => null);
-      const wdEnt = wdTop ? await wikidataEntityData(wdTop.id).catch(() => null) : null;
-      const wdBasics = extractWikidataBasics(wdEnt, 'en');
+  // 2) Knowledge / entity
+  const wdTop = await wikidataSearchEntity(query, 'en').catch(() => null);
+  const wdEnt = wdTop ? await wikidataEntityData(wdTop.id).catch(() => null) : null;
+  const wdBasics = extractWikidataBasics(wdEnt, 'en');
 
-      const wikiTitleEn = wdBasics && wdBasics.wikipedia && wdBasics.wikipedia.en;
-      const wikiTitleKo = wdBasics && wdBasics.wikipedia && wdBasics.wikipedia.ko;
+  // prefer wikipedia title from wikidata
+  const wikiTitleEn = wdBasics && wdBasics.wikipedia && wdBasics.wikipedia.en;
+  const wikiTitleKo = wdBasics && wdBasics.wikipedia && wdBasics.wikipedia.ko;
 
-      const [wikiEn, wikiKo] = await Promise.allSettled([
-        wikiTitleEn ? wikipediaSummary(wikiTitleEn, 'en') : Promise.resolve(null),
-        wikiTitleKo ? wikipediaSummary(wikiTitleKo, 'ko') : Promise.resolve(null),
-      ]).then(r => r.map(x => x.status === 'fulfilled' ? x.value : null));
+  const wikiEn = wikiTitleEn ? await wikipediaSummary(wikiTitleEn, 'en').catch(() => null) : null;
+  const wikiKo = wikiTitleKo ? await wikipediaSummary(wikiTitleKo, 'ko').catch(() => null) : null;
 
-      const img = (wikiEn && wikiEn.thumbnail) ? { source: wikiEn.thumbnail } :
-                  (wikiKo && wikiKo.thumbnail) ? { source: wikiKo.thumbnail } :
-                  (wikiTitleEn ? await wikimediaPageImage(wikiTitleEn, 'en').catch(() => null) : null);
+  const img = (wikiEn && wikiEn.thumbnail) ? { source: wikiEn.thumbnail } :
+              (wikiKo && wikiKo.thumbnail) ? { source: wikiKo.thumbnail } :
+              (wikiTitleEn ? await wikimediaPageImage(wikiTitleEn, 'en').catch(() => null) : null);
 
-      return { wdTop, wdBasics, wikiEn, wikiKo, img };
-    })(),
-
-    // Geo -> Weather
-    (async () => {
-      // prefer wikidata coord if available later; initial geo from nominatim as fallback
-      const geo = await nominatimGeocode(query).catch(() => null);
-      const coord = geo ? { lat: geo.lat, lon: geo.lon } : null;
-      const weather = coord ? await openMeteoWeather(coord.lat, coord.lon).catch(() => null) : null;
-      const map = coord ? {
-        lat: coord.lat, lon: coord.lon,
-        osm: `https://www.openstreetmap.org/?mlat=${encodeURIComponent(coord.lat)}&mlon=${encodeURIComponent(coord.lon)}#map=11/${encodeURIComponent(coord.lat)}/${encodeURIComponent(coord.lon)}`
-      } : null;
-      return { geo, coord, weather, map };
-    })()
-  ]);
-
-  const kn = settled[0].status === 'fulfilled' ? settled[0].value : { wdTop: null, wdBasics: null, wikiEn: null, wikiKo: null, img: null };
-  const sig = settled[1].status === 'fulfilled' ? settled[1].value : { geo: null, coord: null, weather: null, map: null };
-
-  // If wikidata coord exists, prefer it for signals (re-fetch weather if needed)
-  let coord = (kn.wdBasics && kn.wdBasics.coord) ? kn.wdBasics.coord : sig.coord;
-  let geo = sig.geo;
-  let weather = sig.weather;
-  let map = sig.map;
-
-  if (coord && (!weather || !map)) {
-    // try to fill missing pieces safely
-    if (!weather) weather = await openMeteoWeather(coord.lat, coord.lon).catch(() => null);
-    if (!map) map = {
-      lat: coord.lat, lon: coord.lon,
-      osm: `https://www.openstreetmap.org/?mlat=${encodeURIComponent(coord.lat)}&mlon=${encodeURIComponent(coord.lon)}#map=11/${encodeURIComponent(coord.lat)}/${encodeURIComponent(coord.lon)}`
-    };
+  // 3) Signals: map/weather (use wikidata coord first, else nominatim)
+  let coord = wdBasics && wdBasics.coord ? wdBasics.coord : null;
+  let geo = null;
+  if (!coord) {
+    geo = await nominatimGeocode(query).catch(() => null);
+    if (geo) coord = { lat: geo.lat, lon: geo.lon };
   }
 
-  const entityType = guessEntityType(query, kn.wdBasics);
+  const weather = coord ? await openMeteoWeather(coord.lat, coord.lon).catch(() => null) : null;
+  const map = coord ? {
+    lat: coord.lat, lon: coord.lon,
+    osm: `https://www.openstreetmap.org/?mlat=${encodeURIComponent(coord.lat)}&mlon=${encodeURIComponent(coord.lon)}#map=11/${encodeURIComponent(coord.lat)}/${encodeURIComponent(coord.lon)}`
+  } : null;
+
+  const entityType = guessEntityType(query, wdBasics);
   const entity = {
     type: entityType,
-    name: (kn.wdBasics && kn.wdBasics.label) || (kn.wdTop && kn.wdTop.label) || query,
-    summary: (kn.wdBasics && kn.wdBasics.description) || (kn.wdTop && kn.wdTop.description) || '',
-    images: (kn.img && kn.img.source) ? [kn.img.source] : [],
+    name: (wdBasics && wdBasics.label) || (wdTop && wdTop.label) || query,
+    summary: (wdBasics && wdBasics.description) || (wdTop && wdTop.description) || '',
+    images: img && img.source ? [img.source] : [],
     official: {},
-    wikidata: kn.wdBasics ? { id: kn.wdBasics.id, url: kn.wdTop ? kn.wdTop.url : '' } : (kn.wdTop ? { id: kn.wdTop.id, url: kn.wdTop.url } : {}),
+    wikidata: wdBasics ? { id: wdBasics.id, url: wdTop ? wdTop.url : '' } : (wdTop ? { id: wdTop.id, url: wdTop.url } : {}),
     coord: coord || null,
     geo: geo || null,
   };
 
   const knowledge = {
-    wikipedia: { en: kn.wikiEn || null, ko: kn.wikiKo || null },
-    wikidata: kn.wdBasics ? kn.wdBasics : (kn.wdTop ? kn.wdTop : null),
+    wikipedia: { en: wikiEn || null, ko: wikiKo || null },
+    wikidata: wdBasics ? wdBasics : (wdTop ? wdTop : null),
   };
 
   const media = {
@@ -504,10 +438,11 @@ async function aggregateV21(q, limit, mode) {
   let rankedWeb = webItems;
   if (Core && typeof Core.scoreItem === "function") {
     rankedWeb = rankedWeb.map(it => ({ ...it, _coreScore: Core.scoreItem(it) }))
-                         .sort((a, b) => (b._coreScore || 0) - (a._coreScore || 0));
+                         .sort((a,b) => (b._coreScore||0) - (a._coreScore||0));
   }
 
   // 5) Backward compatible flat list for search.js (items/results)
+  // Keep same shape expected by current search.js: title/link/snippet
   const legacyItems = rankedWeb.map(it => ({
     title: it.title,
     link: it.url,
@@ -516,13 +451,13 @@ async function aggregateV21(q, limit, mode) {
     source: it.source || usedSource || 'web',
   }));
 
-  const out = {
+  return {
     status: 'ok',
     engine: 'maru-search',
     version: VERSION,
     query: query,
 
-    // aggregated schema
+    // v2 aggregated schema
     entity,
     knowledge,
     media,
@@ -534,17 +469,12 @@ async function aggregateV21(q, limit, mode) {
       ...meta,
       sources: webSourcesTried,
       count: legacyItems.length,
-      timingMs: { total: nowMs() - t0 },
-      cache: false,
     },
 
     // backward compatible
     items: legacyItems,
     results: legacyItems,
   };
-
-  cacheSet(ck, { ...out, meta: { ...out.meta, cache: true } });
-  return out;
 }
 
 // ------------------------------
@@ -593,7 +523,7 @@ exports.handler = async (event) => {
       }
     }
 
-    const aggregated = await aggregateV21(q, limit, mode);
+    const aggregated = await aggregateV2(q, limit, mode);
     return ok(aggregated);
 
   } catch (e) {
@@ -617,3 +547,55 @@ async function maruSearchDispatcher(req = {}) {
 }
 
 exports.maruSearchDispatcher = maruSearchDispatcher;
+
+
+/* ===== FAN-OUT 5 (source-specific strategies + RU) ===== */
+// Source-focused query variants (no judgment, expand-only)
+const FANOUT_SOURCE_QUERIES = {
+  encyclopedia: (q) => [
+    q,
+    `${q} wikipedia`,
+    `${q} wiki`,
+  ],
+  government: (q) => [
+    q,
+    `${q} official`,
+    `${q} site:gov`,
+  ],
+  news: (q) => [
+    q,
+    `${q} news`,
+    `${q} press`,
+  ],
+  academic: (q) => [
+    q,
+    `${q} research`,
+    `${q} study`,
+  ]
+};
+
+// Russian (RU) canonical expansion
+function expandRU(baseQuery){
+  if (!baseQuery) return [];
+  // Mechanical RU hints (no translation decision)
+  return [
+    baseQuery,
+    `${baseQuery} официальный`,
+    `${baseQuery} википедия`,
+    `${baseQuery} новости`
+  ];
+}
+
+function expandSourceStrategies(baseQuery){
+  const out = new Set();
+  if (!baseQuery) return [];
+  Object.values(FANOUT_SOURCE_QUERIES).forEach(fn => {
+    try{
+      fn(baseQuery).forEach(v => out.add(v));
+    }catch(e){}
+  });
+  // RU additions
+  expandRU(baseQuery).forEach(v => out.add(v));
+  return Array.from(out);
+}
+/* ===== /FAN-OUT 5 ===== */
