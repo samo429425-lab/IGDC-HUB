@@ -2117,8 +2117,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const q = input.value.trim();
     if (!q) return;
 
-    // ✅ 같은 탭에서 정식 웹페이지로 이동
-    location.href = `/search.html?q=${encodeURIComponent(q)}`;
+    // ✅ 새 탭 / 독립 웹페이지 / 팝업 아님
+    window.open(
+      `/search.html?q=${encodeURIComponent(q)}`,
+      '_blank'
+    );
   };
 
   btn.addEventListener('click', openSearch);
