@@ -1,12 +1,16 @@
 /* =========================================================
-   MARU SEARCH – FINAL A (v6.1 compat)
-   - 유지: 기존 v6 흐름(쿼리/상태/2중 URL fallback)
-   - 추가: maru-search 표준 스키마(summary/url) + 래핑(data/baseResult) 호환
-   - 추가: 카드 전체 클릭 → search-view.html 중계
-   - 추가: 밑줄 제거(스타일 보강)
+   MARU SEARCH – FINAL A (v6.2 SAFE EXPAND)
+   - 기준: 정상 작동 흐름(v6 계열) 유지
+   - 확장: summary/desc 표시, 카드 전체 클릭 이동, 밑줄 제거, 썸네일 표시(있을 때만)
+   - 안전: /search.html 전용 실행 (다른 페이지 영향 0)
    ========================================================= */
 
 document.addEventListener('DOMContentLoaded', () => {
+  // ===== HARD GUARD: search.html 전용 =====
+  const path = (location.pathname || '').toLowerCase();
+  const isSearchPage = path.endsWith('/search.html') || path === '/search.html';
+  if (!isSearchPage) return;
+
   const params = new URLSearchParams(window.location.search);
   const initialQ = (params.get('q') || '').trim();
 
@@ -20,24 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  // 밑줄/링크 기본 스타일 보강 (기존 CSS와 충돌 없음)
-  (function ensureStyle(){
-    const id = 'maru-search-style-v61';
-    if (document.getElementById(id)) return;
-    const s = document.createElement('style');
-    s.id = id;
-    s.textContent = `
-      .search-card, .search-card * { text-decoration: none !important; }
-      .search-card { cursor: pointer; }
-      .search-title { font-weight: 700; color: #1f2a44; }
-      .search-desc { margin-top: 6px; color: #444; line-height: 1.35; font-size: 14px; }
-      .search-meta { margin-top: 6px; color: #666; font-size: 12px; }
-      .search-thumb { width: 88px; height: 66px; object-fit: cover; border-radius: 10px; margin-right: 12px; flex: 0 0 auto; }
-      .search-card { display: flex; gap: 0; align-items: flex-start; background: #fff; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
-      .search-body { flex: 1; min-width: 0; }
-    `;
-    document.head.appendChild(s);
-  })();
+  // 밑줄 제거 + 카드 스타일(기존 CSS에 "추가"만)
+  injectStyleOnce();
 
   if (initialQ) {
     input.value = initialQ;
@@ -71,7 +59,40 @@ document.addEventListener('DOMContentLoaded', () => {
     statusEl.textContent = text;
   }
 
+  function injectStyleOnce() {
+    const id = 'maru-search-style-v62';
+    if (document.getElementById(id)) return;
+    const s = document.createElement('style');
+    s.id = id;
+    s.textContent = `
+      /* underline 제거 */
+      #searchResults a, #searchResults a:link, #searchResults a:visited { text-decoration:none !important; }
+      /* 카드 */
+      .search-card{
+        background:#fff;
+        border-radius:12px;
+        padding:14px 16px;
+        margin-bottom:12px;
+        box-shadow:0 2px 6px rgba(0,0,0,0.05);
+        display:flex;
+        gap:12px;
+        align-items:flex-start;
+        cursor:pointer;
+      }
+      .search-thumb{
+        width:92px; height:68px; object-fit:cover;
+        border-radius:10px; flex:0 0 auto;
+      }
+      .search-body{ flex:1; min-width:0; }
+      .search-title{ font-size:16px; font-weight:700; color:#4f46e5; }
+      .search-desc{ margin-top:6px; font-size:14px; color:#444; line-height:1.4; }
+      .search-meta{ margin-top:6px; font-size:12px; color:#666; }
+    `;
+    document.head.appendChild(s);
+  }
+
   async function fetchMaru(q) {
+    // ✅ 기존 안정형: 2중 URL fallback 유지
     const urls = [
       `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}`,
       `/netlify/functions/maru-search?q=${encodeURIComponent(q)}`
@@ -93,14 +114,11 @@ document.addEventListener('DOMContentLoaded', () => {
     throw lastErr;
   }
 
-  // maru-global-insight-engine / 기타 래핑 구조 호환
+  // ✅ 래핑 호환 (maru-global-insight 등)
   function unwrap(data) {
     if (!data) return data;
-    // case: { data: { items: [] } }
     if (data.data && (Array.isArray(data.data.items) || Array.isArray(data.data.results))) return data.data;
-    // case: { baseResult: { items: [] } }
     if (data.baseResult && (Array.isArray(data.baseResult.items) || Array.isArray(data.baseResult.results))) return data.baseResult;
-    // case: { baseResult: { data: { items: [] } } }
     if (data.baseResult && data.baseResult.data && (Array.isArray(data.baseResult.data.items) || Array.isArray(data.baseResult.data.results))) return data.baseResult.data;
     return data;
   }
@@ -141,21 +159,21 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function normalize(it, root) {
-    // maru-search 표준 items: { title, url, summary, source }
-    const title = (it.title || it.name || '').trim() || '제목 없음';
-    const url = (it.url || it.link || '').trim();
-    const desc = (it.summary || it.description || it.snippet || '').trim();
-    const source = (it.source || it.site || root?.source || root?.engine || '').trim();
-    const thumb = (it.thumbnail || it.image || '').trim();
-
-    return { title, url, desc, thumb, source };
+    // ✅ maru-search 표준: summary / url / title / source
+    return {
+      title: (it.title || it.name || '').trim() || '제목 없음',
+      url: (it.url || it.link || '').trim(),
+      desc: (it.summary || it.description || it.snippet || '').trim(),
+      thumb: (it.thumbnail || it.image || '').trim(),
+      source: (it.source || it.site || root?.source || root?.engine || '').trim()
+    };
   }
 
   function renderCard(item) {
     const card = document.createElement('div');
     card.className = 'search-card';
 
-    // 카드 어디를 눌러도 이동
+    // 카드 어디를 눌러도 이동 (IGDC 컨텍스트 유지)
     card.addEventListener('click', () => {
       if (!item.url) return;
       window.location.href = `/search-view.html?u=${encodeURIComponent(item.url)}`;
