@@ -93,10 +93,7 @@
       const scrollA = section && (section.querySelector('.ad-scroll') || section);
       const listA = section && section.querySelector('.ad-list');
       if (listA) {
-        // NOTE: home.html uses data-psom-key on .ad-list itself.
-        // In that case, psomEl === listA, so hiding psomEl would hide the rendered list.
-        const mode = (psomEl === listA) ? 'direct' : 'ad-section';
-        return { isRight: true, mode, section, scroller: scrollA, list: listA, psomEl };
+        return { isRight: true, mode: 'ad-section', section, scroller: scrollA, list: listA, psomEl };
       }
 
       // Layout B: direct list (data-psom-key is on .ad-list itself)
@@ -113,13 +110,10 @@
   }
 
   function showEmpty(t){
-    // If psomEl is the same node as list (e.g., data-psom-key on .ad-list),
-    // do NOT hide the list by styling psomEl. Render empty message inside the list.
-    if (t.psomEl === t.list) {
-      t.list.innerHTML = '<div class="igdc-empty" style="padding:12px;border-radius:12px;background:#f7f7f7;color:#666;text-align:center;font-size:14px;line-height:1.6;min-height:44px;">'+ emptyText() +'</div>';
-      // keep scroller visible (RIGHT panel should remain visible)
-      return;
-    }
+    // If psomEl is the render list itself (RIGHT panels often use data-psom-key on .ad-list),
+    // never hide the list; show the empty message inside it.
+    const psomIsList = (t.psomEl === t.list);
+
     t.psomEl.style.display = 'block';
     t.psomEl.textContent = emptyText();
     t.psomEl.style.padding = '12px';
@@ -135,7 +129,8 @@
       if (!t.isRight) {
         t.scroller.style.display = 'none';
       } else if (t.mode === 'ad-section') {
-        t.scroller.style.display = 'none';
+        // RIGHT ad-section: keep scroller visible when psomEl is list (otherwise list will disappear)
+        if (!psomIsList) t.scroller.style.display = 'none';
       } else {
         // RIGHT direct: keep panel visible
       }
@@ -143,8 +138,25 @@
   }
 
   function showData(t){
-    // Only hide placeholder node when it's different from the actual list.
-    if (t.psomEl !== t.list) t.psomEl.style.display = 'none';
+    const psomIsList = (t.psomEl === t.list);
+
+    // If psomEl is the list itself, do NOT hide it.
+    if (!psomIsList) {
+      t.psomEl.style.display = 'none';
+    } else {
+      t.psomEl.style.display = '';
+      // clear empty message styling if any
+      t.psomEl.textContent = '';
+      t.psomEl.style.padding = '';
+      t.psomEl.style.background = '';
+      t.psomEl.style.borderRadius = '';
+      t.psomEl.style.color = '';
+      t.psomEl.style.textAlign = '';
+      t.psomEl.style.fontSize = '';
+      t.psomEl.style.lineHeight = '';
+      t.psomEl.style.minHeight = '';
+    }
+
     if (t.scroller) {
       if (!t.isRight) {
         t.scroller.style.display = '';
@@ -301,6 +313,16 @@
 
     const t = resolveTargets(psomEl, key);
     if (!t.list) return;
+
+    // RIGHT panel scroll safety (some CSS forces overflow:visible)
+    if (t.isRight && t.scroller) {
+      try{
+        t.scroller.style.overflowY = 'auto';
+        t.scroller.style.webkitOverflowScrolling = 'touch';
+        t.scroller.style.touchAction = 'pan-y';
+      }catch(e){}
+    }
+
 
     const isRight = t.isRight;
 

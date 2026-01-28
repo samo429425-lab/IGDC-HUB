@@ -1,66 +1,71 @@
-
-/* ================= IGDC Search.js — RICH CARDS CANONICAL v2 =================
- * GUARANTEES:
- * 1) NO result limiting (no slice/pageSize)
- * 2) NO source pruning (all multi-source fan-out preserved)
- * 3) NO pipeline changes (engine/bridge/snapshot/feed untouched)
- * 4) ADAPTER-ONLY: accepts every known result shape, never deletes fields
- * ========================================================================== */
-
+// IGDC Search.js — FINAL A+ (safe, no filter, correct source labels, robust unwrap)
 document.addEventListener('DOMContentLoaded', () => {
   if (!location.pathname.endsWith('/search.html')) return;
 
-  const input =
-    document.getElementById('searchInput') ||
-    document.getElementById('q');
-
-  const btn =
-    document.getElementById('searchBtn');
-
-  const status =
-    document.getElementById('searchStatus') ||
-    document.getElementById('status');
-
-  const results =
-    document.getElementById('searchResults') ||
-    document.getElementById('results');
-
+  const input = document.getElementById('searchInput');
+  const btn = document.getElementById('searchBtn');
+  const status = document.getElementById('searchStatus');
+  const results = document.getElementById('searchResults');
   if (!input || !btn || !status || !results) return;
 
-  let __ALL_ITEMS__ = [];
+  const params = new URLSearchParams(location.search);
+  const q0 = (params.get('q') || '').trim();
+  if (q0) { input.value = q0; runSearch(q0); }
+  else status.textContent = '';
 
-  /* ---------- ADAPTERS (non-destructive) ---------- */
-  function unwrapResponse(x){
-    if (!x) return {};
-    if (Array.isArray(x.items) || Array.isArray(x.results)) return x;
+  btn.onclick = () => {
+    const q = input.value.trim();
+    if (!q) return;
+    const u = new URL(location.href);
+    u.searchParams.set('q', q);
+    history.replaceState(null, '', u.toString());
+    runSearch(q);
+  };
+
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') btn.click(); });
+
+  function unwrap(x){
+    if (!x) return x;
     if (x.data && (Array.isArray(x.data.items) || Array.isArray(x.data.results))) return x.data;
-    if (x.baseResult) {
-      if (Array.isArray(x.baseResult.items) || Array.isArray(x.baseResult.results)) return x.baseResult;
-      if (x.baseResult.data) return x.baseResult.data;
-    }
+    if (x.baseResult && (Array.isArray(x.baseResult.items) || Array.isArray(x.baseResult.results))) return x.baseResult;
+    if (x.baseResult && x.baseResult.data && (Array.isArray(x.baseResult.data.items) || Array.isArray(x.baseResult.data.results))) return x.baseResult.data;
     return x;
   }
 
   async function fetchMaru(q){
-    const endpoints = [
-      '/.netlify/functions/maru-search',
-      '/netlify/functions/maru-search'
+    const urls = [
+      `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=100`,
+      `/netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=100`
     ];
     let lastErr;
-    for (const ep of endpoints){
+    for (const u of urls){
       try{
-        const r = await fetch(`${ep}?q=${encodeURIComponent(q)}`, { cache: 'no-store' });
-        if (!r.ok) { lastErr = new Error(r.status); continue; }
+        const r = await fetch(u, { cache: 'no-store' });
+        if (!r.ok) { lastErr = new Error('HTTP '+r.status); continue; }
         return await r.json();
       }catch(e){ lastErr = e; }
     }
     throw lastErr;
   }
 
-  /* ---------- HELPERS ---------- */
+  async function runSearch(q){
+    status.textContent = 'Searching…';
+    results.innerHTML = '';
+    try{
+      const j0 = await fetchMaru(q);
+      const d = unwrap(j0) || {};
+      const items = d.items || d.results || [];
+      if (!items.length) { status.textContent = 'No results.'; return; }
+      status.textContent = `${items.length} results`;
+      items.forEach(render);
+    }catch(e){
+      console.error(e);
+      status.textContent = 'Search error';
+    }
+  }
+
   function domainOf(url){
-    try { return new URL(url).hostname.replace(/^www\./,''); }
-    catch(e){ return ''; }
+    try{ return new URL(url).hostname.replace(/^www\./,''); }catch(e){ return ''; }
   }
 
   function faviconOf(url){
@@ -68,125 +73,71 @@ document.addEventListener('DOMContentLoaded', () => {
     return d ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64` : '';
   }
 
-  function sourceBadge(url){
+  function detectSourceByUrl(url){
     const u = (url || '').toLowerCase();
-    if (u.includes('wikipedia.org')) return { t:'Wikipedia', i:'📘' };
-    if (u.includes('youtube.com') || u.includes('youtu.be')) return { t:'YouTube', i:'▶️' };
-    if (u.includes('naver.')) return { t:'NAVER', i:'🟢' };
-    if (u.includes('google.')) return { t:'Google', i:'🔵' };
-    if (u.includes('bing.') || u.includes('microsoft.')) return { t:'Bing/MS', i:'🟦' };
-    if (u.includes('reuters.') || u.includes('nytimes.') || u.includes('bbc.')) return { t:'News', i:'📰' };
-    return { t:'Web', i:'🌐' };
+    if (u.includes('wikipedia.org')) return { n:'Wikipedia', i:'📘' };
+    if (u.includes('youtube.com') || u.includes('youtu.be')) return { n:'YouTube', i:'▶️' };
+    if (u.includes('google.')) return { n:'Google', i:'🔵' };
+    if (u.includes('bing.') || u.includes('microsoft.com')) return { n:'Bing/MS', i:'🟦' };
+    if (u.includes('naver.')) return { n:'NAVER', i:'🟢' };
+    if (u.includes('reuters.com')) return { n:'Reuters', i:'📰' };
+    if (u.includes('nytimes.com')) return { n:'NYTimes', i:'📰' };
+    return { n:'Web', i:'🌐' };
   }
 
-  /* ---------- RENDER ---------- */
-  function clear(){
-    results.innerHTML = '';
-  }
-
-  function renderAll(items){
-    clear();
-    status.textContent = items.length ? `${items.length} results` : 'No results';
-    items.forEach(renderCard);
-  }
-
-  function renderCard(it){
-    const url = it.url || it.link || it.href || '';
+  function render(it){
+    const url = it.url || it.link || '';
     const card = document.createElement('div');
     card.className = 'card';
+    card.style.cursor = url ? 'pointer' : 'default';
+    if (url) card.onclick = () => { location.href = url; };
 
-    const thumb = it.thumbnail || it.image || it.ogImage || it.previewImage;
-    if (thumb){
+    if (it.thumbnail || it.image){
       const img = document.createElement('img');
       img.className = 'thumb';
-      img.src = thumb;
-      img.loading = 'lazy';
+      img.src = it.thumbnail || it.image;
       img.onerror = () => img.remove();
       card.appendChild(img);
     }
 
     const body = document.createElement('div');
 
-    const title = document.createElement('div');
-    title.className = 'title';
-    title.textContent = it.title || it.name || 'Untitled';
+    const t = document.createElement('div');
+    t.className = 'title';
+    t.textContent = (it.title || it.name || 'Untitled').trim();
 
-    const desc = document.createElement('div');
-    desc.className = 'desc';
-    desc.textContent = it.summary || it.description || it.snippet || '';
+    const d = document.createElement('div');
+    d.className = 'desc';
+    d.textContent = (it.summary || it.description || it.snippet || '').trim();
 
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-
-    const fav = document.createElement('img');
-    fav.className = 'favicon';
-    const f = faviconOf(url);
-    if (f){ fav.src = f; fav.loading = 'lazy'; } else fav.style.display='none';
-
-    const badge = document.createElement('span');
-    const sb = sourceBadge(url);
-    badge.className = 'badge';
-    badge.textContent = `${sb.i} ${sb.t}`;
-
+    const m = document.createElement('div');
+    m.className = 'meta';
+    const src = detectSourceByUrl(url);
+    const b = document.createElement('span');
+    b.className = 'badge';
+    b.textContent = `${src.i} ${src.n}`;
+    // favicon + domain (Google-like)
+    const favUrl = faviconOf(url);
+    if (favUrl) {
+      const fav = document.createElement('img');
+      fav.className = 'favicon';
+      fav.src = favUrl;
+      fav.alt = '';
+      fav.loading = 'lazy';
+      fav.onerror = () => fav.remove();
+      m.appendChild(fav);
+    }
+    m.appendChild(b);
     const dom = document.createElement('span');
     dom.className = 'domain';
     dom.textContent = domainOf(url);
+    m.appendChild(dom);
 
-    meta.appendChild(fav);
-    meta.appendChild(badge);
-    meta.appendChild(dom);
-
-    const actions = document.createElement('div');
-    actions.className = 'actions';
-    if (url){
-      const a = document.createElement('a');
-      a.href = url;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      a.textContent = 'Open';
-      actions.appendChild(a);
-    }
-
-    body.appendChild(title);
-    if (desc.textContent) body.appendChild(desc);
-    body.appendChild(meta);
-    body.appendChild(actions);
+    body.appendChild(t);
+    if (d.textContent) body.appendChild(d);
+    body.appendChild(m);
 
     card.appendChild(body);
     results.appendChild(card);
   }
-
-  /* ---------- SEARCH FLOW ---------- */
-  async function run(q){
-    status.textContent = 'Searching…';
-    clear();
-    try{
-      const raw = await fetchMaru(q);
-      const data = unwrapResponse(raw) || {};
-      const items = data.items || data.results || [];
-      __ALL_ITEMS__ = items.map(x => ({ ...x })); // copy, no filter
-      renderAll(__ALL_ITEMS__);
-    }catch(e){
-      console.error(e);
-      status.textContent = 'Search error';
-    }
-  }
-
-  /* ---------- INIT ---------- */
-  const p = new URLSearchParams(location.search);
-  const q0 = (p.get('q') || '').trim();
-  if (q0){ input.value = q0; run(q0); }
-
-  btn.onclick = () => {
-    const q = input.value.trim();
-    if (!q) return;
-    const u = new URL(location.href);
-    u.searchParams.set('q', q);
-    history.pushState(null, '', u.toString());
-    run(q);
-  };
-
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') btn.click();
-  });
 });
