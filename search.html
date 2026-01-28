@@ -4,84 +4,246 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>IGDC Search</title>
-
 <style>
-*{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto;}
-body{margin:0;background:#fff;color:#111}
-header{padding:14px 18px;border-bottom:1px solid #e5e7eb;display:flex;gap:10px;align-items:center}
-header input{flex:1;padding:12px 16px;border-radius:999px;border:1px solid #d1d5db;font-size:16px}
-header button{padding:10px 18px;border-radius:999px;border:none;background:#2563eb;color:#fff;font-size:15px;cursor:pointer}
+  *{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+  body{margin:0;background:#fff;color:#111}
+  header{padding:14px 18px;border-bottom:1px solid #e5e7eb;display:flex;gap:10px;align-items:center}
+  .searchbar{flex:1;display:flex;align-items:center;border:1px solid #d1d5db;border-radius:999px;padding:10px 14px;gap:10px;background:#fff}
+  .searchbar input{flex:1;border:none;outline:none;font-size:16px}
+  .searchbar button{border:none;background:#2563eb;color:#fff;border-radius:999px;padding:10px 18px;font-size:14px;cursor:pointer}
+  .searchbar button:hover{background:#1d4ed8}
+  #searchStatus{padding:10px 18px;color:#374151;font-size:14px}
 
-#container{display:flex;height:calc(100vh - 70px)}
-#results{width:340px;border-right:1px solid #e5e7eb;overflow-y:auto}
-.result-item{padding:14px 16px;border-bottom:1px solid #f1f5f9;cursor:pointer}
-.result-item:hover{background:#f8fafc}
-.result-title{font-size:15px;font-weight:600;color:#1a0dab}
-.result-desc{font-size:13px;color:#4b5563;margin-top:6px}
+  #viewList{padding:0 18px 18px}
+  #viewSplit{display:none;height:calc(100vh - 70px);border-top:1px solid #e5e7eb}
 
-#viewer{flex:1}
-#viewer iframe{width:100%;height:100%;border:none}
+  .result-card{padding:14px 12px;border-bottom:1px solid #eef2f7;cursor:pointer}
+  .result-card:hover{background:#f9fafb}
+  .result-title{font-size:16px;font-weight:700;color:#1a0dab;text-decoration:none}
+  .result-desc{margin-top:6px;font-size:14px;color:#4b5563;line-height:1.45}
 
-#empty{padding:40px;color:#6b7280;text-align:center}
+  #sidebar{width:330px;border-right:1px solid #e5e7eb;overflow-y:auto}
+  #main{flex:1;min-width:0}
+  #main iframe{width:100%;height:100%;border:0}
+
+  .side-item{padding:12px 12px;border-bottom:1px solid #eef2f7;cursor:pointer}
+  .side-item:hover{background:#f9fafb}
+  .side-item.active{background:#eef2ff}
+  .side-title{font-size:14px;font-weight:700;color:#1a0dab}
+
+  .empty{padding:26px 0;color:#6b7280}
 </style>
 </head>
-
 <body>
 
 <header>
-  <input id="q" placeholder="검색어를 입력하세요"/>
-  <button id="searchBtn">검색</button>
+  <div class="searchbar" role="search">
+    <input id="searchInput" type="search" placeholder="검색어를 입력하세요" autocomplete="off" />
+    <button id="searchBtn" type="button">검색</button>
+  </div>
 </header>
 
-<div id="container">
-  <div id="results">
-    <div id="empty">검색 결과가 여기에 표시됩니다.</div>
-  </div>
-  <div id="viewer">
-    <iframe id="iframe" src=""></iframe>
-  </div>
+<div id="searchStatus"></div>
+
+<div id="viewList">
+  <div id="searchResults"></div>
+</div>
+
+<div id="viewSplit">
+  <div id="sidebar"></div>
+  <div id="main"><iframe id="previewFrame" src=""></iframe></div>
 </div>
 
 <script>
-const params = new URLSearchParams(location.search);
-const qParam = params.get('q');
-const input = document.getElementById('q');
-const btn = document.getElementById('searchBtn');
-const resultsEl = document.getElementById('results');
-const iframe = document.getElementById('iframe');
+(function(){
+  const input = document.getElementById('searchInput');
+  const btn = document.getElementById('searchBtn');
+  const statusEl = document.getElementById('searchStatus');
+  const resultsEl = document.getElementById('searchResults');
 
-if(qParam){input.value=qParam; runSearch(qParam);}
+  const viewList = document.getElementById('viewList');
+  const viewSplit = document.getElementById('viewSplit');
+  const sidebar = document.getElementById('sidebar');
+  const frame = document.getElementById('previewFrame');
 
-btn.onclick = ()=>{ if(input.value.trim()) location.search='?q='+encodeURIComponent(input.value.trim()); };
-input.onkeydown = e=>{ if(e.key==='Enter') btn.click(); };
+  let lastResults = [];
+  let activeIndex = -1;
 
-async function runSearch(q){
-  resultsEl.innerHTML='<div id="empty">검색 중...</div>';
-  try{
-    const res = await fetch('/netlify/functions/maru-search?q='+encodeURIComponent(q));
-    const data = await res.json();
-    const list = data.results || data.items || [];
-    if(!list.length){
-      resultsEl.innerHTML='<div id="empty">결과 없음</div>'; return;
-    }
-    resultsEl.innerHTML='';
-    list.forEach(item=>{
-      const div=document.createElement('div');
-      div.className='result-item';
-      div.innerHTML=`<div class="result-title">${item.title||'제목 없음'}</div>
-                     <div class="result-desc">${item.description||item.snippet||''}</div>`;
-      div.onclick=()=>{
-        iframe.src=item.url;
-        history.pushState({url:item.url},'',location.pathname+location.search+'#view');
-      };
-      resultsEl.appendChild(div);
-    });
-  }catch(e){
-    resultsEl.innerHTML='<div id="empty">검색 오류</div>';
+  const params = new URLSearchParams(location.search);
+  const q = (params.get('q') || '').trim();
+
+  if (q) {
+    input.value = q;
+    runSearch(q);
+  } else {
+    setStatus('검색어를 입력하세요.');
+    resultsEl.innerHTML = '<div class="empty">검색 결과가 여기에 표시됩니다.</div>';
   }
-}
 
-window.onpopstate=()=>{iframe.src='';};
+  btn.addEventListener('click', () => {
+    const keyword = (input.value || '').trim();
+    if (!keyword) return;
+
+    const url = new URL(location.href);
+    url.searchParams.set('q', keyword);
+    history.replaceState(null, '', url.toString());
+
+    showListView();
+    runSearch(keyword);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      btn.click();
+    }
+  });
+
+  window.addEventListener('popstate', () => {
+    showListView();
+  });
+
+  function setStatus(t){ statusEl.textContent = t; }
+
+  async function fetchMaru(keyword){
+    const urls = [
+      `/.netlify/functions/maru-search?q=${encodeURIComponent(keyword)}`,
+      `/netlify/functions/maru-search?q=${encodeURIComponent(keyword)}`
+    ];
+    let lastErr;
+    for (const u of urls){
+      try{
+        const res = await fetch(u, {cache:'no-store'});
+        if(!res.ok){ lastErr = new Error('HTTP '+res.status); continue; }
+        return await res.json();
+      }catch(e){ lastErr = e; }
+    }
+    throw lastErr || new Error('fetch_failed');
+  }
+
+  function normalizePayload(data){
+    if (!data) return { error: '검색 엔진 오류', items: [] };
+    if (data.status === 'error') return { error: data.message || '검색 엔진 오류', items: [] };
+
+    const raw =
+      (Array.isArray(data.items) && data.items) ||
+      (Array.isArray(data.results) && data.results) ||
+      (Array.isArray(data) && data) ||
+      [];
+
+    const items = raw.map(it => ({
+      title: (it.title || it.name || '').trim() || '제목 없음',
+      url: (it.url || it.link || it.href || '').trim(),
+      desc: (it.description || it.snippet || it.summary || '').trim(),
+    })).filter(x => x.url || x.title);
+
+    return { error: null, items };
+  }
+
+  async function runSearch(keyword){
+    setStatus('검색 중입니다…');
+    resultsEl.innerHTML = '';
+    lastResults = [];
+    activeIndex = -1;
+
+    try{
+      const data = await fetchMaru(keyword);
+      const norm = normalizePayload(data);
+
+      if (norm.error){
+        setStatus(norm.error);
+        resultsEl.innerHTML = '<div class="empty">검색 오류</div>';
+        return;
+      }
+
+      if (!norm.items.length){
+        setStatus('검색 결과가 없습니다.');
+        resultsEl.innerHTML = '<div class="empty">검색 결과가 없습니다.</div>';
+        return;
+      }
+
+      setStatus(`${norm.items.length}개의 결과`);
+      lastResults = norm.items;
+      renderListCards(norm.items);
+
+    }catch(e){
+      console.error(e);
+      setStatus('검색 중 오류가 발생했습니다.');
+      resultsEl.innerHTML = '<div class="empty">검색 오류</div>';
+    }
+  }
+
+  function renderListCards(items){
+    resultsEl.innerHTML = '';
+    items.forEach((item, idx) => {
+      const card = document.createElement('div');
+      card.className = 'result-card';
+
+      const t = document.createElement('div');
+      t.className = 'result-title';
+      t.textContent = item.title;
+
+      card.appendChild(t);
+
+      if (item.desc) {
+        const d = document.createElement('div');
+        d.className = 'result-desc';
+        d.textContent = item.desc;
+        card.appendChild(d);
+      }
+
+      card.addEventListener('click', () => {
+        activateSplit(idx);
+      });
+
+      resultsEl.appendChild(card);
+    });
+  }
+
+  function showListView(){
+    viewSplit.style.display = 'none';
+    viewList.style.display = 'block';
+    frame.src = '';
+  }
+
+  function activateSplit(index){
+    if (!lastResults.length) return;
+    if (index < 0 || index >= lastResults.length) return;
+
+    viewList.style.display = 'none';
+    viewSplit.style.display = 'flex';
+
+    openResult(index);
+
+    const u = new URL(location.href);
+    u.hash = 'view';
+    history.pushState({mode:'view'}, '', u.toString());
+  }
+
+  function renderSidebar(){
+    sidebar.innerHTML = '';
+    lastResults.forEach((item, idx) => {
+      const row = document.createElement('div');
+      row.className = 'side-item' + (idx===activeIndex ? ' active' : '');
+
+      const st = document.createElement('div');
+      st.className = 'side-title';
+      st.textContent = item.title;
+
+      row.appendChild(st);
+      row.addEventListener('click', () => openResult(idx));
+      sidebar.appendChild(row);
+    });
+  }
+
+  function openResult(index){
+    activeIndex = index;
+    renderSidebar();
+
+    const item = lastResults[index];
+    frame.src = item.url || 'about:blank';
+  }
+})();
 </script>
 
 </body>
