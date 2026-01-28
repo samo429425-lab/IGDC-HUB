@@ -1,151 +1,190 @@
 /* =========================================================
-   MARU SEARCH – Standalone Advanced Search Engine
-   Version: v4.0 (Future-ready / Multi-source tolerant)
-   Role:
-   - Single entry: maru-search Netlify Function
-   - Tolerant to multiple payload schemas
-   - Rich result cards (title, description, link, thumbnail, source)
+   MARU SEARCH – Standalone Search.js (FINAL / v5.0)
+   ---------------------------------------------------------
+   목표:
+   - 오직 maru-search(Netlify Function)만 호출
+   - maru-search 실제 응답 스키마(status/ items/ meta) 100% 호환
+   - 에러/빈결과 안전 처리 (200 + status:'error' 포함)
+   - 페이지 리로드 없이 재검색 (history.replaceState)
+   - 카드 전체 클릭(링크), 설명/출처/썸네일 표시
    ========================================================= */
 
 document.addEventListener('DOMContentLoaded', () => {
   const params = new URLSearchParams(window.location.search);
-  const q = params.get('q') || '';
+  const initialQ = (params.get('q') || '').trim();
 
   const input = document.getElementById('searchInput');
   const btn = document.getElementById('searchBtn');
-  const status = document.getElementById('searchStatus');
-  const results = document.getElementById('searchResults');
+  const statusEl = document.getElementById('searchStatus');
+  const resultsEl = document.getElementById('searchResults');
 
-  if (input && q) input.value = q;
-  if (q) runSearch(q);
-
-  if (btn) {
-    btn.addEventListener('click', () => {
-      const keyword = input.value.trim();
-      if (!keyword) return;
-      window.location.search = `?q=${encodeURIComponent(keyword)}`;
-    });
+  if (!input || !btn || !statusEl || !resultsEl) {
+    console.error('[MARU SEARCH] required DOM ids missing: searchInput/searchBtn/searchStatus/searchResults');
+    return;
   }
 
-  if (input) {
-    input.addEventListener('keydown', e => {
-      if (e.key === 'Enter') btn.click();
-    });
+  if (initialQ) {
+    input.value = initialQ;
+    runSearch(initialQ);
+  } else {
+    setStatus('검색어를 입력하세요.');
   }
 
-  async function runSearch(keyword) {
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    const q = (input.value || '').trim();
+    if (!q) return;
+    setQueryWithoutReload(q);
+    runSearch(q);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      btn.click();
+    }
+  });
+
+  function setQueryWithoutReload(q) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('q', q);
+    window.history.replaceState(null, '', url.toString());
+  }
+
+  function setStatus(text) {
+    statusEl.textContent = text;
+  }
+
+  async function fetchMaruSearch(q) {
+    // Netlify에서 보통 /.netlify/functions 이지만,
+    // 프로젝트에 따라 /netlify/functions 리라이트가 있을 수 있어 둘 다 시도.
+    const candidates = [
+      `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}`,
+      `/netlify/functions/maru-search?q=${encodeURIComponent(q)}`
+    ];
+
+    let lastErr = null;
+
+    for (const url of candidates) {
+      try {
+        const res = await fetch(url, { method: 'GET', cache: 'no-store' });
+        if (!res.ok) {
+          lastErr = new Error(`HTTP_${res.status}`);
+          continue;
+        }
+        // maru-search는 에러여도 200 + {status:'error'} 를 반환할 수 있음
+        const data = await res.json();
+        return data;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+
+    throw lastErr || new Error('fetch_failed');
+  }
+
+  async function runSearch(q) {
     setStatus('검색 중입니다…');
-    results.innerHTML = '';
+    resultsEl.innerHTML = '';
 
     try {
-      const res = await fetch(
-        `/netlify/functions/maru-search?q=${encodeURIComponent(keyword)}`
-      );
+      const data = await fetchMaruSearch(q);
 
-      if (!res.ok) throw new Error('MARU SEARCH API ERROR');
+      // maru-search error payload: {status:'error', message, detail...}
+      if (data && data.status === 'error') {
+        setStatus(data.message ? `검색 엔진 오류: ${data.message}` : '검색 엔진 오류가 발생했습니다.');
+        // detail은 콘솔에만
+        console.error('[MARU SEARCH ENGINE ERROR]', data);
+        return;
+      }
 
-      const data = await res.json();
+      // maru-search ok payload: {status:'ok', items:[...], meta:{...}}
+      const rawItems =
+        (data && Array.isArray(data.items) && data.items) ||
+        (data && Array.isArray(data.results) && data.results) ||
+        (data && data.data && Array.isArray(data.data.items) && data.data.items) ||
+        [];
 
-      // Normalize results from any possible schema
-      const list = normalizeResults(data);
+      const items = rawItems.map(normalizeItem).filter(x => x.url || x.title);
 
-      if (!list.length) {
+      if (items.length === 0) {
         setStatus('검색 결과가 없습니다.');
         return;
       }
 
-      setStatus(`${list.length}개의 결과`);
-      list.forEach(renderCard);
+      setStatus(`${items.length}개의 결과`);
+      items.forEach(renderCard);
 
-    } catch (err) {
-      console.error('[MARU SEARCH]', err);
+    } catch (e) {
+      console.error('[MARU SEARCH JS ERROR]', e);
       setStatus('검색 중 오류가 발생했습니다.');
     }
   }
 
-  function normalizeResults(data) {
-    if (!data) return [];
+  function normalizeItem(it) {
+    const title = (it.title || it.name || it.heading || '').trim() || '제목 없음';
+    const url = (it.url || it.link || it.href || '').trim() || '';
+    const description =
+      (it.description || it.summary || it.snippet || it.excerpt || '').trim();
 
-    // Preferred: data.results
-    if (Array.isArray(data.results)) return data.results.map(normalizeItem);
+    const thumbnail =
+      (it.thumbnail || it.image || it.thumb || it.icon || '').trim() || '';
 
-    // Fallback: data.items (global / legacy)
-    if (Array.isArray(data.items)) return data.items.map(normalizeItem);
+    const source =
+      (it.source || it.provider || it.site || '').trim();
 
-    // Snapshot-style object map
-    if (typeof data === 'object') {
-      return Object.values(data)
-        .filter(v => typeof v === 'object')
-        .map(normalizeItem);
-    }
-
-    return [];
-  }
-
-  function normalizeItem(item) {
-    return {
-      title: item.title || item.name || '제목 없음',
-      url: item.url || item.link || '#',
-      description:
-        item.description ||
-        item.snippet ||
-        item.summary ||
-        '',
-      thumbnail:
-        item.thumbnail ||
-        item.image ||
-        item.thumb ||
-        null,
-      source:
-        item.source ||
-        item.provider ||
-        'MARU'
-    };
+    return { title, url, description, thumbnail, source };
   }
 
   function renderCard(item) {
     const card = document.createElement('div');
     card.className = 'search-card';
 
-    // Entire card clickable
-    card.addEventListener('click', () => {
-      if (item.url && item.url !== '#') {
-        window.open(item.url, '_blank', 'noopener');
-      }
-    });
+    const a = document.createElement('a');
+    a.className = 'search-card-link';
+    a.href = item.url || '#';
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
 
+    // 썸네일
     if (item.thumbnail) {
       const img = document.createElement('img');
+      img.className = 'search-thumb';
       img.src = item.thumbnail;
       img.alt = item.title;
-      img.className = 'search-thumb';
-      card.appendChild(img);
+      img.loading = 'lazy';
+      // 이미지 로드 실패 시 숨김
+      img.addEventListener('error', () => {
+        img.remove();
+      });
+      a.appendChild(img);
     }
 
     const body = document.createElement('div');
     body.className = 'search-body';
 
-    const title = document.createElement('div');
-    title.className = 'search-title';
-    title.textContent = item.title;
+    const t = document.createElement('div');
+    t.className = 'search-title';
+    t.textContent = item.title;
 
-    const desc = document.createElement('div');
-    desc.className = 'search-desc';
-    desc.textContent = item.description;
+    body.appendChild(t);
 
-    const meta = document.createElement('div');
-    meta.className = 'search-meta';
-    meta.textContent = item.source;
+    if (item.description) {
+      const d = document.createElement('div');
+      d.className = 'search-desc';
+      d.textContent = item.description;
+      body.appendChild(d);
+    }
 
-    body.appendChild(title);
-    if (item.description) body.appendChild(desc);
-    body.appendChild(meta);
+    if (item.source) {
+      const m = document.createElement('div');
+      m.className = 'search-meta';
+      m.textContent = item.source;
+      body.appendChild(m);
+    }
 
-    card.appendChild(body);
-    results.appendChild(card);
-  }
-
-  function setStatus(text) {
-    if (status) status.textContent = text;
+    a.appendChild(body);
+    card.appendChild(a);
+    resultsEl.appendChild(card);
   }
 });
