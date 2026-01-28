@@ -93,7 +93,10 @@
       const scrollA = section && (section.querySelector('.ad-scroll') || section);
       const listA = section && section.querySelector('.ad-list');
       if (listA) {
-        return { isRight: true, mode: 'ad-section', section, scroller: scrollA, list: listA, psomEl };
+        // NOTE: home.html uses data-psom-key on .ad-list itself.
+        // In that case, psomEl === listA, so hiding psomEl would hide the rendered list.
+        const mode = (psomEl === listA) ? 'direct' : 'ad-section';
+        return { isRight: true, mode, section, scroller: scrollA, list: listA, psomEl };
       }
 
       // Layout B: direct list (data-psom-key is on .ad-list itself)
@@ -110,6 +113,13 @@
   }
 
   function showEmpty(t){
+    // If psomEl is the same node as list (e.g., data-psom-key on .ad-list),
+    // do NOT hide the list by styling psomEl. Render empty message inside the list.
+    if (t.psomEl === t.list) {
+      t.list.innerHTML = '<div class="igdc-empty" style="padding:12px;border-radius:12px;background:#f7f7f7;color:#666;text-align:center;font-size:14px;line-height:1.6;min-height:44px;">'+ emptyText() +'</div>';
+      // keep scroller visible (RIGHT panel should remain visible)
+      return;
+    }
     t.psomEl.style.display = 'block';
     t.psomEl.textContent = emptyText();
     t.psomEl.style.padding = '12px';
@@ -133,7 +143,8 @@
   }
 
   function showData(t){
-    t.psomEl.style.display = 'none';
+    // Only hide placeholder node when it's different from the actual list.
+    if (t.psomEl !== t.list) t.psomEl.style.display = 'none';
     if (t.scroller) {
       if (!t.isRight) {
         t.scroller.style.display = '';
