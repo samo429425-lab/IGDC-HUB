@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>IGDC Search View</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+(function () {
+  const params = new URLSearchParams(window.location.search);
+  const u = params.get('u');
+  if (!u) {
+    document.body.innerText = '잘못된 접근입니다.';
+    return;
+  }
+  const target = decodeURIComponent(u);
+  // 히스토리는 남기되 IGDC 컨텍스트 유지
+  window.location.replace(target);
+})();
+</script>
+</head>
+<body>
+</body>
+</html>
