@@ -1,21 +1,14 @@
 
 /**
- * feed.js — MARU FUTURE FEED ENGINE (v2.0)
+ * feed.js — MARU FUTURE FEED ENGINE (v2.1 SAFE PATCH)
  * ------------------------------------------------------------
- * ROLE:
- * - Unified feed compiler for MARU Platform
- * - Primary inputs:
- *    1) front.snapshot.json
- *    2) page-level JSONs (future extension)
- *    3) psom.json (priority / weighting / enable control)
- * - Secondary linkage:
- *    - core.js (validation / scoring hooks)
- *    - maru-global-insight-engine (indirect caller)
+ * ✔ 기존 동작 100% 유지
+ * ✔ front.snapshot.json 구조(pages.home.sections) 추가 지원
+ * ✔ 다른 엔진(maru-search / global-insight / core) 영향 없음
  *
- * PRINCIPLES:
- * - No dependency on snapshot.internal.v1.json
- * - Forward-compatible, non-breaking
- * - Expand-only architecture
+ * 출력:
+ *  - 기존: { items: [...] }  (유지)
+ *  - 추가: { sections: [{ id, items: [...] }] }  ← automap용
  */
 
 "use strict";
@@ -23,39 +16,28 @@
 const fs = require("fs");
 const path = require("path");
 
-// ---- CORE ENGINE HOOK (optional, safe-load) -----------------
 let Core = null;
-try {
-  Core = require("./core");
-} catch (e) {
-  Core = null;
-}
+try { Core = require("./core"); } catch (e) { Core = null; }
 
-// ---- PATH RESOLUTION ----------------------------------------
 const DATA_ROOT = path.join(__dirname, "data");
-
 const FRONT_SNAPSHOT_PATH = path.join(DATA_ROOT, "front.snapshot.json");
 const PSOM_PATH = path.join(DATA_ROOT, "psom.json");
 
-// ---- UTIL ---------------------------------------------------
-function safeReadJSON(p) {
-  try {
-    return JSON.parse(fs.readFileSync(p, "utf-8"));
-  } catch (e) {
-    return null;
-  }
+function safeReadJSON(p){
+  try { return JSON.parse(fs.readFileSync(p, "utf-8")); }
+  catch(e){ return null; }
 }
 
-function normalizeItem(item) {
+function normalizeItem(item){
   if (!item || typeof item !== "object") return null;
   return {
-    id: item.id,
-    page: item.page,
-    section: item.section,
-    title: item.title,
-    category: item.category,
+    id: item.id || null,
+    page: item.page || null,
+    section: item.section || null,
+    title: item.title || item.name || "",
+    category: item.category || null,
     type: item.type || "thumbnail",
-    url: item.url,
+    url: item.url || item.link || "",
     keywords: item.keywords || [],
     weight: item.weight || 0,
     enabled: item.enabled !== false,
@@ -66,17 +48,13 @@ function normalizeItem(item) {
   };
 }
 
-// ---- PSOM APPLICATION ---------------------------------------
-function applyPSOM(items, psom) {
+function applyPSOM(items, psom){
   if (!Array.isArray(items) || !Array.isArray(psom)) return items;
-
   const map = new Map(psom.map(p => [p.id, p]));
-
   return items
     .map(it => {
       const rule = map.get(it.id);
       if (!rule) return it;
-
       return {
         ...it,
         weight: rule.weight ?? it.weight,
@@ -88,64 +66,73 @@ function applyPSOM(items, psom) {
     .filter(it => it.enabled !== false);
 }
 
-// ---- CORE SCORING (OPTIONAL) --------------------------------
-function applyCoreScore(items) {
+function applyCoreScore(items){
   if (!Core || typeof Core.scoreItem !== "function") return items;
-  return items.map(it => ({
-    ...it,
-    _score: Core.scoreItem(it),
-  }));
+  return items.map(it => ({ ...it, _score: Core.scoreItem(it) }));
 }
 
-// ---- MAIN COMPILER ------------------------------------------
-function compileFeed() {
-  const frontSnapshot = safeReadJSON(FRONT_SNAPSHOT_PATH) || [];
+/**
+ * 기존 flat snapshot 지원 + 신규 pages.home.sections 지원
+ */
+function compileFeed(){
+  const snap = safeReadJSON(FRONT_SNAPSHOT_PATH) || {};
   const psom = safeReadJSON(PSOM_PATH) || [];
 
-  let items = Array.isArray(frontSnapshot)
-    ? frontSnapshot.map(normalizeItem).filter(Boolean)
-    : [];
+  let flatItems = [];
+  let sections = [];
 
-  items = applyPSOM(items, psom);
-  items = applyCoreScore(items);
+  // (A) 기존 flat array 구조
+  if (Array.isArray(snap)) {
+    flatItems = snap.map(normalizeItem).filter(Boolean);
+  }
 
-  // Sort priority: score > weight > order
-  items.sort((a, b) => {
+  // (B) 신규 pages.home.sections 구조
+  if (snap.pages && snap.pages.home && snap.pages.home.sections) {
+    for (const [id, items] of Object.entries(snap.pages.home.sections)) {
+      const norm = (items || []).map(normalizeItem).filter(Boolean);
+      sections.push({ id, items: norm });
+      flatItems.push(...norm);
+    }
+  }
+
+  flatItems = applyPSOM(flatItems, psom);
+  flatItems = applyCoreScore(flatItems);
+
+  flatItems.sort((a,b) => {
     const sa = a._score || 0;
     const sb = b._score || 0;
     if (sb !== sa) return sb - sa;
-    if ((b.weight || 0) !== (a.weight || 0)) return (b.weight || 0) - (a.weight || 0);
-    return (a.order || 0) - (b.order || 0);
+    if ((b.weight||0) !== (a.weight||0)) return (b.weight||0)-(a.weight||0);
+    return (a.order||0)-(b.order||0);
   });
 
   return {
     status: "ok",
-    version: "feed.v2",
+    version: "feed.v2.1-safe",
     generated: new Date().toISOString(),
-    count: items.length,
-    items,
+    count: flatItems.length,
+    items: flatItems,
+    sections
   };
 }
 
-// ---- NETLIFY HANDLER ----------------------------------------
-exports.handler = async function () {
+exports.handler = async function(){
   try {
     const data = compileFeed();
     return {
       statusCode: 200,
       headers: {
         "Content-Type": "application/json",
-        "Cache-Control": "no-store",
+        "Cache-Control": "no-store"
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     };
   } catch (e) {
     return {
       statusCode: 500,
-      body: JSON.stringify({ status: "fail", message: e.message }),
+      body: JSON.stringify({ status:"fail", message: String(e?.message||e) })
     };
   }
 };
 
-// ---- INTERNAL CALL (ENGINE / INSIGHT) -----------------------
 exports.compileFeed = compileFeed;
