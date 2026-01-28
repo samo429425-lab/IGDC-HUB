@@ -2122,11 +2122,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const left = window.screenX + (window.outerWidth - w) / 2-120;
     const top = window.screenY + (window.outerHeight - h) / 2;
 
-    window.open(
-      `/search.html?q=${encodeURIComponent(q)}`,
-      'maru_search',
-      `popup=yes,noopener,noreferrer,width=${w},height=${h},left=${left},top=${top}`
-    );
+ window.open(
+`/search.html?q=${encodeURIComponent(q)}`,
+'_blank',
+'noopener'
+);
   };
 
   btn.addEventListener('click', openSearch);
