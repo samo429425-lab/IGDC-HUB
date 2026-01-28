@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!q) return;
     const u = new URL(location.href);
     u.searchParams.set('q', q);
-    history.pushState(null, '', u.toString());
+    history.replaceState(null, '', u.toString());
     runSearch(q);
   };
 
