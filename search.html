@@ -1,89 +1,88 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<title>IGDC 통합 검색</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>IGDC Search</title>
+
 <style>
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  margin: 0;
-  padding: 24px;
-  background: #f7f7f9;
-}
-.search-bar {
-  max-width: 720px;
-  margin: 0 auto 24px auto;
-  display: flex;
-  align-items: center;
-  background: #fff;
-  border-radius: 999px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-  padding: 8px 12px;
-}
-.search-bar input {
-  flex: 1;
-  border: none;
-  outline: none;
-  font-size: 16px;
-  padding: 10px 12px;
-}
-.search-bar button {
-  border: none;
-  background: #2563eb;
-  color: #fff;
-  border-radius: 999px;
-  padding: 10px 18px;
-  font-size: 14px;
-  cursor: pointer;
-}
-.search-bar button:hover {
-  background: #1d4ed8;
-}
-#searchStatus {
-  max-width: 720px;
-  margin: 0 auto 12px auto;
-  color: #555;
-  font-size: 14px;
-}
-#searchResults {
-  max-width: 720px;
-  margin: 0 auto;
-}
-.search-item {
-  background: #fff;
-  border-radius: 12px;
-  padding: 14px 16px;
-  margin-bottom: 12px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-}
-.search-item a {
-  font-size: 16px;
-  font-weight: 600;
-  color: #4f46e5;
-  text-decoration: none;
-}
-.search-item a:hover {
-  text-decoration: underline;
-}
-.search-item p {
-  margin: 6px 0 0 0;
-  font-size: 14px;
-  color: #444;
-  line-height: 1.4;
-}
+*{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto;}
+body{margin:0;background:#fff;color:#111}
+header{padding:14px 18px;border-bottom:1px solid #e5e7eb;display:flex;gap:10px;align-items:center}
+header input{flex:1;padding:12px 16px;border-radius:999px;border:1px solid #d1d5db;font-size:16px}
+header button{padding:10px 18px;border-radius:999px;border:none;background:#2563eb;color:#fff;font-size:15px;cursor:pointer}
+
+#container{display:flex;height:calc(100vh - 70px)}
+#results{width:340px;border-right:1px solid #e5e7eb;overflow-y:auto}
+.result-item{padding:14px 16px;border-bottom:1px solid #f1f5f9;cursor:pointer}
+.result-item:hover{background:#f8fafc}
+.result-title{font-size:15px;font-weight:600;color:#1a0dab}
+.result-desc{font-size:13px;color:#4b5563;margin-top:6px}
+
+#viewer{flex:1}
+#viewer iframe{width:100%;height:100%;border:none}
+
+#empty{padding:40px;color:#6b7280;text-align:center}
 </style>
 </head>
+
 <body>
 
-<div class="search-bar">
-  <input id="searchInput" type="text" placeholder="검색어를 입력하세요" />
+<header>
+  <input id="q" placeholder="검색어를 입력하세요"/>
   <button id="searchBtn">검색</button>
+</header>
+
+<div id="container">
+  <div id="results">
+    <div id="empty">검색 결과가 여기에 표시됩니다.</div>
+  </div>
+  <div id="viewer">
+    <iframe id="iframe" src=""></iframe>
+  </div>
 </div>
 
-<div id="searchStatus"></div>
-<div id="searchResults"></div>
+<script>
+const params = new URLSearchParams(location.search);
+const qParam = params.get('q');
+const input = document.getElementById('q');
+const btn = document.getElementById('searchBtn');
+const resultsEl = document.getElementById('results');
+const iframe = document.getElementById('iframe');
 
-<script src="/assets/js/search.js"></script>
+if(qParam){input.value=qParam; runSearch(qParam);}
+
+btn.onclick = ()=>{ if(input.value.trim()) location.search='?q='+encodeURIComponent(input.value.trim()); };
+input.onkeydown = e=>{ if(e.key==='Enter') btn.click(); };
+
+async function runSearch(q){
+  resultsEl.innerHTML='<div id="empty">검색 중...</div>';
+  try{
+    const res = await fetch('/netlify/functions/maru-search?q='+encodeURIComponent(q));
+    const data = await res.json();
+    const list = data.results || data.items || [];
+    if(!list.length){
+      resultsEl.innerHTML='<div id="empty">결과 없음</div>'; return;
+    }
+    resultsEl.innerHTML='';
+    list.forEach(item=>{
+      const div=document.createElement('div');
+      div.className='result-item';
+      div.innerHTML=`<div class="result-title">${item.title||'제목 없음'}</div>
+                     <div class="result-desc">${item.description||item.snippet||''}</div>`;
+      div.onclick=()=>{
+        iframe.src=item.url;
+        history.pushState({url:item.url},'',location.pathname+location.search+'#view');
+      };
+      resultsEl.appendChild(div);
+    });
+  }catch(e){
+    resultsEl.innerHTML='<div id="empty">검색 오류</div>';
+  }
+}
+
+window.onpopstate=()=>{iframe.src='';};
+</script>
+
 </body>
 </html>
