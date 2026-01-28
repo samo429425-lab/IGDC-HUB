@@ -1,14 +1,15 @@
 
 /**
- * feed.js — MARU FUTURE FEED ENGINE (v2.1 SAFE PATCH)
+ * feed.js — MARU FUTURE FEED ENGINE (v2.2 SAFE PATCH)
  * ------------------------------------------------------------
- * ✔ 기존 동작 100% 유지
- * ✔ front.snapshot.json 구조(pages.home.sections) 추가 지원
- * ✔ 다른 엔진(maru-search / global-insight / core) 영향 없음
+ * FIX:
+ * - automap(MAIN)은 item.thumb가 없으면 전부 empty 처리됨.
+ * - v2.1에서 normalizeItem이 thumb/priority를 버려서 MAIN/RIGHT 모두 비는 현상 발생 가능.
  *
- * 출력:
- *  - 기존: { items: [...] }  (유지)
- *  - 추가: { sections: [{ id, items: [...] }] }  ← automap용
+ * 보장:
+ * ✔ 기존 동작 유지: { items:[...] }
+ * ✔ 추가 동작 유지: { sections:[{id, items:[...]}] }
+ * ✔ 다른 엔진 영향 없음 (maru-search / global-insight / core)
  */
 
 "use strict";
@@ -28,16 +29,20 @@ function safeReadJSON(p){
   catch(e){ return null; }
 }
 
+// ✅ thumb/priority 보존
 function normalizeItem(item){
   if (!item || typeof item !== "object") return null;
   return {
     id: item.id || null,
     page: item.page || null,
     section: item.section || null,
-    title: item.title || item.name || "",
+    title: item.title || item.name || item.label || item.caption || "",
     category: item.category || null,
     type: item.type || "thumbnail",
-    url: item.url || item.link || "",
+    url: item.url || item.href || item.link || item.path || "",
+    thumb: item.thumb || item.image || item.image_url || item.img || item.photo ||
+           item.thumbnail || item.thumbnailUrl || item.cover || item.coverUrl || "",
+    priority: (typeof item.priority === "number" ? item.priority : (Number.isFinite(Number(item.priority)) ? Number(item.priority) : null)),
     keywords: item.keywords || [],
     weight: item.weight || 0,
     enabled: item.enabled !== false,
@@ -71,9 +76,6 @@ function applyCoreScore(items){
   return items.map(it => ({ ...it, _score: Core.scoreItem(it) }));
 }
 
-/**
- * 기존 flat snapshot 지원 + 신규 pages.home.sections 지원
- */
 function compileFeed(){
   const snap = safeReadJSON(FRONT_SNAPSHOT_PATH) || {};
   const psom = safeReadJSON(PSOM_PATH) || [];
@@ -86,15 +88,16 @@ function compileFeed(){
     flatItems = snap.map(normalizeItem).filter(Boolean);
   }
 
-  // (B) 신규 pages.home.sections 구조
+  // (B) 신규 pages.home.sections 구조 (HOME 우선)
   if (snap.pages && snap.pages.home && snap.pages.home.sections) {
     for (const [id, items] of Object.entries(snap.pages.home.sections)) {
       const norm = (items || []).map(normalizeItem).filter(Boolean);
-      sections.push({ id, items: norm });
-      flatItems.push(...norm);
+      sections.push({ id, items: norm });     // ← automap이 여기서 읽음
+      flatItems.push(...norm);                // ← 기존 파이프라인 유지용
     }
   }
 
+  // 기존 파이프라인 유지(PSOM/CORE는 flatItems에만 적용)
   flatItems = applyPSOM(flatItems, psom);
   flatItems = applyCoreScore(flatItems);
 
@@ -103,12 +106,12 @@ function compileFeed(){
     const sb = b._score || 0;
     if (sb !== sa) return sb - sa;
     if ((b.weight||0) !== (a.weight||0)) return (b.weight||0)-(a.weight||0);
-    return (a.order||0)-(b.order||0);
+    return (a.order||0) - (b.order||0);
   });
 
   return {
     status: "ok",
-    version: "feed.v2.1-safe",
+    version: "feed.v2.2-safe",
     generated: new Date().toISOString(),
     count: flatItems.length,
     items: flatItems,
