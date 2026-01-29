@@ -1,7 +1,8 @@
-// IGDC Search.js — STEP 4 (Engine-Aligned, Emoji Restored)
+// IGDC Search.js — STEP 4 (Engine-Aligned, Emoji Restored, Favicon Enlarged)
 // ✔ maru-search response structure respected
 // ✔ Google-style readability
-// ✔ Original favicon/emoji line restored (one-line)
+// ✔ Original favicon/emoji line restored
+// ✔ Favicon size adjusted to Google-level visibility
 
 document.addEventListener('DOMContentLoaded', () => {
   if (!location.pathname.endsWith('/search.html')) return;
@@ -103,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function faviconOf(url){
     const d = domainOf(url);
-    return d ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=32` : '';
+    return d ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64` : '';
   }
 
   function renderItem(it){
@@ -117,21 +118,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const body = document.createElement('div');
 
-    // Title
     const t = document.createElement('div');
     t.className = 'title';
     t.textContent = (it.title || '').trim();
 
-    // Emoji/Favicon + Link line (RESTORED)
     const l = document.createElement('div');
     l.className = 'link';
 
     const fav = document.createElement('img');
     fav.src = faviconOf(url);
-    fav.style.width = '16px';
-    fav.style.height = '16px';
+    fav.style.width = '24px';
+    fav.style.height = '24px';
     fav.style.verticalAlign = 'middle';
-    fav.style.marginRight = '6px';
+    fav.style.marginRight = '8px';
     fav.onerror = () => fav.remove();
 
     const span = document.createElement('span');
@@ -140,7 +139,6 @@ document.addEventListener('DOMContentLoaded', () => {
     l.appendChild(fav);
     l.appendChild(span);
 
-    // Summary
     const d = document.createElement('div');
     d.className = 'desc';
     d.textContent = (it.summary || '').trim();
