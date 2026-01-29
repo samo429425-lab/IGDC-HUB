@@ -154,49 +154,59 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
-// ===== MARU PAGINATION (SAFE WRAP, NO PIPELINE CHANGE) =====
-(function(){
-  const PAGE_SIZE = 10;
-  let _all = [];
-  let _page = 1;
-  let _render = null;
 
-  function mountControls(total){
+
+// ===== MARU PAGINATION (STRICT 10 PER PAGE, SAFE) =====
+(function(){
+  const PAGE_SIZE = 15;
+  let allItems = [];
+  let currentPage = 1;
+  let originalRender = null;
+
+  function ensurePager(){
     let bar = document.getElementById('maru-page-controls');
-    if(!bar){
+    if (!bar){
       bar = document.createElement('div');
       bar.id = 'maru-page-controls';
       bar.style.display = 'flex';
       bar.style.gap = '6px';
       bar.style.margin = '8px 0';
       const status = document.getElementById('searchStatus');
-      if(status && status.parentNode) status.parentNode.insertBefore(bar, status.nextSibling);
+      if (status && status.parentNode){
+        status.parentNode.insertBefore(bar, status.nextSibling);
+      }
     }
+    return bar;
+  }
+
+  function drawPager(){
+    const bar = ensurePager();
     bar.innerHTML = '';
-    const pages = Math.ceil(total / PAGE_SIZE);
-    for(let i=1;i<=pages;i++){
+    const pages = Math.ceil(allItems.length / PAGE_SIZE);
+    for (let i = 1; i <= pages; i++){
       const b = document.createElement('button');
       b.textContent = i;
-      b.onclick = ()=>{ _page=i; draw(); };
+      b.style.opacity = (i === currentPage) ? '0.6' : '1';
+      b.onclick = () => { currentPage = i; drawPage(); };
       bar.appendChild(b);
     }
   }
 
-  function draw(){
-    if(!_render) return;
-    const s = (_page-1)*PAGE_SIZE;
-    const slice = _all.slice(s, s+PAGE_SIZE);
-    _render(slice);
-    mountControls(_all.length);
+  function drawPage(){
+    if (!originalRender) return;
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const slice = allItems.slice(start, start + PAGE_SIZE);
+    originalRender(slice);   // 🔒 ONLY 10 items rendered
+    drawPager();
   }
 
-  document.addEventListener('DOMContentLoaded', ()=>{
-    if(window.renderSearchItems && !_render){
-      _render = window.renderSearchItems;
+  document.addEventListener('DOMContentLoaded', () => {
+    if (window.renderSearchItems && !originalRender){
+      originalRender = window.renderSearchItems;
       window.renderSearchItems = function(items){
-        _all = Array.isArray(items)?items:[];
-        _page = 1;
-        draw();
+        allItems = Array.isArray(items) ? items : [];
+        currentPage = 1;
+        drawPage();
       };
     }
   });

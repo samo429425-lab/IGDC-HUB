@@ -1,3 +1,4 @@
+// === PATCH: RIGHT PANEL USE SECTIONS ONLY (FINAL) ===
 /**
  * home-products-automap.v2.js  (RIGHT-PANEL SAFE)
  * Purpose:
@@ -84,7 +85,14 @@
   function isExternal(url){ return /^https?:\/\//i.test(url); }
 
   // ===== DOM target resolution =====
-  function resolveTargets(psomEl, key){
+  
+function getSectionItemsByKey(data, key){
+  if (!data || !Array.isArray(data.sections)) return [];
+  const sec = data.sections.find(s => s.id === key);
+  return sec && Array.isArray(sec.items) ? sec.items : [];
+}
+
+function resolveTargets(psomEl, key){
     const isRight = key.indexOf('home_right_') === 0;
 
     if (isRight){
@@ -110,6 +118,10 @@
   }
 
   function showEmpty(t){
+    // If psomEl is the render list itself (RIGHT panels often use data-psom-key on .ad-list),
+    // never hide the list; show the empty message inside it.
+    const psomIsList = (t.psomEl === t.list);
+
     t.psomEl.style.display = 'block';
     t.psomEl.textContent = emptyText();
     t.psomEl.style.padding = '12px';
@@ -125,7 +137,8 @@
       if (!t.isRight) {
         t.scroller.style.display = 'none';
       } else if (t.mode === 'ad-section') {
-        t.scroller.style.display = 'none';
+        // RIGHT ad-section: keep scroller visible when psomEl is list (otherwise list will disappear)
+        if (!psomIsList) t.scroller.style.display = 'none';
       } else {
         // RIGHT direct: keep panel visible
       }
@@ -133,7 +146,25 @@
   }
 
   function showData(t){
-    t.psomEl.style.display = 'none';
+    const psomIsList = (t.psomEl === t.list);
+
+    // If psomEl is the list itself, do NOT hide it.
+    if (!psomIsList) {
+      t.psomEl.style.display = 'none';
+    } else {
+      t.psomEl.style.display = '';
+      // clear empty message styling if any
+      t.psomEl.textContent = '';
+      t.psomEl.style.padding = '';
+      t.psomEl.style.background = '';
+      t.psomEl.style.borderRadius = '';
+      t.psomEl.style.color = '';
+      t.psomEl.style.textAlign = '';
+      t.psomEl.style.fontSize = '';
+      t.psomEl.style.lineHeight = '';
+      t.psomEl.style.minHeight = '';
+    }
+
     if (t.scroller) {
       if (!t.isRight) {
         t.scroller.style.display = '';
@@ -291,6 +322,16 @@
     const t = resolveTargets(psomEl, key);
     if (!t.list) return;
 
+    // RIGHT panel scroll safety (some CSS forces overflow:visible)
+    if (t.isRight && t.scroller) {
+      try{
+        t.scroller.style.overflowY = 'auto';
+        t.scroller.style.webkitOverflowScrolling = 'touch';
+        t.scroller.style.touchAction = 'pan-y';
+      }catch(e){}
+    }
+
+
     const isRight = t.isRight;
 
     let list = (rawItems || []).map(normItem).filter(x => {
@@ -345,5 +386,3 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
 })();
-
-// hasReal flag fallback
