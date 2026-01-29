@@ -1,3 +1,16 @@
+
+<style id="maru-search-favicon-style">
+.maru-favicon {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px; /* subtle, not fully round */
+  display: inline-block;
+  object-fit: cover;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+</style>
+
 // IGDC Search.js — STEP 4 (Engine-Aligned, Emoji Restored, Favicon Enlarged)
 // ✔ maru-search response structure respected
 // ✔ Google-style readability
@@ -151,3 +164,56 @@ document.addEventListener('DOMContentLoaded', () => {
     results.appendChild(card);
   }
 });
+
+
+// ===== MARU SEARCH PAGINATION (10 per page) =====
+(function(){
+  const PAGE_SIZE = 10;
+  let __maru_all_items__ = [];
+  let __maru_current_page__ = 1;
+
+  function renderPageControls(total){
+    const totalPages = Math.ceil(total / PAGE_SIZE);
+    const holder = document.getElementById('maru-page-controls');
+    if(!holder){ return; }
+    holder.innerHTML = '';
+    for(let i=1;i<=totalPages;i++){
+      const b = document.createElement('button');
+      b.textContent = i;
+      b.className = 'maru-page-btn' + (i===__maru_current_page__?' active':'');
+      b.onclick = ()=>{ __maru_current_page__ = i; renderPage(); };
+      holder.appendChild(b);
+    }
+  }
+
+  function renderPage(){
+    const start = (__maru_current_page__-1)*PAGE_SIZE;
+    const slice = __maru_all_items__.slice(start, start+PAGE_SIZE);
+    if(typeof window.renderSearchItems === 'function'){
+      window.renderSearchItems(slice);
+    }
+    renderPageControls(__maru_all_items__.length);
+  }
+
+  // Hook point: engine sets window.__MARU_SEARCH_ITEMS__
+  Object.defineProperty(window, '__MARU_SEARCH_ITEMS__', {
+    set(v){
+      __maru_all_items__ = Array.isArray(v)?v:[];
+      __maru_current_page__ = 1;
+      renderPage();
+    }
+  });
+
+  // Create controls container near results count
+  document.addEventListener('DOMContentLoaded', ()=>{
+    const counter = document.querySelector('.search-count');
+    if(counter && !document.getElementById('maru-page-controls')){
+      const d = document.createElement('div');
+      d.id = 'maru-page-controls';
+      d.style.margin = '8px 0';
+      d.style.display = 'flex';
+      d.style.gap = '6px';
+      counter.parentNode.insertBefore(d, counter.nextSibling);
+    }
+  });
+})();
