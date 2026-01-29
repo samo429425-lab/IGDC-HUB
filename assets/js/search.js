@@ -115,7 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const src = detectSourceByUrl(url);
     const b = document.createElement('span');
     b.className = 'badge';
-    b.textContent = `${src.i} ${src.n}`;
+    b.textContent = `${src.n}`;
     // favicon + domain (Google-like)
     const favUrl = faviconOf(url);
     if (favUrl) {
