@@ -90,7 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       status.textContent = `${items.length} results`;
-      renderSearchItems(items);
+      items.forEach(renderItem);
     }catch(e){
       console.error(e);
       status.textContent = 'Search error';
@@ -107,13 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return d ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64` : '';
   }
 
-  
-  function renderSearchItems(items){
-    results.innerHTML = '';
-    renderSearchItems(items);
-  }
-
-function renderItem(it){
+  function renderItem(it){
     const url = it.url || '';
     const domain = domainOf(url);
 
@@ -217,14 +211,3 @@ function renderItem(it){
     }
   });
 })();
-
-
-// ===== MARU PAGER INTO STATUS SLOT (UI ONLY) =====
-document.addEventListener('DOMContentLoaded', () => {
-  const status = document.getElementById('searchStatus');
-  const pager = document.getElementById('maru-page-controls');
-  if (status && pager){
-    status.textContent = '';
-    status.appendChild(pager);
-  }
-});
