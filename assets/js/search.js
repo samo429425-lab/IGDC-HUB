@@ -1,22 +1,3 @@
-
-<style id="maru-pagination-style">
-#maru-page-controls button {
-  padding: 4px 8px;
-  border-radius: 4px;
-  border: 1px solid #ccc;
-  background: #fff;
-  cursor: pointer;
-}
-#maru-page-controls button:hover {
-  background: #f0f0f0;
-}
-#maru-page-controls button.active {
-  font-weight: bold;
-  border-color: #1a73e8;
-  color: #1a73e8;
-}
-</style>
-
 // IGDC Search.js — STEP 4 (Engine-Aligned, Emoji Restored, Favicon Enlarged)
 // ✔ maru-search response structure respected
 // ✔ Google-style readability
@@ -149,8 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fav.style.width = '20px';
     fav.style.height = '20px';
     fav.style.verticalAlign = 'middle';
-    fav.style.borderRadius = '50%';
-    fav.style.border = '1px solid rgba(0,0,0,0.35)';
+    fav.style.borderRadius = '4px';
     fav.style.marginRight = '8px';
     fav.onerror = () => fav.remove();
 
@@ -208,7 +188,6 @@ document.addEventListener('DOMContentLoaded', () => {
       b.textContent = i;
       b.style.opacity = (i === currentPage) ? '0.6' : '1';
       b.onclick = () => { currentPage = i; drawPage(); };
-      if(i === currentPage) b.classList.add('active');
       bar.appendChild(b);
     }
   }
