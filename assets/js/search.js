@@ -1,7 +1,8 @@
-// IGDC Search.js — STEP 1+2 (Additive Only)
-// - Skeleton UI for instant feedback
-// - Expanded thumbnail bowl (no feature removal)
-// NOTE: All existing pipelines preserved. No triggers removed.
+// IGDC Search.js — STEP 1+2+3 (Additive Only)
+// STEP 1: Skeleton UI (instant feedback)
+// STEP 2: Expanded thumbnail bowl
+// STEP 3: Card type branching (video / image / text)
+// NOTE: All existing triggers, pipelines, and behaviors are preserved.
 
 document.addEventListener('DOMContentLoaded', () => {
   if (!location.pathname.endsWith('/search.html')) return;
@@ -61,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
       card.className = 'card';
       card.innerHTML = `
         <div style="display:flex;gap:12px">
-          <div style="width:96px;height:64px;background:#eee;border-radius:6px"></div>
+          <div style="width:120px;height:72px;background:#eee;border-radius:6px"></div>
           <div style="flex:1">
             <div style="height:14px;width:60%;background:#eee;margin-bottom:8px"></div>
             <div style="height:12px;width:90%;background:#f0f0f0"></div>
@@ -103,41 +104,70 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function detectSourceByUrl(url){
     const u = (url || '').toLowerCase();
-    if (u.includes('wikipedia.org')) return { n:'Wikipedia' };
-    if (u.includes('youtube.com') || u.includes('youtu.be')) return { n:'YouTube' };
-    if (u.includes('google.')) return { n:'Google' };
-    if (u.includes('bing.') || u.includes('microsoft.com')) return { n:'Bing/MS' };
-    if (u.includes('naver.')) return { n:'NAVER' };
-    if (u.includes('reuters.com')) return { n:'Reuters' };
-    if (u.includes('nytimes.com')) return { n:'NYTimes' };
-    return { n:'Web' };
+    if (u.includes('youtube.com') || u.includes('youtu.be')) return { n:'YouTube', type:'video' };
+    if (u.includes('vimeo.com')) return { n:'Vimeo', type:'video' };
+    if (u.includes('wikipedia.org')) return { n:'Wikipedia', type:'image' };
+    return { n:'Web', type:'text' };
   }
 
   function pickThumbnail(it){
     return (
+      it.videoThumbnail ||
       it.thumbnail ||
       it.image ||
       it.ogImage ||
       (Array.isArray(it.images) ? it.images[0] : null) ||
-      it.videoThumbnail ||
       null
     );
   }
 
+  function detectCardType(it, url){
+    if (it.video || it.videos || it.videoThumbnail) return 'video';
+    const src = detectSourceByUrl(url);
+    if (src.type === 'video') return 'video';
+    if (pickThumbnail(it)) return 'image';
+    return 'text';
+  }
+
   function render(it){
     const url = it.url || it.link || '';
+    const cardType = detectCardType(it, url);
+
     const card = document.createElement('div');
-    card.className = 'card';
+    card.className = `card card-${cardType}`;
     card.style.cursor = url ? 'pointer' : 'default';
     if (url) card.onclick = () => { location.href = url; };
 
-    const thumbSrc = pickThumbnail(it);
-    if (thumbSrc){
-      const img = document.createElement('img');
-      img.className = 'thumb';
-      img.src = thumbSrc;
-      img.onerror = () => img.remove();
-      card.appendChild(img);
+    // Media block (video/image)
+    if (cardType !== 'text'){
+      const thumbSrc = pickThumbnail(it);
+      if (thumbSrc){
+        const mediaWrap = document.createElement('div');
+        mediaWrap.className = `media media-${cardType}`;
+
+        const img = document.createElement('img');
+        img.className = 'thumb';
+        img.src = thumbSrc;
+        img.onerror = () => img.remove();
+
+        mediaWrap.appendChild(img);
+
+        if (cardType === 'video'){
+          const play = document.createElement('div');
+          play.textContent = '▶';
+          play.style.position = 'absolute';
+          play.style.left = '50%';
+          play.style.top = '50%';
+          play.style.transform = 'translate(-50%, -50%)';
+          play.style.fontSize = '28px';
+          play.style.color = '#fff';
+          play.style.textShadow = '0 2px 6px rgba(0,0,0,0.6)';
+          mediaWrap.style.position = 'relative';
+          mediaWrap.appendChild(play);
+        }
+
+        card.appendChild(mediaWrap);
+      }
     }
 
     const body = document.createElement('div');
@@ -155,10 +185,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const src = detectSourceByUrl(url);
     const b = document.createElement('span');
     b.className = 'badge';
-    b.textContent = `${src.n}`;
+    b.textContent = src.n;
 
     const favUrl = faviconOf(url);
-    if (favUrl) {
+    if (favUrl){
       const fav = document.createElement('img');
       fav.className = 'favicon';
       fav.src = favUrl;

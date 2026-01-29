@@ -675,11 +675,13 @@ document.addEventListener('click', function(e){
     }
 
     MaruAddon.handleTextQuery = function (payload, context = {}) {
+  ensureExtensionOpen();
       if (payload && typeof payload === 'object') return routeInbound({ input:'text', text: payload.text || '', context: payload.context || null });
       return routeInbound({ input:'text', text: payload || '', context });
     };
 
     MaruAddon.handleVoiceQuery = function (payload, context = {}) {
+  ensureExtensionOpen();
       if (!VOICE_ENABLED) return;
 
       let text = '';
