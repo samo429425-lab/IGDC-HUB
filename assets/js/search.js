@@ -1,4 +1,8 @@
-// IGDC Search.js — FINAL A+ (safe, no filter, correct source labels, robust unwrap)
+// IGDC Search.js — STEP 1+2 (Additive Only)
+// - Skeleton UI for instant feedback
+// - Expanded thumbnail bowl (no feature removal)
+// NOTE: All existing pipelines preserved. No triggers removed.
+
 document.addEventListener('DOMContentLoaded', () => {
   if (!location.pathname.endsWith('/search.html')) return;
 
@@ -22,7 +26,9 @@ document.addEventListener('DOMContentLoaded', () => {
     runSearch(q);
   };
 
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') btn.click(); });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') btn.click();
+  });
 
   function unwrap(x){
     if (!x) return x;
@@ -48,14 +54,36 @@ document.addEventListener('DOMContentLoaded', () => {
     throw lastErr;
   }
 
+  function renderSkeleton(count = 6){
+    results.innerHTML = '';
+    for (let i = 0; i < count; i++){
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <div style="display:flex;gap:12px">
+          <div style="width:96px;height:64px;background:#eee;border-radius:6px"></div>
+          <div style="flex:1">
+            <div style="height:14px;width:60%;background:#eee;margin-bottom:8px"></div>
+            <div style="height:12px;width:90%;background:#f0f0f0"></div>
+          </div>
+        </div>
+      `;
+      results.appendChild(card);
+    }
+  }
+
   async function runSearch(q){
     status.textContent = 'Searching…';
-    results.innerHTML = '';
+    renderSkeleton();
     try{
       const j0 = await fetchMaru(q);
       const d = unwrap(j0) || {};
       const items = d.items || d.results || [];
-      if (!items.length) { status.textContent = 'No results.'; return; }
+      results.innerHTML = '';
+      if (!items.length) {
+        status.textContent = 'No results.';
+        return;
+      }
       status.textContent = `${items.length} results`;
       items.forEach(render);
     }catch(e){
@@ -75,14 +103,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function detectSourceByUrl(url){
     const u = (url || '').toLowerCase();
-    if (u.includes('wikipedia.org')) return { n:'Wikipedia', i:'📘' };
-    if (u.includes('youtube.com') || u.includes('youtu.be')) return { n:'YouTube', i:'▶️' };
-    if (u.includes('google.')) return { n:'Google', i:'🔵' };
-    if (u.includes('bing.') || u.includes('microsoft.com')) return { n:'Bing/MS', i:'🟦' };
-    if (u.includes('naver.')) return { n:'NAVER', i:'🟢' };
-    if (u.includes('reuters.com')) return { n:'Reuters', i:'📰' };
-    if (u.includes('nytimes.com')) return { n:'NYTimes', i:'📰' };
-    return { n:'Web', i:'🌐' };
+    if (u.includes('wikipedia.org')) return { n:'Wikipedia' };
+    if (u.includes('youtube.com') || u.includes('youtu.be')) return { n:'YouTube' };
+    if (u.includes('google.')) return { n:'Google' };
+    if (u.includes('bing.') || u.includes('microsoft.com')) return { n:'Bing/MS' };
+    if (u.includes('naver.')) return { n:'NAVER' };
+    if (u.includes('reuters.com')) return { n:'Reuters' };
+    if (u.includes('nytimes.com')) return { n:'NYTimes' };
+    return { n:'Web' };
+  }
+
+  function pickThumbnail(it){
+    return (
+      it.thumbnail ||
+      it.image ||
+      it.ogImage ||
+      (Array.isArray(it.images) ? it.images[0] : null) ||
+      it.videoThumbnail ||
+      null
+    );
   }
 
   function render(it){
@@ -92,10 +131,11 @@ document.addEventListener('DOMContentLoaded', () => {
     card.style.cursor = url ? 'pointer' : 'default';
     if (url) card.onclick = () => { location.href = url; };
 
-    if (it.thumbnail || it.image){
+    const thumbSrc = pickThumbnail(it);
+    if (thumbSrc){
       const img = document.createElement('img');
       img.className = 'thumb';
-      img.src = it.thumbnail || it.image;
+      img.src = thumbSrc;
       img.onerror = () => img.remove();
       card.appendChild(img);
     }
@@ -116,7 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const b = document.createElement('span');
     b.className = 'badge';
     b.textContent = `${src.n}`;
-    // favicon + domain (Google-like)
+
     const favUrl = faviconOf(url);
     if (favUrl) {
       const fav = document.createElement('img');
@@ -127,6 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
       fav.onerror = () => fav.remove();
       m.appendChild(fav);
     }
+
     m.appendChild(b);
     const dom = document.createElement('span');
     dom.className = 'domain';
