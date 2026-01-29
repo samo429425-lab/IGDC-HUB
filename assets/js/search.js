@@ -232,14 +232,3 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 })();
-
-
-// ===== MARU PAGINATION HEADER SLOT (UI ONLY) =====
-document.addEventListener('DOMContentLoaded', () => {
-  const header = document.querySelector('.search-count, #searchStatus');
-  const pager = document.getElementById('maru-page-controls');
-  if (header && pager) {
-    header.innerHTML = '';
-    header.appendChild(pager);
-  }
-});
