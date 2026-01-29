@@ -1,16 +1,3 @@
-
-<style id="maru-search-favicon-style">
-.maru-favicon {
-  width: 20px;
-  height: 20px;
-  border-radius: 4px; /* subtle, not fully round */
-  display: inline-block;
-  object-fit: cover;
-  margin-right: 6px;
-  vertical-align: middle;
-}
-</style>
-
 // IGDC Search.js — STEP 4 (Engine-Aligned, Emoji Restored, Favicon Enlarged)
 // ✔ maru-search response structure respected
 // ✔ Google-style readability
@@ -140,9 +127,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const fav = document.createElement('img');
     fav.src = faviconOf(url);
-    fav.style.width = '24px';
-    fav.style.height = '24px';
+    fav.style.width = '20px';
+    fav.style.height = '20px';
     fav.style.verticalAlign = 'middle';
+    fav.style.borderRadius = '4px';
     fav.style.marginRight = '8px';
     fav.onerror = () => fav.remove();
 
@@ -166,54 +154,50 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
-// ===== MARU SEARCH PAGINATION (10 per page) =====
+// ===== MARU PAGINATION (SAFE WRAP, NO PIPELINE CHANGE) =====
 (function(){
   const PAGE_SIZE = 10;
-  let __maru_all_items__ = [];
-  let __maru_current_page__ = 1;
+  let _all = [];
+  let _page = 1;
+  let _render = null;
 
-  function renderPageControls(total){
-    const totalPages = Math.ceil(total / PAGE_SIZE);
-    const holder = document.getElementById('maru-page-controls');
-    if(!holder){ return; }
-    holder.innerHTML = '';
-    for(let i=1;i<=totalPages;i++){
+  function mountControls(total){
+    let bar = document.getElementById('maru-page-controls');
+    if(!bar){
+      bar = document.createElement('div');
+      bar.id = 'maru-page-controls';
+      bar.style.display = 'flex';
+      bar.style.gap = '6px';
+      bar.style.margin = '8px 0';
+      const status = document.getElementById('searchStatus');
+      if(status && status.parentNode) status.parentNode.insertBefore(bar, status.nextSibling);
+    }
+    bar.innerHTML = '';
+    const pages = Math.ceil(total / PAGE_SIZE);
+    for(let i=1;i<=pages;i++){
       const b = document.createElement('button');
       b.textContent = i;
-      b.className = 'maru-page-btn' + (i===__maru_current_page__?' active':'');
-      b.onclick = ()=>{ __maru_current_page__ = i; renderPage(); };
-      holder.appendChild(b);
+      b.onclick = ()=>{ _page=i; draw(); };
+      bar.appendChild(b);
     }
   }
 
-  function renderPage(){
-    const start = (__maru_current_page__-1)*PAGE_SIZE;
-    const slice = __maru_all_items__.slice(start, start+PAGE_SIZE);
-    if(typeof window.renderSearchItems === 'function'){
-      window.renderSearchItems(slice);
-    }
-    renderPageControls(__maru_all_items__.length);
+  function draw(){
+    if(!_render) return;
+    const s = (_page-1)*PAGE_SIZE;
+    const slice = _all.slice(s, s+PAGE_SIZE);
+    _render(slice);
+    mountControls(_all.length);
   }
 
-  // Hook point: engine sets window.__MARU_SEARCH_ITEMS__
-  Object.defineProperty(window, '__MARU_SEARCH_ITEMS__', {
-    set(v){
-      __maru_all_items__ = Array.isArray(v)?v:[];
-      __maru_current_page__ = 1;
-      renderPage();
-    }
-  });
-
-  // Create controls container near results count
   document.addEventListener('DOMContentLoaded', ()=>{
-    const counter = document.querySelector('.search-count');
-    if(counter && !document.getElementById('maru-page-controls')){
-      const d = document.createElement('div');
-      d.id = 'maru-page-controls';
-      d.style.margin = '8px 0';
-      d.style.display = 'flex';
-      d.style.gap = '6px';
-      counter.parentNode.insertBefore(d, counter.nextSibling);
+    if(window.renderSearchItems && !_render){
+      _render = window.renderSearchItems;
+      window.renderSearchItems = function(items){
+        _all = Array.isArray(items)?items:[];
+        _page = 1;
+        draw();
+      };
     }
   });
 })();
