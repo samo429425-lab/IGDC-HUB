@@ -1030,8 +1030,6 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
 @media (max-width: 768px){
   .sidebar,
   .right,
-  .right-panel,
-  .ad-panel,
   .bottom-nav,
   .bottom-bar,
   .mobile-dock { display:none !important; }
@@ -1054,6 +1052,17 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
     grid-template-columns:repeat(2, minmax(0,1fr)) !important;
     gap:10px 10px !important;
   }
+  /* RIGHT PANEL -> Sections 6/7/8 on mobile (keep titles/sections) */
+  .ad-panel{
+    display: flex !important;
+    width: 100% !important;
+    margin-top: 18px !important;
+    padding: 12px !important;
+    background: #e0e0e0 !important;
+  }
+  /* stack sidebar + main + ad sections */
+  .container{ display:block !important; }
+
 }
 @media (max-width: 768px) and (orientation: landscape){
   .grid { grid-template-columns:repeat(3, minmax(0,1fr)) !important; }
@@ -2039,7 +2048,6 @@ section.shopping-section, section.shopping-section .shopping-rows {
 </style>
 <link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
 
-
 <style id="hero-search-style">
   .hero-search{ padding: 14px 0 18px; }
   .hero-search-inner{ max-width: 1100px; margin: 0 auto; padding: 0 14px; }
@@ -2077,7 +2085,6 @@ section.shopping-section, section.shopping-section .shopping-rows {
 <div class="desc desc2">세상의 모든 이들에게 행운이 있으시길 기원합니다.</div>
 </div>
 </div>
-
 <!-- ========== HERO SEARCH BAR (FINAL) ========== -->
 <section class="hero-search" aria-label="사이트 검색">
   <div class="hero-search-inner">
@@ -2301,15 +2308,38 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 </section>
 </div>
-<!-- 우측 광고 패널 (unchanged width) -->
-<div class="ad-panel"><div class="ad-section" data-max="10" data-section="top" data-visible="4"><h4 class="ad-title" style="text-align:center; width:100%; margin:0; padding:0; font-weight:600; font-size:1rem;">자동차 · 웹툰 · 패션</h4><div class="ad-scroll"><div class="ad-list"><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a></div></div><div class="thumb-grid thumb-scroller" data-psom-key="home_right_top"></div></div><div class="ad-section" data-max="10" data-section="middle" data-visible="4"><h4 class="ad-title" style="text-align:center; width:100%; margin:0; padding:0; font-weight:600; font-size:1rem;">
-  푸드 · 리빙 · 책방
-</h4><div class="ad-scroll"><div class="ad-list"><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a></div></div><div class="thumb-grid thumb-scroller" data-psom-key="home_right_middle"></div></div><div class="ad-section" data-max="7" data-section="bottom" data-visible="4"><h4 class="ad-title" style="text-align:center; width:100%; margin:0; padding:0; font-weight:600; font-size:1rem;">
-  지식 · 건강 · 기타
-</h4><div class="ad-scroll"><div class="ad-list"><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a></div></div><div class="thumb-grid thumb-scroller" data-psom-key="home_right_bottom"></div></div></div>
-</div>
-<script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.home.json" data-interval="20000" src="/assets/js/hero.rotator.js"></script>
+<!-- RIGHT AD PANEL : SINGLE SOURCE OF TRUTH -->
+<aside class="ad-panel">
 
+  <!-- TOP -->
+  <section class="ad-section" data-section="top" data-max="80" data-visible="4">
+    <h4 class="ad-title">자동차 · 웹툰 · 패션</h4>
+    <div class="ad-scroll">
+      <!-- ⚠️ 더미 제거: JS 오토맵이 직접 채움 -->
+      <div class="ad-list" data-psom-key="home_right_top"></div>
+    </div>
+  </section>
+
+  <!-- MIDDLE -->
+  <section class="ad-section" data-section="middle" data-max="80" data-visible="4">
+    <h4 class="ad-title">푸드 · 리빙 · 책방</h4>
+    <div class="ad-scroll">
+      <div class="ad-list" data-psom-key="home_right_middle"></div>
+    </div>
+  </section>
+
+  <!-- BOTTOM -->
+  <section class="ad-section" data-section="bottom" data-max="80" data-visible="4">
+    <h4 class="ad-title">지식 · 건강 · 기타</h4>
+    <div class="ad-scroll">
+      <div class="ad-list" data-psom-key="home_right_bottom"></div>
+    </div>
+  </section>
+
+</aside>
+
+</div>
+</div>
 <footer>
     IGDC Global Hub © 2025 | International General Distribution Company<br/>
     경기도 평택시 고덕갈평3로 50, <br/>
@@ -2512,12 +2542,20 @@ function reorderRow(rowId){
     reorderRow('newsRow3');
     reorderRow('newsRow4');
   }
+  
+  if (window.__HOME_AUTOMAP_DOMFIT__ || window.__HOME_AUTOMAP_V2__ || window.__HOME_AUTOMAP__) return;
+
   window.addEventListener('DOMContentLoaded', run);
 })();
 </script>
 <!-- removed stray text:  -->
 <script>
 (function(){
+
+  // ===== GUARD: Automap이 활성화되면 이 placeholder 스크립트는 실행하지 않음 =====
+  // (Automap이 메인/우측 패널을 렌더링하므로, 여기서 fillRows로 덮어쓰면 카드가 사라짐)
+  if (window.__HOME_AUTOMAP_DOMFIT__) return;
+
   const ROWS = 5;
   const ITEMS_PER_ROW = 80; // can be increased
 
@@ -2575,6 +2613,7 @@ function reorderRow(rowId){
   window.addEventListener('DOMContentLoaded', run);
 })();
 </script>
+
 <!-- removed stray text:  -->
 <script>
 (function(){
@@ -2826,6 +2865,8 @@ function reorderRow(rowId){
 <!-- removed stray text:  -->
 <script id="ad-panel-rotator">
 (function(){
+if (window.__HOME_AUTOMAP_DOMFIT__) return;
+
   const ROTATE_SECONDS = 8;           // rotation interval
   const VISIBLE_COUNT = 3;            // show 3 at a time
   const FETCH_TIMEOUT = 1500;         // ms
@@ -2873,6 +2914,9 @@ function reorderRow(rowId){
   }
 
   async function hydrateSection(sec){
+  const list = sec.querySelector('.ad-list');
+  if (list && list.hasAttribute('data-psom-key')) return; // automap-managed
+
     // Try to fetch ads for this section; if fails, keep existing DOM as fallback
     const key = (sec.getAttribute('data-section')||'').toLowerCase(); // 'top' | 'middle' | 'bottom'
     const cc = ccFromEnv();
@@ -3998,9 +4042,12 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }, {passive:true});
 })();
 </script>
+
+
 <script defer="" src="/assets/js/auto-embed.instagram.js"></script>
 <script defer="" src="/assets/js/placeholder-sweeper.js"></script>
 <script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
+
 <!-- IGTC SIMPLE QNA AUTO-OPENER (Home) -->
 <style id="mobile-hide-row-arrows">
 /* Desktop은 기존 상태 유지, Mobile만 버튼 숨김 */
