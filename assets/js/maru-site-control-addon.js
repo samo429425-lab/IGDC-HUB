@@ -87,7 +87,21 @@
       .maru-ext-msg .role{font-weight:700;margin-right:6px;color:#1f3a5f}
       .maru-ext-msg.user .role{color:#6b3a1f}
       .maru-ext-sep{height:1px;background:#f0f0f0;margin:12px 0}
-    `;
+
+      /* Voice toggle ON indicator (country) */
+      .maru-country-voice-toggle.voice-live{
+        box-shadow:0 0 0 2px #22c55e inset;
+      }
+      .maru-country-voice-toggle.voice-live::after{
+        content:'';
+        width:8px;height:8px;border-radius:50%;
+        background:#22c55e;
+        display:inline-block;
+        margin-left:6px;
+        vertical-align:middle;
+      }
+
+`;
     document.head.appendChild(st);
   }
 
@@ -408,7 +422,8 @@ function reconcileExtensionVisibility(){
     btns.forEach(btn => {
       btn.classList.toggle('on', VOICE_ENABLED);
       btn.classList.toggle('off', !VOICE_ENABLED);
-      // Keep existing label if present; else set
+            btn.classList.toggle('voice-live', VOICE_ENABLED); // 🔔 green indicator
+// Keep existing label if present; else set
       const hasKorean = /음성/.test(btn.textContent || '');
       if (!hasKorean) {
         btn.textContent = VOICE_ENABLED ? '🎙 음성 ON' : '🎙 음성 OFF';
@@ -667,7 +682,7 @@ function setInputMode(mode){
   }
 
   function routeResponse(req, res){
-    const headline = res.text || '응답이 없습니다.';
+    const headline = res.text || '준비된 자료가 없습니다.';
 
     // 확장창 오픈 여부 판단 (정본)
     // - 질문은 Conversation Dock에만 존재 (확장창에 USER 질문 표시 금지)
