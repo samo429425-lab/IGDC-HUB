@@ -77,6 +77,45 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  
+  // ===== Pagination State (Google-style, pipeline-safe) =====
+  const PAGE_SIZE = 15;
+  let allItems = [];
+  let currentPage = 1;
+
+  function renderPage(page){
+    results.innerHTML = '';
+    const start = (page - 1) * PAGE_SIZE;
+    const slice = allItems.slice(start, start + PAGE_SIZE);
+    slice.forEach(renderItem);
+    drawPager();
+  }
+
+  function drawPager(){
+    let bar = document.getElementById('maru-page-controls');
+    if (!bar){
+      bar = document.createElement('div');
+      bar.id = 'maru-page-controls';
+      bar.style.display = 'flex';
+      bar.style.gap = '6px';
+      bar.style.margin = '8px 0';
+      status.parentNode.insertBefore(bar, status.nextSibling);
+    }
+    bar.innerHTML = '';
+    const pages = Math.ceil(allItems.length / PAGE_SIZE);
+    for (let i = 1; i <= pages; i++){
+      const b = document.createElement('button');
+      b.textContent = i;
+      b.style.opacity = (i === currentPage) ? '0.6' : '1';
+      b.onclick = () => {
+        currentPage = i;
+        renderPage(currentPage);
+      };
+      bar.appendChild(b);
+    }
+  }
+
+
   async function runSearch(q){
     status.textContent = 'Searching…';
     renderSkeleton();
@@ -90,7 +129,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       status.textContent = `${items.length} results`;
-      items.forEach(renderItem);
+      allItems = items;
+      currentPage = 1;
+      renderPage(currentPage);
     }catch(e){
       console.error(e);
       status.textContent = 'Search error';
@@ -209,85 +250,5 @@ document.addEventListener('DOMContentLoaded', () => {
         drawPage();
       };
     }
-  });
-})();
-
-/* ===== MARU PAGINATION EXTENSION (PIPELINE-SAFE) =====
- * - NO changes to runSearch / engine / render loop
- * - Uses MutationObserver to detect new search cycle
- * - First page renders 15 items only, rest via pager
- */
-(function(){
-  if (window.__MARU_PAGINATION_SAFE__) return;
-  window.__MARU_PAGINATION_SAFE__ = true;
-
-  const PAGE_SIZE = 15;
-  let buffer = [];
-  let page = 1;
-  let originalRenderItem = null;
-  let resultsEl = null;
-
-  function ensurePager(){
-    let bar = document.getElementById('maru-page-controls');
-    if (!bar){
-      bar = document.createElement('div');
-      bar.id = 'maru-page-controls';
-      bar.style.display = 'flex';
-      bar.style.gap = '6px';
-      bar.style.margin = '8px 0';
-      const status = document.getElementById('searchStatus');
-      if (status && status.parentNode){
-        status.parentNode.insertBefore(bar, status.nextSibling);
-      }
-    }
-    return bar;
-  }
-
-  function drawPager(){
-    const bar = ensurePager();
-    bar.innerHTML = '';
-    const pages = Math.ceil(buffer.length / PAGE_SIZE) || 1;
-    for (let i=1;i<=pages;i++){
-      const b = document.createElement('button');
-      b.textContent = i;
-      b.style.opacity = (i===page)?'0.6':'1';
-      b.onclick = () => { page=i; redraw(); };
-      bar.appendChild(b);
-    }
-  }
-
-  function redraw(){
-    if (!resultsEl || !originalRenderItem) return;
-    resultsEl.innerHTML = '';
-    const start = (page-1)*PAGE_SIZE;
-    buffer.slice(start, start+PAGE_SIZE).forEach(it => originalRenderItem(it));
-    drawPager();
-  }
-
-  document.addEventListener('DOMContentLoaded', () => {
-    resultsEl = document.getElementById('searchResults');
-    if (!resultsEl) return;
-
-    // Hook renderItem WITHOUT removing pipeline
-    if (typeof window.renderItem === 'function' && !originalRenderItem){
-      originalRenderItem = window.renderItem;
-      window.renderItem = function(it){
-        buffer.push(it);
-        if (buffer.length <= PAGE_SIZE){
-          originalRenderItem(it); // first page only
-        }
-      };
-    }
-
-    // Detect new search cycle safely
-    const mo = new MutationObserver(muts => {
-      muts.forEach(m => {
-        if (m.type === 'childList' && m.removedNodes.length > 0 && resultsEl.childElementCount === 0){
-          buffer = [];
-          page = 1;
-        }
-      });
-    });
-    mo.observe(resultsEl, { childList: true });
   });
 })();
