@@ -360,75 +360,26 @@ function resolveTargets(psomEl, key){
     bindIncremental(t, list);
   }
 
- async function load(){
-  try{
-    const r = await fetch(FEED_URL, { cache: 'no-store' });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const payload = await r.json();
-    const byId = indexSections(payload);
+  async function load(){
+    try{
+      const r = await fetch(FEED_URL, { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const payload = await r.json();
+      const byId = indexSections(payload);
 
-    // ===== MAIN : 기존 홈 보호 =====
-    KEYS_MAIN.forEach(key => {
-      const psomEl = qs(`[data-psom-key="${key}"]`);
-      if (!psomEl) return;
-
-      const scroller = psomEl.closest('.shop-scroller');
-      const row = scroller && scroller.querySelector('.shop-row');
-      if (!row) return;
-
-      const items =
-        byId[key] ||
-        byId[key.replace(/_/g,'-')] ||
-        byId[legacyKey(key)] ||
-        [];
-
-      if (!items.length) return;
-
-      // ❗ 메인은 기존 카드 구조만 사용 (showEmpty / bindIncremental 금지)
-      row.innerHTML = '';
-      items.map(normItem)
-        .filter(it => it.thumb)
-        .forEach(it => {
-          row.appendChild(buildMainCard(it));
-        });
-    });
-
-    // ===== RIGHT PANEL : 신규 탑재 =====
-    KEYS_RIGHT.forEach(key => {
-      const psomEl = qs(`[data-psom-key="${key}"]`);
-      if (!psomEl) return;
-
-      const t = resolveTargets(psomEl, key);
-      if (!t || !t.list) return;
-
-      const items =
-        byId[key] ||
-        byId[key.replace(/_/g,'-')] ||
-        byId[legacyKey(key)] ||
-        [];
-
-      if (!items.length) return;
-
-      t.list.innerHTML = '';
-      items
-        .map(normItem)
-        .sort((a,b)=>(a.priority||999999)-(b.priority||999999))
-        .forEach(it => {
-          t.list.appendChild(buildRightCard(it));
-        });
-    });
-
-  }catch(e){
-    // ❗ 에러 시에도 메인 보호, 우측만 empty 처리
-    KEYS_RIGHT.forEach(key => {
-      const psomEl = qs(`[data-psom-key="${key}"]`);
-      if (!psomEl) return;
-      const t = resolveTargets(psomEl, key);
-      showEmpty(t);
-    });
+      for (const key of ALL_KEYS){
+        const alt = key.replace(/_/g,'-');
+        renderSlot(key, byId[key] || byId[alt] || byId[legacyKey(key)] || []);
+      }
+    }catch(e){
+      for (const key of ALL_KEYS){
+        const psomEl = qs(`[data-psom-key="${key}"]`);
+        if (!psomEl) continue;
+        const t = resolveTargets(psomEl, key);
+        showEmpty(t);
+      }
+    }
   }
-}
-
 
   function boot(){ load(); }
 
