@@ -90,7 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       status.textContent = `${items.length} results`;
-      items.forEach(renderItem);
+      renderSearchItems(items);
     }catch(e){
       console.error(e);
       status.textContent = 'Search error';
@@ -155,6 +155,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
+
+
+  function renderSearchItems(items){
+    results.innerHTML = '';
+    items.forEach(renderItem);
+  }
 
 // ===== MARU PAGINATION (STRICT 10 PER PAGE, SAFE) =====
 (function(){
