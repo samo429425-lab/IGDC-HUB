@@ -66,9 +66,7 @@
       .maru-ext-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.28);z-index:200000;display:none}
       .maru-ext-modal{
         position:fixed;
-        left:6%; right:calc(6% + 32px);
-        top:calc(6% + 32px);
-        bottom:calc(64px + 24px + 10px); /* dock(64)+margin(24)+up(10) */
+        /* geometry is set by JS (dock-based) */
         background:#ffffff;
         border-radius:22px;
         box-shadow:0 40px 90px rgba(0,0,0,.45);
@@ -106,6 +104,7 @@
       EXT.modal = existingModal;
       EXT.body = existingModal.querySelector('.maru-ext-body') || null;
       EXT.title = existingModal.querySelector('.maru-ext-header strong') || null;
+      applyExtensionSize();
       return;
     }
 
@@ -152,8 +151,30 @@
     EXT.backdrop.addEventListener('click', function(){ /* no-op */ });
   }
 
+  // ---------- EXTENSION SIZE (DOCK-BASED, FORCE) ----------
+  function applyExtensionSize(){
+    // Ensure nodes exist
+    const modal = document.getElementById('maru-ext-modal') || EXT.modal;
+    const dock = document.getElementById('maru-conversation-dock');
+    if(!modal || !dock) return;
+
+    const d = dock.getBoundingClientRect();
+    const m = Math.round(d.height); // unit = dock height
+
+    // Spec: shrink all four sides by dock height
+    modal.style.setProperty('left', m + 'px', 'important');
+    modal.style.setProperty('right', m + 'px', 'important');
+    modal.style.setProperty('top', m + 'px', 'important');
+    // bottom should leave dock + extra dock-height gap (dock itself + 1 more dock height)
+    modal.style.setProperty('bottom', (m * 2) + 'px', 'important');
+
+    // Keep within viewport
+    modal.style.setProperty('max-height', 'calc(100vh - ' + (m * 3) + 'px)', 'important');
+  }
+
 function showExtension(){
     ensureExtension();
+    applyExtensionSize();
     EXT.backdrop.style.display = 'block';
     EXT.modal.classList.remove('maru-ext-hidden');
     EXT.visible = true;
@@ -729,31 +750,9 @@ function reconcileExtensionVisibility(){
   // Init
   bindGlobalButtons();
   syncVoiceToggleUi();
+  // sizing init
+  setTimeout(applyExtensionSize, 0);
+  window.addEventListener('resize', applyExtensionSize);
   // NOTE: 확장창은 조건 충족 시에만 오픈 (기본 자동 오픈 금지)
 
-})();
-
-
-
-// === SIZE OVERRIDE v4: stronger reduction relative to Conversation Dock ===
-(function(){
-  function applyPaneSize(){
-    const pane = document.querySelector('.maru-detached-pane');
-    const dock = document.getElementById('maru-conversation-dock');
-    if(!pane || !dock) return;
-    const d = dock.getBoundingClientRect();
-    // width reduced on both sides by dock height
-    const w = Math.max(240, Math.round(d.width * 1.5 - d.height * 2));
-    pane.style.width = w + 'px';
-    pane.style.left = Math.max(8, Math.round(d.left + (d.width - w)/2)) + 'px';
-    // vertical reductions: top + bottom each by dock height
-    const topPad = Math.round(d.height * 2);
-    pane.style.top = Math.max(8, topPad) + 'px';
-    pane.style.bottom = Math.round(d.height * 2) + 'px';
-    pane.style.maxHeight = 'calc(100vh - ' + Math.round(d.height * 4) + 'px)';
-  }
-  window.addEventListener('resize', applyPaneSize);
-  const mo = new MutationObserver(applyPaneSize);
-  mo.observe(document.documentElement,{childList:true,subtree:true});
-  setTimeout(applyPaneSize, 0);
 })();
