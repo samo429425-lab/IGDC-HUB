@@ -1938,6 +1938,14 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     window.addEventListener('resize', function(){ update(wrap); }, {passive:true});
     // initial
     setTimeout(function(){ update(wrap); }, 0);
+    // 🔧 FIX: 카드가 나중에 들어오면 update 재호출
+    try{
+    const mo = new MutationObserver(function(){
+    update(wrap);
+  });
+  mo.observe(scroller, { childList:true, subtree:true });
+}catch(_){}
+
   }
   function init(){
     document.querySelectorAll('.scroller-wrap').forEach(bind);
