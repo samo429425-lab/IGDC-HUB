@@ -421,6 +421,72 @@ function reconcileExtensionVisibility(){
     window.__MARU_VOICE_TOGGLE__ = VOICE_ENABLED;
   }
 
+// ===== Input Mode Selector (restored from addon-a) =====
+function setInputMode(mode){
+      INPUT_MODE = (mode === 'confirm') ? 'confirm' : 'realtime';
+      syncInputModeUi();
+    }
+
+function syncInputModeUi(){
+      const blocks = Array.prototype.slice.call(document.querySelectorAll('[data-maru-inputmode]'));
+      blocks.forEach(b => { try { b.__syncRadios && b.__syncRadios(); } catch(_){} });
+    }
+
+function installInputModeSelector(){
+      // region header
+      const rh = document.querySelector('.maru-region-header');
+      const ch = document.querySelector('.maru-country-header');
+      [rh, ch].forEach(h => {
+        if (!h) return;
+        if (h.querySelector('[data-maru-inputmode]')) return;
+
+        const wrap = document.createElement('div');
+        wrap.setAttribute('data-maru-inputmode','1');
+        wrap.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;white-space:nowrap;';
+
+        const label = document.createElement('span');
+        label.textContent = '입력 표시:';
+        label.style.cssText = 'color:#6e5a32;font-weight:600;';
+
+        const opt1 = document.createElement('label');
+        opt1.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;';
+        const r1 = document.createElement('input');
+        r1.type = 'radio'; r1.name = 'maru-inputmode'; r1.value = 'realtime';
+        const t1 = document.createElement('span'); t1.textContent = '실시간';
+
+        const opt2 = document.createElement('label');
+        opt2.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;';
+        const r2 = document.createElement('input');
+        r2.type = 'radio'; r2.name = 'maru-inputmode'; r2.value = 'confirm';
+        const t2 = document.createElement('span'); t2.textContent = '확정';
+
+        opt1.appendChild(r1); opt1.appendChild(t1);
+        opt2.appendChild(r2); opt2.appendChild(t2);
+        wrap.appendChild(label);
+        wrap.appendChild(opt1);
+        wrap.appendChild(opt2);
+
+        // insert near voice toggle (after toggle if exists)
+        const vt = h.querySelector('.maru-region-voice-toggle, .maru-country-voice-toggle');
+        if (vt && vt.parentNode) vt.parentNode.insertBefore(wrap, vt.nextSibling);
+        else h.appendChild(wrap);
+
+        function syncRadios(){
+          r1.checked = (INPUT_MODE === 'realtime');
+          r2.checked = (INPUT_MODE === 'confirm');
+          // only active when voice is enabled
+          r1.disabled = !VOICE_ENABLED;
+          r2.disabled = !VOICE_ENABLED;
+          wrap.style.opacity = VOICE_ENABLED ? '1' : '.45';
+        }
+        r1.addEventListener('change', function(){ if (r1.checked) setInputMode('realtime'); });
+        r2.addEventListener('change', function(){ if (r2.checked) setInputMode('confirm'); });
+        syncRadios();
+        // store
+        wrap.__syncRadios = syncRadios;
+      });
+    }
+
   function startMic(){
     safe(() => { if (typeof window.startMaruMic === 'function') window.startMaruMic(); });
   }
@@ -756,3 +822,7 @@ function reconcileExtensionVisibility(){
   // NOTE: 확장창은 조건 충족 시에만 오픈 (기본 자동 오픈 금지)
 
 })();
+
+
+// init input mode selector
+installInputModeSelector();
