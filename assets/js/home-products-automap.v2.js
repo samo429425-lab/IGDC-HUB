@@ -244,10 +244,6 @@ function resolveTargets(psomEl, key){
       }
     }
 
-    for (const k of PAGE_KEYS){
-    if (Array.isArray(payload[k])) map[k] = payload[k];
-  }
-
 
     return map;
   }
