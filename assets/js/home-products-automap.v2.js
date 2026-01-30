@@ -24,7 +24,7 @@
 
   const KEYS_MAIN  = ['home_1','home_2','home_3','home_4','home_5'];
   const KEYS_RIGHT = ['home_right_top','home_right_middle','home_right_bottom'];
-  const ALL_KEYS   = KEYS_MAIN.concat(KEYS_RIGHT);
+  const PAGE_KEYS = KEYS_MAIN.concat(KEYS_RIGHT);
 
   const MAIN_LIMIT = 100, MAIN_BATCH = 7;
   const RIGHT_LIMIT = 80, RIGHT_BATCH = 5;
@@ -44,7 +44,11 @@
     vi: 'Nội dung đang được chuẩn bị.',
     zh: '内容正在准备中。'
   };
-  const SUPPORTED_12 = new Set(['de','en','es','fr','id','ja','pt','ru','th','tr','vi','zh']);
+// 인덱스 상단 – 전체 선택용
+const ALL_LOCALES = [
+  'ko','en','ja','zh','fr','de','es','pt','ru','it','tr','vi','th',
+  'id','pl','nl','sv','no','fi','da','ar'
+];
 
   function getLangCode(){
     try{
@@ -240,9 +244,7 @@ function resolveTargets(psomEl, key){
       }
     }
 
-    for (const k of ALL_KEYS){
-      if (Array.isArray(payload[k])) map[k] = payload[k];
-    }
+}
 
     return map;
   }
