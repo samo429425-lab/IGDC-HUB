@@ -152,35 +152,24 @@
   }
 
   // ---------- EXTENSION SIZE (DOCK-BASED, FORCE) ----------
-  
   function applyExtensionSize(){
+    // Ensure nodes exist
     const modal = document.getElementById('maru-ext-modal') || EXT.modal;
     const dock = document.getElementById('maru-conversation-dock');
     if(!modal || !dock) return;
 
     const d = dock.getBoundingClientRect();
-    const m = Math.round(d.height);
+    const m = Math.round(d.height); // unit = dock height
 
-    // get current rect (base size)
-    const r = modal.getBoundingClientRect();
+    // Spec: shrink all four sides by dock height
+    modal.style.setProperty('left', (m * 2) + 'px', 'important');
+    modal.style.setProperty('right', (m * 2) + 'px', 'important');
+    modal.style.setProperty('top', (m * 2) + 'px', 'important');
+    // bottom should leave dock + extra dock-height gap (dock itself + 1 more dock height)
+    modal.style.setProperty('bottom', (m * 3) + 'px', 'important');
 
-    // NEW SPEC:
-    // width  = current width  - (dock.height * 4)  // left 2x + right 2x
-    // height = current height - (dock.height * 2)  // top + bottom
-    const newWidth  = Math.max(260, Math.round(r.width  - m * 4));
-    const newHeight = Math.max(200, Math.round(r.height - m * 2));
-
-    // center horizontally around current center
-    const centerX = r.left + r.width / 2;
-    const left = Math.max(8, Math.round(centerX - newWidth / 2));
-
-    modal.style.setProperty('width', newWidth + 'px', 'important');
-    modal.style.setProperty('height', newHeight + 'px', 'important');
-    modal.style.setProperty('left', left + 'px', 'important');
-
-    // vertical placement: lift up by dock height
-    modal.style.setProperty('top', Math.max(8, Math.round(r.top + m)) + 'px', 'important');
-    modal.style.setProperty('bottom', 'auto', 'important');
+    // Keep within viewport
+    modal.style.setProperty('max-height', 'calc(100vh - ' + (m * 3) + 'px)', 'important');
   }
 
 function showExtension(){
