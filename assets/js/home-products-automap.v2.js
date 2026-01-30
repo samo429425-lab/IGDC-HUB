@@ -244,19 +244,10 @@ function resolveTargets(psomEl, key){
       }
     }
 
-// MAIN only
-    for (const k of KEYS_MAIN){
-    if (Array.isArray(payload[k])) {
-    map[k] = payload[k];
+    for (const k of PAGE_KEYS){
+    if (Array.isArray(payload[k])) map[k] = payload[k];
   }
-}
 
-// RIGHT only
-    for (const k of KEYS_RIGHT){
-    if (Array.isArray(payload[k])) {
-    map[k] = payload[k];
-  }
-}
 
     return map;
   }
