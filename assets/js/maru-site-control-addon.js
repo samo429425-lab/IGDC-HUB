@@ -454,21 +454,84 @@ function reconcileExtensionVisibility(){
 // INPUT MODE (Realtime / Confirm) — RESTORED
 // ==============================
 /*
- * v6.3-style: installs a small "입력 표시: 실시간 / 확정" selector
- * into Region/Country modal headers, next to voice toggle.
- * - No dependency on title class names.
- * - Disabled when VOICE is OFF.
+ * Installs "입력 표시: 실시간 / 확정" selector into Region/Country modals.
+ * Layout rule (per 운영 요청):
+ *   - 닫기 버튼 = 모달 우측 상단 (VOICE 토글 옆)
+ *   - 입력 표시 토글 = 타이틀 아래 줄(상단 좌측)
+ * Disabled when VOICE is OFF.
  */
+function injectInputModeStyle(){
+  if (document.getElementById('maru-inputmode-style')) return;
+  const st = document.createElement('style');
+  st.id = 'maru-inputmode-style';
+  st.textContent = `
+    .maru-header-controls{display:flex;align-items:center;gap:8px;margin-left:auto;white-space:nowrap}
+    .maru-inputmode-row{display:flex;align-items:center;gap:6px;font-size:12px;white-space:nowrap;padding:6px 18px 10px 18px}
+  `;
+  document.head.appendChild(st);
+}
+
+function ensureModalHeaderLayout(header, kind){
+  if (!header) return null;
+  injectInputModeStyle();
+
+  const modal = header.closest(kind === 'country' ? '.maru-country-modal' : '.maru-region-modal');
+  if (!modal) return null;
+
+  // --- ensure top-right controls box inside header ---
+  let controls = header.querySelector('.maru-header-controls');
+  if (!controls) {
+    controls = document.createElement('div');
+    controls.className = 'maru-header-controls';
+    header.appendChild(controls);
+  }
+
+  // move VOICE toggle into controls
+  const vtSel = (kind === 'country') ? '.maru-country-voice-toggle' : '.maru-region-voice-toggle';
+  const vt = modal.querySelector(vtSel) || header.querySelector(vtSel);
+  if (vt && vt.parentNode !== controls) controls.appendChild(vt);
+
+  // move CLOSE button into controls (top-right)
+  const closeSel = (kind === 'country') ? '.maru-country-close' : '.maru-region-close';
+  const closeBtn = modal.querySelector(closeSel) || header.querySelector(closeSel);
+  if (closeBtn && closeBtn.parentNode !== controls) controls.appendChild(closeBtn);
+
+  // --- ensure input-mode row right under header ---
+  let row = modal.querySelector('[data-maru-inputmode-row]');
+  if (!row) {
+    row = document.createElement('div');
+    row.className = 'maru-inputmode-row';
+    row.setAttribute('data-maru-inputmode-row','1');
+    // insert right after header
+    if (header.nextSibling) modal.insertBefore(row, header.nextSibling);
+    else modal.appendChild(row);
+  } else {
+    // keep it right after header
+    if (row.previousSibling !== header) {
+      try { modal.insertBefore(row, header.nextSibling); } catch(_){}
+    }
+  }
+
+  return row;
+}
+
 function installInputModeSelector(){
   const rh = document.querySelector('.maru-region-header');
   const ch = document.querySelector('.maru-country-header');
-  [rh, ch].forEach(h => {
-    if (!h) return;
-    if (h.querySelector('[data-maru-inputmode]')) return;
 
-    const wrap = document.createElement('div');
-    wrap.setAttribute('data-maru-inputmode','1');
-    wrap.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;white-space:nowrap;';
+  [
+    { h: rh, kind: 'region', radioName: 'maru-inputmode-region' },
+    { h: ch, kind: 'country', radioName: 'maru-inputmode-country' }
+  ].forEach(cfg => {
+    const h = cfg.h;
+    if (!h) return;
+
+    const row = ensureModalHeaderLayout(h, cfg.kind);
+    if (!row) return;
+
+    // Use the row itself as the singleton mount
+    if (row.getAttribute('data-maru-inputmode') === '1') return;
+    row.setAttribute('data-maru-inputmode','1');
 
     const label = document.createElement('span');
     label.textContent = '입력 표시:';
@@ -477,47 +540,47 @@ function installInputModeSelector(){
     const opt1 = document.createElement('label');
     opt1.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;';
     const r1 = document.createElement('input');
-    r1.type = 'radio'; r1.name = 'maru-inputmode'; r1.value = 'realtime';
+    r1.type = 'radio'; r1.name = cfg.radioName; r1.value = 'realtime';
     const t1 = document.createElement('span'); t1.textContent = '실시간';
 
     const opt2 = document.createElement('label');
     opt2.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;';
     const r2 = document.createElement('input');
-    r2.type = 'radio'; r2.name = 'maru-inputmode'; r2.value = 'confirm';
+    r2.type = 'radio'; r2.name = cfg.radioName; r2.value = 'confirm';
     const t2 = document.createElement('span'); t2.textContent = '확정';
 
     opt1.appendChild(r1); opt1.appendChild(t1);
     opt2.appendChild(r2); opt2.appendChild(t2);
 
-    wrap.appendChild(label);
-    wrap.appendChild(opt1);
-    wrap.appendChild(opt2);
-
-    // Insert after voice toggle if exists; else append to header.
-    const vt = h.querySelector('.maru-region-voice-toggle, .maru-country-voice-toggle');
-    if (vt && vt.parentNode) vt.parentNode.insertBefore(wrap, vt.nextSibling);
-    else h.appendChild(wrap);
+    row.innerHTML = '';
+    row.appendChild(label);
+    row.appendChild(opt1);
+    row.appendChild(opt2);
 
     function syncRadios(){
       r1.checked = (INPUT_MODE === 'realtime');
       r2.checked = (INPUT_MODE === 'confirm');
       r1.disabled = !VOICE_ENABLED;
       r2.disabled = !VOICE_ENABLED;
-      wrap.style.opacity = VOICE_ENABLED ? '1' : '.45';
+      row.style.opacity = VOICE_ENABLED ? '1' : '.45';
+
       if (VOICE_ENABLED && INPUT_MODE === 'realtime') { t1.style.fontWeight='800'; t1.style.color='#1f3a5f'; }
       else { t1.style.fontWeight='600'; t1.style.color=''; }
+
       if (VOICE_ENABLED && INPUT_MODE === 'confirm') { t2.style.fontWeight='800'; t2.style.color='#1f3a5f'; }
       else { t2.style.fontWeight='600'; t2.style.color=''; }
     }
+
     r1.addEventListener('change', function(){ if (r1.checked) setInputMode('realtime'); });
     r2.addEventListener('change', function(){ if (r2.checked) setInputMode('confirm'); });
+
     syncRadios();
-    wrap.__syncRadios = syncRadios;
+    row.__syncRadios = syncRadios;
   });
 }
 
 function syncInputModeUi(){
-  const blocks = Array.prototype.slice.call(document.querySelectorAll('[data-maru-inputmode]'));
+  const blocks = Array.prototype.slice.call(document.querySelectorAll('[data-maru-inputmode-row]'));
   blocks.forEach(b => { try { b.__syncRadios && b.__syncRadios(); } catch(_){} });
 }
 
@@ -527,7 +590,7 @@ function setInputMode(mode){
 }
 
 
-  // ---------- ENGINE ----------
+// ---------- ENGINE ----------
   function detectIntent(text){
     const t = String(text || '');
     if (/영상/.test(t)) return 'video';
