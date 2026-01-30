@@ -120,10 +120,15 @@ function resolveTargets(psomEl, key){
     return { isRight: false, mode: 'shop', section: scroller, scroller, list: row, psomEl };
   }
 
-  function showEmpty(t){
+    function showEmpty(t){
     // If psomEl is the render list itself (RIGHT panels often use data-psom-key on .ad-list),
     // never hide the list; show the empty message inside it.
     const psomIsList = (t.psomEl === t.list);
+
+    // RIGHT direct 모드에서는 빈 상태를 리스트에 그리지 않음 (반짝 방지)
+    if (t.isRight && t.mode === 'direct') {
+    return;
+  }
 
     t.psomEl.style.display = 'block';
     t.psomEl.textContent = emptyText();
