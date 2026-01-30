@@ -90,7 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       status.textContent = `${items.length} results`;
-      renderSearchItems(items);
+      items.forEach(renderItem);
     }catch(e){
       console.error(e);
       status.textContent = 'Search error';
@@ -156,12 +156,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-
-  function renderSearchItems(items){
-    results.innerHTML = '';
-    items.forEach(renderItem);
-  }
-
 // ===== MARU PAGINATION (STRICT 10 PER PAGE, SAFE) =====
 (function(){
   const PAGE_SIZE = 15;
@@ -213,6 +207,71 @@ document.addEventListener('DOMContentLoaded', () => {
         allItems = Array.isArray(items) ? items : [];
         currentPage = 1;
         drawPage();
+      };
+    }
+  });
+})();
+
+/* ===== MARU PAGINATION EXTENSION (NON-DESTRUCTIVE) =====
+ * - Original pipeline preserved
+ * - renderItem is wrapped, not replaced
+ * - PAGE_SIZE = 15
+ */
+(function(){
+  if (window.__MARU_PAGINATION_EXT__) return;
+  window.__MARU_PAGINATION_EXT__ = true;
+
+  const PAGE_SIZE = 15;
+  let buffer = [];
+  let page = 1;
+  let originalRenderItem = null;
+
+  function ensurePager(){
+    let bar = document.getElementById('maru-page-controls');
+    if (!bar){
+      bar = document.createElement('div');
+      bar.id = 'maru-page-controls';
+      bar.style.display = 'flex';
+      bar.style.gap = '6px';
+      bar.style.margin = '8px 0';
+      const status = document.getElementById('searchStatus');
+      if (status && status.parentNode){
+        status.parentNode.insertBefore(bar, status.nextSibling);
+      }
+    }
+    return bar;
+  }
+
+  function drawPager(){
+    const bar = ensurePager();
+    bar.innerHTML = '';
+    const pages = Math.ceil(buffer.length / PAGE_SIZE) || 1;
+    for (let i=1;i<=pages;i++){
+      const b = document.createElement('button');
+      b.textContent = i;
+      b.style.opacity = (i===page)?'0.6':'1';
+      b.onclick = () => { page=i; redraw(); };
+      bar.appendChild(b);
+    }
+  }
+
+  function redraw(){
+    const results = document.getElementById('searchResults');
+    if (!results) return;
+    results.innerHTML = '';
+    const start = (page-1)*PAGE_SIZE;
+    buffer.slice(start, start+PAGE_SIZE).forEach(it => originalRenderItem(it));
+    drawPager();
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    if (typeof window.renderItem === 'function' && !originalRenderItem){
+      originalRenderItem = window.renderItem;
+      window.renderItem = function(it){
+        buffer.push(it);
+        if (buffer.length <= PAGE_SIZE){
+          originalRenderItem(it);
+        }
       };
     }
   });
