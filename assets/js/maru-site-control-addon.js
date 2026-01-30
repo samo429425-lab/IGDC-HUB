@@ -95,12 +95,29 @@
 
   function ensureExtension(){
     injectExtensionStyle();
-    if (EXT.backdrop && EXT.modal) return;
+
+    // ===== SINGLETON GUARANTEE =====
+    // Reuse existing nodes if they already exist in DOM (prevents duplicate windows)
+    const existingBackdrop = document.getElementById('maru-ext-backdrop');
+    const existingModal = document.getElementById('maru-ext-modal');
+
+    if (existingBackdrop && existingModal) {
+      EXT.backdrop = existingBackdrop;
+      EXT.modal = existingModal;
+      EXT.body = existingModal.querySelector('.maru-ext-body') || null;
+      EXT.title = existingModal.querySelector('.maru-ext-header strong') || null;
+      return;
+    }
+
+    // If old nodes exist partially, remove them to avoid duplicates
+    try { document.querySelectorAll('#maru-ext-backdrop, #maru-ext-modal, .maru-ext-backdrop, .maru-ext-modal').forEach(n => n.remove()); } catch(_){}
 
     EXT.backdrop = document.createElement('div');
+    EXT.backdrop.id = 'maru-ext-backdrop';
     EXT.backdrop.className = 'maru-ext-backdrop';
 
     EXT.modal = document.createElement('div');
+    EXT.modal.id = 'maru-ext-modal';
     EXT.modal.className = 'maru-ext-modal';
 
     const header = document.createElement('div');
@@ -111,10 +128,11 @@
 
     const closeBtn = document.createElement('button');
     closeBtn.className = 'maru-ext-close';
-    closeBtn.textContent = '숨김';
+    closeBtn.textContent = '닫기';
     closeBtn.addEventListener('click', function(e){
       e.preventDefault();
-      hideExtension(true);
+      // Close = destroy (so it won't spawn another window while open; will recreate only if absent)
+      destroyExtension(true);
     });
 
     header.appendChild(EXT.title);
@@ -130,60 +148,11 @@
     document.body.appendChild(EXT.backdrop);
     document.body.appendChild(EXT.modal);
 
-    // draggable
-    makeExtDraggable(EXT.modal, header);
-
-    // click backdrop -> keep open (default), but allow hide if user clicked close only
+    // click backdrop -> no-op (do not close automatically)
     EXT.backdrop.addEventListener('click', function(){ /* no-op */ });
-  
-
-  function makeExtDraggable(pane, handle){
-    if (!pane || !handle) return;
-    let startX=0, startY=0, startLeft=0, startTop=0;
-    let dragging=false;
-
-    handle.style.cursor = 'move';
-
-    handle.addEventListener('pointerdown', function(e){
-      // ignore clicks on close button
-      const t = e.target;
-      if (t && t.closest && t.closest('.maru-ext-close')) return;
-
-      dragging = true;
-      pane.style.zIndex = 200002; // above backdrop
-      startX = e.clientX;
-      startY = e.clientY;
-      const rect = pane.getBoundingClientRect();
-      startLeft = rect.left;
-      startTop = rect.top;
-      try { handle.setPointerCapture(e.pointerId); } catch(_){}
-    });
-
-    handle.addEventListener('pointermove', function(e){
-      if (!dragging) return;
-      const nx = startLeft + (e.clientX - startX);
-      const ny = startTop + (e.clientY - startY);
-
-      // clamp within viewport
-      const w = pane.offsetWidth || 300;
-      const h = pane.offsetHeight || 200;
-      const maxL = Math.max(6, window.innerWidth - w - 6);
-      const maxT = Math.max(6, window.innerHeight - h - 6);
-
-      pane.style.left = Math.max(6, Math.min(nx, maxL)) + 'px';
-      pane.style.top  = Math.max(6, Math.min(ny, maxT)) + 'px';
-      pane.style.right = 'auto';
-      pane.style.bottom = 'auto';
-    });
-
-    handle.addEventListener('pointerup', function(e){
-      dragging = false;
-      try { handle.releasePointerCapture(e.pointerId); } catch(_){}
-    });
   }
-}
 
-  function showExtension(){
+function showExtension(){
     ensureExtension();
     EXT.backdrop.style.display = 'block';
     EXT.modal.classList.remove('maru-ext-hidden');
@@ -191,10 +160,22 @@
   }
 
   function hideExtension(userInitiated){
-    // Even if user hides, auto-open rules will reopen on input/voice-on
+    // Hide only (keeps singleton instance)
     if (!EXT.modal) return;
     EXT.backdrop.style.display = 'none';
     EXT.modal.classList.add('maru-ext-hidden');
+    EXT.visible = false;
+    if (userInitiated) { /* keep silent */ }
+  }
+
+  function destroyExtension(userInitiated){
+    // Destroy nodes (no instance). Next showExtension() will recreate.
+    try { EXT.backdrop && EXT.backdrop.remove(); } catch(_){}
+    try { EXT.modal && EXT.modal.remove(); } catch(_){}
+    EXT.backdrop = null;
+    EXT.modal = null;
+    EXT.body = null;
+    EXT.title = null;
     EXT.visible = false;
     if (userInitiated) { /* keep silent */ }
   }
