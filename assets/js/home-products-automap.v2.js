@@ -215,43 +215,15 @@ function resolveTargets(psomEl, key){
 
    function buildRightCard(item){
     const a = document.createElement('a');
-    a.className = 'ad-box';
+    a.className = 'ad-box news-btn';
     a.href = item.url || '#';
-    if (isExternal(item.url)) { a.target = '_blank'; a.rel = 'noopener'; }
-    else { a.target = '_self'; }
-
-    const thumb = document.createElement('div');
-    thumb.className = 'thumb';
-    if (item.thumb){
-      const u = String(item.thumb).replace(/"/g,'\\"');
-      thumb.style.backgroundImage = `url("${u}")`;
-      thumb.style.backgroundPosition = 'center';
-      thumb.style.backgroundSize = 'cover';
-      thumb.style.backgroundRepeat = 'no-repeat';
-    }
-
-    // ✅ 우측 패널도 “실데이터 카드”처럼 보이도록 캡션 추가
-    const cap = document.createElement('div');
-    cap.className = 'ad-cap';
-    cap.textContent = item.title || item.name || '';
-    cap.style.width = '100%';
-    cap.style.background = 'rgba(255,255,255,.88)';
-    cap.style.padding = '6px 8px';
-    cap.style.fontWeight = '700';
-    cap.style.fontSize = '13px';
-    cap.style.color = '#222';
-    cap.style.whiteSpace = 'nowrap';
-    cap.style.overflow = 'hidden';
-    cap.style.textOverflow = 'ellipsis';
-
-    a.style.display = 'grid';
-    a.style.gridTemplateRows = '1fr auto';
-    a.style.alignItems = 'stretch';
-    a.style.justifyItems = 'stretch';
-
-    a.appendChild(thumb);
-    if (cap.textContent) a.appendChild(cap);
-
+    a.target = '_blank';
+    const img = document.createElement('img');
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.src = item.thumb || '';
+    img.alt = item.title || '';
+    a.appendChild(img);
     return a;
   }
 
@@ -360,26 +332,37 @@ function resolveTargets(psomEl, key){
     bindIncremental(t, list);
   }
 
-  async function load(){
-    try{
-      const r = await fetch(FEED_URL, { cache: 'no-store' });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const payload = await r.json();
-      const byId = indexSections(payload);
+async function load(){
+  try{
+    const r = await fetch(FEED_URL, { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const payload = await r.json();
+    const byId = indexSections(payload);
 
-      for (const key of ALL_KEYS){
-        const alt = key.replace(/_/g,'-');
-        renderSlot(key, byId[key] || byId[alt] || byId[legacyKey(key)] || []);
-      }
-    }catch(e){
-      for (const key of ALL_KEYS){
-        const psomEl = qs(`[data-psom-key="${key}"]`);
-        if (!psomEl) continue;
-        const t = resolveTargets(psomEl, key);
-        showEmpty(t);
-      }
+    // MAIN (복구)
+    for (const key of KEYS_MAIN){
+      const alt = key.replace(/_/g,'-');
+      renderSlot(key, byId[key] || byId[alt] || byId[legacyKey(key)] || []);
+    }
+
+    // RIGHT (유지)
+    for (const key of KEYS_RIGHT){
+      const alt = key.replace(/_/g,'-');
+      renderSlot(key, byId[key] || byId[alt] || byId[legacyKey(key)] || []);
+    }
+
+  }catch(e){
+    // 에러 시에도 MAIN + RIGHT 모두 empty 처리
+    for (const key of KEYS_MAIN.concat(KEYS_RIGHT)){
+      const psomEl = qs(`[data-psom-key="${key}"]`);
+      if (!psomEl) continue;
+      const t = resolveTargets(psomEl, key);
+      showEmpty(t);
     }
   }
+}
+
+
 
   function boot(){ load(); }
 
