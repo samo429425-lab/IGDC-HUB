@@ -450,10 +450,78 @@ function reconcileExtensionVisibility(){
     safe(() => window.maruVoiceSpeak(String(text)));
   }
 
-  // ---------- INPUT MODE (kept) ----------
-  function setInputMode(mode){
-    INPUT_MODE = (mode === 'confirm') ? 'confirm' : 'realtime';
-  }
+// ==============================
+// INPUT MODE (Realtime / Confirm) — RESTORED
+// ==============================
+let INPUT_MODE = 'realtime';
+
+// 상태 변경 (엔진용)
+function setInputMode(mode){
+  INPUT_MODE = (mode === 'confirm') ? 'confirm' : 'realtime';
+  syncInputModeUi();
+}
+
+// UI 동기화
+function syncInputModeUi(){
+  document.querySelectorAll('[data-maru-inputmode]').forEach(wrap=>{
+    const r1 = wrap.querySelector('input[value="realtime"]');
+    const r2 = wrap.querySelector('input[value="confirm"]');
+    if (!r1 || !r2) return;
+    r1.checked = (INPUT_MODE === 'realtime');
+    r2.checked = (INPUT_MODE === 'confirm');
+  });
+}
+
+// UI 설치 (모달 헤더에 삽입)
+function installInputModeSelector(){
+  const headers = document.querySelectorAll(
+    '.maru-region-header, .maru-country-header'
+  );
+
+  headers.forEach(header=>{
+    if (header.querySelector('[data-maru-inputmode]')) return;
+
+    const wrap = document.createElement('div');
+    wrap.setAttribute('data-maru-inputmode','1');
+    wrap.style.display = 'flex';
+    wrap.style.gap = '12px';
+    wrap.style.alignItems = 'center';
+    wrap.style.margin = '6px 0 10px 0';
+
+    const l1 = document.createElement('label');
+    const r1 = document.createElement('input');
+    r1.type = 'radio';
+    r1.name = 'maru-input-mode';
+    r1.value = 'realtime';
+    l1.appendChild(r1);
+    l1.append(' 실시간');
+
+    const l2 = document.createElement('label');
+    const r2 = document.createElement('input');
+    r2.type = 'radio';
+    r2.name = 'maru-input-mode';
+    r2.value = 'confirm';
+    l2.appendChild(r2);
+    l2.append(' 확정');
+
+    r1.addEventListener('change', ()=> r1.checked && setInputMode('realtime'));
+    r2.addEventListener('change', ()=> r2.checked && setInputMode('confirm'));
+
+    wrap.appendChild(l1);
+    wrap.appendChild(l2);
+
+    // 타이틀 바로 아래에 삽입
+    const title = header.querySelector('.maru-region-title, .maru-country-title');
+    if (title && title.nextSibling) {
+      header.insertBefore(wrap, title.nextSibling);
+    } else {
+      header.appendChild(wrap);
+    }
+
+    syncInputModeUi();
+  });
+}
+
 
   // ---------- ENGINE ----------
   function detectIntent(text){
