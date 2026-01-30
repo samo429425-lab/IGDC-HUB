@@ -734,20 +734,23 @@ function reconcileExtensionVisibility(){
 })();
 
 
-// === SIZE OVERRIDE: constrain extension pane relative to Conversation Dock ===
+
+// === SIZE OVERRIDE v4: stronger reduction relative to Conversation Dock ===
 (function(){
   function applyPaneSize(){
     const pane = document.querySelector('.maru-detached-pane');
     const dock = document.getElementById('maru-conversation-dock');
     if(!pane || !dock) return;
-    const dRect = dock.getBoundingClientRect();
-    const w = Math.round(dRect.width * 1.5);
+    const d = dock.getBoundingClientRect();
+    // width reduced on both sides by dock height
+    const w = Math.max(240, Math.round(d.width * 1.5 - d.height * 2));
     pane.style.width = w + 'px';
-    pane.style.left = Math.max(8, Math.round(dRect.left + (dRect.width - w)/2)) + 'px';
-    const topReduce = dRect.height;
-    pane.style.top = Math.max(8, Math.round(8 + topReduce)) + 'px';
-    pane.style.bottom = Math.round(dRect.height) + 'px';
-    pane.style.maxHeight = 'calc(100vh - ' + Math.round(dRect.height*2) + 'px)';
+    pane.style.left = Math.max(8, Math.round(d.left + (d.width - w)/2)) + 'px';
+    // vertical reductions: top + bottom each by dock height
+    const topPad = Math.round(d.height * 2);
+    pane.style.top = Math.max(8, topPad) + 'px';
+    pane.style.bottom = Math.round(d.height * 2) + 'px';
+    pane.style.maxHeight = 'calc(100vh - ' + Math.round(d.height * 4) + 'px)';
   }
   window.addEventListener('resize', applyPaneSize);
   const mo = new MutationObserver(applyPaneSize);
