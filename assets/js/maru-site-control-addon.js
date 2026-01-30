@@ -1,262 +1,540 @@
 /* =========================================================
- * MARU Site Control Addon — FINAL STABLE
- * Version: 6.1
- * ---------------------------------------------------------
- * - window.MaruAddon is ALWAYS defined (never undefined)
- * - Boots after DOM ready (prevents early crashes)
- * - Text + Voice share one pipeline
- * - Routes engine responses into existing injectors
- * - TTS reads responses when VOICE is enabled
+ * MARU Site Control Addon
+ * Version: 5.0 (Voice/Conversation Final Mapping)
+ *
+ * 목표:
+ * - 보이스(STT) + 컨버세이션(텍스트) 입력 완전 수용
+ * - VOICE 토글에 따른 문자입력창 표시 규칙 준수
+ * - Region/Country 컨텍스트에 따라 정확한 injector로 주입
+ * - 영상 목록(3~4) → 클릭/음성 선택 → 확대 재생(컨트리 UI 재사용)
+ *
+ * 규칙:
+ * - 항상 풀 파일
+ * - Region/Country/IGDC UI 로직을 가로채지 않음
  * ========================================================= */
 
 (function () {
   'use strict';
 
-  // =====================================================
-  // 0) ALWAYS EXPORT A SAFE STUB FIRST
-  // =====================================================
-  const MaruAddon = (window.MaruAddon && typeof window.MaruAddon === 'object') ? window.MaruAddon : {};
+  /* =====================================================
+   * 1. STATE
+   * ===================================================== */
 
-  // No-op defaults so callers never crash
-  const noop = function () {};
-  MaruAddon.handleTextQuery = MaruAddon.handleTextQuery || noop;
-  MaruAddon.handleVoiceQuery = MaruAddon.handleVoiceQuery || noop;
-  MaruAddon.setVoiceEnabled = MaruAddon.setVoiceEnabled || noop;
-  MaruAddon.isVoiceEnabled = MaruAddon.isVoiceEnabled || function () { return false; };
-  MaruAddon.setMediaPlaying = MaruAddon.setMediaPlaying || noop;
-  MaruAddon.setMediaState = MaruAddon.setMediaState || noop;
-  MaruAddon.bootstrapGlobalInsight = MaruAddon.bootstrapGlobalInsight || noop;
-  MaruAddon.requestInsight = MaruAddon.requestInsight || noop;
+  let VOICE_ENABLED = false;
+  const MEDIA_STATE = {
+  video: false,
+  music: false,
+  narration: false
+};
 
-  window.MaruAddon = MaruAddon;
+// === Voice Intent Detection ===
+function detectVoiceIntent(text) {
+  const t = text || '';
 
-  // =====================================================
-  // 1) BOOT GATE
-  // =====================================================
-  function safeBoot() {
-    try {
-      initAddon();
-    } catch (e) {
-      try { console.error('[MaruAddon] BOOT FAILED', e); } catch (_) {}
-      // keep stub exported
+  if (
+    t.includes('자세히') ||
+    t.includes('상세') ||
+    t.includes('더 알려') ||
+    t.includes('더 보여')
+  ) {
+    return 'expand';
+  }
+
+  if (
+    t.includes('요약') ||
+    t.includes('간단히') ||
+    t.includes('짧게')
+  ) {
+    return 'summary';
+  }
+
+  if (
+    t.includes('읽어') ||
+    t.includes('말해')
+  ) {
+    return 'read';
+  }
+
+  return 'general';
+}
+
+function routeVoiceByIntent(intent, text, context) {
+  switch (intent) {
+    case 'expand':
+      if (context) {
+        window.openMaruDetailOverlay?.(context);
+      }
+      return { mode: 'expand' };
+
+    case 'summary':
+      return { mode: 'summary' };
+
+    case 'read':
+      return { mode: 'read' };
+
+    default:
+      return { mode: 'general' };
+  }
+}
+
+  const STATE = {
+    lastRequest: null,
+    lastResponse: null,
+    commandHistory: [],
+    videoPool: {
+      country: null,     // active country name
+      list: []           // [{title, thumbnail, src, ...}]
+    }
+  };
+
+let ENGINE_DEBOUNCE_TIMER = null;
+const ENGINE_DEBOUNCE_DELAY = 400; // ms (권장 300~500)
+
+  /* =====================================================
+   * 2. PUBLIC API
+   * ===================================================== */
+
+  const MaruAddon = {};
+
+  // IGDC: AI 글로벌 인사이트 실행
+  MaruAddon.bootstrapGlobalInsight = function () {
+    dispatchCommand({
+      source: 'panel',
+      input: 'system',
+      text: '글로벌 인사이트 전체 수집',
+      scope: 'global',
+      target: null,
+      intent: 'summary',
+      voiceWanted: VOICE_ENABLED
+    });
+  };
+
+  // IGDC: 실시간 이슈
+  MaruAddon.requestInsight = function (opts = {}) {
+    dispatchCommand({
+      source: opts.source || 'panel',
+      input: 'system',
+      text: '실시간 글로벌 이슈',
+      scope: 'global',
+      target: null,
+      intent: 'realtime',
+      voiceWanted: VOICE_ENABLED
+    });
+  };
+
+  // 텍스트 입력
+MaruAddon.handleTextQuery = function (payload, context = {}) {
+  // payload: {text, context} or text(string)
+  if (payload && typeof payload === 'object') {
+    return routeInbound({ input: 'text', text: payload.text || '', context: payload.context || null });
+  }
+  return routeInbound({ input: 'text', text: payload || '', context });
+};
+  // 음성 입력
+MaruAddon.handleVoiceQuery = function (payload, context = {}) {
+  if (payload && typeof payload === 'object') {
+    return routeInbound({ input: 'voice', text: payload.text || '', context: payload.context || null });
+  }
+  return routeInbound({ input: 'voice', text: payload || '', context });
+};
+
+// topic 추출 (간단 1차)
+function extractTopic(t) {
+  const m = (t || '').match(/(?:에 대해서|관련해서|부분|항목|주제)\s*([^\s]+)/);
+  return m ? m[1] : null;
+}
+
+  /* =====================================================
+   * 3. SINGLE VOICE CONTROL + TEXT INPUT RULES
+   * ===================================================== */
+
+  MaruAddon.setVoiceEnabled = function (on) {
+    const enabled = !!on;
+    if (enabled === VOICE_ENABLED) {
+      // UI 동기화만 한번 더
+      syncConversationInputVisibility();
+      return;
+    }
+
+    VOICE_ENABLED = enabled;
+
+    if (VOICE_ENABLED) {
+      if (typeof window.startMaruMic === 'function') window.startMaruMic();
+    } else {
+      if (typeof window.stopMaruMic === 'function') window.stopMaruMic();
+    }
+
+    syncConversationInputVisibility();
+  };
+
+  MaruAddon.isVoiceEnabled = function () {
+    return VOICE_ENABLED;
+  };
+
+// 영상 재생 상태 제어 (UX 충돌 방지)
+MaruAddon.setMediaPlaying = function (on) {
+  MEDIA_STATE.video = !!on;
+};
+
+MaruAddon.setMediaState = function (type, on) {
+  if (!MEDIA_STATE.hasOwnProperty(type)) return;
+  MEDIA_STATE[type] = !!on;
+};
+
+  // 규칙:
+  // - VOICE OFF => 입력창 반드시 보이기
+  // - VOICE ON  => 숨겨도 됨(기본 숨김)
+  function syncConversationInputVisibility() {
+    if (!window.MaruConversationModal) return;
+
+    if (VOICE_ENABLED) {
+      // 기본: 음성 ON이면 입력 숨김 가능
+      MaruConversationModal.setVoiceMode(true);  // 내부적으로 inputWrap 숨김
+      MaruConversationModal.hideInput();
+    } else {
+      // 음성 OFF이면 입력 반드시 표시
+      MaruConversationModal.setVoiceMode(false);
+      MaruConversationModal.showInput();
     }
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', safeBoot);
-  } else {
-    safeBoot();
+  // 음성 ON 상태에서도 “문자창 띄워줘”로 강제 표시
+  function forceShowTextInput() {
+    if (!window.MaruConversationModal) return;
+    MaruConversationModal.setVoiceMode(false);
+    MaruConversationModal.showInput();
   }
 
-  // =====================================================
-  // 2) IMPLEMENTATION
-  // =====================================================
-  function initAddon() {
-    // Prevent double-init
-    if (MaruAddon.__READY__) return;
-    MaruAddon.__READY__ = true;
+  // 음성 ON 상태에서도 “문자창 숨겨줘”로 숨김
+  function forceHideTextInput() {
+    if (!window.MaruConversationModal) return;
+    MaruConversationModal.setVoiceMode(true);
+    MaruConversationModal.hideInput();
+  }
 
-    let VOICE_ENABLED = false;
-    const MEDIA_STATE = { video: false, music: false, narration: false };
+  /* =====================================================
+   * 4. INBOUND ROUTER (command / control)
+   * ===================================================== */
 
-    const STATE = {
-      lastRequest: null,
-      lastResponse: null,
-      commandHistory: [],
-      videoPool: { country: null, list: [] }
-    };
+  function routeInbound({ input, text, context }) {
+    const raw = (text || '').trim();
+    if (!raw) return;
 
-    let ENGINE_DEBOUNCE_TIMER = null;
-    const ENGINE_DEBOUNCE_DELAY = 350;
-
-    function ttsSpeak(text) {
-      if (!text) return;
-      if (!VOICE_ENABLED) return;
-      if (MEDIA_STATE.video) return;
-      if (typeof window.maruVoiceSpeak !== 'function') return;
-      try { window.maruVoiceSpeak(String(text)); } catch (_) {}
+    // 1) UI 제어 음성 명령 (엔진 호출 없이 즉시 처리)
+    const uiCtl = detectUiControl(raw);
+    if (uiCtl === 'showText') {
+      forceShowTextInput();
+      // 음성 ON이면, 확인 멘트만 읽기(선택)
+      if (VOICE_ENABLED && typeof window.maruVoiceSpeak === 'function') {
+        window.maruVoiceSpeak('문자 입력창을 열었습니다.');
+      }
+      return;
+    }
+    if (uiCtl === 'hideText') {
+      forceHideTextInput();
+      if (VOICE_ENABLED && typeof window.maruVoiceSpeak === 'function') {
+        window.maruVoiceSpeak('문자 입력창을 숨겼습니다.');
+      }
+      return;
     }
 
-    function detectIntent(text) {
-      const t = String(text || '').toLowerCase();
-      if (t.includes('영상')) return 'video';
-      if (t.includes('자세히') || t.includes('상세')) return 'expand';
-      if (t.includes('이슈')) return 'realtime';
-      return 'summary';
-    }
-
-    function normalizeContext(ctx) {
-      if (!ctx || typeof ctx !== 'object') return null;
-      if (!ctx.level) return null;
-      return { level: ctx.level, id: (ctx.id != null ? ctx.id : null) };
-    }
-
-    function normalizeCommand({ input, text, context }) {
-      const raw = String(text || '').trim();
-      if (!raw) return null;
-
-      const ctx = normalizeContext(context) || normalizeContext(window.__MARU_CONTEXT__) || null;
-
-      let scope = 'global';
-      let target = null;
-      if (ctx && ctx.level === 'region') { scope = 'region'; target = ctx.id || null; }
-      if (ctx && ctx.level === 'country') { scope = 'country'; target = ctx.id || null; }
-
-      return {
-        source: 'user',
-        input: input || 'text',
-        text: raw,
-        scope,
-        target,
-        intent: detectIntent(raw),
-        voiceWanted: (input === 'voice')
-      };
-    }
-
-    function dispatchCommand(req) {
-      if (!req || !req.text) return;
-      STATE.lastRequest = req;
-      STATE.commandHistory.push({ role: 'user', text: req.text });
-
-      if (ENGINE_DEBOUNCE_TIMER) clearTimeout(ENGINE_DEBOUNCE_TIMER);
-      ENGINE_DEBOUNCE_TIMER = setTimeout(function () {
-        callInsightEngine(req)
-          .then(function (raw) {
-            const res = normalizeEngineResponse(raw);
-            STATE.lastResponse = res;
-            STATE.commandHistory.push({ role: 'assistant', text: res.text || '' });
-            routeResponse(req, res);
-          })
-          .catch(function (err) {
-            try { console.error('[MaruAddon] engine error', err); } catch (_) {}
-            // Always give a minimal audible response if voice is on
-            ttsSpeak('현재 엔진 응답을 받을 수 없습니다.');
-          });
-      }, ENGINE_DEBOUNCE_DELAY);
-    }
-
-    function normalizeEngineResponse(raw) {
-      const ok = !!(raw && raw.ok === true);
-      const text = (raw && (raw.text || raw.summary)) ? String(raw.text || raw.summary) : '';
-      const mode = (raw && raw.mode) ? String(raw.mode) : 'summary';
-      const data = (raw && raw.data) ? raw.data : {};
-      return { ok, text, mode, data, raw: raw || null };
-    }
-
-    function callInsightEngine(req) {
-      return fetch('/.netlify/functions/maru-global-insight', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: req.text,
-          scope: req.scope,
-          depth: req.intent
-        })
-      }).then(function (r) { return r.json(); });
-    }
-
-    function routeResponse(req, res) {
-      // Even if ok=false, we still speak a minimal response when voice is on
-      if (!res || !res.ok) {
-        ttsSpeak('준비된 자료가 없습니다.');
+    // 2) 영상 선택 명령 (A/1/첫번째 등) → 컨트리 영상 카드 클릭으로 처리
+    const videoPick = parseVideoPick(raw);
+    if (videoPick != null) {
+      const ok = tryOpenCountryVideoByIndex(videoPick);
+      if (ok) {
+        if (VOICE_ENABLED && typeof window.maruVoiceSpeak === 'function') {
+          window.maruVoiceSpeak(`${videoPick + 1}번 영상을 실행합니다.`);
+        }
         return;
       }
-
-      // Global summary hook (optional)
-      if (req.scope === 'global' && typeof window.renderSummary === 'function') {
-        try { window.renderSummary(res.text || ''); } catch (_) {}
-      }
-
-      // Injectors
-      if (req.scope === 'global') {
-        if (typeof window.injectMaruGlobalRegionData === 'function') {
-          try { window.injectMaruGlobalRegionData(res.data && res.data.regions ? res.data.regions : (res.data || [])); } catch (_) {}
-        }
-        if (typeof window.injectMaruGlobalCountryData === 'function') {
-          try { window.injectMaruGlobalCountryData(res.data && res.data.countries ? res.data.countries : (res.data || [])); } catch (_) {}
-        }
-      }
-
-      if (req.scope === 'region' && typeof window.injectRegionContextResult === 'function') {
-        try {
-          window.injectRegionContextResult(req.target, {
-            summary: res.text || '',
-            issues: (res.data && res.data.issues) ? res.data.issues : null,
-            raw: res
-          });
-        } catch (_) {}
-      }
-
-      if (req.scope === 'country' && typeof window.injectCountryContextResult === 'function') {
-        try {
-          window.injectCountryContextResult(req.target, {
-            summary: res.text || '',
-            issues: (res.data && res.data.issues) ? res.data.issues : null,
-            videos: (res.data && res.data.videos) ? res.data.videos : null,
-            raw: res
-          });
-        } catch (_) {}
-      }
-
-      // Videos
-      if (req.scope === 'country' && res.data && Array.isArray(res.data.videos) && typeof window.injectMaruCountryVideos === 'function') {
-        try {
-          STATE.videoPool.country = req.target;
-          STATE.videoPool.list = res.data.videos;
-          window.injectMaruCountryVideos({ country: req.target, videos: res.data.videos });
-        } catch (_) {}
-      }
-
-      // Speak
-      ttsSpeak(res.text || '');
+      // 열기 실패 시에는 엔진 호출로 fallback
     }
 
-    // =====================================================
-    // 3) PUBLIC API (STABLE)
-    // =====================================================
-    MaruAddon.setVoiceEnabled = function (on) {
-      VOICE_ENABLED = !!on;
-      // Start/stop recognition if available
-      try {
-        if (VOICE_ENABLED && typeof window.startMaruMic === 'function') window.startMaruMic();
-        if (!VOICE_ENABLED && typeof window.stopMaruMic === 'function') window.stopMaruMic();
-      } catch (_) {}
-    };
-
-    MaruAddon.isVoiceEnabled = function () { return VOICE_ENABLED; };
-
-    MaruAddon.setMediaPlaying = function (on) { MEDIA_STATE.video = !!on; };
-
-    MaruAddon.setMediaState = function (type, on) {
-      if (!Object.prototype.hasOwnProperty.call(MEDIA_STATE, type)) return;
-      MEDIA_STATE[type] = !!on;
-    };
-
-    MaruAddon.handleTextQuery = function (payload, context) {
-      const text = (payload && typeof payload === 'object') ? (payload.text || '') : (payload || '');
-      const ctx = (payload && typeof payload === 'object') ? payload.context : context;
-      const req = normalizeCommand({ input: 'text', text: text, context: ctx });
-      if (!req) return;
-      dispatchCommand(req);
-    };
-
-    MaruAddon.handleVoiceQuery = function (payload, context) {
-      const text = (payload && typeof payload === 'object') ? (payload.text || '') : (payload || '');
-      const ctx = (payload && typeof payload === 'object') ? payload.context : context;
-      const req = normalizeCommand({ input: 'voice', text: text, context: ctx });
-      if (!req) return;
-      dispatchCommand(req);
-    };
-
-    MaruAddon.bootstrapGlobalInsight = function () {
-      dispatchCommand({ source: 'panel', input: 'system', text: '글로벌 인사이트 전체 수집', scope: 'global', target: null, intent: 'summary', voiceWanted: VOICE_ENABLED });
-    };
-
-    MaruAddon.requestInsight = function () {
-      dispatchCommand({ source: 'panel', input: 'system', text: '실시간 글로벌 이슈', scope: 'global', target: null, intent: 'realtime', voiceWanted: VOICE_ENABLED });
-    };
-
-    try { console.log('[MaruAddon] READY'); } catch (_) {}
+    // 3) 일반/명령형 요청 → 엔진 파이프라인
+    dispatchCommand(normalizeCommand({ input, text: raw, context }));
   }
+
+  // “문자창 띄워줘/열어줘/보여줘” 등
+  function detectUiControl(text) {
+    const t = text.toLowerCase().replace(/\s+/g, '');
+    if (t.includes('문자창') || t.includes('입력창') || t.includes('텍스트창')) {
+      if (t.includes('띄워') || t.includes('열어') || t.includes('보여')) return 'showText';
+      if (t.includes('닫아') || t.includes('숨겨') || t.includes('가려')) return 'hideText';
+    }
+    return null;
+  }
+
+  // “A번 영상”, “1번 영상”, “첫번째 영상” 등 → 0-based index
+  function parseVideoPick(text) {
+    const t = (text || '').trim();
+    if (!t) return null;
+    if (!/영상/.test(t)) return null;
+
+    // A/B/C/D
+    const mAlpha = t.match(/\b([A-Da-d])\b/);
+    if (mAlpha) {
+      const c = mAlpha[1].toUpperCase().charCodeAt(0) - 65;
+      if (c >= 0 && c <= 3) return c;
+    }
+
+    // 1~4
+    const mNum = t.match(/([1-4])\s*번/);
+    if (mNum) {
+      const idx = parseInt(mNum[1], 10) - 1;
+      if (idx >= 0 && idx <= 3) return idx;
+    }
+
+    // “첫번째/두번째/세번째/네번째”
+    if (t.includes('첫')) return 0;
+    if (t.includes('두')) return 1;
+    if (t.includes('세')) return 2;
+    if (t.includes('네')) return 3;
+
+    return null;
+  }
+
+  // 컨트리 모달에 이미 렌더된 카드(.maru-country-video-card)를 클릭 트리거
+function tryOpenCountryVideoByIndex(idx) {
+  if (typeof window.openMaruCountryVideoByIndex === 'function') {
+    return window.openMaruCountryVideoByIndex(idx) === true;
+  }
+  return false;
+}
+
+
+  /* =====================================================
+   * 5. COMMAND NORMALIZER
+   * ===================================================== */
+
+  function normalizeCommand({ input, text, context = {} }) {
+    // 보이스 파일은 ConversationModal.getContext()를 넘김
+    // 컨텍스트는 { level:'region'|'country', id: ... } 형태가 기준
+    let scope = 'global';
+    let target = null;
+
+    if (context && context.level === 'region') {
+      scope = 'region';
+      target = context.id || null;
+    } else if (context && context.level === 'country') {
+      scope = 'country';
+      target = context.id || null;
+    }
+
+// === MIXED REFRESH TRIGGER (A + B) ===
+const rawText = (text || '').trim();
+const voiceIntent = detectVoiceIntent(rawText);
+
+const topic = extractTopic(rawText);
+
+const FORCE_KEYWORDS = /(다시|재조사|재수집|최신|갱신|업데이트|추가 조사)/;
+const NO_REFRESH_KEYWORDS = /(요약|정리|설명|비교)/;
+
+let refresh = false;
+
+// B안: 명시적 재조사
+if (FORCE_KEYWORDS.test(rawText)) refresh = true;
+
+// A안: Expand + topic (단, 요약/설명은 제외)
+if (voiceIntent === 'expand' && topic && !NO_REFRESH_KEYWORDS.test(rawText)) refresh = true;
+
+// req에 반영될 값을 return 오브젝트에 넣기 위해 변수로 남김
+const refreshFlag = refresh;
+const focusTopic = topic;
+
+    return {
+      source: 'user',
+      input,
+      text,
+      scope,
+      target,
+      intent: detectIntent(text),
+      voiceWanted: (input === 'voice') ? true : false,
+	  
+	  refresh: refreshFlag,
+      focus: focusTopic,
+
+    };
+  }
+
+  // intent는 엔진 depth로 매핑됨: summary | detail(expand) | realtime | video
+  function detectIntent(text = '') {
+    const t = text.toLowerCase();
+
+    if (t.includes('영상')) return 'video';
+    if (t.includes('자세히') || t.includes('상세')) return 'expand';
+    if (t.includes('이슈')) return 'realtime';
+    return 'summary';
+  }
+
+  /* =====================================================
+   * 6. ENGINE PIPELINE
+   * ===================================================== */
+function normalizeEngineResponse(raw) {
+  return {
+    ok: raw?.ok === true,
+    text: raw?.text ?? raw?.summary ?? '',
+    mode: raw?.mode ?? 'summary',
+    data: raw?.data ?? {}   // ✅ regions/countries/issues/videos 전부 보존
+  };
+}
+
+
+function dispatchCommand(req) {
+  STATE.lastRequest = req;
+  STATE.commandHistory.push({ role: 'user', text: req.text });
+
+  // 🔹 Netlify Function 호출 디바운스
+  if (ENGINE_DEBOUNCE_TIMER) {
+    clearTimeout(ENGINE_DEBOUNCE_TIMER);
+  }
+
+  ENGINE_DEBOUNCE_TIMER = setTimeout(() => {
+    callInsightEngine(req)
+.then(raw => {
+  const res = normalizeEngineResponse(raw);
+
+  STATE.lastResponse = res;
+  STATE.commandHistory.push({ role: 'assistant', text: res.text || '' });
+  routeResponse(req, res);
+})
+
+      .catch(err => console.error('[MaruAddon]', err));
+  }, ENGINE_DEBOUNCE_DELAY);
+}
+
+
+  function callInsightEngine(req) {
+    return fetch('/.netlify/functions/maru-global-insight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: req.text,
+        scope: req.scope,
+        depth: req.intent, // summary | expand | realtime | video
+		refresh: !!req.refresh,
+        focus: req.focus || null
+      })
+    }).then(r => r.json());
+  }
+
+  /* =====================================================
+   * 7. RESPONSE ROUTER (PERFECT MAPPING)
+   * ===================================================== */
+
+  function routeResponse(req, res) {
+    if (!res || res.ok !== true) return;
+
+    // 7-1) 요약 카드(항상)
+    if (req.scope === 'global' && typeof window.renderSummary === 'function') {
+      window.renderSummary(res.text || '');
+    }
+
+    // 7-2) 글로벌 실행 결과를 레기온/컨트리 준비 섹션으로 뿌리기
+    // (엔진이 배열을 내려주면 그대로 주입됨)
+    if (req.scope === 'global') {
+      if (typeof window.injectMaruGlobalRegionData === 'function') {
+        window.injectMaruGlobalRegionData(res.data?.regions || res.data || []);
+      }
+      if (typeof window.injectMaruGlobalCountryData === 'function') {
+        window.injectMaruGlobalCountryData(res.data?.countries || res.data || []);
+      }
+    }
+
+    // 7-3) 레기온 요청 응답 → 레기온 injector에 “정확한 shape”로 주입
+    if (req.scope === 'region' && typeof window.injectRegionContextResult === 'function') {
+      window.injectRegionContextResult(req.target, {
+        summary: res.text || '',
+        issues: res.data?.issues || null,
+        raw: res
+      });
+    }
+
+    // 7-4) 컨트리 요청 응답 → 컨트리 injector에 “정확한 shape”로 주입
+    if (req.scope === 'country' && typeof window.injectCountryContextResult === 'function') {
+      window.injectCountryContextResult(req.target, {
+        summary: res.text || '',
+        issues: res.data?.issues || null,
+        videos: res.data?.videos || null,
+        raw: res
+      });
+    }
+
+    // 7-5) 영상 목록 주입(컨트리 전용 UI 공유)
+    // 엔진이 videos를 내려주면: 컨트리 모달의 injectMaruCountryVideos가 리스트(3~4) 렌더
+    if (req.scope === 'country' && Array.isArray(res.data?.videos) && typeof window.injectMaruCountryVideos === 'function') {
+      STATE.videoPool.country = req.target;
+      STATE.videoPool.list = res.data.videos;
+
+      window.injectMaruCountryVideos({
+        country: req.target,
+        videos: res.data.videos
+      });
+    }
+
+    // 7-6) 영상 intent일 때: 리스트가 이미 있으면 선택 오픈(음성/문자)
+    if (req.intent === 'video') {
+
+      const idx = parseVideoPick(req.text);
+      const openIdx = (idx != null) ? idx : 0;
+      const ok = tryOpenCountryVideoByIndex(openIdx);
+      if (!ok) {
+        // 2) 카드가 없다면, 엔진 데이터 기반으로 overlay 훅이 있으면 호출(옵션)
+        if (typeof window.openMaruVideoOverlay === 'function' && STATE.videoPool.list.length > 0) {
+          const v = STATE.videoPool.list[openIdx] || STATE.videoPool.list[0];
+          if (v) window.openMaruVideoOverlay(v);
+        }
+      }
+
+      // 토글 ON이면 영상 오픈/선택 안내를 음성으로 읽어줌(“영상 음성” 자체는 player가 재생)
+      if (VOICE_ENABLED && typeof window.maruVoiceSpeak === 'function') {
+        window.maruVoiceSpeak('요청하신 영상을 실행합니다.');
+      }
+    }
+
+// === Base text ===
+const text = req.text || '';
+
+// === Voice Intent → Expand Flag ===
+const intent = detectVoiceIntent(text);
+
+if (intent === 'expand') {
+  res.mode = 'expand';
+}
+
+
+    // 7-7) 상세(expand) 오버레이
+    if (res.mode === 'expand' && typeof window.openMaruDetailOverlay === 'function') {
+      window.openMaruDetailOverlay({
+        text: res.text || '',
+        scope: res.scope || req.scope,
+        conversation: STATE.commandHistory.slice(-6),
+        raw: res
+      });
+    }
+
+    // 7-8) 음성 읽기(요청이 어떤 것이든, 토글 ON이면 읽어줌)
+    // - 보이스 요청은 반드시 읽기
+    // - 텍스트 요청도 토글 ON이면 읽기 가능
+ if (
+  VOICE_ENABLED &&
+  !MEDIA_STATE.video &&
+  typeof window.maruVoiceSpeak === 'function'
+) {
+const say = (res.speech || res.text || '').trim();
+
+if (say) {
+  window.maruVoiceSpeak(say);
+} else {
+  window.maruVoiceSpeak('준비된 자료가 없습니다.');
+}
+
+}
+  }
+  /* =====================================================
+   * 8. EXPORT
+   * ===================================================== */
+
+  window.MaruAddon = MaruAddon;
 
 })();
