@@ -1,540 +1,891 @@
 /* =========================================================
- * MARU Site Control Addon
- * Version: 5.0 (Voice/Conversation Final Mapping)
- *
- * 목표:
- * - 보이스(STT) + 컨버세이션(텍스트) 입력 완전 수용
- * - VOICE 토글에 따른 문자입력창 표시 규칙 준수
- * - Region/Country 컨텍스트에 따라 정확한 injector로 주입
- * - 영상 목록(3~4) → 클릭/음성 선택 → 확대 재생(컨트리 UI 재사용)
- *
- * 규칙:
- * - 항상 풀 파일
- * - Region/Country/IGDC UI 로직을 가로채지 않음
+ * MARU Site Control Addon — INTEGRATED FIX (v6.3)
+ * ---------------------------------------------------------
+ * Fixes:
+ * - Voice toggle UI sync (Region <-> Country)
+ * - Voice default: answers are spoken when VOICE is ON
+ * - Input display option: Realtime / Confirm (selection, not toggle)
+ * - Detached Pane auto-open rules:
+ *     (1) missing item (not in Region/Country list) -> open pane + answer
+ *     (2) detailed query (상세/자세/구체/더) -> open pane + answer
+ *     (3) existing item + no data -> speak "없습니다" (NO pane)
+ * - Self-contained: ensures MaruDetachedPane + MaruConversationDock exist
  * ========================================================= */
 
 (function () {
   'use strict';
 
-  /* =====================================================
-   * 1. STATE
-   * ===================================================== */
+  // =====================================================
+  // 0) SAFE EXPORT STUB
+  // =====================================================
+  const MaruAddon = (window.MaruAddon && typeof window.MaruAddon === 'object') ? window.MaruAddon : {};
+  const noop = function () {};
 
-  let VOICE_ENABLED = false;
-  const MEDIA_STATE = {
-  video: false,
-  music: false,
-  narration: false
-};
+  MaruAddon.handleTextQuery = MaruAddon.handleTextQuery || noop;
+  MaruAddon.handleVoiceQuery = MaruAddon.handleVoiceQuery || noop;
+  MaruAddon.previewVoice = MaruAddon.previewVoice || noop;     // typing only (interim)
+  MaruAddon.setVoiceEnabled = MaruAddon.setVoiceEnabled || noop;
+  MaruAddon.isVoiceEnabled = MaruAddon.isVoiceEnabled || function () { return false; };
+  MaruAddon.setInputDisplayMode = MaruAddon.setInputDisplayMode || noop;
+  MaruAddon.getInputDisplayMode = MaruAddon.getInputDisplayMode || function(){ return 'realtime'; };
+  MaruAddon.setMediaState = MaruAddon.setMediaState || noop;
+  MaruAddon.setMediaPlaying = MaruAddon.setMediaPlaying || noop;
+  MaruAddon.bootstrapGlobalInsight = MaruAddon.bootstrapGlobalInsight || noop;
+  MaruAddon.requestInsight = MaruAddon.requestInsight || noop;
 
-// === Voice Intent Detection ===
-function detectVoiceIntent(text) {
-  const t = text || '';
+  window.MaruAddon = MaruAddon;
 
-  if (
-    t.includes('자세히') ||
-    t.includes('상세') ||
-    t.includes('더 알려') ||
-    t.includes('더 보여')
-  ) {
-    return 'expand';
+  // =====================================================
+  // 1) BOOT
+  // =====================================================
+  function safeBoot() {
+    try { initAddon(); }
+    catch (e) { try { console.error('[MaruAddon] BOOT FAILED', e); } catch (_) {} }
   }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', safeBoot);
+  else safeBoot();
 
-  if (
-    t.includes('요약') ||
-    t.includes('간단히') ||
-    t.includes('짧게')
-  ) {
-    return 'summary';
-  }
+  // =====================================================
+  // 2) IMPLEMENTATION
+  // =====================================================
+  function initAddon() {
+    if (MaruAddon.__READY__) return;
+    MaruAddon.__READY__ = true;
 
-  if (
-    t.includes('읽어') ||
-    t.includes('말해')
-  ) {
-    return 'read';
-  }
+    // ------------------------------
+    // 2.1 State
+    // ------------------------------
+    let VOICE_ENABLED = false;                 // actual voice service flag
+    let INPUT_MODE = 'realtime';              // 'realtime' | 'confirm'
+    const MEDIA_STATE = { video: false, music: false, narration: false };
 
-  return 'general';
-}
+    const STATE = {
+      lastRequest: null,
+      lastResponse: null,
+      commandHistory: [],
+      videoPool: { country: null, list: [] }
+    };
 
-function routeVoiceByIntent(intent, text, context) {
-  switch (intent) {
-    case 'expand':
-      if (context) {
-        window.openMaruDetailOverlay?.(context);
+    let ENGINE_DEBOUNCE_TIMER = null;
+    const ENGINE_DEBOUNCE_DELAY = 250;
+
+    // ------------------------------
+    // 2.2 Ensure Detached Pane + Conversation Dock
+    // ------------------------------
+    ensureDetachedPane();
+    ensureConversationDock();
+
+    // ------------------------------
+    // 2.3 Helpers
+    // ------------------------------
+    function setMediaState(kind, on) {
+      if (!kind) return;
+      MEDIA_STATE[kind] = !!on;
+    }
+    MaruAddon.setMediaState = setMediaState;
+    MaruAddon.setMediaPlaying = function(on){ setMediaState('video', !!on); };
+
+    function ttsSpeak(text) {
+      if (!text) return;
+      if (!VOICE_ENABLED) return;
+      if (MEDIA_STATE.video) return;
+      if (typeof window.maruVoiceSpeak !== 'function') return;
+      try { window.maruVoiceSpeak(String(text)); } catch (_) {}
+    }
+
+    function normalizeContext(ctx) {
+      if (!ctx || typeof ctx !== 'object') return null;
+      if (!ctx.level) return null;
+      return { level: ctx.level, id: (ctx.id != null ? ctx.id : null) };
+    }
+
+    function getBestContext() {
+      const g = normalizeContext(window.__MARU_CONTEXT__);
+      if (g) return g;
+      if (window.activeCountryName) return { level: 'country', id: window.activeCountryName };
+      if (window.activeRegionId) return { level: 'region', id: window.activeRegionId };
+      return null;
+    }
+
+    function detectIntent(text) {
+      const t = String(text || '').toLowerCase();
+      // detail keywords
+      if (/(상세|자세|구체|심층|디테일|더\s*자세)/.test(text)) return 'detail';
+      if (t.includes('영상')) return 'video';
+      if (t.includes('이슈')) return 'realtime';
+      return 'summary';
+    }
+
+    function isDetailQuery(text){
+      return detectIntent(text) === 'detail';
+    }
+
+    // ------------------------------
+    // 2.4 Item existence / data checks (DOM-based)
+    // ------------------------------
+    function getOpenModalKind(){
+      const hasCountry = !!document.querySelector('.maru-country-modal');
+      const hasRegion = !!document.querySelector('.maru-region-modal');
+      if (hasCountry) return 'country';
+      if (hasRegion) return 'region';
+      return null;
+    }
+
+    function getCountryItemsFromDom(){
+      const cards = Array.prototype.slice.call(document.querySelectorAll('.maru-country-card[data-country]'));
+      const set = new Set();
+      cards.forEach(c => {
+        const raw = (c.getAttribute('data-country') || '').trim();
+        if (!raw) return;
+        set.add(raw);
+        // add korean-only token before space or '('
+        const k = raw.split('(')[0].trim();
+        if (k) set.add(k);
+      });
+      return set;
+    }
+
+    function getRegionItemsFromDom(){
+      // Region cards hold data-region ids; we map common Korean aliases
+      const set = new Set();
+      const cards = Array.prototype.slice.call(document.querySelectorAll('.maru-region-card[data-region]'));
+      cards.forEach(c => {
+        const id = (c.getAttribute('data-region') || '').trim();
+        if (id) set.add(id);
+      });
+      // common aliases
+      [
+        ['유럽','europe'], ['아시아','asia'], ['중동','middle_east'], ['아프리카','africa'],
+        ['북미','north_america'], ['남미','south_america'], ['중남미','south_america'],
+        ['유라시아','eurasia'], ['러시아','eurasia'], ['중앙아시아','eurasia']
+      ].forEach(pair => { set.add(pair[0]); set.add(pair[1]); });
+      return set;
+    }
+
+    function findMentionedCountry(text){
+      const items = getCountryItemsFromDom();
+      if (!items.size) return null;
+      const q = String(text||'');
+      // greedy match: any korean country token in list
+      for (const it of items) {
+        if (!it) continue;
+        if (it.length < 2) continue;
+        if (q.includes(it)) return it;
       }
-      return { mode: 'expand' };
-
-    case 'summary':
-      return { mode: 'summary' };
-
-    case 'read':
-      return { mode: 'read' };
-
-    default:
-      return { mode: 'general' };
-  }
-}
-
-  const STATE = {
-    lastRequest: null,
-    lastResponse: null,
-    commandHistory: [],
-    videoPool: {
-      country: null,     // active country name
-      list: []           // [{title, thumbnail, src, ...}]
-    }
-  };
-
-let ENGINE_DEBOUNCE_TIMER = null;
-const ENGINE_DEBOUNCE_DELAY = 400; // ms (권장 300~500)
-
-  /* =====================================================
-   * 2. PUBLIC API
-   * ===================================================== */
-
-  const MaruAddon = {};
-
-  // IGDC: AI 글로벌 인사이트 실행
-  MaruAddon.bootstrapGlobalInsight = function () {
-    dispatchCommand({
-      source: 'panel',
-      input: 'system',
-      text: '글로벌 인사이트 전체 수집',
-      scope: 'global',
-      target: null,
-      intent: 'summary',
-      voiceWanted: VOICE_ENABLED
-    });
-  };
-
-  // IGDC: 실시간 이슈
-  MaruAddon.requestInsight = function (opts = {}) {
-    dispatchCommand({
-      source: opts.source || 'panel',
-      input: 'system',
-      text: '실시간 글로벌 이슈',
-      scope: 'global',
-      target: null,
-      intent: 'realtime',
-      voiceWanted: VOICE_ENABLED
-    });
-  };
-
-  // 텍스트 입력
-MaruAddon.handleTextQuery = function (payload, context = {}) {
-  // payload: {text, context} or text(string)
-  if (payload && typeof payload === 'object') {
-    return routeInbound({ input: 'text', text: payload.text || '', context: payload.context || null });
-  }
-  return routeInbound({ input: 'text', text: payload || '', context });
-};
-  // 음성 입력
-MaruAddon.handleVoiceQuery = function (payload, context = {}) {
-  if (payload && typeof payload === 'object') {
-    return routeInbound({ input: 'voice', text: payload.text || '', context: payload.context || null });
-  }
-  return routeInbound({ input: 'voice', text: payload || '', context });
-};
-
-// topic 추출 (간단 1차)
-function extractTopic(t) {
-  const m = (t || '').match(/(?:에 대해서|관련해서|부분|항목|주제)\s*([^\s]+)/);
-  return m ? m[1] : null;
-}
-
-  /* =====================================================
-   * 3. SINGLE VOICE CONTROL + TEXT INPUT RULES
-   * ===================================================== */
-
-  MaruAddon.setVoiceEnabled = function (on) {
-    const enabled = !!on;
-    if (enabled === VOICE_ENABLED) {
-      // UI 동기화만 한번 더
-      syncConversationInputVisibility();
-      return;
+      return null;
     }
 
-    VOICE_ENABLED = enabled;
-
-    if (VOICE_ENABLED) {
-      if (typeof window.startMaruMic === 'function') window.startMaruMic();
-    } else {
-      if (typeof window.stopMaruMic === 'function') window.stopMaruMic();
-    }
-
-    syncConversationInputVisibility();
-  };
-
-  MaruAddon.isVoiceEnabled = function () {
-    return VOICE_ENABLED;
-  };
-
-// 영상 재생 상태 제어 (UX 충돌 방지)
-MaruAddon.setMediaPlaying = function (on) {
-  MEDIA_STATE.video = !!on;
-};
-
-MaruAddon.setMediaState = function (type, on) {
-  if (!MEDIA_STATE.hasOwnProperty(type)) return;
-  MEDIA_STATE[type] = !!on;
-};
-
-  // 규칙:
-  // - VOICE OFF => 입력창 반드시 보이기
-  // - VOICE ON  => 숨겨도 됨(기본 숨김)
-  function syncConversationInputVisibility() {
-    if (!window.MaruConversationModal) return;
-
-    if (VOICE_ENABLED) {
-      // 기본: 음성 ON이면 입력 숨김 가능
-      MaruConversationModal.setVoiceMode(true);  // 내부적으로 inputWrap 숨김
-      MaruConversationModal.hideInput();
-    } else {
-      // 음성 OFF이면 입력 반드시 표시
-      MaruConversationModal.setVoiceMode(false);
-      MaruConversationModal.showInput();
-    }
-  }
-
-  // 음성 ON 상태에서도 “문자창 띄워줘”로 강제 표시
-  function forceShowTextInput() {
-    if (!window.MaruConversationModal) return;
-    MaruConversationModal.setVoiceMode(false);
-    MaruConversationModal.showInput();
-  }
-
-  // 음성 ON 상태에서도 “문자창 숨겨줘”로 숨김
-  function forceHideTextInput() {
-    if (!window.MaruConversationModal) return;
-    MaruConversationModal.setVoiceMode(true);
-    MaruConversationModal.hideInput();
-  }
-
-  /* =====================================================
-   * 4. INBOUND ROUTER (command / control)
-   * ===================================================== */
-
-  function routeInbound({ input, text, context }) {
-    const raw = (text || '').trim();
-    if (!raw) return;
-
-    // 1) UI 제어 음성 명령 (엔진 호출 없이 즉시 처리)
-    const uiCtl = detectUiControl(raw);
-    if (uiCtl === 'showText') {
-      forceShowTextInput();
-      // 음성 ON이면, 확인 멘트만 읽기(선택)
-      if (VOICE_ENABLED && typeof window.maruVoiceSpeak === 'function') {
-        window.maruVoiceSpeak('문자 입력창을 열었습니다.');
+    function findMentionedRegion(text){
+      const q = String(text||'');
+      const map = [
+        ['유럽','europe'], ['아시아','asia'], ['중동','middle_east'], ['아프리카','africa'],
+        ['북미','north_america'], ['남미','south_america'], ['중남미','south_america'],
+        ['유라시아','eurasia'], ['러시아','eurasia'], ['중앙아시아','eurasia'],
+        ['europe','europe'], ['asia','asia'], ['africa','africa'], ['middle east','middle_east'],
+        ['north america','north_america'], ['south america','south_america'], ['eurasia','eurasia']
+      ];
+      for (const [k,id] of map) {
+        if (q.toLowerCase().includes(String(k).toLowerCase())) return id;
       }
-      return;
-    }
-    if (uiCtl === 'hideText') {
-      forceHideTextInput();
-      if (VOICE_ENABLED && typeof window.maruVoiceSpeak === 'function') {
-        window.maruVoiceSpeak('문자 입력창을 숨겼습니다.');
-      }
-      return;
+      return null;
     }
 
-    // 2) 영상 선택 명령 (A/1/첫번째 등) → 컨트리 영상 카드 클릭으로 처리
-    const videoPick = parseVideoPick(raw);
-    if (videoPick != null) {
-      const ok = tryOpenCountryVideoByIndex(videoPick);
-      if (ok) {
-        if (VOICE_ENABLED && typeof window.maruVoiceSpeak === 'function') {
-          window.maruVoiceSpeak(`${videoPick + 1}번 영상을 실행합니다.`);
+    function hasDataForCountry(countryKey){
+      if (!countryKey) return false;
+      const cards = Array.prototype.slice.call(document.querySelectorAll('.maru-country-card[data-country]'));
+      for (const c of cards) {
+        const raw = (c.getAttribute('data-country') || '').trim();
+        const k = raw.split('(')[0].trim();
+        if (raw === countryKey || k === countryKey) {
+          const brief = c.querySelector('.maru-country-brief');
+          const t = (brief && brief.textContent) ? brief.textContent.trim() : '';
+          if (!t) return false;
+          // treat placeholder as no data
+          if (/(분석\s*중|준비\s*중|불러오는\s*중)/.test(t)) return false;
+          return true;
         }
+      }
+      return false;
+    }
+
+    function hasDataForRegion(regionId){
+      if (!regionId) return false;
+      const card = document.querySelector('.maru-region-card[data-region="'+regionId+'"]');
+      if (!card) return false;
+      const brief = card.querySelector('.maru-region-brief');
+      const t = (brief && brief.textContent) ? brief.textContent.trim() : '';
+      if (!t) return false;
+      if (/(분석\s*중|준비\s*중|불러오는\s*중)/.test(t)) return false;
+      return true;
+    }
+
+    // ------------------------------
+    // 2.5 Input display mode selector UI (Realtime/Confirm)
+    // ------------------------------
+    function installInputModeSelector(){
+      // region header
+      const rh = document.querySelector('.maru-region-header');
+      const ch = document.querySelector('.maru-country-header');
+      [rh, ch].forEach(h => {
+        if (!h) return;
+        if (h.querySelector('[data-maru-inputmode]')) return;
+
+        const wrap = document.createElement('div');
+        wrap.setAttribute('data-maru-inputmode','1');
+        wrap.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;white-space:nowrap;';
+
+        const label = document.createElement('span');
+        label.textContent = '입력 표시:';
+        label.style.cssText = 'color:#6e5a32;font-weight:600;';
+
+        const opt1 = document.createElement('label');
+        opt1.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;';
+        const r1 = document.createElement('input');
+        r1.type = 'radio'; r1.name = 'maru-inputmode'; r1.value = 'realtime';
+        const t1 = document.createElement('span'); t1.textContent = '실시간';
+
+        const opt2 = document.createElement('label');
+        opt2.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;';
+        const r2 = document.createElement('input');
+        r2.type = 'radio'; r2.name = 'maru-inputmode'; r2.value = 'confirm';
+        const t2 = document.createElement('span'); t2.textContent = '확정';
+
+        opt1.appendChild(r1); opt1.appendChild(t1);
+        opt2.appendChild(r2); opt2.appendChild(t2);
+        wrap.appendChild(label);
+        wrap.appendChild(opt1);
+        wrap.appendChild(opt2);
+
+        // insert near voice toggle (after toggle if exists)
+        const vt = h.querySelector('.maru-region-voice-toggle, .maru-country-voice-toggle');
+        if (vt && vt.parentNode) vt.parentNode.insertBefore(wrap, vt.nextSibling);
+        else h.appendChild(wrap);
+
+        function syncRadios(){
+          r1.checked = (INPUT_MODE === 'realtime');
+          r2.checked = (INPUT_MODE === 'confirm');
+          // only active when voice is enabled
+          r1.disabled = !VOICE_ENABLED;
+          r2.disabled = !VOICE_ENABLED;
+          wrap.style.opacity = VOICE_ENABLED ? '1' : '.45';
+        }
+        r1.addEventListener('change', function(){ if (r1.checked) setInputMode('realtime'); });
+        r2.addEventListener('change', function(){ if (r2.checked) setInputMode('confirm'); });
+        syncRadios();
+        // store
+        wrap.__syncRadios = syncRadios;
+      });
+    }
+
+    function syncInputModeUi(){
+      const blocks = Array.prototype.slice.call(document.querySelectorAll('[data-maru-inputmode]'));
+      blocks.forEach(b => { try { b.__syncRadios && b.__syncRadios(); } catch(_){} });
+    }
+
+    function setInputMode(mode){
+      INPUT_MODE = (mode === 'confirm') ? 'confirm' : 'realtime';
+      syncInputModeUi();
+    }
+
+    MaruAddon.setInputDisplayMode = setInputMode;
+    MaruAddon.getInputDisplayMode = function(){ return INPUT_MODE; };
+
+    // ------------------------------
+    // 2.6 Voice toggle UI sync + handlers
+    // ------------------------------
+    function setVoiceEnabled(on, reason){
+      VOICE_ENABLED = !!on;
+
+      if (VOICE_ENABLED) {
+        try { if (typeof window.startMaruMic === 'function') window.startMaruMic(); } catch(_) {}
+      } else {
+        try { if (typeof window.stopMaruMic === 'function') window.stopMaruMic(); } catch(_) {}
+      }
+
+      // show dock whenever voice ON (for typing/confirm)
+      try {
+        window.MaruConversationDock && window.MaruConversationDock.show && window.MaruConversationDock.show();
+      } catch(_) {}
+
+      syncVoiceToggleUi();
+      syncInputModeUi();
+    }
+
+    MaruAddon.setVoiceEnabled = setVoiceEnabled;
+    MaruAddon.isVoiceEnabled = function(){ return VOICE_ENABLED; };
+
+    function syncVoiceToggleUi(){
+      // Region + Country toggles are mirrored
+      const btns = Array.prototype.slice.call(document.querySelectorAll('.maru-region-voice-toggle, .maru-country-voice-toggle'));
+      btns.forEach(btn => {
+        btn.classList.toggle('off', !VOICE_ENABLED);
+        // keep text compact
+        try {
+          const base = btn.textContent.replace(/\s+/g,' ').trim();
+          // preserve original language if any
+          if (/voice/i.test(base) || /음성/.test(base)) {
+            // do nothing
+          }
+        } catch(_) {}
+      });
+      // expose for other scripts
+      window.__MARU_VOICE_TOGGLE__ = VOICE_ENABLED;
+    }
+
+    // Click delegation for voice toggles
+    document.addEventListener('click', function(e){
+      const t = e.target;
+      if (!t) return;
+      const btn = t.closest && t.closest('.maru-region-voice-toggle, .maru-country-voice-toggle');
+      if (!btn) return;
+      e.preventDefault();
+      setVoiceEnabled(!VOICE_ENABLED, 'ui');
+    }, true);
+
+    // Region modal close: must force voice off
+    // We hook by capturing clicks on known close buttons
+    document.addEventListener('click', function(e){
+      const t = e.target;
+      if (!t) return;
+      const btn = t.closest && t.closest('.maru-region-close');
+      if (!btn) return;
+      // region close -> voice off + ui sync
+      setVoiceEnabled(false, 'region_close');
+      setInputMode('realtime');
+    }, true);
+
+// Country modal close: must force voice off (prevents mic auto-restart after close)
+document.addEventListener('click', function(e){
+  const t = e.target;
+  if (!t) return;
+  const btn = t.closest && t.closest('.maru-country-close');
+  if (!btn) return;
+  setVoiceEnabled(false, 'country_close');
+  setInputMode('realtime');
+}, true);
+
+// Backdrop click (region/country) can close modals — force voice off safely
+document.addEventListener('click', function(e){
+  const t = e.target;
+  if (!t) return;
+  if (t.classList && (t.classList.contains('maru-country-backdrop') || t.classList.contains('maru-region-backdrop'))) {
+    setVoiceEnabled(false, 'backdrop_close');
+    setInputMode('realtime');
+  }
+}, true);
+
+
+    // Install close button positioning: ensure it sits right of voice toggle
+    function normalizeHeaderButtons(){
+      // Region
+      const rh = document.querySelector('.maru-region-header');
+      if (rh) {
+        const close = rh.querySelector('.maru-region-close');
+        const toggle = rh.querySelector('.maru-region-voice-toggle');
+        if (close && toggle && close.parentNode === rh) {
+          // header is grid; ensure close after toggle
+          try {
+            if (toggle.nextSibling !== close) {
+              rh.insertBefore(close, toggle.nextSibling);
+            }
+          } catch(_) {}
+        }
+      }
+      // Country
+      const ch = document.querySelector('.maru-country-header');
+      if (ch) {
+        const close = ch.querySelector('.maru-country-close');
+        const toggle = ch.querySelector('.maru-country-voice-toggle');
+        if (close && toggle && close.parentNode === ch) {
+          try {
+            if (toggle.nextSibling !== close) {
+              ch.insertBefore(close, toggle.nextSibling);
+            }
+          } catch(_) {}
+        }
+      }
+    }
+
+    // Observe DOM changes (modals open/close)
+    const mo = new MutationObserver(function(){
+      try{
+        installInputModeSelector();
+        normalizeHeaderButtons();
+        syncVoiceToggleUi();
+      }catch(_){}
+    });
+    try { mo.observe(document.documentElement, { childList:true, subtree:true }); } catch(_) {}
+
+    // initial
+    installInputModeSelector();
+    normalizeHeaderButtons();
+    syncVoiceToggleUi();
+
+    // ------------------------------
+    // 2.7 Conversation Dock integration
+    // ------------------------------
+    function setTypingText(text){
+      if (!text) return;
+      try {
+        window.MaruConversationDock && window.MaruConversationDock.setText && window.MaruConversationDock.setText(text);
+      } catch(_) {}
+    }
+    function appendTypingText(text){
+      if (!text) return;
+      try {
+        window.MaruConversationDock && window.MaruConversationDock.appendText && window.MaruConversationDock.appendText(text);
+      } catch(_) {}
+    }
+
+    MaruAddon.previewVoice = function(text, context){
+      if (!VOICE_ENABLED) return;
+      // realtime typing: update input only
+      setTypingText(text);
+    };
+
+    // ------------------------------
+    // 2.8 Command normalize / dispatch
+    // ------------------------------
+    function normalizeCommand({ input, text, context }) {
+      const raw = String(text || '').trim();
+      if (!raw) return null;
+
+      const ctx = normalizeContext(context) || getBestContext() || null;
+
+      let scope = 'global';
+      let target = null;
+      if (ctx && ctx.level === 'region') { scope = 'region'; target = ctx.id || null; }
+      if (ctx && ctx.level === 'country') { scope = 'country'; target = ctx.id || null; }
+
+      return {
+        source: 'user',
+        input: input || 'text',
+        text: raw,
+        scope,
+        target,
+        intent: detectIntent(raw),
+        voiceWanted: (input === 'voice')
+      };
+    }
+
+    function callInsightEngine(req) {
+      return fetch('/.netlify/functions/maru-global-insight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: req.text,
+          scope: req.scope,
+          depth: req.intent
+        })
+      }).then(function (r) { return r.json(); });
+    }
+
+    function normalizeEngineResponse(raw) {
+      const ok = !!(raw && (raw.ok !== false));
+      const text = (raw && (raw.text || raw.answer || raw.message)) ? String(raw.text || raw.answer || raw.message) : '';
+      const data = (raw && raw.data) ? raw.data : raw;
+      return { ok, text, data, raw };
+    }
+
+    function openDetailPane(title, text){
+      ensureDetachedPane();
+      try {
+        window.MaruDetachedPane.open({ type:'detail', title: title || 'MARU', text: text || '' });
+      } catch (_) {}
+    }
+
+    function shouldOpenPane(req){
+      // Rule:
+      // - Missing item (not in list) -> pane
+      // - Detail query -> pane
+      // - Existing item + no data -> NO pane
+      const q = req.text || '';
+      const detail = isDetailQuery(q);
+
+      const kind = getOpenModalKind();
+      if (kind === 'country') {
+        const mentioned = findMentionedCountry(q);
+        if (!mentioned) return true;          // missing item
+        if (detail) return true;              // detail request
+        // existing item
+        return false;
+      }
+      if (kind === 'region') {
+        const regionId = findMentionedRegion(q) || req.target;
+        // if they mention a region keyword, treat as existing; otherwise missing item
+        if (!regionId) return true;
+        if (detail) return true;
+        return false;
+      }
+      // No modal: any global question -> pane (acts as search window)
+      return true;
+    }
+
+    function existingItemButNoData(req){
+      const q = req.text || '';
+      const kind = getOpenModalKind();
+
+      if (kind === 'country') {
+        const mentioned = findMentionedCountry(q);
+        if (!mentioned) return false; // missing item handled elsewhere
+        if (isDetailQuery(q)) return false;
+        // existing item: check data
+        // if target exists but brief is placeholder -> no data
+        const has = hasDataForCountry(mentioned);
+        return !has;
+      }
+
+      if (kind === 'region') {
+        const regionId = findMentionedRegion(q) || req.target;
+        if (!regionId) return false;
+        if (isDetailQuery(q)) return false;
+        const has = hasDataForRegion(regionId);
+        return !has;
+      }
+
+      return false;
+    }
+
+    function buildNoDataMessage(req){
+      const q = req.text || '';
+      const kind = getOpenModalKind();
+
+      if (kind === 'country') {
+        const mentioned = findMentionedCountry(q);
+        const name = (mentioned || req.target || '해당 국가');
+        return name + '에 대한 데이터가 없습니다.';
+      }
+      if (kind === 'region') {
+        const regionId = findMentionedRegion(q) || req.target;
+        const labelMap = {
+          europe:'유럽', asia:'아시아', eurasia:'유라시아', north_america:'북미', south_america:'남미', middle_east:'중동', africa:'아프리카'
+        };
+        const nm = labelMap[regionId] || '해당 권역';
+        return nm + '에 대한 데이터가 없습니다.';
+      }
+      return '준비된 자료가 없습니다.';
+    }
+
+    function routeResponse(req, res, openedPane) {
+      // Injectors (keep all existing hooks)
+      if (req.scope === 'global') {
+        if (typeof window.injectMaruGlobalRegionData === 'function') {
+          try { window.injectMaruGlobalRegionData(res.data && res.data.regions ? res.data.regions : (res.data || [])); } catch (_) {}
+        }
+        if (typeof window.injectMaruGlobalCountryData === 'function') {
+          try { window.injectMaruGlobalCountryData(res.data && res.data.countries ? res.data.countries : (res.data || [])); } catch (_) {}
+        }
+      }
+
+      if (req.scope === 'region' && typeof window.injectRegionContextResult === 'function') {
+        try {
+          window.injectRegionContextResult(req.target, {
+            summary: res.text || '',
+            issues: (res.data && res.data.issues) ? res.data.issues : null,
+            raw: res.raw
+          });
+        } catch (_) {}
+      }
+
+      if (req.scope === 'country' && typeof window.injectCountryContextResult === 'function') {
+        try {
+          window.injectCountryContextResult(req.target, {
+            summary: res.text || '',
+            issues: (res.data && res.data.issues) ? res.data.issues : null,
+            videos: (res.data && res.data.videos) ? res.data.videos : null,
+            raw: res.raw
+          });
+        } catch (_) {}
+      }
+
+      // Videos hook
+      if (req.scope === 'country' && res.data && Array.isArray(res.data.videos) && typeof window.injectMaruCountryVideos === 'function') {
+        try {
+          STATE.videoPool.country = req.target;
+          STATE.videoPool.list = res.data.videos;
+          window.injectMaruCountryVideos({ country: req.target, videos: res.data.videos });
+        } catch (_) {}
+      }
+
+      // Detached pane content
+      if (openedPane) {
+        const title = (req.scope === 'country' ? ('Country: ' + (req.target || '')) :
+                      (req.scope === 'region' ? ('Region: ' + (req.target || '')) : 'Global'));
+        openDetailPane(title, res.text || '');
+      }
+
+      // Speak always when voice is ON
+      ttsSpeak(res.text || '');
+    }
+
+    function dispatchCommand(req) {
+      if (!req || !req.text) return;
+      STATE.lastRequest = req;
+      STATE.commandHistory.push({ role: 'user', text: req.text });
+
+      // Rule: if existing item but no data (and not detail) -> speak "없습니다", no engine call
+      if (existingItemButNoData(req)) {
+        const msg = buildNoDataMessage(req);
+        // show message in pane? 규칙상 X
+        ttsSpeak(msg);
         return;
       }
-      // 열기 실패 시에는 엔진 호출로 fallback
+
+      const openPane = shouldOpenPane(req);
+
+      if (ENGINE_DEBOUNCE_TIMER) clearTimeout(ENGINE_DEBOUNCE_TIMER);
+      ENGINE_DEBOUNCE_TIMER = setTimeout(function () {
+        callInsightEngine(req)
+          .then(function (raw) {
+            const res = normalizeEngineResponse(raw);
+            STATE.lastResponse = res;
+            STATE.commandHistory.push({ role: 'assistant', text: res.text || '' });
+
+            // If engine failed: speak fallback + if pane rule says open -> open pane with fallback
+            if (!res.ok) {
+              const fb = (openPane ? (res.text || '준비된 자료가 없습니다.') : buildNoDataMessage(req));
+              if (openPane) openDetailPane('MARU', fb);
+              ttsSpeak(fb);
+              return;
+            }
+
+            routeResponse(req, res, openPane);
+          })
+          .catch(function (err) {
+            try { console.error('[MaruAddon] engine error', err); } catch (_) {}
+            const fb = '현재 엔진 응답을 가져오지 못했습니다.';
+            if (openPane) openDetailPane('MARU', fb);
+            ttsSpeak(fb);
+          });
+      }, ENGINE_DEBOUNCE_DELAY);
     }
 
-    // 3) 일반/명령형 요청 → 엔진 파이프라인
-    dispatchCommand(normalizeCommand({ input, text: raw, context }));
+    // ------------------------------
+    // 2.9 Public APIs (text / voice)
+    // ------------------------------
+    function routeInbound({ input, text, context }) {
+      const cmd = normalizeCommand({ input, text, context });
+      if (!cmd) return;
+
+      // always keep global context updated for other scripts
+      const ctx = normalizeContext(context) || getBestContext();
+      if (ctx) window.__MARU_CONTEXT__ = ctx;
+
+      dispatchCommand(cmd);
+    }
+
+    MaruAddon.handleTextQuery = function (payload, context = {}) {
+      if (payload && typeof payload === 'object') return routeInbound({ input:'text', text: payload.text || '', context: payload.context || null });
+      return routeInbound({ input:'text', text: payload || '', context });
+    };
+
+    MaruAddon.handleVoiceQuery = function (payload, context = {}) {
+      if (!VOICE_ENABLED) return;
+
+      let text = '';
+      let ctx = context;
+
+      if (payload && typeof payload === 'object') {
+        text = payload.text || '';
+        ctx = payload.context || null;
+      } else {
+        text = payload || '';
+      }
+
+      text = String(text || '').trim();
+      if (!text) return;
+
+      // show typing always
+      setTypingText(text);
+
+      // mode
+      if (INPUT_MODE === 'confirm') {
+        // Do NOT auto-dispatch. User confirms with Send.
+        // Dock 'Send' already routes to handleTextQuery.
+        return;
+      }
+
+      // realtime: auto dispatch
+      routeInbound({ input:'voice', text, context: ctx });
+    };
+
+    // ------------------------------
+    // 2.10 Site-control hooks (optional)
+    // ------------------------------
+    MaruAddon.bootstrapGlobalInsight = function(){
+      routeInbound({ input:'system', text:'글로벌 인사이트 전체 수집', context: { level:'global', id:null }});
+    };
+    MaruAddon.requestInsight = function(){
+      routeInbound({ input:'system', text:'실시간 글로벌 이슈', context: { level:'global', id:null }});
+    };
+
+    // Expose minimal diagnostics
+    MaruAddon.__state = STATE;
   }
 
-  // “문자창 띄워줘/열어줘/보여줘” 등
-  function detectUiControl(text) {
-    const t = text.toLowerCase().replace(/\s+/g, '');
-    if (t.includes('문자창') || t.includes('입력창') || t.includes('텍스트창')) {
-      if (t.includes('띄워') || t.includes('열어') || t.includes('보여')) return 'showText';
-      if (t.includes('닫아') || t.includes('숨겨') || t.includes('가려')) return 'hideText';
-    }
-    return null;
-  }
+  // =====================================================
+  // 3) INLINE: Detached Pane (only if missing)
+  // =====================================================
+  function ensureDetachedPane() {
+    if (window.MaruDetachedPane) return;
 
-  // “A번 영상”, “1번 영상”, “첫번째 영상” 등 → 0-based index
-  function parseVideoPick(text) {
-    const t = (text || '').trim();
-    if (!t) return null;
-    if (!/영상/.test(t)) return null;
+    let zIndexBase = 250000; // above Region/Country modals
 
-    // A/B/C/D
-    const mAlpha = t.match(/\b([A-Da-d])\b/);
-    if (mAlpha) {
-      const c = mAlpha[1].toUpperCase().charCodeAt(0) - 65;
-      if (c >= 0 && c <= 3) return c;
-    }
+    function createPane(opts){
+      const title = (opts && opts.title) ? opts.title : '';
+      const text = (opts && opts.text) ? opts.text : '';
+      const pane = document.createElement('div');
+      pane.className = 'maru-detached-pane';
+      pane.style.cssText = 'position:fixed;left:120px;top:120px;width:min(900px,92vw);max-height:80vh;background:#fff;border:1px solid #ddd;border-radius:14px;box-shadow:0 22px 70px rgba(0,0,0,.25);z-index:'+ (zIndexBase++) +';overflow:hidden;display:flex;flex-direction:column;';
+      pane.innerHTML = ''
+        + '<div class="maru-pane-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #eee;background:#fafafa;">'
+        +   '<span class="maru-pane-title" style="font-weight:800;color:#1f3a5f;">'+ escapeHtml(title) +'</span>'
+        +   '<button class="maru-pane-close" style="border:1px solid #ddd;background:#fff;border-radius:10px;padding:6px 10px;cursor:pointer;">✕</button>'
+        + '</div>'
+        + '<div class="maru-pane-body" style="padding:12px 14px;overflow:auto;font-size:13px;line-height:1.6;"></div>';
 
-    // 1~4
-    const mNum = t.match(/([1-4])\s*번/);
-    if (mNum) {
-      const idx = parseInt(mNum[1], 10) - 1;
-      if (idx >= 0 && idx <= 3) return idx;
-    }
+      const body = pane.querySelector('.maru-pane-body');
+      body.innerHTML = '<div class="maru-pane-text" style="white-space:pre-wrap;">'+ escapeHtml(text) +'</div>';
 
-    // “첫번째/두번째/세번째/네번째”
-    if (t.includes('첫')) return 0;
-    if (t.includes('두')) return 1;
-    if (t.includes('세')) return 2;
-    if (t.includes('네')) return 3;
-
-    return null;
-  }
-
-  // 컨트리 모달에 이미 렌더된 카드(.maru-country-video-card)를 클릭 트리거
-function tryOpenCountryVideoByIndex(idx) {
-  if (typeof window.openMaruCountryVideoByIndex === 'function') {
-    return window.openMaruCountryVideoByIndex(idx) === true;
-  }
-  return false;
-}
-
-
-  /* =====================================================
-   * 5. COMMAND NORMALIZER
-   * ===================================================== */
-
-  function normalizeCommand({ input, text, context = {} }) {
-    // 보이스 파일은 ConversationModal.getContext()를 넘김
-    // 컨텍스트는 { level:'region'|'country', id: ... } 형태가 기준
-    let scope = 'global';
-    let target = null;
-
-    if (context && context.level === 'region') {
-      scope = 'region';
-      target = context.id || null;
-    } else if (context && context.level === 'country') {
-      scope = 'country';
-      target = context.id || null;
+      document.body.appendChild(pane);
+      bindClose(pane);
+      makeDraggable(pane);
+      return pane;
     }
 
-// === MIXED REFRESH TRIGGER (A + B) ===
-const rawText = (text || '').trim();
-const voiceIntent = detectVoiceIntent(rawText);
+    function bindClose(pane){
+      const btn = pane.querySelector('.maru-pane-close');
+      if (!btn) return;
+      btn.onclick = function(){
+        try { window.MaruAddon && window.MaruAddon.setMediaState && window.MaruAddon.setMediaState('video', false); } catch(_) {}
+        pane.remove();
+      };
+    }
 
-const topic = extractTopic(rawText);
+    function makeDraggable(pane){
+      const header = pane.querySelector('.maru-pane-header');
+      if (!header) return;
+      let startX=0,startY=0,startLeft=0,startTop=0, dragging=false;
+      header.addEventListener('pointerdown', function(e){
+        dragging = true;
+        pane.style.zIndex = zIndexBase++;
+        startX = e.clientX; startY = e.clientY;
+        const rect = pane.getBoundingClientRect();
+        startLeft = rect.left; startTop = rect.top;
+        header.setPointerCapture(e.pointerId);
+      });
+      header.addEventListener('pointermove', function(e){
+        if (!dragging) return;
+        pane.style.left = (startLeft + (e.clientX - startX)) + 'px';
+        pane.style.top  = (startTop  + (e.clientY - startY)) + 'px';
+      });
+      header.addEventListener('pointerup', function(e){
+        dragging = false;
+        try { header.releasePointerCapture(e.pointerId); } catch(_) {}
+      });
+    }
 
-const FORCE_KEYWORDS = /(다시|재조사|재수집|최신|갱신|업데이트|추가 조사)/;
-const NO_REFRESH_KEYWORDS = /(요약|정리|설명|비교)/;
+    function escapeHtml(str){
+      return String(str || '').replace(/[&<>"']/g, function(s){
+        return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]) || s;
+      });
+    }
 
-let refresh = false;
-
-// B안: 명시적 재조사
-if (FORCE_KEYWORDS.test(rawText)) refresh = true;
-
-// A안: Expand + topic (단, 요약/설명은 제외)
-if (voiceIntent === 'expand' && topic && !NO_REFRESH_KEYWORDS.test(rawText)) refresh = true;
-
-// req에 반영될 값을 return 오브젝트에 넣기 위해 변수로 남김
-const refreshFlag = refresh;
-const focusTopic = topic;
-
-    return {
-      source: 'user',
-      input,
-      text,
-      scope,
-      target,
-      intent: detectIntent(text),
-      voiceWanted: (input === 'voice') ? true : false,
-	  
-	  refresh: refreshFlag,
-      focus: focusTopic,
-
+    window.MaruDetachedPane = {
+      open: function(opts){
+        const o = opts || {};
+        // only detail needed for now
+        createPane({ title: o.title || 'MARU', text: o.text || '' });
+      }
     };
   }
 
-  // intent는 엔진 depth로 매핑됨: summary | detail(expand) | realtime | video
-  function detectIntent(text = '') {
-    const t = text.toLowerCase();
+  // =====================================================
+  // 4) INLINE: Conversation Dock (only if missing)
+  // =====================================================
+  function ensureConversationDock(){
+    if (window.MaruConversationDock) return;
 
-    if (t.includes('영상')) return 'video';
-    if (t.includes('자세히') || t.includes('상세')) return 'expand';
-    if (t.includes('이슈')) return 'realtime';
-    return 'summary';
-  }
+    let bar=null, input=null, sendBtn=null;
+    let _ctx=null;
 
-  /* =====================================================
-   * 6. ENGINE PIPELINE
-   * ===================================================== */
-function normalizeEngineResponse(raw) {
-  return {
-    ok: raw?.ok === true,
-    text: raw?.text ?? raw?.summary ?? '',
-    mode: raw?.mode ?? 'summary',
-    data: raw?.data ?? {}   // ✅ regions/countries/issues/videos 전부 보존
-  };
-}
+    function ensure(){
+      if (bar) return;
 
+      bar = document.createElement('div');
+      bar.id = 'maru-conversation-dock';
+      bar.style.cssText = [
+        'position:fixed',
+        'left:50%',
+        'transform:translateX(-50%)',
+        'bottom:12px',
+        'width:min(920px,92vw)',
+        'height:64px',
+        'display:none',
+        'align-items:center',
+        'gap:10px',
+        'padding:0 12px',
+        'background:#ffffff',
+        'border:1px solid #ddd',
+        'border-radius:18px',
+        'box-sizing:border-box',
+        'z-index:200500',
+        'box-shadow:0 18px 50px rgba(0,0,0,.22)'
+      ].join(';');
 
-function dispatchCommand(req) {
-  STATE.lastRequest = req;
-  STATE.commandHistory.push({ role: 'user', text: req.text });
-
-  // 🔹 Netlify Function 호출 디바운스
-  if (ENGINE_DEBOUNCE_TIMER) {
-    clearTimeout(ENGINE_DEBOUNCE_TIMER);
-  }
-
-  ENGINE_DEBOUNCE_TIMER = setTimeout(() => {
-    callInsightEngine(req)
-.then(raw => {
-  const res = normalizeEngineResponse(raw);
-
-  STATE.lastResponse = res;
-  STATE.commandHistory.push({ role: 'assistant', text: res.text || '' });
-  routeResponse(req, res);
-})
-
-      .catch(err => console.error('[MaruAddon]', err));
-  }, ENGINE_DEBOUNCE_DELAY);
-}
-
-
-  function callInsightEngine(req) {
-    return fetch('/.netlify/functions/maru-global-insight', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text: req.text,
-        scope: req.scope,
-        depth: req.intent, // summary | expand | realtime | video
-		refresh: !!req.refresh,
-        focus: req.focus || null
-      })
-    }).then(r => r.json());
-  }
-
-  /* =====================================================
-   * 7. RESPONSE ROUTER (PERFECT MAPPING)
-   * ===================================================== */
-
-  function routeResponse(req, res) {
-    if (!res || res.ok !== true) return;
-
-    // 7-1) 요약 카드(항상)
-    if (req.scope === 'global' && typeof window.renderSummary === 'function') {
-      window.renderSummary(res.text || '');
-    }
-
-    // 7-2) 글로벌 실행 결과를 레기온/컨트리 준비 섹션으로 뿌리기
-    // (엔진이 배열을 내려주면 그대로 주입됨)
-    if (req.scope === 'global') {
-      if (typeof window.injectMaruGlobalRegionData === 'function') {
-        window.injectMaruGlobalRegionData(res.data?.regions || res.data || []);
-      }
-      if (typeof window.injectMaruGlobalCountryData === 'function') {
-        window.injectMaruGlobalCountryData(res.data?.countries || res.data || []);
-      }
-    }
-
-    // 7-3) 레기온 요청 응답 → 레기온 injector에 “정확한 shape”로 주입
-    if (req.scope === 'region' && typeof window.injectRegionContextResult === 'function') {
-      window.injectRegionContextResult(req.target, {
-        summary: res.text || '',
-        issues: res.data?.issues || null,
-        raw: res
+      input = document.createElement('input');
+      input.type='text';
+      input.placeholder='Ask MARU…';
+      input.autocomplete='off';
+      input.style.cssText = 'flex:1;height:40px;padding:0 10px;font-size:14px;border:1px solid #ccc;border-radius:12px;outline:none;box-sizing:border-box;';
+      input.addEventListener('keydown', function(e){
+        if (e.key === 'Enter') send();
       });
+
+      sendBtn = document.createElement('button');
+      sendBtn.type='button';
+      sendBtn.textContent='Send';
+      sendBtn.style.cssText = 'height:40px;padding:0 14px;border:none;border-radius:12px;background:#1f3a5f;color:#fff;cursor:pointer;font-weight:700;';
+      sendBtn.addEventListener('click', send);
+
+      bar.appendChild(input);
+      bar.appendChild(sendBtn);
+      document.body.appendChild(bar);
     }
 
-    // 7-4) 컨트리 요청 응답 → 컨트리 injector에 “정확한 shape”로 주입
-    if (req.scope === 'country' && typeof window.injectCountryContextResult === 'function') {
-      window.injectCountryContextResult(req.target, {
-        summary: res.text || '',
-        issues: res.data?.issues || null,
-        videos: res.data?.videos || null,
-        raw: res
-      });
+    function normalizeContext(ctx){
+      if (!ctx || typeof ctx !== 'object') return null;
+      if (!ctx.level) return null;
+      return { level: ctx.level, id: (ctx.id != null) ? ctx.id : null };
     }
 
-    // 7-5) 영상 목록 주입(컨트리 전용 UI 공유)
-    // 엔진이 videos를 내려주면: 컨트리 모달의 injectMaruCountryVideos가 리스트(3~4) 렌더
-    if (req.scope === 'country' && Array.isArray(res.data?.videos) && typeof window.injectMaruCountryVideos === 'function') {
-      STATE.videoPool.country = req.target;
-      STATE.videoPool.list = res.data.videos;
-
-      window.injectMaruCountryVideos({
-        country: req.target,
-        videos: res.data.videos
-      });
+    function bestContext(){
+      const g = normalizeContext(window.__MARU_CONTEXT__);
+      if (g) return g;
+      if (window.activeCountryName) return { level:'country', id: window.activeCountryName };
+      if (window.activeRegionId) return { level:'region', id: window.activeRegionId };
+      return null;
     }
 
-    // 7-6) 영상 intent일 때: 리스트가 이미 있으면 선택 오픈(음성/문자)
-    if (req.intent === 'video') {
-
-      const idx = parseVideoPick(req.text);
-      const openIdx = (idx != null) ? idx : 0;
-      const ok = tryOpenCountryVideoByIndex(openIdx);
-      if (!ok) {
-        // 2) 카드가 없다면, 엔진 데이터 기반으로 overlay 훅이 있으면 호출(옵션)
-        if (typeof window.openMaruVideoOverlay === 'function' && STATE.videoPool.list.length > 0) {
-          const v = STATE.videoPool.list[openIdx] || STATE.videoPool.list[0];
-          if (v) window.openMaruVideoOverlay(v);
-        }
-      }
-
-      // 토글 ON이면 영상 오픈/선택 안내를 음성으로 읽어줌(“영상 음성” 자체는 player가 재생)
-      if (VOICE_ENABLED && typeof window.maruVoiceSpeak === 'function') {
-        window.maruVoiceSpeak('요청하신 영상을 실행합니다.');
-      }
+    function send(){
+      ensure();
+      const text = (input.value || '').trim();
+      if (!text) return;
+      const ctx = _ctx || bestContext();
+      window.__MARU_CONTEXT__ = ctx;
+      try { window.MaruAddon && window.MaruAddon.handleTextQuery && window.MaruAddon.handleTextQuery(text, ctx); } catch(_) {}
+      input.value = '';
     }
 
-// === Base text ===
-const text = req.text || '';
-
-// === Voice Intent → Expand Flag ===
-const intent = detectVoiceIntent(text);
-
-if (intent === 'expand') {
-  res.mode = 'expand';
-}
-
-
-    // 7-7) 상세(expand) 오버레이
-    if (res.mode === 'expand' && typeof window.openMaruDetailOverlay === 'function') {
-      window.openMaruDetailOverlay({
-        text: res.text || '',
-        scope: res.scope || req.scope,
-        conversation: STATE.commandHistory.slice(-6),
-        raw: res
-      });
-    }
-
-    // 7-8) 음성 읽기(요청이 어떤 것이든, 토글 ON이면 읽어줌)
-    // - 보이스 요청은 반드시 읽기
-    // - 텍스트 요청도 토글 ON이면 읽기 가능
- if (
-  VOICE_ENABLED &&
-  !MEDIA_STATE.video &&
-  typeof window.maruVoiceSpeak === 'function'
-) {
-const say = (res.speech || res.text || '').trim();
-
-if (say) {
-  window.maruVoiceSpeak(say);
-} else {
-  window.maruVoiceSpeak('준비된 자료가 없습니다.');
-}
-
-}
+    window.MaruConversationDock = {
+      show: function(){ ensure(); bar.style.display='flex'; },
+      hide: function(){ if(!bar) return; bar.style.display='none'; },
+      setContext: function(ctx){ _ctx = normalizeContext(ctx) || bestContext(); window.__MARU_CONTEXT__ = _ctx; },
+      getContext: function(){ return _ctx || bestContext(); },
+      setText: function(t){ ensure(); input.value = String(t||''); },
+      appendText: function(t){ ensure(); input.value = String(input.value||'') + String(t||''); },
+      focus: function(){ ensure(); try{ input.focus(); }catch(_){} }
+    };
   }
-  /* =====================================================
-   * 8. EXPORT
-   * ===================================================== */
-
-  window.MaruAddon = MaruAddon;
 
 })();
