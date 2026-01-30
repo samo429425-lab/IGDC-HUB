@@ -162,11 +162,11 @@
     const m = Math.round(d.height); // unit = dock height
 
     // Spec: shrink all four sides by dock height
-    modal.style.setProperty('left', (m * 2) + 'px', 'important');
-    modal.style.setProperty('right', (m * 2) + 'px', 'important');
+    modal.style.setProperty('left', (m * 1.8) + 'px', 'important');
+    modal.style.setProperty('right', (m * 2.5) + 'px', 'important');
     modal.style.setProperty('top', (m * 2) + 'px', 'important');
     // bottom should leave dock + extra dock-height gap (dock itself + 1 more dock height)
-    modal.style.setProperty('bottom', (m * 3) + 'px', 'important');
+    modal.style.setProperty('bottom', (m * 2.2) + 'px', 'important');
 
     // Keep within viewport
     modal.style.setProperty('max-height', 'calc(100vh - ' + (m * 3) + 'px)', 'important');
