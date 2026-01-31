@@ -201,16 +201,16 @@ function toStandardItems(arr, source) {
 
 // ===== Containers (future-ready, but safe-noop unless active) =====
 const Containers = {
-  web_naver: {
+    web_naver: {
     name: 'web_naver',
-    async fetch(q, limit){
-      return naverSearch(q, limit);
+    async fetch(q, limit, start){
+    return naverSearch(q, limit, start);
     }
   },
-  web_google: {
+    web_google: {
     name: 'web_google',
-    async fetch(q, limit){
-      return googleSearch(q, limit);
+    async fetch(q, limit, start){
+    return googleSearch(q, limit, start);
     }
   },
   // Snapshot container placeholder (optional):
@@ -230,55 +230,95 @@ const Containers = {
   }
 };
 
-// Orchestrator: chooses containers, runs safely, merges.
+// Orchestrator: chooses containers, runs safely, accumulates, merges (FUTURE-GRADE)
 async function orchestrateSearch({ q, limit }) {
-  // Web-first baseline (existing behavior): NAVER -> GOOGLE
-  // (Snapshot/AI containers are kept as optional hooks but not required to return data.)
-  const results = [];
+  const collected = [];
+  let sourceUsed = null;
 
-  // 1) NAVER
+  // =========================
+  // 1) NAVER — primary bulk source (100/page)
+  // =========================
   if (cbCanRun('naver')) {
-    const n = await Containers.web_naver.fetch(q, limit).catch(e => { cbOnFail('naver'); return null; });
-    if (n && n.results && n.results.length) {
+    let start = 1;
+
+    while (collected.length < limit) {
+      const batchSize = Math.min(100, limit - collected.length);
+
+      const n = await Containers.web_naver.fetch(q, batchSize, start)
+        .catch(e => { cbOnFail('naver'); return null; });
+
+      if (!n || !n.results || !n.results.length) break;
+
       cbOnSuccess('naver');
-      let items = toStandardItems(n.results, n.source);
-      items = await applyCorePipeline(q, items);
-      return { source: n.source, items };
+      sourceUsed = sourceUsed || 'naver';
+
+      const items = toStandardItems(n.results, n.source);
+      collected.push(...items);
+
+      if (n.results.length < batchSize) break;
+      start += batchSize;
     }
   }
 
-  // 2) GOOGLE
-  if (cbCanRun('google')) {
-    const g = await Containers.web_google.fetch(q, limit).catch(e => { cbOnFail('google'); return null; });
-    if (g && g.results && g.results.length) {
+  // =========================
+  // 2) GOOGLE — secondary precision source (10/page, max ~100)
+  // =========================
+  if (collected.length < limit && cbCanRun('google')) {
+    let start = 1;
+
+    while (collected.length < limit && start <= 91) {
+      const batchSize = Math.min(10, limit - collected.length);
+
+      const g = await Containers.web_google.fetch(q, batchSize, start)
+        .catch(e => { cbOnFail('google'); return null; });
+
+      if (!g || !g.results || !g.results.length) break;
+
       cbOnSuccess('google');
-      let items = toStandardItems(g.results, g.source);
-      items = await applyCorePipeline(q, items);
-      return { source: g.source, items };
+      sourceUsed = sourceUsed || 'google';
+
+      const items = toStandardItems(g.results, g.source);
+      collected.push(...items);
+
+      if (g.results.length < batchSize) break;
+      start += batchSize;
     }
   }
 
-   // 3) no data → loose fallback
+  // =========================
+  // 3) CORE PIPELINE (ranking / canonicalization)
+  // =========================
+  if (collected.length > 0) {
+    const finalItems = await applyCorePipeline(q, collected.slice(0, limit));
     return {
+      source: sourceUsed,
+      items: finalItems
+    };
+  }
+
+  // =========================
+  // 4) LOOSE FALLBACK (future-safe)
+  // =========================
+  return {
     source: 'fallback',
     items: await applyCorePipeline(q, [
-    {
-      title: q,
-      summary: 'Loose fallback result',
-      source: 'fallback',
-      score: 0.01
-    }
-  ])
- };
+      {
+        title: q,
+        summary: 'Loose fallback result',
+        source: 'fallback',
+        score: 0.01
+      }
+    ])
+  };
 }
 
 // ===== Source Fetchers =====
-async function naverSearch(q, limit) {
+async function naverSearch(q, limit, start) {
   const id = process.env.NAVER_API_KEY;
   const secret = process.env.NAVER_CLIENT_SECRET;
   if (!id || !secret) return null;
 
-  const url = `https://openapi.naver.com/v1/search/webkr.json?query=${encodeURIComponent(q)}&display=${Math.min(limit, 100)}`;
+  const url = `https://openapi.naver.com/v1/search/webkr.json?query=${encodeURIComponent(q)}&display=${Math.min(limit, 100)}&start=${start}`;
   const res = await fetchWithTimeout(url, {
     headers: {
       'X-Naver-Client-Id': id,
@@ -304,12 +344,12 @@ async function naverSearch(q, limit) {
   return { source: 'naver', results };
 }
 
-async function googleSearch(q, limit) {
+async function googleSearch(q, limit, start) {
   const key = process.env.GOOGLE_API_KEY;
   const cx = process.env.GOOGLE_CSE_ID;
   if (!key || !cx) return null;
 
-  const url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(key)}&cx=${encodeURIComponent(cx)}&q=${encodeURIComponent(q)}&num=${Math.min(limit, 10)}`;
+  const url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(key)}&cx=${encodeURIComponent(cx)}&q=${encodeURIComponent(q)}&num=${Math.min(limit, 10)}&start=${start}`;
   const res = await fetchWithTimeout(url, null, 8500);
   if (!res.ok) throw new Error(`GOOGLE_HTTP_${res.status}`);
   const data = await res.json();
