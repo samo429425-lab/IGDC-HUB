@@ -45,10 +45,10 @@ document.addEventListener('DOMContentLoaded', () => {
     return x;
   }
 
-  async function fetchMaru(q){
+  async function fetchMaru(q, start, limit){
     const urls = [
-      `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=1000`,
-      `/netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=1000`
+      `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&start=${encodeURIComponent(start||1)}&limit=${encodeURIComponent(limit||1000)}`,
+      `/netlify/functions/maru-search?q=${encodeURIComponent(q)}&start=${encodeURIComponent(start||1)}&limit=${encodeURIComponent(limit||1000)}`
     ];
     let lastErr;
     for (const u of urls){
@@ -86,13 +86,30 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderPage(page){
     results.innerHTML = '';
     const start = (page - 1) * PAGE_SIZE;
-    const slice = allItems.slice(start, start + PAGE_SIZE);
+    const slice = (allItems.length <= PAGE_SIZE) ? allItems : allItems.slice(start, start + PAGE_SIZE);
     slice.forEach(renderItem);
     drawPager();
   }
 
   const PAGE_WINDOW = 10;
   let pageWindowStart = 1;
+
+  let totalResults = 0;
+  let totalPages = 0;
+  let lastQuery = '';
+
+  async function loadPage(page){
+    const q = lastQuery;
+    const start = (page - 1) * PAGE_SIZE + 1;
+    const j0 = await fetchMaru(q, start, PAGE_SIZE);
+    const d = unwrap(j0) || {};
+    const meta = d.meta || {};
+      totalResults = Number(meta.total || 0) || 0;
+      const items = d.items || [];
+    allItems = items;
+    currentPage = page;
+    renderPage(1);
+  }
 
   function drawPager(){
     let bar = document.getElementById('maru-page-controls');
@@ -106,7 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
       status.parentNode.insertBefore(bar, status.nextSibling);
     }
     bar.innerHTML = '';
-    const totalPages = Math.ceil(allItems.length / PAGE_SIZE);
+    totalPages = totalResults ? Math.ceil(totalResults / PAGE_SIZE) : Math.ceil(allItems.length / PAGE_SIZE);
     if (totalPages <= 1) return;
 
     const end = Math.min(totalPages, pageWindowStart + PAGE_WINDOW - 1);
@@ -115,11 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
       b.textContent = i;
       b.style.background = '#4DA3FF';
       b.style.opacity = (i === currentPage) ? '0.6' : '1';
-      b.onclick = () => {
-        currentPage = i;
-       
-    renderPage(currentPage);
-      };
+      b.onclick = () => { loadPage(i).catch(console.error); };
       bar.appendChild(b);
     }
 
@@ -155,15 +168,18 @@ document.addEventListener('DOMContentLoaded', () => {
     status.textContent = 'Searching…';
     renderSkeleton();
     try{
-      const j0 = await fetchMaru(q);
-      const d = unwrap(j0) || {};
+      lastQuery = q;
+      const j0 = await fetchMaru(q, 1, PAGE_SIZE);
+const d = unwrap(j0) || {};
+      const meta = d.meta || {};
+      totalResults = Number(meta.total || 0) || 0;
       const items = d.items || [];
       results.innerHTML = '';
       if (!items.length){
         status.textContent = 'No results.';
         return;
       }
-      status.textContent = 'Results';
+      status.textContent = totalResults ? `${totalResults} results` : 'Results';
       allItems = items;
       currentPage = 1;
       renderPage(currentPage);
@@ -230,61 +246,3 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
-
-
-// ===== MARU PAGINATION (STRICT 10 PER PAGE, SAFE) =====
-function legacyPagination(){
-  const PAGE_SIZE = 15;
-  let allItems = [];
-  let currentPage = 1;
-  let originalRender = null;
-
-  function ensurePager(){
-    let bar = document.getElementById('maru-page-controls');
-    if (!bar){
-      bar = document.createElement('div');
-      bar.id = 'maru-page-controls';
-      bar.style.display = 'flex';
-      bar.style.gap = '6px';
-      bar.style.margin = '8px 0';
-      const status = document.getElementById('searchStatus');
-      if (status && status.parentNode){
-        status.parentNode.insertBefore(bar, status.nextSibling);
-      }
-    }
-    return bar;
-  }
-
-  function drawPager(){
-    const bar = ensurePager();
-    bar.innerHTML = '';
-    const pages = Math.ceil(allItems.length / PAGE_SIZE);
-    for (let i = 1; i <= pages; i++){
-      const b = document.createElement('button');
-      b.textContent = i;
-      b.style.background = '#4DA3FF';
-      b.style.opacity = (i === currentPage) ? '0.6' : '1';
-      b.onclick = () => { currentPage = i; drawPage(); };
-      bar.appendChild(b);
-    }
-  }
-
-  function drawPage(){
-    if (!originalRender) return;
-    const start = (currentPage - 1) * PAGE_SIZE;
-    const slice = allItems.slice(start, start + PAGE_SIZE);
-    originalRender(slice);   // 🔒 ONLY 10 items rendered
-    drawPager();
-  }
-
-  document.addEventListener('DOMContentLoaded', () => {
-    if (window.renderSearchItems && !originalRender){
-      originalRender = window.renderSearchItems;
-      window.renderSearchItems = function(items){
-        allItems = Array.isArray(items) ? items : [];
-        currentPage = 1;
-        drawPage();
-      };
-    }
-  });
-}
