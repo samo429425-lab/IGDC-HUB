@@ -47,8 +47,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function fetchMaru(q){
     const urls = [
-      `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=100`,
-      `/netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=100`
+      `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=1000`,
+      `/netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=1000`
     ];
     let lastErr;
     for (const u of urls){
@@ -91,27 +91,61 @@ document.addEventListener('DOMContentLoaded', () => {
     drawPager();
   }
 
+  const PAGE_WINDOW = 10;
+  let pageWindowStart = 1;
+
   function drawPager(){
     let bar = document.getElementById('maru-page-controls');
     if (!bar){
       bar = document.createElement('div');
       bar.id = 'maru-page-controls';
       bar.style.display = 'flex';
+      bar.style.alignItems = 'center';
       bar.style.gap = '6px';
       bar.style.margin = '8px 0';
       status.parentNode.insertBefore(bar, status.nextSibling);
     }
     bar.innerHTML = '';
-    const pages = Math.ceil(allItems.length / PAGE_SIZE);
-    for (let i = 1; i <= pages; i++){
+    const totalPages = Math.ceil(allItems.length / PAGE_SIZE);
+    if (totalPages <= 1) return;
+
+    const end = Math.min(totalPages, pageWindowStart + PAGE_WINDOW - 1);
+    for (let i = pageWindowStart; i <= end; i++){
       const b = document.createElement('button');
       b.textContent = i;
+      b.style.background = '#87CEEB';
       b.style.opacity = (i === currentPage) ? '0.6' : '1';
       b.onclick = () => {
         currentPage = i;
         renderPage(currentPage);
       };
       bar.appendChild(b);
+    }
+
+    // right-side arrows
+    if (pageWindowStart > 1){
+      const prev = document.createElement('button');
+      prev.innerHTML = '❮';
+      prev.title = '이전 페이지 묶음';
+      prev.style.background = '#87CEEB';
+      prev.style.marginLeft = '8px';
+      prev.onclick = () => {
+        pageWindowStart = Math.max(1, pageWindowStart - PAGE_WINDOW);
+        drawPager();
+      };
+      bar.appendChild(prev);
+    }
+
+    if (end < totalPages){
+      const next = document.createElement('button');
+      next.innerHTML = '❯';
+      next.title = '다음 페이지 묶음';
+      next.style.background = '#87CEEB';
+      next.onclick = () => {
+        pageWindowStart = pageWindowStart + PAGE_WINDOW;
+        drawPager();
+      };
+      bar.appendChild(next);
     }
   }
 
@@ -198,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 // ===== MARU PAGINATION (STRICT 10 PER PAGE, SAFE) =====
-(function(){
+function legacyPagination(){
   const PAGE_SIZE = 15;
   let allItems = [];
   let currentPage = 1;
@@ -227,6 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
     for (let i = 1; i <= pages; i++){
       const b = document.createElement('button');
       b.textContent = i;
+      b.style.background = '#87CEEB';
       b.style.opacity = (i === currentPage) ? '0.6' : '1';
       b.onclick = () => { currentPage = i; drawPage(); };
       bar.appendChild(b);
@@ -251,4 +286,4 @@ document.addEventListener('DOMContentLoaded', () => {
       };
     }
   });
-})();
+}
