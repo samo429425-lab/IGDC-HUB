@@ -84,20 +84,22 @@
   }
 
   function render(psomKey, items){
-    const el = qs('[data-psom-key="'+psomKey+'"]');
-    if (!el || !items) return false;
+  const nodes = document.querySelectorAll('[data-psom-key="'+psomKey+'"]');
+  if (!nodes.length || !items) return false;
 
-    const container = resolveContainer(el);
-    if (!container) return false;
+  nodes.forEach(el => {
+    const container = el; // distributionhub: thumb-scroller 자체
+    if (!container) return;
 
-    // ✅ ONLY NOW remove dummy
     container.innerHTML = '';
     const frag = document.createDocumentFragment();
-
     items.forEach(it => frag.appendChild(buildCard(it)));
     container.appendChild(frag);
-    return true;
-  }
+  });
+
+  return true;
+}
+
 
   async function loadSnapshot(){
     try{
