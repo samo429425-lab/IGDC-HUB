@@ -4463,6 +4463,17 @@
           }
         ]
       }
+    },
+    "distribution": {
+      "sections": {
+        "dist_1": [],
+        "dist_2": [],
+        "dist_3": [],
+        "dist_4": [],
+        "dist_5": [],
+        "dist_6": [],
+        "dist_right": []
+      }
     }
   }
 }
