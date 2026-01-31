@@ -84,12 +84,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentPage = 1;
 
   function renderPage(page){
-    results.innerHTML = '';
-    const start = (page - 1) * PAGE_SIZE;
-    const slice = (allItems.length <= PAGE_SIZE) ? allItems : allItems.slice(start, start + PAGE_SIZE);
-    slice.forEach(renderItem);
-    drawPager();
-  }
+  results.innerHTML = '';
+  allItems.forEach(renderItem);
+  drawPager();
+}
 
   const PAGE_WINDOW = 10;
   let pageWindowStart = 1;
@@ -108,7 +106,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const items = d.items || [];
     allItems = items;
     currentPage = page;
-    renderPage(1);
+    renderPage(page);
+
   }
 
   function drawPager(){
@@ -145,7 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
       prev.style.marginLeft = '8px';
       prev.onclick = () => {
         pageWindowStart = Math.max(1, pageWindowStart - PAGE_WINDOW);
-        drawPager();
+        loadPage(pageWindowStart).catch(console.error);
       };
       bar.appendChild(prev);
     }
@@ -157,7 +156,8 @@ document.addEventListener('DOMContentLoaded', () => {
       next.style.background = '#4DA3FF';
       next.onclick = () => {
         pageWindowStart = pageWindowStart + PAGE_WINDOW;
-        drawPager();
+        const target = Math.min(totalPages || pageWindowStart, pageWindowStart);
+        loadPage(target).catch(console.error);
       };
       bar.appendChild(next);
     }
