@@ -47,8 +47,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function fetchMaru(q){
     const urls = [
-      `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=100`,
-      `/netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=100`
+      `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=1000`,
+      `/netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=1000`
     ];
     let lastErr;
     for (const u of urls){
@@ -113,7 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
     for (let i = pageWindowStart; i <= end; i++){
       const b = document.createElement('button');
       b.textContent = i;
-      b.style.background = '#e3f2fd';
+      b.style.background = '#87CEEB';
       b.style.opacity = (i === currentPage) ? '0.6' : '1';
       b.onclick = () => {
         currentPage = i;
@@ -127,7 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const prev = document.createElement('button');
       prev.innerHTML = '❮';
       prev.title = '이전 페이지 묶음';
-      prev.style.background = '#e3f2fd';
+      prev.style.background = '#87CEEB';
       prev.style.marginLeft = '8px';
       prev.onclick = () => {
         pageWindowStart = Math.max(1, pageWindowStart - PAGE_WINDOW);
@@ -140,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const next = document.createElement('button');
       next.innerHTML = '❯';
       next.title = '다음 페이지 묶음';
-      next.style.background = '#e3f2fd';
+      next.style.background = '#87CEEB';
       next.onclick = () => {
         pageWindowStart = pageWindowStart + PAGE_WINDOW;
         drawPager();
@@ -261,7 +261,7 @@ function legacyPagination(){
     for (let i = 1; i <= pages; i++){
       const b = document.createElement('button');
       b.textContent = i;
-      b.style.background = '#e3f2fd';
+      b.style.background = '#87CEEB';
       b.style.opacity = (i === currentPage) ? '0.6' : '1';
       b.onclick = () => { currentPage = i; drawPage(); };
       bar.appendChild(b);
