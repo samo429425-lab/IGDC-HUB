@@ -1,23 +1,28 @@
+
 /**
- * distribution-products-automap.v3.js
- * CLONED FROM home-products-automap.v2.js
- * Snapshot-first + Feed overwrite (IDENTICAL ENGINE)
+ * distribution-products-automap.v5.js
+ * FINAL – HOME ENGINE CLONE (SAFE OVERWRITE)
  *
- * Differences:
- * - MAIN sections: 6
- * - RIGHT panel: single (distribution)
- * - Keys mapped to Distribution PSOM
+ * RULES:
+ * 1) Snapshot / feed 연결 성공 시에만 기존 더미 DOM 제거
+ * 2) 연결 실패 시 HTML 더미 그대로 유지
+ * 3) distributionhub.html 구조 그대로 사용 (HTML 수정 없음)
+ *
+ * SOURCE PRIORITY:
+ *  - front.snapshot.json  (1차)
+ *  - feed?page=distribution (2차 덮어쓰기)
  */
 
 (function () {
   'use strict';
-  if (window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V3__) return;
-  window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V3__ = true;
+  if (window.__DISTRIBUTION_AUTOMAP_V5__) return;
+  window.__DISTRIBUTION_AUTOMAP_V5__ = true;
 
-  const FEED_URL = '/.netlify/functions/feed?page=distribution';
   const SNAPSHOT_URL = '/data/front.snapshot.json';
+  const FEED_URL = '/.netlify/functions/feed?page=distribution';
 
-  const KEYS_MAIN = [
+  // PSOM keys
+  const MAIN_KEYS = [
     'distribution-recommend',
     'distribution-sponsor',
     'distribution-trending',
@@ -25,195 +30,139 @@
     'distribution-special',
     'distribution-others'
   ];
-  const KEYS_RIGHT = ['distribution'];
-
-  const MAIN_LIMIT = 100, MAIN_BATCH = 7;
-  const RIGHT_LIMIT = 80, RIGHT_BATCH = 5;
-
-  const EMPTY_I18N = {
-    de: 'Inhalte werden vorbereitet.',
-    en: 'Content is being prepared.',
-    es: 'El contenido está en preparación.',
-    fr: 'Contenu en cours de préparation.',
-    id: 'Konten sedang disiapkan.',
-    ja: 'コンテンツ準備中です。',
-    ko: '콘텐츠 준비 중입니다.',
-    pt: 'Conteúdo em preparação.',
-    ru: 'Контент готовится.',
-    th: 'กำลังเตรียมเนื้อหาอยู่',
-    tr: 'İçerik hazırlanıyor.',
-    vi: 'Nội dung đang được chuẩn bị.',
-    zh: '内容正在准备中。'
-  };
-
-  function getLangCode(){
-    try{
-      const raw = String(
-        (window.localStorage && localStorage.getItem('igdc_lang')) ||
-        (document.documentElement && document.documentElement.getAttribute('lang')) ||
-        (navigator && (navigator.language || (navigator.languages && navigator.languages[0]))) ||
-        'en'
-      ).trim().toLowerCase();
-      const base = raw.split('-')[0];
-      return EMPTY_I18N[base] ? base : 'en';
-    }catch(e){ return 'en'; }
-  }
-  function emptyText(){ return EMPTY_I18N[getLangCode()] || EMPTY_I18N.en; }
+  const RIGHT_KEY = 'distribution';
 
   function qs(sel, root){ return (root||document).querySelector(sel); }
-  function qsa(sel, root){ return Array.from((root||document).querySelectorAll(sel)); }
 
   function pick(o, keys){
     for (const k of keys){
-      const v = o && o[k];
-      if (typeof v === 'string' && v.trim()) return v.trim();
+      if (o && typeof o[k] === 'string' && o[k].trim()) return o[k].trim();
     }
     return '';
   }
 
-  function normItem(it){
-    it = it || {};
+  function norm(it){
     return {
-      title: pick(it, ['title','name','label','caption']) || 'Item',
-      thumb: pick(it, ['thumb','image','image_url','img','photo','thumbnail','thumbnailUrl','cover','coverUrl']),
-      url:   pick(it, ['checkoutUrl','productUrl','url','href','link','path','detailUrl']) || '#',
-      priority: (typeof it.priority === 'number' ? it.priority : null)
+      title: pick(it, ['title','name','label','caption']) || '',
+      thumb: pick(it, ['thumb','image','image_url','thumbnail','cover']),
+      url:   pick(it, ['url','link','href','productUrl']) || '#'
     };
   }
 
-  function resolveTargets(psomEl, key){
-    const isRight = (key === 'distribution');
-    if (isRight){
-      const section = psomEl.closest('.ad-section') || psomEl.closest('.brand-rail') || null;
-      const scroller = section && (section.querySelector('.ad-scroll') || section);
-      const list = section && (section.querySelector('.ad-list') || psomEl);
-      return { isRight:true, section, scroller, list, psomEl };
-    }
-    const scroller = psomEl.closest('.shop-scroller');
-    const list = scroller && scroller.querySelector('.shop-row');
-    return { isRight:false, section:scroller, scroller, list, psomEl };
+  function resolveContainer(psomEl){
+    // distributionhub.html: data-psom-key is on .thumb-scroller
+    return psomEl;
   }
 
-  function showEmpty(t){
-    if (!t || !t.list) return;
-    t.list.innerHTML = '<div class="empty">'+emptyText()+'</div>';
-  }
+  function buildCard(item){
+    const a = document.createElement('a');
+    a.className = 'thumb-card';
+    a.href = item.url || '#';
 
-  function showData(t){
-    if (!t || !t.list) return;
-    t.list.innerHTML = '';
-  }
-
-  function bindIncremental(t, items){
-    const isRight = t.isRight;
-    const limit = isRight ? RIGHT_LIMIT : MAIN_LIMIT;
-    const batch = isRight ? RIGHT_BATCH : MAIN_BATCH;
-    let offset = 0;
-
-    function buildCard(it){
-      const a = document.createElement('a');
-      a.className = isRight ? 'ad-box news-btn' : 'thumb-card';
-      a.href = it.url || '#';
-      if (it.thumb){
-        const img = document.createElement('img');
-        img.loading = 'lazy';
-        img.decoding = 'async';
-        img.src = it.thumb;
-        img.alt = it.title || '';
-        a.appendChild(img);
-      }
-      if (!isRight){
-        const cap = document.createElement('div');
-        cap.className = 'thumb-title';
-        cap.textContent = it.title || '';
-        a.appendChild(cap);
-      }
-      return a;
+    const imgWrap = document.createElement('div');
+    imgWrap.className = 'thumb-img';
+    if (item.thumb){
+      const img = document.createElement('img');
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.src = item.thumb;
+      img.alt = item.title || '';
+      imgWrap.appendChild(img);
     }
 
-    function renderMore(){
-      const end = Math.min(offset + batch, limit, items.length);
-      const frag = document.createDocumentFragment();
-      for (let i = offset; i < end; i++){
-        frag.appendChild(buildCard(items[i]));
-      }
-      t.list.appendChild(frag);
-      offset = end;
-    }
+    const body = document.createElement('div');
+    body.className = 'thumb-body';
 
-    renderMore();
-    if (!t.scroller) return;
-    t.scroller.addEventListener('scroll', function(){
-      const nearEnd = isRight
-        ? (t.scroller.scrollTop + t.scroller.clientHeight >= t.scroller.scrollHeight - 20)
-        : (t.scroller.scrollLeft + t.scroller.clientWidth >= t.scroller.scrollWidth - 20);
-      if (nearEnd && offset < items.length) renderMore();
-    }, { passive:true });
+    const title = document.createElement('div');
+    title.className = 'thumb-title';
+    title.textContent = item.title || '';
+
+    body.appendChild(title);
+    a.appendChild(imgWrap);
+    a.appendChild(body);
+    return a;
   }
 
-  async function applySnapshot(){
+  function render(psomKey, items){
+    const el = qs('[data-psom-key=\"'+psomKey+'\"]');
+    if (!el || !items || !items.length) return false;
+
+    const container = resolveContainer(el);
+    if (!container) return false;
+
+    // ✅ ONLY NOW remove dummy
+    container.innerHTML = '';
+    const frag = document.createDocumentFragment();
+
+    items.forEach(it => frag.appendChild(buildCard(it)));
+    container.appendChild(frag);
+    return true;
+  }
+
+  async function loadSnapshot(){
     try{
       const r = await fetch(SNAPSHOT_URL, { cache:'no-store' });
-      if (!r.ok) return;
+      if (!r.ok) return false;
       const snap = await r.json();
-      const sections = snap?.pages?.distribution?.sections || {};
-      KEYS_MAIN.forEach(key => {
-        const el = qs('[data-psom-key="'+key+'"]');
-        if (!el) return;
-        const t = resolveTargets(el, key);
-        const list = (sections[key]||[]).map(normItem).filter(x=>x.thumb);
-        if (!list.length) return;
-        showData(t);
-        bindIncremental(t, list);
+      const sections = snap?.pages?.distribution?.sections;
+      if (!sections) return false;
+
+      let used = false;
+      MAIN_KEYS.forEach(k => {
+        const list = (sections[k]||[]).map(norm).filter(x=>x.thumb);
+        if (render(k, list)) used = true;
       });
-      KEYS_RIGHT.forEach(key => {
-        const el = qs('[data-psom-key="'+key+'"]');
-        if (!el) return;
-        const t = resolveTargets(el, key);
-        const list = (sections[key]||[]).map(normItem);
-        if (!list.length) return;
-        showData(t);
-        bindIncremental(t, list);
-      });
-    }catch(e){}
+
+      // right panel (compat: distribution / distribution-right)
+      const rightList =
+        (sections[RIGHT_KEY] ||
+         sections['distribution-right'] ||
+         []).map(norm);
+
+      if (render(RIGHT_KEY, rightList)) used = true;
+
+      return used;
+    }catch(e){
+      return false;
+    }
   }
 
-  async function applyFeed(){
+  async function loadFeed(){
     try{
       const r = await fetch(FEED_URL, { cache:'no-store' });
-      if (!r.ok) return;
+      if (!r.ok) return false;
       const payload = await r.json();
-      const byId = {};
-      (payload.sections||[]).forEach(s=>{
-        if (s && s.id && Array.isArray(s.items)) byId[s.id] = s.items;
+      if (!Array.isArray(payload.sections)) return false;
+
+      const map = {};
+      payload.sections.forEach(s => {
+        if (s && s.id && Array.isArray(s.items)) map[s.id] = s.items;
       });
-      KEYS_MAIN.forEach(key => {
-        const el = qs('[data-psom-key="'+key+'"]');
-        if (!el) return;
-        const t = resolveTargets(el, key);
-        const list = (byId[key]||[]).map(normItem).filter(x=>x.thumb);
-        if (!list.length) return;
-        showData(t);
-        bindIncremental(t, list);
+
+      let used = false;
+      MAIN_KEYS.forEach(k => {
+        const list = (map[k]||[]).map(norm).filter(x=>x.thumb);
+        if (render(k, list)) used = true;
       });
-      KEYS_RIGHT.forEach(key => {
-        const el = qs('[data-psom-key="'+key+'"]');
-        if (!el) return;
-        const t = resolveTargets(el, key);
-        const list = (byId[key]||[]).map(normItem);
-        if (!list.length) return;
-        showData(t);
-        bindIncremental(t, list);
-      });
-    }catch(e){}
+
+      const rightList =
+        map[RIGHT_KEY] || map['dist_right'] || map['distribution-right'];
+      if (rightList && render(RIGHT_KEY, rightList.map(norm))) used = true;
+
+      return used;
+    }catch(e){
+      return false;
+    }
   }
 
   async function boot(){
-    await applySnapshot();
-    await applyFeed();
+    const snapOK = await loadSnapshot();
+    if (snapOK) await loadFeed();
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
-
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
 })();
