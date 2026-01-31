@@ -45,10 +45,10 @@ document.addEventListener('DOMContentLoaded', () => {
     return x;
   }
 
-  async function fetchMaru(q, start, limit){
+  async function fetchMaru(q){
     const urls = [
-      `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&start=${encodeURIComponent(start||1)}&limit=${encodeURIComponent(limit||15)}`,
-      `/netlify/functions/maru-search?q=${encodeURIComponent(q)}&start=${encodeURIComponent(start||1)}&limit=${encodeURIComponent(limit||15)}`
+      `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=1000`,
+      `/netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=1000`
     ];
     let lastErr;
     for (const u of urls){
@@ -94,22 +94,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const PAGE_WINDOW = 10;
   let pageWindowStart = 1;
 
-  async function runSearchPage(q, page){
-    const start = (page - 1) * PAGE_SIZE + 1;
-    status.textContent = 'Searching…';
-    renderSkeleton();
-    try{
-      const j0 = await fetchMaru(q, start, PAGE_SIZE);
-      const d = unwrap(j0) || {};
-      const items = d.items || [];
-      results.innerHTML = '';
-      if (!items.length){ status.textContent = 'No results.'; return; }
-      status.textContent = 'Results';
-      allItems = items;
-      renderPage(1);
-    }catch(e){ console.error(e); status.textContent = 'Search error'; }
-  }
-
   function drawPager(){
     let bar = document.getElementById('maru-page-controls');
     if (!bar){
@@ -129,9 +113,13 @@ document.addEventListener('DOMContentLoaded', () => {
     for (let i = pageWindowStart; i <= end; i++){
       const b = document.createElement('button');
       b.textContent = i;
-      b.style.background = '#6EC6FF';
+      b.style.background = '#4DA3FF';
       b.style.opacity = (i === currentPage) ? '0.6' : '1';
-      b.onclick = () => { currentPage = i; runSearchPage(q0 || input.value.trim(), currentPage); };
+      b.onclick = () => {
+        currentPage = i;
+        runSearch(q);
+    renderPage(currentPage);
+      };
       bar.appendChild(b);
     }
 
@@ -140,7 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const prev = document.createElement('button');
       prev.innerHTML = '❮';
       prev.title = '이전 페이지 묶음';
-      prev.style.background = '#6EC6FF';
+      prev.style.background = '#4DA3FF';
       prev.style.marginLeft = '8px';
       prev.onclick = () => {
         pageWindowStart = Math.max(1, pageWindowStart - PAGE_WINDOW);
@@ -153,7 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const next = document.createElement('button');
       next.innerHTML = '❯';
       next.title = '다음 페이지 묶음';
-      next.style.background = '#6EC6FF';
+      next.style.background = '#4DA3FF';
       next.onclick = () => {
         pageWindowStart = pageWindowStart + PAGE_WINDOW;
         drawPager();
@@ -167,7 +155,18 @@ document.addEventListener('DOMContentLoaded', () => {
     status.textContent = 'Searching…';
     renderSkeleton();
     try{
-      await runSearchPage(q, 1);
+      const j0 = await fetchMaru(q);
+      const d = unwrap(j0) || {};
+      const items = d.items || [];
+      results.innerHTML = '';
+      if (!items.length){
+        status.textContent = 'No results.';
+        return;
+      }
+      status.textContent = 'Results';
+      allItems = items;
+      currentPage = 1;
+      renderPage(currentPage);
     }catch(e){
       console.error(e);
       status.textContent = 'Search error';
@@ -263,7 +262,7 @@ function legacyPagination(){
     for (let i = 1; i <= pages; i++){
       const b = document.createElement('button');
       b.textContent = i;
-      b.style.background = '#6EC6FF';
+      b.style.background = '#4DA3FF';
       b.style.opacity = (i === currentPage) ? '0.6' : '1';
       b.onclick = () => { currentPage = i; drawPage(); };
       bar.appendChild(b);
