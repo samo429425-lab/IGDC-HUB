@@ -30,6 +30,18 @@
     'distribution-special',
     'distribution-others'
   ];
+
+// --- ADDED: dist_* alias mapping (snapshot compatibility)
+const KEY_ALIASES = {
+  'dist_1': 'distribution-recommend',
+  'dist_2': 'distribution-sponsor',
+  'dist_3': 'distribution-trending',
+  'dist_4': 'distribution-new',
+  'dist_5': 'distribution-special',
+  'dist_6': 'distribution-others',
+  'dist_right': 'distribution-right'
+};
+
   const RIGHT_KEY = 'distribution';
 
   function qs(sel, root){ return (root||document).querySelector(sel); }
@@ -110,9 +122,12 @@
       if (!sections) return false;
 
       let used = false;
-      MAIN_KEYS.forEach(k => {
-        const list = (sections[k]||[]).map(norm);
-        if (render(k, list)) used = true;
+      // --- UPDATED: iterate all snapshot sections with alias resolution
+Object.entries(sections || {}).forEach(([key, list]) => {
+  const mappedKey = KEY_ALIASES[key] || key;
+  render(mappedKey, (list || []).map(norm));
+});
+if (render(k, list)) used = true;
       });
 
       // right panel (compat: distribution / distribution-right)
