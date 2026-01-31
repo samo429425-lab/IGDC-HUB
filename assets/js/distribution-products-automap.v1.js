@@ -1,185 +1,87 @@
-
 /**
- * distribution-products-automap.v5.js
- * FINAL – HOME ENGINE CLONE (SAFE OVERWRITE)
+ * distribution-products-automap.v2.clean.js
+ * CLEAN / STABLE / SNAPSHOT-FIRST
  *
- * RULES:
- * 1) Snapshot / feed 연결 성공 시에만 기존 더미 DOM 제거
- * 2) 연결 실패 시 HTML 더미 그대로 유지
- * 3) distributionhub.html 구조 그대로 사용 (HTML 수정 없음)
+ * DESIGN PRINCIPLES
+ * 1) Snapshot is the single source of truth
+ * 2) Iterate sections dynamically (no hard-coded keys)
+ * 3) data-psom-key in HTML must match snapshot section key
+ * 4) No feed / no thumbnail-loader dependency here
  *
- * SOURCE PRIORITY:
- *  - front.snapshot.json  (1차)
- *  - feed?page=distribution (2차 덮어쓰기)
+ * EXPECTED SNAPSHOT PATH
+ * front.snapshot.json
+ *   pages.distribution.sections.{sectionKey} = [items]
  */
 
 (function () {
   'use strict';
-  if (window.__DISTRIBUTION_AUTOMAP_V5__) return;
-  window.__DISTRIBUTION_AUTOMAP_V5__ = true;
+
+  if (window.__DIST_AUTOMAP_V2_CLEAN__) return;
+  window.__DIST_AUTOMAP_V2_CLEAN__ = true;
 
   const SNAPSHOT_URL = '/data/front.snapshot.json';
-  const FEED_URL = '/.netlify/functions/feed?page=distribution';
 
-  // PSOM keys
-  const MAIN_KEYS = [
-    'distribution-recommend',
-    'distribution-sponsor',
-    'distribution-trending',
-    'distribution-new',
-    'distribution-special',
-    'distribution-others'
-  ];
-
-// --- ADDED: dist_* alias mapping (snapshot compatibility)
-const KEY_ALIASES = {
-  'dist_1': 'distribution-recommend',
-  'dist_2': 'distribution-sponsor',
-  'dist_3': 'distribution-trending',
-  'dist_4': 'distribution-new',
-  'dist_5': 'distribution-special',
-  'dist_6': 'distribution-others',
-  'dist_right': 'distribution-right'
-};
-
-  const RIGHT_KEY = 'distribution';
-
-  function qs(sel, root){ return (root||document).querySelector(sel); }
-
-  function pick(o, keys){
-    for (const k of keys){
-      if (o && typeof o[k] === 'string' && o[k].trim()) return o[k].trim();
-    }
-    return '';
-  }
-
-  function norm(it){
+  function norm(item) {
     return {
-      title: pick(it, ['title','name','label','caption']) || '',
-      thumb: pick(it, ['thumb','image','image_url','thumbnail','cover']),
-      url:   pick(it, ['url','link','href','productUrl']) || '#'
+      title: item.title || '',
+      thumb: item.thumb || '',
+      url: item.url || '#',
+      priority: item.priority || 0
     };
   }
 
-  function resolveContainer(psomEl){
-    // distributionhub.html: data-psom-key is on .thumb-scroller
-    return psomEl;
-  }
+  function render(sectionKey, items) {
+    const el = document.querySelector('[data-psom-key="' + sectionKey + '"]');
+    if (!el || !items || !items.length) return false;
 
-  function buildCard(item){
-    const a = document.createElement('a');
-    a.className = 'thumb-card';
-    a.href = item.url || '#';
+    el.innerHTML = '';
+    items.forEach(it => {
+      const a = document.createElement('a');
+      a.className = 'card product-card';
+      a.href = it.url || '#';
 
-    const imgWrap = document.createElement('div');
-    imgWrap.className = 'thumb-img';
-    if (item.thumb){
       const img = document.createElement('img');
-      img.loading = 'lazy';
-      img.decoding = 'async';
-      img.src = item.thumb;
-      img.alt = item.title || '';
-      imgWrap.appendChild(img);
+      img.src = it.thumb;
+      img.alt = it.title;
+
+      const title = document.createElement('div');
+      title.className = 'meta';
+      title.textContent = it.title;
+
+      a.appendChild(img);
+      a.appendChild(title);
+      el.appendChild(a);
+    });
+    return true;
+  }
+
+  async function run() {
+    let snap;
+    try {
+      const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
+      if (!res.ok) return;
+      snap = await res.json();
+    } catch (e) {
+      return;
     }
 
-    const body = document.createElement('div');
-    body.className = 'thumb-body';
+    const sections =
+      snap &&
+      snap.pages &&
+      snap.pages.distribution &&
+      snap.pages.distribution.sections;
 
-    const title = document.createElement('div');
-    title.className = 'thumb-title';
-    title.textContent = item.title || '';
+    if (!sections) return;
 
-    body.appendChild(title);
-    a.appendChild(imgWrap);
-    a.appendChild(body);
-    return a;
+    Object.entries(sections).forEach(([key, list]) => {
+      const items = (list || []).map(norm);
+      render(key, items);
+    });
   }
 
-  function render(psomKey, items){
-  const nodes = document.querySelectorAll('[data-psom-key="'+psomKey+'"]');
-  if (!nodes.length || !items) return false;
-
-  nodes.forEach(el => {
-    const container = el; // distributionhub: thumb-scroller 자체
-    if (!container) return;
-
-    container.innerHTML = '';
-    const frag = document.createDocumentFragment();
-    items.forEach(it => frag.appendChild(buildCard(it)));
-    container.appendChild(frag);
-  });
-
-  return true;
-}
-
-
-  async function loadSnapshot(){
-    try{
-      const r = await fetch(SNAPSHOT_URL, { cache:'no-store' });
-      if (!r.ok) return false;
-      const snap = await r.json();
-      const sections = snap?.pages?.distribution?.sections;
-      if (!sections) return false;
-
-      let used = false;
-      // --- UPDATED: iterate all snapshot sections with alias resolution
-Object.entries(sections || {}).forEach(([key, list]) => {
-  const mappedKey = KEY_ALIASES[key] || key;
-  render(mappedKey, (list || []).map(norm));
-});
-if (render(k, list)) used = true;
-      });
-
-      // right panel (compat: distribution / distribution-right)
-      const rightList =
-        (sections[RIGHT_KEY] ||
-         sections['distribution-right'] ||
-         []).map(norm);
-
-      if (render(RIGHT_KEY, rightList)) used = true;
-
-      return used;
-    }catch(e){
-      return false;
-    }
-  }
-
-  async function loadFeed(){
-    try{
-      const r = await fetch(FEED_URL, { cache:'no-store' });
-      if (!r.ok) return false;
-      const payload = await r.json();
-      if (!Array.isArray(payload.sections)) return false;
-
-      const map = {};
-      payload.sections.forEach(s => {
-        if (s && s.id && Array.isArray(s.items)) map[s.id] = s.items;
-      });
-
-      let used = false;
-      MAIN_KEYS.forEach(k => {
-        const list = (map[k]||[]).map(norm);
-        if (render(k, list)) used = true;
-      });
-
-      const rightList =
-        map[RIGHT_KEY] || map['dist_right'] || map['distribution-right'];
-      if (rightList && render(RIGHT_KEY, rightList.map(norm))) used = true;
-
-      return used;
-    }catch(e){
-      return false;
-    }
-  }
-
-  async function boot(){
-    const snapOK = await loadSnapshot();
-    if (snapOK) await loadFeed();
-  }
-
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', boot);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', run);
   } else {
-    boot();
+    run();
   }
 })();
