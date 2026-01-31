@@ -84,8 +84,8 @@
   }
 
   function render(psomKey, items){
-    const el = qs('[data-psom-key=\"'+psomKey+'\"]');
-    if (!el || !items || !items.length) return false;
+    const el = qs('[data-psom-key="'+psomKey+'"]');
+    if (!el || !items) return false;
 
     const container = resolveContainer(el);
     if (!container) return false;
@@ -109,7 +109,7 @@
 
       let used = false;
       MAIN_KEYS.forEach(k => {
-        const list = (sections[k]||[]).map(norm).filter(x=>x.thumb);
+        const list = (sections[k]||[]).map(norm);
         if (render(k, list)) used = true;
       });
 
@@ -141,7 +141,7 @@
 
       let used = false;
       MAIN_KEYS.forEach(k => {
-        const list = (map[k]||[]).map(norm).filter(x=>x.thumb);
+        const list = (map[k]||[]).map(norm);
         if (render(k, list)) used = true;
       });
 
