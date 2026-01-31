@@ -163,11 +163,18 @@
 
       const fav = document.createElement('img');
       fav.src = faviconOf(url);
-      fav.style.width = '20px';
-      fav.style.height = '20px';
+      fav.style.width = '23px';
+      fav.style.height = '23px';
       fav.style.verticalAlign = 'middle';
-      fav.style.borderRadius = '4px';
-      fav.style.marginRight = '8px';
+      fav.style.marginRight = '10px';
+
+      /* Google-style icon */
+      fav.style.borderRadius = '50%';
+      fav.style.background = '#fff';
+      fav.style.border = '1px solid #e0e0e0';
+      fav.style.boxShadow = '0 1px 3px rgba(0,0,0,0.25)';
+      fav.style.padding = '2px';
+
       fav.onerror = () => fav.remove();
 
       const span = document.createElement('span');
