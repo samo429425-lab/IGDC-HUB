@@ -117,7 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
       b.style.opacity = (i === currentPage) ? '0.6' : '1';
       b.onclick = () => {
         currentPage = i;
-        runSearch(q);
+       
     renderPage(currentPage);
       };
       bar.appendChild(b);
