@@ -95,11 +95,14 @@ function pickQ(event) {
   const limitRaw = parseInt(qs.limit || DEFAULT_LIMIT, 10);
   const limit = Math.min(Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : DEFAULT_LIMIT, MAX_LIMIT);
 
+  const startRaw = parseInt(qs.start || 1, 10);
+  const start = Number.isFinite(startRaw) && startRaw > 0 ? startRaw : 1;
+
   // future: explicit mode selection
   const mode = String(qs.mode || 'search').trim() || 'search';
   const lang = String(qs.lang || '').trim() || null;
 
-  return { q, limit, mode, lang };
+  return { q, limit, start, mode, lang };
 }
 
 function stripHtml(s) {
@@ -351,7 +354,7 @@ async function applyCorePipeline(query, items) {
 // ===== MAIN HANDLER =====
 exports.handler = async function (event) {
   try {
-    const { q, limit } = pickQ(event);
+   const { q, limit, start } = pickQ(event);
 
     if (!q) {
       return ok({
@@ -366,7 +369,7 @@ exports.handler = async function (event) {
       });
     }
 
-    const base = await orchestrateSearch({ q, limit });
+    const base = await orchestrateSearch({ q, limit, start });
 
     // env missing check stays consistent with previous behavior
     const envOk = !!(process.env.NAVER_API_KEY && process.env.NAVER_CLIENT_SECRET) || !!(process.env.GOOGLE_API_KEY && process.env.GOOGLE_CSE_ID);
