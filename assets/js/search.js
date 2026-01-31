@@ -1,9 +1,10 @@
-// IGDC Search.js — QA (Stable Pipeline + Block Pagination)
-// - Runs on /search.html, /search, /search/
-// - maru-search compatible: {status, items, results}
+// IGDC Search.js — QA (Stable Pipeline + Block Pagination) v2
+// Fixes:
+// 1) Open results in SAME tab (back button works).
+// 2) Request up to 1000 items so page blocks beyond 10 pages can exist (◀ ▶ appear when needed).
 // - 15 items per page
 // - 10-page blocks with ◀ ▶ shifting
-// - No duplicate pagination IIFE
+// - maru-search compatible: {status, items, results}
 
 (function () {
   'use strict';
@@ -14,11 +15,9 @@
   }
 
   ready(function () {
-    // Allow multiple routes (avoid silent no-run)
     const p = location.pathname || '';
     const isSearchPage = p.endsWith('/search.html') || p.endsWith('/search') || p.endsWith('/search/');
     if (!isSearchPage) {
-      // Still allow if the DOM has our expected nodes (safety for custom routes)
       if (!document.getElementById('searchInput') || !document.getElementById('searchResults')) return;
     }
 
@@ -28,15 +27,14 @@
     const results = document.getElementById('searchResults');
     if (!input || !btn || !status || !results) return;
 
-    // ===== Pagination State =====
-    const PAGE_SIZE = 15;     // items per page
-    const BLOCK_SIZE = 10;    // pages per block
+    const PAGE_SIZE = 15;
+    const BLOCK_SIZE = 10;
+    const FETCH_LIMIT = 1000; // ✅ allow more than 10 pages
 
     let allItems = [];
     let currentPage = 1;
-    let currentBlock = 0; // 0-based block index
+    let currentBlock = 0;
 
-    // ===== Init from URL =====
     const params = new URLSearchParams(location.search);
     const q0 = (params.get('q') || '').trim();
     if (q0) {
@@ -46,7 +44,6 @@
       status.textContent = '';
     }
 
-    // ===== UI Events =====
     btn.onclick = () => {
       const q = input.value.trim();
       if (!q) return;
@@ -70,8 +67,8 @@
 
     async function fetchMaru(q){
       const urls = [
-        `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=150`,
-        `/netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=150`
+        `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`,
+        `/netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`
       ];
       let lastErr;
       for (const u of urls){
@@ -115,11 +112,7 @@
         bar.style.justifyContent = 'center';
         bar.style.gap = '6px';
         bar.style.margin = '8px 0 14px';
-        if (status && status.parentNode){
-          status.parentNode.insertBefore(bar, status.nextSibling);
-        } else {
-          results.parentNode.insertBefore(bar, results);
-        }
+        status.parentNode.insertBefore(bar, status.nextSibling);
       }
       return bar;
     }
@@ -140,14 +133,30 @@
 
       const card = document.createElement('div');
       card.className = 'card';
-      card.style.cursor = url ? 'pointer' : 'default';
-      if (url) card.onclick = () => window.open(url, '_blank');
+
+      // ✅ SAME TAB navigation so browser back works
+      if (url) {
+        card.style.cursor = 'pointer';
+        card.addEventListener('click', () => { window.location.href = url; });
+      }
 
       const body = document.createElement('div');
 
       const t = document.createElement('div');
       t.className = 'title';
-      t.textContent = (it.title || '').trim() || '(no title)';
+
+      if (url) {
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_self'; // ✅
+        a.rel = 'noopener';
+        a.textContent = (it.title || '').trim() || '(no title)';
+        a.style.color = 'inherit';
+        a.style.textDecoration = 'none';
+        t.appendChild(a);
+      } else {
+        t.textContent = (it.title || '').trim() || '(no title)';
+      }
 
       const l = document.createElement('div');
       l.className = 'link';
@@ -212,10 +221,7 @@
         const b = document.createElement('button');
         b.textContent = String(p);
         b.style.opacity = (p === currentPage) ? '0.6' : '1';
-        b.onclick = () => {
-          currentPage = p;
-          renderPage(currentPage);
-        };
+        b.onclick = () => { currentPage = p; renderPage(currentPage); };
         bar.appendChild(b);
       }
 
