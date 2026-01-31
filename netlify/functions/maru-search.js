@@ -346,34 +346,56 @@ async function naverSearch(q, limit, start) {
 
 async function googleSearch(q, limit, start) {
   const key = process.env.GOOGLE_API_KEY;
-  const cx = process.env.GOOGLE_CSE_ID;
+  const cx  = process.env.GOOGLE_CSE_ID;
   if (!key || !cx) return null;
 
-  const url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(key)}&cx=${encodeURIComponent(cx)}&q=${encodeURIComponent(q)}&num=${Math.min(limit, 10)}&start=${start}`;
-  const res = await fetchWithTimeout(url, null, 8500);
-  if (!res.ok) throw new Error(`GOOGLE_HTTP_${res.status}`);
-  const data = await res.json();
+  const base =
+    `https://www.googleapis.com/customsearch/v1` +
+    `?key=${encodeURIComponent(key)}` +
+    `&cx=${encodeURIComponent(cx)}` +
+    `&q=${encodeURIComponent(q)}` +
+    `&num=${Math.min(limit, 10)}` +
+    `&start=${start}` +
+    `&gl=us` +
+    `&lr=lang_en|lang_ko` +
+    `&sort=date`;
 
-  const items = Array.isArray(data.items) ? data.items : [];
-  const results = items.map(it => {
-    // Try pull thumbnail from CSE payload if present.
-    const pagemap = it.pagemap || {};
-    const cseThumb = Array.isArray(pagemap.cse_thumbnail) ? pagemap.cse_thumbnail[0] : null;
-    const cseImg = Array.isArray(pagemap.cse_image) ? pagemap.cse_image[0] : null;
+  // 1) WEB
+  const webRes = await fetchWithTimeout(base, null, 8500)
+    .then(r => r.ok ? r.json() : null)
+    .catch(() => null);
 
-    return ({
-      title: it.title || '',
-      link: it.link || '',
-      snippet: it.snippet || '',
-      type: 'web',
-      payload: {
-        source: 'google',
-        thumb: (cseThumb && cseThumb.src) || (cseImg && cseImg.src) || ''
-      }
+  // 2) NEWS
+  const newsRes = await fetchWithTimeout(base + `&tbm=nws`, null, 8500)
+    .then(r => r.ok ? r.json() : null)
+    .catch(() => null);
+
+  const mergeItems = (data, type, source) => {
+    const items = Array.isArray(data && data.items) ? data.items : [];
+    return items.map(it => {
+      const pagemap = it.pagemap || {};
+      const cseThumb = Array.isArray(pagemap.cse_thumbnail) ? pagemap.cse_thumbnail[0] : null;
+      const cseImg   = Array.isArray(pagemap.cse_image) ? pagemap.cse_image[0] : null;
+
+      return {
+        title: it.title || '',
+        link: it.link || '',
+        snippet: it.snippet || '',
+        type,
+        payload: {
+          source,
+          thumb: (cseThumb && cseThumb.src) || (cseImg && cseImg.src) || ''
+        }
+      };
     });
-  });
+  };
 
-  return { source: 'google', results };
+  const results = [
+    ...mergeItems(webRes,  'web',  'google'),
+    ...mergeItems(newsRes, 'news', 'google_news')
+  ];
+
+  return { source: 'google+news', results };
 }
 
 // ===== CORE PIPELINE APPLY (NON-DESTRUCTIVE) =====
