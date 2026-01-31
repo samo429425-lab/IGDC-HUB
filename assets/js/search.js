@@ -168,14 +168,15 @@
       fav.style.verticalAlign = 'middle';
       fav.style.marginRight = '10px';
 
-      /* Google-style icon */
-      fav.style.borderRadius = '50%';
-      fav.style.background = '#fff';
-      fav.style.border = '1px solid #e0e0e0';
-      fav.style.boxShadow = '0 1px 3px rgba(0,0,0,0.25)';
-      fav.style.padding = '2px';
+      /* IGDC style: rounded-rect + clean light-blue border */
+      fav.style.borderRadius = '6px';                 // 라디우스 사각형 유지
+      fav.style.background = '#ffffff';
+      fav.style.border = '1px solid #d6e4ff';         // 구글 느낌의 아주 연한 블루
+      fav.style.boxShadow = '0 0 0 0 rgba(0,0,0,0)';  // 그림자 제거 (깔끔함 우선)
+      fav.style.padding = '2px';                      // 아이콘 숨 고르기용 최소 패딩
 
       fav.onerror = () => fav.remove();
+
 
       const span = document.createElement('span');
       span.textContent = domain || (it.source || '');
