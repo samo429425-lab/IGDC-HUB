@@ -97,6 +97,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let lastQuery = '';
 
   async function loadPage(page){
+	status.textContent = 'Searching…';
+    renderSkeleton();
+  
     const q = lastQuery;
     const start = (page - 1) * PAGE_SIZE + 1;
     const j0 = await fetchMaru(q, start, PAGE_SIZE);
