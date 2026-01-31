@@ -91,14 +91,7 @@
       /* Voice toggle ON indicator (country) */
       .maru-country-voice-toggle.voice-live{
         box-shadow:0 0 0 2px #22c55e inset;
-
-      /* === Voice ON: light INSIDE square (no dot) === */
-      .maru-country-voice-toggle.voice-live{
-        box-shadow: inset 0 0 0 2px #22c55e, inset 0 0 0 6px rgba(34,197,94,.35);
       }
-
-      }
-      /* dot indicator disabled per UI request */
       .maru-country-voice-toggle.voice-live::after{
         content:'';
         width:8px;height:8px;border-radius:50%;
