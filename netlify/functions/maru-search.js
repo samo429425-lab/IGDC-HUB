@@ -428,6 +428,14 @@ exports.handler = async function (event) {
   try {
    const { q, limit, start } = pickQ(event);
 
+ // env missing check stays consistent with previous behavior
+const envOk = !!(
+  (process.env.NAVER_API_KEY && process.env.NAVER_CLIENT_SECRET) ||
+  (process.env.GOOGLE_API_KEY && process.env.GOOGLE_CSE_ID)
+);
+if (!envOk) {
+  return fail('Missing env', 'Set NAVER_API_KEY+NAVER_CLIENT_SECRET or GOOGLE_API_KEY+GOOGLE_CSE_ID');
+}
     if (!q) {
       return ok({
         status: 'ok',
@@ -442,15 +450,6 @@ exports.handler = async function (event) {
     }
 
     const base = await orchestrateSearch({ q, limit, start });
-
- // env missing check stays consistent with previous behavior
-const envOk = !!(
-  (process.env.NAVER_API_KEY && process.env.NAVER_CLIENT_SECRET) ||
-  (process.env.GOOGLE_API_KEY && process.env.GOOGLE_CSE_ID)
-);
-if (!envOk) {
-  return fail('Missing env', 'Set NAVER_API_KEY+NAVER_CLIENT_SECRET or GOOGLE_API_KEY+GOOGLE_CSE_ID');
-}
 
 
     return ok({
