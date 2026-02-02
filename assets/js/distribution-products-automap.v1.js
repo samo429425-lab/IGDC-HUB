@@ -1,87 +1,72 @@
-/**
- * distribution-products-automap.v2.clean.js
- * CLEAN / STABLE / SNAPSHOT-FIRST
- *
- * DESIGN PRINCIPLES
- * 1) Snapshot is the single source of truth
- * 2) Iterate sections dynamically (no hard-coded keys)
- * 3) data-psom-key in HTML must match snapshot section key
- * 4) No feed / no thumbnail-loader dependency here
- *
- * EXPECTED SNAPSHOT PATH
- * front.snapshot.json
- *   pages.distribution.sections.{sectionKey} = [items]
- */
+// distribution-products-automap.final.js
+// PURPOSE:
+// - Distribution hub auto-mapping (snapshot-first)
+// - Remove dummy cards before render
+// - Separate main sections vs right panel
+// - NO global scan / NO fallback explosion
 
 (function () {
   'use strict';
 
-  if (window.__DIST_AUTOMAP_V2_CLEAN__) return;
-  window.__DIST_AUTOMAP_V2_CLEAN__ = true;
+  const SNAPSHOT_URL = '/assets/data/front.snapshot.json';
 
-  const SNAPSHOT_URL = '/data/front.snapshot.json';
-
-  function norm(item) {
-    return {
-      title: item.title || '',
-      thumb: item.thumb || '',
-      url: item.url || '#',
-      priority: item.priority || 0
-    };
+  function qsAll(sel, root = document) {
+    return Array.from(root.querySelectorAll(sel));
   }
 
-  function render(sectionKey, items) {
-    const el = document.querySelector('[data-psom-key="' + sectionKey + '"]');
-    if (!el || !items || !items.length) return false;
+  function clearContainer(container) {
+    if (!container) return;
+    qsAll('.dummy, .placeholder', container).forEach(el => el.remove());
+    container.innerHTML = '';
+  }
 
-    el.innerHTML = '';
-    items.forEach(it => {
-      const a = document.createElement('a');
-      a.className = 'card product-card';
-      a.href = it.url || '#';
+  function renderCards(container, items) {
+    if (!container || !items || !items.length) return;
 
-      const img = document.createElement('img');
-      img.src = it.thumb;
-      img.alt = it.title;
+    clearContainer(container);
 
-      const title = document.createElement('div');
-      title.className = 'meta';
-      title.textContent = it.title;
-
-      a.appendChild(img);
-      a.appendChild(title);
-      el.appendChild(a);
+    items.forEach(item => {
+      const card = document.createElement('a');
+      card.className = 'dist-card';
+      card.href = item.url || '#';
+      card.innerHTML = `
+        <div class="thumb">
+          <img src="${item.thumb || 'data:image/gif;base64,R0lGODlhAQABAAAAACw='}" alt="">
+        </div>
+        <div class="title">${item.title || ''}</div>
+      `;
+      container.appendChild(card);
     });
-    return true;
   }
 
-  async function run() {
-    let snap;
+  async function boot() {
+    let snapshot;
+
     try {
       const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
-      if (!res.ok) return;
-      snap = await res.json();
+      snapshot = await res.json();
     } catch (e) {
+      console.warn('[distribution automap] snapshot load failed');
       return;
     }
 
-    const sections =
-      snap &&
-      snap.pages &&
-      snap.pages.distribution &&
-      snap.pages.distribution.sections;
-
+    const sections = snapshot?.pages?.distribution?.sections;
     if (!sections) return;
 
-    Object.entries(sections).forEach(([key, list]) => {
-      const items = (list || []).map(norm);
-      render(key, items);
+    Object.keys(sections).forEach(key => {
+      if (key === 'dist_right') return;
+
+      const container = document.querySelector(`[data-psom-key="${key}"]`);
+      if (!container) return;
+
+      renderCards(container, sections[key]);
     });
+
+    if (sections.dist_right) {
+      const rightContainer = document.querySelector('[data-psom-key="dist_right"]');
+      renderCards(rightContainer, sections.dist_right);
+    }
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', run);
-  } else {
-    run();
-  }
+  document.addEventListener('DOMContentLoaded', boot);
 })();
