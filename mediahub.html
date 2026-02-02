@@ -2507,91 +2507,72 @@ body {
 <script>
 (function(){
 
-/* ===== 설정 ===== */
-const CARD_SELECTOR = '.card';
-const SHORT_CLICK_MS = 180;   // 짧은 클릭 기준
-const HOLD_INTERVAL_MS = 120; // 길게 누를 때 반복 속도
+const CARD = '.card';
+const SHORT = 180;
+const HOLD = 140;
 
-/* ===== 유틸 ===== */
-function getGapPx(el){
-  const style = getComputedStyle(el);
-  return parseFloat(style.columnGap || style.gap || 0) || 0;
+function gap(el){
+  const s = getComputedStyle(el);
+  return parseFloat(s.gap || s.columnGap || 0) || 0;
 }
 
-function getStride(container){
-  const card = container.querySelector(CARD_SELECTOR);
-  if(!card) return container.clientWidth;
-  return card.offsetWidth + getGapPx(container);
+function stride(container){
+  const c = container.querySelector(CARD);
+  return c ? c.offsetWidth + gap(container) : container.clientWidth;
 }
 
-function getFullyVisibleCount(container){
-  const cards = Array.from(container.querySelectorAll(CARD_SELECTOR));
-  const left = container.scrollLeft;
-  const right = left + container.clientWidth;
-  let count = 0;
-
-  cards.forEach(card=>{
+function fullyVisible(container){
+  const L = container.scrollLeft;
+  const R = L + container.clientWidth;
+  let n = 0;
+  container.querySelectorAll(CARD).forEach(card=>{
     const l = card.offsetLeft;
     const r = l + card.offsetWidth;
-    if(l >= left && r <= right) count++;
+    if(l >= L && r <= R) n++;
   });
-
-  return Math.max(1, count);
+  return Math.max(1, n);
 }
 
-/* ===== 핵심 스크롤 ===== */
-function scrollByCards(container, count){
-  const stride = getStride(container);
-  container.scrollTo({
-    left: container.scrollLeft + stride * count,
-    behavior:'smooth'
-  });
-}
+function bind(wrapper){
+  const cont = wrapper.querySelector('.scroll-content');
+  if(!cont) return;
 
-/* ===== 버튼 바인딩 ===== */
-function bindScroller(wrapper){
-  const container = wrapper.querySelector('.scroll-content');
-  if(!container) return;
+  const left  = wrapper.querySelector('.scroll-btn.left');
+  const right = wrapper.querySelector('.scroll-btn.right');
 
-  const leftBtn  = wrapper.querySelector('.scroll-btn.left');
-  const rightBtn = wrapper.querySelector('.scroll-btn.right');
+  let timer=null, start=0;
 
-  let pressTimer = null;
-  let pressStart = 0;
-
-  function start(dir){
-    pressStart = Date.now();
-
-    pressTimer = setInterval(()=>{
-      const visible = getFullyVisibleCount(container);
-      scrollByCards(container, dir * visible);
-    }, HOLD_INTERVAL_MS);
+  function scroll(dir, count){
+    cont.scrollTo({
+      left: cont.scrollLeft + stride(cont)*count*dir,
+      behavior:'smooth'
+    });
   }
 
-  function end(dir){
-    clearInterval(pressTimer);
-    pressTimer = null;
-
-    const elapsed = Date.now() - pressStart;
-
-    // 짧은 클릭 → 1~2장
-    if(elapsed < SHORT_CLICK_MS){
-      scrollByCards(container, dir * 1);
-    }
+  function down(dir){
+    start = Date.now();
+    timer = setInterval(()=>{
+      scroll(dir, fullyVisible(cont));
+    }, HOLD);
   }
 
-  rightBtn && rightBtn.addEventListener('mousedown', ()=>start(1));
-  rightBtn && rightBtn.addEventListener('mouseup', ()=>end(1));
-  rightBtn && rightBtn.addEventListener('mouseleave', ()=>clearInterval(pressTimer));
+  function up(dir){
+    const t = Date.now()-start;
+    clearInterval(timer);
+    if(t < SHORT) scroll(dir,1);
+  }
 
-  leftBtn && leftBtn.addEventListener('mousedown', ()=>start(-1));
-  leftBtn && leftBtn.addEventListener('mouseup', ()=>end(-1));
-  leftBtn && leftBtn.addEventListener('mouseleave', ()=>clearInterval(pressTimer));
+  right && right.addEventListener('mousedown',()=>down(1));
+  right && right.addEventListener('mouseup',()=>up(1));
+  right && right.addEventListener('mouseleave',()=>clearInterval(timer));
+
+  left && left.addEventListener('mousedown',()=>down(-1));
+  left && left.addEventListener('mouseup',()=>up(-1));
+  left && left.addEventListener('mouseleave',()=>clearInterval(timer));
 }
 
-/* ===== 초기화 ===== */
-document.addEventListener('DOMContentLoaded', ()=>{
-  document.querySelectorAll('.scroll-wrapper').forEach(bindScroller);
+document.addEventListener('DOMContentLoaded',()=>{
+  document.querySelectorAll('.scroll-wrapper').forEach(bind);
 });
 
 })();
