@@ -2505,63 +2505,95 @@ body {
 </div>
 
 <script>
-/**
- * MediaHub precise scroll:
- * - 화면에 "실제로 보이는 카드 수"만큼만 이동
- * - 카드 폭 + gap을 계산해서 정확히 스냅 이동
- */
-(function () {
-  function getVisibleCount(container, cardSelector) {
-    const cards = Array.from(container.querySelectorAll(cardSelector));
-    if (!cards.length) return 1;
+(function(){
 
-    const containerRect = container.getBoundingClientRect();
-    let count = 0;
+/* ===== 설정 ===== */
+const CARD_SELECTOR = '.card';
+const SHORT_CLICK_MS = 180;   // 짧은 클릭 기준
+const HOLD_INTERVAL_MS = 120; // 길게 누를 때 반복 속도
 
-    for (const card of cards) {
-      const r = card.getBoundingClientRect();
-      if (r.right > containerRect.left && r.left < containerRect.right) {
-        count++;
-      }
+/* ===== 유틸 ===== */
+function getGapPx(el){
+  const style = getComputedStyle(el);
+  return parseFloat(style.columnGap || style.gap || 0) || 0;
+}
+
+function getStride(container){
+  const card = container.querySelector(CARD_SELECTOR);
+  if(!card) return container.clientWidth;
+  return card.offsetWidth + getGapPx(container);
+}
+
+function getFullyVisibleCount(container){
+  const cards = Array.from(container.querySelectorAll(CARD_SELECTOR));
+  const left = container.scrollLeft;
+  const right = left + container.clientWidth;
+  let count = 0;
+
+  cards.forEach(card=>{
+    const l = card.offsetLeft;
+    const r = l + card.offsetWidth;
+    if(l >= left && r <= right) count++;
+  });
+
+  return Math.max(1, count);
+}
+
+/* ===== 핵심 스크롤 ===== */
+function scrollByCards(container, count){
+  const stride = getStride(container);
+  container.scrollTo({
+    left: container.scrollLeft + stride * count,
+    behavior:'smooth'
+  });
+}
+
+/* ===== 버튼 바인딩 ===== */
+function bindScroller(wrapper){
+  const container = wrapper.querySelector('.scroll-content');
+  if(!container) return;
+
+  const leftBtn  = wrapper.querySelector('.scroll-btn.left');
+  const rightBtn = wrapper.querySelector('.scroll-btn.right');
+
+  let pressTimer = null;
+  let pressStart = 0;
+
+  function start(dir){
+    pressStart = Date.now();
+
+    pressTimer = setInterval(()=>{
+      const visible = getFullyVisibleCount(container);
+      scrollByCards(container, dir * visible);
+    }, HOLD_INTERVAL_MS);
+  }
+
+  function end(dir){
+    clearInterval(pressTimer);
+    pressTimer = null;
+
+    const elapsed = Date.now() - pressStart;
+
+    // 짧은 클릭 → 1~2장
+    if(elapsed < SHORT_CLICK_MS){
+      scrollByCards(container, dir * 1);
     }
-    return Math.max(1, count);
   }
 
-  function getStep(container, cardSelector) {
-    const card = container.querySelector(cardSelector);
-    if (!card) return container.clientWidth;
+  rightBtn && rightBtn.addEventListener('mousedown', ()=>start(1));
+  rightBtn && rightBtn.addEventListener('mouseup', ()=>end(1));
+  rightBtn && rightBtn.addEventListener('mouseleave', ()=>clearInterval(pressTimer));
 
-    const style = getComputedStyle(card);
-    const gap =
-      parseFloat(style.marginLeft) +
-      parseFloat(style.marginRight);
+  leftBtn && leftBtn.addEventListener('mousedown', ()=>start(-1));
+  leftBtn && leftBtn.addEventListener('mouseup', ()=>end(-1));
+  leftBtn && leftBtn.addEventListener('mouseleave', ()=>clearInterval(pressTimer));
+}
 
-    return card.offsetWidth + gap;
-  }
+/* ===== 초기화 ===== */
+document.addEventListener('DOMContentLoaded', ()=>{
+  document.querySelectorAll('.scroll-wrapper').forEach(bindScroller);
+});
 
-  function bindScroll(wrapper) {
-    const container = wrapper.querySelector('.scroll-wrapper, .section-row');
-    if (!container) return;
-
-    const leftBtn  = wrapper.querySelector('.btn-scroll-left');
-    const rightBtn = wrapper.querySelector('.btn-scroll-right');
-
-    const CARD_SEL = '.card';
-
-    function scroll(dir) {
-      const visible = getVisibleCount(container, CARD_SEL);
-      const step = getStep(container, CARD_SEL);
-      container.scrollBy({
-        left: dir * step * visible,
-        behavior: 'smooth'
-      });
-    }
-
-    leftBtn  && leftBtn.addEventListener('click', () => scroll(-1));
-    rightBtn && rightBtn.addEventListener('click', () => scroll(1));
-  }
-
-  document.querySelectorAll('[data-scroll-section]').forEach(bindScroll);
 })();
 </script>
 
