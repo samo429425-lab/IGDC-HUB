@@ -2505,76 +2505,63 @@ body {
 </div>
 
 <script>
-(function(){
+/**
+ * MediaHub precise scroll:
+ * - 화면에 "실제로 보이는 카드 수"만큼만 이동
+ * - 카드 폭 + gap을 계산해서 정확히 스냅 이동
+ */
+(function () {
+  function getVisibleCount(container, cardSelector) {
+    const cards = Array.from(container.querySelectorAll(cardSelector));
+    if (!cards.length) return 1;
 
-const CARD = '.card';
-const SHORT = 180;
-const HOLD = 140;
+    const containerRect = container.getBoundingClientRect();
+    let count = 0;
 
-function gap(el){
-  const s = getComputedStyle(el);
-  return parseFloat(s.gap || s.columnGap || 0) || 0;
-}
-
-function stride(container){
-  const c = container.querySelector(CARD);
-  return c ? c.offsetWidth + gap(container) : container.clientWidth;
-}
-
-function fullyVisible(container){
-  const L = container.scrollLeft;
-  const R = L + container.clientWidth;
-  let n = 0;
-  container.querySelectorAll(CARD).forEach(card=>{
-    const l = card.offsetLeft;
-    const r = l + card.offsetWidth;
-    if(l >= L && r <= R) n++;
-  });
-  return Math.max(1, n);
-}
-
-function bind(wrapper){
-  const cont = wrapper.querySelector('.scroll-content');
-  if(!cont) return;
-
-  const left  = wrapper.querySelector('.scroll-btn.left');
-  const right = wrapper.querySelector('.scroll-btn.right');
-
-  let timer=null, start=0;
-
-  function scroll(dir, count){
-    cont.scrollTo({
-      left: cont.scrollLeft + stride(cont)*count*dir,
-      behavior:'smooth'
-    });
+    for (const card of cards) {
+      const r = card.getBoundingClientRect();
+      if (r.right > containerRect.left && r.left < containerRect.right) {
+        count++;
+      }
+    }
+    return Math.max(1, count);
   }
 
-  function down(dir){
-    start = Date.now();
-    timer = setInterval(()=>{
-      scroll(dir, fullyVisible(cont));
-    }, HOLD);
+  function getStep(container, cardSelector) {
+    const card = container.querySelector(cardSelector);
+    if (!card) return container.clientWidth;
+
+    const style = getComputedStyle(card);
+    const gap =
+      parseFloat(style.marginLeft) +
+      parseFloat(style.marginRight);
+
+    return card.offsetWidth + gap;
   }
 
-  function up(dir){
-    const t = Date.now()-start;
-    clearInterval(timer);
-    if(t < SHORT) scroll(dir,1);
+  function bindScroll(wrapper) {
+    const container = wrapper.querySelector('.scroll-wrapper, .section-row');
+    if (!container) return;
+
+    const leftBtn  = wrapper.querySelector('.btn-scroll-left');
+    const rightBtn = wrapper.querySelector('.btn-scroll-right');
+
+    const CARD_SEL = '.card';
+
+    function scroll(dir) {
+      const visible = getVisibleCount(container, CARD_SEL);
+      const step = getStep(container, CARD_SEL);
+      container.scrollBy({
+        left: dir * step * visible,
+        behavior: 'smooth'
+      });
+    }
+
+    leftBtn  && leftBtn.addEventListener('click', () => scroll(-1));
+    rightBtn && rightBtn.addEventListener('click', () => scroll(1));
   }
 
-  right && right.addEventListener('mousedown',()=>down(1));
-  right && right.addEventListener('mouseup',()=>up(1));
-  right && right.addEventListener('mouseleave',()=>clearInterval(timer));
-
-  left && left.addEventListener('mousedown',()=>down(-1));
-  left && left.addEventListener('mouseup',()=>up(-1));
-  left && left.addEventListener('mouseleave',()=>clearInterval(timer));
-}
-
-document.addEventListener('DOMContentLoaded',()=>{
-  document.querySelectorAll('.scroll-wrapper').forEach(bind);
-});
-
+  document.querySelectorAll('[data-scroll-section]').forEach(bindScroll);
 })();
 </script>
 
