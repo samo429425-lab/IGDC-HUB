@@ -156,6 +156,7 @@
       }
 
       const body = document.createElement('div');
+	  body.style.overflow = 'hidden';
 
       const t = document.createElement('div');
       t.className = 'title';
@@ -206,18 +207,13 @@
       body.appendChild(t);
       body.appendChild(l);
       if (d.textContent) body.appendChild(d);
-
-      card.appendChild(body);
+      
 	  
 /* ===============================
    HYBRID SEARCH CARD RENDER (FINAL)
    - WEB/NEWS: stable card (no oversize)
    - MEDIA: show only when real media exists
    =============================== */
-
-// 0) 카드 크기 안정화 (전체 공통)
-card.style.maxHeight = '240px';
-card.style.overflow = 'hidden';
 
 // 1) 뉴스/기사 요약 절단 (웹/뉴스 공통)
 if (d && d.textContent) {
@@ -239,7 +235,7 @@ const isRealThumb = !!thumbUrl && !isFaviconLike;
 
 // 3) 미디어 존재 판별 (진짜로 있을 때만 미디어 영역 렌더)
 const hasVideoPreview =
-  it.media && it.media.type === 'video' &&
+  it.media && ((it.media.type || it.media.kind) === 'video') &&
   it.media.preview &&
   (it.media.preview.mp4 || it.media.preview.webm || it.media.preview.poster);
 
@@ -275,6 +271,15 @@ if (hasVideoPreview) {
   videoWrap.style.borderRadius = '6px';
 
   const video = document.createElement('video');
+  // poster만 있고 mp4/webm이 없을 경우: 정적 미디어 카드로 처리
+const hasPlayableSource =
+  !!(it.media.preview.mp4 || it.media.preview.webm);
+
+if (!hasPlayableSource) {
+  // 재생 비활성 (hover play 금지)
+  video.controls = false;
+}
+
   video.muted = true;
   video.loop = true;
   video.playsInline = true;
@@ -300,7 +305,10 @@ if (hasVideoPreview) {
 
   // hover play (데스크톱)
   videoWrap.addEventListener('mouseenter', () => {
-    video.play().catch(()=>{});
+if (hasPlayableSource) {
+  video.play().catch(()=>{});
+}
+
   });
   videoWrap.addEventListener('mouseleave', () => {
     video.pause();
@@ -308,7 +316,7 @@ if (hasVideoPreview) {
   });
 
   videoWrap.appendChild(video);
-  card.appendChild(videoWrap);
+  body.appendChild(videoWrap);
 }
 
 // 4-3) 포토뷰(갤러리) (있을 때만, 최대 3장)
@@ -331,10 +339,10 @@ if (hasImageSet) {
     gallery.appendChild(img);
   });
 
-  card.appendChild(gallery);
+  body.appendChild(gallery);
 }
 
-
+      card.appendChild(body);
       results.appendChild(card);
     }
 

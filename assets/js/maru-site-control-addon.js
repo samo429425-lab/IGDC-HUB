@@ -633,17 +633,20 @@ function setInputMode(mode){
     };
   }
 
-  function callInsightEngine(req){
-    return fetch('/.netlify/functions/maru-global-insight', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        text: req.text,
-        scope: req.scope,
-        depth: req.intent
-      })
-    }).then(r => r.json());
+function callInsightEngine(req){
+  if (window.MaruGlobalInsight && typeof window.MaruGlobalInsight.dispatch === 'function') {
+    return window.MaruGlobalInsight.dispatch({
+      q: req.text,
+      scope: req.scope,
+      target: req.target,
+      intent: req.intent,
+      source: 'addon'
+    });
   }
+
+  return Promise.reject(new Error('MaruGlobalInsight not available'));
+}
+
 
   function dispatch(req){
     STATE.lastRequest = req;
