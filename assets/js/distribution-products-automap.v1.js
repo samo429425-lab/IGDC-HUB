@@ -1,23 +1,25 @@
 /**
- * /assets/js/distribution-products-automap.v1.js
- * DISTRIBUTION AUTOMAP – STABLE (snapshot-first)
+ * /assets/js/distribution-products-automap.v2.1to1.js
+ * DISTRIBUTION AUTOMAP – STRICT 1:1 SECTION MAPPING
  *
- * Guarantees:
- * - Reads ONLY: front.snapshot.json -> pages.distribution.sections
- * - Renders ONLY to containers that match data-psom-key in distributionhub.html
- * - If a section has items: clears existing dummy DOM and replaces with cards
- * - If a section has NO items: leaves dummy DOM untouched
- * - Right panel: snapshot keys (distribution | dist_right | distribution-right) -> HTML key "distribution"
+ * Rules (HARD):
+ * 1) Reads ONLY: front.snapshot.json -> pages.distribution.sections
+ * 2) Each section key renders ONLY its own items (no merge, no reuse)
+ * 3) No access to pages.home, no Object.values, no flat, no cache reuse
+ * 4) If items exist -> clear dummy and replace
+ * 5) If items empty/undefined -> do NOTHING (keep dummy)
+ * 6) Right panel rendered separately
  */
 
 (function () {
   'use strict';
-  if (window.__DIST_AUTOMAP_V1_STABLE__) return;
-  window.__DIST_AUTOMAP_V1_STABLE__ = true;
+  if (window.__DIST_AUTOMAP_V21__) return;
+  window.__DIST_AUTOMAP_V21__ = true;
 
   const SNAPSHOT_URL = '/data/front.snapshot.json';
 
-  const MAIN_KEYS = [
+  // === HTML section keys (must match data-psom-key exactly) ===
+  const MAIN_SECTION_KEYS = [
     'distribution-recommend',
     'distribution-sponsor',
     'distribution-trending',
@@ -27,8 +29,9 @@
   ];
 
   const RIGHT_HTML_KEY = 'distribution';
-  const RIGHT_SNAPSHOT_KEYS = ['distribution', 'dist_right', 'distribution-right'];
+  const RIGHT_SNAPSHOT_KEYS = ['dist_right', 'distribution', 'distribution-right'];
 
+  // ---------- utils ----------
   function pick(o, keys){
     for (const k of keys){
       const v = o && o[k];
@@ -37,65 +40,63 @@
     return '';
   }
 
-  function norm(it){
-    it = it || {};
+  function normalize(item){
+    item = item || {};
     return {
-      title: pick(it, ['title','name','label','caption']) || '',
-      thumb: pick(it, ['thumb','image','image_url','thumbnail','cover']) || '',
-      url:   pick(it, ['url','link','href','productUrl','detailUrl','path']) || '#'
+      title: pick(item, ['title','name','label','caption']),
+      thumb: pick(item, ['thumb','image','image_url','thumbnail','cover']),
+      url:   pick(item, ['url','link','href','productUrl','detailUrl','path']) || '#'
     };
   }
 
-  function buildCard(item){
+  function buildCard(it){
     const a = document.createElement('a');
     a.className = 'thumb-card';
-    a.href = item.url || '#';
+    a.href = it.url;
 
     const imgWrap = document.createElement('div');
     imgWrap.className = 'thumb-img';
-    if (item.thumb){
+    if (it.thumb){
       const img = document.createElement('img');
       img.loading = 'lazy';
       img.decoding = 'async';
-      img.src = item.thumb;
-      img.alt = item.title || '';
+      img.src = it.thumb;
+      img.alt = it.title || '';
       imgWrap.appendChild(img);
     }
 
     const body = document.createElement('div');
     body.className = 'thumb-body';
+    const t = document.createElement('div');
+    t.className = 'thumb-title';
+    t.textContent = it.title || '';
+    body.appendChild(t);
 
-    const title = document.createElement('div');
-    title.className = 'thumb-title';
-    title.textContent = item.title || '';
-
-    body.appendChild(title);
     a.appendChild(imgWrap);
     a.appendChild(body);
     return a;
   }
 
-  function render(psomKey, items){
+  function renderSection(htmlKey, items){
     if (!Array.isArray(items) || items.length === 0) return false;
 
-    const nodes = document.querySelectorAll('[data-psom-key="'+psomKey+'"]');
+    const nodes = document.querySelectorAll('[data-psom-key="'+htmlKey+'"]');
     if (!nodes.length) return false;
 
     nodes.forEach(el => {
-      // IMPORTANT: replace (remove dummies)
+      // clear dummy & previous
       el.innerHTML = '';
       const frag = document.createDocumentFragment();
       items.forEach(it => frag.appendChild(buildCard(it)));
       el.appendChild(frag);
     });
-
     return true;
   }
 
   function getRightItems(sections){
     for (const k of RIGHT_SNAPSHOT_KEYS){
-      const v = sections && sections[k];
-      if (Array.isArray(v) && v.length) return v;
+      const arr = sections[k];
+      if (Array.isArray(arr) && arr.length) return arr;
     }
     return [];
   }
@@ -106,23 +107,26 @@
       const r = await fetch(SNAPSHOT_URL, { cache:'no-store' });
       if (!r.ok) return;
       snap = await r.json();
-    }catch(e){
-      return;
-    }
+    }catch(e){ return; }
 
-    // ✅ FIX: distribution ONLY (never home)
-    const sections = snap && snap.pages && snap.pages.distribution && snap.pages.distribution.sections;
+    // === STRICT: distribution only ===
+    const sections = snap?.pages?.distribution?.sections;
     if (!sections) return;
 
-    // main sections (HTML uses distribution-*)
-    MAIN_KEYS.forEach(k => {
-      const items = (sections[k] || []).map(norm);
-      render(k, items);
+    // MAIN: strict 1:1
+    MAIN_SECTION_KEYS.forEach(key => {
+      const raw = sections[key];
+      if (!Array.isArray(raw) || raw.length === 0) return;
+      const items = raw.map(normalize); // NEW array per section
+      renderSection(key, items);
     });
 
-    // right panel
-    const rightItems = getRightItems(sections).map(norm);
-    render(RIGHT_HTML_KEY, rightItems);
+    // RIGHT: separate
+    const rightRaw = getRightItems(sections);
+    if (rightRaw.length){
+      const items = rightRaw.map(normalize);
+      renderSection(RIGHT_HTML_KEY, items);
+    }
   }
 
   if (document.readyState === 'loading'){
