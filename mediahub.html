@@ -2506,62 +2506,134 @@ body {
 
 <script>
 /**
- * MediaHub precise scroll:
- * - 화면에 "실제로 보이는 카드 수"만큼만 이동
- * - 카드 폭 + gap을 계산해서 정확히 스냅 이동
+ * MediaHub Unified Scroll Script (FULL BLOCK)
+ * - 구조 생성 (wrapLines)
+ * - 버튼 생성
+ * - 클릭: 1장 이동
+ * - 꾹 누름: 화면에 "완전히 보이는 카드 수"만큼 이동
+ * - 반쯤 걸친 카드 기준 이동 ❌
+ * - 모든 .thumb-line / .platform-line 공통 적용
  */
-(function () {
-  function getVisibleCount(container, cardSelector) {
-    const cards = Array.from(container.querySelectorAll(cardSelector));
-    if (!cards.length) return 1;
 
-    const containerRect = container.getBoundingClientRect();
-    let count = 0;
+(function(){
 
-    for (const card of cards) {
-      const r = card.getBoundingClientRect();
-      if (r.right > containerRect.left && r.left < containerRect.right) {
-        count++;
-      }
+/* ===== 설정 ===== */
+const CARD_SELECTOR = '.card';
+const SHORT_CLICK_MS = 180;     // 짧은 클릭 기준
+const HOLD_INTERVAL_MS = 140;  // 꾹 누름 반복 간격
+
+/* ===== 유틸 ===== */
+function getGapPx(el){
+  const s = getComputedStyle(el);
+  return parseFloat(s.gap || s.columnGap || 0) || 0;
+}
+
+function getStride(container){
+  const card = container.querySelector(CARD_SELECTOR);
+  return card ? card.offsetWidth + getGapPx(container) : container.clientWidth;
+}
+
+function getFullyVisibleCount(container){
+  const L = container.scrollLeft;
+  const R = L + container.clientWidth;
+  let count = 0;
+
+  container.querySelectorAll(CARD_SELECTOR).forEach(card=>{
+    const l = card.offsetLeft;
+    const r = l + card.offsetWidth;
+    if(l >= L && r <= R) count++;
+  });
+
+  return Math.max(1, count);
+}
+
+/* ===== 핵심 스크롤 ===== */
+function scrollByCards(container, count){
+  const stride = getStride(container);
+  container.scrollTo({
+    left: container.scrollLeft + stride * count,
+    behavior: 'smooth'
+  });
+}
+
+/* ===== 버튼 바인딩 ===== */
+function bindScroll(wrapper){
+  const container = wrapper.querySelector('.scroll-content');
+  if(!container) return;
+
+  const leftBtn  = wrapper.querySelector('.scroll-btn.left');
+  const rightBtn = wrapper.querySelector('.scroll-btn.right');
+
+  let timer = null;
+  let pressStart = 0;
+
+  function start(dir){
+    pressStart = Date.now();
+    timer = setInterval(()=>{
+      const visible = getFullyVisibleCount(container);
+      scrollByCards(container, dir * visible);
+    }, HOLD_INTERVAL_MS);
+  }
+
+  function end(dir){
+    if(timer){
+      clearInterval(timer);
+      timer = null;
     }
-    return Math.max(1, count);
+    const elapsed = Date.now() - pressStart;
+    if(elapsed < SHORT_CLICK_MS){
+      scrollByCards(container, dir * 1); // 짧은 클릭 = 1장
+    }
   }
 
-  function getStep(container, cardSelector) {
-    const card = container.querySelector(cardSelector);
-    if (!card) return container.clientWidth;
+  rightBtn && rightBtn.addEventListener('mousedown', ()=>start(1));
+  rightBtn && rightBtn.addEventListener('mouseup',   ()=>end(1));
+  rightBtn && rightBtn.addEventListener('mouseleave',()=>{ if(timer) clearInterval(timer); });
 
-    const style = getComputedStyle(card);
-    const gap =
-      parseFloat(style.marginLeft) +
-      parseFloat(style.marginRight);
+  leftBtn && leftBtn.addEventListener('mousedown', ()=>start(-1));
+  leftBtn && leftBtn.addEventListener('mouseup',   ()=>end(-1));
+  leftBtn && leftBtn.addEventListener('mouseleave',()=>{ if(timer) clearInterval(timer); });
+}
 
-    return card.offsetWidth + gap;
-  }
+/* ===== 구조 생성 ===== */
+function wrapLines(selector){
+  document.querySelectorAll(selector).forEach(line=>{
+    if(line.closest('.scroll-wrapper')) return;
 
-  function bindScroll(wrapper) {
-    const container = wrapper.querySelector('.scroll-wrapper, .section-row');
-    if (!container) return;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'scroll-wrapper';
 
-    const leftBtn  = wrapper.querySelector('.btn-scroll-left');
-    const rightBtn = wrapper.querySelector('.btn-scroll-right');
+    const content = document.createElement('div');
+    content.className = 'scroll-content';
 
-    const CARD_SEL = '.card';
-
-    function scroll(dir) {
-      const visible = getVisibleCount(container, CARD_SEL);
-      const step = getStep(container, CARD_SEL);
-      container.scrollBy({
-        left: dir * step * visible,
-        behavior: 'smooth'
-      });
+    while(line.firstChild){
+      content.appendChild(line.firstChild);
     }
 
-    leftBtn  && leftBtn.addEventListener('click', () => scroll(-1));
-    rightBtn && rightBtn.addEventListener('click', () => scroll(1));
-  }
+    const leftBtn = document.createElement('button');
+    leftBtn.className = 'scroll-btn left';
+    leftBtn.textContent = '‹';
 
-  document.querySelectorAll('[data-scroll-section]').forEach(bindScroll);
+    const rightBtn = document.createElement('button');
+    rightBtn.className = 'scroll-btn right';
+    rightBtn.textContent = '›';
+
+    wrapper.appendChild(leftBtn);
+    wrapper.appendChild(content);
+    wrapper.appendChild(rightBtn);
+
+    line.parentNode.replaceChild(wrapper, line);
+  });
+}
+
+/* ===== 초기화 ===== */
+document.addEventListener('DOMContentLoaded', ()=>{
+  wrapLines('.thumb-line');     // 미디어 10개 섹션
+  wrapLines('.platform-line');  // 콘텐츠 공급사 영역
+
+  document.querySelectorAll('.scroll-wrapper').forEach(bindScroll);
+});
+
 })();
 </script>
 
