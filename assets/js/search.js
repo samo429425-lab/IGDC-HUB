@@ -209,75 +209,44 @@
 
       card.appendChild(body);
 	  
-	  /* ===============================
-   MEDIA / VISUAL RENDER (FUTURE)
+/* ===============================
+   SEARCH CARD FINAL RENDER
+   (WEB / NEWS SAFE MODE)
    =============================== */
 
-// 1) Thumbnail image
-if (it.thumbnail) {
+// 카드 크기 안정화
+card.style.maxHeight = '220px';
+card.style.overflow = 'hidden';
+
+// 뉴스/기사 요약 절단 (앞부분 중심)
+if (d && d.textContent) {
+  d.style.display = '-webkit-box';
+  d.style.webkitLineClamp = '3';
+  d.style.webkitBoxOrient = 'vertical';
+  d.style.overflow = 'hidden';
+  d.style.textOverflow = 'ellipsis';
+}
+
+// 실제 썸네일만 허용 (favicon 제외)
+const isRealThumbnail =
+  it.thumbnail &&
+  !it.thumbnail.includes('favicon') &&
+  !it.thumbnail.endsWith('.ico');
+
+// 썸네일은 보조 요소로만
+if (isRealThumbnail) {
   const thumb = document.createElement('img');
   thumb.src = it.thumbnail;
-  thumb.alt = it.title || '';
   thumb.loading = 'lazy';
-  thumb.style.width = '100%';
-  thumb.style.marginTop = '8px';
-  thumb.style.borderRadius = '6px';
-  card.appendChild(thumb);
+  thumb.style.maxWidth = '120px';
+  thumb.style.maxHeight = '80px';
+  thumb.style.objectFit = 'cover';
+  thumb.style.float = 'right';
+  thumb.style.marginLeft = '8px';
+  thumb.style.borderRadius = '4px';
+  body.appendChild(thumb);
 }
 
-// 2) Video preview (hover play ready)
-if (it.media && it.media.type === 'video' && it.media.preview) {
-  const videoWrap = document.createElement('div');
-  videoWrap.style.marginTop = '8px';
-
-  const video = document.createElement('video');
-  video.muted = true;
-  video.loop = true;
-  video.playsInline = true;
-  video.preload = 'none';
-  video.style.width = '100%';
-  video.style.borderRadius = '6px';
-
-  if (it.media.preview.poster) {
-    video.poster = it.media.preview.poster;
-  }
-  if (it.media.preview.mp4) {
-    const s = document.createElement('source');
-    s.src = it.media.preview.mp4;
-    s.type = 'video/mp4';
-    video.appendChild(s);
-  }
-
-  videoWrap.addEventListener('mouseenter', () => {
-    video.play().catch(()=>{});
-  });
-  videoWrap.addEventListener('mouseleave', () => {
-    video.pause();
-    video.currentTime = 0;
-  });
-
-  videoWrap.appendChild(video);
-  card.appendChild(videoWrap);
-}
-
-// 3) Photo view (image set)
-if (Array.isArray(it.imageSet) && it.imageSet.length) {
-  const gallery = document.createElement('div');
-  gallery.style.display = 'flex';
-  gallery.style.gap = '6px';
-  gallery.style.marginTop = '8px';
-
-  it.imageSet.slice(0,3).forEach(src => {
-    const img = document.createElement('img');
-    img.src = src;
-    img.loading = 'lazy';
-    img.style.width = '33%';
-    img.style.borderRadius = '4px';
-    gallery.appendChild(img);
-  });
-
-  card.appendChild(gallery);
-}
 
       results.appendChild(card);
     }
