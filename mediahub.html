@@ -1232,7 +1232,6 @@ body {
   <div class="meta">Coming Soon</div>
 </a>
 
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
   <div class="thumb ph"></div>
   <div class="meta">Coming Soon</div>
@@ -2504,89 +2503,68 @@ body {
 </div>
 </main>
 </div>
+
 <script>
-function getGapPx(el){
-  const style = window.getComputedStyle(el);
-  const gapStr = style.columnGap || style.gap || "0";
-  return parseFloat(gapStr) || 0;
-}
+/**
+ * MediaHub precise scroll:
+ * - 화면에 "실제로 보이는 카드 수"만큼만 이동
+ * - 카드 폭 + gap을 계산해서 정확히 스냅 이동
+ */
+(function () {
+  function getVisibleCount(container, cardSelector) {
+    const cards = Array.from(container.querySelectorAll(cardSelector));
+    if (!cards.length) return 1;
 
-function scrollByViewport(wrapper, dir){
-  if (!wrapper) return;
+    const containerRect = container.getBoundingClientRect();
+    let count = 0;
 
-  // wrapper 안에서 실제 스크롤 컨테이너 자동 판별
-  const scroller =
-    wrapper.querySelector('.scroll-content') ||
-    wrapper.querySelector('.thumb-line');
-
-  if (!scroller) return;
-
-  const cards = Array.from(scroller.children).filter(el =>
-    el.classList && el.classList.contains('card')
-  );
-  if (!cards.length) return;
-
-  const gap = getGapPx(scroller);
-  const viewportLeft  = scroller.scrollLeft;
-  const viewportRight = viewportLeft + scroller.clientWidth;
-
-  // 1) 완전히 노출된 카드만 카운트
-  let fullyVisible = 0;
-  cards.forEach(card => {
-    const left  = card.offsetLeft;
-    const right = left + card.offsetWidth + gap;
-    if (left >= viewportLeft && right <= viewportRight) {
-      fullyVisible++;
+    for (const card of cards) {
+      const r = card.getBoundingClientRect();
+      if (r.right > containerRect.left && r.left < containerRect.right) {
+        count++;
+      }
     }
-  });
+    return Math.max(1, count);
+  }
 
-  // 최소 1칸 이동 보장
-  fullyVisible = Math.max(1, fullyVisible);
+  function getStep(container, cardSelector) {
+    const card = container.querySelector(cardSelector);
+    if (!card) return container.clientWidth;
 
-  // 2) 반응형 이동 상한
-  let maxStep = 3;           // desktop
-  if (window.innerWidth < 640) maxStep = 1;      // mobile
-  else if (window.innerWidth < 1024) maxStep = 2; // tablet / small window
+    const style = getComputedStyle(card);
+    const gap =
+      parseFloat(style.marginLeft) +
+      parseFloat(style.marginRight);
 
-  const step = Math.min(fullyVisible, maxStep);
+    return card.offsetWidth + gap;
+  }
 
-  // 3) 이동 계산
-  const stride = cards[0].offsetWidth + gap;
-  const currentIndex = Math.round(scroller.scrollLeft / stride);
-  const delta = (dir === 'left' ? -step : step);
-  const maxIndex = Math.max(0, cards.length - step);
-  const nextIndex = Math.min(Math.max(0, currentIndex + delta), maxIndex);
+  function bindScroll(wrapper) {
+    const container = wrapper.querySelector('.scroll-wrapper, .section-row');
+    if (!container) return;
 
-  scroller.scrollTo({
-    left: Math.round(nextIndex * stride),
-    behavior: 'smooth'
-  });
-}
+    const leftBtn  = wrapper.querySelector('.btn-scroll-left');
+    const rightBtn = wrapper.querySelector('.btn-scroll-right');
 
-function wrapLines(selector){
-  document.querySelectorAll(selector).forEach(line => {
-    const wrapper = document.createElement('div');
-    wrapper.classList.add('scroll-wrapper');
-    const content = document.createElement('div');
-    content.classList.add('scroll-content');
-    while (line.firstChild) content.appendChild(line.firstChild);
-    const leftBtn = document.createElement('button');
-    leftBtn.className = 'scroll-btn left'; leftBtn.innerHTML = '‹';
-    const rightBtn = document.createElement('button');
-    rightBtn.className = 'scroll-btn right'; rightBtn.innerHTML = '›';
-    leftBtn.onclick = () => scrollByViewport(wrapper, 'left');
-    rightBtn.onclick = () => scrollByViewport(wrapper, 'right');
-    wrapper.appendChild(leftBtn);
-    wrapper.appendChild(content);
-    wrapper.appendChild(rightBtn);
-    line.parentNode.replaceChild(wrapper, line);
-  });
-}
-window.addEventListener('DOMContentLoaded', () => {
-  wrapLines('.platform-line');
-  wrapLines('.thumb-line');
-});
+    const CARD_SEL = '.card';
+
+    function scroll(dir) {
+      const visible = getVisibleCount(container, CARD_SEL);
+      const step = getStep(container, CARD_SEL);
+      container.scrollBy({
+        left: dir * step * visible,
+        behavior: 'smooth'
+      });
+    }
+
+    leftBtn  && leftBtn.addEventListener('click', () => scroll(-1));
+    rightBtn && rightBtn.addEventListener('click', () => scroll(1));
+  }
+
+  document.querySelectorAll('[data-scroll-section]').forEach(bindScroll);
+})();
 </script>
+
 <script>
 // Open provider search in a new tab, no backend dependency
 function handleVideoSearch(e){
