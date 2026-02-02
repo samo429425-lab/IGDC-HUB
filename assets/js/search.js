@@ -210,15 +210,16 @@
       card.appendChild(body);
 	  
 /* ===============================
-   SEARCH CARD FINAL RENDER
-   (WEB / NEWS SAFE MODE)
+   HYBRID SEARCH CARD RENDER (FINAL)
+   - WEB/NEWS: stable card (no oversize)
+   - MEDIA: show only when real media exists
    =============================== */
 
-// 카드 크기 안정화
-card.style.maxHeight = '220px';
+// 0) 카드 크기 안정화 (전체 공통)
+card.style.maxHeight = '240px';
 card.style.overflow = 'hidden';
 
-// 뉴스/기사 요약 절단 (앞부분 중심)
+// 1) 뉴스/기사 요약 절단 (웹/뉴스 공통)
 if (d && d.textContent) {
   d.style.display = '-webkit-box';
   d.style.webkitLineClamp = '3';
@@ -227,24 +228,110 @@ if (d && d.textContent) {
   d.style.textOverflow = 'ellipsis';
 }
 
-// 실제 썸네일만 허용 (favicon 제외)
-const isRealThumbnail =
-  it.thumbnail &&
-  !it.thumbnail.includes('favicon') &&
-  !it.thumbnail.endsWith('.ico');
+// 2) 썸네일이 "진짜 이미지"인지 판별 (favicon/ico 제외)
+const thumbUrl = (it.thumbnail || '').trim();
+const isFaviconLike =
+  thumbUrl.includes('google.com/s2/favicons') ||
+  thumbUrl.includes('favicon') ||
+  thumbUrl.toLowerCase().endsWith('.ico');
 
-// 썸네일은 보조 요소로만
-if (isRealThumbnail) {
+const isRealThumb = !!thumbUrl && !isFaviconLike;
+
+// 3) 미디어 존재 판별 (진짜로 있을 때만 미디어 영역 렌더)
+const hasVideoPreview =
+  it.media && it.media.type === 'video' &&
+  it.media.preview &&
+  (it.media.preview.mp4 || it.media.preview.webm || it.media.preview.poster);
+
+const hasImageSet =
+  Array.isArray(it.imageSet) && it.imageSet.length > 0;
+
+// 4) 기본은 WEB/NEWS 카드 (텍스트 중심)
+//    미디어가 있으면 '보조 미디어'를 카드 안에 추가 (카드 크기 유지)
+
+// 4-1) 보조 썸네일 (우측 작은 썸네일)
+if (isRealThumb) {
   const thumb = document.createElement('img');
-  thumb.src = it.thumbnail;
+  thumb.src = thumbUrl;
   thumb.loading = 'lazy';
+
   thumb.style.maxWidth = '120px';
   thumb.style.maxHeight = '80px';
   thumb.style.objectFit = 'cover';
   thumb.style.float = 'right';
   thumb.style.marginLeft = '8px';
   thumb.style.borderRadius = '4px';
+
+  // 텍스트 영역 안에서 우측 썸네일처럼 동작
   body.appendChild(thumb);
+}
+
+// 4-2) 비디오 프리뷰 (있을 때만, 카드 과대확대 금지)
+if (hasVideoPreview) {
+  const videoWrap = document.createElement('div');
+  videoWrap.style.marginTop = '8px';
+  videoWrap.style.maxHeight = '120px';
+  videoWrap.style.overflow = 'hidden';
+  videoWrap.style.borderRadius = '6px';
+
+  const video = document.createElement('video');
+  video.muted = true;
+  video.loop = true;
+  video.playsInline = true;
+  video.preload = 'none';
+  video.style.width = '100%';
+  video.style.maxHeight = '120px';
+  video.style.objectFit = 'cover';
+
+  if (it.media.preview.poster) video.poster = it.media.preview.poster;
+
+  if (it.media.preview.webm) {
+    const s = document.createElement('source');
+    s.src = it.media.preview.webm;
+    s.type = 'video/webm';
+    video.appendChild(s);
+  }
+  if (it.media.preview.mp4) {
+    const s = document.createElement('source');
+    s.src = it.media.preview.mp4;
+    s.type = 'video/mp4';
+    video.appendChild(s);
+  }
+
+  // hover play (데스크톱)
+  videoWrap.addEventListener('mouseenter', () => {
+    video.play().catch(()=>{});
+  });
+  videoWrap.addEventListener('mouseleave', () => {
+    video.pause();
+    video.currentTime = 0;
+  });
+
+  videoWrap.appendChild(video);
+  card.appendChild(videoWrap);
+}
+
+// 4-3) 포토뷰(갤러리) (있을 때만, 최대 3장)
+if (hasImageSet) {
+  const gallery = document.createElement('div');
+  gallery.style.display = 'flex';
+  gallery.style.gap = '6px';
+  gallery.style.marginTop = '8px';
+  gallery.style.maxHeight = '90px';
+  gallery.style.overflow = 'hidden';
+
+  it.imageSet.slice(0,3).forEach(src => {
+    const img = document.createElement('img');
+    img.src = src;
+    img.loading = 'lazy';
+    img.style.width = '33%';
+    img.style.maxHeight = '90px';
+    img.style.objectFit = 'cover';
+    img.style.borderRadius = '4px';
+    gallery.appendChild(img);
+  });
+
+  card.appendChild(gallery);
 }
 
 
