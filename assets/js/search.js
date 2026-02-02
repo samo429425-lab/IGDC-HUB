@@ -81,6 +81,21 @@
       throw lastErr;
     }
 
+  async function fetchBank(){
+    const urls = [
+    '/.netlify/functions/data/search-bank.snapshot.json',
+    '/data/search-bank.snapshot.json'
+    ];
+  for (const u of urls){
+    try{
+      const r = await fetch(u, { cache: 'no-store' });
+      if (!r.ok) continue;
+      return await r.json();
+    }catch(e){}
+  }
+  return null;
+ }
+
     function renderSkeleton(count = 6){
       results.innerHTML = '';
       for (let i = 0; i < count; i++){
@@ -246,39 +261,41 @@
       }
     }
 
-    async function runSearch(q){
-      status.textContent = 'Searching…';
-      renderSkeleton();
-      clearPager();
+async function runSearch(q){
+  status.textContent = 'Searching…';
+  renderSkeleton();
+  clearPager();
 
-      try{
-        const j0 = await fetchMaru(q);
-        const d = unwrap(j0) || {};
+  try {
 
-        if (d && d.status && d.status !== 'ok') {
-          results.innerHTML = '';
-          status.textContent = d.message || 'Search error';
-          return;
-        }
+    const bank = await fetchBank();
+    const bankItems = Array.isArray(bank && bank.items)
+      ? bank.items.filter(it =>
+          (it.title || '').toLowerCase().includes(q.toLowerCase()) ||
+          (it.summary || '').toLowerCase().includes(q.toLowerCase())
+        )
+      : [];
 
-        const items = d.items || d.results || [];
-        allItems = Array.isArray(items) ? items : [];
-
-        results.innerHTML = '';
-        if (!allItems.length){
-          status.textContent = 'No results.';
-          return;
-        }
-
-        status.textContent = `${allItems.length} results`;
-        currentBlock = 0;
-        currentPage = 1;
-        renderPage(currentPage);
-      }catch(e){
-        console.error(e);
-        results.innerHTML = '';
-        status.textContent = 'Search error';
-      }
+    if (bankItems.length){
+      allItems = bankItems;
+    } else {
+      const j0 = await fetchMaru(q);
+      const d = unwrap(j0) || {};
+      const items = d.items || d.results || [];
+      allItems = Array.isArray(items) ? items : [];
     }
+
+    status.textContent = `${allItems.length} results`;
+    currentBlock = 0;
+    currentPage = 1;
+    renderPage(currentPage);
+
+  } catch(e){
+    console.error(e);
+    results.innerHTML = '';
+    status.textContent = 'Search error';
+  }
+}
+
   });
 })();
