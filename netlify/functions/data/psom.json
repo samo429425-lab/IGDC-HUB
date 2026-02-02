@@ -127,7 +127,39 @@
       "vi"
     ],
     "version": "1.1",
-    "updated": "2025-12-27"
+    "updated": "2025-12-27",
+    "mediaProfile": {
+      "intent": {
+        "primary": [
+          "video",
+          "media"
+        ],
+        "secondary": [
+          "film",
+          "documentary",
+          "archive",
+          "culture",
+          "music"
+        ],
+        "tertiary": [
+          "short",
+          "long",
+          "classic",
+          "independent"
+        ]
+      },
+      "collect": {
+        "scope": "broad",
+        "allowArchive": true,
+        "allowUserOwned": true,
+        "allowExternal": true,
+        "allowFuturePartner": true
+      },
+      "usage": {
+        "role": "hub",
+        "priorityBias": "balanced"
+      }
+    }
   },
   {
     "id": "literature-academic",
