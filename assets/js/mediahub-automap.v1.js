@@ -2,19 +2,15 @@
  * mediahub-automap.v1.js
  * FINAL — CLASSIC SCRIPT SAFE (NO MODULE EXPORT)
  *
- * Fixes:
- *  - Works when loaded as <script defer src="/assets/js/mediahub-automap.v1.js"></script>
- *  - HOME-style pipeline validation: section activation by items.length
- *  - Placeholders auto-hide only when real content arrives
- *
- * FRONT DOM:
- *  - .thumb-line[data-psom-key="{sectionKey}"]
- *  - .card.media-card[data-placeholder="true"]
+ * Contract:
+ *  - Snapshot: /data/media.snapshot.json
+ *  - DOM line: .thumb-line[data-psom-key="{sectionKey}"]
+ *  - Placeholders: .card.media-card[data-placeholder="true"] (hide only when real items exist)
  */
-
 (function () {
   'use strict';
 
+  // prevent double-run when included twice
   if (window.__MEDIAHUB_AUTOMAP_V1__) return;
   window.__MEDIAHUB_AUTOMAP_V1__ = true;
 
@@ -26,34 +22,34 @@
   }
 
   function formatDuration(sec) {
-    sec = sec || 0;
+    sec = Number(sec || 0);
     if (!sec) return '';
     const m = Math.floor(sec / 60);
-    const s = sec % 60;
+    const s = Math.floor(sec % 60);
     return `${m}:${String(s).padStart(2, '0')}`;
   }
 
   function createCard(item) {
     item = item || {};
+
     const a = document.createElement('a');
     a.className = 'card media-card';
-    a.href = item.video || 'javascript:void(0)';
-    if (item.video) { a.target = '_blank'; a.rel = 'noopener'; }
+
+    const href = item.video || item.url || '';
+    a.href = href ? href : 'javascript:void(0)';
+    if (href) { a.target = '_blank'; a.rel = 'noopener'; }
 
     const thumb = document.createElement('div');
     thumb.className = 'thumb';
 
-    if (item.thumbnail) {
+    const imgUrl = item.thumbnail || item.poster || item.image || '';
+    if (imgUrl) {
       const img = document.createElement('img');
-      img.src = item.thumbnail;
+      img.src = imgUrl;
       img.alt = item.title || '';
       img.loading = 'lazy';
       thumb.appendChild(img);
     }
-
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    meta.textContent = item.title || '';
 
     const dur = formatDuration(item.duration);
     if (dur) {
@@ -62,6 +58,10 @@
       badge.textContent = dur;
       thumb.appendChild(badge);
     }
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = item.title || '';
 
     a.appendChild(thumb);
     a.appendChild(meta);
@@ -85,6 +85,7 @@
   }
 
   function clearInjected(line) {
+    // only remove injected real cards (keep placeholders)
     line.querySelectorAll('.card.media-card:not([data-placeholder="true"])').forEach(el => el.remove());
   }
 
@@ -92,12 +93,24 @@
     try {
       const heroItem = snapshot && snapshot.hero && Array.isArray(snapshot.hero.items) ? snapshot.hero.items[0] : null;
       if (!heroItem) return;
-      const imgUrl = heroItem.poster || heroItem.thumbnail || '';
+
+      const imgUrl = heroItem.poster || heroItem.thumbnail || heroItem.image || '';
       if (!imgUrl) return;
+
       const heroImg = document.querySelector('section.hero img');
-      if (!heroImg) return;
-      heroImg.src = imgUrl;
-      heroImg.alt = heroItem.title || heroImg.alt || 'hero';
+      if (heroImg) {
+        heroImg.src = imgUrl;
+        heroImg.alt = heroItem.title || heroImg.alt || 'hero';
+      }
+
+      // If hero has an anchor wrapper, link it
+      const heroLink = document.querySelector('section.hero a');
+      const href = heroItem.video || heroItem.url || '';
+      if (heroLink && href) {
+        heroLink.href = href;
+        heroLink.target = '_blank';
+        heroLink.rel = 'noopener';
+      }
     } catch (e) { /* silent */ }
   }
 
@@ -108,14 +121,12 @@
     const safeItems = Array.isArray(items) ? items : [];
     clearInjected(line);
 
-    // HOME-style: activate by items.length
     if (safeItems.length === 0) {
       showPlaceholders(line);
       return;
     }
 
-    // Only hide placeholders when real content exists
-    const hasReal = safeItems.some(it => it && (it.thumbnail || it.title || it.video));
+    const hasReal = safeItems.some(it => it && (it.thumbnail || it.poster || it.image || it.title || it.video || it.url));
     if (hasReal) hidePlaceholders(line);
     else showPlaceholders(line);
 
@@ -138,6 +149,7 @@
     });
   }
 
+  // expose for console sanity-check: typeof runMediaAutoMap === 'function'
   window.runMediaAutoMap = runMediaAutoMap;
 
   if (document.readyState === 'loading') {
