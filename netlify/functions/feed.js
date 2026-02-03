@@ -143,30 +143,10 @@ function buildHomeSectionsFromPagesSnapshot(snap){
   }));
 }
 
-
-function buildDistributionSectionsFromPagesSnapshot(snap){
-  const sectionsMap = snap?.pages?.distribution?.sections;
-  if (!sectionsMap || typeof sectionsMap !== "object") return null;
-
-  // 6 main sections (100 each) + 1 right panel (80)
-  const keys = ["dist_1","dist_2","dist_3","dist_4","dist_5","dist_6","dist_right"];
-
-  return keys.map(id => {
-    const limit = (id === "dist_right") ? 80 : 100;
-    const arr = toArr(sectionsMap[id]).slice(0, limit);
-    return {
-      id,
-      items: arr.map(x => normalizeItem(x, { section: id, page: "distribution" })).filter(Boolean)
-    };
-  });
-}
-
-
 // Placeholder for future expansion (distribution/social/media/...)
 function buildSectionsForPageQuery(pageQuery, snap){
   const p = String(pageQuery || "").toLowerCase();
   if (p === "homeproducts") return buildHomeSectionsFromPagesSnapshot(snap);
-  if (p === "distribution") return buildDistributionSectionsFromPagesSnapshot(snap);
   return null; // expand-only
 }
 
@@ -228,7 +208,12 @@ exports.handler = async function (event) {
     const snap = safeReadJSON(FRONT_SNAPSHOT_PATH) || {};
     const psom = safeReadJSON(PSOM_PATH) || [];
 
-    const items = compileFlatItems(snap, psom);
+    const itemsAll = compileFlatItems(snap, psom);
+
+    // Optional narrow filter for section key (compat for key-based automaps)
+    const keyQuery = (qs.key || qs.k || "");
+    const items = keyQuery ? itemsAll.filter(it => String(it.section||"") === String(keyQuery)) : itemsAll;
+
 
     // sections only when page query is provided & supported
     const sections = pageQuery ? (buildSectionsForPageQuery(pageQuery, snap) || []) : [];
