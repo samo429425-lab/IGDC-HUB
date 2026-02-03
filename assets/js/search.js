@@ -342,108 +342,6 @@ if (hasImageSet) {
   body.appendChild(gallery);
 }
 
-/* ===============================
-   MEDIA / THUMB / PREVIEW SLOT
-   (inserted before card.appendChild(body))
-   =============================== */
-
-const thumbUrl = String(
-  it.thumbnail ||
-  (it.media && it.media.thumbnail) ||
-  (it.payload && (it.payload.thumb || it.payload.thumbnail)) ||
-  ''
-).trim();
-
-// favicon/ico 제외 (진짜 미디어만)
-const isFaviconLike =
-  thumbUrl.includes('google.com/s2/favicons') ||
-  thumbUrl.toLowerCase().includes('favicon') ||
-  thumbUrl.toLowerCase().endsWith('.ico');
-
-const hasRealThumb = !!thumbUrl && !isFaviconLike;
-
-// === IMAGE / PHOTO VIEW ===
-if (hasRealThumb) {
-  const img = document.createElement('img');
-  img.src = thumbUrl;
-  img.loading = 'lazy';
-  img.style.width = '100%';
-  img.style.maxHeight = '160px';
-  img.style.objectFit = 'cover';
-  img.style.borderRadius = '8px';
-  img.style.marginTop = '8px';
-  body.appendChild(img);
-}
-
-// === VIDEO PREVIEW (hover play) ===
-const media = it.media || {};
-const preview = media.preview || {};
-const isVideo = media.type === 'video' || media.kind === 'video';
-const hasPreviewSrc = !!(preview.mp4 || preview.webm);
-
-if (isVideo && (preview.poster || hasPreviewSrc)) {
-  const wrap = document.createElement('div');
-  wrap.style.marginTop = '8px';
-  wrap.style.borderRadius = '8px';
-  wrap.style.overflow = 'hidden';
-
-  const video = document.createElement('video');
-  video.muted = true;
-  video.loop = true;
-  video.playsInline = true;
-  video.preload = 'none';
-  video.style.width = '100%';
-  video.style.maxHeight = '180px';
-  video.style.objectFit = 'cover';
-
-  if (preview.poster) video.poster = preview.poster;
-
-  if (preview.webm) {
-    const s = document.createElement('source');
-    s.src = preview.webm;
-    s.type = 'video/webm';
-    video.appendChild(s);
-  }
-  if (preview.mp4) {
-    const s = document.createElement('source');
-    s.src = preview.mp4;
-    s.type = 'video/mp4';
-    video.appendChild(s);
-  }
-
-  wrap.addEventListener('mouseenter', () => {
-    if (hasPreviewSrc) video.play().catch(()=>{});
-  });
-  wrap.addEventListener('mouseleave', () => {
-    video.pause();
-    video.currentTime = 0;
-  });
-
-  wrap.appendChild(video);
-  body.appendChild(wrap);
-}
-
-// === IMAGE SET (gallery, max 3) ===
-if (Array.isArray(it.imageSet) && it.imageSet.length) {
-  const gallery = document.createElement('div');
-  gallery.style.display = 'flex';
-  gallery.style.gap = '6px';
-  gallery.style.marginTop = '8px';
-
-  it.imageSet.slice(0, 3).forEach(src => {
-    const gi = document.createElement('img');
-    gi.src = src;
-    gi.loading = 'lazy';
-    gi.style.width = '33%';
-    gi.style.maxHeight = '90px';
-    gi.style.objectFit = 'cover';
-    gi.style.borderRadius = '6px';
-    gallery.appendChild(gi);
-  });
-
-  body.appendChild(gallery);
-}
-
       card.appendChild(body);
       results.appendChild(card);
     }
@@ -505,22 +403,39 @@ async function runSearch(q){
 
   try {
 
-    const bank = await fetchBank();
-    const bankItems = Array.isArray(bank && bank.items)
-      ? bank.items.filter(it =>
-          (it.title || '').toLowerCase().includes(q.toLowerCase()) ||
-          (it.summary || '').toLowerCase().includes(q.toLowerCase())
-        )
-      : [];
+const bank = await fetchBank();
+const bankItems = Array.isArray(bank && bank.items)
+  ? bank.items.filter(it =>
+      (it.title || '').toLowerCase().includes(q.toLowerCase()) ||
+      (it.summary || '').toLowerCase().includes(q.toLowerCase())
+    )
+  : [];
 
-    if (bankItems.length){
-      allItems = bankItems;
-    } else {
-      const j0 = await fetchMaru(q);
-      const d = unwrap(j0) || {};
-      const items = d.items || d.results || [];
-      allItems = Array.isArray(items) ? items : [];
-    }
+// [UPGRADE] 검색 전용 미디어 아이템 우선 추출
+const mediaItems = bankItems.filter(it =>
+  it.media &&
+  it.media.kind &&
+  it.media.kind !== 'none' &&
+  (
+    it.thumbnail ||
+    (it.media.preview && it.media.preview.poster)
+  )
+);
+
+// [POLICY] 미디어는 있을 때만, bank → maru 순서 유지
+if (mediaItems.length){
+  allItems = mediaItems.concat(
+    bankItems.filter(it => !mediaItems.includes(it))
+  );
+} else if (bankItems.length){
+  allItems = bankItems;
+} else {
+  const j0 = await fetchMaru(q);
+  const d = unwrap(j0) || {};
+  const items = d.items || d.results || [];
+  allItems = Array.isArray(items) ? items : [];
+}
+
 
     status.textContent = `${allItems.length} results`;
     currentBlock = 0;
