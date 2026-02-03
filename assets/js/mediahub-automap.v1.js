@@ -1,18 +1,14 @@
 /**
- * mediahub-automap.v1.js
- * FINAL — CLASSIC SCRIPT SAFE (NO MODULE EXPORT)
- *
- * Contract:
- *  - Snapshot: /data/media.snapshot.json
- *  - DOM line: .thumb-line[data-psom-key="{sectionKey}"]
- *  - Placeholders: .card.media-card[data-placeholder="true"] (hide only when real items exist)
+ * mediahub-automap.v1.js (FIXED)
+ * - classic script (NO export)
+ * - target: .thumb-line[data-psom-key="{sectionKey}"]
+ * - placeholders: a.card.media-card[data-placeholder="true"] auto-hide when real items exist
  */
+
 (function () {
   'use strict';
-
-  // prevent double-run when included twice
-  if (window.__MEDIAHUB_AUTOMAP_V1__) return;
-  window.__MEDIAHUB_AUTOMAP_V1__ = true;
+  if (window.__MEDIAHUB_AUTOMAP_V1_FIXED__) return;
+  window.__MEDIAHUB_AUTOMAP_V1_FIXED__ = true;
 
   async function loadMediaSnapshot(url) {
     url = url || '/data/media.snapshot.json';
@@ -21,42 +17,26 @@
     return res.json();
   }
 
-  function formatDuration(sec) {
-    sec = Number(sec || 0);
-    if (!sec) return '';
-    const m = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60);
-    return `${m}:${String(s).padStart(2, '0')}`;
-  }
-
   function createCard(item) {
-    item = item || {};
-
     const a = document.createElement('a');
     a.className = 'card media-card';
-
-    const href = item.video || item.url || '';
-    a.href = href ? href : 'javascript:void(0)';
-    if (href) { a.target = '_blank'; a.rel = 'noopener'; }
+    a.href = item.video || 'javascript:void(0)';
+    if (item.video) { a.target = '_blank'; a.rel = 'noopener'; }
 
     const thumb = document.createElement('div');
     thumb.className = 'thumb';
 
-    const imgUrl = item.thumbnail || item.poster || item.image || '';
-    if (imgUrl) {
+    if (item.thumbnail) {
       const img = document.createElement('img');
-      img.src = imgUrl;
+      img.src = item.thumbnail;
       img.alt = item.title || '';
       img.loading = 'lazy';
       thumb.appendChild(img);
-    }
-
-    const dur = formatDuration(item.duration);
-    if (dur) {
-      const badge = document.createElement('span');
-      badge.className = 'duration';
-      badge.textContent = dur;
-      thumb.appendChild(badge);
+    } else {
+      // keep layout stable
+      const ph = document.createElement('div');
+      ph.className = 'thumb ph';
+      thumb.appendChild(ph);
     }
 
     const meta = document.createElement('div');
@@ -73,45 +53,19 @@
   }
 
   function hidePlaceholders(line) {
-    line.querySelectorAll('.card.media-card[data-placeholder="true"]').forEach(el => {
+    line.querySelectorAll('a.card.media-card[data-placeholder="true"]').forEach(el => {
       el.style.display = 'none';
     });
   }
 
   function showPlaceholders(line) {
-    line.querySelectorAll('.card.media-card[data-placeholder="true"]').forEach(el => {
+    line.querySelectorAll('a.card.media-card[data-placeholder="true"]').forEach(el => {
       el.style.display = '';
     });
   }
 
   function clearInjected(line) {
-    // only remove injected real cards (keep placeholders)
-    line.querySelectorAll('.card.media-card:not([data-placeholder="true"])').forEach(el => el.remove());
-  }
-
-  function renderHero(snapshot) {
-    try {
-      const heroItem = snapshot && snapshot.hero && Array.isArray(snapshot.hero.items) ? snapshot.hero.items[0] : null;
-      if (!heroItem) return;
-
-      const imgUrl = heroItem.poster || heroItem.thumbnail || heroItem.image || '';
-      if (!imgUrl) return;
-
-      const heroImg = document.querySelector('section.hero img');
-      if (heroImg) {
-        heroImg.src = imgUrl;
-        heroImg.alt = heroItem.title || heroImg.alt || 'hero';
-      }
-
-      // If hero has an anchor wrapper, link it
-      const heroLink = document.querySelector('section.hero a');
-      const href = heroItem.video || heroItem.url || '';
-      if (heroLink && href) {
-        heroLink.href = href;
-        heroLink.target = '_blank';
-        heroLink.rel = 'noopener';
-      }
-    } catch (e) { /* silent */ }
+    line.querySelectorAll('a.card.media-card:not([data-placeholder="true"])').forEach(el => el.remove());
   }
 
   function renderSection(sectionKey, items) {
@@ -126,35 +80,31 @@
       return;
     }
 
-    const hasReal = safeItems.some(it => it && (it.thumbnail || it.poster || it.image || it.title || it.video || it.url));
+    const hasReal = safeItems.some(it => it && (it.thumbnail || it.title || it.video));
     if (hasReal) hidePlaceholders(line);
     else showPlaceholders(line);
 
-    safeItems.forEach(item => {
-      if (!item) return;
-      line.appendChild(createCard(item));
+    safeItems.forEach(it => {
+      if (!it) return;
+      line.appendChild(createCard(it));
     });
   }
 
-  async function runMediaAutoMap() {
+  async function run() {
     const snapshot = await loadMediaSnapshot('/data/media.snapshot.json');
-    if (!snapshot) return;
-
-    renderHero(snapshot);
-
-    const sections = Array.isArray(snapshot.sections) ? snapshot.sections : [];
+    const sections = (snapshot && Array.isArray(snapshot.sections)) ? snapshot.sections : [];
     sections.forEach(sec => {
       if (!sec || !sec.key) return;
       renderSection(sec.key, sec.items || []);
     });
   }
 
-  // expose for console sanity-check: typeof runMediaAutoMap === 'function'
-  window.runMediaAutoMap = runMediaAutoMap;
+  // expose for console check
+  window.runMediaAutoMap = run;
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => { runMediaAutoMap().catch(console.error); });
+    document.addEventListener('DOMContentLoaded', () => { run().catch(console.error); });
   } else {
-    runMediaAutoMap().catch(console.error);
+    run().catch(console.error);
   }
 })();
