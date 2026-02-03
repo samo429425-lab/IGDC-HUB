@@ -2541,11 +2541,18 @@ function getFullyVisibleCount(container){
   container.querySelectorAll(CARD_SELECTOR).forEach(card=>{
     const l = card.offsetLeft;
     const r = l + card.offsetWidth;
-    if(l >= L && r <= R) count++;
+
+    // 🔧 핵심 수정:
+    // 80% 이상 보이면 "다음 페이지로 넘길 대상"으로 간주
+    const visibleWidth = Math.min(r, R) - Math.max(l, L);
+    const ratio = visibleWidth / card.offsetWidth;
+
+    if(ratio >= 0.8) count++;
   });
 
   return Math.max(1, count);
 }
+
 
 /* ===== 핵심 스크롤 ===== */
 function scrollByCards(container, count){
@@ -4333,7 +4340,7 @@ window.addEventListener("message",function(ev){
 </script>
 
 <!-- Media Hub AutoMap (정본) -->
-<script type="module" src="/assets/js/mediahub-automap.v1.js"></script>
+<script defer src="/assets/js/mediahub-automap.v1.js"></script>
 
 </body>
 </html>
