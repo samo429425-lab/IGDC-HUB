@@ -78,8 +78,8 @@ function buildDistributionSnapshotFromBank(bank){
 
   const sections = {};
   for (const k of SECTION_KEYS){
-    sections[k] = fill(k, k === "distribution" ? 20 : 12);
-  }
+ sections[k] = fill(k, 100);
+ }
 
   return {
     meta: {
