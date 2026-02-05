@@ -15,8 +15,11 @@ const fs = require("fs");
 const path = require("path");
 
 // ---- PATHS -----------------------------------------------------
-const DATA_ROOT = path.join(__dirname, "data");
-const BANK_SNAPSHOT_PATH = path.join(DATA_ROOT, "search-bank.snapshot.json");
+const BANK_SNAPSHOT_PATH = path.join(
+  process.cwd(),
+  "data",
+  "search-bank.snapshot.json"
+);
 
 // ---- UTIL ------------------------------------------------------
 function safeReadJSON(p) {
