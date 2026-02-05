@@ -1,11 +1,11 @@
 /**
- * distribution-products-automap.v2.js
+ * distribution-products-automap.v3.js
  * -------------------------------------------------
- * DISTRIBUTION HUB Auto Mapping Engine (V2)
+ * DISTRIBUTION HUB Auto Mapping Engine (V3)
  *
  * Goals:
  * - HARD scope to Distribution Hub (no Home bleed)
- * - Data source: /data/front.snapshot.json (snapshot-only)
+ * - Data source: /data/distribution.snapshot.json (distribution-only snapshot)
  * - Section 1:1 mapping via data-psom-key (list element itself supported)
  * - Dummy handling:
  *    - Hide/replace ONLY on successful render with real items
@@ -21,13 +21,13 @@
   'use strict';
 
   // ---- CONFIG -------------------------------------------------
-  const SNAPSHOT_URL = '/data/front.snapshot.json'; // keep canonical static path
+  const SNAPSHOT_URL = '/data/distribution.snapshot.json'; // distribution-only snapshot (NO Home bleed)
   const PSOM_PREFIX = 'distribution';
   const LIST_SELF_CLASS = ['thumb-list', 'card-list'];
   const LIST_CHILD_SELECTORS = ['.thumb-list', '.card-list'];
 
   // Optional: limit items per section (UI is 4-col grid; 8 is safe)
-  const MAX_ITEMS_PER_SECTION = 12;
+  const MAX_ITEMS_PER_SECTION = 100;
 
   // ---- UTILS --------------------------------------------------
   const qs = (sel, root) => (root || document).querySelector(sel);
