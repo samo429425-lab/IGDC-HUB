@@ -236,7 +236,10 @@ button svg, .btn svg, .button svg, .cta-button svg{ width:1em; height:1em; }
   grid-template-columns: repeat(20, minmax(0,1fr)) !important;
 }
 </style>
-
+<style id="patch-hide-providerbar">
+/* Remove the stamp bar below search (keep dropdown only) */
+.provider-bar{ display:none !important; }
+</style>
 <style id="mediahub-clean-scroll-and-bc">
 :root{
   --scroll-btn-w: 56px;   /* keep modest; not oversized */
@@ -2867,7 +2870,7 @@ function handleVideoSearch(e){
     // Save selected provider on change
     sel.addEventListener('change', ()=>{ localStorage.setItem('mediahub_provider', sel.value); });
     const saved = localStorage.getItem('mediahub_provider');
-    if (saved && [...sel.options].some(o=>o.value===saved)) sel.value = saved;
+    if (saved && [...sel.options].some(o => o.value === saved)) sel.value = saved;
   }
 
   // Intercept search submit to use selected provider
