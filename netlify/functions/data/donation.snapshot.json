@@ -1,0 +1,347 @@
+{
+  "meta": {
+    "schema": "donation.snapshot.photo.v2",
+    "generated_at": "2026-02-05T09:03:35Z",
+    "producer": "donation-unified-builder"
+  },
+  "sections": [
+    {
+      "psom_key": "donation-global",
+      "label": "Global / News"
+    },
+    {
+      "psom_key": "donation-ngo",
+      "label": "NGO / Relief"
+    },
+    {
+      "psom_key": "donation-mission",
+      "label": "Mission"
+    },
+    {
+      "psom_key": "donation-service",
+      "label": "Service"
+    },
+    {
+      "psom_key": "donation-relief",
+      "label": "Disaster / Relief"
+    },
+    {
+      "psom_key": "donation-education",
+      "label": "Education"
+    },
+    {
+      "psom_key": "donation-environment",
+      "label": "Environment"
+    },
+    {
+      "psom_key": "donation-others",
+      "label": "Others"
+    }
+  ],
+  "items": [
+    {
+      "id": "donation-global-1",
+      "psom_key": "donation-global",
+      "type": "news",
+      "title": "Seed 1 (Global / News)",
+      "subtitle": "",
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "link": "#",
+      "country": null,
+      "source": "seed",
+      "priority": 1,
+      "tags": [],
+      "media": {
+        "type": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null
+      }
+    },
+    {
+      "id": "donation-global-2",
+      "psom_key": "donation-global",
+      "type": "news",
+      "title": "Seed 2 (Global / News)",
+      "subtitle": "",
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "link": "#",
+      "country": null,
+      "source": "seed",
+      "priority": 2,
+      "tags": [],
+      "media": {
+        "type": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null
+      }
+    },
+    {
+      "id": "donation-ngo-1",
+      "psom_key": "donation-ngo",
+      "type": "org",
+      "title": "Seed 1 (NGO / Relief)",
+      "subtitle": "",
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "link": "#",
+      "country": null,
+      "source": "seed",
+      "priority": 1,
+      "tags": [],
+      "media": {
+        "type": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null
+      }
+    },
+    {
+      "id": "donation-ngo-2",
+      "psom_key": "donation-ngo",
+      "type": "org",
+      "title": "Seed 2 (NGO / Relief)",
+      "subtitle": "",
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "link": "#",
+      "country": null,
+      "source": "seed",
+      "priority": 2,
+      "tags": [],
+      "media": {
+        "type": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null
+      }
+    },
+    {
+      "id": "donation-mission-1",
+      "psom_key": "donation-mission",
+      "type": "org",
+      "title": "Seed 1 (Mission)",
+      "subtitle": "",
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "link": "#",
+      "country": null,
+      "source": "seed",
+      "priority": 1,
+      "tags": [],
+      "media": {
+        "type": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null
+      }
+    },
+    {
+      "id": "donation-mission-2",
+      "psom_key": "donation-mission",
+      "type": "org",
+      "title": "Seed 2 (Mission)",
+      "subtitle": "",
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "link": "#",
+      "country": null,
+      "source": "seed",
+      "priority": 2,
+      "tags": [],
+      "media": {
+        "type": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null
+      }
+    },
+    {
+      "id": "donation-service-1",
+      "psom_key": "donation-service",
+      "type": "org",
+      "title": "Seed 1 (Service)",
+      "subtitle": "",
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "link": "#",
+      "country": null,
+      "source": "seed",
+      "priority": 1,
+      "tags": [],
+      "media": {
+        "type": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null
+      }
+    },
+    {
+      "id": "donation-service-2",
+      "psom_key": "donation-service",
+      "type": "org",
+      "title": "Seed 2 (Service)",
+      "subtitle": "",
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "link": "#",
+      "country": null,
+      "source": "seed",
+      "priority": 2,
+      "tags": [],
+      "media": {
+        "type": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null
+      }
+    },
+    {
+      "id": "donation-relief-1",
+      "psom_key": "donation-relief",
+      "type": "org",
+      "title": "Seed 1 (Disaster / Relief)",
+      "subtitle": "",
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "link": "#",
+      "country": null,
+      "source": "seed",
+      "priority": 1,
+      "tags": [],
+      "media": {
+        "type": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null
+      }
+    },
+    {
+      "id": "donation-relief-2",
+      "psom_key": "donation-relief",
+      "type": "org",
+      "title": "Seed 2 (Disaster / Relief)",
+      "subtitle": "",
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "link": "#",
+      "country": null,
+      "source": "seed",
+      "priority": 2,
+      "tags": [],
+      "media": {
+        "type": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null
+      }
+    },
+    {
+      "id": "donation-education-1",
+      "psom_key": "donation-education",
+      "type": "org",
+      "title": "Seed 1 (Education)",
+      "subtitle": "",
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "link": "#",
+      "country": null,
+      "source": "seed",
+      "priority": 1,
+      "tags": [],
+      "media": {
+        "type": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null
+      }
+    },
+    {
+      "id": "donation-education-2",
+      "psom_key": "donation-education",
+      "type": "org",
+      "title": "Seed 2 (Education)",
+      "subtitle": "",
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "link": "#",
+      "country": null,
+      "source": "seed",
+      "priority": 2,
+      "tags": [],
+      "media": {
+        "type": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null
+      }
+    },
+    {
+      "id": "donation-environment-1",
+      "psom_key": "donation-environment",
+      "type": "org",
+      "title": "Seed 1 (Environment)",
+      "subtitle": "",
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "link": "#",
+      "country": null,
+      "source": "seed",
+      "priority": 1,
+      "tags": [],
+      "media": {
+        "type": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null
+      }
+    },
+    {
+      "id": "donation-environment-2",
+      "psom_key": "donation-environment",
+      "type": "org",
+      "title": "Seed 2 (Environment)",
+      "subtitle": "",
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "link": "#",
+      "country": null,
+      "source": "seed",
+      "priority": 2,
+      "tags": [],
+      "media": {
+        "type": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null
+      }
+    },
+    {
+      "id": "donation-others-1",
+      "psom_key": "donation-others",
+      "type": "org",
+      "title": "Seed 1 (Others)",
+      "subtitle": "",
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "link": "#",
+      "country": null,
+      "source": "seed",
+      "priority": 1,
+      "tags": [],
+      "media": {
+        "type": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null
+      }
+    },
+    {
+      "id": "donation-others-2",
+      "psom_key": "donation-others",
+      "type": "org",
+      "title": "Seed 2 (Others)",
+      "subtitle": "",
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "link": "#",
+      "country": null,
+      "source": "seed",
+      "priority": 2,
+      "tags": [],
+      "media": {
+        "type": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null
+      }
+    }
+  ]
+}
