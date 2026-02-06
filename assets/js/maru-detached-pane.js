@@ -8,7 +8,7 @@
 
   if (window.MaruDetachedPane) return;
 
-  let zIndexBase = 210000;
+  let zIndexBase = 1000000;
 
   function createPane({ title = '', content = '' }) {
     const pane = document.createElement('div');
@@ -16,6 +16,7 @@
     pane.style.zIndex = zIndexBase++;
     pane.style.left = '120px';
     pane.style.top = '120px';
+    pane.style.position = 'fixed';
 
     pane.innerHTML = `
       <div class="maru-pane-header">
