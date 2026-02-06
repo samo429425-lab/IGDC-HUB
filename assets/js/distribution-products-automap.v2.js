@@ -1,142 +1,75 @@
-/**
- * distribution-products-automap.direct.js (DIRECT KEY MAPPING)
- * -------------------------------------------------
- * FINAL DIRECT VERSION
- * - No extract functions
- * - No normalization
- * - No reuse
- * - Direct: key -> snapshot.sections[key]
- * - All sections = 30
- */
+// distribution-products-automap.v5.locked.js
+// Locked 1:1 section mapping - NO auto merge, NO fallback
 
-(function () {
-  'use strict';
-
+(async function () {
   const SNAPSHOT_URL = '/data/distribution.snapshot.json';
   const LIMIT = 30;
 
-  function qsAll(sel) {
-    return Array.from(document.querySelectorAll(sel));
-  }
+  const SECTION_MAP = [
+    { key: 'distribution-recommend', selector: '[data-psom-key="distribution-recommend"]' },
+    { key: 'distribution-new', selector: '[data-psom-key="distribution-new"]' },
+    { key: 'distribution-best', selector: '[data-psom-key="distribution-best"]' },
+    { key: 'distribution-special', selector: '[data-psom-key="distribution-special"]' },
+    { key: 'distribution-others', selector: '[data-psom-key="distribution-others"]' },
+    { key: 'distribution-right', selector: '[data-psom-key="distribution-right"]' }
+  ];
 
   function clear(el) {
     while (el.firstChild) el.removeChild(el.firstChild);
   }
 
-  function safe(v) {
-    return String(v || '').replace(/[<>]/g, '');
-  }
-
-  function pick(obj, keys) {
-    for (const k of keys) {
-      if (obj && typeof obj[k] === 'string' && obj[k].trim()) {
-        return obj[k].trim();
-      }
-    }
-    return '';
-  }
-
-  function normalize(item) {
-    if (!item || typeof item !== 'object') return null;
-
-    return {
-      title: pick(item, ['title', 'name', 'label', 'text']) || 'Untitled',
-      url: pick(item, ['url', 'link', 'href']) || '#',
-      thumb: pick(item, ['image', 'thumb', 'thumbnail', 'img', 'cover', 'poster'])
-    };
-  }
-
-  function makeCard(n) {
+  function createCard(item) {
     const a = document.createElement('a');
     a.className = 'thumb-card';
-    a.href = n.url;
-    a.target = '_blank';
-    a.rel = 'noopener';
+    a.href = item.url || '#';
 
-    if (n.thumb) {
-      const img = document.createElement('img');
-      img.className = 'thumb-img';
-      img.src = n.thumb;
-      img.alt = safe(n.title);
-      a.appendChild(img);
-    } else {
-      const ph = document.createElement('div');
-      ph.className = 'thumb-img';
-      a.appendChild(ph);
-    }
+    const img = document.createElement('img');
+    img.src = item.image || '';
+    img.alt = item.title || '';
 
-    const t = document.createElement('div');
-    t.className = 'thumb-title';
-    t.textContent = safe(n.title);
+    const title = document.createElement('div');
+    title.className = 'thumb-title';
+    title.textContent = item.title || '';
 
-    a.appendChild(t);
-
+    a.appendChild(img);
+    a.appendChild(title);
     return a;
   }
 
   async function loadSnapshot() {
     const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
     if (!res.ok) throw new Error('Snapshot load failed');
-    return await res.json();
+    return res.json();
   }
 
-  async function init() {
-
-    const targets = qsAll('[data-psom-key]');
-
-    if (!targets.length) return;
-
+  try {
     const snapshot = await loadSnapshot();
 
-    if (
-      !snapshot ||
-      !snapshot.pages ||
-      !snapshot.pages.distribution ||
-      !snapshot.pages.distribution.sections
-    ) {
-      console.error('[AUTOMAP] Invalid snapshot structure');
+    if (!snapshot || !snapshot.sections) {
+      console.error('[AUTOMAP] Invalid snapshot');
       return;
     }
 
-    const sections = snapshot.pages.distribution.sections;
+    SECTION_MAP.forEach(cfg => {
+      const box = document.querySelector(cfg.selector);
+      if (!box) return;
 
-    // === DIRECT MAPPING ONLY ===
-    for (const wrap of targets) {
+      const items = snapshot.sections[cfg.key];
+      if (!Array.isArray(items)) return;
 
-      const key = wrap.getAttribute('data-psom-key');
+      const list = items.slice(0, LIMIT);
 
-      if (!key) continue;
+      clear(box);
 
-      const list =
-        wrap.classList.contains('thumb-list')
-          ? wrap
-          : wrap.querySelector('.thumb-list, .card-list');
+      list.forEach(item => {
+        box.appendChild(createCard(item));
+      });
+    });
 
-      if (!list) continue;
+    console.log('[AUTOMAP] Locked mapping loaded');
 
-      const items = sections[key]; // <-- DIRECT LOOKUP
-
-      if (!Array.isArray(items) || !items.length) continue;
-
-      const norm = items
-        .map(normalize)
-        .filter(Boolean)
-        .slice(0, LIMIT);
-
-      if (!norm.length) continue;
-
-      clear(list);
-
-      for (const n of norm) {
-        list.appendChild(makeCard(n));
-      }
-    }
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init, { once: true });
-  } else {
-    init();
+  } catch (e) {
+    console.error('[AUTOMAP] Error:', e);
   }
 
 })();
