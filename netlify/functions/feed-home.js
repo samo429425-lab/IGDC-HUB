@@ -1,135 +1,74 @@
-// feed-home.js (HOME FEED - AUTOMAP + PIN SUPPORT)
-
+// feed-home.js (HOME FEED - FRONT.SNAPSHOT DIRECT)
 import fs from "fs/promises";
 import path from "path";
 
-/* ===== BANK PATHS ===== */
+/* ===== SNAPSHOT PATHS (dual) ===== */
 const DATA_ROOT = path.join(process.cwd(), "data");
-const BANK1 = path.join(DATA_ROOT, "search-bank.snapshot.json");
-const BANK2 = path.join(process.cwd(), "functions", "data", "search-bank.snapshot.json");
+const SNAP1 = path.join(DATA_ROOT, "front.snapshot.json");
+const SNAP2 = path.join(process.cwd(), "functions", "data", "front.snapshot.json");
 
-/* ===== READ SEARCH BANK ===== */
-async function readBank(){
-  try{
-    return JSON.parse(await fs.readFile(BANK1,"utf-8"));
-  }catch(e){}
-
-  try{
-    return JSON.parse(await fs.readFile(BANK2,"utf-8"));
-  }catch(e){}
-
+async function readSnapshot(){
+  try{ return JSON.parse(await fs.readFile(SNAP1, "utf-8")); }catch(e){}
+  try{ return JSON.parse(await fs.readFile(SNAP2, "utf-8")); }catch(e){}
   return null;
 }
 
+/* ===== SORT (pin first, then priority asc) ===== */
+function sortItems(arr){
+  const items = Array.isArray(arr) ? arr.slice() : [];
+  items.sort((a,b)=>{
+    const ap = (a && a.pin === true) ? 0 : 1;
+    const bp = (b && b.pin === true) ? 0 : 1;
+    if (ap !== bp) return ap - bp;
 
-/* ===== PIN / PRIORITY SORT ===== */
-function sortWithPin(items){
+    const apr = (a && typeof a.priority === "number") ? a.priority : 999999;
+    const bpr = (b && typeof b.priority === "number") ? b.priority : 999999;
+    if (apr !== bpr) return apr - bpr;
 
-  const pinned = [];
-  const normal = [];
-
-  items.forEach(it=>{
-    if(it && it.pin === true){
-      pinned.push(it);
-    }else{
-      normal.push(it);
-    }
+    return 0;
   });
-
-  return [...pinned, ...normal];
+  return items;
 }
 
+function toSections(pageSections){
+  const KEYS = [
+    "home_1","home_2","home_3","home_4","home_5",
+    "home_right_top","home_right_middle","home_right_bottom"
+  ];
 
-/* ===== HOME SECTION MAPPER ===== */
-function buildHomeSections(items){
-
-  const sections = {
-    home_1: [],
-    home_2: [],
-    home_3: [],
-    home_4: [],
-    home_5: [],
-
-    home_right_top: [],
-    home_right_middle: [],
-    home_right_bottom: []
-  };
-
-  if(!Array.isArray(items)) return sections;
-
-  let mainIndex = 0;
-  let rightIndex = 0;
-
-  items.forEach(it=>{
-
-    if(!it || !it.url) return;
-
-    /* MAIN */
-    const mainKey = `home_${(mainIndex % 5) + 1}`;
-    sections[mainKey].push(it);
-    mainIndex++;
-
-    /* RIGHT */
-    const rightKeys = [
-      'home_right_top',
-      'home_right_middle',
-      'home_right_bottom'
-    ];
-
-    const rk = rightKeys[rightIndex % 3];
-    sections[rk].push(it);
-    rightIndex++;
-
-  });
-
-  return sections;
+  return KEYS.map(id => ({
+    id,
+    items: sortItems(pageSections && pageSections[id])
+  }));
 }
-
 
 /* ===== NETLIFY HANDLER ===== */
 export async function handler(){
+  const snap = await readSnapshot();
+  const pageSections = snap && snap.pages && snap.pages.home && snap.pages.home.sections;
 
-  const bank = await readBank();
-
-  if(!bank || !Array.isArray(bank.items)){
+  if (!pageSections || typeof pageSections !== "object"){
     return {
-      statusCode:500,
-      body: JSON.stringify({ error:"BANK_INVALID" })
+      statusCode: 500,
+      headers: { "Content-Type":"application/json", "Cache-Control":"no-store" },
+      body: JSON.stringify({ error: "SNAPSHOT_INVALID" })
     };
   }
 
-  /* FILTER + PIN SORT */
-  let homeItems = bank.items.filter(x=>x && x.url);
+  const sections = toSections(pageSections);
+  const anyData = sections.some(s => Array.isArray(s.items) && s.items.length);
 
-  homeItems = sortWithPin(homeItems);
-
-  if(!homeItems.length){
+  if (!anyData){
     return {
-      statusCode:500,
-      body: JSON.stringify({ error:"HOME_EMPTY" })
+      statusCode: 500,
+      headers: { "Content-Type":"application/json", "Cache-Control":"no-store" },
+      body: JSON.stringify({ error: "HOME_EMPTY" })
     };
-  }
-
-  /* BUILD AUTOMAP STRUCTURE */
-  const sectionMap = buildHomeSections(homeItems);
-
-  const sections = [];
-
-  for(const key in sectionMap){
-    sections.push({
-      id: key,
-      items: sectionMap[key]
-    });
   }
 
   return {
-    statusCode:200,
-    headers:{
-      "Content-Type":"application/json",
-      "Cache-Control":"no-store"
-    },
-    body: JSON.stringify({
-      sections
-    })
+    statusCode: 200,
+    headers: { "Content-Type":"application/json", "Cache-Control":"no-store" },
+    body: JSON.stringify({ sections })
   };
 }
