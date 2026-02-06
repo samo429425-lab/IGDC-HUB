@@ -2,7 +2,7 @@
 /**
  * home-products-automap.v2.js  (V3-SAFE drop-in)
  * ------------------------------------------------------------
- * Data source: /.netlify/functions/feed?page=homeproducts
+ * Data source: /.netlify/functions/feed-home
  * Expected: payload.sections = [{id, items:[...]} ...]
  *
  * SAFETY:
@@ -22,7 +22,7 @@
   }
   if (!hasHomeSlots()) return;
 
-  const FEED_URL = '/.netlify/functions/feed?page=homeproducts';
+  const FEED_URL = '/.netlify/functions/feed-home';
 
   const KEYS_MAIN  = ['home_1','home_2','home_3','home_4','home_5'];
   const KEYS_RIGHT = ['home_right_top','home_right_middle','home_right_bottom'];
