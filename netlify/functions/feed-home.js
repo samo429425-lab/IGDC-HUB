@@ -4,7 +4,7 @@ const path = require("path");
 /**
  * feed.js (HOME compiler - fixed mapping)
  * - Handles: ?page=homeproducts
- * - Reads: netlify/functions/data/snapshot.internal.v1.json
+ * - Reads: netlify/functions/data/front.snapshot.json
  * - Compiles sections into keys expected by home automap:
  *   home_1..home_5, home_right_top/middle/bottom
  *
@@ -13,7 +13,7 @@ const path = require("path");
  * - If you have an existing multi-page feed.js, merge ONLY the homeproducts branch.
  */
 
-const SNAPSHOT_PATH = path.join(__dirname, "data", "snapshot.internal.v1.json");
+const SNAPSHOT_PATH = path.join(__dirname, "data", "front.snapshot.json");
 
 function readJsonSafe(p) {
   try { return JSON.parse(fs.readFileSync(p, "utf8")); }
@@ -80,7 +80,7 @@ exports.handler = async function(event){
         "Cache-Control": "no-store"
       },
       body: JSON.stringify({
-        meta: { page: "homeproducts", source: "snapshot.internal.v1", compiled: true },
+        meta: { page: "homeproducts", source: "front.snapshot.json", compiled: true },
         sections
       })
     };
