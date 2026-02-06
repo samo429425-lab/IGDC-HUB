@@ -406,15 +406,28 @@ function showExtension(){
   }
 
 function reconcileExtensionVisibility(){
-    // Default OPEN
-    if (!EXT.modal) return;
-    if (dashboardHasData()) {
-      // temporarily hide
-      hideExtension(false);
-    } else {
-      showExtension();
-    }
+
+  if (!EXT.modal) return;
+
+  // 내기업 / 대시보드 / 요약카드 열려 있으면 숨김
+  if (dashboardHasData()) {
+    hideExtension(false);
+    return;
   }
+
+  // Region / Country 열려 있으면 표시
+  if (
+    document.querySelector('.maru-region-modal.open') ||
+    document.querySelector('.maru-country-modal.open')
+  ){
+    showExtension();
+    return;
+  }
+
+  // 기본은 숨김
+  hideExtension(false);
+}
+
 
   // ---------- VOICE ----------
   function syncVoiceToggleUi(){
@@ -888,12 +901,16 @@ function callInsightEngine(req){
     const isClose = t.closest && t.closest('.maru-region-close, .maru-country-close');
     const isBackdrop = t.classList && (t.classList.contains('maru-region-backdrop') || t.classList.contains('maru-country-backdrop'));
 
-    if (isClose || isBackdrop) {
-      // Keep voice state intact.
-      // Ensure extension is visible when dashboards disappear.
-      setTimeout(reconcileExtensionVisibility, 50);
-    }
-  }, true);
+  if (isClose || isBackdrop) {
+
+  // === 전체 상태 초기화 ===
+  setVoiceEnabled(false, 'modal-close');
+
+  // 확장창 상태 재정렬
+  setTimeout(reconcileExtensionVisibility, 50);
+
+}
+}, true);
 
   // Keep extension visible by default when modals are not showing data
     const obs = new MutationObserver(function(){
