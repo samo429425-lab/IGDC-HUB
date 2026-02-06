@@ -2519,15 +2519,17 @@ function reorderRow(rowId){
 <script>
 (function(){
   const ROWS = 5;
-  const ITEMS_PER_ROW = 80; // can be increased
+
+  /* 메인 섹션 카드 수 */
+  const ITEMS_PER_ROW = 50;
 
   function makeCard(i, row){
     const a = document.createElement('a');
     a.className = 'shop-card';
-    a// href left unset by default; set only when URL exists;
     a.textContent = `아이템 ${i+1}`;
     return a;
   }
+
 
   function fillRows(){
     for(let r=1;r<=ROWS;r++){
@@ -2883,7 +2885,10 @@ function reorderRow(rowId){
         const list = sec.querySelector('.ad-list');
         if(list){
           list.innerHTML = '';
-          data.forEach(item=> list.appendChild(buildCard(item)));
+         data.slice(0,30).forEach(item=>{
+         list.appendChild(buildCard(item));
+    });
+
         }
       }
     }catch(_){ /* ignore */ }
