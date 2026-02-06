@@ -51,7 +51,7 @@ function compileHome(snapshot){
 
   for (const [key, arr] of Object.entries(sectionsMap)) {
     if (out[key] !== undefined) {
-      out[key] = toArr(arr);
+      out[key] = normalizeItems(arr);
     }
   }
 
@@ -60,7 +60,8 @@ const keys = [
   "home_right_top","home_right_middle","home_right_bottom"
 ];
 
-  return keys.map(k => ({ id: k, items: toArr(out[k]) }));
+  return keys.map(k => ({ id: k, items: normalizeItems(out[k])
+ }));
 }
 
 
