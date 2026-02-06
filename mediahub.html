@@ -1182,7 +1182,6 @@ body {
 <select name="provider" style="padding:8px 10px; border-radius:10px; border:none; outline:none;"></select>
 <button style="padding:10px 16px; border-radius:10px; border:none; background:#2e6bff; color:#fff; font-weight:700; cursor:pointer;" type="submit">검색</button>
 </form>
-
 <!-- 플랫폼 링크 라인 -->
 <div class="section-title">콘텐츠 공급사</div>
 <div class="platform-line"><a class="platform-tile" href="https://www.netflix.com" target="_blank">Netflix</a><a class="platform-tile" href="https://www.disneyplus.com" target="_blank">Disney+</a><a class="platform-tile" href="https://www.amazon.com/primevideo" target="_blank">Amazon Prime</a><a class="platform-tile" href="https://tv.apple.com" target="_blank">Apple TV+</a><a class="platform-tile" href="https://www.youtube.com" target="_blank">YouTube</a><a class="platform-tile" href="https://spotify.com" target="_blank">Spotify</a><a class="platform-tile" href="https://www.melon.com" target="_blank">Melon</a><a class="platform-tile" href="https://www.wavve.com" target="_blank">Wavve</a><a class="platform-tile" href="https://www.hulu.com" target="_blank">Hulu</a><a class="platform-tile" href="https://www.paramountplus.com" target="_blank">Paramount+</a><a class="platform-tile" href="https://www.peacocktv.com" target="_blank">Peacock</a><a class="platform-tile" href="https://www.tving.com" target="_blank">Tving</a><a class="platform-tile" href="https://www.coupangplay.com" target="_blank">Coupang Play</a><a class="platform-tile" href="https://music.youtube.com" target="_blank">YouTube Music</a><a class="platform-tile" href="https://tidal.com" target="_blank">Tidal</a><a class="platform-tile" href="https://www.deezer.com" target="_blank">Deezer</a><a class="platform-tile" href="https://music.amazon.com" target="_blank">Amazon Music</a><a class="platform-tile" href="https://www.bbc.co.uk/iplayer" target="_blank">BBC iPlayer</a><a class="platform-tile" href="https://www.viki.com" target="_blank">Rakuten Viki</a><a class="platform-tile" href="https://mubi.com" target="_blank">Mubi</a><a class="platform-tile" href="https://www.crunchyroll.com" target="_blank">Crunchyroll</a><a class="platform-tile" href="https://tv.kakao.com" target="_blank">Kakao TV</a><a class="platform-tile" href="https://video.unext.jp" target="_blank">U-NEXT</a></div>
@@ -2506,143 +2505,268 @@ body {
 
 <script>
 /**
- * MediaHub Unified Scroll Script (FULL BLOCK)
- * - 구조 생성 (wrapLines)
- * - 버튼 생성
- * - 클릭: 1장 이동
- * - 꾹 누름: 화면에 "완전히 보이는 카드 수"만큼 이동
- * - 반쯤 걸친 카드 기준 이동 ❌
- * - 모든 .thumb-line / .platform-line 공통 적용
+ * MediaHub Unified Scroll Script (SAFE FULL BLOCK)
+ * ✅ thumb-line + platform-line 모두 지원
+ * ✅ "원본 라인 요소(.thumb-line/.platform-line)는 절대 교체/삭제하지 않음" (replaceChild 금지)
+ * ✅ 내부만 .scroll-content로 래핑하여 렌더러/초기화 코드와 충돌 방지
+ * - 짧은 클릭: 1장
+ * - 꾹 누름: "화면에 완전히(80%↑) 보이는 카드 수"만큼 이동
  */
 
-(function(){
+(function () {
+  const CARD_SELECTOR = '.card';
+  const SHORT_CLICK_MS = 180;
+  const HOLD_INTERVAL_MS = 140;
+  const VISIBLE_RATIO = 0.8;
 
-/* ===== 설정 ===== */
-const CARD_SELECTOR = '.card';
-const SHORT_CLICK_MS = 180;     // 짧은 클릭 기준
-const HOLD_INTERVAL_MS = 140;  // 꾹 누름 반복 간격
+  function getGapPx(el) {
+    const s = getComputedStyle(el);
+    return parseFloat(s.gap || s.columnGap || 0) || 0;
+  }
 
-/* ===== 유틸 ===== */
-function getGapPx(el){
-  const s = getComputedStyle(el);
-  return parseFloat(s.gap || s.columnGap || 0) || 0;
-}
+  function getStride(container) {
+    const card = container.querySelector(CARD_SELECTOR);
+    return card ? (card.offsetWidth + getGapPx(container)) : container.clientWidth;
+  }
 
-function getStride(container){
-  const card = container.querySelector(CARD_SELECTOR);
-  return card ? card.offsetWidth + getGapPx(container) : container.clientWidth;
-}
+  function getFullyVisibleCount(container) {
+    const L = container.scrollLeft;
+    const R = L + container.clientWidth;
+    let count = 0;
 
-function getFullyVisibleCount(container){
-  const L = container.scrollLeft;
-  const R = L + container.clientWidth;
-  let count = 0;
+    container.querySelectorAll(CARD_SELECTOR).forEach(card => {
+      const l = card.offsetLeft;
+      const r = l + card.offsetWidth;
+      const visible = Math.min(r, R) - Math.max(l, L);
+      const ratio = visible / (card.offsetWidth || 1);
+      if (ratio >= VISIBLE_RATIO) count++;
+    });
 
-  container.querySelectorAll(CARD_SELECTOR).forEach(card=>{
-    const l = card.offsetLeft;
-    const r = l + card.offsetWidth;
+    return Math.max(1, count);
+  }
 
-    // 🔧 핵심 수정:
-    // 80% 이상 보이면 "다음 페이지로 넘길 대상"으로 간주
-    const visibleWidth = Math.min(r, R) - Math.max(l, L);
-    const ratio = visibleWidth / card.offsetWidth;
+  function scrollByCards(container, count) {
+    const stride = getStride(container);
+    container.scrollTo({
+      left: container.scrollLeft + stride * count,
+      behavior: 'smooth'
+    });
+  }
 
-    if(ratio >= 0.8) count++;
-  });
+  // ✅ 원본 line 요소를 교체하지 않고, 내부만 래핑 + 버튼을 line 안에 생성
+  function ensureLineWrapped(line) {
+    if (!line || line.dataset.scrollWrapped === '1') return;
 
-  return Math.max(1, count);
-}
+    // scroll-content 없으면 생성해서 기존 자식들을 이동
+    let content = line.querySelector(':scope > .scroll-content');
+    if (!content) {
+      content = document.createElement('div');
+      content.className = 'scroll-content';
 
+      // 기존 자식들을 content로 이동 (버튼이 이미 있을 수 있으니, 생성 전에는 통째 이동)
+      const children = Array.from(line.childNodes);
+      children.forEach(n => content.appendChild(n));
 
-/* ===== 핵심 스크롤 ===== */
-function scrollByCards(container, count){
-  const stride = getStride(container);
-  container.scrollTo({
-    left: container.scrollLeft + stride * count,
-    behavior: 'smooth'
-  });
-}
+      line.appendChild(content);
+    }
 
-/* ===== 버튼 바인딩 ===== */
-function bindScroll(wrapper){
-  const container = wrapper.querySelector('.scroll-content');
-  if(!container) return;
+    // 버튼이 없으면 생성
+    let leftBtn = line.querySelector(':scope > .scroll-btn.left');
+    let rightBtn = line.querySelector(':scope > .scroll-btn.right');
 
-  const leftBtn  = wrapper.querySelector('.scroll-btn.left');
-  const rightBtn = wrapper.querySelector('.scroll-btn.right');
+    if (!leftBtn) {
+      leftBtn = document.createElement('button');
+      leftBtn.className = 'scroll-btn left';
+      leftBtn.type = 'button';
+      leftBtn.textContent = '‹';
+      line.insertBefore(leftBtn, content);
+    } else {
+      // 혹시 content 뒤에 있으면 앞으로
+      if (leftBtn.nextSibling !== content) line.insertBefore(leftBtn, content);
+    }
 
-  let timer = null;
-  let pressStart = 0;
+    if (!rightBtn) {
+      rightBtn = document.createElement('button');
+      rightBtn.className = 'scroll-btn right';
+      rightBtn.type = 'button';
+      rightBtn.textContent = '›';
+      line.appendChild(rightBtn);
+    } else {
+      // 혹시 content 앞에 있으면 뒤로
+      if (rightBtn.previousSibling !== content) line.appendChild(rightBtn);
+    }
 
-  function start(dir){
-    pressStart = Date.now();
-    timer = setInterval(()=>{
-      const visible = getFullyVisibleCount(container);
+    // line에 wrapper 역할 클래스 부여 (CSS가 scroll-wrapper를 기대하는 경우 대응)
+    line.classList.add('scroll-wrapper');
+
+    // 바인딩 (중복 방지)
+    bindScroll(line);
+
+    line.dataset.scrollWrapped = '1';
+  }
+
+  function bindScroll(line) {
+    if (!line || line.dataset.scrollBound === '1') return;
+
+    const container = line.querySelector(':scope > .scroll-content');
+    if (!container) return;
+
+    const leftBtn = line.querySelector(':scope > .scroll-btn.left');
+    const rightBtn = line.querySelector(':scope > .scroll-btn.right');
+
+    let timer = null;
+    let pressStart = 0;
+
+    function clearTimer() {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    }
+
+ function start(dir) {
+  pressStart = Date.now();
+  clearTimer();
+
+  const isPlatform = line.classList.contains('platform-line');
+
+  // ✅ 공급사 전용: "타일 100% 노출 기준"으로만 페이지 이동 + 항상 offsetLeft로 스냅
+  function providerStep(stepDir){
+    const items = Array.from(container.querySelectorAll('.platform-tile'));
+    if(!items.length) return;
+
+    const crect = container.getBoundingClientRect();
+    const EPS = 1;
+
+    // 1) 현재 화면에서 "완전 100% 보이는 타일"만
+    const fully = [];
+    for(let i=0;i<items.length;i++){
+      const r = items[i].getBoundingClientRect();
+      if(r.left >= crect.left - EPS && r.right <= crect.right + EPS) fully.push(i);
+    }
+
+    // 2) 기준 인덱스(완전노출이 없으면: 현재 L 기준으로 걸쳐진 다음 타일)
+    const L = container.scrollLeft;
+    let firstIdx = (fully.length ? fully[0] : (() => {
+      for(let i=0;i<items.length;i++){
+        const l = items[i].offsetLeft;
+        const rr = l + items[i].offsetWidth;
+        if(rr > L + EPS) return i;
+      }
+      return 0;
+    })());
+
+    const pageCount = Math.max(1, fully.length || 1);
+    const targetIdx = Math.max(0, Math.min(items.length - 1, firstIdx + stepDir * pageCount));
+
+    container.scrollTo({ left: items[targetIdx].offsetLeft, behavior:'smooth' });
+  }
+
+  timer = setInterval(() => {
+    if(isPlatform){
+      providerStep(dir);                 // ✅ 공급사: 반 잘리면 다음번에 "그 타일이 통으로" 시작되게 스냅
+    } else {
+      const visible = getFullyVisibleCount(container);  // ✅ 메인 10섹션(thumb-line): 기존 방식 유지
       scrollByCards(container, dir * visible);
-    }, HOLD_INTERVAL_MS);
-  }
-
-  function end(dir){
-    if(timer){
-      clearInterval(timer);
-      timer = null;
     }
-    const elapsed = Date.now() - pressStart;
-    if(elapsed < SHORT_CLICK_MS){
-      scrollByCards(container, dir * 1); // 짧은 클릭 = 1장
-    }
-  }
-
-  rightBtn && rightBtn.addEventListener('mousedown', ()=>start(1));
-  rightBtn && rightBtn.addEventListener('mouseup',   ()=>end(1));
-  rightBtn && rightBtn.addEventListener('mouseleave',()=>{ if(timer) clearInterval(timer); });
-
-  leftBtn && leftBtn.addEventListener('mousedown', ()=>start(-1));
-  leftBtn && leftBtn.addEventListener('mouseup',   ()=>end(-1));
-  leftBtn && leftBtn.addEventListener('mouseleave',()=>{ if(timer) clearInterval(timer); });
+  }, HOLD_INTERVAL_MS);
 }
 
-/* ===== 구조 생성 ===== */
-function wrapLines(selector){
-  document.querySelectorAll(selector).forEach(line=>{
-    if(line.closest('.scroll-wrapper')) return;
+function end(dir) {
+  const elapsed = Date.now() - pressStart;
+  clearTimer();
 
-    const wrapper = document.createElement('div');
-    wrapper.className = 'scroll-wrapper';
+  if (elapsed < SHORT_CLICK_MS) {
+    const isPlatform = line.classList.contains('platform-line');
 
-    const content = document.createElement('div');
-    content.className = 'scroll-content';
+    if(isPlatform){
+      // ✅ 공급사: 클릭도 "페이지 스냅"으로 (반 잘린 타일이 다음에 통으로 보이도록)
+      const items = Array.from(container.querySelectorAll('.platform-tile'));
+      if(!items.length) return;
 
-    while(line.firstChild){
-      content.appendChild(line.firstChild);
+      const crect = container.getBoundingClientRect();
+      const EPS = 1;
+
+      const fully = [];
+      for(let i=0;i<items.length;i++){
+        const r = items[i].getBoundingClientRect();
+        if(r.left >= crect.left - EPS && r.right <= crect.right + EPS) fully.push(i);
+      }
+
+      const L = container.scrollLeft;
+      let firstIdx = (fully.length ? fully[0] : (() => {
+        for(let i=0;i<items.length;i++){
+          const l = items[i].offsetLeft;
+          const rr = l + items[i].offsetWidth;
+          if(rr > L + EPS) return i;
+        }
+        return 0;
+      })());
+
+      const pageCount = Math.max(1, fully.length || 1);
+      const targetIdx = Math.max(0, Math.min(items.length - 1, firstIdx + dir * pageCount));
+
+      container.scrollTo({ left: items[targetIdx].offsetLeft, behavior:'smooth' });
+    } else {
+      scrollByCards(container, dir * 1); // 기존: 짧은 클릭=1장
     }
-
-    const leftBtn = document.createElement('button');
-    leftBtn.className = 'scroll-btn left';
-    leftBtn.textContent = '‹';
-
-    const rightBtn = document.createElement('button');
-    rightBtn.className = 'scroll-btn right';
-    rightBtn.textContent = '›';
-
-    wrapper.appendChild(leftBtn);
-    wrapper.appendChild(content);
-    wrapper.appendChild(rightBtn);
-
-    line.parentNode.replaceChild(wrapper, line);
-  });
+  }
 }
 
-/* ===== 초기화 ===== */
-document.addEventListener('DOMContentLoaded', ()=>{
-  wrapLines('.thumb-line');     // 미디어 10개 섹션
-  wrapLines('.platform-line');  // 콘텐츠 공급사 영역
 
-  document.querySelectorAll('.scroll-wrapper').forEach(bindScroll);
-});
+    function end(dir) {
+      const elapsed = Date.now() - pressStart;
+      clearTimer();
+      if (elapsed < SHORT_CLICK_MS) {
+        scrollByCards(container, dir * 1);
+      }
+    }
+
+    // ✅ 마우스 + 터치/펜 모두 대응 (pointer 이벤트)
+    function bindBtn(btn, dir) {
+      if (!btn) return;
+
+      btn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        try { btn.setPointerCapture(e.pointerId); } catch(_) {}
+        start(dir);
+      });
+
+      btn.addEventListener('pointerup', (e) => {
+        e.preventDefault();
+        end(dir);
+      });
+
+      btn.addEventListener('pointercancel', () => {
+        clearTimer();
+      });
+
+      btn.addEventListener('pointerleave', () => {
+        // 포인터가 밖으로 나가면 멈춤 (길게 누르다 이탈 시)
+        clearTimer();
+      });
+    }
+
+    bindBtn(rightBtn, 1);
+    bindBtn(leftBtn, -1);
+
+    line.dataset.scrollBound = '1';
+  }
+
+  function initAll() {
+    // ✅ 두 라인 모두 안전하게 처리 (원본 노드 유지)
+    document.querySelectorAll('.thumb-line, .platform-line').forEach(ensureLineWrapped);
+  }
+
+  document.addEventListener('DOMContentLoaded', initAll);
+
+  // ✅ 공급사 목록/카드가 "나중에 렌더"되는 경우 재적용 (원본 노드 유지라 충돌 없음)
+  const mo = new MutationObserver(() => initAll());
+  mo.observe(document.documentElement, { childList: true, subtree: true });
 
 })();
 </script>
+
 
 <script>
 // Open provider search in a new tab, no backend dependency
@@ -4339,7 +4463,7 @@ window.addEventListener("message",function(ev){
 </script>
 
 <!-- Media Hub AutoMap (정본) -->
-<script defer src="/assets/js/mediahub-automap.v1.js"></script>
+<script defer src="/assets/js/mediahub-automap.v3.js"></script>
 <script defer src="/assets/js/placeholder-sweeper.js"></script>
 
 </body>
