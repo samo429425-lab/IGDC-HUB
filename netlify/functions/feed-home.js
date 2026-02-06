@@ -1,153 +1,93 @@
-// netlify/functions/feed-home.js  (HOME FEED - SNAPSHOT ONLY, PATH-STABLE)
-// ✅ Reads: netlify/functions/data/front.snapshot.json (primary)
-// ✅ Fallbacks: <repo>/data/front.snapshot.json (secondary)
-// ✅ Output: { sections:[{id, items:[...]}] }  (automap compatible)
-// ❌ No search-bank direct read
+const fs = require("fs");
+const path = require("path");
 
-import fs from "fs/promises";
-import path from "path";
-import { fileURLToPath } from "url";
+/**
+ * feed.js (HOME compiler - fixed mapping)
+ * - Handles: ?page=homeproducts
+ * - Reads: netlify/functions/data/snapshot.internal.v1.json
+ * - Compiles sections into keys expected by home automap:
+ *   home_1..home_5, home_right_top/middle/bottom
+ *
+ * NOTE:
+ * - Other pages: returns {} (non-breaking for HOME-only phase).
+ * - If you have an existing multi-page feed.js, merge ONLY the homeproducts branch.
+ */
 
-/* ===== DIR (ESM-safe) ===== */
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const SNAPSHOT_PATH = path.join(__dirname, "data", "snapshot.internal.v1.json");
 
-/* ===== SNAPSHOT PATHS ===== */
-// 1) Netlify functions packaged file (recommended)
-const SNAP1 = path.join(__dirname, "data", "front.snapshot.json");
-// 2) Repo root /data (local/alt build)
-const SNAP2 = path.join(__dirname, "..", "..", "data", "front.snapshot.json");
-
-async function readJSON(p){
-  try{
-    const s = await fs.readFile(p, "utf-8");
-    return JSON.parse(s);
-  }catch(e){
-    return null;
-  }
+function readJsonSafe(p) {
+  try { return JSON.parse(fs.readFileSync(p, "utf8")); }
+  catch (e) { return {}; }
 }
 
-async function readSnapshot(){
-  return (await readJSON(SNAP1)) || (await readJSON(SNAP2));
+function toArr(v){ return Array.isArray(v) ? v : []; }
+
+function normalizeItems(sec){
+  if (!sec) return [];
+  if (Array.isArray(sec.items)) return sec.items;
+  if (Array.isArray(sec.cards)) return sec.cards;
+  return [];
 }
 
-/* ===== NORMALIZE ITEM (automap-friendly) ===== */
-function normItem(it){
-  if(!it || typeof it !== "object") return null;
+// Map snapshot section ids (meta.category) -> home keys (data-psom-key)
+const ID_MAP = {
+  "home-shop-1": "home_1",
+  "home-shop-2": "home_2",
+  "home-shop-3": "home_3",
+  "home-shop-4": "home_4",
+  "home-shop-5": "home_5",
+  "home-right-top": "home_right_top",
+  "home-right-middle": "home_right_middle",
+  "home-right-bottom": "home_right_bottom"
+};
 
-  const url = typeof it.url === "string" ? it.url.trim() : "";
-  if(!url) return null;
-
-  const image =
-    (typeof it.thumb === "string" && it.thumb.trim()) ? it.thumb.trim()
-    : (typeof it.image === "string" && it.image.trim()) ? it.image.trim()
-    : (typeof it.img === "string" && it.img.trim()) ? it.img.trim()
-    : "";
-
-  const title =
-    (typeof it.title === "string" && it.title.trim()) ? it.title.trim()
-    : (typeof it.name === "string" && it.name.trim()) ? it.name.trim()
-    : "";
-
-  const summary =
-    (typeof it.summary === "string" && it.summary.trim()) ? it.summary.trim()
-    : (typeof it.desc === "string" && it.desc.trim()) ? it.desc.trim()
-    : (typeof it.description === "string" && it.description.trim()) ? it.description.trim()
-    : "";
-
-  const priority = (it.priority == null) ? 999999 : Number(it.priority);
-  const pin = it.pin === true;
-
-  const tags = Array.isArray(it.tags) ? it.tags : (Array.isArray(it.tag) ? it.tag : []);
-
-  // Provide both thumb + image for downstream compatibility
-  return {
-    id: (it.id || it._id || "") + "",
-    title,
-    summary,
-    description: (typeof it.description === "string" ? it.description : ""),
-    price: (it.price == null ? "" : (it.price + "")),
-    currency: (it.currency == null ? "" : (it.currency + "")),
-    cta: (it.cta == null ? "" : (it.cta + "")),
-    url,
-    thumb: image,
-    image,
-    tags,
-    priority: Number.isFinite(priority) ? priority : 999999,
-    pin
+function compileHome(snapshot){
+  const out = {
+    home_1: [], home_2: [], home_3: [], home_4: [], home_5: [],
+    home_right_top: [], home_right_middle: [], home_right_bottom: []
   };
+
+  const sectionsMap = snapshot?.pages?.home?.sections || {};
+
+  for (const [key, arr] of Object.entries(sectionsMap)) {
+    if (out[key] !== undefined) {
+      out[key] = toArr(arr);
+    }
+  }
+
+const keys = [
+  "home_1","home_2","home_3","home_4","home_5",
+  "home_right_top","home_right_middle","home_right_bottom"
+];
+
+  return keys.map(k => ({ id: k, items: toArr(out[k]) }));
 }
 
-/* ===== SORT (pin first, then priority asc) ===== */
-function sortItems(items){
-  const pinned = [];
-  const normal = [];
-  for (const it of items){
-    if(it && it.pin === true) pinned.push(it);
-    else normal.push(it);
-  }
-  const byPr = (a,b) => {
-    const pa = (a && a.priority != null) ? a.priority : 999999;
-    const pb = (b && b.priority != null) ? b.priority : 999999;
-    return pa - pb;
-  };
-  pinned.sort(byPr);
-  normal.sort(byPr);
-  return pinned.concat(normal);
-}
 
-/* ===== BUILD SECTIONS FROM SNAPSHOT ===== */
-function buildSections(snapshot){
-  const homeSections = snapshot?.pages?.home?.sections;
-  if(!homeSections || typeof homeSections !== "object") return null;
+exports.handler = async function(event){
+  const qs = event.queryStringParameters || {};
+  const page = String(qs.page || "").toLowerCase();
 
-  const KEYS = [
-    "home_1","home_2","home_3","home_4","home_5",
-    "home_right_top","home_right_middle","home_right_bottom"
-  ];
+  if (page === "homeproducts"){
+    const snapshot = readJsonSafe(SNAPSHOT_PATH);
+    const sections = compileHome(snapshot);
 
-  const sections = [];
-  for (const key of KEYS){
-    const raw = Array.isArray(homeSections[key]) ? homeSections[key] : [];
-    const items = sortItems(raw.map(normItem).filter(Boolean));
-    sections.push({ id: key, items });
-  }
-  return sections;
-}
-
-/* ===== NETLIFY HANDLER ===== */
-export async function handler(){
-  const snap = await readSnapshot();
-
-  if(!snap){
     return {
-      statusCode: 500,
-      headers: { "Content-Type":"application/json", "Cache-Control":"no-store" },
-      body: JSON.stringify({ error: "SNAPSHOT_NOT_FOUND", tried: [SNAP1, SNAP2] })
-    };
-  }
-
-  const sections = buildSections(snap);
-  if(!sections){
-    return {
-      statusCode: 500,
-      headers: { "Content-Type":"application/json", "Cache-Control":"no-store" },
-      body: JSON.stringify({ error: "SNAPSHOT_INVALID" })
-    };
-  }
-
-  const hasData = sections.some(s => Array.isArray(s.items) && s.items.length);
-  if(!hasData){
-    return {
-      statusCode: 500,
-      headers: { "Content-Type":"application/json", "Cache-Control":"no-store" },
-      body: JSON.stringify({ error: "HOME_EMPTY" })
+      statusCode: 200,
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store"
+      },
+      body: JSON.stringify({
+        meta: { page: "homeproducts", source: "snapshot.internal.v1", compiled: true },
+        sections
+      })
     };
   }
 
   return {
     statusCode: 200,
-    headers: { "Content-Type":"application/json", "Cache-Control":"no-store" },
-    body: JSON.stringify({ sections })
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+    body: JSON.stringify({})
   };
-}
+};
