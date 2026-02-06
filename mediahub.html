@@ -1149,6 +1149,37 @@ body {
 .media-card .meta{position:absolute;left:0;right:0;bottom:0;padding:10px;color:#eee;background:linear-gradient(to top,rgba(0,0,0,.6),transparent)}
 </style>
 
+<style id="mediahub-scroll-fix-2026-02">
+/* === MEDIA SCROLL BUTTON FINAL FIX === */
+
+.scroll-wrapper{
+  position:relative !important;
+  padding: 0 72px !important;
+  overflow: hidden !important;
+}
+
+.scroll-btn{
+  z-index:10000 !important;
+}
+
+.scroll-btn.left{
+  left:0px !important;
+}
+
+.scroll-btn.right{
+  right:0px !important;
+}
+
+/* content 영역은 버튼만큼 안쪽으로 */
+.scroll-content,
+.thumb-line{
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 10px !important;
+  padding-right: 5px !important;
+}
+</style>
+
 </head>
 <body>
 <div id="hero" data-psom-key="media-hero"><div class="hero-title"></div></div>
