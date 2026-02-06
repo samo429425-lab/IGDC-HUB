@@ -47,28 +47,22 @@ function compileHome(snapshot){
     home_right_top: [], home_right_middle: [], home_right_bottom: []
   };
 
-  const secs = toArr(snapshot.sections);
-  for (const sec of secs){
-    const sid = String(sec && (sec.id || sec.sectionId) || "").trim().toLowerCase();
-    if (!sid) continue;
+  const sectionsMap = snapshot?.pages?.home?.sections || {};
 
-    // Accept either already-standard keys OR mapped legacy ids
-    const target =
-      out[sid] !== undefined ? sid :
-      ID_MAP[sid] || "";
-
-    if (!target) continue;
-    out[target] = normalizeItems(sec);
+  for (const [key, arr] of Object.entries(sectionsMap)) {
+    if (out[key] !== undefined) {
+      out[key] = toArr(arr);
+    }
   }
 
-  // Emit in strict order
-  const keys = [
-    "home_1","home_2","home_3","home_4","home_5",
-    "home_right_top","home_right_middle","home_right_bottom"
-  ];
+const keys = [
+  "home_1","home_2","home_3","home_4","home_5",
+  "home_right_top","home_right_middle","home_right_bottom"
+];
 
   return keys.map(k => ({ id: k, items: toArr(out[k]) }));
 }
+
 
 exports.handler = async function(event){
   const qs = event.queryStringParameters || {};
