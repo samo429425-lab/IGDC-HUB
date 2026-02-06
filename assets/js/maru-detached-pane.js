@@ -8,7 +8,7 @@
 
   if (window.MaruDetachedPane) return;
 
- let zIndexBase = 100000;
+  let zIndexBase = 210000;
 
   function createPane({ title = '', content = '' }) {
     const pane = document.createElement('div');
