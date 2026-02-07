@@ -9785,12 +9785,39 @@
       "base_currency": "KRW",
       "auto_remit": true,
       "cycle": "monthly",
-      "audit": true
+      "audit": true,
+      "primary_wallet": "igdc_main_wallet"
     },
     "legal": {
       "entity_type": "corporation",
       "jurisdiction": "KR",
       "vat_enabled": true
+    },
+    "usage_scope": [
+      "home_snapshot",
+      "search_ads",
+      "donation",
+      "global_insight",
+      "affiliate",
+      "direct_payment"
+    ],
+    "last_updated": "2026-02-08",
+    "direct_sales": {
+      "enabled": true,
+      "supported_gateways": [],
+      "auto_settlement": true,
+      "future_financial_partners": [],
+      "revenue_flow": {
+        "gross": "100%",
+        "platform_fee": "configurable",
+        "net_settlement": "auto"
+      }
+    },
+    "settlement_extensions": {
+      "pg_linkable": true,
+      "multi_bank_supported": true,
+      "auto_reconciliation": true,
+      "future_ready": true
     }
   }
 }
