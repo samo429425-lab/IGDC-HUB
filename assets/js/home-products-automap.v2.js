@@ -25,8 +25,8 @@
   const KEYS_MAIN  = ['home_1','home_2','home_3','home_4','home_5'];
   const KEYS_RIGHT = ['home_right_top','home_right_middle','home_right_bottom'];
 
-  const MAIN_LIMIT = 24, MAIN_BATCH = 7;
-  const RIGHT_LIMIT = 12, RIGHT_BATCH = 4;
+  const MAIN_LIMIT = 100, MAIN_BATCH = 7;
+  const RIGHT_LIMIT = 80, RIGHT_BATCH = 4;
 
   const EMPTY_I18N = {
     de: 'Inhalte werden vorbereitet.',
