@@ -57,25 +57,31 @@ async function runGlobalInsight(params = {}) {
   // ---------------------------------------------------------
   let searchResult = null;
   if (Bridge && typeof Bridge.dispatch === "function") {
-    searchResult = await Bridge.dispatch({ q: query, mode });
+    searchResult = await Bridge.dispatch({
+  q: query,
+  mode,
+  limit: params.limit || 20
+});
+
   } else {
     return { status: "fail", message: "SEARCH_BRIDGE_UNAVAILABLE" };
   }
 
-  // ---------------------------------------------------------
-  // 2) CORE ENGINE (Optional Enrichment)
-  // ---------------------------------------------------------
-  let enriched = searchResult;
-  if (Core && typeof Core.validateQuery === "function") {
-    const valid = Core.validateQuery(query);
-    if (!valid) {
-      return { status: "fail", message: "INVALID_QUERY" };
-    }
-  }
+ // ---------------------------------------------------------
+// 2) CORE ENGINE (Optional Enrichment)
+// ---------------------------------------------------------
+let enriched = searchResult;
 
-  if (Core && typeof Core.normalizeResult === "function") {
-    enriched = Core.normalizeResult(searchResult);
+if (Core && typeof Core.validateQuery === "function") {
+  const valid = Core.validateQuery(query);
+  if (!valid || valid.ok === false) {
+    return { status: "fail", message: "INVALID_QUERY" };
   }
+}
+
+if (Core && typeof Core.normalizeResult === "function") {
+  enriched = Core.normalizeResult(searchResult);
+}
 
   // ---------------------------------------------------------
   // 3) GLOBAL INSIGHT WRAP

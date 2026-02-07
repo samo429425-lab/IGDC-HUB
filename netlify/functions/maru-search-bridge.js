@@ -1,10 +1,9 @@
 /**
  * maru-search-bridge.js
- * ---------------------------------------------
- * Bridge between maru-global-insight-engine
- * and maru-search core.
- *
- * Netlify Functions safe.
+ * ------------------------------------------------------------
+ * CANONICAL v2 Bridge (CommonJS)
+ * - For Netlify / Node runtime
+ * - For maru-global-insight-engine and others
  */
 
 const { maruSearchDispatcher } = require("./maru-search");
@@ -18,6 +17,28 @@ async function callMaruSearch(params = {}) {
   });
 }
 
-module.exports = {
-  callMaruSearch
-};
+/**
+ * dispatch(payload)
+ * Accepts either:
+ * - { query, options }
+ * - { q, mode, limit, context }
+ */
+function dispatch(payload = {}) {
+  const query = (payload.query || payload.q || "").trim();
+  if (!query) {
+    return Promise.resolve({ ok: false, error: "INVALID_PAYLOAD" });
+  }
+
+  // merge: top-level fields win over options
+  const merged = { ...(payload.options || {}), ...payload };
+  delete merged.options;
+
+  return callMaruSearch({
+    query,
+    mode: merged.mode,
+    limit: merged.limit,
+    context: merged.context
+  });
+}
+
+module.exports = { callMaruSearch, dispatch };

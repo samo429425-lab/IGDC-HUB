@@ -201,6 +201,29 @@ function toStandardItems(arr, source) {
 
 // ===== Containers (future-ready, but safe-noop unless active) =====
 const Containers = {
+	  search_bank: {
+    name: 'search_bank',
+    async fetch(q, limit){
+      try{
+        const res = await fetchWithTimeout(
+          '/.netlify/functions/search-bank?q=' +
+          encodeURIComponent(q) +
+          '&limit=' + encodeURIComponent(limit),
+          null,
+          6000
+        );
+        if(!res || !res.ok) return null;
+        const data = await res.json();
+        if(data && Array.isArray(data.items)){
+          return { source: 'search-bank', results: data.items };
+        }
+        return null;
+      }catch(e){
+        return null;
+      }
+    }
+  },
+
     web_naver: {
     name: 'web_naver',
     async fetch(q, limit, start){
@@ -217,9 +240,27 @@ const Containers = {
   // - If you later provide SNAPSHOT_SEARCH_URL or local snapshot index, implement here.
   snapshot: {
     name: 'snapshot',
-    async fetch(_q, _limit){
-      return null;
+ async fetch(q, limit){
+  try{
+    const res = await fetchWithTimeout(
+      '/.netlify/functions/search-bank?q=' +
+      encodeURIComponent(q) +
+      '&limit=' + encodeURIComponent(limit),
+      null,
+      6000
+    );
+    if(!res || !res.ok) return null;
+
+    const data = await res.json();
+    if(data && Array.isArray(data.items)){
+      return { source: 'search-bank', results: data.items };
     }
+    return null;
+  }catch(e){
+    return null;
+  }
+}
+
   },
   // AI container placeholder (optional):
   ai: {
@@ -234,6 +275,22 @@ const Containers = {
 async function orchestrateSearch({ q, limit }) {
   const collected = [];
   let sourceUsed = null;
+
+  // =========================
+  // 0) SEARCH-BANK — snapshot / fallback
+  // =========================
+  if (cbCanRun('bank')) {
+    const b = await Containers.search_bank.fetch(q, limit)
+      .catch(e => { cbOnFail('bank'); return null; });
+
+    if (b && b.results && b.results.length) {
+      cbOnSuccess('bank');
+      sourceUsed = sourceUsed || 'search-bank';
+
+      const items = toStandardItems(b.results, 'search-bank');
+      collected.push(...items);
+    }
+  }
 
   // =========================
   // 1) NAVER — primary bulk source (100/page)
@@ -428,7 +485,8 @@ exports.handler = async function (event) {
   try {
    const { q, limit, start } = pickQ(event);
 
- // env missing check stays consistent with previous behavior
+// env missing check stays consistent with previous behavior
+/*
 const envOk = !!(
   (process.env.NAVER_API_KEY && process.env.NAVER_CLIENT_SECRET) ||
   (process.env.GOOGLE_API_KEY && process.env.GOOGLE_CSE_ID)
@@ -436,6 +494,8 @@ const envOk = !!(
 if (!envOk) {
   return fail('Missing env', 'Set NAVER_API_KEY+NAVER_CLIENT_SECRET or GOOGLE_API_KEY+GOOGLE_CSE_ID');
 }
+*/
+
     if (!q) {
       return ok({
         status: 'ok',
