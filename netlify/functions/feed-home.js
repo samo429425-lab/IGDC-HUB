@@ -120,16 +120,33 @@ const ID_MAP = {
 };
 
 function compileHome(snapshot){
+
   const out = {
     home_1: [], home_2: [], home_3: [], home_4: [], home_5: [],
     home_right_top: [], home_right_middle: [], home_right_bottom: []
   };
 
-  const sectionsMap = snapshot?.pages?.home?.sections || {};
+  // ✅ 실제 snapshot 구조 기준
+  const secs = Array.isArray(snapshot.sections)
+    ? snapshot.sections
+    : [];
 
-  for (const [key, arr] of Object.entries(sectionsMap)) {
-    if (out[key] !== undefined) {
-      out[key] = normalizeItemsV2(arr);   // ✅ V2 사용
+  for (const sec of secs){
+
+    const sid = String(
+      sec.id || sec.sectionId || ""
+    ).trim();
+
+    if (!sid) continue;
+
+    if (out[sid] !== undefined){
+
+      const items =
+        sec.items ||
+        sec.cards ||
+        [];
+
+      out[sid] = normalizeItemsV2(items);
     }
   }
 
@@ -140,10 +157,9 @@ function compileHome(snapshot){
 
   return keys.map(k => ({
     id: k,
-    items: normalizeItemsV2(out[k])       // ✅ V2 사용
+    items: out[k]
   }));
 }
-
 
 
 exports.handler = async function(event){
