@@ -1,32 +1,29 @@
-// === PATCH: RIGHT PANEL USE SECTIONS ONLY (FINAL) ===
 /**
- * home-products-automap.v2.js  (RIGHT-PANEL SAFE)
- * Purpose:
- *  - Keep MAIN (home_1..home_5) behavior unchanged.
- *  - Enable RIGHT panel (home_right_top/middle/bottom) rendering for BOTH DOM layouts:
- *      A) .ad-section > .ad-scroll > .ad-list  (structured)
- *      B) data-psom-key is directly on .ad-list (direct/legacy)
+ * home-products-automap.v2.domfit.safe.js
+ * Baseline: domfit (renders into real containers used by home.html)
+ * Safety upgrades (no layout break):
+ *  - Never "main disappears" due to thumb filter (removed).
+ *  - Do NOT wipe existing DOM on fetch error / empty payload.
+ *  - Only replace list when VALID data exists.
+ *  - Attach scroll listener once (avoid duplicates).
+ *  - Keep MAIN in .shop-row and RIGHT in .ad-list (no direct-mode).
  *
- * Data source:
- *  - /.netlify/functions/feed-home?page=homeproducts
- *  - Expects payload.sections = [{id, items:[...]} ...]
- *
- * Notes:
- *  - No global CSS/zoom/transform changes.
- *  - No deletion of existing features: empty-state i18n, incremental rendering, priority sort.
+ * Fetch: /.netlify/functions/feed?page=homeproducts
  */
+
 (function () {
   'use strict';
-  if (window.__HOME_PRODUCTS_AUTOMAP_V2__) return;
-  window.__HOME_PRODUCTS_AUTOMAP_V2__ = true;
+  if (window.__HOME_AUTOMAP_DOMFIT_SAFE__) return;
+  window.__HOME_AUTOMAP_DOMFIT_SAFE__ = true;
 
-  const FEED_URL = '/.netlify/functions/feed-home?page=homeproducts';
+  const FEED_URL = '/.netlify/functions/feed?page=homeproducts';
 
   const KEYS_MAIN  = ['home_1','home_2','home_3','home_4','home_5'];
   const KEYS_RIGHT = ['home_right_top','home_right_middle','home_right_bottom'];
+  const ALL_KEYS   = KEYS_MAIN.concat(KEYS_RIGHT);
 
   const MAIN_LIMIT = 100, MAIN_BATCH = 7;
-  const RIGHT_LIMIT = 80, RIGHT_BATCH = 4;
+  const RIGHT_LIMIT = 80, RIGHT_BATCH = 5;
 
   const EMPTY_I18N = {
     de: 'Inhalte werden vorbereitet.',
@@ -43,11 +40,7 @@
     vi: 'Nội dung đang được chuẩn bị.',
     zh: '内容正在准备中。'
   };
-// 인덱스 상단 – 전체 선택용
-const ALL_LOCALES = [
-  'ko','en','ja','zh','fr','de','es','pt','ru','it','tr','vi','th',
-  'id','pl','nl','sv','no','fi','da','ar'
-];
+  const SUPPORTED_12 = new Set(['de','en','es','fr','id','ja','pt','ru','th','tr','vi','zh']);
 
   function getLangCode(){
     try{
@@ -87,49 +80,29 @@ const ALL_LOCALES = [
 
   function isExternal(url){ return /^https?:\/\//i.test(url); }
 
-  // ===== DOM target resolution =====
-  
-function getSectionItemsByKey(data, key){
-  if (!data || !Array.isArray(data.sections)) return [];
-  const sec = data.sections.find(s => s.id === key);
-  return sec && Array.isArray(sec.items) ? sec.items : [];
-}
-
-function resolveTargets(psomEl, key){
+  // ===== DOM target resolution (REAL containers only) =====
+  function resolveTargets(psomEl, key){
     const isRight = key.indexOf('home_right_') === 0;
 
     if (isRight){
-      // Layout A: structured ad-section
       const section = psomEl.closest('.ad-section');
-      const scrollA = section && (section.querySelector('.ad-scroll') || section);
-      const listA = section && section.querySelector('.ad-list');
-      if (listA) {
-        return { isRight: true, mode: 'ad-section', section, scroller: scrollA, list: listA, psomEl };
-      }
-
-      // Layout B: direct list (data-psom-key is on .ad-list itself)
-      const panel = psomEl.closest('.right-panel') || psomEl.closest('.ad-panel') || null;
-      const scrollB = psomEl.closest('.ad-scroll') || panel || null;
-      const listB = psomEl; // render directly into psom node
-      return { isRight: true, mode: 'direct', section: panel, scroller: scrollB, list: listB, psomEl };
+      const scroll = section && (section.querySelector('.ad-scroll') || section);
+      const list = section && section.querySelector('.ad-list');
+      return { isRight: true, section, scroller: scroll, list, psomEl };
     }
 
-    // MAIN
     const scroller = psomEl.closest('.shop-scroller');
     const row = scroller && scroller.querySelector('.shop-row');
-    return { isRight: false, mode: 'shop', section: scroller, scroller, list: row, psomEl };
+    return { isRight: false, section: scroller, scroller, list: row, psomEl };
   }
 
-    function showEmpty(t){
-    // If psomEl is the render list itself (RIGHT panels often use data-psom-key on .ad-list),
-    // never hide the list; show the empty message inside it.
-    const psomIsList = (t.psomEl === t.list);
+  // ===== Empty/Data state (SAFE: preserve existing visuals when present) =====
+  function showEmpty(t, opts){
+    opts = opts || {};
+    const preserveIfHasChildren = !!opts.preserveIfHasChildren;
 
-    // RIGHT direct 모드에서는 빈 상태를 리스트에 그리지 않음 (반짝 방지)
-    if (t.isRight && t.mode === 'direct') {
-    return;
-  }
-
+    // Always show message on psom (per baseline),
+    // BUT do not hide existing list if it already has content and we want to preserve.
     t.psomEl.style.display = 'block';
     t.psomEl.textContent = emptyText();
     t.psomEl.style.padding = '12px';
@@ -141,61 +114,35 @@ function resolveTargets(psomEl, key){
     t.psomEl.style.lineHeight = '1.6';
     t.psomEl.style.minHeight = '44px';
 
-    if (t.scroller) {
-      if (!t.isRight) {
-        t.scroller.style.display = 'none';
-      } else if (t.mode === 'ad-section') {
-        // RIGHT ad-section: keep scroller visible when psomEl is list (otherwise list will disappear)
-        if (!psomIsList) t.scroller.style.display = 'none';
-      } else {
-        // RIGHT direct: keep panel visible
-      }
+    if (!t.scroller) return;
+
+    const hasChildren = !!(t.list && t.list.children && t.list.children.length);
+    if (preserveIfHasChildren && hasChildren) {
+      // keep scroller visible; message still appears (psom), but list remains
+      t.scroller.style.display = '';
+      return;
     }
+
+    // baseline: hide list area when empty
+    t.scroller.style.display = 'none';
   }
 
   function showData(t){
-    const psomIsList = (t.psomEl === t.list);
-
-    // If psomEl is the list itself, do NOT hide it.
-    if (!psomIsList) {
-      t.psomEl.style.display = 'none';
-    } else {
-      t.psomEl.style.display = '';
-      // clear empty message styling if any
-      t.psomEl.textContent = '';
-      t.psomEl.style.padding = '';
-      t.psomEl.style.background = '';
-      t.psomEl.style.borderRadius = '';
-      t.psomEl.style.color = '';
-      t.psomEl.style.textAlign = '';
-      t.psomEl.style.fontSize = '';
-      t.psomEl.style.lineHeight = '';
-      t.psomEl.style.minHeight = '';
-    }
-
-    if (t.scroller) {
-      if (!t.isRight) {
-        t.scroller.style.display = '';
-      } else if (t.mode === 'ad-section') {
-        t.scroller.style.display = '';
-      } else {
-        // RIGHT direct: keep panel visible
-      }
-    }
+    // hide message, show list area
+    t.psomEl.style.display = 'none';
+    if (t.scroller) t.scroller.style.display = '';
   }
 
+  // ===== Card builders (match home.html CSS) =====
   function buildMainCard(item){
     const a = document.createElement('a');
     a.className = 'shop-card';
     a.href = item.url || '#';
     if (isExternal(item.url)) { a.target = '_blank'; a.rel = 'noopener'; }
 
+    // image background (optional)
     if (item.thumb){
-      const u = String(item.thumb).replace(/"/g,'\\"');
-      a.style.backgroundImage = `url("${u}")`;
-      a.style.backgroundPosition = 'center';
-      a.style.backgroundSize = 'cover';
-      a.style.backgroundRepeat = 'no-repeat';
+      a.style.background = `center/cover no-repeat url("${String(item.thumb).replace(/"/g,'\\"')}")`;
     }
 
     const cap = document.createElement('div');
@@ -221,20 +168,21 @@ function resolveTargets(psomEl, key){
     return a;
   }
 
-   function buildRightCard(item){
+  function buildRightCard(item){
     const a = document.createElement('a');
-    a.className = 'ad-box news-btn';
+    a.className = 'ad-box';
     a.href = item.url || '#';
-    a.target = '_blank';
-    const img = document.createElement('img');
-    img.loading = 'lazy';
-    img.decoding = 'async';
-    img.src = item.thumb || '';
-    img.alt = item.title || '';
-    a.appendChild(img);
+    if (isExternal(item.url)) { a.target = '_blank'; a.rel = 'noopener'; }
+    else { a.target = '_self'; }
+
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    if (item.thumb){
+      thumb.style.background = `center/cover no-repeat url("${String(item.thumb).replace(/"/g,'\\"')}")`;
+    }
+    a.appendChild(thumb);
     return a;
   }
-
 
   function indexSections(payload){
     const map = {};
@@ -248,11 +196,15 @@ function resolveTargets(psomEl, key){
       }
     }
 
-
+    // defensive: accept direct keys
+    for (const k of ALL_KEYS){
+      if (Array.isArray(payload[k])) map[k] = payload[k];
+    }
     return map;
   }
 
   function legacyKey(key){
+    // Accept snapshot legacy ids too (if feed isn't mapped)
     if (key.startsWith('home_right_')) return key.replace('home_right_','home-right-');
     return key.replace('home_','home-shop-');
   }
@@ -275,11 +227,18 @@ function resolveTargets(psomEl, key){
       offset = end;
     }
 
+    // Replace only when we have VALID data (caller guarantees items.length > 0)
     t.list.innerHTML = '';
+    t.list.dataset.automapManaged = '1';
     renderMore();
 
     const sc = t.scroller;
     if (!sc) return;
+
+    // Attach scroll listener once per scroller+key
+    const marker = `automapBound:${t.isRight ? 'R' : 'M'}:${t.psomEl.getAttribute('data-psom-key') || ''}`;
+    if (sc.dataset && sc.dataset[marker] === '1') return;
+    if (sc.dataset) sc.dataset[marker] = '1';
 
     sc.addEventListener('scroll', function(){
       if (offset >= items.length || offset >= limit) return;
@@ -297,77 +256,56 @@ function resolveTargets(psomEl, key){
     if (!psomEl) return;
 
     const t = resolveTargets(psomEl, key);
-    if (!t.list) return;
+    if (!t || !t.list) return;
 
-    // RIGHT panel scroll safety (some CSS forces overflow:visible)
-    if (t.isRight && t.scroller) {
-      try{
-        t.scroller.style.overflowY = 'auto';
-        t.scroller.style.webkitOverflowScrolling = 'touch';
-        t.scroller.style.touchAction = 'pan-y';
-      }catch(e){}
-    }
+    // Normalize (NO thumb filter: keep titles even if thumb missing)
+    let list = (rawItems || []).map(normItem).filter(x => !!x);
 
-
-    const isRight = t.isRight;
-
-    let list = (rawItems || []).map(normItem).filter(x => {
-      if (!x) return false;
-      if (isRight) return true;
-      return !!x.thumb;
-    });
-
+    // priority sort (stable-ish)
     list.sort((a,b) => {
       const pa = (a.priority == null ? 999999 : a.priority);
       const pb = (b.priority == null ? 999999 : b.priority);
       return pa - pb;
     });
 
+    // If no data: show message but PRESERVE existing visuals if present
     if (!list.length){
-      showEmpty(t);
+      showEmpty(t, { preserveIfHasChildren: true });
       return;
     }
 
-    // RIGHT panel: 기존 카드 제거 (데이터 1개라도 오면 교체)
-    if (t.isRight) {
-      t.list.innerHTML = '';
-    }
-
+    // Data exists: show list and replace with fresh cards
     showData(t);
     bindIncremental(t, list);
   }
 
-async function load(){
-  try{
-    const r = await fetch(FEED_URL, { cache: 'no-store' });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const payload = await r.json();
-    const byId = indexSections(payload);
+  async function load(){
+    // Before fetch: do nothing (do NOT wipe). We only render when data is valid.
+    try{
+      const r = await fetch(FEED_URL, { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
 
-    // MAIN (복구)
-    for (const key of KEYS_MAIN){
-      const alt = key.replace(/_/g,'-');
-      renderSlot(key, byId[key] || byId[alt] || byId[legacyKey(key)] || []);
-    }
+      const payload = await r.json();
+      const byId = indexSections(payload);
 
-    // RIGHT (유지)
-    for (const key of KEYS_RIGHT){
-      const alt = key.replace(/_/g,'-');
-      renderSlot(key, byId[key] || byId[alt] || byId[legacyKey(key)] || []);
-    }
-
-  }catch(e){
-    // 에러 시에도 MAIN + RIGHT 모두 empty 처리
-    for (const key of KEYS_MAIN.concat(KEYS_RIGHT)){
-      const psomEl = qs(`[data-psom-key="${key}"]`);
-      if (!psomEl) continue;
-      const t = resolveTargets(psomEl, key);
-      showEmpty(t);
+      // Render all slots with best-effort id mapping
+      for (const key of ALL_KEYS){
+        const alt = key.replace(/_/g,'-');
+        renderSlot(key, byId[key] || byId[alt] || byId[legacyKey(key)] || []);
+      }
+    }catch(e){
+      // On fail: preserve existing layout, show psom message without hiding existing cards
+      for (const key of ALL_KEYS){
+        const psomEl = qs(`[data-psom-key="${key}"]`);
+        if (!psomEl) continue;
+        const t = resolveTargets(psomEl, key);
+        if (!t) continue;
+        showEmpty(t, { preserveIfHasChildren: true });
+      }
+      // Optional debug
+      try{ console.warn('[HOME_AUTOMAP_DOMFIT_SAFE] feed failed:', e); }catch(_){}
     }
   }
-}
-
-
 
   function boot(){ load(); }
 
