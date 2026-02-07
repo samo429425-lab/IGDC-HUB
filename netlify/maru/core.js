@@ -46,6 +46,24 @@ function scoreItem(q, item) {
 }
 
 /**
+ * normalizeResult(res)
+ * - 엔진 응답 형태를 { items: [] } 중심으로 정규화
+ */
+function normalizeResult(res) {
+  if (!res || typeof res !== "object") return res;
+
+  if (Array.isArray(res.items)) return res;
+  if (res.data && Array.isArray(res.data.items)) return res.data;
+
+  if (res.baseResult && Array.isArray(res.baseResult.items)) return res.baseResult;
+  if (res.baseResult?.data && Array.isArray(res.baseResult.data.items)) return res.baseResult.data;
+
+  if (Array.isArray(res.results)) return { ...res, items: res.results };
+
+  return res;
+}
+
+/**
  * Store layer (in-memory per invocation). For Netlify, real cache/snapshot is on disk or KV.
  * We implement a tiered fetch:
  *  - liveProvider(): live (optional)
@@ -78,5 +96,6 @@ module.exports = {
   validateQuery,
   safeInt,
   scoreItem,
+  normalizeResult,
   tieredFetch,
 };
