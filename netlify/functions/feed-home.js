@@ -1,5 +1,89 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
+
+// ================================
+// Normalize V2 (충돌 없는 표준화 엔진)
+// ================================
+
+function normalizeItemV2(item = {}) {
+  if (!item || typeof item !== "object") return null;
+
+  // 링크만 최소 필수
+  const link =
+    item.link ||
+    item.url ||
+    item.href ||
+    item.permalink ||
+    "";
+
+  if (!link) return null; // 이것만 필터 기준
+
+  return {
+    // 기본 ID
+    id:
+      item.id ||
+      item._id ||
+      item.uuid ||
+      crypto.randomUUID(),
+
+    // 제목 자동 매핑
+    title:
+      item.title ||
+      item.name ||
+      item.subject ||
+      item.label ||
+      "",
+
+    // 이미지 자동 매핑
+    thumb:
+      item.thumb ||
+      item.image ||
+      item.img ||
+      item.thumbnail ||
+      item.cover ||
+      "",
+
+    // 링크
+    link,
+
+    // 가격 (상품 대응)
+    price:
+      item.price ||
+      item.cost ||
+      item.amount ||
+      null,
+
+    // 출처
+    source:
+      item.source ||
+      item.site ||
+      item.provider ||
+      "snapshot",
+
+    // 타입/카테고리
+    type:
+      item.type ||
+      item.category ||
+      item.kind ||
+      "general",
+
+    // 기타 메타
+    meta: item.meta || {},
+
+    // 원본 백업 (디버그용)
+    _raw: item
+  };
+}
+
+
+function normalizeItemsV2(arr = []) {
+  if (!Array.isArray(arr)) return [];
+
+  return arr
+    .map(normalizeItemV2)
+    .filter(Boolean);
+}
 
 /**
  * feed.js (HOME compiler - fixed mapping)
@@ -22,12 +106,6 @@ function readJsonSafe(p) {
 
 function toArr(v){ return Array.isArray(v) ? v : []; }
 
-function normalizeItems(sec){
-  if (!sec) return [];
-  if (Array.isArray(sec.items)) return sec.items;
-  if (Array.isArray(sec.cards)) return sec.cards;
-  return [];
-}
 
 // Map snapshot section ids (meta.category) -> home keys (data-psom-key)
 const ID_MAP = {
@@ -51,18 +129,21 @@ function compileHome(snapshot){
 
   for (const [key, arr] of Object.entries(sectionsMap)) {
     if (out[key] !== undefined) {
-      out[key] = normalizeItems(arr);
+      out[key] = normalizeItemsV2(arr);   // ✅ V2 사용
     }
   }
 
-const keys = [
-  "home_1","home_2","home_3","home_4","home_5",
-  "home_right_top","home_right_middle","home_right_bottom"
-];
+  const keys = [
+    "home_1","home_2","home_3","home_4","home_5",
+    "home_right_top","home_right_middle","home_right_bottom"
+  ];
 
-  return keys.map(k => ({ id: k, items: normalizeItems(out[k])
- }));
+  return keys.map(k => ({
+    id: k,
+    items: normalizeItemsV2(out[k])       // ✅ V2 사용
+  }));
 }
+
 
 
 exports.handler = async function(event){
