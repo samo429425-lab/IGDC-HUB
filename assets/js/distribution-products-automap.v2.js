@@ -1,330 +1,123 @@
-// === PATCH: HOME PRODUCTS AUTOMAP (V3, SAFE + BANK-FEED) ===
-/**
- * home-products-automap.v2.js  (V3-SAFE drop-in)
- * ------------------------------------------------------------
- * Data source: /.netlify/functions/feed-home
- * Expected: payload.sections = [{id, items:[...]} ...]
- *
- * SAFETY:
- *  - HARD scope to Home page only (avoid Distribution bleed).
- *  - If fetch fails OR sections empty -> keep original DOM (offline-safe).
- *  - RIGHT direct-mode never paints empty text into list (flicker-safe).
- */
-(function () {
-  'use strict';
-  if (window.__HOME_PRODUCTS_AUTOMAP_V3__) return;
-  window.__HOME_PRODUCTS_AUTOMAP_V3__ = true;
+// distribution-products-automap.v2.js (LOCKED MAPPING - PRODUCTION)
+// - 1:1 section mapping ONLY (no auto merge)
+// - Reads snapshot from /data/distribution.snapshot.json
+// - Supports BOTH snapshot shapes:
+//     A) { sections: { ... } }
+//     B) { pages: { distribution: { sections: { ... }}}}
+// - Limits:
+//     main sections: 100
+//     right panel:   80
+//
+// NOTE: Card DOM structure matches distributionhub.html's thumb-autofill-js
+//       (.thumb-card > .thumb-img + .thumb-title + .thumb-meta)
 
-  // ---- HARD SCOPE GUARD: run only if Home psom keys exist ----
-  function hasHomeSlots(){
-    try{ return !!document.querySelector('[data-psom-key="home_1"], [data-psom-key="home_right_top"]'); }
-    catch(e){ return false; }
-  }
-  if (!hasHomeSlots()) return;
+(async function () {
+  const SNAPSHOT_URL = '/data/distribution.snapshot.json';
 
-  const FEED_URL = '/.netlify/functions/feed-home?ts=' + Date.now();
+  const LIMIT_MAIN = 100;
+  const LIMIT_RIGHT = 80;
 
-  const KEYS_MAIN  = ['home_1','home_2','home_3','home_4','home_5'];
-  const KEYS_RIGHT = ['home_right_top','home_right_middle','home_right_bottom'];
+  const SECTION_MAP = [
+    { key: 'distribution-recommend', selector: '[data-psom-key="distribution-recommend"]', limit: LIMIT_MAIN },
+    { key: 'distribution-new',       selector: '[data-psom-key="distribution-new"]',       limit: LIMIT_MAIN },
+    { key: 'distribution-best',      selector: '[data-psom-key="distribution-best"]',      limit: LIMIT_MAIN },
+    { key: 'distribution-special',   selector: '[data-psom-key="distribution-special"]',   limit: LIMIT_MAIN },
+    { key: 'distribution-others',    selector: '[data-psom-key="distribution-others"]',    limit: LIMIT_MAIN },
+    { key: 'distribution-right',     selector: '[data-psom-key="distribution-right"]',     limit: LIMIT_RIGHT }
+  ];
 
-  const MAIN_LIMIT = 100, MAIN_BATCH = 7;
-  const RIGHT_LIMIT = 80, RIGHT_BATCH = 4;
-
-  const EMPTY_I18N = {
-    de: 'Inhalte werden vorbereitet.',
-    en: 'Content is being prepared.',
-    es: 'El contenido está en preparación.',
-    fr: 'Contenu en cours de préparation.',
-    id: 'Konten sedang disiapkan.',
-    ja: 'コンテンツ準備中です。',
-    ko: '콘텐츠 준비 중입니다.',
-    pt: 'Conteúdo em preparação.',
-    ru: 'Контент готовится.',
-    th: 'กำลังเตรียมเนื้อหาอยู่',
-    tr: 'İçerik hazırlanıyor.',
-    vi: 'Nội dung đang được chuẩn bị.',
-    zh: '内容正在准备中。'
-  };
-  const SUPPORTED_12 = new Set(['ko','en','ja','zh','fr','de','es','pt','ru','th','tr','vi','id']);
-  function getLangCode(){
-    try{
-      const raw = String(
-        (window.localStorage && localStorage.getItem('igdc_lang')) ||
-        (document.documentElement && document.documentElement.getAttribute('lang')) ||
-        (navigator && (navigator.language || (navigator.languages && navigator.languages[0]))) ||
-        'en'
-      ).trim().toLowerCase();
-      const base = raw.split('-')[0];
-      if (SUPPORTED_12.has(base)) return base;
-      if (base === 'ko') return 'ko';
-      return 'en';
-    }catch(e){ return 'en'; }
-  }
-  function emptyText(){ return EMPTY_I18N[getLangCode()] || EMPTY_I18N.en; }
-
-  function qs(sel, root){ return (root||document).querySelector(sel); }
-
-  function pick(o, keys){
-    for (const k of keys){
-      const v = o && o[k];
-      if (typeof v === 'string' && v.trim()) return v.trim();
-    }
-    return '';
+  function clear(el) {
+    while (el.firstChild) el.removeChild(el.firstChild);
   }
 
-  function normItem(it){
-    it = it || {};
-    return {
-      title: pick(it, ['title','name','label','caption','text']) || 'Item',
-      thumb: pick(it, ['thumb','image','image_url','img','photo','thumbnail','thumbnailUrl','cover','coverUrl','poster']),
-      url:   pick(it, ['checkoutUrl','productUrl','url','href','link','path','detailUrl']) || '#',
-      priority: (typeof it.priority === 'number' ? it.priority : null)
-    };
+  function escUrl(u) {
+    try { return String(u || '').replace(/'/g, '%27'); } catch { return ''; }
   }
 
-  function isExternal(url){ return /^https?:\/\//i.test(url); }
+  function pickImage(item) {
+    return (item && (item.image || item.thumb || item.thumbnail || '')) || '';
+  }
 
-  // ===== DOM target resolution =====
-  function resolveTargets(psomEl, key){
-    const isRight = key.indexOf('home_right_') === 0;
+  function pickTitle(item) {
+    return (item && (item.title || item.name || item.text || '')) || '';
+  }
 
-    if (isRight){
-      // Layout A: structured ad-section
-      const section = psomEl.closest('.ad-section');
-      const scrollA = section && (section.querySelector('.ad-scroll') || section);
-      const listA = section && section.querySelector('.ad-list');
-      if (listA) {
-        return { isRight: true, mode: 'ad-section', section, scroller: scrollA, list: listA, psomEl };
-      }
+  function pickMeta(item) {
+    return (item && (item.meta || item.subtitle || item.summary || '')) || '';
+  }
 
-      // Layout B: direct list (data-psom-key is on .ad-list itself)
-      const panel = psomEl.closest('.right-panel') || psomEl.closest('.ad-panel') || null;
-      const scrollB = psomEl.closest('.ad-scroll') || panel || null;
-      const listB = psomEl; // render directly into psom node
-      return { isRight: true, mode: 'direct', section: panel, scroller: scrollB, list: listB, psomEl };
+  function pickUrl(item) {
+    return (item && (item.url || item.href || item.link || '#')) || '#';
+  }
+
+  function createCard(item) {
+    const card = document.createElement('div');
+    card.className = 'thumb-card';
+
+    const img = document.createElement('div');
+    img.className = 'thumb-img';
+    const src = pickImage(item);
+    if (src) {
+      img.style.backgroundImage = "url('" + escUrl(src) + "')";
+      img.style.backgroundSize = 'cover';
+      img.style.backgroundPosition = 'center';
     }
 
-    // MAIN
-    const scroller = psomEl.closest('.shop-scroller');
-    const row = scroller && scroller.querySelector('.shop-row');
-    return { isRight: false, mode: 'shop', section: scroller, scroller, list: row, psomEl };
-  }
+    const title = document.createElement('div');
+    title.className = 'thumb-title';
+    title.textContent = pickTitle(item) || 'Recommended';
 
-  function showEmpty(t){
-    const psomIsList = (t.psomEl === t.list);
+    const meta = document.createElement('div');
+    meta.className = 'thumb-meta';
+    meta.textContent = pickMeta(item);
 
-    // RIGHT direct 모드에서는 빈 상태를 리스트에 그리지 않음 (반짝 방지)
-    if (t.isRight && t.mode === 'direct') return;
+    card.appendChild(img);
+    card.appendChild(title);
+    card.appendChild(meta);
 
-    t.psomEl.style.display = 'block';
-    t.psomEl.textContent = emptyText();
-    t.psomEl.style.padding = '12px';
-    t.psomEl.style.borderRadius = '12px';
-    t.psomEl.style.background = '#f7f7f7';
-    t.psomEl.style.color = '#666';
-    t.psomEl.style.textAlign = 'center';
-    t.psomEl.style.fontSize = '14px';
-    t.psomEl.style.lineHeight = '1.6';
-    t.psomEl.style.minHeight = '44px';
-
-    if (t.scroller) {
-      if (!t.isRight) {
-        t.scroller.style.display = 'none';
-      } else if (t.mode === 'ad-section') {
-        if (!psomIsList) t.scroller.style.display = 'none';
-      }
-    }
-  }
-
-  function showData(t){
-    const psomIsList = (t.psomEl === t.list);
-
-    if (!psomIsList) {
-      t.psomEl.style.display = 'none';
-    } else {
-      t.psomEl.style.display = '';
-      t.psomEl.textContent = '';
-      t.psomEl.style.padding = '';
-      t.psomEl.style.background = '';
-      t.psomEl.style.borderRadius = '';
-      t.psomEl.style.color = '';
-      t.psomEl.style.textAlign = '';
-      t.psomEl.style.fontSize = '';
-      t.psomEl.style.lineHeight = '';
-      t.psomEl.style.minHeight = '';
+    const href = pickUrl(item);
+    if (href && href !== '#') {
+      card.addEventListener('click', function(){ location.href = href; });
+      card.style.cursor = 'pointer';
     }
 
-    if (t.scroller) t.scroller.style.display = '';
+    return card;
   }
 
-  function buildMainCard(item){
-    const a = document.createElement('a');
-    a.className = 'shop-card';
-    a.href = item.url || '#';
-    if (isExternal(item.url)) { a.target = '_blank'; a.rel = 'noopener'; }
-
-    if (item.thumb){
-      const u = String(item.thumb).replace(/"/g,'\\"');
-      a.style.backgroundImage = `url("${u}")`;
-      a.style.backgroundPosition = 'center';
-      a.style.backgroundSize = 'cover';
-      a.style.backgroundRepeat = 'no-repeat';
-    }
-
-    const cap = document.createElement('div');
-    cap.className = 'shop-card-cap';
-    cap.textContent = item.title || '';
-    cap.style.alignSelf = 'end';
-    cap.style.width = '100%';
-    cap.style.background = 'rgba(255,255,255,.88)';
-    cap.style.padding = '6px 8px';
-    cap.style.fontWeight = '700';
-    cap.style.fontSize = '14px';
-    cap.style.color = '#222';
-    cap.style.whiteSpace = 'nowrap';
-    cap.style.overflow = 'hidden';
-    cap.style.textOverflow = 'ellipsis';
-
-    a.style.display = 'grid';
-    a.style.gridTemplateRows = '1fr auto';
-    a.style.alignItems = 'stretch';
-    a.style.justifyItems = 'stretch';
-
-    a.appendChild(cap);
-    return a;
+  async function loadSnapshot() {
+    const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Snapshot load failed');
+    return res.json();
   }
 
-  function buildRightCard(item){
-    const a = document.createElement('a');
-    a.className = 'ad-box news-btn';
-    a.href = item.url || '#';
-    a.target = '_blank';
-    a.rel = 'noopener';
-    const img = document.createElement('img');
-    img.loading = 'lazy';
-    img.decoding = 'async';
-    img.src = item.thumb || '';
-    img.alt = item.title || '';
-    a.appendChild(img);
-    return a;
+  function getSections(snapshot) {
+    return snapshot?.pages?.distribution?.sections || snapshot?.sections || null;
   }
 
-  function indexSections(payload){
-    const map = {};
-    if (!payload) return map;
+  try {
+    const snapshot = await loadSnapshot();
+    const sections = getSections(snapshot);
 
-    if (Array.isArray(payload.sections)){
-      for (const s of payload.sections){
-        const id = String((s && (s.id || s.sectionId) || '')).trim();
-        if (!id) continue;
-        map[id] = Array.isArray(s.items) ? s.items : (Array.isArray(s.cards) ? s.cards : []);
-      }
-    }
-    return map;
-  }
-
-  function bindIncremental(t, items){
-    const isRight = t.isRight;
-    const limit = isRight ? RIGHT_LIMIT : MAIN_LIMIT;
-    const batch = isRight ? RIGHT_BATCH : MAIN_BATCH;
-
-    let offset = 0;
-
-    function renderMore(){
-      const end = Math.min(offset + batch, limit, items.length);
-      const frag = document.createDocumentFragment();
-      for (let i = offset; i < end; i++){
-        const it = items[i];
-        frag.appendChild(isRight ? buildRightCard(it) : buildMainCard(it));
-      }
-      t.list.appendChild(frag);
-      offset = end;
-    }
-
-    t.list.innerHTML = '';
-    renderMore();
-
-    const sc = t.scroller;
-    if (!sc) return;
-
-    sc.addEventListener('scroll', function(){
-      if (offset >= items.length || offset >= limit) return;
-
-      const nearEnd = isRight
-        ? (sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 20)
-        : (sc.scrollLeft + sc.clientWidth >= sc.scrollWidth - 20);
-
-      if (nearEnd) renderMore();
-    }, { passive: true });
-  }
-
-  function renderSlot(key, rawItems){
-    const psomEl = qs(`[data-psom-key="${key}"]`);
-    if (!psomEl) return;
-
-    const t = resolveTargets(psomEl, key);
-    if (!t.list) return;
-
-    // RIGHT panel scroll safety
-    if (t.isRight && t.scroller) {
-      try{
-        t.scroller.style.overflowY = 'auto';
-        t.scroller.style.webkitOverflowScrolling = 'touch';
-        t.scroller.style.touchAction = 'pan-y';
-      }catch(e){}
-    }
-
-    const isRight = t.isRight;
-    let list = (rawItems || []).map(normItem).filter(x => {
-      if (!x) return false;
-      if (isRight) return true;
-      return !!x.thumb; // MAIN requires thumb
-    });
-
-    list.sort((a,b) => {
-      const pa = (a.priority == null ? 999999 : a.priority);
-      const pb = (b.priority == null ? 999999 : b.priority);
-      return pa - pb;
-    });
-
-    if (!list.length){
-      // NON-DESTRUCTIVE: keep original DOM when no data
+    if (!sections) {
+      console.error('[AUTOMAP] Invalid snapshot structure (need snapshot.pages.distribution.sections OR snapshot.sections)');
       return;
     }
 
-    // SUCCESS PATH: replace existing cards
-    t.list.innerHTML = '';
-    showData(t);
-    bindIncremental(t, list);
-  }
+    SECTION_MAP.forEach(cfg => {
+      const box = document.querySelector(cfg.selector);
+      if (!box) return;
 
-  async function load(){
-    const r = await fetch(FEED_URL, { cache: 'no-store' });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const payload = await r.json();
-    const byId = indexSections(payload);
+      const items = sections[cfg.key];
+      if (!Array.isArray(items) || items.length === 0) return;
 
-    const anyData =
-      Object.keys(byId).some(k => Array.isArray(byId[k]) && byId[k].length);
+      const list = items.slice(0, cfg.limit || LIMIT_MAIN);
 
-    if (!anyData) throw new Error('0 sections/items');
-
-    for (const key of KEYS_MAIN){
-      renderSlot(key, byId[key] || []);
-    }
-    for (const key of KEYS_RIGHT){
-      renderSlot(key, byId[key] || []);
-    }
-  }
-
-  function boot(){
-    // Offline-safe: on failure, keep original DOM (do NOT clear)
-    load().catch(() => {
-      // NON-DESTRUCTIVE: keep original DOM on failure
-      return;
+      clear(box);
+      list.forEach(item => box.appendChild(createCard(item)));
     });
-  }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
+    console.log('[AUTOMAP] Locked mapping loaded');
+  } catch (e) {
+    console.error('[AUTOMAP] Error:', e);
+  }
 })();
