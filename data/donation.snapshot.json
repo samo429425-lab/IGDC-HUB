@@ -1,810 +1,492 @@
 {
-  "pages": {
-    "donation": {
-      "sections": {
-        "donation_main": [
-          {
-            "id": "donation-mission-1",
-            "title": "Sample Item A for donation-mission",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "mission"
-            ],
-            "priority": 1
-          },
-          {
-            "id": "donation-mission-2",
-            "title": "Sample Item B for donation-mission",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "mission"
-            ],
-            "priority": 2
-          },
-          {
-            "id": "donation-ngo-1",
-            "title": "Sample Item A for donation-ngo",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "ngo"
-            ],
-            "priority": 1
-          },
-          {
-            "id": "donation-ngo-2",
-            "title": "Sample Item B for donation-ngo",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "ngo"
-            ],
-            "priority": 2
-          },
-          {
-            "id": "donation-others-1",
-            "title": "Sample Item A for donation-others",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "others"
-            ],
-            "priority": 1
-          },
-          {
-            "id": "donation-others-2",
-            "title": "Sample Item B for donation-others",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "others"
-            ],
-            "priority": 2
-          },
-          {
-            "id": "donation-relief-1",
-            "title": "Sample Item A for donation-relief",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "relief"
-            ],
-            "priority": 1
-          },
-          {
-            "id": "donation-relief-2",
-            "title": "Sample Item B for donation-relief",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "relief"
-            ],
-            "priority": 2
-          },
-          {
-            "id": "donation-volunteer-1",
-            "title": "Sample Item A for donation-volunteer",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "volunteer"
-            ],
-            "priority": 1
-          },
-          {
-            "id": "donation-volunteer-2",
-            "title": "Sample Item B for donation-volunteer",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "volunteer"
-            ],
-            "priority": 2
-          },
-          {
-            "id": "donation-education-1",
-            "title": "Sample Item A for donation-education",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "education"
-            ],
-            "priority": 1
-          },
-          {
-            "id": "donation-education-2",
-            "title": "Sample Item B for donation-education",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "education"
-            ],
-            "priority": 2
-          },
-          {
-            "id": "donation-environment-1",
-            "title": "Sample Item A for donation-environment",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "environment"
-            ],
-            "priority": 1
-          },
-          {
-            "id": "donation-environment-2",
-            "title": "Sample Item B for donation-environment",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "environment"
-            ],
-            "priority": 2
-          },
-          {
-            "id": "donation-global-news-1",
-            "title": "Sample Item A for donation-global-news",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "global-news"
-            ],
-            "priority": 1
-          },
-          {
-            "id": "donation-global-news-2",
-            "title": "Sample Item B for donation-global-news",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "global-news"
-            ],
-            "priority": 2
-          },
-          {
-            "id": "donation-mission-1",
-            "title": "Sample Item A for donation-mission",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "mission"
-            ],
-            "priority": 1
-          },
-          {
-            "id": "donation-mission-2",
-            "title": "Sample Item B for donation-mission",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "mission"
-            ],
-            "priority": 2
-          },
-          {
-            "id": "donation-ngo-1",
-            "title": "Sample Item A for donation-ngo",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "ngo"
-            ],
-            "priority": 1
-          },
-          {
-            "id": "donation-ngo-2",
-            "title": "Sample Item B for donation-ngo",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "ngo"
-            ],
-            "priority": 2
-          },
-          {
-            "id": "donation-others-1",
-            "title": "Sample Item A for donation-others",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "others"
-            ],
-            "priority": 1
-          },
-          {
-            "id": "donation-others-2",
-            "title": "Sample Item B for donation-others",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "others"
-            ],
-            "priority": 2
-          },
-          {
-            "id": "donation-relief-1",
-            "title": "Sample Item A for donation-relief",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "relief"
-            ],
-            "priority": 1
-          },
-          {
-            "id": "donation-relief-2",
-            "title": "Sample Item B for donation-relief",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "relief"
-            ],
-            "priority": 2
-          },
-          {
-            "id": "donation-volunteer-1",
-            "title": "Sample Item A for donation-volunteer",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "volunteer"
-            ],
-            "priority": 1
-          },
-          {
-            "id": "donation-volunteer-2",
-            "title": "Sample Item B for donation-volunteer",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "volunteer"
-            ],
-            "priority": 2
-          },
-          {
-            "id": "donation-education-1",
-            "title": "Sample Item A for donation-education",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "education"
-            ],
-            "priority": 1
-          },
-          {
-            "id": "donation-education-2",
-            "title": "Sample Item B for donation-education",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "education"
-            ],
-            "priority": 2
-          },
-          {
-            "id": "donation-environment-1",
-            "title": "Sample Item A for donation-environment",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "environment"
-            ],
-            "priority": 1
-          },
-          {
-            "id": "donation-environment-2",
-            "title": "Sample Item B for donation-environment",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "environment"
-            ],
-            "priority": 2
-          },
-          {
-            "id": "donation-global-news-1",
-            "title": "Sample Item A for donation-global-news",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "global-news"
-            ],
-            "priority": 1
-          },
-          {
-            "id": "donation-global-news-2",
-            "title": "Sample Item B for donation-global-news",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "global-news"
-            ],
-            "priority": 2
-          },
-          {
-            "id": "donation-mission-1",
-            "title": "Sample Item A for donation-mission",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "mission"
-            ],
-            "priority": 1
-          },
-          {
-            "id": "donation-mission-2",
-            "title": "Sample Item B for donation-mission",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "mission"
-            ],
-            "priority": 2
-          },
-          {
-            "id": "donation-ngo-1",
-            "title": "Sample Item A for donation-ngo",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "ngo"
-            ],
-            "priority": 1
-          },
-          {
-            "id": "donation-ngo-2",
-            "title": "Sample Item B for donation-ngo",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "ngo"
-            ],
-            "priority": 2
-          },
-          {
-            "id": "donation-others-1",
-            "title": "Sample Item A for donation-others",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "others"
-            ],
-            "priority": 1
-          },
-          {
-            "id": "donation-others-2",
-            "title": "Sample Item B for donation-others",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "others"
-            ],
-            "priority": 2
-          },
-          {
-            "id": "donation-relief-1",
-            "title": "Sample Item A for donation-relief",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "relief"
-            ],
-            "priority": 1
-          },
-          {
-            "id": "donation-relief-2",
-            "title": "Sample Item B for donation-relief",
-            "summary": "",
-            "description": "",
-            "amounts": [
-              5,
-              10,
-              25,
-              50
-            ],
-            "currency": "USD",
-            "cta": "Donate",
-            "url": "#",
-            "image": "/assets/img/placeholder.png",
-            "tags": [
-              "relief"
-            ],
-            "priority": 2
-          }
-        ]
-      }
+  "meta": {
+    "schema": "donation.snapshot.photo.v3",
+    "generated_at": "2026-02-09T14:19:52Z",
+    "producer": "donation-v3-final",
+    "version": 3
+  },
+  "sections": [
+    {
+      "psom_key": "donation-global",
+      "label": "Global / News"
+    },
+    {
+      "psom_key": "donation-ngo",
+      "label": "NGO / Relief"
+    },
+    {
+      "psom_key": "donation-mission",
+      "label": "Mission"
+    },
+    {
+      "psom_key": "donation-service",
+      "label": "Service"
+    },
+    {
+      "psom_key": "donation-relief",
+      "label": "Disaster / Relief"
+    },
+    {
+      "psom_key": "donation-education",
+      "label": "Education"
+    },
+    {
+      "psom_key": "donation-environment",
+      "label": "Environment"
+    },
+    {
+      "psom_key": "donation-others",
+      "label": "Others"
     }
-  }
+  ],
+  "items": [
+    {
+      "id": "donation-global-1",
+      "psom_key": "donation-global",
+      "category": "donation-global",
+      "type": "news",
+      "title": "Seed 1 (Global / News)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-09T14:19:52Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-global-2",
+      "psom_key": "donation-global",
+      "category": "donation-global",
+      "type": "news",
+      "title": "Seed 2 (Global / News)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-09T14:19:52Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-ngo-1",
+      "psom_key": "donation-ngo",
+      "category": "donation-ngo",
+      "type": "org",
+      "title": "Seed 1 (NGO / Relief)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-09T14:19:52Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-ngo-2",
+      "psom_key": "donation-ngo",
+      "category": "donation-ngo",
+      "type": "org",
+      "title": "Seed 2 (NGO / Relief)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-09T14:19:52Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-mission-1",
+      "psom_key": "donation-mission",
+      "category": "donation-mission",
+      "type": "org",
+      "title": "Seed 1 (Mission)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-09T14:19:52Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-mission-2",
+      "psom_key": "donation-mission",
+      "category": "donation-mission",
+      "type": "org",
+      "title": "Seed 2 (Mission)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-09T14:19:52Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-service-1",
+      "psom_key": "donation-service",
+      "category": "donation-service",
+      "type": "org",
+      "title": "Seed 1 (Service)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-09T14:19:52Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-service-2",
+      "psom_key": "donation-service",
+      "category": "donation-service",
+      "type": "org",
+      "title": "Seed 2 (Service)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-09T14:19:52Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-relief-1",
+      "psom_key": "donation-relief",
+      "category": "donation-relief",
+      "type": "org",
+      "title": "Seed 1 (Disaster / Relief)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-09T14:19:52Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-relief-2",
+      "psom_key": "donation-relief",
+      "category": "donation-relief",
+      "type": "org",
+      "title": "Seed 2 (Disaster / Relief)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-09T14:19:52Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-education-1",
+      "psom_key": "donation-education",
+      "category": "donation-education",
+      "type": "org",
+      "title": "Seed 1 (Education)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-09T14:19:52Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-education-2",
+      "psom_key": "donation-education",
+      "category": "donation-education",
+      "type": "org",
+      "title": "Seed 2 (Education)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-09T14:19:52Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-environment-1",
+      "psom_key": "donation-environment",
+      "category": "donation-environment",
+      "type": "org",
+      "title": "Seed 1 (Environment)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-09T14:19:52Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-environment-2",
+      "psom_key": "donation-environment",
+      "category": "donation-environment",
+      "type": "org",
+      "title": "Seed 2 (Environment)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-09T14:19:52Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-others-1",
+      "psom_key": "donation-others",
+      "category": "donation-others",
+      "type": "org",
+      "title": "Seed 1 (Others)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-09T14:19:52Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-others-2",
+      "psom_key": "donation-others",
+      "category": "donation-others",
+      "type": "org",
+      "title": "Seed 2 (Others)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-09T14:19:52Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    }
+  ]
 }
