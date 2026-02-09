@@ -1,0 +1,44 @@
+/* ================= MARU DETACHED PANE ================= */
+
+.maru-detached-pane{
+  position:fixed;
+  width:520px;
+  background:#fff;
+  border-radius:14px;
+  box-shadow:0 12px 30px rgba(0,0,0,.25);
+  overflow:hidden;
+}
+
+.maru-pane-header{
+  background:#1e4fff;
+  color:#fff;
+  padding:10px 14px;
+  cursor:grab;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+.maru-pane-title{
+  font-weight:600;
+}
+
+.maru-pane-close{
+  background:none;
+  border:none;
+  color:#fff;
+  font-size:16px;
+  cursor:pointer;
+}
+
+.maru-pane-body{
+  padding:14px;
+  max-height:70vh;
+  overflow:auto;
+}
+
+.maru-pane-body video,
+.maru-pane-body audio,
+.maru-pane-body iframe{
+  width:100%;
+}
