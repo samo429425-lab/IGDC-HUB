@@ -1,123 +1,95 @@
-// distribution-products-automap.v2.js (LOCKED MAPPING - PRODUCTION)
-// - 1:1 section mapping ONLY (no auto merge)
-// - Reads snapshot from /data/distribution.snapshot.json
-// - Supports BOTH snapshot shapes:
-//     A) { sections: { ... } }
-//     B) { pages: { distribution: { sections: { ... }}}}
-// - Limits:
-//     main sections: 100
-//     right panel:   80
-//
-// NOTE: Card DOM structure matches distributionhub.html's thumb-autofill-js
-//       (.thumb-card > .thumb-img + .thumb-title + .thumb-meta)
+/**
+ * distribution-products-automap.final.js
+ * --------------------------------------------------
+ * 정본 오토맵 파일
+ * - 구조: home-products-automap.v2.js 와 100% 동일
+ * - 차이점:
+ *   1) 메인 섹션: 6개 (distribution_1 ~ distribution_6)
+ *   2) 우측 패널: 1개 (distribution_right)
+ *   3) 각 섹션별 개별 타이틀 지원
+ * - 슬롯:
+ *   메인 100 / 우측 80
+ * --------------------------------------------------
+ */
 
-(async function () {
-  const SNAPSHOT_URL = '/data/distribution.snapshot.json';
+const FEED_URL = "/.netlify/functions/feed?page=distribution";
 
-  const LIMIT_MAIN = 100;
-  const LIMIT_RIGHT = 80;
+const MAIN_SECTIONS = [
+  { key: "distribution_1", title: "Distribution Section 1", limit: 100 },
+  { key: "distribution_2", title: "Distribution Section 2", limit: 100 },
+  { key: "distribution_3", title: "Distribution Section 3", limit: 100 },
+  { key: "distribution_4", title: "Distribution Section 4", limit: 100 },
+  { key: "distribution_5", title: "Distribution Section 5", limit: 100 },
+  { key: "distribution_6", title: "Distribution Section 6", limit: 100 }
+];
 
-  const SECTION_MAP = [
-    { key: 'distribution-recommend', selector: '[data-psom-key="distribution-recommend"]', limit: LIMIT_MAIN },
-    { key: 'distribution-new',       selector: '[data-psom-key="distribution-new"]',       limit: LIMIT_MAIN },
-    { key: 'distribution-best',      selector: '[data-psom-key="distribution-best"]',      limit: LIMIT_MAIN },
-    { key: 'distribution-special',   selector: '[data-psom-key="distribution-special"]',   limit: LIMIT_MAIN },
-    { key: 'distribution-others',    selector: '[data-psom-key="distribution-others"]',    limit: LIMIT_MAIN },
-    { key: 'distribution-right',     selector: '[data-psom-key="distribution-right"]',     limit: LIMIT_RIGHT }
-  ];
+const RIGHT_SECTION = {
+  key: "distribution_right",
+  title: "Popular Brands",
+  limit: 80
+};
 
-  function clear(el) {
-    while (el.firstChild) el.removeChild(el.firstChild);
+function qs(sel, root = document) {
+  return root.querySelector(sel);
+}
+
+function qsa(sel, root = document) {
+  return Array.from(root.querySelectorAll(sel));
+}
+
+function createDummyCard() {
+  const div = document.createElement("div");
+  div.className = "thumb-card dummy";
+  div.innerHTML = `<div class="thumb-img"></div><div class="thumb-title"></div>`;
+  return div;
+}
+
+function fillDummies(container, limit) {
+  const cards = qsa(".thumb-card", container);
+  for (let i = cards.length; i < limit; i++) {
+    container.appendChild(createDummyCard());
   }
+}
 
-  function escUrl(u) {
-    try { return String(u || '').replace(/'/g, '%27'); } catch { return ''; }
-  }
+async function fetchSection(key) {
+  const res = await fetch(`${FEED_URL}&key=${key}`);
+  const json = await res.json();
+  return json.items || [];
+}
 
-  function pickImage(item) {
-    return (item && (item.image || item.thumb || item.thumbnail || '')) || '';
-  }
+function replaceCards(container, items) {
+  const cards = qsa(".thumb-card", container);
+  items.forEach((item, idx) => {
+    if (!cards[idx]) return;
+    cards[idx].classList.remove("dummy");
+    cards[idx].innerHTML = `
+      <img src="${item.image || ""}" loading="lazy"/>
+      <div class="thumb-title">${item.title || ""}</div>
+    `;
+  });
+}
 
-  function pickTitle(item) {
-    return (item && (item.title || item.name || item.text || '')) || '';
-  }
+async function runSection(section) {
+  const block = qs(`[data-psom-key="${section.key}"]`);
+  if (!block) return;
 
-  function pickMeta(item) {
-    return (item && (item.meta || item.subtitle || item.summary || '')) || '';
-  }
-
-  function pickUrl(item) {
-    return (item && (item.url || item.href || item.link || '#')) || '#';
-  }
-
-  function createCard(item) {
-    const card = document.createElement('div');
-    card.className = 'thumb-card';
-
-    const img = document.createElement('div');
-    img.className = 'thumb-img';
-    const src = pickImage(item);
-    if (src) {
-      img.style.backgroundImage = "url('" + escUrl(src) + "')";
-      img.style.backgroundSize = 'cover';
-      img.style.backgroundPosition = 'center';
-    }
-
-    const title = document.createElement('div');
-    title.className = 'thumb-title';
-    title.textContent = pickTitle(item) || 'Recommended';
-
-    const meta = document.createElement('div');
-    meta.className = 'thumb-meta';
-    meta.textContent = pickMeta(item);
-
-    card.appendChild(img);
-    card.appendChild(title);
-    card.appendChild(meta);
-
-    const href = pickUrl(item);
-    if (href && href !== '#') {
-      card.addEventListener('click', function(){ location.href = href; });
-      card.style.cursor = 'pointer';
-    }
-
-    return card;
-  }
-
-  async function loadSnapshot() {
-    const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Snapshot load failed');
-    return res.json();
-  }
-
-  function getSections(snapshot) {
-    return snapshot?.pages?.distribution?.sections || snapshot?.sections || null;
-  }
+  fillDummies(block, section.limit);
 
   try {
-    const snapshot = await loadSnapshot();
-    const sections = getSections(snapshot);
-
-    if (!sections) {
-      console.error('[AUTOMAP] Invalid snapshot structure (need snapshot.pages.distribution.sections OR snapshot.sections)');
-      return;
+    const items = await fetchSection(section.key);
+    if (items.length) {
+      replaceCards(block, items.slice(0, section.limit));
     }
-
-    SECTION_MAP.forEach(cfg => {
-      const box = document.querySelector(cfg.selector);
-      if (!box) return;
-
-      const items = sections[cfg.key];
-      if (!Array.isArray(items) || items.length === 0) return;
-
-      const list = items.slice(0, cfg.limit || LIMIT_MAIN);
-
-      clear(box);
-      list.forEach(item => box.appendChild(createCard(item)));
-    });
-
-    console.log('[AUTOMAP] Locked mapping loaded');
   } catch (e) {
-    console.error('[AUTOMAP] Error:', e);
+    console.warn("Automap error:", section.key, e);
   }
-})();
+}
+
+async function init() {
+  for (const sec of MAIN_SECTIONS) {
+    await runSection(sec);
+  }
+  await runSection(RIGHT_SECTION);
+}
+
+document.addEventListener("DOMContentLoaded", init);
