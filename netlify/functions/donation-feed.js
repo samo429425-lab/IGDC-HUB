@@ -1,8 +1,8 @@
 
 "use strict";
 
-const snap = require("./donation-snapshot");
+const builder = require("./donation-snapshot-builder");
 
 exports.handler = async function(event, context){
-  return snap.handler(event, context);
+  return builder.handler(event, context);
 };
