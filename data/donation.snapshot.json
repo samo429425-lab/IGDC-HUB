@@ -1,205 +1,45 @@
 {
   "meta": {
     "schema": "donation.snapshot.photo.v3",
-    "generated_at": "2026-02-10T02:58:37.522090Z",
+    "generated_at": "2026-02-10T12:45:12Z",
     "producer": "donation-html-aligned",
     "version": 3
   },
   "sections": [
     {
-      "psom_key": "donation-ngo",
-      "label": "NGO / Relief"
-    },
-    {
-      "psom_key": "donation-mission",
-      "label": "Mission"
-    },
-    {
-      "psom_key": "donation-service",
-      "label": "Service"
-    },
-    {
       "psom_key": "donation-education",
-      "label": "Education"
+      "label": "donation-education"
     },
     {
       "psom_key": "donation-environment",
-      "label": "Environment"
+      "label": "donation-environment"
+    },
+    {
+      "psom_key": "donation-global",
+      "label": "donation-global"
+    },
+    {
+      "psom_key": "donation-mission",
+      "label": "donation-mission"
+    },
+    {
+      "psom_key": "donation-ngo",
+      "label": "donation-ngo"
     },
     {
       "psom_key": "donation-others",
-      "label": "Others"
+      "label": "donation-others"
+    },
+    {
+      "psom_key": "donation-relief",
+      "label": "donation-relief"
+    },
+    {
+      "psom_key": "donation-service",
+      "label": "donation-service"
     }
   ],
   "items": [
-    {
-      "id": "donation-ngo-1",
-      "psom_key": "donation-ngo",
-      "category": "donation-ngo",
-      "type": "org",
-      "title": "Sample 1 (donation-ngo)",
-      "summary": "",
-      "media": {
-        "kind": "image",
-        "thumb": "/assets/img/placeholder.png",
-        "src": null,
-        "ratio": null
-      },
-      "link": {
-        "url": "#",
-        "target": "_blank"
-      },
-      "meta": {
-        "country": null,
-        "language": null,
-        "source": "seed",
-        "verified": false,
-        "updated_at": "2026-02-10T02:58:37.522090Z"
-      },
-      "image": "/assets/img/placeholder.png",
-      "og_image": null,
-      "tags": []
-    },
-    {
-      "id": "donation-ngo-2",
-      "psom_key": "donation-ngo",
-      "category": "donation-ngo",
-      "type": "org",
-      "title": "Sample 2 (donation-ngo)",
-      "summary": "",
-      "media": {
-        "kind": "image",
-        "thumb": "/assets/img/placeholder.png",
-        "src": null,
-        "ratio": null
-      },
-      "link": {
-        "url": "#",
-        "target": "_blank"
-      },
-      "meta": {
-        "country": null,
-        "language": null,
-        "source": "seed",
-        "verified": false,
-        "updated_at": "2026-02-10T02:58:37.522090Z"
-      },
-      "image": "/assets/img/placeholder.png",
-      "og_image": null,
-      "tags": []
-    },
-    {
-      "id": "donation-mission-1",
-      "psom_key": "donation-mission",
-      "category": "donation-mission",
-      "type": "org",
-      "title": "Sample 1 (donation-mission)",
-      "summary": "",
-      "media": {
-        "kind": "image",
-        "thumb": "/assets/img/placeholder.png",
-        "src": null,
-        "ratio": null
-      },
-      "link": {
-        "url": "#",
-        "target": "_blank"
-      },
-      "meta": {
-        "country": null,
-        "language": null,
-        "source": "seed",
-        "verified": false,
-        "updated_at": "2026-02-10T02:58:37.522090Z"
-      },
-      "image": "/assets/img/placeholder.png",
-      "og_image": null,
-      "tags": []
-    },
-    {
-      "id": "donation-mission-2",
-      "psom_key": "donation-mission",
-      "category": "donation-mission",
-      "type": "org",
-      "title": "Sample 2 (donation-mission)",
-      "summary": "",
-      "media": {
-        "kind": "image",
-        "thumb": "/assets/img/placeholder.png",
-        "src": null,
-        "ratio": null
-      },
-      "link": {
-        "url": "#",
-        "target": "_blank"
-      },
-      "meta": {
-        "country": null,
-        "language": null,
-        "source": "seed",
-        "verified": false,
-        "updated_at": "2026-02-10T02:58:37.522090Z"
-      },
-      "image": "/assets/img/placeholder.png",
-      "og_image": null,
-      "tags": []
-    },
-    {
-      "id": "donation-service-1",
-      "psom_key": "donation-service",
-      "category": "donation-service",
-      "type": "org",
-      "title": "Sample 1 (donation-service)",
-      "summary": "",
-      "media": {
-        "kind": "image",
-        "thumb": "/assets/img/placeholder.png",
-        "src": null,
-        "ratio": null
-      },
-      "link": {
-        "url": "#",
-        "target": "_blank"
-      },
-      "meta": {
-        "country": null,
-        "language": null,
-        "source": "seed",
-        "verified": false,
-        "updated_at": "2026-02-10T02:58:37.522090Z"
-      },
-      "image": "/assets/img/placeholder.png",
-      "og_image": null,
-      "tags": []
-    },
-    {
-      "id": "donation-service-2",
-      "psom_key": "donation-service",
-      "category": "donation-service",
-      "type": "org",
-      "title": "Sample 2 (donation-service)",
-      "summary": "",
-      "media": {
-        "kind": "image",
-        "thumb": "/assets/img/placeholder.png",
-        "src": null,
-        "ratio": null
-      },
-      "link": {
-        "url": "#",
-        "target": "_blank"
-      },
-      "meta": {
-        "country": null,
-        "language": null,
-        "source": "seed",
-        "verified": false,
-        "updated_at": "2026-02-10T02:58:37.522090Z"
-      },
-      "image": "/assets/img/placeholder.png",
-      "og_image": null,
-      "tags": []
-    },
     {
       "id": "donation-education-1",
       "psom_key": "donation-education",
@@ -222,7 +62,7 @@
         "language": null,
         "source": "seed",
         "verified": false,
-        "updated_at": "2026-02-10T02:58:37.522090Z"
+        "updated_at": "2026-02-10T12:45:12Z"
       },
       "image": "/assets/img/placeholder.png",
       "og_image": null,
@@ -250,7 +90,7 @@
         "language": null,
         "source": "seed",
         "verified": false,
-        "updated_at": "2026-02-10T02:58:37.522090Z"
+        "updated_at": "2026-02-10T12:45:12Z"
       },
       "image": "/assets/img/placeholder.png",
       "og_image": null,
@@ -278,7 +118,7 @@
         "language": null,
         "source": "seed",
         "verified": false,
-        "updated_at": "2026-02-10T02:58:37.522090Z"
+        "updated_at": "2026-02-10T12:45:12Z"
       },
       "image": "/assets/img/placeholder.png",
       "og_image": null,
@@ -306,7 +146,175 @@
         "language": null,
         "source": "seed",
         "verified": false,
-        "updated_at": "2026-02-10T02:58:37.522090Z"
+        "updated_at": "2026-02-10T12:45:12Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-global-1",
+      "psom_key": "donation-global",
+      "category": "donation-global",
+      "type": "news",
+      "title": "Sample 1 (donation-global)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-10T12:45:12Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-global-2",
+      "psom_key": "donation-global",
+      "category": "donation-global",
+      "type": "news",
+      "title": "Sample 2 (donation-global)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-10T12:45:12Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-mission-1",
+      "psom_key": "donation-mission",
+      "category": "donation-mission",
+      "type": "org",
+      "title": "Sample 1 (donation-mission)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-10T12:45:12Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-mission-2",
+      "psom_key": "donation-mission",
+      "category": "donation-mission",
+      "type": "org",
+      "title": "Sample 2 (donation-mission)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-10T12:45:12Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-ngo-1",
+      "psom_key": "donation-ngo",
+      "category": "donation-ngo",
+      "type": "org",
+      "title": "Sample 1 (donation-ngo)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-10T12:45:12Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-ngo-2",
+      "psom_key": "donation-ngo",
+      "category": "donation-ngo",
+      "type": "org",
+      "title": "Sample 2 (donation-ngo)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-10T12:45:12Z"
       },
       "image": "/assets/img/placeholder.png",
       "og_image": null,
@@ -334,7 +342,7 @@
         "language": null,
         "source": "seed",
         "verified": false,
-        "updated_at": "2026-02-10T02:58:37.522090Z"
+        "updated_at": "2026-02-10T12:45:12Z"
       },
       "image": "/assets/img/placeholder.png",
       "og_image": null,
@@ -362,7 +370,119 @@
         "language": null,
         "source": "seed",
         "verified": false,
-        "updated_at": "2026-02-10T02:58:37.522090Z"
+        "updated_at": "2026-02-10T12:45:12Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-relief-1",
+      "psom_key": "donation-relief",
+      "category": "donation-relief",
+      "type": "org",
+      "title": "Sample 1 (donation-relief)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-10T12:45:12Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-relief-2",
+      "psom_key": "donation-relief",
+      "category": "donation-relief",
+      "type": "org",
+      "title": "Sample 2 (donation-relief)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-10T12:45:12Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-service-1",
+      "psom_key": "donation-service",
+      "category": "donation-service",
+      "type": "org",
+      "title": "Sample 1 (donation-service)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-10T12:45:12Z"
+      },
+      "image": "/assets/img/placeholder.png",
+      "og_image": null,
+      "tags": []
+    },
+    {
+      "id": "donation-service-2",
+      "psom_key": "donation-service",
+      "category": "donation-service",
+      "type": "org",
+      "title": "Sample 2 (donation-service)",
+      "summary": "",
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": null,
+        "ratio": null
+      },
+      "link": {
+        "url": "#",
+        "target": "_blank"
+      },
+      "meta": {
+        "country": null,
+        "language": null,
+        "source": "seed",
+        "verified": false,
+        "updated_at": "2026-02-10T12:45:12Z"
       },
       "image": "/assets/img/placeholder.png",
       "og_image": null,
