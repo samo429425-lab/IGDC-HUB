@@ -1,95 +1,159 @@
-/**
- * distribution-products-automap.final.js
- * --------------------------------------------------
- * 정본 오토맵 파일
- * - 구조: home-products-automap.v2.js 와 100% 동일
- * - 차이점:
- *   1) 메인 섹션: 6개 (distribution_1 ~ distribution_6)
- *   2) 우측 패널: 1개 (distribution_right)
- *   3) 각 섹션별 개별 타이틀 지원
- * - 슬롯:
- *   메인 100 / 우측 80
- * --------------------------------------------------
- */
+// distribution-products-automap.v2.js (LOCKED MAPPING - PRODUCTION, SLOT-FIRST)
+// - 1:1 section mapping ONLY (no auto merge)
+// - Reads snapshot from /data/distribution.snapshot.json
+// - Supports BOTH snapshot shapes:
+//     A) { sections: { ... } }
+//     B) { pages: { distribution: { sections: { ... }}}}
+// - SLOT-FIRST rendering (HOME style):
+//     * Always renders fixed slots (main: 100, right: 80)
+//     * If snapshot has fewer items, fills remaining slots with safe placeholders
+//
+// NOTE: Card DOM structure matches distributionhub.html's thumb-autofill-js
+//       (.thumb-card > .thumb-img + .thumb-title + .thumb-meta)
 
-const FEED_URL = "/.netlify/functions/feed?page=distribution";
+(function () {
+  'use strict';
+  if (window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V2__) return;
+  window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V2__ = true;
 
-const MAIN_SECTIONS = [
-  { key: "distribution_1", title: "Distribution Section 1", limit: 100 },
-  { key: "distribution_2", title: "Distribution Section 2", limit: 100 },
-  { key: "distribution_3", title: "Distribution Section 3", limit: 100 },
-  { key: "distribution_4", title: "Distribution Section 4", limit: 100 },
-  { key: "distribution_5", title: "Distribution Section 5", limit: 100 },
-  { key: "distribution_6", title: "Distribution Section 6", limit: 100 }
-];
+  const SNAPSHOT_URL = '/data/distribution.snapshot.json';
 
-const RIGHT_SECTION = {
-  key: "distribution_right",
-  title: "Popular Brands",
-  limit: 80
-};
+  const LIMIT_MAIN = 100;
+  const LIMIT_RIGHT = 80;
 
-function qs(sel, root = document) {
-  return root.querySelector(sel);
-}
+  // 6 MAIN + 1 RIGHT  (PSOM/HTML aligned)
+  const SECTION_MAP = [
+    { key: 'distribution-recommend', selector: '[data-psom-key="distribution-recommend"]', limit: LIMIT_MAIN },
+    { key: 'distribution-new',       selector: '[data-psom-key="distribution-new"]',       limit: LIMIT_MAIN },
+    { key: 'distribution-trending',  selector: '[data-psom-key="distribution-trending"]',  limit: LIMIT_MAIN },
+    { key: 'distribution-special',   selector: '[data-psom-key="distribution-special"]',   limit: LIMIT_MAIN },
+    { key: 'distribution-sponsor',   selector: '[data-psom-key="distribution-sponsor"]',   limit: LIMIT_MAIN },
+    { key: 'distribution-others',    selector: '[data-psom-key="distribution-others"]',    limit: LIMIT_MAIN },
+    { key: 'distribution-right',     selector: '[data-psom-key="distribution-right"]',     limit: LIMIT_RIGHT }
+  ];
 
-function qsa(sel, root = document) {
-  return Array.from(root.querySelectorAll(sel));
-}
+  // 1x1 transparent gif (safe placeholder, no asset dependency)
+  const PLACEHOLDER_IMG = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
 
-function createDummyCard() {
-  const div = document.createElement("div");
-  div.className = "thumb-card dummy";
-  div.innerHTML = `<div class="thumb-img"></div><div class="thumb-title"></div>`;
-  return div;
-}
-
-function fillDummies(container, limit) {
-  const cards = qsa(".thumb-card", container);
-  for (let i = cards.length; i < limit; i++) {
-    container.appendChild(createDummyCard());
+  function clear(el) {
+    while (el.firstChild) el.removeChild(el.firstChild);
   }
-}
 
-async function fetchSection(key) {
-  const res = await fetch(`${FEED_URL}&key=${key}`);
-  const json = await res.json();
-  return json.items || [];
-}
+  function escUrl(u) {
+    try { return String(u || '').replace(/'/g, '%27'); } catch { return ''; }
+  }
 
-function replaceCards(container, items) {
-  const cards = qsa(".thumb-card", container);
-  items.forEach((item, idx) => {
-    if (!cards[idx]) return;
-    cards[idx].classList.remove("dummy");
-    cards[idx].innerHTML = `
-      <img src="${item.image || ""}" loading="lazy"/>
-      <div class="thumb-title">${item.title || ""}</div>
-    `;
-  });
-}
+  function pickImage(item) {
+    return (item && (item.thumb || item.image || item.thumbnail || item.imageUrl || item.thumbnailUrl || '')) || '';
+  }
 
-async function runSection(section) {
-  const block = qs(`[data-psom-key="${section.key}"]`);
-  if (!block) return;
+  function pickTitle(item) {
+    return (item && (item.title || item.name || item.text || '')) || '';
+  }
 
-  fillDummies(block, section.limit);
+  function pickMeta(item) {
+    return (item && (item.meta || item.subtitle || item.summary || '')) || '';
+  }
 
-  try {
-    const items = await fetchSection(section.key);
-    if (items.length) {
-      replaceCards(block, items.slice(0, section.limit));
+  function pickUrl(item) {
+    return (item && (item.url || item.href || item.link || '#')) || '#';
+  }
+
+  function makeDummy(cfg, idx) {
+    const n = idx + 1;
+    return {
+      title: (cfg.key || 'distribution') + ' Product ' + n,
+      meta: '',
+      thumb: PLACEHOLDER_IMG,
+      url: '#'
+    };
+  }
+
+  function createCard(item) {
+    const card = document.createElement('div');
+    card.className = 'thumb-card';
+
+    const img = document.createElement('div');
+    img.className = 'thumb-img';
+    const src = pickImage(item);
+    const useSrc = src || PLACEHOLDER_IMG;
+
+    img.style.backgroundImage = "url('" + escUrl(useSrc) + "')";
+    img.style.backgroundSize = 'cover';
+    img.style.backgroundPosition = 'center';
+
+    const title = document.createElement('div');
+    title.className = 'thumb-title';
+    title.textContent = pickTitle(item) || 'Product';
+
+    const meta = document.createElement('div');
+    meta.className = 'thumb-meta';
+    meta.textContent = pickMeta(item);
+
+    card.appendChild(img);
+    card.appendChild(title);
+    card.appendChild(meta);
+
+    const href = pickUrl(item);
+    if (href && href !== '#') {
+      card.addEventListener('click', function(){ location.href = href; });
+      card.style.cursor = 'pointer';
     }
-  } catch (e) {
-    console.warn("Automap error:", section.key, e);
-  }
-}
 
-async function init() {
-  for (const sec of MAIN_SECTIONS) {
-    await runSection(sec);
+    return card;
   }
-  await runSection(RIGHT_SECTION);
-}
 
-document.addEventListener("DOMContentLoaded", init);
+  async function loadSnapshot() {
+    const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Snapshot load failed: ' + res.status);
+    return res.json();
+  }
+
+  function getSections(snapshot) {
+    return (snapshot && (snapshot.pages && snapshot.pages.distribution && snapshot.pages.distribution.sections)) ||
+           (snapshot && snapshot.sections) ||
+           null;
+  }
+
+  function renderSlotFirst(sections) {
+    SECTION_MAP.forEach(cfg => {
+      const box = document.querySelector(cfg.selector);
+      if (!box) return;
+
+      const raw = sections && sections[cfg.key];
+      const arr = Array.isArray(raw) ? raw : [];
+      const limit = cfg.limit || LIMIT_MAIN;
+
+      const list = arr.slice(0, limit);
+
+      // HOME-style: always fill to fixed slot count
+      while (list.length < limit) list.push(makeDummy(cfg, list.length));
+
+      clear(box);
+      list.forEach(item => box.appendChild(createCard(item)));
+    });
+  }
+
+  function renderAllPlaceholders() {
+    renderSlotFirst(null);
+  }
+
+  (async function run(){
+    try {
+      const snapshot = await loadSnapshot();
+      const sections = getSections(snapshot);
+
+      if (!sections) {
+        console.error('[AUTOMAP] Invalid snapshot structure (need snapshot.pages.distribution.sections OR snapshot.sections) — using placeholders');
+        renderAllPlaceholders();
+        return;
+      }
+
+      renderSlotFirst(sections);
+      console.log('[AUTOMAP] Slot-first locked mapping loaded');
+    } catch (e) {
+      console.error('[AUTOMAP] Error (using placeholders):', e);
+      renderAllPlaceholders();
+    }
+  })();
+})();
