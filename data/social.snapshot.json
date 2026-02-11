@@ -1,9 +1,9 @@
 {
   "meta": {
     "type": "social_snapshot",
-    "version": "5.0",
+    "version": "6.0-final",
     "created_at": "2026-02-07T16:09:06Z",
-    "updated_at": "2026-02-08T00:00:00Z",
+    "updated_at": "2026-02-10T23:12:43Z",
     "psom_ref": "psom.json",
     "notes": "Container v5: 9 social sections + single right panel; includes engagement, monetization anchors, and payout settlement profile.",
     "payout_profile": {
@@ -43,7 +43,8 @@
         "settlement_mode": "manual_settlement_stub",
         "status": "ready_for_gateway_binding"
       }
-    }
+    },
+    "status": "production_ready"
   },
   "capacity": {
     "sections_default": 100,
