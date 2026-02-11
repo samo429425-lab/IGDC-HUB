@@ -1,7 +1,7 @@
 
 /**
- * distribution-products-automap.v3.5.js
- * Verified dual-structure automap (legacy + upgraded)
+ * distribution-products-automap.v3.4.js
+ * Home-style slot-first automap for Distribution Hub
  */
 
 const MAIN_LIMIT = 100;
@@ -98,37 +98,12 @@ function buildList(raw, limit, prefix) {
   return list;
 }
 
-/* ================= TARGET RESOLVERS ================= */
-
-function findMainTarget(key) {
-  return (
-    document.querySelector(`[data-section="${key}"]`) ||
-    document.querySelector(`#${key} .thumb-scroller`) ||
-    document.querySelector(`.${key} .thumb-scroller`) ||
-    document.querySelector(`#${key} .thumb-list`) ||
-    document.querySelector(`.${key} .thumb-list`)
-  );
-}
-
-function findRightTarget() {
-  return (
-    document.querySelector("[data-section='distribution-right']") ||
-    document.querySelector(".brand-rail .rail-track") ||
-    document.querySelector(".right-panel") ||
-    document.querySelector(".side-list")
-  );
-}
-
-/* ================= SNAPSHOT ================= */
-
 async function loadDistributionSnapshot() {
   const res = await fetch("/data/distribution.snapshot.json");
   if (!res.ok) throw new Error("Snapshot load failed");
 
   return await res.json();
 }
-
-/* ================= MAIN ================= */
 
 async function initDistributionAutoMap() {
   try {
@@ -141,13 +116,13 @@ async function initDistributionAutoMap() {
 
     const sections = snapshot.pages.distribution.sections || {};
 
-    /* MAIN */
+    /* MAIN SECTIONS */
 
     Object.keys(sections).forEach((key) => {
       if (key.indexOf("distribution-") !== 0) return;
       if (RIGHT_KEYS.includes(key)) return;
 
-      const container = findMainTarget(key);
+      const container = document.querySelector(`[data-section="${key}"]`);
       if (!container) return;
 
       const raw = sections[key];
@@ -156,9 +131,9 @@ async function initDistributionAutoMap() {
       render(container, list);
     });
 
-    /* RIGHT */
+    /* RIGHT PANEL */
 
-    const rightContainer = findRightTarget();
+    const rightContainer = document.querySelector("[data-section='distribution-right']");
 
     if (rightContainer) {
       const rawRight = collectRightItems(sections);
