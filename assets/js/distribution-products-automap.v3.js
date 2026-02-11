@@ -1,150 +1,159 @@
+// distribution-products-automap.v2.js (LOCKED MAPPING - PRODUCTION, SLOT-FIRST)
+// - 1:1 section mapping ONLY (no auto merge)
+// - Reads snapshot from /data/distribution.snapshot.json
+// - Supports BOTH snapshot shapes:
+//     A) { sections: { ... } }
+//     B) { pages: { distribution: { sections: { ... }}}}
+// - SLOT-FIRST rendering (HOME style):
+//     * Always renders fixed slots (main: 100, right: 80)
+//     * If snapshot has fewer items, fills remaining slots with safe placeholders
+//
+// NOTE: Card DOM structure matches distributionhub.html's thumb-autofill-js
+//       (.thumb-card > .thumb-img + .thumb-title + .thumb-meta)
 
-/**
- * distribution-products-automap.v3.4.js
- * Home-style slot-first automap for Distribution Hub
- */
+(function () {
+  'use strict';
+  if (window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V2__) return;
+  window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V2__ = true;
 
-const MAIN_LIMIT = 100;
-const RIGHT_LIMIT = 80;
+  const SNAPSHOT_URL = '/data/distribution.snapshot.json';
 
-const PLACEHOLDER =
-  "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
+  const LIMIT_MAIN = 100;
+  const LIMIT_RIGHT = 80;
 
-const RIGHT_KEYS = [
-  "distribution-right",
-  "distribution-right-middle",
-  "distribution-right-bottom"
-];
+  // 6 MAIN + 1 RIGHT  (PSOM/HTML aligned)
+  const SECTION_MAP = [
+    { key: 'distribution-recommend', selector: '[data-psom-key="distribution-recommend"]', limit: LIMIT_MAIN },
+    { key: 'distribution-new',       selector: '[data-psom-key="distribution-new"]',       limit: LIMIT_MAIN },
+    { key: 'distribution-trending',  selector: '[data-psom-key="distribution-trending"]',  limit: LIMIT_MAIN },
+    { key: 'distribution-special',   selector: '[data-psom-key="distribution-special"]',   limit: LIMIT_MAIN },
+    { key: 'distribution-sponsor',   selector: '[data-psom-key="distribution-sponsor"]',   limit: LIMIT_MAIN },
+    { key: 'distribution-others',    selector: '[data-psom-key="distribution-others"]',    limit: LIMIT_MAIN },
+    { key: 'distribution-right',     selector: '[data-psom-key="distribution-right"]',     limit: LIMIT_RIGHT }
+  ];
 
-function makeDummy(prefix, i) {
-  return {
-    title: `${prefix} Product ${i}`,
-    thumb: PLACEHOLDER,
-    link: "#",
-    dummy: true
-  };
-}
+  // 1x1 transparent gif (safe placeholder, no asset dependency)
+  const PLACEHOLDER_IMG = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
 
-function normalize(item) {
-  if (!item) return null;
-
-  return {
-    title: item.title || item.name || "Product",
-    thumb: item.thumb || item.image || PLACEHOLDER,
-    link: item.link || item.url || "#",
-    raw: item
-  };
-}
-
-function fillDummy(list, limit, prefix) {
-  let i = list.length + 1;
-  while (list.length < limit) {
-    list.push(makeDummy(prefix, i++));
+  function clear(el) {
+    while (el.firstChild) el.removeChild(el.firstChild);
   }
-}
 
-function render(container, list) {
-  if (!container) return;
+  function escUrl(u) {
+    try { return String(u || '').replace(/'/g, '%27'); } catch { return ''; }
+  }
 
-  container.innerHTML = "";
+  function pickImage(item) {
+    return (item && (item.thumb || item.image || item.thumbnail || item.imageUrl || item.thumbnailUrl || '')) || '';
+  }
 
-  list.forEach((it) => {
-    const card = document.createElement("div");
-    card.className = "product-card";
+  function pickTitle(item) {
+    return (item && (item.title || item.name || item.text || '')) || '';
+  }
 
-    const img = document.createElement("img");
-    img.src = it.thumb || PLACEHOLDER;
+  function pickMeta(item) {
+    return (item && (item.meta || item.subtitle || item.summary || '')) || '';
+  }
 
-    const title = document.createElement("div");
-    title.className = "product-title";
-    title.textContent = it.title;
+  function pickUrl(item) {
+    return (item && (item.url || item.href || item.link || '#')) || '#';
+  }
+
+  function makeDummy(cfg, idx) {
+    const n = idx + 1;
+    return {
+      title: (cfg.key || 'distribution') + ' Product ' + n,
+      meta: '',
+      thumb: PLACEHOLDER_IMG,
+      url: '#'
+    };
+  }
+
+  function createCard(item) {
+    const card = document.createElement('div');
+    card.className = 'thumb-card';
+
+    const img = document.createElement('div');
+    img.className = 'thumb-img';
+    const src = pickImage(item);
+    const useSrc = src || PLACEHOLDER_IMG;
+
+    img.style.backgroundImage = "url('" + escUrl(useSrc) + "')";
+    img.style.backgroundSize = 'cover';
+    img.style.backgroundPosition = 'center';
+
+    const title = document.createElement('div');
+    title.className = 'thumb-title';
+    title.textContent = pickTitle(item) || 'Product';
+
+    const meta = document.createElement('div');
+    meta.className = 'thumb-meta';
+    meta.textContent = pickMeta(item);
 
     card.appendChild(img);
     card.appendChild(title);
+    card.appendChild(meta);
 
-    if (it.link && it.link !== "#") {
-      card.onclick = () => (location.href = it.link);
+    const href = pickUrl(item);
+    if (href && href !== '#') {
+      card.addEventListener('click', function(){ location.href = href; });
+      card.style.cursor = 'pointer';
     }
 
-    container.appendChild(card);
-  });
-}
+    return card;
+  }
 
-function collectRightItems(sections) {
-  let result = [];
+  async function loadSnapshot() {
+    const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Snapshot load failed: ' + res.status);
+    return res.json();
+  }
 
-  RIGHT_KEYS.forEach((k) => {
-    if (Array.isArray(sections[k])) {
-      result = result.concat(sections[k]);
-    }
-  });
+  function getSections(snapshot) {
+    return (snapshot && (snapshot.pages && snapshot.pages.distribution && snapshot.pages.distribution.sections)) ||
+           (snapshot && snapshot.sections) ||
+           null;
+  }
 
-  return result;
-}
+  function renderSlotFirst(sections) {
+    SECTION_MAP.forEach(cfg => {
+      const box = document.querySelector(cfg.selector);
+      if (!box) return;
 
-function buildList(raw, limit, prefix) {
-  let list = [];
+      const raw = sections && sections[cfg.key];
+      const arr = Array.isArray(raw) ? raw : [];
+      const limit = cfg.limit || LIMIT_MAIN;
 
-  if (Array.isArray(raw)) {
-    raw.forEach((x) => {
-      const n = normalize(x);
-      if (n) list.push(n);
+      const list = arr.slice(0, limit);
+
+      // HOME-style: always fill to fixed slot count
+      while (list.length < limit) list.push(makeDummy(cfg, list.length));
+
+      clear(box);
+      list.forEach(item => box.appendChild(createCard(item)));
     });
   }
 
-  list = list.slice(0, limit);
-  fillDummy(list, limit, prefix);
-
-  return list;
-}
-
-async function loadDistributionSnapshot() {
-  const res = await fetch("/data/distribution.snapshot.json");
-  if (!res.ok) throw new Error("Snapshot load failed");
-
-  return await res.json();
-}
-
-async function initDistributionAutoMap() {
-  try {
-    const snapshot = await loadDistributionSnapshot();
-
-    if (!snapshot || !snapshot.pages || !snapshot.pages.distribution) {
-      console.warn("Invalid distribution snapshot");
-      return;
-    }
-
-    const sections = snapshot.pages.distribution.sections || {};
-
-    /* MAIN SECTIONS */
-
-    Object.keys(sections).forEach((key) => {
-      if (key.indexOf("distribution-") !== 0) return;
-      if (RIGHT_KEYS.includes(key)) return;
-
-      const container = document.querySelector(`[data-section="${key}"]`);
-      if (!container) return;
-
-      const raw = sections[key];
-      const list = buildList(raw, MAIN_LIMIT, key);
-
-      render(container, list);
-    });
-
-    /* RIGHT PANEL */
-
-    const rightContainer = document.querySelector("[data-section='distribution-right']");
-
-    if (rightContainer) {
-      const rawRight = collectRightItems(sections);
-      const rightList = buildList(rawRight, RIGHT_LIMIT, "right");
-
-      render(rightContainer, rightList);
-    }
-
-  } catch (e) {
-    console.error("Distribution AutoMap Error:", e);
+  function renderAllPlaceholders() {
+    renderSlotFirst(null);
   }
-}
 
-document.addEventListener("DOMContentLoaded", initDistributionAutoMap);
+  (async function run(){
+    try {
+      const snapshot = await loadSnapshot();
+      const sections = getSections(snapshot);
+
+      if (!sections) {
+        console.error('[AUTOMAP] Invalid snapshot structure (need snapshot.pages.distribution.sections OR snapshot.sections) — using placeholders');
+        renderAllPlaceholders();
+        return;
+      }
+
+      renderSlotFirst(sections);
+      console.log('[AUTOMAP] Slot-first locked mapping loaded');
+    } catch (e) {
+      console.error('[AUTOMAP] Error (using placeholders):', e);
+      renderAllPlaceholders();
+    }
+  })();
+})();
