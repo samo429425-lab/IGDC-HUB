@@ -1,7 +1,7 @@
 
 /**
- * distribution-products-automap.v3.4.js
- * Home-style slot-first automap for Distribution Hub
+ * distribution-products-automap.v3.5.js
+ * Verified dual-structure automap (legacy + upgraded)
  */
 
 const MAIN_LIMIT = 100;
@@ -98,12 +98,37 @@ function buildList(raw, limit, prefix) {
   return list;
 }
 
+/* ================= TARGET RESOLVERS ================= */
+
+function findMainTarget(key) {
+  return (
+    document.querySelector(`[data-section="${key}"]`) ||
+    document.querySelector(`#${key} .thumb-scroller`) ||
+    document.querySelector(`.${key} .thumb-scroller`) ||
+    document.querySelector(`#${key} .thumb-list`) ||
+    document.querySelector(`.${key} .thumb-list`)
+  );
+}
+
+function findRightTarget() {
+  return (
+    document.querySelector("[data-section='distribution-right']") ||
+    document.querySelector(".brand-rail .rail-track") ||
+    document.querySelector(".right-panel") ||
+    document.querySelector(".side-list")
+  );
+}
+
+/* ================= SNAPSHOT ================= */
+
 async function loadDistributionSnapshot() {
   const res = await fetch("/data/distribution.snapshot.json");
   if (!res.ok) throw new Error("Snapshot load failed");
 
   return await res.json();
 }
+
+/* ================= MAIN ================= */
 
 async function initDistributionAutoMap() {
   try {
@@ -116,13 +141,13 @@ async function initDistributionAutoMap() {
 
     const sections = snapshot.pages.distribution.sections || {};
 
-    /* MAIN SECTIONS */
+    /* MAIN */
 
     Object.keys(sections).forEach((key) => {
       if (key.indexOf("distribution-") !== 0) return;
       if (RIGHT_KEYS.includes(key)) return;
 
-      const container = document.querySelector(`[data-section="${key}"]`);
+      const container = findMainTarget(key);
       if (!container) return;
 
       const raw = sections[key];
@@ -131,9 +156,9 @@ async function initDistributionAutoMap() {
       render(container, list);
     });
 
-    /* RIGHT PANEL */
+    /* RIGHT */
 
-    const rightContainer = document.querySelector("[data-section='distribution-right']");
+    const rightContainer = findRightTarget();
 
     if (rightContainer) {
       const rawRight = collectRightItems(sections);
