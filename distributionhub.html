@@ -679,7 +679,11 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
     }
   }
 </style>
-
+<style id="distribution-footer-fix">
+html,body{overflow-x:hidden;min-height:100%}
+footer,.site-footer{position:static !important; clear:both !important; width:100% !important; transform:none !important;}
+.container, .wrap, .layout, main, .main-content, #main { max-width:100vw !important; width:100% !important; box-sizing:border-box !important; }
+</style>
 <style id="dh-rail-style">
 /* Desktop default: hidden */
 #mobile-ad-rail-wrap{ display:none !important; }
@@ -900,80 +904,34 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
   /* Footer safety: home bar overlap */
   footer { padding-bottom: max(24px, env(safe-area-inset-bottom)) !important; position: static !important; }
 </style>
-
-<style id="igdc-rightpanel-final">
-
-/* ================= RIGHT PANEL FINAL ================= */
-
-/* 외곽 컨테이너 */
+<style id="igdc-rightpanel-scrollbar-hide">
+/* Hide ONLY the right ad panel's scrollbar but keep scrolling functional */
 .brand-rail{
-  background:#fff;
-  border-radius:12px;
-  padding:12px;
-  box-shadow:0 2px 6px rgba(0,0,0,.06);
-
-  overflow:visible !important;
-  max-height:none !important;
+  scrollbar-width: none;        /* Firefox */
+  -ms-overflow-style: none;     /* IE/Edge legacy */
 }
-
-/* 실제 스크롤 영역 */
-.brand-rail .thumb-grid{
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-
-  /* 카드 약 4.5장 높이 */
-  max-height:720px;
-
-  overflow-y:auto;
-  overscroll-behavior:contain;
-  -webkit-overflow-scrolling:touch;
-
-  scrollbar-width:none;
-}
-
-/* 스크롤바 숨김 */
-.brand-rail .thumb-grid::-webkit-scrollbar{
-  display:none;
-  width:0;
-  height:0;
-}
-
-/* 슬롯 카드 */
-.brand-rail .thumb-card{
-  height:150px;
-  min-height:150px;
-
-  border-radius:8px;
-  background:#eee;
-
-  flex:0 0 auto;
-}
-
-/* 더미 이미지 */
-.brand-rail .thumb-card .thumb-img{
-  height:100px;
-  background:#ddd;
-  border-radius:6px;
-}
-
-/* 더미 텍스트 */
-.brand-rail .thumb-card .thumb-title{
-  margin-top:6px;
-  font-size:12px;
-  color:#777;
-  text-align:center;
-}
-
-</style>
-
-<style id="rightpanel-ad-headline-center">
-.brand-rail .ad-headline{
-  text-align: center !important;
+.brand-rail::-webkit-scrollbar{
+  display: none;                /* WebKit browsers */
+  width: 0;
+  height: 0;
 }
 </style>
-
-
+<style id="igdc-rightpanel-10cards">
+/* Desktop: right panel height tuned to show about 10~10.5 thumbnail cards */
+@media (min-width: 1024px){
+  .brand-rail{
+    max-height: 1680px !important;  /* 160px * 10.5 */
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .brand-rail .brand-card{
+    height: 150px !important;
+    max-height: 150px !important;
+    margin: 0 0 10px 0 !important;
+    flex: 0 0 auto !important;
+  }
+}
+</style>
 <link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
 </head>
 <body>
@@ -998,168 +956,73 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
 </section>
 <h1 class="page-title" style="font-size: 2em; margin-bottom: 20px;">📦 유통허브</h1>
 
-<!-- ================= DISTRIBUTION LAYOUT ================= -->
-
-<div class="page-grid">
-
-  <!-- ===== MAIN COLUMN ===== -->
-  <div class="main-col">
-
-    <!-- 1 -->
-    <section class="content-box" id="sec-reco">
-      <h3>🔥 오늘의 추천</h3>
-      <div class="scroller-wrap">
-        <div class="thumb-grid thumb-scroller" data-psom-key="distribution_1"></div>
-        <button class="rscroll left">‹</button>
-        <button class="rscroll right">›</button>
-      </div>
-    </section>
-
-    <!-- 2 -->
-    <section class="content-box" id="sec-ads">
-      <h3>📣 스폰서</h3>
-      <div class="scroller-wrap">
-        <div class="thumb-grid thumb-scroller" data-psom-key="distribution_2"></div>
-        <button class="rscroll left">‹</button>
-        <button class="rscroll right">›</button>
-      </div>
-    </section>
-
-    <!-- 3 -->
-    <section class="content-box" id="sec-trend">
-      <h3>📈 실시간 인기</h3>
-      <div class="scroller-wrap">
-        <div class="thumb-grid thumb-scroller" data-psom-key="distribution_3"></div>
-        <button class="rscroll left">‹</button>
-        <button class="rscroll right">›</button>
-      </div>
-    </section>
-
-    <!-- 4 -->
-    <section class="content-box" id="sec-new">
-      <h3>🆕 신규 상품</h3>
-      <div class="scroller-wrap">
-        <div class="thumb-grid thumb-scroller" data-psom-key="distribution_4"></div>
-        <button class="rscroll left">‹</button>
-        <button class="rscroll right">›</button>
-      </div>
-    </section>
-
-    <!-- 5 -->
-    <section class="content-box" id="sec-special">
-      <h3>🌟 특별 상품</h3>
-      <div class="scroller-wrap">
-        <div class="thumb-grid thumb-scroller" data-psom-key="distribution_5"></div>
-        <button class="rscroll left">‹</button>
-        <button class="rscroll right">›</button>
-      </div>
-    </section>
-
-    <!-- 6 -->
-    <section class="content-box" id="sec-others">
-      <h3>🧺 기타 상품</h3>
-      <div class="scroller-wrap">
-        <div class="thumb-grid thumb-scroller" data-psom-key="distribution_6"></div>
-        <button class="rscroll left">‹</button>
-        <button class="rscroll right">›</button>
-      </div>
-    </section>
-
-  </div>
-
-
-  <!-- ===== RIGHT COLUMN ===== -->
-  <aside class="right-col">
-
-    <div class="brand-rail">
-
-      <h3 class="ad-headline">💎 인기 브랜드 💎</h3>
-
-      <div class="thumb-grid thumb-scroller vertical"
-           data-psom-key="distribution_right">
-      </div>
-
-    </div>
-
-  </aside>
-
+<section class="content-box" id="sec-reco">
+<h3>🔥 오늘의 추천</h3>
+<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-recommend"></div><button aria-label="왼쪽으로 스크롤" class="rscroll left" type="button">‹</button><button aria-label="오른쪽으로 스크롤" class="rscroll right" type="button">›</button></div>
+<a class="more-link" href="#">더 보기</a>
+</section>
+<section class="content-box" id="sec-ads">
+<h3>📣 스폰서</h3>
+<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-sponsor"></div><button aria-label="왼쪽으로 스크롤" class="rscroll left" type="button">‹</button><button aria-label="오른쪽으로 스크롤" class="rscroll right" type="button">›</button></div>
+</section>
+<section class="content-box" id="sec-trend">
+<h3>📈 실시간 인기</h3>
+<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-trending"></div><button aria-label="왼쪽으로 스크롤" class="rscroll left" type="button">‹</button><button aria-label="오른쪽으로 스크롤" class="rscroll right" type="button">›</button></div>
+<a class="more-link" href="#">랭킹 전체</a>
+</section>
+<section class="content-box" id="sec-new">
+<h3>🆕 신규 등록 상품</h3>
+<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-new"></div><button aria-label="왼쪽으로 스크롤" class="rscroll left" type="button">‹</button><button aria-label="오른쪽으로 스크롤" class="rscroll right" type="button">›</button></div>
+</section>
+<section class="content-box" id="sec-special">
+<h3>🌟 특별 상품</h3>
+<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-special"></div>
+<button aria-label="왼쪽으로 스크롤" class="rscroll left" type="button">‹</button>
+<button aria-label="오른쪽으로 스크롤" class="rscroll right" type="button">›</button>
+</div>
+</section>
+<section class="content-box" id="sec-others">
+<h3>🧺 기타 상품</h3>
+<div class="scroller-wrap">
+<div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-others"></div>
+<button aria-label="왼쪽으로 스크롤" class="rscroll left" type="button">‹</button>
+<button aria-label="오른쪽으로 스크롤" class="rscroll right" type="button">›</button>
+</div>
+</section><div class="scroller-wrap" id="mobile-ad-rail-wrap"><div class="rail-title">💎 인기 브랜드 💎</div><div class="thumb-list thumb-scroller" id="mobile-ad-rail-list"></div></div></main> 
+<div class="brand-rail"><h3 class="ad-headline" style="margin:2px 0 2px; text-align:center; line-height:1.0; height:1em; white-space:nowrap;">💎 인기 브랜드 💎</h3> 
+<div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-right"></div> 
+<div class="brand-card"><a href="#ad1" title="광고 1"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 광고 1</span></a></div>
+<div class="brand-card"><a href="#ad2" title="광고 2"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 광고 2</span></a></div>
+<div class="brand-card"><a href="#ad3" title="광고 3"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 광고 3</span></a></div>
+<div class="brand-card"><a href="#ad4" title="광고 4"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 광고 4</span></a></div>
+<div class="brand-card"><a href="#ad5" title="광고 5"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 광고 5</span></a></div>
+<div class="brand-card"><a href="#ad6" title="광고 6"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 광고 6</span></a></div>
+<div class="brand-card"><a href="#ad7" title="광고 7"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 광고 7</span></a></div>
+<div class="brand-card"><a href="#ad8" title="광고 8"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 광고 8</span></a></div>
+<div class="brand-card"><a href="#ad9" title="광고 9"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 광고 9</span></a></div>
+<div class="brand-card"><a href="#ad10" title="광고 10"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 광고 10</span></a></div>
+<div class="brand-card"><a href="#ad11" title="광고 11"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 광고 11</span></a></div>
+<div class="brand-card"><a href="#ad12" title="광고 12"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 광고 12</span></a></div>
+<div class="brand-card"><a href="#ad13" title="광고 13"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 광고 13</span></a></div>
+<div class="brand-card"><a href="#ad14" title="광고 14"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 광고 14</span></a></div>
+<div class="brand-card"><a href="#ad15" title="광고 15"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 광고 15</span></a></div>
+<div class="brand-card"><a href="#ad16" title="광고 16"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 광고 16</span></a></div>
+<div class="brand-card"><a href="#ad17" title="광고 17"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 광고 17</span></a></div>
+<div class="brand-card"><a href="#ad18" title="광고 18"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 광고 18</span></a></div>
+<div class="brand-card"><a href="#ad19" title="광고 19"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 광고 19</span></a></div>
+<div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 광고 20</span></a></div>
+<div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 21</span></a></div>
+<div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 22</span></a></div>
+<div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 23</span></a></div>
+<div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 24</span></a></div>
+<div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 25</span></a></div>
+<div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 26</span></a></div>
+<div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 27</span></a></div>
+<div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 28</span></a></div>
+<div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 29</span></a></div>
+<div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 30</span></a></div>
 </div>
 
-
-
-<!-- ===== RIGHT PANEL MOVE PATCH (keep automap/snapshot intact) ===== -->
-<script id="rightpanel-move-patch">
-document.addEventListener('DOMContentLoaded', function(){
-  try{
-    var container = document.querySelector('.container');
-    var main = document.querySelector('.container > .main-content');
-    // brand rail currently inside main -> page-grid -> right-col
-    var rail = document.querySelector('.page-grid .right-col .brand-rail') || document.querySelector('.page-grid .brand-rail');
-    if(!container || !main || !rail) return;
-
-    // Move rail to be a direct child of .container (3rd column target)
-    container.insertBefore(rail, main.nextSibling);
-
-    // Remove the old wrapper (right-col) to prevent layout split in main
-    var rightCol = document.querySelector('.page-grid .right-col');
-    if(rightCol) rightCol.remove();
-  }catch(e){
-    console.error('rightpanel-move-patch error', e);
-  }
-});
-</script>
-
-<!-- ================= SLOT GENERATOR ================= -->
-<script>
-(function(){
-
-  const MAIN_COUNT = 100;
-  const RIGHT_COUNT = 80;
-
-  function makeSlot(){
-    const d = document.createElement('div');
-    d.className = 'thumb-card placeholder';
-    d.innerHTML = `
-      <div class="thumb-img"></div>
-      <div class="thumb-title">Auto-filled</div>
-    `;
-    return d;
-  }
-
-  function fillGrid(grid, count){
-
-    if(!grid) return;
-
-    // 이미 데이터 있으면 중단
-    if(grid.children.length > 0) return;
-
-    for(let i=0;i<count;i++){
-      grid.appendChild(makeSlot());
-    }
-  }
-
-  function initSlots(){
-
-    document
-      .querySelectorAll('.thumb-grid[data-psom-key]')
-      .forEach(grid=>{
-
-        const key = grid.dataset.psomKey;
-
-        if(key === 'distribution_right'){
-          fillGrid(grid, RIGHT_COUNT);
-        }else{
-          fillGrid(grid, MAIN_COUNT);
-        }
-
-      });
-  }
-
-  document.addEventListener('DOMContentLoaded', initSlots);
-
-})();
-</script>
-</div>
 
 <footer>
     IGDC Global Hub © 2025 | International General Distribution Company<br/>
@@ -3221,7 +3084,7 @@ window.addEventListener("message",function(ev){
 <script defer="" src="/assets/js/placeholder-sweeper.js"></script>
 <script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
 
-<script src="/assets/js/distribution-products-automap.v3.js" defer></script>
+<script src="/assets/js/distribution-products-automap.v2.js" defer></script>
 
 </body>
 </html>
