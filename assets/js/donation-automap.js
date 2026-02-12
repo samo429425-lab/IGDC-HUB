@@ -1,75 +1,194 @@
 
-"use strict";
+/**
+ * donation-automap.v7.enterprise.js
+ * v7 snapshot compatible automapper
+ * - slot_limit from snapshot
+ * - bank-first replacement
+ * - rank-aware sorting
+ * - seed fallback
+ */
 
-async function fetchDonation(){
-  const r = await fetch("/.netlify/functions/donation-feed",{cache:"no-store"});
-  if(!r.ok) throw new Error("FEED_ERROR");
-  return r.json();
-}
+(async function(){
 
-function esc(s){
-  return String(s||"")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-}
+  const SNAPSHOT_PATHS = [
+    "/data/donation.snapshot.json",
+    "/netlify/functions/data/donation.snapshot.json"
+  ];
 
-function card(it){
-
-  const a = document.createElement("a");
-
-  a.className = "donation-card";
-  a.href = it?.link?.url || "#";
-  a.target = it?.link?.target || "_blank";
-  a.rel = "noopener noreferrer";
-
-  const img = it?.media?.thumb || it?.image || "";
-  const title = it?.title || "";
-
-  a.innerHTML = `
-    <div class="donation-card-img">
-      <img src="${esc(img)}" loading="lazy"/>
-    </div>
-    <div class="donation-card-title">${esc(title)}</div>
-  `;
-
-  /* ===== Popup Binding (핵심) ===== */
-  if(window.__bindDonationCard){
-    window.__bindDonationCard(a, it);
+  async function loadSnapshot(){
+    for(const p of SNAPSHOT_PATHS){
+      try{
+        const r = await fetch(p, {cache:"no-store"});
+        if(r.ok){
+          return await r.json();
+        }
+      }catch(e){}
+    }
+    throw new Error("Donation snapshot not found");
   }
 
-  return a;
-}
+
+  function buildSectionIndex(sections){
+    const map = {};
+    sections.forEach(s=>{
+      map[s.psom_key] = s.slot_limit || 40;
+    });
+    return map;
+  }
 
 
-function render(key,items){
-  const box=document.querySelector('[data-psom-key="'+key+'"]');
-  if(!box) return;
+  function scoreItem(it){
 
-  box.innerHTML="";
+    let score = 0;
 
-  items.slice(0,24).forEach(it=>box.appendChild(card(it)));
-}
+    // Bank priority
+    if(it.bank_ref && it.bank_ref.record_id){
+      score += 1000000;
+    }
 
-async function init(){
-  try{
-    const snap=await fetchDonation();
-    const items=Array.isArray(snap.items)?snap.items:[];
+    // Rank score
+    if(it.rank && typeof it.rank.score === "number"){
+      score += it.rank.score * 1000;
+    }
 
-    const map={};
+    // Verification bonus
+    if(it.verify && it.verify.status === "verified"){
+      score += 500;
+    }
 
-    items.forEach(it=>{
-      const k=it.psom_key||it.category||"donation-others";
-      if(!map[k]) map[k]=[];
-      map[k].push(it);
+    return score;
+  }
+
+
+  function normalizeItems(items){
+
+    return items.map(it=>{
+      it.__score = scoreItem(it);
+      return it;
     });
 
-    Object.keys(map).forEach(k=>render(k,map[k]));
-  }catch(e){
-    console.error(e);
   }
-}
 
-document.addEventListener("DOMContentLoaded",init);
+
+  function groupBySection(items){
+
+    const map = {};
+
+    items.forEach(it=>{
+
+      const k = it.psom_key;
+
+      if(!map[k]) map[k] = [];
+
+      map[k].push(it);
+
+    });
+
+    return map;
+  }
+
+
+
+  function sortSection(items){
+
+    return items.sort((a,b)=>{
+
+      // score desc
+      if(b.__score !== a.__score){
+        return b.__score - a.__score;
+      }
+
+      // updated_at desc
+      const ta = a?.meta?.updated_at || "";
+      const tb = b?.meta?.updated_at || "";
+
+      return tb.localeCompare(ta);
+
+    });
+
+  }
+
+
+
+  function renderCard(it){
+
+    const img = it?.media?.thumb || "/assets/img/placeholder.png";
+    const title = it?.org?.name || it?.title || "";
+    const url = it?.link?.url || it?.org?.homepage || "#";
+
+    return `
+      <a class="donation-card" href="${url}" target="_blank">
+        <div class="thumb">
+          <img src="${img}" loading="lazy">
+        </div>
+        <div class="info">
+          <div class="title">${title}</div>
+        </div>
+      </a>
+    `;
+
+  }
+
+
+
+  function mountSection(key, items, limit){
+
+    const box = document.querySelector(
+      `[data-psom-key="${key}"]`
+    );
+
+    if(!box) return;
+
+    box.innerHTML = "";
+
+    items.slice(0, limit).forEach(it=>{
+
+      box.insertAdjacentHTML(
+        "beforeend",
+        renderCard(it)
+      );
+
+    });
+
+  }
+
+
+
+  async function main(){
+
+    const snapshot = await loadSnapshot();
+
+    if(!snapshot?.sections || !snapshot?.items){
+      console.error("Invalid donation snapshot");
+      return;
+    }
+
+    // slot limits
+    const limits = buildSectionIndex(snapshot.sections);
+
+    // prepare items
+    const items = normalizeItems(snapshot.items);
+
+    // group
+    const groups = groupBySection(items);
+
+
+    // render
+    Object.keys(limits).forEach(key=>{
+
+      const limit = limits[key];
+
+      let list = groups[key] || [];
+
+      list = sortSection(list);
+
+      mountSection(key, list, limit);
+
+    });
+
+  }
+
+
+  document.addEventListener("DOMContentLoaded", main);
+
+})();
