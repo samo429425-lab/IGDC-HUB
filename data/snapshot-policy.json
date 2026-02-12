@@ -1,0 +1,94 @@
+{
+  "home": {
+    "main": {
+      "limit": 800,
+      "reserve": 200,
+      "schedule": "0 */6 * * *"
+    },
+    "featured": {
+      "limit": 150,
+      "schedule": "0 */12 * * *"
+    },
+    "right": {
+      "limit": 200,
+      "schedule": "0 0 * * *"
+    }
+  },
+  "distribution": {
+    "main": {
+      "limit": 700,
+      "reserve": 150,
+      "schedule": "0 */8 * * *"
+    },
+    "category": {
+      "limit": 300,
+      "schedule": "0 */12 * * *"
+    },
+    "right": {
+      "limit": 200,
+      "schedule": "0 0 * * *"
+    }
+  },
+  "media": {
+    "main": {
+      "limit": 350,
+      "reserve": 100,
+      "schedule": "0 */3 * * *"
+    },
+    "short": {
+      "limit": 200,
+      "schedule": "0 */2 * * *"
+    },
+    "right": {
+      "limit": 150,
+      "schedule": "0 */6 * * *"
+    }
+  },
+  "social": {
+    "youtube": {
+      "limit": 400,
+      "schedule": "0 */2 * * *"
+    },
+    "tiktok": {
+      "limit": 300,
+      "schedule": "0 */1 * * *"
+    },
+    "instagram": {
+      "limit": 200,
+      "schedule": "0 */2 * * *"
+    },
+    "right": {
+      "limit": 200,
+      "schedule": "0 */6 * * *"
+    }
+  },
+  "donation": {
+    "main": {
+      "limit": 300,
+      "reserve": 100,
+      "schedule": "0 0 */2 * *"
+    },
+    "news": {
+      "limit": 150,
+      "schedule": "0 */2 * * *"
+    },
+    "right": {
+      "limit": 150,
+      "schedule": "0 0 * * *"
+    }
+  },
+  "network_tour": {
+    "network": {
+      "limit": 200,
+      "schedule": "0 0 * * *"
+    },
+    "tour": {
+      "limit": 200,
+      "schedule": "0 0 * * *"
+    },
+    "right": {
+      "limit": 200,
+      "schedule": "0 0 * * *"
+    }
+  }
+}
