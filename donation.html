@@ -5433,114 +5433,90 @@ window.addEventListener("message",function(ev){
 </style>
 
 <script>
-/* ======================================================
-   Donation Dummy Placeholder (Horizontal Rail FIX)
-   - Uses existing .card template (matches your CSS)
-   - Forces thumb-grid to behave like horizontal rail
-   - Auto removes when real cards appear
-   FULL REPLACE BLOCK
-====================================================== */
+/* === Auto Slot Generator (Donation Feed) - FINAL === */
+
 (function(){
 
-  function ensureStyle(){
-    if (document.getElementById("donationDummyStyle")) return;
-
-    const st = document.createElement("style");
-    st.id = "donationDummyStyle";
-    st.textContent = `
-      /* Make thumb-grid act like a horizontal rail */
-      .feed-row .thumb-grid.thumb-scroller{
-        display:flex;
-        flex-direction:row;
-        flex-wrap:nowrap;
-        gap: var(--thumb-gap, 14px);
-        align-items:stretch;
-        width: max-content;            /* expand to fit children */
-      }
-      /* Card width for rail (keeps same feel as original) */
-      .feed-row .thumb-grid.thumb-scroller > .card{
-        flex: 0 0 auto;
-        width: 280px;
-        min-width: 280px;
-      }
-      /* Dummy thumb look */
-      .feed-row .thumb-grid.thumb-scroller > .card .thumb{
-        background: #d9d9d9;
-      }
-      .feed-row .thumb-grid.thumb-scroller > .card.dummy .thumb::after{
-        content:"";
-        position:absolute; inset:0;
-        background: linear-gradient(90deg, rgba(255,255,255,.0), rgba(255,255,255,.35), rgba(255,255,255,.0));
-        transform: translateX(-100%);
-        animation: donationDummyShimmer 1.6s infinite;
-      }
-      @keyframes donationDummyShimmer{
-        0%{ transform: translateX(-100%); }
-        100%{ transform: translateX(100%); }
-      }
-      .card.dummy .card-actions .button{ opacity:.55; pointer-events:none; }
-    `;
-    document.head.appendChild(st);
-  }
+  let locked = false; // 오토맵 들어오면 true
 
   function createDummyCard(){
-    const card = document.createElement("div");
-    card.className = "card dummy";
+
+    const card = document.createElement('div');
+    card.className = 'card dummy';
 
     card.innerHTML = `
       <div class="thumb"></div>
       <div class="card-body">
-        <div class="card-meta">WAM · IESF</div>
-        <div class="card-title">등록 준비중</div>
-        <div class="card-preview">프로젝트 데이터 수신 대기중입니다.</div>
-        <div class="card-actions">
-          <button class="button small">준비중</button>
-        </div>
+        <div class="card-title">Loading...</div>
+        <div class="card-meta">-</div>
+        <div class="card-preview">Preparing</div>
       </div>
     `;
 
     return card;
   }
 
-  function buildPlaceholders(){
-    ensureStyle();
+  function buildSlots(){
 
-    document
-      .querySelectorAll(".thumb-grid.thumb-scroller[data-psom-key]")
-      .forEach(grid => {
+    if(locked) return;
 
-        const row = grid.closest(".feed-row");
-        const count = Number(row?.dataset.count || 12);
+    document.querySelectorAll('.feed-row').forEach(row=>{
 
-        /* If real cards exist, do nothing */
-        if (grid.querySelector(".card:not(.dummy)")) return;
+      const count = Number(row.dataset.count || 80);
+      const track = row.querySelector('.row-track');
 
-        /* Reset only this grid */
-        grid.innerHTML = "";
+      if(!track) return;
 
-        for(let i=0; i<count; i++){
-          grid.appendChild(createDummyCard());
-        }
-      });
-  }
+      /* 실카드 있으면 더미 생성 금지 */
+      if(track.querySelector('.card:not(.dummy)')) return;
 
-  function observeRealData(){
-    const observer = new MutationObserver(() => {
-      document
-        .querySelectorAll(".thumb-grid.thumb-scroller[data-psom-key]")
-        .forEach(grid => {
-          if (grid.querySelector(".card:not(.dummy)")) {
-            grid.querySelectorAll(".dummy").forEach(d => d.remove());
-          }
-        });
+      /* 이미 더미 있으면 중복 생성 금지 */
+      if(track.querySelector('.dummy')) return;
+
+      for(let i=0;i<count;i++){
+        track.appendChild(createDummyCard());
+      }
+
     });
 
-    observer.observe(document.body, { childList:true, subtree:true });
   }
 
-  document.addEventListener("DOMContentLoaded", function(){
-    buildPlaceholders();
-    observeRealData();
+  function watchAutomap(){
+
+    const ob = new MutationObserver(()=>{
+
+      document.querySelectorAll('.feed-row').forEach(row=>{
+
+        const track = row.querySelector('.row-track');
+        if(!track) return;
+
+        /* 실카드 감지 */
+        if(track.querySelector('.card:not(.dummy)')){
+
+          /* 더미 제거 */
+          track.querySelectorAll('.dummy')
+               .forEach(d=>d.remove());
+
+          /* 다시 안 생기게 락 */
+          locked = true;
+        }
+
+      });
+
+    });
+
+    ob.observe(document.body,{
+      childList:true,
+      subtree:true
+    });
+
+  }
+
+  document.addEventListener('DOMContentLoaded', ()=>{
+
+    buildSlots();
+    watchAutomap();
+
   });
 
 })();
