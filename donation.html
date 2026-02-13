@@ -3499,7 +3499,7 @@ body .right{ display:none !important; }
   document.querySelectorAll('.feed-row').forEach(row=>{
     const labelEl = row.querySelector('.row-label');
     const txt = (labelEl && labelEl.textContent || '').trim();
-    const track = row.querySelector('.row-track');
+    const track = row.querySelector('[data-psom-key]');
     if(!txt || !track) return;
     // Avoid duplicates
     if(!row.querySelector(':scope > .row-title')){
