@@ -1,10 +1,16 @@
 'use strict';
 /**
- * socialnetwork-automap.v3.js — OpenLab (AutoMap) FINAL
+ * socialnetwork-automap.v4.js — OpenLab (AutoMap) FINAL
  * 역할: socialnetwork.html의 [data-psom-key] 컨테이너에 feed-social 결과를 꽂는다.
  */
 (function(){
   var FEED_URL = '/.netlify/functions/feed-social?page=socialnetwork';
+
+
+  function isDebug(){
+    try{ return new URL(location.href).searchParams.get('debug') === '1'; }
+    catch(e){ return false; }
+  }
 
   function qsLang(){
     try{
