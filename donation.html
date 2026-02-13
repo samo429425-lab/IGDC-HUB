@@ -5433,52 +5433,119 @@ window.addEventListener("message",function(ev){
 </style>
 
 <script>
-/* === Auto Slot Generator (Donation Feed) === */
-
+/* ======================================================
+   Donation Dummy Placeholder (Horizontal Rail FIX)
+   - Uses existing .card template (matches your CSS)
+   - Forces thumb-grid to behave like horizontal rail
+   - Auto removes when real cards appear
+   FULL REPLACE BLOCK
+====================================================== */
 (function(){
 
+  function ensureStyle(){
+    if (document.getElementById("donationDummyStyle")) return;
+
+    const st = document.createElement("style");
+    st.id = "donationDummyStyle";
+    st.textContent = `
+      /* Make thumb-grid act like a horizontal rail */
+      .feed-row .thumb-grid.thumb-scroller{
+        display:flex;
+        flex-direction:row;
+        flex-wrap:nowrap;
+        gap: var(--thumb-gap, 14px);
+        align-items:stretch;
+        width: max-content;            /* expand to fit children */
+      }
+      /* Card width for rail (keeps same feel as original) */
+      .feed-row .thumb-grid.thumb-scroller > .card{
+        flex: 0 0 auto;
+        width: 280px;
+        min-width: 280px;
+      }
+      /* Dummy thumb look */
+      .feed-row .thumb-grid.thumb-scroller > .card .thumb{
+        background: #d9d9d9;
+      }
+      .feed-row .thumb-grid.thumb-scroller > .card.dummy .thumb::after{
+        content:"";
+        position:absolute; inset:0;
+        background: linear-gradient(90deg, rgba(255,255,255,.0), rgba(255,255,255,.35), rgba(255,255,255,.0));
+        transform: translateX(-100%);
+        animation: donationDummyShimmer 1.6s infinite;
+      }
+      @keyframes donationDummyShimmer{
+        0%{ transform: translateX(-100%); }
+        100%{ transform: translateX(100%); }
+      }
+      .card.dummy .card-actions .button{ opacity:.55; pointer-events:none; }
+    `;
+    document.head.appendChild(st);
+  }
+
   function createDummyCard(){
-    const card = document.createElement('div');
-    card.className = 'card';
+    const card = document.createElement("div");
+    card.className = "card dummy";
 
     card.innerHTML = `
       <div class="thumb"></div>
       <div class="card-body">
-        <div class="card-title">Loading...</div>
-        <div class="card-meta">-</div>
-        <div class="card-preview">Preparing</div>
+        <div class="card-meta">WAM · IESF</div>
+        <div class="card-title">등록 준비중</div>
+        <div class="card-preview">프로젝트 데이터 수신 대기중입니다.</div>
+        <div class="card-actions">
+          <button class="button small">준비중</button>
+        </div>
       </div>
     `;
 
     return card;
   }
 
-  function buildSlots(){
+  function buildPlaceholders(){
+    ensureStyle();
 
-    document.querySelectorAll('.feed-row').forEach(row=>{
+    document
+      .querySelectorAll(".thumb-grid.thumb-scroller[data-psom-key]")
+      .forEach(grid => {
 
-      const count = Number(row.dataset.count || 80);
-      const track = row.querySelector('.row-track');
+        const row = grid.closest(".feed-row");
+        const count = Number(row?.dataset.count || 12);
 
-      if(!track) return;
+        /* If real cards exist, do nothing */
+        if (grid.querySelector(".card:not(.dummy)")) return;
 
-      // 이미 카드 있으면 더미 안 만듦
-      if(track.querySelectorAll('.card').length > 0) return;
+        /* Reset only this grid */
+        grid.innerHTML = "";
 
-
-      // 슬롯 자동 생성
-      for(let i=0;i<count;i++){
-        track.appendChild(createDummyCard());
-      }
-
-    });
-
+        for(let i=0; i<count; i++){
+          grid.appendChild(createDummyCard());
+        }
+      });
   }
 
-  document.addEventListener('DOMContentLoaded', buildSlots);
+  function observeRealData(){
+    const observer = new MutationObserver(() => {
+      document
+        .querySelectorAll(".thumb-grid.thumb-scroller[data-psom-key]")
+        .forEach(grid => {
+          if (grid.querySelector(".card:not(.dummy)")) {
+            grid.querySelectorAll(".dummy").forEach(d => d.remove());
+          }
+        });
+    });
+
+    observer.observe(document.body, { childList:true, subtree:true });
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    buildPlaceholders();
+    observeRealData();
+  });
 
 })();
 </script>
+
 
 <script defer src="/assets/js/auto-embed.instagram.js"></script>
 <script defer src="/assets/js/placeholder-sweeper.js"></script>
