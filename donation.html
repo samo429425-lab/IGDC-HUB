@@ -2392,121 +2392,67 @@ body .right{ display:none !important; }
 <section class="feed-wrapper">
 <div class="feed-header"><h3 style="margin:0;">📺 피드</h3></div>
 <div id="feedRows">
-<!-- 1. Global 소식 -->
-<div class="feed-row">
-<div class="row-label">Global 소식</div>
-<div class="row-track">
 
-<div class="thumb-grid thumb-scroller" data-psom-key="donation-global"></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-</div>
-</div>
-<!-- 2. NGO -->
-<div class="feed-row">
-<div class="row-label">NGO</div>
-<div class="row-track">
+<!-- ===== Donation Feed Rows (Auto Slot Version) ===== -->
 
-<div class="thumb-grid thumb-scroller" data-psom-key="donation-ngo"></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-</div>
-</div>
-<!-- 3. Mission -->
-<div class="feed-row">
-<div class="row-label">선 교</div>
-<div class="row-track">
+<div id="donationRows">
 
-<div class="thumb-grid thumb-scroller" data-psom-key="donation-mission"></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-</div>
-</div>
-<!-- 4. Volunteer -->
-<div class="feed-row">
-<div class="row-label">봉 사</div>
-<div class="row-track">
+  <div class="feed-row" data-count="100">
+    <div class="row-label">Global News</div>
+    <div class="row-track">
+      <div class="thumb-grid thumb-scroller" data-psom-key="donation-global"></div>
+    </div>
+  </div>
 
-<div class="thumb-grid thumb-scroller" data-psom-key="donation-service"></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-</div>
-</div>
-<!-- 5. Relief -->
-<div class="feed-row">
-<div class="row-label">구 호</div>
-<div class="row-track">
+  <div class="feed-row" data-count="80">
+    <div class="row-label">NGO</div>
+    <div class="row-track">
+      <div class="thumb-grid thumb-scroller" data-psom-key="donation-ngo"></div>
+    </div>
+  </div>
 
-<div class="thumb-grid thumb-scroller" data-psom-key="donation-relief"></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-</div>
-</div>
-<!-- 6. education -->
-<div class="feed-row">
-<div class="row-label">교 육</div>
-<div class="row-track">
+  <div class="feed-row" data-count="80">
+    <div class="row-label">선교</div>
+    <div class="row-track">
+      <div class="thumb-grid thumb-scroller" data-psom-key="donation-mission"></div>
+    </div>
+  </div>
 
-  <div class="thumb-grid thumb-scroller" data-psom-key="donation-education"></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-</div>
-</div>
-<!-- 7. Environment -->
-<div class="feed-row">
-<div class="row-label">환 경</div>
-<div class="row-track">
+  <div class="feed-row" data-count="80">
+    <div class="row-label">봉사</div>
+    <div class="row-track">
+      <div class="thumb-grid thumb-scroller" data-psom-key="donation-service"></div>
+    </div>
+  </div>
 
-<div class="thumb-grid thumb-scroller" data-psom-key="donation-environment"></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-</div>
-</div>
-<!-- 8. Others -->
-<div class="feed-row">
-<div class="row-label">기 타</div>
-<div class="row-track">
+  <div class="feed-row" data-count="80">
+    <div class="row-label">구호</div>
+    <div class="row-track">
+      <div class="thumb-grid thumb-scroller" data-psom-key="donation-relief"></div>
+    </div>
+  </div>
 
-<div class="thumb-grid thumb-scroller" data-psom-key="donation-others"></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-<div class="card"><div class="thumb"></div><div class="card-body"><div class="card-title">제목</div><div class="card-meta">-</div><div class="card-preview">내용</div></div></div>
-</div>
-</div>
-</div>
-</section>
-<div class="hidden" id="composerModal" style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:9999;">
-<div class="panel" style="width:min(92vw, 720px); max-height:80vh; overflow:auto;">
-<h3 style="margin-top:0;">글쓰기</h3>
-<input id="composeTitle" placeholder="Title" style="width:100%;"/>
-<textarea id="composeBody" placeholder="Enter content..." rows="8" style="width:100%; resize:vertical;"></textarea>
-<div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px;">
-<button class="button outline" id="btnDraftSave" type="button">저장 임시저장</button><button class="button outline" id="btnCancel">취소</button>
-<button class="button" disabled="disabled" id="btnSave" style=";display:none !important;">저장</button>
-</div>
+  <div class="feed-row" data-count="80">
+    <div class="row-label">교육</div>
+    <div class="row-track">
+      <div class="thumb-grid thumb-scroller" data-psom-key="donation-education"></div>
+    </div>
+  </div>
+
+  <div class="feed-row" data-count="80">
+    <div class="row-label">환경</div>
+    <div class="row-track">
+      <div class="thumb-grid thumb-scroller" data-psom-key="donation-environment"></div>
+    </div>
+  </div>
+
+  <div class="feed-row" data-count="80">
+    <div class="row-label">기타</div>
+    <div class="row-track">
+      <div class="thumb-grid thumb-scroller" data-psom-key="donation-others"></div>
+    </div>
+  </div>
+
 </div>
 </div>
 </main>
@@ -3578,82 +3524,32 @@ body .right{ display:none !important; }
   const ROW_GUTTER = 16; // must match --row-gutter
 
   function ensureFortyCards(track){
-    const cards = track.querySelectorAll('.card');
+
+    const grid = track.querySelector('[data-psom-key]');
+    if(!grid) return;
+
+    const cards = grid.querySelectorAll('.card');
     if(cards.length === 0) return;
 
-    // clone template from the last card
-    const tpl = cards[cards.length-1].cloneNode(true);
-    // normalize template content
-    tpl.querySelector('.card-title')?.replaceChildren(document.createTextNode('Title'));
-    tpl.querySelector('.card-meta')?.replaceChildren(document.createTextNode('-'));
-    tpl.querySelector('.card-preview')?.replaceChildren(document.createTextNode('Content'));
-
-    // append until 20
-    for(let i = cards.length; i < 40; i++){
-      track.appendChild(tpl.cloneNode(true));
-    }
-  }
-
-  function addScrollButtons(row){
-    if(row.querySelector('.scroll-left') || row.querySelector('.scroll-right')) return;
-    const track = row.querySelector('.row-track');
-    if(!track) return;
-
-    const leftBtn = document.createElement('button');
-    leftBtn.type = 'button';
-    leftBtn.className = 'scroll-btn scroll-left';
-    leftBtn.style.setProperty('--row-gutter', ROW_GUTTER + 'px');
-    leftBtn.innerHTML = '<span class="chev">‹</span>';
-
-    const rightBtn = document.createElement('button');
-    rightBtn.type = 'button';
-    rightBtn.className = 'scroll-btn scroll-right';
-    rightBtn.style.setProperty('--row-gutter', ROW_GUTTER + 'px');
-    rightBtn.innerHTML = '<span class="chev">›</span>';
-
-    const step = () => Math.max(1, Math.round(track.clientWidth * 0.9));
-    leftBtn.addEventListener('click', ()=> track.scrollBy({left: -step(), behavior:'smooth'}));
-    rightBtn.addEventListener('click', ()=> track.scrollBy({left: step(), behavior:'smooth'}));
-
-    row.appendChild(leftBtn);
-    row.appendChild(rightBtn);
-  }
-
-  document.querySelectorAll('.feed-row .row-track').forEach(ensureFortyCards);
-  document.querySelectorAll('.feed-row').forEach(addScrollButtons);
-
-  // If dynamic rows are added later
-  const feed = document.querySelector('#feedRows');
-  if(feed){
-    const mo = new MutationObserver(muts=>{
-      muts.forEach(m=>{
-        m.addedNodes && Array.from(m.addedNodes).forEach(n=>{
-          if(n.nodeType===1 && n.matches('.feed-row')){
-            const t = n.querySelector('.row-track');
-            if(t) ensureFortyCards(t);
-            addScrollButtons(n);
-          }
-        });
-      });
-    });
-    mo.observe(feed, {childList:true});
-  }
-})();
-</script><script>
-(function(){
-  const ROW_GUTTER = 16; // must match --row-gutter
-
-  function ensureFortyCards(track){
-    const cards = track.querySelectorAll('.card');
-    if(cards.length === 0) return;
     // use last card as template
     const tpl = cards[cards.length-1].cloneNode(true);
+
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
-    const t = tpl.querySelector('.card-title'); if(t) t.textContent = 'Title';
-    const m = tpl.querySelector('.card-meta');  if(m) m.textContent = '-';
-    const p = tpl.querySelector('.card-preview'); if(p) p.textContent = 'Content';
-    for(let i = cards.length; i < 40; i++){
-      track.appendChild(tpl.cloneNode(true));
+
+    const t = tpl.querySelector('.card-title');
+    if(t) t.textContent = 'Title';
+
+    const m = tpl.querySelector('.card-meta');
+    if(m) m.textContent = '-';
+
+    const p = tpl.querySelector('.card-preview');
+    if(p) p.textContent = 'Content';
+
+    const key = grid.dataset.psomKey;
+    const limit = SLOT_MAP[key] || 80;
+
+    for(let i = cards.length; i < limit; i++){
+      grid.appendChild(tpl.cloneNode(true));
     }
   }
 
@@ -5536,6 +5432,53 @@ window.addEventListener("message",function(ev){
   }
 }
 </style>
+
+<script>
+/* === Auto Slot Generator (Donation Feed) === */
+
+(function(){
+
+  function createDummyCard(){
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    card.innerHTML = `
+      <div class="thumb"></div>
+      <div class="card-body">
+        <div class="card-title">Loading...</div>
+        <div class="card-meta">-</div>
+        <div class="card-preview">Preparing</div>
+      </div>
+    `;
+
+    return card;
+  }
+
+  function buildSlots(){
+
+    document.querySelectorAll('.feed-row').forEach(row=>{
+
+      const count = Number(row.dataset.count || 80);
+      const track = row.querySelector('.row-track');
+
+      if(!track) return;
+
+      // 기존 더미 제거
+      track.querySelectorAll('.card').forEach(c=>c.remove());
+
+      // 슬롯 자동 생성
+      for(let i=0;i<count;i++){
+        track.appendChild(createDummyCard());
+      }
+
+    });
+
+  }
+
+  document.addEventListener('DOMContentLoaded', buildSlots);
+
+})();
+</script>
 
 <script defer src="/assets/js/auto-embed.instagram.js"></script>
 <script defer src="/assets/js/placeholder-sweeper.js"></script>
