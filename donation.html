@@ -5462,8 +5462,9 @@ window.addEventListener("message",function(ev){
 
       if(!track) return;
 
-      // 기존 더미 제거
-      track.querySelectorAll('.card').forEach(c=>c.remove());
+      // 이미 카드 있으면 더미 안 만듦
+      if(track.querySelectorAll('.card').length > 0) return;
+
 
       // 슬롯 자동 생성
       for(let i=0;i<count;i++){
