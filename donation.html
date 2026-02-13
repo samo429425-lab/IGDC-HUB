@@ -5433,16 +5433,13 @@ window.addEventListener("message",function(ev){
 </style>
 
 <script>
-/* === Auto Slot Generator (Donation Feed) - FINAL === */
+/* === Auto Slot Generator (Donation Feed) === */
 
 (function(){
 
-  let locked = false; // 오토맵 들어오면 true
-
   function createDummyCard(){
-
     const card = document.createElement('div');
-    card.className = 'card dummy';
+    card.className = 'card';
 
     card.innerHTML = `
       <div class="thumb"></div>
@@ -5458,8 +5455,6 @@ window.addEventListener("message",function(ev){
 
   function buildSlots(){
 
-    if(locked) return;
-
     document.querySelectorAll('.feed-row').forEach(row=>{
 
       const count = Number(row.dataset.count || 80);
@@ -5467,12 +5462,16 @@ window.addEventListener("message",function(ev){
 
       if(!track) return;
 
-      /* 실카드 있으면 더미 생성 금지 */
-      if(track.querySelector('.card:not(.dummy)')) return;
+// ✅ 실데이터(오토맵) 들어오면 더미 비켜줌(삭제)
+if(track.querySelector('.donation-card')){
+  track.querySelectorAll('.card').forEach(c => c.remove());
+  return;
+}
 
-      /* 이미 더미 있으면 중복 생성 금지 */
-      if(track.querySelector('.dummy')) return;
+// ✅ 이미 더미 있으면 중복 생성 방지
+if(track.querySelectorAll('.card').length > 0) return;
 
+      // 슬롯 자동 생성
       for(let i=0;i<count;i++){
         track.appendChild(createDummyCard());
       }
@@ -5481,47 +5480,10 @@ window.addEventListener("message",function(ev){
 
   }
 
-  function watchAutomap(){
-
-    const ob = new MutationObserver(()=>{
-
-      document.querySelectorAll('.feed-row').forEach(row=>{
-
-        const track = row.querySelector('.row-track');
-        if(!track) return;
-
-        /* 실카드 감지 */
-        if(track.querySelector('.card:not(.dummy)')){
-
-          /* 더미 제거 */
-          track.querySelectorAll('.dummy')
-               .forEach(d=>d.remove());
-
-          /* 다시 안 생기게 락 */
-          locked = true;
-        }
-
-      });
-
-    });
-
-    ob.observe(document.body,{
-      childList:true,
-      subtree:true
-    });
-
-  }
-
-  document.addEventListener('DOMContentLoaded', ()=>{
-
-    buildSlots();
-    watchAutomap();
-
-  });
+  document.addEventListener('DOMContentLoaded', buildSlots);
 
 })();
 </script>
-
 
 <script defer src="/assets/js/auto-embed.instagram.js"></script>
 <script defer src="/assets/js/placeholder-sweeper.js"></script>
