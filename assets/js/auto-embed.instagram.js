@@ -53,6 +53,12 @@
   ready(async ()=>{
     const list = allCandidates(document.body);
     for(const a of list){
+      	      // Page/Section restriction: only Social & Donation(Global)
+      if(
+        !a.closest(".social-section") &&
+        !a.closest('[data-psom-key="donation-global"]')
+      ) continue;
+	
       const href = a.getAttribute('href') || a.getAttribute('data-url');
       const holder = ensureHolder(a);
       if(!holder || holder.dataset.autoEmbedded === "1") continue;
