@@ -565,7 +565,7 @@ function buildSnapshot({ seed, psomList, bank, optional }){
   });
   // defaults if seed missing
   SECTION_KEYS.forEach(k=>{
-    if(!limits[k]) limits[k] = (k==="donation-global" ? 80 : 70);
+    if(!limits[k]) limits[k] = (k==="donation-global" ? 100 : 80);
   });
 
   // PSOM (optional) -> info map
@@ -654,30 +654,22 @@ function buildSnapshot({ seed, psomList, bank, optional }){
     // take top real items
     const chosen = list.slice(0, limit);
 
-    // if 부족하면 seed로 채움
-    if(chosen.length < limit){
-      const need = limit - chosen.length;
-      const filler = (seedByKey[k] || []).slice(0, need).map((s, idx)=>{
-        // preserve seed but enforce keys, and mark seed source
-        const copy = JSON.parse(JSON.stringify(s));
-        copy.psom_key = k;
-        copy.category = k;
-        copy.meta = copy.meta || {};
-        copy.meta.source = copy.meta.source || "seed";
-        copy.meta.replaceable = true;
-        copy.meta.updated_at = generatedAt;
-        // ensure v7 compatible fields exist minimally for automap ordering
-        if(!copy.bank_ref) copy.bank_ref = { source:"search-bank", channel:"donation", record_id:null };
-        if(!copy.rank) copy.rank = { global:0, section:0, score:0 };
-        if(!copy.verify) copy.verify = { status:"pending", score:0, engine:"seed", checked_at: generatedAt };
-        if(!copy.org) copy.org = { id:null, name: copy.title || null, legal_name:null, homepage: copy.link?.url || null, country:null, verified:false };
-        if(!copy.replace_policy) copy.replace_policy = { mode:"bank-first", fallback:"seed", locked:false };
-        return copy;
-      });
-      outItems.push(...chosen, ...filler);
-    }else{
-      outItems.push(...chosen);
-    }
+ // ===== section item build (no seed fallback) =====
+if (chosen && Array.isArray(chosen)) {
+
+  // limit 범위 내에서만 사용
+  const selected = chosen.slice(0, limit);
+
+  // seed filler 완전 제거
+  outItems.push(...selected);
+
+} else {
+
+  // 예외 안전 처리
+  outItems.push(...chosen);
+
+}
+
   });
 
   // Build sections output: prefer seed sections, but normalize required fields
