@@ -79,6 +79,17 @@
   }
 
   function closeModal() {
+    // Ensure global voice OFF when Country modal closes (prevents stuck Region toggle)
+    try {
+      if (typeof window.stopMaruMic === 'function') window.stopMaruMic();
+      if (window.MaruAddon && typeof window.MaruAddon.setVoiceEnabled === 'function') {
+        window.MaruAddon.setVoiceEnabled(false);
+      }
+      window.__MARU_VOICE_TOGGLE__ = false;
+      window.dispatchEvent(new CustomEvent('maru:voicechange', { detail: { enabled: false } }));
+    } catch (_) {}
+
+
 	window.MARU_COUNTRY_VOICE_READY = false; 
     if (modal) modal.remove();
     if (backdrop) backdrop.remove();
@@ -705,6 +716,12 @@ if (window.MaruCountryVoice) window.MaruCountryVoice.disable?.();
 
 countryVoiceCheckbox.addEventListener('change', () => {
   const enabled = countryVoiceCheckbox.checked;
+  // global voice state flag + broadcast (sync with Region modal)
+  try {
+    window.__MARU_VOICE_TOGGLE__ = !!enabled;
+    window.dispatchEvent(new CustomEvent('maru:voicechange', { detail: { enabled: !!enabled } }));
+  } catch (_) {}
+
 
 // === VOICE TOGGLE ON/OFF (Country) : delegated to Addon ===
 

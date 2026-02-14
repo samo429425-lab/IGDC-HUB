@@ -55,7 +55,9 @@
     modal: null,
     body: null,
     title: null,
-    visible: false
+    visible: false,
+    pinned: false,
+    pinnedBy: null
   };
 
   function injectExtensionStyle(){
@@ -63,14 +65,14 @@
     const st = document.createElement('style');
     st.id = 'maru-ext-style';
     st.textContent = `
-      .maru-ext-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.28);z-index:200000;display:none}
+      .maru-ext-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.28);z-index:900000;display:none}
       .maru-ext-modal{
         position:fixed;
         /* geometry is set by JS (dock-based) */
         background:#ffffff;
         border-radius:22px;
         box-shadow:0 40px 90px rgba(0,0,0,.45);
-        z-index:200001;
+        z-index:900001;
         display:flex; flex-direction:column;
         overflow:hidden;
       }
@@ -200,6 +202,8 @@ function showExtension(){
     EXT.backdrop.style.display = 'none';
     EXT.modal.classList.add('maru-ext-hidden');
     EXT.visible = false;
+    EXT.pinned = false;
+    EXT.pinnedBy = null;
     if (userInitiated) { /* keep silent */ }
   }
 
@@ -212,6 +216,8 @@ function showExtension(){
     EXT.body = null;
     EXT.title = null;
     EXT.visible = false;
+    EXT.pinned = false;
+    EXT.pinnedBy = null;
     if (userInitiated) { /* keep silent */ }
   }
 
@@ -409,22 +415,13 @@ function reconcileExtensionVisibility(){
 
   if (!EXT.modal) return;
 
-  // 내기업 / 대시보드 / 요약카드 열려 있으면 숨김
-  if (dashboardHasData()) {
-    hideExtension(false);
-    return;
-  }
-
-  // Region / Country 열려 있으면 표시
-  if (
-    document.querySelector('.maru-region-modal.open') ||
-    document.querySelector('.maru-country-modal.open')
-  ){
+  // Pinned by latest request → keep visible
+  if (EXT.pinned) {
     showExtension();
     return;
   }
 
-  // 기본은 숨김
+  // Otherwise keep hidden (extension is "on-demand" only)
   hideExtension(false);
 }
 
@@ -445,6 +442,12 @@ function reconcileExtensionVisibility(){
         if (!btn.textContent.trim()) btn.textContent = VOICE_ENABLED ? '🎙 음성 ON' : '🎙 음성 OFF';
       }
       btn.style.opacity = VOICE_ENABLED ? '1' : '.45';
+
+      // keep checkbox state in sync (label wraps checkbox in modals)
+      try{
+        const cb = btn.querySelector('input[type="checkbox"]');
+        if(cb) cb.checked = !!VOICE_ENABLED;
+      }catch(_){ }
     });
     window.__MARU_VOICE_TOGGLE__ = VOICE_ENABLED;
   }
@@ -705,11 +708,17 @@ function callInsightEngine(req){
     // - 확장창은 Region/Country 게시판에 "겹치지 않거나", "데이터 없음", "상세(2차) 요청"일 때만 오픈
     const openExt = shouldOpenExtension(req);
 
+    // pin extension visibility for this request (until next non-ext response or user close)
+    EXT.pinned = !!openExt;
+    EXT.pinnedBy = openExt ? (req && (req.scope||req.source||'req')) : null;
+
     if (openExt) {
       showExtension();
       appendExt('assistant', headline);
+    } else {
+      // not needed for this response
+      reconcileExtensionVisibility();
     }
-
 
     // Distribute to dashboards if available (non-blocking)
     if (req.scope === 'global') {

@@ -78,6 +78,9 @@ window.injectRegionContextResult = function (regionId, result) {
   let detailOverlay = null;
   let voiceEnabled = false;     // global gate for voice-bridge reads
   let regionVoiceEnabled = false; // UI toggle state
+  let _voiceListener = null; // window 'maru:voicechange' handler
+  let _suppressVoiceBroadcast = false;
+
 
   /* ================= UTIL ================= */
   function el(tag, cls, html) {
@@ -128,6 +131,28 @@ window.injectRegionContextResult = function (regionId, result) {
     try {
       if (typeof window.stopMaruMic === 'function') window.stopMaruMic();
     } catch (e) {}
+
+    // Addon single-source voice OFF + broadcast
+    try {
+      if (window.MaruAddon && typeof window.MaruAddon.setVoiceEnabled === 'function') {
+        window.MaruAddon.setVoiceEnabled(false);
+      }
+      window.__MARU_VOICE_TOGGLE__ = false;
+    } catch (_) {}
+
+    // remove global voice listener (avoid leaks)
+    try {
+      if (_voiceListener) {
+        window.removeEventListener('maru:voicechange', _voiceListener);
+        _voiceListener = null;
+      }
+    } catch (_) {}
+
+    // broadcast after listener removal
+    try {
+      window.dispatchEvent(new CustomEvent('maru:voicechange', { detail: { enabled: false } }));
+    } catch (_) {}
+
 
     if (detailOverlay) detailOverlay.remove();
     if (modal) modal.remove();
@@ -185,11 +210,29 @@ window.injectRegionContextResult = function (regionId, result) {
     // VOICE toggle (manual)
     const voiceBtn = el('button', 'maru-region-voice-toggle off', 'VOICE OFF');
 
+    // Keep Region toggle UI in sync with global voice state
+    if (!_voiceListener) {
+      _voiceListener = function (e) {
+        if (!modal) return;
+        const enabled = !!(e && e.detail && e.detail.enabled);
+        regionVoiceEnabled = enabled;
+        try { _suppressVoiceBroadcast = true; setVoice(enabled); } catch (_) {} finally { _suppressVoiceBroadcast = false; }
+      };
+      try { window.addEventListener('maru:voicechange', _voiceListener); } catch (_) {}
+    }
+
+
     function setVoice(on) {
       // 음성 상태는 Addon이 단일 관리
       if (window.MaruAddon && typeof window.MaruAddon.setVoiceEnabled === 'function') {
         window.MaruAddon.setVoiceEnabled(!!on);
       }
+      try {
+        window.__MARU_VOICE_TOGGLE__ = !!on;
+        if (!_suppressVoiceBroadcast) {
+          window.dispatchEvent(new CustomEvent('maru:voicechange', { detail: { enabled: !!on } }));
+        }
+      } catch (_) {}
 
     const enabled =
     (window.MaruAddon && typeof window.MaruAddon.isVoiceEnabled === 'function')
