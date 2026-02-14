@@ -565,7 +565,7 @@ function buildSnapshot({ seed, psomList, bank, optional }){
   });
   // defaults if seed missing
   SECTION_KEYS.forEach(k=>{
-    if(!limits[k]) limits[k] = (k==="donation-global" ? 80 : 70);
+    if(!limits[k]) limits[k] = (k==="donation-global" ? 100 : 80);
   });
 
   // PSOM (optional) -> info map
