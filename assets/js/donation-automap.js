@@ -1,146 +1,270 @@
 
 /**
- * donation-automap.enterprise.stable.js
- * Purpose: Safely replace dummy slots with snapshot data
- * Pipeline: Snapshot -> Automap -> Front
+ * donation-automap.v7.enterprise.js
+ * v7 snapshot compatible automapper
+ * - slot_limit from snapshot
+ * - bank-first replacement
+ * - rank-aware sorting
+ * - seed fallback
  */
 
 (async function(){
 
   const SNAPSHOT_PATHS = [
+    // dynamic feed (Netlify function)
+    "/.netlify/functions/donation-feed",
+    "/netlify/functions/donation-feed",
     "/data/donation.snapshot.json",
     "/netlify/functions/data/donation.snapshot.json"
   ];
 
-  const PSOM_KEYS = [
-    "donation-global",
-    "donation-ngo",
-    "donation-mission",
-    "donation-service",
-    "donation-relief",
-    "donation-education",
-    "donation-environment",
-    "donation-others"
-  ];
-
-  /* =========================
-     Utils
-  ========================= */
-
-  async function loadJSON(url){
-    try{
-      const res = await fetch(url, {cache:"no-store"});
-      if(!res.ok) return null;
-      return await res.json();
-    }catch(e){
-      console.warn("[DonationAutomap] Load fail:", url);
-      return null;
-    }
-  }
-
   async function loadSnapshot(){
     for(const p of SNAPSHOT_PATHS){
-      const j = await loadJSON(p);
-      if(j && j.sections && j.items) return j;
+      try{
+        const r = await fetch(p, {cache:"no-store"});
+        if(r.ok){
+          return await r.json();
+        }
+      }catch(e){}
     }
-    return null;
-  }
-
-  function clearContainer(el){
-    if(!el) return;
-    el.innerHTML = "";
-    el.dataset.mapped = "1";
-  }
-
-  function buildCard(item){
-
-    const card = document.createElement("div");
-    card.className = "donation-card";
-
-    const img = document.createElement("img");
-    img.src = item.thumb || item.image || "/assets/img/placeholder.png";
-    img.alt = item.title || "";
-
-    const title = document.createElement("h4");
-    title.textContent = item.title || "";
-
-    const desc = document.createElement("p");
-    desc.textContent = item.summary || item.description || "";
-
-    const link = document.createElement("a");
-    link.href = item.url || "#";
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.textContent = "바로가기";
-
-    card.appendChild(img);
-    card.appendChild(title);
-    card.appendChild(desc);
-    card.appendChild(link);
-
-    return card;
+    throw new Error("Donation snapshot not found");
   }
 
 
-  /* =========================
-     Core Render
-  ========================= */
+  function buildSectionIndex(sections){
+    const map = {};
+    sections.forEach(s=>{
+      map[s.psom_key] = s.slot_limit || 80;
+    });
+    return map;
+  }
 
-  function renderSection(key, items){
 
-    const container = document.querySelector(
-      `[data-psom-key="${key}"]`
-    );
+  function scoreItem(it){
 
-    if(!container) return;
-    if(container.dataset.mapped === "1") return;
+    let score = 0;
 
-    // Remove dummy
-    clearContainer(container);
+    // Bank priority
+    if(it.bank_ref && it.bank_ref.record_id){
+      score += 1000000;
+    }
 
-    items.forEach(item=>{
-      const card = buildCard(item);
-      container.appendChild(card);
+    // Rank score
+    if(it.rank && typeof it.rank.score === "number"){
+      score += it.rank.score * 1000;
+    }
+
+    // Verification bonus
+    if(it.verify && it.verify.status === "verified"){
+      score += 500;
+    }
+
+    return score;
+  }
+
+
+  function normalizeItems(items){
+
+    return items.map(it=>{
+      it.__score = scoreItem(it);
+      return it;
     });
 
   }
 
 
-  /* =========================
-     Bootstrap
-  ========================= */
+  function groupBySection(items){
 
-  async function init(){
+    const map = {};
+
+    items.forEach(it=>{
+
+      const k = it.psom_key;
+
+      if(!map[k]) map[k] = [];
+
+      map[k].push(it);
+
+    });
+
+    return map;
+  }
+
+
+
+  function sortSection(items){
+
+    return items.sort((a,b)=>{
+
+      // score desc
+      if(b.__score !== a.__score){
+        return b.__score - a.__score;
+      }
+
+      // updated_at desc
+      const ta = a?.meta?.updated_at || "";
+      const tb = b?.meta?.updated_at || "";
+
+      return tb.localeCompare(ta);
+
+    });
+
+  }
+
+
+
+  function renderCard(it){
+
+    const img = safeUrl(it?.media?.thumb) || "/assets/img/placeholder.png";
+    const title = escHtml(it?.org?.name || it?.title || "");
+    const meta = escHtml(
+      it?.org?.country ||
+      it?.donation?.currency ||
+      it?.category ||
+      ""
+    );
+    const summary = escHtml(it?.summary || it?.org?.legal_name || "");
+    const url = safeUrl(it?.donation?.checkout_url) || safeUrl(it?.link?.url) || safeUrl(it?.org?.homepage) || "";
+    const uid = escAttr(it?.uid || it?.id || "");
+
+    // IMPORTANT:
+    // - keep `.card` structure to match donation.html dummy cards + CSS
+    // - keep `.donation-card` class so dummy generator can detect real data
+    return `
+      <div class="card donation-card" data-uid="${uid}" data-url="${escAttr(url)}" role="link" tabindex="0" aria-label="${title}">
+        <div class="thumb">${img ? `<img src="${img}" loading="lazy" alt="">` : ""}</div>
+        <div class="card-body">
+          <div class="card-title">${title || "-"}</div>
+          <div class="card-meta">${meta || "-"}</div>
+          <div class="card-preview">${summary || ""}</div>
+        </div>
+      </div>
+    `;
+
+  }
+
+
+
+  function mountSection(key, items, limit){
+
+    const box = document.querySelector(`[data-psom-key="${key}"]`);
+    if(!box) return;
+
+    // Prefer HTML declared count if present (keeps UI consistent with each row)
+    const row = box.closest?.('.feed-row');
+    const htmlCount = row ? Number(row.dataset.count || 0) : 0;
+    const finalLimit = clampLimit(htmlCount || limit || 80);
+
+    // Replace placeholders in one shot
+    box.innerHTML = "";
+
+    const slice = items.slice(0, finalLimit);
+    for(const it of slice){
+      box.insertAdjacentHTML("beforeend", renderCard(it));
+    }
+
+  }
+
+  function clampLimit(n){
+    const x = Number(n);
+    if(!Number.isFinite(x) || x <= 0) return 80;
+    // hard guard (prevents accidental huge DOM)
+    return Math.max(1, Math.min(200, Math.floor(x)));
+  }
+
+  function escHtml(s){
+    const str = String(s ?? "");
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function escAttr(s){
+    // attribute-safe (no quotes/newlines)
+    return escHtml(String(s ?? "")).replace(/\s+/g, " ").trim();
+  }
+
+  function safeUrl(u){
+    const s = String(u ?? "").trim();
+    if(!s) return "";
+    if(/^javascript:/i.test(s)) return "";
+    return s;
+  }
+
+
+
+  async function main(){
 
     const snapshot = await loadSnapshot();
 
-    if(!snapshot){
-      console.warn("[DonationAutomap] Snapshot not found.");
+    if(!snapshot?.sections || !snapshot?.items){
+      console.error("Invalid donation snapshot");
       return;
     }
 
-    PSOM_KEYS.forEach(key=>{
+    // slot limits
+    const limits = buildSectionIndex(snapshot.sections);
 
-      const section = snapshot.sections.find(
-        s => s.key === key
-      );
+    // prepare items
+    const items = normalizeItems(snapshot.items);
 
-      if(!section) return;
+    // group
+    const groups = groupBySection(items);
 
-      const items = snapshot.items.filter(
-        i => i.section === key
-      );
 
-      if(!items || !items.length) return;
-
-      renderSection(key, items);
-
+    // render
+    Object.keys(limits).forEach(key=>{
+      const limit = limits[key];
+      let list = groups[key] || [];
+      list = sortSection(list);
+      mountSection(key, list, limit);
     });
 
-    console.log("[DonationAutomap] Mapping completed.");
   }
 
+  // Click delegation: whole card is clickable
+  function bindClicks(){
+    document.addEventListener('click', (e)=>{
+      const card = e.target?.closest?.('.donation-card');
+      if(!card) return;
+      const url = card.getAttribute('data-url');
+      if(url){
+        window.open(url, '_blank', 'noopener');
+      }
+    });
+    document.addEventListener('keydown', (e)=>{
+      if(e.key !== 'Enter' && e.key !== ' ') return;
+      const card = e.target?.closest?.('.donation-card');
+      if(!card) return;
+      e.preventDefault();
+      const url = card.getAttribute('data-url');
+      if(url){
+        window.open(url, '_blank', 'noopener');
+      }
+    });
+  }
 
-  document.addEventListener("DOMContentLoaded", init);
+  function boot(){
+    bindClicks();
+    main();
+
+    // Safety: if other scripts recreate placeholders after first render, rerun once.
+    let reran = false;
+    const mo = new MutationObserver(()=>{
+      if(reran) return;
+      const anyTrack = document.querySelector('[data-psom-key].row-track');
+      if(anyTrack && anyTrack.querySelector('.card') && !anyTrack.querySelector('.donation-card')){
+        reran = true;
+        main();
+        try{ mo.disconnect(); }catch(_e){}
+      }
+    });
+    try{ mo.observe(document.documentElement, {childList:true, subtree:true}); }catch(_e){}
+  }
+
+  document.addEventListener("DOMContentLoaded", boot);
 
 })();
