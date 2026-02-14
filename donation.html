@@ -3539,7 +3539,7 @@ body .right{ display:none !important; }
     if(p) p.textContent = 'Content';
 
     const key = grid.dataset.psomKey;
-    const limit = SLOT_MAP[key] || 80;
+    const limit = SLOT_MAP[key] || 100;
 
     for(let i = cards.length; i < limit; i++){
       grid.appendChild(tpl.cloneNode(true));
