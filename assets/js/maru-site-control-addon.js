@@ -245,8 +245,27 @@ function showExtension(){
 
   // Hide extension only when dashboard has meaningful data
   function isPlaceholderText(t){
-    if (!t) return true;
-    return /(분석\s*중|준비\s*중|불러오는\s*중|데이터가\s*없|없습니다)/.test(t);
+    const raw = (t == null) ? '' : String(t);
+    const s = raw.trim();
+    if (!s) return true;
+
+    // Common placeholders (Korean + English + symbols)
+    if (
+      s === '-' || s === '—' || s === '–' ||
+      s === '...' || s === '…' ||
+      /^n\/?a$/i.test(s) ||
+      /^na$/i.test(s) ||
+      /^none$/i.test(s) ||
+      /^null$/i.test(s) ||
+      /^tbd$/i.test(s) ||
+      /^todo$/i.test(s)
+    ) return true;
+
+    // Textual placeholders
+    if (/(분석\s*중|준비\s*중|불러오는\s*중|데이터가\s*없|없습니다)/.test(s)) return true;
+    if (/(no\s*data|no\s*summary|not\s*available|unavailable|empty|coming\s*soon|loading)/i.test(s)) return true;
+
+    return false;
   }
 
   function dashboardHasData(){
