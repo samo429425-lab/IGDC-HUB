@@ -181,50 +181,7 @@
         "platform": "youtube"
       }
     },
-    {
-      "id": "seed-donation-001",
-      "type": "org_news",
-      "channel": "donation",
-      "section": null,
-      "title": "Seed placeholder (donation/org news)",
-      "summary": "Replace with NGO/기관 공지/뉴스 스냅샷.",
-      "url": "https://example.org",
-      "thumbnail": "https://www.google.com/s2/favicons?domain=example.org&sz=64",
-      "lang": "ko",
-      "published_at": null,
-      "ingested_at": "2026-02-02T12:00:00Z",
-      "source": {
-        "name": "seed",
-        "platform": "org",
-        "authority": 0.5
-      },
-      "quality": {
-        "rank": 0.1,
-        "freshness": 0.1,
-        "trust": 0.1
-      },
-      "media": {
-        "kind": "none",
-        "duration": null,
-        "preview": null
-      },
-      "rights": {
-        "license": "public-domain",
-        "attribution": null,
-        "usage": "read-only"
-      },
-      "tags": [
-        "seed",
-        "donation"
-      ],
-      "extension": {
-        "org": {
-          "name": "",
-          "home": "",
-          "rss": ""
-        }
-      }
-    },
+
     {
       "id": "seed-culture-001",
       "type": "report",
