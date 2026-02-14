@@ -55,9 +55,7 @@
     modal: null,
     body: null,
     title: null,
-    visible: false,
-    pinned: false,
-    pinnedBy: null
+    visible: false
   };
 
   function injectExtensionStyle(){
@@ -65,14 +63,14 @@
     const st = document.createElement('style');
     st.id = 'maru-ext-style';
     st.textContent = `
-      .maru-ext-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.28);z-index:900000;display:none}
+      .maru-ext-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.28);z-index:200000;display:none}
       .maru-ext-modal{
         position:fixed;
         /* geometry is set by JS (dock-based) */
         background:#ffffff;
         border-radius:22px;
         box-shadow:0 40px 90px rgba(0,0,0,.45);
-        z-index:900001;
+        z-index:200001;
         display:flex; flex-direction:column;
         overflow:hidden;
       }
@@ -202,8 +200,6 @@ function showExtension(){
     EXT.backdrop.style.display = 'none';
     EXT.modal.classList.add('maru-ext-hidden');
     EXT.visible = false;
-    EXT.pinned = false;
-    EXT.pinnedBy = null;
     if (userInitiated) { /* keep silent */ }
   }
 
@@ -216,8 +212,6 @@ function showExtension(){
     EXT.body = null;
     EXT.title = null;
     EXT.visible = false;
-    EXT.pinned = false;
-    EXT.pinnedBy = null;
     if (userInitiated) { /* keep silent */ }
   }
 
@@ -245,27 +239,8 @@ function showExtension(){
 
   // Hide extension only when dashboard has meaningful data
   function isPlaceholderText(t){
-    const raw = (t == null) ? '' : String(t);
-    const s = raw.trim();
-    if (!s) return true;
-
-    // Common placeholders (Korean + English + symbols)
-    if (
-      s === '-' || s === '—' || s === '–' ||
-      s === '...' || s === '…' ||
-      /^n\/?a$/i.test(s) ||
-      /^na$/i.test(s) ||
-      /^none$/i.test(s) ||
-      /^null$/i.test(s) ||
-      /^tbd$/i.test(s) ||
-      /^todo$/i.test(s)
-    ) return true;
-
-    // Textual placeholders
-    if (/(분석\s*중|준비\s*중|불러오는\s*중|데이터가\s*없|없습니다)/.test(s)) return true;
-    if (/(no\s*data|no\s*summary|not\s*available|unavailable|empty|coming\s*soon|loading)/i.test(s)) return true;
-
-    return false;
+    if (!t) return true;
+    return /(분석\s*중|준비\s*중|불러오는\s*중|데이터가\s*없|없습니다)/.test(t);
   }
 
   function dashboardHasData(){
@@ -401,29 +376,46 @@ function showExtension(){
     const intent = req && req.intent ? String(req.intent) : 'summary';
     const q = String(req && req.text ? req.text : '');
 
-    // 상세(2차) 요청은 확장창
     const isDetail = (intent === 'expand' || intent === 'detail');
+    const isMedia  = (intent === 'video' || intent === 'audio' || intent === 'media' || intent === 'newsclip');
+
+    // Media(뉴스 클립/영상/오디오)는 결과 표시/대화가 필요하므로 확장창을 기본 오픈
+    // (Detached Pane으로 넘기는 것은 별도 라우팅에서 처리)
+    if (isMedia) return true;
+
+    // 상세/리서치 요청은 항상 확장창
+    if (isDetail) return true;
 
     if (kind === 'country') {
       const mentioned = findMentionedCountry(q);
-      // 겹침 없음 = 자유질문/비주제 → 확장창
+
+      // 질문에서 나라가 특정되지 않으면(또는 매칭 실패) → 확장창(자유질문/외부리서치)
       if (!mentioned) return true;
-      // Country는 1차 확장까지는 내부 처리, 2차(상세)는 확장창
-      if (isDetail) return true;
+
       // 겹치지만 데이터가 없으면 확장창(백도 호출 필요)
       if (!hasDataForCountry(mentioned)) return true;
-      // 겹치고 데이터 있음 → 확장창 불필요
+
+      // 겹치고 데이터 있음 → 카드/요약을 읽는 내부 처리
       return false;
     }
 
     if (kind === 'region') {
-      const regionId = findMentionedRegion(q) || (req && req.scope === 'region' ? req.target : null);
-      // 겹침 없음 = 자유질문/비주제 → 확장창
+      const mentioned = findMentionedRegion(q);
+      const followup = isFollowupQuery(q);
+
+      // 명시된 권역이 없으면: 후속(읽어줘/설명해줘)일 때만 현재 컨텍스트(target)로 처리
+      let regionId = mentioned;
+      if (!regionId && followup && req && req.scope === 'region' && req.target) {
+        regionId = String(req.target);
+      }
+
+      // 권역 매칭 실패(또는 컨텍스트 없음) → 확장창
       if (!regionId) return true;
-      // 상세 요청은 확장창
-      if (isDetail) return true;
+
       // 겹치지만 데이터가 없으면 확장창
       if (!hasDataForRegion(regionId)) return true;
+
+      // 겹치고 데이터 있음 → 카드/요약 내부 처리
       return false;
     }
 
@@ -434,13 +426,22 @@ function reconcileExtensionVisibility(){
 
   if (!EXT.modal) return;
 
-  // Pinned by latest request → keep visible
-  if (EXT.pinned) {
+  // 내기업 / 대시보드 / 요약카드 열려 있으면 숨김
+  if (dashboardHasData()) {
+    hideExtension(false);
+    return;
+  }
+
+  // Region / Country 열려 있으면 표시
+  if (
+    document.querySelector('.maru-region-modal.open') ||
+    document.querySelector('.maru-country-modal.open')
+  ){
     showExtension();
     return;
   }
 
-  // Otherwise keep hidden (extension is "on-demand" only)
+  // 기본은 숨김
   hideExtension(false);
 }
 
@@ -461,12 +462,6 @@ function reconcileExtensionVisibility(){
         if (!btn.textContent.trim()) btn.textContent = VOICE_ENABLED ? '🎙 음성 ON' : '🎙 음성 OFF';
       }
       btn.style.opacity = VOICE_ENABLED ? '1' : '.45';
-
-      // keep checkbox state in sync (label wraps checkbox in modals)
-      try{
-        const cb = btn.querySelector('input[type="checkbox"]');
-        if(cb) cb.checked = !!VOICE_ENABLED;
-      }catch(_){ }
     });
     window.__MARU_VOICE_TOGGLE__ = VOICE_ENABLED;
   }
@@ -642,12 +637,40 @@ function setInputMode(mode){
 
 // ---------- ENGINE ----------
   function detectIntent(text){
-    const t = String(text || '');
-    if (/영상/.test(t)) return 'video';
-    if (/(자세|상세|구체|심층|디테일|더\s*자세)/.test(t)) return 'expand';
-    if (/이슈/.test(t)) return 'realtime';
+    const raw = String(text || '');
+    const t = raw.toLowerCase();
+
+    // Media / clips (news clip 포함)
+    if (/(뉴스\s*클립|news\s*clip|헤드라인\s*영상|클립\s*영상|shorts|쇼츠|reel|릴스|tiktok|틱톡)/i.test(raw)) return 'video';
+    if (/(영상|동영상|비디오|video|youtube|유튜브|news\s*video)/i.test(raw)) return 'video';
+    if (/(오디오|음성\s*파일|팟캐스트|podcast|audio|mp3|wav|m4a|음악|music|노래|bgm)/i.test(raw)) return 'audio';
+
+    // Detail / research
+    if (/(자세|상세|구체|심층|디테일|더\s*자세|분석|리서치|조사|근거|출처|통계|전망|추세|리포트|보고서|비교|자료|논문)/i.test(raw)) return 'expand';
+    if (/(detail|deep|research|analy(sis|ze)|evidence|source|stats|trend|outlook|report|compare)/i.test(t)) return 'expand';
+
+    // Realtime
+    if (/이슈/.test(raw)) return 'realtime';
+
     return 'summary';
   }
+
+  function isFollowupQuery(text){
+    const q = String(text || '').trim();
+    const compact = q.replace(/\s+/g,'');
+    if (!compact) return true;
+
+    // very short / deictic follow-ups (카드 선택 없이 "그거", "읽어줘" 등)
+    if (compact.length <= 6) return true;
+    if (/^(그거|그것|이거|이것|여기|거기|저기|이내용|그내용|이부분|그부분)$/.test(compact)) return true;
+
+    // "읽어줘/설명해줘/알려줘" 류의 후속 요청(상세 요청은 detectIntent에서 expand로 분기)
+    if (/(읽어\s*줘|설명해\s*줘|알려\s*줘|요약해\s*줘|정리해\s*줘)/.test(q)) return true;
+    if (/^(tell\s*me|explain|summarize|read\s*it)/i.test(q)) return true;
+
+    return false;
+  }
+
 
   function normalizeRequest(input, text, context){
     const ctx = normalizeContext(context) || getBestContext();
@@ -727,17 +750,11 @@ function callInsightEngine(req){
     // - 확장창은 Region/Country 게시판에 "겹치지 않거나", "데이터 없음", "상세(2차) 요청"일 때만 오픈
     const openExt = shouldOpenExtension(req);
 
-    // pin extension visibility for this request (until next non-ext response or user close)
-    EXT.pinned = !!openExt;
-    EXT.pinnedBy = openExt ? (req && (req.scope||req.source||'req')) : null;
-
     if (openExt) {
       showExtension();
       appendExt('assistant', headline);
-    } else {
-      // not needed for this response
-      reconcileExtensionVisibility();
     }
+
 
     // Distribute to dashboards if available (non-blocking)
     if (req.scope === 'global') {
