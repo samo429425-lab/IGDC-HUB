@@ -55,7 +55,9 @@
     modal: null,
     body: null,
     title: null,
-    visible: false
+    visible: false,
+    lockUntil: 0,
+    lockReason: ''
   };
 
   function injectExtensionStyle(){
@@ -63,14 +65,14 @@
     const st = document.createElement('style');
     st.id = 'maru-ext-style';
     st.textContent = `
-      .maru-ext-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.28);z-index:200000;display:none}
+      .maru-ext-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.28);z-index:900000;display:none}
       .maru-ext-modal{
         position:fixed;
         /* geometry is set by JS (dock-based) */
         background:#ffffff;
         border-radius:22px;
         box-shadow:0 40px 90px rgba(0,0,0,.45);
-        z-index:200001;
+        z-index:900001;
         display:flex; flex-direction:column;
         overflow:hidden;
       }
@@ -200,11 +202,19 @@ function showExtension(){
     EXT.backdrop.style.display = 'none';
     EXT.modal.classList.add('maru-ext-hidden');
     EXT.visible = false;
-    if (userInitiated) { /* keep silent */ }
+    if (userInitiated) {
+      // User intent wins: clear lock so future auto-open works cleanly
+      EXT.lockUntil = 0;
+      EXT.lockReason = '';
+    }
   }
 
   function destroyExtension(userInitiated){
     // Destroy nodes (no instance). Next showExtension() will recreate.
+    if (userInitiated) {
+      EXT.lockUntil = 0;
+      EXT.lockReason = '';
+    }
     try { EXT.backdrop && EXT.backdrop.remove(); } catch(_){}
     try { EXT.modal && EXT.modal.remove(); } catch(_){}
     EXT.backdrop = null;
@@ -240,7 +250,14 @@ function showExtension(){
   // Hide extension only when dashboard has meaningful data
   function isPlaceholderText(t){
     if (!t) return true;
-    return /(분석\s*중|준비\s*중|불러오는\s*중|데이터가\s*없|없습니다)/.test(t);
+    const s = String(t).trim();
+    if (!s) return true;
+
+    // common placeholders (KR/EN)
+    return (
+      /(분석\s*중|준비\s*중|불러오는\s*중|데이터가\s*없|없습니다|없음|로딩\s*중|loading|n\/?a|not\s*available|coming\s*soon|tbd|\.{2,}|^-+$)/i
+        .test(s)
+    );
   }
 
   function dashboardHasData(){
@@ -271,8 +288,8 @@ function showExtension(){
   
   // ---------- OVERLAP / DATA CHECK (Region/Country Board) ----------
   function getOpenModalKind(){
-    const hasCountry = !!$('.maru-country-modal');
-    const hasRegion = !!$('.maru-region-modal');
+    const hasCountry = !!document.querySelector('.maru-country-modal.open');
+    const hasRegion  = !!document.querySelector('.maru-region-modal.open');
     if (hasCountry) return 'country';
     if (hasRegion) return 'region';
     return null;
@@ -365,57 +382,33 @@ function showExtension(){
   function shouldOpenExtension(req){
     const kind = getOpenModalKind();
 
-    // Global 버튼 실행은 기본적으로 패널/게시판에 뿌리고, 확장창은 필요 시만
-    if (!kind && req && req.source === 'panel' && (req.input === 'system' || req.input === 'panel')) {
-      return false;
-    }
-
-    // 모달이 없으면, 확장창이 최종 게시판
+    // When no modal is open, extension is the main conversation surface.
     if (!kind) return true;
 
     const intent = req && req.intent ? String(req.intent) : 'summary';
-    const q = String(req && req.text ? req.text : '');
+    const q = String(req && req.text ? req.text : '').trim();
 
-    const isDetail = (intent === 'expand' || intent === 'detail');
-    const isMedia  = (intent === 'video' || intent === 'audio' || intent === 'media' || intent === 'newsclip');
-
-    // Media(뉴스 클립/영상/오디오)는 결과 표시/대화가 필요하므로 확장창을 기본 오픈
-    // (Detached Pane으로 넘기는 것은 별도 라우팅에서 처리)
-    if (isMedia) return true;
-
-    // 상세/리서치 요청은 항상 확장창
-    if (isDetail) return true;
+    // Force extension for detail/research, realtime, and any media/audio/news clip requests.
+    if (intent === 'expand' || intent === 'detail' || intent === 'realtime' || intent === 'media' || intent === 'audio') {
+      return true;
+    }
 
     if (kind === 'country') {
       const mentioned = findMentionedCountry(q);
-
-      // 질문에서 나라가 특정되지 않으면(또는 매칭 실패) → 확장창(자유질문/외부리서치)
+      // No explicit country mention → 자유질문/비주제 → 확장창
       if (!mentioned) return true;
-
-      // 겹치지만 데이터가 없으면 확장창(백도 호출 필요)
+      // Mentioned but no card data → 확장창
       if (!hasDataForCountry(mentioned)) return true;
-
-      // 겹치고 데이터 있음 → 카드/요약을 읽는 내부 처리
+      // Mentioned + has data → 카드 읽기(확장창 불필요)
       return false;
     }
 
     if (kind === 'region') {
-      const mentioned = findMentionedRegion(q);
-      const followup = isFollowupQuery(q);
-
-      // 명시된 권역이 없으면: 후속(읽어줘/설명해줘)일 때만 현재 컨텍스트(target)로 처리
-      let regionId = mentioned;
-      if (!regionId && followup && req && req.scope === 'region' && req.target) {
-        regionId = String(req.target);
-      }
-
-      // 권역 매칭 실패(또는 컨텍스트 없음) → 확장창
+      const regionId = findMentionedRegion(q);
+      // No explicit region mention → 자유질문/비주제 → 확장창
       if (!regionId) return true;
-
-      // 겹치지만 데이터가 없으면 확장창
+      // Mentioned but no card data → 확장창
       if (!hasDataForRegion(regionId)) return true;
-
-      // 겹치고 데이터 있음 → 카드/요약 내부 처리
       return false;
     }
 
@@ -423,27 +416,23 @@ function showExtension(){
   }
 
 function reconcileExtensionVisibility(){
+    if (!EXT.modal) return;
 
-  if (!EXT.modal) return;
+    // If locked by routing decision, keep it on top.
+    if (EXT.lockUntil && Date.now() < EXT.lockUntil) {
+      showExtension();
+      return;
+    }
 
-  // 내기업 / 대시보드 / 요약카드 열려 있으면 숨김
-  if (dashboardHasData()) {
-    hideExtension(false);
-    return;
+    // When dashboards have meaningful data, keep extension hidden unless user opens it manually.
+    if (dashboardHasData()) {
+      hideExtension(false);
+      return;
+    }
+
+    // Default: do not auto-show. (Only show when routing decides to open.)
+    // Keep current state.
   }
-
-  // Region / Country 열려 있으면 표시
-  if (
-    document.querySelector('.maru-region-modal.open') ||
-    document.querySelector('.maru-country-modal.open')
-  ){
-    showExtension();
-    return;
-  }
-
-  // 기본은 숨김
-  hideExtension(false);
-}
 
 
   // ---------- VOICE ----------
@@ -637,40 +626,20 @@ function setInputMode(mode){
 
 // ---------- ENGINE ----------
   function detectIntent(text){
-    const raw = String(text || '');
-    const t = raw.toLowerCase();
+    const t = String(text || '').trim();
 
-    // Media / clips (news clip 포함)
-    if (/(뉴스\s*클립|news\s*clip|헤드라인\s*영상|클립\s*영상|shorts|쇼츠|reel|릴스|tiktok|틱톡)/i.test(raw)) return 'video';
-    if (/(영상|동영상|비디오|video|youtube|유튜브|news\s*video)/i.test(raw)) return 'video';
-    if (/(오디오|음성\s*파일|팟캐스트|podcast|audio|mp3|wav|m4a|음악|music|노래|bgm)/i.test(raw)) return 'audio';
+    // Media intent (video/audio/news clip) → handled via extension + engine routing
+    if (/(뉴스\s*클립|클립|영상|동영상|비디오|video|clip)/i.test(t)) return 'media';
+    if (/(오디오|음성\s*파일|나레이션|낭독|audio|narration|tts)/i.test(t)) return 'audio';
 
-    // Detail / research
-    if (/(자세|상세|구체|심층|디테일|더\s*자세|분석|리서치|조사|근거|출처|통계|전망|추세|리포트|보고서|비교|자료|논문)/i.test(raw)) return 'expand';
-    if (/(detail|deep|research|analy(sis|ze)|evidence|source|stats|trend|outlook|report|compare)/i.test(t)) return 'expand';
+    // Detail / research intent → force extension
+    if (/(자세|상세|구체|심층|디테일|더\s*자세|리서치|조사|분석|근거|통계|전망|추세|보고서|리포트|출처|비교)/.test(t)) return 'expand';
 
-    // Realtime
-    if (/이슈/.test(raw)) return 'realtime';
+    // Realtime issues
+    if (/(실시간|이슈|속보|브리핑)/.test(t)) return 'realtime';
 
     return 'summary';
   }
-
-  function isFollowupQuery(text){
-    const q = String(text || '').trim();
-    const compact = q.replace(/\s+/g,'');
-    if (!compact) return true;
-
-    // very short / deictic follow-ups (카드 선택 없이 "그거", "읽어줘" 등)
-    if (compact.length <= 6) return true;
-    if (/^(그거|그것|이거|이것|여기|거기|저기|이내용|그내용|이부분|그부분)$/.test(compact)) return true;
-
-    // "읽어줘/설명해줘/알려줘" 류의 후속 요청(상세 요청은 detectIntent에서 expand로 분기)
-    if (/(읽어\s*줘|설명해\s*줘|알려\s*줘|요약해\s*줘|정리해\s*줘)/.test(q)) return true;
-    if (/^(tell\s*me|explain|summarize|read\s*it)/i.test(q)) return true;
-
-    return false;
-  }
-
 
   function normalizeRequest(input, text, context){
     const ctx = normalizeContext(context) || getBestContext();
@@ -751,6 +720,11 @@ function callInsightEngine(req){
     const openExt = shouldOpenExtension(req);
 
     if (openExt) {
+      // Lock extension open until user closes it (prevents auto-hide on first turn)
+      try {
+        EXT.lockUntil = Date.now() + 3600 * 1000; // 1h safety lock
+        EXT.lockReason = 'auto-open';
+      } catch(_) {}
       showExtension();
       appendExt('assistant', headline);
     }
@@ -813,7 +787,7 @@ function callInsightEngine(req){
 
   // ---------- PUBLIC API ----------
   const MaruAddon = {
-    __MARU_ADDON_VER__: 'v7.0-fixed',
+    __MARU_ADDON_VER__: 'v8.0-final',
     // buttons
     bootstrapGlobalInsight: function(){
       dispatch({
