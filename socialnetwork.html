@@ -3649,7 +3649,8 @@ window.addEventListener('resize', () => {
     var items=qsa(".ad-box, .thumbnail-card, .thumb-card, .sn-card, .card, li, .item, .ad-card", root);
     return items.filter(function(el){
       // 링크/이미지 포함 요소만
-      return el.querySelector("a, img, picture, .thumb, .image, .cover");
+      return el.matches("a, img, picture, .thumb, .image, .cover")
+      || el.querySelector("a, img, picture, .thumb, .image, .cover");
     }).slice(0,100);
   }
   function fill(){
