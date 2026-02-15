@@ -1038,46 +1038,25 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
 </div>
 </section>
 
-<!-- MOBILE: move right-panel into main as 7th section -->
-<div class="scroller-wrap" id="mobile-ad-rail-wrap"><div class="rail-title">💎 인기 브랜드 💎</div><div class="thumb-list thumb-scroller" id="mobile-ad-rail-list"></div></div>
+<section class="content-box" id="sec-mobile-rail" style="display:none;">
+  <h3>💎 인기 브랜드 💎</h3>
+  <div id="mobile-brand-rail-slot"></div>
+</section>
+
 </main>
 
   <!-- ===== RIGHT COLUMN ===== -->
   <aside class="right-col">
-    <div class="brand-rail">
+    <div id="brand-rail-slot"></div>
+    <div class="brand-rail" id="brand-rail">
       <h3 class="ad-headline">💎 인기 브랜드 💎</h3>
-      <div class="thumb-grid thumb-scroller vertical"
+      <div class="thumb-grid thumb-scroller vertical thumb-list"
            data-psom-key="distribution-right">
       </div>
     </div>
   </aside>
 
 </div>
-
-
-
-<!-- ===== RIGHT PANEL MOVE PATCH (keep automap/snapshot intact) ===== -->
-<script id="rightpanel-move-patch">
-document.addEventListener('DOMContentLoaded', function(){
-  try{
-    var container = document.querySelector('.container');
-    var main = document.querySelector('.container > .main-content');
-    // brand rail currently inside main -> page-grid -> right-col
-    var rail = document.querySelector('.page-grid .right-col .brand-rail') || document.querySelector('.page-grid .brand-rail');
-    if(!container || !main || !rail) return;
-
-    // Move rail to be a direct child of .container (3rd column target)
-    container.insertBefore(rail, main.nextSibling);
-
-    // Remove the old wrapper (right-col) to prevent layout split in main
-    var rightCol = document.querySelector('.page-grid .right-col');
-    if(rightCol) rightCol.remove();
-  }catch(e){
-    console.error('rightpanel-move-patch error', e);
-  }
-});
-</script>
-
 <!-- ================= SLOT GENERATOR ================= -->
 <script>
 (function(){
@@ -3192,60 +3171,36 @@ window.addEventListener("message",function(ev){
 <script src="/assets/js/distribution-products-automap.v3.js" defer></script>
 
 
-<!-- ===== MOBILE RIGHT-PANEL -> 7TH SECTION PATCH ===== -->
-<script id="mobile-rightpanel-to-7th">
+<script id="brand-rail-responsive-bridge">
 (function(){
-  function isMobile(){ return window.matchMedia && window.matchMedia('(max-width:1024px)').matches; }
-
-  function moveOnce(){
-    if(!isMobile()) return;
-    var wrap = document.getElementById('mobile-ad-rail-wrap');
-    var list = document.getElementById('mobile-ad-rail-list');
-    var grid = document.querySelector('.brand-rail .thumb-grid[data-psom-key="distribution-right"]')
-            || document.querySelector('.brand-rail .thumb-grid[data-psom-key="distribution"]');
-    if(!wrap || !list || !grid) return;
-
-    // avoid repeated moves
-    if(list.getAttribute('data-moved') === '1') return;
-
-    // if automap hasn't populated yet, wait
-    if(!grid.children || grid.children.length === 0) return;
-
-    // move cards from right grid to mobile list
-    while(grid.firstChild){
-      list.appendChild(grid.firstChild);
-    }
-    list.setAttribute('data-moved','1');
+  function isMobile(){
+    return window.matchMedia && window.matchMedia('(max-width: 860px)').matches;
   }
-
-  function arm(){
+  function bridge(){
     try{
-      moveOnce();
-      // Observe late fills (automap)
-      var grid = document.querySelector('.brand-rail .thumb-grid[data-psom-key="distribution-right"]')
-              || document.querySelector('.brand-rail .thumb-grid[data-psom-key="distribution"]');
-      if(!grid || grid.__m7obs) return;
-      var obs = new MutationObserver(function(){ moveOnce(); });
-      obs.observe(grid, { childList:true, subtree:false });
-      grid.__m7obs = obs;
-    }catch(e){}
+      var rail = document.getElementById('brand-rail') || document.querySelector('.brand-rail');
+      var desktopSlot = document.getElementById('brand-rail-slot');
+      var mobileSlot = document.getElementById('mobile-brand-rail-slot');
+      var mobileSection = document.getElementById('sec-mobile-rail');
+      if(!rail || !desktopSlot || !mobileSlot || !mobileSection) return;
+
+      if(isMobile()){
+        // show mobile section and move rail into it
+        mobileSection.style.display = '';
+        if(rail.parentNode !== mobileSlot) mobileSlot.appendChild(rail);
+      }else{
+        // hide mobile section and move rail back to desktop slot
+        mobileSection.style.display = 'none';
+        if(rail.parentNode !== desktopSlot) desktopSlot.appendChild(rail);
+      }
+    }catch(e){
+      console.error('brand-rail-responsive-bridge', e);
+    }
   }
-
-  if(document.readyState==='complete' || document.readyState==='interactive') arm();
-  else document.addEventListener('DOMContentLoaded', arm);
-
-  window.addEventListener('resize', function(){
-    // allow rerun if desktop -> mobile
-    var list = document.getElementById('mobile-ad-rail-list');
-    if(list && !isMobile()) list.removeAttribute('data-moved');
-    arm();
-  });
-  window.addEventListener('orientationchange', function(){
-    var list = document.getElementById('mobile-ad-rail-list');
-    if(list) list.removeAttribute('data-moved');
-    arm();
-  });
+  window.addEventListener('resize', bridge);
+  document.addEventListener('DOMContentLoaded', bridge);
 })();
 </script>
+
 </body>
 </html>
