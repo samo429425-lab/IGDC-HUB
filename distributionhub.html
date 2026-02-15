@@ -1037,20 +1037,14 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
 <button aria-label="오른쪽으로 스크롤" class="rscroll right" type="button">›</button>
 </div>
 </section>
-
-<section class="content-box" id="sec-mobile-rail" style="display:none;">
-  <h3>💎 인기 브랜드 💎</h3>
-  <div id="mobile-brand-rail-slot"></div>
-</section>
-
+<div class="scroller-wrap" id="mobile-ad-rail-wrap"><div class="rail-title">💎 인기 브랜드 💎</div><div class="thumb-list thumb-scroller" id="mobile-ad-rail-list"></div></div>
 </main>
 
   <!-- ===== RIGHT COLUMN ===== -->
   <aside class="right-col">
-    <div id="brand-rail-slot"></div>
-    <div class="brand-rail" id="brand-rail">
+    <div class="brand-rail">
       <h3 class="ad-headline">💎 인기 브랜드 💎</h3>
-      <div class="thumb-grid thumb-scroller vertical thumb-list"
+      <div class="thumb-grid thumb-scroller vertical"
            data-psom-key="distribution-right">
       </div>
     </div>
@@ -3170,37 +3164,75 @@ window.addEventListener("message",function(ev){
 
 <script src="/assets/js/distribution-products-automap.v3.js" defer></script>
 
-
-<script id="brand-rail-responsive-bridge">
+<script id="mobile-rightpanel-clone">
 (function(){
-  function isMobile(){
-    return window.matchMedia && window.matchMedia('(max-width: 860px)').matches;
-  }
-  function bridge(){
-    try{
-      var rail = document.getElementById('brand-rail') || document.querySelector('.brand-rail');
-      var desktopSlot = document.getElementById('brand-rail-slot');
-      var mobileSlot = document.getElementById('mobile-brand-rail-slot');
-      var mobileSection = document.getElementById('sec-mobile-rail');
-      if(!rail || !desktopSlot || !mobileSlot || !mobileSection) return;
+  function isNarrow(){ return window.matchMedia && window.matchMedia('(max-width: 1024px)').matches; }
 
-      if(isMobile()){
-        // show mobile section and move rail into it
-        mobileSection.style.display = '';
-        if(rail.parentNode !== mobileSlot) mobileSlot.appendChild(rail);
-      }else{
-        // hide mobile section and move rail back to desktop slot
-        mobileSection.style.display = 'none';
-        if(rail.parentNode !== desktopSlot) desktopSlot.appendChild(rail);
-      }
-    }catch(e){
-      console.error('brand-rail-responsive-bridge', e);
+  function getSource(){
+    return document.querySelector('.brand-rail [data-psom-key="distribution-right"]') ||
+           document.querySelector('[data-psom-key="distribution-right"]');
+  }
+
+  function getTarget(){
+    return document.getElementById('mobile-ad-rail-list');
+  }
+
+  var raf = 0;
+  function scheduleSync(){
+    if(raf) return;
+    raf = requestAnimationFrame(function(){ raf=0; sync(); });
+  }
+
+  function sync(){
+    var src = getSource();
+    var tgt = getTarget();
+    if(!src || !tgt) return;
+
+    // Desktop/tablet-wide: keep mobile rail empty (avoid duplicate content)
+    if(!isNarrow()){
+      if(tgt.childElementCount) tgt.innerHTML = '';
+      return;
+    }
+
+    // Clone (do NOT move) cards so automap keeps owning the right-panel slot
+    var kids = Array.prototype.slice.call(src.children);
+    // If nothing yet, keep empty
+    tgt.innerHTML = '';
+    for(var i=0;i<kids.length;i++){
+      var node = kids[i].cloneNode(true);
+      // remove duplicate ids if any
+      if(node.id) node.removeAttribute('id');
+      tgt.appendChild(node);
     }
   }
-  window.addEventListener('resize', bridge);
-  document.addEventListener('DOMContentLoaded', bridge);
+
+  function boot(){
+    var src = getSource();
+    if(!src) return;
+
+    // initial
+    scheduleSync();
+
+    // watch automap fills
+    try{
+      var mo = new MutationObserver(scheduleSync);
+      mo.observe(src, { childList:true, subtree:false });
+    }catch(e){}
+
+    // resize/orientation
+    window.addEventListener('resize', scheduleSync, {passive:true});
+    window.addEventListener('orientationchange', scheduleSync, {passive:true});
+    // late load
+    setTimeout(scheduleSync, 250);
+    setTimeout(scheduleSync, 1000);
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot);
+  }else{
+    boot();
+  }
 })();
 </script>
-
 </body>
 </html>
