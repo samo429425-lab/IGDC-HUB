@@ -284,11 +284,15 @@ async function run(){
 
     list = list.slice(0, MAX_ITEMS);
 
-    if(!list.length){
-      box.textContent = '콘텐츠 준비 중입니다.';
-      box.style.padding = '12px';
-      return;
-    }
+   if(!list.length){
+    box.innerHTML = '';
+    box.classList.remove('thumb-grid','thumb-list','thumb-scroller');
+    box.classList.add('empty-slot');
+    box.innerHTML = '<div class="empty-msg">콘텐츠 준비 중입니다.</div>';
+    box.style.padding = '12px';
+   return;
+  }
+
 
     render(box, list);
 
