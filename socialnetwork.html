@@ -2056,6 +2056,8 @@ body{ overflow-y: scroll; }
       --thumb-gap: 14px;
     }
   }
+  
+
 </style>
 <style id="qna-brand-only">
 /* === Q&A sidebar link color only (no other changes) === */
@@ -3695,13 +3697,13 @@ window.addEventListener('resize', () => {
     if(grid.getAttribute("data-filled")==="1") return;
     var r=rail(), ads=pick(r);
     if(!ads.length){
-      // 비어 있어도 박스는 보이게 간단 플레이스홀더
-      var ph=D.createElement("div");
-      ph.textContent="AD Panel (mobile)";
-      ph.style.cssText="display:flex;align-items:center;justify-content:center;min-width:200px;max-width:260px;height:144px;line-height:144px;font-size:12px;opacity:.6;";      grid.appendChild(ph);
-      grid.setAttribute("data-filled","1");
-      return;
-    }
+  // 빈 상태면 공백 섹션 만들지 않음 (정석: 컨테이너 숨김)
+  var wrap = grid.closest("#rpMobileBox, #rpMobileRailWrap, .rpMobileBox, .mobile-rail-wrap") || grid.parentElement;
+  if(wrap) wrap.style.display = "none";
+  grid.setAttribute("data-filled","1");
+  return;
+}
+
     ads.forEach(function(a){
       var n=a.cloneNode(true);
       n.style.margin="0"; n.style.width="auto"; n.style.removeProperty("height"); n.style.removeProperty("line-height");
