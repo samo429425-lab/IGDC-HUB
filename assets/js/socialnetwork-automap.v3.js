@@ -248,12 +248,22 @@ async function run(){
   let sectionMap = Object.create(null);
 
   /* snapshot priority */
-  if(snapshot && snapshot.pages && snapshot.pages.social){
-    sectionMap = snapshot.pages.social.sections || {};
-    log('[CORE] snapshot loaded');
+  if(snapshot && snapshot.pages){
+    if(snapshot.pages.social && snapshot.pages.social.sections){
+      sectionMap = snapshot.pages.social.sections || {};
+      log('[CORE] snapshot loaded (pages.social)');
+    }else if(snapshot.pages.socialnetwork && snapshot.pages.socialnetwork.sections){
+      sectionMap = snapshot.pages.socialnetwork.sections || {};
+      log('[CORE] snapshot loaded (pages.socialnetwork)');
+    }else{
+      // legacy shapes
+      sectionMap = snapshot.sections || snapshot.blocks || {};
+      if(sectionMap && typeof sectionMap === 'object'){
+        log('[CORE] snapshot loaded (legacy)');
+      }
+    }
   }
-
-  /* feed fallback */
+/* feed fallback */
   if(feed && feed.grid && Array.isArray(feed.grid.sections)){
     feed.grid.sections.forEach(s=>{
       if(!sectionMap[s.id]){
@@ -263,12 +273,72 @@ async function run(){
     log('[CORE] feed merged');
   }
 
+
+  /* ================= KEY RESOLUTION ================= */
+  const ALIASES = {
+    // right panel legacy keys
+    'socialnetwork': ['socialnetwork-right','social-right','social_right','right-social','social-right-panel','socialnetwork_panel','socialnetworkpanel'],
+    // common misspellings / variants
+    'social-youtube': ['social_youtube','youtube','social-youtube-1','social-youtube-main'],
+    'social-tiktok': ['social_tiktok','tiktok','social-tiktok-main'],
+    'social-instagram': ['social_instagram','instagram','social-instagram-main'],
+    'social-facebook': ['social_facebook','facebook','social-facebook-main'],
+    'social-twitter': ['social_twitter','twitter','social-x','social-x-twitter'],
+    'social-pinterest': ['social_pinterest','pinterest'],
+    'social-reddit': ['social_reddit','reddit'],
+    'social-wechat': ['social_wechat','wechat'],
+    'social-weibo': ['social_weibo','weibo']
+  };
+
+  function normKey(k){
+    return String(k||'').trim();
+  }
+
+  function getSectionAny(k){
+    const key = normKey(k);
+    if(!key) return null;
+    if(sectionMap && Object.prototype.hasOwnProperty.call(sectionMap, key)) return sectionMap[key];
+    // try case-insensitive hit (snapshot keys are stable but defensive)
+    const lower = key.toLowerCase();
+    for(const kk in sectionMap){
+      if(String(kk).toLowerCase() === lower) return sectionMap[kk];
+    }
+    return null;
+  }
+
+  function resolveSection(key){
+    const base = normKey(key);
+    let raw = getSectionAny(base);
+    if(raw) return raw;
+
+    // alias list
+    const list = (ALIASES[base] || []).map(normKey).filter(Boolean);
+    for(const k of list){
+      raw = getSectionAny(k);
+      if(raw) return raw;
+    }
+
+    // last resort: if this is the right panel and we have no dedicated section,
+    // build it from top items of the main social sections.
+    if(base === 'socialnetwork'){
+      const blendFrom = ['social-instagram','social-youtube','social-tiktok','social-twitter','social-facebook'];
+      let blended = [];
+      blendFrom.forEach(k=>{
+        const sec = getSectionAny(k);
+        if(Array.isArray(sec)) blended = blended.concat(sec);
+      });
+      if(blended.length) return blended;
+    }
+
+    return [];
+  }
+
   boxes.forEach(box=>{
 
     const key = box.getAttribute('data-psom-key');
     if(!key) return;
 
-    let raw = sectionMap[key] || [];
+    let raw = resolveSection(key);
 
     if(!Array.isArray(raw)) raw = [];
 
