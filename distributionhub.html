@@ -450,7 +450,10 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
 
 /* 1) Tablet & down: hide right/ad panel to free width */
 @media (max-width: 1024px){
-  .right-panel, .brand-rail, .right-ad-panel { display: none !important; }
+  .right-panel:not(#mobile-ad-rail-wrap),
+  .brand-rail:not(#mobile-ad-rail-wrap),
+  .right-ad-panel { display: none !important; }
+
 }
 
 /* 2) Small tablet & large phones: hide left sidebar too; main = 100% */
