@@ -676,6 +676,13 @@ function callInsightEngine(req){
 
 
   function dispatch(req){
+	  
+    // === [PATCH v10] FIRST TURN EXTENSION PRE-OPEN ===
+    if (shouldOpenExtension(req)) {
+        EXT.lockUntil = Date.now() + 3600 * 1000;
+        EXT.lockReason = 'pre-open';
+        showExtension();
+    }
     STATE.lastRequest = req;
     STATE.commandHistory.push({ role:'user', text: req.text });
 
