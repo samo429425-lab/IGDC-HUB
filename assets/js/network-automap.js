@@ -1,61 +1,83 @@
-// network-automap.js
-// Network Hub Right Panel Automap (PSOM Based)
+/* NETWORK AUTOMAP v1.0 - entry point (HTML loads ONLY this) */
+(function(){
+  'use strict';
 
-document.addEventListener("DOMContentLoaded", function () {
+  const HUB = 'network';
+  const SNAPSHOT_URL = '/data/network-snapshot.json';
+  const FEED_SRC = '/assets/js/feed-network.v1.js';
+  const SLOT_COUNT = 100;
 
-  async function loadSnapshot(key) {
-    const res = await fetch(`/data/${key}.json`);
-    if (!res.ok) throw new Error("Snapshot load failed: " + key);
-    return await res.json();
+  function $(sel, root=document){ return root.querySelector(sel); }
+  function ensureScript(src){
+    return new Promise((resolve, reject) => {
+      const existing = Array.from(document.scripts).find(s => (s.getAttribute('src')||'') === src);
+      if(existing){ 
+        if(existing.dataset.loaded === '1') return resolve();
+        existing.addEventListener('load', () => resolve(), { once:true });
+        existing.addEventListener('error', () => reject(new Error('script load error: ' + src)), { once:true });
+        return;
+      }
+      const s = document.createElement('script');
+      s.src = src;
+      s.async = true;
+      s.dataset.loaded = '0';
+      s.onload = () => { s.dataset.loaded = '1'; resolve(); };
+      s.onerror = () => reject(new Error('script load error: ' + src));
+      document.head.appendChild(s);
+    });
   }
 
-  function clearPanel(panel) {
-    panel.innerHTML = "";
+  function disablePsomThumbGrid(){
+    const grid = $('.thumb-grid[data-psom-key="network"]');
+    if(!grid) return;
+    grid.innerHTML = '';
+    grid.style.display = 'none';
+    grid.setAttribute('data-disabled','1');
   }
 
-  function renderItem(item) {
-    const div = document.createElement("div");
-    div.className = "thumb-card";
-
-    div.innerHTML = `
-      <a href="${item.link || item.url || "#"}"
-         class="thumb-link"
-         data-track-id="${item.id}">
-        <img src="${item.thumb || item.image}"
-             loading="lazy"
-             alt="${item.title || ""}">
-      </a>
-    `;
-
-    return div;
-  }
-
-  async function mount(panel) {
-
-    const key = panel.dataset.psomKey;
-    if (!key) return;
-
-    try {
-
-      const data = await loadSnapshot(key);
-
-      if (!data.items || !data.items.length) return;
-
-      clearPanel(panel);
-
-      data.items.forEach(item => {
-        panel.appendChild(renderItem(item));
-      });
-
-      console.log("[NETWORK AUTOMAP] OK:", key);
-
-    } catch (e) {
-      console.error("[NETWORK AUTOMAP ERROR]", e);
+  function buildSlots(panel){
+    panel.innerHTML = '';
+    const slots = [];
+    for(let i=0;i<SLOT_COUNT;i++){
+      const box = document.createElement('div');
+      box.className = 'ad-box';
+      box.setAttribute('data-slot', String(i+1));
+      slots.push(box);
+      panel.appendChild(box);
     }
+    return slots;
   }
 
-  document
-    .querySelectorAll('[data-psom-key^="network"], [data-psom-key^="right-network"]')
-    .forEach(mount);
+  async function run(){
+    if(window.__IGDC_NETWORK_AUTOMAP_DONE__) return;
+    window.__IGDC_NETWORK_AUTOMAP_DONE__ = true;
 
-});
+    const panel = document.getElementById('rightAutoPanel');
+    if(!panel){
+      console.warn('[NETWORK AUTOMAP] missing #rightAutoPanel');
+      return;
+    }
+
+    disablePsomThumbGrid();
+    const slots = buildSlots(panel);
+
+    const mobileList = document.getElementById('nh-mobile-rail-list');
+    await ensureScript(FEED_SRC);
+
+    if(!window.IGDC_FEED_NETWORK || typeof window.IGDC_FEED_NETWORK.fill !== 'function'){
+      throw new Error('[NETWORK AUTOMAP] IGDC_FEED_NETWORK.fill not found');
+    }
+
+    await window.IGDC_FEED_NETWORK.fill({
+      hubKey: HUB,
+      snapshotUrl: SNAPSHOT_URL,
+      slots,
+      mobileListEl: mobileList,
+      mobileLimit: 30
+    });
+  }
+
+  window.addEventListener('load', () => {
+    run().catch(err => console.error(err));
+  });
+})();
