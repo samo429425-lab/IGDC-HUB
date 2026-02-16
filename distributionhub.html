@@ -390,7 +390,21 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
 </style>
 <style id="igdc-q-mobile-kit">
 @media (max-width:768px){
-  .sidebar{ display:none !important; }
+
+  .sidebar{
+    display:block !important;
+    width:100% !important;
+    margin-top:20px;
+  }
+
+  .sidebar .thumb-list,
+  .sidebar .thumb-scroller{
+    display:flex !important;
+    overflow-x:auto !important;
+    gap:12px;
+  }
+
+}
   .content-box{
     background: transparent !important;
     border: 0 !important;
