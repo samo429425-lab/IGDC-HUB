@@ -106,7 +106,7 @@ function isBlocked(item){
 
   if(!item.url || !item.thumb) return true;
 
-  if(item.platform && !SAFE_PLATFORMS.includes(item.platform)) return true;
+  if(typeof item.platform === 'string' && item.platform && !SAFE_PLATFORMS.includes(item.platform)) return true;
 
   return false;
 }
@@ -121,7 +121,19 @@ function normalize(it, idx){
     url: pick(it,['url','href','link','path']) || '#',
     thumb: pick(it,['thumb','image','img','thumbnail','poster','cover']),
     channel: pick(it,['channel','author','owner']),
-    platform: it.platform || it.source || null,
+    platform: (function(){
+      const src = it && it.source;
+      // prefer explicit platform field
+      if(it && typeof it.platform === 'string' && it.platform.trim()) return it.platform.trim().toLowerCase();
+      // allow string source
+      if(typeof src === 'string' && src.trim()) return src.trim().toLowerCase();
+      // allow object source (standard in social.snapshot.json)
+      if(src && typeof src === 'object'){
+        const p = (src.platform || src.name || src.provider || src.site || '');
+        if(typeof p === 'string' && p.trim()) return p.trim().toLowerCase();
+      }
+      return null;
+    })(),
     priority: typeof it.priority === 'number' ? it.priority : 999999,
     revenue: it.revenue === true,
     signals: it.signals || null,
@@ -266,9 +278,26 @@ async function run(){
 /* feed fallback */
   if(feed && feed.grid && Array.isArray(feed.grid.sections)){
     feed.grid.sections.forEach(s=>{
-      if(!sectionMap[s.id]){
-        sectionMap[s.id] = s.items || [];
+      const incoming = Array.isArray(s.items) ? s.items : [];
+      const cur = sectionMap[s.id];
+
+      // If snapshot has no section, just set it.
+      if(!cur){
+        sectionMap[s.id] = incoming;
+        return;
       }
+
+      // If snapshot section is present but looks like placeholder-only (or empty), prefer feed.
+      const curArr = Array.isArray(cur) ? cur : [];
+      const hasReal = curArr.some(it=>{
+        const t = String(it && (it.type||'')).toLowerCase();
+        return t && t !== 'placeholder';
+      });
+
+      if(!curArr.length || !hasReal){
+        sectionMap[s.id] = incoming;
+      }
+      // else keep snapshot as priority (do not mix to avoid noisy blends)
     });
     log('[CORE] feed merged');
   }
