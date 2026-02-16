@@ -20,11 +20,28 @@ const FRONT_SECTION_KEYS = [
   "media-trending",
   "media-movie",
   "media-drama",
+  "media-thriller",
+  "media-romance",
+  "media-variety",
   "media-documentary",
   "media-animation",
   "media-music",
-  "media-education",
+  "media-shorts",
 ];
+
+const SECTION_LIMITS = {
+  "media-trending": 50,
+  "media-movie": 40,
+  "media-drama": 40,
+  "media-thriller": 30,
+  "media-romance": 30,
+  "media-variety": 30,
+  "media-documentary": 30,
+  "media-animation": 30,
+  "media-music": 30,
+  "media-shorts": 30,
+};
+
 
 /* ===============================
  * 2) FILE LOCATOR
@@ -154,8 +171,8 @@ export async function buildMediaFeedFromBank() {
   const sections = FRONT_SECTION_KEYS.map((key) => ({
     key,
     title: key,
-    policy: { maxItems: 25, autoRotate: true },
-    items: sectionBuckets[key].slice(0, 25),
+    policy: { maxItems: (SECTION_LIMITS[key] || 30), autoRotate: true },
+    items: sectionBuckets[key].slice(0, (SECTION_LIMITS[key] || 30)),
   }));
 
   return {
@@ -183,9 +200,25 @@ export async function buildMediaFeedFromBank() {
 /* ===============================
  * 5) NETLIFY HANDLER
  * =============================== */
-export const handler = async () => {
+export const handler = async (event = {}) => {
   try {
     const snapshot = await buildMediaFeedFromBank();
+    const qs = event.queryStringParameters || {};
+    const key = (qs.key || "").trim();
+    const limit = Math.max(1, Math.min(500, parseInt(qs.limit || "0", 10) || 0));
+    if (key) {
+      const found = (snapshot.sections || []).find(s => s && s.key === key);
+      const items = (found && Array.isArray(found.items)) ? found.items : [];
+      const max = limit || (SECTION_LIMITS[key] || 30);
+      return {
+        statusCode: 200,
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "no-store",
+        },
+        body: JSON.stringify({ key, items: items.slice(0, max) }),
+      };
+    }
     return {
       statusCode: 200,
       headers: {
