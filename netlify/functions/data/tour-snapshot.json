@@ -1,9 +1,10 @@
 {
   "meta": {
     "hub": "tour",
-    "version": "2.0-revenue-routing",
+    "version": "2.0-revenue-routing-labeled",
     "generated": "2026-02-16",
-    "engine": "IGDC Snapshot Engine"
+    "engine": "IGDC Snapshot Engine",
+    "debugLabel": true
   },
   "policy": {
     "exposure": "global",
@@ -318,7 +319,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-001",
+      "debug": true
     },
     {
       "id": "tour-002",
@@ -613,7 +616,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-002",
+      "debug": true
     },
     {
       "id": "tour-003",
@@ -908,7 +913,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-003",
+      "debug": true
     },
     {
       "id": "tour-004",
@@ -1203,7 +1210,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-004",
+      "debug": true
     },
     {
       "id": "tour-005",
@@ -1498,7 +1507,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-005",
+      "debug": true
     },
     {
       "id": "tour-006",
@@ -1793,7 +1804,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-006",
+      "debug": true
     },
     {
       "id": "tour-007",
@@ -2088,7 +2101,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-007",
+      "debug": true
     },
     {
       "id": "tour-008",
@@ -2383,7 +2398,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-008",
+      "debug": true
     },
     {
       "id": "tour-009",
@@ -2678,7 +2695,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-009",
+      "debug": true
     },
     {
       "id": "tour-010",
@@ -2973,7 +2992,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-010",
+      "debug": true
     },
     {
       "id": "tour-011",
@@ -3268,7 +3289,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-011",
+      "debug": true
     },
     {
       "id": "tour-012",
@@ -3563,7 +3586,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-012",
+      "debug": true
     },
     {
       "id": "tour-013",
@@ -3858,7 +3883,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-013",
+      "debug": true
     },
     {
       "id": "tour-014",
@@ -4153,7 +4180,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-014",
+      "debug": true
     },
     {
       "id": "tour-015",
@@ -4448,7 +4477,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-015",
+      "debug": true
     },
     {
       "id": "tour-016",
@@ -4743,7 +4774,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-016",
+      "debug": true
     },
     {
       "id": "tour-017",
@@ -5038,7 +5071,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-017",
+      "debug": true
     },
     {
       "id": "tour-018",
@@ -5333,7 +5368,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-018",
+      "debug": true
     },
     {
       "id": "tour-019",
@@ -5628,7 +5665,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-019",
+      "debug": true
     },
     {
       "id": "tour-020",
@@ -5923,7 +5962,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-020",
+      "debug": true
     },
     {
       "id": "tour-021",
@@ -6218,7 +6259,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-021",
+      "debug": true
     },
     {
       "id": "tour-022",
@@ -6513,7 +6556,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-022",
+      "debug": true
     },
     {
       "id": "tour-023",
@@ -6808,7 +6853,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-023",
+      "debug": true
     },
     {
       "id": "tour-024",
@@ -7103,7 +7150,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-024",
+      "debug": true
     },
     {
       "id": "tour-025",
@@ -7398,7 +7447,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-025",
+      "debug": true
     },
     {
       "id": "tour-026",
@@ -7693,7 +7744,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-026",
+      "debug": true
     },
     {
       "id": "tour-027",
@@ -7988,7 +8041,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-027",
+      "debug": true
     },
     {
       "id": "tour-028",
@@ -8283,7 +8338,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-028",
+      "debug": true
     },
     {
       "id": "tour-029",
@@ -8578,7 +8635,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-029",
+      "debug": true
     },
     {
       "id": "tour-030",
@@ -8873,7 +8932,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-030",
+      "debug": true
     },
     {
       "id": "tour-031",
@@ -9168,7 +9229,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-031",
+      "debug": true
     },
     {
       "id": "tour-032",
@@ -9463,7 +9526,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-032",
+      "debug": true
     },
     {
       "id": "tour-033",
@@ -9758,7 +9823,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-033",
+      "debug": true
     },
     {
       "id": "tour-034",
@@ -10053,7 +10120,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-034",
+      "debug": true
     },
     {
       "id": "tour-035",
@@ -10348,7 +10417,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-035",
+      "debug": true
     },
     {
       "id": "tour-036",
@@ -10643,7 +10714,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-036",
+      "debug": true
     },
     {
       "id": "tour-037",
@@ -10938,7 +11011,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-037",
+      "debug": true
     },
     {
       "id": "tour-038",
@@ -11233,7 +11308,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-038",
+      "debug": true
     },
     {
       "id": "tour-039",
@@ -11528,7 +11605,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-039",
+      "debug": true
     },
     {
       "id": "tour-040",
@@ -11823,7 +11902,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-040",
+      "debug": true
     },
     {
       "id": "tour-041",
@@ -12118,7 +12199,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-041",
+      "debug": true
     },
     {
       "id": "tour-042",
@@ -12413,7 +12496,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-042",
+      "debug": true
     },
     {
       "id": "tour-043",
@@ -12708,7 +12793,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-043",
+      "debug": true
     },
     {
       "id": "tour-044",
@@ -13003,7 +13090,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-044",
+      "debug": true
     },
     {
       "id": "tour-045",
@@ -13298,7 +13387,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-045",
+      "debug": true
     },
     {
       "id": "tour-046",
@@ -13593,7 +13684,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-046",
+      "debug": true
     },
     {
       "id": "tour-047",
@@ -13888,7 +13981,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-047",
+      "debug": true
     },
     {
       "id": "tour-048",
@@ -14183,7 +14278,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-048",
+      "debug": true
     },
     {
       "id": "tour-049",
@@ -14478,7 +14575,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-049",
+      "debug": true
     },
     {
       "id": "tour-050",
@@ -14773,7 +14872,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-050",
+      "debug": true
     },
     {
       "id": "tour-051",
@@ -15068,7 +15169,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-051",
+      "debug": true
     },
     {
       "id": "tour-052",
@@ -15363,7 +15466,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-052",
+      "debug": true
     },
     {
       "id": "tour-053",
@@ -15658,7 +15763,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-053",
+      "debug": true
     },
     {
       "id": "tour-054",
@@ -15953,7 +16060,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-054",
+      "debug": true
     },
     {
       "id": "tour-055",
@@ -16248,7 +16357,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-055",
+      "debug": true
     },
     {
       "id": "tour-056",
@@ -16543,7 +16654,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-056",
+      "debug": true
     },
     {
       "id": "tour-057",
@@ -16838,7 +16951,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-057",
+      "debug": true
     },
     {
       "id": "tour-058",
@@ -17133,7 +17248,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-058",
+      "debug": true
     },
     {
       "id": "tour-059",
@@ -17428,7 +17545,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-059",
+      "debug": true
     },
     {
       "id": "tour-060",
@@ -17723,7 +17842,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-060",
+      "debug": true
     },
     {
       "id": "tour-061",
@@ -18018,7 +18139,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-061",
+      "debug": true
     },
     {
       "id": "tour-062",
@@ -18313,7 +18436,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-062",
+      "debug": true
     },
     {
       "id": "tour-063",
@@ -18608,7 +18733,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-063",
+      "debug": true
     },
     {
       "id": "tour-064",
@@ -18903,7 +19030,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-064",
+      "debug": true
     },
     {
       "id": "tour-065",
@@ -19198,7 +19327,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-065",
+      "debug": true
     },
     {
       "id": "tour-066",
@@ -19493,7 +19624,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-066",
+      "debug": true
     },
     {
       "id": "tour-067",
@@ -19788,7 +19921,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-067",
+      "debug": true
     },
     {
       "id": "tour-068",
@@ -20083,7 +20218,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-068",
+      "debug": true
     },
     {
       "id": "tour-069",
@@ -20378,7 +20515,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-069",
+      "debug": true
     },
     {
       "id": "tour-070",
@@ -20673,7 +20812,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-070",
+      "debug": true
     },
     {
       "id": "tour-071",
@@ -20968,7 +21109,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-071",
+      "debug": true
     },
     {
       "id": "tour-072",
@@ -21263,7 +21406,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-072",
+      "debug": true
     },
     {
       "id": "tour-073",
@@ -21558,7 +21703,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-073",
+      "debug": true
     },
     {
       "id": "tour-074",
@@ -21853,7 +22000,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-074",
+      "debug": true
     },
     {
       "id": "tour-075",
@@ -22148,7 +22297,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-075",
+      "debug": true
     },
     {
       "id": "tour-076",
@@ -22443,7 +22594,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-076",
+      "debug": true
     },
     {
       "id": "tour-077",
@@ -22738,7 +22891,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-077",
+      "debug": true
     },
     {
       "id": "tour-078",
@@ -23033,7 +23188,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-078",
+      "debug": true
     },
     {
       "id": "tour-079",
@@ -23328,7 +23485,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-079",
+      "debug": true
     },
     {
       "id": "tour-080",
@@ -23623,7 +23782,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-080",
+      "debug": true
     },
     {
       "id": "tour-081",
@@ -23918,7 +24079,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-081",
+      "debug": true
     },
     {
       "id": "tour-082",
@@ -24213,7 +24376,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-082",
+      "debug": true
     },
     {
       "id": "tour-083",
@@ -24508,7 +24673,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-083",
+      "debug": true
     },
     {
       "id": "tour-084",
@@ -24803,7 +24970,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-084",
+      "debug": true
     },
     {
       "id": "tour-085",
@@ -25098,7 +25267,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-085",
+      "debug": true
     },
     {
       "id": "tour-086",
@@ -25393,7 +25564,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-086",
+      "debug": true
     },
     {
       "id": "tour-087",
@@ -25688,7 +25861,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-087",
+      "debug": true
     },
     {
       "id": "tour-088",
@@ -25983,7 +26158,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-088",
+      "debug": true
     },
     {
       "id": "tour-089",
@@ -26278,7 +26455,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-089",
+      "debug": true
     },
     {
       "id": "tour-090",
@@ -26573,7 +26752,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-090",
+      "debug": true
     },
     {
       "id": "tour-091",
@@ -26868,7 +27049,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-091",
+      "debug": true
     },
     {
       "id": "tour-092",
@@ -27163,7 +27346,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-092",
+      "debug": true
     },
     {
       "id": "tour-093",
@@ -27458,7 +27643,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-093",
+      "debug": true
     },
     {
       "id": "tour-094",
@@ -27753,7 +27940,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-094",
+      "debug": true
     },
     {
       "id": "tour-095",
@@ -28048,7 +28237,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-095",
+      "debug": true
     },
     {
       "id": "tour-096",
@@ -28343,7 +28534,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-096",
+      "debug": true
     },
     {
       "id": "tour-097",
@@ -28638,7 +28831,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-097",
+      "debug": true
     },
     {
       "id": "tour-098",
@@ -28933,7 +29128,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-098",
+      "debug": true
     },
     {
       "id": "tour-099",
@@ -29228,7 +29425,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-099",
+      "debug": true
     },
     {
       "id": "tour-100",
@@ -29523,7 +29722,9 @@
         "commission": 0.1,
         "partner": "default",
         "settle": "monthly"
-      }
+      },
+      "displayLabel": "TOUR-100",
+      "debug": true
     }
   ]
 }
