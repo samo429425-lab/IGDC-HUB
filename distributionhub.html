@@ -448,10 +448,28 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
 <style id="mobile-overrides-20251009v2">
 /* === Unified breakpoints: 1024 / 900 / 768 === */
 
-/* 1) Tablet & down: hide right/ad panel to free width */
-@media (max-width: 1024px){
-  .right-panel, .brand-rail, .right-ad-panel { display: none !important; }
+/* 1) Tablet & down: keep panel in DOM, move offscreen */
+@media (max-width:1024px){
+
+  .right-panel,
+  .brand-rail,
+  .right-ad-panel{
+
+    position:absolute !important;
+    left:-99999px !important;
+    top:-99999px !important;
+
+    width:1px !important;
+    height:1px !important;
+
+    overflow:hidden !important;
+    visibility:hidden !important;
+
+    display:block !important;
+  }
+
 }
+
 
 /* 2) Small tablet & large phones: hide left sidebar too; main = 100% */
 @media (max-width: 1024px){
@@ -3178,75 +3196,6 @@ window.addEventListener("message",function(ev){
 
 <script src="/assets/js/distribution-products-automap.v3.js" defer></script>
 
-<script id="mobile-rightpanel-clone">
-(function(){
-  function isNarrow(){ return window.matchMedia && window.matchMedia('(max-width: 1024px)').matches; }
 
-  function getSource(){
-    return document.querySelector('.brand-rail [data-psom-key="distribution-right"]') ||
-           document.querySelector('[data-psom-key="distribution-right"]');
-  }
-
-  function getTarget(){
-    return document.getElementById('mobile-ad-rail-list');
-  }
-
-  var raf = 0;
-  function scheduleSync(){
-    if(raf) return;
-    raf = requestAnimationFrame(function(){ raf=0; sync(); });
-  }
-
-  function sync(){
-    var src = getSource();
-    var tgt = getTarget();
-    if(!src || !tgt) return;
-
-    // Desktop/tablet-wide: keep mobile rail empty (avoid duplicate content)
-    if(!isNarrow()){
-      if(tgt.childElementCount) tgt.innerHTML = '';
-      return;
-    }
-
-    // Clone (do NOT move) cards so automap keeps owning the right-panel slot
-    var kids = Array.prototype.slice.call(src.children);
-    // If nothing yet, keep empty
-    tgt.innerHTML = '';
-    for(var i=0;i<kids.length;i++){
-      var node = kids[i].cloneNode(true);
-      // remove duplicate ids if any
-      if(node.id) node.removeAttribute('id');
-      tgt.appendChild(node);
-    }
-  }
-
-  function boot(){
-    var src = getSource();
-    if(!src) return;
-
-    // initial
-    scheduleSync();
-
-    // watch automap fills
-    try{
-      var mo = new MutationObserver(scheduleSync);
-      mo.observe(src, { childList:true, subtree:false });
-    }catch(e){}
-
-    // resize/orientation
-    window.addEventListener('resize', scheduleSync, {passive:true});
-    window.addEventListener('orientationchange', scheduleSync, {passive:true});
-    // late load
-    setTimeout(scheduleSync, 250);
-    setTimeout(scheduleSync, 1000);
-  }
-
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', boot);
-  }else{
-    boot();
-  }
-})();
-</script>
 </body>
 </html>
