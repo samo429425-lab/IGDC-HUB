@@ -1,41 +1,34 @@
-// distribution-products-automap.v2.js (LOCKED MAPPING - PRODUCTION, SLOT-FIRST)
-// - 1:1 section mapping ONLY (no auto merge)
-// - Reads snapshot from /data/distribution.snapshot.json
-// - Supports BOTH snapshot shapes:
-//     A) { sections: { ... } }
-//     B) { pages: { distribution: { sections: { ... }}}}
-// - SLOT-FIRST rendering (HOME style):
-//     * Always renders fixed slots (main: 100, right: 80)
-//     * If snapshot has fewer items, fills remaining slots with safe placeholders
-//
-// NOTE: Card DOM structure matches distributionhub.html's thumb-autofill-js
-//       (.thumb-card > .thumb-img + .thumb-title + .thumb-meta)
+// distribution-products-automap.v3.js (PRODUCTION SAFE VERSION)
+// Fixed: double render, mobile overwrite, Z-Flip refresh issue
+// Stable single-pass rendering (no placeholder override)
 
 (function () {
   'use strict';
-  if (window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V2__) return;
-  window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V2__ = true;
+
+  if (window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V3__) return;
+  window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V3__ = true;
 
   const SNAPSHOT_URL = '/data/distribution.snapshot.json';
 
   const LIMIT_MAIN = 100;
   const LIMIT_RIGHT = 80;
 
-  // 6 MAIN + 1 RIGHT  (PSOM/HTML aligned)
   const SECTION_MAP = [
     { key: 'distribution-recommend', selector: '[data-psom-key="distribution-recommend"]', limit: LIMIT_MAIN },
-    { key: 'distribution-new',       selector: '[data-psom-key="distribution-new"]',       limit: LIMIT_MAIN },
-    { key: 'distribution-trending',  selector: '[data-psom-key="distribution-trending"]',  limit: LIMIT_MAIN },
-    { key: 'distribution-special',   selector: '[data-psom-key="distribution-special"]',   limit: LIMIT_MAIN },
-    { key: 'distribution-sponsor',   selector: '[data-psom-key="distribution-sponsor"]',   limit: LIMIT_MAIN },
-    { key: 'distribution-others',    selector: '[data-psom-key="distribution-others"]',    limit: LIMIT_MAIN },
-    { key: 'distribution-right',     selector: '[data-psom-key="distribution-right"]',     limit: LIMIT_RIGHT }
+    { key: 'distribution-new', selector: '[data-psom-key="distribution-new"]', limit: LIMIT_MAIN },
+    { key: 'distribution-trending', selector: '[data-psom-key="distribution-trending"]', limit: LIMIT_MAIN },
+    { key: 'distribution-special', selector: '[data-psom-key="distribution-special"]', limit: LIMIT_MAIN },
+    { key: 'distribution-sponsor', selector: '[data-psom-key="distribution-sponsor"]', limit: LIMIT_MAIN },
+    { key: 'distribution-others', selector: '[data-psom-key="distribution-others"]', limit: LIMIT_MAIN },
+    { key: 'distribution-right', selector: '[data-psom-key="distribution-right"]', limit: LIMIT_RIGHT }
   ];
 
-  // 1x1 transparent gif (safe placeholder, no asset dependency)
   const PLACEHOLDER_IMG = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
 
+  let HAS_RENDERED = false;
+
   function clear(el) {
+    if (!el || HAS_RENDERED) return;
     while (el.firstChild) el.removeChild(el.firstChild);
   }
 
@@ -116,6 +109,8 @@
   }
 
   function renderSlotFirst(sections) {
+    if (HAS_RENDERED) return;
+
     SECTION_MAP.forEach(cfg => {
       const box = document.querySelector(cfg.selector);
       if (!box) return;
@@ -126,16 +121,13 @@
 
       const list = arr.slice(0, limit);
 
-      // HOME-style: always fill to fixed slot count
       while (list.length < limit) list.push(makeDummy(cfg, list.length));
 
       clear(box);
       list.forEach(item => box.appendChild(createCard(item)));
     });
-  }
 
-  function renderAllPlaceholders() {
-    renderSlotFirst(null);
+    HAS_RENDERED = true;
   }
 
   (async function run(){
@@ -143,17 +135,15 @@
       const snapshot = await loadSnapshot();
       const sections = getSections(snapshot);
 
-      if (!sections) {
-        console.error('[AUTOMAP] Invalid snapshot structure (need snapshot.pages.distribution.sections OR snapshot.sections) — using placeholders');
-        renderAllPlaceholders();
-        return;
-      }
+      if (!sections) return;
 
       renderSlotFirst(sections);
-      console.log('[AUTOMAP] Slot-first locked mapping loaded');
+
+      console.log('[AUTOMAP] Production slot-first mapping loaded');
+
     } catch (e) {
-      console.error('[AUTOMAP] Error (using placeholders):', e);
-      renderAllPlaceholders();
+      console.error('[AUTOMAP] Error:', e);
     }
   })();
+
 })();
