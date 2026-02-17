@@ -200,41 +200,8 @@ function makeCard(item){
 
 function render(container, items){
 
- function render(container, items){
-
-  const slots = container.querySelectorAll('.thumb-card');
-  if(!slots.length) return;
-
-  items.forEach(function(item,i){
-
-    if(!slots[i]) return;
-
-    const a = slots[i];
-
-    a.href = item.url;
-    a.target = '_blank';
-
-    let img = a.querySelector('img');
-    if(!img){
-      img = document.createElement('img');
-      img.className = 'thumb-media';
-      a.prepend(img);
-    }
-
-    img.src = item.thumb;
-    img.alt = item.title || '';
-
-    let t = a.querySelector('.thumb-title');
-    if(!t){
-      t = document.createElement('div');
-      t.className = 'thumb-title';
-      a.appendChild(t);
-    }
-
-    t.textContent = item.title;
-
-  });
-}
+  let idx = 0;
+  container.innerHTML = '';
 
   function mount(){
 
