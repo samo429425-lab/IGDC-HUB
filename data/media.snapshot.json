@@ -1,33 +1,31 @@
 {
-  "version": "v5",
-  "type": "media-snapshot",
-  "meta": {
-    "generatedAt": "2026-02-16T09:59:49Z",
-    "schema": "media.snapshot.v5",
-    "notes": "Slots only. Real content is injected by feed-media + automap."
-  },
+  "version": "media.snapshot.v4.ott.full",
+  "type": "media_snapshot",
   "hero": {
-    "key": "media-hero",
+    "enabled": true,
+    "rotation": true,
+    "source": [
+      "trending_now",
+      "latest_movie",
+      "latest_drama"
+    ],
+    "current": null,
     "rotateFrom": [
       "media-trending",
       "media-movie",
       "media-drama"
     ],
-    "maxItems": 10,
     "intervalSec": 12
   },
   "sections": {
     "media-trending": {
-      "key": "media-trending",
-      "title": "🔥 지금 뜨는 콘텐츠",
-      "slotCount": 50,
+      "title": "지금 뜨는 콘텐츠",
       "slots": [
         {
           "slotId": 1,
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -60,7 +58,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -93,7 +90,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -126,7 +122,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -159,7 +154,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -192,7 +186,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -225,7 +218,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -258,7 +250,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -291,7 +282,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -324,7 +314,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -357,7 +346,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -390,7 +378,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -423,7 +410,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -456,7 +442,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -489,7 +474,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -522,7 +506,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -555,7 +538,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -588,7 +570,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -621,7 +602,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -654,7 +634,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -687,7 +666,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -720,7 +698,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -753,7 +730,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -786,7 +762,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -819,7 +794,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -852,7 +826,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -885,7 +858,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -918,7 +890,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -951,7 +922,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -984,7 +954,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1017,7 +986,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1050,7 +1018,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1083,7 +1050,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1116,7 +1082,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1149,7 +1114,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1182,7 +1146,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1215,7 +1178,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1248,7 +1210,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1281,7 +1242,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1314,7 +1274,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1347,7 +1306,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1380,7 +1338,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1413,7 +1370,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1446,7 +1402,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1479,7 +1434,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1512,7 +1466,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1545,7 +1498,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1578,7 +1530,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1611,7 +1562,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1644,7 +1594,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1672,19 +1621,17 @@
             "directSale": true
           }
         }
-      ]
+      ],
+      "key": "media-trending"
     },
     "media-movie": {
-      "key": "media-movie",
-      "title": "🎬 최신 영화",
-      "slotCount": 40,
+      "title": "최신 영화",
       "slots": [
         {
           "slotId": 1,
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1717,7 +1664,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1750,7 +1696,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1783,7 +1728,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1816,7 +1760,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1849,7 +1792,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1882,7 +1824,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1915,7 +1856,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1948,7 +1888,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -1981,7 +1920,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2014,7 +1952,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2047,7 +1984,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2080,7 +2016,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2113,7 +2048,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2146,7 +2080,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2179,7 +2112,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2212,7 +2144,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2245,7 +2176,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2278,7 +2208,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2311,7 +2240,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2344,7 +2272,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2377,7 +2304,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2410,7 +2336,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2443,7 +2368,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2476,7 +2400,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2509,7 +2432,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2542,7 +2464,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2575,7 +2496,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2608,7 +2528,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2641,7 +2560,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2674,7 +2592,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2707,7 +2624,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2740,7 +2656,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2773,7 +2688,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2806,7 +2720,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2839,7 +2752,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2872,7 +2784,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2905,7 +2816,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2938,7 +2848,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2971,7 +2880,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -2999,19 +2907,17 @@
             "directSale": true
           }
         }
-      ]
+      ],
+      "key": "media-movie"
     },
     "media-drama": {
-      "key": "media-drama",
-      "title": "📺 최신 드라마",
-      "slotCount": 40,
+      "title": "최신 드라마",
       "slots": [
         {
           "slotId": 1,
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3044,7 +2950,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3077,7 +2982,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3110,7 +3014,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3143,7 +3046,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3176,7 +3078,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3209,7 +3110,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3242,7 +3142,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3275,7 +3174,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3308,7 +3206,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3341,7 +3238,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3374,7 +3270,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3407,7 +3302,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3440,7 +3334,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3473,7 +3366,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3506,7 +3398,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3539,7 +3430,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3572,7 +3462,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3605,7 +3494,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3638,7 +3526,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3671,7 +3558,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3704,7 +3590,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3737,7 +3622,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3770,7 +3654,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3803,7 +3686,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3836,7 +3718,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3869,7 +3750,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3902,7 +3782,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3935,7 +3814,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -3968,7 +3846,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4001,7 +3878,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4034,7 +3910,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4067,7 +3942,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4100,7 +3974,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4133,7 +4006,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4166,7 +4038,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4199,7 +4070,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4232,7 +4102,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4265,7 +4134,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4298,7 +4166,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4326,19 +4193,17 @@
             "directSale": true
           }
         }
-      ]
+      ],
+      "key": "media-drama"
     },
     "media-thriller": {
-      "key": "media-thriller",
-      "title": "🕵️‍♂️ 미스터리 / 스릴러",
-      "slotCount": 30,
+      "title": "섹션_1",
       "slots": [
         {
           "slotId": 1,
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4371,7 +4236,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4404,7 +4268,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4437,7 +4300,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4470,7 +4332,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4503,7 +4364,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4536,7 +4396,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4569,7 +4428,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4602,7 +4460,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4635,7 +4492,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4668,7 +4524,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4701,7 +4556,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4734,7 +4588,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4767,7 +4620,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4800,7 +4652,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4833,7 +4684,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4866,7 +4716,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4899,7 +4748,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4932,7 +4780,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4965,7 +4812,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -4998,7 +4844,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5031,7 +4876,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5064,7 +4908,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5097,7 +4940,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5130,7 +4972,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5163,7 +5004,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5196,7 +5036,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5229,7 +5068,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5262,7 +5100,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5295,7 +5132,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5323,19 +5159,17 @@
             "directSale": true
           }
         }
-      ]
+      ],
+      "key": "media-thriller"
     },
     "media-romance": {
-      "key": "media-romance",
-      "title": "💘 로맨스",
-      "slotCount": 30,
+      "title": "섹션_2",
       "slots": [
         {
           "slotId": 1,
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5368,7 +5202,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5401,7 +5234,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5434,7 +5266,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5467,7 +5298,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5500,7 +5330,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5533,7 +5362,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5566,7 +5394,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5599,7 +5426,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5632,7 +5458,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5665,7 +5490,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5698,7 +5522,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5731,7 +5554,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5764,7 +5586,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5797,7 +5618,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5830,7 +5650,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5863,7 +5682,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5896,7 +5714,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5929,7 +5746,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5962,7 +5778,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -5995,7 +5810,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6028,7 +5842,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6061,7 +5874,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6094,7 +5906,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6127,7 +5938,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6160,7 +5970,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6193,7 +6002,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6226,7 +6034,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6259,7 +6066,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6292,7 +6098,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6320,19 +6125,17 @@
             "directSale": true
           }
         }
-      ]
+      ],
+      "key": "media-romance"
     },
     "media-variety": {
-      "key": "media-variety",
-      "title": "😂 예능 / 오락",
-      "slotCount": 30,
+      "title": "섹션_3",
       "slots": [
         {
           "slotId": 1,
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6365,7 +6168,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6398,7 +6200,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6431,7 +6232,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6464,7 +6264,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6497,7 +6296,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6530,7 +6328,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6563,7 +6360,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6596,7 +6392,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6629,7 +6424,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6662,7 +6456,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6695,7 +6488,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6728,7 +6520,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6761,7 +6552,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6794,7 +6584,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6827,7 +6616,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6860,7 +6648,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6893,7 +6680,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6926,7 +6712,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6959,7 +6744,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -6992,7 +6776,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7025,7 +6808,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7058,7 +6840,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7091,7 +6872,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7124,7 +6904,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7157,7 +6936,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7190,7 +6968,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7223,7 +7000,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7256,7 +7032,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7289,7 +7064,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7317,19 +7091,17 @@
             "directSale": true
           }
         }
-      ]
+      ],
+      "key": "media-variety"
     },
     "media-documentary": {
-      "key": "media-documentary",
-      "title": "🌍 다큐멘터리",
-      "slotCount": 30,
+      "title": "섹션_4",
       "slots": [
         {
           "slotId": 1,
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7362,7 +7134,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7395,7 +7166,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7428,7 +7198,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7461,7 +7230,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7494,7 +7262,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7527,7 +7294,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7560,7 +7326,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7593,7 +7358,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7626,7 +7390,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7659,7 +7422,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7692,7 +7454,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7725,7 +7486,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7758,7 +7518,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7791,7 +7550,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7824,7 +7582,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7857,7 +7614,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7890,7 +7646,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7923,7 +7678,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7956,7 +7710,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -7989,7 +7742,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8022,7 +7774,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8055,7 +7806,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8088,7 +7838,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8121,7 +7870,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8154,7 +7902,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8187,7 +7934,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8220,7 +7966,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8253,7 +7998,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8286,7 +8030,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8314,19 +8057,17 @@
             "directSale": true
           }
         }
-      ]
+      ],
+      "key": "media-documentary"
     },
     "media-animation": {
-      "key": "media-animation",
-      "title": "🧸 애니메이션",
-      "slotCount": 30,
+      "title": "섹션_5",
       "slots": [
         {
           "slotId": 1,
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8359,7 +8100,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8392,7 +8132,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8425,7 +8164,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8458,7 +8196,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8491,7 +8228,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8524,7 +8260,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8557,7 +8292,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8590,7 +8324,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8623,7 +8356,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8656,7 +8388,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8689,7 +8420,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8722,7 +8452,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8755,7 +8484,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8788,7 +8516,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8821,7 +8548,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8854,7 +8580,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8887,7 +8612,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8920,7 +8644,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8953,7 +8676,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -8986,7 +8708,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9019,7 +8740,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9052,7 +8772,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9085,7 +8804,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9118,7 +8836,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9151,7 +8868,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9184,7 +8900,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9217,7 +8932,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9250,7 +8964,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9283,7 +8996,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9311,19 +9023,17 @@
             "directSale": true
           }
         }
-      ]
+      ],
+      "key": "media-animation"
     },
     "media-music": {
-      "key": "media-music",
-      "title": "🎵 음악 / 공연",
-      "slotCount": 30,
+      "title": "섹션_6",
       "slots": [
         {
           "slotId": 1,
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9356,7 +9066,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9389,7 +9098,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9422,7 +9130,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9455,7 +9162,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9488,7 +9194,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9521,7 +9226,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9554,7 +9258,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9587,7 +9290,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9620,7 +9322,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9653,7 +9354,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9686,7 +9386,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9719,7 +9418,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9752,7 +9450,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9785,7 +9482,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9818,7 +9514,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9851,7 +9546,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9884,7 +9578,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9917,7 +9610,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9950,7 +9642,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -9983,7 +9674,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10016,7 +9706,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10049,7 +9738,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10082,7 +9770,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10115,7 +9802,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10148,7 +9834,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10181,7 +9866,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10214,7 +9898,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10247,7 +9930,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10280,7 +9962,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10308,19 +9989,17 @@
             "directSale": true
           }
         }
-      ]
+      ],
+      "key": "media-music"
     },
     "media-shorts": {
-      "key": "media-shorts",
-      "title": "⚡ 쇼츠 / 숏폼",
-      "slotCount": 30,
+      "title": "섹션_7",
       "slots": [
         {
           "slotId": 1,
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10353,7 +10032,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10386,7 +10064,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10419,7 +10096,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10452,7 +10128,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10485,7 +10160,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10518,7 +10192,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10551,7 +10224,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10584,7 +10256,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10617,7 +10288,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10650,7 +10320,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10683,7 +10352,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10716,7 +10384,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10749,7 +10416,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10782,7 +10448,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10815,7 +10480,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10848,7 +10512,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10881,7 +10544,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10914,7 +10576,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10947,7 +10608,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -10980,7 +10640,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -11013,7 +10672,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -11046,7 +10704,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -11079,7 +10736,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -11112,7 +10768,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -11145,7 +10800,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -11178,7 +10832,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -11211,7 +10864,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -11244,7 +10896,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -11277,7 +10928,6 @@
           "contentId": null,
           "title": null,
           "thumb": null,
-          "video": null,
           "provider": null,
           "metrics": {
             "click": 0,
@@ -11305,26 +10955,25 @@
             "directSale": true
           }
         }
-      ]
+      ],
+      "key": "media-shorts"
     }
   },
   "globalRevenue": {
-    "enabled": true,
-    "modes": {
-      "affiliate_outbound": true,
-      "ads_overlay": true,
-      "direct_checkout": true
-    },
-    "tracking": {
-      "click": true,
-      "watchTime": true,
-      "like": true,
-      "recommend": true
-    }
+    "affiliate": true,
+    "outboundAds": true,
+    "providerAds": true,
+    "directSale": true,
+    "watchTimeShare": true
   },
   "payout": {
-    "mode": "vault-ref",
-    "vaultRef": "payout.vault.json",
-    "enabled": true
+    "ref": "igtc_main"
+  },
+  "meta": {
+    "validated": true,
+    "crossChecked": true,
+    "ready": true,
+    "version": "v6.keys",
+    "generatedAt": "2026-02-16T23:31:13.104657Z"
   }
 }
