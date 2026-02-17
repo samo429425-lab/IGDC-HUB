@@ -1149,68 +1149,7 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
     IGDC Global Hub © 2025 | International General Distribution Company<br/>
     경기도 평택시 고덕갈평3로 50, <br/>
 </footer>
-<!-- 내부 로직은 숨김 처리(코드 최소 노출) -->
-<script>
-/*
-  Distribution Hub – Mobile Skeleton Stabilizer (FULL REPLACE BLOCK)
-  목적:
-  1) 모바일 세로 화면에서 썸네일 영역 붕괴 방지
-  2) 초기 렌더링 시 빈 컨테이너로 인한 레이아웃 흔들림 제거
-
-  원칙:
-  - 이 스크립트는 '자리만' 만든다 (Skeleton)
-  - 실제 데이터 렌더링은 distribution-automap.v1.js 단독 담당
-  - innerHTML 초기화 / 실제 데이터 렌더링 금지
-*/
-
-(function () {
-  'use strict';
-
-  // 모바일/터치 환경에서만 동작
-  const isMobile = matchMedia('(max-width: 768px), (pointer: coarse)').matches;
-  if (!isMobile) return;
-
-if (document.querySelector('.thumb-list .thumb-card')) return;
-
-  const SKELETON_COUNT = 7; // 초기 안정화용 카드 수
-
-  function createSkeletonCard() {
-    const card = document.createElement('article');
-    card.className = 'thumb-card skeleton';
-    card.innerHTML = `
-      <div class="thumb-img sk-img"></div>
-      <div class="thumb-body">
-        <div class="thumb-title sk-text"></div>
-        <div class="thumb-meta">
-          <div class="thumb-price sk-text"></div>
-        </div>
-      </div>`;
-    return card;
-  }
-
-  function mountSkeleton(listEl) {
-    if (!listEl) return;
-    if (listEl.dataset.skeletonMounted === '1') return;
-    listEl.dataset.skeletonMounted = '1';
-
-    const frag = document.createDocumentFragment();
-    for (let i = 0; i < SKELETON_COUNT; i++) {
-      frag.appendChild(createSkeletonCard());
-    }
-    listEl.appendChild(frag);
-  }
-
-  function init() {
-    document.querySelectorAll('.thumb-list').forEach(mountSkeleton);
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init, { once: true });
-  } else {
-    init();
-  }
-})();
-</script>
+<!-- Mobile Skeleton DISABLED -->
 
 <!-- 필수 CSS (같이 추가) -->
 <style>
