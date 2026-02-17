@@ -390,7 +390,21 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
 </style>
 <style id="igdc-q-mobile-kit">
 @media (max-width:768px){
-  .sidebar{ display:none !important; }
+
+  .sidebar{
+    display:block !important;
+    width:100% !important;
+    margin-top:20px;
+  }
+
+  .sidebar .thumb-list,
+  .sidebar .thumb-scroller{
+    display:flex !important;
+    overflow-x:auto !important;
+    gap:12px;
+  }
+
+}
   .content-box{
     background: transparent !important;
     border: 0 !important;
@@ -1037,6 +1051,7 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
 <button aria-label="오른쪽으로 스크롤" class="rscroll right" type="button">›</button>
 </div>
 </section>
+<div class="scroller-wrap" id="mobile-ad-rail-wrap"><div class="rail-title">💎 인기 브랜드 💎</div><div class="thumb-list thumb-scroller" id="mobile-ad-rail-list"></div></div>
 </main>
 
   <!-- ===== RIGHT COLUMN ===== -->
@@ -1050,31 +1065,6 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
   </aside>
 
 </div>
-
-
-
-<!-- ===== RIGHT PANEL MOVE PATCH (keep automap/snapshot intact) ===== -->
-<script id="rightpanel-move-patch">
-document.addEventListener('DOMContentLoaded', function(){
-  try{
-    var container = document.querySelector('.container');
-    var main = document.querySelector('.container > .main-content');
-    // brand rail currently inside main -> page-grid -> right-col
-    var rail = document.querySelector('.page-grid .right-col .brand-rail') || document.querySelector('.page-grid .brand-rail');
-    if(!container || !main || !rail) return;
-
-    // Move rail to be a direct child of .container (3rd column target)
-    container.insertBefore(rail, main.nextSibling);
-
-    // Remove the old wrapper (right-col) to prevent layout split in main
-    var rightCol = document.querySelector('.page-grid .right-col');
-    if(rightCol) rightCol.remove();
-  }catch(e){
-    console.error('rightpanel-move-patch error', e);
-  }
-});
-</script>
-
 <!-- ================= SLOT GENERATOR ================= -->
 <script>
 (function(){
@@ -3188,5 +3178,75 @@ window.addEventListener("message",function(ev){
 
 <script src="/assets/js/distribution-products-automap.v3.js" defer></script>
 
+<script id="mobile-rightpanel-clone">
+(function(){
+  function isNarrow(){ return window.matchMedia && window.matchMedia('(max-width: 1024px)').matches; }
+
+  function getSource(){
+    return document.querySelector('.brand-rail [data-psom-key="distribution-right"]') ||
+           document.querySelector('[data-psom-key="distribution-right"]');
+  }
+
+  function getTarget(){
+    return document.getElementById('mobile-ad-rail-list');
+  }
+
+  var raf = 0;
+  function scheduleSync(){
+    if(raf) return;
+    raf = requestAnimationFrame(function(){ raf=0; sync(); });
+  }
+
+  function sync(){
+    var src = getSource();
+    var tgt = getTarget();
+    if(!src || !tgt) return;
+
+    // Desktop/tablet-wide: keep mobile rail empty (avoid duplicate content)
+    if(!isNarrow()){
+      if(tgt.childElementCount) tgt.innerHTML = '';
+      return;
+    }
+
+    // Clone (do NOT move) cards so automap keeps owning the right-panel slot
+    var kids = Array.prototype.slice.call(src.children);
+    // If nothing yet, keep empty
+    tgt.innerHTML = '';
+    for(var i=0;i<kids.length;i++){
+      var node = kids[i].cloneNode(true);
+      // remove duplicate ids if any
+      if(node.id) node.removeAttribute('id');
+      tgt.appendChild(node);
+    }
+  }
+
+  function boot(){
+    var src = getSource();
+    if(!src) return;
+
+    // initial
+    scheduleSync();
+
+    // watch automap fills
+    try{
+      var mo = new MutationObserver(scheduleSync);
+      mo.observe(src, { childList:true, subtree:false });
+    }catch(e){}
+
+    // resize/orientation
+    window.addEventListener('resize', scheduleSync, {passive:true});
+    window.addEventListener('orientationchange', scheduleSync, {passive:true});
+    // late load
+    setTimeout(scheduleSync, 250);
+    setTimeout(scheduleSync, 1000);
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot);
+  }else{
+    boot();
+  }
+})();
+</script>
 </body>
 </html>
