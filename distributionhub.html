@@ -390,7 +390,21 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
 </style>
 <style id="igdc-q-mobile-kit">
 @media (max-width:768px){
-  .sidebar{ display:none !important; }
+
+  .sidebar{
+    display:block !important;
+    width:100% !important;
+    margin-top:20px;
+  }
+
+  .sidebar .thumb-list,
+  .sidebar .thumb-scroller{
+    display:flex !important;
+    overflow-x:auto !important;
+    gap:12px;
+  }
+
+}
   .content-box{
     background: transparent !important;
     border: 0 !important;
@@ -436,7 +450,10 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
 
 /* 1) Tablet & down: hide right/ad panel to free width */
 @media (max-width: 1024px){
-  .right-panel, .brand-rail, .right-ad-panel { display: none !important; }
+  .right-panel:not(#mobile-ad-rail-wrap),
+  .brand-rail:not(#mobile-ad-rail-wrap),
+  .right-ad-panel { display: none !important; }
+
 }
 
 /* 2) Small tablet & large phones: hide left sidebar too; main = 100% */
@@ -1037,6 +1054,7 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
 <button aria-label="오른쪽으로 스크롤" class="rscroll right" type="button">›</button>
 </div>
 </section>
+<div class="scroller-wrap" id="mobile-ad-rail-wrap"><div class="rail-title">💎 인기 브랜드 💎</div><div class="thumb-list thumb-scroller" id="mobile-ad-rail-list"></div></div>
 </main>
 
   <!-- ===== RIGHT COLUMN ===== -->
@@ -1050,31 +1068,6 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
   </aside>
 
 </div>
-
-
-
-<!-- ===== RIGHT PANEL MOVE PATCH (keep automap/snapshot intact) ===== -->
-<script id="rightpanel-move-patch">
-document.addEventListener('DOMContentLoaded', function(){
-  try{
-    var container = document.querySelector('.container');
-    var main = document.querySelector('.container > .main-content');
-    // brand rail currently inside main -> page-grid -> right-col
-    var rail = document.querySelector('.page-grid .right-col .brand-rail') || document.querySelector('.page-grid .brand-rail');
-    if(!container || !main || !rail) return;
-
-    // Move rail to be a direct child of .container (3rd column target)
-    container.insertBefore(rail, main.nextSibling);
-
-    // Remove the old wrapper (right-col) to prevent layout split in main
-    var rightCol = document.querySelector('.page-grid .right-col');
-    if(rightCol) rightCol.remove();
-  }catch(e){
-    console.error('rightpanel-move-patch error', e);
-  }
-});
-</script>
-
 <!-- ================= SLOT GENERATOR ================= -->
 <script>
 (function(){
@@ -3188,5 +3181,113 @@ window.addEventListener("message",function(ev){
 
 <script src="/assets/js/distribution-products-automap.v3.js" defer></script>
 
+<script id="mobile-rightpanel-clone">
+(function(){
+  // Mobile = <=1024 OR touch-first devices (real phones/tablets) even if viewport is weird.
+  function isMobile(){
+    try{
+      var mm = window.matchMedia;
+      if(mm && (mm('(max-width: 1024px)').matches || mm('(pointer: coarse)').matches || mm('(hover: none)').matches)) return true;
+      var ua = (navigator.userAgent||'').toLowerCase();
+      return /iphone|ipad|ipod|android|mobile|silk|kindle|webos|blackberry|opera mini/.test(ua);
+    }catch(e){ return (window.innerWidth||0) <= 1024; }
+  }
+
+  function qs(sel, root){ return (root||document).querySelector(sel); }
+
+  function getSourceGrid(){
+    // Prefer the right-panel grid, but fall back to any matching key.
+    return qs('.brand-rail [data-psom-key="distribution-right"]') ||
+           qs('.right-panel [data-psom-key="distribution-right"]') ||
+           qs('[data-psom-key="distribution-right"]');
+  }
+
+  function getMobileWrap(){ return document.getElementById('mobile-ad-rail-wrap'); }
+  function getMobileList(){ return document.getElementById('mobile-ad-rail-list'); }
+
+  function isProbablyEmptyCard(el){
+    if(!el || el.nodeType !== 1) return true;
+    var img = el.querySelector && el.querySelector('img');
+    if(img && img.getAttribute('src') && img.getAttribute('src').trim() && img.getAttribute('src').trim() !== '#') return false;
+    var t = el.querySelector && (el.querySelector('.thumb-title') || el.querySelector('.title') || el.querySelector('h3,h4'));
+    if(t && (t.textContent||'').trim().length >= 2) return false;
+    // Slot placeholders are usually empty blocks.
+    return true;
+  }
+
+  function sync(){
+    var wrap = getMobileWrap();
+    var list = getMobileList();
+    var src  = getSourceGrid();
+    if(!wrap || !list || !src) return;
+
+    if(!isMobile()){
+      wrap.style.display = 'none';
+      list.innerHTML = '';
+      return;
+    }
+
+    // Force visible on mobile.
+    wrap.style.display = 'block';
+    wrap.setAttribute('data-mobile-in-main','1');
+
+    // Copy children from the right panel grid into the mobile rail list.
+    // Do not move (keep original intact); just clone.
+    var kids = Array.prototype.slice.call(src.children || []);
+    // If src exists but only has empty placeholders, still render them (better than disappearing),
+    // but keep watching for real data to arrive.
+    list.innerHTML = '';
+    for(var i=0;i<kids.length;i++){
+      list.appendChild(kids[i].cloneNode(true));
+    }
+
+    // If nothing at all, keep wrap hidden to avoid title-only.
+    if(kids.length === 0){
+      wrap.style.display = 'none';
+      return;
+    }
+
+    // If we ended up with only empty placeholders, keep wrap visible but mark it (debug).
+    var emptyCount = 0;
+    for(var j=0;j<kids.length;j++){ if(isProbablyEmptyCard(kids[j])) emptyCount++; }
+    wrap.setAttribute('data-mobile-empty', String(emptyCount === kids.length));
+  }
+
+  var t=null;
+  function syncDebounced(){
+    if(t) clearTimeout(t);
+    t = setTimeout(sync, 120);
+  }
+
+  function bind(){
+    sync();
+    window.addEventListener('resize', syncDebounced, {passive:true});
+    window.addEventListener('orientationchange', syncDebounced, {passive:true});
+
+    // Observe right-panel updates (automap replaces slots later on real mobile).
+    try{
+      var src = getSourceGrid();
+      if(src && window.MutationObserver){
+        var mo = new MutationObserver(syncDebounced);
+        mo.observe(src, {childList:true, subtree:true, attributes:true});
+      }
+    }catch(e){}
+
+    // Short polling burst to catch late population on slow devices.
+    var n=0;
+    var iv = setInterval(function(){
+      n++;
+      sync();
+      if(n>=10) clearInterval(iv);
+    }, 400);
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', bind);
+  }else{
+    bind();
+  }
+})();
+</script>
 </body>
 </html>
