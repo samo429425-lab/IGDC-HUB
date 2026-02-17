@@ -1069,13 +1069,13 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
 <button aria-label="오른쪽으로 스크롤" class="rscroll right" type="button">›</button>
 </div>
 </section>
-<div class="scroller-wrap" id="mobile-ad-rail-wrap"><div class="rail-title">💎 인기 브랜드 💎</div><div class="thumb-list thumb-scroller" id="mobile-ad-rail-list"></div></div>
+<div class="scroller-wrap" id="mobile-ad-rail-wrap"><div class="rail-title">💎 추천 브랜드 💎</div><div class="thumb-list thumb-scroller" id="mobile-ad-rail-list"></div></div>
 </main>
 
   <!-- ===== RIGHT COLUMN ===== -->
   <aside class="right-col">
     <div class="brand-rail">
-      <h3 class="ad-headline">💎 인기 브랜드 💎</h3>
+      <h3 class="ad-headline">💎 추천 브랜드 💎</h3>
       <div class="thumb-grid thumb-scroller vertical"
            data-psom-key="distribution-right">
       </div>
@@ -2850,7 +2850,7 @@ window.addEventListener("message",function(ev){
       var title = document.querySelector('#mobile-ad-rail-wrap .rail-title, #mobile-ad-rail-wrap h3, #mobile-ad-rail-wrap header h3');
       if (title){
         var t=(title.textContent||'').trim();
-        if (t.length>8) title.textContent='💎 인기 브랜드 💎';
+        if (t.length>8) title.textContent='💎 추천 브랜드 💎';
       }
       // Capture-phase guard to preserve native vertical scroll
       var zone = list || wrap;
