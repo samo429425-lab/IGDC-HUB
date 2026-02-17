@@ -532,41 +532,50 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
 }
 </style>
 <style id="mobile-rightgap-fix-20251009">
-/* Remove transient right gap when the right panel hides */
 
-/* Right panel hides here; also kill reserved padding/margins so main expands instantly */
+/* Mobile: hide side panels only, DO NOT touch grid structure */
+
 @media (max-width: 1024px){
-  #tour-adpanel-core, .right, .edge-right { display: none !important; }
 
-  /* kill any right-side reserved space */
-  .container, .wrap, .page, .content-box, .main-content, #main {
-    width: 100vw !important;
-    max-width: 100vw !important;
-    margin-right: 0 !important;
-    padding-right: 0 !important;
+  /* hide side panels */
+  #tour-adpanel-core,
+  .right,
+  .edge-right,
+  .left,
+  .sidebar,
+  .edge-left {
+    display: none !important;
+  }
+
+  /* expand main area only */
+  .container,
+  .wrap,
+  .page,
+  .content-box,
+  .main-content,
+  #main {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
     box-sizing: border-box !important;
   }
-  .with-right, .has-right, .right-gap, .ad-gap,
-  .main-sidebar-innerpadding-override,
-  .container-padding-override,
-  .sidebar-hide-and-gap-fix {
-    margin-right: 0 !important; padding-right: 0 !important;
+
+  /* remove right-gap only */
+  .with-right,
+  .has-right,
+  .right-gap,
+  .ad-gap {
+    margin-right: 0 !important;
+    padding-right: 0 !important;
   }
 
-  /* if grid/flex reserved a right column, collapse it */
-  .layout, .grid, .grid-wrap { grid-template-columns: 1fr !important; }
-  .row, .flex-row, .split { gap: 0 !important; }
 }
 
-/* Keep left+right both hidden at 900px and expand main (from previous patch) */
-@media (max-width: 1024px){
-  .left, .sidebar, .edge-left { display: none !important; }
-  .container, #main, .page, .wrap, .content-box {
-    width: 100% !important; max-width: 100% !important;
-    margin: 0 !important; padding: 0 !important; box-sizing: border-box !important;
-  }
-}
+/* DO NOT TOUCH GRID / FLEX / ROW / LAYOUT */
+
 </style>
+
 <style id="mobile-1024-grid-collapse">
 /* Collapse desktop 3-column grid at the same breakpoint so there are no ghost columns */
 @media (max-width: 1024px){
