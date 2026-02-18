@@ -5,7 +5,7 @@
 'use strict';
 
 const HUB = 'network';
-const SNAPSHOT_URL = '/data/network-snapshot.json';
+const SNAPSHOT_URL = '/data/networkhub-snapshot.json';
 const FEED_SRC = '/assets/js/feed-network.js';
 const SLOT_COUNT = 100;
 
