@@ -51,8 +51,7 @@
 
     .main-content {
       flex: 1 1 auto; /* allow shrinking/growing within JS limits */
-      flex: 1 1 0;
-      min-width: 0;
+      flex: 1;
       background-color: #ffffff;
       padding: 40px 30px;
       max-width: none;
@@ -627,8 +626,7 @@ html, body {
 
     .main-content {
       flex: 1 1 auto; /* allow shrinking/growing within JS limits */
-      flex: 1 1 0;
-      min-width: 0;
+      flex: 1;
       background-color: #ffffff;
       padding: 40px 30px;
       max-width: 950px;
@@ -1603,8 +1601,7 @@ body{ overflow-y: scroll; }
   #influencer-sections + #rpMobileBox,
   #mainContent + #rpMobileBox,
   .content-box + #rpMobileBox,
-  .main-content + #rpMobileBox, #rightRail, .right-rail {
- margin-top:0px !important; } /* 필요 시 값 조정 */
+  .main-content + #rpMobileBox { margin-top:0px !important; } /* 필요 시 값 조정 */
   #rpMobileScroller{overflow-x:auto; overflow-y:hidden; -ms-overflow-style:none; scrollbar-width:none;}
   #rpMobileScroller::-webkit-scrollbar{display:none; width:0; height:0;}
 }
@@ -3574,7 +3571,7 @@ window.addEventListener('resize', () => {
     if(!isPortrait()) return;
     // Heuristics for main and right panel containers
     const main = document.querySelector('.main, .main-content, main, .grid, .cards, [data-main]') || document.body;
-    const right = document.querySelector('#rightRail, .right-rail, .right-panel, aside[role="complementary"]');
+    const right = document.querySelector('.right-panel, .ad-panel, .right-ad-panel, aside[role="complementary"]');
     if(!right || !main) return;
     // If right is already after main, skip
     const parent = main.parentElement;
@@ -3793,8 +3790,7 @@ window.addEventListener('resize', () => {
 @media (max-width:1023px) and (orientation: portrait){
   .right-panel, .ad-panel, .panel-right, .rightpanel, 
   [data-section=\"10\"], #section10, .section-10, 
-  #rpMobileBox, #rightRail, .right-rail {
-
+  #rpMobileBox {
     width:100% !important; max-width:100% !important; min-width:0 !important;
     overflow:visible !important; contain: none !important;
     position: static !important; transform: none !important;
@@ -3835,30 +3831,6 @@ window.addEventListener('resize', () => {
   #rpMobileGrid img, #rpMobileGrid video{
     width:100% !important; height:auto !important; object-fit: cover;
   }
-  /* SOCIAL: right rail becomes 7th row (full-width horizontal snap) */
-  #rightRail, .right-rail{
-    display:block !important;
-    width:100% !important; max-width:100% !important; min-width:0 !important;
-    margin:14px 0 0 !important;
-  }
-  /* Hide ad stack on mobile (space killer) */
-  #rightRail .ad-panel{ display:none !important; }
-  #rightRail .ad-headline{ margin:0 0 8px !important; }
-  /* Make the socialnetwork thumb grid behave like a horizontal lane */
-  #rightRail [data-psom-key="socialnetwork"]{
-    display:grid !important;
-    grid-auto-flow: column !important;
-    grid-auto-columns: 100% !important;
-    grid-template-rows: auto !important;
-    column-gap: var(--thumb-gap, 12px) !important;
-    overflow-x:auto !important; overflow-y:hidden !important;
-    -webkit-overflow-scrolling: touch;
-    scroll-snap-type: x mandatory;
-    touch-action: pan-x;
-  }
-  #rightRail [data-psom-key="socialnetwork"]::-webkit-scrollbar{ display:none; }
-  #rightRail [data-psom-key="socialnetwork"] .thumb-card{ scroll-snap-align:start; width:100% !important; max-width:100% !important; }
-
 }
 </style>
 <script id='\"rpMobileGrid-horizontal-unlock-fix-v4\"'>
@@ -4495,7 +4467,7 @@ footer{
 <script defer="" src="/assets/js/placeholder-sweeper.js"></script>
 <script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
 
-<script defer src="/assets/js/socialnetwork-automap.v3.js"></script>
+<script src="/assets/js/socialnetwork-automap.v3.js?v=9999"></script>
 
 </body>
 </html>
