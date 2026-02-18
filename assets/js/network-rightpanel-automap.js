@@ -8,7 +8,7 @@
   if (typeof document === "undefined") return;
 
   const PANEL_SELECTOR = ".ad-panel";
-  const MAX_ITEMS = 12;
+  const MAX_ITEMS = 100;
 
   function createCard(item) {
     const a = document.createElement("a");
