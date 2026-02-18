@@ -1489,7 +1489,7 @@ window.addEventListener("message",function(ev){
 
   // Try to load feed automatically (optional)
   (async function(){
-    const tries=['/.netlify/functions/feed?page=networkhub'];
+    const tries=[]; // disabled: prevent cross-page mixed feed injection
     for(const u of tries){
       try{
         const r=await fetch(u,{cache:'no-cache'});
