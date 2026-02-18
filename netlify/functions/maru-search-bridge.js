@@ -5,7 +5,6 @@
  * - For Netlify / Node runtime
  * - For maru-global-insight-engine and others
  */
-
 const { maruSearchDispatcher } = require("./maru-search");
 
 async function callMaruSearch(params = {}) {
@@ -13,7 +12,8 @@ async function callMaruSearch(params = {}) {
     mode: params.mode || "search",
     q: params.q || params.query || "",
     limit: params.limit,
-    context: params.context || null
+    context: params.context || null,
+    headers: params.headers || null
   });
 }
 
@@ -29,7 +29,6 @@ function dispatch(payload = {}) {
     return Promise.resolve({ ok: false, error: "INVALID_PAYLOAD" });
   }
 
-  // merge: top-level fields win over options
   const merged = { ...(payload.options || {}), ...payload };
   delete merged.options;
 
@@ -37,7 +36,8 @@ function dispatch(payload = {}) {
     query,
     mode: merged.mode,
     limit: merged.limit,
-    context: merged.context
+    context: merged.context,
+    headers: merged.headers
   });
 }
 

@@ -1,49 +1,23 @@
-
 /**
  * maru-global-insight-engine.js
  * ------------------------------------------------------------
- * MARU Global Insight Engine (Upgraded / Expanded Edition)
- *
- * ROLE:
- * - Central orchestrator between:
- *   maru-search  →  insight logic  →  core engine
- *
- * PRINCIPLES:
- * - Expand-only (no feature removal)
- * - Backward compatible
- * - Future-ready
+ * MARU Global Insight Engine (Expanded Edition)
+ * - Orchestrator between maru-search → insight logic → core engine
+ * - Backward compatible / expand-only
  */
-
 "use strict";
 
-// -------------------------------------------------------------
-// Dependencies (Safe Load)
-// -------------------------------------------------------------
 let Core = null;
-try {
-  Core = require("./core");
-} catch (e) {
-  Core = null;
-}
+try { Core = require("./core"); } catch (e) { Core = null; }
 
 let Bridge = null;
-try {
-  Bridge = require("./maru-search-bridge");
-} catch (e) {
-  Bridge = null;
-}
+try { Bridge = require("./maru-search-bridge"); } catch (e) { Bridge = null; }
 
-// -------------------------------------------------------------
-// Utility
-// -------------------------------------------------------------
 function normalizeQuery(q) {
   if (!q) return "";
   return String(q).trim();
 }
 
-// -------------------------------------------------------------
-// MAIN INSIGHT PIPELINE
-// -------------------------------------------------------------
 async function runGlobalInsight(params = {}) {
   const query = normalizeQuery(params.q || params.query);
   const mode = params.mode || "search";
@@ -52,40 +26,30 @@ async function runGlobalInsight(params = {}) {
     return { status: "fail", message: "EMPTY_QUERY" };
   }
 
-  // ---------------------------------------------------------
-  // 1) MARU SEARCH (Central Processing)
-  // ---------------------------------------------------------
   let searchResult = null;
   if (Bridge && typeof Bridge.dispatch === "function") {
     searchResult = await Bridge.dispatch({
-  q: query,
-  mode,
-  limit: params.limit || 20
-});
-
+      q: query,
+      mode,
+      limit: params.limit || 20
+    });
   } else {
     return { status: "fail", message: "SEARCH_BRIDGE_UNAVAILABLE" };
   }
 
- // ---------------------------------------------------------
-// 2) CORE ENGINE (Optional Enrichment)
-// ---------------------------------------------------------
-let enriched = searchResult;
+  let enriched = searchResult;
 
-if (Core && typeof Core.validateQuery === "function") {
-  const valid = Core.validateQuery(query);
-  if (!valid || valid.ok === false) {
-    return { status: "fail", message: "INVALID_QUERY" };
+  if (Core && typeof Core.validateQuery === "function") {
+    const valid = Core.validateQuery(query);
+    if (!valid || valid.ok === false) {
+      return { status: "fail", message: "INVALID_QUERY" };
+    }
   }
-}
 
-if (Core && typeof Core.normalizeResult === "function") {
-  enriched = Core.normalizeResult(searchResult);
-}
+  if (Core && typeof Core.normalizeResult === "function") {
+    enriched = Core.normalizeResult(searchResult);
+  }
 
-  // ---------------------------------------------------------
-  // 3) GLOBAL INSIGHT WRAP
-  // ---------------------------------------------------------
   return {
     status: "ok",
     engine: "maru-global-insight",
@@ -96,9 +60,6 @@ if (Core && typeof Core.normalizeResult === "function") {
   };
 }
 
-// -------------------------------------------------------------
-// HTTP HANDLER (Netlify / External)
-// -------------------------------------------------------------
 exports.handler = async function (event) {
   try {
     const params = event.queryStringParameters || {};
@@ -120,7 +81,4 @@ exports.handler = async function (event) {
   }
 };
 
-// -------------------------------------------------------------
-// INTERNAL EXPORT (Engine-to-Engine)
-// -------------------------------------------------------------
 exports.runGlobalInsight = runGlobalInsight;

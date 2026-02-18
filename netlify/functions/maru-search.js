@@ -1,17 +1,13 @@
 /**
  * netlify/functions/maru-search.js
  * ------------------------------------------------------------
- * MARU SEARCH — CANONICAL CAPABILITY CORE (A1.4)
+ * MARU SEARCH — CANONICAL CAPABILITY CORE (A1.4+ bankfix)
  *
- * Goals (expand-only, no regressions):
+ * Expand-only:
  * - Keep existing API: exports.handler / exports.maruSearchDispatcher / items + results alias
- * - Add "Capability Layer" inside maru-search:
- *   - Canonical Result Object (thumbnail/mediaType/lang/source fields)
- *   - Resilience: timeouts, safe fetch, soft circuit-breaker (per function runtime)
- *   - Future-ready containers registry (web/snapshot/media/ai) without breaking current flow
  *
- * Notes:
- * - No hard dependency on external storage. "Snapshot/AI" containers are optional and safe-noop unless configured.
+ * Patch:
+ * - search-bank container now uses absolute URL (Netlify Functions safe)
  */
 
 'use strict';
@@ -20,13 +16,12 @@
 let Core = null;
 try { Core = require("./core"); } catch (e) { Core = null; }
 
-const VERSION = 'A1.4-capability';
+const VERSION = 'A1.4-capability+bankfix';
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 1000;
 
 // ===== Resilience (lightweight; safe on Netlify) =====
 const CB = {
-  // name -> { fails, openUntil }
   states: Object.create(null),
   maxFails: 4,
   coolDownMs: 25_000
@@ -98,7 +93,6 @@ function pickQ(event) {
   const startRaw = parseInt(qs.start || 1, 10);
   const start = Number.isFinite(startRaw) && startRaw > 0 ? startRaw : 1;
 
-  // future: explicit mode selection
   const mode = String(qs.mode || 'search').trim() || 'search';
   const lang = String(qs.lang || '').trim() || null;
 
@@ -124,12 +118,10 @@ function domainOf(url){
 function faviconOf(url){
   const d = domainOf(url);
   if (!d) return '';
-  // Google S2 favicon service (works globally). Front can still override if needed.
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64`;
 }
 
 function detectLangFromTextFallback(text){
-  // VERY light heuristic; true language intelligence layer will replace this.
   const t = String(text || '');
   if (!t) return null;
   if (/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(t)) return 'ko';
@@ -139,15 +131,11 @@ function detectLangFromTextFallback(text){
   return 'en';
 }
 
-function canonicalizeItem(it, query){
+function canonicalizeItem(it, _query){
   const url = safeUrl(it.url || it.link || '');
   const title = String(it.title || '').trim();
   const summary = String(it.summary || it.snippet || '').trim();
 
-  // Thumbnail priority:
-  // 1) explicit it.thumbnail / it.thumb
-  // 2) payload common keys
-  // 3) favicon fallback
   const p = (it && typeof it.payload === 'object') ? it.payload : {};
   const thumb =
     String(it.thumbnail || it.thumb || p.thumb || p.thumbnail || p.image || p.image_url || p.og_image || '').trim() ||
@@ -164,7 +152,6 @@ function canonicalizeItem(it, query){
     p.mediaType ||
     (it.type === 'image' ? 'image' : (it.type === 'video' ? 'video' : 'article'));
 
-  // stable-ish id (no hard storage). Prefer url, else title.
   const id = it.id || url || title || ('item-' + Math.random().toString(16).slice(2));
 
   return {
@@ -177,7 +164,6 @@ function canonicalizeItem(it, query){
     source: it.source || p.source || null,
     lang,
     thumbnail: thumb,
-    // existing score fields preserved
     score: typeof it.score === 'number' ? it.score : 0.9,
     payload: p
   };
@@ -199,16 +185,25 @@ function toStandardItems(arr, source) {
   });
 }
 
-// ===== Containers (future-ready, but safe-noop unless active) =====
+function baseUrlFromEvent(event){
+  const host = (event && event.headers && (event.headers["x-forwarded-host"] || event.headers["host"])) || "";
+  const proto = (event && event.headers && event.headers["x-forwarded-proto"]) || "https";
+  return host ? `${proto}://${host}` : "";
+}
+
+// ===== Containers =====
 const Containers = {
-	  search_bank: {
+  search_bank: {
     name: 'search_bank',
-    async fetch(q, limit){
+    async fetch(event, q, limit){
       try{
+        const base = baseUrlFromEvent(event);
+        if(!base) return null;
+
         const res = await fetchWithTimeout(
-          '/.netlify/functions/search-bank?q=' +
+          `${base}/.netlify/functions/search-bank?q=` +
           encodeURIComponent(q) +
-          '&limit=' + encodeURIComponent(limit),
+          `&limit=` + encodeURIComponent(limit),
           null,
           6000
         );
@@ -224,148 +219,108 @@ const Containers = {
     }
   },
 
-    web_naver: {
+  web_naver: {
     name: 'web_naver',
-    async fetch(q, limit, start){
-    return naverSearch(q, limit, start);
+    async fetch(_event, q, limit, start){
+      return naverSearch(q, limit, start);
     }
   },
-    web_google: {
+
+  web_google: {
     name: 'web_google',
-    async fetch(q, limit, start){
-    return googleSearch(q, limit, start);
+    async fetch(_event, q, limit, start){
+      return googleSearch(q, limit, start);
     }
   },
-  // Snapshot container placeholder (optional):
-  // - If you later provide SNAPSHOT_SEARCH_URL or local snapshot index, implement here.
+
+  // Snapshot container placeholder (optional) — currently same as bank for compatibility
   snapshot: {
     name: 'snapshot',
- async fetch(q, limit){
-  try{
-    const res = await fetchWithTimeout(
-      '/.netlify/functions/search-bank?q=' +
-      encodeURIComponent(q) +
-      '&limit=' + encodeURIComponent(limit),
-      null,
-      6000
-    );
-    if(!res || !res.ok) return null;
-
-    const data = await res.json();
-    if(data && Array.isArray(data.items)){
-      return { source: 'search-bank', results: data.items };
+    async fetch(event, q, limit){
+      return Containers.search_bank.fetch(event, q, limit);
     }
-    return null;
-  }catch(e){
-    return null;
-  }
-}
-
   },
-  // AI container placeholder (optional):
+
   ai: {
     name: 'ai',
-    async fetch(_q, _limit){
+    async fetch(_event, _q, _limit){
       return null;
     }
   }
 };
 
-// Orchestrator: chooses containers, runs safely, accumulates, merges (FUTURE-GRADE)
-async function orchestrateSearch({ q, limit }) {
+// Orchestrator
+async function orchestrateSearch({ event, q, limit, start }) {
   const collected = [];
   let sourceUsed = null;
 
-  // =========================
-  // 0) SEARCH-BANK — snapshot / fallback
-  // =========================
+  // 0) SEARCH-BANK
   if (cbCanRun('bank')) {
-    const b = await Containers.search_bank.fetch(q, limit)
-      .catch(e => { cbOnFail('bank'); return null; });
+    const b = await Containers.search_bank.fetch(event, q, limit)
+      .catch(() => { cbOnFail('bank'); return null; });
 
     if (b && b.results && b.results.length) {
       cbOnSuccess('bank');
       sourceUsed = sourceUsed || 'search-bank';
-
-      const items = toStandardItems(b.results, 'search-bank');
-      collected.push(...items);
+      collected.push(...toStandardItems(b.results, 'search-bank'));
     }
   }
 
-  // =========================
-  // 1) NAVER — primary bulk source (100/page)
-  // =========================
+  // 1) NAVER
   if (cbCanRun('naver')) {
-    let start = 1;
+    let s = start || 1;
 
     while (collected.length < limit) {
       const batchSize = Math.min(100, limit - collected.length);
 
-      const n = await Containers.web_naver.fetch(q, batchSize, start)
-        .catch(e => { cbOnFail('naver'); return null; });
+      const n = await Containers.web_naver.fetch(event, q, batchSize, s)
+        .catch(() => { cbOnFail('naver'); return null; });
 
       if (!n || !n.results || !n.results.length) break;
 
       cbOnSuccess('naver');
       sourceUsed = sourceUsed || 'naver';
-
-      const items = toStandardItems(n.results, n.source);
-      collected.push(...items);
+      collected.push(...toStandardItems(n.results, n.source));
 
       if (n.results.length < batchSize) break;
-      start += batchSize;
+      s += batchSize;
     }
   }
 
-  // =========================
-  // 2) GOOGLE — secondary precision source (10/page, max ~100)
-  // =========================
+  // 2) GOOGLE
   if (collected.length < limit && cbCanRun('google')) {
-    let start = 1;
+    let s = start || 1;
 
-    while (collected.length < limit && start <= 91) {
+    while (collected.length < limit && s <= 91) {
       const batchSize = Math.min(10, limit - collected.length);
 
-      const g = await Containers.web_google.fetch(q, batchSize, start)
-        .catch(e => { cbOnFail('google'); return null; });
+      const g = await Containers.web_google.fetch(event, q, batchSize, s)
+        .catch(() => { cbOnFail('google'); return null; });
 
       if (!g || !g.results || !g.results.length) break;
 
       cbOnSuccess('google');
       sourceUsed = sourceUsed || 'google';
-
-      const items = toStandardItems(g.results, g.source);
-      collected.push(...items);
+      collected.push(...toStandardItems(g.results, g.source));
 
       if (g.results.length < batchSize) break;
-      start += batchSize;
+      s += batchSize;
     }
   }
 
-  // =========================
-  // 3) CORE PIPELINE (ranking / canonicalization)
-  // =========================
   if (collected.length > 0) {
     const finalItems = await applyCorePipeline(q, collected.slice(0, limit));
-    return {
-      source: sourceUsed,
-      items: finalItems
-    };
+    return { source: sourceUsed, items: finalItems };
   }
 
-  // =========================
-  // 4) LOOSE FALLBACK (future-safe)
-  // =========================
   return {
     source: 'fallback',
-    items: await applyCorePipeline(q, [
-      {
-        title: q,
-        summary: 'Loose fallback result',
-        source: 'fallback',
-        score: 0.01
-      }
-    ])
+    items: await applyCorePipeline(q, [{
+      title: q,
+      summary: 'Loose fallback result',
+      source: 'fallback',
+      score: 0.01
+    }])
   };
 }
 
@@ -392,10 +347,7 @@ async function naverSearch(q, limit, start) {
     link: it.link || '',
     snippet: stripHtml(it.description),
     type: 'web',
-    payload: {
-      // naver webkr doesn't give thumb; leave payload open for future connectors
-      source: 'naver'
-    }
+    payload: { source: 'naver' }
   }));
 
   return { source: 'naver', results };
@@ -417,12 +369,10 @@ async function googleSearch(q, limit, start) {
     `&lr=lang_en|lang_ko` +
     `&sort=date`;
 
-  // 1) WEB
   const webRes = await fetchWithTimeout(base, null, 8500)
     .then(r => r.ok ? r.json() : null)
     .catch(() => null);
 
-  // 2) NEWS
   const newsRes = await fetchWithTimeout(base + `&tbm=nws`, null, 8500)
     .then(r => r.ok ? r.json() : null)
     .catch(() => null);
@@ -459,7 +409,6 @@ async function googleSearch(q, limit, start) {
 async function applyCorePipeline(query, items) {
   const q = query;
 
-  // Core.validateQuery may return boolean OR {ok, value}
   if (Core && typeof Core.validateQuery === "function") {
     const v = Core.validateQuery(q);
     if (v === false) return [];
@@ -471,11 +420,10 @@ async function applyCorePipeline(query, items) {
   if (Core && typeof Core.scoreItem === "function" && Array.isArray(results)) {
     results = results.map(it => ({
       ...it,
-      _coreScore: Core.scoreItem(q, it)  // core.js signature supports (q,item); safe for older too
+      _coreScore: Core.scoreItem(q, it)
     })).sort((a, b) => (b._coreScore || 0) - (a._coreScore || 0));
   }
 
-  // final canonical pass (ensures thumbnail/lang exist)
   results = results.map(it => canonicalizeItem(it, q));
   return results;
 }
@@ -483,18 +431,7 @@ async function applyCorePipeline(query, items) {
 // ===== MAIN HANDLER =====
 exports.handler = async function (event) {
   try {
-   const { q, limit, start } = pickQ(event);
-
-// env missing check stays consistent with previous behavior
-/*
-const envOk = !!(
-  (process.env.NAVER_API_KEY && process.env.NAVER_CLIENT_SECRET) ||
-  (process.env.GOOGLE_API_KEY && process.env.GOOGLE_CSE_ID)
-);
-if (!envOk) {
-  return fail('Missing env', 'Set NAVER_API_KEY+NAVER_CLIENT_SECRET or GOOGLE_API_KEY+GOOGLE_CSE_ID');
-}
-*/
+    const { q, limit, start } = pickQ(event);
 
     if (!q) {
       return ok({
@@ -509,8 +446,7 @@ if (!envOk) {
       });
     }
 
-    const base = await orchestrateSearch({ q, limit, start });
-
+    const base = await orchestrateSearch({ event, q, limit, start });
 
     return ok({
       status: 'ok',
@@ -519,7 +455,7 @@ if (!envOk) {
       query: q,
       source: base.source,
       items: base.items,
-      results: base.items, // legacy alias
+      results: base.items,
       meta: { count: (base.items || []).length, limit },
     });
 
@@ -532,7 +468,7 @@ if (!envOk) {
 async function maruSearchDispatcher(req = {}) {
   const q = String(req.q || req.query || "").trim();
   const limit = req.limit;
-  const event = { queryStringParameters: { q, limit } };
+  const event = { queryStringParameters: { q, limit }, headers: req.headers || {} };
   const res = await exports.handler(event);
   try {
     return JSON.parse(res.body || "{}");
