@@ -1,53 +1,34 @@
 /**
- * network-rightpanel-automap.js (FIXED)
+ * network-rightpanel-automap.js
  * Right panel automap for Network Hub
- * - Uses /data/networkhub-snapshot.json ONLY (anti-mix)
- * - Renders into #rightAutoPanel ONLY
- * - Supports 100 items (scroll)
- * - Emits .thumb-link with data-track-id for feed-network.js logger
+ * PSOM-based, safe standalone
  */
+
 (function () {
   if (typeof document === "undefined") return;
 
-  const PANEL_SELECTOR = "#rightAutoPanel";
-  const SNAPSHOT_URL   = "/data/networkhub-snapshot.json";
-  const MAX_ITEMS      = 100;
-  const MOBILE_MAX    = 15;
-
-  function toStr(x){ return (x==null) ? "" : String(x); }
-
-  function pickThumb(item){
-    return item.thumb || item.thumbnail || item.image || "";
-  }
+  const PANEL_SELECTOR = ".ad-panel";
+  const MAX_ITEMS = 12;
 
   function createCard(item) {
-    const box = document.createElement("div");
-    box.className = "ad-box";
-
     const a = document.createElement("a");
-    a.className = "thumb-link";
-    a.href = item.url || item.link || "#";
+    a.className = "ad-box";
+    a.href = item.url || "#";
     a.target = "_blank";
     a.rel = "noopener";
 
-    // tracking (feed-network.js listens on .thumb-link)
-    const tid = item.id || item.trackId || item._id || "";
-    if (tid) a.dataset.trackId = tid;
-
     const img = document.createElement("img");
-    img.src = pickThumb(item);
-    img.alt = toStr(item.title || item.name || "Network Item");
+    img.src = item.thumbnail || "";
+    img.alt = item.title || "";
     img.loading = "lazy";
-    img.decoding = "async";
 
     a.appendChild(img);
-    box.appendChild(a);
-    return box;
+    return a;
   }
 
-  async function loadSnapshot() {
+  async function loadJSON(key) {
     try {
-      const res = await fetch(SNAPSHOT_URL, { cache: "no-store" });
+      const res = await fetch(`/.netlify/functions/feed?key=${encodeURIComponent(key)}&limit=120`, { cache: "no-store" });
       if (!res.ok) return null;
       return await res.json();
     } catch (e) {
@@ -55,78 +36,44 @@
     }
   }
 
-  function disablePSOMGrid(){
-    const grid = document.querySelector('.right-rail .thumb-grid[data-psom-key="network"]')
-              || document.querySelector('.thumb-grid[data-psom-key="network"]');
-    if(!grid) return;
-    try{ grid.removeAttribute('data-psom-key'); grid.style.display='none'; grid.innerHTML=''; }catch(e){}
-  }
-
-  function fillMobile(items){
-    const list = document.getElementById('nh-mobile-rail-list');
-    if(!list) return;
-    if(list.children && list.children.length) return;
-    const take = Math.min(MOBILE_MAX, items.length);
-    if(!take) return;
-    for(let i=0;i<take;i++){
-      const it = items[i]||{};
-      const url = it.url || it.link || '#';
-      const thumb = pickThumb(it);
-      if(!url || url==='#' || !thumb) continue;
-      const a=document.createElement('a');
-      a.className='card';
-      a.href=url; a.target='_blank'; a.rel='noopener';
-      const img=document.createElement('img');
-      img.src=thumb; img.alt=toStr(it.title||it.name||'Item');
-      img.loading='lazy'; img.decoding='async';
-      a.appendChild(img);
-      list.appendChild(a);
-    }
-  }
-
-async function run() {
-    disablePSOMGrid();
+  async function run() {
     const panel = document.querySelector(PANEL_SELECTOR);
     if (!panel) return;
 
     if (panel.dataset.bound === "true") return;
     panel.dataset.bound = "true";
 
-    const snap = await loadSnapshot();
-    const items = (snap && Array.isArray(snap.items)) ? snap.items : [];
-    if (!items.length) return;
+    // Network hub related PSOM keys
+    const CANDIDATE_KEYS = [
+      "social-instagram",
+      "social-youtube",
+      "social-twitter",
+      "social-facebook",
+      "social-tiktok",
+      "media-video",
+      "distribution-recommend"
+    ];
 
-    // Build valid cards first; only then replace dummy DOM
-    const valid = [];
-    const cap = Math.min(MAX_ITEMS, items.length);
-    for (let i=0;i<cap;i++){
-      const it = items[i] || {};
-      const url = it.url || it.link;
-      const thumb = pickThumb(it);
-      if (!url || !thumb) continue;
-      valid.push(it);
+    let collected = [];
+
+    for (const key of CANDIDATE_KEYS) {
+      const json = await loadJSON(key);
+      if (json && Array.isArray(json.items)) {
+        collected = collected.concat(json.items);
+      }
+      if (collected.length >= MAX_ITEMS) break;
     }
-    if (!valid.length) return;
 
- // 기존 더미/슬롯 유지, 데이터 있을 때만 교체
-const oldCards = panel.querySelectorAll(".ad-box, .thumb-item, .card");
+    if (!collected.length) return;
 
-if (oldCards.length && valid.length) {
-  oldCards.forEach(el => el.remove());
-}
-
-// 데이터 있을 때만 렌더링
-if (valid.length) {
-  for (let i = 0; i < valid.length; i++) {
-    panel.appendChild(createCard(valid[i]));
+    panel.innerHTML = "";
+    collected.slice(0, MAX_ITEMS).forEach(item => {
+      panel.appendChild(createCard(item));
+    });
   }
 
-  fillMobile(valid);
-}
-
-
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", run, { once: true });
+    document.addEventListener("DOMContentLoaded", run);
   } else {
     run();
   }
