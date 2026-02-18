@@ -368,22 +368,7 @@
     border-radius:8px; 
   }
 </style>
-<style id="edge-autohide-mobile">
-@media (pointer:coarse){
-:root{--edge:10px;--spd:.14s;--e:ease-out}
-body.hide-top nav,body.hide-top .topbar{transform:translateY(-100%);transition:transform var(--spd) var(--e)}
-body.hide-left .sidebar{transform:translateX(-100%);transition:transform var(--spd) var(--e)}
-body.hide-right .right-panel,body.hide-right .brand-rail{transform:translateX(100%);transition:transform var(--spd) var(--e)}
-nav,.topbar,.sidebar,.right-panel,.brand-rail{will-change:transform}
-.edge-top,.edge-left,.edge-right{position:fixed;z-index:9999}
-.edge-top{top:0;left:0;right:0;height:var(--edge)}
-.edge-left{top:0;left:0;bottom:0;width:var(--edge)}
-.edge-right{top:0;right:0;bottom:0;width:var(--edge)}
-body.show-top nav,body.show-top .topbar{transform:none}
-body.show-left .sidebar{transform:none}
-body.show-right .right-panel,body.show-right .brand-rail{transform:none}
-}
-</style>
+
 <link href="/assets/css/thumbs.standard.css?v=20250914" rel="stylesheet"/>
 <link href="/assets/css/hero.css?v=20250914" rel="stylesheet"/>
 <style id="igdc-mobile-distributionhub-patch">
@@ -1317,57 +1302,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   else { ensureButton(); }
 })();
 </script>
-<script id="igdc-layout-hotfix-v2">
-(function(){
-  function applyHotfix(){
-    var container = document.querySelector('.container');
-    var sidebar   = document.querySelector('.sidebar');
-    var adpanel   = document.querySelector('.ad-panel');
-    var main      = document.querySelector('.main-content');
-    if(!container || !sidebar || !adpanel || !main) return;
 
-    [sidebar, adpanel].forEach(function(el){
-      el.style.flex = '0 0 220px';
-      el.style.minWidth = '220px';
-      el.style.maxWidth = '220px';
-    });
-
-    container.style.overflow = 'visible';
-
-    main.style.flex = '1 1 720px';
-    main.style.maxWidth = '920px';
-    main.style.minWidth = '360px';
-    main.style.margin = '30px';
-    main.style.boxSizing = 'border-box';
-
-    document.querySelectorAll('.thumb-list:not(.thumb-scroller)').forEach(function(list){
-      list.style.display = 'grid';
-      list.style.gridTemplateColumns = 'repeat(auto-fill, minmax(240px, 1fr))';
-      list.style.gap = '12px';
-    });
-
-    document.querySelectorAll('.thumb-scroller .thumb-card').forEach(function(card){
-      card.style.minWidth = '240px';
-    });
-    document.querySelectorAll('.thumb-card').forEach(function(card){
-      if(!card.style.minWidth) card.style.minWidth = '240px';
-    });
-  }
-
-  var _t;
-  function onResize(){
-    clearTimeout(_t);
-    _t = setTimeout(applyHotfix, 50);
-  }
-
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', applyHotfix, { once: true });
-  } else {
-    applyHotfix();
-  }
-  window.addEventListener('resize', onResize);
-})();
-</script>
 <script id="igdc-scroller-position-fix-v1">// neutralized by igdc-scroller-outside-v1 (replaced igdc-scroller-position-fix-v1)</script>
 <script id="igdc-scroller-position-final-v2">// neutralized by igdc-scroller-outside-v1 (replaced igdc-scroller-position-final-v2)</script>
 <script id="igdc-scroller-smooth-v3">// neutralized: IGDC Scroller Smooth v3</script>
@@ -2734,11 +2669,38 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       min-width: 0 !important; margin: 0 !important;
     }
     .right-rail, .brand-rail{ grid-column: 3; }
-    .brand-rail{
-      position: sticky !important; top: 16px !important;
-      width: 274px !important; min-width: 274px !important; max-width: 274px !important;
-      right: auto !important; transform: none !important;
-    }
+/* RIGHT PANEL SCROLL FIX - PRODUCTION */
+
+@media (max-width:1024px){
+  /* Mobile / Tablet: keep sticky */
+  .brand-rail{
+    position: sticky !important;
+    top:16px !important;
+
+    width:274px !important;
+    min-width:274px !important;
+    max-width:274px !important;
+
+    right:auto !important;
+    transform:none !important;
+  }
+}
+
+@media (min-width:1025px){
+  /* Desktop: follow page scroll */
+  .brand-rail{
+    position: relative !important;
+    top:auto !important;
+
+    width:274px !important;
+    min-width:274px !important;
+    max-width:274px !important;
+
+    right:auto !important;
+    transform:none !important;
+  }
+}
+
   }
 
   /* Narrow tablet & mobile: instant 1-col takeover by main */
