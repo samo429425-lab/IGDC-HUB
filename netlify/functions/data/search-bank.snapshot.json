@@ -1,10 +1,10 @@
 {
   "meta": {
     "bank": "MARU Search Bank Snapshot",
-    "schema_version": "1.0.0-bank-canon",
-    "snapshot_version": "mvp.2026-02-02T12:00:00Z",
-    "generated_at": "2026-02-02T12:00:00Z",
-    "producer": "maru-search-bank.snapshot (manual seed)",
+    "schema_version": "2.0.0-bank-regional",
+    "snapshot_version": "v2.2026-02-19T00:00:00Z",
+    "generated_at": "2026-02-19T00:00:00Z",
+    "producer": "maru-search-bank.snapshot (v2 seed)",
     "access": {
       "mode": "internal",
       "key_required": false,
@@ -41,6 +41,9 @@
       },
       "culture": {
         "enabled": true
+      },
+      "commerce": {
+        "enabled": true
       }
     },
     "policy": {
@@ -52,6 +55,44 @@
       ],
       "allow_commercial": true
     }
+  },
+  "registry": {
+    "producers": [
+      {
+        "id": "seed-producer-001",
+        "name": "Seed Producer",
+        "home": "https://example.com",
+        "geo": {
+          "country": "US",
+          "state": "CA",
+          "city": "San Francisco"
+        },
+        "contact": {
+          "email": "",
+          "phone": "",
+          "chat": ""
+        },
+        "payment": {
+          "checkout_url": "",
+          "order_api": "",
+          "methods": [
+            "card",
+            "local_pay"
+          ]
+        },
+        "dispute_profile": {
+          "local_mediator": true,
+          "response_avg_hour": 12,
+          "refund_rate": 0.03,
+          "complaint_ratio": 0.01
+        },
+        "trust": {
+          "biz_verified": false,
+          "site_trust": 0.5,
+          "trade_stability": 0.5
+        }
+      }
+    ]
   },
   "index": {
     "by_channel": {
@@ -68,6 +109,9 @@
       "insight": [],
       "culture": [
         "seed-culture-001"
+      ],
+      "commerce": [
+        "seed-commerce-001"
       ]
     },
     "by_section": {
@@ -88,7 +132,10 @@
       "media-documentary": [],
       "media-animation": [],
       "media-music": [],
-      "media-education": []
+      "media-education": [],
+      "commerce-featured": [
+        "seed-commerce-001"
+      ]
     }
   },
   "items": [
@@ -103,7 +150,7 @@
       "thumbnail": "https://www.google.com/s2/favicons?domain=example.com&sz=64",
       "lang": "en",
       "published_at": null,
-      "ingested_at": "2026-02-02T12:00:00Z",
+      "ingested_at": "2026-02-19T00:00:00Z",
       "source": {
         "name": "seed",
         "platform": "web",
@@ -127,6 +174,16 @@
       "tags": [
         "seed"
       ],
+      "geo": {
+        "country": "US",
+        "state": "CA",
+        "city": "San Francisco"
+      },
+      "producer": {
+        "id": "seed-producer-001",
+        "name": "Seed Producer",
+        "home": "https://example.com"
+      },
       "extension": {}
     },
     {
@@ -140,7 +197,7 @@
       "thumbnail": "https://img.youtube.com/vi/xxxx/hqdefault.jpg",
       "lang": "en",
       "published_at": null,
-      "ingested_at": "2026-02-02T12:00:00Z",
+      "ingested_at": "2026-02-19T00:00:00Z",
       "source": {
         "name": "seed",
         "platform": "youtube",
@@ -172,6 +229,16 @@
         "social",
         "preview-hook"
       ],
+      "geo": {
+        "country": "US",
+        "state": "CA",
+        "city": "San Francisco"
+      },
+      "producer": {
+        "id": "seed-producer-001",
+        "name": "Seed Producer",
+        "home": "https://example.com"
+      },
       "extension": {
         "account": {
           "name": "",
@@ -181,7 +248,56 @@
         "platform": "youtube"
       }
     },
-
+    {
+      "id": "seed-donation-001",
+      "type": "org_news",
+      "channel": "donation",
+      "section": null,
+      "title": "Seed placeholder (donation/org news)",
+      "summary": "Replace with NGO/기관 공지/뉴스 스냅샷.",
+      "url": "https://example.org",
+      "thumbnail": "https://www.google.com/s2/favicons?domain=example.org&sz=64",
+      "lang": "ko",
+      "published_at": null,
+      "ingested_at": "2026-02-19T00:00:00Z",
+      "source": {
+        "name": "seed",
+        "platform": "org",
+        "authority": 0.5
+      },
+      "quality": {
+        "rank": 0.1,
+        "freshness": 0.1,
+        "trust": 0.1
+      },
+      "media": {
+        "kind": "none",
+        "duration": null,
+        "preview": null
+      },
+      "rights": {
+        "license": "public-domain",
+        "attribution": null,
+        "usage": "read-only"
+      },
+      "tags": [
+        "seed",
+        "donation"
+      ],
+      "geo": {
+        "country": "KR",
+        "state": "",
+        "city": "Seoul"
+      },
+      "producer": null,
+      "extension": {
+        "org": {
+          "name": "",
+          "home": "",
+          "rss": ""
+        }
+      }
+    },
     {
       "id": "seed-culture-001",
       "type": "report",
@@ -193,7 +309,7 @@
       "thumbnail": "https://www.google.com/s2/favicons?domain=example.edu&sz=64",
       "lang": "en",
       "published_at": null,
-      "ingested_at": "2026-02-02T12:00:00Z",
+      "ingested_at": "2026-02-19T00:00:00Z",
       "source": {
         "name": "seed",
         "platform": "culture",
@@ -218,7 +334,81 @@
         "seed",
         "culture"
       ],
+      "geo": {
+        "country": "US",
+        "state": "CA",
+        "city": "San Francisco"
+      },
+      "producer": null,
       "extension": {}
+    },
+    {
+      "id": "seed-commerce-001",
+      "type": "product",
+      "channel": "commerce",
+      "section": "commerce-featured",
+      "title": "Seed placeholder (commerce / local producer product)",
+      "summary": "Replace with producer product items (direct connect).",
+      "url": "https://example.com/product/seed",
+      "thumbnail": "https://www.google.com/s2/favicons?domain=example.com&sz=64",
+      "lang": "en",
+      "published_at": null,
+      "ingested_at": "2026-02-19T00:00:00Z",
+      "source": {
+        "name": "seed",
+        "platform": "producer",
+        "authority": 0.5
+      },
+      "quality": {
+        "rank": 0.2,
+        "freshness": 0.2,
+        "trust": 0.2
+      },
+      "media": {
+        "kind": "image",
+        "duration": null,
+        "preview": null
+      },
+      "rights": {
+        "license": "public-domain",
+        "attribution": null,
+        "usage": "read-only"
+      },
+      "tags": [
+        "seed",
+        "commerce",
+        "producer-direct"
+      ],
+      "geo": {
+        "country": "US",
+        "state": "CA",
+        "city": "San Francisco"
+      },
+      "producer": {
+        "id": "seed-producer-001",
+        "name": "Seed Producer",
+        "home": "https://example.com"
+      },
+      "dispute_profile": {
+        "local_mediator": true,
+        "response_avg_hour": 12,
+        "refund_rate": 0.03,
+        "complaint_ratio": 0.01
+      },
+      "extension": {
+        "payment": {
+          "checkout_url": "",
+          "order_api": "",
+          "methods": [
+            "card",
+            "local_pay"
+          ]
+        },
+        "stock": {
+          "mode": "unknown",
+          "qty": null
+        }
+      }
     }
   ]
 }
