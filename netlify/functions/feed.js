@@ -181,35 +181,21 @@ function compileFlatItems(snap, psom) {
       items.push(...snap.items.map(x => normalizeItem(x)).filter(Boolean));
     }
 
-// pages -> sections -> items
-const pages = (snap.pages && typeof snap.pages === "object") ? snap.pages : null;
+    // pages -> sections -> items
+    const pages = (snap.pages && typeof snap.pages === "object") ? snap.pages : null;
+    if (pages) {
+	if (pageQuery && pageName !== pageQuery) continue;
+      for (const [pageName, pageObj] of Object.entries(pages)) {
+        const sections = (pageObj && pageObj.sections && typeof pageObj.sections === "object") ? pageObj.sections : null;
+        if (!sections) continue;
 
-if (pages) {
-  for (const [pageName, pageObj] of Object.entries(pages)) {
-
-    // page 필터 (homeproducts는 home으로 매핑)
-    if (pageQuery === "homeproducts") {
-      if (pageName !== "home") continue;
-    } else if (pageQuery) {
-      if (pageName !== pageQuery) continue;
-    }
-
-    const sections =
-      (pageObj && pageObj.sections && typeof pageObj.sections === "object")
-        ? pageObj.sections
-        : null;
-
-    if (!sections) continue;
-
-    for (const [sectionId, arr] of Object.entries(sections)) {
-      const norm = toArr(arr)
-        .map(x => normalizeItem(x, { page: pageName, section: sectionId }))
-        .filter(Boolean);
-
-      items.push(...norm);
+        for (const [sectionId, arr] of Object.entries(sections)) {
+          const norm = toArr(arr).map(x => normalizeItem(x, { page: pageName, section: sectionId })).filter(Boolean);
+          items.push(...norm);
+        }
+      }
     }
   }
-}
 
   // legacy snapshot as array
   if (Array.isArray(snap)) {
