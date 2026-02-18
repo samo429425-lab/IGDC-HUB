@@ -1,421 +1,230 @@
+// socialnetwork-automap.v3.js (PRODUCTION — PSOM/SNAPSHOT LOCKED)
+// A: Slot-out / wrong append issue
+// A-1: No fallback append. Only renders into fixed slots (rowGrid1..9 + [data-psom-key="socialnetwork"]).
+// B: What we do: fetch social.snapshot.json and mount 9*100 + right*100 safely.
 
-'use strict';
-/**
- * socialnetwork-automap.core.js
- * CORE Social AutoMap Engine (10Y+ Stable Edition)
- * Author: IGDC / MARU
- * Purpose: Snapshot/Feed driven, fail-safe, monetization-ready automap
- */
+(function () {
+  'use strict';
 
-(function(){
+  if (window.__SOCIALNETWORK_AUTOMAP_V3_PROD__) return;
+  window.__SOCIALNETWORK_AUTOMAP_V3_PROD__ = true;
 
-/* ================= CONFIG ================= */
+  const SNAPSHOT_URL = '/data/social.snapshot.json';
 
-const FEED_URL = '/.netlify/functions/feed-social?page=socialnetwork';
-const SNAPSHOT_URL = '/data/social.snapshot.json';
+  const MAIN_ROWS = 9;
+  const MAIN_LIMIT = 100;
+  const RIGHT_LIMIT = 100;
 
-const MAX_ITEMS = 200;
-const BATCH_SIZE = 12;
-
-const SAFE_PLATFORMS = [
-  'youtube','tiktok','instagram','facebook',
-  'twitter','pinterest','reddit','wechat','weibo'
-];
-
-const DEBUG = false;
-
-/* ================= UTIL ================= */
-
-function log(){
-  if(DEBUG) console.log.apply(console, arguments);
-}
-
-function safeJSON(text){
-  try{ return JSON.parse(text); }
-  catch(e){ return null; }
-}
-
-function qs(sel, root){
-  return (root||document).querySelector(sel);
-}
-
-function qsa(sel, root){
-  return Array.prototype.slice.call((root||document).querySelectorAll(sel));
-}
-
-function pick(obj, keys){
-  for(const k of keys){
-    const v = obj && obj[k];
-    if(typeof v === 'string' && v.trim()) return v.trim();
-  }
-  return '';
-}
-
-function nowISO(){
-  return new Date().toISOString();
-}
-
-/* ================= LOADERS ================= */
-
-async function loadSnapshot(){
-  try{
-    const r = await fetch(SNAPSHOT_URL, {cache:'no-store'});
-    if(!r.ok) return null;
-    return await r.json();
-  }catch(e){
-    return null;
-  }
-}
-
-async function loadFeed(lang){
-  let url = FEED_URL;
-  if(lang) url += '&lang=' + encodeURIComponent(lang);
-
-  try{
-    const r = await fetch(url, {cache:'no-store'});
-    if(!r.ok) return null;
-    return await r.json();
-  }catch(e){
-    return null;
-  }
-}
-
-/* ================= FILTER ================= */
-
-function isBlocked(item){
-
-  if(!item) return true;
-
-  const bad = [
-    /도박|베팅|카지노|바카라|토토/i,
-    /성인|야동|porn|sex|escort/i,
-    /마약|대마|코카인|필로폰/i,
-    /사기|스캠|scam|피싱/i
+  const MAIN_SECTION_ORDER = [
+    'social-instagram',
+    'social-youtube',
+    'social-twitter',
+    'social-facebook',
+    'social-tiktok',
+    'social-threads',
+    'social-telegram',
+    'social-discord',
+    'social-community'
   ];
 
-  const txt = [
-    item.title,
-    item.channel,
-    item.desc,
-    item.url
-  ].filter(Boolean).join(' ');
+  function qs(sel, root){ return (root || document).querySelector(sel); }
 
-  if(bad.some(r=>r.test(txt))) return true;
+  function safeText(v){ return (v == null) ? '' : String(v); }
 
-  if(item.status && item.status !== 'live') return true;
+  function pickTitle(it){
+    return safeText(it && (it.title || it.name || it.text || it.label));
+  }
+  function pickUrl(it){
+    return safeText(it && (it.url || it.href || it.link)) || '#';
+  }
+  function pickThumb(it){
+    return safeText(it && (it.thumb || it.image || it.thumbnail || it.imageUrl || it.thumbnailUrl));
+  }
+  function pickPlatform(it){
+    return safeText(it && it.source && (it.source.platform || it.source.site || it.source.provider));
+  }
 
-  if(!item.url || !item.thumb) return true;
+  function ensureCards(gridEl, count){
+    if(!gridEl) return [];
+    const existing = Array.from(gridEl.querySelectorAll('a.card'));
+    const need = count - existing.length;
+    if(need > 0){
+      const frag = document.createDocumentFragment();
+      for(let i=0;i<need;i++){
+        const a = document.createElement('a');
+        a.className = 'card';
+        a.href = '#';
+        a.target = '_blank';
+        a.rel = 'noopener';
 
-  if(typeof item.platform === 'string' && item.platform && !SAFE_PLATFORMS.includes(item.platform)) return true;
+        a.innerHTML =
+          '<div class="pic">•</div>' +
+          '<div class="meta">' +
+            '<div class="title">Loading…</div>' +
+            '<div class="desc">Preparing</div>' +
+            '<span class="cta">Open</span>' +
+          '</div>';
 
-  return false;
-}
-
-/* ================= NORMALIZE ================= */
-
-function normalize(it, idx){
-
-  return {
-    id: it.id || ('sn-'+idx),
-    title: pick(it,['title','name','label','caption']) || 'Item',
-    url: pick(it,['url','href','link','path']) || '#',
-    thumb: pick(it,['thumb','image','img','thumbnail','poster','cover']),
-    channel: pick(it,['channel','author','owner']),
-    platform: (function(){
-      const src = it && it.source;
-      // prefer explicit platform field
-      if(it && typeof it.platform === 'string' && it.platform.trim()) return it.platform.trim().toLowerCase();
-      // allow string source
-      if(typeof src === 'string' && src.trim()) return src.trim().toLowerCase();
-      // allow object source (standard in social.snapshot.json)
-      if(src && typeof src === 'object'){
-        const p = (src.platform || src.name || src.provider || src.site || '');
-        if(typeof p === 'string' && p.trim()) return p.trim().toLowerCase();
+        frag.appendChild(a);
       }
-      return null;
-    })(),
-    priority: typeof it.priority === 'number' ? it.priority : 999999,
-    revenue: it.revenue === true,
-    signals: it.signals || null,
-    raw: it
-  };
-
-}
-
-/* ================= SCORE ================= */
-
-function score(item){
-
-  let s = 0;
-
-  if(item.revenue) s += 5000;
-
-  if(item.signals){
-    if(typeof item.signals.quality_score === 'number'){
-      s += item.signals.quality_score * 100;
+      gridEl.appendChild(frag);
     }
-    if(typeof item.signals.trust_score === 'number'){
-      s += item.signals.trust_score * 100;
-    }
+    return Array.from(gridEl.querySelectorAll('a.card'));
   }
 
-  if(item.raw && item.raw.engagement){
-    const e = item.raw.engagement;
-    s += (e.views||0)/100;
-    s += (e.likes||0)/10;
-  }
+  function renderRow(gridEl, items){
+    if(!gridEl) return;
 
-  s -= item.priority;
+    // Hard rule: never move/append outside. Only touch inside gridEl.
+    const cards = ensureCards(gridEl, MAIN_LIMIT);
+    const list = Array.isArray(items) ? items.slice(0, MAIN_LIMIT) : [];
 
-  return s;
-}
+    for(let i=0;i<MAIN_LIMIT;i++){
+      const card = cards[i];
+      if(!card) continue;
 
-/* ================= RENDER ================= */
+      const it = list[i] || null;
+      const url = it ? pickUrl(it) : '#';
+      const title = it ? pickTitle(it) : 'Loading…';
+      const platform = it ? (pickPlatform(it) || '') : '';
 
-function makeCard(item){
+      card.href = url || '#';
+      card.target = (url && url !== '#') ? '_blank' : '_self';
 
-  const a = document.createElement('a');
-  a.className = 'thumb-card';
-  a.href = item.url;
-  a.target = '_blank';
-  a.rel = 'noopener';
+      const pic = card.querySelector('.pic');
+      const metaTitle = card.querySelector('.title');
+      const desc = card.querySelector('.desc');
 
-  const img = document.createElement('img');
-  img.className = 'thumb-media';
-  img.loading = 'lazy';
-  img.decoding = 'async';
-  img.src = item.thumb;
-  img.alt = item.title || '';
+      if(metaTitle) metaTitle.textContent = title || 'Item';
+      if(desc) desc.textContent = platform ? platform : ' ';
 
-  const t = document.createElement('div');
-  t.className = 'thumb-title';
-  t.textContent = item.title;
-
-  a.appendChild(img);
-  a.appendChild(t);
-
-  return a;
-}
-
-
-function render(container, items){
-  // 운영 원칙: 기존 더미/placeholder는 '교체'한다. (append 금지)
-  if(!container || !Array.isArray(items) || !items.length) return;
-
-  // 안전: 기존 내용/더미를 제거하고 새 카드로 재구성
-  container.innerHTML = '';
-  container.classList.remove('empty-slot');
-  container.style.padding = '';
-
-  // 일부 페이지에서 클래스가 누락된 경우 대비 (하지만 기존 class는 최대한 유지)
-  if(!container.classList.contains('thumb-list')) container.classList.add('thumb-list');
-  if(!container.classList.contains('thumb-scroller')) container.classList.add('thumb-scroller');
-
-  let idx = 0;
-  let io = null;
-  const sentinel = document.createElement('div');
-  sentinel.setAttribute('data-io-sentinel','1');
-  sentinel.style.cssText = 'width:1px;height:1px;';
-
-  function mount(){
-    const end = Math.min(idx + BATCH_SIZE, items.length);
-    const frag = document.createDocumentFragment();
-
-    for(let i=idx;i<end;i++){
-      frag.appendChild(makeCard(items[i]));
-    }
-
-    container.appendChild(frag);
-    idx = end;
-
-    if(idx < items.length){
-      if(!container.contains(sentinel)) container.appendChild(sentinel);
-      observe();
-    }else{
-      if(io){ try{ io.disconnect(); }catch(e){} io = null; }
-      if(container.contains(sentinel)) sentinel.remove();
-    }
-  }
-
-  function observe(){
-    if(io) return;
-    if(!('IntersectionObserver' in window)) return;
-
-    io = new IntersectionObserver((entries)=>{
-      for(const ent of entries){
-        if(ent.isIntersecting){
-          // 다음 배치
-          if(io){ try{ io.disconnect(); }catch(e){} io = null; }
-          mount();
-          break;
+      // thumb as background image if exists, else keep emoji dot
+      if(pic){
+        const thumb = it ? pickThumb(it) : '';
+        if(thumb){
+          pic.textContent = '';
+          pic.style.backgroundImage = "url('" + thumb.replace(/'/g, "%27") + "')";
+          pic.style.backgroundSize = 'cover';
+          pic.style.backgroundPosition = 'center';
+        }else{
+          pic.style.backgroundImage = '';
+          pic.textContent = '•';
         }
       }
-    }, { root: null, rootMargin: '400px 0px', threshold: 0.01 });
-
-    io.observe(sentinel);
+    }
   }
 
-  // 첫 배치 즉시 렌더
-  mount();
-}
+  function ensureThumbCards(boxEl, count){
+    if(!boxEl) return [];
+    const existing = Array.from(boxEl.querySelectorAll('a.thumb-card'));
+    const need = count - existing.length;
+    if(need > 0){
+      const frag = document.createDocumentFragment();
+      for(let i=0;i<need;i++){
+        const a = document.createElement('a');
+        a.className = 'thumb-card';
+        a.href = '#';
+        a.target = '_blank';
+        a.rel = 'noopener';
 
-/* ================= CORE ================= */
+        const img = document.createElement('img');
+        img.className = 'thumb-media';
+        img.alt = '';
+        a.appendChild(img);
 
-async function run(){
+        const t = document.createElement('div');
+        t.className = 'thumb-title';
+        t.textContent = 'Loading…';
+        a.appendChild(t);
 
-  const boxes = qsa('[data-psom-key]');
-  if(!boxes.length) return;
-
-  const lang = (new URL(location.href)).searchParams.get('lang') || null;
-
-  const snapshot = await loadSnapshot();
-  const feed = await loadFeed(lang);
-
-  let sectionMap = Object.create(null);
-
-  /* snapshot priority */
-  if(snapshot && snapshot.pages){
-    if(snapshot.pages.social && snapshot.pages.social.sections){
-      sectionMap = snapshot.pages.social.sections || {};
-      log('[CORE] snapshot loaded (pages.social)');
-    }else if(snapshot.pages.socialnetwork && snapshot.pages.socialnetwork.sections){
-      sectionMap = snapshot.pages.socialnetwork.sections || {};
-      log('[CORE] snapshot loaded (pages.socialnetwork)');
-    }else{
-      // legacy shapes
-      sectionMap = snapshot.sections || snapshot.blocks || {};
-      if(sectionMap && typeof sectionMap === 'object'){
-        log('[CORE] snapshot loaded (legacy)');
+        frag.appendChild(a);
       }
+      boxEl.appendChild(frag);
+    }
+    return Array.from(boxEl.querySelectorAll('a.thumb-card'));
+  }
+
+  function renderRight(boxEl, items){
+    if(!boxEl) return;
+
+    const cards = ensureThumbCards(boxEl, RIGHT_LIMIT);
+    const list = Array.isArray(items) ? items.slice(0, RIGHT_LIMIT) : [];
+
+    for(let i=0;i<RIGHT_LIMIT;i++){
+      const a = cards[i];
+      if(!a) continue;
+
+      const it = list[i] || null;
+      const url = it ? pickUrl(it) : '#';
+      const title = it ? pickTitle(it) : 'Loading…';
+      const thumb = it ? pickThumb(it) : '';
+
+      a.href = url || '#';
+      a.target = (url && url !== '#') ? '_blank' : '_self';
+
+      const img = a.querySelector('img.thumb-media') || a.querySelector('img');
+      if(img){
+        img.src = thumb || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+        img.alt = title || '';
+      }
+      const t = a.querySelector('.thumb-title');
+      if(t) t.textContent = title || 'Item';
     }
   }
-/* feed fallback */
-  if(feed && feed.grid && Array.isArray(feed.grid.sections)){
-    feed.grid.sections.forEach(s=>{
-      const incoming = Array.isArray(s.items) ? s.items : [];
-      const cur = sectionMap[s.id];
 
-      // If snapshot has no section, just set it.
-      if(!cur){
-        sectionMap[s.id] = incoming;
-        return;
+  function getSections(snapshot){
+    try{
+      return snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections;
+    }catch(e){
+      return null;
+    }
+  }
+
+  async function loadSnapshot(){
+    const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
+    if(!res.ok) throw new Error('snapshot_load_failed:' + res.status);
+    return res.json();
+  }
+
+  async function run(){
+    try{
+      const snap = await loadSnapshot();
+      const sections = getSections(snap);
+      if(!sections) return;
+
+      // MAIN 9 rows
+      for(let i=1;i<=MAIN_ROWS;i++){
+        const grid = qs('#rowGrid' + i);
+        if(!grid) continue;
+
+        const key = MAIN_SECTION_ORDER[i-1];
+        const items = sections[key] || [];
+        renderRow(grid, items);
       }
 
-      // If snapshot section is present but looks like placeholder-only (or empty), prefer feed.
-      const curArr = Array.isArray(cur) ? cur : [];
-      const hasReal = curArr.some(it=>{
-        const t = String(it && (it.type||'')).toLowerCase();
-        return t && t !== 'placeholder';
-      });
-
-      if(!curArr.length || !hasReal){
-        sectionMap[s.id] = incoming;
+      // RIGHT panel
+      const rightBox = qs('[data-psom-key="socialnetwork"]');
+      if(rightBox){
+        const rightItems = sections['socialnetwork'] || [];
+        renderRight(rightBox, rightItems);
       }
-      // else keep snapshot as priority (do not mix to avoid noisy blends)
-    });
-    log('[CORE] feed merged');
+
+      window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
+
+    }catch(e){
+      console.error('[social-automap] fail', e);
+    }
   }
 
-
-  /* ================= KEY RESOLUTION ================= */
-  const ALIASES = {
-    // right panel legacy keys
-    'socialnetwork': ['socialnetwork-right','social-right','social_right','right-social','social-right-panel','socialnetwork_panel','socialnetworkpanel'],
-    // common misspellings / variants
-    'social-youtube': ['social_youtube','youtube','social-youtube-1','social-youtube-main'],
-    'social-tiktok': ['social_tiktok','tiktok','social-tiktok-main'],
-    'social-instagram': ['social_instagram','instagram','social-instagram-main'],
-    'social-facebook': ['social_facebook','facebook','social-facebook-main'],
-    'social-twitter': ['social_twitter','twitter','social-x','social-x-twitter'],
-    'social-pinterest': ['social_pinterest','pinterest'],
-    'social-reddit': ['social_reddit','reddit'],
-    'social-wechat': ['social_wechat','wechat'],
-    'social-weibo': ['social_weibo','weibo']
-  };
-
-  function normKey(k){
-    return String(k||'').trim();
+  // run after DOM is ready + one micro delay (so dummy bootstrap has finished first paint)
+  function boot(){
+    setTimeout(run, 0);
   }
 
-  function getSectionAny(k){
-    const key = normKey(k);
-    if(!key) return null;
-    if(sectionMap && Object.prototype.hasOwnProperty.call(sectionMap, key)) return sectionMap[key];
-    // try case-insensitive hit (snapshot keys are stable but defensive)
-    const lower = key.toLowerCase();
-    for(const kk in sectionMap){
-      if(String(kk).toLowerCase() === lower) return sectionMap[kk];
-    }
-    return null;
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  }else{
+    boot();
   }
-
-  function resolveSection(key){
-    const base = normKey(key);
-    let raw = getSectionAny(base);
-    if(raw) return raw;
-
-    // alias list
-    const list = (ALIASES[base] || []).map(normKey).filter(Boolean);
-    for(const k of list){
-      raw = getSectionAny(k);
-      if(raw) return raw;
-    }
-
-    // last resort: if this is the right panel and we have no dedicated section,
-    // build it from top items of the main social sections.
-    if(base === 'socialnetwork'){
-      const blendFrom = ['social-instagram','social-youtube','social-tiktok','social-twitter','social-facebook'];
-      let blended = [];
-      blendFrom.forEach(k=>{
-        const sec = getSectionAny(k);
-        if(Array.isArray(sec)) blended = blended.concat(sec);
-      });
-      if(blended.length) return blended;
-    }
-
-    return [];
-  }
-
-  boxes.forEach(box=>{
-
-    const key = box.getAttribute('data-psom-key');
-    if(!key) return;
-
-    let raw = resolveSection(key);
-
-    if(!Array.isArray(raw)) raw = [];
-
-    let list = raw
-      .map(normalize)
-      .filter(it=>!isBlocked(it));
-
-    list.forEach(it=>{
-      it.__score = score(it);
-    });
-
-    list.sort((a,b)=> b.__score - a.__score);
-
-    list = list.slice(0, MAX_ITEMS);
-
-    if(!list.length){
-      // 데이터가 없으면 기존 더미/placeholder를 건드리지 않는다 (삭제/덮어쓰기 금지)
-      return;
-    }
-
-
-    render(box, list);
-
-  });
-
-  log('[CORE] done', nowISO());
-}
-
-/* ================= BOOT ================= */
-
-if(document.readyState === 'loading'){
-  document.addEventListener('DOMContentLoaded', run, {once:true});
-}else{
-  run();
-}
 
 })();
