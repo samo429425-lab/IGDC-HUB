@@ -199,47 +199,26 @@ function makeCard(item){
 
 
 function render(container, items){
+  // 운영 원칙: 기존 더미/placeholder는 '교체'한다. (append 금지)
+  if(!container || !Array.isArray(items) || !items.length) return;
 
- function render(container, items){
+  // 안전: 기존 내용/더미를 제거하고 새 카드로 재구성
+  container.innerHTML = '';
+  container.classList.remove('empty-slot');
+  container.style.padding = '';
 
-  const slots = container.querySelectorAll('.thumb-card');
-  if(!slots.length) return;
+  // 일부 페이지에서 클래스가 누락된 경우 대비 (하지만 기존 class는 최대한 유지)
+  if(!container.classList.contains('thumb-list')) container.classList.add('thumb-list');
+  if(!container.classList.contains('thumb-scroller')) container.classList.add('thumb-scroller');
 
-  items.forEach(function(item,i){
-
-    if(!slots[i]) return;
-
-    const a = slots[i];
-
-    a.href = item.url;
-    a.target = '_blank';
-
-    let img = a.querySelector('img');
-    if(!img){
-      img = document.createElement('img');
-      img.className = 'thumb-media';
-      a.prepend(img);
-    }
-
-    img.src = item.thumb;
-    img.alt = item.title || '';
-
-    let t = a.querySelector('.thumb-title');
-    if(!t){
-      t = document.createElement('div');
-      t.className = 'thumb-title';
-      a.appendChild(t);
-    }
-
-    t.textContent = item.title;
-
-  });
-}
+  let idx = 0;
+  let io = null;
+  const sentinel = document.createElement('div');
+  sentinel.setAttribute('data-io-sentinel','1');
+  sentinel.style.cssText = 'width:1px;height:1px;';
 
   function mount(){
-
     const end = Math.min(idx + BATCH_SIZE, items.length);
-
     const frag = document.createDocumentFragment();
 
     for(let i=idx;i<end;i++){
@@ -250,31 +229,33 @@ function render(container, items){
     idx = end;
 
     if(idx < items.length){
+      if(!container.contains(sentinel)) container.appendChild(sentinel);
       observe();
+    }else{
+      if(io){ try{ io.disconnect(); }catch(e){} io = null; }
+      if(container.contains(sentinel)) sentinel.remove();
     }
   }
-
-  let io = null;
 
   function observe(){
+    if(io) return;
     if(!('IntersectionObserver' in window)) return;
 
-    if(io) io.disconnect();
-
-    io = new IntersectionObserver(function(ent){
-      ent.forEach(e=>{
-        if(e.isIntersecting){
-          io.disconnect();
+    io = new IntersectionObserver((entries)=>{
+      for(const ent of entries){
+        if(ent.isIntersecting){
+          // 다음 배치
+          if(io){ try{ io.disconnect(); }catch(e){} io = null; }
           mount();
+          break;
         }
-      });
-    }, {rootMargin:'600px'});
+      }
+    }, { root: null, rootMargin: '400px 0px', threshold: 0.01 });
 
-    if(container.lastElementChild){
-      io.observe(container.lastElementChild);
-    }
+    io.observe(sentinel);
   }
 
+  // 첫 배치 즉시 렌더
   mount();
 }
 
@@ -416,14 +397,10 @@ async function run(){
 
     list = list.slice(0, MAX_ITEMS);
 
-   if(!list.length){
-    box.innerHTML = '';
-    box.classList.remove('thumb-grid','thumb-list','thumb-scroller');
-    box.classList.add('empty-slot');
-    box.innerHTML = '<div class="empty-msg">콘텐츠 준비 중입니다.</div>';
-    box.style.padding = '12px';
-   return;
-  }
+    if(!list.length){
+      // 데이터가 없으면 기존 더미/placeholder를 건드리지 않는다 (삭제/덮어쓰기 금지)
+      return;
+    }
 
 
     render(box, list);
