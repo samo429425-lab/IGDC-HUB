@@ -184,7 +184,6 @@ function compileFlatItems(snap, psom) {
     // pages -> sections -> items
     const pages = (snap.pages && typeof snap.pages === "object") ? snap.pages : null;
     if (pages) {
-	if (pageQuery && pageName !== pageQuery) continue;
       for (const [pageName, pageObj] of Object.entries(pages)) {
         const sections = (pageObj && pageObj.sections && typeof pageObj.sections === "object") ? pageObj.sections : null;
         if (!sections) continue;
