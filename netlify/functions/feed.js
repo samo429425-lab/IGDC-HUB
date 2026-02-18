@@ -187,8 +187,12 @@ const pages = (snap.pages && typeof snap.pages === "object") ? snap.pages : null
 if (pages) {
   for (const [pageName, pageObj] of Object.entries(pages)) {
 
-    // page 필터 (home / network / distribution 등)
-    if (pageQuery && pageName !== pageQuery) continue;
+    // page 필터 (homeproducts는 home으로 매핑)
+    if (pageQuery === "homeproducts") {
+      if (pageName !== "home") continue;
+    } else if (pageQuery) {
+      if (pageName !== pageQuery) continue;
+    }
 
     const sections =
       (pageObj && pageObj.sections && typeof pageObj.sections === "object")
