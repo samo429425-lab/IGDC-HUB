@@ -62,20 +62,35 @@
     panel.dataset.bound = "true";
 
     const snap = await loadSnapshot();
+	if (!snap) {
+  console.error("[network-automap] snapshot load failed");
+  return;
+}
+
     const items = (snap && Array.isArray(snap.items)) ? snap.items : [];
     if (!items.length) return;
 
-    panel.innerHTML = "";
-    const take = Math.min(MAX_ITEMS, items.length);
+const take = Math.min(MAX_ITEMS, items.length);
+const buffer = [];
 
-    for (let i = 0; i < take; i++) {
-      const it = items[i] || {};
-      const url = it.url || it.link;
-      const thumb = pickThumb(it);
-      // 최소 안전 필터: url+thumb 없으면 skip (빈 카드 방지)
-      if (!url || !thumb) continue;
-      panel.appendChild(createCard(it));
-    }
+for (let i = 0; i < take; i++) {
+  const it = items[i] || {};
+  const url = it.url || it.link;
+  const thumb = pickThumb(it);
+  if (!url || !thumb) continue;
+  buffer.push(createCard(it));
+}
+
+// 데이터 없으면 기존 더미 유지
+if (!buffer.length) {
+  console.warn("[network-automap] no valid items, keep dummy");
+  return;
+}
+
+// 정상일 때만 초기화
+panel.innerHTML = "";
+buffer.forEach(node => panel.appendChild(node));
+
   }
 
   if (document.readyState === "loading") {
