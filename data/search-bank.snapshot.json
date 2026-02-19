@@ -1,0 +1,224 @@
+{
+  "meta": {
+    "bank": "MARU Search Bank Snapshot",
+    "schema_version": "1.0.0-bank-canon",
+    "snapshot_version": "mvp.2026-02-02T12:00:00Z",
+    "generated_at": "2026-02-02T12:00:00Z",
+    "producer": "maru-search-bank.snapshot (manual seed)",
+    "access": {
+      "mode": "internal",
+      "key_required": false,
+      "scopes": [
+        "read:bank"
+      ]
+    },
+    "channels": {
+      "web": {
+        "enabled": true
+      },
+      "media": {
+        "enabled": true
+      },
+      "social": {
+        "enabled": true,
+        "sections": [
+          "social-1",
+          "social-2",
+          "social-3",
+          "social-4",
+          "social-5",
+          "social-6",
+          "social-7",
+          "social-8",
+          "social-9"
+        ]
+      },
+      "donation": {
+        "enabled": true
+      },
+      "insight": {
+        "enabled": true
+      },
+      "culture": {
+        "enabled": true
+      }
+    },
+    "policy": {
+      "license_default": "public-domain",
+      "allow_licenses": [
+        "public-domain",
+        "cc0",
+        "cc-by"
+      ],
+      "allow_commercial": true
+    }
+  },
+  "index": {
+    "by_channel": {
+      "web": [
+        "seed-web-001"
+      ],
+      "media": [],
+      "social": [
+        "seed-social-1-video-001"
+      ],
+      "donation": [
+        "seed-donation-001"
+      ],
+      "insight": [],
+      "culture": [
+        "seed-culture-001"
+      ]
+    },
+    "by_section": {
+      "social-1": [
+        "seed-social-1-video-001"
+      ],
+      "social-2": [],
+      "social-3": [],
+      "social-4": [],
+      "social-5": [],
+      "social-6": [],
+      "social-7": [],
+      "social-8": [],
+      "social-9": [],
+      "media-trending": [],
+      "media-movie": [],
+      "media-drama": [],
+      "media-documentary": [],
+      "media-animation": [],
+      "media-music": [],
+      "media-education": []
+    }
+  },
+  "items": [
+    {
+      "id": "seed-web-001",
+      "type": "article",
+      "channel": "web",
+      "section": null,
+      "title": "Seed placeholder (web)",
+      "summary": "Replace with ingested web results from maru-search.",
+      "url": "https://example.com",
+      "thumbnail": "https://www.google.com/s2/favicons?domain=example.com&sz=64",
+      "lang": "en",
+      "published_at": null,
+      "ingested_at": "2026-02-02T12:00:00Z",
+      "source": {
+        "name": "seed",
+        "platform": "web",
+        "authority": 0.5
+      },
+      "quality": {
+        "rank": 0.1,
+        "freshness": 0.1,
+        "trust": 0.1
+      },
+      "media": {
+        "kind": "none",
+        "duration": null,
+        "preview": null
+      },
+      "rights": {
+        "license": "public-domain",
+        "attribution": null,
+        "usage": "read-only"
+      },
+      "tags": [
+        "seed"
+      ],
+      "extension": {}
+    },
+    {
+      "id": "seed-social-1-video-001",
+      "type": "video",
+      "channel": "social",
+      "section": "social-1",
+      "title": "Seed placeholder (social-1 video)",
+      "summary": "Replace with real social video + hover preview when available.",
+      "url": "https://youtube.com/watch?v=xxxx",
+      "thumbnail": "https://img.youtube.com/vi/xxxx/hqdefault.jpg",
+      "lang": "en",
+      "published_at": null,
+      "ingested_at": "2026-02-02T12:00:00Z",
+      "source": {
+        "name": "seed",
+        "platform": "youtube",
+        "authority": 0.5
+      },
+      "quality": {
+        "rank": 0.1,
+        "freshness": 0.1,
+        "trust": 0.1
+      },
+      "media": {
+        "kind": "video",
+        "duration": null,
+        "preview": {
+          "mp4": null,
+          "webm": null,
+          "poster": "https://img.youtube.com/vi/xxxx/hqdefault.jpg",
+          "start": 0,
+          "duration": 5
+        }
+      },
+      "rights": {
+        "license": "public-domain",
+        "attribution": null,
+        "usage": "read-only"
+      },
+      "tags": [
+        "seed",
+        "social",
+        "preview-hook"
+      ],
+      "extension": {
+        "account": {
+          "name": "",
+          "handle": "",
+          "url": ""
+        },
+        "platform": "youtube"
+      }
+    },
+
+    {
+      "id": "seed-culture-001",
+      "type": "report",
+      "channel": "culture",
+      "section": null,
+      "title": "Seed placeholder (culture/academic)",
+      "summary": "Future hook for 문화/학술 영역.",
+      "url": "https://example.edu",
+      "thumbnail": "https://www.google.com/s2/favicons?domain=example.edu&sz=64",
+      "lang": "en",
+      "published_at": null,
+      "ingested_at": "2026-02-02T12:00:00Z",
+      "source": {
+        "name": "seed",
+        "platform": "culture",
+        "authority": 0.5
+      },
+      "quality": {
+        "rank": 0.1,
+        "freshness": 0.1,
+        "trust": 0.1
+      },
+      "media": {
+        "kind": "none",
+        "duration": null,
+        "preview": null
+      },
+      "rights": {
+        "license": "public-domain",
+        "attribution": null,
+        "usage": "read-only"
+      },
+      "tags": [
+        "seed",
+        "culture"
+      ],
+      "extension": {}
+    }
+  ]
+}
