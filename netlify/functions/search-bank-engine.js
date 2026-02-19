@@ -1,5 +1,5 @@
 /**
- * search-bank.engine.js — MARU Search Bank Engine (Core v2)
+ * search-bank-engine.js — MARU Search Bank Engine (Core v2)
  * ----------------------------------------------------------
  * Netlify Function (CommonJS)
  * Expand-only: keeps API compatible with v1:
