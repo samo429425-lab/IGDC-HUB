@@ -1,10 +1,10 @@
 {
   "meta": {
     "bank": "MARU Search Bank Snapshot",
-    "schema_version": "2.0.0-bank-regional",
-    "snapshot_version": "v2.2026-02-19T00:00:00Z",
-    "generated_at": "2026-02-19T00:00:00Z",
-    "producer": "maru-search-bank.snapshot (v2 seed)",
+    "schema_version": "3.0.0-bank-future",
+    "snapshot_version": "v3.2026-02-18T23:55:13Z",
+    "generated_at": "2026-02-18T23:55:13Z",
+    "producer": "maru-search-bank.snapshot (v3 future)",
     "access": {
       "mode": "internal",
       "key_required": false,
@@ -44,6 +44,9 @@
       },
       "commerce": {
         "enabled": true
+      },
+      "academic": {
+        "enabled": true
       }
     },
     "policy": {
@@ -54,7 +57,21 @@
         "cc-by"
       ],
       "allow_commercial": true
-    }
+    },
+    "pages": [
+      "home",
+      "distribution",
+      "social",
+      "media",
+      "donation",
+      "network",
+      "tour",
+      "academic"
+    ],
+    "compatibility": [
+      "engine:search-bank.engine.js expects meta+index.by_channel/by_section+items[]",
+      "non-breaking: extra fields ignored"
+    ]
   },
   "registry": {
     "producers": [
@@ -94,6 +111,866 @@
       }
     ]
   },
+  "page_registry": {
+    "home": {
+      "enabled": true,
+      "sections": [
+        "home_1",
+        "home_2",
+        "home_3",
+        "home_4",
+        "home_5",
+        "home_right_top",
+        "home_right_middle",
+        "home_right_bottom"
+      ],
+      "defaults": {
+        "slot_limit_main": 100,
+        "slot_limit_right": 80
+      }
+    },
+    "distribution": {
+      "enabled": true,
+      "sections": [
+        "dist_1",
+        "dist_2",
+        "dist_3",
+        "dist_4",
+        "dist_5",
+        "dist_6",
+        "dist_right"
+      ],
+      "aliases": [
+        "distribution_1",
+        "distribution_2",
+        "distribution_3",
+        "distribution_4",
+        "distribution_5",
+        "distribution_6",
+        "distribution_right"
+      ],
+      "defaults": {
+        "slot_limit_main": 100,
+        "slot_limit_right": 80
+      }
+    },
+    "social": {
+      "enabled": true,
+      "sections": [
+        "social-instagram",
+        "social-youtube",
+        "social-twitter",
+        "social-facebook",
+        "social-tiktok",
+        "social-threads",
+        "social-telegram",
+        "social-discord",
+        "social-community",
+        "socialnetwork"
+      ],
+      "defaults": {
+        "slot_limit_main": 100,
+        "slot_limit_right": 80
+      }
+    },
+    "media": {
+      "enabled": true,
+      "sections": [
+        "media-trending",
+        "media-movie",
+        "media-drama",
+        "media-thriller",
+        "media-romance",
+        "media-variety",
+        "media-documentary",
+        "media-animation",
+        "media-music",
+        "media-shorts"
+      ],
+      "defaults": {
+        "slot_limit": 50
+      }
+    },
+    "donation": {
+      "enabled": true,
+      "sections": [
+        "donation-global",
+        "donation-ngo",
+        "donation-mission",
+        "donation-service",
+        "donation-relief",
+        "donation-education",
+        "donation-environment",
+        "donation-others"
+      ],
+      "defaults": {
+        "slot_limit_main": 100,
+        "slot_limit_right": 80
+      }
+    },
+    "network": {
+      "enabled": true,
+      "sections": [
+        "network-right"
+      ],
+      "defaults": {
+        "slot_limit_right": 100
+      }
+    },
+    "tour": {
+      "enabled": true,
+      "sections": [
+        "tour-right"
+      ],
+      "defaults": {
+        "slot_limit_right": 100
+      }
+    },
+    "academic": {
+      "enabled": true,
+      "sections": [
+        "academic-literature",
+        "academic-humanities",
+        "academic-theology",
+        "academic-philosophy",
+        "academic-history",
+        "academic-arts",
+        "academic-cultural-studies"
+      ],
+      "defaults": {
+        "slot_limit": 100
+      },
+      "status": "planned"
+    }
+  },
+  "bind": {
+    "schema": "bind/page/psom_key.v3",
+    "targets": [
+      {
+        "page": "home",
+        "section": "home_1",
+        "psom_key": "home_1",
+        "bank_channel": "web",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "home",
+        "section": "home_2",
+        "psom_key": "home_2",
+        "bank_channel": "web",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "home",
+        "section": "home_3",
+        "psom_key": "home_3",
+        "bank_channel": "web",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "home",
+        "section": "home_4",
+        "psom_key": "home_4",
+        "bank_channel": "web",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "home",
+        "section": "home_5",
+        "psom_key": "home_5",
+        "bank_channel": "web",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "home",
+        "section": "home_right_top",
+        "psom_key": "home_right_top",
+        "bank_channel": "web",
+        "slot_limit": 80,
+        "role": "right",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "home",
+        "section": "home_right_middle",
+        "psom_key": "home_right_middle",
+        "bank_channel": "web",
+        "slot_limit": 80,
+        "role": "right",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "home",
+        "section": "home_right_bottom",
+        "psom_key": "home_right_bottom",
+        "bank_channel": "web",
+        "slot_limit": 80,
+        "role": "right",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "distribution",
+        "section": "dist_1",
+        "psom_key": "dist_1",
+        "bank_channel": "commerce",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "distribution",
+        "section": "dist_2",
+        "psom_key": "dist_2",
+        "bank_channel": "commerce",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "distribution",
+        "section": "dist_3",
+        "psom_key": "dist_3",
+        "bank_channel": "commerce",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "distribution",
+        "section": "dist_4",
+        "psom_key": "dist_4",
+        "bank_channel": "commerce",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "distribution",
+        "section": "dist_5",
+        "psom_key": "dist_5",
+        "bank_channel": "commerce",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "distribution",
+        "section": "dist_6",
+        "psom_key": "dist_6",
+        "bank_channel": "commerce",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "distribution",
+        "section": "dist_right",
+        "psom_key": "dist_right",
+        "bank_channel": "commerce",
+        "slot_limit": 80,
+        "role": "right",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "distribution",
+        "section": "distribution_1",
+        "psom_key": "distribution_1",
+        "bank_channel": "commerce",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [
+          "dist_1"
+        ],
+        "notes": "alias of dist_1"
+      },
+      {
+        "page": "distribution",
+        "section": "distribution_2",
+        "psom_key": "distribution_2",
+        "bank_channel": "commerce",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [
+          "dist_2"
+        ],
+        "notes": "alias of dist_2"
+      },
+      {
+        "page": "distribution",
+        "section": "distribution_3",
+        "psom_key": "distribution_3",
+        "bank_channel": "commerce",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [
+          "dist_3"
+        ],
+        "notes": "alias of dist_3"
+      },
+      {
+        "page": "distribution",
+        "section": "distribution_4",
+        "psom_key": "distribution_4",
+        "bank_channel": "commerce",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [
+          "dist_4"
+        ],
+        "notes": "alias of dist_4"
+      },
+      {
+        "page": "distribution",
+        "section": "distribution_5",
+        "psom_key": "distribution_5",
+        "bank_channel": "commerce",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [
+          "dist_5"
+        ],
+        "notes": "alias of dist_5"
+      },
+      {
+        "page": "distribution",
+        "section": "distribution_6",
+        "psom_key": "distribution_6",
+        "bank_channel": "commerce",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [
+          "dist_6"
+        ],
+        "notes": "alias of dist_6"
+      },
+      {
+        "page": "distribution",
+        "section": "distribution_right",
+        "psom_key": "distribution_right",
+        "bank_channel": "commerce",
+        "slot_limit": 80,
+        "role": "right",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [
+          "dist_right"
+        ],
+        "notes": "alias of dist_right"
+      },
+      {
+        "page": "social",
+        "section": "social-instagram",
+        "psom_key": "social-instagram",
+        "bank_channel": "social",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "social",
+        "section": "social-youtube",
+        "psom_key": "social-youtube",
+        "bank_channel": "social",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "social",
+        "section": "social-twitter",
+        "psom_key": "social-twitter",
+        "bank_channel": "social",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "social",
+        "section": "social-facebook",
+        "psom_key": "social-facebook",
+        "bank_channel": "social",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "social",
+        "section": "social-tiktok",
+        "psom_key": "social-tiktok",
+        "bank_channel": "social",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "social",
+        "section": "social-threads",
+        "psom_key": "social-threads",
+        "bank_channel": "social",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "social",
+        "section": "social-telegram",
+        "psom_key": "social-telegram",
+        "bank_channel": "social",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "social",
+        "section": "social-discord",
+        "psom_key": "social-discord",
+        "bank_channel": "social",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "social",
+        "section": "social-community",
+        "psom_key": "social-community",
+        "bank_channel": "social",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "social",
+        "section": "socialnetwork",
+        "psom_key": "socialnetwork",
+        "bank_channel": "social",
+        "slot_limit": 80,
+        "role": "right",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "media",
+        "section": "media-trending",
+        "psom_key": "media-trending",
+        "bank_channel": "media",
+        "slot_limit": 50,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "media",
+        "section": "media-movie",
+        "psom_key": "media-movie",
+        "bank_channel": "media",
+        "slot_limit": 50,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "media",
+        "section": "media-drama",
+        "psom_key": "media-drama",
+        "bank_channel": "media",
+        "slot_limit": 50,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "media",
+        "section": "media-thriller",
+        "psom_key": "media-thriller",
+        "bank_channel": "media",
+        "slot_limit": 50,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "media",
+        "section": "media-romance",
+        "psom_key": "media-romance",
+        "bank_channel": "media",
+        "slot_limit": 50,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "media",
+        "section": "media-variety",
+        "psom_key": "media-variety",
+        "bank_channel": "media",
+        "slot_limit": 50,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "media",
+        "section": "media-documentary",
+        "psom_key": "media-documentary",
+        "bank_channel": "media",
+        "slot_limit": 50,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "media",
+        "section": "media-animation",
+        "psom_key": "media-animation",
+        "bank_channel": "media",
+        "slot_limit": 50,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "media",
+        "section": "media-music",
+        "psom_key": "media-music",
+        "bank_channel": "media",
+        "slot_limit": 50,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "media",
+        "section": "media-shorts",
+        "psom_key": "media-shorts",
+        "bank_channel": "media",
+        "slot_limit": 50,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "donation",
+        "section": "donation-global",
+        "psom_key": "donation-global",
+        "bank_channel": "donation",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "donation",
+        "section": "donation-ngo",
+        "psom_key": "donation-ngo",
+        "bank_channel": "donation",
+        "slot_limit": 80,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "donation",
+        "section": "donation-mission",
+        "psom_key": "donation-mission",
+        "bank_channel": "donation",
+        "slot_limit": 80,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "donation",
+        "section": "donation-service",
+        "psom_key": "donation-service",
+        "bank_channel": "donation",
+        "slot_limit": 80,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "donation",
+        "section": "donation-relief",
+        "psom_key": "donation-relief",
+        "bank_channel": "donation",
+        "slot_limit": 80,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "donation",
+        "section": "donation-education",
+        "psom_key": "donation-education",
+        "bank_channel": "donation",
+        "slot_limit": 80,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "donation",
+        "section": "donation-environment",
+        "psom_key": "donation-environment",
+        "bank_channel": "donation",
+        "slot_limit": 80,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "donation",
+        "section": "donation-others",
+        "psom_key": "donation-others",
+        "bank_channel": "donation",
+        "slot_limit": 80,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": ""
+      },
+      {
+        "page": "network",
+        "section": "network-right",
+        "psom_key": "network-right",
+        "bank_channel": "web",
+        "slot_limit": 100,
+        "role": "right",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": "flat snapshot (networkhub-snapshot.json items[100])"
+      },
+      {
+        "page": "tour",
+        "section": "tour-right",
+        "psom_key": "tour-right",
+        "bank_channel": "web",
+        "slot_limit": 100,
+        "role": "right",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": "flat snapshot (tour-snapshot.json items[100])"
+      },
+      {
+        "page": "academic",
+        "section": "academic-literature",
+        "psom_key": "academic-literature",
+        "bank_channel": "academic",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": "planned front page (literature/academic/arts)"
+      },
+      {
+        "page": "academic",
+        "section": "academic-humanities",
+        "psom_key": "academic-humanities",
+        "bank_channel": "academic",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": "planned front page (literature/academic/arts)"
+      },
+      {
+        "page": "academic",
+        "section": "academic-theology",
+        "psom_key": "academic-theology",
+        "bank_channel": "academic",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": "planned front page (literature/academic/arts)"
+      },
+      {
+        "page": "academic",
+        "section": "academic-philosophy",
+        "psom_key": "academic-philosophy",
+        "bank_channel": "academic",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": "planned front page (literature/academic/arts)"
+      },
+      {
+        "page": "academic",
+        "section": "academic-history",
+        "psom_key": "academic-history",
+        "bank_channel": "academic",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": "planned front page (literature/academic/arts)"
+      },
+      {
+        "page": "academic",
+        "section": "academic-arts",
+        "psom_key": "academic-arts",
+        "bank_channel": "academic",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": "planned front page (literature/academic/arts)"
+      },
+      {
+        "page": "academic",
+        "section": "academic-cultural-studies",
+        "psom_key": "academic-cultural-studies",
+        "bank_channel": "academic",
+        "slot_limit": 100,
+        "role": "main",
+        "replaceable": true,
+        "rank_policy": "auto",
+        "aliases": [],
+        "notes": "planned front page (literature/academic/arts)"
+      }
+    ],
+    "notes": "Declarative binding map for Snapshot Engine (non-breaking; Search-Bank Engine ignores unknown fields)."
+  },
   "index": {
     "by_channel": {
       "web": [
@@ -112,6 +989,11 @@
       ],
       "commerce": [
         "seed-commerce-001"
+      ],
+      "academic": [
+        "seed-academic-literature-001",
+        "seed-academic-arts-001",
+        "seed-academic-humanities-001"
       ]
     },
     "by_section": {
@@ -135,7 +1017,84 @@
       "media-education": [],
       "commerce-featured": [
         "seed-commerce-001"
-      ]
+      ],
+      "academic-literature": [
+        "seed-academic-literature-001"
+      ],
+      "academic-humanities": [
+        "seed-academic-humanities-001"
+      ],
+      "academic-theology": [],
+      "academic-philosophy": [],
+      "academic-history": [],
+      "academic-arts": [
+        "seed-academic-arts-001"
+      ],
+      "academic-cultural-studies": []
+    },
+    "by_page": {
+      "home": [],
+      "distribution": [],
+      "social": [],
+      "media": [],
+      "donation": [],
+      "network": [],
+      "tour": [],
+      "academic": []
+    },
+    "by_page_section": {
+      "home.home_1": [],
+      "home.home_2": [],
+      "home.home_3": [],
+      "home.home_4": [],
+      "home.home_5": [],
+      "home.home_right_top": [],
+      "home.home_right_middle": [],
+      "home.home_right_bottom": [],
+      "distribution.dist_1": [],
+      "distribution.dist_2": [],
+      "distribution.dist_3": [],
+      "distribution.dist_4": [],
+      "distribution.dist_5": [],
+      "distribution.dist_6": [],
+      "distribution.dist_right": [],
+      "social.social-instagram": [],
+      "social.social-youtube": [],
+      "social.social-twitter": [],
+      "social.social-facebook": [],
+      "social.social-tiktok": [],
+      "social.social-threads": [],
+      "social.social-telegram": [],
+      "social.social-discord": [],
+      "social.social-community": [],
+      "social.socialnetwork": [],
+      "media.media-trending": [],
+      "media.media-movie": [],
+      "media.media-drama": [],
+      "media.media-thriller": [],
+      "media.media-romance": [],
+      "media.media-variety": [],
+      "media.media-documentary": [],
+      "media.media-animation": [],
+      "media.media-music": [],
+      "media.media-shorts": [],
+      "donation.donation-global": [],
+      "donation.donation-ngo": [],
+      "donation.donation-mission": [],
+      "donation.donation-service": [],
+      "donation.donation-relief": [],
+      "donation.donation-education": [],
+      "donation.donation-environment": [],
+      "donation.donation-others": [],
+      "network.network-right": [],
+      "tour.tour-right": [],
+      "academic.academic-literature": [],
+      "academic.academic-humanities": [],
+      "academic.academic-theology": [],
+      "academic.academic-philosophy": [],
+      "academic.academic-history": [],
+      "academic.academic-arts": [],
+      "academic.academic-cultural-studies": []
     }
   },
   "items": [
@@ -407,6 +1366,159 @@
         "stock": {
           "mode": "unknown",
           "qty": null
+        }
+      }
+    },
+    {
+      "id": "seed-academic-literature-001",
+      "type": "report",
+      "channel": "academic",
+      "section": "academic-literature",
+      "title": "Seed placeholder (academic / literature)",
+      "summary": "Seed placeholder — replace with ingested academic/literature/arts results.",
+      "url": "https://example.edu/literature",
+      "thumbnail": "https://www.google.com/s2/favicons?domain=example.edu&sz=64",
+      "lang": "en",
+      "published_at": null,
+      "ingested_at": "2026-02-18T23:55:13Z",
+      "source": {
+        "name": "seed",
+        "platform": "academic",
+        "authority": 0.5
+      },
+      "quality": {
+        "rank": 0.1,
+        "freshness": 0.1,
+        "trust": 0.1
+      },
+      "media": {
+        "kind": "none",
+        "duration": null,
+        "preview": null
+      },
+      "rights": {
+        "license": "public-domain",
+        "attribution": null,
+        "usage": "read-only"
+      },
+      "tags": [
+        "seed",
+        "academic",
+        "literature"
+      ],
+      "geo": {
+        "country": "KR",
+        "state": "",
+        "city": "Seoul"
+      },
+      "producer": null,
+      "extension": {
+        "academic": {
+          "discipline": "academic-literature",
+          "peer_reviewed": false,
+          "doi": null
+        }
+      }
+    },
+    {
+      "id": "seed-academic-arts-001",
+      "type": "report",
+      "channel": "academic",
+      "section": "academic-arts",
+      "title": "Seed placeholder (academic / arts)",
+      "summary": "Seed placeholder — replace with ingested academic/literature/arts results.",
+      "url": "https://example.edu/arts",
+      "thumbnail": "https://www.google.com/s2/favicons?domain=example.edu&sz=64",
+      "lang": "en",
+      "published_at": null,
+      "ingested_at": "2026-02-18T23:55:13Z",
+      "source": {
+        "name": "seed",
+        "platform": "academic",
+        "authority": 0.5
+      },
+      "quality": {
+        "rank": 0.1,
+        "freshness": 0.1,
+        "trust": 0.1
+      },
+      "media": {
+        "kind": "none",
+        "duration": null,
+        "preview": null
+      },
+      "rights": {
+        "license": "public-domain",
+        "attribution": null,
+        "usage": "read-only"
+      },
+      "tags": [
+        "seed",
+        "academic",
+        "arts"
+      ],
+      "geo": {
+        "country": "KR",
+        "state": "",
+        "city": "Seoul"
+      },
+      "producer": null,
+      "extension": {
+        "academic": {
+          "discipline": "academic-arts",
+          "peer_reviewed": false,
+          "doi": null
+        }
+      }
+    },
+    {
+      "id": "seed-academic-humanities-001",
+      "type": "report",
+      "channel": "academic",
+      "section": "academic-humanities",
+      "title": "Seed placeholder (academic / humanities)",
+      "summary": "Seed placeholder — replace with ingested academic/literature/arts results.",
+      "url": "https://example.edu/humanities",
+      "thumbnail": "https://www.google.com/s2/favicons?domain=example.edu&sz=64",
+      "lang": "en",
+      "published_at": null,
+      "ingested_at": "2026-02-18T23:55:13Z",
+      "source": {
+        "name": "seed",
+        "platform": "academic",
+        "authority": 0.5
+      },
+      "quality": {
+        "rank": 0.1,
+        "freshness": 0.1,
+        "trust": 0.1
+      },
+      "media": {
+        "kind": "none",
+        "duration": null,
+        "preview": null
+      },
+      "rights": {
+        "license": "public-domain",
+        "attribution": null,
+        "usage": "read-only"
+      },
+      "tags": [
+        "seed",
+        "academic",
+        "humanities"
+      ],
+      "geo": {
+        "country": "KR",
+        "state": "",
+        "city": "Seoul"
+      },
+      "producer": null,
+      "extension": {
+        "academic": {
+          "discipline": "academic-humanities",
+          "peer_reviewed": false,
+          "doi": null
         }
       }
     }
