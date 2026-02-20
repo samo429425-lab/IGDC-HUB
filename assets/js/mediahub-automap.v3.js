@@ -9,8 +9,15 @@
  */
 (function(){
   'use strict';
-  if (window.__MEDIAHUB_AUTOMAP_V5__) return;
-  window.__MEDIAHUB_AUTOMAP_V5__ = true;
+  function isMediaKey(k){ return typeof k==='string' && k.startsWith('media-'); }
+  function looksLikeMedia(it){
+    const url = it && (it.url || it.video || (it.media && it.media.url)) || '';
+    const thumb = it && (it.thumbnail || it.thumb || it.image) || '';
+    return !!(String(url).trim() || String(thumb).trim());
+  }
+
+  if (window.__MEDIAHUB_AUTOMAP__) return;
+  window.__MEDIAHUB_AUTOMAP__ = 'mediahub-automap.v5';
 
   const D = document;
   const W = window;
@@ -103,15 +110,18 @@
   }
 
   async function loadFeedItems(key){
+    if(!isMediaKey(key)) return [];
     const url = `/.netlify/functions/feed-media?key=${encodeURIComponent(key)}&limit=500`;
     try{
       const data = await fetchJson(url);
-      if(data && Array.isArray(data.items)) return data.items;
+      let items = [];
+      if(data && Array.isArray(data.items)) items = data.items;
       // fallback: full snapshot response
-      if(data && Array.isArray(data.sections)){
+      if(!items.length && data && Array.isArray(data.sections)){
         const found = data.sections.find(s=>s && s.key === key);
-        if(found && Array.isArray(found.items)) return found.items;
+        if(found && Array.isArray(found.items)) items = found.items;
       }
+      if(Array.isArray(items)) return items.filter(looksLikeMedia);
     }catch(e){ /* ignore */ }
     return [];
   }
