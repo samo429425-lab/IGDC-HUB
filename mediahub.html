@@ -4966,6 +4966,39 @@ window.addEventListener("message",function(ev){
 
 })(window, document);
 </script>
+<style id="mediahub-mobile-scroll-final">
+
+/* === MOBILE FINAL CONTROL === */
+@media (max-width:1024px){
+
+  /* 1. 스크롤 버튼 완전 제거 */
+  .scroll-btn,
+  .btn-scroll-left,
+  .btn-scroll-right{
+    display:none !important;
+    visibility:hidden !important;
+  }
+
+  /* 2. 가로 스크롤 강제 활성 */
+  .thumb-line,
+  .section-row,
+  .scroll-content,
+  .media-rail{
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    touch-action:pan-x !important;
+  }
+
+  /* 3. 모바일 카드 1열 기준 유지 */
+  .card,
+  .media-card{
+    flex:0 0 100% !important;
+    max-width:100% !important;
+  }
+}
+
+</style>
 
 <!-- Media Hub AutoMap (정본) -->
 <script defer src="/assets/js/mediahub-automap.v3.js"></script>
