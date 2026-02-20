@@ -90,6 +90,7 @@
   function slotsToItems(section){
     const slots = section && Array.isArray(section.slots) ? section.slots : [];
     return slots.map((slot)=>({
+	  slotId: slot.slotId ?? null,	
       id: slot.contentId || null,
       title: slot.title || '',
       thumbnail: slot.thumb || '',
@@ -273,6 +274,7 @@
       if(!items || items.length === 0){
         items = extractItems(sectionMap[key]);
       }
+	  items.sort((a,b)=>(a.slotId ?? 999999) - (b.slotId ?? 999999));
       applyLine(line, items);
     }
   }
