@@ -11,9 +11,10 @@
   const CONFIG = {
     version: 'vNext-orchestrator-1',
     endpoints: {
-      insight: '/.netlify/functions/maru-global-insight',
-      bank: '/.netlify/functions/search-bank'
-    },
+      insight: '/.netlify/functions/maru-global-insight-engine',
+      bank: '/.netlify/functions/search-bank-engine'
+},
+
     limits: {
       bank: 30,
       insight: 20
