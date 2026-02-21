@@ -1,98 +1,37 @@
 /**
- * netlify/functions/feed-network.js (v4)
- * ------------------------------------------------------------
- * 목적:
- *  - Search-Bank snapshot -> Network Hub right panel에 필요한 items 제공
- *  - Search-Bank에 네트워크 데이터가 없으면, networkhub-snapshot.json의 items로 폴백
+ * feed-network.v5.js (NETLIFY FUNCTION)
  *
- * IMPORTANT:
- *  - 이 함수는 "항상" items를 돌려줘서(최소 폴백) UI/오토맵이 빈 상태가 되지 않게 함.
+ * 역할(정이사장님 정의대로):
+ * - Search-Bank Snapshot → NetworkHub snapshot 역할로 'items'를 구성해서 전달
+ * - Search-Bank에서 못 찾으면 NetworkHub Snapshot의 items를 그대로 fallback 전달
+ * - 오토맵이 바로 꽂을 수 있도록: items[]에 url + thumb 필드가 반드시 채워지도록 정규화
  *
- * Query:
- *  - ?limit=100 (1..200)
+ * Endpoint:
+ * - /.netlify/functions/feed-network?limit=100&channel=web
+ * Response:
+ * - { status:"ok", items:[...] }
  */
 
-import fs from "fs/promises";
-import path from "path";
+"use strict";
 
-const BANK_NAME = "search-bank.snapshot.json";
-const NH_NAME   = "networkhub-snapshot.json";
+const fs = require("fs");
+const path = require("path");
 
-function clampInt(v, d, min, max){
-  const n = Number.parseInt(String(v ?? ""), 10);
-  if (Number.isNaN(n)) return d;
-  return Math.max(min, Math.min(max, n));
-}
-
-function corsHeaders(){
-  return {
-    "Content-Type": "application/json; charset=utf-8",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Cache-Control": "no-store"
-  };
-}
-
-function ok(obj){
-  return { statusCode: 200, headers: corsHeaders(), body: JSON.stringify(obj) };
-}
-
-async function readJsonIfExists(p){
-  try{
-    const raw = await fs.readFile(p, "utf-8");
-    return JSON.parse(raw);
-  }catch{
-    return null;
-  }
-}
-
-function guessSiteBaseUrl(){
-  return (
-    process.env.URL ||
-    process.env.DEPLOY_PRIME_URL ||
-    process.env.DEPLOY_URL ||
-    ""
-  );
-}
-
-async function fetchJsonOverHttp(filename){
-  const base = guessSiteBaseUrl();
-  const urls = [];
-  if (base) urls.push(`${base.replace(/\/$/, "")}/data/${filename}`);
-  urls.push(`/data/${filename}`);
-
-  for (const u of urls){
+// Netlify functions runs in /functions. Data is usually in /data at site root.
+// We attempt both relative and absolute-ish paths by traversing up.
+function tryReadJSON(rel){
+  const tries = [
+    path.join(__dirname, rel),
+    path.join(__dirname, "..", rel),
+    path.join(__dirname, "..", "..", rel),
+    path.join(__dirname, "..", "..", "..", rel),
+  ];
+  for (const p of tries){
     try{
-      const r = await fetch(u, { cache: "no-store" });
-      if (!r.ok) continue;
-      return await r.json();
-    }catch{
-      // ignore
-    }
+      if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf-8"));
+    }catch(e){}
   }
   return null;
-}
-
-function fsCandidatePaths(filename){
-  const cwd = process.cwd();
-  const dir = typeof __dirname === "string" ? __dirname : cwd;
-  return [
-    path.join(cwd, "data", filename),
-    path.join(cwd, "netlify", "functions", "data", filename),
-    path.join(dir, "data", filename),
-    path.join(dir, "..", "data", filename),
-    path.join(dir, "..", "..", "data", filename),
-    path.join(dir, "functions", "data", filename)
-  ];
-}
-
-async function loadDataFile(filename){
-  for (const p of fsCandidatePaths(filename)){
-    const j = await readJsonIfExists(p);
-    if (j) return j;
-  }
-  return await fetchJsonOverHttp(filename);
 }
 
 function pick(obj, keys){
@@ -103,82 +42,86 @@ function pick(obj, keys){
   return "";
 }
 
-function normalizeItem(it){
+function normalize(it){
   if (!it || typeof it !== "object") return null;
-  const url = pick(it, ["url","link","href","path"]);
-  const title = pick(it, ["title","name","label","caption"]) || "";
-  const thumb = pick(it, ["thumb","thumbnail","image","icon","img","photo"]) || "";
 
-  // URL은 없을 수 있음 -> UI 안정성 위해 "#"로라도 채움
+  const url = pick(it, ["url","link","href","path"]);
+  const thumb = pick(it, ["thumb","thumbnail","image","icon","photo","img","cover","coverUrl","thumbnailUrl"]);
+
+  if (!url || !thumb) return null;
+
   return {
-    id: it.id || it.trackId || null,
-    title,
-    url: url || "#",
-    thumb,
-    section: it.section || null,
-    channel: it.channel || null,
-    tags: Array.isArray(it.tags) ? it.tags : []
+    id: it.id || it._id || it.trackId || null,
+    title: pick(it, ["title","name","label","caption"]) || "",
+    url,
+    thumb
   };
 }
 
-function extractNetworkItemsFromBank(bank){
-  if (!bank) return [];
+function extractFromSearchBank(bank, channel){
+  // bank schema variability 대응:
+  // 1) bank.items[]
+  // 2) bank.network.items[]
+  // 3) bank.data.items[]
+  // 4) bank.pages.network.sections["right-network-100"][]
+  const pools = [];
 
-  // 1) by_page.network (가장 명시적)
-  const bp = bank.by_page && bank.by_page.network;
-  if (Array.isArray(bp) && bp.length) return bp;
+  if (Array.isArray(bank?.items)) pools.push(bank.items);
+  if (Array.isArray(bank?.network?.items)) pools.push(bank.network.items);
+  if (Array.isArray(bank?.data?.items)) pools.push(bank.data.items);
 
-  // 2) pages.network.sections.*
-  const sections = bank?.pages?.network?.sections;
-  if (sections && typeof sections === "object"){
-    const out = [];
-    for (const arr of Object.values(sections)){
-      if (Array.isArray(arr)) out.push(...arr);
+  const sec = bank?.pages?.network?.sections?.["right-network-100"];
+  if (Array.isArray(sec)) pools.push(sec);
+
+  // channel 필터는 "있을 때만" 적용 (없으면 통과)
+  const out = [];
+  for (const arr of pools){
+    for (const it of arr){
+      if (channel){
+        const ch = (it && (it.channel || it.platform || it.source)) || "";
+        if (ch && String(ch).toLowerCase() !== String(channel).toLowerCase()) continue;
+      }
+      const n = normalize(it);
+      if (n) out.push(n);
     }
-    if (out.length) return out;
   }
-
-  // 3) flat items scan: section/tag로 networkhub 추정
-  const flat = Array.isArray(bank.items) ? bank.items : [];
-  const out2 = [];
-  for (const it of flat){
-    const section = String(it && it.section || "").toLowerCase();
-    const tags = Array.isArray(it && it.tags) ? it.tags.map(x=>String(x).toLowerCase()) : [];
-    if (section.includes("network")) { out2.push(it); continue; }
-    if (tags.includes("networkhub") || tags.includes("right-panel")) { out2.push(it); continue; }
-  }
-  return out2;
+  return out;
 }
 
-export async function handler(event){
-  if (event.httpMethod === "OPTIONS"){
-    return { statusCode: 200, headers: corsHeaders(), body: "" };
+exports.handler = async function(event){
+  try{
+    const q = event.queryStringParameters || {};
+    const limit = Math.max(1, Math.min(1000, parseInt(q.limit || "100", 10) || 100));
+    const channel = (q.channel || "").trim(); // optional
+
+    const searchBank = tryReadJSON("data/search-bank.snapshot.json") || {};
+    let items = extractFromSearchBank(searchBank, channel).slice(0, limit);
+
+    // fallback: networkhub snapshot items
+    if (!items.length){
+      const nh = tryReadJSON("data/networkhub-snapshot.json") || tryReadJSON("networkhub-snapshot.json") || {};
+      const raw = Array.isArray(nh.items) ? nh.items : [];
+      items = raw.map(normalize).filter(Boolean).slice(0, limit);
+    }
+
+    return {
+      statusCode: 200,
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        "Access-Control-Allow-Origin": "*"
+      },
+      body: JSON.stringify({
+        status: "ok",
+        generated: new Date().toISOString(),
+        items
+      })
+    };
+  } catch (e){
+    return {
+      statusCode: 500,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ status:"error", error: String(e && e.message || e) })
+    };
   }
-
-  const q = event.queryStringParameters || {};
-  const limit = clampInt(q.limit, 100, 1, 200);
-
-  // 1) try Search-Bank
-  const bank = await loadDataFile(BANK_NAME);
-  const bankItemsRaw = extractNetworkItemsFromBank(bank);
-  const bankItems = bankItemsRaw.map(normalizeItem).filter(Boolean).slice(0, limit);
-
-  // 2) fallback: networkhub snapshot
-  let fallbackItems = [];
-  if (bankItems.length === 0){
-    const nh = await loadDataFile(NH_NAME);
-    const raw = (nh && Array.isArray(nh.items)) ? nh.items : [];
-    fallbackItems = raw.map(normalizeItem).filter(Boolean).slice(0, limit);
-  }
-
-  const items = bankItems.length ? bankItems : fallbackItems;
-
-  return ok({
-    status: "ok",
-    page: "networkhub",
-    source: bankItems.length ? "search-bank.snapshot.json" : "networkhub-snapshot.json",
-    generated: new Date().toISOString(),
-    count: items.length,
-    items
-  });
-}
+};
