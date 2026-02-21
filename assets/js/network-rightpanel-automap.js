@@ -67,6 +67,19 @@
     return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
   }
 
+  // __IMG_ONERROR_PATCH_V1__: broken image -> dummy svg
+  function bindImgFallback(img, idx){
+    if (!img) return;
+    img.addEventListener('error', ()=>{
+      try{
+        // prevent infinite loop
+        img.onerror = null;
+        img.src = safeDummySvg(idx);
+      }catch(_){/*noop*/}
+    }, { once:true });
+  }
+
+
   function createDesktopBox(i, href, imgSrc, title, trackId){
     const box = document.createElement("div");
     box.className = "ad-box";
@@ -89,6 +102,7 @@
     img.alt = title || "Loading";
     img.loading = href && imgSrc ? "lazy" : "eager";
     img.decoding = "async";
+    bindImgFallback(img, i);
 
     a.appendChild(img);
     box.appendChild(a);
@@ -118,6 +132,7 @@
     img.alt = title || "Loading";
     img.loading = href && imgSrc ? "lazy" : "eager";
     img.decoding = "async";
+    bindImgFallback(img, i);
 
     a.appendChild(img);
     card.appendChild(a);
