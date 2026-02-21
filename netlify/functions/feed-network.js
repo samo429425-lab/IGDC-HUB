@@ -50,20 +50,19 @@ function pick(obj, keys){
 function normalize(it){
   if (!it || typeof it !== "object") return null;
 
-  // url candidates (top-level + common nested)
+  // shallow + nested 후보까지 폭넓게 수용
   const url =
     pick(it, ["url","link","href","path"]) ||
-    pick(it?.detail, ["url","link","href","path"]) ||
-    pick(it?.media, ["url","link","href","path"]) ||
-    pick(it?.extension, ["url","link","href","path"]);
+    pick(it?.detail, ["url","href","link"]) ||
+    pick(it?.extension, ["url","href","link"]);
 
-  // thumb candidates (top-level + common nested)
   const thumb =
     pick(it, ["thumb","thumbnail","image","icon","photo","img","cover","coverUrl","thumbnailUrl"]) ||
-    pick(it?.media, ["thumb","thumbnail","image","icon","photo","img","cover","coverUrl","thumbnailUrl"]) ||
-    pick(it?.media?.preview, ["thumb","thumbnail","image","icon","photo","img","cover","coverUrl","thumbnailUrl","url"]) ||
-    pick(it?.preview, ["thumb","thumbnail","image","icon","photo","img","cover","coverUrl","thumbnailUrl","url"]);
+    pick(it?.media, ["thumb","thumbnail","image","cover","coverUrl","thumbnailUrl"]) ||
+    pick(it?.media?.preview, ["thumb","thumbnail","image","cover","coverUrl","thumbnailUrl"]) ||
+    pick(it?.extension, ["thumb","thumbnail","image","cover","coverUrl","thumbnailUrl"]);
 
+  // url/thumb 둘 다 없으면 오토맵이 쓸 수 없으니 제외
   if (!url || !thumb) return null;
 
   return {
@@ -75,37 +74,52 @@ function normalize(it){
 }
 
 function extractFromSearchBank(bank, channel){
-  // 우선순위:
-  // 0) index.by_page_section["network.right-network-100"]가 존재하고 비어있지 않으면 그 ID들만 사용
-  // 1) 그렇지 않으면 bank.items / bank.network.items / bank.data.items / pages.network.sections["right-network-100"] 풀에서 스캔
-  // 2) channel 필터는 "있을 때만" 적용 (없으면 통과)
-  // 3) TARGET_PAGE/TARGET_PSOM_KEY로 bind가 붙어있으면 그것만 우선 통과
-
+  // ✅ Search-Bank 표준 구조 대응:
+  // - bank.index.by_page_section["network.right-network-100"] => [itemId...]
+  // - bank.items[] => item objects (bind.page/psom_key로 스캔)
   const out = [];
+  const itemsArr = Array.isArray(bank?.items) ? bank.items : [];
+  const byId = new Map(itemsArr.map(x => [x?.id, x]));
 
-  // --- 0) index route ---
-  const routeKey = `${TARGET_PAGE}.${TARGET_PSOM_KEY}`;
-  const idList = bank?.index?.by_page_section?.[routeKey];
-  if (Array.isArray(idList) && idList.length){
-    const map = new Map();
-    if (Array.isArray(bank?.items)){
-      for (const it of bank.items) if (it && it.id) map.set(it.id, it);
-    }
-    for (const id of idList){
-      const it = map.get(id);
+  // 1) index 우선
+  const idxIds = bank?.index?.by_page_section?.["network.right-network-100"];
+  if (Array.isArray(idxIds) && idxIds.length){
+    for (const id of idxIds){
+      const it = byId.get(id);
       if (!it) continue;
 
       if (channel){
-        const ch = (it && (it.channel || it.platform || it.source?.platform || it.source)) || "";
+        const ch = (it && (it.channel || it.platform || it.source)) || "";
         if (ch && String(ch).toLowerCase() !== String(channel).toLowerCase()) continue;
       }
-
       const n = normalize(it);
       if (n) out.push(n);
     }
     return out;
   }
 
+  // 2) index가 비어있으면 bind로 스캔
+  for (const it of itemsArr){
+    const b = it?.bind || {};
+    const isNetworkPage = String(b.page || "").toLowerCase() === "network";
+    const isRightKey =
+      String(b.psom_key || "").toLowerCase() === "right-network-100" ||
+      String(b.section || "").toLowerCase() === "right-network-100" ||
+      String(b.route || "").toLowerCase() === "network.right-network-100";
+
+    if (!isNetworkPage || !isRightKey) continue;
+
+    if (channel){
+      const ch = (it && (it.channel || it.platform || it.source)) || "";
+      if (ch && String(ch).toLowerCase() !== String(channel).toLowerCase()) continue;
+    }
+
+    const n = normalize(it);
+    if (n) out.push(n);
+  }
+
+  return out;
+}
   // --- 1) pools scan ---
   const pools = [];
   if (Array.isArray(bank?.items)) pools.push(bank.items);
