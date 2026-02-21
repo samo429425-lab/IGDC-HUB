@@ -1,103 +1,112 @@
 /**
- * netlify/functions/feed-network.js
- * Network Hub feed broker (Search-Bank -> Network Right Panel)
- *
- * - Reads /data/search-bank.snapshot.json from the deployed site (same origin)
- * - Filters ONLY one channel (default: "web") to avoid cross-page mixing
- * - Returns normalized items for the Network right rail
- *
- * Query:
- *   ?limit=100        (default 100, max 200)
- *   ?channel=web      (default "web")
+ * feed-network.v2.js  (NETWORK FEED - CANON)
+ * Purpose:
+ *  - Build sections for Network Hub from front.snapshot.json
+ *  - Provide: /.netlify/functions/feed?page=network compatible output
+ *  - Section: right-network-100 (100 slots)
  */
 
-function clampInt(v, d, min, max){
-  const n = Number.parseInt(String(v ?? ""), 10);
-  if (Number.isNaN(n)) return d;
-  return Math.max(min, Math.min(max, n));
+"use strict";
+
+const fs = require("fs");
+const path = require("path");
+
+const DATA_ROOT = path.join(__dirname, "data");
+const FRONT_SNAPSHOT_PATH = path.join(DATA_ROOT, "front.snapshot.json");
+const PSOM_PATH = path.join(DATA_ROOT, "psom.json");
+
+// ------------------ Utils ------------------
+
+function safeReadJSON(p){
+  try { return JSON.parse(fs.readFileSync(p,"utf-8")); }
+  catch { return null; }
 }
 
-function json(res, status, body){
+function toArr(v){ return Array.isArray(v)?v:[]; }
+
+function pick(obj, keys){
+  for(const k of keys){
+    const v = obj && obj[k];
+    if(typeof v==="string" && v.trim()) return v.trim();
+  }
+  return "";
+}
+
+function normalizeItem(item, fallback={}){
+  if(!item || typeof item!=="object") return null;
+
   return {
-    statusCode: status,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store"
-    },
-    body: JSON.stringify(body)
+    id: item.id || fallback.id || null,
+    page: "network",
+    section: "right-network-100",
+
+    title: pick(item,["title","name","label","caption"])||"",
+    url: pick(item,["url","href","link","path","detailUrl"])||"",
+    thumb: pick(item,[
+      "thumb","image","image_url","img",
+      "photo","thumbnail","thumbnailUrl","cover","coverUrl"
+    ])||"",
+
+    priority: (typeof item.priority==="number") ? item.priority : null,
+    enabled: (item.enabled!==false),
+    order: (typeof item.order==="number") ? item.order : 0
   };
 }
 
-function originFromEnv(){
-  // Netlify runtime provides one of these
-  return (
-    process.env.URL ||
-    process.env.DEPLOY_PRIME_URL ||
-    process.env.DEPLOY_URL ||
-    ""
-  ).replace(/\/+$/, "");
+// ------------------ Builder ------------------
+
+function buildNetworkSections(snap){
+
+  const sectionsMap = snap?.pages?.network?.sections;
+  if(!sectionsMap || typeof sectionsMap!=="object") return [];
+
+  const key = "right-network-100";
+
+  const raw = toArr(sectionsMap[key]).slice(0,100);
+
+  return [{
+    id: key,
+    items: raw
+      .map(x=>normalizeItem(x))
+      .filter(it=>it && it.url && it.thumb)
+  }];
 }
 
-function normalizeItem(it){
-  if (!it || typeof it !== "object") return null;
+// ------------------ Handler ------------------
 
-  const url = it.url || it.link || it.href;
-  if (!url) return null;
+exports.handler = async function(event){
 
-  return {
-    id: it.id || null,
-    channel: it.channel || null,
-    section: it.section || null,
-    title: it.title || it.name || "",
-    summary: it.summary || it.desc || "",
-    url,
-    thumbnail: it.thumbnail || it.image || it.icon || "",
-    source: (it.source && it.source.name) ? it.source.name : (it.source || null),
-    published_at: it.published_at || null,
-    ingested_at: it.ingested_at || null,
-    tags: Array.isArray(it.tags) ? it.tags : []
-  };
-}
-
-exports.handler = async (event) => {
   try{
-    const q = event.queryStringParameters || {};
-    const limit = clampInt(q.limit, 100, 1, 200);
-    const channel = String(q.channel || "web").trim();
 
-    const origin = originFromEnv();
-    if (!origin){
-      return json(null, 500, { status:"error", error:"Missing site origin env (URL/DEPLOY_PRIME_URL)." });
-    }
+    const snap = safeReadJSON(FRONT_SNAPSHOT_PATH) || {};
+    const psom = safeReadJSON(PSOM_PATH) || [];
 
-    const bankUrl = `${origin}/data/search-bank.snapshot.json`;
+    const sections = buildNetworkSections(snap);
 
-    const r = await fetch(bankUrl, { headers: { "accept": "application/json" } });
-    if (!r.ok){
-      return json(null, 502, { status:"error", error:`Failed to fetch search-bank snapshot (${r.status})`, bankUrl });
-    }
-
-    const snap = await r.json();
-    const all = Array.isArray(snap?.items) ? snap.items : [];
-    const filtered = [];
-    for (const it of all){
-      if (!it || typeof it !== "object") continue;
-      if (channel && it.channel !== channel) continue;
-      const n = normalizeItem(it);
-      if (n) filtered.push(n);
-      if (filtered.length >= limit) break;
-    }
-
-    return json(null, 200, {
-      status: "ok",
-      page: "network",
-      channel,
-      count: filtered.length,
-      generated: new Date().toISOString(),
-      items: filtered
-    });
+    return {
+      statusCode: 200,
+      headers: {
+        "Content-Type":"application/json; charset=utf-8",
+        "Cache-Control":"no-store"
+      },
+      body: JSON.stringify({
+        status: "ok",
+        page: "network",
+        generated: new Date().toISOString(),
+        sections
+      })
+    };
 
   }catch(e){
-    return json(null, 500, { status:"error", error: String(e && e.message ? e.message : e) });
+
+    return {
+      statusCode:500,
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({
+        status:"error",
+        error: String(e?.message||e)
+      })
+    };
+
   }
 };
