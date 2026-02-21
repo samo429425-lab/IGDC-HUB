@@ -14,6 +14,11 @@
 
 "use strict";
 
+// === NetworkHub feed target (PSOM bind) ===
+const TARGET_PAGE = "network";
+const TARGET_PSOM_KEY = "right-network-100";
+
+
 const fs = require("fs");
 const path = require("path");
 
@@ -45,8 +50,19 @@ function pick(obj, keys){
 function normalize(it){
   if (!it || typeof it !== "object") return null;
 
-  const url = pick(it, ["url","link","href","path"]);
-  const thumb = pick(it, ["thumb","thumbnail","image","icon","photo","img","cover","coverUrl","thumbnailUrl"]);
+  // url candidates (top-level + common nested)
+  const url =
+    pick(it, ["url","link","href","path"]) ||
+    pick(it?.detail, ["url","link","href","path"]) ||
+    pick(it?.media, ["url","link","href","path"]) ||
+    pick(it?.extension, ["url","link","href","path"]);
+
+  // thumb candidates (top-level + common nested)
+  const thumb =
+    pick(it, ["thumb","thumbnail","image","icon","photo","img","cover","coverUrl","thumbnailUrl"]) ||
+    pick(it?.media, ["thumb","thumbnail","image","icon","photo","img","cover","coverUrl","thumbnailUrl"]) ||
+    pick(it?.media?.preview, ["thumb","thumbnail","image","icon","photo","img","cover","coverUrl","thumbnailUrl","url"]) ||
+    pick(it?.preview, ["thumb","thumbnail","image","icon","photo","img","cover","coverUrl","thumbnailUrl","url"]);
 
   if (!url || !thumb) return null;
 
@@ -59,28 +75,62 @@ function normalize(it){
 }
 
 function extractFromSearchBank(bank, channel){
-  // bank schema variability 대응:
-  // 1) bank.items[]
-  // 2) bank.network.items[]
-  // 3) bank.data.items[]
-  // 4) bank.pages.network.sections["right-network-100"][]
-  const pools = [];
+  // 우선순위:
+  // 0) index.by_page_section["network.right-network-100"]가 존재하고 비어있지 않으면 그 ID들만 사용
+  // 1) 그렇지 않으면 bank.items / bank.network.items / bank.data.items / pages.network.sections["right-network-100"] 풀에서 스캔
+  // 2) channel 필터는 "있을 때만" 적용 (없으면 통과)
+  // 3) TARGET_PAGE/TARGET_PSOM_KEY로 bind가 붙어있으면 그것만 우선 통과
 
+  const out = [];
+
+  // --- 0) index route ---
+  const routeKey = `${TARGET_PAGE}.${TARGET_PSOM_KEY}`;
+  const idList = bank?.index?.by_page_section?.[routeKey];
+  if (Array.isArray(idList) && idList.length){
+    const map = new Map();
+    if (Array.isArray(bank?.items)){
+      for (const it of bank.items) if (it && it.id) map.set(it.id, it);
+    }
+    for (const id of idList){
+      const it = map.get(id);
+      if (!it) continue;
+
+      if (channel){
+        const ch = (it && (it.channel || it.platform || it.source?.platform || it.source)) || "";
+        if (ch && String(ch).toLowerCase() !== String(channel).toLowerCase()) continue;
+      }
+
+      const n = normalize(it);
+      if (n) out.push(n);
+    }
+    return out;
+  }
+
+  // --- 1) pools scan ---
+  const pools = [];
   if (Array.isArray(bank?.items)) pools.push(bank.items);
   if (Array.isArray(bank?.network?.items)) pools.push(bank.network.items);
   if (Array.isArray(bank?.data?.items)) pools.push(bank.data.items);
 
-  const sec = bank?.pages?.network?.sections?.["right-network-100"];
+  const sec = bank?.pages?.network?.sections?.[TARGET_PSOM_KEY];
   if (Array.isArray(sec)) pools.push(sec);
 
-  // channel 필터는 "있을 때만" 적용 (없으면 통과)
-  const out = [];
   for (const arr of pools){
     for (const it of arr){
+      if (!it || typeof it !== "object") continue;
+
+      // bind 기반 page/psom_key 필터 (있을 때는 강제)
+      const b = it.bind || it.route || it.psom || null;
+      const bindPage = it?.bind?.page || it?.bind?.page_id || "";
+      const bindKey  = it?.bind?.psom_key || it?.bind?.psomKey || it?.bind?.section || "";
+      if (bindPage && String(bindPage) !== TARGET_PAGE) continue;
+      if (bindKey  && String(bindKey)  !== TARGET_PSOM_KEY) continue;
+
       if (channel){
-        const ch = (it && (it.channel || it.platform || it.source)) || "";
+        const ch = (it.channel || it.platform || it.source?.platform || it.source) || "";
         if (ch && String(ch).toLowerCase() !== String(channel).toLowerCase()) continue;
       }
+
       const n = normalize(it);
       if (n) out.push(n);
     }
