@@ -1,26 +1,32 @@
 /**
- * network-rightpanel-automap.js (v8)
+ * network-rightpanel-automap.js (v9)
+ * 네트워크 허브(파일명: networkhub.html, 타이틀은 마켓허브일 수 있음) 전용.
  *
- * FIX 목표(정이사장님 스크린샷 기준):
- * 1) 카드가 1장만 보이는 현상 → 실제로는 데이터가 많아도 "모바일 레일 구조(.card)"와 불일치로 레이아웃이 깨짐.
- * 2) 모바일 가로/태블릿에서 이미지가 분산/중복 → 데스크탑 패널(#rightAutoPanel)과 모바일 레일(#nh-mobile-rail-list)의 DOM/CSS가 서로 다른데 같은 마크업(.ad-box)으로 넣어서 깨짐.
+ * 규칙:
+ * - 유효 데이터(normalized) >= 1 : 100개까지 순환 확장 → 렌더(기존 더미/DOM 교체)
+ * - 유효 데이터(normalized) == 0 : 기존 HTML 더미는 절대 건드리지 않음
+ *   단, 대상 컨테이너가 "완전 비어있을 때만" 안전 더미 100개 주입
  *
- * v8 원칙:
- * - 데스크탑(우측패널): .ad-box (기존 CSS 그대로 사용)
- * - 모바일 레일: .card (networkhub.html의 #nh-mobile-rail CSS와 1:1 매칭)
- * - 실데이터가 1개라도 있으면: 1..N은 실데이터, N+1..100은 안전 더미(Loading)로 채워서 "100개 규정" 보장
- * - 실데이터 0이면: 기존 더미 DOM을 절대 삭제하지 않음. (비어있으면 안전 더미 100개 복구)
+ * 타겟:
+ * - Desktop: #rightAutoPanel  (slot: .ad-box)
+ * - Mobile : #nh-mobile-rail-list (slot: .card)
  */
-
 (function(){
   "use strict";
   if (typeof document === "undefined") return;
-  if (window.__NETWORK_AUTOMAP_V8__) return;
-  window.__NETWORK_AUTOMAP_V8__ = true;
+
+  // ✅ 페이지 가드: 파일명 기반(타이틀 무관) + 모바일 레일 존재 기반
+  const path = (location && location.pathname) ? String(location.pathname) : "";
+  const isNetworkHubPage =
+    /(^|\/)networkhub\.html$/i.test(path) ||
+    !!document.getElementById("nh-mobile-rail-list");
+
+  if (!isNetworkHubPage) return;
+
+  if (window.__NETWORK_AUTOMAP_V9__) return;
+  window.__NETWORK_AUTOMAP_V9__ = true;
 
   const LIMIT = 100;
-
-  // ✅ channel=web 강제 제거(필터로 인해 1개만 남는 경우 차단)
   const FEED_URL = "/.netlify/functions/feed-network?limit=100";
 
   const SNAPSHOT_URLS = [
@@ -30,13 +36,11 @@
     "./networkhub-snapshot.json"
   ];
 
-  const DESKTOP_TARGETS = [
-    "#rightAutoPanel",
-    '[data-psom-key="right-network-100"]'
-  ];
+  const DESKTOP_SELECTOR = "#rightAutoPanel";
   const MOBILE_LIST_ID = "nh-mobile-rail-list";
 
   const toStr = (x)=> (x==null ? "" : String(x));
+
   const pick = (it, keys)=> {
     for (const k of keys){
       const v = it && it[k];
@@ -44,6 +48,7 @@
     }
     return "";
   };
+
   const pickUrl = (it)=> pick(it, ["url","link","href","path"]);
   const pickThumb = (it)=> pick(it, ["thumb","thumbnail","image","icon","photo","img","cover","thumbnailUrl","coverUrl"]);
 
@@ -67,18 +72,15 @@
     return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
   }
 
-  // __IMG_ONERROR_PATCH_V1__: broken image -> dummy svg
   function bindImgFallback(img, idx){
     if (!img) return;
     img.addEventListener('error', ()=>{
       try{
-        // prevent infinite loop
         img.onerror = null;
         img.src = safeDummySvg(idx);
-      }catch(_){/*noop*/}
+      }catch(_){}
     }, { once:true });
   }
-
 
   function createDesktopBox(i, href, imgSrc, title, trackId){
     const box = document.createElement("div");
@@ -109,7 +111,6 @@
     return box;
   }
 
-  // ✅ mobile rail은 반드시 .card 구조
   function createMobileCard(i, href, imgSrc, title, trackId){
     const card = document.createElement("div");
     card.className = "card";
@@ -139,27 +140,27 @@
     return card;
   }
 
- function ensureNotEmptyDesktop(container){
-  if (!container) return;
+  function ensureDummyDesktop(container){
+    if (!container) return;
+    // ✅ 기존 HTML 더미가 있으면 손대지 않음 (ad-box가 하나라도 있으면 OK)
+    if (container.querySelector && container.querySelector(".ad-box")) return;
+    // ✅ 완전 비어있을 때만 100개 주입
+    if (container.children && container.children.length > 0) return;
 
-  // ✅ children.length 기준 금지 → 실제 슬롯(.ad-box) 존재 여부로 판단
-  if (container.querySelector && container.querySelector(".ad-box")) return;
+    const frag = document.createDocumentFragment();
+    for (let i=1;i<=LIMIT;i++) frag.appendChild(createDesktopBox(i));
+    container.appendChild(frag);
+  }
 
-  const frag = document.createDocumentFragment();
-  for (let i=1;i<=LIMIT;i++) frag.appendChild(createDesktopBox(i));
-  container.appendChild(frag);
-}
+  function ensureDummyMobile(container){
+    if (!container) return;
+    if (container.querySelector && container.querySelector(".card")) return;
+    if (container.children && container.children.length > 0) return;
 
- function ensureNotEmptyMobile(container){
-  if (!container) return;
-
-  // ✅ children.length 기준 금지 → 실제 슬롯(.card) 존재 여부로 판단
-  if (container.querySelector && container.querySelector(".card")) return;
-
-  const frag = document.createDocumentFragment();
-  for (let i=1;i<=LIMIT;i++) frag.appendChild(createMobileCard(i));
-  container.appendChild(frag);
-}
+    const frag = document.createDocumentFragment();
+    for (let i=1;i<=LIMIT;i++) frag.appendChild(createMobileCard(i));
+    container.appendChild(frag);
+  }
 
   async function fetchJson(url){
     try{
@@ -182,26 +183,6 @@
     return [];
   }
 
-  function getDesktopContainers(){
-    const els = [];
-    for (const sel of DESKTOP_TARGETS){
-      const el = document.querySelector(sel);
-      if (el) els.push(el);
-    }
-    return Array.from(new Set(els));
-  }
-
-  function attachGuard(container, ensureFn){
-    if (!container || container.dataset.guardBound === "1") return;
-    container.dataset.guardBound = "1";
-    const mo = new MutationObserver(()=> {
-      if (!container.children || container.children.length === 0){
-        ensureFn(container);
-      }
-    });
-    mo.observe(container, { childList:true, subtree:false });
-  }
-
   function normalizeValid(items){
     const out = [];
     for (const it of (items || [])){
@@ -218,75 +199,72 @@
     return out;
   }
 
-
-   function expandToLimit(list){
+  function expandToLimit(list){
     const src = Array.isArray(list) ? list : [];
     if (!src.length) return [];
     const out = [];
-    for (let i = 0; i < LIMIT; i++){
-      out.push(src[i % src.length]); // ✅ 1개 이상이면 100까지 순환 확장
-    }
+    for (let i = 0; i < LIMIT; i++) out.push(src[i % src.length]);
     return out;
   }
 
   function renderDesktop(container, normalized){
-  if (!container) return;
+    if (!container) return;
 
-  // ✅ 유효 데이터 0이면: 기존 HTML 더미 절대 건드리지 않음
-  if (!normalized || !normalized.length){
-    return;
+    // ✅ 데이터 0: 기존 더미/DOM 유지, 단 "완전 비어있을 때만" 안전 더미 주입
+    if (!normalized || !normalized.length){
+      ensureDummyDesktop(container);
+      return;
+    }
+
+    const filled = expandToLimit(normalized);
+    if (!filled.length) { ensureDummyDesktop(container); return; }
+
+    const frag = document.createDocumentFragment();
+    let i = 1;
+    for (const it of filled){
+      frag.appendChild(createDesktopBox(i, it.url, it.thumb, it.title, it.id));
+      i++;
+    }
+
+    // ✅ 데이터가 있을 때만 교체
+    container.innerHTML = "";
+    container.appendChild(frag);
   }
 
-  const filled = expandToLimit(normalized);
+  function renderMobile(container, normalized){
+    if (!container) return;
 
-  // ✅ filled가 0이면(방어): 절대 건드리지 않음
-  if (!filled.length) return;
+    if (!normalized || !normalized.length){
+      ensureDummyMobile(container);
+      return;
+    }
 
-  const frag = document.createDocumentFragment();
-  let i = 1;
-  for (const it of filled){
-    frag.appendChild(createDesktopBox(i, it.url, it.thumb, it.title, it.id));
-    i++;
+    const filled = expandToLimit(normalized);
+    if (!filled.length) { ensureDummyMobile(container); return; }
+
+    const frag = document.createDocumentFragment();
+    let i = 1;
+    for (const it of filled){
+      frag.appendChild(createMobileCard(i, it.url, it.thumb, it.title, it.id));
+      i++;
+    }
+
+    container.innerHTML = "";
+    container.appendChild(frag);
   }
-
-  // ✅ 유효 데이터가 있을 때만 갈아엎기
-  container.innerHTML = "";
-  container.appendChild(frag);
-}
-
- function renderMobile(container, normalized){
-  if (!container) return;
-
-  // ✅ 유효 데이터 0이면: 기존 HTML 더미 절대 건드리지 않음
-  if (!normalized || !normalized.length){
-    return;
-  }
-
-  const filled = expandToLimit(normalized);
-  if (!filled.length) return;
-
-  const frag = document.createDocumentFragment();
-  let i = 1;
-  for (const it of filled){
-    frag.appendChild(createMobileCard(i, it.url, it.thumb, it.title, it.id));
-    i++;
-  }
-
-  container.innerHTML = "";
-  container.appendChild(frag);
-}
 
   async function run(){
-    const desktops = getDesktopContainers();
+    const desktop = document.querySelector(DESKTOP_SELECTOR);
     const mobile = document.getElementById(MOBILE_LIST_ID);
 
-    desktops.forEach(c => { attachGuard(c, ensureNotEmptyDesktop); ensureNotEmptyDesktop(c); });
-    if (mobile) { attachGuard(mobile, ensureNotEmptyMobile); ensureNotEmptyMobile(mobile); }
+    // ✅ 초기 상태: 비어있으면만 더미 주입(기존 더미가 있으면 건드리지 않음)
+    if (desktop) ensureDummyDesktop(desktop);
+    if (mobile) ensureDummyMobile(mobile);
 
     const items = await loadItems();
     const normalized = normalizeValid(items);
 
-    desktops.forEach(c => renderDesktop(c, normalized));
+    if (desktop) renderDesktop(desktop, normalized);
     if (mobile) renderMobile(mobile, normalized);
   }
 
