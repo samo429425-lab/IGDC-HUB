@@ -139,21 +139,27 @@
     return card;
   }
 
-  function ensureNotEmptyDesktop(container){
-    if (!container) return;
-    if (container.children && container.children.length) return;
-    const frag = document.createDocumentFragment();
-    for (let i=1;i<=LIMIT;i++) frag.appendChild(createDesktopBox(i));
-    container.appendChild(frag);
-  }
+ function ensureNotEmptyDesktop(container){
+  if (!container) return;
 
-  function ensureNotEmptyMobile(container){
-    if (!container) return;
-    if (container.children && container.children.length) return;
-    const frag = document.createDocumentFragment();
-    for (let i=1;i<=LIMIT;i++) frag.appendChild(createMobileCard(i));
-    container.appendChild(frag);
-  }
+  // ✅ children.length 기준 금지 → 실제 슬롯(.ad-box) 존재 여부로 판단
+  if (container.querySelector && container.querySelector(".ad-box")) return;
+
+  const frag = document.createDocumentFragment();
+  for (let i=1;i<=LIMIT;i++) frag.appendChild(createDesktopBox(i));
+  container.appendChild(frag);
+}
+
+ function ensureNotEmptyMobile(container){
+  if (!container) return;
+
+  // ✅ children.length 기준 금지 → 실제 슬롯(.card) 존재 여부로 판단
+  if (container.querySelector && container.querySelector(".card")) return;
+
+  const frag = document.createDocumentFragment();
+  for (let i=1;i<=LIMIT;i++) frag.appendChild(createMobileCard(i));
+  container.appendChild(frag);
+}
 
   async function fetchJson(url){
     try{
@@ -224,38 +230,40 @@
   }
 
   function renderDesktop(container, normalized){
-    if (!container) return;
-
-    // ✅ 실데이터 0이면 더미 유지
-    if (!normalized || !normalized.length){
-      ensureNotEmptyDesktop(container);
-      return;
-    }
-
-    const filled = expandToLimit(normalized);
-
-    const frag = document.createDocumentFragment();
-    let i = 1;
-    for (const it of filled){
-      frag.appendChild(createDesktopBox(i, it.url, it.thumb, it.title, it.id));
-      i++;
-    }
-
-    container.innerHTML = "";
-    container.appendChild(frag);
-  }
-
-  function renderMobile(container, normalized){
   if (!container) return;
 
-  // ✅ 실데이터 0이면 더미 유지
+  // ✅ 유효 데이터 0이면: 기존 HTML 더미 절대 건드리지 않음
   if (!normalized || !normalized.length){
-    ensureNotEmptyMobile(container);
     return;
   }
 
-  // ✅ 1개 이상이면 100개까지 순환 확장
   const filled = expandToLimit(normalized);
+
+  // ✅ filled가 0이면(방어): 절대 건드리지 않음
+  if (!filled.length) return;
+
+  const frag = document.createDocumentFragment();
+  let i = 1;
+  for (const it of filled){
+    frag.appendChild(createDesktopBox(i, it.url, it.thumb, it.title, it.id));
+    i++;
+  }
+
+  // ✅ 유효 데이터가 있을 때만 갈아엎기
+  container.innerHTML = "";
+  container.appendChild(frag);
+}
+
+ function renderMobile(container, normalized){
+  if (!container) return;
+
+  // ✅ 유효 데이터 0이면: 기존 HTML 더미 절대 건드리지 않음
+  if (!normalized || !normalized.length){
+    return;
+  }
+
+  const filled = expandToLimit(normalized);
+  if (!filled.length) return;
 
   const frag = document.createDocumentFragment();
   let i = 1;
