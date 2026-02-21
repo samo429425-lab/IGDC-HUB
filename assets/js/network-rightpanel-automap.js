@@ -207,51 +207,51 @@
     return out;
   }
 
-  function renderDesktop(container, normalized){
-    if (!container) return;
+ function renderDesktop(container, normalized){
+  if (!container) return;
 
-    // ✅ 데이터 0: 기존 더미/DOM 유지, 단 "완전 비어있을 때만" 안전 더미 주입
-    if (!normalized || !normalized.length){
-      ensureDummyDesktop(container);
-      return;
-    }
-
-    const filled = expandToLimit(normalized);
-    if (!filled.length) { ensureDummyDesktop(container); return; }
-
-    const frag = document.createDocumentFragment();
-    let i = 1;
-    for (const it of filled){
-      frag.appendChild(createDesktopBox(i, it.url, it.thumb, it.title, it.id));
-      i++;
-    }
-
-    // ✅ 데이터가 있을 때만 교체
-    container.innerHTML = "";
-    container.appendChild(frag);
+  // ✅ 실데이터 0이면: 기존 더미 DOM을 절대 삭제하지 않음 (비어있으면 더미 복구)
+  if (!normalized || !normalized.length){
+    ensureNotEmptyDesktop(container);   // container가 비어있을 때만 채움
+    return;
   }
+
+  // ✅ 1개 이상이면 100개까지 순환 확장 후, 그때만 교체 렌더(더미 제거 포함)
+  const filled = expandToLimit(normalized);
+
+  const frag = document.createDocumentFragment();
+  let i = 1;
+  for (const it of filled){
+    frag.appendChild(createDesktopBox(i, it.url, it.thumb, it.title, it.id));
+    i++;
+  }
+
+  container.innerHTML = "";
+  container.appendChild(frag);
+}
 
   function renderMobile(container, normalized){
-    if (!container) return;
+  if (!container) return;
 
-    if (!normalized || !normalized.length){
-      ensureDummyMobile(container);
-      return;
-    }
-
-    const filled = expandToLimit(normalized);
-    if (!filled.length) { ensureDummyMobile(container); return; }
-
-    const frag = document.createDocumentFragment();
-    let i = 1;
-    for (const it of filled){
-      frag.appendChild(createMobileCard(i, it.url, it.thumb, it.title, it.id));
-      i++;
-    }
-
-    container.innerHTML = "";
-    container.appendChild(frag);
+  // ✅ 실데이터 0이면: 기존 더미 DOM을 절대 삭제하지 않음 (비어있으면 더미 복구)
+  if (!normalized || !normalized.length){
+    ensureNotEmptyMobile(container);    // container가 비어있을 때만 채움
+    return;
   }
+
+  // ✅ 1개 이상이면 100개까지 순환 확장 후, 그때만 교체 렌더(더미 제거 포함)
+  const filled = expandToLimit(normalized);
+
+  const frag = document.createDocumentFragment();
+  let i = 1;
+  for (const it of filled){
+    frag.appendChild(createMobileCard(i, it.url, it.thumb, it.title, it.id));
+    i++;
+  }
+
+  container.innerHTML = "";
+  container.appendChild(frag);
+}
 
   async function run(){
     const desktop = document.querySelector(DESKTOP_SELECTOR);
