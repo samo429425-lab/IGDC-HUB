@@ -212,43 +212,61 @@
     return out;
   }
 
+
+   function expandToLimit(list){
+    const src = Array.isArray(list) ? list : [];
+    if (!src.length) return [];
+    const out = [];
+    for (let i = 0; i < LIMIT; i++){
+      out.push(src[i % src.length]); // ✅ 1개 이상이면 100까지 순환 확장
+    }
+    return out;
+  }
+
   function renderDesktop(container, normalized){
     if (!container) return;
-    if (!normalized.length){
+
+    // ✅ 실데이터 0이면 더미 유지
+    if (!normalized || !normalized.length){
       ensureNotEmptyDesktop(container);
       return;
     }
+
+    const filled = expandToLimit(normalized);
+
     const frag = document.createDocumentFragment();
-    let i=1;
-    for (const it of normalized){
+    let i = 1;
+    for (const it of filled){
       frag.appendChild(createDesktopBox(i, it.url, it.thumb, it.title, it.id));
       i++;
     }
-    for (; i<=LIMIT; i++){
-      frag.appendChild(createDesktopBox(i));
-    }
+
     container.innerHTML = "";
     container.appendChild(frag);
   }
 
   function renderMobile(container, normalized){
-    if (!container) return;
-    if (!normalized.length){
-      ensureNotEmptyMobile(container);
-      return;
-    }
-    const frag = document.createDocumentFragment();
-    let i=1;
-    for (const it of normalized){
-      frag.appendChild(createMobileCard(i, it.url, it.thumb, it.title, it.id));
-      i++;
-    }
-    for (; i<=LIMIT; i++){
-      frag.appendChild(createMobileCard(i));
-    }
-    container.innerHTML = "";
-    container.appendChild(frag);
+  if (!container) return;
+
+  // ✅ 실데이터 0이면 더미 유지
+  if (!normalized || !normalized.length){
+    ensureNotEmptyMobile(container);
+    return;
   }
+
+  // ✅ 1개 이상이면 100개까지 순환 확장
+  const filled = expandToLimit(normalized);
+
+  const frag = document.createDocumentFragment();
+  let i = 1;
+  for (const it of filled){
+    frag.appendChild(createMobileCard(i, it.url, it.thumb, it.title, it.id));
+    i++;
+  }
+
+  container.innerHTML = "";
+  container.appendChild(frag);
+}
 
   async function run(){
     const desktops = getDesktopContainers();
