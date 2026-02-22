@@ -1,34 +1,34 @@
 /**
- * network-rightpanel-automap.js (v9)
- * 네트워크 허브(파일명: networkhub.html, 타이틀은 마켓허브일 수 있음) 전용.
+ * network-rightpanel-automap.js (v2) - NetworkHub Right-Only
  *
- * 규칙:
- * - 유효 데이터(normalized) >= 1 : 100개까지 순환 확장 → 렌더(기존 더미/DOM 교체)
- * - 유효 데이터(normalized) == 0 : 기존 HTML 더미는 절대 건드리지 않음
+ * 원칙(홈/디스트리뷰션 안정 패턴 참고, 코드 이식 아님):
+ * - 유효 데이터 >= 1 : 100개까지 순환 확장 → 렌더(그때만 innerHTML 교체)
+ * - 유효 데이터 == 0 : 기존 HTML 더미는 절대 건드리지 않음
  *   단, 대상 컨테이너가 "완전 비어있을 때만" 안전 더미 100개 주입
  *
- * 타겟:
- * - Desktop: #rightAutoPanel  (slot: .ad-box)
- * - Mobile : #nh-mobile-rail-list (slot: .card)
+ * 추가 안정화:
+ * - 외부 스크립트가 DOM을 비우면(충돌) : MutationObserver로 자동 복구
+ *   - 캐시된 filled가 있으면 다시 렌더
+ *   - 없으면 더미만 복구
  */
+
 (function(){
   "use strict";
   if (typeof document === "undefined") return;
 
-  // ✅ 페이지 가드: 파일명 기반(타이틀 무관) + 모바일 레일 존재 기반
+  // 실행 가드: 파일명(networkhub.html) 또는 핵심 앵커 존재
   const path = (location && location.pathname) ? String(location.pathname) : "";
   const isNetworkHubPage =
     /(^|\/)networkhub\.html$/i.test(path) ||
-    !!document.getElementById("nh-mobile-rail-list");
+    (!!document.getElementById("nh-mobile-rail-list") && !!document.querySelector("#rightAutoPanel"));
 
   if (!isNetworkHubPage) return;
 
-  if (window.__NETWORK_AUTOMAP_V9__) return;
-  window.__NETWORK_AUTOMAP_V9__ = true;
+  if (window.__NETWORK_AUTOMAP_V2__) return;
+  window.__NETWORK_AUTOMAP_V2__ = true;
 
   const LIMIT = 100;
   const FEED_URL = "/.netlify/functions/feed-network?limit=100";
-
   const SNAPSHOT_URLS = [
     "/data/networkhub-snapshot.json",
     "/networkhub-snapshot.json",
@@ -40,7 +40,6 @@
   const MOBILE_LIST_ID = "nh-mobile-rail-list";
 
   const toStr = (x)=> (x==null ? "" : String(x));
-
   const pick = (it, keys)=> {
     for (const k of keys){
       const v = it && it[k];
@@ -48,7 +47,6 @@
     }
     return "";
   };
-
   const pickUrl = (it)=> pick(it, ["url","link","href","path"]);
   const pickThumb = (it)=> pick(it, ["thumb","thumbnail","image","icon","photo","img","cover","thumbnailUrl","coverUrl"]);
 
@@ -85,7 +83,6 @@
   function createDesktopBox(i, href, imgSrc, title, trackId){
     const box = document.createElement("div");
     box.className = "ad-box";
-    if (href && imgSrc) box.dataset.real = "1";
 
     const a = document.createElement("a");
     a.className = "thumb-link";
@@ -114,7 +111,6 @@
   function createMobileCard(i, href, imgSrc, title, trackId){
     const card = document.createElement("div");
     card.className = "card";
-    if (href && imgSrc) card.dataset.real = "1";
 
     const a = document.createElement("a");
     a.className = "thumb-link";
@@ -140,11 +136,18 @@
     return card;
   }
 
+  function hasSlotDesktop(container){
+    return !!(container && container.querySelector && container.querySelector(".ad-box"));
+  }
+  function hasSlotMobile(container){
+    return !!(container && container.querySelector && container.querySelector(".card"));
+  }
+
   function ensureDummyDesktop(container){
     if (!container) return;
-    // ✅ 기존 HTML 더미가 있으면 손대지 않음 (ad-box가 하나라도 있으면 OK)
-    if (container.querySelector && container.querySelector(".ad-box")) return;
-    // ✅ 완전 비어있을 때만 100개 주입
+    // 기존 더미가 있으면 건드리지 않음
+    if (hasSlotDesktop(container)) return;
+    // 랩퍼(타이틀 등)만 있고 슬롯이 없을 수도 있음 → 완전 비었을 때만 주입
     if (container.children && container.children.length > 0) return;
 
     const frag = document.createDocumentFragment();
@@ -154,7 +157,7 @@
 
   function ensureDummyMobile(container){
     if (!container) return;
-    if (container.querySelector && container.querySelector(".card")) return;
+    if (hasSlotMobile(container)) return;
     if (container.children && container.children.length > 0) return;
 
     const frag = document.createDocumentFragment();
@@ -173,11 +176,13 @@
   }
 
   async function loadItems(){
-    const f = await fetchJson(FEED_URL);
+    // feed 우선
+    const f = await fetchJson(FEED_URL + "&_t=" + Date.now());
     if (f && Array.isArray(f.items) && f.items.length) return f.items;
 
+    // snapshot fallback
     for (const u of SNAPSHOT_URLS){
-      const j = await fetchJson(u);
+      const j = await fetchJson(u + "?_t=" + Date.now());
       if (j && Array.isArray(j.items) && j.items.length) return j.items;
     }
     return [];
@@ -203,63 +208,103 @@
     const src = Array.isArray(list) ? list : [];
     if (!src.length) return [];
     const out = [];
-    for (let i = 0; i < LIMIT; i++) out.push(src[i % src.length]);
+    for (let i=0;i<LIMIT;i++) out.push(src[i % src.length]);
     return out;
   }
 
- function renderDesktop(container, normalized){
-  if (!container) return;
+  // 캐시(충돌 복구용)
+  let _lastFilled = null;
 
-  // ✅ 실데이터 0이면: 기존 더미 DOM을 절대 삭제하지 않음 (비어있으면 더미 복구)
-  if (!normalized || !normalized.length){
-    ensureNotEmptyDesktop(container);   // container가 비어있을 때만 채움
-    return;
+  function renderDesktop(container, normalized){
+    if (!container) return;
+
+    if (!normalized || !normalized.length){
+      // 데이터 0이면: 기존 DOM 유지, 비었을 때만 더미 복구
+      ensureDummyDesktop(container);
+      return;
+    }
+
+    const filled = expandToLimit(normalized);
+    if (!filled.length){
+      ensureDummyDesktop(container);
+      return;
+    }
+
+    _lastFilled = filled;
+
+    const frag = document.createDocumentFragment();
+    let i = 1;
+    for (const it of filled){
+      frag.appendChild(createDesktopBox(i, it.url, it.thumb, it.title, it.id));
+      i++;
+    }
+
+    container.innerHTML = "";
+    container.appendChild(frag);
   }
-
-  // ✅ 1개 이상이면 100개까지 순환 확장 후, 그때만 교체 렌더(더미 제거 포함)
-  const filled = expandToLimit(normalized);
-
-  const frag = document.createDocumentFragment();
-  let i = 1;
-  for (const it of filled){
-    frag.appendChild(createDesktopBox(i, it.url, it.thumb, it.title, it.id));
-    i++;
-  }
-
-  container.innerHTML = "";
-  container.appendChild(frag);
-}
 
   function renderMobile(container, normalized){
-  if (!container) return;
+    if (!container) return;
 
-  // ✅ 실데이터 0이면: 기존 더미 DOM을 절대 삭제하지 않음 (비어있으면 더미 복구)
-  if (!normalized || !normalized.length){
-    ensureNotEmptyMobile(container);    // container가 비어있을 때만 채움
-    return;
+    if (!normalized || !normalized.length){
+      ensureDummyMobile(container);
+      return;
+    }
+
+    const filled = expandToLimit(normalized);
+    if (!filled.length){
+      ensureDummyMobile(container);
+      return;
+    }
+
+    _lastFilled = filled;
+
+    const frag = document.createDocumentFragment();
+    let i = 1;
+    for (const it of filled){
+      frag.appendChild(createMobileCard(i, it.url, it.thumb, it.title, it.id));
+      i++;
+    }
+
+    container.innerHTML = "";
+    container.appendChild(frag);
   }
 
-  // ✅ 1개 이상이면 100개까지 순환 확장 후, 그때만 교체 렌더(더미 제거 포함)
-  const filled = expandToLimit(normalized);
+  function attachRecovery(container, kind){
+    if (!container || container.dataset.v2Recovery === "1") return;
+    container.dataset.v2Recovery = "1";
 
-  const frag = document.createDocumentFragment();
-  let i = 1;
-  for (const it of filled){
-    frag.appendChild(createMobileCard(i, it.url, it.thumb, it.title, it.id));
-    i++;
+    const mo = new MutationObserver(()=> {
+      // 슬롯이 0개가 되면 복구 시도
+      const slotOk = (kind === "desktop") ? hasSlotDesktop(container) : hasSlotMobile(container);
+      if (slotOk) return;
+
+      // 데이터 캐시가 있으면 다시 렌더
+      if (_lastFilled && _lastFilled.length){
+        const normalized = _lastFilled;
+        if (kind === "desktop") renderDesktop(container, normalized);
+        else renderMobile(container, normalized);
+        return;
+      }
+
+      // 캐시도 없으면 더미만 복구
+      if (kind === "desktop") ensureDummyDesktop(container);
+      else ensureDummyMobile(container);
+    });
+
+    mo.observe(container, { childList:true, subtree:false });
   }
-
-  container.innerHTML = "";
-  container.appendChild(frag);
-}
 
   async function run(){
     const desktop = document.querySelector(DESKTOP_SELECTOR);
     const mobile = document.getElementById(MOBILE_LIST_ID);
 
-    // ✅ 초기 상태: 비어있으면만 더미 주입(기존 더미가 있으면 건드리지 않음)
+    // 초기: 완전 비었을 때만 더미(기존 HTML 더미가 있으면 그대로 둠)
     if (desktop) ensureDummyDesktop(desktop);
     if (mobile) ensureDummyMobile(mobile);
+
+    if (desktop) attachRecovery(desktop, "desktop");
+    if (mobile) attachRecovery(mobile, "mobile");
 
     const items = await loadItems();
     const normalized = normalizeValid(items);
