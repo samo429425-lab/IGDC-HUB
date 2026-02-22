@@ -1416,6 +1416,7 @@ window.addEventListener("message",function(ev){
   try{if(ev&&ev.data&&ev.data.type==="IGTC_OPEN_QNA"&&typeof IGDC_QA.open==="function"){IGDC_QA.open();}}catch(e){}
 });
 </script>
+
 <script id="nh-mobile-rail-mount">
 (function(){
   const isMobile = matchMedia('(max-width:1100px)').matches || matchMedia('(pointer:coarse)').matches;
@@ -1423,89 +1424,49 @@ window.addEventListener("message",function(ev){
   const mobileSec = document.getElementById('nh-mobile-rail-list');
 
   // 1) Mobile: clone right rail cards to bottom (max 15)
+  // ✅ 핵심: 우측 레일에 복제할 "실 카드"가 1개도 없으면, 기존 더미(HTML)를 절대 지우지 않는다.
   if(isMobile && rail && mobileSec){
-    const items = Array.from(rail.querySelectorAll('.ad-box a, .ad-box img, .ad-box'));
+    const items = Array.from(rail.querySelectorAll('.ad-box'));
     const take = Math.min(15, items.length || 0);
+
+    if(take <= 0){
+      // 더미 유지 (아무것도 안 함)
+      return;
+    }
+
     mobileSec.innerHTML = '';
     for(let i=0;i<take;i++){
       const box = items[i];
-      const a = box.tagName==='A' ? box : (box.querySelector && box.querySelector('a'));
-      const img = (box.querySelector && box.querySelector('img')) || (box.tagName==='IMG' ? box : null);
+      const a = box.querySelector && box.querySelector('a');
+      const img = box.querySelector && box.querySelector('img');
       const href = a ? a.getAttribute('href') : '#';
-      const src  = img ? img.getAttribute('src') : (box.getAttribute && box.getAttribute('src'));
-      const card = document.createElement('a');
+      const src  = img ? img.getAttribute('src') : '';
+
+      // 기존 모바일 카드 스타일을 망가뜨리지 않게 "가벼운" 카드로 복제
+      const card = document.createElement('div');
       card.className = 'card';
-      card.href = href || '#';
-      card.target = '_blank'; card.rel = 'noopener';
-      if(src){
-        const im = document.createElement('img');
-        im.src = src;
-        im.loading='lazy'; im.decoding='async';
-        im.style.width='100%'; im.style.height='auto'; im.style.objectFit='cover';
-        card.appendChild(im);
+
+      const link = document.createElement('a');
+      link.href = href || '#';
+      if(href && href !== '#'){
+        link.target = '_blank';
+        link.rel = 'noopener';
       }else{
-        card.textContent = (a && a.textContent) || '상품';
-        card.style.display='block'; card.style.padding='20px'; card.style.background='#fff';
+        link.tabIndex = -1;
+        link.setAttribute('aria-hidden','true');
       }
+
+      const im = document.createElement('img');
+      if(src) im.src = src;
+      im.alt = 'thumb';
+      im.loading = 'lazy';
+      im.decoding = 'async';
+
+      link.appendChild(im);
+      card.appendChild(link);
       mobileSec.appendChild(card);
     }
   }
-
-  // 2) Automap: replace dummies with feed (filters incl. harmful content)
-  function blocked(c){
-    const bad=[/도박|베팅|카지노|바카라|토토|먹튀/i,/성매매|성인용|19\+|야동|AV|porn|sex/i,/마약|대마|코카인|필로폰|스테로이드/i,/총기|무기거래|테러/i,/보이스피싱|폰테크|작전주|묻지마 코인|러그풀|scam/i];
-    const t=[c.title,c.brand,c.desc,c.url].filter(Boolean).join(' ');
-    return bad.some(rx=>rx.test(t)) || !c.url || !c.thumb;
-  }
-  function cardHTML(c){
-    const u = c.url || '#';
-    return `<a class="card" href="${u}" target="_blank" rel="noopener">
-      <img src="${c.thumb}" alt="${(c.title||'상품').replace(/\"/g,'')}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;display:block">
-    </a>`;
-  }
-
-  /* ✅ FIX: do NOT clear rail/mobile unless we have valid cards */
-  function replaceWithFeed(rows){
-    const railBox = document.querySelector('.right-rail .ad-panel, .right-panel .ad-panel, .ad-panel');
-    const mobile = document.getElementById('nh-mobile-rail-list');
-
-    const cards=[];
-    (rows||[]).forEach(r => (r.items||r.cards||[]).forEach(c=>{ if(!blocked(c)) cards.push(c); }));
-    const take = Math.min(cards.length, 15);
-
-    // 핵심: 피드가 0개면 기존(더미/기존맵핑) DOM을 유지
-    if(!take) return;
-
-    if(mobile) mobile.innerHTML='';
-    if(railBox) railBox.innerHTML='';
-
-    for(let i=0;i<take;i++){
-      const c = cards[i];
-      if(mobile) mobile.insertAdjacentHTML('beforeend', cardHTML(c));
-      if(railBox){
-        const b=document.createElement('div');
-        b.className='ad-box';
-        b.innerHTML=cardHTML(c);
-        railBox.appendChild(b);
-      }
-    }
-  }
-
-  // Try to load feed automatically (optional)
-  (async function(){
-    const tries=[]; // disabled: prevent cross-page mixed feed injection
-    for(const u of tries){
-      try{
-        const r=await fetch(u,{cache:'no-cache'});
-        if(r.ok){
-          const j=await r.json();
-          const rows = j.rows ? j.rows : (j.items||j.cards ? [{items:(j.items||j.cards)}] : []);
-          replaceWithFeed(rows);
-          break;
-        }
-      }catch(e){}
-    }
-  })();
 })();
 </script>
 
