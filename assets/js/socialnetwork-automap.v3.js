@@ -1,194 +1,382 @@
+
 'use strict';
 /**
- * socialnetwork-automap.v4.js
- * A-Standard: HTML-first order, Snapshot/Feed data, NO layout-breaking DOM ops.
- * - 9 platform sections: fill ONLY their own [data-psom-key] containers (in HTML order)
- * - Right panel (10th): delegate to window.__IGDC_RIGHTPANEL_RENDER (HTML owns mobile+desktop rail)
- * - No global [data-psom-key] sweeping beyond the social page containers
- * - No container.innerHTML='' on layout wrappers; ONLY on the exact section grid container
+ * socialnetwork-automap.core.js
+ * CORE Social AutoMap Engine (10Y+ Stable Edition)
+ * Author: IGDC / MARU
+ * Purpose: Snapshot/Feed driven, fail-safe, monetization-ready automap
  */
 
 (function(){
 
-  /* ================= CONFIG ================= */
-  const FEED_URL = '/.netlify/functions/feed-social?page=socialnetwork';
-  const SNAPSHOT_FALLBACK_URL = '/data/social.snapshot.json';
-  const TIMEOUT_MS = 12000;
+/* ================= CONFIG ================= */
 
-  /* ================= UTILS ================= */
-  const qs  = (s, r=document) => r.querySelector(s);
-  const qsa = (s, r=document) => Array.from(r.querySelectorAll(s));
+const FEED_URL = '/.netlify/functions/feed-social?page=socialnetwork';
+const SNAPSHOT_URL = '/data/social.snapshot.json';
 
-  function withTimeout(promise, ms){
-    return Promise.race([
-      promise,
-      new Promise((_, rej)=> setTimeout(()=> rej(new Error('timeout')), ms))
-    ]);
+const MAX_ITEMS = 200;
+const BATCH_SIZE = 12;
+
+const SAFE_PLATFORMS = [
+  'youtube','tiktok','instagram','facebook',
+  'twitter','pinterest','reddit','wechat','weibo'
+];
+
+const DEBUG = false;
+
+/* ================= UTIL ================= */
+
+function log(){
+  if(DEBUG) console.log.apply(console, arguments);
+}
+
+function safeJSON(text){
+  try{ return JSON.parse(text); }
+  catch(e){ return null; }
+}
+
+function qs(sel, root){
+  return (root||document).querySelector(sel);
+}
+
+function qsa(sel, root){
+  return Array.prototype.slice.call((root||document).querySelectorAll(sel));
+}
+
+function pick(obj, keys){
+  for(const k of keys){
+    const v = obj && obj[k];
+    if(typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return '';
+}
+
+function nowISO(){
+  return new Date().toISOString();
+}
+
+/* ================= LOADERS ================= */
+
+async function loadSnapshot(){
+  try{
+    const r = await fetch(SNAPSHOT_URL, {cache:'no-store'});
+    if(!r.ok) return null;
+    return await r.json();
+  }catch(e){
+    return null;
+  }
+}
+
+async function loadFeed(lang){
+  let url = FEED_URL;
+  if(lang) url += '&lang=' + encodeURIComponent(lang);
+
+  try{
+    const r = await fetch(url, {cache:'no-store'});
+    if(!r.ok) return null;
+    return await r.json();
+  }catch(e){
+    return null;
+  }
+}
+
+/* ================= FILTER ================= */
+
+function isBlocked(item){
+
+  if(!item) return true;
+
+  const bad = [
+    /도박|베팅|카지노|바카라|토토/i,
+    /성인|야동|porn|sex|escort/i,
+    /마약|대마|코카인|필로폰/i,
+    /사기|스캠|scam|피싱/i
+  ];
+
+  const txt = [
+    item.title,
+    item.channel,
+    item.desc,
+    item.url
+  ].filter(Boolean).join(' ');
+
+  if(bad.some(r=>r.test(txt))) return true;
+
+  if(item.status && item.status !== 'live') return true;
+
+  if(!item.url || !item.thumb) return true;
+
+  if(item.platform && !SAFE_PLATFORMS.includes(item.platform)) return true;
+
+  return false;
+}
+
+/* ================= NORMALIZE ================= */
+
+function normalize(it, idx){
+
+  return {
+    id: it.id || ('sn-'+idx),
+    title: pick(it,['title','name','label','caption']) || 'Item',
+    url: pick(it,['url','href','link','path']) || '#',
+    thumb: pick(it,['thumb','image','img','thumbnail','poster','cover']),
+    channel: pick(it,['channel','author','owner']),
+    platform: it.platform || it.source || null,
+    priority: typeof it.priority === 'number' ? it.priority : 999999,
+    revenue: it.revenue === true,
+    signals: it.signals || null,
+    raw: it
+  };
+
+}
+
+/* ================= SCORE ================= */
+
+function score(item){
+
+  let s = 0;
+
+  if(item.revenue) s += 5000;
+
+  if(item.signals){
+    if(typeof item.signals.quality_score === 'number'){
+      s += item.signals.quality_score * 100;
+    }
+    if(typeof item.signals.trust_score === 'number'){
+      s += item.signals.trust_score * 100;
+    }
   }
 
-  async function fetchJSON(url){
-    const res = await withTimeout(fetch(url, { credentials:'same-origin' }), TIMEOUT_MS);
-    if(!res.ok) throw new Error('HTTP '+res.status);
-    return res.json();
+  if(item.raw && item.raw.engagement){
+    const e = item.raw.engagement;
+    s += (e.views||0)/100;
+    s += (e.likes||0)/10;
   }
 
-  function normalizeItem(it){
-    if(!it || typeof it !== 'object') return null;
+  s -= item.priority;
 
-    const title = (it.title || it.name || '').toString();
-    const url   = (it.url || it.link || '#').toString();
-    const thumb = (it.thumb || it.image || it.icon || '').toString();
+  return s;
+}
 
-    // keep placeholders but mark them
-    const type  = (it.type || '').toString();
+/* ================= RENDER ================= */
 
-    return {
-      id: it.id || '',
-      type,
-      title,
-      url,
-      thumb
-    };
-  }
+function makeCard(item){
 
-  function makeCard(item){
-    const a = document.createElement('a');
-    a.className = 'thumb-card';
-    a.href = item.url || '#';
-    a.target = '_blank';
-    a.rel = 'noopener';
+  const a = document.createElement('a');
+  a.className = 'thumb-card';
+  a.href = item.url;
+  a.target = '_blank';
+  a.rel = 'noopener';
 
-    const img = document.createElement('img');
-    img.className = 'thumb-media';
-    img.loading = 'lazy';
-    img.decoding = 'async';
-    if(item.thumb) img.src = item.thumb;
-    img.alt = item.title || '';
+  const img = document.createElement('img');
+  img.className = 'thumb-media';
+  img.loading = 'lazy';
+  img.decoding = 'async';
+  img.src = item.thumb;
+  img.alt = item.title || '';
 
-    const t = document.createElement('div');
-    t.className = 'thumb-title';
-    t.textContent = item.title || '';
+  const t = document.createElement('div');
+  t.className = 'thumb-title';
+  t.textContent = item.title;
 
-    a.appendChild(img);
-    a.appendChild(t);
-    return a;
-  }
+  a.appendChild(img);
+  a.appendChild(t);
 
-  function renderIntoGrid(gridEl, rawItems, limit){
-    if(!gridEl) return;
+  return a;
+}
 
-    // IMPORTANT: Only clear the grid element itself (NOT parents/wrappers)
-    gridEl.textContent = '';
 
-    const items = [];
-    for(const it of (rawItems || [])){
-      const n = normalizeItem(it);
-      if(!n) continue;
-      // If placeholder: keep only when there's nothing else
-      items.push(n);
-      if(limit && items.length >= limit) break;
+function render(container, items){
+
+  let idx = 0;
+  container.innerHTML = '';
+
+  function mount(){
+
+    const end = Math.min(idx + BATCH_SIZE, items.length);
+
+    const frag = document.createDocumentFragment();
+
+    for(let i=idx;i<end;i++){
+      frag.appendChild(makeCard(items[i]));
     }
 
-    // If all placeholders and no real content, still show placeholders (keeps UX stable)
-    const hasReal = items.some(x => x.url && x.url !== '#' && x.type !== 'placeholder');
-    const finalItems = hasReal ? items.filter(x => x.url && x.url !== '#' && x.type !== 'placeholder') : items;
+    container.appendChild(frag);
+    idx = end;
 
-    for(const it of finalItems){
-      gridEl.appendChild(makeCard(it));
+    if(idx < items.length){
+      observe();
     }
   }
 
-  function getHTMLOrderKeys(){
-    // HTML-first: use appearance order of section grids
-    return qsa('[data-psom-key]').map(el => (el.getAttribute('data-psom-key')||'').trim()).filter(Boolean);
+  let io = null;
+
+  function observe(){
+    if(!('IntersectionObserver' in window)) return;
+
+    if(io) io.disconnect();
+
+    io = new IntersectionObserver(function(ent){
+      ent.forEach(e=>{
+        if(e.isIntersecting){
+          io.disconnect();
+          mount();
+        }
+      });
+    }, {rootMargin:'600px'});
+
+    if(container.lastElementChild){
+      io.observe(container.lastElementChild);
+    }
   }
 
-  function getSectionContainersByKey(){
-    const map = {};
-    qsa('[data-psom-key]').forEach(el=>{
-      const k = (el.getAttribute('data-psom-key')||'').trim();
-      if(!k) return;
-      // first one wins (prevents accidental duplicates)
-      if(!map[k]) map[k] = el;
+  mount();
+}
+
+/* ================= CORE ================= */
+
+async function run(){
+
+  const boxes = qsa('[data-psom-key]');
+  if(!boxes.length) return;
+
+  const lang = (new URL(location.href)).searchParams.get('lang') || null;
+
+  const snapshot = await loadSnapshot();
+  const feed = await loadFeed(lang);
+
+  let sectionMap = Object.create(null);
+
+  /* snapshot priority */
+  if(snapshot && snapshot.pages){
+    if(snapshot.pages.social && snapshot.pages.social.sections){
+      sectionMap = snapshot.pages.social.sections || {};
+      log('[CORE] snapshot loaded (pages.social)');
+    }else if(snapshot.pages.socialnetwork && snapshot.pages.socialnetwork.sections){
+      sectionMap = snapshot.pages.socialnetwork.sections || {};
+      log('[CORE] snapshot loaded (pages.socialnetwork)');
+    }else{
+      // legacy shapes
+      sectionMap = snapshot.sections || snapshot.blocks || {};
+      if(sectionMap && typeof sectionMap === 'object'){
+        log('[CORE] snapshot loaded (legacy)');
+      }
+    }
+  }
+/* feed fallback */
+  if(feed && feed.grid && Array.isArray(feed.grid.sections)){
+    feed.grid.sections.forEach(s=>{
+      if(!sectionMap[s.id]){
+        sectionMap[s.id] = s.items || [];
+      }
     });
-    return map;
+    log('[CORE] feed merged');
   }
 
-  function extractSectionsFromFeed(payload){
-    // feed-social returns: { grid:{ sections:{ id: items[] } } }
-    const sections = payload && payload.grid && payload.grid.sections;
-    if(sections && typeof sections === 'object') return sections;
+
+  /* ================= KEY RESOLUTION ================= */
+  const ALIASES = {
+    // right panel legacy keys
+    'socialnetwork': ['socialnetwork-right','social-right','social_right','right-social','social-right-panel','socialnetwork_panel','socialnetworkpanel'],
+    // common misspellings / variants
+    'social-youtube': ['social_youtube','youtube','social-youtube-1','social-youtube-main'],
+    'social-tiktok': ['social_tiktok','tiktok','social-tiktok-main'],
+    'social-instagram': ['social_instagram','instagram','social-instagram-main'],
+    'social-facebook': ['social_facebook','facebook','social-facebook-main'],
+    'social-twitter': ['social_twitter','twitter','social-x','social-x-twitter'],
+    'social-pinterest': ['social_pinterest','pinterest'],
+    'social-reddit': ['social_reddit','reddit'],
+    'social-wechat': ['social_wechat','wechat'],
+    'social-weibo': ['social_weibo','weibo']
+  };
+
+  function normKey(k){
+    return String(k||'').trim();
+  }
+
+  function getSectionAny(k){
+    const key = normKey(k);
+    if(!key) return null;
+    if(sectionMap && Object.prototype.hasOwnProperty.call(sectionMap, key)) return sectionMap[key];
+    // try case-insensitive hit (snapshot keys are stable but defensive)
+    const lower = key.toLowerCase();
+    for(const kk in sectionMap){
+      if(String(kk).toLowerCase() === lower) return sectionMap[kk];
+    }
     return null;
   }
 
-  function extractSectionsFromSnapshot(payload){
-    // snapshot returns: { pages:{ social:{ sections:{ id: items[] } } } }
-    const sections = payload && payload.pages && payload.pages.social && payload.pages.social.sections;
-    if(sections && typeof sections === 'object') return sections;
-    return null;
-  }
+  function resolveSection(key){
+    const base = normKey(key);
+    let raw = getSectionAny(base);
+    if(raw) return raw;
 
-  function renderRightPanel(rightItems){
-    // HTML owns both desktop right rail + mobile 10th section
-    if(typeof window.__IGDC_RIGHTPANEL_RENDER === 'function'){
-      try{
-        window.__IGDC_RIGHTPANEL_RENDER(rightItems || []);
-      }catch(e){
-        console.warn('[SOCIAL][RIGHT] render failed:', e);
-      }
-    }
-  }
-
-  async function loadSections(){
-    // 1) Try feed (preferred)
-    try{
-      const feed = await fetchJSON(FEED_URL);
-      const sections = extractSectionsFromFeed(feed);
-      if(sections) return sections;
-    }catch(e){
-      console.warn('[SOCIAL] feed failed, fallback snapshot:', e && e.message || e);
+    // alias list
+    const list = (ALIASES[base] || []).map(normKey).filter(Boolean);
+    for(const k of list){
+      raw = getSectionAny(k);
+      if(raw) return raw;
     }
 
-    // 2) Fallback snapshot
-    try{
-      const snap = await fetchJSON(SNAPSHOT_FALLBACK_URL);
-      const sections = extractSectionsFromSnapshot(snap);
-      if(sections) return sections;
-    }catch(e){
-      console.warn('[SOCIAL] snapshot fallback failed:', e && e.message || e);
+    // last resort: if this is the right panel and we have no dedicated section,
+    // build it from top items of the main social sections.
+    if(base === 'socialnetwork'){
+      const blendFrom = ['social-instagram','social-youtube','social-tiktok','social-twitter','social-facebook'];
+      let blended = [];
+      blendFrom.forEach(k=>{
+        const sec = getSectionAny(k);
+        if(Array.isArray(sec)) blended = blended.concat(sec);
+      });
+      if(blended.length) return blended;
     }
 
-    return null;
+    return [];
   }
 
-  async function init(){
-    // Guard: only run on socialnetwork.html (rightRail exists)
-    if(!qs('#rightRail') && !qs('body')) return;
+  boxes.forEach(box=>{
 
-    const keysInOrder = getHTMLOrderKeys();
-    const containers = getSectionContainersByKey();
+    const key = box.getAttribute('data-psom-key');
+    if(!key) return;
 
-    const sections = await loadSections();
-    if(!sections){
-      console.warn('[SOCIAL] No sections data available');
-      return;
-    }
+    let raw = resolveSection(key);
 
-    // Render in HTML order. Right panel is delegated.
-    for(const key of keysInOrder){
-      if(key === 'socialnetwork'){
-        renderRightPanel(sections[key] || []);
-        continue;
-      }
-      const gridEl = containers[key];
-      renderIntoGrid(gridEl, sections[key] || [], 100);
-    }
+    if(!Array.isArray(raw)) raw = [];
+
+    let list = raw
+      .map(normalize)
+      .filter(it=>!isBlocked(it));
+
+    list.forEach(it=>{
+      it.__score = score(it);
+    });
+
+    list.sort((a,b)=> b.__score - a.__score);
+
+    list = list.slice(0, MAX_ITEMS);
+
+   if(!list.length){
+    box.innerHTML = '';
+    box.classList.remove('thumb-grid','thumb-list','thumb-scroller');
+    box.classList.add('empty-slot');
+    box.innerHTML = '<div class="empty-msg">콘텐츠 준비 중입니다.</div>';
+    box.style.padding = '12px';
+   return;
   }
 
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', init, { once:true });
-  }else{
-    init();
-  }
+
+    render(box, list);
+
+  });
+
+  log('[CORE] done', nowISO());
+}
+
+/* ================= BOOT ================= */
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', run, {once:true});
+}else{
+  run();
+}
 
 })();
