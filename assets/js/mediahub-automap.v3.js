@@ -117,18 +117,47 @@
   }
 
   function ensureAnchors(line){
-    // placeholder anchors first
-    let ph = qa('a[data-placeholder="true"]', line);
-    if(ph.length) return ph;
+    const key = (line && line.getAttribute) ? (line.getAttribute('data-psom-key') || '') : '';
+    const targets = { 'media-trending':50, 'media-movie':40, 'media-drama':40 };
+    const need = targets[key] || (key && key.startsWith('media-') && key !== 'media-hero' ? 30 : 0);
 
-    // if no placeholders, mark only anchors that look empty as placeholders
-    const anchors = qa('a', line);
-    anchors.forEach((a)=>{
-      const hasImg = !!q('img', a);
-      const hasText = (a.textContent || '').trim().length > 0;
-      if(!hasImg && !hasText){
+    // choose card container: if wrapper exists, placeholders are inside .scroll-content
+    const container = q(':scope > .scroll-content', line) || line;
+
+    // placeholder anchors first
+    let ph = qa('a[data-placeholder="true"]', container);
+    // if no placeholders, mark empty anchors as placeholders
+    if(ph.length === 0){
+      const anchors = qa('a', container);
+      anchors.forEach((a)=>{
+        const hasImg = !!q('img', a);
+        const hasText = (a.textContent || '').trim().length > 0;
+        if(!hasImg && !hasText){
+          a.setAttribute('data-placeholder','true');
+        }
+      });
+      ph = qa('a[data-placeholder="true"]', container);
+    }
+
+    // if still short, create placeholders up to need
+    if(need && ph.length < need){
+      const add = need - ph.length;
+      for(let i=0;i<add;i++){
+        const a = D.createElement('a');
+        a.className = 'card media-card';
         a.setAttribute('data-placeholder','true');
+        a.href = 'javascript:void(0)';
+        const t = D.createElement('div'); t.className='thumb ph';
+        const m = D.createElement('div'); m.className='meta'; m.textContent='Coming Soon';
+        a.appendChild(t); a.appendChild(m);
+        // append into container
+        container.appendChild(a);
       }
+      ph = qa('a[data-placeholder="true"]', container);
+    }
+
+    return ph;
+  }
     });
     ph = qa('a[data-placeholder="true"]', line);
     // as last resort: create placeholders equal to needed slot count if none exist
