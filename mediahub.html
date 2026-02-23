@@ -149,10 +149,21 @@ html, body {
   overflow-x:auto !important;
   overflow-y:hidden !important;
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-x;
 }
 .thumb-line, .scroll-content{
   overscroll-behavior-x: contain;
+}
+.scroll-content{
+  display:flex;
+  gap: var(--gap, 12px);
+  overflow-x:auto !important;
+  overflow-y:hidden !important;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior:smooth;
+  flex-wrap:nowrap;
+}
+.thumb-line{
+  overflow: visible !important;
 }
 .section-row .card, .scroll-wrapper .card{
   flex: 0 0 320px !important;   /* match width */
@@ -1228,6 +1239,29 @@ body {
   margin-right: 0 !important;
   padding-left: 10px !important;
   padding-right: 5px !important;
+}
+</style>
+
+
+<style id="igdc-10section-mobile-final-override">
+@media (max-width:1024px){
+  .thumb-line > .scroll-btn,
+  .thumb-line > .scroll-button,
+  .thumb-line > .btn-scroll-left,
+  .thumb-line > .btn-scroll-right,
+  .thumb-line > .scroll-btn.left,
+  .thumb-line > .scroll-btn.right{
+    display:none !important;
+    pointer-events:none !important;
+  }
+  .thumb-line{
+    margin-left:0 !important;
+    margin-right:0 !important;
+  }
+  .thumb-line > .scroll-content{
+    margin-left:0 !important;
+    margin-right:0 !important;
+  }
 }
 </style>
 
@@ -5100,6 +5134,52 @@ window.addEventListener("message",function(ev){
 <!-- Media Hub AutoMap (정본) -->
 <script defer src="/assets/js/mediahub-automap.v3.js"></script>
 <script defer src="/assets/js/placeholder-sweeper.js"></script>
+
+
+<script id="igdc-10section-slot-normalizer">
+(function(){
+  function qsa(sel, root){ return Array.prototype.slice.call((root||document).querySelectorAll(sel)); }
+  function clonePlaceholder(){
+    var a = document.createElement('a');
+    a.className = 'card media-card';
+    a.setAttribute('data-placeholder','true');
+    a.href = 'javascript:void(0)';
+    var t = document.createElement('div'); t.className='thumb ph';
+    var m = document.createElement('div'); m.className='meta'; m.textContent='Coming Soon';
+    a.appendChild(t); a.appendChild(m);
+    return a;
+  }
+  var targets = {
+    'media-trending': 50,
+    'media-movie': 40,
+    'media-drama': 40
+  };
+  function targetFor(key){
+    return targets[key] || 30;
+  }
+  function ensure(line){
+    if(!line) return;
+    var key = line.getAttribute('data-psom-key') || '';
+    if(!key || key === 'media-hero') return;
+    // 10 섹션만: media-* thumb-line만
+    if(key.indexOf('media-') !== 0) return;
+
+    // if wrapper exists, use scroll-content as container for cards; else line itself
+    var content = line.querySelector(':scope > .scroll-content') || line;
+    var ph = qsa('a[data-placeholder="true"]', content);
+    var need = targetFor(key);
+    var add = need - ph.length;
+    if(add <= 0) return;
+    for(var i=0;i<add;i++) content.appendChild(clonePlaceholder());
+  }
+
+  function run(){
+    qsa('.thumb-line[data-psom-key]').forEach(ensure);
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
+  else run();
+})();
+</script>
 
 </body>
 </html>
