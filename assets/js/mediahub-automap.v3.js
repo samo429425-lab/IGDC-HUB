@@ -9,15 +9,8 @@
  */
 (function(){
   'use strict';
-  function isMediaKey(k){ return typeof k==='string' && k.startsWith('media-'); }
-  function looksLikeMedia(it){
-    const url = it && (it.url || it.video || (it.media && it.media.url)) || '';
-    const thumb = it && (it.thumbnail || it.thumb || it.image) || '';
-    return !!(String(url).trim() || String(thumb).trim());
-  }
-
-  if (window.__MEDIAHUB_AUTOMAP__) return;
-  window.__MEDIAHUB_AUTOMAP__ = 'mediahub-automap.v5';
+  if (window.__MEDIAHUB_AUTOMAP_V5__) return;
+  window.__MEDIAHUB_AUTOMAP_V5__ = true;
 
   const D = document;
   const W = window;
@@ -90,7 +83,6 @@
   function slotsToItems(section){
     const slots = section && Array.isArray(section.slots) ? section.slots : [];
     return slots.map((slot)=>({
-	  slotId: slot.slotId ?? null,	
       id: slot.contentId || null,
       title: slot.title || '',
       thumbnail: slot.thumb || '',
@@ -111,18 +103,15 @@
   }
 
   async function loadFeedItems(key){
-    if(!isMediaKey(key)) return [];
     const url = `/.netlify/functions/feed-media?key=${encodeURIComponent(key)}&limit=500`;
     try{
       const data = await fetchJson(url);
-      let items = [];
-      if(data && Array.isArray(data.items)) items = data.items;
+      if(data && Array.isArray(data.items)) return data.items;
       // fallback: full snapshot response
-      if(!items.length && data && Array.isArray(data.sections)){
+      if(data && Array.isArray(data.sections)){
         const found = data.sections.find(s=>s && s.key === key);
-        if(found && Array.isArray(found.items)) items = found.items;
+        if(found && Array.isArray(found.items)) return found.items;
       }
-      if(Array.isArray(items)) return items.filter(looksLikeMedia);
     }catch(e){ /* ignore */ }
     return [];
   }
@@ -162,22 +151,40 @@
     if(item.metrics)  a.dataset.metrics = JSON.stringify(item.metrics);
     if(item.payment)  a.dataset.payment = JSON.stringify(item.payment);
 
-    let img = q('img', a);
-    if(!img){
-      img = D.createElement('img');
-      a.appendChild(img);
-    }
-    img.alt = title || '';
-    img.loading = 'lazy';
-    if(thumb) img.src = thumb;
+    // Prefer existing placeholder/card structure: .thumb (image box) + .meta (title)
+    let thumbBox = q('.thumb', a);
+    let metaBox = q('.meta', a) || q('.thumb-title', a);
 
-    let t = q('.thumb-title', a);
-    if(!t){
-      t = D.createElement('div');
-      t.className = 'thumb-title';
-      a.appendChild(t);
+    // Image handling
+    if(thumbBox){
+      // Use <img> inside thumbBox when possible
+      let img = q('img', thumbBox);
+      if(!img){
+        img = D.createElement('img');
+        thumbBox.appendChild(img);
+      }
+      img.alt = title || '';
+      img.loading = 'lazy';
+      if(thumb) img.src = thumb;
+    }else{
+      // Fallback: ensure an <img> exists directly under anchor
+      let img = q('img', a);
+      if(!img){
+        img = D.createElement('img');
+        a.appendChild(img);
+      }
+      img.alt = title || '';
+      img.loading = 'lazy';
+      if(thumb) img.src = thumb;
     }
-    t.textContent = title;
+
+    // Title handling
+    if(!metaBox){
+      metaBox = D.createElement('div');
+      metaBox.className = 'meta';
+      a.appendChild(metaBox);
+    }
+    metaBox.textContent = title;
 
     a.removeAttribute('data-placeholder');
   }
@@ -274,7 +281,6 @@
       if(!items || items.length === 0){
         items = extractItems(sectionMap[key]);
       }
-	  items.sort((a,b)=>(a.slotId ?? 999999) - (b.slotId ?? 999999));
       applyLine(line, items);
     }
   }
