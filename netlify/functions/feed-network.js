@@ -1,13 +1,12 @@
-/* feed-network.FINAL.js */
+/* feed-network.FINAL.v2.js */
 /* Network Hub Feed - Snapshot Pass-Through / No Generate / No Dummy */
+/* Supports networkhub-snapshot.json with top-level { items: [...] } */
 
 import fs from "fs/promises";
 import path from "path";
 
 const SNAPSHOT_NAME = "networkhub-snapshot.json";
-const SECTION_KEY = "network-right";
 
-/* CORS */
 function corsHeaders() {
   return {
     "Content-Type": "application/json; charset=utf-8",
@@ -18,33 +17,26 @@ function corsHeaders() {
 }
 
 function ok(body) {
-  return {
-    statusCode: 200,
-    headers: corsHeaders(),
-    body: JSON.stringify(body)
-  };
+  return { statusCode: 200, headers: corsHeaders(), body: JSON.stringify(body) };
 }
 
 function err(code, hint) {
-  return {
-    statusCode: 500,
-    headers: corsHeaders(),
-    body: JSON.stringify({ error: code, hint })
-  };
+  return { statusCode: 500, headers: corsHeaders(), body: JSON.stringify({ error: code, hint }) };
 }
 
-/* Snapshot extract */
-function extractSections(snapshot) {
-  return (
-    snapshot?.pages?.network?.sections ||
-    snapshot?.sections ||
-    null
-  );
+function extractItems(snapshot, sectionKey) {
+
+  // Case A: right-panel flat snapshot: { items: [...] }
+  if (Array.isArray(snapshot?.items)) return snapshot.items;
+
+  // Case B: sectioned snapshot: pages.network.sections[sectionKey] OR sections[sectionKey]
+  const sections = snapshot?.pages?.network?.sections || snapshot?.sections || null;
+  if (sections && sectionKey && Array.isArray(sections[sectionKey])) return sections[sectionKey];
+
+  return null;
 }
 
-/* FS paths */
 function fsCandidatePaths() {
-
   const cwd = process.cwd();
   const dir = typeof __dirname === "string" ? __dirname : cwd;
 
@@ -67,7 +59,6 @@ async function readJsonIfExists(p) {
   }
 }
 
-/* HTTP fallback */
 function guessBaseUrl() {
   return (
     process.env.URL ||
@@ -96,7 +87,6 @@ async function fetchSnapshotHttp() {
   return null;
 }
 
-/* Loader */
 async function loadSnapshot() {
 
   for (const p of fsCandidatePaths()) {
@@ -107,32 +97,19 @@ async function loadSnapshot() {
   return await fetchSnapshotHttp();
 }
 
-/* Handler */
 export async function handler(event) {
 
   if (event.httpMethod === "OPTIONS") {
-    return {
-      statusCode: 200,
-      headers: corsHeaders(),
-      body: ""
-    };
+    return { statusCode: 200, headers: corsHeaders(), body: "" };
   }
+
+  const section = (event?.queryStringParameters?.section || "network-right").trim();
 
   const snapshot = await loadSnapshot();
+  if (!snapshot) return err("SNAPSHOT_NOT_FOUND", "Put /data/networkhub-snapshot.json");
 
-  if (!snapshot) {
-    return err("SNAPSHOT_NOT_FOUND", "Put /data/networkhub-snapshot.json");
-  }
+  const items = extractItems(snapshot, section);
 
-  const sections = extractSections(snapshot);
-
-  if (!sections) {
-    return err("INVALID_SNAPSHOT_STRUCTURE", "Need pages.network.sections");
-  }
-
-  const items = sections[SECTION_KEY];
-
-  /* Pass-through only */
   if (!Array.isArray(items) || items.length === 0) {
     return ok({ items: [] });
   }
