@@ -1,381 +1,205 @@
-
-'use strict';
-/**
- * socialnetwork-automap.core.js
- * CORE Social AutoMap Engine (10Y+ Stable Edition)
- * Author: IGDC / MARU
- * Purpose: Snapshot/Feed driven, fail-safe, monetization-ready automap
- */
+// socialnetwork-automap.prod.js (PRODUCTION, Distribution-style mapping)
+// 원칙:
+// 1) 오토맵은 슬롯을 "생성"하지 않는다. (데이터 없으면 건드리지 않음)
+// 2) 데이터가 있을 때만, HTML 더미 슬롯을 "제자리"에서 교체한다.
+// 3) Desktop: RightRail에만 꽂음 / Mobile: rpMobileGrid에만 꽂음
 
 (function(){
+  'use strict';
 
-/* ================= CONFIG ================= */
+  if (window.__SOCIALNETWORK_AUTOMAP_PROD__) return;
+  window.__SOCIALNETWORK_AUTOMAP_PROD__ = true;
 
-const FEED_URL = '/.netlify/functions/feed-social?page=socialnetwork';
-const SNAPSHOT_URL = '/data/social.snapshot.json';
+  const SNAPSHOT_URL = '/data/social.snapshot.json';
+  const LIMIT_MAIN = 100;
+  const LIMIT_RIGHT = 100;
+  const BREAKPOINT = 1024; // <=1024: mobile/tablet
 
-const MAX_ITEMS = 200;
-const BATCH_SIZE = 12;
+  // snapshot key -> selector (기본은 같은 키)
+  // HTML이 구버전 키를 쓰는 경우(alias)도 흡수
+  const SECTION_MAP = [
+    { key: 'social-youtube',   selectors: ['[data-psom-key="social-youtube"]'],   limit: LIMIT_MAIN },
+    { key: 'social-instagram', selectors: ['[data-psom-key="social-instagram"]'], limit: LIMIT_MAIN },
+    { key: 'social-tiktok',    selectors: ['[data-psom-key="social-tiktok"]'],    limit: LIMIT_MAIN },
+    { key: 'social-facebook',  selectors: ['[data-psom-key="social-facebook"]'],  limit: LIMIT_MAIN },
+    { key: 'social-twitter',   selectors: ['[data-psom-key="social-twitter"]'],   limit: LIMIT_MAIN },
 
-const SAFE_PLATFORMS = [
-  'youtube', 'tiktok', 'instagram', 'facebook', 'twitter', 'threads', 'telegram', 'discord', 'community', 'placeholder'
-];
-
-const DEBUG = false;
-
-/* ================= UTIL ================= */
-
-function log(){
-  if(DEBUG) console.log.apply(console, arguments);
-}
-
-function safeJSON(text){
-  try{ return JSON.parse(text); }
-  catch(e){ return null; }
-}
-
-function qs(sel, root){
-  return (root||document).querySelector(sel);
-}
-
-function qsa(sel, root){
-  return Array.prototype.slice.call((root||document).querySelectorAll(sel));
-}
-
-function pick(obj, keys){
-  for(const k of keys){
-    const v = obj && obj[k];
-    if(typeof v === 'string' && v.trim()) return v.trim();
-  }
-  return '';
-}
-
-function nowISO(){
-  return new Date().toISOString();
-}
-
-/* ================= LOADERS ================= */
-
-async function loadSnapshot(){
-  try{
-    const r = await fetch(SNAPSHOT_URL, {cache:'no-store'});
-    if(!r.ok) return null;
-    return await r.json();
-  }catch(e){
-    return null;
-  }
-}
-
-async function loadFeed(lang){
-  let url = FEED_URL;
-  if(lang) url += '&lang=' + encodeURIComponent(lang);
-
-  try{
-    const r = await fetch(url, {cache:'no-store'});
-    if(!r.ok) return null;
-    return await r.json();
-  }catch(e){
-    return null;
-  }
-}
-
-/* ================= FILTER ================= */
-
-function isBlocked(item){
-
-  if(!item) return true;
-
-  const bad = [
-    /도박|베팅|카지노|바카라|토토/i,
-    /성인|야동|porn|sex|escort/i,
-    /마약|대마|코카인|필로폰/i,
-    /사기|스캠|scam|피싱/i
+    // aliases (HTML 구버전 흡수)
+    { key: 'social-threads',   selectors: ['[data-psom-key="social-threads"]','[data-psom-key="social-pinterest"]'], limit: LIMIT_MAIN },
+    { key: 'social-telegram',  selectors: ['[data-psom-key="social-telegram"]','[data-psom-key="social-reddit"]'],    limit: LIMIT_MAIN },
+    { key: 'social-discord',   selectors: ['[data-psom-key="social-discord"]','[data-psom-key="social-wechat"]'],     limit: LIMIT_MAIN },
+    { key: 'social-community', selectors: ['[data-psom-key="social-community"]','[data-psom-key="social-weibo"]'],     limit: LIMIT_MAIN },
   ];
 
-  const txt = [
-    item.title,
-    item.channel,
-    item.desc,
-    item.url
-  ].filter(Boolean).join(' ');
-
-  if(bad.some(r=>r.test(txt))) return true;
-
-  if(item.status && item.status !== 'live') return true;
-
-  if(!item.url || !item.thumb) return true;
-
-  if(item.platform && !SAFE_PLATFORMS.includes(item.platform)) return true;
-
-  return false;
-}
-
-/* ================= NORMALIZE ================= */
-
-function normalize(it, idx){
-
-  return {
-    id: it.id || ('sn-'+idx),
-    title: pick(it,['title','name','label','caption']) || 'Item',
-    url: pick(it,['url','href','link','path']) || '#',
-    thumb: pick(it,['thumb','image','img','thumbnail','poster','cover']),
-    channel: pick(it,['channel','author','owner']),
-    platform: it.platform || it.source || null,
-    priority: typeof it.priority === 'number' ? it.priority : 999999,
-    revenue: it.revenue === true,
-    signals: it.signals || null,
-    raw: it
-  };
-
-}
-
-/* ================= SCORE ================= */
-
-function score(item){
-
-  let s = 0;
-
-  if(item.revenue) s += 5000;
-
-  if(item.signals){
-    if(typeof item.signals.quality_score === 'number'){
-      s += item.signals.quality_score * 100;
+  // right panel: desktop vs mobile targets are different nodes
+  function rightTargets(){
+    const isMobile = (window.innerWidth || 0) <= BREAKPOINT;
+    if (isMobile){
+      const el = document.querySelector('#rpMobileGrid');
+      return el ? [el] : [];
     }
-    if(typeof item.signals.trust_score === 'number'){
-      s += item.signals.trust_score * 100;
-    }
+    // desktop: only right rail
+    const el = document.querySelector('#rightRail [data-psom-key="socialnetwork"]');
+    return el ? [el] : [];
   }
 
-  if(item.raw && item.raw.engagement){
-    const e = item.raw.engagement;
-    s += (e.views||0)/100;
-    s += (e.likes||0)/10;
+  function pick(obj, keys){
+    for (const k of keys){
+      const v = obj && obj[k];
+      if (typeof v === 'string' && v.trim()) return v.trim();
+    }
+    return '';
   }
 
-  s -= item.priority;
-
-  return s;
-}
-
-/* ================= RENDER ================= */
-
-function makeCard(item){
-
-  const a = document.createElement('a');
-  a.className = 'thumb-card';
-  a.href = item.url;
-  a.target = '_blank';
-  a.rel = 'noopener';
-
-  const img = document.createElement('img');
-  img.className = 'thumb-media';
-  img.loading = 'lazy';
-  img.decoding = 'async';
-  img.src = item.thumb;
-  img.alt = item.title || '';
-
-  const t = document.createElement('div');
-  t.className = 'thumb-title';
-  t.textContent = item.title;
-
-  a.appendChild(img);
-  a.appendChild(t);
-
-  return a;
-}
-
-
-function render(container, items){
-
-  let idx = 0;
-  container.innerHTML = '';
-
-  function mount(){
-
-    const end = Math.min(idx + BATCH_SIZE, items.length);
-
-    const frag = document.createDocumentFragment();
-
-    for(let i=idx;i<end;i++){
-      frag.appendChild(makeCard(items[i]));
-    }
-
-    container.appendChild(frag);
-    idx = end;
-
-    if(idx < items.length){
-      observe();
-    }
+  function pickImage(item){
+    return pick(item, ['thumb','image','img','thumbnail','thumbnailUrl','cover','poster','thumbnail_url','imageUrl']);
   }
 
-  let io = null;
-
-  function observe(){
-    if(!('IntersectionObserver' in window)) return;
-
-    if(io) io.disconnect();
-
-    io = new IntersectionObserver(function(ent){
-      ent.forEach(e=>{
-        if(e.isIntersecting){
-          io.disconnect();
-          mount();
-        }
-      });
-    }, {rootMargin:'600px'});
-
-    if(container.lastElementChild){
-      io.observe(container.lastElementChild);
-    }
+  function pickTitle(item){
+    return pick(item, ['title','name','label','caption','text']);
   }
 
-  mount();
-}
-
-/* ================= CORE ================= */
-
-async function run(){
-
-  const boxes = qsa('[data-psom-key]');
-  if(!boxes.length) return;
-
-  const lang = (new URL(location.href)).searchParams.get('lang') || null;
-
-  const snapshot = await loadSnapshot();
-  const feed = await loadFeed(lang);
-
-  let sectionMap = Object.create(null);
-
-  /* snapshot priority */
-  if(snapshot && snapshot.pages){
-    if(snapshot.pages.social && snapshot.pages.social.sections){
-      sectionMap = snapshot.pages.social.sections || {};
-      log('[CORE] snapshot loaded (pages.social)');
-    }else if(snapshot.pages.socialnetwork && snapshot.pages.socialnetwork.sections){
-      sectionMap = snapshot.pages.socialnetwork.sections || {};
-      log('[CORE] snapshot loaded (pages.socialnetwork)');
-    }else{
-      // legacy shapes
-      sectionMap = snapshot.sections || snapshot.blocks || {};
-      if(sectionMap && typeof sectionMap === 'object'){
-        log('[CORE] snapshot loaded (legacy)');
-      }
-    }
+  function pickUrl(item){
+    return pick(item, ['url','href','link','path','detailUrl','productUrl','checkoutUrl']) || '#';
   }
-/* feed fallback */
-  if(feed && feed.grid && Array.isArray(feed.grid.sections)){
-    feed.grid.sections.forEach(s=>{
-      if(!sectionMap[s.id]){
-        sectionMap[s.id] = s.items || [];
-      }
+
+  function ensureScroller(box){
+    if(!box) return;
+    // mobile drag friendliness
+    box.style.overflowX = 'auto';
+    box.style.overflowY = 'hidden';
+    box.style.webkitOverflowScrolling = 'touch';
+    box.style.touchAction = 'pan-x';
+  }
+
+  function clearChildren(el){
+    while (el && el.firstChild) el.removeChild(el.firstChild);
+  }
+
+  function createCard(item){
+    const card = document.createElement('div');
+    card.className = 'thumb-card';
+
+    const img = document.createElement('div');
+    img.className = 'thumb-img';
+    const src = pickImage(item);
+    if (src) {
+      img.style.backgroundImage = "url('" + String(src).replace(/'/g,'%27') + "')";
+      img.style.backgroundSize = 'cover';
+      img.style.backgroundPosition = 'center';
+    }
+
+    const title = document.createElement('div');
+    title.className = 'thumb-title';
+    title.textContent = pickTitle(item) || 'Item';
+
+    card.appendChild(img);
+    card.appendChild(title);
+
+    const href = pickUrl(item);
+    if (href && href !== '#'){
+      card.addEventListener('click', function(){ location.href = href; });
+      card.style.cursor = 'pointer';
+    }
+
+    return card;
+  }
+
+  async function loadSnapshot(){
+    const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
+    if(!res.ok) throw new Error('Snapshot load failed: ' + res.status);
+    return await res.json();
+  }
+
+  function getSections(snapshot){
+    return (snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections) ||
+           (snapshot && snapshot.sections) ||
+           null;
+  }
+
+  // data가 있을 때만 clear + render (없으면 더미 유지)
+  function renderBox(box, items, limit){
+    if (!box) return;
+    if (!Array.isArray(items) || items.length === 0) return; // keep dummy
+
+    ensureScroller(box);
+
+    const list = items.slice(0, limit);
+    clearChildren(box);
+    list.forEach(it => box.appendChild(createCard(it)));
+  }
+
+  // 여러 selector 중, 실제 존재하는 첫 box를 찾아 렌더
+  function renderBySelectors(selectors, items, limit){
+    for (const sel of selectors){
+      const box = document.querySelector(sel);
+      if (!box) continue;
+      renderBox(box, items, limit);
+      return true;
+    }
+    return false;
+  }
+
+  let CACHED_SECTIONS = null;
+  let LAST_MODE = null;
+
+  function mode(){
+    return ((window.innerWidth || 0) <= BREAKPOINT) ? 'mobile' : 'desktop';
+  }
+
+  function renderMainSections(sections){
+    SECTION_MAP.forEach(cfg => {
+      const raw = sections && sections[cfg.key];
+      const arr = Array.isArray(raw) ? raw : [];
+      renderBySelectors(cfg.selectors, arr, cfg.limit || LIMIT_MAIN);
     });
-    log('[CORE] feed merged');
   }
 
+  function renderRightPanel(sections){
+    const raw = sections && sections['socialnetwork'];
+    const arr = Array.isArray(raw) ? raw : [];
 
-  /* ================= KEY RESOLUTION ================= */
-  const ALIASES = {
-    // right panel legacy keys
-    'socialnetwork': ['socialnetwork-right','social-right','social_right','right-social','social-right-panel','socialnetwork_panel','socialnetworkpanel'],
-    // common misspellings / variants
-    'social-youtube': ['social_youtube','youtube','social-youtube-1','social-youtube-main'],
-    'social-tiktok': ['social_tiktok','tiktok','social-tiktok-main'],
-    'social-instagram': ['social_instagram','instagram','social-instagram-main'],
-    'social-facebook': ['social_facebook','facebook','social-facebook-main'],
-    'social-twitter': ['social_twitter','twitter','social-x','social-x-twitter'],
-    'social-pinterest': ['social_pinterest','pinterest'],
-    'social-reddit': ['social_reddit','reddit'],
-    'social-wechat': ['social_wechat','wechat'],
-    'social-weibo': ['social_weibo','weibo']
-  };
-
-  function normKey(k){
-    return String(k||'').trim();
+    const targets = rightTargets();
+    targets.forEach(t => renderBox(t, arr, LIMIT_RIGHT));
   }
 
-  function getSectionAny(k){
-    const key = normKey(k);
-    if(!key) return null;
-    if(sectionMap && Object.prototype.hasOwnProperty.call(sectionMap, key)) return sectionMap[key];
-    // try case-insensitive hit (snapshot keys are stable but defensive)
-    const lower = key.toLowerCase();
-    for(const kk in sectionMap){
-      if(String(kk).toLowerCase() === lower) return sectionMap[kk];
-    }
-    return null;
+  function renderAll(){
+    if(!CACHED_SECTIONS) return;
+    renderMainSections(CACHED_SECTIONS);
+    renderRightPanel(CACHED_SECTIONS);
   }
 
-  function resolveSection(key){
-    const base = normKey(key);
-    let raw = getSectionAny(base);
-    if(raw) return raw;
+  function onResize(){
+    const m = mode();
+    if (m === LAST_MODE) return;
+    LAST_MODE = m;
+    // right panel 타겟만 바뀌므로 right panel만 다시 렌더
+    renderRightPanel(CACHED_SECTIONS);
+  }
 
-    // alias list
-    const list = (ALIASES[base] || []).map(normKey).filter(Boolean);
-    for(const k of list){
-      raw = getSectionAny(k);
-      if(raw) return raw;
-    }
+  (async function run(){
+    try{
+      const snapshot = await loadSnapshot();
+      const sections = getSections(snapshot);
+      if(!sections) return;
 
-    // last resort: if this is the right panel and we have no dedicated section,
-    // build it from top items of the main social sections.
-    if(base === 'socialnetwork'){
-      const blendFrom = ['social-instagram','social-youtube','social-tiktok','social-twitter','social-facebook'];
-      let blended = [];
-      blendFrom.forEach(k=>{
-        const sec = getSectionAny(k);
-        if(Array.isArray(sec)) blended = blended.concat(sec);
+      CACHED_SECTIONS = sections;
+      LAST_MODE = mode();
+
+      renderAll();
+
+      window.addEventListener('resize', function(){
+        // light debounce
+        clearTimeout(window.__SOCIAL_AUTOMAP_RESIZE_T__);
+        window.__SOCIAL_AUTOMAP_RESIZE_T__ = setTimeout(onResize, 120);
       });
-      if(blended.length) return blended;
+
+      console.log('[AUTOMAP] socialnetwork prod mapping loaded');
+
+    }catch(e){
+      // 실패 시 더미 유지 (no clear)
+      console.error('[AUTOMAP] Error:', e);
     }
-
-    return [];
-  }
-
-  boxes.forEach(box=>{
-
-    const key = box.getAttribute('data-psom-key');
-    if(!key) return;
-
-    let raw = resolveSection(key);
-
-    if(!Array.isArray(raw)) raw = [];
-
-    let list = raw
-      .map(normalize)
-      .filter(it=>!isBlocked(it));
-
-    list.forEach(it=>{
-      it.__score = score(it);
-    });
-
-    list.sort((a,b)=> b.__score - a.__score);
-
-    list = list.slice(0, MAX_ITEMS);
-
-   if(!list.length){
-    box.innerHTML = '';
-    box.classList.remove('thumb-grid','thumb-list','thumb-scroller');
-    box.classList.add('empty-slot');
-    box.innerHTML = '<div class="empty-msg">콘텐츠 준비 중입니다.</div>';
-    box.style.padding = '12px';
-   return;
-  }
-
-
-    render(box, list);
-
-  });
-
-  log('[CORE] done', nowISO());
-}
-
-/* ================= BOOT ================= */
-
-if(document.readyState === 'loading'){
-  document.addEventListener('DOMContentLoaded', run, {once:true});
-}else{
-  run();
-}
+  })();
 
 })();
