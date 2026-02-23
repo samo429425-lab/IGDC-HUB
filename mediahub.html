@@ -144,39 +144,28 @@ html, body {
 }
 
 
-/* === IGDC FIX: 10-section scroll stability (desktop↔tablet↔mobile) === */
+/* === 10 Media Sections Layout Stabilizer (2026-02-23) === */
+/* Allow both vertical page scroll and horizontal row scroll */
 .thumb-line > .scroll-content{
-  overflow-x:auto !important;
-  overflow-y:hidden !important;
-  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y !important;
 }
-.thumb-line, .scroll-content{
-  overscroll-behavior-x: contain;
-}
-.scroll-content{
-  display:flex;
-  gap: var(--gap, 12px);
-  overflow-x:auto !important;
-  overflow-y:hidden !important;
-  -webkit-overflow-scrolling: touch;
-  scroll-behavior:smooth;
-  flex-wrap:nowrap;
-}
-.thumb-line{
-  overflow: visible !important;
-}
-.section-row .card, .scroll-wrapper .card{
-  flex: 0 0 320px !important;   /* match width */
-  min-width: 320px !important;
-}
-/* <=1024px: hide BOTH scroll buttons (no one-sided ghost), remove padding that blocks touch */
-@media (max-width:1024px){
-  .scroll-btn,.scroll-button,.btn-scroll-left,.btn-scroll-right{
-    display:none !important;
-    pointer-events:none !important;
+/* Force both scroll buttons visible on desktop/tablet (>1024) for media sections */
+@media (min-width:1025px){
+  .thumb-line[data-psom-key^="media-"] > .scroll-btn{
+    display:block !important;
+    opacity:1 !important;
+    visibility:visible !important;
   }
-  .scroll-wrapper{ padding:0 !important; overflow:visible !important; }
-  .thumb-line{ padding:0 !important; }
+}
+/* Mobile portrait: YouTube-like full-width cards */
+@media (max-width:900px){
+  .thumb-line[data-psom-key^="media-"] .card{
+    flex:0 0 100% !important;
+    max-width:100% !important;
+  }
+  .thumb-line[data-psom-key^="media-"] .thumb{
+    aspect-ratio:16/9;
+  }
 }
 
 </style>
@@ -714,41 +703,15 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   }
 
   var startX=0, curX=0, dragging=false;
-  var startY=0, curY=0, dragAxis=null; // dragAxis: 'x'|'y'|null
   function onStart(e){
-    var t = e.target;
-    // ✅ do NOT hijack swipes that start inside horizontal scrollers/cards
-    if(t && t.closest && t.closest('.thumb-line,.scroll-content,.section-row,.scroll-wrapper,.card,.media-card')) return;
-
-    var p = (e.touches?e.touches[0]:null);
-    var x = p ? p.clientX : e.clientX;
-    var y = p ? p.clientY : e.clientY;
-
+    var x = (e.touches?e.touches[0].clientX:e.clientX);
     if((window.innerWidth - x) <= 24) return; // allow full width for ad drawer (if any)
-    dragging=true; dragAxis=null; startX=x; startY=y; curX=x; curY=y; track.style.transition="none";
+    dragging=true; startX=x; curX=x; track.style.transition="none";
   }
   function onMove(e){
     if(!dragging) return;
-    var p = (e.touches?e.touches[0]:null);
-    curX = p ? p.clientX : e.clientX;
-    curY = p ? p.clientY : e.clientY;
+    curX = (e.touches?e.touches[0].clientX:e.clientX);
     var dx = curX - startX;
-    var dy = curY - startY;
-
-    // ✅ decide axis early; if vertical intent → release (allow native scroll)
-    if(dragAxis === null){
-      if(Math.abs(dy) > Math.abs(dx) + 6){
-        dragAxis = 'y';
-        dragging = false;
-        track.style.transition = "";
-        go(idx);
-        return;
-      }
-      if(Math.abs(dx) > 6) dragAxis = 'x';
-      else return;
-    }
-    if(dragAxis !== 'x') return;
-
     var base = -idx * pager.clientWidth;
     track.style.transform = "translateX(" + (base + dx) + "px)";
   }
@@ -1239,29 +1202,6 @@ body {
   margin-right: 0 !important;
   padding-left: 10px !important;
   padding-right: 5px !important;
-}
-</style>
-
-
-<style id="igdc-10section-mobile-final-override">
-@media (max-width:1024px){
-  .thumb-line > .scroll-btn,
-  .thumb-line > .scroll-button,
-  .thumb-line > .btn-scroll-left,
-  .thumb-line > .btn-scroll-right,
-  .thumb-line > .scroll-btn.left,
-  .thumb-line > .scroll-btn.right{
-    display:none !important;
-    pointer-events:none !important;
-  }
-  .thumb-line{
-    margin-left:0 !important;
-    margin-right:0 !important;
-  }
-  .thumb-line > .scroll-content{
-    margin-left:0 !important;
-    margin-right:0 !important;
-  }
 }
 </style>
 
@@ -3357,88 +3297,9 @@ function end(dir) {
 })();
 </script>
 
-<script id="igdc-mediahub-10section-normalizer">
-/* IGDC: enforce fixed slot counts (10 main sections only) without touching provider blocks */
-(function(){
-  'use strict';
-  const TARGET = {
-    "media-trending": 50,
-    "media-movie": 40,
-    "media-drama": 40,
-    "media-thriller": 30,
-    "media-romance": 30,
-    "media-variety": 30,
-    "media-documentary": 30,
-    "media-animation": 30,
-    "media-music": 30,
-    "media-shorts": 30
-  };
-
-  function makePlaceholder(){
-    const a = document.createElement('a');
-    a.className = 'card media-card';
-    a.setAttribute('data-placeholder','true');
-    a.href = 'javascript:void(0)';
-    const thumb = document.createElement('div');
-    thumb.className = 'thumb ph';
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    meta.textContent = 'Coming Soon';
-    a.appendChild(thumb);
-    a.appendChild(meta);
-    return a;
-  }
-
-  function normalizeLine(line){
-    const key = line.getAttribute('data-psom-key');
-    const target = TARGET[key];
-    if(!target) return;
-
-    // anchors may be inside scroll-content after wrapper
-    const host = line.querySelector(':scope > .scroll-content') || line;
-    let cards = Array.from(host.querySelectorAll(':scope > a.card.media-card'));
-    // If wrapper moved nodes and non-card anchors exist, still count all anchors
-    if(cards.length === 0) cards = Array.from(host.querySelectorAll(':scope > a'));
-
-    const cur = cards.length;
-    if(cur < target){
-      const frag = document.createDocumentFragment();
-      for(let i=0;i<(target-cur);i++) frag.appendChild(makePlaceholder());
-      host.appendChild(frag);
-    }else if(cur > target){
-      // remove from the end; prefer removing placeholders first
-      const toRemove = cur - target;
-      let removed = 0;
-
-      const placeholders = cards.filter(a => a.getAttribute('data-placeholder') === 'true');
-      for(let i=placeholders.length-1;i>=0 && removed<toRemove;i--){
-        placeholders[i].remove();
-        removed++;
-      }
-      // if still need remove, remove from end regardless
-      cards = Array.from(host.querySelectorAll(':scope > a'));
-      for(let i=cards.length-1;i>=0 && removed<toRemove;i--){
-        cards[i].remove();
-        removed++;
-      }
-    }
-  }
-
-  function run(){
-    document.querySelectorAll('.thumb-line[data-psom-key]').forEach(normalizeLine);
-  }
-
-  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
-  else run();
-
-  // re-run after automap fills (it doesn't remove placeholders)
-  setTimeout(run, 800);
-})();
-</script>
-
 
 <script>
-// Open provider search in a new tab, no backend dependency in a new tab, no backend dependency
+// Open provider search in a new tab, no backend dependency
 function handleVideoSearch(e){
   e.preventDefault();
   const q = (e.target.q?.value || "").trim();
@@ -5136,48 +4997,58 @@ window.addEventListener("message",function(ev){
 <script defer src="/assets/js/placeholder-sweeper.js"></script>
 
 
-<script id="igdc-10section-slot-normalizer">
+<script id="igdc-media-10section-frame">
 (function(){
-  function qsa(sel, root){ return Array.prototype.slice.call((root||document).querySelectorAll(sel)); }
-  function clonePlaceholder(){
-    var a = document.createElement('a');
+  const LIMIT = 50;
+  function isMediaKey(key){
+    return key && key.indexOf('media-') === 0 && key !== 'media-hero';
+  }
+  function makePlaceholder(){
+    const a = document.createElement('a');
     a.className = 'card media-card';
     a.setAttribute('data-placeholder','true');
     a.href = 'javascript:void(0)';
-    var t = document.createElement('div'); t.className='thumb ph';
-    var m = document.createElement('div'); m.className='meta'; m.textContent='Coming Soon';
-    a.appendChild(t); a.appendChild(m);
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb ph';
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = 'Coming Soon';
+    a.appendChild(thumb);
+    a.appendChild(meta);
     return a;
   }
-  var targets = {
-    'media-trending': 50,
-    'media-movie': 40,
-    'media-drama': 40
-  };
-  function targetFor(key){
-    return targets[key] || 30;
-  }
-  function ensure(line){
+  function ensureLine(line){
     if(!line) return;
-    var key = line.getAttribute('data-psom-key') || '';
-    if(!key || key === 'media-hero') return;
-    // 10 섹션만: media-* thumb-line만
-    if(key.indexOf('media-') !== 0) return;
+    const key = line.getAttribute('data-psom-key') || '';
+    if(!isMediaKey(key)) return;
 
-    // if wrapper exists, use scroll-content as container for cards; else line itself
-    var content = line.querySelector(':scope > .scroll-content') || line;
-    var ph = qsa('a[data-placeholder="true"]', content);
-    var need = targetFor(key);
-    var add = need - ph.length;
-    if(add <= 0) return;
-    for(var i=0;i<add;i++) content.appendChild(clonePlaceholder());
+    // If wrapped, placeholders belong inside .scroll-content; else inside line
+    const container = line.querySelector(':scope > .scroll-content') || line;
+
+    // Count current cards (including placeholders)
+    const cards = container.querySelectorAll(':scope > a.card');
+    const need = LIMIT - cards.length;
+    if(need <= 0) return;
+
+    const frag = document.createDocumentFragment();
+    for(let i=0;i<need;i++) frag.appendChild(makePlaceholder());
+    container.appendChild(frag);
   }
-
   function run(){
-    qsa('.thumb-line[data-psom-key]').forEach(ensure);
+    document.querySelectorAll('.thumb-line[data-psom-key]').forEach(ensureLine);
   }
-  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
-  else run();
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', function(){
+      run();
+      // run again after wrappers/buttons may be injected
+      setTimeout(run, 200);
+      setTimeout(run, 600);
+    });
+  }else{
+    run();
+    setTimeout(run, 200);
+    setTimeout(run, 600);
+  }
 })();
 </script>
 
