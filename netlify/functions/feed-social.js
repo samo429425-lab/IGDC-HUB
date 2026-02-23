@@ -22,10 +22,10 @@ const DEFAULT_SECTIONS = [
   'social-instagram',
   'social-facebook',
   'social-twitter',
-  'social-pinterest',
-  'social-reddit',
-  'social-wechat',
-  'social-weibo',
+  'social-threads',
+  'social-telegram',
+  'social-discord',
+  'social-community',
   'socialnetwork'
 ];
 
