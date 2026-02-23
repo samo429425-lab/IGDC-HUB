@@ -240,11 +240,6 @@ button svg, .btn svg, .button svg, .cta-button svg{ width:1em; height:1em; }
 /* Remove the stamp bar below search (keep dropdown only) */
 .provider-bar{ display:none !important; }
 </style>
-<style id="bc-tile-style">
-  .bc-tile{display:inline-block;padding:8px 12px;border-radius:999px;background:#111;color:#fff;font-weight:700;text-decoration:none}
-  .bc-tile:hover{background:#333}
-  .section-blockchain{margin:12px 0 18px; text-align:left;}
-</style>
 <style id="mediahub-clean-scroll-and-bc">
 :root{
   --scroll-btn-w: 56px;   /* keep modest; not oversized */
@@ -280,12 +275,7 @@ button svg, .btn svg, .button svg, .cta-button svg{ width:1em; height:1em; }
 .scroll-content{ scrollbar-width:none; -ms-overflow-style:none; }
 
 /* Blockchain tiles: pastel between light green & light orange (peach-green) */
-.section-blockchain .bc-tile{
-  background:#D6F5D6;
-  border:1px solid rgba(20,80,40,.18);
-  color:#0B1F4D;
-  transition:background-color .18s ease, border-color .18s ease;
-}
+.section-blockchain 
 .section-blockchain .bc-tile:hover{
   background:#DDF2E6;
   border-color:rgba(20,80,40,.28);
@@ -319,12 +309,6 @@ button svg, .btn svg, .button svg, .cta-button svg{ width:1em; height:1em; }
 </style>
 <style id="mediahub-right-overlap-30">
 .scroll-content{ margin-right: calc(var(--scroll-btn-w,56px) + var(--scroll-btn-gap,16px) - 54px) !important; }
-</style>
-<style id="bc-bg-midgreen">
-.section-blockchain .bc-tile{
-  background:#D6F5D6 !important;
-  color:#0B1F4D !important;
-}
 </style>
 <style id="thumbline-drag-style">
 /* Make main thumbnail rows draggable & hide native scrollbar */
@@ -408,11 +392,7 @@ html, body {
   z-index:2;
   margin-top:16px;
 }
-.section-blockchain{
-  position:relative;
-  margin-top:24px;
-  text-align:left;
-}
+
 .hero img{ -webkit-user-drag:none; }
 
 </style>
@@ -973,6 +953,193 @@ body {
   padding: 0 10px 10px 10px;
 }
 </style>
+<!-- Injected: exact blockchain styles cloned from socialnetwork.html -->
+<style id="bc-style-from-sn-20251013">
+.bc-tile{display:inline-block;padding:5px 8px;border-radius:999px;background:#a7f3d0;color:#064e3b;font-weight:500;text-decoration:none}
+  .bc-tile:hover{background:#86efac}
+  .bc-tile.orange{background:#f97316;color:#fff}
+  .bc-tile.orange:hover{background:#fb923c}
+  .section-blockchain{margin:12px 0 18px; text-align:left;}
+
+/* === BlockChain 버튼 테두리 (시각 약한 강조용) === */
+.bc-tile, .platform-tile, .button {
+  border: 1px solid rgba(0,0,0,0.15);
+  box-shadow: 0 0 2px rgba(0,0,0,0.05);
+}
+.bc-tile:hover, .platform-tile:hover, .button:hover {
+  border-color: rgba(0,0,0,0.25);
+}
+
+/* --- Blockchain pills: narrow glyphs + lighter weight, no underline --- */
+.section-blockchain{ display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; }
+.section-blockchain .bc-tile,
+.bc-tile{
+  text-decoration: none !important;
+  font-weight: 500 !important;                 /* lighter */
+  letter-spacing: 0 !important;                /* neutral tracking */
+  font-variation-settings: "wdth" 70 !important; /* narrow glyphs if supported */
+  font-stretch: 80% !important;                /* fallback for non-variable fonts */
+  padding: 5px 8px !important;                /* slightly tighter left/right */
+  line-height: 1.1 !important;
+  white-space: nowrap;
+}
+.bc-tile:hover{ text-decoration: none !important; }
+/* Mobile wrap (no overflow) */
+@media (max-width: 640px){
+  .section-blockchain{ gap:6px 8px; }
+  .section-blockchain .bc-tile{ max-width: 100%; }
+}
+</style>
+<!-- BC text-condense + tight-gap patch -->
+<style id="bc-tight-text-20251013">
+  /* 1) Buttons between-blockchain spacing: ~3px */
+  .section-blockchain{ gap: 3px 3px !important; }
+
+  /* 2) Keep height; reduce horizontal width via glyph width (condense) */
+  .section-blockchain .bc-tile{
+    /* Prefer variable-font width if available */
+    font-variation-settings: "wdth" 72, "wght" 600;
+    /* Fallbacks for non-variable fonts */
+    font-stretch: 75%;
+    letter-spacing: -0.2px;
+    /* Keep vertical size, don't alter line-height; avoid shrinking height */
+    line-height: inherit;
+    /* Do NOT change padding vertically; only a subtle horizontal trim if needed */
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  /* Hover unaffected except border/bg from the base design */
+</style>
+
+<!-- BC ultra-tight adjust: shrink button width slightly, gap=5px -->
+
+
+<!-- BC tight correction: text-only narrow, keep font size, exact 5px gaps -->
+<style id="bc-tight-correct-20251013">
+  /* Exact inter-button gap */
+  .section-blockchain{ gap:5px 5px !important; }
+
+  /* Button container: DO NOT scale; remove extra margins; tighten L/R padding only */
+  .section-blockchain .bc-tile{
+    transform:none !important;
+    margin:0 !important;
+    padding-left:4px !important; padding-right:4px !important;
+    line-height:inherit !important; font-size:inherit !important;
+    display:inline-flex !important; align-items:center; justify-content:center;
+  }
+
+  /* Text-only narrow wrapper */
+  .section-blockchain .bc-tile .bc-narrow{
+    display:inline-block;
+    transform:scaleX(0.82);
+    transform-origin:center center;
+    font-size:inherit; /* keep original size */
+    letter-spacing:normal;
+  }
+</style>
+
+<!-- Hero overflow hotfix (2025-10-13) -->
+<style id="mediahub-hero-overflow-hotfix">
+  @media (max-width: 1024px){
+    main, .main, #main,
+    .content, .content-area, .main-content {
+      width: 100% !important;
+      max-width: 100% !important;
+    }
+    .hero{
+      width: 100% !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+      overflow: hidden !important;
+    }
+    .hero img, .hero video{
+      width: 100% !important;
+      height: auto !important;
+      max-height: 55vh !important;
+      object-fit: cover !important;
+    }
+    body{ overflow-x: hidden !important; }
+  }
+</style>
+<script id="bc-narrow-js">
+(function(){
+  var tiles = document.querySelectorAll('.section-blockchain .bc-tile');
+  tiles.forEach(function(t){
+    if (t.querySelector('.bc-narrow')) return;
+    // Create wrapper span
+    var span = document.createElement('span');
+    span.className = 'bc-narrow';
+    // Move only text nodes into wrapper; keep icons/imgs as-is
+    var nodes = Array.prototype.slice.call(t.childNodes);
+    nodes.forEach(function(n){
+      if (n.nodeType === Node.TEXT_NODE || (n.nodeType===1 && n.tagName==='SPAN' && n.childNodes.length && Array.prototype.every.call(n.childNodes, function(c){return c.nodeType===Node.TEXT_NODE;}))) {
+        span.appendChild(n);
+      }
+    });
+    // Insert wrapper at the beginning if it has content
+    if (span.childNodes.length){
+      t.insertBefore(span, t.firstChild);
+    }
+  });
+})();</script>
+
+
+<style id="bc-mobile-80-lock-20251113">
+/* Mobile (<=900px): lock ~20% shrink for both text and button, with stable gaps */
+@media (max-width: 900px){
+  /* Neutralize any previous transforms or width constraints */
+  .section-blockchain .bc-tile,
+  .section-blockchain .platform-tile{
+    transform: none !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 0 0 auto !important;
+    box-sizing: border-box !important;
+    white-space: nowrap;
+  }
+  /* Box + text shrink targeting ~20% */
+  .section-blockchain .bc-tile,
+  .section-blockchain .platform-tile{
+    padding-top: 4px !important;     /* 5 → 4  (≈20%↓) */
+    padding-bottom: 4px !important;
+    padding-left: 6px !important;    /* 8 → 6  (≈25%↓, 가로폭에 더 집중) */
+    padding-right: 6px !important;
+    font-size: 0.85em !important;    /* ≈15% text shrink */
+    letter-spacing: -0.015em !important; /* 약간 더 가로 압축 */
+  }
+  /* Keep gaps visually proportional (대략 20%↓). */
+  .section-blockchain{
+    gap: 6px 6px !important;         /* 8~10px 기준이면 ≈20%↓ */
+  }
+}
+</style>
+
+<style id="mobile-footer-guard">
+  html, body { height: auto; min-height: 100% !important; }
+  @supports (height: 100dvh) {
+    .container, .layout, main, .main-content { min-height: 100dvh !important; }
+  }
+  @supports not (height: 100dvh) {
+    .container, .layout, main, .main-content { min-height: 100vh !important; }
+  }
+  @supports (-webkit-touch-callout: none) {
+    html, body { height: -webkit-fill-available; }
+    .container, .layout, main, .main-content { min-height: -webkit-fill-available !important; }
+  }
+  @media (max-width: 980px) {
+    main, .content-area, .main-content, .container, .layout {
+      overflow: visible !important;
+      max-height: none !important;
+    }
+  }
+  footer { padding-bottom: max(24px, env(safe-area-inset-bottom)) !important; }
+</style>
+<style id="mediahub-mobile-unlock">
+  @media (max-width: 980px){
+    main, .content-area { overflow: visible !important; }
+  }
+</style>
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -1149,7 +1316,7 @@ body {
 <div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item10)"></div><div class="meta">Item10</div></div>
 <div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item11)"></div><div class="meta">Item11</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item12)"></div><div class="meta">Item12</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item13)"></div><div class="meta">Item13</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item14)"></div><div class="meta">Item14</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item15)"></div><div class="meta">Item15</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item16)"></div><div class="meta">Item16</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item17)"></div><div class="meta">Item17</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item18)"></div><div class="meta">Item18</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item19)"></div><div class="meta">Item19</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item20)"></div><div class="meta">Item20</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item21)"></div><div class="meta">Item21</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item22)"></div><div class="meta">Item22</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item23)"></div><div class="meta">Item23</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item24)"></div><div class="meta">Item24</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item25)"></div><div class="meta">Item25</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item26)"></div><div class="meta">Item26</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item27)"></div><div class="meta">Item27</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item28)"></div><div class="meta">Item28</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item29)"></div><div class="meta">Item29</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item30)"></div><div class="meta">Item30</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item31)"></div><div class="meta">Item31</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item32)"></div><div class="meta">Item32</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item33)"></div><div class="meta">Item33</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item34)"></div><div class="meta">Item34</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item35)"></div><div class="meta">Item35</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item36)"></div><div class="meta">Item36</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item37)"></div><div class="meta">Item37</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item38)"></div><div class="meta">Item38</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item39)"></div><div class="meta">Item39</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item40)"></div><div class="meta">Item40</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item41)"></div><div class="meta">Item41</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item42)"></div><div class="meta">Item42</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item43)"></div><div class="meta">Item43</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item44)"></div><div class="meta">Item44</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item45)"></div><div class="meta">Item45</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item46)"></div><div class="meta">Item46</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item47)"></div><div class="meta">Item47</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item48)"></div><div class="meta">Item48</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item49)"></div><div class="meta">Item49</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item50)"></div><div class="meta">Item50</div></div></div>
 </div>
-<div class="thumb-grid" data-feed="/.netlify/functions/feed" data-lang-attr="html" data-psom-key="mediahub"></div>
+<div class="thumb-grid thumb-scroller" data-psom-key="mediahub"></div>
 </main>
 </div>
 <script>
@@ -2489,6 +2656,152 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <script>document.addEventListener("DOMContentLoaded",()=>{if(matchMedia("(max-width:768px)").matches){const p=document.querySelector(".platform-line");if(p)p.setAttribute("data-providers","");}});</script>
 <div class="thumb-grid" data-psom-key="mediahub"></div>
 <!-- thumbnail automapping -->
-<script src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
+<script defer="" src="/assets/js/auto-embed.instagram.js"></script>
+<script defer="" src="/assets/js/placeholder-sweeper.js"></script>
+<script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
+
+<script>
+window.IGDC_QA=window.IGDC_QA||{};
+if(typeof window.IGDC_QA.open!=="function"){
+  window.IGDC_QA.open=function(){
+    if(window.QnaCore&&typeof QnaCore.open==="function"){QnaCore.open();}
+    else if(typeof openModal==="function"){openModal();}
+  };
+}
+window.addEventListener("message",function(ev){
+  try{if(ev&&ev.data&&ev.data.type==="IGTC_OPEN_QNA"&&typeof IGDC_QA.open==="function"){IGDC_QA.open();}}catch(e){}
+});
+</script>
+
+  <script src="/assets/js/mh-automap.v1.js" defer></script>
+<script id="igtc-checkout-trigger-v1">
+(function(){
+  if (window.__IGTC_CHECKOUT_READY__) return;
+  window.IGTC = window.IGTC || {};
+  function safeJSON(s){ try{ return JSON.parse(s); }catch(_){ return null; } }
+  IGTC.checkout = function(opts){
+    try{
+      // Normalize
+      var payload = Object.assign({ method: 'card', amount: 0, currency: 'KRW', meta: {} }, opts||{});
+      // 1) CustomEvent for same-page listeners (optional)
+      try{ window.dispatchEvent(new CustomEvent('IGTC_CHECKOUT', { detail: payload })); }catch(_){}
+      // 2) postMessage for index.html dispatcher (if present)
+      try{ window.postMessage({ type: 'CHECKOUT', payload: payload }, '*'); }catch(_){}
+      // 3) Fallback: call serverless function directly (no-op if not configured)
+      try{
+        fetch('/.netlify/functions/checkout', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+          .then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); })
+          .then(function(res){
+            if(res && res.redirectUrl){ window.location.assign(res.redirectUrl); }
+            else if(res && res.qr && res.qr.html){
+              // Minimal inline QR modal (scoped)
+              var wrap = document.getElementById('igtc-qr-modal'); 
+              if(!wrap){
+                wrap = document.createElement('div');
+                wrap.id = 'igtc-qr-modal';
+                wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+                wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>결제 QR</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">닫기</button></div>'
+                  + '<div id="igtc-qr-area"></div></div>';
+                document.body.appendChild(wrap);
+                var btn = document.getElementById('igtc-qr-close');
+                if(btn) btn.addEventListener('click', function(){ wrap.remove(); }, { passive:true });
+              }
+              var area = document.getElementById('igtc-qr-area'); if(area){ area.innerHTML = res.qr.html; }
+            }
+          })
+          .catch(function(){ /* silent fallback */ });
+      }catch(_){}
+    }catch(_){}
+  };
+  // Data-API: any element with [data-checkout] will trigger checkout with attributes
+  document.addEventListener('click', function(e){
+    var el = e.target.closest('[data-checkout]'); if(!el) return;
+    var metaAttr = el.getAttribute('data-meta');
+    var meta = metaAttr ? (safeJSON(metaAttr) || { note: metaAttr }) : {};
+    var amount = parseFloat(el.getAttribute('data-amount')||'0') || 0;
+    var currency = el.getAttribute('data-currency') || 'KRW';
+    var method = el.getAttribute('data-method') || 'card';
+    IGTC.checkout({ method: method, amount: amount, currency: currency, meta: meta });
+    e.preventDefault();
+  }, { passive:true });
+  window.__IGTC_CHECKOUT_READY__ = true;
+})();
+</script>
+<script>
+(()=> {
+  const form=document.querySelector('#qnaForm,[data-qna-form]');
+  const ta=document.querySelector('#qnaText, textarea[name="question"]');
+  if(!ta) return; const pageId=location.pathname+(location.hash||'');
+  async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
+    await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
+    ta.value=''; alert('전송되었습니다.');
+  }
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('전송 실패'));});
+  const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('전송 실패'));});
+})();
+</script>
+
+<style id="mobile-footer-guard-final">
+  html, body { height: auto; min-height: 100% !important; }
+  @supports (height: 100dvh) {
+    .container, .layout, main, .main-content { min-height: 100dvh !important; }
+  }
+  @supports not (height: 100dvh) {
+    .container, .layout, main, .main-content { min-height: 100vh !important; }
+  }
+  @supports (-webkit-touch-callout: none) {
+    html, body { height: -webkit-fill-available; }
+    .container, .layout, main, .main-content { min-height: -webkit-fill-available !important; }
+  }
+  @media (max-width: 980px) {
+    main, .content-area, .main-content, .container, .layout {
+      overflow: visible !important;
+      max-height: none !important;
+    }
+  }
+  footer { padding-bottom: max(28px, env(safe-area-inset-bottom)) !important; position: static !important; }
+  /* MOBILE-FOOTER-GUARD: final */
+</style>
+<script>
+// IGDC: report page height to parent index for iframe resizing
+(function(){
+  function sendHeight(){
+    try{
+      if(window.parent === window){ return; }
+      var docEl = document.documentElement;
+      var body = document.body;
+      var h = Math.max(
+        docEl ? docEl.scrollHeight : 0,
+        body ? body.scrollHeight : 0,
+        docEl ? docEl.offsetHeight : 0,
+        body ? body.offsetHeight : 0
+      );
+      if(!h || h < 100){ return; }
+      var payload = { type: "igdcFrameHeight", height: h, page: location.pathname };
+      if(window.parent && window.parent.postMessage){
+        window.parent.postMessage(payload, "*");
+      }
+    }catch(e){}
+  }
+  function schedule(){
+    sendHeight();
+    [200, 800, 1600].forEach(function(ms){
+      setTimeout(sendHeight, ms);
+    });
+  }
+  if(document.readyState === "complete" || document.readyState === "interactive"){
+    schedule();
+  }else{
+    document.addEventListener("DOMContentLoaded", schedule);
+  }
+  window.addEventListener("load", function(){ setTimeout(sendHeight, 400); });
+  window.addEventListener("resize", function(){ setTimeout(sendHeight, 250); });
+  window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
+})();
+</script>
 </body>
 </html>
