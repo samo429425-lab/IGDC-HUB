@@ -18,8 +18,7 @@ const MAX_ITEMS = 200;
 const BATCH_SIZE = 12;
 
 const SAFE_PLATFORMS = [
-  'youtube','tiktok','instagram','facebook',
-  'twitter','pinterest','reddit','wechat','weibo'
+  'youtube', 'tiktok', 'instagram', 'facebook', 'twitter', 'threads', 'telegram', 'discord', 'community', 'placeholder'
 ];
 
 const DEBUG = false;
