@@ -4343,10 +4343,10 @@ footer{
 
   const PANEL_ID = 'rightAutoPanel';
   const DESKTOP_COUNT = 100;
-  const MOBILE_COUNT = 1;
+  const MOBILE_COUNT = 100;
 
   function isMobile(){
-    return window.innerWidth <= 768;
+    return window.matchMedia("(max-width:1023px)").matches;
   }
 
   function getCount(){
@@ -4354,7 +4354,8 @@ footer{
   }
 
   function getPanel(){
-    return document.getElementById(PANEL_ID);
+    // Desktop: right rail panel, Mobile/Tablet: section10 panel
+    return document.getElementById(isMobile() ? "rpMobileGrid" : PANEL_ID);
   }
 
   function resetHeight(panel){
