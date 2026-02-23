@@ -2010,6 +2010,26 @@ footer{
 </style>
 
 <link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
+
+<style id="mobile-rightpanel-final-lock">
+/* FINAL LOCK: mobile always uses #rpMobileBox as the 10th section.
+   Prevent legacy right-rail / ad-panel blocks from re-entering the flow on real mobile portrait. */
+@media (max-width:1024px){
+  .right-rail, .right-panel, .ad-panel, .right-ad-panel, #rightRail, #rightAutoPanel { 
+    display:none !important;
+    visibility:hidden !important;
+    width:0 !important;
+    max-width:0 !important;
+    min-width:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    border:0 !important;
+  }
+  #rpMobileBox{ display:block !important; width:100% !important; }
+  #rpMobileScroller{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
+}
+</style>
+
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -2052,22 +2072,22 @@ footer{
 <button aria-label="scroll right" class="rscroll right" id="rsRight4">›</button>
 </div>
 <div class="row-viewport" data-row="5">
-<div class="row-scroller" id="rowScroller5"><div aria-live="polite" class="row-grid" id="rowGrid5"><div class="thumb-grid thumb-scroller" data-psom-key="social-threads"></div></div></div>
+<div class="row-scroller" id="rowScroller5"><div aria-live="polite" class="row-grid" id="rowGrid5"><div class="thumb-grid thumb-scroller" data-psom-key="social-wechat"></div></div></div>
 <button aria-label="scroll left" class="rscroll left" id="rsLeft5">‹</button>
 <button aria-label="scroll right" class="rscroll right" id="rsRight5">›</button>
 </div>
 <div class="row-viewport" data-row="6">
-<div class="row-scroller" id="rowScroller6"><div aria-live="polite" class="row-grid" id="rowGrid6"><div class="thumb-grid thumb-scroller" data-psom-key="social-telegram"></div></div></div>
+<div class="row-scroller" id="rowScroller6"><div aria-live="polite" class="row-grid" id="rowGrid6"><div class="thumb-grid thumb-scroller" data-psom-key="social-weibo"></div></div></div>
 <button aria-label="scroll left" class="rscroll left" id="rsLeft6">‹</button>
 <button aria-label="scroll right" class="rscroll right" id="rsRight6">›</button>
 </div>
 <div class="row-viewport" data-row="7">
-<div class="row-scroller" id="rowScroller7"><div aria-live="polite" class="row-grid" id="rowGrid7"><div class="thumb-grid thumb-scroller" data-psom-key="social-discord"></div></div></div>
+<div class="row-scroller" id="rowScroller7"><div aria-live="polite" class="row-grid" id="rowGrid7"><div class="thumb-grid thumb-scroller" data-psom-key="social-pinterest"></div></div></div>
 <button aria-label="scroll left" class="rscroll left" id="rsLeft7">‹</button>
 <button aria-label="scroll right" class="rscroll right" id="rsRight7">›</button>
 </div>
 <div class="row-viewport" data-row="8">
-<div class="row-scroller" id="rowScroller8"><div aria-live="polite" class="row-grid" id="rowGrid8"><div class="thumb-grid thumb-scroller" data-psom-key="social-community"></div></div></div>
+<div class="row-scroller" id="rowScroller8"><div aria-live="polite" class="row-grid" id="rowGrid8"><div class="thumb-grid thumb-scroller" data-psom-key="social-reddit"></div></div></div>
 <button aria-label="scroll left" class="rscroll left" id="rsLeft8">‹</button>
 <button aria-label="scroll right" class="rscroll right" id="rsRight8">›</button>
 </div>
@@ -2078,7 +2098,7 @@ footer{
 </div>
 <section id="rpMobileBox">
 <div id="rpMobileScroller">
-<div id="rpMobileGrid"></div>
+<div id="rpMobileGrid" class="thumb-grid thumb-scroller" data-psom-key="socialnetwork"></div>
 </div>
 </section>
 </div>
