@@ -1,22 +1,28 @@
-/* network-rightpanel-automap.js (RESET FINAL)
- * 목적: Network Hub 우측패널/모바일레일에 "받은 데이터만" 꽂기
- * 원칙:
- *  - Feed items 0개면: 기존 HTML 절대 건드리지 않음
- *  - Dummy/샘플 생성 절대 없음
- *  - 타겟: #rightAutoPanel (데스크탑), #nh-mobile-rail-list (모바일)
- */
+/* network-rightpanel-automap.js (FINAL + FALLBACK) */
 
 (function () {
   'use strict';
 
-  if (window.__NETWORK_RIGHT_AUTOMAP_RESET__) return;
-  window.__NETWORK_RIGHT_AUTOMAP_RESET__ = true;
+  if (window.__NETWORK_RIGHT_AUTOMAP_FINAL__) return;
+  window.__NETWORK_RIGHT_AUTOMAP_FINAL__ = true;
 
-  // ✅ 중요: feed-network는 limit 기반으로 호출 (section 불필요)
-  const FEED_URL = '/.netlify/functions/feed-network?limit=100';
+  const FEED_URL =
+    '/.netlify/functions/feed-network?section=right-network-100';
+
   const SLOT_LIMIT = 100;
 
-  function $(id) { return document.getElementById(id); }
+  async function loadFeed() {
+    const res = await fetch(FEED_URL + '&_t=' + Date.now(), {
+      cache: 'no-store'
+    });
+
+    if (!res.ok) throw new Error('Feed load failed');
+    return res.json();
+  }
+
+  function clearBox(box) {
+    while (box.firstChild) box.removeChild(box.firstChild);
+  }
 
   function pick(it, keys) {
     for (let i = 0; i < keys.length; i++) {
@@ -26,42 +32,62 @@
     return '';
   }
 
-  function pickUrl(it)  { return pick(it, ['url','href','link','path']); }
-  function pickImg(it)  { return pick(it, ['thumb','image','thumbnail','imageUrl','img','photo','cover','coverUrl']); }
-  function pickTitle(it){ return pick(it, ['title','name','text','label']); }
-
-  async function loadFeed() {
-    const res = await fetch(FEED_URL + '&_t=' + Date.now(), { cache: 'no-store' });
-    if (!res.ok) throw new Error('Feed load failed: ' + res.status);
-    return res.json();
+  function pickImg(it) {
+    return pick(it, [
+      'thumb','image','thumbnail','imageUrl','img','photo','cover'
+    ]);
   }
 
-  function clearBox(box) {
-    while (box.firstChild) box.removeChild(box.firstChild);
+  function pickTitle(it) {
+    return pick(it, ['title','name','text','label']);
   }
 
-  // ✅ 기존 우측패널(더미/광고) 구조 호환: .ad-box > a > img
-  function createAdBox(item) {
+  function pickUrl(it) {
+    return pick(it, ['url','href','link','path']) || '#';
+  }
+
+  /* ✅ 샘플 자동 생성 */
+  function makeSamples(limit) {
+
+    const list = [];
+
+    for (let i = 1; i <= limit; i++) {
+
+      const n = String(i).padStart(3, '0');
+
+      list.push({
+        id: 'net-sample-' + n,
+        title: 'Sample ' + i,
+        url: '#',
+        thumb: '/assets/sample/network/' + n + '.jpg',
+        image: '/assets/sample/network/' + n + '.jpg'
+      });
+
+    }
+
+    return list;
+  }
+
+  function createBox(item) {
+
     const box = document.createElement('div');
     box.className = 'ad-box';
 
     const a = document.createElement('a');
-    const href = pickUrl(item) || '#';
+    const href = pickUrl(item);
+
     a.href = href;
-    if (href && href !== '#') {
+
+    if (href !== '#') {
       a.target = '_blank';
       a.rel = 'noopener';
-    } else {
-      a.tabIndex = -1;
-      a.setAttribute('aria-hidden', 'true');
     }
 
     const img = document.createElement('img');
-    const src = pickImg(item);
-    img.src = src || '';
+
+    img.src = pickImg(item) || '';
     img.alt = pickTitle(item) || 'thumb';
     img.loading = 'lazy';
-    img.decoding = 'async';
 
     a.appendChild(img);
     box.appendChild(a);
@@ -69,52 +95,44 @@
     return box;
   }
 
-  function renderInto(target, items) {
-    if (!target) return;
-
-    // ✅ 0개면 HTML 유지 (절대 clear 하지 않음)
-    if (!items || items.length === 0) {
-      console.warn('[NETWORK-AUTOMAP] Empty items → keep HTML:', target.id || target.className);
-      return;
-    }
-
-    clearBox(target);
-
-    const max = Math.min(items.length, SLOT_LIMIT);
-    for (let i = 0; i < max; i++) {
-      target.appendChild(createAdBox(items[i]));
-    }
-
-    console.log('[NETWORK-AUTOMAP] Rendered', max, 'into', target.id || target.className);
-  }
-
   async function run() {
-    try {
-      const right = $('rightAutoPanel');
-      const mobile = $('nh-mobile-rail-list');
 
-      if (!right && !mobile) {
-        console.error('[NETWORK-AUTOMAP] Target not found: rightAutoPanel / nh-mobile-rail-list');
-        return;
-      }
+    try {
+
+      const box =
+        document.getElementById('rightAutoPanel') ||
+        document.getElementById('nh-mobile-rail-list');
+
+      if (!box) return;
 
       const data = await loadFeed();
-      const items = Array.isArray(data && data.items) ? data.items : [];
 
-      // ✅ 유효 아이템만 (이미지 없는 건 제외)
-      const filtered = [];
-      for (let i = 0; i < items.length; i++) {
-        if (pickImg(items[i])) filtered.push(items[i]);
-        if (filtered.length >= SLOT_LIMIT) break;
+      let items = Array.isArray(data?.items)
+        ? data.items
+        : [];
+
+      /* ✅ 비었으면 샘플 생성 */
+      if (items.length === 0) {
+
+        console.warn('[NETWORK] Empty feed → use samples');
+
+        items = makeSamples(SLOT_LIMIT);
       }
 
-      console.log('[NETWORK-AUTOMAP] Feed items:', items.length, 'usable:', filtered.length);
+      clearBox(box);
 
-      renderInto(right, filtered);
-      renderInto(mobile, filtered);
+      const max = Math.min(items.length, SLOT_LIMIT);
+
+      for (let i = 0; i < max; i++) {
+        box.appendChild(createBox(items[i]));
+      }
+
+      console.log('[NETWORK] Rendered:', max);
 
     } catch (e) {
-      console.error('[NETWORK-AUTOMAP] Error:', e);
+
+      console.error('[NETWORK] Error:', e);
+
     }
   }
 
