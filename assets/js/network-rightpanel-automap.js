@@ -1,5 +1,5 @@
-/* network-rightpanel-automap.FINAL.js */
-/* Network Hub Right Panel - Feed Driven / No Dummy / No Auto Generate */
+/* network-rightpanel-automap.js (FINAL FIX) */
+/* 목적: feed ↔ snapshot 키 불일치 해결 버전 */
 
 (function () {
   'use strict';
@@ -7,12 +7,19 @@
   if (window.__NETWORK_RIGHT_AUTOMAP_FINAL__) return;
   window.__NETWORK_RIGHT_AUTOMAP_FINAL__ = true;
 
-  const FEED_URL = '/.netlify/functions/feed-network?section=network-right';
+  // ✅ 피드가 읽는 section에 맞춤 (중요)
+  const FEED_URL =
+    '/.netlify/functions/feed-network?section=right-network-100';
+
   const SLOT_LIMIT = 100;
 
   async function loadFeed() {
-    const res = await fetch(FEED_URL, { cache: 'no-store' });
+    const res = await fetch(FEED_URL + '&_t=' + Date.now(), {
+      cache: 'no-store'
+    });
+
     if (!res.ok) throw new Error('Feed load failed');
+
     return res.json();
   }
 
@@ -20,95 +27,104 @@
     while (box.firstChild) box.removeChild(box.firstChild);
   }
 
-  function pickImage(item) {
-    return item?.thumb || item?.image || item?.thumbnail || item?.imageUrl || '';
+  function pick(it, keys) {
+    for (let i = 0; i < keys.length; i++) {
+      const v = it && it[keys[i]];
+      if (typeof v === 'string' && v.trim()) return v.trim();
+    }
+    return '';
   }
 
-  function pickTitle(item) {
-    return item?.title || item?.name || item?.text || '';
+  function pickImage(it) {
+    return pick(it, [
+      'thumb',
+      'image',
+      'thumbnail',
+      'imageUrl',
+      'img',
+      'photo',
+      'cover'
+    ]);
   }
 
-  function pickMeta(item) {
-    return item?.meta || item?.subtitle || item?.summary || '';
+  function pickTitle(it) {
+    return pick(it, ['title', 'name', 'text', 'label']);
   }
 
-  function pickUrl(item) {
-    return item?.url || item?.href || item?.link || '#';
-  }
-
-  function esc(u) {
-    return String(u || '').replace(/'/g, '%27');
+  function pickUrl(it) {
+    return pick(it, ['url', 'href', 'link', 'path']) || '#';
   }
 
   function createCard(item) {
+    const box = document.createElement('div');
+    box.className = 'ad-box';
 
-    const card = document.createElement('div');
-    card.className = 'thumb-card';
-
-    const img = document.createElement('div');
-    img.className = 'thumb-img';
-
-    const src = pickImage(item);
-    if (src) {
-      img.style.backgroundImage = "url('" + esc(src) + "')";
-      img.style.backgroundSize = 'cover';
-      img.style.backgroundPosition = 'center';
-    }
-
-    const title = document.createElement('div');
-    title.className = 'thumb-title';
-    title.textContent = pickTitle(item);
-
-    const meta = document.createElement('div');
-    meta.className = 'thumb-meta';
-    meta.textContent = pickMeta(item);
-
-    card.appendChild(img);
-    card.appendChild(title);
-    card.appendChild(meta);
-
+    const a = document.createElement('a');
     const href = pickUrl(item);
-    if (href && href !== '#') {
-      card.addEventListener('click', function () {
-        location.href = href;
-      });
-      card.style.cursor = 'pointer';
+
+    a.href = href;
+
+    if (href !== '#') {
+      a.target = '_blank';
+      a.rel = 'noopener';
     }
 
-    return card;
+    const img = document.createElement('img');
+
+    img.src = pickImage(item) || '';
+    img.alt = pickTitle(item) || 'thumb';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+
+    a.appendChild(img);
+    box.appendChild(a);
+
+    return box;
   }
 
   async function run() {
-
     try {
+      // ✅ HTML 타겟 정확히 맞춤
+      const box =
+        document.getElementById('rightAutoPanel') ||
+        document.getElementById('nh-mobile-rail-list');
 
-      const box = document.querySelector('[data-psom-key="network-right"]');
-      if (!box) return;
-
-      const data = await loadFeed();
-      const items = Array.isArray(data?.items) ? data.items : [];
-
-      // If feed empty → keep existing HTML
-      if (items.length === 0) {
-        console.log('[NETWORK-AUTOMAP] Empty feed. Keep HTML.');
+      if (!box) {
+        console.error('[NETWORK-AUTOMAP] Target not found');
         return;
       }
 
-      // Replace only when data exists
+      const data = await loadFeed();
+
+      const items = Array.isArray(data?.items)
+        ? data.items
+        : [];
+
+      // ✅ 데이터 없으면 건드리지 않음
+      if (items.length === 0) {
+        console.warn('[NETWORK-AUTOMAP] Empty feed');
+        return;
+      }
+
       clearBox(box);
 
-      items.slice(0, SLOT_LIMIT).forEach(item => {
-        box.appendChild(createCard(item));
-      });
+      const max = Math.min(items.length, SLOT_LIMIT);
 
-      console.log('[NETWORK-AUTOMAP] Rendered', items.length, 'items');
+      for (let i = 0; i < max; i++) {
+        box.appendChild(createCard(items[i]));
+      }
+
+      console.log('[NETWORK-AUTOMAP] Rendered:', max);
 
     } catch (e) {
       console.error('[NETWORK-AUTOMAP] Error:', e);
     }
-
   }
 
-  run();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', run);
+  } else {
+    run();
+  }
 
 })();
