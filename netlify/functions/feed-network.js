@@ -1,20 +1,14 @@
-// feed-network.js (NETWORK HUB RIGHT PANEL FEED - PRODUCTION)
-// 목적: "중개기"만 수행
-// - networkhub-snapshot.json 을 그대로 읽어 { items: [...] } 형태로 반환
-// - 절대 더미/생성/자동 채움 없음 (스냅샷이 비면 items:[])
-// - CORS + OPTIONS 지원
-//
-// Endpoint:
-//   /.netlify/functions/feed-network?limit=100
-// Response:
-//   { items:[...] }
+// feed-network.js (NETWORK HUB RIGHT PANEL FEED - PATCHED)
+// 역할: 중개기 전용
+// - networkhub-snapshot.json에서 정확한 section을 찾아 반환
+// - 생성 / 더미 / 자동채움 절대 없음
+// - section 파라미터 지원
 
 import fs from "fs/promises";
 import path from "path";
 
 const SNAPSHOT_NAME = "networkhub-snapshot.json";
 
-// ---- CORS ----
 function corsHeaders() {
   return {
     "Content-Type": "application/json; charset=utf-8",
@@ -24,32 +18,13 @@ function corsHeaders() {
   };
 }
 
-function ok(bodyObj) {
-  return { statusCode: 200, headers: corsHeaders(), body: JSON.stringify(bodyObj) };
+function ok(body) {
+  return { statusCode: 200, headers: corsHeaders(), body: JSON.stringify(body) };
 }
 
-function err(statusCode, code, extra = {}) {
-  return {
-    statusCode,
-    headers: corsHeaders(),
-    body: JSON.stringify({ error: code, ...extra })
-  };
-}
-
-function extractItems(snapshot) {
-  // networkhub-snapshot.json canonical: { items:[...] }
-  if (Array.isArray(snapshot?.items)) return snapshot.items;
-
-  // fallback shapes (optional)
-  const sections = snapshot?.pages?.network?.sections || snapshot?.sections || null;
-  if (sections && Array.isArray(sections["right-network-100"])) return sections["right-network-100"];
-
-  return null;
-}
-
-async function readJsonIfExists(filePath) {
+async function readJsonIfExists(p) {
   try {
-    const raw = await fs.readFile(filePath, "utf-8");
+    const raw = await fs.readFile(p, "utf-8");
     return JSON.parse(raw);
   } catch {
     return null;
@@ -70,62 +45,46 @@ function fsCandidatePaths() {
   ];
 }
 
-function guessSiteBaseUrl() {
-  return (
-    process.env.URL ||
-    process.env.DEPLOY_PRIME_URL ||
-    process.env.DEPLOY_URL ||
-    ""
-  );
-}
-
-async function fetchSnapshotOverHttp() {
-  const base = guessSiteBaseUrl();
-
-  const urls = [];
-  if (base) urls.push(`${base.replace(/\/$/, "")}/data/${SNAPSHOT_NAME}`);
-  urls.push(`/data/${SNAPSHOT_NAME}`);
-
-  for (const url of urls) {
-    try {
-      const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) continue;
-      return await res.json();
-    } catch {
-      // ignore
-    }
-  }
-  return null;
-}
-
 async function loadSnapshot() {
   for (const p of fsCandidatePaths()) {
     const json = await readJsonIfExists(p);
     if (json) return json;
   }
-  return await fetchSnapshotOverHttp();
+  return null;
+}
+
+function extractItems(snapshot, key) {
+
+  // Flat snapshot: { items:[...] }
+  if (Array.isArray(snapshot?.items)) return snapshot.items;
+
+  // Sectioned snapshot
+  const sections = snapshot?.pages?.network?.sections || snapshot?.sections || null;
+
+  if (sections && key && Array.isArray(sections[key])) {
+    return sections[key];
+  }
+
+  return [];
 }
 
 export async function handler(event) {
-  // Preflight
+
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 200, headers: corsHeaders(), body: "" };
   }
 
   const qs = event.queryStringParameters || {};
-  const limitRaw = parseInt((qs.limit || "100").trim(), 10);
-  const limit = Number.isFinite(limitRaw) ? Math.max(0, Math.min(1000, limitRaw)) : 100;
+  const section = (qs.section || "").trim();
 
   const snapshot = await loadSnapshot();
-  if (!snapshot) {
-    // 운영: UI/오토맵이 죽지 않게 200 empty
-    return ok({ items: [] });
-  }
+  if (!snapshot) return ok({ items: [] });
 
-  const items = extractItems(snapshot);
+  const items = extractItems(snapshot, section);
+
   if (!Array.isArray(items) || items.length === 0) {
     return ok({ items: [] });
   }
 
-  return ok({ items: items.slice(0, limit) });
+  return ok({ items });
 }
