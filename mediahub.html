@@ -717,6 +717,12 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   var startX=0, curX=0, dragging=false;
   function onStart(e){
     var x = (e.touches?e.touches[0].clientX:e.clientX);
+    // If gesture started inside a horizontal media row, DO NOT hijack it (let row scroll/drag).
+    try{
+      var _t = e.target;
+      if(_t && _t.closest && _t.closest('.thumb-line, .scroll-content, .scroll-wrapper, .section-row')) return;
+    }catch(_){}
+
     if((window.innerWidth - x) <= 24) return; // allow full width for ad drawer (if any)
     dragging=true; startX=x; curX=x; track.style.transition="none";
   }
@@ -4723,27 +4729,68 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 })();
 </script><script id="thumbline-drag-script">
 (function(){
+  // IGDC MediaHub: horizontal drag for real scroll containers (mobile friendly)
+  // - Bind to actual scrollable nodes (.scroll-content preferred)
+  // - Do NOT globally block native scrolling unless we are actively dragging a scrollable row
+  function pickScrollTargets(){
+    const list = [];
+    document.querySelectorAll('.thumb-line').forEach(line=>{
+      const sc = line.querySelector('.scroll-content');
+      list.push(sc || line);
+    });
+    // Also catch any standalone scroll-content/section-row (defensive)
+    document.querySelectorAll('.scroll-content, .section-row').forEach(el=>{
+      if(!list.includes(el)) list.push(el);
+    });
+    return list;
+  }
+
   function enableDrag(el){
+    // Only if it can actually scroll horizontally
+    const canScroll = ()=> (el.scrollWidth - el.clientWidth) > 2;
+
     let down=false, sx=0, sl=0;
+
+    function start(pageX){
+      if(!canScroll()) return;
+      down=true; sx=pageX; sl=el.scrollLeft;
+    }
+    function move(pageX){
+      if(!down) return;
+      el.scrollLeft = sl - (pageX - sx);
+    }
+    function end(){ down=false; }
+
     el.addEventListener('mousedown', function(e){
-      down = true; sx = e.pageX; sl = el.scrollLeft;
+      start(e.pageX);
     }, {passive:true});
+
     window.addEventListener('mousemove', function(e){
       if(!down) return;
-      el.scrollLeft = sl - (e.pageX - sx);
+      move(e.pageX);
       e.preventDefault();
     }, {passive:false});
-    window.addEventListener('mouseup', function(){ down=false; }, {passive:true});
+
+    window.addEventListener('mouseup', end, {passive:true});
+
     el.addEventListener('touchstart', function(e){
-      const t = e.touches[0]; down=true; sx=t.pageX; sl=el.scrollLeft;
+      if(!e.touches || !e.touches[0]) return;
+      start(e.touches[0].pageX);
     }, {passive:true});
+
+    // IMPORTANT: preventDefault ONLY while actively dragging this row,
+    // so vertical page scroll still works when user is not dragging a row.
     window.addEventListener('touchmove', function(e){
       if(!down) return;
-      const t = e.touches[0]; el.scrollLeft = sl - (t.pageX - sx);
+      if(!e.touches || !e.touches[0]) return;
+      move(e.touches[0].pageX);
       e.preventDefault();
     }, {passive:false});
-    window.addEventListener('touchend', function(){ down=false; }, {passive:true});
-    window.addEventListener('touchcancel', function(){ down=false; }, {passive:true});
+
+    window.addEventListener('touchend', end, {passive:true});
+    window.addEventListener('touchcancel', end, {passive:true});
+
+    // Wheel-to-horizontal (desktop trackpads)
     el.addEventListener('wheel', function(e){
       if(Math.abs(e.deltaY) > Math.abs(e.deltaX)){
         el.scrollLeft += e.deltaY;
@@ -4751,12 +4798,16 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       }
     }, {passive:false});
   }
+
   function init(){
-    document.querySelectorAll('.thumb-line').forEach(enableDrag);
+    pickScrollTargets().forEach(enableDrag);
   }
+
   if(document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', init);
-  } else { init(); }
+  } else {
+    init();
+  }
 })();
 </script><script id="sidebar-active-script-ko">
 (function(){
@@ -5391,62 +5442,119 @@ window.addEventListener("message",function(ev){
 
 })(window, document);
 </script>
-<!-- Media Hub AutoMap (정본) -->
-<script defer="" src="/assets/js/mediahub-automap.v3.js"></script>
-<script defer="" src="/assets/js/placeholder-sweeper.js"></script>
+
 <script id="igdc-media-10section-frame">
 (function(){
-  const LIMIT = 50;
+
+  /* ===== CONFIG ===== */
+  const LIMIT = 50;            // 섹션당 슬롯 수
+  const CHECK_INTERVAL = 1200; // 상태 감시 주기(ms)
+
+  /* ================== */
+
   function isMediaKey(key){
-    return key && key.indexOf('media-') === 0 && key !== 'media-hero';
+    return key && key.startsWith('media-') && key !== 'media-hero';
   }
+
   function makePlaceholder(){
+
     const a = document.createElement('a');
     a.className = 'card media-card';
     a.setAttribute('data-placeholder','true');
     a.href = 'javascript:void(0)';
+
     const thumb = document.createElement('div');
     thumb.className = 'thumb ph';
+
     const meta = document.createElement('div');
     meta.className = 'meta';
     meta.textContent = 'Coming Soon';
+
     a.appendChild(thumb);
     a.appendChild(meta);
+
     return a;
   }
-  function ensureLine(line){
-    if(!line) return;
+
+  function ensureSection(line){
+
     const key = line.getAttribute('data-psom-key') || '';
     if(!isMediaKey(key)) return;
 
-    // If wrapped, placeholders belong inside .scroll-content; else inside line
-    const container = line.querySelector(':scope > .scroll-content') || line;
+    const container =
+      line.querySelector(':scope > .scroll-content') || line;
 
-    // Count current cards (including placeholders)
-    const cards = container.querySelectorAll(':scope > a.card');
-    const need = LIMIT - cards.length;
-    if(need <= 0) return;
+    if(!container) return;
 
-    const frag = document.createDocumentFragment();
-    for(let i=0;i<need;i++) frag.appendChild(makePlaceholder());
-    container.appendChild(frag);
+    const realCount =
+      container.querySelectorAll('a.card:not([data-placeholder])').length;
+
+    const dummyEls =
+      container.querySelectorAll('a.card[data-placeholder]');
+
+    const dummyCount = dummyEls.length;
+
+
+    /* ===== CASE 1 : 실데이터 없음 → 더미 유지/보정 ===== */
+    if(realCount === 0){
+
+      const total = realCount + dummyCount;
+      const need = LIMIT - total;
+
+      if(need > 0){
+
+        const frag = document.createDocumentFragment();
+
+        for(let i=0;i<need;i++){
+          frag.appendChild(makePlaceholder());
+        }
+
+        container.appendChild(frag);
+      }
+
+      return;
+    }
+
+
+    /* ===== CASE 2 : 실데이터 있음 → 더미 제거 ===== */
+    if(dummyCount){
+
+      dummyEls.forEach(el => el.remove());
+
+    }
+
   }
+
   function run(){
-    document.querySelectorAll('.thumb-line[data-psom-key]').forEach(ensureLine);
+
+    document
+      .querySelectorAll('.thumb-line[data-psom-key]')
+      .forEach(ensureSection);
+
   }
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', function(){
-      run();
-      // run again after wrappers/buttons may be injected
-      setTimeout(run, 200);
-      setTimeout(run, 600);
-    });
-  }else{
+
+  function boot(){
+
+    // 초기 1회
     run();
-    setTimeout(run, 200);
-    setTimeout(run, 600);
+
+    // 상태 감시 루프
+    setInterval(run, CHECK_INTERVAL);
+
   }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot);
+  }else{
+    boot();
+  }
+
 })();
 </script>
+
+<!-- Media Hub AutoMap (정본) -->
+<script defer="" src="/assets/js/mediahub-automap.v3.js"></script>
+<script defer="" src="/assets/js/placeholder-sweeper.js"></script>
+
 </body>
 </html>
