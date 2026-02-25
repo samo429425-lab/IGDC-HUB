@@ -88,22 +88,28 @@ async function fetchSnapshotHttp() {
 
   const urls = [];
 
+  // 1) Netlify 환경 URL
   if (base) {
+    urls.push(`${base.replace(/\/$/, "")}/data/networkhub-snapshot.json`);
     urls.push(`${base.replace(/\/$/, "")}/data/${SNAPSHOT_NAME}`);
   }
 
+  // 2) 상대경로
+  urls.push(`/data/networkhub-snapshot.json`);
   urls.push(`/data/${SNAPSHOT_NAME}`);
+
+  // 3) 루트 직접 시도 (일부 빌드 대응)
+  urls.push(`/networkhub-snapshot.json`);
 
   for (const url of urls) {
     try {
       const res = await fetch(url, { cache: "no-store" });
-
       if (!res.ok) continue;
-
       return await res.json();
-    } catch {}
+    } catch (e) {}
   }
 
+  console.warn('[FEED-NETWORK] snapshot not found (http)');
   return null;
 }
 
