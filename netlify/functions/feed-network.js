@@ -1,82 +1,66 @@
-// feed-network.js (FINAL - SNAPSHOT COMPATIBLE)
-
 import fs from 'fs/promises';
 import path from 'path';
 
-const SNAPSHOT_NAME = 'networkhub-snapshot.json';
-const LIMIT_DEFAULT = 100;
+const SNAPSHOT = 'networkhub-snapshot.json';
 
-// ---------------- CORS ----------------
 function cors(){
   return {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type'
+    "Content-Type":"application/json; charset=utf-8",
+    "Access-Control-Allow-Origin":"*",
+    "Access-Control-Allow-Methods":"GET,OPTIONS"
   };
 }
 
-function ok(body){
-  return {
-    statusCode: 200,
-    headers: cors(),
-    body: JSON.stringify(body)
-  };
+function ok(o){
+  return { statusCode:200, headers:cors(), body:JSON.stringify(o) };
 }
 
-// ---------------- FS ----------------
-async function readJson(p){
+async function read(p){
   try{
-    const raw = await fs.readFile(p,'utf-8');
-    return JSON.parse(raw);
-  }catch{
-    return null;
-  }
+    return JSON.parse(await fs.readFile(p,'utf8'));
+  }catch{ return null; }
 }
 
-function fsPaths(){
+function paths(){
   const cwd = process.cwd();
-  const dir = typeof __dirname === 'string' ? __dirname : cwd;
+  const dir = __dirname || cwd;
 
   return [
-    path.join(cwd,'data',SNAPSHOT_NAME),
-    path.join(dir,'data',SNAPSHOT_NAME),
-    path.join(dir,'..','data',SNAPSHOT_NAME),
-    path.join(dir,'..','..','data',SNAPSHOT_NAME)
+    path.join(cwd,'data',SNAPSHOT),
+    path.join(dir,'data',SNAPSHOT),
+    path.join(dir,'..','data',SNAPSHOT),
+    path.join(dir,'..','..','data',SNAPSHOT)
   ];
 }
 
-async function loadSnapshot(){
-
-  for (const p of fsPaths()){
-    const j = await readJson(p);
-    if (j) return j;
+async function load(){
+  for(const p of paths()){
+    const j = await read(p);
+    if(j) return j;
   }
-
   return null;
 }
 
-// ---------------- HANDLER ----------------
-export async function handler(event){
+export async function handler(e){
 
-  if (event.httpMethod === 'OPTIONS'){
-    return { statusCode:200, headers:cors(), body:'' };
+  if(e.httpMethod==='OPTIONS')
+    return {statusCode:200,headers:cors(),body:''};
+
+  const qs = e.queryStringParameters||{};
+  const key = (qs.key||'rightpanel').trim();
+
+  const snap = await load();
+
+  if(!snap?.sections?.rightpanel)
+    return ok({ items: [] });
+
+  const sections = {
+    rightpanel: snap.sections.rightpanel
+  };
+
+  if(key){
+    return ok({ items: sections[key]||[] });
   }
 
-  const qs = event.queryStringParameters || {};
-  const limit = Math.min(parseInt(qs.limit||LIMIT_DEFAULT,10) || LIMIT_DEFAULT, 200);
-
-  const snap = await loadSnapshot();
-
-  let items = [];
-
-  if (snap && Array.isArray(snap.items)){
-    items = snap.items;
-  }
-
-  return ok({
-    source: 'network-snapshot',
-    count: items.length,
-    items: items.slice(0, limit)
-  });
+  return ok({ sections });
 }
