@@ -1,107 +1,182 @@
-// network-rightpanel-automap.js
-// Snapshot First → Auto Sample → Never Blank
+/* ===================================================
+   IGDC Network RightPanel Automap (Production Final)
+   Same Architecture as Distribution
+=================================================== */
 
 (function(){
-  'use strict';
 
-  if (window.__NH_AUTO_V4__) return;
-  window.__NH_AUTO_V4__ = true;
+/* ================= CONFIG ================= */
 
-  const SNAPSHOT_URL = '/data/networkhub-snapshot.json';
-  const LIMIT = 100;
+const LIMIT = 100;
 
-  const DESKTOP_ID = 'rightAutoPanel';
-  const MOBILE_ID  = 'nh-mobile-rail-list';
+const FEED_URL = "/data/feed-network.json";
 
-  const PLACEHOLDER = '/assets/sample/placeholder.jpg';
+const SNAPSHOT_URLS = [
+  "/data/networkhub-snapshot.json",
+  "/.netlify/functions/networkSnapshot"
+];
 
-  function $(id){ return document.getElementById(id); }
 
-  function pick(it, keys){
-    for(const k of keys){
-      const v = it && it[k];
-      if(typeof v === 'string' && v.trim()) return v.trim();
-    }
-    return '';
+/* ================= UTILS ================= */
+
+async function fetchJson(url){
+  try{
+    const r = await fetch(url, { cache:"no-store" });
+    if(!r.ok) return null;
+    return await r.json();
+  }catch(e){
+    return null;
+  }
+}
+
+function toStr(v){
+  return (v||"").toString().trim();
+}
+
+
+/* ================= SAMPLE BUILDER ================= */
+
+function buildSamples(){
+
+  const list = [];
+
+  for(let i=1;i<=LIMIT;i++){
+
+    const n = String(i).padStart(3,"0");
+
+    list.push({
+      id: "sample-"+n,
+      title: "Network Sample "+i,
+      url: "#",
+      thumb: "/assets/sample/network/"+n+".jpg"
+    });
   }
 
-  function pickImg(it){
-    return pick(it,['thumb','image','img','photo','cover']) || PLACEHOLDER;
+  return list;
+}
+
+
+/* ================= DATA LOADER ================= */
+
+async function loadItems(){
+
+  /* 1) Feed First */
+  const feed = await fetchJson(FEED_URL+"?_t="+Date.now());
+
+  if(feed && Array.isArray(feed.items) && feed.items.length){
+    return feed.items;
   }
 
-  function pickUrl(it){
-    return pick(it,['url','href','link']) || '#';
-  }
+  /* 2) Snapshot Fallback */
+  for(const u of SNAPSHOT_URLS){
 
-  function makeSample(i){
-    return {
-      title: 'Network Sample ' + (i+1),
-      thumb: PLACEHOLDER,
-      url: '#'
-    };
-  }
+    const snap = await fetchJson(u+"?_t="+Date.now());
 
-  function buildList(items){
-    const list = Array.isArray(items) ? items.slice(0,LIMIT) : [];
-    while(list.length < LIMIT){
-      list.push(makeSample(list.length));
-    }
-    return list;
-  }
-
-  function createCard(item){
-    const box = document.createElement('div');
-    box.className = 'ad-box';
-
-    const a = document.createElement('a');
-    const href = pickUrl(item);
-    a.href = href;
-
-    if(href !== '#'){
-      a.target = '_blank';
-      a.rel = 'noopener';
-    }
-
-    const img = document.createElement('img');
-    img.src = pickImg(item);
-    img.loading = 'lazy';
-    img.decoding = 'async';
-
-    a.appendChild(img);
-    box.appendChild(a);
-
-    return box;
-  }
-
-  function render(box, list){
-    if(!box) return;
-    while(box.firstChild) box.removeChild(box.firstChild);
-    list.forEach(it => box.appendChild(createCard(it)));
-  }
-
-  async function loadSnapshot(){
-    try{
-      const r = await fetch(SNAPSHOT_URL, {cache:'no-store'});
-      if(!r.ok) return [];
-      const j = await r.json();
-      return Array.isArray(j.items) ? j.items : [];
-    }catch{
-      return [];
+    if(snap && Array.isArray(snap.items) && snap.items.length){
+      return snap.items;
     }
   }
 
-  async function run(){
-    const items = await loadSnapshot();
-    const list = buildList(items);
+  /* 3) Internal Sample */
+  return buildSamples();
+}
 
-    render($(DESKTOP_ID), list);
-    render($(MOBILE_ID), list);
+
+/* ================= NORMALIZER ================= */
+
+function normalize(items){
+
+  const out = [];
+
+  for(const it of (items||[])){
+
+    const thumb = it.thumb || it.image || "";
+    if(!thumb) continue;
+
+    let url = it.url || "#";
+
+    out.push({
+      id: it.id || "",
+      title: toStr(it.title||it.name||"Sample"),
+      url,
+      thumb
+    });
+
+    if(out.length>=LIMIT) break;
   }
 
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', run, {once:true});
+  return out;
+}
+
+
+/* ================= RENDER ================= */
+
+function createBox(it){
+
+  const box = document.createElement("div");
+  box.className = "ad-box";
+
+  const a = document.createElement("a");
+  a.className = "thumb-link";
+  a.href = it.url || "#";
+
+  if(it.url && it.url!=="#"){
+    a.target="_blank";
+    a.rel="noopener";
   }else{
-    run();
+    a.tabIndex=-1;
+    a.setAttribute("aria-hidden","true");
   }
+
+  const img = document.createElement("img");
+  img.src = it.thumb;
+  img.alt = it.title;
+  img.loading="lazy";
+  img.decoding="async";
+
+  a.appendChild(img);
+  box.appendChild(a);
+
+  return box;
+}
+
+
+function render(items){
+
+  const panel =
+    document.querySelector(".right-panel .ad-panel") ||
+    document.querySelector(".right-rail .ad-panel") ||
+    document.querySelector(".ad-panel");
+
+  if(!panel) return;
+
+  panel.innerHTML = "";
+
+  const frag = document.createDocumentFragment();
+
+  for(const it of items){
+    frag.appendChild(createBox(it));
+  }
+
+  panel.appendChild(frag);
+}
+
+
+/* ================= BOOT ================= */
+
+async function boot(){
+
+  const raw = await loadItems();
+
+  const normalized = normalize(raw);
+
+  render(normalized);
+}
+
+if(document.readyState==="loading"){
+  document.addEventListener("DOMContentLoaded", boot,{once:true});
+}else{
+  boot();
+}
 
 })();
