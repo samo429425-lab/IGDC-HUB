@@ -111,11 +111,14 @@
         return;
       }
 
-      const data = await loadFeed();
+const data = await loadFeed();
 
-      let items = Array.isArray(data?.items)
-        ? data.items
-        : [];
+if (!data || !Array.isArray(data.items)) {
+  console.warn('[NETWORK] invalid feed → keep html');
+  return;
+}
+
+let items = data.items;
 
       console.log('[NETWORK-AUTOMAP] feed items:', items.length);
 
