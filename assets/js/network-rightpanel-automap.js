@@ -1,39 +1,47 @@
-// network-rightpanel-automap.js (FINAL - SNAPSHOT FIRST MODE)
+// network-rightpanel-automap.js (DISTRIBUTION STYLE - FINAL)
 
 (function () {
   'use strict';
 
-  if (window.__NETWORK_AUTOMAP_FINAL__) return;
-  window.__NETWORK_AUTOMAP_FINAL__ = true;
+  if (window.__NETWORK_AUTOMAP_V3__) return;
+  window.__NETWORK_AUTOMAP_V3__ = true;
 
   const SNAPSHOT_URL = '/data/networkhub-snapshot.json';
-  const FEED_URL = '/.netlify/functions/feed-network?limit=100';
   const LIMIT = 100;
 
-  const DESKTOP_ID = 'rightAutoPanel';
-  const MOBILE_ID = 'nh-mobile-rail-list';
+  const DESKTOP = 'rightAutoPanel';
+  const MOBILE = 'nh-mobile-rail-list';
 
-  function $(id){
-    return document.getElementById(id);
-  }
+  const PLACEHOLDER = '/assets/sample/placeholder.jpg';
+
+  function $(id){ return document.getElementById(id); }
 
   function pick(it, keys){
     for (const k of keys){
       const v = it && it[k];
-      if (typeof v === 'string' && v.trim()) return v.trim();
+      if (typeof v === 'string' && v.trim()) return v;
     }
     return '';
   }
 
-  function pickUrl(it){
-    return pick(it, ['url','link','href']) || '#';
-  }
-
   function pickImg(it){
-    return pick(it, ['thumb','image','thumbnail','img','photo','cover']);
+    return pick(it,['thumb','image','img','photo','cover']) || PLACEHOLDER;
   }
 
-  function createBox(i, item){
+  function pickUrl(it){
+    return pick(it,['url','href','link']) || '#';
+  }
+
+  function makeDummy(i){
+    return {
+      title: 'Network Item ' + (i+1),
+      thumb: PLACEHOLDER,
+      url: '#'
+    };
+  }
+
+  function create(item){
+
     const box = document.createElement('div');
     box.className = 'ad-box';
 
@@ -48,11 +56,8 @@
     }
 
     const img = document.createElement('img');
-
-    img.src = pickImg(item) || '/assets/sample/placeholder.jpg';
-    img.alt = item.title || 'thumb';
+    img.src = pickImg(item);
     img.loading = 'lazy';
-    img.decoding = 'async';
 
     a.appendChild(img);
     box.appendChild(a);
@@ -60,82 +65,52 @@
     return box;
   }
 
-  async function fetchJson(url){
-    try{
-      const r = await fetch(url, { cache:'no-store' });
-      if (!r.ok) return null;
-      return await r.json();
-    }catch{
-      return null;
-    }
-  }
-
   async function loadSnapshot(){
-    return await fetchJson(SNAPSHOT_URL + '?_t=' + Date.now());
+    const r = await fetch(SNAPSHOT_URL,{ cache:'no-store' });
+    if (!r.ok) throw new Error('snapshot fail');
+    return r.json();
   }
 
-  async function loadFeed(){
-    return await fetchJson(FEED_URL + '&_t=' + Date.now());
+  function buildList(items){
+
+    const list = Array.isArray(items) ? items.slice(0,LIMIT) : [];
+
+    while (list.length < LIMIT){
+      list.push(makeDummy(list.length));
+    }
+
+    return list;
   }
 
-  async function loadItems(){
+  function render(box, list){
 
-    // 1순위: Snapshot
-    const snap = await loadSnapshot();
+    if (!box) return;
 
-    if (snap && Array.isArray(snap.items) && snap.items.length){
-      return snap.items;
-    }
+    while (box.firstChild) box.removeChild(box.firstChild);
 
-    // 2순위: Feed
-    const feed = await loadFeed();
-
-    if (feed && Array.isArray(feed.items) && feed.items.length){
-      return feed.items;
-    }
-
-    return [];
-  }
-
-  function ensureDummy(container){
-    if (!container) return;
-    if (container.children.length > 0) return;
-
-    for (let i=1;i<=LIMIT;i++){
-      container.appendChild(createBox(i, {}));
-    }
-  }
-
-  function render(container, items){
-
-    if (!container) return;
-
-    if (!items || !items.length){
-      ensureDummy(container);
-      return;
-    }
-
-    container.innerHTML = '';
-
-    const max = Math.min(items.length, LIMIT);
-
-    for (let i=0;i<max;i++){
-      container.appendChild(createBox(i+1, items[i]));
-    }
+    list.forEach(it=>{
+      box.appendChild(create(it));
+    });
   }
 
   async function run(){
 
-    const desktop = $(DESKTOP_ID);
-    const mobile = $(MOBILE_ID);
+    try{
 
-    ensureDummy(desktop);
-    ensureDummy(mobile);
+      const snap = await loadSnapshot();
 
-    const items = await loadItems();
+      const raw = snap && Array.isArray(snap.items)
+        ? snap.items
+        : [];
 
-    render(desktop, items);
-    render(mobile, items);
+      const list = buildList(raw);
+
+      render($(DESKTOP), list);
+      render($(MOBILE), list);
+
+    }catch(e){
+      console.error('[NETWORK] render fail', e);
+    }
   }
 
   if (document.readyState === 'loading'){
