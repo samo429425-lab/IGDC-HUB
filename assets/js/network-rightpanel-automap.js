@@ -1,148 +1,182 @@
-// network-rightpanel-automap.js (FINAL - compatible with rightpanel-dummy-engine-v2)
-// 목표: 디스트리뷰션과 동일 운영 철학
-// 1) snapshot(/data/networkhub-snapshot.json) 우선
-// 2) 없으면 샘플 100개 즉시 생성
-// 3) 기존 rightpanel-dummy-engine-v2 훅(__IGDC_RIGHTPANEL_RENDER) 사용 (더미→실데이터 전환)
-// 4) 모바일 레일(nh-mobile-rail-list)은 별도 렌더
+/* ===================================================
+   IGDC Network RightPanel Automap (Production Final)
+   Same Architecture as Distribution
+=================================================== */
 
-(function () {
-  'use strict';
+(function(){
 
-  if (window.__NH_RIGHT_AUTOMAP_FINAL__) return;
-  window.__NH_RIGHT_AUTOMAP_FINAL__ = true;
+/* ================= CONFIG ================= */
 
-  const SNAPSHOT_URL = '/data/networkhub-snapshot.json';
-  const LIMIT = 100;
+const LIMIT = 100;
 
-  const DESKTOP_PANEL_ID = 'rightAutoPanel';
-  const MOBILE_LIST_ID = 'nh-mobile-rail-list';
+const FEED_URL = "/data/feed-network.json";
 
-  const PLACEHOLDER = '/assets/sample/placeholder.jpg';
+const SNAPSHOT_URLS = [
+  "/data/networkhub-snapshot.json",
+  "/.netlify/functions/networkSnapshot"
+];
 
-  function $(id) { return document.getElementById(id); }
 
-  function pick(it, keys) {
-    for (let i = 0; i < keys.length; i++) {
-      const v = it && it[keys[i]];
-      if (typeof v === 'string' && v.trim()) return v.trim();
-    }
-    return '';
+/* ================= UTILS ================= */
+
+async function fetchJson(url){
+  try{
+    const r = await fetch(url, { cache:"no-store" });
+    if(!r.ok) return null;
+    return await r.json();
+  }catch(e){
+    return null;
+  }
+}
+
+function toStr(v){
+  return (v||"").toString().trim();
+}
+
+
+/* ================= SAMPLE BUILDER ================= */
+
+function buildSamples(){
+
+  const list = [];
+
+  for(let i=1;i<=LIMIT;i++){
+
+    const n = String(i).padStart(3,"0");
+
+    list.push({
+      id: "sample-"+n,
+      title: "Network Sample "+i,
+      url: "#",
+      thumb: "/assets/sample/network/"+n+".jpg"
+    });
   }
 
-  function normalizeItem(it, idx) {
-    // snapshot/feed 형태가 뭐든 이 3개 키로 통일
-    const thumb = pick(it, ['thumb','image','thumbnail','imageUrl','img','photo','cover']) || PLACEHOLDER;
-    const link  = pick(it, ['link','url','href']) || '#';
-    const id    = pick(it, ['id','productId','pid']) || String(idx + 1);
-    return { id, thumb, link };
+  return list;
+}
+
+
+/* ================= DATA LOADER ================= */
+
+async function loadItems(){
+
+  /* 1) Feed First */
+  const feed = await fetchJson(FEED_URL+"?_t="+Date.now());
+
+  if(feed && Array.isArray(feed.items) && feed.items.length){
+    return feed.items;
   }
 
-  function makeSample(idx) {
-    return { id: 'S' + (idx + 1), thumb: PLACEHOLDER, link: '#' };
-  }
+  /* 2) Snapshot Fallback */
+  for(const u of SNAPSHOT_URLS){
 
-  function buildList(raw) {
-    const list = Array.isArray(raw) ? raw.slice(0, LIMIT).map(normalizeItem) : [];
-    while (list.length < LIMIT) list.push(makeSample(list.length));
-    return list;
-  }
+    const snap = await fetchJson(u+"?_t="+Date.now());
 
-  async function loadSnapshotItems() {
-    try {
-      const r = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
-      if (!r.ok) return [];
-      const j = await r.json();
-      // 지원: {items:[...]} / {data:{items:[...]}}
-      const items =
-        (j && Array.isArray(j.items) ? j.items : null) ||
-        (j && j.data && Array.isArray(j.data.items) ? j.data.items : null) ||
-        [];
-      return Array.isArray(items) ? items : [];
-    } catch {
-      return [];
-    }
-  }
-
-  function renderMobile(list) {
-    const box = $(MOBILE_LIST_ID);
-    if (!box) return;
-
-    // items 없으면(=샘플이든 실데이터든) 무조건 채움
-    while (box.firstChild) box.removeChild(box.firstChild);
-
-    for (let i = 0; i < list.length; i++) {
-      const it = list[i];
-
-      const card = document.createElement('div');
-      card.className = 'ad-box';
-
-      const a = document.createElement('a');
-      a.href = it.link || '#';
-      if (a.href !== '#') { a.target = '_blank'; a.rel = 'noopener'; }
-
-      const img = document.createElement('img');
-      img.src = it.thumb || PLACEHOLDER;
-      img.loading = 'lazy';
-      img.decoding = 'async';
-      a.appendChild(img);
-
-      card.appendChild(a);
-      box.appendChild(card);
+    if(snap && Array.isArray(snap.items) && snap.items.length){
+      return snap.items;
     }
   }
 
-  function renderDesktopViaHook(list) {
-    // 기존 엔진 훅이 있으면 그걸로 렌더(더미 관리 포함)
-    if (typeof window.__IGDC_RIGHTPANEL_RENDER === 'function') {
-      window.__IGDC_RIGHTPANEL_RENDER(list);
-      return true;
-    }
-    return false;
+  /* 3) Internal Sample */
+  return buildSamples();
+}
+
+
+/* ================= NORMALIZER ================= */
+
+function normalize(items){
+
+  const out = [];
+
+  for(const it of (items||[])){
+
+    const thumb = it.thumb || it.image || "";
+    if(!thumb) continue;
+
+    let url = it.url || "#";
+
+    out.push({
+      id: it.id || "",
+      title: toStr(it.title||it.name||"Sample"),
+      url,
+      thumb
+    });
+
+    if(out.length>=LIMIT) break;
   }
 
-  function renderDesktopFallback(list) {
-    const panel = $(DESKTOP_PANEL_ID);
-    if (!panel) return;
+  return out;
+}
 
-    while (panel.firstChild) panel.removeChild(panel.firstChild);
 
-    for (let i = 0; i < list.length; i++) {
-      const it = list[i];
+/* ================= RENDER ================= */
 
-      const card = document.createElement('div');
-      card.className = 'ad-box';
+function createBox(it){
 
-      const a = document.createElement('a');
-      a.href = it.link || '#';
-      a.setAttribute('data-product-id', it.id || '');
-      if (a.href !== '#') { a.target = '_blank'; a.rel = 'noopener'; }
+  const box = document.createElement("div");
+  box.className = "ad-box";
 
-      const img = document.createElement('img');
-      img.src = it.thumb || PLACEHOLDER;
-      img.loading = 'lazy';
-      img.decoding = 'async';
+  const a = document.createElement("a");
+  a.className = "thumb-link";
+  a.href = it.url || "#";
 
-      a.appendChild(img);
-      card.appendChild(a);
-      panel.appendChild(card);
-    }
+  if(it.url && it.url!=="#"){
+    a.target="_blank";
+    a.rel="noopener";
+  }else{
+    a.tabIndex=-1;
+    a.setAttribute("aria-hidden","true");
   }
 
-  async function run() {
-    const raw = await loadSnapshotItems();
-    const list = buildList(raw);
+  const img = document.createElement("img");
+  img.src = it.thumb;
+  img.alt = it.title;
+  img.loading="lazy";
+  img.decoding="async";
 
-    // 데스크탑: 훅 우선(=기존 더미 엔진과 100% 호환)
-    const ok = renderDesktopViaHook(list);
-    if (!ok) renderDesktopFallback(list);
+  a.appendChild(img);
+  box.appendChild(a);
 
-    // 모바일: 별도 리스트 렌더
-    renderMobile(list);
+  return box;
+}
+
+
+function render(items){
+
+  const panel =
+    document.querySelector(".right-panel .ad-panel") ||
+    document.querySelector(".right-rail .ad-panel") ||
+    document.querySelector(".ad-panel");
+
+  if(!panel) return;
+
+  panel.innerHTML = "";
+
+  const frag = document.createDocumentFragment();
+
+  for(const it of items){
+    frag.appendChild(createBox(it));
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', run, { once: true });
-  } else {
-    run();
-  }
+  panel.appendChild(frag);
+}
+
+
+/* ================= BOOT ================= */
+
+async function boot(){
+
+  const raw = await loadItems();
+
+  const normalized = normalize(raw);
+
+  render(normalized);
+}
+
+if(document.readyState==="loading"){
+  document.addEventListener("DOMContentLoaded", boot,{once:true});
+}else{
+  boot();
+}
+
 })();
