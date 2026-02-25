@@ -1,25 +1,26 @@
-// network-rightpanel-automap.js (DISTRIBUTION STYLE - FINAL)
+// network-rightpanel-automap.js
+// Snapshot First → Auto Sample → Never Blank
 
-(function () {
+(function(){
   'use strict';
 
-  if (window.__NETWORK_AUTOMAP_V3__) return;
-  window.__NETWORK_AUTOMAP_V3__ = true;
+  if (window.__NH_AUTO_V4__) return;
+  window.__NH_AUTO_V4__ = true;
 
   const SNAPSHOT_URL = '/data/networkhub-snapshot.json';
   const LIMIT = 100;
 
-  const DESKTOP = 'rightAutoPanel';
-  const MOBILE = 'nh-mobile-rail-list';
+  const DESKTOP_ID = 'rightAutoPanel';
+  const MOBILE_ID  = 'nh-mobile-rail-list';
 
   const PLACEHOLDER = '/assets/sample/placeholder.jpg';
 
   function $(id){ return document.getElementById(id); }
 
   function pick(it, keys){
-    for (const k of keys){
+    for(const k of keys){
       const v = it && it[k];
-      if (typeof v === 'string' && v.trim()) return v;
+      if(typeof v === 'string' && v.trim()) return v.trim();
     }
     return '';
   }
@@ -32,25 +33,31 @@
     return pick(it,['url','href','link']) || '#';
   }
 
-  function makeDummy(i){
+  function makeSample(i){
     return {
-      title: 'Network Item ' + (i+1),
+      title: 'Network Sample ' + (i+1),
       thumb: PLACEHOLDER,
       url: '#'
     };
   }
 
-  function create(item){
+  function buildList(items){
+    const list = Array.isArray(items) ? items.slice(0,LIMIT) : [];
+    while(list.length < LIMIT){
+      list.push(makeSample(list.length));
+    }
+    return list;
+  }
 
+  function createCard(item){
     const box = document.createElement('div');
     box.className = 'ad-box';
 
     const a = document.createElement('a');
     const href = pickUrl(item);
-
     a.href = href;
 
-    if (href !== '#'){
+    if(href !== '#'){
       a.target = '_blank';
       a.rel = 'noopener';
     }
@@ -58,6 +65,7 @@
     const img = document.createElement('img');
     img.src = pickImg(item);
     img.loading = 'lazy';
+    img.decoding = 'async';
 
     a.appendChild(img);
     box.appendChild(a);
@@ -65,56 +73,33 @@
     return box;
   }
 
-  async function loadSnapshot(){
-    const r = await fetch(SNAPSHOT_URL,{ cache:'no-store' });
-    if (!r.ok) throw new Error('snapshot fail');
-    return r.json();
-  }
-
-  function buildList(items){
-
-    const list = Array.isArray(items) ? items.slice(0,LIMIT) : [];
-
-    while (list.length < LIMIT){
-      list.push(makeDummy(list.length));
-    }
-
-    return list;
-  }
-
   function render(box, list){
+    if(!box) return;
+    while(box.firstChild) box.removeChild(box.firstChild);
+    list.forEach(it => box.appendChild(createCard(it)));
+  }
 
-    if (!box) return;
-
-    while (box.firstChild) box.removeChild(box.firstChild);
-
-    list.forEach(it=>{
-      box.appendChild(create(it));
-    });
+  async function loadSnapshot(){
+    try{
+      const r = await fetch(SNAPSHOT_URL, {cache:'no-store'});
+      if(!r.ok) return [];
+      const j = await r.json();
+      return Array.isArray(j.items) ? j.items : [];
+    }catch{
+      return [];
+    }
   }
 
   async function run(){
+    const items = await loadSnapshot();
+    const list = buildList(items);
 
-    try{
-
-      const snap = await loadSnapshot();
-
-      const raw = snap && Array.isArray(snap.items)
-        ? snap.items
-        : [];
-
-      const list = buildList(raw);
-
-      render($(DESKTOP), list);
-      render($(MOBILE), list);
-
-    }catch(e){
-      console.error('[NETWORK] render fail', e);
-    }
+    render($(DESKTOP_ID), list);
+    render($(MOBILE_ID), list);
   }
 
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', run, { once:true });
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', run, {once:true});
   }else{
     run();
   }
