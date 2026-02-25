@@ -1,85 +1,48 @@
-/* network-rightpanel-automap.js (FINAL STABLE)
- * 기준:
- * - HTML: #rightAutoPanel / #nh-mobile-rail-list
- * - Feed: { items: [...] }
- * - 0개면 기존 HTML 유지 (절대 비우지 않음)
- */
+// network-rightpanel-automap.js (FINAL - SNAPSHOT FIRST MODE)
 
 (function () {
   'use strict';
 
-  if (window.__NETWORK_RIGHT_AUTOMAP_OK__) return;
-  window.__NETWORK_RIGHT_AUTOMAP_OK__ = true;
+  if (window.__NETWORK_AUTOMAP_FINAL__) return;
+  window.__NETWORK_AUTOMAP_FINAL__ = true;
 
-  // ✅ 피드 주소 (고정)
+  const SNAPSHOT_URL = '/data/networkhub-snapshot.json';
   const FEED_URL = '/.netlify/functions/feed-network?limit=100';
+  const LIMIT = 100;
 
-  const SLOT_LIMIT = 100;
+  const DESKTOP_ID = 'rightAutoPanel';
+  const MOBILE_ID = 'nh-mobile-rail-list';
 
-  // ------------------------------
-
-  function getTarget() {
-    return (
-      document.getElementById('rightAutoPanel') ||
-      document.getElementById('nh-mobile-rail-list')
-    );
+  function $(id){
+    return document.getElementById(id);
   }
 
-  function pick(it, keys) {
-    for (let i = 0; i < keys.length; i++) {
-      const v = it && it[keys[i]];
+  function pick(it, keys){
+    for (const k of keys){
+      const v = it && it[k];
       if (typeof v === 'string' && v.trim()) return v.trim();
     }
     return '';
   }
 
-  function pickImg(it) {
-    return pick(it, [
-      'image',
-      'thumb',
-      'thumbnail',
-      'imageUrl',
-      'img',
-      'photo',
-      'cover'
-    ]);
+  function pickUrl(it){
+    return pick(it, ['url','link','href']) || '#';
   }
 
-  function pickTitle(it) {
-    return pick(it, ['title', 'name', 'text']);
+  function pickImg(it){
+    return pick(it, ['thumb','image','thumbnail','img','photo','cover']);
   }
 
-  function pickUrl(it) {
-    return pick(it, ['url', 'href', 'link']) || '#';
-  }
-
-  async function loadFeed() {
-    const res = await fetch(FEED_URL + '&_t=' + Date.now(), {
-      cache: 'no-store'
-    });
-
-    if (!res.ok) throw new Error('Feed error: ' + res.status);
-
-    return res.json();
-  }
-
-  function clearBox(box) {
-    while (box.firstChild) box.removeChild(box.firstChild);
-  }
-
-  // ------------------------------
-
-  function createCard(item) {
-
-    const wrap = document.createElement('div');
-    wrap.className = 'ad-box';
+  function createBox(i, item){
+    const box = document.createElement('div');
+    box.className = 'ad-box';
 
     const a = document.createElement('a');
     const href = pickUrl(item);
 
     a.href = href;
 
-    if (href !== '#') {
+    if (href !== '#'){
       a.target = '_blank';
       a.rel = 'noopener';
     }
@@ -87,70 +50,97 @@
     const img = document.createElement('img');
 
     img.src = pickImg(item) || '/assets/sample/placeholder.jpg';
-    img.alt = pickTitle(item) || 'thumb';
-
+    img.alt = item.title || 'thumb';
     img.loading = 'lazy';
     img.decoding = 'async';
 
     a.appendChild(img);
-    wrap.appendChild(a);
+    box.appendChild(a);
 
-    return wrap;
+    return box;
   }
 
-  // ------------------------------
-
-  async function run() {
-
-    try {
-
-      const box = getTarget();
-
-      if (!box) {
-        console.error('[NETWORK-AUTOMAP] target not found');
-        return;
-      }
-
-const data = await loadFeed();
-
-if (!data || !Array.isArray(data.items)) {
-  console.warn('[NETWORK] invalid feed → keep html');
-  return;
-}
-
-let items = data.items;
-
-      console.log('[NETWORK-AUTOMAP] feed items:', items.length);
-
-      // ✅ 0개면: 기존 HTML 유지 (안 지움)
-      if (items.length === 0) {
-        console.warn('[NETWORK-AUTOMAP] empty → keep HTML');
-        return;
-      }
-
-      // ✅ 정상일 때만 교체
-      clearBox(box);
-
-      const max = Math.min(items.length, SLOT_LIMIT);
-
-      for (let i = 0; i < max; i++) {
-        box.appendChild(createCard(items[i]));
-      }
-
-      console.log('[NETWORK-AUTOMAP] rendered:', max);
-
-    } catch (e) {
-
-      console.error('[NETWORK-AUTOMAP] error:', e);
-
+  async function fetchJson(url){
+    try{
+      const r = await fetch(url, { cache:'no-store' });
+      if (!r.ok) return null;
+      return await r.json();
+    }catch{
+      return null;
     }
   }
 
-  // ------------------------------
+  async function loadSnapshot(){
+    return await fetchJson(SNAPSHOT_URL + '?_t=' + Date.now());
+  }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', run);
-  } else {
+  async function loadFeed(){
+    return await fetchJson(FEED_URL + '&_t=' + Date.now());
+  }
+
+  async function loadItems(){
+
+    // 1순위: Snapshot
+    const snap = await loadSnapshot();
+
+    if (snap && Array.isArray(snap.items) && snap.items.length){
+      return snap.items;
+    }
+
+    // 2순위: Feed
+    const feed = await loadFeed();
+
+    if (feed && Array.isArray(feed.items) && feed.items.length){
+      return feed.items;
+    }
+
+    return [];
+  }
+
+  function ensureDummy(container){
+    if (!container) return;
+    if (container.children.length > 0) return;
+
+    for (let i=1;i<=LIMIT;i++){
+      container.appendChild(createBox(i, {}));
+    }
+  }
+
+  function render(container, items){
+
+    if (!container) return;
+
+    if (!items || !items.length){
+      ensureDummy(container);
+      return;
+    }
+
+    container.innerHTML = '';
+
+    const max = Math.min(items.length, LIMIT);
+
+    for (let i=0;i<max;i++){
+      container.appendChild(createBox(i+1, items[i]));
+    }
+  }
+
+  async function run(){
+
+    const desktop = $(DESKTOP_ID);
+    const mobile = $(MOBILE_ID);
+
+    ensureDummy(desktop);
+    ensureDummy(mobile);
+
+    const items = await loadItems();
+
+    render(desktop, items);
+    render(mobile, items);
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', run, { once:true });
+  }else{
     run();
   }
 
