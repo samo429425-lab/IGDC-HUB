@@ -168,6 +168,13 @@ html, body {
   }
 }
 
+
+/* Force hide both scroll buttons on tablet/mobile */
+@media (max-width:1024px){
+  .scroll-btn{ display:none !important; }
+}
+/* Improve touch scrolling behavior */
+.scroll-content{ -webkit-overflow-scrolling:touch; touch-action: pan-y; }
 </style>
 <style>
 
@@ -627,126 +634,12 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
 })();
 </script>
 <!-- Mobile Section Pager v1 (group sections into horizontal slides on mobile) -->
-<style id="igdc-mobile-section-pager">
-@media (max-width:768px){
-  .section-pager{position:relative;overflow:hidden}
-  .section-track{display:flex;transition:transform .25s ease}
-  .section-slide{flex:0 0 100%;padding:0 10px;box-sizing:border-box}
-  .section-dots{position:sticky;bottom:8px;display:flex;gap:6px;justify-content:center;padding:10px 0}
-  .section-dots button{width:8px;height:8px;border-radius:999px;border:0;background:#cfd3da}
-  .section-dots button[aria-current="true"]{background:#111}
-}
-@media (max-width:768px) and (orientation:landscape){
-  .section-slide{padding:0 8px}
-}
-</style>
-<script defer="" id="igdc-mobile-section-pager-script">
-(function(){
-  var isMobile = matchMedia("(max-width:768px)").matches;
-  if(!isMobile) return;
-  // NOTE: MediaHub disables section-pager to preserve vertical scroll + per-row drag.
-  return;
-  if(document.getElementById("igdc-mobile-section-pager-ready")) return;
-  var m=document.createElement("meta"); m.id="igdc-mobile-section-pager-ready"; document.head.appendChild(m);
 
-  var host = document.querySelector("main") || document.querySelector(".main") || document.querySelector(".main-content");
-  if(!host) return;
+<!-- igdc-mobile-section-pager removed for MediaHub to preserve native scroll -->
 
-  var sections = Array.from(host.querySelectorAll(":scope > section"));
-  if(sections.length < 6) return;
 
-  function perPage(){ return matchMedia("(orientation:landscape)").matches ? 4 : 3; }
+<!-- igdc-mobile-section-pager removed for MediaHub to preserve native scroll -->
 
-  var pager = document.createElement("div"); pager.className = "section-pager";
-  var track = document.createElement("div"); track.className = "section-track";
-  pager.appendChild(track);
-
-  function build(){
-    track.innerHTML = "";
-    var n = perPage();
-    for(var i=0;i<sections.length;i+=n){
-      var slide = document.createElement("div");
-      slide.className = "section-slide";
-      for(var j=i;j<i+n && j<sections.length;j++){
-        slide.appendChild(sections[j]);
-      }
-      track.appendChild(slide);
-    }
-  }
-  build();
-
-  host.insertBefore(pager, host.firstChild);
-
-  var dots = document.createElement("div"); dots.className="section-dots";
-  pager.appendChild(dots);
-
-  function pageCount(){ return track.children.length; }
-  var idx = 0;
-  function renderDots(){
-    dots.innerHTML = "";
-    for(var i=0;i<pageCount();i++){
-      var b=document.createElement("button");
-      b.type="button"; b.setAttribute("aria-label","Go to page "+(i+1));
-      if(i===idx) b.setAttribute("aria-current","true");
-      (function(ii){ b.addEventListener("click", function(){ go(ii); }); })(i);
-      dots.appendChild(b);
-    }
-  }
-  function go(i){
-    idx = Math.max(0, Math.min(i, pageCount()-1));
-    track.style.transform = "translateX(" + (-100*idx) + "%)";
-    Array.from(dots.children).forEach(function(d,k){
-      if(k===idx) d.setAttribute("aria-current","true"); else d.removeAttribute("aria-current");
-    });
-    requestAnimationFrame(function(){
-      var h = track.children[idx].offsetHeight;
-      pager.style.minHeight = h + 20 + "px";
-    });
-  }
-
-  var startX=0, curX=0, dragging=false;
-  function onStart(e){
-    var x = (e.touches?e.touches[0].clientX:e.clientX);
-    if((window.innerWidth - x) <= 24) return; // allow full width for ad drawer (if any)
-    dragging=true; startX=x; curX=x; track.style.transition="none";
-  }
-  function onMove(e){
-    if(!dragging) return;
-    curX = (e.touches?e.touches[0].clientX:e.clientX);
-    var dx = curX - startX;
-    var base = -idx * pager.clientWidth;
-    track.style.transform = "translateX(" + (base + dx) + "px)";
-  }
-  function onEnd(){
-    if(!dragging) return;
-    dragging=false; track.style.transition="";
-    var dx = curX - startX;
-    if(Math.abs(dx) > 40){
-      if(dx<0) go(idx+1); else go(idx-1);
-    }else{
-      go(idx);
-    }
-  }
-  pager.addEventListener("touchstart", onStart, {passive:true});
-  pager.addEventListener("touchmove", onMove, {passive:true});
-  pager.addEventListener("touchend", onEnd, {passive:true});
-  pager.addEventListener("mousedown", onStart);
-  window.addEventListener("mousemove", onMove);
-  window.addEventListener("mouseup", onEnd);
-
-  window.addEventListener("resize", function(){
-    var oldPages = pageCount();
-    build();
-    if(pageCount() !== oldPages){
-      renderDots(); go(0);
-    }else{
-      go(idx);
-    }
-  });
-
-  renderDots(); go(0);
-})();
-</script>
 <style id="igdc-mobile-mediahub-patch-v3">
 /* === Mobile Optimization Patch — MediaHub (KR/ZH/EN) === */
 @media (max-width:768px){
@@ -4402,33 +4295,83 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       if(drag==='left'&&dx>8) document.body.classList.add(showCls);
       if(drag==='right'&&dx<-8) document.body.classList.add(showCls);
     };
-    const up=()=>{const pass=(drag==='top'&&dy>S)||(drag==='left'&&dx>S)||(drag==='right'&&dx<-S);
-      if(!pass) document.body.classList.remove(showCls);
-      drag=null; removeEventListener('pointermove',move); removeEventListener('touchmove',move);
-      removeEventListener('pointerup',up); removeEventListener('touchend',up);
-    };
-    edge.addEventListener('pointerdown',down); edge.addEventListener('touchstart',down,{passive:true});
-    document.addEventListener('click',e=>{const p=(dir==='top'?top:dir==='left'?left:right); if(!p) return;
-      if(document.body.classList.contains(showCls)&&!p.contains(e.target)) document.body.classList.remove(showCls);
-    });
-    addEventListener('scroll',()=>{if(document.body.classList.contains(showCls)) document.body.classList.remove(showCls)},{passive:true});
-  }
-  if(top) bind('.edge-top','top','show-top');
-  if(left) bind('.edge-left','left','show-left');
-  if(right) bind('.edge-right','right','show-right');
-})();
-</script><script id="igdc-qa-ensure-modal">
+    const up=()=>{const pass=(drag==='top'&&dy>S)||(drag==='left'&&dx>S)||(drag=<script id="thumbline-drag-script">
+/*
+  MediaHub row drag (mobile-safe)
+  - Allows vertical page scroll even when touching cards
+  - Only hijacks when horizontal intent is clear
+*/
 (function(){
-  if (window.__IGDC_QA_ENSURE__) return; window.__IGDC_QA_ENSURE__ = true;
+  const THRESHOLD = 10;
 
-  function ensureModal(){
-    var modal = document.querySelector('.igdc-qa-modal');
-    if(!modal){
-      // minimal modal skeleton
-      var m = document.createElement('div'); m.className='igdc-qa-modal';
-      var b = document.createElement('div'); b.className='igdc-qa-backdrop';
-      var p = document.createElement('div'); p.className='igdc-qa-panel';
-      var h = document.createElement('div'); h.className='igdc-qa-header';
+  function enableDrag(scroller){
+    if(!scroller) return;
+
+    let isDown = false;
+    let isDraggingX = false;
+    let startX = 0, startY = 0, startScrollLeft = 0;
+
+    const onDown = (e) => {
+      // Only primary pointer
+      if(e.pointerType && e.pointerType !== 'mouse'){
+        // ok
+      }
+      isDown = true;
+      isDraggingX = false;
+      startX = e.clientX;
+      startY = e.clientY;
+      startScrollLeft = scroller.scrollLeft;
+      try { scroller.setPointerCapture(e.pointerId); } catch(_){}
+    };
+
+    const onMove = (e) => {
+      if(!isDown) return;
+
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      // Decide intent
+      if(!isDraggingX){
+        if(Math.abs(dx) > THRESHOLD && Math.abs(dx) > Math.abs(dy) + 4){
+          isDraggingX = true;
+        }else{
+          // vertical intent: do not block page scroll
+          return;
+        }
+      }
+
+      // Horizontal drag: prevent page scroll and move row
+      e.preventDefault();
+      scroller.scrollLeft = startScrollLeft - dx;
+    };
+
+    const onUp = () => {
+      isDown = false;
+      isDraggingX = false;
+    };
+
+    scroller.addEventListener('pointerdown', onDown, {passive:true});
+    scroller.addEventListener('pointermove', onMove, {passive:false});
+    scroller.addEventListener('pointerup', onUp, {passive:true});
+    scroller.addEventListener('pointercancel', onUp, {passive:true});
+    scroller.addEventListener('pointerleave', onUp, {passive:true});
+  }
+
+  function boot(){
+    // Prefer the actual horizontal scroller container
+    document.querySelectorAll('.thumb-line').forEach(line=>{
+      const scroller = line.querySelector(':scope > .scroll-content') || line;
+      enableDrag(scroller);
+    });
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot);
+  }else{
+    boot();
+  }
+})();
+</script>iv'); h.className='igdc-qa-header';
       var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
