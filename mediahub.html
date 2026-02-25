@@ -158,7 +158,7 @@ html, body {
   }
 }
 /* Mobile portrait: YouTube-like full-width cards */
-@media (max-width:900px){
+@media (max-width:900px) and (orientation: portrait){
   .thumb-line[data-psom-key^="media-"] .card{
     flex:0 0 100% !important;
     max-width:100% !important;
@@ -168,18 +168,6 @@ html, body {
   }
 }
 
-
-
-/* === Media mobile scroll hard-fix (<=1024) === */
-@media (max-width:1024px){
-  .thumb-line[data-psom-key^="media-"] > .scroll-btn{ display:none !important; }
-  .thumb-line[data-psom-key^="media-"].scroll-wrapper{ padding:0 !important; overflow:hidden !important; }
-  .thumb-line[data-psom-key^="media-"] > .scroll-content{
-    overflow-x:auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    touch-action: pan-x !important;
-  }
-}
 </style>
 <style>
 
@@ -656,6 +644,8 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
 (function(){
   var isMobile = matchMedia("(max-width:768px)").matches;
   if(!isMobile) return;
+  // NOTE: MediaHub disables section-pager to preserve vertical scroll + per-row drag.
+  return;
   if(document.getElementById("igdc-mobile-section-pager-ready")) return;
   var m=document.createElement("meta"); m.id="igdc-mobile-section-pager-ready"; document.head.appendChild(m);
 
@@ -717,12 +707,6 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   var startX=0, curX=0, dragging=false;
   function onStart(e){
     var x = (e.touches?e.touches[0].clientX:e.clientX);
-    // If gesture started inside a horizontal media row, DO NOT hijack it (let row scroll/drag).
-    try{
-      var _t = e.target;
-      if(_t && _t.closest && _t.closest('.thumb-line, .scroll-content, .scroll-wrapper, .section-row')) return;
-    }catch(_){}
-
     if((window.innerWidth - x) <= 24) return; // allow full width for ad drawer (if any)
     dragging=true; startX=x; curX=x; track.style.transition="none";
   }
@@ -768,6 +752,9 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
 @media (max-width:768px){
   /* 1) Hide left sidebar on mobile */
   .sidebar{ display:none !important; }
+
+  /* 1.1) Allow page vertical scroll (avoid trapping in main overflow:hidden) */
+  main{ overflow: visible !important; }
 
   /* 2) Relax layout paddings for full-width content */
   .container,.layout{ display:block !important; padding:0 !important; margin:0 !important; }
@@ -1053,7 +1040,10 @@ body {
   }
   /* Hover unaffected except border/bg from the base design */
 </style>
+
 <!-- BC ultra-tight adjust: shrink button width slightly, gap=5px -->
+
+
 <!-- BC tight correction: text-only narrow, keep font size, exact 5px gaps -->
 <style id="bc-tight-correct-20251013">
   /* Exact inter-button gap */
@@ -1077,6 +1067,7 @@ body {
     letter-spacing:normal;
   }
 </style>
+
 <!-- Hero overflow hotfix (2025-10-13) -->
 <style id="mediahub-hero-overflow-hotfix">
   @media (max-width: 1024px){
@@ -1121,6 +1112,8 @@ body {
     }
   });
 })();</script>
+
+
 <style id="bc-mobile-80-lock-20251113">
 /* Mobile (<=900px): lock ~20% shrink for both text and button, with stable gaps */
 @media (max-width: 900px){
@@ -1151,6 +1144,7 @@ body {
   }
 }
 </style>
+
 <style id="mobile-footer-guard">
   html, body { height: auto; min-height: 100% !important; }
   @supports (height: 100dvh) {
@@ -1176,12 +1170,15 @@ body {
     main, .content-area { overflow: visible !important; }
   }
 </style>
-<link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
+
+<link rel="stylesheet" href="/assets/css/thumbs.standard.css">
+
 <style id="media-placeholder-style">
 .media-card{position:relative;width:320px;height:180px;flex:0 0 320px;border-radius:12px;overflow:hidden;background:#111;margin-right:12px}
 .media-card .thumb.ph{width:100%;height:100%;background:linear-gradient(135deg,#222,#333)}
 .media-card .meta{position:absolute;left:0;right:0;bottom:0;padding:10px;color:#eee;background:linear-gradient(to top,rgba(0,0,0,.6),transparent)}
 </style>
+
 <style id="mediahub-scroll-fix-2026-02">
 /* === MEDIA SCROLL BUTTON FINAL FIX === */
 
@@ -1212,9 +1209,11 @@ body {
   padding-right: 5px !important;
 }
 </style>
+
 </head>
 <body>
-<div data-psom-key="media-hero" id="hero"><div class="hero-title"></div></div>
+<div id="hero" data-psom-key="media-hero"><div class="hero-title"></div></div>
+
 <script>(function(){document.addEventListener("DOMContentLoaded",function(){document.documentElement.classList.remove("prelayout");var s=document.getElementById("prelayout-guard");if(s&&s.parentNode){s.parentNode.removeChild(s);}});})();</script>
 <div class="layout">
 <aside class="sidebar">
@@ -1247,2204 +1246,1798 @@ body {
 <!-- 플랫폼 링크 라인 -->
 <div class="section-title">콘텐츠 공급사</div>
 <div class="platform-line"><a class="platform-tile" href="https://www.netflix.com" target="_blank">Netflix</a><a class="platform-tile" href="https://www.disneyplus.com" target="_blank">Disney+</a><a class="platform-tile" href="https://www.amazon.com/primevideo" target="_blank">Amazon Prime</a><a class="platform-tile" href="https://tv.apple.com" target="_blank">Apple TV+</a><a class="platform-tile" href="https://www.youtube.com" target="_blank">YouTube</a><a class="platform-tile" href="https://spotify.com" target="_blank">Spotify</a><a class="platform-tile" href="https://www.melon.com" target="_blank">Melon</a><a class="platform-tile" href="https://www.wavve.com" target="_blank">Wavve</a><a class="platform-tile" href="https://www.hulu.com" target="_blank">Hulu</a><a class="platform-tile" href="https://www.paramountplus.com" target="_blank">Paramount+</a><a class="platform-tile" href="https://www.peacocktv.com" target="_blank">Peacock</a><a class="platform-tile" href="https://www.tving.com" target="_blank">Tving</a><a class="platform-tile" href="https://www.coupangplay.com" target="_blank">Coupang Play</a><a class="platform-tile" href="https://music.youtube.com" target="_blank">YouTube Music</a><a class="platform-tile" href="https://tidal.com" target="_blank">Tidal</a><a class="platform-tile" href="https://www.deezer.com" target="_blank">Deezer</a><a class="platform-tile" href="https://music.amazon.com" target="_blank">Amazon Music</a><a class="platform-tile" href="https://www.bbc.co.uk/iplayer" target="_blank">BBC iPlayer</a><a class="platform-tile" href="https://www.viki.com" target="_blank">Rakuten Viki</a><a class="platform-tile" href="https://mubi.com" target="_blank">Mubi</a><a class="platform-tile" href="https://www.crunchyroll.com" target="_blank">Crunchyroll</a><a class="platform-tile" href="https://tv.kakao.com" target="_blank">Kakao TV</a><a class="platform-tile" href="https://video.unext.jp" target="_blank">U-NEXT</a></div>
+
 <!-- 지금 뜨는 콘텐츠 -->
 <div class="section-title">🔥 지금 뜨는 콘텐츠</div>
 <div class="thumb-line" data-psom-key="media-trending">
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
 </div>
+
 <!-- 최신 영화 -->
 <div class="section-title">🎬 최신 영화</div>
 <div class="thumb-line" data-psom-key="media-movie">
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
 </div>
+
 <!-- 최신 드라마 -->
 <div class="section-title">📺 최신 드라마</div>
 <div class="thumb-line" data-psom-key="media-drama">
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
 </div>
+
 <!-- 미스터리/스릴러 -->
 <div class="section-title">🕵️‍♂️ 미스터리 / 스릴러</div>
 <div class="thumb-line" data-psom-key="media-thriller">
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
 </div>
+
 <!-- 로멘스 -->
 <div class="section-title">💖 로멘스</div>
 <div class="thumb-line" data-psom-key="media-romance">
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
 </div>
+
 <!-- 예능/오락 -->
 <div class="section-title">😂 예능 / 오락</div>
 <div class="thumb-line" data-psom-key="media-variety">
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
 </div>
+
 <!-- 다큐/교양 -->
 <div class="section-title">🎥 다큐 / 교양</div>
 <div class="thumb-line" data-psom-key="media-documentary">
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
 </div>
+
 <!-- 애니메이션 -->
 <div class="section-title">🐱 애니메이션</div>
 <div class="thumb-line" data-psom-key="media-animation">
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
 </div>
+
 <!-- 뮤비 -->
 <div class="section-title">🎵 뮤비</div>
 <div class="thumb-line" data-psom-key="media-music">
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
 </div>
+
 <!-- 핫한 쇼츠 영상무비 -->
 <div class="section-title">🔥 핫한 쇼츠 영상무비</div>
 <div class="thumb-line" data-psom-key="media-shorts">
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
-</a>
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
 </a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Coming Soon</div>
+</a>
+
 </div>
 </div>
 </main>
 </div>
+
 <script>
 /**
  * MediaHub Unified Scroll Script (SAFE FULL BLOCK)
@@ -3548,13 +3141,6 @@ body {
   }
 
   function bindScroll(line) {
-    // Mobile/tablet (<=1024): disable JS drag/button logic. Use native horizontal scroll.
-    try{
-      if (window.matchMedia && window.matchMedia('(max-width:1024px)').matches) {
-        line.dataset.scrollBound = '1';
-        return;
-      }
-    }catch(e){}
     if (!line || line.dataset.scrollBound === '1') return;
 
     const container = line.querySelector(':scope > .scroll-content');
@@ -3715,6 +3301,8 @@ function end(dir) {
 
 })();
 </script>
+
+
 <script>
 // Open provider search in a new tab, no backend dependency
 function handleVideoSearch(e){
@@ -4240,6 +3828,7 @@ function handleVideoSearch(e){
       });
   })();
 </script>
+
 <script id="igdc-qa-script">
 (function(){
   if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
@@ -4729,68 +4318,27 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 })();
 </script><script id="thumbline-drag-script">
 (function(){
-  // IGDC MediaHub: horizontal drag for real scroll containers (mobile friendly)
-  // - Bind to actual scrollable nodes (.scroll-content preferred)
-  // - Do NOT globally block native scrolling unless we are actively dragging a scrollable row
-  function pickScrollTargets(){
-    const list = [];
-    document.querySelectorAll('.thumb-line').forEach(line=>{
-      const sc = line.querySelector('.scroll-content');
-      list.push(sc || line);
-    });
-    // Also catch any standalone scroll-content/section-row (defensive)
-    document.querySelectorAll('.scroll-content, .section-row').forEach(el=>{
-      if(!list.includes(el)) list.push(el);
-    });
-    return list;
-  }
-
   function enableDrag(el){
-    // Only if it can actually scroll horizontally
-    const canScroll = ()=> (el.scrollWidth - el.clientWidth) > 2;
-
     let down=false, sx=0, sl=0;
-
-    function start(pageX){
-      if(!canScroll()) return;
-      down=true; sx=pageX; sl=el.scrollLeft;
-    }
-    function move(pageX){
-      if(!down) return;
-      el.scrollLeft = sl - (pageX - sx);
-    }
-    function end(){ down=false; }
-
     el.addEventListener('mousedown', function(e){
-      start(e.pageX);
+      down = true; sx = e.pageX; sl = el.scrollLeft;
     }, {passive:true});
-
     window.addEventListener('mousemove', function(e){
       if(!down) return;
-      move(e.pageX);
+      el.scrollLeft = sl - (e.pageX - sx);
       e.preventDefault();
     }, {passive:false});
-
-    window.addEventListener('mouseup', end, {passive:true});
-
+    window.addEventListener('mouseup', function(){ down=false; }, {passive:true});
     el.addEventListener('touchstart', function(e){
-      if(!e.touches || !e.touches[0]) return;
-      start(e.touches[0].pageX);
+      const t = e.touches[0]; down=true; sx=t.pageX; sl=el.scrollLeft;
     }, {passive:true});
-
-    // IMPORTANT: preventDefault ONLY while actively dragging this row,
-    // so vertical page scroll still works when user is not dragging a row.
     window.addEventListener('touchmove', function(e){
       if(!down) return;
-      if(!e.touches || !e.touches[0]) return;
-      move(e.touches[0].pageX);
+      const t = e.touches[0]; el.scrollLeft = sl - (t.pageX - sx);
       e.preventDefault();
     }, {passive:false});
-
-    window.addEventListener('touchend', end, {passive:true});
-    window.addEventListener('touchcancel', end, {passive:true});
-
-    // Wheel-to-horizontal (desktop trackpads)
+    window.addEventListener('touchend', function(){ down=false; }, {passive:true});
+    window.addEventListener('touchcancel', function(){ down=false; }, {passive:true});
     el.addEventListener('wheel', function(e){
       if(Math.abs(e.deltaY) > Math.abs(e.deltaX)){
         el.scrollLeft += e.deltaY;
@@ -4798,16 +4346,12 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       }
     }, {passive:false});
   }
-
   function init(){
-    pickScrollTargets().forEach(enableDrag);
+    document.querySelectorAll('.thumb-line').forEach(enableDrag);
   }
-
   if(document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+  } else { init(); }
 })();
 </script><script id="sidebar-active-script-ko">
 (function(){
@@ -5105,7 +4649,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var m = document.createElement('div'); m.className='igdc-qa-modal';
       var b = document.createElement('div');  -->
 <script>document.addEventListener("DOMContentLoaded",()=>{if(matchMedia("(max-width:768px)").matches){const p=document.querySelector(".platform-line");if(p)p.setAttribute("data-providers","");}});</script>
+
 <!-- thumbnail automapping -->
+
 <script>
 window.IGDC_QA=window.IGDC_QA||{};
 if(typeof window.IGDC_QA.open!=="function"){
@@ -5118,6 +4664,8 @@ window.addEventListener("message",function(ev){
   try{if(ev&&ev.data&&ev.data.type==="IGTC_OPEN_QNA"&&typeof IGDC_QA.open==="function"){IGDC_QA.open();}}catch(e){}
 });
 </script>
+
+
 <script id="igtc-checkout-trigger-v1">
 (function(){
   if (window.__IGTC_CHECKOUT_READY__) return;
@@ -5188,6 +4736,7 @@ window.addEventListener("message",function(ev){
   if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('전송 실패'));});
 })();
 </script>
+
 <style id="mobile-footer-guard-final">
   html, body { height: auto; min-height: 100% !important; }
   @supports (height: 100dvh) {
@@ -5209,6 +4758,7 @@ window.addEventListener("message",function(ev){
   footer { padding-bottom: max(28px, env(safe-area-inset-bottom)) !important; position: static !important; }
   /* MOBILE-FOOTER-GUARD: final */
 </style>
+
 <script>
 // IGDC MediaHub: per-section lazy card reveal (initial 7, then on scroll)
 (function(){
@@ -5254,6 +4804,7 @@ window.addEventListener("message",function(ev){
   }
 })();
 </script>
+
 <script>
 // IGDC: report page height to parent index for iframe resizing
 (function(){
@@ -5291,9 +4842,12 @@ window.addEventListener("message",function(ev){
   window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
 })();
 </script>
-<script defer="" src="/assets/js/auto-embed.instagram.js"></script>
-<script defer="" src="/assets/js/media-hero-engine.js"></script>
-<script defer="" src="/assets/js/media-empty-handler.js"></script>
+
+<script defer src="/assets/js/auto-embed.instagram.js"></script>
+
+<script defer src="/assets/js/media-hero-engine.js"></script>
+<script defer src="/assets/js/media-empty-handler.js"></script>
+
 <script id="igdc-media-access-script">
 
 /*
@@ -5443,118 +4997,65 @@ window.addEventListener("message",function(ev){
 })(window, document);
 </script>
 
+<!-- Media Hub AutoMap (정본) -->
+<script defer src="/assets/js/mediahub-automap.v3.js"></script>
+<script defer src="/assets/js/placeholder-sweeper.js"></script>
+
+
 <script id="igdc-media-10section-frame">
 (function(){
-
-  /* ===== CONFIG ===== */
-  const LIMIT = 50;            // 섹션당 슬롯 수
-  const CHECK_INTERVAL = 1200; // 상태 감시 주기(ms)
-
-  /* ================== */
-
+  const LIMIT = 50;
   function isMediaKey(key){
-    return key && key.startsWith('media-') && key !== 'media-hero';
+    return key && key.indexOf('media-') === 0 && key !== 'media-hero';
   }
-
   function makePlaceholder(){
-
     const a = document.createElement('a');
     a.className = 'card media-card';
     a.setAttribute('data-placeholder','true');
     a.href = 'javascript:void(0)';
-
     const thumb = document.createElement('div');
     thumb.className = 'thumb ph';
-
     const meta = document.createElement('div');
     meta.className = 'meta';
     meta.textContent = 'Coming Soon';
-
     a.appendChild(thumb);
     a.appendChild(meta);
-
     return a;
   }
-
-  function ensureSection(line){
-
+  function ensureLine(line){
+    if(!line) return;
     const key = line.getAttribute('data-psom-key') || '';
     if(!isMediaKey(key)) return;
 
-    const container =
-      line.querySelector(':scope > .scroll-content') || line;
+    // If wrapped, placeholders belong inside .scroll-content; else inside line
+    const container = line.querySelector(':scope > .scroll-content') || line;
 
-    if(!container) return;
+    // Count current cards (including placeholders)
+    const cards = container.querySelectorAll(':scope > a.card');
+    const need = LIMIT - cards.length;
+    if(need <= 0) return;
 
-    const realCount =
-      container.querySelectorAll('a.card:not([data-placeholder])').length;
-
-    const dummyEls =
-      container.querySelectorAll('a.card[data-placeholder]');
-
-    const dummyCount = dummyEls.length;
-
-
-    /* ===== CASE 1 : 실데이터 없음 → 더미 유지/보정 ===== */
-    if(realCount === 0){
-
-      const total = realCount + dummyCount;
-      const need = LIMIT - total;
-
-      if(need > 0){
-
-        const frag = document.createDocumentFragment();
-
-        for(let i=0;i<need;i++){
-          frag.appendChild(makePlaceholder());
-        }
-
-        container.appendChild(frag);
-      }
-
-      return;
-    }
-
-
-    /* ===== CASE 2 : 실데이터 있음 → 더미 제거 ===== */
-    if(dummyCount){
-
-      dummyEls.forEach(el => el.remove());
-
-    }
-
+    const frag = document.createDocumentFragment();
+    for(let i=0;i<need;i++) frag.appendChild(makePlaceholder());
+    container.appendChild(frag);
   }
-
   function run(){
-
-    document
-      .querySelectorAll('.thumb-line[data-psom-key]')
-      .forEach(ensureSection);
-
+    document.querySelectorAll('.thumb-line[data-psom-key]').forEach(ensureLine);
   }
-
-  function boot(){
-
-    // 초기 1회
-    run();
-
-    // 상태 감시 루프
-    setInterval(run, CHECK_INTERVAL);
-
-  }
-
   if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', boot);
+    document.addEventListener('DOMContentLoaded', function(){
+      run();
+      // run again after wrappers/buttons may be injected
+      setTimeout(run, 200);
+      setTimeout(run, 600);
+    });
   }else{
-    boot();
+    run();
+    setTimeout(run, 200);
+    setTimeout(run, 600);
   }
-
 })();
 </script>
-
-<!-- Media Hub AutoMap (정본) -->
-<script defer="" src="/assets/js/mediahub-automap.v3.js"></script>
-<script defer="" src="/assets/js/placeholder-sweeper.js"></script>
 
 </body>
 </html>
