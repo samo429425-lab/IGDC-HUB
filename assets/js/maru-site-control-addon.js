@@ -1,5 +1,5 @@
 /* =========================================================
- * MARU Site Control Addon — FIXED (v7.0)
+ * MARU Site Control Addon — FIXED (v7.1)
  * ---------------------------------------------------------
  * Goals (per 운영 규칙):
  * 1) Addon is the ONLY owner of voice + conversation routing.
@@ -288,8 +288,8 @@ function showExtension(){
   
   // ---------- OVERLAP / DATA CHECK (Region/Country Board) ----------
   function getOpenModalKind(){
-    const hasCountry = !!document.querySelector('.maru-country-modal.open');
-    const hasRegion  = !!document.querySelector('.maru-region-modal.open');
+    const hasCountry = !!document.querySelector('.maru-country-modal');
+    const hasRegion  = !!document.querySelector('.maru-region-modal');
     if (hasCountry) return 'country';
     if (hasRegion) return 'region';
     return null;
@@ -678,11 +678,6 @@ function callInsightEngine(req){
   function dispatch(req){
 	  
     // === [PATCH v10] FIRST TURN EXTENSION PRE-OPEN ===
-    if (shouldOpenExtension(req)) {
-        EXT.lockUntil = Date.now() + 3600 * 1000;
-        EXT.lockReason = 'pre-open';
-        showExtension();
-    }
     STATE.lastRequest = req;
     STATE.commandHistory.push({ role:'user', text: req.text });
 
@@ -718,8 +713,35 @@ function callInsightEngine(req){
     };
   }
 
+
+  function sanitizeEcho(headline, userText){
+    const h = String(headline || '').trim();
+    const u = String(userText || '').trim();
+    if (!h) return '';
+    if (!u) return h;
+
+    // If headline contains the full user query, strip it to avoid "Q+A together" rendering.
+    // Common patterns: "Q: ... A: ...", "...\n...".
+    let out = h;
+
+    // remove exact inclusion of user text (once)
+    if (out.includes(u)) {
+      out = out.replace(u, '').trim();
+    }
+
+    // remove leading markers that echo the question
+    out = out.replace(/^\s*(Q\s*[:：]|QUESTION\s*[:：]|USER\s*[:：])\s*/i, '').trim();
+
+    // collapse repeated separators
+    out = out.replace(/^[-–—\s]*$/, '').trim();
+
+    // If stripping makes it empty, fall back to original headline.
+    return out || h;
+  }
+
   function routeResponse(req, res){
-    const headline = res.text || '준비된 자료가 없습니다.';
+    const headlineRaw = res.text || '준비된 자료가 없습니다.';
+    const headline = sanitizeEcho(headlineRaw, req && req.text);
 
     // 확장창 오픈 여부 판단 (정본)
     // - 질문은 Conversation Dock에만 존재 (확장창에 USER 질문 표시 금지)
