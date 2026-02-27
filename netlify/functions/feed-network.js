@@ -1,66 +1,77 @@
-import fs from 'fs/promises';
-import path from 'path';
+import fs from "fs/promises";
+import path from "path";
 
-const SNAPSHOT = 'networkhub-snapshot.json';
+const SNAPSHOT = "networkhub-snapshot.json";
 
-function cors(){
+function cors() {
   return {
-    "Content-Type":"application/json; charset=utf-8",
-    "Access-Control-Allow-Origin":"*",
-    "Access-Control-Allow-Methods":"GET,OPTIONS"
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*"
   };
 }
 
-function ok(o){
-  return { statusCode:200, headers:cors(), body:JSON.stringify(o) };
+function ok(data) {
+  return {
+    statusCode: 200,
+    headers: cors(),
+    body: JSON.stringify(data)
+  };
 }
 
-async function read(p){
-  try{
-    return JSON.parse(await fs.readFile(p,'utf8'));
-  }catch{ return null; }
+async function readJSON(p) {
+  try {
+    return JSON.parse(await fs.readFile(p, "utf8"));
+  } catch {
+    return null;
+  }
 }
 
-function paths(){
+function snapshotPaths() {
   const cwd = process.cwd();
-  const dir = __dirname || cwd;
+  const dir = __dirname;
 
   return [
-    path.join(cwd,'data',SNAPSHOT),
-    path.join(dir,'data',SNAPSHOT),
-    path.join(dir,'..','data',SNAPSHOT),
-    path.join(dir,'..','..','data',SNAPSHOT)
+    path.join(cwd, "data", SNAPSHOT),
+    path.join(dir, "data", SNAPSHOT),
+    path.join(dir, "..", "data", SNAPSHOT),
+    path.join(dir, "..", "..", "data", SNAPSHOT)
   ];
 }
 
-async function load(){
-  for(const p of paths()){
-    const j = await read(p);
-    if(j) return j;
+async function loadSnapshot() {
+  for (const p of snapshotPaths()) {
+    const j = await readJSON(p);
+    if (j) return j;
   }
   return null;
 }
 
-export async function handler(e){
+function makeDummyItems(limit = 100) {
+  const arr = [];
+  for (let i = 1; i <= limit; i++) {
+    arr.push({
+      id: `dummy-${i}`,
+      title: `Network Sample ${i}`,
+      thumbnail: "/assets/img/placeholder.png",
+      link: "#"
+    });
+  }
+  return arr;
+}
 
-  if(e.httpMethod==='OPTIONS')
-    return {statusCode:200,headers:cors(),body:''};
+export async function handler() {
+  const snap = await loadSnapshot();
 
-  const qs = e.queryStringParameters||{};
-  const key = (qs.key||'rightpanel').trim();
+  let items = [];
 
-  const snap = await load();
-
-  if(!snap?.sections?.rightpanel)
-    return ok({ items: [] });
-
-  const sections = {
-    rightpanel: snap.sections.rightpanel
-  };
-
-  if(key){
-    return ok({ items: sections[key]||[] });
+  if (snap?.sections?.rightpanel?.length) {
+    items = snap.sections.rightpanel;
   }
 
-  return ok({ sections });
+  // 🔥 핵심: 데이터 없으면 샘플 생성
+  if (!items.length) {
+    items = makeDummyItems(100);
+  }
+
+  return ok({ items });
 }
