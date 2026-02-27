@@ -1102,7 +1102,38 @@ body {
   padding-right: 5px !important;
 }
 </style>
+<style id="mediahub-mobile-drag-fix">
+@media (max-width:1024px){
 
+  /* 버튼은 숨김 유지 */
+  .scroll-btn{ display:none !important; }
+
+  /* 카드 행 드래그 활성화 */
+  .thumb-line,
+  .scroll-content{
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    touch-action: pan-x pan-y !important;
+    pointer-events:auto !important;
+  }
+
+  /* 카드 자체 클릭 가능 */
+  .thumb-line a.card{
+    pointer-events:auto !important;
+  }
+
+  /* 상위 래퍼가 막지 못하게 */
+  .scroll-wrapper{
+    overflow:visible !important;
+  }
+
+  /* 페이지 세로 스크롤 보장 */
+  html, body{
+    overflow-y:auto !important;
+  }
+}
+</style>
 </head>
 <body>
 <div id="hero" data-psom-key="media-hero"><div class="hero-title"></div></div>
