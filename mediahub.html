@@ -4414,58 +4414,86 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     boot();
   }
 })();
-</script>iv'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
-      var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
-      h.appendChild(t); h.appendChild(x);
+</script>
+<script id="igdc-qa-modal-script">
+(function(){
+  "use strict";
 
-      var body = document.createElement('div'); body.className='igdc-qa-body';
-      body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
+  function ensureModal(){
 
-      // ensure the "대표 이메일" is shown only inside the modal
-      var ce = document.createElement('p');
-      ce.className = 'contact-email';
-      ce.innerHTML = '대표 이메일: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-      body.appendChild(ce);
+    var existing = document.getElementById('igdc-qa-modal');
+    if(existing) return;
 
-      p.appendChild(h); p.appendChild(body);
-      m.appendChild(b); m.appendChild(p);
-      document.body.appendChild(m);
+    var overlay = document.createElement('div');
+    overlay.id = 'igdc-qa-modal';
+    overlay.className = 'igdc-qa-overlay';
 
-      function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }
-      x.addEventListener('click', close);
-      b.addEventListener('click', close);
+    var panel = document.createElement('div');
+    panel.className = 'igdc-qa-panel';
 
-      window.IGDC_QA = window.IGDC_QA || {};
-      if (!window.IGDC_QA.open) window.IGDC_QA.open = open;
-    }else{
-      // if exists, make sure contact email is present exactly once
-      var body = modal.querySelector('.igdc-qa-body') || modal;
-      if(body && !body.querySelector('.contact-email')){
-        var ce = document.createElement('p');
-        ce.className = 'contact-email';
-        ce.innerHTML = '대표 이메일: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        body.appendChild(ce);
-      }
+    var header = document.createElement('div');
+    header.className = 'igdc-qa-header';
+
+    var title = document.createElement('div');
+    title.className = 'igdc-qa-title';
+    title.textContent = 'Q&A';
+
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'igdc-qa-close';
+    closeBtn.innerHTML = '&#10005;';
+
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+
+    var body = document.createElement('div');
+    body.className = 'igdc-qa-body';
+
+    body.innerHTML =
+      '<div class="igdc-qa-note">' +
+      '저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.' +
+      '</div>';
+
+    var email = document.createElement('p');
+    email.className = 'contact-email';
+    email.innerHTML =
+      '대표 이메일: <a href="mailto:igdcplatform@gmail.com">' +
+      'igdcplatform@gmail.com</a>';
+
+    body.appendChild(email);
+
+    panel.appendChild(header);
+    panel.appendChild(body);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+
+    function close(){
+      overlay.classList.remove('open');
+      setTimeout(function(){
+        overlay.style.display = 'none';
+      }, 180);
     }
+
+    function open(){
+      overlay.style.display = 'flex';
+      requestAnimationFrame(function(){
+        overlay.classList.add('open');
+      });
+    }
+
+    closeBtn.addEventListener('click', close);
+    overlay.addEventListener('click', function(e){
+      if(e.target === overlay) close();
+    });
+
+    window.IGDC_QA = window.IGDC_QA || {};
+    window.IGDC_QA.open = open;
   }
 
   function stripFooterEmail(){
     try{
-      var footers = document.querySelectorAll('footer');
-      footers.forEach(function(f){
-        f.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
-          var parent = a.parentNode;
-          if(parent){
-            parent.removeChild(a);
-            var html = parent.innerHTML;
-            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
-            html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
-            parent.innerHTML = html;
-          }
-        });
-        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
+      document.querySelectorAll('footer a[href^="mailto:"]').forEach(function(a){
+        var p = a.parentNode;
+        if(p) p.removeChild(a);
       });
     }catch(e){}
   }
@@ -4474,13 +4502,16 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     stripFooterEmail();
     ensureModal();
   }
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', run, {once:true});
-  } else {
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', run, { once:true });
+  }else{
     run();
   }
+
 })();
-</script><script id="igdc-qa-email-ensure">
+</script>
+<script id="igdc-qa-email-ensure">
 (function(){
   if (window.__IGDC_QA_EMAIL_ENSURE__) return;
   window.__IGDC_QA_EMAIL_ENSURE__ = true;
@@ -4746,51 +4777,60 @@ window.addEventListener("message",function(ev){
 </style>
 
 <script>
-// IGDC MediaHub: per-section lazy card reveal (initial 7, then on scroll)
+/* IGDC MediaHub: safe lazy reveal (stable version) */
 (function(){
-  function setupLazySections(){
-    var sections = document.querySelectorAll('.thumb-line, .section-row, .scroll-wrapper');
-    if(!sections.length) return;
-    sections.forEach(function(sec){
-      var cards = Array.prototype.slice.call(sec.querySelectorAll('.card'));
-      if(cards.length <= 7) return;
-      // Mark extra cards as lazy and hide them
-      cards.forEach(function(card, idx){
-        if(idx >= 7){
+  const INITIAL = 7;
+  const STEP = 6;
+
+  function setup(){
+    document.querySelectorAll('.thumb-line').forEach(function(line){
+
+      const cards = Array.from(line.querySelectorAll(':scope > .scroll-content > .card, :scope > .card'));
+      if(cards.length <= INITIAL) return;
+
+      let revealed = INITIAL;
+
+      // 초기 감춤 (display 사용 안 함)
+      cards.forEach(function(card, i){
+        if(i >= INITIAL){
+          card.style.visibility = "hidden";
+          card.style.position = "absolute";
           card.dataset.lazy = "true";
-          card.style.display = "none";
         }
       });
-      // Reveal next batch when user scrolls near end
-      function revealMore(){
-        var hidden = sec.querySelectorAll('.card[data-lazy="true"]');
-        if(!hidden.length) return;
-        // If horizontal scroll is near end, reveal a few more
-        var maxScroll = sec.scrollWidth - sec.clientWidth;
-        var nearEnd = sec.scrollLeft > (maxScroll - 40);
-        if(maxScroll <= 0 || nearEnd){
-          var batch = Array.prototype.slice.call(hidden).slice(0, 6); // reveal up to 6 more each time
-          batch.forEach(function(card){
-            card.style.display = "";
+
+      function reveal(){
+        const maxScroll = line.scrollWidth - line.clientWidth;
+        if(maxScroll <= 0) return;
+
+        if(line.scrollLeft >= maxScroll - 40){
+          const hidden = cards.filter(c => c.dataset.lazy === "true");
+          if(!hidden.length) return;
+
+          hidden.slice(0, STEP).forEach(function(card){
+            card.style.visibility = "";
+            card.style.position = "";
             card.dataset.lazy = "loaded";
           });
+
+          revealed += STEP;
         }
       }
-      sec.addEventListener('scroll', function(){
-        window.requestAnimationFrame(revealMore);
-      });
-      // Also reveal on first paint if container is not scrollable yet
-      setTimeout(revealMore, 600);
+
+      line.addEventListener('scroll', function(){
+        requestAnimationFrame(reveal);
+      }, { passive:true });
+
     });
   }
-  if(document.readyState === "complete" || document.readyState === "interactive"){
-    setTimeout(setupLazySections, 200);
-  }else{
-    document.addEventListener("DOMContentLoaded", function(){ setTimeout(setupLazySections, 200); });
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", setup);
+  } else {
+    setup();
   }
 })();
 </script>
-
 <script>
 // IGDC: report page height to parent index for iframe resizing
 (function(){
