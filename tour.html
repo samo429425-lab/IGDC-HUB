@@ -6,58 +6,73 @@
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
 <meta charset="utf-8"/>
 <title>투어</title>
-<style>body {
-      margin: 0;
-      font-family: sans-serif;
-      background-color: #f2f2f2;
-    }
 
-    .container {
-      display: flex;
-      flex-direction: row;
-      min-height: 90vh;
-    }
+<style>
+body {
+  margin: 0;
+  font-family: sans-serif;
+  background-color: #f2f2f2;
+}
 
-    .main-content {
-      flex: 1;
-      background-color: #ffffff;
-      padding: 40px 30px;
-	  border-radius: 10px;
-      max-width: 900px;
-      margin: 30px auto;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-      text-align: center;
-    }
+.container {
+  display: flex;
+  flex-direction: row;
+  min-height: 90vh;
+  align-items: flex-start;
+}
 
-    .main-content h2 {
-      color: #004080;
-      margin-bottom: 20px;
-    }
+.main-content {
+  flex: 1;
+  background-color: #ffffff;
+  padding: 40px 30px;
+  border-radius: 10px;
+  max-width: 900px;
+  margin: 30px auto;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+  text-align: center;
+}
 
-    .main-content p {
-      font-size: 1rem;
-      line-height: 1.8;
-      color: #333;
-    }
+.main-content h2 {
+  color: #004080;
+  margin-bottom: 20px;
+}
 
-       
+.main-content p {
+  font-size: 1rem;
+  line-height: 1.8;
+  color: #333;
+}
 
-    .ad-box a {
-      text-decoration: none;
-      color: inherit;
-      display: block;
-      height: 100px;
-      line-height: 100px;
-    }
+/* 카드 구조 */
+.ad-box a {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
 
-    footer {
-      background-color: #004080;
-      color: white;
-      text-align: center;
-      padding: 20px 15px;
-      font-size: 0.9rem;
-    }</style>
+.ad-box img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
 
+/* 카드 타이틀 */
+.tour-card-title {
+  font-size: 14px;
+  padding: 6px 4px;
+  text-align: center;
+  color: #222;
+}
+
+/* footer */
+footer {
+  background-color: #004080;
+  color: white;
+  text-align: center;
+  padding: 20px 15px;
+  font-size: 0.9rem;
+}
+</style>
 <style id="adpanel-adbox-round8">/* Round only the right ad panel's thumbnail/card boxes */
   .ad-panel 
   .ad-panel .ad-box a, .ad-panel .ad-box img { border-radius: inherit; display: block; }</style>
