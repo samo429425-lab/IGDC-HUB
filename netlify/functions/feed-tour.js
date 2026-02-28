@@ -1,15 +1,14 @@
-// feed-tour.js (TOUR HUB FEED - PRODUCTION)
-// - Right panel + mobile rail common feed
-// - Reads snapshot via:
-//   1) local FS (multi-path)
-//   2) HTTP fetch fallback from deployed site (/data/tour-snapshot.json)
-// - CORS enabled
-// - OPTIONS preflight supported
+// feed-tour.js (TOUR HUB FEED - FINAL / ISOLATED)
+// - Hard-lock: ONLY reads /data/tour-snapshot.json (FS multi-path + HTTP fallback)
+// - Hard-lock: meta.hub must be "tour" (else stop)
+// - Returns ONLY { items: [...] }  (no other hub, no other sections)
+// - CORS + OPTIONS supported
 
 import fs from "fs/promises";
 import path from "path";
 
 const SNAPSHOT_NAME = "tour-snapshot.json";
+const EXPECTED_HUB = "tour";
 
 // ---- CORS ----
 function corsHeaders() {
@@ -93,7 +92,6 @@ async function loadSnapshot() {
   return await fetchSnapshotOverHttp();
 }
 
-// ---- item normalize/validate ----
 function pick(it, keys) {
   for (const k of keys) {
     const v = it && it[k];
@@ -106,13 +104,13 @@ function normalizeItems(raw, limit) {
   const arr = Array.isArray(raw) ? raw : [];
   const out = [];
   for (const it of arr) {
-    const thumb = pick(it, ["thumb", "image", "thumbnail", "img", "photo", "cover"]);
     const title = pick(it, ["title", "name", "label"]);
+    const thumb = pick(it, ["thumb", "image", "thumbnail", "img", "photo", "cover"]);
     const link = pick(it, ["link", "url", "href"]) || "#";
     const id = pick(it, ["id", "pid", "productId"]);
 
-    // ✅ 최종 운영 안전 규칙: thumb+title 없으면 drop (빈 슬롯 방지)
-    if (!thumb || !title) continue;
+    // 운영 안전: title/thumb 없으면 스킵 (오토맵에서 더미로 채움)
+    if (!title || !thumb) continue;
 
     out.push({ id, title, thumb, link });
     if (out.length >= limit) break;
@@ -130,20 +128,15 @@ export async function handler(event) {
 
   const snapshot = await loadSnapshot();
   if (!snapshot) {
-    return err(500, "SNAPSHOT_NOT_FOUND", {
-      hint: "Put /data/tour-snapshot.json in site root AND/OR include snapshot accessible to function."
-    });
+    return err(500, "SNAPSHOT_NOT_FOUND", { hint: "Need /data/tour-snapshot.json" });
   }
 
-  // ✅ hub strict check
-  const hub = snapshot?.meta?.hub;
-  if (hub !== "tour") {
-    return err(500, "HUB_MISMATCH", { expected: "tour", got: hub || "" });
+  // ✅ HUB HARD LOCK (남의집 손님 차단)
+  const gotHub = snapshot?.meta?.hub;
+  if (gotHub !== EXPECTED_HUB) {
+    return err(500, "HUB_MISMATCH", { expected: EXPECTED_HUB, got: gotHub || "" });
   }
 
-  const rawItems = snapshot?.items;
-  const items = normalizeItems(rawItems, limit);
-
-  // 운영형: UI가 죽지 않게 200 empty로 반환
+  const items = normalizeItems(snapshot?.items, limit);
   return ok({ items });
 }
