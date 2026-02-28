@@ -1146,6 +1146,19 @@ body {
   }
 }
 </style>
+<style>
+.scroll-content {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+}
+
+html, body {
+  overflow-y: auto;
+}
+</style>
+
 </head>
 <body>
 <div id="hero" data-psom-key="media-hero"><div class="hero-title"></div></div>
@@ -4252,44 +4265,10 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     setTimeout(()=>notify(atTop()),50);
   }catch(_){}
 })();
-</script><script id="thumbline-drag-script">
-(function(){
-  function enableDrag(el){
-    let down=false, sx=0, sl=0;
-    el.addEventListener('mousedown', function(e){
-      down = true; sx = e.pageX; sl = el.scrollLeft;
-    }, {passive:true});
-    window.addEventListener('mousemove', function(e){
-      if(!down) return;
-      el.scrollLeft = sl - (e.pageX - sx);
-      e.preventDefault();
-    }, {passive:false});
-    window.addEventListener('mouseup', function(){ down=false; }, {passive:true});
-    el.addEventListener('touchstart', function(e){
-      const t = e.touches[0]; down=true; sx=t.pageX; sl=el.scrollLeft;
-    }, {passive:true});
-    window.addEventListener('touchmove', function(e){
-      if(!down) return;
-      const t = e.touches[0]; el.scrollLeft = sl - (t.pageX - sx);
-      e.preventDefault();
-    }, {passive:false});
-    window.addEventListener('touchend', function(){ down=false; }, {passive:true});
-    window.addEventListener('touchcancel', function(){ down=false; }, {passive:true});
-    el.addEventListener('wheel', function(e){
-      if(Math.abs(e.deltaY) > Math.abs(e.deltaX)){
-        el.scrollLeft += e.deltaY;
-        e.preventDefault();
-      }
-    }, {passive:false});
-  }
-  function init(){
-    document.querySelectorAll('.thumb-line').forEach(enableDrag);
-  }
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', init);
-  } else { init(); }
-})();
-</script><script id="sidebar-active-script-ko">
+</script>
+
+</script>
+<script id="sidebar-active-script-ko">
 (function(){
   function norm(n){
     n = (n||"").trim().toLowerCase();
