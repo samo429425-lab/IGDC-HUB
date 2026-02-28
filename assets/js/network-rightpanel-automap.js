@@ -1,13 +1,17 @@
-// network-rightpanel-automap.js (PRODUCTION v4 - USES __IGDC_RIGHTPANEL_RENDER HOOK)
+// network-rightpanel-automap.js (PRODUCTION v5 - SINGLE PASS, RIGHT PANEL ONLY)
+// - NetworkHub: right panel only (desktop right rail + mobile bottom rail)
+// - No main sections mapping
+// - Never wipes HTML dummy when data is empty
+// - Avoids multi-pass overwrite timing issues
 
 (function () {
   'use strict';
 
-  if (window.__NETWORK_AUTOMAP_V4__) return;
-  window.__NETWORK_AUTOMAP_V4__ = true;
+  if (window.__NETWORK_AUTOMAP_V5__) return;
+  window.__NETWORK_AUTOMAP_V5__ = true;
 
   const SNAPSHOT_URL = '/data/networkhub-snapshot.json';
-  const FEED_URL = '/.netlify/functions/feed-network?limit=100';
+  const FEED_URL = '/.netlify/functions/feed-network?key=rightpanel&limit=100';
   const LIMIT = 100;
 
   const MOBILE_ID = 'nh-mobile-rail-list';
@@ -72,13 +76,16 @@
     const list = $(MOBILE_ID);
     if (!list) return;
 
-    // If we have no items, do NOT wipe existing (keep dummy / previous)
+    // If we have no items, do NOT wipe existing (keep HTML dummy / previous)
     if (!items || !items.length) return;
 
-    list.innerHTML = '';
+    // Mobile rail wants up to 15 cards
+    const take = items.slice(0, 15);
 
+    list.innerHTML = '';
     const frag = document.createDocumentFragment();
-    for (const item of items){
+
+    for (const item of take){
       const card = document.createElement('div');
       card.className = 'ad-box';
 
@@ -102,11 +109,11 @@
       card.appendChild(a);
       frag.appendChild(card);
     }
+
     list.appendChild(frag);
   }
 
-  function renderDesktopViaHook(items){
-    // rightpanel-dummy-engine-v2 provides this hook
+  function callDesktopHook(items){
     if (typeof window.__IGDC_RIGHTPANEL_RENDER === 'function'){
       window.__IGDC_RIGHTPANEL_RENDER(items);
       return true;
@@ -114,14 +121,25 @@
     return false;
   }
 
+  async function waitForHookAndRender(items){
+    // Render once when hook becomes available (avoid overwrite loops)
+    const deadline = Date.now() + 2500; // 2.5s max
+    while (Date.now() < deadline){
+      if (callDesktopHook(items)) return true;
+      await new Promise(r => setTimeout(r, 120));
+    }
+    // If hook never appears, we still keep HTML dummy (no wipe)
+    return false;
+  }
+
   async function loadItems(){
-    // Snapshot first (정이사장님 설계)
+    // Snapshot first
     const snap = await loadSnapshot();
     if (snap && Array.isArray(snap.items) && snap.items.length){
       return snap.items;
     }
 
-    // Feed fallback (보조 심부름꾼)
+    // Feed fallback
     const fd = await loadFeed();
     if (fd && Array.isArray(fd.items) && fd.items.length){
       return fd.items;
@@ -130,45 +148,24 @@
     return [];
   }
 
-  function buildFallback(){
-    const out=[];
-    for(let i=1;i<=LIMIT;i++){
-      out.push({id:'fallback-'+i,title:'Sample '+i,link:'#',thumb:'/assets/sample/placeholder.jpg'});
-    }
-    return out;
-  }
-
-  async function runOnce(){
+  async function run(){
     const raw = await loadItems();
-    let items = normalize(raw);
+    const items = normalize(raw);
 
-    // If everything is empty, render internal fallback to avoid 'title-only' blank.
-    if (!items.length){
-      items = buildFallback();
-    }
+    // 핵심: 비어있으면 HTML을 건드리지 않는다 (더미/기존 유지)
+    if (!items.length) return;
 
-    renderDesktopViaHook(items);
+    // Desktop right rail via hook (single pass)
+    await waitForHookAndRender(items);
+
+    // Mobile bottom rail (direct)
     renderMobile(items);
   }
 
-  async function runWithRetry(){
-    // Some pages load other scripts late; retry a few times
-    for (let i=0;i<5;i++){
-      await runOnce();
-      // If hook exists and panel likely rendered, we can stop
-      if (typeof window.__IGDC_RIGHTPANEL_RENDER === 'function'){
-        // wait a tick for DOM
-        await new Promise(r=>setTimeout(r, 250));
-      } else {
-        await new Promise(r=>setTimeout(r, 250));
-      }
-    }
-  }
-
   if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', runWithRetry, { once:true });
+    document.addEventListener('DOMContentLoaded', run, { once:true });
   } else {
-    runWithRetry();
+    run();
   }
 
 })();
