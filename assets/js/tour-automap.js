@@ -4,7 +4,7 @@
 
   const HUB = 'tour';
   const SNAPSHOT_URL = '/data/tour-snapshot.json';
-  const FEED_SRC = '/.netlify/functions/feed-tour.v1.js';
+  const FEED_SRC = '/netlify/functions/feed-tour.v1.js';
   const SLOT_COUNT = 100;
 
   function $(sel, root=document){ return root.querySelector(sel); }
