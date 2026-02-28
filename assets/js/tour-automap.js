@@ -1,232 +1,127 @@
-// tour-rightpanel-automap.v6.js
-// - 모바일 세로 막대 현상 제거
-// - 모바일 가로에서도 우측패널과 동일한 카드 구조 유지
-// - 30년 운영용 레이아웃 고정 안정 버전
+/* TOUR AUTOMAP v1.0 - entry point (HTML loads ONLY this) */
+(function(){
+  'use strict';
 
-(function () {
-  "use strict";
+  const HUB = 'tour';
+  const SNAPSHOT_URL = '/data/tour-snapshot.json';
+  const FEED_SRC = '/netlify/functions/feed-tour.v1.js';
+  const SLOT_COUNT = 100;
 
-  if (window.__TOUR_RIGHTPANEL_AUTOMAP_V6__) return;
-  window.__TOUR_RIGHTPANEL_AUTOMAP_V6__ = true;
+  function $(sel, root=document){ return root.querySelector(sel); }
+  function ensureScript(src){
+    return new Promise((resolve, reject) => {
+      // already loaded?
+      const existing = Array.from(document.scripts).find(s => (s.getAttribute('src')||'') === src);
+      if(existing){ 
+        if(existing.dataset.loaded === '1') return resolve();
+        existing.addEventListener('load', () => resolve(), { once:true });
+        existing.addEventListener('error', () => reject(new Error('script load error: ' + src)), { once:true });
+        return;
+      }
+      const s = document.createElement('script');
+      s.src = src;
+      s.async = true;
+      s.dataset.loaded = '0';
+      s.onload = () => { s.dataset.loaded = '1'; resolve(); };
+      s.onerror = () => reject(new Error('script load error: ' + src));
+      document.head.appendChild(s);
+    });
+  }
 
-  const HUB = "tour";
-  const SNAPSHOT_URL = "/data/tour-snapshot.json";
-  const FEED_URL = "/.netlify/functions/feed-tour?limit=100";
+  function disablePsomThumbGrid(){
+    const grid = $('.thumb-grid[data-psom-key="tour"]');
+    if(!grid) return;
+    // prevent other engines from injecting into this grid
+    grid.innerHTML = '';
+    grid.style.display = 'none';
+    grid.setAttribute('data-disabled','1');
+  }
 
-  const RIGHT_PANEL_ID = "rightAutoPanel";
-  const RIGHT_SLOT_COUNT = 100;
+  function buildSlots(panel){
+    panel.innerHTML = '';
+    const slots = [];
+    for(let i=0;i<SLOT_COUNT;i++){
+      const box = document.createElement('div');
+      box.className = 'ad-box';
+      box.setAttribute('data-slot', String(i+1));
+      slots.push(box);
+      panel.appendChild(box);
+    }
+    return slots;
+  }
 
-  const MOBILE_RAIL_ID = "tour-mobile-rail";
-  const MOBILE_LIST_SEL = "#tour-mobile-rail .list";
-  const MOBILE_LIMIT = 30;
-
-  const PLACEHOLDER_IMG = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
-  const CSS_ID = "tour-layout-fix-v6";
-
-  function $(sel, root = document) { return root.querySelector(sel); }
-  function byId(id) { return document.getElementById(id); }
-
-  function ensureLayoutFix() {
-    if (document.getElementById(CSS_ID)) return;
-
-    const style = document.createElement("style");
-    style.id = CSS_ID;
+  function ensureTourRightPanelResponsiveFix(){
+    if(document.getElementById('tour-rightpanel-responsive-fix')) return;
+    const style = document.createElement('style');
+    style.id = 'tour-rightpanel-responsive-fix';
     style.textContent = `
-/* =========================
-   RIGHT PANEL FIX
-========================= */
-
-#${RIGHT_PANEL_ID}{
-  display:grid !important;
-  grid-template-columns:repeat(auto-fill,minmax(120px,1fr)) !important;
-  gap:10px;
-}
-
-#${RIGHT_PANEL_ID} .ad-box{
-  position:relative;
-  aspect-ratio:1/1;
-  min-height:120px;
-  overflow:hidden;
-}
-
-#${RIGHT_PANEL_ID} .ad-box img{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-  display:block;
-}
-
-/* =========================
-   MOBILE LANDSCAPE FIX
-========================= */
-@media (max-width:1024px) and (orientation:landscape){
-  #${RIGHT_PANEL_ID}{
-    grid-template-columns:repeat(auto-fill,minmax(110px,1fr)) !important;
+/* TOUR right panel responsive fix (mobile portrait/landscape) */
+@media (max-width: 1024px){
+  #rightAutoPanel{
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important;
+    gap: 10px !important;
+  }
+  #rightAutoPanel .ad-box{
+    aspect-ratio: 1 / 1 !important;
+    min-height: 110px !important;
+    overflow: hidden;
+  }
+  #rightAutoPanel .ad-box a{
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  #rightAutoPanel .ad-box img{
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    display: block;
   }
 }
-
-/* =========================
-   MOBILE PORTRAIT FIX
-========================= */
-@media (max-width:768px){
-  #${RIGHT_PANEL_ID}{
-    grid-template-columns:repeat(auto-fill,minmax(100px,1fr)) !important;
+@media (max-width: 768px){
+  #rightAutoPanel{
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)) !important;
   }
-}
-
-/* =========================
-   MOBILE RAIL FIX
-========================= */
-#${MOBILE_RAIL_ID} .card{
-  position:relative;
-  aspect-ratio:1/1;
-  overflow:hidden;
-}
-
-#${MOBILE_RAIL_ID} .card img{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-  display:block;
-}
-
-#${MOBILE_RAIL_ID} .cap{
-  position:absolute;
-  left:0; right:0; bottom:0;
-  padding:6px 10px;
-  font-weight:800;
-  font-size:.92rem;
-  color:#fff;
-  background:linear-gradient(to top, rgba(0,0,0,.65), rgba(0,0,0,0));
-  text-shadow:0 1px 2px rgba(0,0,0,.6);
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+  #rightAutoPanel .ad-box{
+    min-height: 100px !important;
+  }
 }
 `;
     document.head.appendChild(style);
   }
 
-  function pick(it, keys) {
-    for (const k of keys) {
-      const v = it && it[k];
-      if (typeof v === "string" && v.trim()) return v.trim();
-    }
-    return "";
-  }
-
-  function normalizeItems(raw) {
-    const arr = Array.isArray(raw) ? raw : [];
-    const out = [];
-    for (const it of arr) {
-      const title = pick(it, ["title","name","label"]);
-      const thumb = pick(it, ["thumb","image","thumbnail","img","photo","cover"]);
-      const link = pick(it, ["link","url","href"]) || "#";
-      if (!title || !thumb) continue;
-      out.push({ title, thumb, link });
-      if (out.length >= RIGHT_SLOT_COUNT) break;
-    }
-    return out;
-  }
-
-  async function fetchJson(url){
-    try{
-      const r = await fetch(url,{cache:"no-store"});
-      if(!r.ok) return null;
-      return await r.json();
-    }catch{return null;}
-  }
-
-  function renderRight(items){
-    const panel = byId(RIGHT_PANEL_ID);
-    if(!panel) return;
-    panel.innerHTML="";
-    const frag=document.createDocumentFragment();
-
-    for(let i=0;i<RIGHT_SLOT_COUNT;i++){
-      const it=items[i]||{title:`Tour Brand ${i+1}`,thumb:PLACEHOLDER_IMG,link:"#"};
-      const box=document.createElement("div");
-      box.className="ad-box";
-
-      const a=document.createElement("a");
-      a.href=it.link||"#";
-      if(it.link!=="#"){a.target="_blank";a.rel="noopener";}
-
-      const img=document.createElement("img");
-      img.src=it.thumb||PLACEHOLDER_IMG;
-      img.alt=it.title||"";
-
-      const cap=document.createElement("div");
-      cap.className="tour-card-title";
-      cap.textContent=it.title||"";
-
-      a.appendChild(img);
-      a.appendChild(cap);
-      box.appendChild(a);
-      frag.appendChild(box);
-    }
-
-    panel.appendChild(frag);
-  }
-
-  function renderMobile(items){
-    const rail=byId(MOBILE_RAIL_ID);
-    const list=$(MOBILE_LIST_SEL);
-    if(!rail||!list) return;
-
-    rail.style.display="block";
-    list.innerHTML="";
-    const frag=document.createDocumentFragment();
-
-    for(const it of items.slice(0,MOBILE_LIMIT)){
-      const card=document.createElement("div");
-      card.className="card";
-
-      const a=document.createElement("a");
-      a.href=it.link||"#";
-      if(it.link!=="#"){a.target="_blank";a.rel="noopener";}
-
-      const img=document.createElement("img");
-      img.src=it.thumb||PLACEHOLDER_IMG;
-      img.alt=it.title||"";
-
-      const cap=document.createElement("div");
-      cap.className="cap";
-      cap.textContent=it.title||"";
-
-      a.appendChild(img);
-      card.appendChild(a);
-      card.appendChild(cap);
-      frag.appendChild(card);
-    }
-
-    list.appendChild(frag);
-  }
-
   async function run(){
-    ensureLayoutFix();
+    if(window.__IGDC_TOUR_AUTOMAP_DONE__) return;
+    window.__IGDC_TOUR_AUTOMAP_DONE__ = true;
 
-    let items=[];
-    const snap=await fetchJson(SNAPSHOT_URL);
-
-    if(snap && snap.meta?.hub===HUB && Array.isArray(snap.items)){
-      items=normalizeItems(snap.items);
+    const panel = document.getElementById('rightAutoPanel');
+    if(!panel){
+      console.warn('[TOUR AUTOMAP] missing #rightAutoPanel');
+      return;
     }
 
-    if(!items.length){
-      const feed=await fetchJson(FEED_URL);
-      items=feed && Array.isArray(feed.items) ? normalizeItems(feed.items) : [];
+    disablePsomThumbGrid();
+    ensureTourRightPanelResponsiveFix();
+    const slots = buildSlots(panel);
+
+    const mobileList = $('#tour-mobile-rail .list');
+    await ensureScript(FEED_SRC);
+
+    if(!window.IGDC_FEED_TOUR || typeof window.IGDC_FEED_TOUR.fill !== 'function'){
+      throw new Error('[TOUR AUTOMAP] IGDC_FEED_TOUR.fill not found');
     }
 
-    renderMobile(items);
-    renderRight(items);
+    await window.IGDC_FEED_TOUR.fill({
+      hubKey: HUB,
+      snapshotUrl: SNAPSHOT_URL,
+      slots,
+      mobileListEl: mobileList,
+      mobileLimit: 30
+    });
   }
 
-  if(document.readyState==="complete"||document.readyState==="interactive"){
-    setTimeout(run,0);
-  }else{
-    document.addEventListener("DOMContentLoaded",run,{once:true});
-    window.addEventListener("load",run,{once:true});
-  }
-
+  window.addEventListener('load', () => {
+    run().catch(err => console.error(err));
+  });
 })();
