@@ -168,11 +168,19 @@ html, body {
   }
 }
 
-
-/* Force hide both scroll buttons on tablet/mobile */
+/* Force hide BOTH scroll buttons cleanly on tablet/mobile */
 @media (max-width:1024px){
-  .scroll-btn{ display:none !important; }
+
+  .scroll-wrapper > .scroll-btn.left,
+  .scroll-wrapper > .scroll-btn.right{
+    display:none !important;
+    opacity:0 !important;
+    visibility:hidden !important;
+    pointer-events:none !important;
+  }
+
 }
+
 /* Improve touch scrolling behavior */
 .scroll-content{ -webkit-overflow-scrolling:touch; touch-action: pan-y; }
 </style>
