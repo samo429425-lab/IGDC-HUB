@@ -143,46 +143,6 @@ html, body {
   pointer-events: auto !important;
 }
 
-
-/* === 10 Media Sections Layout Stabilizer (2026-02-23) === */
-/* Allow both vertical page scroll and horizontal row scroll */
-.thumb-line > .scroll-content{
-  touch-action: pan-x pan-y !important;
-}
-/* Force both scroll buttons visible on desktop/tablet (>1024) for media sections */
-@media (min-width:1025px){
-  .thumb-line[data-psom-key^="media-"] > .scroll-btn{
-    display:block !important;
-    opacity:1 !important;
-    visibility:visible !important;
-  }
-}
-/* Mobile portrait: YouTube-like full-width cards */
-@media (max-width:900px) and (orientation: portrait){
-  .thumb-line[data-psom-key^="media-"] .card{
-    flex:0 0 100% !important;
-    max-width:100% !important;
-  }
-  .thumb-line[data-psom-key^="media-"] .thumb{
-    aspect-ratio:16/9;
-  }
-}
-
-/* Force hide BOTH scroll buttons cleanly on tablet/mobile */
-@media (max-width:1024px){
-
-  .scroll-wrapper > .scroll-btn.left,
-  .scroll-wrapper > .scroll-btn.right{
-    display:none !important;
-    opacity:0 !important;
-    visibility:hidden !important;
-    pointer-events:none !important;
-  }
-
-}
-
-/* Improve touch scrolling behavior */
-.scroll-content{ -webkit-overflow-scrolling:touch; touch-action: pan-y; }
 </style>
 <style>
 
@@ -280,6 +240,11 @@ button svg, .btn svg, .button svg, .cta-button svg{ width:1em; height:1em; }
 /* Remove the stamp bar below search (keep dropdown only) */
 .provider-bar{ display:none !important; }
 </style>
+<style id="bc-tile-style">
+  .bc-tile{display:inline-block;padding:8px 12px;border-radius:999px;background:#111;color:#fff;font-weight:700;text-decoration:none}
+  .bc-tile:hover{background:#333}
+  .section-blockchain{margin:12px 0 18px; text-align:left;}
+</style>
 <style id="mediahub-clean-scroll-and-bc">
 :root{
   --scroll-btn-w: 56px;   /* keep modest; not oversized */
@@ -315,7 +280,12 @@ button svg, .btn svg, .button svg, .cta-button svg{ width:1em; height:1em; }
 .scroll-content{ scrollbar-width:none; -ms-overflow-style:none; }
 
 /* Blockchain tiles: pastel between light green & light orange (peach-green) */
-.section-blockchain 
+.section-blockchain .bc-tile{
+  background:#D6F5D6;
+  border:1px solid rgba(20,80,40,.18);
+  color:#0B1F4D;
+  transition:background-color .18s ease, border-color .18s ease;
+}
 .section-blockchain .bc-tile:hover{
   background:#DDF2E6;
   border-color:rgba(20,80,40,.28);
@@ -349,6 +319,12 @@ button svg, .btn svg, .button svg, .cta-button svg{ width:1em; height:1em; }
 </style>
 <style id="mediahub-right-overlap-30">
 .scroll-content{ margin-right: calc(var(--scroll-btn-w,56px) + var(--scroll-btn-gap,16px) - 54px) !important; }
+</style>
+<style id="bc-bg-midgreen">
+.section-blockchain .bc-tile{
+  background:#D6F5D6 !important;
+  color:#0B1F4D !important;
+}
 </style>
 <style id="thumbline-drag-style">
 /* Make main thumbnail rows draggable & hide native scrollbar */
@@ -432,7 +408,11 @@ html, body {
   z-index:2;
   margin-top:16px;
 }
-
+.section-blockchain{
+  position:relative;
+  margin-top:24px;
+  text-align:left;
+}
 .hero img{ -webkit-user-drag:none; }
 
 </style>
@@ -642,20 +622,129 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
 })();
 </script>
 <!-- Mobile Section Pager v1 (group sections into horizontal slides on mobile) -->
+<style id="igdc-mobile-section-pager">
+@media (max-width:768px){
+  .section-pager{position:relative;overflow:hidden}
+  .section-track{display:flex;transition:transform .25s ease}
+  .section-slide{flex:0 0 100%;padding:0 10px;box-sizing:border-box}
+  .section-dots{position:sticky;bottom:8px;display:flex;gap:6px;justify-content:center;padding:10px 0}
+  .section-dots button{width:8px;height:8px;border-radius:999px;border:0;background:#cfd3da}
+  .section-dots button[aria-current="true"]{background:#111}
+}
+@media (max-width:768px) and (orientation:landscape){
+  .section-slide{padding:0 8px}
+}
+</style>
+<script defer="" id="igdc-mobile-section-pager-script">
+(function(){
+  var isMobile = matchMedia("(max-width:768px)").matches;
+  if(!isMobile) return;
+  if(document.getElementById("igdc-mobile-section-pager-ready")) return;
+  var m=document.createElement("meta"); m.id="igdc-mobile-section-pager-ready"; document.head.appendChild(m);
 
-<!-- igdc-mobile-section-pager removed for MediaHub to preserve native scroll -->
+  var host = document.querySelector("main") || document.querySelector(".main") || document.querySelector(".main-content");
+  if(!host) return;
 
+  var sections = Array.from(host.querySelectorAll(":scope > section"));
+  if(sections.length < 6) return;
 
-<!-- igdc-mobile-section-pager removed for MediaHub to preserve native scroll -->
+  function perPage(){ return matchMedia("(orientation:landscape)").matches ? 4 : 3; }
 
+  var pager = document.createElement("div"); pager.className = "section-pager";
+  var track = document.createElement("div"); track.className = "section-track";
+  pager.appendChild(track);
+
+  function build(){
+    track.innerHTML = "";
+    var n = perPage();
+    for(var i=0;i<sections.length;i+=n){
+      var slide = document.createElement("div");
+      slide.className = "section-slide";
+      for(var j=i;j<i+n && j<sections.length;j++){
+        slide.appendChild(sections[j]);
+      }
+      track.appendChild(slide);
+    }
+  }
+  build();
+
+  host.insertBefore(pager, host.firstChild);
+
+  var dots = document.createElement("div"); dots.className="section-dots";
+  pager.appendChild(dots);
+
+  function pageCount(){ return track.children.length; }
+  var idx = 0;
+  function renderDots(){
+    dots.innerHTML = "";
+    for(var i=0;i<pageCount();i++){
+      var b=document.createElement("button");
+      b.type="button"; b.setAttribute("aria-label","Go to page "+(i+1));
+      if(i===idx) b.setAttribute("aria-current","true");
+      (function(ii){ b.addEventListener("click", function(){ go(ii); }); })(i);
+      dots.appendChild(b);
+    }
+  }
+  function go(i){
+    idx = Math.max(0, Math.min(i, pageCount()-1));
+    track.style.transform = "translateX(" + (-100*idx) + "%)";
+    Array.from(dots.children).forEach(function(d,k){
+      if(k===idx) d.setAttribute("aria-current","true"); else d.removeAttribute("aria-current");
+    });
+    requestAnimationFrame(function(){
+      var h = track.children[idx].offsetHeight;
+      pager.style.minHeight = h + 20 + "px";
+    });
+  }
+
+  var startX=0, curX=0, dragging=false;
+  function onStart(e){
+    var x = (e.touches?e.touches[0].clientX:e.clientX);
+    if((window.innerWidth - x) <= 24) return; // allow full width for ad drawer (if any)
+    dragging=true; startX=x; curX=x; track.style.transition="none";
+  }
+  function onMove(e){
+    if(!dragging) return;
+    curX = (e.touches?e.touches[0].clientX:e.clientX);
+    var dx = curX - startX;
+    var base = -idx * pager.clientWidth;
+    track.style.transform = "translateX(" + (base + dx) + "px)";
+  }
+  function onEnd(){
+    if(!dragging) return;
+    dragging=false; track.style.transition="";
+    var dx = curX - startX;
+    if(Math.abs(dx) > 40){
+      if(dx<0) go(idx+1); else go(idx-1);
+    }else{
+      go(idx);
+    }
+  }
+  pager.addEventListener("touchstart", onStart, {passive:true});
+  pager.addEventListener("touchmove", onMove, {passive:true});
+  pager.addEventListener("touchend", onEnd, {passive:true});
+  pager.addEventListener("mousedown", onStart);
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onEnd);
+
+  window.addEventListener("resize", function(){
+    var oldPages = pageCount();
+    build();
+    if(pageCount() !== oldPages){
+      renderDots(); go(0);
+    }else{
+      go(idx);
+    }
+  });
+
+  renderDots(); go(0);
+})();
+</script>
 <style id="igdc-mobile-mediahub-patch-v3">
 /* === Mobile Optimization Patch — MediaHub (KR/ZH/EN) === */
 @media (max-width:768px){
   /* 1) Hide left sidebar on mobile */
   .sidebar{ display:none !important; }
-
-  /* 1.1) Allow page vertical scroll (avoid trapping in main overflow:hidden) */
-  main{ overflow: visible !important; }
 
   /* 2) Relax layout paddings for full-width content */
   .container,.layout{ display:block !important; padding:0 !important; margin:0 !important; }
@@ -884,273 +973,14 @@ body {
   padding: 0 10px 10px 10px;
 }
 </style>
-<!-- Injected: exact blockchain styles cloned from socialnetwork.html -->
-<style id="bc-style-from-sn-20251013">
-.bc-tile{display:inline-block;padding:5px 8px;border-radius:999px;background:#a7f3d0;color:#064e3b;font-weight:500;text-decoration:none}
-  .bc-tile:hover{background:#86efac}
-  .bc-tile.orange{background:#f97316;color:#fff}
-  .bc-tile.orange:hover{background:#fb923c}
-  .section-blockchain{margin:12px 0 18px; text-align:left;}
-
-/* === BlockChain 버튼 테두리 (시각 약한 강조용) === */
-.bc-tile, .platform-tile, .button {
-  border: 1px solid rgba(0,0,0,0.15);
-  box-shadow: 0 0 2px rgba(0,0,0,0.05);
-}
-.bc-tile:hover, .platform-tile:hover, .button:hover {
-  border-color: rgba(0,0,0,0.25);
-}
-
-/* --- Blockchain pills: narrow glyphs + lighter weight, no underline --- */
-.section-blockchain{ display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; }
-.section-blockchain .bc-tile,
-.bc-tile{
-  text-decoration: none !important;
-  font-weight: 500 !important;                 /* lighter */
-  letter-spacing: 0 !important;                /* neutral tracking */
-  font-variation-settings: "wdth" 70 !important; /* narrow glyphs if supported */
-  font-stretch: 80% !important;                /* fallback for non-variable fonts */
-  padding: 5px 8px !important;                /* slightly tighter left/right */
-  line-height: 1.1 !important;
-  white-space: nowrap;
-}
-.bc-tile:hover{ text-decoration: none !important; }
-/* Mobile wrap (no overflow) */
-@media (max-width: 640px){
-  .section-blockchain{ gap:6px 8px; }
-  .section-blockchain .bc-tile{ max-width: 100%; }
-}
-</style>
-<!-- BC text-condense + tight-gap patch -->
-<style id="bc-tight-text-20251013">
-  /* 1) Buttons between-blockchain spacing: ~3px */
-  .section-blockchain{ gap: 3px 3px !important; }
-
-  /* 2) Keep height; reduce horizontal width via glyph width (condense) */
-  .section-blockchain .bc-tile{
-    /* Prefer variable-font width if available */
-    font-variation-settings: "wdth" 72, "wght" 600;
-    /* Fallbacks for non-variable fonts */
-    font-stretch: 75%;
-    letter-spacing: -0.2px;
-    /* Keep vertical size, don't alter line-height; avoid shrinking height */
-    line-height: inherit;
-    /* Do NOT change padding vertically; only a subtle horizontal trim if needed */
-    padding-left: 8px;
-    padding-right: 8px;
-  }
-  /* Hover unaffected except border/bg from the base design */
-</style>
-
-<!-- BC ultra-tight adjust: shrink button width slightly, gap=5px -->
-
-
-<!-- BC tight correction: text-only narrow, keep font size, exact 5px gaps -->
-<style id="bc-tight-correct-20251013">
-  /* Exact inter-button gap */
-  .section-blockchain{ gap:5px 5px !important; }
-
-  /* Button container: DO NOT scale; remove extra margins; tighten L/R padding only */
-  .section-blockchain .bc-tile{
-    transform:none !important;
-    margin:0 !important;
-    padding-left:4px !important; padding-right:4px !important;
-    line-height:inherit !important; font-size:inherit !important;
-    display:inline-flex !important; align-items:center; justify-content:center;
-  }
-
-  /* Text-only narrow wrapper */
-  .section-blockchain .bc-tile .bc-narrow{
-    display:inline-block;
-    transform:scaleX(0.82);
-    transform-origin:center center;
-    font-size:inherit; /* keep original size */
-    letter-spacing:normal;
-  }
-</style>
-
-<!-- Hero overflow hotfix (2025-10-13) -->
-<style id="mediahub-hero-overflow-hotfix">
-  @media (max-width: 1024px){
-    main, .main, #main,
-    .content, .content-area, .main-content {
-      width: 100% !important;
-      max-width: 100% !important;
-    }
-    .hero{
-      width: 100% !important;
-      max-width: 100% !important;
-      box-sizing: border-box !important;
-      overflow: hidden !important;
-    }
-    .hero img, .hero video{
-      width: 100% !important;
-      height: auto !important;
-      max-height: 55vh !important;
-      object-fit: cover !important;
-    }
-    body{ overflow-x: hidden !important; }
-  }
-</style>
-<script id="bc-narrow-js">
-(function(){
-  var tiles = document.querySelectorAll('.section-blockchain .bc-tile');
-  tiles.forEach(function(t){
-    if (t.querySelector('.bc-narrow')) return;
-    // Create wrapper span
-    var span = document.createElement('span');
-    span.className = 'bc-narrow';
-    // Move only text nodes into wrapper; keep icons/imgs as-is
-    var nodes = Array.prototype.slice.call(t.childNodes);
-    nodes.forEach(function(n){
-      if (n.nodeType === Node.TEXT_NODE || (n.nodeType===1 && n.tagName==='SPAN' && n.childNodes.length && Array.prototype.every.call(n.childNodes, function(c){return c.nodeType===Node.TEXT_NODE;}))) {
-        span.appendChild(n);
-      }
-    });
-    // Insert wrapper at the beginning if it has content
-    if (span.childNodes.length){
-      t.insertBefore(span, t.firstChild);
-    }
-  });
-})();</script>
-
-
-<style id="bc-mobile-80-lock-20251113">
-/* Mobile (<=900px): lock ~20% shrink for both text and button, with stable gaps */
-@media (max-width: 900px){
-  /* Neutralize any previous transforms or width constraints */
-  .section-blockchain .bc-tile,
-  .section-blockchain .platform-tile{
-    transform: none !important;
-    width: auto !important;
-    min-width: 0 !important;
-    max-width: 100% !important;
-    flex: 0 0 auto !important;
-    box-sizing: border-box !important;
-    white-space: nowrap;
-  }
-  /* Box + text shrink targeting ~20% */
-  .section-blockchain .bc-tile,
-  .section-blockchain .platform-tile{
-    padding-top: 4px !important;     /* 5 → 4  (≈20%↓) */
-    padding-bottom: 4px !important;
-    padding-left: 6px !important;    /* 8 → 6  (≈25%↓, 가로폭에 더 집중) */
-    padding-right: 6px !important;
-    font-size: 0.85em !important;    /* ≈15% text shrink */
-    letter-spacing: -0.015em !important; /* 약간 더 가로 압축 */
-  }
-  /* Keep gaps visually proportional (대략 20%↓). */
-  .section-blockchain{
-    gap: 6px 6px !important;         /* 8~10px 기준이면 ≈20%↓ */
-  }
-}
-</style>
-
-<style id="mobile-footer-guard">
-  html, body { height: auto; min-height: 100% !important; }
-  @supports (height: 100dvh) {
-    .container, .layout, main, .main-content { min-height: 100dvh !important; }
-  }
-  @supports not (height: 100dvh) {
-    .container, .layout, main, .main-content { min-height: 100vh !important; }
-  }
-  @supports (-webkit-touch-callout: none) {
-    html, body { height: -webkit-fill-available; }
-    .container, .layout, main, .main-content { min-height: -webkit-fill-available !important; }
-  }
-  @media (max-width: 980px) {
-    main, .content-area, .main-content, .container, .layout {
-      overflow: visible !important;
-      max-height: none !important;
-    }
-  }
-  footer { padding-bottom: max(24px, env(safe-area-inset-bottom)) !important; }
-</style>
-<style id="mediahub-mobile-unlock">
-  @media (max-width: 980px){
-    main, .content-area { overflow: visible !important; }
-  }
-</style>
-
-<link rel="stylesheet" href="/assets/css/thumbs.standard.css">
-
-<style id="media-placeholder-style">
-.media-card{position:relative;width:320px;height:180px;flex:0 0 320px;border-radius:12px;overflow:hidden;background:#111;margin-right:12px}
-.media-card .thumb.ph{width:100%;height:100%;background:linear-gradient(135deg,#222,#333)}
-.media-card .meta{position:absolute;left:0;right:0;bottom:0;padding:10px;color:#eee;background:linear-gradient(to top,rgba(0,0,0,.6),transparent)}
-</style>
-
-<style id="mediahub-scroll-fix-2026-02">
-/* === MEDIA SCROLL BUTTON FINAL FIX === */
-
-.scroll-wrapper{
-  position:relative !important;
-  padding: 0 72px !important;
-  overflow: hidden !important;
-}
-
-.scroll-btn{
-  z-index:10000 !important;
-}
-
-.scroll-btn.left{
-  left:0px !important;
-}
-
-.scroll-btn.right{
-  right:0px !important;
-}
-
-/* content 영역은 버튼만큼 안쪽으로 */
-.scroll-content,
-.thumb-line{
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  padding-left: 10px !important;
-  padding-right: 5px !important;
-}
-</style>
-<style id="mediahub-mobile-drag-fix">
-@media (max-width:1024px){
-
-  /* 버튼은 숨김 유지 */
-  .scroll-btn{ display:none !important; }
-
-  /* 카드 행 드래그 활성화 */
-  .thumb-line,
-  .scroll-content{
-    overflow-x:auto !important;
-    overflow-y:hidden !important;
-    -webkit-overflow-scrolling:touch !important;
-    touch-action: pan-x pan-y !important;
-    pointer-events:auto !important;
-  }
-
-  /* 카드 자체 클릭 가능 */
-  .thumb-line a.card{
-    pointer-events:auto !important;
-  }
-
-  /* 상위 래퍼가 막지 못하게 */
-  .scroll-wrapper{
-    overflow:visible !important;
-  }
-
-  /* 페이지 세로 스크롤 보장 */
-  html, body{
-    overflow-y:auto !important;
-  }
-}
-</style>
 </head>
 <body>
-<div id="hero" data-psom-key="media-hero"><div class="hero-title"></div></div>
-
+<div id="hero"><div class="hero-title"></div></div>
 <script>(function(){document.addEventListener("DOMContentLoaded",function(){document.documentElement.classList.remove("prelayout");var s=document.getElementById("prelayout-guard");if(s&&s.parentNode){s.parentNode.removeChild(s);}});})();</script>
 <div class="layout">
 <aside class="sidebar">
 <a href="home.html">🏠 홈</a>
-<a href="networkhub.html">🛒 마켓 허브</a>
+<a href="networkhub.html">🛒 네트워크 허브</a>
 <a href="distributionhub.html">🏭 유통허브</a>
 <a href="socialnetwork.html">📢 쇼셜 네트워크</a>
 <a href="mediahub.html">🎬 미디어 허브</a>
@@ -1178,2063 +1008,194 @@ body {
 <!-- 플랫폼 링크 라인 -->
 <div class="section-title">콘텐츠 공급사</div>
 <div class="platform-line"><a class="platform-tile" href="https://www.netflix.com" target="_blank">Netflix</a><a class="platform-tile" href="https://www.disneyplus.com" target="_blank">Disney+</a><a class="platform-tile" href="https://www.amazon.com/primevideo" target="_blank">Amazon Prime</a><a class="platform-tile" href="https://tv.apple.com" target="_blank">Apple TV+</a><a class="platform-tile" href="https://www.youtube.com" target="_blank">YouTube</a><a class="platform-tile" href="https://spotify.com" target="_blank">Spotify</a><a class="platform-tile" href="https://www.melon.com" target="_blank">Melon</a><a class="platform-tile" href="https://www.wavve.com" target="_blank">Wavve</a><a class="platform-tile" href="https://www.hulu.com" target="_blank">Hulu</a><a class="platform-tile" href="https://www.paramountplus.com" target="_blank">Paramount+</a><a class="platform-tile" href="https://www.peacocktv.com" target="_blank">Peacock</a><a class="platform-tile" href="https://www.tving.com" target="_blank">Tving</a><a class="platform-tile" href="https://www.coupangplay.com" target="_blank">Coupang Play</a><a class="platform-tile" href="https://music.youtube.com" target="_blank">YouTube Music</a><a class="platform-tile" href="https://tidal.com" target="_blank">Tidal</a><a class="platform-tile" href="https://www.deezer.com" target="_blank">Deezer</a><a class="platform-tile" href="https://music.amazon.com" target="_blank">Amazon Music</a><a class="platform-tile" href="https://www.bbc.co.uk/iplayer" target="_blank">BBC iPlayer</a><a class="platform-tile" href="https://www.viki.com" target="_blank">Rakuten Viki</a><a class="platform-tile" href="https://mubi.com" target="_blank">Mubi</a><a class="platform-tile" href="https://www.crunchyroll.com" target="_blank">Crunchyroll</a><a class="platform-tile" href="https://tv.kakao.com" target="_blank">Kakao TV</a><a class="platform-tile" href="https://video.unext.jp" target="_blank">U-NEXT</a></div>
-
 <!-- 지금 뜨는 콘텐츠 -->
 <div class="section-title">🔥 지금 뜨는 콘텐츠</div>
-<div class="thumb-line" data-psom-key="media-trending">
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-</div>
-
+<div class="thumb-line">
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item1)"></div><div class="meta">Item1</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item2)"></div><div class="meta">Item2</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item3)"></div><div class="meta">Item3</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item4)"></div><div class="meta">Item4</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item5)"></div><div class="meta">Item5</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item6)"></div><div class="meta">Item6</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item7)"></div><div class="meta">Item7</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item8)"></div><div class="meta">Item8</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item9)"></div><div class="meta">Item9</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item10)"></div><div class="meta">Item10</div></div>
+<div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item11)"></div><div class="meta">Item11</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item12)"></div><div class="meta">Item12</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item13)"></div><div class="meta">Item13</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item14)"></div><div class="meta">Item14</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item15)"></div><div class="meta">Item15</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item16)"></div><div class="meta">Item16</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item17)"></div><div class="meta">Item17</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item18)"></div><div class="meta">Item18</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item19)"></div><div class="meta">Item19</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item20)"></div><div class="meta">Item20</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item21)"></div><div class="meta">Item21</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item22)"></div><div class="meta">Item22</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item23)"></div><div class="meta">Item23</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item24)"></div><div class="meta">Item24</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item25)"></div><div class="meta">Item25</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item26)"></div><div class="meta">Item26</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item27)"></div><div class="meta">Item27</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item28)"></div><div class="meta">Item28</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item29)"></div><div class="meta">Item29</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item30)"></div><div class="meta">Item30</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item31)"></div><div class="meta">Item31</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item32)"></div><div class="meta">Item32</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item33)"></div><div class="meta">Item33</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item34)"></div><div class="meta">Item34</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item35)"></div><div class="meta">Item35</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item36)"></div><div class="meta">Item36</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item37)"></div><div class="meta">Item37</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item38)"></div><div class="meta">Item38</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item39)"></div><div class="meta">Item39</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item40)"></div><div class="meta">Item40</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item41)"></div><div class="meta">Item41</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item42)"></div><div class="meta">Item42</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item43)"></div><div class="meta">Item43</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item44)"></div><div class="meta">Item44</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item45)"></div><div class="meta">Item45</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item46)"></div><div class="meta">Item46</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item47)"></div><div class="meta">Item47</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item48)"></div><div class="meta">Item48</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item49)"></div><div class="meta">Item49</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item50)"></div><div class="meta">Item50</div></div></div>
 <!-- 최신 영화 -->
 <div class="section-title">🎬 최신 영화</div>
-<div class="thumb-line" data-psom-key="media-movie">
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-</div>
-
+<div class="thumb-line">
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item1)"></div><div class="meta">Item1</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item2)"></div><div class="meta">Item2</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item3)"></div><div class="meta">Item3</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item4)"></div><div class="meta">Item4</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item5)"></div><div class="meta">Item5</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item6)"></div><div class="meta">Item6</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item7)"></div><div class="meta">Item7</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item8)"></div><div class="meta">Item8</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item9)"></div><div class="meta">Item9</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item10)"></div><div class="meta">Item10</div></div>
+<div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item11)"></div><div class="meta">Item11</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item12)"></div><div class="meta">Item12</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item13)"></div><div class="meta">Item13</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item14)"></div><div class="meta">Item14</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item15)"></div><div class="meta">Item15</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item16)"></div><div class="meta">Item16</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item17)"></div><div class="meta">Item17</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item18)"></div><div class="meta">Item18</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item19)"></div><div class="meta">Item19</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item20)"></div><div class="meta">Item20</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item21)"></div><div class="meta">Item21</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item22)"></div><div class="meta">Item22</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item23)"></div><div class="meta">Item23</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item24)"></div><div class="meta">Item24</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item25)"></div><div class="meta">Item25</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item26)"></div><div class="meta">Item26</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item27)"></div><div class="meta">Item27</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item28)"></div><div class="meta">Item28</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item29)"></div><div class="meta">Item29</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item30)"></div><div class="meta">Item30</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item31)"></div><div class="meta">Item31</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item32)"></div><div class="meta">Item32</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item33)"></div><div class="meta">Item33</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item34)"></div><div class="meta">Item34</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item35)"></div><div class="meta">Item35</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item36)"></div><div class="meta">Item36</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item37)"></div><div class="meta">Item37</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item38)"></div><div class="meta">Item38</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item39)"></div><div class="meta">Item39</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item40)"></div><div class="meta">Item40</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item41)"></div><div class="meta">Item41</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item42)"></div><div class="meta">Item42</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item43)"></div><div class="meta">Item43</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item44)"></div><div class="meta">Item44</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item45)"></div><div class="meta">Item45</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item46)"></div><div class="meta">Item46</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item47)"></div><div class="meta">Item47</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item48)"></div><div class="meta">Item48</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item49)"></div><div class="meta">Item49</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item50)"></div><div class="meta">Item50</div></div></div>
 <!-- 최신 드라마 -->
 <div class="section-title">📺 최신 드라마</div>
-<div class="thumb-line" data-psom-key="media-drama">
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-</div>
-
+<div class="thumb-line">
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item1)"></div><div class="meta">Item1</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item2)"></div><div class="meta">Item2</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item3)"></div><div class="meta">Item3</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item4)"></div><div class="meta">Item4</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item5)"></div><div class="meta">Item5</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item6)"></div><div class="meta">Item6</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item7)"></div><div class="meta">Item7</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item8)"></div><div class="meta">Item8</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item9)"></div><div class="meta">Item9</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item10)"></div><div class="meta">Item10</div></div>
+<div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item11)"></div><div class="meta">Item11</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item12)"></div><div class="meta">Item12</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item13)"></div><div class="meta">Item13</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item14)"></div><div class="meta">Item14</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item15)"></div><div class="meta">Item15</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item16)"></div><div class="meta">Item16</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item17)"></div><div class="meta">Item17</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item18)"></div><div class="meta">Item18</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item19)"></div><div class="meta">Item19</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item20)"></div><div class="meta">Item20</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item21)"></div><div class="meta">Item21</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item22)"></div><div class="meta">Item22</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item23)"></div><div class="meta">Item23</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item24)"></div><div class="meta">Item24</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item25)"></div><div class="meta">Item25</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item26)"></div><div class="meta">Item26</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item27)"></div><div class="meta">Item27</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item28)"></div><div class="meta">Item28</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item29)"></div><div class="meta">Item29</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item30)"></div><div class="meta">Item30</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item31)"></div><div class="meta">Item31</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item32)"></div><div class="meta">Item32</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item33)"></div><div class="meta">Item33</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item34)"></div><div class="meta">Item34</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item35)"></div><div class="meta">Item35</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item36)"></div><div class="meta">Item36</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item37)"></div><div class="meta">Item37</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item38)"></div><div class="meta">Item38</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item39)"></div><div class="meta">Item39</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item40)"></div><div class="meta">Item40</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item41)"></div><div class="meta">Item41</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item42)"></div><div class="meta">Item42</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item43)"></div><div class="meta">Item43</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item44)"></div><div class="meta">Item44</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item45)"></div><div class="meta">Item45</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item46)"></div><div class="meta">Item46</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item47)"></div><div class="meta">Item47</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item48)"></div><div class="meta">Item48</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item49)"></div><div class="meta">Item49</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item50)"></div><div class="meta">Item50</div></div></div>
 <!-- 미스터리/스릴러 -->
 <div class="section-title">🕵️‍♂️ 미스터리 / 스릴러</div>
-<div class="thumb-line" data-psom-key="media-thriller">
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-</div>
-
+<div class="thumb-line">
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item1)"></div><div class="meta">Item1</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item2)"></div><div class="meta">Item2</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item3)"></div><div class="meta">Item3</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item4)"></div><div class="meta">Item4</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item5)"></div><div class="meta">Item5</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item6)"></div><div class="meta">Item6</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item7)"></div><div class="meta">Item7</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item8)"></div><div class="meta">Item8</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item9)"></div><div class="meta">Item9</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item10)"></div><div class="meta">Item10</div></div>
+<div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item11)"></div><div class="meta">Item11</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item12)"></div><div class="meta">Item12</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item13)"></div><div class="meta">Item13</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item14)"></div><div class="meta">Item14</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item15)"></div><div class="meta">Item15</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item16)"></div><div class="meta">Item16</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item17)"></div><div class="meta">Item17</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item18)"></div><div class="meta">Item18</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item19)"></div><div class="meta">Item19</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item20)"></div><div class="meta">Item20</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item21)"></div><div class="meta">Item21</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item22)"></div><div class="meta">Item22</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item23)"></div><div class="meta">Item23</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item24)"></div><div class="meta">Item24</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item25)"></div><div class="meta">Item25</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item26)"></div><div class="meta">Item26</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item27)"></div><div class="meta">Item27</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item28)"></div><div class="meta">Item28</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item29)"></div><div class="meta">Item29</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item30)"></div><div class="meta">Item30</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item31)"></div><div class="meta">Item31</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item32)"></div><div class="meta">Item32</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item33)"></div><div class="meta">Item33</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item34)"></div><div class="meta">Item34</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item35)"></div><div class="meta">Item35</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item36)"></div><div class="meta">Item36</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item37)"></div><div class="meta">Item37</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item38)"></div><div class="meta">Item38</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item39)"></div><div class="meta">Item39</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item40)"></div><div class="meta">Item40</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item41)"></div><div class="meta">Item41</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item42)"></div><div class="meta">Item42</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item43)"></div><div class="meta">Item43</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item44)"></div><div class="meta">Item44</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item45)"></div><div class="meta">Item45</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item46)"></div><div class="meta">Item46</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item47)"></div><div class="meta">Item47</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item48)"></div><div class="meta">Item48</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item49)"></div><div class="meta">Item49</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item50)"></div><div class="meta">Item50</div></div></div>
 <!-- 로멘스 -->
 <div class="section-title">💖 로멘스</div>
-<div class="thumb-line" data-psom-key="media-romance">
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-</div>
-
+<div class="thumb-line">
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item1)"></div><div class="meta">Item1</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item2)"></div><div class="meta">Item2</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item3)"></div><div class="meta">Item3</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item4)"></div><div class="meta">Item4</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item5)"></div><div class="meta">Item5</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item6)"></div><div class="meta">Item6</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item7)"></div><div class="meta">Item7</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item8)"></div><div class="meta">Item8</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item9)"></div><div class="meta">Item9</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item10)"></div><div class="meta">Item10</div></div>
+<div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item11)"></div><div class="meta">Item11</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item12)"></div><div class="meta">Item12</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item13)"></div><div class="meta">Item13</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item14)"></div><div class="meta">Item14</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item15)"></div><div class="meta">Item15</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item16)"></div><div class="meta">Item16</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item17)"></div><div class="meta">Item17</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item18)"></div><div class="meta">Item18</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item19)"></div><div class="meta">Item19</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item20)"></div><div class="meta">Item20</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item21)"></div><div class="meta">Item21</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item22)"></div><div class="meta">Item22</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item23)"></div><div class="meta">Item23</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item24)"></div><div class="meta">Item24</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item25)"></div><div class="meta">Item25</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item26)"></div><div class="meta">Item26</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item27)"></div><div class="meta">Item27</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item28)"></div><div class="meta">Item28</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item29)"></div><div class="meta">Item29</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item30)"></div><div class="meta">Item30</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item31)"></div><div class="meta">Item31</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item32)"></div><div class="meta">Item32</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item33)"></div><div class="meta">Item33</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item34)"></div><div class="meta">Item34</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item35)"></div><div class="meta">Item35</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item36)"></div><div class="meta">Item36</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item37)"></div><div class="meta">Item37</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item38)"></div><div class="meta">Item38</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item39)"></div><div class="meta">Item39</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item40)"></div><div class="meta">Item40</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item41)"></div><div class="meta">Item41</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item42)"></div><div class="meta">Item42</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item43)"></div><div class="meta">Item43</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item44)"></div><div class="meta">Item44</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item45)"></div><div class="meta">Item45</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item46)"></div><div class="meta">Item46</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item47)"></div><div class="meta">Item47</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item48)"></div><div class="meta">Item48</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item49)"></div><div class="meta">Item49</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item50)"></div><div class="meta">Item50</div></div></div>
 <!-- 예능/오락 -->
 <div class="section-title">😂 예능 / 오락</div>
-<div class="thumb-line" data-psom-key="media-variety">
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-</div>
-
+<div class="thumb-line">
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item1)"></div><div class="meta">Item1</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item2)"></div><div class="meta">Item2</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item3)"></div><div class="meta">Item3</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item4)"></div><div class="meta">Item4</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item5)"></div><div class="meta">Item5</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item6)"></div><div class="meta">Item6</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item7)"></div><div class="meta">Item7</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item8)"></div><div class="meta">Item8</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item9)"></div><div class="meta">Item9</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item10)"></div><div class="meta">Item10</div></div>
+<div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item11)"></div><div class="meta">Item11</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item12)"></div><div class="meta">Item12</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item13)"></div><div class="meta">Item13</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item14)"></div><div class="meta">Item14</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item15)"></div><div class="meta">Item15</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item16)"></div><div class="meta">Item16</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item17)"></div><div class="meta">Item17</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item18)"></div><div class="meta">Item18</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item19)"></div><div class="meta">Item19</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item20)"></div><div class="meta">Item20</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item21)"></div><div class="meta">Item21</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item22)"></div><div class="meta">Item22</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item23)"></div><div class="meta">Item23</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item24)"></div><div class="meta">Item24</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item25)"></div><div class="meta">Item25</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item26)"></div><div class="meta">Item26</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item27)"></div><div class="meta">Item27</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item28)"></div><div class="meta">Item28</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item29)"></div><div class="meta">Item29</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item30)"></div><div class="meta">Item30</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item31)"></div><div class="meta">Item31</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item32)"></div><div class="meta">Item32</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item33)"></div><div class="meta">Item33</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item34)"></div><div class="meta">Item34</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item35)"></div><div class="meta">Item35</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item36)"></div><div class="meta">Item36</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item37)"></div><div class="meta">Item37</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item38)"></div><div class="meta">Item38</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item39)"></div><div class="meta">Item39</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item40)"></div><div class="meta">Item40</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item41)"></div><div class="meta">Item41</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item42)"></div><div class="meta">Item42</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item43)"></div><div class="meta">Item43</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item44)"></div><div class="meta">Item44</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item45)"></div><div class="meta">Item45</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item46)"></div><div class="meta">Item46</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item47)"></div><div class="meta">Item47</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item48)"></div><div class="meta">Item48</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item49)"></div><div class="meta">Item49</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item50)"></div><div class="meta">Item50</div></div></div>
 <!-- 다큐/교양 -->
 <div class="section-title">🎥 다큐 / 교양</div>
-<div class="thumb-line" data-psom-key="media-documentary">
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-</div>
-
+<div class="thumb-line">
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item1)"></div><div class="meta">Item1</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item2)"></div><div class="meta">Item2</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item3)"></div><div class="meta">Item3</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item4)"></div><div class="meta">Item4</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item5)"></div><div class="meta">Item5</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item6)"></div><div class="meta">Item6</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item7)"></div><div class="meta">Item7</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item8)"></div><div class="meta">Item8</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item9)"></div><div class="meta">Item9</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item10)"></div><div class="meta">Item10</div></div>
+<div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item11)"></div><div class="meta">Item11</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item12)"></div><div class="meta">Item12</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item13)"></div><div class="meta">Item13</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item14)"></div><div class="meta">Item14</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item15)"></div><div class="meta">Item15</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item16)"></div><div class="meta">Item16</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item17)"></div><div class="meta">Item17</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item18)"></div><div class="meta">Item18</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item19)"></div><div class="meta">Item19</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item20)"></div><div class="meta">Item20</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item21)"></div><div class="meta">Item21</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item22)"></div><div class="meta">Item22</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item23)"></div><div class="meta">Item23</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item24)"></div><div class="meta">Item24</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item25)"></div><div class="meta">Item25</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item26)"></div><div class="meta">Item26</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item27)"></div><div class="meta">Item27</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item28)"></div><div class="meta">Item28</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item29)"></div><div class="meta">Item29</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item30)"></div><div class="meta">Item30</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item31)"></div><div class="meta">Item31</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item32)"></div><div class="meta">Item32</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item33)"></div><div class="meta">Item33</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item34)"></div><div class="meta">Item34</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item35)"></div><div class="meta">Item35</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item36)"></div><div class="meta">Item36</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item37)"></div><div class="meta">Item37</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item38)"></div><div class="meta">Item38</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item39)"></div><div class="meta">Item39</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item40)"></div><div class="meta">Item40</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item41)"></div><div class="meta">Item41</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item42)"></div><div class="meta">Item42</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item43)"></div><div class="meta">Item43</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item44)"></div><div class="meta">Item44</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item45)"></div><div class="meta">Item45</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item46)"></div><div class="meta">Item46</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item47)"></div><div class="meta">Item47</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item48)"></div><div class="meta">Item48</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item49)"></div><div class="meta">Item49</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item50)"></div><div class="meta">Item50</div></div></div>
 <!-- 애니메이션 -->
 <div class="section-title">🐱 애니메이션</div>
-<div class="thumb-line" data-psom-key="media-animation">
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-</div>
-
+<div class="thumb-line">
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item1)"></div><div class="meta">Item1</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item2)"></div><div class="meta">Item2</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item3)"></div><div class="meta">Item3</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item4)"></div><div class="meta">Item4</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item5)"></div><div class="meta">Item5</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item6)"></div><div class="meta">Item6</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item7)"></div><div class="meta">Item7</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item8)"></div><div class="meta">Item8</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item9)"></div><div class="meta">Item9</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item10)"></div><div class="meta">Item10</div></div>
+<div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item11)"></div><div class="meta">Item11</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item12)"></div><div class="meta">Item12</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item13)"></div><div class="meta">Item13</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item14)"></div><div class="meta">Item14</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item15)"></div><div class="meta">Item15</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item16)"></div><div class="meta">Item16</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item17)"></div><div class="meta">Item17</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item18)"></div><div class="meta">Item18</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item19)"></div><div class="meta">Item19</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item20)"></div><div class="meta">Item20</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item21)"></div><div class="meta">Item21</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item22)"></div><div class="meta">Item22</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item23)"></div><div class="meta">Item23</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item24)"></div><div class="meta">Item24</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item25)"></div><div class="meta">Item25</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item26)"></div><div class="meta">Item26</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item27)"></div><div class="meta">Item27</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item28)"></div><div class="meta">Item28</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item29)"></div><div class="meta">Item29</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item30)"></div><div class="meta">Item30</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item31)"></div><div class="meta">Item31</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item32)"></div><div class="meta">Item32</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item33)"></div><div class="meta">Item33</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item34)"></div><div class="meta">Item34</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item35)"></div><div class="meta">Item35</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item36)"></div><div class="meta">Item36</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item37)"></div><div class="meta">Item37</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item38)"></div><div class="meta">Item38</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item39)"></div><div class="meta">Item39</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item40)"></div><div class="meta">Item40</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item41)"></div><div class="meta">Item41</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item42)"></div><div class="meta">Item42</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item43)"></div><div class="meta">Item43</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item44)"></div><div class="meta">Item44</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item45)"></div><div class="meta">Item45</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item46)"></div><div class="meta">Item46</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item47)"></div><div class="meta">Item47</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item48)"></div><div class="meta">Item48</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item49)"></div><div class="meta">Item49</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item50)"></div><div class="meta">Item50</div></div></div>
 <!-- 뮤비 -->
 <div class="section-title">🎵 뮤비</div>
-<div class="thumb-line" data-psom-key="media-music">
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-</div>
-
+<div class="thumb-line">
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item1)"></div><div class="meta">Item1</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item2)"></div><div class="meta">Item2</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item3)"></div><div class="meta">Item3</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item4)"></div><div class="meta">Item4</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item5)"></div><div class="meta">Item5</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item6)"></div><div class="meta">Item6</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item7)"></div><div class="meta">Item7</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item8)"></div><div class="meta">Item8</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item9)"></div><div class="meta">Item9</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item10)"></div><div class="meta">Item10</div></div>
+<div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item11)"></div><div class="meta">Item11</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item12)"></div><div class="meta">Item12</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item13)"></div><div class="meta">Item13</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item14)"></div><div class="meta">Item14</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item15)"></div><div class="meta">Item15</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item16)"></div><div class="meta">Item16</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item17)"></div><div class="meta">Item17</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item18)"></div><div class="meta">Item18</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item19)"></div><div class="meta">Item19</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item20)"></div><div class="meta">Item20</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item21)"></div><div class="meta">Item21</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item22)"></div><div class="meta">Item22</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item23)"></div><div class="meta">Item23</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item24)"></div><div class="meta">Item24</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item25)"></div><div class="meta">Item25</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item26)"></div><div class="meta">Item26</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item27)"></div><div class="meta">Item27</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item28)"></div><div class="meta">Item28</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item29)"></div><div class="meta">Item29</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item30)"></div><div class="meta">Item30</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item31)"></div><div class="meta">Item31</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item32)"></div><div class="meta">Item32</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item33)"></div><div class="meta">Item33</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item34)"></div><div class="meta">Item34</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item35)"></div><div class="meta">Item35</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item36)"></div><div class="meta">Item36</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item37)"></div><div class="meta">Item37</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item38)"></div><div class="meta">Item38</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item39)"></div><div class="meta">Item39</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item40)"></div><div class="meta">Item40</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item41)"></div><div class="meta">Item41</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item42)"></div><div class="meta">Item42</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item43)"></div><div class="meta">Item43</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item44)"></div><div class="meta">Item44</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item45)"></div><div class="meta">Item45</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item46)"></div><div class="meta">Item46</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item47)"></div><div class="meta">Item47</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item48)"></div><div class="meta">Item48</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item49)"></div><div class="meta">Item49</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item50)"></div><div class="meta">Item50</div></div></div>
 <!-- 핫한 쇼츠 영상무비 -->
 <div class="section-title">🔥 핫한 쇼츠 영상무비</div>
-<div class="thumb-line" data-psom-key="media-shorts">
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
-<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">Coming Soon</div>
-</a>
-
+<div class="thumb-line">
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item1)"></div><div class="meta">Item1</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item2)"></div><div class="meta">Item2</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item3)"></div><div class="meta">Item3</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item4)"></div><div class="meta">Item4</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item5)"></div><div class="meta">Item5</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item6)"></div><div class="meta">Item6</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item7)"></div><div class="meta">Item7</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item8)"></div><div class="meta">Item8</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item9)"></div><div class="meta">Item9</div></div>
+<div class="card"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item10)"></div><div class="meta">Item10</div></div>
+<div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item11)"></div><div class="meta">Item11</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item12)"></div><div class="meta">Item12</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item13)"></div><div class="meta">Item13</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item14)"></div><div class="meta">Item14</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item15)"></div><div class="meta">Item15</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item16)"></div><div class="meta">Item16</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item17)"></div><div class="meta">Item17</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item18)"></div><div class="meta">Item18</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item19)"></div><div class="meta">Item19</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item20)"></div><div class="meta">Item20</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item21)"></div><div class="meta">Item21</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item22)"></div><div class="meta">Item22</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item23)"></div><div class="meta">Item23</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item24)"></div><div class="meta">Item24</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item25)"></div><div class="meta">Item25</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item26)"></div><div class="meta">Item26</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item27)"></div><div class="meta">Item27</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item28)"></div><div class="meta">Item28</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item29)"></div><div class="meta">Item29</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item30)"></div><div class="meta">Item30</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item31)"></div><div class="meta">Item31</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item32)"></div><div class="meta">Item32</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item33)"></div><div class="meta">Item33</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item34)"></div><div class="meta">Item34</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item35)"></div><div class="meta">Item35</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item36)"></div><div class="meta">Item36</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item37)"></div><div class="meta">Item37</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item38)"></div><div class="meta">Item38</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item39)"></div><div class="meta">Item39</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item40)"></div><div class="meta">Item40</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item41)"></div><div class="meta">Item41</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item42)"></div><div class="meta">Item42</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item43)"></div><div class="meta">Item43</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item44)"></div><div class="meta">Item44</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item45)"></div><div class="meta">Item45</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item46)"></div><div class="meta">Item46</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item47)"></div><div class="meta">Item47</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item48)"></div><div class="meta">Item48</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item49)"></div><div class="meta">Item49</div></div><div class="card" data-clone="true"><div class="thumb" style="background-image:url(https://placehold.co/320x180?text=Item50)"></div><div class="meta">Item50</div></div></div>
 </div>
-</div>
+<div class="thumb-grid" data-feed="/.netlify/functions/feed" data-lang-attr="html" data-psom-key="mediahub"></div>
 </main>
 </div>
-
 <script>
-/**
- * MediaHub Unified Scroll Script (SAFE FULL BLOCK)
- * ✅ thumb-line + platform-line 모두 지원
- * ✅ "원본 라인 요소(.thumb-line/.platform-line)는 절대 교체/삭제하지 않음" (replaceChild 금지)
- * ✅ 내부만 .scroll-content로 래핑하여 렌더러/초기화 코드와 충돌 방지
- * - 짧은 클릭: 1장
- * - 꾹 누름: "화면에 완전히(80%↑) 보이는 카드 수"만큼 이동
- */
-
-(function () {
-  const CARD_SELECTOR = '.card';
-  const SHORT_CLICK_MS = 180;
-  const HOLD_INTERVAL_MS = 140;
-  const VISIBLE_RATIO = 0.8;
-
-  function getGapPx(el) {
-    const s = getComputedStyle(el);
-    return parseFloat(s.gap || s.columnGap || 0) || 0;
-  }
-
-  function getStride(container) {
-    const card = container.querySelector(CARD_SELECTOR);
-    return card ? (card.offsetWidth + getGapPx(container)) : container.clientWidth;
-  }
-
-  function getFullyVisibleCount(container) {
-    const L = container.scrollLeft;
-    const R = L + container.clientWidth;
-    let count = 0;
-
-    container.querySelectorAll(CARD_SELECTOR).forEach(card => {
-      const l = card.offsetLeft;
-      const r = l + card.offsetWidth;
-      const visible = Math.min(r, R) - Math.max(l, L);
-      const ratio = visible / (card.offsetWidth || 1);
-      if (ratio >= VISIBLE_RATIO) count++;
-    });
-
-    return Math.max(1, count);
-  }
-
-  function scrollByCards(container, count) {
-    const stride = getStride(container);
-    container.scrollTo({
-      left: container.scrollLeft + stride * count,
-      behavior: 'smooth'
-    });
-  }
-
-  // ✅ 원본 line 요소를 교체하지 않고, 내부만 래핑 + 버튼을 line 안에 생성
-  function ensureLineWrapped(line) {
-    if (!line || line.dataset.scrollWrapped === '1') return;
-
-    // scroll-content 없으면 생성해서 기존 자식들을 이동
-    let content = line.querySelector(':scope > .scroll-content');
-    if (!content) {
-      content = document.createElement('div');
-      content.className = 'scroll-content';
-
-      // 기존 자식들을 content로 이동 (버튼이 이미 있을 수 있으니, 생성 전에는 통째 이동)
-      const children = Array.from(line.childNodes);
-      children.forEach(n => content.appendChild(n));
-
-      line.appendChild(content);
-    }
-
-    // 버튼이 없으면 생성
-    let leftBtn = line.querySelector(':scope > .scroll-btn.left');
-    let rightBtn = line.querySelector(':scope > .scroll-btn.right');
-
-    if (!leftBtn) {
-      leftBtn = document.createElement('button');
-      leftBtn.className = 'scroll-btn left';
-      leftBtn.type = 'button';
-      leftBtn.textContent = '‹';
-      line.insertBefore(leftBtn, content);
-    } else {
-      // 혹시 content 뒤에 있으면 앞으로
-      if (leftBtn.nextSibling !== content) line.insertBefore(leftBtn, content);
-    }
-
-    if (!rightBtn) {
-      rightBtn = document.createElement('button');
-      rightBtn.className = 'scroll-btn right';
-      rightBtn.type = 'button';
-      rightBtn.textContent = '›';
-      line.appendChild(rightBtn);
-    } else {
-      // 혹시 content 앞에 있으면 뒤로
-      if (rightBtn.previousSibling !== content) line.appendChild(rightBtn);
-    }
-
-    // line에 wrapper 역할 클래스 부여 (CSS가 scroll-wrapper를 기대하는 경우 대응)
-    line.classList.add('scroll-wrapper');
-
-    // 바인딩 (중복 방지)
-    bindScroll(line);
-
-    line.dataset.scrollWrapped = '1';
-  }
-
-  function bindScroll(line) {
-    if (!line || line.dataset.scrollBound === '1') return;
-
-    const container = line.querySelector(':scope > .scroll-content');
-    if (!container) return;
-
-    const leftBtn = line.querySelector(':scope > .scroll-btn.left');
-    const rightBtn = line.querySelector(':scope > .scroll-btn.right');
-
-    let timer = null;
-    let pressStart = 0;
-
-    function clearTimer() {
-      if (timer) {
-        clearInterval(timer);
-        timer = null;
-      }
-    }
-
- function start(dir) {
-  pressStart = Date.now();
-  clearTimer();
-
-  const isPlatform = line.classList.contains('platform-line');
-
-  // ✅ 공급사 전용: "타일 100% 노출 기준"으로만 페이지 이동 + 항상 offsetLeft로 스냅
-  function providerStep(stepDir){
-    const items = Array.from(container.querySelectorAll('.platform-tile'));
-    if(!items.length) return;
-
-    const crect = container.getBoundingClientRect();
-    const EPS = 1;
-
-    // 1) 현재 화면에서 "완전 100% 보이는 타일"만
-    const fully = [];
-    for(let i=0;i<items.length;i++){
-      const r = items[i].getBoundingClientRect();
-      if(r.left >= crect.left - EPS && r.right <= crect.right + EPS) fully.push(i);
-    }
-
-    // 2) 기준 인덱스(완전노출이 없으면: 현재 L 기준으로 걸쳐진 다음 타일)
-    const L = container.scrollLeft;
-    let firstIdx = (fully.length ? fully[0] : (() => {
-      for(let i=0;i<items.length;i++){
-        const l = items[i].offsetLeft;
-        const rr = l + items[i].offsetWidth;
-        if(rr > L + EPS) return i;
-      }
-      return 0;
-    })());
-
-    const pageCount = Math.max(1, fully.length || 1);
-    const targetIdx = Math.max(0, Math.min(items.length - 1, firstIdx + stepDir * pageCount));
-
-    container.scrollTo({ left: items[targetIdx].offsetLeft, behavior:'smooth' });
-  }
-
-  timer = setInterval(() => {
-    if(isPlatform){
-      providerStep(dir);                 // ✅ 공급사: 반 잘리면 다음번에 "그 타일이 통으로" 시작되게 스냅
-    } else {
-      const visible = getFullyVisibleCount(container);  // ✅ 메인 10섹션(thumb-line): 기존 방식 유지
-      scrollByCards(container, dir * visible);
-    }
-  }, HOLD_INTERVAL_MS);
+function getGapPx(el){
+  const style = window.getComputedStyle(el);
+  const gapStr = style.columnGap || style.gap || "0";
+  return parseFloat(gapStr) || 0;
 }
-
-function end(dir) {
-  const elapsed = Date.now() - pressStart;
-  clearTimer();
-
-  if (elapsed < SHORT_CLICK_MS) {
-    const isPlatform = line.classList.contains('platform-line');
-
-    if(isPlatform){
-      // ✅ 공급사: 클릭도 "페이지 스냅"으로 (반 잘린 타일이 다음에 통으로 보이도록)
-      const items = Array.from(container.querySelectorAll('.platform-tile'));
-      if(!items.length) return;
-
-      const crect = container.getBoundingClientRect();
-      const EPS = 1;
-
-      const fully = [];
-      for(let i=0;i<items.length;i++){
-        const r = items[i].getBoundingClientRect();
-        if(r.left >= crect.left - EPS && r.right <= crect.right + EPS) fully.push(i);
-      }
-
-      const L = container.scrollLeft;
-      let firstIdx = (fully.length ? fully[0] : (() => {
-        for(let i=0;i<items.length;i++){
-          const l = items[i].offsetLeft;
-          const rr = l + items[i].offsetWidth;
-          if(rr > L + EPS) return i;
-        }
-        return 0;
-      })());
-
-      const pageCount = Math.max(1, fully.length || 1);
-      const targetIdx = Math.max(0, Math.min(items.length - 1, firstIdx + dir * pageCount));
-
-      container.scrollTo({ left: items[targetIdx].offsetLeft, behavior:'smooth' });
-    } else {
-      scrollByCards(container, dir * 1); // 기존: 짧은 클릭=1장
-    }
-  }
+function scrollByViewport(wrapper, dir){
+  const scroller = wrapper.querySelector('.scroll-content');
+  if (!scroller) return;
+  const children = Array.from(scroller.children);
+  if (!children.length) return;
+  const firstW = children[0].getBoundingClientRect().width;
+  const stride = firstW + getGapPx(scroller);
+  const visible = Math.max(1, Math.floor(scroller.clientWidth / stride));
+  const currentIndex = Math.round(scroller.scrollLeft / stride);
+  const delta = (dir === 'left' ? -visible : visible);
+  const maxIndex = Math.max(0, children.length - visible);
+  const nextIndex = Math.min(Math.max(0, currentIndex + delta), maxIndex);
+  scroller.scrollTo({ left: Math.round(nextIndex * stride), behavior: 'smooth' });
 }
-
-
-    function end(dir) {
-      const elapsed = Date.now() - pressStart;
-      clearTimer();
-      if (elapsed < SHORT_CLICK_MS) {
-        scrollByCards(container, dir * 1);
-      }
-    }
-
-    // ✅ 마우스 + 터치/펜 모두 대응 (pointer 이벤트)
-    function bindBtn(btn, dir) {
-      if (!btn) return;
-
-      btn.addEventListener('pointerdown', (e) => {
-        e.preventDefault();
-        try { btn.setPointerCapture(e.pointerId); } catch(_) {}
-        start(dir);
-      });
-
-      btn.addEventListener('pointerup', (e) => {
-        e.preventDefault();
-        end(dir);
-      });
-
-      btn.addEventListener('pointercancel', () => {
-        clearTimer();
-      });
-
-      btn.addEventListener('pointerleave', () => {
-        // 포인터가 밖으로 나가면 멈춤 (길게 누르다 이탈 시)
-        clearTimer();
-      });
-    }
-
-    bindBtn(rightBtn, 1);
-    bindBtn(leftBtn, -1);
-
-    line.dataset.scrollBound = '1';
-  }
-
-  function initAll() {
-    // ✅ 두 라인 모두 안전하게 처리 (원본 노드 유지)
-    document.querySelectorAll('.thumb-line, .platform-line').forEach(ensureLineWrapped);
-  }
-
-  document.addEventListener('DOMContentLoaded', initAll);
-
-  // ✅ 공급사 목록/카드가 "나중에 렌더"되는 경우 재적용 (원본 노드 유지라 충돌 없음)
-  const mo = new MutationObserver(() => initAll());
-  mo.observe(document.documentElement, { childList: true, subtree: true });
-
-})();
+function wrapLines(selector){
+  document.querySelectorAll(selector).forEach(line => {
+    const wrapper = document.createElement('div');
+    wrapper.classList.add('scroll-wrapper');
+    const content = document.createElement('div');
+    content.classList.add('scroll-content');
+    while (line.firstChild) content.appendChild(line.firstChild);
+    const leftBtn = document.createElement('button');
+    leftBtn.className = 'scroll-btn left'; leftBtn.innerHTML = '‹';
+    const rightBtn = document.createElement('button');
+    rightBtn.className = 'scroll-btn right'; rightBtn.innerHTML = '›';
+    leftBtn.onclick = () => scrollByViewport(wrapper, 'left');
+    rightBtn.onclick = () => scrollByViewport(wrapper, 'right');
+    wrapper.appendChild(leftBtn);
+    wrapper.appendChild(content);
+    wrapper.appendChild(rightBtn);
+    line.parentNode.replaceChild(wrapper, line);
+  });
+}
+window.addEventListener('DOMContentLoaded', () => {
+  wrapLines('.platform-line');
+  wrapLines('.thumb-line');
+});
 </script>
-
-
 <script>
 // Open provider search in a new tab, no backend dependency
 function handleVideoSearch(e){
@@ -3461,7 +1422,7 @@ function handleVideoSearch(e){
     // Save selected provider on change
     sel.addEventListener('change', ()=>{ localStorage.setItem('mediahub_provider', sel.value); });
     const saved = localStorage.getItem('mediahub_provider');
-    if (saved && [...sel.options].some(o => o.value === saved)) sel.value = saved;
+    if (saved && [...sel.options].some(o=>o.value===saved)) sel.value = saved;
   }
 
   // Intercept search submit to use selected provider
@@ -3698,69 +1659,14 @@ function handleVideoSearch(e){
 })();
 </script>
 <script id="igdc-qa-config">
-  (function () {
-    // 1) 민감정보 없는 기본 설정
-    const baseConfig = {
-      url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "",
-      project: "IGDC",
-      pageId: null,
-      aiEndpoint: null
-    };
-
-    // Supabase 환경을 SUPER_VARSAR에 적용하는 함수
-    function applyConfig(env) {
-      const url =
-        (env && env.SUPABASE_URL) ||
-        baseConfig.url;
-
-      const anonKey =
-        (env && env.SUPABASE_ANON_KEY) ||
-        "";
-
-      if (!anonKey) {
-        console.warn("[IGDC] Supabase anonKey is not configured.");
-      }
-
-      window.SUPER_VARSAR = Object.assign(
-        window.SUPER_VARSAR || {},
-        baseConfig,
-        {
-          url: url,
-          anonKey: anonKey
-        }
-      );
-    }
-
-    // 2) 이미 window.IGDC_ENV가 있다면(로컬 테스트 등) 그걸 우선 사용
-    if (window.IGDC_ENV &&
-        (window.IGDC_ENV.SUPABASE_ANON_KEY || window.IGDC_ENV.SUPABASE_URL)) {
-      applyConfig(window.IGDC_ENV);
-      return;
-    }
-
-    // 3) 없으면 Netlify Functions에서 환경변수 읽어오기
-    var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
-
-    fetch(endpoint, { cache: "no-store" })
-      .then(function (res) {
-        if (!res.ok) {
-          throw new Error("http " + res.status);
-        }
-        return res.json();
-      })
-      .then(function (data) {
-        var env = data && (data.env || data);
-        window.IGDC_ENV = Object.assign(window.IGDC_ENV || {}, env || {});
-        applyConfig(window.IGDC_ENV);
-        console.log("[IGDC] Supabase env loaded from secureEnvBridge.");
-      })
-      .catch(function (err) {
-        console.warn("[IGDC] Failed to load Supabase env:", err && err.message);
-        applyConfig(null);
-      });
-  })();
+window.SUPER_VARSAR = Object.assign(window.SUPER_VARSAR||{}, {
+  url: "https://iuxvjxyeriagkjtdcrom.supabase.co",
+  anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1eHZqeHllcmlhZ2tqdGRjcm9tIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NTM0ODUwMCwiZXhwIjoyMDcwOTI0NTAwfQ.a0spncjSkvfuU50BpsTbtHCCAQaBykvNmjT-QmB_6WU",
+  project: "IGDC",
+  pageId: null,
+  aiEndpoint: null
+});
 </script>
-
 <script id="igdc-qa-script">
 (function(){
   if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
@@ -4334,83 +2240,33 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       if(drag==='left'&&dx>8) document.body.classList.add(showCls);
       if(drag==='right'&&dx<-8) document.body.classList.add(showCls);
     };
-    const up=()=>{const pass=(drag==='top'&&dy>S)||(drag==='left'&&dx>S)||(drag=<script id="thumbline-drag-script">
-/*
-  MediaHub row drag (mobile-safe)
-  - Allows vertical page scroll even when touching cards
-  - Only hijacks when horizontal intent is clear
-*/
-(function(){
-  const THRESHOLD = 10;
-
-  function enableDrag(scroller){
-    if(!scroller) return;
-
-    let isDown = false;
-    let isDraggingX = false;
-    let startX = 0, startY = 0, startScrollLeft = 0;
-
-    const onDown = (e) => {
-      // Only primary pointer
-      if(e.pointerType && e.pointerType !== 'mouse'){
-        // ok
-      }
-      isDown = true;
-      isDraggingX = false;
-      startX = e.clientX;
-      startY = e.clientY;
-      startScrollLeft = scroller.scrollLeft;
-      try { scroller.setPointerCapture(e.pointerId); } catch(_){}
+    const up=()=>{const pass=(drag==='top'&&dy>S)||(drag==='left'&&dx>S)||(drag==='right'&&dx<-S);
+      if(!pass) document.body.classList.remove(showCls);
+      drag=null; removeEventListener('pointermove',move); removeEventListener('touchmove',move);
+      removeEventListener('pointerup',up); removeEventListener('touchend',up);
     };
-
-    const onMove = (e) => {
-      if(!isDown) return;
-
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-
-      // Decide intent
-      if(!isDraggingX){
-        if(Math.abs(dx) > THRESHOLD && Math.abs(dx) > Math.abs(dy) + 4){
-          isDraggingX = true;
-        }else{
-          // vertical intent: do not block page scroll
-          return;
-        }
-      }
-
-      // Horizontal drag: prevent page scroll and move row
-      e.preventDefault();
-      scroller.scrollLeft = startScrollLeft - dx;
-    };
-
-    const onUp = () => {
-      isDown = false;
-      isDraggingX = false;
-    };
-
-    scroller.addEventListener('pointerdown', onDown, {passive:true});
-    scroller.addEventListener('pointermove', onMove, {passive:false});
-    scroller.addEventListener('pointerup', onUp, {passive:true});
-    scroller.addEventListener('pointercancel', onUp, {passive:true});
-    scroller.addEventListener('pointerleave', onUp, {passive:true});
-  }
-
-  function boot(){
-    // Prefer the actual horizontal scroller container
-    document.querySelectorAll('.thumb-line').forEach(line=>{
-      const scroller = line.querySelector(':scope > .scroll-content') || line;
-      enableDrag(scroller);
+    edge.addEventListener('pointerdown',down); edge.addEventListener('touchstart',down,{passive:true});
+    document.addEventListener('click',e=>{const p=(dir==='top'?top:dir==='left'?left:right); if(!p) return;
+      if(document.body.classList.contains(showCls)&&!p.contains(e.target)) document.body.classList.remove(showCls);
     });
+    addEventListener('scroll',()=>{if(document.body.classList.contains(showCls)) document.body.classList.remove(showCls)},{passive:true});
   }
-
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', boot);
-  }else{
-    boot();
-  }
+  if(top) bind('.edge-top','top','show-top');
+  if(left) bind('.edge-left','left','show-left');
+  if(right) bind('.edge-right','right','show-right');
 })();
-</script>iv'); h.className='igdc-qa-header';
+</script><script id="igdc-qa-ensure-modal">
+(function(){
+  if (window.__IGDC_QA_ENSURE__) return; window.__IGDC_QA_ENSURE__ = true;
+
+  function ensureModal(){
+    var modal = document.querySelector('.igdc-qa-modal');
+    if(!modal){
+      // minimal modal skeleton
+      var m = document.createElement('div'); m.className='igdc-qa-modal';
+      var b = document.createElement('div'); b.className='igdc-qa-backdrop';
+      var p = document.createElement('div'); p.className='igdc-qa-panel';
+      var h = document.createElement('div'); h.className='igdc-qa-header';
       var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
@@ -4631,413 +2487,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var m = document.createElement('div'); m.className='igdc-qa-modal';
       var b = document.createElement('div');  -->
 <script>document.addEventListener("DOMContentLoaded",()=>{if(matchMedia("(max-width:768px)").matches){const p=document.querySelector(".platform-line");if(p)p.setAttribute("data-providers","");}});</script>
-
+<div class="thumb-grid" data-psom-key="mediahub"></div>
 <!-- thumbnail automapping -->
-
-<script>
-window.IGDC_QA=window.IGDC_QA||{};
-if(typeof window.IGDC_QA.open!=="function"){
-  window.IGDC_QA.open=function(){
-    if(window.QnaCore&&typeof QnaCore.open==="function"){QnaCore.open();}
-    else if(typeof openModal==="function"){openModal();}
-  };
-}
-window.addEventListener("message",function(ev){
-  try{if(ev&&ev.data&&ev.data.type==="IGTC_OPEN_QNA"&&typeof IGDC_QA.open==="function"){IGDC_QA.open();}}catch(e){}
-});
-</script>
-
-
-<script id="igtc-checkout-trigger-v1">
-(function(){
-  if (window.__IGTC_CHECKOUT_READY__) return;
-  window.IGTC = window.IGTC || {};
-  function safeJSON(s){ try{ return JSON.parse(s); }catch(_){ return null; } }
-  IGTC.checkout = function(opts){
-    try{
-      // Normalize
-      var payload = Object.assign({ method: 'card', amount: 0, currency: 'KRW', meta: {} }, opts||{});
-      // 1) CustomEvent for same-page listeners (optional)
-      try{ window.dispatchEvent(new CustomEvent('IGTC_CHECKOUT', { detail: payload })); }catch(_){}
-      // 2) postMessage for index.html dispatcher (if present)
-      try{ window.postMessage({ type: 'CHECKOUT', payload: payload }, '*'); }catch(_){}
-      // 3) Fallback: call serverless function directly (no-op if not configured)
-      try{
-        fetch('/.netlify/functions/checkout', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
-          .then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); })
-          .then(function(res){
-            if(res && res.redirectUrl){ window.location.assign(res.redirectUrl); }
-            else if(res && res.qr && res.qr.html){
-              // Minimal inline QR modal (scoped)
-              var wrap = document.getElementById('igtc-qr-modal'); 
-              if(!wrap){
-                wrap = document.createElement('div');
-                wrap.id = 'igtc-qr-modal';
-                wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
-                wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>결제 QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">닫기</button></div>'
-                  + '<div id="igtc-qr-area"></div></div>';
-                document.body.appendChild(wrap);
-                var btn = document.getElementById('igtc-qr-close');
-                if(btn) btn.addEventListener('click', function(){ wrap.remove(); }, { passive:true });
-              }
-              var area = document.getElementById('igtc-qr-area'); if(area){ area.innerHTML = res.qr.html; }
-            }
-          })
-          .catch(function(){ /* silent fallback */ });
-      }catch(_){}
-    }catch(_){}
-  };
-  // Data-API: any element with [data-checkout] will trigger checkout with attributes
-  document.addEventListener('click', function(e){
-    var el = e.target.closest('[data-checkout]'); if(!el) return;
-    var metaAttr = el.getAttribute('data-meta');
-    var meta = metaAttr ? (safeJSON(metaAttr) || { note: metaAttr }) : {};
-    var amount = parseFloat(el.getAttribute('data-amount')||'0') || 0;
-    var currency = el.getAttribute('data-currency') || 'KRW';
-    var method = el.getAttribute('data-method') || 'card';
-    IGTC.checkout({ method: method, amount: amount, currency: currency, meta: meta });
-    e.preventDefault();
-  }, { passive:true });
-  window.__IGTC_CHECKOUT_READY__ = true;
-})();
-</script>
-<script>
-(()=> {
-  const form=document.querySelector('#qnaForm,[data-qna-form]');
-  const ta=document.querySelector('#qnaText, textarea[name="question"]');
-  if(!ta) return; const pageId=location.pathname+(location.hash||'');
-  async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
-    await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
-    ta.value=''; alert('전송되었습니다.');
-  }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('전송 실패'));});
-  const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('전송 실패'));});
-})();
-</script>
-
-<style id="mobile-footer-guard-final">
-  html, body { height: auto; min-height: 100% !important; }
-  @supports (height: 100dvh) {
-    .container, .layout, main, .main-content { min-height: 100dvh !important; }
-  }
-  @supports not (height: 100dvh) {
-    .container, .layout, main, .main-content { min-height: 100vh !important; }
-  }
-  @supports (-webkit-touch-callout: none) {
-    html, body { height: -webkit-fill-available; }
-    .container, .layout, main, .main-content { min-height: -webkit-fill-available !important; }
-  }
-  @media (max-width: 980px) {
-    main, .content-area, .main-content, .container, .layout {
-      overflow: visible !important;
-      max-height: none !important;
-    }
-  }
-  footer { padding-bottom: max(28px, env(safe-area-inset-bottom)) !important; position: static !important; }
-  /* MOBILE-FOOTER-GUARD: final */
-</style>
-
-<script>
-// IGDC MediaHub: per-section lazy card reveal (initial 7, then on scroll)
-(function(){
-  function setupLazySections(){
-    var sections = document.querySelectorAll('.thumb-line, .section-row, .scroll-wrapper');
-    if(!sections.length) return;
-    sections.forEach(function(sec){
-      var cards = Array.prototype.slice.call(sec.querySelectorAll('.card'));
-      if(cards.length <= 7) return;
-      // Mark extra cards as lazy and hide them
-      cards.forEach(function(card, idx){
-        if(idx >= 7){
-          card.dataset.lazy = "true";
-          card.style.display = "none";
-        }
-      });
-      // Reveal next batch when user scrolls near end
-      function revealMore(){
-        var hidden = sec.querySelectorAll('.card[data-lazy="true"]');
-        if(!hidden.length) return;
-        // If horizontal scroll is near end, reveal a few more
-        var maxScroll = sec.scrollWidth - sec.clientWidth;
-        var nearEnd = sec.scrollLeft > (maxScroll - 40);
-        if(maxScroll <= 0 || nearEnd){
-          var batch = Array.prototype.slice.call(hidden).slice(0, 6); // reveal up to 6 more each time
-          batch.forEach(function(card){
-            card.style.display = "";
-            card.dataset.lazy = "loaded";
-          });
-        }
-      }
-      sec.addEventListener('scroll', function(){
-        window.requestAnimationFrame(revealMore);
-      });
-      // Also reveal on first paint if container is not scrollable yet
-      setTimeout(revealMore, 600);
-    });
-  }
-  if(document.readyState === "complete" || document.readyState === "interactive"){
-    setTimeout(setupLazySections, 200);
-  }else{
-    document.addEventListener("DOMContentLoaded", function(){ setTimeout(setupLazySections, 200); });
-  }
-})();
-</script>
-
-<script>
-// IGDC: report page height to parent index for iframe resizing
-(function(){
-  function sendHeight(){
-    try{
-      if(window.parent === window){ return; }
-      var docEl = document.documentElement;
-      var body = document.body;
-      var h = Math.max(
-        docEl ? docEl.scrollHeight : 0,
-        body ? body.scrollHeight : 0,
-        docEl ? docEl.offsetHeight : 0,
-        body ? body.offsetHeight : 0
-      );
-      if(!h || h < 100){ return; }
-      var payload = { type: "igdcFrameHeight", height: h, page: location.pathname };
-      if(window.parent && window.parent.postMessage){
-        window.parent.postMessage(payload, "*");
-      }
-    }catch(e){}
-  }
-  function schedule(){
-    sendHeight();
-    [200, 800, 1600].forEach(function(ms){
-      setTimeout(sendHeight, ms);
-    });
-  }
-  if(document.readyState === "complete" || document.readyState === "interactive"){
-    schedule();
-  }else{
-    document.addEventListener("DOMContentLoaded", schedule);
-  }
-  window.addEventListener("load", function(){ setTimeout(sendHeight, 400); });
-  window.addEventListener("resize", function(){ setTimeout(sendHeight, 250); });
-  window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
-})();
-</script>
-
-<script defer src="/assets/js/auto-embed.instagram.js"></script>
-
-<script defer src="/assets/js/media-hero-engine.js"></script>
-<script defer src="/assets/js/media-empty-handler.js"></script>
-
-<script id="igdc-media-access-script">
-
-/*
- IGDC Media Access Script
- ----------------------------------------
- - MediaHub 전용 (Netflix / KT / Amazon 스타일)
- - 썸네일 클릭 → 상세 오버레이
- - 시청 / 대여 / 소장 / 찜하기
- - 외부 PG 결제 트리거 연동
- ----------------------------------------
- 전제:
-  - 썸네일 카드에 data-media-id 존재
-  - IGTC.checkout() 존재
-  - window.__IGDC_ROLE, window.__IGDC_USER 존재
-*/
-
-(function (window, document) {
-  'use strict';
-
-  const MediaAccess = {
-    state: {
-      role: 'guest',
-      user: null,
-      activeMediaId: null
-    },
-
-    init() {
-      this.state.role = window.__IGDC_ROLE || 'guest';
-      this.state.user = window.__IGDC_USER || null;
-      this.bindThumbnailClick();
-    },
-
-    /* 1️⃣ 썸네일 클릭 */
-    bindThumbnailClick() {
-      document.addEventListener('click', (e) => {
-        const card = e.target.closest('[data-media-id]');
-        if (!card) return;
-
-        const mediaId = card.dataset.mediaId;
-        if (!mediaId) return;
-
-        this.openDetail(mediaId, card);
-      });
-    },
-
-    /* 2️⃣ 상세 오버레이 */
-    openDetail(mediaId, card) {
-      this.state.activeMediaId = mediaId;
-
-      this.closeDetail();
-
-      const overlay = document.createElement('div');
-      overlay.id = 'igdc-media-overlay';
-      overlay.innerHTML = `
-        <div class="media-modal">
-          <button class="media-close">✕</button>
-          <h2>${card.dataset.title || 'Media Content'}</h2>
-          <p>${card.dataset.description || ''}</p>
-
-          <div class="media-actions">
-            <button data-action="play">▶ 시청하기</button>
-            <button data-action="rent">💳 대여하기</button>
-            <button data-action="own">💳 소장하기</button>
-            <button data-action="wish">⭐ 찜하기</button>
-          </div>
-
-          <div class="media-review">
-            <textarea placeholder="한 줄 리뷰 (선택)" maxlength="200"></textarea>
-            <button data-action="review">리뷰 등록</button>
-          </div>
-        </div>
-      `;
-
-      document.body.appendChild(overlay);
-
-      overlay.querySelector('.media-close').onclick = () => this.closeDetail();
-      overlay.onclick = (e) => { if (e.target === overlay) this.closeDetail(); };
-
-      overlay.querySelectorAll('[data-action]').forEach(btn => {
-        btn.onclick = () => this.handleAction(btn.dataset.action);
-      });
-    },
-
-    /* 3️⃣ 버튼 액션 */
-    handleAction(action) {
-      const mediaId = this.state.activeMediaId;
-
-      switch (action) {
-        case 'play':
-          alert('시청 권한 확인 후 재생');
-          break;
-
-        case 'rent':
-        case 'own':
-          IGTC.checkout({
-            type: 'media',
-            mediaId,
-            mode: action, // rent | own
-            user: this.state.user
-          });
-          break;
-
-        case 'wish':
-          alert('찜 목록에 추가되었습니다');
-          break;
-
-        case 'review':
-          alert('리뷰가 등록되었습니다');
-          break;
-      }
-    },
-
-    closeDetail() {
-      const el = document.getElementById('igdc-media-overlay');
-      if (el) el.remove();
-    }
-  };
-
-  /* 기본 스타일 */
-  const style = document.createElement('style');
-  style.textContent = `
-    #igdc-media-overlay {
-      position: fixed; inset: 0;
-      background: rgba(0,0,0,.6);
-      z-index: 9999;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .media-modal {
-      background: #fff; padding: 20px;
-      border-radius: 12px; width: 420px;
-    }
-    .media-actions button {
-      margin: 6px 4px;
-    }
-    .media-close {
-      float: right; border: none; background: none; font-size: 18px;
-    }
-    .media-review textarea {
-      width: 100%; margin-top: 10px;
-    }
-  `;
-  document.head.appendChild(style);
-
-  MediaAccess.init();
-  window.IGDCMediaAccess = MediaAccess;
-
-})(window, document);
-</script>
-
-<!-- Media Hub AutoMap (정본) -->
-<script defer src="/assets/js/mediahub-automap.v3.js"></script>
-<script defer src="/assets/js/placeholder-sweeper.js"></script>
-
-
-<script id="igdc-media-10section-frame">
-(function(){
-  const LIMIT = 50;
-  function isMediaKey(key){
-    return key && key.indexOf('media-') === 0 && key !== 'media-hero';
-  }
-  function makePlaceholder(){
-    const a = document.createElement('a');
-    a.className = 'card media-card';
-    a.setAttribute('data-placeholder','true');
-    a.href = 'javascript:void(0)';
-    const thumb = document.createElement('div');
-    thumb.className = 'thumb ph';
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    meta.textContent = 'Coming Soon';
-    a.appendChild(thumb);
-    a.appendChild(meta);
-    return a;
-  }
-  function ensureLine(line){
-    if(!line) return;
-    const key = line.getAttribute('data-psom-key') || '';
-    if(!isMediaKey(key)) return;
-
-    // If wrapped, placeholders belong inside .scroll-content; else inside line
-    const container = line.querySelector(':scope > .scroll-content') || line;
-
-    // Count current cards (including placeholders)
-    const cards = container.querySelectorAll(':scope > a.card');
-    const need = LIMIT - cards.length;
-    if(need <= 0) return;
-
-    const frag = document.createDocumentFragment();
-    for(let i=0;i<need;i++) frag.appendChild(makePlaceholder());
-    container.appendChild(frag);
-  }
-  function run(){
-    document.querySelectorAll('.thumb-line[data-psom-key]').forEach(ensureLine);
-  }
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', function(){
-      run();
-      // run again after wrappers/buttons may be injected
-      setTimeout(run, 200);
-      setTimeout(run, 600);
-    });
-  }else{
-    run();
-    setTimeout(run, 200);
-    setTimeout(run, 600);
-  }
-})();
-</script>
-
+<script src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
 </body>
 </html>
