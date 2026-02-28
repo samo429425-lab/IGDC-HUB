@@ -4746,60 +4746,51 @@ window.addEventListener("message",function(ev){
 </style>
 
 <script>
-/* IGDC MediaHub: safe lazy reveal (stable version) */
+// IGDC MediaHub: per-section lazy card reveal (initial 7, then on scroll)
 (function(){
-  const INITIAL = 7;
-  const STEP = 6;
-
-  function setup(){
-    document.querySelectorAll('.thumb-line').forEach(function(line){
-
-      const cards = Array.from(line.querySelectorAll(':scope > .scroll-content > .card, :scope > .card'));
-      if(cards.length <= INITIAL) return;
-
-      let revealed = INITIAL;
-
-      // 초기 감춤 (display 사용 안 함)
-      cards.forEach(function(card, i){
-        if(i >= INITIAL){
-          card.style.visibility = "hidden";
-          card.style.position = "absolute";
+  function setupLazySections(){
+    var sections = document.querySelectorAll('.thumb-line, .section-row, .scroll-wrapper');
+    if(!sections.length) return;
+    sections.forEach(function(sec){
+      var cards = Array.prototype.slice.call(sec.querySelectorAll('.card'));
+      if(cards.length <= 7) return;
+      // Mark extra cards as lazy and hide them
+      cards.forEach(function(card, idx){
+        if(idx >= 7){
           card.dataset.lazy = "true";
+          card.style.display = "none";
         }
       });
-
-      function reveal(){
-        const maxScroll = line.scrollWidth - line.clientWidth;
-        if(maxScroll <= 0) return;
-
-        if(line.scrollLeft >= maxScroll - 40){
-          const hidden = cards.filter(c => c.dataset.lazy === "true");
-          if(!hidden.length) return;
-
-          hidden.slice(0, STEP).forEach(function(card){
-            card.style.visibility = "";
-            card.style.position = "";
+      // Reveal next batch when user scrolls near end
+      function revealMore(){
+        var hidden = sec.querySelectorAll('.card[data-lazy="true"]');
+        if(!hidden.length) return;
+        // If horizontal scroll is near end, reveal a few more
+        var maxScroll = sec.scrollWidth - sec.clientWidth;
+        var nearEnd = sec.scrollLeft > (maxScroll - 40);
+        if(maxScroll <= 0 || nearEnd){
+          var batch = Array.prototype.slice.call(hidden).slice(0, 6); // reveal up to 6 more each time
+          batch.forEach(function(card){
+            card.style.display = "";
             card.dataset.lazy = "loaded";
           });
-
-          revealed += STEP;
         }
       }
-
-      line.addEventListener('scroll', function(){
-        requestAnimationFrame(reveal);
-      }, { passive:true });
-
+      sec.addEventListener('scroll', function(){
+        window.requestAnimationFrame(revealMore);
+      });
+      // Also reveal on first paint if container is not scrollable yet
+      setTimeout(revealMore, 600);
     });
   }
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", setup);
-  } else {
-    setup();
+  if(document.readyState === "complete" || document.readyState === "interactive"){
+    setTimeout(setupLazySections, 200);
+  }else{
+    document.addEventListener("DOMContentLoaded", function(){ setTimeout(setupLazySections, 200); });
   }
 })();
 </script>
+
 <script>
 // IGDC: report page height to parent index for iframe resizing
 (function(){
