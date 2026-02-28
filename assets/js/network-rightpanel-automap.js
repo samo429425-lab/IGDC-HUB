@@ -1,8 +1,7 @@
-// network-rightpanel-automap.js (PRODUCTION v5 - SINGLE PASS, RIGHT PANEL ONLY)
-// - NetworkHub: right panel only (desktop right rail + mobile bottom rail)
-// - No main sections mapping
-// - Never wipes HTML dummy when data is empty
-// - Avoids multi-pass overwrite timing issues
+// network-rightpanel-automap.js (PRODUCTION v5 - DESKTOP HOOK 유지 + MOBILE RAIL 정합)
+// - sweeper 없이도 안전
+// - 모바일 레일은 #nh-mobile-rail-list 에 .card 구조로 렌더 + 캡션(타이틀) 포함
+// - 데스크탑은 window.__IGDC_RIGHTPANEL_RENDER(items) 그대로 사용
 
 (function () {
   'use strict';
@@ -11,10 +10,11 @@
   window.__NETWORK_AUTOMAP_V5__ = true;
 
   const SNAPSHOT_URL = '/data/networkhub-snapshot.json';
-  const FEED_URL = '/.netlify/functions/feed-network?key=rightpanel&limit=100';
+  const FEED_URL = '/.netlify/functions/feed-network?limit=100';
   const LIMIT = 100;
 
   const MOBILE_ID = 'nh-mobile-rail-list';
+  const MOBILE_CSS_ID = 'nh-mobile-rail-fix-v1';
 
   function $(id){ return document.getElementById(id); }
 
@@ -26,14 +26,30 @@
     return '';
   }
 
-  function pickLink(it){
-    // rightpanel-dummy-engine-v2 expects "link"
-    return pick(it, ['link','url','href']) || '#';
-  }
+  function pickLink(it){ return pick(it, ['link','url','href']) || '#'; }
+  function pickThumb(it){ return pick(it, ['thumb','image','thumbnail','img','photo','cover']); }
+  function pickTitle(it){ return pick(it, ['title','name','label']); }
 
-  function pickThumb(it){
-    // rightpanel-dummy-engine-v2 expects "thumb"
-    return pick(it, ['thumb','image','thumbnail','img','photo','cover']);
+  function ensureMobileCss(){
+    if (document.getElementById(MOBILE_CSS_ID)) return;
+    const style = document.createElement('style');
+    style.id = MOBILE_CSS_ID;
+    style.textContent = `
+/* network mobile rail fix (production) */
+#nh-mobile-rail .card{ position:relative; }
+#nh-mobile-rail .card a{ display:block; width:100%; height:100%; }
+#nh-mobile-rail .card img{ display:block; width:100%; height:100%; object-fit:cover; }
+#nh-mobile-rail .cap{
+  position:absolute; left:0; right:0; bottom:0;
+  padding:6px 10px;
+  font-weight:800; font-size:.92rem; line-height:1.15;
+  color:#fff;
+  background:linear-gradient(to top, rgba(0,0,0,.62), rgba(0,0,0,0));
+  text-shadow:0 1px 2px rgba(0,0,0,.55);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+`;
+    document.head.appendChild(style);
   }
 
   async function fetchJson(url){
@@ -46,27 +62,17 @@
     }
   }
 
-  async function loadSnapshot(){
-    return await fetchJson(SNAPSHOT_URL + '?_t=' + Date.now());
-  }
-
-  async function loadFeed(){
-    return await fetchJson(FEED_URL + '&_t=' + Date.now());
-  }
-
-  function normalize(items){
+  function normalizeItems(raw){
+    const arr = Array.isArray(raw) ? raw : [];
     const out = [];
-    for (const it of (items || [])){
+    for (const it of arr){
       const thumb = pickThumb(it);
       if (!thumb) continue;
-
       out.push({
-        id: it.id || it._id || it.trackId || '',
-        title: (it.title || it.name || it.label || '').toString(),
-        link: pickLink(it),
-        thumb
+        title: pickTitle(it),
+        thumb,
+        link: pickLink(it)
       });
-
       if (out.length >= LIMIT) break;
     }
     return out;
@@ -76,18 +82,16 @@
     const list = $(MOBILE_ID);
     if (!list) return;
 
-    // If we have no items, do NOT wipe existing (keep HTML dummy / previous)
+    // 아이템이 없으면 기존 더미/기존 상태 유지 (절대 wipe 금지)
     if (!items || !items.length) return;
 
-    // Mobile rail wants up to 15 cards
-    const take = items.slice(0, 15);
-
+    ensureMobileCss();
     list.innerHTML = '';
-    const frag = document.createDocumentFragment();
 
-    for (const item of take){
+    const frag = document.createDocumentFragment();
+    for (const item of items){
       const card = document.createElement('div');
-      card.className = 'ad-box';
+      card.className = 'card'; // ✅ CSS가 기대하는 클래스
 
       const a = document.createElement('a');
       a.href = item.link || '#';
@@ -107,13 +111,18 @@
 
       a.appendChild(img);
       card.appendChild(a);
+
+      const cap = document.createElement('div');
+      cap.className = 'cap';
+      cap.textContent = item.title || '';
+      card.appendChild(cap);
+
       frag.appendChild(card);
     }
-
     list.appendChild(frag);
   }
 
-  function callDesktopHook(items){
+  function renderDesktopViaHook(items){
     if (typeof window.__IGDC_RIGHTPANEL_RENDER === 'function'){
       window.__IGDC_RIGHTPANEL_RENDER(items);
       return true;
@@ -121,51 +130,39 @@
     return false;
   }
 
-  async function waitForHookAndRender(items){
-    // Render once when hook becomes available (avoid overwrite loops)
-    const deadline = Date.now() + 2500; // 2.5s max
-    while (Date.now() < deadline){
-      if (callDesktopHook(items)) return true;
-      await new Promise(r => setTimeout(r, 120));
-    }
-    // If hook never appears, we still keep HTML dummy (no wipe)
-    return false;
-  }
-
-  async function loadItems(){
-    // Snapshot first
-    const snap = await loadSnapshot();
-    if (snap && Array.isArray(snap.items) && snap.items.length){
-      return snap.items;
-    }
-
-    // Feed fallback
-    const fd = await loadFeed();
-    if (fd && Array.isArray(fd.items) && fd.items.length){
-      return fd.items;
-    }
-
-    return [];
-  }
-
   async function run(){
-    const raw = await loadItems();
-    const items = normalize(raw);
+    // 데스크탑/모바일 공통: feed → items → (desktop hook / mobile rail)
+    const snap = await fetchJson(SNAPSHOT_URL);
 
-    // 핵심: 비어있으면 HTML을 건드리지 않는다 (더미/기존 유지)
-    if (!items.length) return;
+    // snapshot이 직접 items를 갖고 있으면 그걸 우선
+    let items = snap && Array.isArray(snap.items) ? normalizeItems(snap.items) : [];
 
-    // Desktop right rail via hook (single pass)
-    await waitForHookAndRender(items);
+    // snapshot items 없으면 feed 함수로 시도
+    if (!items.length){
+      const feed = await fetchJson(FEED_URL);
+      items = feed && Array.isArray(feed.items) ? normalizeItems(feed.items) : [];
+    }
 
-    // Mobile bottom rail (direct)
+    // ✅ 모바일 rail: 항상 시도 (존재할 때만)
     renderMobile(items);
+
+    // ✅ 데스크탑 우측패널: hook이 준비된 뒤 실행
+    if (!renderDesktopViaHook(items)){
+      // hook이 늦게 준비될 수 있어 짧게 재시도
+      let tries = 0;
+      const t = setInterval(()=>{
+        tries++;
+        if (renderDesktopViaHook(items) || tries >= 20) clearInterval(t);
+      }, 100);
+    }
   }
 
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', run, { once:true });
+  // load + DOMContentLoaded 이중 안전
+  if (document.readyState === 'complete' || document.readyState === 'interactive'){
+    setTimeout(run, 0);
   } else {
-    run();
+    document.addEventListener('DOMContentLoaded', run, { once:true });
+    window.addEventListener('load', run, { once:true });
   }
 
 })();
