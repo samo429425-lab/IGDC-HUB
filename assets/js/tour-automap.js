@@ -1,127 +1,245 @@
-/* TOUR AUTOMAP v1.0 - entry point (HTML loads ONLY this) */
-(function(){
-  'use strict';
+// tour-rightpanel-automap.v5.js (FINAL / ISOLATED)
+// - ONLY renders into #rightAutoPanel + #tour-mobile-rail .list
+// - NEVER uses global rightpanel renderer (mixing 방지)
+// - Snapshot 우선 → feed fallback
+// - Always fills 100 slots (missing -> dummy) so "백지" 발생 금지
 
-  const HUB = 'tour';
-  const SNAPSHOT_URL = '/data/tour-snapshot.json';
-  const FEED_SRC = '/netlify/functions/feed-tour.v1.js';
-  const SLOT_COUNT = 100;
+(function () {
+  "use strict";
 
-  function $(sel, root=document){ return root.querySelector(sel); }
-  function ensureScript(src){
-    return new Promise((resolve, reject) => {
-      // already loaded?
-      const existing = Array.from(document.scripts).find(s => (s.getAttribute('src')||'') === src);
-      if(existing){ 
-        if(existing.dataset.loaded === '1') return resolve();
-        existing.addEventListener('load', () => resolve(), { once:true });
-        existing.addEventListener('error', () => reject(new Error('script load error: ' + src)), { once:true });
-        return;
-      }
-      const s = document.createElement('script');
-      s.src = src;
-      s.async = true;
-      s.dataset.loaded = '0';
-      s.onload = () => { s.dataset.loaded = '1'; resolve(); };
-      s.onerror = () => reject(new Error('script load error: ' + src));
-      document.head.appendChild(s);
-    });
-  }
+  if (window.__TOUR_RIGHTPANEL_AUTOMAP_V5__) return;
+  window.__TOUR_RIGHTPANEL_AUTOMAP_V5__ = true;
 
-  function disablePsomThumbGrid(){
-    const grid = $('.thumb-grid[data-psom-key="tour"]');
-    if(!grid) return;
-    // prevent other engines from injecting into this grid
-    grid.innerHTML = '';
-    grid.style.display = 'none';
-    grid.setAttribute('data-disabled','1');
-  }
+  const HUB = "tour";
+  const SNAPSHOT_URL = "/data/tour-snapshot.json";
+  const FEED_URL = "/.netlify/functions/feed-tour?limit=100";
 
-  function buildSlots(panel){
-    panel.innerHTML = '';
-    const slots = [];
-    for(let i=0;i<SLOT_COUNT;i++){
-      const box = document.createElement('div');
-      box.className = 'ad-box';
-      box.setAttribute('data-slot', String(i+1));
-      slots.push(box);
-      panel.appendChild(box);
+  const RIGHT_PANEL_ID = "rightAutoPanel";
+  const RIGHT_SLOT_COUNT = 100;
+
+  const MOBILE_RAIL_ID = "tour-mobile-rail";
+  const MOBILE_LIST_SEL = "#tour-mobile-rail .list";
+  const MOBILE_LIMIT = 30;
+
+  const PLACEHOLDER_IMG = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
+  const MOBILE_CSS_ID = "tour-mobile-rail-cap-v1";
+
+  function $(sel, root = document) { return root.querySelector(sel); }
+  function byId(id) { return document.getElementById(id); }
+
+  function pick(it, keys) {
+    for (const k of keys) {
+      const v = it && it[k];
+      if (typeof v === "string" && v.trim()) return v.trim();
     }
-    return slots;
+    return "";
   }
 
-  function ensureTourRightPanelResponsiveFix(){
-    if(document.getElementById('tour-rightpanel-responsive-fix')) return;
-    const style = document.createElement('style');
-    style.id = 'tour-rightpanel-responsive-fix';
-    style.textContent = `
-/* TOUR right panel responsive fix (mobile portrait/landscape) */
-@media (max-width: 1024px){
-  #rightAutoPanel{
-    display: grid !important;
-    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important;
-    gap: 10px !important;
+  function normalizeItems(raw) {
+    const arr = Array.isArray(raw) ? raw : [];
+    const out = [];
+    for (const it of arr) {
+      const title = pick(it, ["title", "name", "label"]);
+      const thumb = pick(it, ["thumb", "image", "thumbnail", "img", "photo", "cover"]);
+      const link = pick(it, ["link", "url", "href"]) || "#";
+      const id = pick(it, ["id", "pid", "productId"]);
+      if (!title || !thumb) continue;
+      out.push({ id, title, thumb, link });
+      if (out.length >= RIGHT_SLOT_COUNT) break;
+    }
+    return out;
   }
-  #rightAutoPanel .ad-box{
-    aspect-ratio: 1 / 1 !important;
-    min-height: 110px !important;
-    overflow: hidden;
+
+  async function fetchJson(url) {
+    try {
+      const r = await fetch(url, { cache: "no-store" });
+      if (!r.ok) return null;
+      return await r.json();
+    } catch {
+      return null;
+    }
   }
-  #rightAutoPanel .ad-box a{
-    display: block;
-    width: 100%;
-    height: 100%;
+
+  function disablePsomThumbGrid() {
+    const grid = $('.thumb-grid[data-psom-key="tour"]');
+    if (!grid) return;
+    grid.innerHTML = "";
+    grid.style.display = "none";
+    grid.setAttribute("data-disabled", "1");
   }
-  #rightAutoPanel .ad-box img{
-    width: 100% !important;
-    height: 100% !important;
-    object-fit: cover !important;
-    display: block;
-  }
+
+function ensureMobileCss() {
+  if (document.getElementById(MOBILE_CSS_ID)) return;
+
+  const style = document.createElement("style");
+  style.id = MOBILE_CSS_ID;
+  style.textContent = `
+/* 모바일 레일 카드 - 우측패널과 동일 구조 기준 */
+
+#${MOBILE_RAIL_ID} .card{
+  position:relative;
+  overflow:hidden;
 }
-@media (max-width: 768px){
-  #rightAutoPanel{
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)) !important;
-  }
-  #rightAutoPanel .ad-box{
-    min-height: 100px !important;
-  }
+
+#${MOBILE_RAIL_ID} .card a{
+  display:block;
+  position:relative;
+  width:100%;
+  height:100%;
+}
+
+#${MOBILE_RAIL_ID} .card img{
+  display:block;
+  width:100%;
+  height:auto;
+}
+
+#${MOBILE_RAIL_ID} .cap{
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  padding:6px 10px;
+  font-weight:800;
+  font-size:.92rem;
+  line-height:1.15;
+  color:#fff;
+  background:linear-gradient(to top, rgba(0,0,0,.65), rgba(0,0,0,0));
+  text-shadow:0 1px 2px rgba(0,0,0,.6);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 `;
-    document.head.appendChild(style);
+  document.head.appendChild(style);
+}
+
+  function makeDummy(idx) {
+    const n = idx + 1;
+    return {
+      id: "",
+      title: `Tour Brand ${n}`,
+      thumb: PLACEHOLDER_IMG,
+      link: "#"
+    };
   }
 
-  async function run(){
-    if(window.__IGDC_TOUR_AUTOMAP_DONE__) return;
-    window.__IGDC_TOUR_AUTOMAP_DONE__ = true;
+  function createRightBox(item) {
+    const box = document.createElement("div");
+    box.className = "ad-box";
 
-    const panel = document.getElementById('rightAutoPanel');
-    if(!panel){
-      console.warn('[TOUR AUTOMAP] missing #rightAutoPanel');
-      return;
+    const a = document.createElement("a");
+    a.href = item.link || "#";
+    if (item.link && item.link !== "#") {
+      a.target = "_blank";
+      a.rel = "noopener";
+    } else {
+      a.tabIndex = -1;
+      a.setAttribute("aria-hidden", "true");
     }
 
+    const img = document.createElement("img");
+    img.src = item.thumb || PLACEHOLDER_IMG;
+    img.alt = item.title || "";
+    img.loading = "lazy";
+    img.decoding = "async";
+
+    const cap = document.createElement("div");
+    cap.className = "tour-card-title";
+    cap.textContent = item.title || "";
+
+    a.appendChild(img);
+    a.appendChild(cap);
+    box.appendChild(a);
+    return box;
+  }
+
+  function renderRightPanel(items) {
+    const panel = byId(RIGHT_PANEL_ID);
+    if (!panel) return;
+
+    panel.innerHTML = "";
+    const frag = document.createDocumentFragment();
+
+    for (let i = 0; i < RIGHT_SLOT_COUNT; i++) {
+      const it = items[i] || makeDummy(i);
+      frag.appendChild(createRightBox(it));
+    }
+
+    panel.appendChild(frag);
+  }
+
+  function renderMobileRail(items) {
+    const rail = byId(MOBILE_RAIL_ID);
+    const list = $(MOBILE_LIST_SEL);
+    if (!rail || !list) return;
+
+    if (!items || !items.length) return;
+
+    rail.style.display = "block";
+    ensureMobileCss();
+
+    list.innerHTML = "";
+    const frag = document.createDocumentFragment();
+
+    for (const it of items.slice(0, MOBILE_LIMIT)) {
+      const card = document.createElement("div");
+      card.className = "card";
+
+      const a = document.createElement("a");
+      a.href = it.link || "#";
+      if (it.link && it.link !== "#") {
+        a.target = "_blank";
+        a.rel = "noopener";
+      } else {
+        a.tabIndex = -1;
+        a.setAttribute("aria-hidden", "true");
+      }
+
+      const img = document.createElement("img");
+      img.src = it.thumb || PLACEHOLDER_IMG;
+      img.alt = it.title || "";
+      img.loading = "lazy";
+      img.decoding = "async";
+
+      const cap = document.createElement("div");
+      cap.className = "cap";
+      cap.textContent = it.title || "";
+
+      a.appendChild(img);
+      a.appendChild(cap);
+      card.appendChild(a);
+      frag.appendChild(card);
+    }
+
+    list.appendChild(frag);
+  }
+
+  async function run() {
     disablePsomThumbGrid();
-    ensureTourRightPanelResponsiveFix();
-    const slots = buildSlots(panel);
 
-    const mobileList = $('#tour-mobile-rail .list');
-    await ensureScript(FEED_SRC);
+    // 1) snapshot 우선
+    const snap = await fetchJson(SNAPSHOT_URL);
+    let items = [];
 
-    if(!window.IGDC_FEED_TOUR || typeof window.IGDC_FEED_TOUR.fill !== 'function'){
-      throw new Error('[TOUR AUTOMAP] IGDC_FEED_TOUR.fill not found');
+    if (snap && snap.meta && snap.meta.hub === HUB && Array.isArray(snap.items)) {
+      items = normalizeItems(snap.items);
     }
 
-    await window.IGDC_FEED_TOUR.fill({
-      hubKey: HUB,
-      snapshotUrl: SNAPSHOT_URL,
-      slots,
-      mobileListEl: mobileList,
-      mobileLimit: 30
-    });
+    // 2) feed fallback
+    if (!items.length) {
+      const feed = await fetchJson(FEED_URL);
+      items = feed && Array.isArray(feed.items) ? normalizeItems(feed.items) : [];
+    }
+
+    renderMobileRail(items);
+    renderRightPanel(items);
   }
 
-  window.addEventListener('load', () => {
-    run().catch(err => console.error(err));
-  });
+  if (document.readyState === "complete" || document.readyState === "interactive") {
+    setTimeout(run, 0);
+  } else {
+    document.addEventListener("DOMContentLoaded", run, { once: true });
+    window.addEventListener("load", run, { once: true });
+  }
 })();
