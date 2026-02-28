@@ -4812,58 +4812,71 @@ window.addEventListener("message",function(ev){
   /* MOBILE-FOOTER-GUARD: final */
 </style>
 
-<script>
-/* IGDC MediaHub: safe lazy reveal (stable version) */
+<script id="media-lazy-reveal-v2">
 (function(){
   const INITIAL = 7;
   const STEP = 6;
+  const MAX = 50;
 
-  function setup(){
-    document.querySelectorAll('.thumb-line').forEach(function(line){
+  function setupSection(line){
+    if(!line) return;
 
-      const cards = Array.from(line.querySelectorAll(':scope > .scroll-content > .card, :scope > .card'));
-      if(cards.length <= INITIAL) return;
+    const scroller = line.querySelector(':scope > .scroll-content') || line;
+    const cards = Array.from(scroller.querySelectorAll(':scope > .card'));
+    if(cards.length <= INITIAL) return;
 
-      let revealed = INITIAL;
+    // 1️⃣ 초기 표시
+    cards.forEach((card, i)=>{
+      if(i >= INITIAL){
+        card.dataset.lazy = "true";
+        card.style.visibility = "hidden";
+        card.style.position = "absolute";
+      }
+    });
 
-      // 초기 감춤 (display 사용 안 함)
-      cards.forEach(function(card, i){
-        if(i >= INITIAL){
-          card.style.visibility = "hidden";
-          card.style.position = "absolute";
-          card.dataset.lazy = "true";
-        }
+    let revealed = INITIAL;
+
+    function revealBatch(){
+      const hidden = cards.filter(c => c.dataset.lazy === "true");
+      if(!hidden.length) return;
+
+      hidden.slice(0, STEP).forEach(card=>{
+        card.dataset.lazy = "loaded";
+        card.style.visibility = "";
+        card.style.position = "";
       });
 
-      function reveal(){
-        const maxScroll = line.scrollWidth - line.clientWidth;
-        if(maxScroll <= 0) return;
+      revealed += STEP;
+      if(revealed > MAX) revealed = MAX;
+    }
 
-        if(line.scrollLeft >= maxScroll - 40){
-          const hidden = cards.filter(c => c.dataset.lazy === "true");
-          if(!hidden.length) return;
-
-          hidden.slice(0, STEP).forEach(function(card){
-            card.style.visibility = "";
-            card.style.position = "";
-            card.dataset.lazy = "loaded";
-          });
-
-          revealed += STEP;
+    // 2️⃣ 버튼 클릭 시 확장
+    const wrapper = line.closest('.section-row') || line.parentElement;
+    if(wrapper){
+      wrapper.addEventListener('click', function(e){
+        if(e.target.closest('.scroll-btn')){
+          revealBatch();
         }
+      });
+    }
+
+    // 3️⃣ 모바일 드래그 끝나면 확장
+    scroller.addEventListener('scroll', function(){
+      const maxScroll = scroller.scrollWidth - scroller.clientWidth;
+      if(scroller.scrollLeft > maxScroll - 60){
+        revealBatch();
       }
+    }, {passive:true});
+  }
 
-      line.addEventListener('scroll', function(){
-        requestAnimationFrame(reveal);
-      }, { passive:true });
-
-    });
+  function boot(){
+    document.querySelectorAll('.thumb-line[data-psom-key]').forEach(setupSection);
   }
 
   if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", setup);
-  } else {
-    setup();
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
   }
 })();
 </script>
