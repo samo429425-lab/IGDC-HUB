@@ -169,51 +169,29 @@ function ensureMobileCss() {
     panel.appendChild(frag);
   }
 
-  function renderMobileRail(items) {
-    const rail = byId(MOBILE_RAIL_ID);
-    const list = $(MOBILE_LIST_SEL);
-    if (!rail || !list) return;
+ function renderMobileRail(items) {
+  const rail = byId(MOBILE_RAIL_ID);
+  const list = $(MOBILE_LIST_SEL);
+  if (!rail || !list) return;
+  if (!items || !items.length) return;
 
-    if (!items || !items.length) return;
+  rail.style.display = "block";
 
-    rail.style.display = "block";
-    ensureMobileCss();
+  list.innerHTML = "";
+  const frag = document.createDocumentFragment();
 
-    list.innerHTML = "";
-    const frag = document.createDocumentFragment();
+  for (const it of items.slice(0, MOBILE_LIMIT)) {
+    // 데스크탑과 동일한 구조 사용
+    const box = createRightBox(it);
 
-    for (const it of items.slice(0, MOBILE_LIMIT)) {
-      const card = document.createElement("div");
-      card.className = "card";
+    // 모바일에서는 ad-box가 card처럼 동작하도록 클래스 추가
+    box.classList.add("mobile-clone");
 
-      const a = document.createElement("a");
-      a.href = it.link || "#";
-      if (it.link && it.link !== "#") {
-        a.target = "_blank";
-        a.rel = "noopener";
-      } else {
-        a.tabIndex = -1;
-        a.setAttribute("aria-hidden", "true");
-      }
-
-      const img = document.createElement("img");
-      img.src = it.thumb || PLACEHOLDER_IMG;
-      img.alt = it.title || "";
-      img.loading = "lazy";
-      img.decoding = "async";
-
-      const cap = document.createElement("div");
-      cap.className = "cap";
-      cap.textContent = it.title || "";
-
-      a.appendChild(img);
-      a.appendChild(cap);
-      card.appendChild(a);
-      frag.appendChild(card);
-    }
-
-    list.appendChild(frag);
+    frag.appendChild(box);
   }
+
+  list.appendChild(frag);
+}
 
   async function run() {
     disablePsomThumbGrid();
