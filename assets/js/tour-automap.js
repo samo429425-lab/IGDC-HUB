@@ -1,85 +1,99 @@
-/* TOUR AUTOMAP v1.0 - entry point (HTML loads ONLY this) */
+/* =========================================================
+   IGDC TOUR AUTOMAP – Long Term Stable Version
+   - Netlify Function 기반
+   - 전역 오염 없음
+   - 중복 실행 방지
+   - 슬롯 자동 생성 + 안전 채움
+   ========================================================= */
+
 (function(){
-  'use strict';
 
-  const HUB = 'tour';
-  const SNAPSHOT_URL = '/data/tour-snapshot.json';
-  const FEED_SRC = '/assets/js/feed-tour.v1.js';
-  const SLOT_COUNT = 100;
+  if (window.__IGDC_TOUR_AUTOMAP_LOADED__) return;
+  window.__IGDC_TOUR_AUTOMAP_LOADED__ = true;
 
-  function $(sel, root=document){ return root.querySelector(sel); }
-  function ensureScript(src){
-    return new Promise((resolve, reject) => {
-      // already loaded?
-      const existing = Array.from(document.scripts).find(s => (s.getAttribute('src')||'') === src);
-      if(existing){ 
-        if(existing.dataset.loaded === '1') return resolve();
-        existing.addEventListener('load', () => resolve(), { once:true });
-        existing.addEventListener('error', () => reject(new Error('script load error: ' + src)), { once:true });
-        return;
-      }
-      const s = document.createElement('script');
-      s.src = src;
-      s.async = true;
-      s.dataset.loaded = '0';
-      s.onload = () => { s.dataset.loaded = '1'; resolve(); };
-      s.onerror = () => reject(new Error('script load error: ' + src));
-      document.head.appendChild(s);
-    });
-  }
+  const FEED_ENDPOINT = '/.netlify/functions/feed-tour';
+  const PANEL_SELECTOR = '.ad-panel';
+  const SLOT_CLASS = 'ad-box';
+  const SLOT_COUNT = 100;   // 필요시 조정 가능
 
-  function disablePsomThumbGrid(){
-    const grid = $('.thumb-grid[data-psom-key="tour"]');
-    if(!grid) return;
-    // prevent other engines from injecting into this grid
-    grid.innerHTML = '';
-    grid.style.display = 'none';
-    grid.setAttribute('data-disabled','1');
-  }
-
+  /* -------------------------
+     슬롯 생성 (안전)
+  ------------------------- */
   function buildSlots(panel){
+    if (!panel) return;
+
+    const existing = panel.querySelectorAll('.' + SLOT_CLASS);
+    if (existing.length >= SLOT_COUNT) return;
+
     panel.innerHTML = '';
-    const slots = [];
-    for(let i=0;i<SLOT_COUNT;i++){
+
+    for(let i=0; i<SLOT_COUNT; i++){
       const box = document.createElement('div');
-      box.className = 'ad-box';
-      box.setAttribute('data-slot', String(i+1));
-      slots.push(box);
+      box.className = SLOT_CLASS;
       panel.appendChild(box);
     }
-    return slots;
   }
 
-  async function run(){
-    if(window.__IGDC_TOUR_AUTOMAP_DONE__) return;
-    window.__IGDC_TOUR_AUTOMAP_DONE__ = true;
-
-    const panel = document.getElementById('rightAutoPanel');
-    if(!panel){
-      console.warn('[TOUR AUTOMAP] missing #rightAutoPanel');
-      return;
+  /* -------------------------
+     Feed 로드
+  ------------------------- */
+  async function loadFeed(){
+    try{
+      const res = await fetch(FEED_ENDPOINT);
+      if(!res.ok) throw new Error('Feed load failed');
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    }catch(err){
+      console.error('[TOUR FEED ERROR]', err);
+      return [];
     }
+  }
 
-    disablePsomThumbGrid();
-    const slots = buildSlots(panel);
+  /* -------------------------
+     카드 채우기
+  ------------------------- */
+  function fillSlots(panel, items){
+    if (!panel) return;
 
-    const mobileList = $('#tour-mobile-rail .list');
-    await ensureScript(FEED_SRC);
+    const slots = panel.querySelectorAll('.' + SLOT_CLASS);
+    if (!slots.length) return;
 
-    if(!window.IGDC_FEED_TOUR || typeof window.IGDC_FEED_TOUR.fill !== 'function'){
-      throw new Error('[TOUR AUTOMAP] IGDC_FEED_TOUR.fill not found');
-    }
+    slots.forEach((slot, index)=>{
+      const item = items[index];
+      if (!item) return;
 
-    await window.IGDC_FEED_TOUR.fill({
-      hubKey: HUB,
-      snapshotUrl: SNAPSHOT_URL,
-      slots,
-      mobileListEl: mobileList,
-      mobileLimit: 30
+      const link = item.link || '#';
+      const image = item.image || '';
+      const title = item.title || '';
+
+      slot.innerHTML = `
+        <a href="${link}">
+          ${image ? `<img src="${image}" alt="">` : ''}
+          ${title ? `<div class="tour-card-title">${title}</div>` : ''}
+        </a>
+      `;
     });
   }
 
-  window.addEventListener('load', () => {
-    run().catch(err => console.error(err));
-  });
+  /* -------------------------
+     초기화
+  ------------------------- */
+  async function init(){
+    const panel = document.querySelector(PANEL_SELECTOR);
+    if (!panel) return;
+
+    buildSlots(panel);
+    const items = await loadFeed();
+    fillSlots(panel, items);
+  }
+
+  /* -------------------------
+     DOM Ready
+  ------------------------- */
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
 })();
