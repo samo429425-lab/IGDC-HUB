@@ -182,7 +182,11 @@ html, body {
 }
 
 /* Improve touch scrolling behavior */
-.scroll-content{ -webkit-overflow-scrolling:touch; touch-action: pan-y; }
+.scroll-content{
+  -webkit-overflow-scrolling: touch;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
 </style>
 <style>
 
