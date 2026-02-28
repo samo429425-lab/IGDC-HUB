@@ -1932,35 +1932,38 @@ window.addEventListener("message",function(ev){
   }
 
 
-  /* ===============================
-     실데이터 렌더
-  =============================== */
+ function renderReal(items){
 
-  function renderReal(items){
+  if(!items || !items.length) return;
 
-    if(!items || !items.length) return;
+  clearDummy();
 
-    clearDummy();
+  // 기존 실카드 제거 (중복 방지)
+  panel.querySelectorAll('.ad-box[data-real="1"]').forEach(el=>el.remove());
 
-    items.forEach(item=>{
+  items.forEach(item=>{
 
-      const card = document.createElement('div');
+    const title = item.title || item.name || '';
+    const link  = item.link  || '#';
+    const thumb = item.thumb || item.image || '';
 
-      card.className = 'ad-box';
+    const card = document.createElement('div');
+    card.className = 'ad-box';
+    card.setAttribute('data-real','1');
 
-      card.innerHTML = `
-        <a href="${item.link||'#'}"
-           data-product-id="${item.id||''}">
-          <img src="${item.thumb||''}"
-               loading="lazy"
-               alt="">
-        </a>
-      `;
+    card.innerHTML = `
+      <a href="${link}" target="_blank" rel="noopener">
+        <img src="${thumb}"
+             loading="lazy"
+             alt="${title}"
+             onerror="this.style.display='none';">
+      </a>
+      <div class="cap">${title}</div>
+    `;
 
-      panel.appendChild(card);
-    });
-  }
-
+    panel.appendChild(card);
+  });
+}
 
   /* ===============================
      초기 실행
@@ -1982,10 +1985,7 @@ window.addEventListener("message",function(ev){
 })();
 </script>
 
-
-
 <script defer src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
-
 <script defer src="/assets/js/network-rightpanel-automap.js?v=20260225a"></script>
 
 </body>
