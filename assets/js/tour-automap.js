@@ -169,7 +169,7 @@ function ensureMobileCss() {
     panel.appendChild(frag);
   }
 
- function renderMobileRail(items) {
+function renderMobileRail(items) {
   const rail = byId(MOBILE_RAIL_ID);
   const list = $(MOBILE_LIST_SEL);
   if (!rail || !list) return;
