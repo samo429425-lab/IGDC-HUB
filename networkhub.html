@@ -188,23 +188,18 @@ a{ color:inherit }
 
 /* Cards */
 .right-rail .ad-box{
+  position:relative;
   background:#fff;
   border:1px solid #d7dce1;
-  border-radius:8px;
+  border-radius:10px;
 
- aspect-ratio: 16 / 9;
- height:auto;
- min-height:0;
- max-height:none;
+  box-sizing:border-box;
+  aspect-ratio:16 / 9;
 
   width:100%;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-
-  font-weight:600;
-  color:#444;
+  flex-shrink:0;
   overflow:hidden;
+  display:block;
 }
 
 /* anchor fills the card */
