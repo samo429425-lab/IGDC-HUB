@@ -24,7 +24,708 @@
       "group": "tour-global"
     }
   },
-  "slots": [],
+  "slots": [
+    {
+      "title": "Tour Item 1",
+      "thumb": "/assets/sample/tour/001.jpg",
+      "url": "#",
+      "priority": 1,
+      "id": "tour-001"
+    },
+    {
+      "title": "Tour Item 2",
+      "thumb": "/assets/sample/tour/002.jpg",
+      "url": "#",
+      "priority": 2,
+      "id": "tour-002"
+    },
+    {
+      "title": "Tour Item 3",
+      "thumb": "/assets/sample/tour/003.jpg",
+      "url": "#",
+      "priority": 3,
+      "id": "tour-003"
+    },
+    {
+      "title": "Tour Item 4",
+      "thumb": "/assets/sample/tour/004.jpg",
+      "url": "#",
+      "priority": 4,
+      "id": "tour-004"
+    },
+    {
+      "title": "Tour Item 5",
+      "thumb": "/assets/sample/tour/005.jpg",
+      "url": "#",
+      "priority": 5,
+      "id": "tour-005"
+    },
+    {
+      "title": "Tour Item 6",
+      "thumb": "/assets/sample/tour/006.jpg",
+      "url": "#",
+      "priority": 6,
+      "id": "tour-006"
+    },
+    {
+      "title": "Tour Item 7",
+      "thumb": "/assets/sample/tour/007.jpg",
+      "url": "#",
+      "priority": 7,
+      "id": "tour-007"
+    },
+    {
+      "title": "Tour Item 8",
+      "thumb": "/assets/sample/tour/008.jpg",
+      "url": "#",
+      "priority": 8,
+      "id": "tour-008"
+    },
+    {
+      "title": "Tour Item 9",
+      "thumb": "/assets/sample/tour/009.jpg",
+      "url": "#",
+      "priority": 9,
+      "id": "tour-009"
+    },
+    {
+      "title": "Tour Item 10",
+      "thumb": "/assets/sample/tour/010.jpg",
+      "url": "#",
+      "priority": 10,
+      "id": "tour-010"
+    },
+    {
+      "title": "Tour Item 11",
+      "thumb": "/assets/sample/tour/011.jpg",
+      "url": "#",
+      "priority": 11,
+      "id": "tour-011"
+    },
+    {
+      "title": "Tour Item 12",
+      "thumb": "/assets/sample/tour/012.jpg",
+      "url": "#",
+      "priority": 12,
+      "id": "tour-012"
+    },
+    {
+      "title": "Tour Item 13",
+      "thumb": "/assets/sample/tour/013.jpg",
+      "url": "#",
+      "priority": 13,
+      "id": "tour-013"
+    },
+    {
+      "title": "Tour Item 14",
+      "thumb": "/assets/sample/tour/014.jpg",
+      "url": "#",
+      "priority": 14,
+      "id": "tour-014"
+    },
+    {
+      "title": "Tour Item 15",
+      "thumb": "/assets/sample/tour/015.jpg",
+      "url": "#",
+      "priority": 15,
+      "id": "tour-015"
+    },
+    {
+      "title": "Tour Item 16",
+      "thumb": "/assets/sample/tour/016.jpg",
+      "url": "#",
+      "priority": 16,
+      "id": "tour-016"
+    },
+    {
+      "title": "Tour Item 17",
+      "thumb": "/assets/sample/tour/017.jpg",
+      "url": "#",
+      "priority": 17,
+      "id": "tour-017"
+    },
+    {
+      "title": "Tour Item 18",
+      "thumb": "/assets/sample/tour/018.jpg",
+      "url": "#",
+      "priority": 18,
+      "id": "tour-018"
+    },
+    {
+      "title": "Tour Item 19",
+      "thumb": "/assets/sample/tour/019.jpg",
+      "url": "#",
+      "priority": 19,
+      "id": "tour-019"
+    },
+    {
+      "title": "Tour Item 20",
+      "thumb": "/assets/sample/tour/020.jpg",
+      "url": "#",
+      "priority": 20,
+      "id": "tour-020"
+    },
+    {
+      "title": "Tour Item 21",
+      "thumb": "/assets/sample/tour/021.jpg",
+      "url": "#",
+      "priority": 21,
+      "id": "tour-021"
+    },
+    {
+      "title": "Tour Item 22",
+      "thumb": "/assets/sample/tour/022.jpg",
+      "url": "#",
+      "priority": 22,
+      "id": "tour-022"
+    },
+    {
+      "title": "Tour Item 23",
+      "thumb": "/assets/sample/tour/023.jpg",
+      "url": "#",
+      "priority": 23,
+      "id": "tour-023"
+    },
+    {
+      "title": "Tour Item 24",
+      "thumb": "/assets/sample/tour/024.jpg",
+      "url": "#",
+      "priority": 24,
+      "id": "tour-024"
+    },
+    {
+      "title": "Tour Item 25",
+      "thumb": "/assets/sample/tour/025.jpg",
+      "url": "#",
+      "priority": 25,
+      "id": "tour-025"
+    },
+    {
+      "title": "Tour Item 26",
+      "thumb": "/assets/sample/tour/026.jpg",
+      "url": "#",
+      "priority": 26,
+      "id": "tour-026"
+    },
+    {
+      "title": "Tour Item 27",
+      "thumb": "/assets/sample/tour/027.jpg",
+      "url": "#",
+      "priority": 27,
+      "id": "tour-027"
+    },
+    {
+      "title": "Tour Item 28",
+      "thumb": "/assets/sample/tour/028.jpg",
+      "url": "#",
+      "priority": 28,
+      "id": "tour-028"
+    },
+    {
+      "title": "Tour Item 29",
+      "thumb": "/assets/sample/tour/029.jpg",
+      "url": "#",
+      "priority": 29,
+      "id": "tour-029"
+    },
+    {
+      "title": "Tour Item 30",
+      "thumb": "/assets/sample/tour/030.jpg",
+      "url": "#",
+      "priority": 30,
+      "id": "tour-030"
+    },
+    {
+      "title": "Tour Item 31",
+      "thumb": "/assets/sample/tour/031.jpg",
+      "url": "#",
+      "priority": 31,
+      "id": "tour-031"
+    },
+    {
+      "title": "Tour Item 32",
+      "thumb": "/assets/sample/tour/032.jpg",
+      "url": "#",
+      "priority": 32,
+      "id": "tour-032"
+    },
+    {
+      "title": "Tour Item 33",
+      "thumb": "/assets/sample/tour/033.jpg",
+      "url": "#",
+      "priority": 33,
+      "id": "tour-033"
+    },
+    {
+      "title": "Tour Item 34",
+      "thumb": "/assets/sample/tour/034.jpg",
+      "url": "#",
+      "priority": 34,
+      "id": "tour-034"
+    },
+    {
+      "title": "Tour Item 35",
+      "thumb": "/assets/sample/tour/035.jpg",
+      "url": "#",
+      "priority": 35,
+      "id": "tour-035"
+    },
+    {
+      "title": "Tour Item 36",
+      "thumb": "/assets/sample/tour/036.jpg",
+      "url": "#",
+      "priority": 36,
+      "id": "tour-036"
+    },
+    {
+      "title": "Tour Item 37",
+      "thumb": "/assets/sample/tour/037.jpg",
+      "url": "#",
+      "priority": 37,
+      "id": "tour-037"
+    },
+    {
+      "title": "Tour Item 38",
+      "thumb": "/assets/sample/tour/038.jpg",
+      "url": "#",
+      "priority": 38,
+      "id": "tour-038"
+    },
+    {
+      "title": "Tour Item 39",
+      "thumb": "/assets/sample/tour/039.jpg",
+      "url": "#",
+      "priority": 39,
+      "id": "tour-039"
+    },
+    {
+      "title": "Tour Item 40",
+      "thumb": "/assets/sample/tour/040.jpg",
+      "url": "#",
+      "priority": 40,
+      "id": "tour-040"
+    },
+    {
+      "title": "Tour Item 41",
+      "thumb": "/assets/sample/tour/041.jpg",
+      "url": "#",
+      "priority": 41,
+      "id": "tour-041"
+    },
+    {
+      "title": "Tour Item 42",
+      "thumb": "/assets/sample/tour/042.jpg",
+      "url": "#",
+      "priority": 42,
+      "id": "tour-042"
+    },
+    {
+      "title": "Tour Item 43",
+      "thumb": "/assets/sample/tour/043.jpg",
+      "url": "#",
+      "priority": 43,
+      "id": "tour-043"
+    },
+    {
+      "title": "Tour Item 44",
+      "thumb": "/assets/sample/tour/044.jpg",
+      "url": "#",
+      "priority": 44,
+      "id": "tour-044"
+    },
+    {
+      "title": "Tour Item 45",
+      "thumb": "/assets/sample/tour/045.jpg",
+      "url": "#",
+      "priority": 45,
+      "id": "tour-045"
+    },
+    {
+      "title": "Tour Item 46",
+      "thumb": "/assets/sample/tour/046.jpg",
+      "url": "#",
+      "priority": 46,
+      "id": "tour-046"
+    },
+    {
+      "title": "Tour Item 47",
+      "thumb": "/assets/sample/tour/047.jpg",
+      "url": "#",
+      "priority": 47,
+      "id": "tour-047"
+    },
+    {
+      "title": "Tour Item 48",
+      "thumb": "/assets/sample/tour/048.jpg",
+      "url": "#",
+      "priority": 48,
+      "id": "tour-048"
+    },
+    {
+      "title": "Tour Item 49",
+      "thumb": "/assets/sample/tour/049.jpg",
+      "url": "#",
+      "priority": 49,
+      "id": "tour-049"
+    },
+    {
+      "title": "Tour Item 50",
+      "thumb": "/assets/sample/tour/050.jpg",
+      "url": "#",
+      "priority": 50,
+      "id": "tour-050"
+    },
+    {
+      "title": "Tour Item 51",
+      "thumb": "/assets/sample/tour/051.jpg",
+      "url": "#",
+      "priority": 51,
+      "id": "tour-051"
+    },
+    {
+      "title": "Tour Item 52",
+      "thumb": "/assets/sample/tour/052.jpg",
+      "url": "#",
+      "priority": 52,
+      "id": "tour-052"
+    },
+    {
+      "title": "Tour Item 53",
+      "thumb": "/assets/sample/tour/053.jpg",
+      "url": "#",
+      "priority": 53,
+      "id": "tour-053"
+    },
+    {
+      "title": "Tour Item 54",
+      "thumb": "/assets/sample/tour/054.jpg",
+      "url": "#",
+      "priority": 54,
+      "id": "tour-054"
+    },
+    {
+      "title": "Tour Item 55",
+      "thumb": "/assets/sample/tour/055.jpg",
+      "url": "#",
+      "priority": 55,
+      "id": "tour-055"
+    },
+    {
+      "title": "Tour Item 56",
+      "thumb": "/assets/sample/tour/056.jpg",
+      "url": "#",
+      "priority": 56,
+      "id": "tour-056"
+    },
+    {
+      "title": "Tour Item 57",
+      "thumb": "/assets/sample/tour/057.jpg",
+      "url": "#",
+      "priority": 57,
+      "id": "tour-057"
+    },
+    {
+      "title": "Tour Item 58",
+      "thumb": "/assets/sample/tour/058.jpg",
+      "url": "#",
+      "priority": 58,
+      "id": "tour-058"
+    },
+    {
+      "title": "Tour Item 59",
+      "thumb": "/assets/sample/tour/059.jpg",
+      "url": "#",
+      "priority": 59,
+      "id": "tour-059"
+    },
+    {
+      "title": "Tour Item 60",
+      "thumb": "/assets/sample/tour/060.jpg",
+      "url": "#",
+      "priority": 60,
+      "id": "tour-060"
+    },
+    {
+      "title": "Tour Item 61",
+      "thumb": "/assets/sample/tour/061.jpg",
+      "url": "#",
+      "priority": 61,
+      "id": "tour-061"
+    },
+    {
+      "title": "Tour Item 62",
+      "thumb": "/assets/sample/tour/062.jpg",
+      "url": "#",
+      "priority": 62,
+      "id": "tour-062"
+    },
+    {
+      "title": "Tour Item 63",
+      "thumb": "/assets/sample/tour/063.jpg",
+      "url": "#",
+      "priority": 63,
+      "id": "tour-063"
+    },
+    {
+      "title": "Tour Item 64",
+      "thumb": "/assets/sample/tour/064.jpg",
+      "url": "#",
+      "priority": 64,
+      "id": "tour-064"
+    },
+    {
+      "title": "Tour Item 65",
+      "thumb": "/assets/sample/tour/065.jpg",
+      "url": "#",
+      "priority": 65,
+      "id": "tour-065"
+    },
+    {
+      "title": "Tour Item 66",
+      "thumb": "/assets/sample/tour/066.jpg",
+      "url": "#",
+      "priority": 66,
+      "id": "tour-066"
+    },
+    {
+      "title": "Tour Item 67",
+      "thumb": "/assets/sample/tour/067.jpg",
+      "url": "#",
+      "priority": 67,
+      "id": "tour-067"
+    },
+    {
+      "title": "Tour Item 68",
+      "thumb": "/assets/sample/tour/068.jpg",
+      "url": "#",
+      "priority": 68,
+      "id": "tour-068"
+    },
+    {
+      "title": "Tour Item 69",
+      "thumb": "/assets/sample/tour/069.jpg",
+      "url": "#",
+      "priority": 69,
+      "id": "tour-069"
+    },
+    {
+      "title": "Tour Item 70",
+      "thumb": "/assets/sample/tour/070.jpg",
+      "url": "#",
+      "priority": 70,
+      "id": "tour-070"
+    },
+    {
+      "title": "Tour Item 71",
+      "thumb": "/assets/sample/tour/071.jpg",
+      "url": "#",
+      "priority": 71,
+      "id": "tour-071"
+    },
+    {
+      "title": "Tour Item 72",
+      "thumb": "/assets/sample/tour/072.jpg",
+      "url": "#",
+      "priority": 72,
+      "id": "tour-072"
+    },
+    {
+      "title": "Tour Item 73",
+      "thumb": "/assets/sample/tour/073.jpg",
+      "url": "#",
+      "priority": 73,
+      "id": "tour-073"
+    },
+    {
+      "title": "Tour Item 74",
+      "thumb": "/assets/sample/tour/074.jpg",
+      "url": "#",
+      "priority": 74,
+      "id": "tour-074"
+    },
+    {
+      "title": "Tour Item 75",
+      "thumb": "/assets/sample/tour/075.jpg",
+      "url": "#",
+      "priority": 75,
+      "id": "tour-075"
+    },
+    {
+      "title": "Tour Item 76",
+      "thumb": "/assets/sample/tour/076.jpg",
+      "url": "#",
+      "priority": 76,
+      "id": "tour-076"
+    },
+    {
+      "title": "Tour Item 77",
+      "thumb": "/assets/sample/tour/077.jpg",
+      "url": "#",
+      "priority": 77,
+      "id": "tour-077"
+    },
+    {
+      "title": "Tour Item 78",
+      "thumb": "/assets/sample/tour/078.jpg",
+      "url": "#",
+      "priority": 78,
+      "id": "tour-078"
+    },
+    {
+      "title": "Tour Item 79",
+      "thumb": "/assets/sample/tour/079.jpg",
+      "url": "#",
+      "priority": 79,
+      "id": "tour-079"
+    },
+    {
+      "title": "Tour Item 80",
+      "thumb": "/assets/sample/tour/080.jpg",
+      "url": "#",
+      "priority": 80,
+      "id": "tour-080"
+    },
+    {
+      "title": "Tour Item 81",
+      "thumb": "/assets/sample/tour/081.jpg",
+      "url": "#",
+      "priority": 81,
+      "id": "tour-081"
+    },
+    {
+      "title": "Tour Item 82",
+      "thumb": "/assets/sample/tour/082.jpg",
+      "url": "#",
+      "priority": 82,
+      "id": "tour-082"
+    },
+    {
+      "title": "Tour Item 83",
+      "thumb": "/assets/sample/tour/083.jpg",
+      "url": "#",
+      "priority": 83,
+      "id": "tour-083"
+    },
+    {
+      "title": "Tour Item 84",
+      "thumb": "/assets/sample/tour/084.jpg",
+      "url": "#",
+      "priority": 84,
+      "id": "tour-084"
+    },
+    {
+      "title": "Tour Item 85",
+      "thumb": "/assets/sample/tour/085.jpg",
+      "url": "#",
+      "priority": 85,
+      "id": "tour-085"
+    },
+    {
+      "title": "Tour Item 86",
+      "thumb": "/assets/sample/tour/086.jpg",
+      "url": "#",
+      "priority": 86,
+      "id": "tour-086"
+    },
+    {
+      "title": "Tour Item 87",
+      "thumb": "/assets/sample/tour/087.jpg",
+      "url": "#",
+      "priority": 87,
+      "id": "tour-087"
+    },
+    {
+      "title": "Tour Item 88",
+      "thumb": "/assets/sample/tour/088.jpg",
+      "url": "#",
+      "priority": 88,
+      "id": "tour-088"
+    },
+    {
+      "title": "Tour Item 89",
+      "thumb": "/assets/sample/tour/089.jpg",
+      "url": "#",
+      "priority": 89,
+      "id": "tour-089"
+    },
+    {
+      "title": "Tour Item 90",
+      "thumb": "/assets/sample/tour/090.jpg",
+      "url": "#",
+      "priority": 90,
+      "id": "tour-090"
+    },
+    {
+      "title": "Tour Item 91",
+      "thumb": "/assets/sample/tour/091.jpg",
+      "url": "#",
+      "priority": 91,
+      "id": "tour-091"
+    },
+    {
+      "title": "Tour Item 92",
+      "thumb": "/assets/sample/tour/092.jpg",
+      "url": "#",
+      "priority": 92,
+      "id": "tour-092"
+    },
+    {
+      "title": "Tour Item 93",
+      "thumb": "/assets/sample/tour/093.jpg",
+      "url": "#",
+      "priority": 93,
+      "id": "tour-093"
+    },
+    {
+      "title": "Tour Item 94",
+      "thumb": "/assets/sample/tour/094.jpg",
+      "url": "#",
+      "priority": 94,
+      "id": "tour-094"
+    },
+    {
+      "title": "Tour Item 95",
+      "thumb": "/assets/sample/tour/095.jpg",
+      "url": "#",
+      "priority": 95,
+      "id": "tour-095"
+    },
+    {
+      "title": "Tour Item 96",
+      "thumb": "/assets/sample/tour/096.jpg",
+      "url": "#",
+      "priority": 96,
+      "id": "tour-096"
+    },
+    {
+      "title": "Tour Item 97",
+      "thumb": "/assets/sample/tour/097.jpg",
+      "url": "#",
+      "priority": 97,
+      "id": "tour-097"
+    },
+    {
+      "title": "Tour Item 98",
+      "thumb": "/assets/sample/tour/098.jpg",
+      "url": "#",
+      "priority": 98,
+      "id": "tour-098"
+    },
+    {
+      "title": "Tour Item 99",
+      "thumb": "/assets/sample/tour/099.jpg",
+      "url": "#",
+      "priority": 99,
+      "id": "tour-099"
+    },
+    {
+      "title": "Tour Item 100",
+      "thumb": "/assets/sample/tour/100.jpg",
+      "url": "#",
+      "priority": 100,
+      "id": "tour-100"
+    }
+  ],
   "items": [
     {
       "id": "tour-001",
@@ -29726,5 +30427,26 @@
       "displayLabel": "TOUR-100",
       "debug": true
     }
-  ]
+  ],
+  "engine_layer": {
+    "cs_version": "CS1",
+    "generated_at": "2026-02-26T09:34:59.444472+00:00",
+    "new_meta": {
+      "version": "v1-master",
+      "generatedBy": "snapshot-engine-final",
+      "status": "release"
+    },
+    "new_sections": {
+      "hero": [],
+      "main": [],
+      "right": [],
+      "buffer": []
+    }
+  },
+  "sections": {
+    "right-tour-100": []
+  },
+  "capacity": {
+    "sections_default": 100
+  }
 }
