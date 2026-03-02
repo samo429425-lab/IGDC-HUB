@@ -44,17 +44,7 @@
       color: #333;
     }
 
-    
 
-    
-
-    .ad-box a {
-      text-decoration: none;
-      color: inherit;
-      display: block;
-      height: 100px;
-      line-height: 100px;
-    }
 
     footer {
       background-color: #004080;
@@ -63,6 +53,7 @@
       padding: 20px 15px;
       font-size: 0.9rem;
     }</style>
+	
 <style id="adpanel-adbox-round8">/* Round only the right ad panel's thumbnail/card boxes */
   .ad-panel 
   .ad-panel .ad-box a, .ad-panel .ad-box img { border-radius: inherit; display: block; }</style>
@@ -78,6 +69,7 @@
 
   /* 🔒 핵심 안정화 */
   box-sizing:border-box;          /* border 포함 계산 */
+  aspect-ratio: 16 / 9;           /* 고정 비율 */
   width:100%;
   flex-shrink:0;
   overflow:hidden;
@@ -98,8 +90,9 @@
 /* image always fills frame safely */
 .ad-panel .ad-box img{
   width:100% !important;
-  height:auto !important;
-  object-fit:contain !important;
+  height:100% !important;
+  object-fit:cover !important;      /* 항상 꽉 채움 */
+  object-position:center !important;/* 중앙 기준 */
   display:block !important;
 }
 
