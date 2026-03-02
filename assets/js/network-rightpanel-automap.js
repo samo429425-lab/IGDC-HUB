@@ -123,12 +123,13 @@
   }
 
   function renderDesktopViaHook(items){
-    if (typeof window.__IGDC_RIGHTPANEL_RENDER === 'function'){
-      window.__IGDC_RIGHTPANEL_RENDER(items);
-      return true;
-    }
-    return false;
-  }
+  // desktop도 mobile rail과 동일 구조로 렌더 (hook 사용 안 함)
+  const list = $(MOBILE_ID); // 모바일과 동일 DOM 타겟 사용(동일 구조 강제)
+  if(!list) return false;
+
+  renderMobile(items); // 동일 렌더 함수 재사용
+  return true;
+}
 
   async function run(){
     // 데스크탑/모바일 공통: feed → items → (desktop hook / mobile rail)
@@ -146,15 +147,7 @@
     // ✅ 모바일 rail: 항상 시도 (존재할 때만)
     renderMobile(items);
 
-    // ✅ 데스크탑 우측패널: hook이 준비된 뒤 실행
-    if (!renderDesktopViaHook(items)){
-      // hook이 늦게 준비될 수 있어 짧게 재시도
-      let tries = 0;
-      const t = setInterval(()=>{
-        tries++;
-        if (renderDesktopViaHook(items) || tries >= 20) clearInterval(t);
-      }, 100);
-    }
+    renderDesktopViaHook(items);
   }
 
   // load + DOMContentLoaded 이중 안전
