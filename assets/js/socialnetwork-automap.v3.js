@@ -1,239 +1,114 @@
-// socialnetwork-automap.v3.js (PRODUCTION — PSOM/SNAPSHOT LOCKED)
-// A: Slot-out / wrong append issue
-// A-1: No fallback append. Only renders into fixed slots (rowGrid1..9 + [data-psom-key="socialnetwork"]).
-// B: What we do: fetch social.snapshot.json and mount 9*100 + right*100 safely.
 
-(function () {
-  'use strict';
+// socialnetwork-automap.v4.STABLE.js
+// FINAL STABLE VERSION
+// - Desktop → #rightAutoPanel
+// - Mobile  → #rpMobileGrid
+// - No duplication
+// - No cloning
+// - No fallback bleed
+// - Strict key isolation
 
-  if (window.__SOCIALNETWORK_AUTOMAP_V3_PROD__) return;
-  window.__SOCIALNETWORK_AUTOMAP_V3_PROD__ = true;
+(function(){
 
-  const SNAPSHOT_URL = '/data/social.snapshot.json';
+if(window.__SOCIAL_AUTOMAP_V4__) return;
+window.__SOCIAL_AUTOMAP_V4__ = true;
 
-  const MAIN_ROWS = 9;
-  const MAIN_LIMIT = 100;
-  const RIGHT_LIMIT = 100;
+const SNAPSHOT_URL = "/data/social.snapshot.json";
+const MAIN_LIMIT = 100;
+const RIGHT_LIMIT = 80;
+const MOBILE_BREAKPOINT = 1024;
 
-  const MAIN_SECTION_ORDER = [
-    'social-instagram',
-    'social-youtube',
-    'social-twitter',
-    'social-facebook',
-    'social-tiktok',
-    'social-threads',
-    'social-telegram',
-    'social-discord',
-    'social-community'
-  ];
+const MAIN_KEYS = [
+  "sns-instagram",
+  "sns-tiktok",
+  "sns-facebook",
+  "sns-youtube",
+  "sns-twitter",
+  "sns-linkedin",
+  "sns-pinterest",
+  "sns-etc1",
+  "sns-etc2"
+];
 
-  function qs(sel, root){ return (root || document).querySelector(sel); }
+function createCard(item){
+  const el = document.createElement("div");
+  el.className = "thumb-card";
 
-  function safeText(v){ return (v == null) ? '' : String(v); }
+  const img = item.thumb || "";
+  const title = item.title || "";
+  const meta = item.meta || "";
 
-  function pickTitle(it){
-    return safeText(it && (it.title || it.name || it.text || it.label));
-  }
-  function pickUrl(it){
-    return safeText(it && (it.url || it.href || it.link)) || '#';
-  }
-  function pickThumb(it){
-    return safeText(it && (it.thumb || it.image || it.thumbnail || it.imageUrl || it.thumbnailUrl));
-  }
-  function pickPlatform(it){
-    return safeText(it && it.source && (it.source.platform || it.source.site || it.source.provider));
-  }
+  el.innerHTML =
+    '<div class="thumb-img" style="background-image:url(\'' + img + '\')"></div>' +
+    '<div class="thumb-title">' + title + '</div>' +
+    '<div class="thumb-meta">' + meta + '</div>';
 
-  function ensureCards(gridEl, count){
-    if(!gridEl) return [];
-    const existing = Array.from(gridEl.querySelectorAll('a.card'));
-    const need = count - existing.length;
-    if(need > 0){
-      const frag = document.createDocumentFragment();
-      for(let i=0;i<need;i++){
-        const a = document.createElement('a');
-        a.className = 'card';
-        a.href = '#';
-        a.target = '_blank';
-        a.rel = 'noopener';
-
-        a.innerHTML =
-          '<div class="pic">•</div>' +
-          '<div class="meta">' +
-            '<div class="title">Loading…</div>' +
-            '<div class="desc">Preparing</div>' +
-            '<span class="cta">Open</span>' +
-          '</div>';
-
-        frag.appendChild(a);
-      }
-      gridEl.appendChild(frag);
-    }
-    return Array.from(gridEl.querySelectorAll('a.card'));
+  if(item.url){
+    el.style.cursor = "pointer";
+    el.onclick = function(){ location.href = item.url; };
   }
 
-  function renderRow(gridEl, items){
-    if(!gridEl) return;
+  return el;
+}
 
-    // Hard rule: never move/append outside. Only touch inside gridEl.
-    const cards = ensureCards(gridEl, MAIN_LIMIT);
-    const list = Array.isArray(items) ? items.slice(0, MAIN_LIMIT) : [];
+async function loadSnapshot(){
+  const res = await fetch(SNAPSHOT_URL, { cache: "no-store" });
+  if(!res.ok) throw new Error("SNAPSHOT_LOAD_FAIL");
+  return res.json();
+}
 
-    for(let i=0;i<MAIN_LIMIT;i++){
-      const card = cards[i];
-      if(!card) continue;
+function renderMainSections(sections){
+  MAIN_KEYS.forEach(function(key){
+    const selector = '[data-psom-key="' + key + '"]';
+    const box = document.querySelector(selector);
+    if(!box) return;
 
-      const it = list[i] || null;
-      const url = it ? pickUrl(it) : '#';
-      const title = it ? pickTitle(it) : 'Loading…';
-      const platform = it ? (pickPlatform(it) || '') : '';
+    const list = Array.isArray(sections[key]) ? sections[key] : [];
+    box.innerHTML = "";
 
-      card.href = url || '#';
-      card.target = (url && url !== '#') ? '_blank' : '_self';
+    list.slice(0, MAIN_LIMIT).forEach(function(item){
+      box.appendChild(createCard(item));
+    });
+  });
+}
 
-      const pic = card.querySelector('.pic');
-      const metaTitle = card.querySelector('.title');
-      const desc = card.querySelector('.desc');
+function renderRight(sections){
 
-      if(metaTitle) metaTitle.textContent = title || 'Item';
-      if(desc) desc.textContent = platform ? platform : ' ';
+  const isMobile = window.innerWidth <= MOBILE_BREAKPOINT;
 
-      // thumb as background image if exists, else keep emoji dot
-      if(pic){
-        const thumb = it ? pickThumb(it) : '';
-        if(thumb){
-          pic.textContent = '';
-          pic.style.backgroundImage = "url('" + thumb.replace(/'/g, "%27") + "')";
-          pic.style.backgroundSize = 'cover';
-          pic.style.backgroundPosition = 'center';
-        }else{
-          pic.style.backgroundImage = '';
-          pic.textContent = '•';
-        }
-      }
-    }
+  const target = isMobile
+    ? document.querySelector("#rpMobileGrid")
+    : document.querySelector("#rightAutoPanel");
+
+  if(!target) return;
+
+  target.innerHTML = "";
+
+  const list = Array.isArray(sections["socialnetwork"])
+    ? sections["socialnetwork"]
+    : [];
+
+  list.slice(0, RIGHT_LIMIT).forEach(function(item){
+    target.appendChild(createCard(item));
+  });
+}
+
+window.addEventListener("resize", function(){
+  if(window.__SOCIAL_SECTIONS_CACHE__){
+    renderRight(window.__SOCIAL_SECTIONS_CACHE__);
   }
+});
 
-  function ensureThumbCards(boxEl, count){
-    if(!boxEl) return [];
-    const existing = Array.from(boxEl.querySelectorAll('a.thumb-card'));
-    const need = count - existing.length;
-    if(need > 0){
-      const frag = document.createDocumentFragment();
-      for(let i=0;i<need;i++){
-        const a = document.createElement('a');
-        a.className = 'thumb-card';
-        a.href = '#';
-        a.target = '_blank';
-        a.rel = 'noopener';
-
-        const img = document.createElement('img');
-        img.className = 'thumb-media';
-        img.alt = '';
-        a.appendChild(img);
-
-        const t = document.createElement('div');
-        t.className = 'thumb-title';
-        t.textContent = 'Loading…';
-        a.appendChild(t);
-
-        frag.appendChild(a);
-      }
-      boxEl.appendChild(frag);
-    }
-    return Array.from(boxEl.querySelectorAll('a.thumb-card'));
+(async function(){
+  try{
+    const snapshot = await loadSnapshot();
+    const sections = snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections;
+    window.__SOCIAL_SECTIONS_CACHE__ = sections || {};
+    renderMainSections(window.__SOCIAL_SECTIONS_CACHE__);
+    renderRight(window.__SOCIAL_SECTIONS_CACHE__);
+  }catch(e){
+    console.error("SOCIAL AUTOMAP ERROR:", e);
   }
-
-  function renderRight(boxEl, items){
-    if(!boxEl) return;
-
-    const cards = ensureThumbCards(boxEl, RIGHT_LIMIT);
-    const list = Array.isArray(items) ? items.slice(0, RIGHT_LIMIT) : [];
-
-    for(let i=0;i<RIGHT_LIMIT;i++){
-      const a = cards[i];
-      if(!a) continue;
-
-      const it = list[i] || null;
-      const url = it ? pickUrl(it) : '#';
-      const title = it ? pickTitle(it) : 'Loading…';
-      const thumb = it ? pickThumb(it) : '';
-
-      a.href = url || '#';
-      a.target = (url && url !== '#') ? '_blank' : '_self';
-
-      const img = a.querySelector('img.thumb-media') || a.querySelector('img');
-      if(img){
-        img.src = thumb || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
-        img.alt = title || '';
-      }
-      const t = a.querySelector('.thumb-title');
-      if(t) t.textContent = title || 'Item';
-    }
-  }
-
-  function getSections(snapshot){
-    try{
-      return snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections;
-    }catch(e){
-      return null;
-    }
-  }
-
-  async function loadSnapshot(){
-    const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
-    if(!res.ok) throw new Error('snapshot_load_failed:' + res.status);
-    return res.json();
-  }
-
-  async function run(){
-    try{
-      const snap = await loadSnapshot();
-      const sections = getSections(snap);
-      if(!sections) return;
-
-      // MAIN 9 rows
-      for(let i=1;i<=MAIN_ROWS;i++){
-        const grid = qs('#rowGrid' + i);
-        if(!grid) continue;
-
-        const key = MAIN_SECTION_ORDER[i-1];
-        const items = sections[key] || [];
-        renderRow(grid, items);
-      }
-
-      // RIGHT panel (desktop + mobile) — NEVER use generic [data-psom-key="socialnetwork"]
-      // because #rpMobileGrid lives inside main flow and will steal the first match.
-      const rightItems = sections['socialnetwork'] || [];
-
-      // Desktop right rail (fixed container)
-      const rightDesktop = qs('#rightAutoPanel') || qs('#rightRail #rightAutoPanel');
-      if(rightDesktop){
-        renderRight(rightDesktop, rightItems);
-      }
-
-      // Mobile 10th section rail (fixed container)
-      const rightMobile = qs('#rpMobileGrid') || qs('#rpMobileBox #rpMobileGrid');
-      if(rightMobile){
-        renderRight(rightMobile, rightItems);
-      }
-
-      window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
-
-    }catch(e){
-      console.error('[social-automap] fail', e);
-    }
-  }
-
-  // run after DOM is ready + one micro delay (so dummy bootstrap has finished first paint)
-  function boot(){
-    setTimeout(run, 0);
-  }
-
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', boot, { once: true });
-  }else{
-    boot();
-  }
+})();
 
 })();
