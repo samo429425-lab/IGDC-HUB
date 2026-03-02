@@ -67,42 +67,45 @@
   .ad-panel 
   .ad-panel .ad-box a, .ad-panel .ad-box img { border-radius: inherit; display: block; }</style>
 
-<style id="adpanel-override-v1">/* === Right AD panel: make it match mobile card look (16:9 + caption overlay) === */
+<style id="adpanel-override-v1">
+/* === Right AD panel: stable 16:9 card system (production-safe) === */
 
 .ad-panel .ad-box{
   position: relative;
   background:#fff;
   border:1px solid #d7dce1;
   border-radius:10px;
+
+  /* 🔒 핵심 안정화 */
+  box-sizing:border-box;          /* border 포함 계산 */
+  aspect-ratio: 16 / 9;           /* 고정 비율 */
+  width:100%;
+  flex-shrink:0;
   overflow:hidden;
-  
- 
-  /* make card shape stable like mobile */
-  aspect-ratio: 16 / 9;
-  width: 100%;
-  flex-shrink: 0;
+  display:block;
 }
 
-/* anchor fills the card (no old line-height centering) */
+/* anchor fills the card */
 .ad-panel .ad-box > a{
   display:block !important;
   width:100% !important;
   height:100% !important;
-  line-height:0 !important;          /* ✅ 핵심: 텍스트 세로중앙 “옛 느낌” 제거 */
+  line-height:0 !important;
   border-radius:10px !important;
   text-decoration:none !important;
   color:inherit !important;
 }
 
-/* image fills card */
+/* image always fills frame safely */
 .ad-panel .ad-box img{
   width:100% !important;
   height:100% !important;
-  object-fit:cover !important;
+  object-fit:cover !important;      /* 항상 꽉 채움 */
+  object-position:center !important;/* 중앙 기준 */
   display:block !important;
 }
 
-/* caption overlay (same concept as mobile) */
+/* caption overlay */
 .ad-panel .ad-box .cap{
   position:absolute;
   left:0;
@@ -117,11 +120,15 @@
   box-sizing:border-box;
 }
 
-/* Hint: slightly fade items after 10 for visual cue they are behind the fold */
-.ad-panel .ad-box:nth-child(n+11){ opacity: 0.96; }
+/* subtle fade after 10 */
+.ad-panel .ad-box:nth-child(n+11){
+  opacity:0.96;
+}
 
-/* Make sure the main content doesn't stretch under the panel in flex layouts */
-.container{ align-items: flex-start; }
+/* flex 안정화 */
+.container{
+  align-items:flex-start;
+}
 </style>
 
 <style id="adpanel-visible-7">/* Show ~7 cards before scroll (7 full + 20% of 8th) */</style>
