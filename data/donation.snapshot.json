@@ -6,7 +6,7 @@
     "mode": "bank-first-seed-fallback",
     "version": 7,
     "lifecycle": "long-term-stable",
-    "slot_policy": "global=100, others=80",
+    "slot_policy": "global=100, others=100",
     "compatibility": [
       "v4",
       "v5"
@@ -64,80 +64,9 @@
       ]
     }
   },
-  "sections": [
-    {
-      "psom_key": "donation-global",
-      "slot_limit": 100,
-      "replaceable": true,
-      "source": "seed",
-      "bank_channel": "donation",
-      "rank_policy": "auto",
-      "priority": 0
-    },
-    {
-      "psom_key": "donation-ngo",
-      "slot_limit": 80,
-      "replaceable": true,
-      "source": "seed",
-      "bank_channel": "donation",
-      "rank_policy": "auto",
-      "priority": 0
-    },
-    {
-      "psom_key": "donation-mission",
-      "slot_limit": 80,
-      "replaceable": true,
-      "source": "seed",
-      "bank_channel": "donation",
-      "rank_policy": "auto",
-      "priority": 0
-    },
-    {
-      "psom_key": "donation-service",
-      "slot_limit": 80,
-      "replaceable": true,
-      "source": "seed",
-      "bank_channel": "donation",
-      "rank_policy": "auto",
-      "priority": 0
-    },
-    {
-      "psom_key": "donation-relief",
-      "slot_limit": 80,
-      "replaceable": true,
-      "source": "seed",
-      "bank_channel": "donation",
-      "rank_policy": "auto",
-      "priority": 0
-    },
-    {
-      "psom_key": "donation-education",
-      "slot_limit": 80,
-      "replaceable": true,
-      "source": "seed",
-      "bank_channel": "donation",
-      "rank_policy": "auto",
-      "priority": 0
-    },
-    {
-      "psom_key": "donation-environment",
-      "slot_limit": 80,
-      "replaceable": true,
-      "source": "seed",
-      "bank_channel": "donation",
-      "rank_policy": "auto",
-      "priority": 0
-    },
-    {
-      "psom_key": "donation-others",
-      "slot_limit": 80,
-      "replaceable": true,
-      "source": "seed",
-      "bank_channel": "donation",
-      "rank_policy": "auto",
-      "priority": 0
-    }
-  ],
+  "sections": {
+    "donation-global": []
+  },
   "items": [
     {
       "uid": "donation:donation-global:000001",
@@ -82690,5 +82619,97 @@
       "rejected",
       "needs-review"
     ]
+  },
+  "engine_layer": {
+    "cs_version": "CS1",
+    "generated_at": "2026-02-26T09:34:59.316411+00:00",
+    "new_meta": {
+      "version": "v1-master",
+      "generatedBy": "snapshot-engine-final",
+      "status": "release"
+    },
+    "new_sections": {
+      "hero": [],
+      "main": [],
+      "right": [],
+      "buffer": []
+    }
+  },
+  "sections_legacy": [
+    {
+      "psom_key": "donation-global",
+      "slot_limit": 100,
+      "replaceable": true,
+      "source": "seed",
+      "bank_channel": "donation",
+      "rank_policy": "auto",
+      "priority": 0
+    },
+    {
+      "psom_key": "donation-ngo",
+      "slot_limit": 100,
+      "replaceable": true,
+      "source": "seed",
+      "bank_channel": "donation",
+      "rank_policy": "auto",
+      "priority": 0
+    },
+    {
+      "psom_key": "donation-mission",
+      "slot_limit": 100,
+      "replaceable": true,
+      "source": "seed",
+      "bank_channel": "donation",
+      "rank_policy": "auto",
+      "priority": 0
+    },
+    {
+      "psom_key": "donation-service",
+      "slot_limit": 100,
+      "replaceable": true,
+      "source": "seed",
+      "bank_channel": "donation",
+      "rank_policy": "auto",
+      "priority": 0
+    },
+    {
+      "psom_key": "donation-relief",
+      "slot_limit": 100,
+      "replaceable": true,
+      "source": "seed",
+      "bank_channel": "donation",
+      "rank_policy": "auto",
+      "priority": 0
+    },
+    {
+      "psom_key": "donation-education",
+      "slot_limit": 100,
+      "replaceable": true,
+      "source": "seed",
+      "bank_channel": "donation",
+      "rank_policy": "auto",
+      "priority": 0
+    },
+    {
+      "psom_key": "donation-environment",
+      "slot_limit": 100,
+      "replaceable": true,
+      "source": "seed",
+      "bank_channel": "donation",
+      "rank_policy": "auto",
+      "priority": 0
+    },
+    {
+      "psom_key": "donation-others",
+      "slot_limit": 100,
+      "replaceable": true,
+      "source": "seed",
+      "bank_channel": "donation",
+      "rank_policy": "auto",
+      "priority": 0
+    }
+  ],
+  "capacity": {
+    "sections_default": 100
   }
 }
