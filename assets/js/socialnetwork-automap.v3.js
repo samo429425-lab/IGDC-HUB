@@ -1,274 +1,182 @@
-/**
- * socialnetwork-automap.PRODUCTION.js — LONG-TERM OPERATIONS ENGINE
- * -----------------------------------------------------------------
- * Canon:
- *  - Reads ONLY from /.netlify/functions/feed-social?page=social (no cross-page snapshot URLs).
- *  - Renders ONLY into nodes that declare data-psom-key.
- *  - Supports duplicate keys (desktop right rail + mobile rail share "socialnetwork").
- *
- * Guarantees:
- *  - No DOM-order dependency (uses querySelectorAll).
- *  - Incremental rendering (batch) for long lists.
- *  - Empty-state i18n.
- *  - Anti-collision: marks containers as owned; restores if another script wipes them.
- */
+// socialnetwork-automap.v3.js (PRODUCTION SAFE VERSION)
+// Fixed: strict PSOM key mapping, right/main separation, mobile rail target support
+// Stable single-pass rendering (no placeholder override)
+
 (function () {
   'use strict';
-  if (window.__SOCIAL_AUTOMAP_PRODUCTION__) return;
-  window.__SOCIAL_AUTOMAP_PRODUCTION__ = true;
 
-  const FEED_URL = '/.netlify/functions/feed-social?page=social';
+  if (window.__SOCIALNETWORK_AUTOMAP_V3_PROD__) return;
+  window.__SOCIALNETWORK_AUTOMAP_V3_PROD__ = true;
 
-  const MAIN_LIMIT = 100, MAIN_BATCH = 10;
-  const RIGHT_LIMIT = 100, RIGHT_BATCH = 8;
+  const SNAPSHOT_URL = '/data/social.snapshot.json';
 
-  const EMPTY_I18N = {
-    de: 'Inhalte werden vorbereitet.',
-    en: 'Content is being prepared.',
-    es: 'El contenido está en preparación.',
-    fr: 'Contenu en cours de préparation.',
-    id: 'Konten sedang disiapkan.',
-    ja: 'コンテンツ準備中です。',
-    ko: '콘텐츠 준비 중입니다.',
-    pt: 'Conteúdo em preparação.',
-    ru: 'Контент готовится.',
-    th: 'กำลังเตรียมเนื้อหาอยู่',
-    tr: 'İçerik hazırlanıyor.',
-    vi: 'Nội dung đang được chuẩn bị.',
-    zh: '内容正在准备中。'
-  };
+  const LIMIT_MAIN = 100;
+  const LIMIT_RIGHT = 80;
 
-  const OWN_ATTR = 'data-igdc-owned';
-  const OWN_VAL = 'social-automap';
+  // Main 9 sections + Right rail (socialnetwork)
+  const SECTION_MAP = [
+    { key: 'social-instagram', selectors: ['[data-psom-key="social-instagram"]'], limit: LIMIT_MAIN },
+    { key: 'social-youtube', selectors: ['[data-psom-key="social-youtube"]'], limit: LIMIT_MAIN },
+    { key: 'social-twitter', selectors: ['[data-psom-key="social-twitter"]'], limit: LIMIT_MAIN },
+    { key: 'social-facebook', selectors: ['[data-psom-key="social-facebook"]'], limit: LIMIT_MAIN },
+    { key: 'social-tiktok', selectors: ['[data-psom-key="social-tiktok"]'], limit: LIMIT_MAIN },
+    { key: 'social-threads', selectors: ['[data-psom-key="social-threads"]'], limit: LIMIT_MAIN },
+    { key: 'social-telegram', selectors: ['[data-psom-key="social-telegram"]'], limit: LIMIT_MAIN },
+    { key: 'social-discord', selectors: ['[data-psom-key="social-discord"]'], limit: LIMIT_MAIN },
+    { key: 'social-community', selectors: ['[data-psom-key="social-community"]'], limit: LIMIT_MAIN },
 
-  function getLangCode(){
-    try{
-      const raw = String(
-        (window.localStorage && localStorage.getItem('igdc_lang')) ||
-        (document.documentElement && document.documentElement.getAttribute('lang')) ||
-        (navigator && (navigator.language || (navigator.languages && navigator.languages[0]))) ||
-        'en'
-      ).trim().toLowerCase();
-      const base = raw.split('-')[0];
-      return EMPTY_I18N[base] ? base : 'en';
-    }catch(e){ return 'en'; }
+    // RIGHT: desktop right panel + mobile last rail (above footer)
+    { key: 'socialnetwork', selectors: ['[data-psom-key="socialnetwork"]', '#social-mobile-rail .list'], limit: LIMIT_RIGHT }
+  ];
+
+  const PLACEHOLDER_IMG = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+
+  let HAS_RENDERED = false;
+  const RENDERED_NODES = new WeakSet();
+
+  function clear(el) {
+    if (!el || RENDERED_NODES.has(el)) return;
+    while (el.firstChild) el.removeChild(el.firstChild);
   }
-  function emptyText(){ return EMPTY_I18N[getLangCode()] || EMPTY_I18N.en; }
 
-  function qsa(sel, root){ return Array.from((root || document).querySelectorAll(sel)); }
-  function pick(o, keys){
-    for (const k of keys){
-      const v = o && o[k];
-      if (typeof v === 'string' && v.trim()) return v.trim();
-    }
-    return '';
+  function escText(s) {
+    try { return String(s ?? ''); } catch { return ''; }
   }
-  function normItem(it){
-    it = it || {};
+
+  function escUrl(u) {
+    try { return String(u ?? '').replace(/'/g, '%27'); } catch { return ''; }
+  }
+
+  function pickImage(item) {
+    return (item && (item.thumb || item.image || item.thumbnail || item.imageUrl || item.thumbnailUrl || '')) || '';
+  }
+
+  function pickTitle(item) {
+    return (item && (item.title || item.name || item.text || '')) || '';
+  }
+
+  function pickMeta(item) {
+    return (item && (item.meta || item.subtitle || item.summary || '')) || '';
+  }
+
+  function pickUrl(item) {
+    return (item && (item.url || item.href || item.link || '')) || '';
+  }
+
+  function makeDummy(cfg, idx) {
+    const n = idx + 1;
     return {
-      title: pick(it, ['title','name','label','caption']) || 'Item',
-      thumb: pick(it, ['thumb','image','image_url','img','photo','thumbnail','thumbnailUrl','cover','coverUrl']),
-      url:   pick(it, ['url','href','link','path','detailUrl','productUrl']) || '#',
-      priority: (typeof it.priority === 'number' ? it.priority : null),
-      meta: pick(it, ['meta','category','type'])
+      title: (cfg.key || 'social') + ' ' + n,
+      meta: '',
+      thumb: PLACEHOLDER_IMG,
+      url: '#'
     };
   }
-  function isExternal(url){ return /^https?:\/\//i.test(url); }
 
-  function indexSections(payload){
-    const map = {};
-    if (!payload) return map;
-    if (Array.isArray(payload.sections)){
-      for (const s of payload.sections){
-        const id = String((s && (s.id || s.sectionId) || '')).trim();
-        if (!id) continue;
-        map[id] = Array.isArray(s.items) ? s.items : (Array.isArray(s.cards) ? s.cards : []);
-      }
-    }
-    return map;
-  }
-
-  function isRightKey(key){ return key === 'socialnetwork'; }
-
-  function resolveTargets(psomEl, key){
-    const isRight = isRightKey(key);
-    let scroller = null;
-
-    if (isRight){
-      scroller = psomEl.closest('#rpMobileScroller') ||
-                 psomEl.closest('.right-rail') ||
-                 psomEl.closest('#rightRail') ||
-                 psomEl.closest('.right-panel') ||
-                 psomEl.parentElement;
-      return { isRight:true, key, list: psomEl, scroller };
-    }
-
-    scroller = psomEl.closest('.row-scroller') ||
-               psomEl.closest('.row-viewport') ||
-               psomEl.parentElement;
-    return { isRight:false, key, list: psomEl, scroller };
-  }
-
-  function showEmpty(t){
-    t.list.innerHTML = '';
-    const msg = document.createElement('div');
-    msg.className = 'igdc-empty';
-    msg.textContent = emptyText();
-    msg.style.padding = '12px';
-    msg.style.borderRadius = '12px';
-    msg.style.background = '#f7f7f7';
-    msg.style.color = '#666';
-    msg.style.textAlign = 'center';
-    msg.style.fontSize = '14px';
-    msg.style.lineHeight = '1.6';
-    msg.style.minHeight = '44px';
-    t.list.appendChild(msg);
-  }
-
-  function buildCard(item){
-    const a = document.createElement('a');
-    a.className = 'thumb-card';
-    a.href = item.url || '#';
-    if (isExternal(item.url)) { a.target = '_blank'; a.rel = 'noopener'; }
+  function createCard(item) {
+    const card = document.createElement('div');
+    card.className = 'thumb-card';
 
     const img = document.createElement('div');
     img.className = 'thumb-img';
-    if (item.thumb){
-      const u = String(item.thumb).replace(/"/g,'\\"');
-      img.style.backgroundImage = `url("${u}")`;
-      img.style.backgroundPosition = 'center';
-      img.style.backgroundSize = 'cover';
-      img.style.backgroundRepeat = 'no-repeat';
+    const src = pickImage(item);
+    const useSrc = src || PLACEHOLDER_IMG;
+    img.style.backgroundImage = "url('" + escUrl(useSrc) + "')";
+    img.style.backgroundSize = 'cover';
+    img.style.backgroundPosition = 'center';
+
+    const title = document.createElement('div');
+    title.className = 'thumb-title';
+    title.textContent = escText(pickTitle(item));
+
+    const meta = document.createElement('div');
+    meta.className = 'thumb-meta';
+    meta.textContent = escText(pickMeta(item));
+
+    card.appendChild(img);
+    card.appendChild(title);
+    card.appendChild(meta);
+
+    const href = pickUrl(item);
+    if (href && href !== '#') {
+      card.addEventListener('click', function () { location.href = href; });
+      card.style.cursor = 'pointer';
     }
 
-    const cap = document.createElement('div');
-    cap.className = 'thumb-title';
-    cap.textContent = item.title || '';
-
-    a.appendChild(img);
-    a.appendChild(cap);
-    return a;
+    return card;
   }
 
-  function sortByPriority(list){
-    return list.slice().sort((a,b) => {
-      const pa = (a.priority == null ? 999999 : a.priority);
-      const pb = (b.priority == null ? 999999 : b.priority);
-      return pa - pb;
-    });
+  async function loadSnapshot() {
+    const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Snapshot load failed: ' + res.status);
+    return res.json();
   }
 
-  const CACHE = new Map(); // key -> normalized items
+  function getSections(snapshot) {
+    return (snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections) ||
+           (snapshot && snapshot.sections) ||
+           null;
+  }
 
-  function bindIncremental(t, items){
-    const isRight = t.isRight;
-    const limit = isRight ? RIGHT_LIMIT : MAIN_LIMIT;
-    const batch = isRight ? RIGHT_BATCH : MAIN_BATCH;
-
-    try{ t.list.setAttribute(OWN_ATTR, OWN_VAL); }catch(e){}
-
-    t.list.innerHTML = '';
-
-    const list = sortByPriority(items).slice(0, limit);
-    if (!list.length){ showEmpty(t); return; }
-
-    let offset = 0;
-    function renderMore(){
-      const end = Math.min(offset + batch, list.length);
-      const frag = document.createDocumentFragment();
-      for (let i = offset; i < end; i++){
-        frag.appendChild(buildCard(list[i]));
+  function selectTargets(selectors) {
+    const out = [];
+    (selectors || []).forEach(sel => {
+      try {
+        const nodes = document.querySelectorAll(sel);
+        nodes.forEach(n => out.push(n));
+      } catch {
+        // ignore selector errors
       }
-      t.list.appendChild(frag);
-      offset = end;
-    }
-
-    renderMore();
-
-    const sc = t.scroller;
-    if (!sc) return;
-
-    const onScroll = function(){
-      if (offset >= list.length) return;
-
-      const nearEnd = isRight
-        ? (sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 30)
-        : (sc.scrollLeft + sc.clientWidth >= sc.scrollWidth - 30);
-
-      if (nearEnd) renderMore();
-    };
-
-    sc.addEventListener('scroll', onScroll, { passive: true });
+    });
+    return out;
   }
 
-  function attachObserver(t){
-    const el = t.list;
-    if (!el || el.__igdcObserverAttached) return;
-    el.__igdcObserverAttached = true;
+  function renderStrict(sections) {
+    if (HAS_RENDERED) return;
 
-    const obs = new MutationObserver(() => {
-      try{
-        if (el.getAttribute(OWN_ATTR) !== OWN_VAL) return;
-        if (el.childElementCount === 0){
-          const cached = CACHE.get(t.key) || [];
-          bindIncremental(t, cached);
-        }
-      }catch(e){}
+    // Strict: only SECTION_MAP keys are allowed to render
+    SECTION_MAP.forEach(cfg => {
+      const raw = sections && sections[cfg.key];
+      const arr = Array.isArray(raw) ? raw : [];
+      const limit = cfg.limit || LIMIT_MAIN;
+
+      const list = arr.slice(0, limit);
+
+      // If snapshot provides fewer items, fill with dummy (but do not invent cross-section items)
+      while (list.length < limit) list.push(makeDummy(cfg, list.length));
+
+      const targets = selectTargets(cfg.selectors);
+      if (!targets.length) return;
+
+      targets.forEach(box => {
+        if (!box || RENDERED_NODES.has(box)) return;
+        clear(box);
+        list.forEach(item => box.appendChild(createCard(item)));
+        RENDERED_NODES.add(box);
+      });
     });
 
-    obs.observe(el, { childList: true });
+    HAS_RENDERED = true;
   }
 
-  function renderKeyToAllTargets(key, rawItems){
-    const items = (rawItems || []).map(normItem).filter(Boolean);
-    CACHE.set(key, items);
+  async function run() {
+    try {
+      const snapshot = await loadSnapshot();
+      const sections = getSections(snapshot);
+      if (!sections) return;
 
-    const nodes = qsa(`[data-psom-key="${key}"]`);
-    if (!nodes.length) return;
+      renderStrict(sections);
 
-    nodes.forEach(psomEl => {
-      const t = resolveTargets(psomEl, key);
-      bindIncremental(t, items);
-      attachObserver(t);
-    });
-  }
-
-  async function load(){
-    const r = await fetch(FEED_URL, { cache: 'no-store' });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    return await r.json();
-  }
-
-  async function boot(){
-    try{
-      const payload = await load();
-      const byId = indexSections(payload);
-
-      Object.keys(byId).forEach(key => {
-        renderKeyToAllTargets(key, byId[key] || []);
-      });
-
-      // DOM keys without data => empty-state (never fill with other-page data)
-      qsa('[data-psom-key]').forEach(el => {
-        const key = String(el.getAttribute('data-psom-key') || '').trim();
-        if (!key) return;
-        if (CACHE.has(key)) return;
-        const t = resolveTargets(el, key);
-        showEmpty(t);
-      });
-
-      console.log('[SOCIAL AUTOMAP PRODUCTION] ok');
-    }catch(e){
-      console.error('[SOCIAL AUTOMAP ERROR]', e);
-      qsa('[data-psom-key]').forEach(el => {
-        const key = String(el.getAttribute('data-psom-key') || '').trim();
-        if (!key) return;
-        const t = resolveTargets(el, key);
-        showEmpty(t);
-      });
+      console.log('[AUTOMAP] Socialnetwork v3 production mapping loaded');
+    } catch (e) {
+      console.error('[AUTOMAP] Socialnetwork v3 error:', e);
     }
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', run, { once: true });
+  } else {
+    run();
+  }
+
 })();
