@@ -1,6 +1,7 @@
-// socialnetwork-automap.v3.js (PRODUCTION SAFE VERSION)
-// Fixed: strict PSOM key mapping, right/main separation, mobile rail target support
-// Stable single-pass rendering (no placeholder override)
+// socialnetwork-automap.v3.js (PRODUCTION — PSOM/SNAPSHOT LOCKED)
+// A: Slot-out / wrong append issue
+// A-1: No fallback append. Only renders into fixed slots (rowGrid1..9 + [data-psom-key="socialnetwork"]).
+// B: What we do: fetch social.snapshot.json and mount 9*100 + right*100 safely.
 
 (function () {
   'use strict';
@@ -10,173 +11,229 @@
 
   const SNAPSHOT_URL = '/data/social.snapshot.json';
 
-  const LIMIT_MAIN = 100;
-  const LIMIT_RIGHT = 80;
+  const MAIN_ROWS = 9;
+  const MAIN_LIMIT = 100;
+  const RIGHT_LIMIT = 100;
 
-  // Main 9 sections + Right rail (socialnetwork)
-  const SECTION_MAP = [
-    { key: 'social-instagram', selectors: ['[data-psom-key="social-instagram"]'], limit: LIMIT_MAIN },
-    { key: 'social-youtube', selectors: ['[data-psom-key="social-youtube"]'], limit: LIMIT_MAIN },
-    { key: 'social-twitter', selectors: ['[data-psom-key="social-twitter"]'], limit: LIMIT_MAIN },
-    { key: 'social-facebook', selectors: ['[data-psom-key="social-facebook"]'], limit: LIMIT_MAIN },
-    { key: 'social-tiktok', selectors: ['[data-psom-key="social-tiktok"]'], limit: LIMIT_MAIN },
-    { key: 'social-threads', selectors: ['[data-psom-key="social-threads"]'], limit: LIMIT_MAIN },
-    { key: 'social-telegram', selectors: ['[data-psom-key="social-telegram"]'], limit: LIMIT_MAIN },
-    { key: 'social-discord', selectors: ['[data-psom-key="social-discord"]'], limit: LIMIT_MAIN },
-    { key: 'social-community', selectors: ['[data-psom-key="social-community"]'], limit: LIMIT_MAIN },
-
-    // RIGHT: desktop right panel + mobile last rail (above footer)
-    { key: 'socialnetwork', selectors: ['[data-psom-key="socialnetwork"]', '#social-mobile-rail .list'], limit: LIMIT_RIGHT }
+  const MAIN_SECTION_ORDER = [
+    'social-instagram',
+    'social-youtube',
+    'social-twitter',
+    'social-facebook',
+    'social-tiktok',
+    'social-threads',
+    'social-telegram',
+    'social-discord',
+    'social-community'
   ];
 
-  const PLACEHOLDER_IMG = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+  function qs(sel, root){ return (root || document).querySelector(sel); }
 
-  let HAS_RENDERED = false;
-  const RENDERED_NODES = new WeakSet();
+  function safeText(v){ return (v == null) ? '' : String(v); }
 
-  function clear(el) {
-    if (!el || RENDERED_NODES.has(el)) return;
-    while (el.firstChild) el.removeChild(el.firstChild);
+  function pickTitle(it){
+    return safeText(it && (it.title || it.name || it.text || it.label));
+  }
+  function pickUrl(it){
+    return safeText(it && (it.url || it.href || it.link)) || '#';
+  }
+  function pickThumb(it){
+    return safeText(it && (it.thumb || it.image || it.thumbnail || it.imageUrl || it.thumbnailUrl));
+  }
+  function pickPlatform(it){
+    return safeText(it && it.source && (it.source.platform || it.source.site || it.source.provider));
   }
 
-  function escText(s) {
-    try { return String(s ?? ''); } catch { return ''; }
-  }
+  function ensureCards(gridEl, count){
+    if(!gridEl) return [];
+    const existing = Array.from(gridEl.querySelectorAll('a.card'));
+    const need = count - existing.length;
+    if(need > 0){
+      const frag = document.createDocumentFragment();
+      for(let i=0;i<need;i++){
+        const a = document.createElement('a');
+        a.className = 'card';
+        a.href = '#';
+        a.target = '_blank';
+        a.rel = 'noopener';
 
-  function escUrl(u) {
-    try { return String(u ?? '').replace(/'/g, '%27'); } catch { return ''; }
-  }
+        a.innerHTML =
+          '<div class="pic">•</div>' +
+          '<div class="meta">' +
+            '<div class="title">Loading…</div>' +
+            '<div class="desc">Preparing</div>' +
+            '<span class="cta">Open</span>' +
+          '</div>';
 
-  function pickImage(item) {
-    return (item && (item.thumb || item.image || item.thumbnail || item.imageUrl || item.thumbnailUrl || '')) || '';
-  }
-
-  function pickTitle(item) {
-    return (item && (item.title || item.name || item.text || '')) || '';
-  }
-
-  function pickMeta(item) {
-    return (item && (item.meta || item.subtitle || item.summary || '')) || '';
-  }
-
-  function pickUrl(item) {
-    return (item && (item.url || item.href || item.link || '')) || '';
-  }
-
-  function makeDummy(cfg, idx) {
-    const n = idx + 1;
-    return {
-      title: (cfg.key || 'social') + ' ' + n,
-      meta: '',
-      thumb: PLACEHOLDER_IMG,
-      url: '#'
-    };
-  }
-
-  function createCard(item) {
-    const card = document.createElement('div');
-    card.className = 'thumb-card';
-
-    const img = document.createElement('div');
-    img.className = 'thumb-img';
-    const src = pickImage(item);
-    const useSrc = src || PLACEHOLDER_IMG;
-    img.style.backgroundImage = "url('" + escUrl(useSrc) + "')";
-    img.style.backgroundSize = 'cover';
-    img.style.backgroundPosition = 'center';
-
-    const title = document.createElement('div');
-    title.className = 'thumb-title';
-    title.textContent = escText(pickTitle(item));
-
-    const meta = document.createElement('div');
-    meta.className = 'thumb-meta';
-    meta.textContent = escText(pickMeta(item));
-
-    card.appendChild(img);
-    card.appendChild(title);
-    card.appendChild(meta);
-
-    const href = pickUrl(item);
-    if (href && href !== '#') {
-      card.addEventListener('click', function () { location.href = href; });
-      card.style.cursor = 'pointer';
+        frag.appendChild(a);
+      }
+      gridEl.appendChild(frag);
     }
-
-    return card;
+    return Array.from(gridEl.querySelectorAll('a.card'));
   }
 
-  async function loadSnapshot() {
+  function renderRow(gridEl, items){
+    if(!gridEl) return;
+
+    // Hard rule: never move/append outside. Only touch inside gridEl.
+    const cards = ensureCards(gridEl, MAIN_LIMIT);
+    const list = Array.isArray(items) ? items.slice(0, MAIN_LIMIT) : [];
+
+    for(let i=0;i<MAIN_LIMIT;i++){
+      const card = cards[i];
+      if(!card) continue;
+
+      const it = list[i] || null;
+      const url = it ? pickUrl(it) : '#';
+      const title = it ? pickTitle(it) : 'Loading…';
+      const platform = it ? (pickPlatform(it) || '') : '';
+
+      card.href = url || '#';
+      card.target = (url && url !== '#') ? '_blank' : '_self';
+
+      const pic = card.querySelector('.pic');
+      const metaTitle = card.querySelector('.title');
+      const desc = card.querySelector('.desc');
+
+      if(metaTitle) metaTitle.textContent = title || 'Item';
+      if(desc) desc.textContent = platform ? platform : ' ';
+
+      // thumb as background image if exists, else keep emoji dot
+      if(pic){
+        const thumb = it ? pickThumb(it) : '';
+        if(thumb){
+          pic.textContent = '';
+          pic.style.backgroundImage = "url('" + thumb.replace(/'/g, "%27") + "')";
+          pic.style.backgroundSize = 'cover';
+          pic.style.backgroundPosition = 'center';
+        }else{
+          pic.style.backgroundImage = '';
+          pic.textContent = '•';
+        }
+      }
+    }
+  }
+
+  function ensureThumbCards(boxEl, count){
+    if(!boxEl) return [];
+    const existing = Array.from(boxEl.querySelectorAll('a.thumb-card'));
+    const need = count - existing.length;
+    if(need > 0){
+      const frag = document.createDocumentFragment();
+      for(let i=0;i<need;i++){
+        const a = document.createElement('a');
+        a.className = 'thumb-card';
+        a.href = '#';
+        a.target = '_blank';
+        a.rel = 'noopener';
+
+        const img = document.createElement('img');
+        img.className = 'thumb-media';
+        img.alt = '';
+        a.appendChild(img);
+
+        const t = document.createElement('div');
+        t.className = 'thumb-title';
+        t.textContent = 'Loading…';
+        a.appendChild(t);
+
+        frag.appendChild(a);
+      }
+      boxEl.appendChild(frag);
+    }
+    return Array.from(boxEl.querySelectorAll('a.thumb-card'));
+  }
+
+  function renderRight(boxEl, items){
+    if(!boxEl) return;
+
+    const cards = ensureThumbCards(boxEl, RIGHT_LIMIT);
+    const list = Array.isArray(items) ? items.slice(0, RIGHT_LIMIT) : [];
+
+    for(let i=0;i<RIGHT_LIMIT;i++){
+      const a = cards[i];
+      if(!a) continue;
+
+      const it = list[i] || null;
+      const url = it ? pickUrl(it) : '#';
+      const title = it ? pickTitle(it) : 'Loading…';
+      const thumb = it ? pickThumb(it) : '';
+
+      a.href = url || '#';
+      a.target = (url && url !== '#') ? '_blank' : '_self';
+
+      const img = a.querySelector('img.thumb-media') || a.querySelector('img');
+      if(img){
+        img.src = thumb || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+        img.alt = title || '';
+      }
+      const t = a.querySelector('.thumb-title');
+      if(t) t.textContent = title || 'Item';
+    }
+  }
+
+  function getSections(snapshot){
+    try{
+      return snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections;
+    }catch(e){
+      return null;
+    }
+  }
+
+  async function loadSnapshot(){
     const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Snapshot load failed: ' + res.status);
+    if(!res.ok) throw new Error('snapshot_load_failed:' + res.status);
     return res.json();
   }
 
-  function getSections(snapshot) {
-    return (snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections) ||
-           (snapshot && snapshot.sections) ||
-           null;
-  }
+  async function run(){
+    try{
+      const snap = await loadSnapshot();
+      const sections = getSections(snap);
+      if(!sections) return;
 
-  function selectTargets(selectors) {
-    const out = [];
-    (selectors || []).forEach(sel => {
-      try {
-        const nodes = document.querySelectorAll(sel);
-        nodes.forEach(n => out.push(n));
-      } catch {
-        // ignore selector errors
+      // MAIN 9 rows
+      for(let i=1;i<=MAIN_ROWS;i++){
+        const grid = qs('#rowGrid' + i);
+        if(!grid) continue;
+
+        const key = MAIN_SECTION_ORDER[i-1];
+        const items = sections[key] || [];
+        renderRow(grid, items);
       }
-    });
-    return out;
-  }
 
-  function renderStrict(sections) {
-    if (HAS_RENDERED) return;
+      // RIGHT panel (desktop + mobile) — NEVER use generic [data-psom-key="socialnetwork"]
+      // because #rpMobileGrid lives inside main flow and will steal the first match.
+      const rightItems = sections['socialnetwork'] || [];
 
-    // Strict: only SECTION_MAP keys are allowed to render
-    SECTION_MAP.forEach(cfg => {
-      const raw = sections && sections[cfg.key];
-      const arr = Array.isArray(raw) ? raw : [];
-      const limit = cfg.limit || LIMIT_MAIN;
+      // Desktop right rail (fixed container)
+      const rightDesktop = qs('#rightAutoPanel') || qs('#rightRail #rightAutoPanel');
+      if(rightDesktop){
+        renderRight(rightDesktop, rightItems);
+      }
 
-      const list = arr.slice(0, limit);
+      // Mobile 10th section rail (fixed container)
+      const rightMobile = qs('#rpMobileGrid') || qs('#rpMobileBox #rpMobileGrid');
+      if(rightMobile){
+        renderRight(rightMobile, rightItems);
+      }
 
-      // If snapshot provides fewer items, fill with dummy (but do not invent cross-section items)
-      while (list.length < limit) list.push(makeDummy(cfg, list.length));
+      window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
 
-      const targets = selectTargets(cfg.selectors);
-      if (!targets.length) return;
-
-      targets.forEach(box => {
-        if (!box || RENDERED_NODES.has(box)) return;
-        clear(box);
-        list.forEach(item => box.appendChild(createCard(item)));
-        RENDERED_NODES.add(box);
-      });
-    });
-
-    HAS_RENDERED = true;
-  }
-
-  async function run() {
-    try {
-      const snapshot = await loadSnapshot();
-      const sections = getSections(snapshot);
-      if (!sections) return;
-
-      renderStrict(sections);
-
-      console.log('[AUTOMAP] Socialnetwork v3 production mapping loaded');
-    } catch (e) {
-      console.error('[AUTOMAP] Socialnetwork v3 error:', e);
+    }catch(e){
+      console.error('[social-automap] fail', e);
     }
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', run, { once: true });
-  } else {
-    run();
+  // run after DOM is ready + one micro delay (so dummy bootstrap has finished first paint)
+  function boot(){
+    setTimeout(run, 0);
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  }else{
+    boot();
   }
 
 })();
