@@ -1,175 +1,135 @@
-/**
- * feed-social.js — SOCIAL EXCLUSIVE FEED (production)
- * ------------------------------------------------------------
- * Goal:
- *  - Return ONLY Social snapshot sections (no cross-page bleed).
- *  - Payload: { status, version, generated, meta, sections:[{id, items:[...]}] }
- *
- * Source of truth (priority):
- *  1) data/front.snapshot.json  (if it contains pages.social.sections)
- *  2) data/social.snapshot.json (legacy per-page snapshot)
- *
- * Notes:
- *  - Does NOT read search-bank.snapshot.json (prevents random mixing).
- *  - Applies PSOM rules if item.id exists (optional; non-breaking).
- */
-"use strict";
+// feed-social.js (SOCIAL FEED - PRODUCTION SAFE)
+// - Mirrors feed-distribution.js behavior
+// - Reads snapshot via:
+//   1) local FS (multiple candidate paths)
+//   2) HTTP fetch from deployed site (/data/social.snapshot.json)
+// - CORS enabled
+// - OPTIONS preflight supported
 
-const fs = require("fs");
-const path = require("path");
+import fs from "fs/promises";
+import path from "path";
 
-const DATA_ROOT = path.join(__dirname, "data");
-const FRONT_SNAPSHOT_PATH = path.join(DATA_ROOT, "front.snapshot.json");
-const SOCIAL_SNAPSHOT_PATH = path.join(DATA_ROOT, "social.snapshot.json");
-const PSOM_PATH = path.join(DATA_ROOT, "psom.json");
+const SNAPSHOT_NAME = "social.snapshot.json";
 
-function safeReadJSON(p){
-  try { return JSON.parse(fs.readFileSync(p, "utf-8")); }
-  catch(e){ return null; }
-}
-function toArr(v){ return Array.isArray(v) ? v : []; }
-function pick(obj, keys){
-  for (const k of keys){
-    const v = obj && obj[k];
-    if (typeof v === "string" && v.trim()) return v.trim();
-  }
-  return "";
-}
-function normalizeItem(item, fallback = {}){
-  if (!item || typeof item !== "object") return null;
+// ---- CORS ----
+function corsHeaders() {
   return {
-    id: item.id || fallback.id || null,
-    page: item.page || fallback.page || "social",
-    section: item.section || fallback.section || null,
-
-    title: pick(item, ["title","name","label","caption"]) || "",
-    category: item.category || fallback.category || null,
-    type: item.type || fallback.type || "thumbnail",
-
-    url: pick(item, ["url","href","link","path","detailUrl","productUrl"]) || "",
-    thumb: pick(item, ["thumb","image","image_url","img","photo","thumbnail","thumbnailUrl","cover","coverUrl"]) || "",
-
-    priority: (typeof item.priority === "number"
-      ? item.priority
-      : (Number.isFinite(Number(item.priority)) ? Number(item.priority) : null)),
-
-    keywords: Array.isArray(item.keywords) ? item.keywords : (Array.isArray(fallback.keywords) ? fallback.keywords : []),
-    weight: (typeof item.weight === "number" ? item.weight : (typeof fallback.weight === "number" ? fallback.weight : 0)),
-    enabled: (item.enabled !== false) && (fallback.enabled !== false),
-    order: (typeof item.order === "number" ? item.order : (typeof fallback.order === "number" ? fallback.order : 0)),
-    lang: Array.isArray(item.lang) ? item.lang : (Array.isArray(fallback.lang) ? fallback.lang : []),
-    version: item.version || fallback.version || "1.0",
-    updated: item.updated || fallback.updated || null,
-    meta: item.meta || fallback.meta || ""
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type"
   };
 }
 
-function applyPSOM(items, psomRules){
-  if (!Array.isArray(items) || !Array.isArray(psomRules)) return items;
-  const map = new Map(psomRules.map(r => [r.id, r]));
-  return items
-    .map(it => {
-      if (!it || !it.id) return it;
-      const rule = map.get(it.id);
-      if (!rule) return it;
-      return {
-        ...it,
-        weight: (rule.weight ?? it.weight),
-        enabled: (rule.enabled ?? it.enabled),
-        order: (rule.order ?? it.order),
-        lang: (rule.lang ?? it.lang),
-      };
-    })
-    .filter(it => it && it.enabled !== false);
+function ok(bodyObj) {
+  return { statusCode: 200, headers: corsHeaders(), body: JSON.stringify(bodyObj) };
 }
 
-function buildSocialSections(snap){
-  const sectionsMap = snap?.pages?.social?.sections;
-  if (!sectionsMap || typeof sectionsMap !== "object") return [];
+function err(statusCode, code, extra = {}) {
+  return {
+    statusCode,
+    headers: corsHeaders(),
+    body: JSON.stringify({ error: code, ...extra })
+  };
+}
 
-  const preferred = [
-    "social-youtube",
-    "social-instagram",
-    "social-x",
-    "social-facebook",
-    "social-tiktok",
-    "social-threads",
-    "social-linkedin",
-    "social-pinterest",
-    "social-blog",
-    "socialnetwork"
+function extractSections(snapshot) {
+  // STRICT: only social snapshot structure is accepted
+  return snapshot?.pages?.social?.sections || null;
+}
+
+// ---- 1) FS read (multi-path) ----
+async function readJsonIfExists(filePath) {
+  try {
+    const raw = await fs.readFile(filePath, "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function fsCandidatePaths() {
+  const cwd = process.cwd();
+  const dir = typeof __dirname === "string" ? __dirname : cwd;
+
+  return [
+    path.join(cwd, "data", SNAPSHOT_NAME),
+    path.join(cwd, "netlify", "functions", "data", SNAPSHOT_NAME),
+    path.join(dir, "data", SNAPSHOT_NAME),
+    path.join(dir, "..", "data", SNAPSHOT_NAME),
+    path.join(dir, "..", "..", "data", SNAPSHOT_NAME),
+    path.join(dir, "functions", "data", SNAPSHOT_NAME)
   ];
-
-  const keys = [];
-  const seen = new Set();
-
-  for (const k of preferred){
-    if (sectionsMap[k] !== undefined && !seen.has(k)){
-      keys.push(k); seen.add(k);
-    }
-  }
-  for (const k of Object.keys(sectionsMap)){
-    if (!seen.has(k)){
-      keys.push(k); seen.add(k);
-    }
-  }
-
-  return keys.map(id => {
-    const limit = 100;
-    const arr = toArr(sectionsMap[id]).slice(0, limit);
-    return {
-      id,
-      items: arr.map(x => normalizeItem(x, { section: id, page: "social" })).filter(Boolean)
-    };
-  });
 }
 
-exports.handler = async function(event){
-  try{
-    const qs = (event && event.queryStringParameters) || {};
-    const pageQuery = String(qs.page || qs.p || "social").toLowerCase();
-    if (pageQuery !== "social" && pageQuery !== "socialnetwork" && pageQuery !== "socials") {
-      return {
-        statusCode: 400,
-        headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
-        body: JSON.stringify({ status:"fail", message:"feed-social supports only page=social" })
-      };
+// ---- 2) HTTP fetch fallback ----
+function guessSiteBaseUrl() {
+  return (
+    process.env.URL ||
+    process.env.DEPLOY_PRIME_URL ||
+    process.env.DEPLOY_URL ||
+    ""
+  );
+}
+
+async function fetchSnapshotOverHttp() {
+  const base = guessSiteBaseUrl();
+
+  const urls = [];
+  if (base) urls.push(`${base.replace(/\/$/, "")}/data/${SNAPSHOT_NAME}`);
+  urls.push(`/data/${SNAPSHOT_NAME}`);
+
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) continue;
+      return await res.json();
+    } catch {
+      // ignore
     }
-
-    const front = safeReadJSON(FRONT_SNAPSHOT_PATH);
-    const social = safeReadJSON(SOCIAL_SNAPSHOT_PATH);
-    const snap = (front && front.pages && front.pages.social && front.pages.social.sections) ? front
-               : (social && social.pages && social.pages.social && social.pages.social.sections) ? social
-               : null;
-
-    if (!snap){
-      return {
-        statusCode: 500,
-        headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
-        body: JSON.stringify({ status:"fail", message:"No social snapshot found (front.snapshot.json or social.snapshot.json)" })
-      };
-    }
-
-    const psom = safeReadJSON(PSOM_PATH) || [];
-    const sectionsRaw = buildSocialSections(snap);
-    const sections = sectionsRaw.map(s => ({ id: s.id, items: applyPSOM(s.items, psom) }));
-
-    return {
-      statusCode: 200,
-      headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
-      body: JSON.stringify({
-        status: "ok",
-        version: "feed-social.v1.exclusive",
-        generated: new Date().toISOString(),
-        meta: { page: "social", source: (snap === front ? "front.snapshot.json" : "social.snapshot.json") },
-        sections
-      })
-    };
-  }catch(e){
-    return {
-      statusCode: 500,
-      headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
-      body: JSON.stringify({ status:"fail", message: String((e && e.message) || e) })
-    };
   }
-};
+  return null;
+}
+
+async function loadSnapshot() {
+  for (const p of fsCandidatePaths()) {
+    const json = await readJsonIfExists(p);
+    if (json) return json;
+  }
+  return await fetchSnapshotOverHttp();
+}
+
+export async function handler(event) {
+  if (event.httpMethod === "OPTIONS") {
+    return { statusCode: 200, headers: corsHeaders(), body: "" };
+  }
+
+  const qs = event.queryStringParameters || {};
+  const key = (qs.key || qs.section || "").trim();
+
+  const snapshot = await loadSnapshot();
+  if (!snapshot) {
+    return err(500, "SNAPSHOT_NOT_FOUND", {
+      hint: "Put /data/social.snapshot.json in site root AND/OR make it accessible to the function."
+    });
+  }
+
+  const sections = extractSections(snapshot);
+  if (!sections) {
+    return err(500, "INVALID_SNAPSHOT_STRUCTURE", {
+      hint: "Need snapshot.pages.social.sections"
+    });
+  }
+
+  // Section specific request
+  if (key) {
+    const items = sections[key];
+    if (!Array.isArray(items) || items.length === 0) {
+      return ok({ items: [] });
+    }
+    return ok({ items });
+  }
+
+  // All sections
+  return ok({ sections });
+}
