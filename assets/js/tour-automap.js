@@ -73,20 +73,26 @@
     const style = document.createElement("style");
     style.id = MOBILE_CSS_ID;
     style.textContent = `
-#${MOBILE_RAIL_ID} .card{ position:relative; }
-#${MOBILE_RAIL_ID} .card a{ display:block; width:100%; height:100%; }
-#${MOBILE_RAIL_ID} .card img{ display:block; width:100%; height:100%; object-fit:cover; }
-#${MOBILE_RAIL_ID} .cap{
+/* Mobile rail cards should look IDENTICAL to right panel cards */
+#${MOBILE_RAIL_ID} .list{ display:flex; gap:12px; overflow-x:auto; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; }
+#${MOBILE_RAIL_ID} .ad-box{ position:relative; flex:0 0 220px; aspect-ratio: 4 / 5; border-radius:8px; overflow:hidden; background:#fff; border:1px solid #d7dce1; scroll-snap-align:start; }
+#${MOBILE_RAIL_ID} .ad-box > a{ display:block; width:100%; height:100%; text-decoration:none; color:inherit; position:relative; }
+#${MOBILE_RAIL_ID} .ad-box img{ display:block; width:100%; height:100%; object-fit:cover; }
+#${MOBILE_RAIL_ID} .ad-box .tour-card-title{
   position:absolute; left:0; right:0; bottom:0;
   padding:6px 10px;
-  font-weight:800; font-size:.92rem; line-height:1.15;
+  font-size:14px; line-height:1.15; font-weight:800;
   color:#fff;
   background:linear-gradient(to top, rgba(0,0,0,.62), rgba(0,0,0,0));
   text-shadow:0 1px 2px rgba(0,0,0,.55);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
+/* portrait: one card per view */
+@media (max-width:768px){
+  #${MOBILE_RAIL_ID} .ad-box{ flex:0 0 100%; }
+}
 `;
-    document.head.appendChild(style);
+document.head.appendChild(style);
   }
 
   function makeDummy(idx) {
@@ -158,78 +164,37 @@
     const frag = document.createDocumentFragment();
 
     for (const it of items.slice(0, MOBILE_LIMIT)) {
-      const card = document.createElement("div");
-      card.className = "card";
-
-      const a = document.createElement("a");
-      a.href = it.link || "#";
-      if (it.link && it.link !== "#") {
-        a.target = "_blank";
-        a.rel = "noopener";
-      } else {
-        a.tabIndex = -1;
-        a.setAttribute("aria-hidden", "true");
-      }
-
-      const img = document.createElement("img");
-      img.src = it.thumb || PLACEHOLDER_IMG;
-      img.alt = it.title || "";
-      img.loading = "lazy";
-      img.decoding = "async";
-
-      const cap = document.createElement("div");
-      cap.className = "cap";
-      cap.textContent = it.title || "";
-
-      a.appendChild(img);
-      card.appendChild(a);
-      card.appendChild(cap);
+      const card = createRightBox(it);
+      // reuse the exact same markup as right panel (img + tour-card-title overlay)
+      card.classList.add("card");
       frag.appendChild(card);
     }
 
     list.appendChild(frag);
   }
-  function lockRightPanel() {
-    const panel = byId(RIGHT_PANEL_ID);
-    if (!panel) return;
-
-    const allowed = (node) => {
-      if (node.nodeType === 3) return false; // text node -> remove
-      if (node.nodeType !== 1) return false;
-      // allow our generated boxes only
-      if (node.classList && node.classList.contains("ad-box")) return true;
-      return false;
-    };
-
-    // initial cleanup
-    Array.from(panel.childNodes).forEach(n => { if (!allowed(n)) panel.removeChild(n); });
-
-    // observe and clean future injections
-    if (panel.__tourLockObserver) return;
-    const obs = new MutationObserver(() => {
-      Array.from(panel.childNodes).forEach(n => { if (!allowed(n)) panel.removeChild(n); });
-    });
-    obs.observe(panel, { childList: true });
-    panel.__tourLockObserver = obs;
-  }
-
 
   async function run() {
     disablePsomThumbGrid();
 
-    // ✅ FEED ONLY (남의 스냅샷 혼입 차단)
-    const feed = await fetchJson(FEED_URL);
-    const items = normalizeItems(feed && feed.items ? feed.items : []);
+    // 1) snapshot 우선
+    const snap = await fetchJson(SNAPSHOT_URL);
+    let items = [];
 
-    // 렌더 (항상 100칸 유지 - 부족분 더미)
-    renderRightPanel(items);
-    ensureMobileCss();
+    if (snap && snap.meta && snap.meta.hub === HUB && Array.isArray(snap.items)) {
+      items = normalizeItems(snap.items);
+    }
+
+    // 2) feed fallback
+    if (!items.length) {
+      const feed = await fetchJson(FEED_URL);
+      items = feed && Array.isArray(feed.items) ? normalizeItems(feed.items) : [];
+    }
+
     renderMobileRail(items);
-
-    // 🔒 Right panel lockdown: 외부 스크립트가 텍스트 리스트를 끼워넣으면 즉시 제거
-    lockRightPanel();
+    renderRightPanel(items);
   }
- === "complete" || document.readyState === "interactive") {
+
+  if (document.readyState === "complete" || document.readyState === "interactive") {
     setTimeout(run, 0);
   } else {
     document.addEventListener("DOMContentLoaded", run, { once: true });
