@@ -34,8 +34,18 @@ function err(statusCode, code, extra = {}) {
 }
 
 function extractSections(snapshot) {
-  // STRICT: only social snapshot structure is accepted
-  return snapshot?.pages?.social?.sections || null;
+  // ✅ latest: social.snapshot.json uses placeholder_cards
+  if (snapshot?.placeholder_cards && typeof snapshot.placeholder_cards === "object") {
+    return snapshot.placeholder_cards;
+  }
+
+  // compat: snapshot.pages.social.placeholder_cards
+  if (snapshot?.pages?.social?.placeholder_cards) {
+    return snapshot.pages.social.placeholder_cards;
+  }
+
+  // legacy: snapshot.pages.social.sections
+  return snapshot?.pages?.social?.sections || snapshot?.sections || null;
 }
 
 // ---- 1) FS read (multi-path) ----
@@ -117,7 +127,7 @@ export async function handler(event) {
   const sections = extractSections(snapshot);
   if (!sections) {
     return err(500, "INVALID_SNAPSHOT_STRUCTURE", {
-      hint: "Need snapshot.pages.social.sections"
+      hint: "Need snapshot.pages.social.sections OR snapshot.sections"
     });
   }
 
