@@ -451,47 +451,34 @@ function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
 /* Desktop: lock to stable fixed-height cards (prevents collapse into thin bars) */
 @media (min-width:1025px){
-
   .ad-box{
-    position:relative !important;
     width:100% !important;
-
-    height:auto !important;
-    min-height:0 !important;
-    max-height:none !important;
-
-    padding-top:125% !important; /* 4:5 비율 */
-
-    overflow:hidden !important;
-    border-radius:8px;
-  }
-
-  .ad-box > a{
-    position:absolute !important;
-    top:0;
-    left:0;
-    width:100% !important;
-    height:100% !important;
-
+    height:206px !important;
+    min-height:206px !important;
+    max-height:206px !important;
     display:flex !important;
     align-items:center !important;
     justify-content:center !important;
+    overflow:hidden !important;
   }
-
-  .ad-box img,
-  .ad-box iframe,
-  .ad-box video,
-  .ad-box picture,
-  .ad-box canvas{
+  .ad-box > a{
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    width:100% !important;
+    height:100% !important;
+    line-height:normal !important;
+    text-align:center !important;
+    padding:0 !important;
+  }
+  .ad-box img, .ad-box iframe, .ad-box video, .ad-box picture, .ad-box canvas{
     width:100% !important;
     height:100% !important;
     object-fit:cover !important;
     display:block !important;
     border:0 !important;
   }
-
 }
-
 /* Right panel: 8 full cards + 20% of 9th; scrollbar hidden; wheel/touch/drag work */
 .ad-panel::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }</style><style id="adpanel-visible-8-kr">/* Right panel: 8 full cards + 20% of 9th; scrollbar hidden; wheel/touch/drag work */
 .ad-panel {
