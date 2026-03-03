@@ -1,204 +1,265 @@
-// socialnetwork-automap.v3.js (PRODUCTION)
-// 목적: social.snapshot.json -> (SNS 9섹션 + 우측패널/모바일레일) 1:1 정확 매핑
-// 핵심: 'socialnetwork' 키는 HTML에 2곳 존재(우측패널/모바일레일)하므로, 뷰포트에 따라 1곳만 렌더링
+/*
+  IGDC Social Network AutoMap (v3.PROD2)
+  - Reads /data/social.snapshot.json (placeholder_cards)
+  - Renders 9 main sections into existing .thumb-grid[data-psom-key]
+  - Renders RIGHT panel into #rightAutoPanel using .card markup (so CSS + mobile rail work)
+  - On resize, re-renders AFTER the page's dummy right-panel bootstrap runs
+*/
 
-(function () {
+(function(){
+  'use strict';
+/**
+ * socialnetwork-automap.v3.PROD3.js
+ * - Desktop right panel (#rightAutoPanel): renders 100 "ad-box" slots (keeps original ad-panel layout).
+ * - Mobile 10th section (#rpMobileGrid): renders same 100 items as "thumb-card" for touch drag.
+ * - Main 9 sections: renders into each [data-psom-key] thumb-grid, preserving per-grid slot count.
+ * - Always renders BOTH desktop and mobile targets, so resize restores correctly.
+ */
+
+(function(){
   'use strict';
 
-  if (window.__SOCIALNETWORK_AUTOMAP_V3__) return;
-  window.__SOCIALNETWORK_AUTOMAP_V3__ = true;
-
-  const SNAPSHOT_URL = '/data/social.snapshot.json';
-
-  const LIMIT_MAIN = 100;
-  const LIMIT_RIGHT = 80;
-
-  // ---- 정확 타겟 (HTML 구조 기반) ----
-  // 1) 메인 9섹션: data-psom-key 1개씩
-  // 2) RIGHT/MOBILE: 둘 다 data-psom-key="socialnetwork" 이므로, CSS/viewport 기준으로 1곳만 선택 렌더링
-  const MAIN_SECTIONS = [
-    { key: 'social-instagram', selector: '[data-psom-key="social-instagram"]', limit: LIMIT_MAIN },
-    { key: 'social-youtube', selector: '[data-psom-key="social-youtube"]', limit: LIMIT_MAIN },
-    { key: 'social-twitter', selector: '[data-psom-key="social-twitter"]', limit: LIMIT_MAIN },
-    { key: 'social-facebook', selector: '[data-psom-key="social-facebook"]', limit: LIMIT_MAIN },
-    { key: 'social-tiktok', selector: '[data-psom-key="social-tiktok"]', limit: LIMIT_MAIN },
-    { key: 'social-threads', selector: '[data-psom-key="social-threads"]', limit: LIMIT_MAIN },
-    { key: 'social-telegram', selector: '[data-psom-key="social-telegram"]', limit: LIMIT_MAIN },
-    { key: 'social-discord', selector: '[data-psom-key="social-discord"]', limit: LIMIT_MAIN },
-    { key: 'social-community', selector: '[data-psom-key="social-community"]', limit: LIMIT_MAIN }
+  const SNAPSHOT_CANDIDATES = [
+    '/data/social.snapshot.json',
+    '/data/snapshot/social.snapshot.json',
+    '/data/snapshots/social.snapshot.json',
+    '/social.snapshot.json'
   ];
 
-  // 우측패널 'socialnetwork' 슬롯: #rightAutoPanel 바로 다음 thumb-grid
-  const RIGHT_TARGET_SELECTOR = '#rightAutoPanel + .thumb-grid.thumb-scroller[data-psom-key="socialnetwork"]';
+  const FEED_CANDIDATES = [
+    '/.netlify/functions/feed-social',
+    '/api/feed-social'
+  ];
 
-  // 모바일 레일 'socialnetwork' 슬롯: #rpMobileGrid
-  const MOBILE_TARGET_SELECTOR = '#rpMobileGrid.thumb-grid.thumb-scroller[data-psom-key="socialnetwork"]';
+  const PAGE_KEY = 'social';
 
-  const PLACEHOLDER_IMG = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+  const RIGHT_PANEL_KEY = 'socialnetwork';   // right panel / mobile 10th section uses this key
+  const RIGHT_PANEL_COUNT = 100;
 
-  // 같은 노드 중복렌더 방지
-  const RENDERED_NODES = new WeakSet();
+  const FALLBACK_CARD = {
+    title: 'Loading...',
+    subtitle: '',
+    image: '',
+    url: '#'
+  };
 
-  function clear(el) {
-    if (!el || RENDERED_NODES.has(el)) return;
-    while (el.firstChild) el.removeChild(el.firstChild);
-  }
+  function $(sel, root=document){ return root.querySelector(sel); }
+  function $all(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
 
-  function escText(s) {
-    try { return String(s ?? ''); } catch { return ''; }
-  }
+  function safeText(v){ return (v==null?'':String(v)); }
 
-  function escUrl(u) {
-    try { return String(u ?? '').replace(/'/g, '%27'); } catch { return ''; }
-  }
-
-  function pickImage(item) {
-    return (item && (item.thumb || item.image || item.thumbnail || item.imageUrl || item.thumbnailUrl || '')) || '';
-  }
-
-  function pickTitle(item) {
-    return (item && (item.title || item.name || item.text || '')) || '';
-  }
-
-  function pickMeta(item) {
-    return (item && (item.meta || item.subtitle || item.summary || '')) || '';
-  }
-
-  function pickUrl(item) {
-    return (item && (item.url || item.href || item.link || '')) || '';
-  }
-
-  function makeDummy(prefix, idx) {
-    const n = idx + 1;
+  function normalizeItem(raw){
+    if(!raw || typeof raw!=='object') return {...FALLBACK_CARD};
     return {
-      title: prefix + ' ' + n,
-      meta: '',
-      thumb: PLACEHOLDER_IMG,
-      url: '#'
+      title: safeText(raw.title || raw.name || raw.label || raw.platform || raw.brand || 'Loading...'),
+      subtitle: safeText(raw.subtitle || raw.desc || raw.description || raw.category || ''),
+      image: safeText(raw.image || raw.img || raw.thumbnail || raw.thumb || ''),
+      url: safeText(raw.url || raw.href || raw.link || raw.target || '#')
     };
   }
 
-  function createCard(item) {
-    const card = document.createElement('div');
-    card.className = 'thumb-card';
+  async function fetchJson(url){
+    const r = await fetch(url, { cache: 'no-store' });
+    if(!r.ok) throw new Error('HTTP '+r.status+' @ '+url);
+    return await r.json();
+  }
 
-    const img = document.createElement('div');
-    img.className = 'thumb-img';
-    const src = pickImage(item);
-    const useSrc = src || PLACEHOLDER_IMG;
+  async function loadSnapshot(){
+    // 1) try snapshot files
+    for(const u of SNAPSHOT_CANDIDATES){
+      try{
+        const j = await fetchJson(u);
+        if(j && j.pages && j.pages[PAGE_KEY] && j.pages[PAGE_KEY].sections) return j;
+      }catch(_e){}
+    }
+    // 2) try feed (if it returns snapshot-like shape)
+    for(const u of FEED_CANDIDATES){
+      try{
+        const j = await fetchJson(u);
+        if(j && j.pages && j.pages[PAGE_KEY] && j.pages[PAGE_KEY].sections) return j;
+      }catch(_e){}
+    }
+    throw new Error('No social snapshot/feed found');
+  }
 
-    img.style.backgroundImage = "url('" + escUrl(useSrc) + "')";
-    img.style.backgroundSize = 'cover';
-    img.style.backgroundPosition = 'center';
+  function getSectionItems(snapshot, key){
+    const secs = snapshot?.pages?.[PAGE_KEY]?.sections;
+    const arr = secs?.[key];
+    if(Array.isArray(arr)) return arr.map(normalizeItem);
+    if(arr && Array.isArray(arr.items)) return arr.items.map(normalizeItem);
+    return [];
+  }
 
-    const title = document.createElement('div');
-    title.className = 'thumb-title';
-    title.textContent = escText(pickTitle(item));
+  function buildThumbCard(item, label){
+    const a = document.createElement('a');
+    a.className = 'thumb-card';
+    a.href = item.url || '#';
+    a.target = '_blank';
+    a.rel = 'noopener';
 
-    const meta = document.createElement('div');
-    meta.className = 'thumb-meta';
-    meta.textContent = escText(pickMeta(item));
-
-    card.appendChild(img);
-    card.appendChild(title);
-    card.appendChild(meta);
-
-    const href = pickUrl(item);
-    if (href && href !== '#') {
-      card.addEventListener('click', function () { location.href = href; });
-      card.style.cursor = 'pointer';
+    const img = document.createElement('img');
+    img.alt = item.title || '';
+    if(item.image){
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.src = item.image;
+    }else{
+      // keep empty image space consistent
+      img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
     }
 
-    return card;
+    const body = document.createElement('div');
+    body.className = 'thumb-body';
+
+    const t = document.createElement('div');
+    t.className = 'thumb-title';
+    t.textContent = item.title || 'Loading...';
+
+    const s = document.createElement('div');
+    s.className = 'thumb-sub';
+    s.textContent = item.subtitle || (label ? label : '');
+
+    body.appendChild(t);
+    body.appendChild(s);
+    a.appendChild(img);
+    a.appendChild(body);
+    return a;
   }
 
-  async function loadSnapshot() {
-    const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Snapshot load failed: ' + res.status);
-    return res.json();
+  function ensureAdBoxes(panelEl, count){
+    if(!panelEl) return;
+    const boxes = panelEl.querySelectorAll('.ad-box');
+    const need = count - boxes.length;
+    if(need <= 0) return;
+    for(let i=0;i<need;i++){
+      const b = document.createElement('div');
+      b.className = 'ad-box';
+      const inner = document.createElement('div');
+      inner.textContent = 'Loading...';
+      b.appendChild(inner);
+      panelEl.appendChild(b);
+    }
   }
 
-  function getSections(snapshot) {
-    return (snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections) ||
-           (snapshot && snapshot.sections) ||
-           null;
+  function fillAdBoxes(panelEl, items, count){
+    if(!panelEl) return;
+    ensureAdBoxes(panelEl, count);
+
+    const boxes = Array.from(panelEl.querySelectorAll('.ad-box')).slice(0, count);
+    for(let i=0;i<count;i++){
+      const it = items[i] || FALLBACK_CARD;
+      const item = normalizeItem(it);
+
+      const box = boxes[i];
+      box.innerHTML = ''; // keep wrapper, replace content only
+
+      const a = document.createElement('a');
+      a.href = item.url || '#';
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.style.display = 'block';
+      a.style.width = '100%';
+      a.style.height = '100%';
+      a.style.textDecoration = 'none';
+      a.style.color = 'inherit';
+
+      // If image exists, show a minimal top thumbnail strip without breaking fixed height:
+      if(item.image){
+        const img = document.createElement('img');
+        img.src = item.image;
+        img.alt = item.title || '';
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.style.width = '100%';
+        img.style.height = '88px';
+        img.style.objectFit = 'cover';
+        img.style.borderRadius = '10px';
+        img.style.display = 'block';
+        a.appendChild(img);
+      }
+
+      const txt = document.createElement('div');
+      txt.textContent = item.title || 'Loading...';
+      txt.style.padding = item.image ? '8px 10px 0' : '0 10px';
+      txt.style.fontWeight = '700';
+      txt.style.fontSize = '13px';
+      txt.style.lineHeight = '1.25';
+      txt.style.wordBreak = 'break-word';
+
+      const sub = document.createElement('div');
+      sub.textContent = item.subtitle || '';
+      sub.style.padding = '4px 10px 0';
+      sub.style.fontSize = '12px';
+      sub.style.opacity = '0.85';
+      sub.style.lineHeight = '1.2';
+
+      a.appendChild(txt);
+      if(item.subtitle) a.appendChild(sub);
+
+      box.appendChild(a);
+    }
   }
 
-  function renderBox(box, items, limit, dummyPrefix) {
-    if (!box || RENDERED_NODES.has(box)) return;
+  function renderThumbGrid(gridEl, items, label){
+    if(!gridEl) return;
+    // preserve slot count from existing HTML if present
+    const existing = gridEl.querySelectorAll('.thumb-card');
+    const desired = existing.length > 0 ? existing.length : 12;
 
-    const arr = Array.isArray(items) ? items.slice(0, limit) : [];
-    while (arr.length < limit) arr.push(makeDummy(dummyPrefix, arr.length));
-
-    clear(box);
-    arr.forEach(it => box.appendChild(createCard(it)));
-    RENDERED_NODES.add(box);
+    gridEl.innerHTML = '';
+    for(let i=0;i<desired;i++){
+      const item = items[i] ? normalizeItem(items[i]) : {...FALLBACK_CARD};
+      gridEl.appendChild(buildThumbCard(item, label));
+    }
   }
 
-  function isMobile() {
-    // HTML/CSS 기준(<=1024px)과 동일
-    return window.matchMedia && window.matchMedia('(max-width:1024px)').matches;
+  function renderMobileRightGrid(gridEl, items){
+    if(!gridEl) return;
+    gridEl.innerHTML = '';
+    for(let i=0;i<RIGHT_PANEL_COUNT;i++){
+      const item = items[i] ? normalizeItem(items[i]) : {...FALLBACK_CARD};
+      gridEl.appendChild(buildThumbCard(item, ''));
+    }
   }
 
-  function renderStrict(sections) {
-    // 1) 메인 9섹션: 무조건 렌더
-    MAIN_SECTIONS.forEach(cfg => {
-      const box = document.querySelector(cfg.selector);
-      if (!box) return;
-      renderBox(box, sections && sections[cfg.key], cfg.limit, cfg.key);
+  let _snapshotCache = null;
+  let _renderTimer = null;
+
+  async function ensureSnapshot(){
+    if(_snapshotCache) return _snapshotCache;
+    _snapshotCache = await loadSnapshot();
+    return _snapshotCache;
+  }
+
+  async function renderAll(){
+    const snap = await ensureSnapshot();
+
+    // 1) main 9 sections
+    const grids = $all('.thumb-grid[data-psom-key]');
+    grids.forEach(grid=>{
+      const key = grid.getAttribute('data-psom-key');
+      if(!key) return;
+      if(key === RIGHT_PANEL_KEY) return; // handled separately
+      const items = getSectionItems(snap, key);
+      renderThumbGrid(grid, items, '');
     });
 
-    // 2) 우측패널/모바일레일: 반드시 1곳만 렌더
-    const key = 'socialnetwork';
-    const limit = LIMIT_RIGHT;
+    // 2) desktop right panel (popular items)
+    const rightItems = getSectionItems(snap, RIGHT_PANEL_KEY);
+    fillAdBoxes($('#rightAutoPanel'), rightItems, RIGHT_PANEL_COUNT);
 
-    const rightBox = document.querySelector(RIGHT_TARGET_SELECTOR);
-    const mobileBox = document.querySelector(MOBILE_TARGET_SELECTOR);
-
-    if (isMobile()) {
-      // 모바일에서는 모바일 레일만 렌더
-      if (mobileBox) renderBox(mobileBox, sections && sections[key], limit, key);
-    } else {
-      // 데스크탑/태블릿에서는 우측패널만 렌더
-      if (rightBox) renderBox(rightBox, sections && sections[key], limit, key);
-    }
+    // 3) mobile 10th section
+    renderMobileRightGrid($('#rpMobileGrid'), rightItems);
   }
 
-  async function run() {
-    try {
-      const snapshot = await loadSnapshot();
-      const sections = getSections(snapshot);
-      if (!sections) return;
-
-      renderStrict(sections);
-
-      // 리사이즈로 레이아웃 전환 시(모바일<->데스크탑) 우측/모바일 타겟 재렌더 필요
-      // => 한 번만 리스너 연결, 전환 시 해당 1곳만 새로 렌더
-      let lastMobile = isMobile();
-      window.addEventListener('resize', function () {
-        const nowMobile = isMobile();
-        if (nowMobile === lastMobile) return;
-        lastMobile = nowMobile;
-
-        // 전환 시, 두 타겟 모두 렌더 상태 해제 후 다시 렌더 (메인 섹션은 유지)
-        const rb = document.querySelector(RIGHT_TARGET_SELECTOR);
-        const mb = document.querySelector(MOBILE_TARGET_SELECTOR);
-        if (rb) { RENDERED_NODES.delete?.(rb); while (rb.firstChild) rb.removeChild(rb.firstChild); }
-        if (mb) { RENDERED_NODES.delete?.(mb); while (mb.firstChild) mb.removeChild(mb.firstChild); }
-
-        renderStrict(sections);
-      }, { passive: true });
-
-      console.log('[AUTOMAP] socialnetwork v3 mapping loaded');
-    } catch (e) {
-      console.error('[AUTOMAP] socialnetwork v3 error:', e);
-    }
+  function debounceRender(){
+    clearTimeout(_renderTimer);
+    _renderTimer = setTimeout(()=>{ renderAll().catch(console.error); }, 160);
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', run, { once: true });
-  } else {
-    run();
-  }
+  document.addEventListener('DOMContentLoaded', ()=>{
+    renderAll().catch(console.error);
+    window.addEventListener('resize', debounceRender, { passive:true });
+  });
 
 })();
