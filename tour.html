@@ -90,7 +90,7 @@ footer {
 /* === Right AD panel card base (stable) === */
 
 .ad-panel .ad-box{
-  height:165px;
+
   border-radius:8px;
   overflow:hidden;
   background:#fff;
@@ -408,35 +408,88 @@ function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
   .bc-tile.orange:hover{background:#fb923c}
   
   .ad-panel{ position:sticky; top:20px; background:#f7f9fb; border:1px solid #d6dce0; border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:12px; max-height:80vh; overflow:auto; box-shadow:0 1px 4px rgba(0,0,0,.08) }
-  .ad-box{ background:#fff; border:1px solid #d7dce1; border-radius:8px; height:165px; display:flex; align-items:center; justify-content:center; font-weight:600; color:#444 }
+  .ad-box{
+    background:#fff;
+    border:1px solid #d7dce1;
+    border-radius:8px;
+}
 
 /* --- Strong rules for right panel thumbnail boxes --- */
 .ad-panel { grid-column: 3; }
-.ad-box{
-  height:165px !important;
-  min-height:165px !important;
-  max-height:165px !important;
-  display:flex !important;
-  align-items:center !important;
-  justify-content:center !important;
-  overflow:hidden !important;
+
+/* Mobile/tablet: keep 4:5 ratio (matches NetworkHub) */
+@media (max-width:1024px){
+  .ad-box{
+    aspect-ratio: 4 / 5 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    overflow:hidden !important;
+  }
+  .ad-box > a{
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    width:100% !important;
+    height:100% !important;
+    line-height:normal !important;
+    text-align:center !important;
+    padding:0 !important;
+  }
+  .ad-box img, .ad-box iframe, .ad-box video, .ad-box picture, .ad-box canvas{
+    width:100% !important;
+    height:100% !important;
+    object-fit:cover !important;
+    display:block !important;
+    border:0 !important;
+  }
 }
-.ad-box > a{
-  display:flex !important;
-  align-items:center !important;
-  justify-content:center !important;
-  width:100% !important;
-  height:100% !important;
-  line-height:normal !important;
-  text-align:center !important;
-  padding:0 !important;
-}
-.ad-box img, .ad-box iframe, .ad-box video, .ad-box picture, .ad-box canvas{
-  width:100% !important;
-  height:100% !important;
-  object-fit:cover !important;
-  display:block !important;
-  border:0 !important;
+
+/* Desktop: lock to stable fixed-height cards (prevents collapse into thin bars) */
+@media (min-width:1025px){
+
+  .ad-box{
+    position:relative !important;
+    width:100% !important;
+
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+
+    padding-top:125% !important; /* 4:5 비율 */
+
+    overflow:hidden !important;
+    border-radius:8px;
+  }
+
+  .ad-box > a{
+    position:absolute !important;
+    top:0;
+    left:0;
+    width:100% !important;
+    height:100% !important;
+
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+  }
+
+  .ad-box img,
+  .ad-box iframe,
+  .ad-box video,
+  .ad-box picture,
+  .ad-box canvas{
+    width:100% !important;
+    height:100% !important;
+    object-fit:cover !important;
+    display:block !important;
+    border:0 !important;
+  }
+
 }
 
 /* Right panel: 8 full cards + 20% of 9th; scrollbar hidden; wheel/touch/drag work */
@@ -852,6 +905,35 @@ html, body {
 </style>
 
 <link rel="stylesheet" href="/assets/css/thumbs.standard.css">
+
+<style id="tour-desktop-fill-and-scroll-fix">
+/* Desktop: main area must expand to fill space between sidebar and right panel */
+@media (min-width:1025px){
+  .container{
+    display:grid !important;
+    grid-template-columns:210px 1fr 274px !important;
+    gap:24px !important;
+    align-items:start !important;
+    padding:28px 24px !important;
+    max-width:none !important;
+  }
+  .main-content{
+    max-width:none !important;
+    width:100% !important;
+    margin:0 !important;
+    justify-self:stretch !important;
+  }
+  .right-rail{ width:274px !important; }
+  .ad-panel{
+    max-height:80vh !important;
+    overflow-y:auto !important;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior:contain;
+    touch-action:pan-y;
+  }
+}
+</style>
+
 </head>
 
 <body>
@@ -2222,6 +2304,8 @@ window.addEventListener("message",function(ev){
 
 <script defer src="/assets/js/placeholder-sweeper.js"></script>
 <script defer src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
+
+<script defer src="/assets/js/tour-automap.js"></script>
 
 </body>
 </html>
