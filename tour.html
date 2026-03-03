@@ -407,7 +407,7 @@ function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
   .bc-tile.orange{background:#f97316;color:#fff}
   .bc-tile.orange:hover{background:#fb923c}
   
-  .ad-panel{ position:sticky; top:20px; background:#f7f9fb; border:1px solid #d6dce0; border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:12px; max-height:80vh; overflow:auto; box-shadow:0 1px 4px rgba(0,0,0,.08) }
+  .ad-panel{ position:sticky; top:20px; background:#f7f9fb; border:1px solid #d6dce0; border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:12px; max-height:100vh; overflow:auto; box-shadow:0 1px 4px rgba(0,0,0,.08) }
   .ad-box{
     background:#fff;
     border:1px solid #d7dce1;
@@ -453,9 +453,9 @@ function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 @media (min-width:1025px){
   .ad-box{
     width:100% !important;
-    height:206px !important;
-    min-height:206px !important;
-    max-height:206px !important;
+    height:285px !important;
+    min-height:285px !important;
+    max-height:285px !important;
     display:flex !important;
     align-items:center !important;
     justify-content:center !important;
@@ -912,7 +912,7 @@ html, body {
   }
   .right-rail{ width:274px !important; }
   .ad-panel{
-    max-height:80vh !important;
+    max-height:100vh !important;
     overflow-y:auto !important;
     -webkit-overflow-scrolling:touch;
     overscroll-behavior:contain;
