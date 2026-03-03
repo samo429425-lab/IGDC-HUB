@@ -1,265 +1,245 @@
-/*
-  IGDC Social Network AutoMap (v3.PROD2)
-  - Reads /data/social.snapshot.json (placeholder_cards)
-  - Renders 9 main sections into existing .thumb-grid[data-psom-key]
-  - Renders RIGHT panel into #rightAutoPanel using .card markup (so CSS + mobile rail work)
-  - On resize, re-renders AFTER the page's dummy right-panel bootstrap runs
-*/
 
-(function(){
-  'use strict';
-/**
- * socialnetwork-automap.v3.PROD3.js
- * - Desktop right panel (#rightAutoPanel): renders 100 "ad-box" slots (keeps original ad-panel layout).
- * - Mobile 10th section (#rpMobileGrid): renders same 100 items as "thumb-card" for touch drag.
- * - Main 9 sections: renders into each [data-psom-key] thumb-grid, preserving per-grid slot count.
- * - Always renders BOTH desktop and mobile targets, so resize restores correctly.
- */
+/* =========================================================
+   socialnetwork-automap.v3.PROD2.js  (Distribution-standard)
+   - 목적: social.snapshot.json(또는 feed-social)에서 슬롯을 받아
+           HTML의 정확한 위치(9개 메인 Row + 우측패널)에 렌더
+   - 원칙: 1) 섹션/타겟 외 삽입 금지  2) 우측패널/메인 혼동 금지
+          3) 스냅샷 실데이터가 없으면 스냅샷 샘플 슬롯 그대로 렌더
+========================================================= */
+(function () {
+  "use strict";
 
-(function(){
-  'use strict';
-
-  const SNAPSHOT_CANDIDATES = [
-    '/data/social.snapshot.json',
-    '/data/snapshot/social.snapshot.json',
-    '/data/snapshots/social.snapshot.json',
-    '/social.snapshot.json'
+  // ---- Config (long-term stable) ----
+  const SNAPSHOT_URL_CANDIDATES = [
+    "/data/social.snapshot.json",
+    "/social.snapshot.json",
+    "/snapshots/social.snapshot.json",
+  ];
+  const FEED_FALLBACK_URLS = [
+    "/.netlify/functions/feed-social",
+    "/.netlify/functions/feed_social",
+    "/api/feed-social",
   ];
 
-  const FEED_CANDIDATES = [
-    '/.netlify/functions/feed-social',
-    '/api/feed-social'
+  const MAIN_KEY_ORDER = [
+    "social-youtube",
+    "social-instagram",
+    "social-tiktok",
+    "social-facebook",
+    "social-discord",
+    "social-community",
+    "social-threads",
+    "social-telegram",
+    "social-twitter",
   ];
 
-  const PAGE_KEY = 'social';
+  // Row targets are hard-wired in socialnetwork.html (rowGrid1..9)
+  const ROW_TARGET_IDS = [
+    "rowGrid1",
+    "rowGrid2",
+    "rowGrid3",
+    "rowGrid4",
+    "rowGrid5",
+    "rowGrid6",
+    "rowGrid7",
+    "rowGrid8",
+    "rowGrid9",
+  ];
 
-  const RIGHT_PANEL_KEY = 'socialnetwork';   // right panel / mobile 10th section uses this key
-  const RIGHT_PANEL_COUNT = 100;
+  const RIGHT_PANEL_KEY = "socialnetwork";
+  const RIGHT_PANEL_LIMIT = 100;
+  const MAIN_ROW_LIMIT = 50;
 
-  const FALLBACK_CARD = {
-    title: 'Loading...',
-    subtitle: '',
-    image: '',
-    url: '#'
-  };
+  // ---- Utils ----
+  function $(sel, root) { return (root || document).querySelector(sel); }
+  function $all(sel, root) { return Array.from((root || document).querySelectorAll(sel)); }
 
-  function $(sel, root=document){ return root.querySelector(sel); }
-  function $all(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
-
-  function safeText(v){ return (v==null?'':String(v)); }
-
-  function normalizeItem(raw){
-    if(!raw || typeof raw!=='object') return {...FALLBACK_CARD};
-    return {
-      title: safeText(raw.title || raw.name || raw.label || raw.platform || raw.brand || 'Loading...'),
-      subtitle: safeText(raw.subtitle || raw.desc || raw.description || raw.category || ''),
-      image: safeText(raw.image || raw.img || raw.thumbnail || raw.thumb || ''),
-      url: safeText(raw.url || raw.href || raw.link || raw.target || '#')
-    };
+  function safeStr(v, fallback = "") {
+    return (typeof v === "string" && v.trim()) ? v.trim() : fallback;
   }
 
-  async function fetchJson(url){
-    const r = await fetch(url, { cache: 'no-store' });
-    if(!r.ok) throw new Error('HTTP '+r.status+' @ '+url);
-    return await r.json();
+  function pickImage(it) {
+    return safeStr(it?.thumbnail) ||
+           safeStr(it?.thumb) ||
+           safeStr(it?.image) ||
+           safeStr(it?.img) ||
+           safeStr(it?.photo) ||
+           "";
   }
 
-  async function loadSnapshot(){
-    // 1) try snapshot files
-    for(const u of SNAPSHOT_CANDIDATES){
-      try{
-        const j = await fetchJson(u);
-        if(j && j.pages && j.pages[PAGE_KEY] && j.pages[PAGE_KEY].sections) return j;
-      }catch(_e){}
-    }
-    // 2) try feed (if it returns snapshot-like shape)
-    for(const u of FEED_CANDIDATES){
-      try{
-        const j = await fetchJson(u);
-        if(j && j.pages && j.pages[PAGE_KEY] && j.pages[PAGE_KEY].sections) return j;
-      }catch(_e){}
-    }
-    throw new Error('No social snapshot/feed found');
+  function pickTitle(it) {
+    return safeStr(it?.title) ||
+           safeStr(it?.name) ||
+           safeStr(it?.label) ||
+           safeStr(it?.platform) ||
+           safeStr(it?.provider) ||
+           "Loading...";
   }
 
-  function getSectionItems(snapshot, key){
-    const secs = snapshot?.pages?.[PAGE_KEY]?.sections;
-    const arr = secs?.[key];
-    if(Array.isArray(arr)) return arr.map(normalizeItem);
-    if(arr && Array.isArray(arr.items)) return arr.items.map(normalizeItem);
-    return [];
+  function pickUrl(it) {
+    return safeStr(it?.url) ||
+           safeStr(it?.link) ||
+           safeStr(it?.href) ||
+           "#";
   }
 
-  function buildThumbCard(item, label){
-    const a = document.createElement('a');
-    a.className = 'thumb-card';
-    a.href = item.url || '#';
-    a.target = '_blank';
-    a.rel = 'noopener';
+  function pickDesc(it, rowIndex) {
+    const d = safeStr(it?.subtitle) || safeStr(it?.desc) || safeStr(it?.meta) || "";
+    if (d) return d;
+    if (Number.isFinite(rowIndex)) return `Row ${rowIndex} · Snapshot`;
+    return "Snapshot";
+  }
 
-    const img = document.createElement('img');
-    img.alt = item.title || '';
-    if(item.image){
-      img.loading = 'lazy';
-      img.decoding = 'async';
-      img.src = item.image;
-    }else{
-      // keep empty image space consistent
-      img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+  function createSocialCard(it, rowIndex) {
+    // IMPORTANT: matches socialnetwork.html preview card structure (Open button included)
+    const a = document.createElement("a");
+    a.className = "card";
+    const url = pickUrl(it);
+    if (url && url !== "#") {
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+    } else {
+      a.href = "javascript:void(0)";
     }
 
-    const body = document.createElement('div');
-    body.className = 'thumb-body';
+    const img = pickImage(it);
+    const emoji = safeStr(it?.emoji) || "";
 
-    const t = document.createElement('div');
-    t.className = 'thumb-title';
-    t.textContent = item.title || 'Loading...';
+    const thumb = document.createElement("div");
+    thumb.className = "thumb";
+    if (img) {
+      thumb.style.backgroundImage = `url("${img}")`;
+    }
+    // keep emoji as fallback if provided
+    if (emoji) {
+      thumb.style.display = "flex";
+      thumb.style.alignItems = "center";
+      thumb.style.justifyContent = "center";
+      thumb.style.fontSize = "42px";
+      thumb.textContent = emoji;
+    }
 
-    const s = document.createElement('div');
-    s.className = 'thumb-sub';
-    s.textContent = item.subtitle || (label ? label : '');
+    const body = document.createElement("div");
+    body.className = "body";
 
-    body.appendChild(t);
-    body.appendChild(s);
-    a.appendChild(img);
+    const title = document.createElement("div");
+    title.className = "title";
+    title.textContent = pickTitle(it);
+
+    const desc = document.createElement("div");
+    desc.className = "desc";
+    desc.textContent = pickDesc(it, rowIndex);
+
+    const cta = document.createElement("span");
+    cta.className = "cta";
+    cta.textContent = "Open";
+
+    body.appendChild(title);
+    body.appendChild(desc);
+    body.appendChild(cta);
+
+    a.appendChild(thumb);
     a.appendChild(body);
     return a;
   }
 
-  function ensureAdBoxes(panelEl, count){
-    if(!panelEl) return;
-    const boxes = panelEl.querySelectorAll('.ad-box');
-    const need = count - boxes.length;
-    if(need <= 0) return;
-    for(let i=0;i<need;i++){
-      const b = document.createElement('div');
-      b.className = 'ad-box';
-      const inner = document.createElement('div');
-      inner.textContent = 'Loading...';
-      b.appendChild(inner);
-      panelEl.appendChild(b);
+  function renderIntoContainer(container, items, opts) {
+    if (!container) return;
+    const limit = opts?.limit ?? 50;
+    const rowIndex = opts?.rowIndex;
+
+    container.innerHTML = "";
+    const list = Array.isArray(items) ? items.slice(0, limit) : [];
+    for (const it of list) {
+      container.appendChild(createSocialCard(it, rowIndex));
     }
   }
 
-  function fillAdBoxes(panelEl, items, count){
-    if(!panelEl) return;
-    ensureAdBoxes(panelEl, count);
+  async function tryFetchJson(url, options) {
+    const res = await fetch(url, options);
+    if (!res.ok) throw new Error(`HTTP ${res.status} @ ${url}`);
+    return await res.json();
+  }
 
-    const boxes = Array.from(panelEl.querySelectorAll('.ad-box')).slice(0, count);
-    for(let i=0;i<count;i++){
-      const it = items[i] || FALLBACK_CARD;
-      const item = normalizeItem(it);
+  async function loadSnapshot() {
+    // 1) direct snapshot URL candidates
+    for (const url of SNAPSHOT_URL_CANDIDATES) {
+      try {
+        const j = await tryFetchJson(url, { cache: "no-store" });
+        if (j && j.pages && j.pages.social && j.pages.social.sections) return j;
+      } catch (_) {}
+    }
+    // 2) feed fallback
+    for (const url of FEED_FALLBACK_URLS) {
+      try {
+        const j = await tryFetchJson(url, { cache: "no-store" });
+        // feed-social can return {snapshot:...} or snapshot directly
+        const snap = j?.snapshot || j;
+        if (snap && snap.pages && snap.pages.social && snap.pages.social.sections) return snap;
+      } catch (_) {}
+    }
+    throw new Error("social snapshot not reachable (snapshot url + feed fallback 모두 실패)");
+  }
 
-      const box = boxes[i];
-      box.innerHTML = ''; // keep wrapper, replace content only
+  function getSections(snapshot) {
+    return snapshot?.pages?.social?.sections || {};
+  }
 
-      const a = document.createElement('a');
-      a.href = item.url || '#';
-      a.target = '_blank';
-      a.rel = 'noopener';
-      a.style.display = 'block';
-      a.style.width = '100%';
-      a.style.height = '100%';
-      a.style.textDecoration = 'none';
-      a.style.color = 'inherit';
+  function renderMainRows(sections) {
+    for (let i = 0; i < MAIN_KEY_ORDER.length; i++) {
+      const key = MAIN_KEY_ORDER[i];
+      const rowId = ROW_TARGET_IDS[i];
+      const rowEl = document.getElementById(rowId);
+      if (!rowEl) continue;
 
-      // If image exists, show a minimal top thumbnail strip without breaking fixed height:
-      if(item.image){
-        const img = document.createElement('img');
-        img.src = item.image;
-        img.alt = item.title || '';
-        img.loading = 'lazy';
-        img.decoding = 'async';
-        img.style.width = '100%';
-        img.style.height = '88px';
-        img.style.objectFit = 'cover';
-        img.style.borderRadius = '10px';
-        img.style.display = 'block';
-        a.appendChild(img);
-      }
-
-      const txt = document.createElement('div');
-      txt.textContent = item.title || 'Loading...';
-      txt.style.padding = item.image ? '8px 10px 0' : '0 10px';
-      txt.style.fontWeight = '700';
-      txt.style.fontSize = '13px';
-      txt.style.lineHeight = '1.25';
-      txt.style.wordBreak = 'break-word';
-
-      const sub = document.createElement('div');
-      sub.textContent = item.subtitle || '';
-      sub.style.padding = '4px 10px 0';
-      sub.style.fontSize = '12px';
-      sub.style.opacity = '0.85';
-      sub.style.lineHeight = '1.2';
-
-      a.appendChild(txt);
-      if(item.subtitle) a.appendChild(sub);
-
-      box.appendChild(a);
+      const items = sections[key];
+      // 메인 Row는 기존 preview를 완전히 교체 (운영형)
+      renderIntoContainer(rowEl, items, { limit: MAIN_ROW_LIMIT, rowIndex: i + 1 });
     }
   }
 
-  function renderThumbGrid(gridEl, items, label){
-    if(!gridEl) return;
-    // preserve slot count from existing HTML if present
-    const existing = gridEl.querySelectorAll('.thumb-card');
-    const desired = existing.length > 0 ? existing.length : 12;
+  function renderRightPanel(sections) {
+    const items = sections[RIGHT_PANEL_KEY] || [];
 
-    gridEl.innerHTML = '';
-    for(let i=0;i<desired;i++){
-      const item = items[i] ? normalizeItem(items[i]) : {...FALLBACK_CARD};
-      gridEl.appendChild(buildThumbCard(item, label));
+    // (A) Desktop right panel container
+    const rightAutoPanel = document.getElementById("rightAutoPanel");
+    if (rightAutoPanel) {
+      renderIntoContainer(rightAutoPanel, items, { limit: RIGHT_PANEL_LIMIT, rowIndex: null });
+    }
+
+    // (B) Mobile/Scroller right rail container (data-psom-key="socialnetwork")
+    const rightScroller = document.querySelector('.thumb-grid.thumb-scroller[data-psom-key="socialnetwork"]');
+    if (rightScroller) {
+      renderIntoContainer(rightScroller, items, { limit: RIGHT_PANEL_LIMIT, rowIndex: null });
     }
   }
 
-  function renderMobileRightGrid(gridEl, items){
-    if(!gridEl) return;
-    gridEl.innerHTML = '';
-    for(let i=0;i<RIGHT_PANEL_COUNT;i++){
-      const item = items[i] ? normalizeItem(items[i]) : {...FALLBACK_CARD};
-      gridEl.appendChild(buildThumbCard(item, ''));
+  async function boot() {
+    try {
+      const snapshot = await loadSnapshot();
+      const sections = getSections(snapshot);
+
+      // Guard: keys must exist; otherwise do nothing (avoid wrong injection)
+      // Only render if at least one main key exists OR right panel key exists
+      const hasAny =
+        MAIN_KEY_ORDER.some(k => Array.isArray(sections[k])) ||
+        Array.isArray(sections[RIGHT_PANEL_KEY]);
+
+      if (!hasAny) return;
+
+      renderMainRows(sections);
+      renderRightPanel(sections);
+
+    } catch (err) {
+      console.warn("[socialnetwork-automap] failed:", err);
     }
   }
 
-  let _snapshotCache = null;
-  let _renderTimer = null;
-
-  async function ensureSnapshot(){
-    if(_snapshotCache) return _snapshotCache;
-    _snapshotCache = await loadSnapshot();
-    return _snapshotCache;
+  // run after DOM + preview rows
+  if (document.readyState === "complete" || document.readyState === "interactive") {
+    setTimeout(boot, 0);
+  } else {
+    document.addEventListener("DOMContentLoaded", () => setTimeout(boot, 0));
   }
-
-  async function renderAll(){
-    const snap = await ensureSnapshot();
-
-    // 1) main 9 sections
-    const grids = $all('.thumb-grid[data-psom-key]');
-    grids.forEach(grid=>{
-      const key = grid.getAttribute('data-psom-key');
-      if(!key) return;
-      if(key === RIGHT_PANEL_KEY) return; // handled separately
-      const items = getSectionItems(snap, key);
-      renderThumbGrid(grid, items, '');
-    });
-
-    // 2) desktop right panel (popular items)
-    const rightItems = getSectionItems(snap, RIGHT_PANEL_KEY);
-    fillAdBoxes($('#rightAutoPanel'), rightItems, RIGHT_PANEL_COUNT);
-
-    // 3) mobile 10th section
-    renderMobileRightGrid($('#rpMobileGrid'), rightItems);
-  }
-
-  function debounceRender(){
-    clearTimeout(_renderTimer);
-    _renderTimer = setTimeout(()=>{ renderAll().catch(console.error); }, 160);
-  }
-
-  document.addEventListener('DOMContentLoaded', ()=>{
-    renderAll().catch(console.error);
-    window.addEventListener('resize', debounceRender, { passive:true });
-  });
-
 })();
