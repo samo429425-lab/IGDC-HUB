@@ -2367,25 +2367,40 @@ body .right{ display:none !important; }
 또한 국제 교류봉사단(IESF)의 소식들을 알리고 공유하며 
 다양한 NGO&nbsp;및 봉사단체들의 소식들을 공유하고 함께나누는 장입니다.</textarea>
 <!-- Inline controls row replacing box UI -->
-<!-- Inline controls, two-row layout -->
+<!-- Inline controls, simplified stable layout -->
 <div class="compose-wrap" id="composeControls">
-<div class="row row-top"><label class="field field-category"><span class="button tiny" id="labelCategory" style="writing-mode:horizontal-tb;">항목</span>
-<select id="postCategory"><option value="iesf">IESF</option>
-<option value="ngo">NGO</option>
-<option value="mission">선교</option>
-<option value="service">봉사</option>
-<option value="relief">구호</option>
-<option value="edu">교육</option>
-<option value="env">환경</option>
-<option value="etc">기타</option>
-</select>
-</label><button class="button small" id="btnAttach" type="button">첨부파일</button><div aria-label="첨부파일 미리보기" class="attach-preview" id="attachPreview"></div>
-<button class="button small" id="btnOpenComposer">글쓰기</button><div aria-label="제목 미리보기" class="title-preview" id="titlePreview"><span class="tp-text">제목 미입력</span></div>
-<button class="button small accent" id="btnSubmitPost">저장</button>
-<span id="attachName"></span>
-<button aria-label="첨부 제거 " class="button tiny" id="btnAttachClear" style="display:none;" type="button">지우기</button>
-<input id="postAttach" style="display:none;" type="file"/>
-</div>
+
+  <div class="row row-top">
+
+    <label class="field field-category">
+      <span class="button tiny" id="labelCategory">항목</span>
+      <select id="postCategory">
+        <option value="iesf">IESF</option>
+        <option value="ngo">NGO</option>
+        <option value="mission">선교</option>
+        <option value="service">봉사</option>
+        <option value="relief">구호</option>
+        <option value="edu">교육</option>
+        <option value="env">환경</option>
+        <option value="etc">기타</option>
+      </select>
+    </label>
+
+    <button class="button small" id="btnAttach" type="button">첨부파일</button>
+    <input id="postAttach" type="file" style="display:none;">
+    <span id="attachName"></span>
+    <button class="button tiny" id="btnAttachClear" type="button" style="display:none;">지우기</button>
+
+    <button class="button small" id="btnOpenComposer" type="button">글쓰기</button>
+
+    <div class="title-preview" id="titlePreview">
+      제목 미입력
+    </div>
+
+    <button class="button small accent" id="btnSubmitPost" type="button">저장</button>
+
+  </div>
+
 <div class="row row-bottom">
 <!-- File first -->
 <label class="field field-file">
