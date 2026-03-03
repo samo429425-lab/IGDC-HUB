@@ -2318,6 +2318,22 @@ body .right{ display:none !important; }
 </style>
 
 <link rel="stylesheet" href="/assets/css/thumbs.standard.css">
+
+<style id="donation-stability-patch">
+/* === DONATION STABILITY PATCH (desktop only) ===
+   목적: (1) 우측 패널~브라우저 우측벽 '큰 여백' 제거
+        (2) 메인-좌측/우측 사이 갭 약 10px 확보
+   해법: 컨테이너 gap 고정 + main flex 확장 + 내부 박스 max-width만 제한
+*/
+@media (min-width:1025px){
+  .container{ width:100% !important; gap:10px !important; }
+  .main{ flex:1 1 auto !important; min-width:0 !important; padding:20px 0 50px !important; }
+  .main > *{ max-width:1200px !important; margin-left:auto !important; margin-right:auto !important; }
+  .feed-wrapper{ max-width:1200px !important; }
+  .right{ flex:0 0 340px !important; width:340px !important; margin:0 !important; }
+}
+</style>
+
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -2504,6 +2520,7 @@ body .right{ display:none !important; }
 
   const modal = $("#composerModal");
   const btnOpen = $("#btnOpenComposer");
+  const titlePreview = $("#titlePreview");
   const btnSubmit = $("#btnSubmitPost");
   const btnSave = $("#btnSave");
   const btnCancel = $("#btnCancel");
@@ -2524,6 +2541,8 @@ body .right{ display:none !important; }
   function closeModal(){ modal.classList.add("hidden"); }
 
   btnOpen && btnOpen.addEventListener("click", openModal);
+  // allow clicking the title preview bar to open the composer
+  titlePreview && titlePreview.addEventListener("click", openModal);
   btnCancel && btnCancel.addEventListener("click", closeModal);
   // trigger hidden inputs and show names
   btnPickFile && btnPickFile.addEventListener("click", ()=> fileAttach && fileAttach.click());
@@ -2891,7 +2910,7 @@ body .right{ display:none !important; }
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || ''제목 미입력';';
+    tpText.textContent = t || '제목 미입력';
   }
 
   // live typing updates preview
