@@ -141,13 +141,60 @@ footer {
   align-items:flex-start;
 }
 </style>
+<style id="adpanel-independent-scroll">.container {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 24px !important;
+}
 
 
+.ad-panel 
 
+.ad-panel .ad-box > a {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  line-height: 150px !important;
+  border-radius: 8px !important;
+  text-decoration: none !important;
+  color: inherit !important;
+}
+
+/* Auto-hide after 10: 11th partially visible */
+.ad-panel .ad-box:nth-child(n+11) {
+  opacity: 0.96;
+}
+.ad-panel .ad-box:nth-child(11) {
+  margin-bottom: auto;
+}</style>
+
+<style id="adpanel-independent-scroll-v2">html, body { overflow-x: hidden !important; }
+.container {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  gap: 24px !important;
+  padding-right: 16px !important; /* separation from right window edge */
+}
+
+.ad-panel 
+.ad-panel .ad-box > a {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  line-height: 150px !important;
+  border-radius: 8px !important;
+  text-decoration: none !important;
+  color: inherit !important;
+}
+/* Visual cue: items beyond the fold */
+.ad-panel .ad-box:nth-child(n+11){ opacity: 0.98; }</style>
 
 <style id="adpanel-fit-cards-hide-scroll">/* Keep panel inside window and separate from main */
 html, body { overflow-x: hidden !important; }
-@media (max-width:1024px){
 .container {
   display: flex !important;
   flex-direction: row !important;
@@ -155,14 +202,13 @@ html, body { overflow-x: hidden !important; }
   gap: 24px !important;
   padding-right: 16px !important;
 }
-}
-
 
 /* AD panel as independent scroller */
 
 
 
 /* Cards fit exactly inside panel content box (250px) regardless of scrollbar */
+.ad-panel 
 .ad-panel .ad-box > a {
   display: block !important;
   width: 100% !important;
@@ -203,14 +249,11 @@ html, body { overflow-x: hidden !important; }
   --ad-slide: 0px;
   --sidebar-slide: 0px;
 }
-@media (max-width:1024px){
 .container{
   display:flex !important;
   align-items:flex-start !important;
   gap:24px !important;
-}
-}
-</style>
+}</style>
 
 <script id="responsive-main-first-js">
 (function(){
@@ -271,10 +314,7 @@ function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 </script>
 
 <style id="main-min-guard-30">html, body { overflow-x: hidden !important; }
-@media (max-width:1024px){
 .container { display: flex !important; align-items: flex-start !important; gap: 24px !important; }
-}
-
 .main-content { min-width: var(--main-min-30, 320px) !important; flex: 1 1 auto !important; }
 
  /* keep left fixed (no shrinking) */</style>
@@ -411,13 +451,11 @@ function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
 /* Desktop: lock to stable fixed-height cards (prevents collapse into thin bars) */
 @media (min-width:1025px){
-  /* Desktop: keep same 4:5 thumbnail ratio as mobile (prevents rectangle distortion) */
   .ad-box{
-    aspect-ratio: 4 / 5 !important;
-    width: 100% !important;
-    height: auto !important;
-    min-height: 0 !important;
-    max-height: none !important;
+    width:100% !important;
+    height:206px !important;
+    min-height:206px !important;
+    max-height:206px !important;
     display:flex !important;
     align-items:center !important;
     justify-content:center !important;
@@ -698,9 +736,88 @@ html, body {
   }
 </style>
 
+<style id="tour-mobile-rail-style">
+@media (max-width:1024px){
+  #tour-mobile-rail{ 
+    display:block !important;
+    background:#f7f9fb; border:1px solid #d6dce0; border-radius:10px;
+    padding:10px 10px 14px; box-shadow:0 1px 4px rgba(0,0,0,.06);
+  }
+  #tour-mobile-rail .list{
+    display:flex; gap:10px; overflow-x:auto; padding:6px 4px;
+    scroll-snap-type:x mandatory;
+  }
+  #tour-mobile-rail .list::-webkit-scrollbar{ display:none; width:0; height:0; }
+  #tour-mobile-rail .list{ scrollbar-width:none; -ms-overflow-style:none; }
+}
+@media (max-width:1024px) and (orientation:portrait){
+  #tour-mobile-rail .list > .card,
+  #tour-mobile-rail .list > .ad-box{
+    flex: 0 0 100% !important; max-width:100% !important;
+    height:auto !important; min-height:0 !important; max-height:none !important;
+  }
+  #tour-mobile-rail .list img,
+  #tour-mobile-rail .list video,
+  #tour-mobile-rail .list iframe{
+    width:100% !important; height:100% !important; object-fit:cover !important;
+  }
+}
+@media (max-width:1024px) and (orientation:landscape){
+  #tour-mobile-rail .list > .card,
+  #tour-mobile-rail .list > .ad-box{ flex:0 0 min(300px,80%); max-width:min(300px,80%); }
+}
+</style>
 
-
-
+<script id="tour-mobile-rail-js">
+(function(){
+  function setAspect(card){
+    var media = card.querySelector('img, video');
+    function apply(w,h){
+      if(w>0 && h>0){ card.style.aspectRatio = w + " / " + h; }
+      else{
+        var ifr = card.querySelector('iframe');
+        var iw = ifr && parseInt(ifr.getAttribute('width')||0);
+        var ih = ifr && parseInt(ifr.getAttribute('height')||0);
+        card.style.aspectRatio = (iw>0 && ih>0) ? (iw+' / '+ih) : '16 / 9';
+      }
+    }
+    if(media){
+      if(media.tagName==='IMG'){
+        if(media.naturalWidth && media.naturalHeight) apply(media.naturalWidth, media.naturalHeight);
+        else media.addEventListener('load', function(){ apply(media.naturalWidth, media.naturalHeight); }, {once:true});
+      }else if(media.tagName==='VIDEO'){
+        if(media.videoWidth && media.videoHeight) apply(media.videoWidth, media.videoHeight);
+        else media.addEventListener('loadedmetadata', function(){ apply(media.videoWidth, media.videoHeight); }, {once:true});
+      }
+    }else{ apply(0,0); }
+  }
+  function build(){
+    var rail = document.getElementById('tour-mobile-rail');
+    var list = rail && rail.querySelector('.list');
+    var src = document.querySelector('.ad-panel');
+    if(!rail || !list || !src) return;
+    list.innerHTML = "";
+    var boxes = src.querySelectorAll('.ad-box');
+    boxes.forEach(function(box){
+      var clone = box.cloneNode(true);
+      clone.classList.add('card');
+      clone.style.height='auto'; clone.style.minHeight='0'; clone.style.maxHeight='none';
+      list.appendChild(clone);
+      setAspect(clone);
+    });
+  }
+  function toggle(){
+    var on = window.matchMedia('(max-width:1024px)').matches;
+    var rail = document.getElementById('tour-mobile-rail');
+    if(!rail) return;
+    rail.style.display = on ? 'block' : 'none';
+    if(on) build();
+  }
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', toggle, {once:true}); }
+  else { toggle(); }
+  window.addEventListener('resize', toggle);
+})();
+</script>
 
 <style id="bc-mobile-80-gap3-tour-20251113">
 @media (max-width: 900px){
@@ -2030,7 +2147,147 @@ window.addEventListener("message",function(ev){
 })(window, document);
 </script>
 
+<script id="rightpanel-dummy-engine-v2">
+(function(){
 
+  /* ===============================
+     설정
+  =============================== */
+
+  const PANEL_ID   = 'rightAutoPanel';
+  const DUMMY_CNT  = 100;
+
+
+  /* ===============================
+     패널 찾기
+  =============================== */
+
+  const panel = document.getElementById(PANEL_ID);
+
+  if(!panel){
+    console.warn('[RightPanel] panel not found');
+    return;
+  }
+
+
+  /* ===============================
+     더미 생성
+  =============================== */
+
+  function buildDummy(){
+
+    panel.innerHTML = '';
+
+    for(let i=1;i<=DUMMY_CNT;i++){
+
+      const card = document.createElement('div');
+
+      card.className = 'ad-box dummy-card';
+      card.dataset.dummy = '1';
+
+      card.innerHTML = `
+        <div class="dummy-thumb"
+             style="
+               width:100%;
+               height:100%;
+               border-radius:12px;
+               background:linear-gradient(135deg,#eef2f7,#dbe4f0);
+               display:flex;
+               flex-direction:column;
+               justify-content:center;
+               align-items:center;
+               box-shadow:0 2px 6px rgba(0,0,0,.08);
+               border:1px solid rgba(0,0,0,.05);
+               font-family:system-ui;
+             ">
+
+          <div style="
+               font-size:26px;
+               font-weight:700;
+               color:#4a6fa5;
+               line-height:1;
+               margin-bottom:4px;
+             ">
+            ${i}
+          </div>
+
+          <div style="
+               font-size:11px;
+               color:#7a8da8;
+               letter-spacing:.5px;
+             ">
+            Loading
+          </div>
+
+        </div>
+      `;
+
+      panel.appendChild(card);
+    }
+  }
+
+
+  /* ===============================
+     더미 제거
+  =============================== */
+
+  function clearDummy(){
+
+    panel
+      .querySelectorAll('[data-dummy="1"]')
+      .forEach(el=>el.remove());
+  }
+
+
+  /* ===============================
+     실데이터 렌더
+  =============================== */
+
+  function renderReal(items){
+
+    if(!items || !items.length) return;
+
+    clearDummy();
+
+    items.forEach(item=>{
+
+      const card = document.createElement('div');
+
+      card.className = 'ad-box';
+
+      card.innerHTML = `
+        <a href="${item.link||'#'}"
+           data-product-id="${item.id||''}">
+          <img src="${item.thumb||''}"
+               loading="lazy"
+               alt="">
+        </a>
+      `;
+
+      panel.appendChild(card);
+    });
+  }
+
+
+  /* ===============================
+     초기 실행
+  =============================== */
+
+  buildDummy();
+
+
+  /* ===============================
+     외부 연동 훅
+  =============================== */
+
+  window.__IGDC_RIGHTPANEL_RENDER = function(items){
+
+    renderReal(items);
+
+  };
+
+})();
+</script>
 
 <script defer src="/assets/js/placeholder-sweeper.js"></script>
 <script defer src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
