@@ -5,7 +5,7 @@
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
 <meta charset="utf-8"/>
-<title>투어</title>
+<title>í¬ì´</title>
 
 <style>
 body {
@@ -74,7 +74,7 @@ body {
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
-} /* ✅ 이 닫는 괄호가 꼭 필요 */
+} /* â ì´ ë«ë ê´í¸ê° ê¼­ íì */
 
 /* footer */
 footer {
@@ -90,7 +90,7 @@ footer {
 /* === Right AD panel card base (stable) === */
 
 .ad-panel .ad-box{
-
+  height:165px;
   border-radius:8px;
   overflow:hidden;
   background:#fff;
@@ -408,82 +408,45 @@ function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
   .bc-tile.orange:hover{background:#fb923c}
   
   .ad-panel{ position:sticky; top:20px; background:#f7f9fb; border:1px solid #d6dce0; border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:12px; max-height:80vh; overflow:auto; box-shadow:0 1px 4px rgba(0,0,0,.08) }
-  .ad-box{
-    background:#fff;
-    border:1px solid #d7dce1;
-    border-radius:8px;
-}
+  .ad-box{ background:#fff; border:1px solid #d7dce1; border-radius:8px; aspect-ratio:1 / 1; height:auto; display:flex; align-items:center; justify-content:center; font-weight:600; color:#444 }
 
 /* --- Strong rules for right panel thumbnail boxes --- */
 .ad-panel { grid-column: 3; }
-
-/* Mobile/tablet: keep 4:5 ratio (matches NetworkHub) */
-@media (max-width:1024px){
-  .ad-box{
-    aspect-ratio: 4 / 5 !important;
-    width: 100% !important;
-    height: auto !important;
-    min-height: 0 !important;
-    max-height: none !important;
-    display:flex !important;
-    align-items:center !important;
-    justify-content:center !important;
-    overflow:hidden !important;
-  }
-  .ad-box > a{
-    display:flex !important;
-    align-items:center !important;
-    justify-content:center !important;
-    width:100% !important;
-    height:100% !important;
-    line-height:normal !important;
-    text-align:center !important;
-    padding:0 !important;
-  }
-  .ad-box img, .ad-box iframe, .ad-box video, .ad-box picture, .ad-box canvas{
-    width:100% !important;
-    height:100% !important;
-    object-fit:cover !important;
-    display:block !important;
-    border:0 !important;
-  }
+.ad-box{
+  aspect-ratio: 1 / 1 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  overflow:hidden !important;
+}
+.ad-box > a{
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  width:100% !important;
+  height:100% !important;
+  line-height:normal !important;
+  text-align:center !important;
+  padding:0 !important;
+}
+.ad-box img, .ad-box iframe, .ad-box video, .ad-box picture, .ad-box canvas{
+  width:100% !important;
+  height:100% !important;
+  object-fit:cover !important;
+  display:block !important;
+  border:0 !important;
 }
 
-/* Desktop: lock to stable fixed-height cards (prevents collapse into thin bars) */
-@media (min-width:1025px){
-  .ad-box{
-    width:100% !important;
-    height:206px !important;
-    min-height:206px !important;
-    max-height:206px !important;
-    display:flex !important;
-    align-items:center !important;
-    justify-content:center !important;
-    overflow:hidden !important;
-  }
-  .ad-box > a{
-    display:flex !important;
-    align-items:center !important;
-    justify-content:center !important;
-    width:100% !important;
-    height:100% !important;
-    line-height:normal !important;
-    text-align:center !important;
-    padding:0 !important;
-  }
-  .ad-box img, .ad-box iframe, .ad-box video, .ad-box picture, .ad-box canvas{
-    width:100% !important;
-    height:100% !important;
-    object-fit:cover !important;
-    display:block !important;
-    border:0 !important;
-  }
-}
+
+
 /* Right panel: 8 full cards + 20% of 9th; scrollbar hidden; wheel/touch/drag work */
 .ad-panel::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }</style><style id="adpanel-visible-8-kr">/* Right panel: 8 full cards + 20% of 9th; scrollbar hidden; wheel/touch/drag work */
 .ad-panel {
   gap: 7px !important;
-  max-height: 1730px !important;
+  max-height: 2076px !important;
   overflow-y: auto !important;
   -ms-overflow-style: none !important;  /* IE/Edge */
   scrollbar-width: none !important;     /* Firefox */
@@ -505,7 +468,7 @@ html, body {
       background-color: #e0e0e0;
       display: flex;
       flex-direction: column;
-      padding-top: 30px; /* 중간쯤 위치 조정 */
+      padding-top: 30px; /* ì¤ê°ì¯¤ ìì¹ ì¡°ì  */
     
       min-width: clamp(180px, 30vw, 260px);
       flex: 0 0 auto}
@@ -552,7 +515,7 @@ html, body {
     .sidebar,
     .main-content,
     .ad-panel{
-      margin-top:16px !important;   /* 투어 페이지와 동일한 상단 여백 */
+      margin-top:16px !important;   /* í¬ì´ íì´ì§ì ëì¼í ìë¨ ì¬ë°± */
       border-top-left-radius:10px !important;
       border-top-right-radius:10px !important;
       overflow:hidden;}
@@ -621,7 +584,7 @@ html, body {
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "아직 등록된 QnA가 없습니다";
+  content: "ìì§ ë±ë¡ë QnAê° ììµëë¤";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -647,7 +610,7 @@ html, body {
   .bc-tile:hover{background:#86efac}
   .bc-tile.orange{background:#f97316;color:#fff}
   .bc-tile.orange:hover{background:#fb923c}
-  .section-blockchain{margin:12px 0 18px; text-align:left;}/* === BlockChain 버튼 테두리 (시각 약한 강조용) === */
+  .section-blockchain{margin:12px 0 18px; text-align:left;}/* === BlockChain ë²í¼ íëë¦¬ (ìê° ì½í ê°ì¡°ì©) === */
 .bc-tile, .platform-tile, .button{
   border: 1px solid rgba(0,0,0,0.15);
   box-shadow: 0 0 2px rgba(0,0,0,0.05);
@@ -754,7 +717,9 @@ html, body {
   #tour-mobile-rail .list > .card,
   #tour-mobile-rail .list > .ad-box{
     flex: 0 0 100% !important; max-width:100% !important;
+    aspect-ratio: 1 / 1 !important;
     height:auto !important; min-height:0 !important; max-height:none !important;
+    overflow:hidden !important;
   }
   #tour-mobile-rail .list img,
   #tour-mobile-rail .list video,
@@ -767,6 +732,45 @@ html, body {
   #tour-mobile-rail .list > .ad-box{ flex:0 0 min(300px,80%); max-width:min(300px,80%); }
 }
 </style>
+
+<script id="tour-mobile-rail-js">
+(function(){
+  function setAspect(card){
+    // 🔒 unify: keep 1:1 everywhere (no per-item aspect)
+    card.style.aspectRatio = ' 1 / 1 ';
+  }
+  function build(){
+    var rail = document.getElementById('tour-mobile-rail');
+    var list = rail && rail.querySelector('.list');
+    var src = document.querySelector('.ad-panel');
+    if(!rail || !list || !src) return;
+    list.innerHTML = "";
+    var boxes = src.querySelectorAll('.ad-box');
+    boxes.forEach(function(box){
+      var clone = box.cloneNode(true);
+      clone.classList.add('card');
+      clone.style.height='auto'; clone.style.minHeight='0'; clone.style.maxHeight='none';
+      list.appendChild(clone);
+      setAspect(clone);
+    });
+  }
+  window.buildTourMobileRail = build;
+
+  function toggle(){
+    var on = window.matchMedia('(max-width:1024px)').matches;
+    var rail = document.getElementById('tour-mobile-rail');
+    if(!rail) return;
+    rail.style.display = on ? 'block' : 'none';
+    if(on) build();
+  }
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', toggle, {once:true}); }
+  else { toggle(); }
+  window.addEventListener('resize', toggle);
+  document.addEventListener('tour:automap:done', function(){
+    if (window.matchMedia('(max-width:1024px)').matches) build();
+  });
+})();
+</script>
 
 <style id="bc-mobile-80-gap3-tour-20251113">
 @media (max-width: 900px){
@@ -841,70 +845,20 @@ html, body {
 </style>
 
 <link rel="stylesheet" href="/assets/css/thumbs.standard.css">
-
-<style id="tour-desktop-fill-and-scroll-fix">
-/* Desktop: main area must expand to fill space between sidebar and right panel */
-@media (min-width:1025px){
-  .container{
-    display:grid !important;
-    grid-template-columns:210px 1fr 274px !important;
-    gap:24px !important;
-    align-items:start !important;
-    padding:28px 24px !important;
-    max-width:none !important;
-  }
-  .main-content{
-    max-width:none !important;
-    width:100% !important;
-    margin:0 !important;
-    justify-self:stretch !important;
-  }
-  .right-rail{ width:274px !important; }
-  .ad-panel{
-    max-height:80vh !important;
-    overflow-y:auto !important;
-    -webkit-overflow-scrolling:touch;
-    overscroll-behavior:contain;
-    touch-action:pan-y;
-  }
-}
-</style>
-
-
-<style id="tour-rightpanel-unify-20260303">
-/* Right Panel Thumbs: unify across desktop/mobile (no aspect-ratio drift, no thin bars) */
-@media (max-width:1024px){
-  #rightAutoPanel .ad-box{
-    aspect-ratio: auto !important;
-    height:206px !important;
-    min-height:206px !important;
-    max-height:206px !important;
-  }
-}
-@media (min-width:1025px){
-  #rightAutoPanel .ad-box{
-    aspect-ratio: auto !important;
-    height:206px !important;
-    min-height:206px !important;
-    max-height:206px !important;
-  }
-}
-</style>
-
 </head>
 
 <body>
 <div id="hero"><div class="hero-title"></div></div>
 <div class="container">
 <div class="sidebar">
-<a href="home.html">🏠 홈</a>
-<a href="networkhub.html">🛒 마켓 허브</a>
-<a href="distributionhub.html">🏭 유통허브</a>
-<a href="socialnetwork.html">📢 쇼셜 네트워크</a>
-<a href="mediahub.html">🎬 미디어 허브</a>
-<a href="tour.html">🧳 여행·관광·숙박</a>
-<a href="literature_academic">📚 문학 학술교류</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A 문의</a></div>
+<a href="home.html">ð  í</a>
+<a href="networkhub.html">ð ë§ì¼ íë¸</a>
+<a href="distributionhub.html">ð­ ì íµíë¸</a>
+<a href="socialnetwork.html">ð¢ ì¼ì ë¤í¸ìí¬</a>
+<a href="mediahub.html">ð¬ ë¯¸ëì´ íë¸</a>
+<a href="tour.html">ð§³ ì¬íÂ·ê´ê´Â·ìë°</a>
+<a href="literature_academic">ð ë¬¸í íì êµë¥</a>
+<a href="javascript:void(0)" id="qnaOpenBtn">ð¬ Q&amp;A ë¬¸ì</a></div>
 <div class="main-content">
 <section class="section-blockchain">
 <a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
@@ -913,8 +867,8 @@ html, body {
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
 </section>
 <div style="background-color:#dfefff; padding:24px; border-radius:10px; box-shadow:1px 1px 8px rgba(0,0,0,0.05); margin-bottom:24px; max-width: 980px; margin-left:auto; margin-right:auto;">
-<h2 style="font-size:1.9em; margin:0 0 8px 0; color:#004080; text-align:center;">🌍 세계여행 플랫폼 HUB</h2>
-<p style="margin:0; color:#335; font-size:0.95rem; text-align:center;">지역별 컨텐츠 박스 안에 링크 버튼을 배치했습니다.</p>
+<h2 style="font-size:1.9em; margin:0 0 8px 0; color:#004080; text-align:center;">ð ì¸ê³ì¬í íë«í¼ HUB</h2>
+<p style="margin:0; color:#335; font-size:0.95rem; text-align:center;">ì§ì­ë³ ì»¨íì¸  ë°ì¤ ìì ë§í¬ ë²í¼ì ë°°ì¹íìµëë¤.</p>
 </div>
 <style id="region-cards-grid">.region-card { border:1px solid #c8d6e5; background:linear-gradient(180deg, #f9fbff, #eef5ff); border-radius:14px; padding:18px 20px; margin:16px 0 22px 0; box-shadow:0 2px 6px rgba(0,0,0,0.08); }
     .region-title { font-size:1.1rem; font-weight:800; color:#003366; margin:4px 0 14px 0; text-align:center; }
@@ -922,30 +876,30 @@ html, body {
     .btn-grid .link-btn { flex:0 0 150px; height:40px; line-height:40px; text-align:center; border:1px solid #e3a5c7; border-radius:8px; background:#ffe6f0; color:#7a004c; text-decoration:none; font-weight:600; letter-spacing:0.2px; box-shadow:0 1px 3px rgba(0,0,0,0.08); font-size:0.85rem; transition: all 0.25s ease; }
     .btn-grid .link-btn:hover { background:#e75480; color:#ffffff; border-color:#cc2d63; box-shadow:0 2px 6px rgba(0,0,0,0.18); }</style>
 <div class="region-card">
-<div class="region-title">아시아</div>
-<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaTour <small>(하나투어)</small></a>
-<a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour<small>(모두투어)</small></a>
-<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon Tour <small>(노랑풍선)</small></a>
-<a class="link-btn" href="https://www.trip.com" target="_blank">Trip.com <small>(携程)</small></a>
-<a class="link-btn" href="https://www.ctrip.com" target="_blank">Ctrip <small>(携程)</small></a>
-<a class="link-btn" href="https://www.qunar.com" target="_blank">Qunar <small>(去哪儿网)</small></a>
-<a class="link-btn" href="https://www.fliggy.com" target="_blank">Fliggy <small>(飞猪)</small></a>
-<a class="link-btn" href="https://www.his.co.jp" target="_blank">HIS Japan <small>(エイチ・アイ・エス)</small></a>
-<a class="link-btn" href="https://www.jtb.co.jp" target="_blank">JTB <small>(ジェイティービー)</small></a>
-<a class="link-btn" href="https://www.knt.co.jp" target="_blank">Kinki Nippon Tourist <small>(近畿日本ツーリスト)</small></a>
+<div class="region-title">ììì</div>
+<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaTour <small>(íëí¬ì´)</small></a>
+<a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour<small>(ëª¨ëí¬ì´)</small></a>
+<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon Tour <small>(ë¸ëíì )</small></a>
+<a class="link-btn" href="https://www.trip.com" target="_blank">Trip.com <small>(æºç¨)</small></a>
+<a class="link-btn" href="https://www.ctrip.com" target="_blank">Ctrip <small>(æºç¨)</small></a>
+<a class="link-btn" href="https://www.qunar.com" target="_blank">Qunar <small>(å»åªå¿ç½)</small></a>
+<a class="link-btn" href="https://www.fliggy.com" target="_blank">Fliggy <small>(é£çª)</small></a>
+<a class="link-btn" href="https://www.his.co.jp" target="_blank">HIS Japan <small>(ã¨ã¤ãã»ã¢ã¤ã»ã¨ã¹)</small></a>
+<a class="link-btn" href="https://www.jtb.co.jp" target="_blank">JTB <small>(ã¸ã§ã¤ãã£ã¼ãã¼)</small></a>
+<a class="link-btn" href="https://www.knt.co.jp" target="_blank">Kinki Nippon Tourist <small>(è¿ç¿æ¥æ¬ãã¼ãªã¹ã)</small></a>
 <a class="link-btn" href="https://www.makemytrip.com" target="_blank">MakeMyTrip</a>
 <a class="link-btn" href="https://www.yatra.com" target="_blank">Yatra</a>
 <a class="link-btn" href="https://www.traveloka.com" target="_blank">Traveloka</a>
 <a class="link-btn" href="https://www.agoda.com" target="_blank">Agoda</a>
 <a class="link-btn" href="https://www.klook.com" target="_blank">Klook</a>
-<a class="link-btn" href="https://www.his-j.com" target="_blank">HIS Japan <small>(エイチ・アイ・エス)</small></a>
+<a class="link-btn" href="https://www.his-j.com" target="_blank">HIS Japan <small>(ã¨ã¤ãã»ã¢ã¤ã»ã¨ã¹)</small></a>
 <a class="link-btn" href="https://www.cleartrip.com" target="_blank">Cleartrip</a>
 <a class="link-btn" href="https://www.virtualtrips.io" target="_blank">Virtual Trips</a>
 <a class="link-btn" href="https://www.kkday.com" target="_blank">KKDay</a>
 <a class="link-btn" href="https://www.vietnamairlines.com" target="_blank">Vietnam Airlines</a></div>
 </div>
 <div class="region-card">
-<div class="region-title">유럽</div>
+<div class="region-title">ì ë½</div>
 <div class="btn-grid"><a class="link-btn" href="https://www.booking.com" target="_blank">Booking.com</a>
 <a class="link-btn" href="https://www.lastminute.com" target="_blank">lastminute.com</a>
 <a class="link-btn" href="https://www.tui.com" target="_blank">TUI</a>
@@ -961,7 +915,7 @@ html, body {
 <a class="link-btn" href="https://www.getyourguide.com" target="_blank">GetYourGuide</a></div>
 </div>
 <div class="region-card">
-<div class="region-title">아메리카</div>
+<div class="region-title">ìë©ë¦¬ì¹´</div>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.expedia.com" target="_blank">Expedia</a>
 <a class="link-btn" href="https://www.tripadvisor.com" target="_blank">TripAdvisor</a>
@@ -973,10 +927,10 @@ html, body {
 </div>
 </div>
 <div class="region-card">
-<div class="region-title">중동 · 아프리카</div>
+<div class="region-title">ì¤ë Â· ìíë¦¬ì¹´</div>
 <div class="btn-grid">
-<a class="link-btn" href="https://www.almosafer.com" target="_blank">Almosafer <small>(المسافر)</small></a>
-<a class="link-btn" href="https://www.rehlat.com" target="_blank">Rehlat <small>(رحلات)</small></a>
+<a class="link-btn" href="https://www.almosafer.com" target="_blank">Almosafer <small>(Ø§ÙÙØ³Ø§ÙØ±)</small></a>
+<a class="link-btn" href="https://www.rehlat.com" target="_blank">Rehlat <small>(Ø±Ø­ÙØ§Øª)</small></a>
 <a class="link-btn" href="https://www.flynas.com" target="_blank">Flynas</a>
 <a class="link-btn" href="https://www.travelstart.com" target="_blank">Travelstart</a>
 <a class="link-btn" href="https://www.safaribookings.com" target="_blank">SafariBookings</a>
@@ -984,7 +938,7 @@ html, body {
 </div>
 </div>
 <div class="region-card">
-<div class="region-title">오세아니아 · 기타 유럽</div>
+<div class="region-title">ì¤ì¸ìëì Â· ê¸°í ì ë½</div>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.webjet.com.au" target="_blank">Webjet</a>
 <a class="link-btn" href="https://www.flightcentre.com.au" target="_blank">Flight Centre</a>
@@ -997,7 +951,7 @@ html, body {
 </div>
 <div class="right-rail">
 <h3 class="ad-headline" style="margin:0 0 6px; text-align:center; line-height:1; height:1em; white-space:nowrap;">
-  💎 인기 브렌드 💎
+  ð ì¸ê¸° ë¸ë ë ð
 </h3>
 <div class="ad-panel" id="rightAutoPanel"></div>
 <div class="thumb-grid" data-psom-key="tour"></div>
@@ -1008,17 +962,17 @@ html, body {
 <!-- Mobile rail for TOUR: directly above the footer (NOT inside) -->
 <section id="tour-mobile-rail" style="display:none; margin-top:14px;">
   <div class="wrap">
-    <h3 class="title" style="margin:8px 0 6px; text-align:left;">💎 인기 브랜드 💎</h3>
-    <div class="list" aria-label="모바일 추천 썸네일"></div>
+    <h3 class="title" style="margin:8px 0 6px; text-align:left;">ð ì¸ê¸° ë¸ëë ð</h3>
+    <div class="list" aria-label="ëª¨ë°ì¼ ì¶ì² ì¸ë¤ì¼"></div>
   </div>
 </section>
 
 <footer>
-    IGDC Global Hub © 2025 | International General Distribution Company<br/>
-    경기도 평택시 고덕갈평3로 50, <br/>
+    IGDC Global Hub Â© 2025 | International General Distribution Company<br/>
+    ê²½ê¸°ë ííì ê³ ëê°í3ë¡ 50, <br/>
 </footer>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<!-- @SAFE-PATCH: hide '문학 학술교류' in sidebar -->
+<!-- @SAFE-PATCH: hide 'ë¬¸í íì êµë¥' in sidebar -->
 <script>
 (function(){
   function hideLit(){
@@ -1028,7 +982,7 @@ html, body {
         var a=links[i];
         var txt=(a.textContent||'').trim();
         var href=(a.getAttribute('href')||'').trim();
-        if(href.includes('literature_academic') || (txt.includes('문학') && txt.includes('학술'))){
+        if(href.includes('literature_academic') || (txt.includes('ë¬¸í') && txt.includes('íì '))){
           a.setAttribute('aria-hidden','true');
           a.setAttribute('tabindex','-1');
           a.classList.add('is-hidden-lit');
@@ -1047,20 +1001,37 @@ html, body {
 <script>
 (function(){
   try{
-    function notify(top){
-      parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*');
-    }
-    function atTop(){
-      var se=document.scrollingElement||document.documentElement||document.body;
+    const adPanel = document.querySelector('.ad-panel');
+    let lastPanelWheelAt = 0;
+    function notify(top){ parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*'); }
+    function pageAtTop(){
+      const se=document.scrollingElement||document.documentElement||document.body;
       return (window.scrollY||window.pageYOffset||0)<=0 && (se?(se.scrollTop||0)<=0:true);
     }
-    function onAnyScroll(){ notify(atTop()); }
-    window.addEventListener('scroll', onAnyScroll, {passive:true});
-    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
-    document.addEventListener('wheel', e=>{ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
-    document.addEventListener('touchmove', ()=>notify(false), {passive:true,capture:true});
-    setTimeout(()=>notify(atTop()),50);
-  }catch(_){}
+    function fromAdPanel(e){
+      const t = e && (e.target || e.srcElement);
+      return !!(t && adPanel && (t===adPanel || (t.closest && t.closest('.ad-panel'))));
+    }
+    function syncTop(){
+      const now = Date.now();
+      if (now - lastPanelWheelAt < 250) { notify(false); return; }
+      notify(pageAtTop());
+    }
+    window.addEventListener('scroll', syncTop, {passive:true});
+    document.addEventListener('scroll', syncTop, {passive:true, capture:true});
+    document.addEventListener('wheel', function(e){
+      if (fromAdPanel(e)) { lastPanelWheelAt = Date.now(); notify(false); return; }
+      if ((e.deltaY||0)>0) notify(false);
+    }, {passive:true, capture:true});
+    document.addEventListener('touchmove', function(e){
+      if (fromAdPanel(e)) { lastPanelWheelAt = Date.now(); notify(false); return; }
+      notify(false);
+    }, {passive:true, capture:true});
+    if (adPanel){
+      adPanel.addEventListener('scroll', function(){ lastPanelWheelAt = Date.now(); notify(false); }, {passive:true});
+    }
+    setTimeout(syncTop,50);
+  }catch(_){ }
 })();
 </script>
 <style id="footer-line-grid">footer{
@@ -1130,11 +1101,11 @@ html, body {
   .igdc-qa-panel{ left:calc(12px + var(--qa-left,0px)); width:min(92vw,560px) }
 }
 a[href^="mailto:"] {
-  color: #007bff;           /* 밝은 파란색 (Bootstrap 기본 블루톤) */
+  color: #007bff;           /* ë°ì íëì (Bootstrap ê¸°ë³¸ ë¸ë£¨í¤) */
   text-decoration: underline;
 }
 a[href^="mailto:"]:hover {
-  color: #0056b3;           /* hover 시 조금 더 짙은 파랑 */
+  color: #0056b3;           /* hover ì ì¡°ê¸ ë ì§ì íë */
   text-decoration: underline;
 }
 </style>
@@ -1176,7 +1147,7 @@ a[href^="mailto:"]:hover {
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">ì ì¥ ì¤ì (Supabase url/key) ì°ê²° í ì ì²´ ê¸°ë¥ì´ íì±íë©ëë¤.</div>';
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
         document.body.appendChild(m);
@@ -1198,7 +1169,7 @@ a[href^="mailto:"]:hover {
 </script>
 <script id="igdc-qa-config">
   (function () {
-    // 1) 민감정보 없는 기본 설정
+    // 1) ë¯¼ê°ì ë³´ ìë ê¸°ë³¸ ì¤ì 
     const baseConfig = {
       url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "",
       project: "IGDC",
@@ -1206,7 +1177,7 @@ a[href^="mailto:"]:hover {
       aiEndpoint: null
     };
 
-    // Supabase 환경을 SUPER_VARSAR에 적용하는 함수
+    // Supabase íê²½ì SUPER_VARSARì ì ì©íë í¨ì
     function applyConfig(env) {
       const url =
         (env && env.SUPABASE_URL) ||
@@ -1230,14 +1201,14 @@ a[href^="mailto:"]:hover {
       );
     }
 
-    // 2) 이미 window.IGDC_ENV가 있다면(로컬 테스트 등) 그걸 우선 사용
+    // 2) ì´ë¯¸ window.IGDC_ENVê° ìë¤ë©´(ë¡ì»¬ íì¤í¸ ë±) ê·¸ê±¸ ì°ì  ì¬ì©
     if (window.IGDC_ENV &&
         (window.IGDC_ENV.SUPABASE_ANON_KEY || window.IGDC_ENV.SUPABASE_URL)) {
       applyConfig(window.IGDC_ENV);
       return;
     }
 
-    // 3) 없으면 Netlify Functions에서 환경변수 읽어오기
+    // 3) ìì¼ë©´ Netlify Functionsìì íê²½ë³ì ì½ì´ì¤ê¸°
     var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
 
     fetch(endpoint, { cache: "no-store" })
@@ -1270,7 +1241,7 @@ a[href^="mailto:"]:hover {
   const fmtDate = (s)=> new Date(s).toLocaleString();
   const nowISO = ()=> new Date().toISOString();
   const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+  const classifyTech = (t)=> /ê´ë¦¬ì|ì´ì|ì¤ì |ë°°í¬|ìë¬|ì¤ë¥|ë²ê·¸|ë¡ë©|API|ì°ë|ìë²|ë°ì´í°ë² ì´ì¤|DB|ê¶í|ì ì±|ë¡ê·¸ì¸|í í°|í¤|ê²°ì |ë³´ì|CORS|ë¤í¸ìí¬|íììì|ìëµì½ë|ë¹ë|ì»´íì¼|ê¹¨ì§|ìë¨|ë©ì¶¤|íì´ì§|ë§í¬|ì¤ìë/i.test(t||'');
 
   function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
   function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
@@ -1280,7 +1251,7 @@ a[href^="mailto:"]:hover {
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      console.warn("[Q&A] Supabase ìê²©/ë¼ì´ë¸ë¬ë¦¬ ë¯¸ì¤ì : UIë íìëì§ë§ ì ì¥ì ë¹íì±íë©ëë¤.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -1307,18 +1278,18 @@ a[href^="mailto:"]:hover {
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
     const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","닫기");
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","ë«ê¸°");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
-    const lQ = el("label"); lQ.textContent="질문";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="질문을 입력하세요...";
-    const lA = el("label"); lA.textContent="답변";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="조금만 기다리시면 금방 답변을 드리겠습니다.";
+    const lQ = el("label"); lQ.textContent="ì§ë¬¸";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="ì§ë¬¸ì ìë ¥íì¸ì...";
+    const lA = el("label"); lA.textContent="ëµë³";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="ì¡°ê¸ë§ ê¸°ë¤ë¦¬ìë©´ ê¸ë°© ëµë³ì ëë¦¬ê² ìµëë¤.";
     const actions = el("div","igdc-qa-actions");
-    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="등록하기";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="지우기";
-    const note = el("div","igdc-qa-note"); note.textContent="※ 가벼운 질문은 AI가 즉시 답변합니다. 기술/오류/운영 관련은 관리자 Q&A로 자동 전달됩니다.";
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="ë±ë¡íê¸°";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="ì§ì°ê¸°";
+    const note = el("div","igdc-qa-note"); note.textContent="â» ê°ë²¼ì´ ì§ë¬¸ì AIê° ì¦ì ëµë³í©ëë¤. ê¸°ì /ì¤ë¥/ì´ì ê´ë ¨ì ê´ë¦¬ì Q&Aë¡ ìë ì ë¬ë©ëë¤.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -1389,18 +1360,18 @@ a[href^="mailto:"]:hover {
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (대기중)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (ëê¸°ì¤)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "관리요청":"일반";
+        const tag = el("span"); tag.textContent = row.is_admin? "ê´ë¦¬ìì²­":"ì¼ë°";
         const actions = el("div","igdc-qa-thread-actions");
         const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
         if(canDelete){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="삭제";
+          const del = el("button","igdc-qa-btn muted"); del.textContent="ì­ì ";
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("삭제 실패(권한/정책)"); return; }
+            if(error){ alert("ì­ì  ì¤í¨(ê¶í/ì ì±)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -1423,9 +1394,9 @@ a[href^="mailto:"]:hover {
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 확인 후 회신됩니다.";
-          else if(/가격|비용|요금/.test(text)) answer="가격/요금 정보는 페이지 내 안내를 참고해주세요. 추가 문의는 남겨주세요.";
-          else answer="문의 감사합니다. 빠르게 확인하여 도와드리겠습니다.";
+          if(/ìê°|ì´ììê°|ì¤í|ë¬¸ì/.test(text)) answer="ì´ì ê´ë ¨ ë¬¸ìë ê´ë¦¬ì íì¸ í íì ë©ëë¤.";
+          else if(/ê°ê²©|ë¹ì©|ìê¸/.test(text)) answer="ê°ê²©/ìê¸ ì ë³´ë íì´ì§ ë´ ìë´ë¥¼ ì°¸ê³ í´ì£¼ì¸ì. ì¶ê° ë¬¸ìë ë¨ê²¨ì£¼ì¸ì.";
+          else answer="ë¬¸ì ê°ì¬í©ëë¤. ë¹ ë¥´ê² íì¸íì¬ ëìëë¦¬ê² ìµëë¤.";
         }
       }
       return { technical, answer };
@@ -1439,7 +1410,7 @@ a[href^="mailto:"]:hover {
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("저장 설정(Supabase url/key)이 아직 연결되지 않아 서버 저장은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        alert("ì ì¥ ì¤ì (Supabase url/key)ì´ ìì§ ì°ê²°ëì§ ìì ìë² ì ì¥ì ë¹íì±í ìíìëë¤. ì¹ì ë°°í¬ ì SUPER_VARSAR.url/anonKeyë¥¼ ì¤ì íë©´ ìë ì°ê²°ë©ëë¤.");
         return;
       }
       const record = {
@@ -1449,7 +1420,7 @@ a[href^="mailto:"]:hover {
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("등록 실패"); return; }
+      if(error){ alert("ë±ë¡ ì¤í¨"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -1472,7 +1443,7 @@ a[href^="mailto:"]:hover {
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth ì´ê¸°í ì¤í¨:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -1502,7 +1473,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
           var h=document.createElement('div'); h.className='igdc-qa-header';
           var t=document.createElement('div'); t.textContent='Q&A';
           var x=document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
-          var body=document.createElement('div'); body.className='igdc-qa-body'; body.textContent='Q&A 연결 준비됨';
+          var body=document.createElement('div'); body.className='igdc-qa-body'; body.textContent='Q&A ì°ê²° ì¤ë¹ë¨';
           h.appendChild(t); h.appendChild(x); p.appendChild(h); p.appendChild(body);
           m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
           function close(){ m.classList.remove('open'); }
@@ -1576,12 +1547,12 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       h.appendChild(t); h.appendChild(x);
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
-      body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
+      body.innerHTML = '<div class="igdc-qa-note">ì ì¥ ì¤ì (Supabase url/key) ì°ê²° í ì ì²´ ê¸°ë¥ì´ íì±íë©ëë¤.</div>';
 
-      // ensure the "대표 이메일" is shown only inside the modal
+      // ensure the "ëí ì´ë©ì¼" is shown only inside the modal
       var ce = document.createElement('p');
       ce.className = 'contact-email';
-      ce.innerHTML = '대표 이메일: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+      ce.innerHTML = 'ëí ì´ë©ì¼: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
       body.appendChild(ce);
 
       p.appendChild(h); p.appendChild(body);
@@ -1601,7 +1572,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       if(body && !body.querySelector('.contact-email')){
         var ce = document.createElement('p');
         ce.className = 'contact-email';
-        ce.innerHTML = '대표 이메일: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+        ce.innerHTML = 'ëí ì´ë©ì¼: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
         body.appendChild(ce);
       }
     }
@@ -1616,12 +1587,12 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
           if(parent){
             parent.removeChild(a);
             var html = parent.innerHTML;
-            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
+            html = html.replace(/ëí\s*ì´ë©ì¼\s*:\s*/g, '');
             html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
             parent.innerHTML = html;
           }
         });
-        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
+        f.innerHTML = f.innerHTML.replace(/ëí\s*ì´ë©ì¼\s*:[^<]*<br\s*\/?>?/gi, '');
       });
     }catch(e){}
   }
@@ -1642,7 +1613,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   if (window.__IGDC_QA_EMAIL_ENSURE__) return;
   window.__IGDC_QA_EMAIL_ENSURE__ = true;
 
-  var CONTACT_HTML = '대표 이메일: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+  var CONTACT_HTML = 'ëí ì´ë©ì¼: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
 
   function stripFooterEmail(){
     try{
@@ -1654,13 +1625,13 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
           if(parent){
             parent.removeChild(a);
             var html = parent.innerHTML;
-            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
+            html = html.replace(/ëí\s*ì´ë©ì¼\s*:\s*/g, '');
             html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
             parent.innerHTML = html;
           }
         });
-        // Remove any plain-text "대표 이메일: ..." remnants
-        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
+        // Remove any plain-text "ëí ì´ë©ì¼: ..." remnants
+        f.innerHTML = f.innerHTML.replace(/ëí\s*ì´ë©ì¼\s*:[^<]*<br\s*\/?>?/gi, '');
       });
     }catch(e){}
   }
@@ -1679,7 +1650,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
       var note = document.createElement('div'); note.className='igdc-qa-note';
-      note.textContent = '저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.';
+      note.textContent = 'ì ì¥ ì¤ì (Supabase url/key) ì°ê²° í ì ì²´ ê¸°ë¥ì´ íì±íë©ëë¤.';
       body.appendChild(note);
 
       // (1) Inject the contact email in creation path
@@ -1825,8 +1796,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>결제 QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">닫기</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>ê²°ì  QR</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">ë«ê¸°</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -1861,11 +1832,11 @@ window.addEventListener("message",function(ev){
   async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
     await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
-    ta.value=''; alert('전송되었습니다.');
+    ta.value=''; alert('ì ì¡ëììµëë¤.');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('전송 실패'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('ì ì¡ ì¤í¨'));});
   const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('전송 실패'));});
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('ì ì¡ ì¤í¨'));});
 })();
 </script>
 
@@ -1911,22 +1882,22 @@ window.addEventListener("message",function(ev){
 /*
  IGDC Unified Commerce Script
  --------------------------------------------------
- 적용 대상:
-  - Distribution (이미 적용 가능)
-  - 나머지 4개 사이트 (Donation 제외, Media 제외)
- 목적:
-  - 썸네일 클릭 자동 감지
-  - 상세 상품 자동 오픈 훅
-  - 구매하기 / 결제 / 장바구니 기존 버튼 그대로 사용
-  - 상세 하단에 리뷰 시스템 자동 장착 (쿠팡 방식)
+ ì ì© ëì:
+  - Distribution (ì´ë¯¸ ì ì© ê°ë¥)
+  - ëë¨¸ì§ 4ê° ì¬ì´í¸ (Donation ì ì¸, Media ì ì¸)
+ ëª©ì :
+  - ì¸ë¤ì¼ í´ë¦­ ìë ê°ì§
+  - ìì¸ ìí ìë ì¤í í
+  - êµ¬ë§¤íê¸° / ê²°ì  / ì¥ë°êµ¬ë ê¸°ì¡´ ë²í¼ ê·¸ëë¡ ì¬ì©
+  - ìì¸ íë¨ì ë¦¬ë·° ìì¤í ìë ì¥ì°© (ì¿ í¡ ë°©ì)
  --------------------------------------------------
- 전제:
-  - 썸네일 카드 또는 상세 컨테이너에 data-product-id 존재
-  - IGTC.checkout(...) 기존 결제 로직 존재
-  - window.__IGDC_ROLE 존재
+ ì ì :
+  - ì¸ë¤ì¼ ì¹´ë ëë ìì¸ ì»¨íì´ëì data-product-id ì¡´ì¬
+  - IGTC.checkout(...) ê¸°ì¡´ ê²°ì  ë¡ì§ ì¡´ì¬
+  - window.__IGDC_ROLE ì¡´ì¬
  --------------------------------------------------
- 삽입 위치:
-  - 각 페이지 </body> 바로 위
+ ì½ì ìì¹:
+  - ê° íì´ì§ </body> ë°ë¡ ì
 */
 
 (function (window, document) {
@@ -1950,7 +1921,7 @@ window.addEventListener("message",function(ev){
       this.bindThumbnailAutoHook();
     },
 
-    /* 1️⃣ 썸네일 카드 클릭 자동 감지 */
+    /* 1ï¸â£ ì¸ë¤ì¼ ì¹´ë í´ë¦­ ìë ê°ì§ */
     bindThumbnailAutoHook() {
       document.addEventListener('click', (e) => {
         const card = e.target.closest('[data-product-id]');
@@ -1959,15 +1930,15 @@ window.addEventListener("message",function(ev){
         const productId = card.dataset.productId;
         if (!productId) return;
 
-        // 기존 상세 상품 오픈 로직은 이미 각 페이지에 있음
-        // 여기서는 리뷰만 자동 부착
+        // ê¸°ì¡´ ìì¸ ìí ì¤í ë¡ì§ì ì´ë¯¸ ê° íì´ì§ì ìì
+        // ì¬ê¸°ìë ë¦¬ë·°ë§ ìë ë¶ì°©
         setTimeout(() => {
           this.mountReview(productId);
         }, 50);
       });
     },
 
-    /* 2️⃣ 리뷰 시스템 장착 */
+    /* 2ï¸â£ ë¦¬ë·° ìì¤í ì¥ì°© */
     mountReview(productId) {
       if (this.state.activeProductId === productId) return;
       this.state.activeProductId = productId;
@@ -1991,13 +1962,13 @@ window.addEventListener("message",function(ev){
       this.loadReviews(productId);
     },
 
-    /* 3️⃣ 리뷰 UI */
+    /* 3ï¸â£ ë¦¬ë·° UI */
     renderReviewShell() {
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">상품 리뷰</h3>
-          <div id="igdc-review-list" class="igdc-review-list">로딩 중...</div>
+          <h3 class="igdc-review-title">ìí ë¦¬ë·°</h3>
+          <div id="igdc-review-list" class="igdc-review-list">ë¡ë© ì¤...</div>
           ${canWrite ? this.renderReviewForm() : this.renderLoginHint()}
         </section>
       `;
@@ -2007,12 +1978,12 @@ window.addEventListener("message",function(ev){
       return `
         <form id="igdc-review-form" class="igdc-review-form">
           <textarea
-            placeholder="상품 사용 경험을 공유해 주세요"
+            placeholder="ìí ì¬ì© ê²½íì ê³µì í´ ì£¼ì¸ì"
             minlength="${this.config.minReviewChars}"
             maxlength="${this.config.maxReviewChars}"
             required></textarea>
           <div class="igdc-review-actions">
-            <button type="submit">리뷰 등록</button>
+            <button type="submit">ë¦¬ë·° ë±ë¡</button>
           </div>
         </form>
       `;
@@ -2020,11 +1991,11 @@ window.addEventListener("message",function(ev){
 
     renderLoginHint() {
       return `<div class="igdc-review-login-hint">
-        리뷰 작성은 로그인 후 가능합니다.
+        ë¦¬ë·° ìì±ì ë¡ê·¸ì¸ í ê°ë¥í©ëë¤.
       </div>`;
     },
 
-    /* 4️⃣ 리뷰 이벤트 */
+    /* 4ï¸â£ ë¦¬ë·° ì´ë²¤í¸ */
     bindReviewForm(root, productId) {
       const form = root.querySelector('#igdc-review-form');
       if (!form) return;
@@ -2035,7 +2006,7 @@ window.addEventListener("message",function(ev){
         const content = textarea.value.trim();
 
         if (content.length < this.config.minReviewChars) {
-          alert(`리뷰는 최소 ${this.config.minReviewChars}자 이상 작성해 주세요.`);
+          alert(`ë¦¬ë·°ë ìµì ${this.config.minReviewChars}ì ì´ì ìì±í´ ì£¼ì¸ì.`);
           return;
         }
 
@@ -2044,16 +2015,16 @@ window.addEventListener("message",function(ev){
             textarea.value = '';
             this.loadReviews(productId);
           })
-          .catch(() => alert('리뷰 등록 실패'));
+          .catch(() => alert('ë¦¬ë·° ë±ë¡ ì¤í¨'));
       });
     },
 
-    /* 5️⃣ 리뷰 로딩 */
+    /* 5ï¸â£ ë¦¬ë·° ë¡ë© */
     async loadReviews(productId) {
       const list = document.getElementById('igdc-review-list');
       if (!list) return;
 
-      list.textContent = '로딩 중...';
+      list.textContent = 'ë¡ë© ì¤...';
 
       try {
         const res = await fetch(
@@ -2062,13 +2033,13 @@ window.addEventListener("message",function(ev){
         const data = await res.json();
 
         if (!Array.isArray(data) || data.length === 0) {
-          list.innerHTML = '<div class="igdc-review-empty">아직 리뷰가 없습니다.</div>';
+          list.innerHTML = '<div class="igdc-review-empty">ìì§ ë¦¬ë·°ê° ììµëë¤.</div>';
           return;
         }
 
         list.innerHTML = data.map(this.renderReviewItem).join('');
       } catch {
-        list.textContent = '리뷰를 불러오지 못했습니다.';
+        list.textContent = 'ë¦¬ë·°ë¥¼ ë¶ë¬ì¤ì§ ëª»íìµëë¤.';
       }
     },
 
@@ -2086,7 +2057,7 @@ window.addEventListener("message",function(ev){
       return `
         <div class="igdc-review-item">
           <div class="igdc-review-meta">
-            <span>${esc(item.user || '익명')}</span>
+            <span>${esc(item.user || 'ìµëª')}</span>
             <span>${esc(item.date || '')}</span>
           </div>
           <div class="igdc-review-content">${esc(item.content)}</div>
@@ -2095,7 +2066,7 @@ window.addEventListener("message",function(ev){
     }
   };
 
-  /* 6️⃣ 기본 스타일 */
+  /* 6ï¸â£ ê¸°ë³¸ ì¤íì¼ */
   const style = document.createElement('style');
   style.textContent = `
     .igdc-review { margin-top:24px; border-top:1px solid #eee; padding-top:16px; }
@@ -2121,7 +2092,7 @@ window.addEventListener("message",function(ev){
 (function(){
 
   /* ===============================
-     설정
+     ì¤ì 
   =============================== */
 
   const PANEL_ID   = 'rightAutoPanel';
@@ -2129,7 +2100,7 @@ window.addEventListener("message",function(ev){
 
 
   /* ===============================
-     패널 찾기
+     í¨ë ì°¾ê¸°
   =============================== */
 
   const panel = document.getElementById(PANEL_ID);
@@ -2141,7 +2112,7 @@ window.addEventListener("message",function(ev){
 
 
   /* ===============================
-     더미 생성
+     ëë¯¸ ìì±
   =============================== */
 
   function buildDummy(){
@@ -2198,7 +2169,7 @@ window.addEventListener("message",function(ev){
 
 
   /* ===============================
-     더미 제거
+     ëë¯¸ ì ê±°
   =============================== */
 
   function clearDummy(){
@@ -2210,7 +2181,7 @@ window.addEventListener("message",function(ev){
 
 
   /* ===============================
-     실데이터 렌더
+     ì¤ë°ì´í° ë ë
   =============================== */
 
   function renderReal(items){
@@ -2240,14 +2211,14 @@ window.addEventListener("message",function(ev){
 
 
   /* ===============================
-     초기 실행
+     ì´ê¸° ì¤í
   =============================== */
 
   buildDummy();
 
 
   /* ===============================
-     외부 연동 훅
+     ì¸ë¶ ì°ë í
   =============================== */
 
   window.__IGDC_RIGHTPANEL_RENDER = function(items){
