@@ -8,157 +8,258 @@
 
 (function(){
   'use strict';
+/**
+ * socialnetwork-automap.v3.PROD3.js
+ * - Desktop right panel (#rightAutoPanel): renders 100 "ad-box" slots (keeps original ad-panel layout).
+ * - Mobile 10th section (#rpMobileGrid): renders same 100 items as "thumb-card" for touch drag.
+ * - Main 9 sections: renders into each [data-psom-key] thumb-grid, preserving per-grid slot count.
+ * - Always renders BOTH desktop and mobile targets, so resize restores correctly.
+ */
 
-  const SNAPSHOT_URL = '/data/social.snapshot.json';
-  const MAX_RIGHT = 100; // requested target
+(function(){
+  'use strict';
 
-  const $ = (sel, root=document) => root.querySelector(sel);
-  const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+  const SNAPSHOT_CANDIDATES = [
+    '/data/social.snapshot.json',
+    '/data/snapshot/social.snapshot.json',
+    '/data/snapshots/social.snapshot.json',
+    '/social.snapshot.json'
+  ];
 
-  function esc(s){
-    return String(s ?? '').replace(/[&<>"']/g, (c) => ({
-      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'
-    }[c]));
+  const FEED_CANDIDATES = [
+    '/.netlify/functions/feed-social',
+    '/api/feed-social'
+  ];
+
+  const PAGE_KEY = 'social';
+
+  const RIGHT_PANEL_KEY = 'socialnetwork';   // right panel / mobile 10th section uses this key
+  const RIGHT_PANEL_COUNT = 100;
+
+  const FALLBACK_CARD = {
+    title: 'Loading...',
+    subtitle: '',
+    image: '',
+    url: '#'
+  };
+
+  function $(sel, root=document){ return root.querySelector(sel); }
+  function $all(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
+
+  function safeText(v){ return (v==null?'':String(v)); }
+
+  function normalizeItem(raw){
+    if(!raw || typeof raw!=='object') return {...FALLBACK_CARD};
+    return {
+      title: safeText(raw.title || raw.name || raw.label || raw.platform || raw.brand || 'Loading...'),
+      subtitle: safeText(raw.subtitle || raw.desc || raw.description || raw.category || ''),
+      image: safeText(raw.image || raw.img || raw.thumbnail || raw.thumb || ''),
+      url: safeText(raw.url || raw.href || raw.link || raw.target || '#')
+    };
   }
 
-  function safeUrl(u){
-    const s = String(u ?? '').trim();
-    if(!s) return '#';
-    // allow http(s), mailto, tel, and relative
-    if(/^https?:\/\//i.test(s) || /^mailto:/i.test(s) || /^tel:/i.test(s) || s.startsWith('/') || s.startsWith('./') || s.startsWith('#')) return s;
-    return '#';
-  }
-
-  function normalizeCard(raw){
-    const o = raw && typeof raw === 'object' ? raw : {};
-    const title = o.title ?? o.name ?? o.label ?? 'Loading...';
-    const subtitle = o.subtitle ?? o.desc ?? o.description ?? '';
-    const href = o.href ?? o.url ?? o.link ?? '#';
-    const ctaText = o.ctaText ?? o.cta ?? 'Open';
-    const thumb = o.thumb ?? o.image ?? o.img ?? '';
-    return { title:String(title), subtitle:String(subtitle), href:String(href), ctaText:String(ctaText), thumb:String(thumb) };
-  }
-
-  function cardHTML(card, {forceFullWidth=false, fixedWidthPx=null}={}){
-    const c = normalizeCard(card);
-    const href = safeUrl(c.href);
-    const target = /^https?:\/\//i.test(href) ? ' target="_blank" rel="noopener noreferrer"' : '';
-
-    // Use same card structure the page already styles (.card > .pic + .meta)
-    const styles = [];
-    if(forceFullWidth) styles.push('width:100%');
-    if(typeof fixedWidthPx === 'number' && fixedWidthPx > 0) styles.push(`width:${fixedWidthPx}px`);
-    const styleAttr = styles.length ? ` style="${styles.join(';')}"` : '';
-
-    const img = c.thumb ? `<img src="${esc(c.thumb)}" alt="" loading="lazy" decoding="async">` : '';
-
-    return `
-      <a class="card" data-card="1" href="${esc(href)}"${target}${styleAttr}>
-        <div class="pic">${img}</div>
-        <div class="meta">
-          <div class="title">${esc(c.title)}</div>
-          <div class="desc">${esc(c.subtitle)}</div>
-          <div class="cta">${esc(c.ctaText || 'Open')}</div>
-        </div>
-      </a>
-    `.trim();
-  }
-
-  function getSnapshotCards(snapshot){
-    // Accept either new or legacy shapes.
-    if(snapshot && snapshot.placeholder_cards && typeof snapshot.placeholder_cards === 'object') return snapshot.placeholder_cards;
-    if(snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.placeholder_cards) return snapshot.pages.social.placeholder_cards;
-    if(snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections) return snapshot.pages.social.sections; // legacy
-    return {};
-  }
-
-  function renderSectionGrid(gridEl, cards){
-    if(!gridEl) return;
-    const list = Array.isArray(cards) ? cards : [];
-    gridEl.innerHTML = list.map(c => cardHTML(c)).join('');
-  }
-
-  function isPortraitMobile(){
-    return window.matchMedia('(max-width: 520px)').matches;
-  }
-
-  function isLandscapeSmall(){
-    return window.matchMedia('(max-width: 1024px)').matches && window.matchMedia('(orientation: landscape)').matches;
-  }
-
-  function renderRightPanel(panelEl, cardsByKey){
-    if(!panelEl) return;
-
-    // Key declared in HTML for right rail.
-    const src = Array.isArray(cardsByKey.socialnetwork) ? cardsByKey.socialnetwork : [];
-
-    const out = [];
-    for(let i=0;i<MAX_RIGHT;i++){
-      out.push(src[i] ?? { title:'Loading...', subtitle:'', href:'#', ctaText:'', thumb:'' });
-    }
-
-    const portrait = isPortraitMobile();
-    const landscape = isLandscapeSmall();
-
-    // The HTML has styles for .rp-hscroll on mobile-landscape.
-    panelEl.classList.toggle('rp-hscroll', landscape && !portrait);
-
-    // In landscape strip, fixed width makes scrolling natural.
-    const fixed = (landscape && !portrait) ? 220 : null;
-    panelEl.innerHTML = out.map(c => cardHTML(c, {forceFullWidth: portrait, fixedWidthPx: fixed})).join('');
-  }
-
-  function renderAll(cardsByKey){
-    // Main 9 section grids (ignore the right-rail thumb-grid; we use #rightAutoPanel instead)
-    $$('.thumb-grid[data-psom-key]').forEach(grid => {
-      const key = String(grid.getAttribute('data-psom-key') || '').trim();
-      if(!key) return;
-      if(key === 'socialnetwork') return;
-      renderSectionGrid(grid, cardsByKey[key]);
-    });
-
-    renderRightPanel($('#rightAutoPanel'), cardsByKey);
+  async function fetchJson(url){
+    const r = await fetch(url, { cache: 'no-store' });
+    if(!r.ok) throw new Error('HTTP '+r.status+' @ '+url);
+    return await r.json();
   }
 
   async function loadSnapshot(){
-    const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
-    if(!res.ok) throw new Error(`snapshot fetch failed: ${res.status}`);
-    return await res.json();
+    // 1) try snapshot files
+    for(const u of SNAPSHOT_CANDIDATES){
+      try{
+        const j = await fetchJson(u);
+        if(j && j.pages && j.pages[PAGE_KEY] && j.pages[PAGE_KEY].sections) return j;
+      }catch(_e){}
+    }
+    // 2) try feed (if it returns snapshot-like shape)
+    for(const u of FEED_CANDIDATES){
+      try{
+        const j = await fetchJson(u);
+        if(j && j.pages && j.pages[PAGE_KEY] && j.pages[PAGE_KEY].sections) return j;
+      }catch(_e){}
+    }
+    throw new Error('No social snapshot/feed found');
   }
 
-  function installRightPanelRenderer(cardsByKey){
-    // Replace dummy renderer (defined inside socialnetwork.html) with a stable one.
-    window.__IGDC_RIGHTPANEL_RENDER = function(){
-      renderRightPanel($('#rightAutoPanel'), cardsByKey);
-    };
+  function getSectionItems(snapshot, key){
+    const secs = snapshot?.pages?.[PAGE_KEY]?.sections;
+    const arr = secs?.[key];
+    if(Array.isArray(arr)) return arr.map(normalizeItem);
+    if(arr && Array.isArray(arr.items)) return arr.items.map(normalizeItem);
+    return [];
   }
 
-  function debounce(fn, ms=140){
-    let t = null;
-    return function(){
-      clearTimeout(t);
-      const args = arguments;
-      t = setTimeout(() => fn.apply(this, args), ms);
-    };
+  function buildThumbCard(item, label){
+    const a = document.createElement('a');
+    a.className = 'thumb-card';
+    a.href = item.url || '#';
+    a.target = '_blank';
+    a.rel = 'noopener';
+
+    const img = document.createElement('img');
+    img.alt = item.title || '';
+    if(item.image){
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.src = item.image;
+    }else{
+      // keep empty image space consistent
+      img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+    }
+
+    const body = document.createElement('div');
+    body.className = 'thumb-body';
+
+    const t = document.createElement('div');
+    t.className = 'thumb-title';
+    t.textContent = item.title || 'Loading...';
+
+    const s = document.createElement('div');
+    s.className = 'thumb-sub';
+    s.textContent = item.subtitle || (label ? label : '');
+
+    body.appendChild(t);
+    body.appendChild(s);
+    a.appendChild(img);
+    a.appendChild(body);
+    return a;
   }
 
-  async function boot(){
-    try{
-      const snapshot = await loadSnapshot();
-      const cardsByKey = getSnapshotCards(snapshot);
-
-      renderAll(cardsByKey);
-      installRightPanelRenderer(cardsByKey);
-
-      // Re-render on resize AFTER the dummy bootstrap rebuilds its placeholders.
-      window.addEventListener('resize', debounce(() => renderAll(cardsByKey), 160));
-
-    } catch (err){
-      console.error('[socialnetwork-automap] boot failed:', err);
+  function ensureAdBoxes(panelEl, count){
+    if(!panelEl) return;
+    const boxes = panelEl.querySelectorAll('.ad-box');
+    const need = count - boxes.length;
+    if(need <= 0) return;
+    for(let i=0;i<need;i++){
+      const b = document.createElement('div');
+      b.className = 'ad-box';
+      const inner = document.createElement('div');
+      inner.textContent = 'Loading...';
+      b.appendChild(inner);
+      panelEl.appendChild(b);
     }
   }
 
-  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
+  function fillAdBoxes(panelEl, items, count){
+    if(!panelEl) return;
+    ensureAdBoxes(panelEl, count);
+
+    const boxes = Array.from(panelEl.querySelectorAll('.ad-box')).slice(0, count);
+    for(let i=0;i<count;i++){
+      const it = items[i] || FALLBACK_CARD;
+      const item = normalizeItem(it);
+
+      const box = boxes[i];
+      box.innerHTML = ''; // keep wrapper, replace content only
+
+      const a = document.createElement('a');
+      a.href = item.url || '#';
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.style.display = 'block';
+      a.style.width = '100%';
+      a.style.height = '100%';
+      a.style.textDecoration = 'none';
+      a.style.color = 'inherit';
+
+      // If image exists, show a minimal top thumbnail strip without breaking fixed height:
+      if(item.image){
+        const img = document.createElement('img');
+        img.src = item.image;
+        img.alt = item.title || '';
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.style.width = '100%';
+        img.style.height = '88px';
+        img.style.objectFit = 'cover';
+        img.style.borderRadius = '10px';
+        img.style.display = 'block';
+        a.appendChild(img);
+      }
+
+      const txt = document.createElement('div');
+      txt.textContent = item.title || 'Loading...';
+      txt.style.padding = item.image ? '8px 10px 0' : '0 10px';
+      txt.style.fontWeight = '700';
+      txt.style.fontSize = '13px';
+      txt.style.lineHeight = '1.25';
+      txt.style.wordBreak = 'break-word';
+
+      const sub = document.createElement('div');
+      sub.textContent = item.subtitle || '';
+      sub.style.padding = '4px 10px 0';
+      sub.style.fontSize = '12px';
+      sub.style.opacity = '0.85';
+      sub.style.lineHeight = '1.2';
+
+      a.appendChild(txt);
+      if(item.subtitle) a.appendChild(sub);
+
+      box.appendChild(a);
+    }
+  }
+
+  function renderThumbGrid(gridEl, items, label){
+    if(!gridEl) return;
+    // preserve slot count from existing HTML if present
+    const existing = gridEl.querySelectorAll('.thumb-card');
+    const desired = existing.length > 0 ? existing.length : 12;
+
+    gridEl.innerHTML = '';
+    for(let i=0;i<desired;i++){
+      const item = items[i] ? normalizeItem(items[i]) : {...FALLBACK_CARD};
+      gridEl.appendChild(buildThumbCard(item, label));
+    }
+  }
+
+  function renderMobileRightGrid(gridEl, items){
+    if(!gridEl) return;
+    gridEl.innerHTML = '';
+    for(let i=0;i<RIGHT_PANEL_COUNT;i++){
+      const item = items[i] ? normalizeItem(items[i]) : {...FALLBACK_CARD};
+      gridEl.appendChild(buildThumbCard(item, ''));
+    }
+  }
+
+  let _snapshotCache = null;
+  let _renderTimer = null;
+
+  async function ensureSnapshot(){
+    if(_snapshotCache) return _snapshotCache;
+    _snapshotCache = await loadSnapshot();
+    return _snapshotCache;
+  }
+
+  async function renderAll(){
+    const snap = await ensureSnapshot();
+
+    // 1) main 9 sections
+    const grids = $all('.thumb-grid[data-psom-key]');
+    grids.forEach(grid=>{
+      const key = grid.getAttribute('data-psom-key');
+      if(!key) return;
+      if(key === RIGHT_PANEL_KEY) return; // handled separately
+      const items = getSectionItems(snap, key);
+      renderThumbGrid(grid, items, '');
+    });
+
+    // 2) desktop right panel (popular items)
+    const rightItems = getSectionItems(snap, RIGHT_PANEL_KEY);
+    fillAdBoxes($('#rightAutoPanel'), rightItems, RIGHT_PANEL_COUNT);
+
+    // 3) mobile 10th section
+    renderMobileRightGrid($('#rpMobileGrid'), rightItems);
+  }
+
+  function debounceRender(){
+    clearTimeout(_renderTimer);
+    _renderTimer = setTimeout(()=>{ renderAll().catch(console.error); }, 160);
+  }
+
+  document.addEventListener('DOMContentLoaded', ()=>{
+    renderAll().catch(console.error);
+    window.addEventListener('resize', debounceRender, { passive:true });
+  });
 
 })();
