@@ -2135,16 +2135,12 @@ footer{
   margin-top: 8px;
   font-size: 0.95rem;
 }
-</style></div>
-
-<div class="right-rail" id="rightRail">
-  <h3 class="ad-headline" style="display:block; margin:0 auto; text-align:center; width:clamp(230px,100%,274px); margin:0 0 10px; text-align:center; line-height:1; height:1em; white-space:nowrap;">
-    💎 인기 아이템 💎
-  </h3>
-
-  <!-- 우측 패널 자동 렌더 전용 -->
-  <div class="ad-panel" id="rightAutoPanel"></div>
-
+</style></div><div class="right-rail" id="rightRail">
+<h3 class="ad-headline" style="display:block; margin:0 auto; text-align:center; width:clamp(230px,100%,274px); margin:0 0 10px; text-align:center; line-height:1; height:1em; white-space:nowrap;">
+  💎 인기 아이템 💎
+</h3>
+<div class="ad-panel" id="rightAutoPanel"></div>
+<div class="thumb-grid thumb-scroller" data-psom-key="socialnetwork"></div>
 </div>
 </div>
 
@@ -2187,184 +2183,45 @@ footer{
 
 <script id="social-mobile-rail-js">
 (function(){
+  const BREAKPOINT = 1024;
+  const rightRail = document.getElementById('rightRail');
+  const mobileHost = document.getElementById('social-mobile-rail');
+  if(!rightRail || !mobileHost) return;
 
-/* ===================================================
-   Social Mobile Rail - Production Stable Version
-   - Safe against Ctrl+F5
-   - Safe against late renderer load
-   - No empty-lock
-   - No duplication
-   =================================================== */
+  // Remember original placement for restore
+  const originalParent = rightRail.parentElement;
+  const originalNext = rightRail.nextElementSibling;
 
-var built = false;
-var lastMode = null;
-var hookAttached = false;
-var observer = null;
-
-/* ---------------------------
-   Aspect ratio sync
----------------------------- */
-function setAspect(card){
-  var media = card.querySelector('img, video');
-  if(!media){
-    card.style.aspectRatio = "16 / 9";
-    return;
+  function isMobile(){
+    return window.matchMedia('(max-width:1024px)').matches || window.innerWidth <= BREAKPOINT;
   }
 
-  function apply(w,h){
-    card.style.aspectRatio = (w>0 && h>0) ? (w + " / " + h) : "16 / 9";
+  function moveToMobile(){
+    if(rightRail.parentElement === mobileHost) return;
+    mobileHost.appendChild(rightRail);
   }
 
-  if(media.tagName === 'IMG'){
-    if(media.complete && media.naturalWidth){
-      apply(media.naturalWidth, media.naturalHeight);
+  function restoreToDesktop(){
+    if(rightRail.parentElement === originalParent) return;
+    if(originalNext && originalNext.parentElement === originalParent){
+      originalParent.insertBefore(rightRail, originalNext);
     }else{
-      media.addEventListener('load', function(){
-        apply(media.naturalWidth, media.naturalHeight);
-      }, { once:true });
+      originalParent.appendChild(rightRail);
     }
   }
 
-  if(media.tagName === 'VIDEO'){
-    if(media.readyState >= 1){
-      apply(media.videoWidth, media.videoHeight);
-    }else{
-      media.addEventListener('loadedmetadata', function(){
-        apply(media.videoWidth, media.videoHeight);
-      }, { once:true });
-    }
-  }
-}
-
-/* ---------------------------
-   Build rail safely
----------------------------- */
-function build(){
-
-  var rail = document.getElementById('social-mobile-rail');
-  var list = rail && rail.querySelector('.list');
-  var src  = document.getElementById('rightAutoPanel');
-
-  if(!rail || !list || !src) return;
-
-  var boxes = src.querySelectorAll('.ad-box');
-
-  if(!boxes.length){
-    built = false;   // ❗ 절대 잠그지 않음
-    return;
+  function apply(){
+    if(isMobile()) moveToMobile();
+    else restoreToDesktop();
   }
 
-  list.innerHTML = "";
-
-  boxes.forEach(function(box){
-    var clone = box.cloneNode(true);
-    clone.classList.add('card');
-    clone.style.height = 'auto';
-    clone.style.minHeight = '0';
-    clone.style.maxHeight = 'none';
-    list.appendChild(clone);
-    setAspect(clone);
+  // initial + resize
+  apply();
+  let t=null;
+  window.addEventListener('resize', ()=>{
+    clearTimeout(t);
+    t=setTimeout(apply, 120);
   });
-
-  built = true;
-}
-
-/* ---------------------------
-   Mode switch
----------------------------- */
-function toggle(){
-
-  var isMobile = window.matchMedia('(max-width:1024px)').matches;
-  var rail = document.getElementById('social-mobile-rail');
-  if(!rail) return;
-
-  var mode = isMobile ? 'mobile' : 'desktop';
-  if(mode === lastMode) return;
-
-  lastMode = mode;
-
-  if(isMobile){
-    rail.style.display = 'block';
-    built = false;
-    build();
-  }else{
-    rail.style.display = 'none';
-    built = false;
-    var list = rail.querySelector('.list');
-    if(list) list.innerHTML = "";
-  }
-}
-
-/* ---------------------------
-   Hook renderer (safe loop)
----------------------------- */
-function attachHook(){
-
-  if(hookAttached) return;
-
-  var fn = window.__IGDC_RIGHTPANEL_RENDER || window.__RIGHT_PANEL_RENDER;
-
-  if(typeof fn !== 'function'){
-    setTimeout(attachHook, 150);  // ❗ 렌더러 생길 때까지 재시도
-    return;
-  }
-
-  function wrapped(items){
-    fn(items);
-    if(window.matchMedia('(max-width:1024px)').matches){
-      built = false;
-      build();
-    }
-  }
-
-  window.__IGDC_RIGHTPANEL_RENDER = wrapped;
-  window.__RIGHT_PANEL_RENDER = wrapped;
-
-  hookAttached = true;
-}
-
-/* ---------------------------
-   Observe right panel changes
----------------------------- */
-function observeSource(){
-
-  var src = document.getElementById('rightAutoPanel');
-  if(!src) return;
-
-  if(observer) observer.disconnect();
-
-  observer = new MutationObserver(function(){
-    if(window.matchMedia('(max-width:1024px)').matches){
-      built = false;
-      build();
-    }
-  });
-
-  observer.observe(src, { childList:true, subtree:false });
-}
-
-/* ---------------------------
-   Init
----------------------------- */
-function init(){
-  toggle();
-  attachHook();
-  observeSource();
-}
-
-/* DOM Ready */
-if(document.readyState === 'loading'){
-  document.addEventListener('DOMContentLoaded', init, { once:true });
-}else{
-  init();
-}
-
-/* Debounced resize */
-var rsTimer = null;
-window.addEventListener('resize', function(){
-  clearTimeout(rsTimer);
-  rsTimer = setTimeout(toggle, 250);
-});
 
 })();
 </script>
@@ -3427,6 +3284,47 @@ function positionAllLeftArrows(){
     display:none !important;
   }
 }
+
+/* ===== FIX: Right panel layout + mobile relocation ===== */
+#rightAutoPanel{display:flex;flex-direction:column;gap:12px;}
+#rightAutoPanel .thumb-card{width:100%;min-width:0;max-width:100%;}
+#rightAutoPanel .thumb-img{height:140px;}
+#rightRail{min-width:280px;}
+/* Ensure right panel scroll works on desktop */
+#rightRail .ad-panel{overflow-y:auto;overflow-x:hidden;max-height:calc(100vh - 220px);}
+
+/* Mobile: hide desktop right rail in-place (we'll move it) */
+@media (max-width:1024px){
+  #leftSidebar{display:none !important;}
+  #rightRail{width:100% !important; max-width:100% !important; margin-top:14px;}
+}
+/* When right rail is inside mobile section, make it horizontal swipe with big cards */
+#social-mobile-rail #rightAutoPanel{
+  display:flex;
+  flex-direction:row;
+  gap:12px;
+  overflow-x:auto;
+  overflow-y:hidden;
+  scroll-snap-type:x mandatory;
+  padding: 10px 10px 14px;
+}
+#social-mobile-rail #rightAutoPanel .thumb-card{
+  scroll-snap-align:start;
+  min-width: 260px;
+  max-width: 320px;
+}
+@media (max-width:600px){
+  #social-mobile-rail #rightAutoPanel .thumb-card{
+    min-width: calc(100vw - 40px);
+    max-width: calc(100vw - 40px);
+  }
+}
+/* Prevent duplicated mobile rail when not needed */
+#social-mobile-rail{display:none;}
+@media (max-width:1024px){
+  #social-mobile-rail{display:block;}
+}
+
 </style>
 
 <script>
