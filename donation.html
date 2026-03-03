@@ -2209,6 +2209,24 @@ body .right{ display:none !important; }
 }
 </style>
 
+
+<style id="donation-widefix">
+/* === Wide layout: let main content expand with sidebar/right === */
+.container{ gap:10px !important; }            /* sidebar ↔ main ↔ right spacing */
+.main{ padding:20px 0 50px !important; }      /* use container gap instead of inner side padding */
+.main > *{
+  max-width:none !important;
+  margin-left:0 !important;
+  margin-right:0 !important;
+}
+/* Remove legacy centering constraints */
+.hero, #topWritePanel, .people-news, .feed-wrapper{
+  max-width:none !important;
+  margin-left:0 !important;
+  margin-right:0 !important;
+}
+</style>
+
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -2339,6 +2357,21 @@ body .right{ display:none !important; }
 </div>
 
 </div>
+
+
+<!-- Composer Modal (restored from donation-Q) -->
+<div class="hidden" id="composerModal" style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:9999;">
+<div class="panel" style="width:min(92vw, 720px); max-height:80vh; overflow:auto;">
+<h3 style="margin-top:0;">글쓰기</h3>
+<input id="composeTitle" placeholder="Title" style="width:100%;"/>
+<textarea id="composeBody" placeholder="Enter content..." rows="8" style="width:100%; resize:vertical;"></textarea>
+<div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px;">
+<button class="button outline" id="btnDraftSave" type="button">저장 임시저장</button><button class="button outline" id="btnCancel">취소</button>
+<button class="button" disabled="disabled" id="btnSave" style=";display:none !important;">저장</button>
+</div>
+</div>
+</div>
+
 </main>
 <!-- Right (불변) -->
 <aside class="right">
