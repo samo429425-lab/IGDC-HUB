@@ -768,57 +768,6 @@ html, body {
 }
 </style>
 
-<script id="tour-mobile-rail-js">
-(function(){
-  function setAspect(card){
-    var media = card.querySelector('img, video');
-    function apply(w,h){
-      if(w>0 && h>0){ card.style.aspectRatio = w + " / " + h; }
-      else{
-        var ifr = card.querySelector('iframe');
-        var iw = ifr && parseInt(ifr.getAttribute('width')||0);
-        var ih = ifr && parseInt(ifr.getAttribute('height')||0);
-        card.style.aspectRatio = (iw>0 && ih>0) ? (iw+' / '+ih) : '16 / 9';
-      }
-    }
-    if(media){
-      if(media.tagName==='IMG'){
-        if(media.naturalWidth && media.naturalHeight) apply(media.naturalWidth, media.naturalHeight);
-        else media.addEventListener('load', function(){ apply(media.naturalWidth, media.naturalHeight); }, {once:true});
-      }else if(media.tagName==='VIDEO'){
-        if(media.videoWidth && media.videoHeight) apply(media.videoWidth, media.videoHeight);
-        else media.addEventListener('loadedmetadata', function(){ apply(media.videoWidth, media.videoHeight); }, {once:true});
-      }
-    }else{ apply(0,0); }
-  }
-  function build(){
-    var rail = document.getElementById('tour-mobile-rail');
-    var list = rail && rail.querySelector('.list');
-    var src = document.querySelector('.ad-panel');
-    if(!rail || !list || !src) return;
-    list.innerHTML = "";
-    var boxes = src.querySelectorAll('.ad-box');
-    boxes.forEach(function(box){
-      var clone = box.cloneNode(true);
-      clone.classList.add('card');
-      clone.style.height='auto'; clone.style.minHeight='0'; clone.style.maxHeight='none';
-      list.appendChild(clone);
-      setAspect(clone);
-    });
-  }
-  function toggle(){
-    var on = window.matchMedia('(max-width:1024px)').matches;
-    var rail = document.getElementById('tour-mobile-rail');
-    if(!rail) return;
-    rail.style.display = on ? 'block' : 'none';
-    if(on) build();
-  }
-  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', toggle, {once:true}); }
-  else { toggle(); }
-  window.addEventListener('resize', toggle);
-})();
-</script>
-
 <style id="bc-mobile-80-gap3-tour-20251113">
 @media (max-width: 900px){
   /* Normalize any prior transforms/width locks, then apply consistent shrink */
@@ -917,6 +866,27 @@ html, body {
     -webkit-overflow-scrolling:touch;
     overscroll-behavior:contain;
     touch-action:pan-y;
+  }
+}
+</style>
+
+
+<style id="tour-rightpanel-unify-20260303">
+/* Right Panel Thumbs: unify across desktop/mobile (no aspect-ratio drift, no thin bars) */
+@media (max-width:1024px){
+  #rightAutoPanel .ad-box{
+    aspect-ratio: auto !important;
+    height:206px !important;
+    min-height:206px !important;
+    max-height:206px !important;
+  }
+}
+@media (min-width:1025px){
+  #rightAutoPanel .ad-box{
+    aspect-ratio: auto !important;
+    height:206px !important;
+    min-height:206px !important;
+    max-height:206px !important;
   }
 }
 </style>
