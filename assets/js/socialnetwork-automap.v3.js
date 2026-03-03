@@ -1,245 +1,204 @@
+// socialnetwork-automap.v3.js (PRODUCTION)
+// 목적: social.snapshot.json -> (SNS 9섹션 + 우측패널/모바일레일) 1:1 정확 매핑
+// 핵심: 'socialnetwork' 키는 HTML에 2곳 존재(우측패널/모바일레일)하므로, 뷰포트에 따라 1곳만 렌더링
 
-/* =========================================================
-   socialnetwork-automap.v3.PROD2.js  (Distribution-standard)
-   - 목적: social.snapshot.json(또는 feed-social)에서 슬롯을 받아
-           HTML의 정확한 위치(9개 메인 Row + 우측패널)에 렌더
-   - 원칙: 1) 섹션/타겟 외 삽입 금지  2) 우측패널/메인 혼동 금지
-          3) 스냅샷 실데이터가 없으면 스냅샷 샘플 슬롯 그대로 렌더
-========================================================= */
 (function () {
-  "use strict";
+  'use strict';
 
-  // ---- Config (long-term stable) ----
-  const SNAPSHOT_URL_CANDIDATES = [
-    "/data/social.snapshot.json",
-    "/social.snapshot.json",
-    "/snapshots/social.snapshot.json",
-  ];
-  const FEED_FALLBACK_URLS = [
-    "/.netlify/functions/feed-social",
-    "/.netlify/functions/feed_social",
-    "/api/feed-social",
-  ];
+  if (window.__SOCIALNETWORK_AUTOMAP_V3__) return;
+  window.__SOCIALNETWORK_AUTOMAP_V3__ = true;
 
-  const MAIN_KEY_ORDER = [
-    "social-youtube",
-    "social-instagram",
-    "social-tiktok",
-    "social-facebook",
-    "social-discord",
-    "social-community",
-    "social-threads",
-    "social-telegram",
-    "social-twitter",
-  ];
+  const SNAPSHOT_URL = '/data/social.snapshot.json';
 
-  // Row targets are hard-wired in socialnetwork.html (rowGrid1..9)
-  const ROW_TARGET_IDS = [
-    "rowGrid1",
-    "rowGrid2",
-    "rowGrid3",
-    "rowGrid4",
-    "rowGrid5",
-    "rowGrid6",
-    "rowGrid7",
-    "rowGrid8",
-    "rowGrid9",
+  const LIMIT_MAIN = 100;
+  const LIMIT_RIGHT = 80;
+
+  // ---- 정확 타겟 (HTML 구조 기반) ----
+  // 1) 메인 9섹션: data-psom-key 1개씩
+  // 2) RIGHT/MOBILE: 둘 다 data-psom-key="socialnetwork" 이므로, CSS/viewport 기준으로 1곳만 선택 렌더링
+  const MAIN_SECTIONS = [
+    { key: 'social-instagram', selector: '[data-psom-key="social-instagram"]', limit: LIMIT_MAIN },
+    { key: 'social-youtube', selector: '[data-psom-key="social-youtube"]', limit: LIMIT_MAIN },
+    { key: 'social-twitter', selector: '[data-psom-key="social-twitter"]', limit: LIMIT_MAIN },
+    { key: 'social-facebook', selector: '[data-psom-key="social-facebook"]', limit: LIMIT_MAIN },
+    { key: 'social-tiktok', selector: '[data-psom-key="social-tiktok"]', limit: LIMIT_MAIN },
+    { key: 'social-threads', selector: '[data-psom-key="social-threads"]', limit: LIMIT_MAIN },
+    { key: 'social-telegram', selector: '[data-psom-key="social-telegram"]', limit: LIMIT_MAIN },
+    { key: 'social-discord', selector: '[data-psom-key="social-discord"]', limit: LIMIT_MAIN },
+    { key: 'social-community', selector: '[data-psom-key="social-community"]', limit: LIMIT_MAIN }
   ];
 
-  const RIGHT_PANEL_KEY = "socialnetwork";
-  const RIGHT_PANEL_LIMIT = 100;
-  const MAIN_ROW_LIMIT = 50;
+  // 우측패널 'socialnetwork' 슬롯: #rightAutoPanel 바로 다음 thumb-grid
+  const RIGHT_TARGET_SELECTOR = '#rightAutoPanel + .thumb-grid.thumb-scroller[data-psom-key="socialnetwork"]';
 
-  // ---- Utils ----
-  function $(sel, root) { return (root || document).querySelector(sel); }
-  function $all(sel, root) { return Array.from((root || document).querySelectorAll(sel)); }
+  // 모바일 레일 'socialnetwork' 슬롯: #rpMobileGrid
+  const MOBILE_TARGET_SELECTOR = '#rpMobileGrid.thumb-grid.thumb-scroller[data-psom-key="socialnetwork"]';
 
-  function safeStr(v, fallback = "") {
-    return (typeof v === "string" && v.trim()) ? v.trim() : fallback;
+  const PLACEHOLDER_IMG = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+
+  // 같은 노드 중복렌더 방지
+  const RENDERED_NODES = new WeakSet();
+
+  function clear(el) {
+    if (!el || RENDERED_NODES.has(el)) return;
+    while (el.firstChild) el.removeChild(el.firstChild);
   }
 
-  function pickImage(it) {
-    return safeStr(it?.thumbnail) ||
-           safeStr(it?.thumb) ||
-           safeStr(it?.image) ||
-           safeStr(it?.img) ||
-           safeStr(it?.photo) ||
-           "";
+  function escText(s) {
+    try { return String(s ?? ''); } catch { return ''; }
   }
 
-  function pickTitle(it) {
-    return safeStr(it?.title) ||
-           safeStr(it?.name) ||
-           safeStr(it?.label) ||
-           safeStr(it?.platform) ||
-           safeStr(it?.provider) ||
-           "Loading...";
+  function escUrl(u) {
+    try { return String(u ?? '').replace(/'/g, '%27'); } catch { return ''; }
   }
 
-  function pickUrl(it) {
-    return safeStr(it?.url) ||
-           safeStr(it?.link) ||
-           safeStr(it?.href) ||
-           "#";
+  function pickImage(item) {
+    return (item && (item.thumb || item.image || item.thumbnail || item.imageUrl || item.thumbnailUrl || '')) || '';
   }
 
-  function pickDesc(it, rowIndex) {
-    const d = safeStr(it?.subtitle) || safeStr(it?.desc) || safeStr(it?.meta) || "";
-    if (d) return d;
-    if (Number.isFinite(rowIndex)) return `Row ${rowIndex} · Snapshot`;
-    return "Snapshot";
+  function pickTitle(item) {
+    return (item && (item.title || item.name || item.text || '')) || '';
   }
 
-  function createSocialCard(it, rowIndex) {
-    // IMPORTANT: matches socialnetwork.html preview card structure (Open button included)
-    const a = document.createElement("a");
-    a.className = "card";
-    const url = pickUrl(it);
-    if (url && url !== "#") {
-      a.href = url;
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-    } else {
-      a.href = "javascript:void(0)";
+  function pickMeta(item) {
+    return (item && (item.meta || item.subtitle || item.summary || '')) || '';
+  }
+
+  function pickUrl(item) {
+    return (item && (item.url || item.href || item.link || '')) || '';
+  }
+
+  function makeDummy(prefix, idx) {
+    const n = idx + 1;
+    return {
+      title: prefix + ' ' + n,
+      meta: '',
+      thumb: PLACEHOLDER_IMG,
+      url: '#'
+    };
+  }
+
+  function createCard(item) {
+    const card = document.createElement('div');
+    card.className = 'thumb-card';
+
+    const img = document.createElement('div');
+    img.className = 'thumb-img';
+    const src = pickImage(item);
+    const useSrc = src || PLACEHOLDER_IMG;
+
+    img.style.backgroundImage = "url('" + escUrl(useSrc) + "')";
+    img.style.backgroundSize = 'cover';
+    img.style.backgroundPosition = 'center';
+
+    const title = document.createElement('div');
+    title.className = 'thumb-title';
+    title.textContent = escText(pickTitle(item));
+
+    const meta = document.createElement('div');
+    meta.className = 'thumb-meta';
+    meta.textContent = escText(pickMeta(item));
+
+    card.appendChild(img);
+    card.appendChild(title);
+    card.appendChild(meta);
+
+    const href = pickUrl(item);
+    if (href && href !== '#') {
+      card.addEventListener('click', function () { location.href = href; });
+      card.style.cursor = 'pointer';
     }
 
-    const img = pickImage(it);
-    const emoji = safeStr(it?.emoji) || "";
-
-    const thumb = document.createElement("div");
-    thumb.className = "thumb";
-    if (img) {
-      thumb.style.backgroundImage = `url("${img}")`;
-    }
-    // keep emoji as fallback if provided
-    if (emoji) {
-      thumb.style.display = "flex";
-      thumb.style.alignItems = "center";
-      thumb.style.justifyContent = "center";
-      thumb.style.fontSize = "42px";
-      thumb.textContent = emoji;
-    }
-
-    const body = document.createElement("div");
-    body.className = "body";
-
-    const title = document.createElement("div");
-    title.className = "title";
-    title.textContent = pickTitle(it);
-
-    const desc = document.createElement("div");
-    desc.className = "desc";
-    desc.textContent = pickDesc(it, rowIndex);
-
-    const cta = document.createElement("span");
-    cta.className = "cta";
-    cta.textContent = "Open";
-
-    body.appendChild(title);
-    body.appendChild(desc);
-    body.appendChild(cta);
-
-    a.appendChild(thumb);
-    a.appendChild(body);
-    return a;
-  }
-
-  function renderIntoContainer(container, items, opts) {
-    if (!container) return;
-    const limit = opts?.limit ?? 50;
-    const rowIndex = opts?.rowIndex;
-
-    container.innerHTML = "";
-    const list = Array.isArray(items) ? items.slice(0, limit) : [];
-    for (const it of list) {
-      container.appendChild(createSocialCard(it, rowIndex));
-    }
-  }
-
-  async function tryFetchJson(url, options) {
-    const res = await fetch(url, options);
-    if (!res.ok) throw new Error(`HTTP ${res.status} @ ${url}`);
-    return await res.json();
+    return card;
   }
 
   async function loadSnapshot() {
-    // 1) direct snapshot URL candidates
-    for (const url of SNAPSHOT_URL_CANDIDATES) {
-      try {
-        const j = await tryFetchJson(url, { cache: "no-store" });
-        if (j && j.pages && j.pages.social && j.pages.social.sections) return j;
-      } catch (_) {}
-    }
-    // 2) feed fallback
-    for (const url of FEED_FALLBACK_URLS) {
-      try {
-        const j = await tryFetchJson(url, { cache: "no-store" });
-        // feed-social can return {snapshot:...} or snapshot directly
-        const snap = j?.snapshot || j;
-        if (snap && snap.pages && snap.pages.social && snap.pages.social.sections) return snap;
-      } catch (_) {}
-    }
-    throw new Error("social snapshot not reachable (snapshot url + feed fallback 모두 실패)");
+    const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Snapshot load failed: ' + res.status);
+    return res.json();
   }
 
   function getSections(snapshot) {
-    return snapshot?.pages?.social?.sections || {};
+    return (snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections) ||
+           (snapshot && snapshot.sections) ||
+           null;
   }
 
-  function renderMainRows(sections) {
-    for (let i = 0; i < MAIN_KEY_ORDER.length; i++) {
-      const key = MAIN_KEY_ORDER[i];
-      const rowId = ROW_TARGET_IDS[i];
-      const rowEl = document.getElementById(rowId);
-      if (!rowEl) continue;
+  function renderBox(box, items, limit, dummyPrefix) {
+    if (!box || RENDERED_NODES.has(box)) return;
 
-      const items = sections[key];
-      // 메인 Row는 기존 preview를 완전히 교체 (운영형)
-      renderIntoContainer(rowEl, items, { limit: MAIN_ROW_LIMIT, rowIndex: i + 1 });
+    const arr = Array.isArray(items) ? items.slice(0, limit) : [];
+    while (arr.length < limit) arr.push(makeDummy(dummyPrefix, arr.length));
+
+    clear(box);
+    arr.forEach(it => box.appendChild(createCard(it)));
+    RENDERED_NODES.add(box);
+  }
+
+  function isMobile() {
+    // HTML/CSS 기준(<=1024px)과 동일
+    return window.matchMedia && window.matchMedia('(max-width:1024px)').matches;
+  }
+
+  function renderStrict(sections) {
+    // 1) 메인 9섹션: 무조건 렌더
+    MAIN_SECTIONS.forEach(cfg => {
+      const box = document.querySelector(cfg.selector);
+      if (!box) return;
+      renderBox(box, sections && sections[cfg.key], cfg.limit, cfg.key);
+    });
+
+    // 2) 우측패널/모바일레일: 반드시 1곳만 렌더
+    const key = 'socialnetwork';
+    const limit = LIMIT_RIGHT;
+
+    const rightBox = document.querySelector(RIGHT_TARGET_SELECTOR);
+    const mobileBox = document.querySelector(MOBILE_TARGET_SELECTOR);
+
+    if (isMobile()) {
+      // 모바일에서는 모바일 레일만 렌더
+      if (mobileBox) renderBox(mobileBox, sections && sections[key], limit, key);
+    } else {
+      // 데스크탑/태블릿에서는 우측패널만 렌더
+      if (rightBox) renderBox(rightBox, sections && sections[key], limit, key);
     }
   }
 
-  function renderRightPanel(sections) {
-    const items = sections[RIGHT_PANEL_KEY] || [];
-
-    // (A) Desktop right panel container
-    const rightAutoPanel = document.getElementById("rightAutoPanel");
-    if (rightAutoPanel) {
-      renderIntoContainer(rightAutoPanel, items, { limit: RIGHT_PANEL_LIMIT, rowIndex: null });
-    }
-
-    // (B) Mobile/Scroller right rail container (data-psom-key="socialnetwork")
-    const rightScroller = document.querySelector('.thumb-grid.thumb-scroller[data-psom-key="socialnetwork"]');
-    if (rightScroller) {
-      renderIntoContainer(rightScroller, items, { limit: RIGHT_PANEL_LIMIT, rowIndex: null });
-    }
-  }
-
-  async function boot() {
+  async function run() {
     try {
       const snapshot = await loadSnapshot();
       const sections = getSections(snapshot);
+      if (!sections) return;
 
-      // Guard: keys must exist; otherwise do nothing (avoid wrong injection)
-      // Only render if at least one main key exists OR right panel key exists
-      const hasAny =
-        MAIN_KEY_ORDER.some(k => Array.isArray(sections[k])) ||
-        Array.isArray(sections[RIGHT_PANEL_KEY]);
+      renderStrict(sections);
 
-      if (!hasAny) return;
+      // 리사이즈로 레이아웃 전환 시(모바일<->데스크탑) 우측/모바일 타겟 재렌더 필요
+      // => 한 번만 리스너 연결, 전환 시 해당 1곳만 새로 렌더
+      let lastMobile = isMobile();
+      window.addEventListener('resize', function () {
+        const nowMobile = isMobile();
+        if (nowMobile === lastMobile) return;
+        lastMobile = nowMobile;
 
-      renderMainRows(sections);
-      renderRightPanel(sections);
+        // 전환 시, 두 타겟 모두 렌더 상태 해제 후 다시 렌더 (메인 섹션은 유지)
+        const rb = document.querySelector(RIGHT_TARGET_SELECTOR);
+        const mb = document.querySelector(MOBILE_TARGET_SELECTOR);
+        if (rb) { RENDERED_NODES.delete?.(rb); while (rb.firstChild) rb.removeChild(rb.firstChild); }
+        if (mb) { RENDERED_NODES.delete?.(mb); while (mb.firstChild) mb.removeChild(mb.firstChild); }
 
-    } catch (err) {
-      console.warn("[socialnetwork-automap] failed:", err);
+        renderStrict(sections);
+      }, { passive: true });
+
+      console.log('[AUTOMAP] socialnetwork v3 mapping loaded');
+    } catch (e) {
+      console.error('[AUTOMAP] socialnetwork v3 error:', e);
     }
   }
 
-  // run after DOM + preview rows
-  if (document.readyState === "complete" || document.readyState === "interactive") {
-    setTimeout(boot, 0);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', run, { once: true });
   } else {
-    document.addEventListener("DOMContentLoaded", () => setTimeout(boot, 0));
+    run();
   }
+
 })();
