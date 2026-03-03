@@ -58,23 +58,39 @@
     });
   }
 
-  window.ensureSupabase = async function ensureSupabase(){
-    if (_clientPromise) return _clientPromise;
+window.ensureSupabase = async function ensureSupabase(){
+  if (_clientPromise) return _clientPromise;
 
-    _clientPromise = (async () => {
-      const SV = window.SUPER_VARSAR || window.SUPABASE_VARS || {};
-      if (!(SV && SV.url && SV.anonKey)) {
-        throw new Error("Supabase vars missing: window.SUPER_VARSAR.url / anonKey");
-      }
-      // load supabase-js v2 from CDN if not present
+  _clientPromise = (async () => {
+
+    const SV = window.SUPER_VARSAR || window.SUPABASE_VARS || {};
+    const url = SV?.url || '';
+    const key = SV?.anonKey || '';
+
+    // 1️⃣ URL 검증 (형식이 http/https 아니면 중성화)
+    if (!/^https?:\/\/.+/i.test(url) || !key) {
+      console.warn("Supabase disabled: invalid or missing vars");
+      return null;
+    }
+
+    try {
+
+      // 2️⃣ supabase-js 로드
       if (!window.supabase || !window.supabase.createClient) {
         await loadScriptOnce("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2");
       }
-      return window.supabase.createClient(SV.url, SV.anonKey);
-    })();
 
-    return _clientPromise;
-  };
+      return window.supabase.createClient(url, key);
+
+    } catch (e) {
+      console.error("Supabase init failed:", e);
+      return null;
+    }
+
+  })();
+
+  return _clientPromise;
+};
 
   // Optional health ping attaching for quick debug
   window.__supabaseHealthCheck = async function(){
