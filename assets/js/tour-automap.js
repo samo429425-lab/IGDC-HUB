@@ -1,50 +1,84 @@
-
 /* ===============================
-   TOUR AUTOMAP - PRODUCTION SAFE
-   Strict Scope / No Global Loop
-=============================== */
+   TOUR AUTOMAP - PRODUCTION (FIXED)
+   - ONLY loads TOUR feed
+   - Renders into existing TOUR right panel (#rightAutoPanel)
+   - No dummy generation, no other hub mixing
+================================= */
 
-const TOUR_PSOM_KEY = "tour_rightpanel";
+(function(){
+  const FEED_URLS = [
+    "/.netlify/functions/feed-tour?limit=100",
+    "/netlify/functions/feed-tour?limit=100",
+    "/api/feed-tour?limit=100"
+  ];
 
-window.runTourAutomap = async function(){
+  const RIGHT_PANEL_ID = "rightAutoPanel";
+  const MAX_SLOTS = 100;
 
-  if (!window.fetchTourFeed) return;
-
-  try{
-
-    const snapshot = await window.fetchTourFeed();
-
-    if (!snapshot || !snapshot[TOUR_PSOM_KEY]) return;
-
-    const items = snapshot[TOUR_PSOM_KEY];
-
-    // 🔒 STRICT DOM SCOPE (Right Panel Only)
-    const slots = document.querySelectorAll('#rightAutoPanel .ad-box');
-
-    if (!slots.length) return;
-
-    slots.forEach((slot, i) => {
-
-      if (!items[i]) return;
-
-      const img = slot.querySelector('img');
-      const title = slot.querySelector('.ad-title');
-      const link = slot.querySelector('a');
-
-      if (img && items[i].image) img.src = items[i].image;
-      if (title && items[i].title) title.textContent = items[i].title;
-      if (link && items[i].url) link.href = items[i].url;
-
-    });
-
-  }catch(err){
-    console.error("Tour Automap Error:", err);
+  async function fetchTourFeed(){
+    for (const url of FEED_URLS){
+      try{
+        const res = await fetch(url, { cache: "no-store" });
+        if(!res.ok) continue;
+        const json = await res.json();
+        if(json && Array.isArray(json.items)) return json.items;
+      }catch(_){ }
+    }
+    return [];
   }
 
-};
+  function buildAdBox(item){
+    const box = document.createElement("div");
+    box.className = "ad-box";
 
-document.addEventListener("DOMContentLoaded", function(){
-  if (window.runTourAutomap){
-    window.runTourAutomap();
+    const a = document.createElement("a");
+    a.href = (item && item.link) ? item.link : "#";
+    a.target = "_self";
+    a.rel = "noopener";
+
+    const img = document.createElement("img");
+    img.alt = (item && item.title) ? item.title : "";
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.src = item.thumb;
+
+    const title = document.createElement("div");
+    title.className = "tour-card-title";
+    title.textContent = item.title || "";
+
+    a.appendChild(img);
+    a.appendChild(title);
+    box.appendChild(a);
+    return box;
   }
-});
+
+  async function run(){
+    const panel = document.getElementById(RIGHT_PANEL_ID);
+    if(!panel) return;
+
+    const items = await fetchTourFeed();
+    if(!items.length) return;
+
+    // Clear only our panel; do not touch other containers.
+    panel.innerHTML = "";
+
+    const limit = Math.min(MAX_SLOTS, items.length);
+    for(let i=0;i<limit;i++){
+      const it = items[i];
+      if(!it || !it.title || !it.thumb) continue;
+      panel.appendChild(buildAdBox(it));
+    }
+
+    // Notify mobile rail to rebuild after real cards exist.
+    document.dispatchEvent(new CustomEvent("tour:automap:done"));
+    if (typeof window.buildTourMobileRail === "function") {
+      try { window.buildTourMobileRail(); } catch(_){ }
+    }
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", run, { once: true });
+  }else{
+    run();
+  }
+})();
