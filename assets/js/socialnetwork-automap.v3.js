@@ -1,245 +1,164 @@
+/*
+  IGDC Social Network AutoMap (v3.PROD2)
+  - Reads /data/social.snapshot.json (placeholder_cards)
+  - Renders 9 main sections into existing .thumb-grid[data-psom-key]
+  - Renders RIGHT panel into #rightAutoPanel using .card markup (so CSS + mobile rail work)
+  - On resize, re-renders AFTER the page's dummy right-panel bootstrap runs
+*/
 
-/* =========================================================
-   socialnetwork-automap.v3.PROD2.js  (Distribution-standard)
-   - 목적: social.snapshot.json(또는 feed-social)에서 슬롯을 받아
-           HTML의 정확한 위치(9개 메인 Row + 우측패널)에 렌더
-   - 원칙: 1) 섹션/타겟 외 삽입 금지  2) 우측패널/메인 혼동 금지
-          3) 스냅샷 실데이터가 없으면 스냅샷 샘플 슬롯 그대로 렌더
-========================================================= */
-(function () {
-  "use strict";
+(function(){
+  'use strict';
 
-  // ---- Config (long-term stable) ----
-  const SNAPSHOT_URL_CANDIDATES = [
-    "/data/social.snapshot.json",
-    "/social.snapshot.json",
-    "/snapshots/social.snapshot.json",
-  ];
-  const FEED_FALLBACK_URLS = [
-    "/.netlify/functions/feed-social",
-    "/.netlify/functions/feed_social",
-    "/api/feed-social",
-  ];
+  const SNAPSHOT_URL = '/data/social.snapshot.json';
+  const MAX_RIGHT = 100; // requested target
 
-  const MAIN_KEY_ORDER = [
-    "social-youtube",
-    "social-instagram",
-    "social-tiktok",
-    "social-facebook",
-    "social-discord",
-    "social-community",
-    "social-threads",
-    "social-telegram",
-    "social-twitter",
-  ];
+  const $ = (sel, root=document) => root.querySelector(sel);
+  const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
 
-  // Row targets are hard-wired in socialnetwork.html (rowGrid1..9)
-  const ROW_TARGET_IDS = [
-    "rowGrid1",
-    "rowGrid2",
-    "rowGrid3",
-    "rowGrid4",
-    "rowGrid5",
-    "rowGrid6",
-    "rowGrid7",
-    "rowGrid8",
-    "rowGrid9",
-  ];
-
-  const RIGHT_PANEL_KEY = "socialnetwork";
-  const RIGHT_PANEL_LIMIT = 100;
-  const MAIN_ROW_LIMIT = 50;
-
-  // ---- Utils ----
-  function $(sel, root) { return (root || document).querySelector(sel); }
-  function $all(sel, root) { return Array.from((root || document).querySelectorAll(sel)); }
-
-  function safeStr(v, fallback = "") {
-    return (typeof v === "string" && v.trim()) ? v.trim() : fallback;
+  function esc(s){
+    return String(s ?? '').replace(/[&<>"']/g, (c) => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'
+    }[c]));
   }
 
-  function pickImage(it) {
-    return safeStr(it?.thumbnail) ||
-           safeStr(it?.thumb) ||
-           safeStr(it?.image) ||
-           safeStr(it?.img) ||
-           safeStr(it?.photo) ||
-           "";
+  function safeUrl(u){
+    const s = String(u ?? '').trim();
+    if(!s) return '#';
+    // allow http(s), mailto, tel, and relative
+    if(/^https?:\/\//i.test(s) || /^mailto:/i.test(s) || /^tel:/i.test(s) || s.startsWith('/') || s.startsWith('./') || s.startsWith('#')) return s;
+    return '#';
   }
 
-  function pickTitle(it) {
-    return safeStr(it?.title) ||
-           safeStr(it?.name) ||
-           safeStr(it?.label) ||
-           safeStr(it?.platform) ||
-           safeStr(it?.provider) ||
-           "Loading...";
+  function normalizeCard(raw){
+    const o = raw && typeof raw === 'object' ? raw : {};
+    const title = o.title ?? o.name ?? o.label ?? 'Loading...';
+    const subtitle = o.subtitle ?? o.desc ?? o.description ?? '';
+    const href = o.href ?? o.url ?? o.link ?? '#';
+    const ctaText = o.ctaText ?? o.cta ?? 'Open';
+    const thumb = o.thumb ?? o.image ?? o.img ?? '';
+    return { title:String(title), subtitle:String(subtitle), href:String(href), ctaText:String(ctaText), thumb:String(thumb) };
   }
 
-  function pickUrl(it) {
-    return safeStr(it?.url) ||
-           safeStr(it?.link) ||
-           safeStr(it?.href) ||
-           "#";
+  function cardHTML(card, {forceFullWidth=false, fixedWidthPx=null}={}){
+    const c = normalizeCard(card);
+    const href = safeUrl(c.href);
+    const target = /^https?:\/\//i.test(href) ? ' target="_blank" rel="noopener noreferrer"' : '';
+
+    // Use same card structure the page already styles (.card > .pic + .meta)
+    const styles = [];
+    if(forceFullWidth) styles.push('width:100%');
+    if(typeof fixedWidthPx === 'number' && fixedWidthPx > 0) styles.push(`width:${fixedWidthPx}px`);
+    const styleAttr = styles.length ? ` style="${styles.join(';')}"` : '';
+
+    const img = c.thumb ? `<img src="${esc(c.thumb)}" alt="" loading="lazy" decoding="async">` : '';
+
+    return `
+      <a class="card" data-card="1" href="${esc(href)}"${target}${styleAttr}>
+        <div class="pic">${img}</div>
+        <div class="meta">
+          <div class="title">${esc(c.title)}</div>
+          <div class="desc">${esc(c.subtitle)}</div>
+          <div class="cta">${esc(c.ctaText || 'Open')}</div>
+        </div>
+      </a>
+    `.trim();
   }
 
-  function pickDesc(it, rowIndex) {
-    const d = safeStr(it?.subtitle) || safeStr(it?.desc) || safeStr(it?.meta) || "";
-    if (d) return d;
-    if (Number.isFinite(rowIndex)) return `Row ${rowIndex} · Snapshot`;
-    return "Snapshot";
+  function getSnapshotCards(snapshot){
+    // Accept either new or legacy shapes.
+    if(snapshot && snapshot.placeholder_cards && typeof snapshot.placeholder_cards === 'object') return snapshot.placeholder_cards;
+    if(snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.placeholder_cards) return snapshot.pages.social.placeholder_cards;
+    if(snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections) return snapshot.pages.social.sections; // legacy
+    return {};
   }
 
-  function createSocialCard(it, rowIndex) {
-    // IMPORTANT: matches socialnetwork.html preview card structure (Open button included)
-    const a = document.createElement("a");
-    a.className = "card";
-    const url = pickUrl(it);
-    if (url && url !== "#") {
-      a.href = url;
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-    } else {
-      a.href = "javascript:void(0)";
+  function renderSectionGrid(gridEl, cards){
+    if(!gridEl) return;
+    const list = Array.isArray(cards) ? cards : [];
+    gridEl.innerHTML = list.map(c => cardHTML(c)).join('');
+  }
+
+  function isPortraitMobile(){
+    return window.matchMedia('(max-width: 520px)').matches;
+  }
+
+  function isLandscapeSmall(){
+    return window.matchMedia('(max-width: 1024px)').matches && window.matchMedia('(orientation: landscape)').matches;
+  }
+
+  function renderRightPanel(panelEl, cardsByKey){
+    if(!panelEl) return;
+
+    // Key declared in HTML for right rail.
+    const src = Array.isArray(cardsByKey.socialnetwork) ? cardsByKey.socialnetwork : [];
+
+    const out = [];
+    for(let i=0;i<MAX_RIGHT;i++){
+      out.push(src[i] ?? { title:'Loading...', subtitle:'', href:'#', ctaText:'', thumb:'' });
     }
 
-    const img = pickImage(it);
-    const emoji = safeStr(it?.emoji) || "";
+    const portrait = isPortraitMobile();
+    const landscape = isLandscapeSmall();
 
-    const thumb = document.createElement("div");
-    thumb.className = "thumb";
-    if (img) {
-      thumb.style.backgroundImage = `url("${img}")`;
-    }
-    // keep emoji as fallback if provided
-    if (emoji) {
-      thumb.style.display = "flex";
-      thumb.style.alignItems = "center";
-      thumb.style.justifyContent = "center";
-      thumb.style.fontSize = "42px";
-      thumb.textContent = emoji;
-    }
+    // The HTML has styles for .rp-hscroll on mobile-landscape.
+    panelEl.classList.toggle('rp-hscroll', landscape && !portrait);
 
-    const body = document.createElement("div");
-    body.className = "body";
-
-    const title = document.createElement("div");
-    title.className = "title";
-    title.textContent = pickTitle(it);
-
-    const desc = document.createElement("div");
-    desc.className = "desc";
-    desc.textContent = pickDesc(it, rowIndex);
-
-    const cta = document.createElement("span");
-    cta.className = "cta";
-    cta.textContent = "Open";
-
-    body.appendChild(title);
-    body.appendChild(desc);
-    body.appendChild(cta);
-
-    a.appendChild(thumb);
-    a.appendChild(body);
-    return a;
+    // In landscape strip, fixed width makes scrolling natural.
+    const fixed = (landscape && !portrait) ? 220 : null;
+    panelEl.innerHTML = out.map(c => cardHTML(c, {forceFullWidth: portrait, fixedWidthPx: fixed})).join('');
   }
 
-  function renderIntoContainer(container, items, opts) {
-    if (!container) return;
-    const limit = opts?.limit ?? 50;
-    const rowIndex = opts?.rowIndex;
+  function renderAll(cardsByKey){
+    // Main 9 section grids (ignore the right-rail thumb-grid; we use #rightAutoPanel instead)
+    $$('.thumb-grid[data-psom-key]').forEach(grid => {
+      const key = String(grid.getAttribute('data-psom-key') || '').trim();
+      if(!key) return;
+      if(key === 'socialnetwork') return;
+      renderSectionGrid(grid, cardsByKey[key]);
+    });
 
-    container.innerHTML = "";
-    const list = Array.isArray(items) ? items.slice(0, limit) : [];
-    for (const it of list) {
-      container.appendChild(createSocialCard(it, rowIndex));
-    }
+    renderRightPanel($('#rightAutoPanel'), cardsByKey);
   }
 
-  async function tryFetchJson(url, options) {
-    const res = await fetch(url, options);
-    if (!res.ok) throw new Error(`HTTP ${res.status} @ ${url}`);
+  async function loadSnapshot(){
+    const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
+    if(!res.ok) throw new Error(`snapshot fetch failed: ${res.status}`);
     return await res.json();
   }
 
-  async function loadSnapshot() {
-    // 1) direct snapshot URL candidates
-    for (const url of SNAPSHOT_URL_CANDIDATES) {
-      try {
-        const j = await tryFetchJson(url, { cache: "no-store" });
-        if (j && j.pages && j.pages.social && j.pages.social.sections) return j;
-      } catch (_) {}
-    }
-    // 2) feed fallback
-    for (const url of FEED_FALLBACK_URLS) {
-      try {
-        const j = await tryFetchJson(url, { cache: "no-store" });
-        // feed-social can return {snapshot:...} or snapshot directly
-        const snap = j?.snapshot || j;
-        if (snap && snap.pages && snap.pages.social && snap.pages.social.sections) return snap;
-      } catch (_) {}
-    }
-    throw new Error("social snapshot not reachable (snapshot url + feed fallback 모두 실패)");
+  function installRightPanelRenderer(cardsByKey){
+    // Replace dummy renderer (defined inside socialnetwork.html) with a stable one.
+    window.__IGDC_RIGHTPANEL_RENDER = function(){
+      renderRightPanel($('#rightAutoPanel'), cardsByKey);
+    };
   }
 
-  function getSections(snapshot) {
-    return snapshot?.pages?.social?.sections || {};
+  function debounce(fn, ms=140){
+    let t = null;
+    return function(){
+      clearTimeout(t);
+      const args = arguments;
+      t = setTimeout(() => fn.apply(this, args), ms);
+    };
   }
 
-  function renderMainRows(sections) {
-    for (let i = 0; i < MAIN_KEY_ORDER.length; i++) {
-      const key = MAIN_KEY_ORDER[i];
-      const rowId = ROW_TARGET_IDS[i];
-      const rowEl = document.getElementById(rowId);
-      if (!rowEl) continue;
-
-      const items = sections[key];
-      // 메인 Row는 기존 preview를 완전히 교체 (운영형)
-      renderIntoContainer(rowEl, items, { limit: MAIN_ROW_LIMIT, rowIndex: i + 1 });
-    }
-  }
-
-  function renderRightPanel(sections) {
-    const items = sections[RIGHT_PANEL_KEY] || [];
-
-    // (A) Desktop right panel container
-    const rightAutoPanel = document.getElementById("rightAutoPanel");
-    if (rightAutoPanel) {
-      renderIntoContainer(rightAutoPanel, items, { limit: RIGHT_PANEL_LIMIT, rowIndex: null });
-    }
-
-    // (B) Mobile/Scroller right rail container (data-psom-key="socialnetwork")
-    const rightScroller = document.querySelector('.thumb-grid.thumb-scroller[data-psom-key="socialnetwork"]');
-    if (rightScroller) {
-      renderIntoContainer(rightScroller, items, { limit: RIGHT_PANEL_LIMIT, rowIndex: null });
-    }
-  }
-
-  async function boot() {
-    try {
+  async function boot(){
+    try{
       const snapshot = await loadSnapshot();
-      const sections = getSections(snapshot);
+      const cardsByKey = getSnapshotCards(snapshot);
 
-      // Guard: keys must exist; otherwise do nothing (avoid wrong injection)
-      // Only render if at least one main key exists OR right panel key exists
-      const hasAny =
-        MAIN_KEY_ORDER.some(k => Array.isArray(sections[k])) ||
-        Array.isArray(sections[RIGHT_PANEL_KEY]);
+      renderAll(cardsByKey);
+      installRightPanelRenderer(cardsByKey);
 
-      if (!hasAny) return;
+      // Re-render on resize AFTER the dummy bootstrap rebuilds its placeholders.
+      window.addEventListener('resize', debounce(() => renderAll(cardsByKey), 160));
 
-      renderMainRows(sections);
-      renderRightPanel(sections);
-
-    } catch (err) {
-      console.warn("[socialnetwork-automap] failed:", err);
+    } catch (err){
+      console.error('[socialnetwork-automap] boot failed:', err);
     }
   }
 
-  // run after DOM + preview rows
-  if (document.readyState === "complete" || document.readyState === "interactive") {
-    setTimeout(boot, 0);
-  } else {
-    document.addEventListener("DOMContentLoaded", () => setTimeout(boot, 0));
-  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+
 })();
