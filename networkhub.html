@@ -68,7 +68,7 @@
 
   /* 🔒 핵심 안정화 */
   box-sizing:border-box;          /* border 포함 계산 */
-  aspect-ratio: 4 / 5;           /* 고정 비율 */
+  aspect-ratio: 4 / 5;           /* 고정 비율 (4:5) */
   width:100%;
   flex-shrink:0;
   overflow:hidden;
@@ -80,7 +80,7 @@
   display:block !important;
   width:100% !important;
   height:100% !important;
-  line-height:0 !important;
+  line-height:normal !important;
   border-radius:10px !important;
   text-decoration:none !important;
   color:inherit !important;
@@ -187,19 +187,22 @@ a{ color:inherit }
 }
 
 /* Cards */
-
 .right-rail .ad-box{
   background:#fff;
   border:1px solid #d7dce1;
-  border-radius:10px;
-  width:100%;
+  border-radius:8px;
+  /* 4:5 ratio (portrait product-style) */
+  aspect-ratio: 4 / 5;
   height:auto;
-  min-height:auto;
-  max-height:none;
-  display:block;
+width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  font-weight:600;
+  color:#444;
   overflow:hidden;
 }
-
 
 /* anchor fills the card */
 .right-rail .ad-box > a{
@@ -304,7 +307,8 @@ html, body {
       margin-top:16px !important;   /* 투어 페이지와 동일한 상단 여백 */
       border-top-left-radius:10px !important;
       border-top-right-radius:10px !important;
-      overflow:hidden;}
+      overflow-x:hidden !important;
+      overflow-y:auto !important;}
 
 .sidebar{ padding-top: 20px !important;}
 
@@ -469,7 +473,7 @@ html, body {
     flex:0 0 100%; max-width:100%;
     background:#fff; border:1px solid #d7dce1; border-radius:10px;
     display:flex; align-items:center; justify-content:center;
-    scroll-snap-align:center; aspect-ratio: 4 / 5; overflow:hidden;
+    scroll-snap-align:center; aspect-ratio: 16 / 9; overflow:hidden;
   }
   /* landscape shows multiple */
   @media (orientation:landscape){

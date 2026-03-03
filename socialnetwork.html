@@ -22,6 +22,7 @@ body{
   display:flex;
   flex-direction:row;
   align-items:stretch;
+  gap:15px;
 }
 
 .sidebar{
@@ -2135,21 +2136,241 @@ footer{
   margin-top: 8px;
   font-size: 0.95rem;
 }
-</style></div>
-
-<div class="right-rail" id="rightRail">
-  <h3 class="ad-headline" style="display:block; margin:0 auto; text-align:center; width:clamp(230px,100%,274px); margin:0 0 10px; text-align:center; line-height:1; height:1em; white-space:nowrap;">
-    💎 인기 아이템 💎
-  </h3>
-
-  <!-- 우측 패널 자동 렌더 전용 -->
-  <div class="ad-panel" id="rightAutoPanel"></div>
-
+</style></div><div class="right-rail" id="rightRail">
+<h3 class="ad-headline" style="display:block; margin:0 auto; text-align:center; width:clamp(230px,100%,274px); margin:0 0 10px; text-align:center; line-height:1; height:1em; white-space:nowrap;">
+  💎 인기 아이템 💎
+</h3>
+<div class="ad-panel" id="rightAutoPanel"></div>
+<div class="thumb-grid thumb-scroller" data-psom-key="socialnetwork"></div>
 </div>
 </div>
 
 <!-- Mobile rail for SOCIAL: directly above the footer (NOT inside) -->
+<style id="social-mobile-rail-style">
+@media (max-width:1024px){
+  #social-mobile-rail{
+    display:block !important;
+    background:#f7f9fb; border:1px solid #d6dce0; border-radius:10px;
+    padding:10px 10px 14px; box-shadow:0 1px 4px rgba(0,0,0,.06);
+    margin-top:14px;
+  }
+  #social-mobile-rail .list{
+    display:flex; gap:10px; overflow-x:auto; padding:6px 4px;
+    scroll-snap-type:x mandatory;
+  }
+  #social-mobile-rail .list::-webkit-scrollbar{ display:none; width:0; height:0; }
+  #social-mobile-rail .list{ scrollbar-width:none; -ms-overflow-style:none; }
+}
+@media (max-width:1024px) and (orientation:portrait){
+  #social-mobile-rail .list > .card,
+  #social-mobile-rail .list > .ad-box{
+    flex: 0 0 100% !important; max-width:100% !important;
+    scroll-snap-align:start;
+  }
+  #social-mobile-rail .list img,
+  #social-mobile-rail .list video,
+  #social-mobile-rail .list iframe{
+    width:100% !important; height:100% !important; object-fit:cover !important;
+  }
+}
+@media (max-width:1024px) and (orientation:landscape){
+  #social-mobile-rail .list > .card,
+  #social-mobile-rail .list > .ad-box{
+    flex:0 0 min(300px,80%); max-width:min(300px,80%);
+    scroll-snap-align:start;
+  }
+}
+</style>
 
+<script id="social-mobile-rail-js">
+(function(){
+
+/* ===================================================
+   Social Mobile Rail - Production Stable Version
+   - Safe against Ctrl+F5
+   - Safe against late renderer load
+   - No empty-lock
+   - No duplication
+   =================================================== */
+
+var built = false;
+var lastMode = null;
+var hookAttached = false;
+var observer = null;
+
+/* ---------------------------
+   Aspect ratio sync
+---------------------------- */
+function setAspect(card){
+  var media = card.querySelector('img, video');
+  if(!media){
+    card.style.aspectRatio = "16 / 9";
+    return;
+  }
+
+  function apply(w,h){
+    card.style.aspectRatio = (w>0 && h>0) ? (w + " / " + h) : "16 / 9";
+  }
+
+  if(media.tagName === 'IMG'){
+    if(media.complete && media.naturalWidth){
+      apply(media.naturalWidth, media.naturalHeight);
+    }else{
+      media.addEventListener('load', function(){
+        apply(media.naturalWidth, media.naturalHeight);
+      }, { once:true });
+    }
+  }
+
+  if(media.tagName === 'VIDEO'){
+    if(media.readyState >= 1){
+      apply(media.videoWidth, media.videoHeight);
+    }else{
+      media.addEventListener('loadedmetadata', function(){
+        apply(media.videoWidth, media.videoHeight);
+      }, { once:true });
+    }
+  }
+}
+
+/* ---------------------------
+   Build rail safely
+---------------------------- */
+function build(){
+
+  var rail = document.getElementById('social-mobile-rail');
+  var list = rail && rail.querySelector('.list');
+  var src  = document.getElementById('rightAutoPanel');
+
+  if(!rail || !list || !src) return;
+
+  var boxes = src.querySelectorAll('.ad-box');
+
+  if(!boxes.length){
+    built = false;   // ❗ 절대 잠그지 않음
+    return;
+  }
+
+  list.innerHTML = "";
+
+  boxes.forEach(function(box){
+    var clone = box.cloneNode(true);
+    clone.classList.add('card');
+    clone.style.height = 'auto';
+    clone.style.minHeight = '0';
+    clone.style.maxHeight = 'none';
+    list.appendChild(clone);
+    setAspect(clone);
+  });
+
+  built = true;
+}
+
+/* ---------------------------
+   Mode switch
+---------------------------- */
+function toggle(){
+
+  var isMobile = window.matchMedia('(max-width:1024px)').matches;
+  var rail = document.getElementById('social-mobile-rail');
+  if(!rail) return;
+
+  var mode = isMobile ? 'mobile' : 'desktop';
+  if(mode === lastMode) return;
+
+  lastMode = mode;
+
+  if(isMobile){
+    rail.style.display = 'block';
+    built = false;
+    build();
+  }else{
+    rail.style.display = 'none';
+    built = false;
+    var list = rail.querySelector('.list');
+    if(list) list.innerHTML = "";
+  }
+}
+
+/* ---------------------------
+   Hook renderer (safe loop)
+---------------------------- */
+function attachHook(){
+
+  if(hookAttached) return;
+
+  var fn = window.__IGDC_RIGHTPANEL_RENDER || window.__RIGHT_PANEL_RENDER;
+
+  if(typeof fn !== 'function'){
+    setTimeout(attachHook, 150);  // ❗ 렌더러 생길 때까지 재시도
+    return;
+  }
+
+  function wrapped(items){
+    fn(items);
+    if(window.matchMedia('(max-width:1024px)').matches){
+      built = false;
+      build();
+    }
+  }
+
+  window.__IGDC_RIGHTPANEL_RENDER = wrapped;
+  window.__RIGHT_PANEL_RENDER = wrapped;
+
+  hookAttached = true;
+}
+
+/* ---------------------------
+   Observe right panel changes
+---------------------------- */
+function observeSource(){
+
+  var src = document.getElementById('rightAutoPanel');
+  if(!src) return;
+
+  if(observer) observer.disconnect();
+
+  observer = new MutationObserver(function(){
+    if(window.matchMedia('(max-width:1024px)').matches){
+      built = false;
+      build();
+    }
+  });
+
+  observer.observe(src, { childList:true, subtree:false });
+}
+
+/* ---------------------------
+   Init
+---------------------------- */
+function init(){
+  toggle();
+  attachHook();
+  observeSource();
+}
+
+/* DOM Ready */
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', init, { once:true });
+}else{
+  init();
+}
+
+/* Debounced resize */
+var rsTimer = null;
+window.addEventListener('resize', function(){
+  clearTimeout(rsTimer);
+  rsTimer = setTimeout(toggle, 250);
+});
+
+})();
+</script>
+<section id="social-mobile-rail" style="display:none;">
+  <div class="wrap">
+    <h3 class="title" style="margin:8px 0 6px; text-align:left;">💎 인기 아이템 💎</h3>
+    <div class="list" aria-label="추천"></div>
+  </div>
+</section>
 
 <script id="igdc-layout-guard">
 (function(){
@@ -4214,7 +4435,7 @@ footer{
 <script defer="" src="/assets/js/placeholder-sweeper.js"></script>
 <script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
 
-<script defer src="/assets/js/socialnetwork-automap.v3.js"></script>
+<script defer src="/assets/js/socialnetwork-automap.v3.PROD3.js"></script>
 
 </body>
 </html>
