@@ -128,9 +128,8 @@ panel.appendChild(box);
 
 function renderRightMobile(items){
 
-  // Mobile: still render into #rightAutoPanel (hidden by CSS) so the page-level
-  // mobile-rail cloner can duplicate cards into #social-mobile-rail.
-  renderRightDesktop(items);
+// 모바일에서는 다시 렌더하지 않음
+return;
 
 }
 
