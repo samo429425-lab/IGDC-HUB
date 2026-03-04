@@ -1,12 +1,7 @@
 
-/* =========================================================
-   IGDC SOCIAL AUTOMAP v5 REBUILD
-   Desktop + Mobile Stable
-   ========================================================= */
+/* IGDC SOCIAL AUTOMAP - STABLE (overwrite existing v3) */
 
-(function(){
-
-"use strict";
+(async function(){
 
 const SNAPSHOT_URLS=[
 "/data/social.snapshot.json",
@@ -15,215 +10,57 @@ const SNAPSHOT_URLS=[
 "/.netlify/functions/feed-social"
 ];
 
-const MAIN_ROWS=[
-{rowId:"rowGrid1",key:"social-youtube"},
-{rowId:"rowGrid2",key:"social-instagram"},
-{rowId:"rowGrid3",key:"social-tiktok"},
-{rowId:"rowGrid4",key:"social-facebook"},
-{rowId:"rowGrid5",key:"social-discord"},
-{rowId:"rowGrid6",key:"social-community"},
-{rowId:"rowGrid7",key:"social-threads"},
-{rowId:"rowGrid8",key:"social-telegram"},
-{rowId:"rowGrid9",key:"social-twitter"}
-];
-
-const RIGHT_KEY="socialnetwork";
-
-let snapshotCache=null;
-
-/* ---------------- CARD ---------------- */
+async function loadSnapshot(){
+for(const url of SNAPSHOT_URLS){
+try{
+const r=await fetch(url,{cache:"no-store"});
+if(!r.ok) continue;
+const j=await r.json();
+const snap=j.snapshot||j;
+const sections=snap?.pages?.social?.sections;
+if(sections) return sections;
+}catch(e){}
+}
+throw new Error("snapshot load fail");
+}
 
 function createCard(item){
-
-const a=document.createElement("a");
-a.className="social-card";
-a.href=item.link || "#";
-a.target="_blank";
-
-const thumb=document.createElement("div");
-thumb.className="thumb";
-
-if(item.thumb){
-thumb.style.backgroundImage='url("'+item.thumb+'")';
-thumb.style.backgroundSize="cover";
-thumb.style.backgroundPosition="center";
+const card=document.createElement("div");
+card.className="snapshot-card";
+card.innerHTML=`
+<div class="thumb"></div>
+<div class="title">${item?.title||""}</div>
+<a class="cta" href="${item?.link||"#"}" target="_blank">Open</a>
+`;
+return card;
 }
 
-const body=document.createElement("div");
-body.className="body";
+function render(sections){
 
-const title=document.createElement("div");
-title.className="title";
-title.textContent=item.title || "Item";
+Object.keys(sections).forEach(key=>{
 
-const btn=document.createElement("div");
-btn.className="cta";
-btn.textContent="Open";
+const slot=document.querySelector('[data-psom-key="'+key+'"]');
+if(!slot) return;
 
-body.appendChild(title);
-body.appendChild(btn);
+slot.innerHTML="";
 
-a.appendChild(thumb);
-a.appendChild(body);
-
-return a;
-
-}
-
-/* ---------------- MAIN GRID ---------------- */
-
-function renderMain(){
-
-MAIN_ROWS.forEach(function(r){
-
-const row=document.getElementById(r.rowId);
-if(!row) return;
-
-const grid=row.querySelector(".thumb-grid");
-if(!grid) return;
-
-grid.innerHTML="";
-
-const items=snapshotCache[r.key] || [];
-
-items.forEach(function(it){
-grid.appendChild(createCard(it));
+(sections[key]||[]).forEach(item=>{
+slot.appendChild(createCard(item));
 });
 
 });
 
 }
-
-/* ---------------- RIGHT PANEL ---------------- */
-
-function renderRight(){
-
-const panel=document.getElementById("rightAutoPanel");
-if(!panel) return;
-
-panel.innerHTML="";
-
-const items=snapshotCache[RIGHT_KEY] || [];
-
-items.forEach(function(it){
-
-const box=document.createElement("div");
-box.className="ad-box";
-
-box.appendChild(createCard(it));
-
-panel.appendChild(box);
-
-});
-
-}
-
-/* ---------------- MOBILE RAIL ---------------- */
-
-function ensureMobileRail(){
-
-let rail=document.getElementById("socialMobileRailList");
-
-if(!rail){
-
-const container=document.createElement("div");
-container.id="socialMobileRailList";
-
-const target=document.querySelector("main, .container, body");
-
-if(target){
-target.appendChild(container);
-}
-
-rail=container;
-
-}
-
-return rail;
-
-}
-
-function mirrorRightToMobile(){
-
-const panel=document.getElementById("rightAutoPanel");
-if(!panel) return;
-
-const rail=ensureMobileRail();
-
-rail.innerHTML="";
-
-panel.querySelectorAll(".ad-box").forEach(function(el){
-
-rail.appendChild(el.cloneNode(true));
-
-});
-
-}
-
-/* ---------------- SNAPSHOT LOAD ---------------- */
-
-async function fetchJson(url){
-
-const r=await fetch(url,{cache:"no-store"});
-if(!r.ok) throw new Error();
-return await r.json();
-
-}
-
-async function loadSnapshot(){
-
-for(const url of SNAPSHOT_URLS){
-
-try{
-
-const j=await fetchJson(url);
-const snap=j.snapshot || j;
-const sections=snap?.pages?.social?.sections;
-
-if(sections) return sections;
-
-}catch(e){}
-
-}
-
-throw new Error("snapshot load fail");
-
-}
-
-/* ---------------- RENDER ---------------- */
-
-function renderAll(){
-
-renderMain();
-renderRight();
-mirrorRightToMobile();
-
-}
-
-/* ---------------- BOOT ---------------- */
 
 async function boot(){
 
 try{
 
-snapshotCache=await loadSnapshot();
-
-renderAll();
-
-window.addEventListener("resize",function(){
-
-setTimeout(function(){
-
-mirrorRightToMobile();
-
-},300);
-
-},{passive:true});
+const sections=await loadSnapshot();
+render(sections);
 
 }catch(e){
-
-console.warn("automap fail",e);
-
+console.warn("automap error",e);
 }
 
 }
