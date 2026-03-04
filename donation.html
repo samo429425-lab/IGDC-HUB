@@ -1595,12 +1595,7 @@ body > .container > .main > *{
     --left-col:210px;
     --right-col:340px;
   }
-  body > .container{
-    display:grid;
-    grid-template-columns: var(--left-col) minmax(0,1fr) var(--right-col);
-    gap: var(--grid-gap);
-    align-items:start;
-  }
+
   .sidebar{ grid-column:1; }
   .main{ grid-column:2; min-width:0; }
   .right, .right-panel, .ad-panel{ grid-column:3; }
