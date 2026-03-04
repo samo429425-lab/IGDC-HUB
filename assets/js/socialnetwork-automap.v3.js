@@ -1,11 +1,6 @@
 
 /* =========================================================
-   socialnetwork-automap.v3.js  (STABLE PATCH)
-   Fix:
-   - Prevent socialnetwork items entering main container
-   - Scope rendering to rowGrid containers only
-   - Desktop right panel → #rightAutoPanel
-   - Mobile right panel  → #rpMobileGrid
+   socialnetwork-automap.v3.js  (FINAL FIXED VERSION)
    ========================================================= */
 
 (function(){
@@ -35,11 +30,13 @@ const MAIN_LIMIT=50;
 const RIGHT_LIMIT=100;
 
 function createCard(it,row){
+
 const a=document.createElement("a");
 a.className="social-card";
 a.href=it?.link||"#";
 a.target="_blank";
-if(row)a.dataset.row=row;
+
+if(row) a.dataset.row=row;
 
 const thumb=document.createElement("div");
 thumb.className="thumb";
@@ -69,6 +66,7 @@ body.appendChild(d);
 const btn=document.createElement("div");
 btn.className="cta";
 btn.textContent="Open";
+
 body.appendChild(btn);
 
 a.appendChild(thumb);
@@ -78,27 +76,29 @@ return a;
 }
 
 function renderList(container,list,limit,row){
-if(!container)return;
+
+if(!container) return;
+
 container.innerHTML="";
 
 (list||[]).slice(0,limit).forEach(it=>{
 container.appendChild(createCard(it,row));
 });
+
 }
 
 function renderMainRows(sections){
 
 MAIN_ROWS.forEach((r,i)=>{
 
-if(r.key===RIGHT_KEY)return;
+if(r.key===RIGHT_KEY) return;
 
 const row=document.getElementById(r.rowId);
-if(!row)return;
+if(!row) return;
 
-/* IMPORTANT: scope search INSIDE rowGrid only */
 const grid=row.querySelector('.thumb-grid[data-psom-key="'+r.key+'"]');
 
-if(!grid)return;
+if(!grid) return;
 
 renderList(grid,sections[r.key],MAIN_LIMIT,i+1);
 
@@ -108,10 +108,10 @@ renderList(grid,sections[r.key],MAIN_LIMIT,i+1);
 
 function renderRightDesktop(items){
 
-if(window.innerWidth<1025)return;
+if(window.innerWidth<1025) return;
 
 const panel=document.getElementById("rightAutoPanel");
-if(!panel)return;
+if(!panel) return;
 
 panel.innerHTML="";
 
@@ -130,19 +130,22 @@ panel.appendChild(box);
 
 function renderRightMobile(items){
 
-if(window.innerWidth>1024)return;
+if(window.innerWidth>1024) return;
 
 const grid=document.getElementById("rpMobileGrid");
-if(!grid)return;
+if(!grid) return;
 
 renderList(grid,items,RIGHT_LIMIT,null);
 
 }
 
 async function fetchJson(url){
+
 const r=await fetch(url,{cache:"no-store"});
-if(!r.ok)throw new Error();
+if(!r.ok) throw new Error();
+
 return await r.json();
+
 }
 
 async function loadSections(){
@@ -155,7 +158,7 @@ const j=await fetchJson(u);
 const snap=j?.snapshot||j;
 const s=snap?.pages?.social?.sections;
 
-if(s)return s;
+if(s) return s;
 
 }catch(e){}
 
@@ -170,7 +173,7 @@ let timer=null;
 
 function renderAll(){
 
-if(!cache)return;
+if(!cache) return;
 
 renderMainRows(cache);
 
@@ -183,7 +186,7 @@ renderRightMobile(right);
 
 async function boot(){
 
-if(!document.getElementById("rowGrid1"))return;
+if(!document.getElementById("rowGrid1")) return;
 
 try{
 
