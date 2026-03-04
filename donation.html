@@ -270,7 +270,7 @@
 /* === Gutter normalization: make left/right gaps equal === */
 .main{ padding-left:16px !important; padding-right:16px !important; }
 /* Keep container gap as the sole inter-column spacing */
-.container{ gap:16px !important; }
+
 /* Center the three top boxes so leftover space splits evenly */
 .hero, #topWritePanel, .people-news{ margin-left:auto !important; margin-right:auto !important; max-width:1210px !important; }
 @media (orientation: portrait){
@@ -999,7 +999,7 @@
 
 /* ====== Sidebar ↔ Main gap: half (from 16px→8px) ====== */
 :root{ --col-gap: 8px !important; }
-.container{ gap: var(--col-gap) !important; }
+
 
 /* Ensure the three top boxes and feed align to the reduced gutter */
 .main{ padding-left: 0 !important; padding-right: 0 !important; }
@@ -1063,7 +1063,7 @@
 /* === Bring labels & thumbnail tracks closer to the left sidebar wall === */
 /* Reduce the grid column gap between sidebar and main */
 :root{ --col-gap: 4px !important; }
-.container{ gap: var(--col-gap) !important; }
+
 
 /* Ensure main column has no extra left padding/margin */
 .main{ padding-left: 0 !important; margin-left: 0 !important; }
