@@ -177,6 +177,16 @@
     const d = dock.getBoundingClientRect();
     const m = Math.round(d.height); // unit = dock height
 
+
+    // Mobile overlay override (avoid bar-style)
+    if (window.innerWidth <= 1024) {
+      modal.style.setProperty('left', '2vw', 'important');
+      modal.style.setProperty('right', '2vw', 'important');
+      modal.style.setProperty('top', '2vh', 'important');
+      modal.style.setProperty('bottom', '2vh', 'important');
+      modal.style.setProperty('max-height', '96vh', 'important');
+      return;
+    }
     // Spec: shrink all four sides by dock height
     modal.style.setProperty('left', (m * 1.8) + 'px', 'important');
     modal.style.setProperty('right', (m * 2.5) + 'px', 'important');
@@ -202,6 +212,8 @@ function showExtension(){
     EXT.backdrop.style.display = 'none';
     EXT.modal.classList.add('maru-ext-hidden');
     EXT.visible = false;
+    // Closing extension must stop voice immediately
+    stopAllVoiceImmediately('extension-hide');
     if (userInitiated) {
       // User intent wins: clear lock so future auto-open works cleanly
       EXT.lockUntil = 0;
@@ -386,6 +398,11 @@ function showExtension(){
     if (!kind) return true;
 
     const intent = req && req.intent ? String(req.intent) : 'summary';
+
+    // Populate mode: if dashboards have data, do NOT open extension.
+    if (intent === 'populate') {
+      return !dashboardHasData();
+    }
     const q = String(req && req.text ? req.text : '').trim();
 
     // Force extension for detail/research, realtime, and any media/audio/news clip requests.
@@ -462,13 +479,26 @@ function reconcileExtensionVisibility(){
     safe(() => { if (typeof window.stopMaruMic === 'function') window.stopMaruMic(); });
   }
 
+
+  // ---- HARD STOP (TTS + Mic) ----
+  function stopAllVoiceImmediately(reason){
+    try { if (typeof window.maruVoiceStop === 'function') window.maruVoiceStop(); } catch(_) {}
+    try { if (typeof window.stopMaruTTS === 'function') window.stopMaruTTS(); } catch(_) {}
+    try { if (window.speechSynthesis && typeof window.speechSynthesis.cancel === 'function') window.speechSynthesis.cancel(); } catch(_) {}
+    try { if (typeof window.stopMaruMic === 'function') window.stopMaruMic(); } catch(_) {}
+    try { window.__MARU_VOICE_LAST_STOP_REASON__ = reason || ''; } catch(_) {}
+  }
+
   function setVoiceEnabled(on, reason){
     VOICE_ENABLED = !!on;
 
     if (VOICE_ENABLED) startMic();
     else stopMic();
 
-    syncVoiceToggleUi();
+    
+
+    if (!VOICE_ENABLED) stopAllVoiceImmediately(reason || 'voice-off');
+syncVoiceToggleUi();
     syncInputModeUi();   // ← 이 줄 딱 1줄 추가
 
 
@@ -681,6 +711,11 @@ function callInsightEngine(req){
     STATE.lastRequest = req;
     STATE.commandHistory.push({ role:'user', text: req.text });
 
+
+    if (req && /(글로벌\s*인사이트).*(실행|전체|수집)/.test(String(req.text||''))) {
+      MaruAddon.bootstrapGlobalInsight();
+      return;
+    }
     if (ENGINE_DEBOUNCE_TIMER) clearTimeout(ENGINE_DEBOUNCE_TIMER);
     ENGINE_DEBOUNCE_TIMER = setTimeout(() => {
       callInsightEngine(req)
@@ -742,6 +777,17 @@ function callInsightEngine(req){
   function routeResponse(req, res){
     const headlineRaw = res.text || '준비된 자료가 없습니다.';
     const headline = sanitizeEcho(headlineRaw, req && req.text);
+
+
+    // Populate-first: for global populate, inject dashboards before deciding extension open
+    const __intent = (req && req.intent) ? String(req.intent) : 'summary';
+    if (req && req.scope === 'global' && __intent === 'populate') {
+      safe(() => { if (typeof window.renderSummary === 'function') window.renderSummary(headline); });
+      // NOTE: regions/countries may be injected by separate populate routine
+      safe(() => { if (typeof window.injectMaruGlobalRegionData === 'function' && Array.isArray(res.data?.regions)) window.injectMaruGlobalRegionData(res.data.regions); });
+      safe(() => { if (typeof window.injectMaruGlobalCountryData === 'function' && Array.isArray(res.data?.countries)) window.injectMaruGlobalCountryData(res.data.countries); });
+      try { setTimeout(reconcileExtensionVisibility, 50); } catch(_) {}
+    }
 
     // 확장창 오픈 여부 판단 (정본)
     // - 질문은 Conversation Dock에만 존재 (확장창에 USER 질문 표시 금지)
@@ -814,6 +860,50 @@ function callInsightEngine(req){
     // After distributing, decide whether to temporarily hide extension
   }
 
+  // ---------- GLOBAL POPULATE (Region cards) ----------
+  function getAllRegionIdsFromDOM(){
+    const nodes = document.querySelectorAll('.maru-region-card[data-region]');
+    const ids = [];
+    nodes.forEach(n => {
+      const id = (n && n.dataset) ? n.dataset.region : null;
+      if (id) ids.push(String(id));
+    });
+    // unique
+    return Array.from(new Set(ids));
+  }
+
+  function pickSummaryFromRes(raw){
+    const t = (raw && (raw.text ?? raw.summary ?? raw.message)) ? String(raw.text ?? raw.summary ?? raw.message) : '';
+    return t.trim();
+  }
+
+  async function populateRegionCards(){
+    const ids = getAllRegionIdsFromDOM();
+    if (!ids.length) return;
+
+    const tasks = ids.map(async (id) => {
+      try{
+        const raw = await callInsightEngine({
+          text: '권역 인사이트 요약',
+          scope: 'region',
+          target: id,
+          intent: 'summary'
+        });
+        const res = normalizeEngineResponse(raw);
+        return { id, summary: pickSummaryFromRes(res), issues: res.data?.issues || null };
+      }catch(e){
+        return null;
+      }
+    });
+
+    const out = (await Promise.all(tasks)).filter(Boolean);
+    if (typeof window.injectMaruGlobalRegionData === 'function') {
+      try { window.injectMaruGlobalRegionData(out); } catch(_) {}
+    }
+    try { setTimeout(reconcileExtensionVisibility, 50); } catch(_) {}
+  }
+
+
   // ---------- PUBLIC API ----------
   const MaruAddon = {
     __MARU_ADDON_VER__: 'v8.0-final',
@@ -825,7 +915,7 @@ function callInsightEngine(req){
         text:'글로벌 인사이트 전체 수집',
         scope:'global',
         target:null,
-        intent:'summary',
+        intent:'populate',
         voiceWanted: VOICE_ENABLED
       });
     },
@@ -861,6 +951,8 @@ function callInsightEngine(req){
       const raw = String(text || '').trim();
       if (!raw) return;
 
+
+      if (/(글로벌\s*인사이트).*(실행|전체|수집)/.test(raw)) { MaruAddon.bootstrapGlobalInsight(); return; }
       // 질문은 항상 Conversation Dock 입력창에서만 처리
       try {
         if (window.MaruConversationDock && typeof window.MaruConversationDock.show === 'function') window.MaruConversationDock.show();
@@ -876,6 +968,8 @@ function callInsightEngine(req){
       const raw = String(text || '').trim();
       if (!raw) return;
 
+
+      if (/(글로벌\s*인사이트).*(실행|전체|수집)/.test(raw)) { MaruAddon.bootstrapGlobalInsight(); return; }
       // 질문은 항상 Conversation Dock 입력창에서만 처리
       try {
         if (window.MaruConversationDock && typeof window.MaruConversationDock.show === 'function') window.MaruConversationDock.show();
