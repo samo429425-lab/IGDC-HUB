@@ -11,9 +11,10 @@
   const CONFIG = {
     version: 'vNext-orchestrator-1',
     endpoints: {
+      collector: '/.netlify/functions/collector',
       insight: '/.netlify/functions/maru-global-insight-engine',
       bank: '/.netlify/functions/search-bank-engine'
-},
+    },
 
     limits: {
       bank: 30,
@@ -86,11 +87,21 @@
   }
 
   async function callInsight(q, mode){
+    // Prefer central collector
+    const cUrl = CONFIG.endpoints.collector + '?' + qs({ mode: 'insight', q, limit: CONFIG.limits.insight, engine: 'insight' });
+    const cRes = await fetchJSON(cUrl);
+    if(cRes) return cRes;
+    // Fallback to direct engine
     const url = CONFIG.endpoints.insight + '?' + qs({ q, mode: mode||'search', limit: CONFIG.limits.insight });
     return await fetchJSON(url);
   }
 
   async function callBank(q, limit){
+    // Prefer central collector
+    const cUrl = CONFIG.endpoints.collector + '?' + qs({ mode: 'search', q, limit: limit || CONFIG.limits.bank, engine: 'search' });
+    const cRes = await fetchJSON(cUrl);
+    if(cRes) return cRes;
+    // Fallback to direct bank engine
     const url = CONFIG.endpoints.bank + '?' + qs({ q, limit: limit || CONFIG.limits.bank });
     return await fetchJSON(url);
   }
