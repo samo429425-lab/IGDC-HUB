@@ -3,7 +3,39 @@
 <html class="prelayout" lang="ko">
 <head>
 <!-- Supabase inline injection (vars + init) -->
+<script>
+/**
+ * 안전한 Supabase 연결 플러그
+ * 기존 하드코딩된 anonKey 제거, secureEnvBridge.js 또는 Netlify 환경변수에서 자동 불러오기
+ */
 
+(async () => {
+  try {
+    const envRes = await fetch('/.netlify/functions/secureEnvBridge');
+    const envData = await envRes.json();
+
+    if (envData?.env?.SUPABASE_URL && envData?.env?.SUPABASE_ANON_KEY) {
+      window.SUPER_VARSAR = Object.freeze({
+        url: envData.env.SUPABASE_URL,
+        anonKey: envData.env.SUPABASE_ANON_KEY
+      });
+      console.log("✅ Supabase 키 정상 로드됨.");
+    } else {
+      console.warn("⚠️ Supabase 키 누락 — secureEnvBridge.js 또는 Netlify 환경변수 확인 필요.");
+      window.SUPER_VARSAR = Object.freeze({
+        url: null,
+        anonKey: null
+      });
+    }
+  } catch (err) {
+    console.error("❌ Supabase 환경변수 로드 실패:", err);
+    window.SUPER_VARSAR = Object.freeze({
+      url: null,
+      anonKey: null
+    });
+  }
+})();
+</script>
 
 
 <!-- /Supabase inline injection -->
@@ -41,7 +73,7 @@
 
 
   .hero{
-    background:#fff; margin:0 auto 20px; width:100%; max-width:1200px;
+    background:#fff; margin:0 auto 20px; width:100%; max-width:none;
     box-shadow:0 0 10px rgba(0,0,0,.06); border-radius:var(--radius); padding:10px 24px; text-align:center;
   }
   .hero h2{ margin:0 0 12px; color:var(--brand); }
@@ -117,7 +149,7 @@
   .account-section span{ font-size:12px; }
 
   /* === (요청사항) Feed: 5줄 + 세로 라벨 + 가로 스크롤 === */
-  .feed-wrapper{ width:100%; max-width:1200px; margin:0 auto 30px; }
+  .feed-wrapper{ width:100%; max-width:none; margin:0 auto 30px; }
   .feed-header{ display:flex; justify-content:space-between; align-items:center; margin:10px 0 16px; gap:8px; flex-wrap:wrap; }
 
   #feedRows{ display:flex; flex-direction:column; gap:14px; }
@@ -218,7 +250,7 @@
 /* === Uniform content widths for top 3 boxes === */
 .hero, #topWritePanel, .people-news{
   width:100% !important;
-  max-width:1200px !important;
+  max-width:none !important;
   margin-left:auto !important;
   margin-right:auto !important;
 }
@@ -1221,7 +1253,7 @@ body > .container > .main > *{
 .sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
 </style>
 <style id="prelayout-guard">.prelayout *{transition:none !important;}</style>
-
+<script>window.IGDC_PAGE = window.IGDC_PAGE || { project:"IGDC", pageId:"front-"+(document.title||"") };</script>
 <style id="adpanel-final-override">
   /* Ensure any CSS variables for right column reflect 300px */
   :root{
@@ -1616,7 +1648,7 @@ body > .container > .main > *{
 
 
 <style id="donation-truefix-css">
-  @media (max-width:1200px) and (min-width:1101px){
+  @media (max-width:none) and (min-width:1101px){
     .container{ gap:0 !important; }
 @media (orientation: portrait){
 .main, main, #main, .main-content, .content, .content-area{
@@ -1727,7 +1759,22 @@ main, .main, #main, .main-content, .content, .content-area{
   .container,.layout,.wrap,.page{display:flex!important;flex-wrap:nowrap!important;gap:0!important}
 }
 </style>
-
+<script id="qna-modal-resize-guard">
+(function(){
+  var Q=['#qnaModal','.qna-modal','[data-role="qna-modal"]','[data-modal="qna"]','[data-component="qna-modal"]','.modal.qna','.qnaModal'];
+  var AP="__igtc_qna_guard_applied";
+  function small(){return (window.innerWidth||0)<=1100}
+  function pick(){for(var i=0;i<Q.length;i++){var el=document.querySelector(Q[i]);if(el)return el}return null}
+  function full(m){if(!m||m[AP])return;m.style.position="fixed";m.style.inset="0";m.style.margin="0";m.style.transform="none";m.style.width="100vw";m.style.maxWidth="100vw";m.style.height="100vh";m.style.maxHeight="100vh";m.style.zIndex=m.style.zIndex||"9999";m[AP]=true}
+  function apply(){if(!small())return;var m=pick();if(m)full(m)}
+  function signal(){if(!small())return;apply();var t=Date.now(),h=setInterval(function(){var m=pick();if(m){full(m);clearInterval(h)}if(Date.now()-t>1500){clearInterval(h)}},120)}
+  window.addEventListener("message",function(e){try{var t=e&&e.data&&e.data.type;if(t==="IGTC_OPEN_QNA"||t==="IGDC_QA_OPENED"||t==="QNA_OPEN")signal()}catch(_){}});
+  if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",apply)}else{apply()}
+  window.addEventListener("resize",function(){if(small())apply()});
+  window.addEventListener("orientationchange",function(){if(small())apply()});
+  try{new MutationObserver(function(){if(small())apply()}).observe(document.documentElement,{childList:true,subtree:true})}catch(_){}
+})();
+</script>
 
 <style id="bc-mobile-tighten-15">
 /* === Blockchain buttons: mobile portrait ≥15% shrink (Donation page) === */
@@ -1975,7 +2022,17 @@ body .right{ display:none !important; }
   }
 </style>
   <!-- Supabase 환경 설정 (글쓰기/도네이션/Q&A 공용) -->
-  
+  <script>
+    window.SUPER_VARSAR = window.SUPER_VARSAR || {
+      url: window.SUPABASE_URL || "",
+      anonKey: window.SUPABASE_ANON_KEY || "",
+      project: "IGDC"
+    };
+
+    window.CURRENT_USER_ID = window.CURRENT_USER_ID || "";
+    window.CURRENT_USER_ROLE = (window.CURRENT_USER_ROLE || "guest").toLowerCase();
+    window.CURRENT_USER_NAME = window.CURRENT_USER_NAME || "";
+  </script>
 
   <!-- Supabase JS (환경만 로드, 실제 사용 로직은 body 쪽에서 처리 예정) -->
   <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
@@ -2026,7 +2083,25 @@ body .right{ display:none !important; }
   }
 </style>
 
+<script>
+  // [IGTC DONATION] Hero description <br> normalization (MOBILE ONLY, width <= 1100px)
+  document.addEventListener("DOMContentLoaded", function () {
+    var vw = window.innerWidth || document.documentElement.clientWidth || 0;
+    if (vw > 1100) return;
 
+    var hero = document.querySelector(".hero");
+    if (!hero) return;
+
+    var targets = hero.querySelectorAll(".hero-desc, .hero-text, .hero-body, p");
+    targets.forEach(function (el) {
+      var html = el.innerHTML;
+      if (!html) return;
+      html = html.replace(/<br\s*\/?>(\s*)/gi, " ");
+      html = html.replace(/\s{2,}/g, " ");
+      el.innerHTML = html.trim();
+    });
+  });
+</script>
 
 <style>
   /* IGTC DONATION - hero & topWritePanel spacing normalize */
@@ -2191,46 +2266,12 @@ body .right{ display:none !important; }
   }
 }
 </style>
-
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="/assets/css/thumbs.standard.css">
-
-<style id="donation-stability-patch">
-/* === DONATION STABILITY PATCH (desktop only) ===
-   목적: (1) 우측 패널~브라우저 우측벽 '큰 여백' 제거
-        (2) 메인-좌측/우측 사이 갭 약 10px 확보
-   해법: 컨테이너 gap 고정 + main flex 확장 + 내부 박스 max-width만 제한
-*/
-@media (min-width:1025px){
-  .container{ width:100% !important; gap:10px !important; }
-  .main{ flex:1 1 auto !important; min-width:0 !important; padding:20px 0 50px !important; }
-  .main > *{ max-width:1200px !important; margin-left:auto !important; margin-right:auto !important; }
-  .feed-wrapper{ max-width:1200px !important; }
-  .right{ flex:0 0 340px !important; width:340px !important; margin:0 !important; }
-}
-</style>
-
-
-<style id="donation-widefix">
-/* === Wide layout: let main content expand with sidebar/right === */
-.container{ gap:10px !important; }            /* sidebar ↔ main ↔ right spacing */
-.main{ padding:20px 0 50px !important; }      /* use container gap instead of inner side padding */
-.main > *{
-  max-width:none !important;
-  margin-left:0 !important;
-  margin-right:0 !important;
-}
-/* Remove legacy centering constraints */
-.hero, #topWritePanel, .people-news, .feed-wrapper{
-  max-width:none !important;
-  margin-left:0 !important;
-  margin-right:0 !important;
-}
-</style>
-
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
-
+<script>(function(){document.addEventListener("DOMContentLoaded",function(){document.documentElement.classList.remove("prelayout");var s=document.getElementById("prelayout-guard"); if(s&&s.parentNode){s.parentNode.removeChild(s);}});})();</script>
 <div class="container">
 <!-- Left Sidebar (불변) -->
 <nav class="sidebar">
@@ -2357,21 +2398,6 @@ body .right{ display:none !important; }
 </div>
 
 </div>
-
-
-<!-- Composer Modal (restored from donation-Q) -->
-<div class="hidden" id="composerModal" style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:9999;">
-<div class="panel" style="width:min(92vw, 720px); max-height:80vh; overflow:auto;">
-<h3 style="margin-top:0;">글쓰기</h3>
-<input id="composeTitle" placeholder="Title" style="width:100%;"/>
-<textarea id="composeBody" placeholder="Enter content..." rows="8" style="width:100%; resize:vertical;"></textarea>
-<div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px;">
-<button class="button outline" id="btnDraftSave" type="button">저장 임시저장</button><button class="button outline" id="btnCancel">취소</button>
-<button class="button" disabled="disabled" id="btnSave" style=";display:none !important;">저장</button>
-</div>
-</div>
-</div>
-
 </main>
 <!-- Right (불변) -->
 <aside class="right">
@@ -2423,7 +2449,580 @@ body .right{ display:none !important; }
 </footer>
 
 
-<div id="newsPreviewModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 800px); max-height:80vh; overflow:auto;">
+<!-- Restored composer modal (from donation-Q) -->
+<div class="hidden" id="composerModal" style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:9999;">
+<div class="panel" style="width:min(92vw, 720px); max-height:80vh; overflow:auto;">
+<h3 style="margin-top:0;">글쓰기</h3>
+<input id="composeTitle" placeholder="Title" style="width:100%;"/>
+<textarea id="composeBody" placeholder="Enter content..." rows="8" style="width:100%; resize:vertical;"></textarea>
+<div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px;">
+<button class="button outline" id="btnDraftSave" type="button">저장 임시저장</button><button class="button outline" id="btnCancel">취소</button>
+<button class="button" disabled="disabled" id="btnSave" style=";display:none !important;">저장</button>
+</div>
+</div>
+</div>
+<!-- /Restored composer modal -->
+
+<script>
+(function(){
+  const $ = (sel, root=document)=>root.querySelector(sel);
+  const $$ = (sel, root=document)=>Array.from(root.querySelectorAll(sel));
+
+  const modal = $("#composerModal");
+  const btnOpen = $("#btnOpenComposer");
+  const btnSubmit = $("#btnSubmitPost");
+  const btnSave = $("#btnSave");
+  const btnCancel = $("#btnCancel");
+  const titleI = $("#composeTitle");
+  const bodyI = $("#composeBody");
+  const catSel = $("#postCategory");
+  const fileI = $("#postImage");
+  const fileAttach = $("#postFile");
+  const btnImgOk = $("#btnImageConfirm");
+  const btnFileOk = $("#btnFileConfirm");
+  const btnPickImg = $("#btnPickImage");
+  const btnPickFile = $("#btnPickFile");
+  const fileChosen = $("#fileChosen");
+  const imgChosen = $("#imgChosen");
+  let imageLink = ""; let attachLink = ""; let imagePreviewObjectUrl = "";
+
+  function openModal(){ modal.classList.remove("hidden"); titleI && titleI.focus(); }
+  function closeModal(){ modal.classList.add("hidden"); }
+
+  btnOpen && btnOpen.addEventListener("click", openModal);
+  btnCancel && btnCancel.addEventListener("click", closeModal);
+  // trigger hidden inputs and show names
+  btnPickFile && btnPickFile.addEventListener("click", ()=> fileAttach && fileAttach.click());
+  btnPickImage && btnPickImage.addEventListener("click", ()=> fileI && fileI.click());
+  fileAttach && fileAttach.addEventListener("change", ()=>{ if(fileChosen){ fileChosen.textContent = fileAttach.files[0]?.name || ""; } });
+  fileI && fileI.addEventListener("change", ()=>{ if(imgChosen){ imgChosen.textContent = fileI.files[0]?.name || ""; } });
+  btnSubmit && btnSubmit.addEventListener("click", ()=>{ if(btnSave){ btnSave.click(); } });
+
+  btnSave && btnSave.addEventListener("click", ()=>{
+    const t = titleI?.value?.trim() || "(Title 없음)";
+    const b = bodyI?.value?.trim() || "(Content 없음)";
+    const cat = catSel?.value || "etc";
+    const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
+    if(holder){
+      const item = document.createElement('div');
+      item.className = 'item';
+      const imgSrc = imageLink || imagePreviewObjectUrl || null;
+      item.innerHTML = `
+        ${imgSrc ? `<div class="thumb" style="aspect-ratio:16/9; overflow:hidden; border-radius:6px; margin-bottom:6px;"><img src="${imgSrc}" style="width:100%; height:100%; object-fit:cover;"/></div>` : ""}
+        <div class="title">${t}</div>
+        <div class="meta">${new Date().toLocaleString()}</div>
+        <div class="preview" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
+      `;
+      holder.prepend(item);
+      if(attachLink){
+        const att = document.createElement("div");
+        att.className = "attach";
+        att.style = "font-size:.8rem; color:#555; margin-top:4px;";
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">첨부 링크</a>` : `첨부: ${attachLink}`);
+        item.appendChild(att);
+      }
+    }
+    // include attachment filename if provided
+    if(fileAttach && fileAttach.files && fileAttach.files[0]){
+      const last = document.querySelector('.right .topic-panel .list[data-cat="' + cat + '"] .item');
+      if(last){
+        const att = document.createElement("div");
+        att.className = "attach";
+        att.style = "font-size:.8rem; color:#555; margin-top:4px;";
+        att.textContent = "첨부: " + fileAttach.files[0].name;
+        last.appendChild(att);
+      }
+    }
+    if(titleI) titleI.value = "";
+    if(bodyI) bodyI.value = "";
+    if(fileI) fileI.value = ""; if(fileAttach) fileAttach.value = "";
+    closeModal();
+  });
+
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+  // Size limits (approx): image 2MB, file 5MB
+  const IMG_MAX = 2 * 1024 * 1024;
+  const FILE_MAX = 5 * 1024 * 1024;
+
+  btnImgOk && btnImgOk.addEventListener('click', ()=>{
+    const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
+    const link = prompt("이미지 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 확인을 누르세요)");
+    if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
+    if(f){
+      if(f.size > IMG_MAX){
+        alert("이미지는 2MB 이하만 직접 미리보기 가능합니다. 큰 파일은 외부 Save소에 올리고 링크를 입력해주세요.");
+        imageLink = ""; imagePreviewObjectUrl = "";
+      }else{
+        imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
+        imageLink = ""; // 실제 Save은 링크만 사용
+      }
+    }else{
+      imageLink = ""; imagePreviewObjectUrl = "";
+    }
+  });
+
+  btnFileOk && btnFileOk.addEventListener('click', ()=>{
+    const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
+    const link = prompt("파일 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 확인을 누르세요)");
+    if(link){ attachLink = link; return; }
+    if(f){
+      if(f.size > FILE_MAX){
+        alert("파일은 5MB 이하만 파일명 표시가 됩니다. 큰 파일은 외부 Save소 링크만 사용해주세요.");
+        attachLink = "";
+      }else{
+        attachLink = f.name; // 파일명만 기록
+      }
+    }else{
+      attachLink = "";
+    }
+  });
+
+})();
+</script>
+<script>
+(function(){
+  var wrap = document.querySelector('.compose-wrap');
+  if(!wrap) return;
+
+  var btnAttach = document.getElementById('btnAttach');
+  var input = document.getElementById('postAttach');
+  var nameEl = document.getElementById('attachName');
+  var clearBtn = document.getElementById('btnAttachClear');
+
+  function updateName(files){
+    if(!nameEl) return;
+    if(files && files.length){
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '개 파일');
+      if(clearBtn) clearBtn.style.display = 'inline-block';
+    }else{
+      nameEl.textContent = '';
+      if(clearBtn) clearBtn.style.display = 'none';
+    }
+  }
+  function mirrorToLegacy(files){
+    var legacy = document.getElementById('postFile'); // 백엔드 호환용
+    if(!legacy || !files) return;
+    try{
+      var dt = new DataTransfer();
+      for(var i=0;i<files.length;i++){ dt.items.add(files[i]); }
+      legacy.files = dt.files;
+    }catch(e){ /* fallback: 서버에서 postAttach를 읽어도 됨 */ }
+  }
+
+  if(btnAttach && input){
+    btnAttach.addEventListener('click', function(){ input.click(); });
+    input.addEventListener('change', function(){
+      updateName(input.files);
+      mirrorToLegacy(input.files);
+    });
+  }
+  if(clearBtn && input){
+    clearBtn.addEventListener('click', function(e){
+      e.preventDefault();
+      try{ input.value=''; }catch(_){}
+      updateName(null);
+      var legacy = document.getElementById('postFile');
+      if(legacy){ try{ legacy.value=''; }catch(_){ } }
+    });
+  }
+})();
+</script>
+<script>
+(function(){
+  const USER_ROLE = (window.USER_ROLE || 'admin');
+  const USER_ID = (window.USER_ID || 'local-user');
+  const $ = (s,r=document)=>r.querySelector(s);
+  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+
+  const rowTop = $('.compose-wrap .row-top');
+  const attachInput = $('#postAttach');
+  const attachPreview = $('#attachPreview');
+  const clearBtn = $('#btnAttachClear');
+  const legacyFile = $('#postFile');
+  const btnSubmit = $('#btnSubmitPost');
+
+  let selectedFiles = [];
+  function syncInputs(){
+    try{
+      const dt = new DataTransfer();
+      selectedFiles.forEach(f=>dt.items.add(f));
+      if(attachInput) attachInput.files = dt.files;
+      if(legacyFile) legacyFile.files = dt.files;
+    }catch(e){}
+  }
+  function renderChips(){
+    if(!attachPreview) return;
+    attachPreview.innerHTML = '';
+    if(!selectedFiles.length){
+      if(clearBtn) clearBtn.style.display = 'none';
+      return;
+    }
+    if(clearBtn) clearBtn.style.display = 'inline-block';
+    selectedFiles.forEach((file, idx)=>{
+      const chip = document.createElement('span');
+      chip.className = 'attach-chip';
+      chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
+      const x = document.createElement('button');
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 제거'); x.textContent='×';
+      x.addEventListener('click', ()=>{
+        selectedFiles.splice(idx,1);
+        syncInputs();
+        renderChips();
+      });
+      chip.appendChild(x);
+      attachPreview.appendChild(chip);
+    });
+  }
+  if(attachInput){
+    attachInput.addEventListener('change', ()=>{
+      selectedFiles = Array.from(attachInput.files || []);
+      syncInputs();
+      renderChips();
+    });
+  }
+  if(clearBtn){
+    clearBtn.addEventListener('click', (e)=>{
+      e.preventDefault();
+      selectedFiles = [];
+      if(attachInput) attachInput.value='';
+      if(legacyFile) legacyFile.value='';
+      syncInputs();
+      renderChips();
+    });
+  }
+
+  const catSel = $('#postCategory');
+  const titleI = $('#composeTitle');
+  const bodyI  = $('#composeBody');
+  const modal  = $('#composerModal');
+  function closeModal(){ modal && modal.classList.add('hidden'); }
+
+  function handleUnifiedSave(){
+    const t = (titleI && titleI.value.trim()) || '(Title 없음)';
+    const b = (bodyI && bodyI.value.trim()) || '(Content 없음)';
+    const cat = (catSel && catSel.value) || 'etc';
+    const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
+    if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
+
+    const item = document.createElement('div');
+    item.className = 'item';
+    item.dataset.author = USER_ID;
+    item.innerHTML = `
+      <div class="title">${t}</div>
+      <div class="meta">${new Date().toLocaleString()}</div>
+      <div class="preview" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
+    `;
+
+    if(selectedFiles.length){
+      const list = document.createElement('ul');
+      list.className = 'attach-list';
+      list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
+      selectedFiles.forEach(f=>{
+        const li = document.createElement('li');
+        li.textContent = '첨부: ' + f.name;
+        list.appendChild(li);
+      });
+      item.appendChild(list);
+    }
+
+    const del = document.createElement('button');
+    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='Delete';
+    del.style.cssText='margin-top:6px; display:none;';
+    item.appendChild(del);
+    const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
+    if(canDelete) del.style.display='inline-block';
+    del.addEventListener('click', ()=>{
+      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      item.remove();
+    });
+
+    holder.prepend(item);
+
+    if(titleI) titleI.value='';
+    if(bodyI) bodyI.value='';
+    selectedFiles = [];
+    if(attachInput) attachInput.value='';
+    if(legacyFile) legacyFile.value='';
+    syncInputs();
+    renderChips();
+    closeModal();
+  }
+
+  if(btnSubmit){
+    btnSubmit.addEventListener('click', (e)=>{
+      e.preventDefault();
+      handleUnifiedSave();
+    });
+  }
+
+  renderChips();
+})();
+</script><script>
+(function(){
+  const $ = (s,r=document)=>r.querySelector(s);
+  const attachInput = $('#postAttach');
+  const attachPreview = $('#attachPreview');
+  const clearBtn = $('#btnAttachClear');
+  const legacyFile = $('#postFile');
+  const nameEl = $('#attachName');
+
+  // Internal unified list (mirrors the file input)
+  let selectedFiles = [];
+
+  function syncInputs(){
+    try{
+      const dt = new DataTransfer();
+      selectedFiles.forEach(f=>dt.items.add(f));
+      if(attachInput) attachInput.files = dt.files;
+      if(legacyFile) legacyFile.files = dt.files;
+    }catch(e){ /* ignore */ }
+  }
+
+  function clearAll(){
+    selectedFiles = [];
+    if(attachInput) try{ attachInput.value=''; }catch(e){}
+    if(legacyFile) try{ legacyFile.value=''; }catch(e){}
+    syncInputs();
+    if(attachPreview) attachPreview.innerHTML = '';
+    if(clearBtn) clearBtn.style.display = 'none';
+    if(nameEl){ nameEl.textContent=''; } // 강제 초기화 (유령 표시 방지)
+  }
+
+  function renderChips(){
+    if(!attachPreview) return;
+    attachPreview.innerHTML = '';
+    if(!selectedFiles.length){
+      if(clearBtn) clearBtn.style.display = 'none';
+      if(nameEl){ nameEl.textContent=''; }
+      return;
+    }
+    if(clearBtn) clearBtn.style.display = 'inline-block';
+
+    // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '개 파일');
+    const chip = document.createElement('span');
+    chip.className = 'attach-chip';
+    chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
+
+    const x = document.createElement('button');
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 모두 제거'); x.textContent='×';
+    x.addEventListener('click', ()=>{ clearAll(); });
+    chip.appendChild(x);
+    attachPreview.appendChild(chip);
+
+    // 레거시 이름 표시 동기화 차단 (항상 칩이 우선)
+    if(nameEl){ nameEl.textContent=''; }
+  }
+
+  // On file pick, load list & render
+  if(attachInput){
+    attachInput.addEventListener('change', ()=>{
+      selectedFiles = Array.from(attachInput.files || []);
+      syncInputs();
+      renderChips();
+    });
+  }
+
+  // "Clear" 버튼도 전체 초기화
+  if(clearBtn){
+    clearBtn.addEventListener('click', (e)=>{
+      e.preventDefault();
+      clearAll();
+    });
+  }
+
+  // Expose minimal API in case other scripts want to clear explicitly
+  window.__composeAttach = {
+    clearAll,
+    list: ()=>selectedFiles.slice()
+  };
+
+  // Initial
+  renderChips();
+})();
+</script><script>
+(function(){
+  const $ = (s,r=document)=>r.querySelector(s);
+  const titleI = $('#composeTitle');
+  const bodyI  = $('#composeBody');
+  const modal  = $('#composerModal');
+  const btnDraft = $('#btnDraftSave');
+  const btnCancel = $('#btnCancel');
+  const btnSubmit = $('#btnSubmitPost');
+  const titlePreview = $('#titlePreview');
+  const tpText = titlePreview ? titlePreview.querySelector('.tp-text') : null;
+
+  let draft = { title:'', body:'' };
+
+  function updateTitlePreview(src){
+    if(!tpText) return;
+    const t = (src || (titleI && titleI.value) || '').trim();
+    tpText.textContent = t || ''제목 미입력';';
+  }
+
+  // live typing updates preview
+  if(titleI){
+    titleI.addEventListener('input', ()=> updateTitlePreview());
+  }
+
+  // 임시Save: keep in-memory draft; do NOT post to right panel
+  if(btnDraft){
+    btnDraft.addEventListener('click', (e)=>{
+      e.preventDefault();
+      draft.title = (titleI && titleI.value)||'';
+      draft.body  = (bodyI && bodyI.value)||'';
+      updateTitlePreview(draft.title);
+      // keep modal open; optional small feedback
+      // console.log('Draft saved');
+    });
+  }
+
+  // 취소: clear draft and input fields, and clear preview
+  if(btnCancel){
+    btnCancel.addEventListener('click', ()=>{
+      draft.title=''; draft.body='';
+      if(titleI) titleI.value='';
+      if(bodyI) bodyI.value='';
+      updateTitlePreview('');
+    });
+  }
+
+  // Before final save, if a draft exists (and modal may be closed/empty),
+  // write draft back into inputs so existing save handler picks it up.
+  if(btnSubmit){
+    btnSubmit.addEventListener('click', ()=>{
+      if((draft.title && draft.title.trim()) || (draft.body && draft.body.trim())){
+        if(titleI) titleI.value = draft.title || '';
+        if(bodyI)  bodyI.value  = draft.body  || '';
+      }
+      // clear draft & preview shortly after click so the original handler can read values
+      setTimeout(()=>{
+        draft.title=''; draft.body='';
+        updateTitlePreview('');
+      }, 0);
+    }, true); // capture phase to run before other handlers
+  }
+
+  // initialize preview on load
+  updateTitlePreview('');
+})();
+</script><script>
+(function(){
+  const $ = (s,r=document)=>r.querySelector(s);
+  const titleI = $('#composeTitle');
+  const modal = $('#composerModal');
+  const btnDraft = $('#btnDraftSave');
+  const titlePreview = $('#titlePreview');
+  const tpText = titlePreview ? titlePreview.querySelector('.tp-text') : null;
+
+  let draft = { title:'', body:'' };
+
+  function updateTitlePreview(src){
+    if(!tpText) return;
+    const t = (src || (titleI && titleI.value) || '').trim();
+    tpText.textContent = t || 'Title Not entered';
+  }
+
+  if(btnDraft){
+    btnDraft.addEventListener('click', (e)=>{
+      e.preventDefault();
+      draft.title = (titleI && titleI.value)||'';
+      draft.body  = ($('#composeBody') && $('#composeBody').value)||'';
+      updateTitlePreview(draft.title);
+      if(modal) modal.classList.add('hidden'); // auto-close
+    });
+  }
+})();
+</script><script>
+(function(){
+  const USER_ROLE = (window.USER_ROLE || 'admin');
+  const USER_ID = (window.USER_ID || 'local-user');
+  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+
+  function canShowDeleteFor(item){
+    if(USER_ROLE==='admin') return true;
+    if(USER_ROLE==='writer'){
+      const author = item && item.dataset ? item.dataset.author : null;
+      return !author || author===USER_ID;
+    }
+    return false;
+  }
+
+  function ensureDelete(item){
+    if(!item || item.querySelector('.delete-post')) return;
+    const btn = document.createElement('button');
+    btn.type='button';
+    btn.className='button tiny danger delete-post';
+    btn.textContent='Delete';
+    btn.style.cssText='margin-top:6px; display:none;';
+    if(canShowDeleteFor(item)) btn.style.display='inline-block';
+    btn.addEventListener('click', ()=>{
+      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      item.remove();
+    });
+    item.appendChild(btn);
+  }
+
+  // Initial pass
+  $$('.right .topic-panel .list .item').forEach(ensureDelete);
+
+  // Observe future additions for all lists
+  $$('.right .topic-panel .list').forEach(list=>{
+    const mo = new MutationObserver((muts)=>{
+      muts.forEach(m=>{
+        m.addedNodes && Array.from(m.addedNodes).forEach(node=>{
+          if(node && node.nodeType===1){
+            if(node.classList.contains('item')) ensureDelete(node);
+            // Nested case: if a wrapper was added, scan inside
+            node.querySelectorAll && node.querySelectorAll('.item').forEach(ensureDelete);
+          }
+        });
+      });
+    });
+    mo.observe(list, {childList:true, subtree:true});
+  });
+})();
+</script><script>
+(function(){
+  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+  function updateGrow(panel){
+    const list = panel && panel.querySelector('.list');
+    if(!list) return;
+    const count = list.querySelectorAll('.item').length;
+    panel.classList.remove('grow-1','grow-2','grow-3');
+    if(count >= 12) panel.classList.add('grow-3');
+    else if(count >= 8) panel.classList.add('grow-2');
+    else if(count >= 4) panel.classList.add('grow-1');
+  }
+  // initial
+  $$('.right .topic-panel').forEach(updateGrow);
+  // observe each list for changes
+  $$('.right .topic-panel .list').forEach(list=>{
+    const panel = list.closest('.topic-panel');
+    const mo = new MutationObserver(()=> updateGrow(panel));
+    mo.observe(list, {childList:true, subtree:false});
+  });
+})();
+</script><script>
+(function(){
+  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+  function updateGrow(panel){
+    const list = panel && panel.querySelector('.list');
+    if(!list) return;
+    const count = list.querySelectorAll('.item').length;
+    panel.classList.remove('grow-1','grow-2','grow-3');
+    if(count >= 12) panel.classList.add('grow-3');
+    else if(count >= 8) panel.classList.add('grow-2');
+    else if(count >= 4) panel.classList.add('grow-1');
+  }
+  $$('.right .topic-panel').forEach(updateGrow);
+  $$('.right .topic-panel .list').forEach(list=>{
+    const panel = list.closest('.topic-panel');
+    const mo = new MutationObserver(()=> updateGrow(panel));
+    mo.observe(list, {childList:true});
+  });
+})();
+</script><div id="newsPreviewModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 800px); max-height:80vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
 <h3 id="npTitle" style="margin:0; font-size:1.05rem;"></h3>
 <div id="npTime" style="font-size:.85rem; color:#6b7280;"></div>
@@ -2433,7 +3032,80 @@ body .right{ display:none !important; }
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
 <button class="button outline" id="npClose" type="button">닫기</button>
 </div>
-</div></div><div id="editNewsModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 680px); max-height:78vh; overflow:auto;">
+</div></div><script>
+(function(){
+  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+  const $ = (s,r=document)=>r.querySelector(s);
+
+  function normalizeItem(item){
+    if(!item || item.querySelector('.item-header')) return;
+    const tEl = item.querySelector('.title');
+    const mEl = item.querySelector('.meta');
+    const header = document.createElement('div');
+    header.className = 'item-header';
+    const dot = document.createElement('span'); dot.className = 'dot';
+    const title = document.createElement('span'); title.className = 'h-title'; title.textContent = (tEl?.textContent || '').trim();
+    const time = document.createElement('span'); time.className = 'h-time'; time.textContent = (mEl?.textContent || '').trim();
+    header.append(dot, title, time);
+    item.insertBefore(header, item.firstChild);
+  }
+
+  function normalizeList(list){
+    list && list.querySelectorAll('.item').forEach(normalizeItem);
+  }
+
+  $$('.right .topic-panel .list').forEach(normalizeList);
+
+  $$('.right .topic-panel .list').forEach(list=>{
+    const mo = new MutationObserver(muts=>{
+      muts.forEach(m=>{
+        m.addedNodes && Array.from(m.addedNodes).forEach(n=>{
+          if(n.nodeType===1 && n.classList.contains('item')) normalizeItem(n);
+        });
+      });
+    });
+    mo.observe(list, {childList:true});
+  });
+
+  const modal = document.getElementById('newsPreviewModal');
+  const npTitle = document.getElementById('npTitle');
+  const npTime = document.getElementById('npTime');
+  const npBody = document.getElementById('npBody');
+  const npAttach = document.getElementById('npAttach');
+  const npClose = document.getElementById('npClose');
+  function openModal(){ modal.style.display='flex'; }
+  function closeModal(){ modal.style.display='none'; }
+  npClose && npClose.addEventListener('click', closeModal);
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+  modal && modal.addEventListener('click', e=>{ if(e.target===modal) closeModal(); });
+
+  document.addEventListener('click', function(e){
+    const del = e.target.closest('.delete-post');
+    if(del) return;
+
+    const item = e.target.closest('.right .topic-panel .list .item');
+    if(!item) return;
+
+    const t = (item.querySelector('.h-title')?.textContent || item.querySelector('.title')?.textContent || '').trim();
+    const tm = (item.querySelector('.h-time')?.textContent || item.querySelector('.meta')?.textContent || '').trim();
+    const body = (item.querySelector('.preview')?.textContent || '').trim();
+    const attachEl = item.querySelector('.attach');
+    const attachList = item.querySelectorAll('.attach-list li');
+    let attachHtml = '';
+    if(attachEl){ attachHtml = attachEl.innerHTML; }
+    else if(attachList && attachList.length){
+      attachHtml = Array.from(attachList).map(li=>li.textContent).join('<br/>');
+    }
+
+    npTitle.textContent = t;
+    npTime.textContent = tm;
+    npBody.textContent = body;
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml) : '';
+
+    openModal();
+  }, true);
+})();
+</script><div id="editNewsModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 680px); max-height:78vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
 <h3 style="margin:0; font-size:1.05rem;">글쓰기 편집</h3>
 <div id="enInfo" style="font-size:.85rem; color:#6b7280;"></div>
@@ -2448,16 +3120,607 @@ body .right{ display:none !important; }
 <button class="button outline" id="enCancel" type="button">취소</button>
 <button class="button" id="enSave" type="button">저장</button>
 </div>
-</div></div>
+</div></div><script>
+(function(){
+  const USER_ROLE = (window.USER_ROLE || 'admin');
+  const USER_ID   = (window.USER_ID   || 'local-user');
+  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+
+  function canEditDelete(item){
+    if(USER_ROLE==='admin') return true;
+    if(USER_ROLE==='writer'){
+      const author = item && item.dataset ? item.dataset.author : null;
+      return !author || author===USER_ID;
+    }
+    return false;
+  }
+  function itemId(item){
+    const t = (item.querySelector('.h-title')?.textContent || item.querySelector('.title')?.textContent || '').trim();
+    const tm = (item.querySelector('.h-time')?.textContent || item.querySelector('.meta')?.textContent || '').trim();
+    const key = (t+'|'+tm).toLowerCase(); let h=0; for(let i=0;i<key.length;i++){ h=((h<<5)-h)+key.charCodeAt(i); h|=0; } return 'news:'+h;
+  }
+  function loadEdit(id){
+    try{ return JSON.parse(localStorage.getItem('newsEdit:'+id) || 'null'); }catch(e){ return null; }
+  }
+  function saveEdit(id, tsStr){
+    localStorage.setItem('newsEdit:'+id, JSON.stringify({editedAt: tsStr}));
+  }
+  function showEditedBadge(item, tsStr){
+    if(!item) return;
+    const header = item.querySelector('.item-header');
+    const timeEl = item.querySelector('.h-time');
+    if(!header || !timeEl) return;
+    // Create or update badge
+    let badge = header.querySelector('.h-edited');
+    if(!badge){
+      badge = document.createElement('span');
+      badge.className = 'h-edited notranslate';
+      badge.setAttribute('translate','no');
+      header.appendChild(badge);
+    }
+    badge.textContent = `Edited · ${tsStr}`;
+  }
+
+  // On load, restore edited badge for admin/author only
+  $$('.right .topic-panel .list .item').forEach(item=>{
+    const id = itemId(item);
+    const meta = loadEdit(id);
+    if(meta && canEditDelete(item)){
+      showEditedBadge(item, meta.editedAt);
+    }
+  });
+
+  // Capture which item is being edited via delegated click
+  window.__currentEditingItem = null;
+  document.addEventListener('click', (e)=>{
+    const btn = e.target.closest('.btn-edit');
+    if(!btn) return;
+    const item = e.target.closest('.right .topic-panel .list .item');
+    if(item && canEditDelete(item)) window.__currentEditingItem = item;
+  }, true);
+
+  // When edit modal "Save" is pressed, persist edited meta and show badge
+  (function attachSaveHook(){
+    const saveBtn = document.getElementById('enSave');
+    if(!saveBtn) return;
+    saveBtn.addEventListener('click', ()=>{
+      const item = window.__currentEditingItem;
+      if(!item || !canEditDelete(item)) return;
+      const ts = new Date().toLocaleString();
+      const id = itemId(item);
+      saveEdit(id, ts);
+      showEditedBadge(item, ts);
+      window.__currentEditingItem = null;
+    });
+  })();
+
+  // Strengthen duplication protection for recommend/like: short debounce on icon clicks
+  function debounceClick(el){
+    if(!el) return false;
+    if(el.dataset.lock==='1') return true;
+    el.dataset.lock='1';
+    setTimeout(()=>{ el.dataset.lock=''; }, 350);
+    return false;
+  }
+  document.addEventListener('click', (e)=>{
+    const reco = e.target.closest('.stat-reco');
+    const like = e.target.closest('.stat-like');
+    if(reco){
+      if(debounceClick(reco)) e.stopPropagation();
+    }else if(like){
+      if(debounceClick(like)) e.stopPropagation();
+    }
+  }, true);
+})();
+</script><script>
+(function(){
+  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+
+  function stripReactions(root=document){
+    $$('.right .topic-panel .item .item-footer .stat-reco', root).forEach(el=>el.remove());
+    $$('.right .topic-panel .item .item-footer .stat-like', root).forEach(el=>el.remove());
+  }
+
+  // Initial strip
+  stripReactions();
+
+  // Observe lists for future items or footer rebuilds
+  $$('.right .topic-panel .list').forEach(list=>{
+    const mo = new MutationObserver(muts=>{
+      muts.forEach(m=>{
+        if(m.addedNodes && m.addedNodes.length){
+          m.addedNodes.forEach(n=>{
+            if(n.nodeType===1){
+              stripReactions(n);
+            }
+          });
+        }
+      });
+    });
+    mo.observe(list, {childList:true, subtree:true});
+  });
+})();
+</script><script>
+(function(){
+  const USER_ROLE = (window.USER_ROLE || 'admin');
+  const USER_ID   = (window.USER_ID   || 'local-user');
+  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+
+  function canEditDelete(item){
+    if(USER_ROLE==='admin') return true;
+    if(USER_ROLE==='writer'){
+      const author = item && item.dataset ? item.dataset.author : null;
+      return !author || author===USER_ID;
+    }
+    return false;
+  }
+  function itemId(item){
+    const t = (item.querySelector('.h-title')?.textContent || item.querySelector('.title')?.textContent || '').trim();
+    const tm = (item.querySelector('.h-time')?.textContent || item.querySelector('.meta')?.textContent || '').trim();
+    const key = (t+'|'+tm).toLowerCase(); let h=0; for(let i=0;i<key.length;i++){ h=((h<<5)-h)+key.charCodeAt(i); h|=0; } return 'news:'+h;
+  }
+  function loadMetrics(id){
+    try{ return JSON.parse(localStorage.getItem('newsMetrics:'+id) || '{"views":0,"reco":0,"like":0}'); }
+    catch(e){ return {views:0,reco:0,like:0}; }
+  }
+  function saveMetrics(id, obj){ localStorage.setItem('newsMetrics:'+id, JSON.stringify(obj)); }
+  function loadToggles(id){
+    try{ return JSON.parse(localStorage.getItem('newsToggles:'+id) || '{"reco":false,"like":false}'); }
+    catch(e){ return {reco:false,like:false}; }
+  }
+  function saveToggles(id, obj){ localStorage.setItem('newsToggles:'+id, JSON.stringify(obj)); }
+
+  function ensureFooterWithIcons(item){
+    let footer = item.querySelector('.item-footer');
+    if(!footer){
+      footer = document.createElement('div');
+      footer.className='item-footer';
+      item.appendChild(footer);
+    }
+    // If stats doesn't exist or lacks our actions, rebuild stats only
+    let stats = footer.querySelector('.stats');
+    if(!stats){
+      stats = document.createElement('div');
+      stats.className='stats';
+      footer.prepend(stats);
+    }
+    const id = itemId(item);
+    const m  = loadMetrics(id);
+    const t  = loadToggles(id);
+
+    // Clear and rebuild stats area
+    stats.innerHTML = `
+      <span class="stat stat-views"><i class="icon">👁</i><span class="n">${m.views}</span></span>
+      <span class="stat action-reco ${t.reco?'active':''}"><i class="icon">👍</i><span class="n">${m.reco}</span></span>
+      <span class="stat action-like ${t.like?'active':''}"><i class="icon">❤️</i><span class="n">${m.like}</span></span>
+    `;
+
+    // Role-based Edit/Delete remain as-is (buttons may already exist from prior code)
+    // If no edit button present, create and apply permissions
+    let btnEdit = footer.querySelector('.btn-edit');
+    let btnDel  = footer.querySelector('.delete-post');
+    if(!btnEdit){
+      btnEdit = document.createElement('button');
+      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
+      footer.appendChild(btnEdit);
+      btnEdit.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        const emodal = document.getElementById('editNewsModal');
+        const enTitle = document.getElementById('enTitle');
+        const enBody  = document.getElementById('enBody');
+        const enInfo  = document.getElementById('enInfo');
+        if(!emodal || !enTitle || !enBody) return;
+        enTitle.value = (item.querySelector('.h-title')?.textContent || item.querySelector('.title')?.textContent || '').trim();
+        enBody.value  = (item.querySelector('.preview')?.textContent || '').trim();
+        enInfo.textContent = (item.querySelector('.h-time')?.textContent || item.querySelector('.meta')?.textContent || '').trim();
+        emodal.style.display='flex';
+      });
+    }
+    if(!btnDel){
+      btnDel = document.createElement('button');
+      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='Delete';
+      footer.appendChild(btnDel);
+      btnDel.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+        item.remove();
+      });
+    }
+    // Apply visibility
+    if(canEditDelete(item)){
+      btnEdit.style.display='inline-block';
+      btnDel.style.display='inline-block';
+    }else{
+      btnEdit.style.display='none';
+      btnDel.style.display='none';
+    }
+
+    // Wire icon clicks with debounce
+    function debounceClick(el){
+      if(!el) return false;
+      if(el.dataset.lock==='1') return true;
+      el.dataset.lock='1';
+      setTimeout(()=>{ el.dataset.lock=''; }, 300);
+      return false;
+    }
+
+    const recoEl = stats.querySelector('.action-reco');
+    const likeEl = stats.querySelector('.action-like');
+
+    recoEl && recoEl.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(debounceClick(recoEl)) return;
+      const id = itemId(item);
+      const m = loadMetrics(id);
+      const tg= loadToggles(id);
+      if(tg.reco){ m.reco=Math.max(0,m.reco-1); tg.reco=false; recoEl.classList.remove('active'); }
+      else { m.reco+=1; tg.reco=true; recoEl.classList.add('active'); }
+      saveMetrics(id,m); saveToggles(id,tg);
+      recoEl.querySelector('.n').textContent = m.reco;
+    });
+
+    likeEl && likeEl.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(debounceClick(likeEl)) return;
+      const id = itemId(item);
+      const m = loadMetrics(id);
+      const tg= loadToggles(id);
+      if(tg.like){ m.like=Math.max(0,m.like-1); tg.like=false; likeEl.classList.remove('active'); }
+      else { m.like+=1; tg.like=true; likeEl.classList.add('active'); }
+      saveMetrics(id,m); saveToggles(id,tg);
+      likeEl.querySelector('.n').textContent = m.like;
+    });
+  }
+
+  // Initialize and observe
+  $$('.right .topic-panel .list .item, .mobile-news-clone .topic-panel .list .item').forEach(ensureFooterWithIcons);
+  $$('.right .topic-panel .list, .mobile-news-clone .topic-panel .list').forEach(list=>{
+    const mo = new MutationObserver(muts=>{
+      muts.forEach(m=>{
+        if(m.addedNodes && m.addedNodes.length){
+          m.addedNodes.forEach(n=>{
+            if(n.nodeType===1 && n.classList && n.classList.contains('item')){
+              ensureFooterWithIcons(n);
+            }
+          });
+        }
+      });
+    });
+    mo.observe(list, {childList:true});
+  });
+
+  // Maintain views increment on popup open (if earlier handler exists, this complements it)
+  document.addEventListener('click', function(e){
+    const skip = e.target.closest('.delete-post, .btn-edit, .action-reco, .action-like');
+    if(skip) return;
+    const item = e.target.closest('.right .topic-panel .list .item, .mobile-news-clone .topic-panel .list .item');
+    if(!item) return;
+    setTimeout(()=>{
+      const id = itemId(item);
+      const m = loadMetrics(id);
+      m.views += 1; saveMetrics(id,m);
+      const vEl = item.querySelector('.stat-views .n'); if(vEl) vEl.textContent = m.views;
+    }, 0);
+  }, true);
+})();
+</script><script>
+(function(){
+  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+  function normalizeDelete(item){
+    if(!item) return;
+    // Ensure footer exists
+    let footer = item.querySelector('.item-footer');
+    if(!footer){
+      footer = document.createElement('div');
+      footer.className = 'item-footer';
+      // Place footer at end
+      item.appendChild(footer);
+    }
+    // Collect all delete buttons
+    const dels = item.querySelectorAll('button.delete-post');
+    if(!dels.length){
+      return; // if none, leave it to builder script
+    }
+    // Keep or create exactly one in footer
+    let keep = footer.querySelector('button.delete-post');
+    if(!keep){
+      keep = dels[0];
+      footer.appendChild(keep);
+    }
+    // Remove all others
+    dels.forEach(btn=>{
+      if(btn!==keep){
+        btn.remove();
+      }
+    });
+    // Mark migrated to avoid CSS hiding
+    keep.classList.add('migrated');
+    // Ensure compact shape
+    keep.style.display = 'inline-flex';
+    keep.style.alignItems = 'center';
+    keep.style.justifyContent = 'center';
+    keep.style.height = '28px';
+    keep.style.lineHeight = '28px';
+    keep.style.padding = '0 10px';
+    keep.style.borderRadius = '8px';
+  }
+
+  // Run on existing items
+  $$('.right .topic-panel .list .item').forEach(normalizeDelete);
+
+  // Observe for new items
+  $$('.right .topic-panel .list').forEach(list=>{
+    const mo = new MutationObserver(muts=>{
+      muts.forEach(m=>{
+        m.addedNodes && Array.from(m.addedNodes).forEach(n=>{
+          if(n.nodeType===1 && n.classList.contains('item')) normalizeDelete(n);
+        });
+      });
+    });
+    mo.observe(list, {childList:true});
+  });
+})();
+</script><script>
+(function(){
+  document.querySelectorAll('.feed-row').forEach(row=>{
+    const labelEl = row.querySelector('.row-label');
+    const txt = (labelEl && labelEl.textContent || '').trim();
+    const track = row.querySelector('[data-psom-key]');
+    if(!txt || !track) return;
+    // Avoid duplicates
+    if(!row.querySelector(':scope > .row-title')){
+      const t = document.createElement('div');
+      t.className = 'row-title';
+      t.textContent = txt;
+      row.insertBefore(t, track);
+    }
+    // Hide original label
+    if(labelEl) labelEl.style.display = 'none';
+  });
+})();
+</script><script>
+(function(){
+  const ROW_GUTTER = 16; // must match --row-gutter
+
+  function ensureFortyCards(track){
+
+    const grid = track.querySelector('[data-psom-key]');
+    if(!grid) return;
+
+    const cards = grid.querySelectorAll('.card');
+    if(cards.length === 0) return;
+
+    // use last card as template
+    const tpl = cards[cards.length-1].cloneNode(true);
+
+    (tpl.querySelector('.thumb')||tpl).innerHTML = '';
+
+    const t = tpl.querySelector('.card-title');
+    if(t) t.textContent = 'Title';
+
+    const m = tpl.querySelector('.card-meta');
+    if(m) m.textContent = '-';
+
+    const p = tpl.querySelector('.card-preview');
+    if(p) p.textContent = 'Content';
+
+    const key = grid.dataset.psomKey;
+    const limit = SLOT_MAP[key] || 100;
+
+    for(let i = cards.length; i < limit; i++){
+      grid.appendChild(tpl.cloneNode(true));
+    }
+  }
+
+  function addScrollButtons(row){
+    if(row.querySelector('.scroll-left') || row.querySelector('.scroll-right')) return;
+    const track = row.querySelector('.row-track');
+    if(!track) return;
+
+    const leftBtn = document.createElement('button');
+    leftBtn.type = 'button';
+    leftBtn.className = 'scroll-btn scroll-left';
+    leftBtn.style.setProperty('--row-gutter', ROW_GUTTER + 'px');
+    leftBtn.innerHTML = '<span class="chev">‹</span>';
+
+    const rightBtn = document.createElement('button');
+    rightBtn.type = 'button';
+    rightBtn.className = 'scroll-btn scroll-right';
+    rightBtn.style.setProperty('--row-gutter', ROW_GUTTER + 'px');
+    rightBtn.innerHTML = '<span class="chev">›</span>';
+
+    const step = () => Math.max(1, Math.round(track.clientWidth * 0.9));
+    leftBtn.addEventListener('click', ()=> track.scrollBy({left: -step(), behavior:'smooth'}));
+    rightBtn.addEventListener('click', ()=> track.scrollBy({left: step(), behavior:'smooth'}));
+
+    row.appendChild(leftBtn);
+    row.appendChild(rightBtn);
+  }
+
+  document.querySelectorAll('.feed-row .row-track').forEach(ensureFortyCards);
+  document.querySelectorAll('.feed-row').forEach(addScrollButtons);
+
+  // Observe dynamic additions (if any)
+  const feed = document.querySelector('#feedRows');
+  if(feed){
+    const mo = new MutationObserver(muts=>{
+      muts.forEach(m=>{
+        (m.addedNodes||[]).forEach(n=>{
+          if(n.nodeType===1 && n.matches('.feed-row')){
+            const t = n.querySelector('.row-track');
+            if(t) ensureFortyCards(t);
+            addScrollButtons(n);
+          }
+        });
+      });
+    });
+    mo.observe(feed, {childList:true});
+  }
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <!-- IGDC: order/settlement + optional web3 hooks (same-origin) -->
+<script>
+(function(){
+  async function postJSON(url, data){
+    const headers = {"Content-Type":"application/json"};
+    const csrf = document.querySelector('meta[name="csrf-token"]');
+    if (csrf && csrf.content) headers["X-CSRF-Token"] = csrf.content;
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      credentials: "include",
+      body: JSON.stringify(data||{})
+    });
+    return res;
+  }
 
+  // 구매
+  window.orderItem = async function(itemId, qty){
+    try{
+      const res = await postJSON("/api/order", { itemId, qty: qty||1 });
+      if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
+      if (res.ok){ alert("구매 요청이 접수되었습니다."); } else { alert("구매 요청 실패"); }
+    }catch(e){ console.warn(e); alert("네트워크 오류"); }
+  };
+
+  // 정산
+  window.requestSettlement = async function(amount, currency){
+    try{
+      const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
+      if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
+      if (res.ok){ alert("정산 요청이 접수되었습니다."); } else { alert("정산 요청 실패"); }
+    }catch(e){ console.warn(e); alert("네트워크 오류"); }
+  };
+
+  // (옵션) Web3/블록체인 액션 – 서버 프록시 전용
+  // 예: requestWeb3Action("donation", { amount:1000, to:"0x..." })
+  window.requestWeb3Action = async function(action, payload){
+    try{
+      const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
+      if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("블록체인 처리 요청 완료: " + (j.txHash||"대기")); }
+      else { alert("블록체인 처리 실패"); }
+    }catch(e){ console.warn(e); alert("네트워크 오류"); }
+  };
+})();
+</script>
 <!-- IGDC: AI thumbnail auto-fill (home/donation) -->
+<script>
+(function(){
+  document.addEventListener('DOMContentLoaded', function(){
+    try{
+      var grid = document.querySelector('#productGrid, .product-grid, .grid-products, .cards.products') || null;
+      if(!grid) return; // no grid present; do nothing
 
+      var cards = grid.querySelectorAll('[data-product-id], .product-card, .card');
+      var needFill = (cards.length < 3);
+
+      if (!needFill && cards.length){
+        var emptyThumbs = 0;
+        cards.forEach(function(c){
+          var img = c.querySelector('img');
+          if(!img || !img.getAttribute('src')) emptyThumbs++;
+        });
+        // If 3 or more thumbnails are missing, fill.
+        if (emptyThumbs >= 3) needFill = true;
+      }
+      if(!needFill) return;
+
+      // Try server recommendations first
+      fetch('/api/recommendations?limit=12', { credentials:'include' })
+        .then(function(r){ if(!r.ok) throw new Error('recommendations failed'); return r.json(); })
+        .then(function(list){
+          if(!Array.isArray(list) || !list.length) throw new Error('empty recos');
+          list.slice(0, 8).forEach(function(item){
+            var a = document.createElement('a');
+            a.className = 'product-card';
+            a.href = item.url || '#';
+            a.setAttribute('data-product-id', item.id || '');
+
+            var img = document.createElement('img');
+            img.alt = item.title || 'item';
+            img.loading = 'lazy';
+            img.referrerPolicy = 'no-referrer';
+            img.src = item.thumb || item.image || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
+
+            var t = document.createElement('div');
+            t.className = 'title';
+            t.textContent = item.title || item.name || '상품';
+
+            a.appendChild(img);
+            a.appendChild(t);
+            grid.appendChild(a);
+          });
+          if (window.IGDC && IGDC.log) IGDC.log({ event:'ai_reco_fill', page:(window.IGDC_PAGE||{}), source:'server', count: Math.min(8, list.length) });
+        })
+        .catch(function(){
+          try{
+            var fb = (window.IGDC_RECO_FALLBACK || []);
+            if(!fb.length) return;
+            fb.slice(0,8).forEach(function(item){
+              var a = document.createElement('a');
+              a.className = 'product-card';
+              a.href = item.url || '#';
+              a.setAttribute('data-product-id', item.id || '');
+              var img = document.createElement('img');
+              img.alt = item.title || 'item';
+              img.loading = 'lazy';
+              img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
+              var t = document.createElement('div');
+              t.className = 'title';
+              t.textContent = item.title || '상품';
+              a.appendChild(img); a.appendChild(t);
+              grid.appendChild(a);
+            });
+            if (window.IGDC && IGDC.log) IGDC.log({ event:'ai_reco_fill', page:(window.IGDC_PAGE||{}), source:'fallback', count: Math.min(8, fb.length) });
+          }catch(err){}
+        });
+    }catch(e){}
+  });
+})();
+</script>
 <script src="/assets/js/igdc-core.min.js"></script>
 <script src="/assets/js/igdc-pay.min.js"></script>
-
+<script>
+// === IGDC AI 썸네일 자동 채움 (섹션별 3장 이상 비어있을 때) ===
+(function(){
+  function q(sel, root){ return Array.prototype.slice.call((root||document).querySelectorAll(sel)); }
+  function isEmpty(img){ return !img || !img.getAttribute("src") || img.getAttribute("src").trim()===""; }
+  function inferType(section){
+    const cls=(section.className||"").toLowerCase(), id=(section.id||"").toLowerCase();
+    const d=(section.dataset&&(section.dataset.type||section.dataset.gallery||section.dataset.kind||"")).toLowerCase();
+    if(d) return d;
+    if(cls.includes("ad")||id.includes("ad")) return "ads";
+    if(cls.includes("news")) return "news";
+    if(cls.includes("product")||cls.includes("shop")||cls.includes("commerce")) return "products";
+    if(cls.includes("video")||cls.includes("media")) return "media";
+    return "general";
+  }
+  async function fetchAI(type, need){
+    try{
+      const r = await fetch("/api/ai/thumbnail", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({type, need, page: location.pathname})});
+      if(r.ok){ const j = await r.json(); if(j && Array.isArray(j.images) && j.images.length){ return j.images; } }
+    }catch(e){}
+    const arr=[]; for(let i=0;i<need;i++){ arr.push("https://placehold.co/330x220?text="+encodeURIComponent(type.toUpperCase()+"+AI")); } return arr;
+  }
+  async function fill(section){
+    const imgs=q("img", section); let empties=[];
+    imgs.forEach(img=>{ if(isEmpty(img)){ empties.push(img); } else { img.addEventListener("error", function(){ this.dataset.broken="1"; }); } });
+    empties = empties.concat(imgs.filter(img=>img.dataset && img.dataset.broken==="1"));
+    if(empties.length<3) return;
+    const type=inferType(section), urls=await fetchAI(type, empties.length);
+    empties.forEach((img,i)=>{ if(isEmpty(img)||img.dataset.broken==="1"){ img.setAttribute("src", urls[Math.min(i, urls.length-1)]); img.removeAttribute("data-broken"); }});
+  }
+  function sections(){
+    const sels=["[data-gallery]","[data-thumbs]","[data-list]",".thumbnail-row",".thumb-row",".thumbnails",".thumbs",".cards",".card-row",".right-ad-panel",".ad-panel",".ad-thumbs","#rightAdPanel"];
+    const set=new Set(); sels.forEach(s=> q(s).forEach(n=>{ const imgs=q("img",n); if(imgs.length>=4){ set.add(n); } })); return Array.from(set);
+  }
+  async function run(){ try{ for(const s of sections()){ await fill(s); } }catch(e){ console.warn("[IGDC] AI thumbnails skipped:", e); } }
+  if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", run, {once:true}); } else { run(); }
+})();
+</script>
 
 <!-- IGDC minimal Donate UI (non-invasive) -->
 
@@ -2465,10 +3728,95 @@ body .right{ display:none !important; }
 <input aria-label="Donation amount (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
 <button class="bc-tile orange" id="btnDonate">Donate</button>
 </div>
+<script>
+(function(){
+  const anchor = document.getElementById("donation-anchor");
+  if(!anchor) return;
 
+  // === 메인 컨테이너 ===
+  const donationDiv = document.createElement("div");
+  donationDiv.className = "donation-inline";
+
+  // === 버튼 영역 ===
+  const btnGroup = document.createElement("div");
+  btnGroup.className = "donation-buttons";
+  btnGroup.setAttribute("role","group");
+  btnGroup.setAttribute("aria-label","정액 기부 금액");
+
+  const amounts = [5000, 10000, 20000, 50000];
+  amounts.forEach(amt=>{
+    const btn = document.createElement("button");
+    btn.className = "bc-tile orange";
+    btn.dataset.amt = amt;
+    btn.textContent = `₩${amt.toLocaleString()}`;
+    btnGroup.appendChild(btn);
+  });
+  donationDiv.appendChild(btnGroup);
+
+  // === 안내 문구 ===
+  const note = document.createElement("div");
+  note.className = "donation-note";
+  note.textContent = "게스트 기부는 $5–$50 범위에서만 가능합니다. 더 큰 금액은 아래 Account이체를 이용해 주세요.";
+  donationDiv.appendChild(note);
+
+  // === 구분선 ===
+  const hr1 = document.createElement("hr");
+  hr1.className = "donation-hr";
+  donationDiv.appendChild(hr1);
+
+  // === Account 안내 박스 ===
+  const accountBox = document.createElement("div");
+  accountBox.className = "account-box";
+  accountBox.setAttribute("aria-label","Account 이체 정보");
+
+  accountBox.innerHTML = `
+    <div><b>IESF (국제Exchange Volunteer Group)</b></div>
+    <div>General: 농협 301-0078-3333-51</div>
+    <div>외화: 농협 452-0022-8173-81</div>
+    <div>SWIFT: NACFKRSE</div>
+    <hr class="donation-hr"/>
+    <div><b>WAM 파운데이션 (세계항공Mission Foundation)</b></div>
+    <div>General: 신한 100-026-331592</div>
+    <div>외화: 신한 180-005-931110</div>
+    <div>SWIFT: SHBKKRSE</div>
+  `;
+  donationDiv.appendChild(accountBox);
+
+  // === DOM 삽입 ===
+  anchor.appendChild(donationDiv);
+
+  // === 버튼 클릭 이벤트 ===
+  const buttons = btnGroup.querySelectorAll("button");
+  buttons.forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const amt = btn.dataset.amt;
+      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      accountBox.scrollIntoView({behavior:"smooth"});
+    });
+  });
+})();
+</script>
 <script src="frontbus.child.js"></script>
-
-
+<script>
+(function(){
+  try{
+    function notify(top){
+      parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*');
+    }
+    function atTop(){
+      var se=document.scrollingElement||document.documentElement||document.body;
+      return (window.scrollY||window.pageYOffset||0)<=0 && (se?(se.scrollTop||0)<=0:true);
+    }
+    function onAnyScroll(){ notify(atTop()); }
+    window.addEventListener('scroll', onAnyScroll, {passive:true});
+    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
+    document.addEventListener('wheel', e=>{ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
+    document.addEventListener('touchmove', ()=>notify(false), {passive:true,capture:true});
+    setTimeout(()=>notify(atTop()),50);
+  }catch(_){}
+})();
+</script>
+<script>(function(){try{document.querySelectorAll(".donation-inline,.donation-buttons").forEach(function(n){n.remove();});}catch(e){}})();</script>
 <div aria-hidden="true" class="donate-modal-backdrop" id="donateModalBackdrop">
 <div aria-labelledby="donateModalTitle" aria-modal="true" class="donate-modal" role="dialog">
 <h3 id="donateModalTitle">후원 단체 선택</h3>
@@ -2479,7 +3827,59 @@ body .right{ display:none !important; }
 <button class="donate-close" type="button">닫기</button>
 </div>
 </div>
+<script id="donate-modal-js">
+(function(){
+  const backdrop = document.getElementById('donateModalBackdrop');
+  function openDonateModal(){ if(backdrop){ backdrop.style.display='flex'; } }
+  function closeDonateModal(){ if(backdrop){ backdrop.style.display='none'; } }
+  window.openDonateModal = openDonateModal;
 
+  // Wire modal buttons
+  document.addEventListener('click', function(e){
+    const t = e.target;
+    if (!t) return;
+    if (t.matches('#donateModalBackdrop, .donate-close')) { closeDonateModal(); }
+    if (t.matches('.donate-actions button[data-org]')){
+      const org = t.getAttribute('data-org');
+      try{
+        // Preferred: existing payment bridge
+        if (window.IGDC && typeof IGDC.requestPayment==='function'){
+          IGDC.requestPayment({ account: org });
+        } else if (window.AdminAPI && typeof AdminAPI.donate==='function'){
+          AdminAPI.donate({ account: org });
+        } else {
+          // Fallback: scroll to right panel account options
+          const anchor = document.querySelector('#rightDonationOptions') || document.querySelector('.account-section');
+          if(anchor){ anchor.scrollIntoView({behavior:'smooth'}); }
+          else { alert('결제 API가 연결되지 않았습니다. 우측 패널에서 Account를 선택해 주세요.'); }
+        }
+      }catch(err){
+        console.error(err);
+        alert('결제 요청 중 문제가 발생했습니다.');
+      } finally {
+        closeDonateModal();
+      }
+    }
+  }, {passive:true});
+
+  // Optional: Esc to close
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeDonateModal(); });
+
+  // Expose a safe helper to rebind existing Donate button(s)
+  window.__bindDonateButtons = function(){
+    document.querySelectorAll('.donate-btn, .btn-donate, [data-action="donate"]')
+      .forEach(function(btn){
+        // remove inline payment calls if any
+        btn.setAttribute('onclick', 'openDonateModal()');
+        btn.addEventListener('click', function(ev){ ev.preventDefault(); openDonateModal(); });
+      });
+  };
+  // Bind on load
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', window.__bindDonateButtons);
+  } else { window.__bindDonateButtons(); }
+})();
+</script>
 <!-- PATCH_ID: CLEAN-2025-09-05 -->
 <!-- === Begin CLEAN patch === -->
 <style>
@@ -2531,7 +3931,37 @@ footer{
   -webkit-overflow-scrolling: touch;
 }
 </style>
+<script>
+/* 섹션 썸네일 뭉치 드래그 스크롤 — 카드 크기는 고정, 화면 좁아지면 그대로 접힘 */
+(function(){
+  function dragify(track){
+    if(track.__dragified) return;
+    track.__dragified = true;
 
+    let down=false, startX=0, startLeft=0;
+    track.addEventListener('pointerdown', e=>{
+      down = true;
+      startX = e.clientX;
+      startLeft = track.scrollLeft;
+      track.setPointerCapture(e.pointerId);
+    });
+    track.addEventListener('pointermove', e=>{
+      if(!down) return;
+      track.scrollLeft = startLeft - (e.clientX - startX);
+    });
+    const up = ()=>{ down=false; };
+    track.addEventListener('pointerup', up);
+    track.addEventListener('pointercancel', up);
+  }
+
+  const apply = () => document.querySelectorAll('.feed-row .row-track').forEach(dragify);
+  apply();
+
+  /* 나중에 행이 추가되더라도 드래그 기능은 계속 붙도록 함 */
+  const mo = new MutationObserver(apply);
+  mo.observe(document.body, {childList:true, subtree:true});
+})();
+</script>
 <!-- === End CLEAN patch === -->
 <!-- PATCH_ID: CLEAN-2025-09-05-B -->
 <!-- === Begin CLEAN patch B (Global News 50) === -->
@@ -2539,7 +3969,93 @@ footer{
 /* Allow main to grow naturally if any prior cap existed */
 .main{ height:auto !important; max-height:none !important; }
 </style>
+<script>
+(function(){
+  function findRowByText(feed, text){
+    return Array.from(feed.querySelectorAll('.feed-row')).find(function(r){
+      var lbl = r.querySelector('.row-label,.row-title');
+      return lbl && (lbl.textContent || '').trim() === text;
+    });
+  }
 
+  function ensureSection(){
+    var feed = document.querySelector('#feedRows');
+    if(!feed) return null;
+    var rowFeed = findRowByText(feed, 'Feed');
+    var rowNGO  = findRowByText(feed, 'NGO');
+    var target  = findRowByText(feed, 'Global 소식');
+    if(!rowFeed || !rowNGO) return null;
+
+    if(!target){
+      // Clone NGO row as a template to preserve layout/styles
+      target = rowNGO.cloneNode(true);
+      var lbl = target.querySelector('.row-label,.row-title');
+      if(lbl) lbl.textContent = 'Global 소식';
+
+      // Insert between feed and NGO
+      feed.insertBefore(target, rowNGO);
+    }
+    return target;
+  }
+
+  function fillRowToCount(row, count){
+    if(!row) return;
+    var track = row.querySelector('.row-track');
+    if(!track) return;
+
+    var cards = track.querySelectorAll('.card');
+    var current = cards.length;
+
+    if(current === 0){
+      // Create a simple placeholder card if none exist
+      var placeholder = document.createElement('div');
+      placeholder.className = 'card';
+      placeholder.innerHTML = '<div class="thumb"></div><div class="card-body"><div class="card-title">Global News</div><div class="card-meta">Auto</div></div>';
+      track.appendChild(placeholder);
+      cards = track.querySelectorAll('.card');
+      current = cards.length;
+    }
+
+    // Use the first card as a template for cloning
+    var template = track.querySelector('.card');
+    if(!template) return;
+
+    // Add up to 'count' cards
+    for(var i=current; i<count; i++){
+      var clone = template.cloneNode(true);
+      track.appendChild(clone);
+    }
+
+    // If more than 'count', trim extras (shouldn't normally happen)
+    while(track.querySelectorAll('.card').length > count){
+      track.removeChild(track.lastElementChild);
+    }
+  }
+
+  function run(){
+    var row = ensureSection();
+    fillRowToCount(row, 50);
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', run);
+  }else{
+    run();
+  }
+
+  // In case other scripts mutate the feed later, keep it stable
+  var feed = document.querySelector('#feedRows');
+  if(feed){
+    var mo = new MutationObserver(function(){
+      var row = findRowByText(feed, 'Global 소식');
+      if(row){
+        fillRowToCount(row, 50);
+      }
+    });
+    mo.observe(feed, {childList:true, subtree:true});
+  }
+})();
+</script>
 <!-- === End CLEAN patch B === -->
 <style id="igtc-adpanel-visualize">
 /* keep panel flexible and show the intended 10px spacing */
@@ -2553,7 +4069,58 @@ footer{
 .right .topic-panel .item.placeholder .title{ font-weight:600; }
 .right .topic-panel .item.placeholder .meta{ font-size:.8rem; color:#64748b; }
 </style>
+<script id="igtc-adpanel-placeholder">
+document.addEventListener('DOMContentLoaded', function(){
+  const lists = document.querySelectorAll('.right .topic-panel .list');
 
+  lists.forEach(function(list){
+    function ensurePlaceholder(){
+      const children = Array.from(list.children || []);
+
+      // 실제 소식 아이템(placeholder가 아닌 .item) 여부
+      const hasReal = children.some(function(node){
+        return node.nodeType === 1 &&
+               node.classList &&
+               node.classList.contains('item') &&
+               !node.classList.contains('placeholder');
+      });
+
+      const hasAny = children.length > 0;
+
+      // 외부 스크립트(placeholder-sweeper 등)가 이미 안내 문구를 넣었는지 체크
+      const hasExternalInfo = children.some(function(node){
+        if (node.nodeType !== 1) return false;
+        const text = (node.textContent || '').replace(/\s+/g,'');
+        return /소식준비중입니다/.test(text) || /소식을준비중입니다/.test(text);
+      });
+
+      const hasOurPlaceholder = !!list.querySelector('.item.placeholder');
+
+      // 1) 실제 소식이 없고, 어떤 방식의 안내문도 없을 때만 우리 placeholder 1개 생성
+      if ((!hasAny || (!hasReal && !hasExternalInfo)) && !hasOurPlaceholder) {
+        const item = document.createElement('div');
+        item.className = 'item placeholder';
+        item.innerHTML = '<div class="title">아직 올린글이 없음</div>';
+        list.appendChild(item);
+      }
+
+      // 2) 실제 소식 아이템이 생기면, 우리 placeholder는 제거
+      if (hasReal && hasOurPlaceholder) {
+        list.querySelectorAll('.item.placeholder').forEach(function(p){ p.remove(); });
+      }
+    }
+
+    // 초기 1회 실행
+    ensurePlaceholder();
+
+    // 이후 리스트 변경 감시 (다른 스크립트가 아이템을 채워 넣을 때)
+    try{
+      const mo = new MutationObserver(ensurePlaceholder);
+      mo.observe(list, { childList:true, subtree:true });
+    }catch(e){}
+  });
+}, {once:true});
+</script>
 <style id="adpanel-clean">
 .right { height:auto !important; }
 .right .topic-panel { height:auto !important; margin-top:0 !important; }
@@ -2590,19 +4157,374 @@ footer{
 }
 </style>
 <style id="sidebar-active-style">.sidebar a.active { background:#ffdfcc; color:#804000; border:1px solid #f3d9b0; border-radius:8px; }</style>
-
+<script id="sidebar-active-script">(function(){function norm(n){return (n||"").toLowerCase().replace(/_en\.html$/,".html").replace(/_zh\.html$/,".html");}document.addEventListener("DOMContentLoaded",function(){var f=norm((location.pathname.split("/").pop()||"index.html"));document.querySelectorAll(".sidebar a").forEach(function(a){var href=norm((a.getAttribute("href")||"").split("/").pop());if(href && href===f){a.classList.add("active");a.setAttribute("aria-current","page");}else{a.classList.remove("active");a.removeAttribute("aria-current");}});});})();</script>
 <script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.donation.json" data-interval="30000" src="/assets/js/hero.rotator.js"></script>
 
+<script id="igdc-qa-config">
+  (function () {
+    // 1) 민감정보 없는 기본 설정
+    const baseConfig = {
+      url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "",
+      project: "IGDC",
+      pageId: null,
+      aiEndpoint: null
+    };
+
+    // Supabase 환경을 SUPER_VARSAR에 적용하는 함수
+    function applyConfig(env) {
+      const url =
+        (env && env.SUPABASE_URL) ||
+        baseConfig.url;
+
+      const anonKey =
+        (env && env.SUPABASE_ANON_KEY) ||
+        "";
+
+      if (!anonKey) {
+        console.warn("[IGDC] Supabase anonKey is not configured.");
+      }
+
+      window.SUPER_VARSAR = Object.assign(
+	  {}, 
+        window.SUPER_VARSAR || {},
+        baseConfig,
+        {
+          url: url,
+          anonKey: anonKey
+        }
+      );
+    }
+
+    // 2) 이미 window.IGDC_ENV가 있다면(로컬 테스트 등) 그걸 우선 사용
+    if (window.IGDC_ENV &&
+        (window.IGDC_ENV.SUPABASE_ANON_KEY || window.IGDC_ENV.SUPABASE_URL)) {
+      applyConfig(window.IGDC_ENV);
+      return;
+    }
+
+    // 3) 없으면 Netlify Functions에서 환경변수 읽어오기
+    //    (secureEnvBridge는 Netlify env에서 SUPABASE_URL, SUPABASE_ANON_KEY를 꺼내서 JSON으로 돌려주는 함수)
+    var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
+
+    fetch(endpoint, { cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("http " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        // 구조: { env: { SUPABASE_URL: "...", SUPABASE_ANON_KEY: "..." } } 또는 그냥 {SUPABASE_URL:...}
+        var env = data && (data.env || data);
+        // 한 번 받아온 값은 전역에도 보관(다른 스크립트에서 재사용 가능)
+        window.IGDC_ENV = Object.assign(window.IGDC_ENV || {}, env || {});
+        applyConfig(window.IGDC_ENV);
+        console.log("[IGDC] Supabase env loaded from secureEnvBridge.");
+      })
+      .catch(function (err) {
+        console.warn("[IGDC] Failed to load Supabase env:", err && err.message);
+        // 실패해도 페이지는 깨지지 않도록 기본값만 적용
+        applyConfig(null);
+      });
+  })();
+</script>
 
 
-
-
+<script>
+(function(){
+  if(window.__PSOM_AUTOLABEL__) return; window.__PSOM_AUTOLABEL__=1;
+  var f=(location.pathname.split('/').pop()||'home');
+  var slug=f.replace(/_(ko|en|zh)\.html$/i,'.html').replace(/\.html$/,'')||'home';
+  var i=1; document.querySelectorAll('.thumb-list.thumb-scroller:not(.ad-panel .thumb-list)')
+    .forEach(function(el){ if(!el.dataset.psomKey) el.dataset.psomKey = slug+'.main'+(i++); });
+  var j=1; document.querySelectorAll('.ad-panel .thumb-list.thumb-scroller')
+    .forEach(function(el){ if(!el.dataset.psomKey) el.dataset.psomKey = slug+'.right'+(j++); });
+})();
+</script>
 
 <!-- QnA Modal (injected) -->
 <div aria-hidden="true" id="qnaBackdrop"></div>
+<script id="igdc-qa-script">
+(function(){
+  if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
+  const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
+  let isOpen=false, isAnimating=false;
 
+  function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
+  const fmtDate = (s)=> new Date(s).toLocaleString();
+  const nowISO = ()=> new Date().toISOString();
+  const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
+  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
 
+  function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
+  function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
 
+  async function ensureSupabase(){
+    if(STATE.sb) return STATE.sb;
+    const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
+    const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
+    if(!url || !key || !window.supabase || !window.supabase.createClient){
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      return null;
+    }
+    STATE.sb = window.supabase.createClient(url, key);
+    return STATE.sb;
+  }
+  async function ensureAuth(){
+    const sb = await ensureSupabase(); if(!sb) return;
+    let { data: { session } } = await sb.auth.getSession();
+    if(!session){
+      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      ({ data: { session } } = await sb.auth.getSession());
+    }
+    if(session){
+      const uid = session.user.id;
+      const { data } = await sb.from("igdc_admins").select("uid").eq("uid", uid).limit(1);
+      STATE.user = session.user;
+      STATE.isAdmin = Array.isArray(data) && data.length>0;
+    }
+  }
+
+  function mountUI(){
+    const modal = el("div","igdc-qa-modal");
+    const backdrop = el("div","igdc-qa-backdrop");
+    const panel = el("div","igdc-qa-panel");
+    const header = el("div","igdc-qa-header");
+    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","닫기");
+    header.append(title, close);
+
+    const body = el("div","igdc-qa-body");
+    const lQ = el("label"); lQ.textContent="질문";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="질문을 입력하세요...";
+    const lA = el("label"); lA.textContent="답변";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="조금만 기다리시면 금방 답변을 드리겠습니다.";
+    const actions = el("div","igdc-qa-actions");
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="등록하기";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="지우기";
+    const note = el("div","igdc-qa-note"); note.textContent="※ 가벼운 질문은 AI가 즉시 답변합니다. 기술/오류/운영 관련은 관리자 Q&A로 자동 전달됩니다.";
+    const list = el("div","igdc-qa-threads");
+
+    body.append(lQ,tQ,lA,tA,actions,note,list);
+	const ce = el("p","contact-email");
+    ce.innerHTML = '대표 이메일: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+    body.append(ce);
+    actions.append(btnSubmit, btnClear);
+    panel.append(header, body);
+    modal.append(backdrop, panel);
+    document.body.append(modal);
+
+    // position near sidebar
+    function positionNearSidebar(){
+      try{
+        const sb = document.querySelector('.sidebar');
+        if(sb){
+          const rect = sb.getBoundingClientRect();
+          const left = Math.round(rect.right + 12);
+          panel.style.left = left + "px";
+        }
+      }catch(e){}
+    }
+    positionNearSidebar();
+    window.addEventListener('resize', positionNearSidebar);
+    window.addEventListener('scroll', positionNearSidebar, { passive:true });
+
+    function openModal(){
+      if(isAnimating || isOpen) return;
+      isAnimating = true;
+      modal.style.display = "block";
+      requestAnimationFrame(()=>{
+        modal.classList.add('open');
+        isOpen = true;
+        setTimeout(()=>{ isAnimating = false; }, 220);
+      });
+    }
+    function closeModal(){
+      if(isAnimating || !isOpen) return;
+      isAnimating = true;
+      modal.classList.remove('open');
+      setTimeout(()=>{
+        modal.style.display = "none";
+        isOpen = false;
+        isAnimating = false;
+      }, 220);
+    }
+
+    // Sidebar trigger
+    const sideBtn = document.querySelector('#qnaOpenBtn');
+    if(sideBtn){ sideBtn.addEventListener('click', openModal); }
+    close.addEventListener("click", closeModal);
+    backdrop.addEventListener("click", closeModal);
+    document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
+
+    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
+    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+
+    async function fetchThreads(){
+      const sb = await ensureSupabase(); if(!sb) return;
+      const { data, error } = await sb.from("igdc_qna_threads")
+        .select("*")
+        .eq("project", STATE.project)
+        .eq("page_id", STATE.pageId)
+        .order("created_at", { ascending:false }).limit(100);
+      if(error){ console.error(error); return; }
+      renderList(data||[]);
+    }
+    function renderList(rows){
+      list.innerHTML="";
+      rows.forEach(row=>{
+        const box = el("div","igdc-qa-thread");
+        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (대기중)";
+        const meta = el("div","igdc-qa-thread-meta");
+        const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
+        const tag = el("span"); tag.textContent = row.is_admin? "관리요청":"일반";
+        const actions = el("div","igdc-qa-thread-actions");
+        const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
+        if(canDelete){
+          const del = el("button","igdc-qa-btn muted"); del.textContent="삭제";
+          del.addEventListener("click", async ()=>{
+            const sb = await ensureSupabase(); if(!sb) return;
+            const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
+            if(error){ alert("삭제 실패(권한/정책)"); return; }
+            await fetchThreads();
+          });
+          actions.append(del);
+        }
+        meta.append(time, tag, actions);
+        box.append(q,a,meta);
+        list.append(box);
+      });
+    }
+
+    async function autoAnswerIfNeeded(text){
+      const technical = classifyTech(text);
+      let answer = null;
+      if(!technical){
+        const ep = getAIEndpoint();
+        if(ep){
+          try{
+            const res = await fetch(ep,{method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({question:text, pageId: STATE.pageId})});
+            const j = await res.json(); answer = j && (j.answer||j.text||null);
+          }catch(e){}
+        }
+        if(!answer){
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 확인 후 회신됩니다.";
+          else if(/가격|비용|요금/.test(text)) answer="가격/요금 정보는 페이지 내 안내를 참고해주세요. 추가 문의는 남겨주세요.";
+          else answer="문의 감사합니다. 빠르게 확인하여 도와드리겠습니다.";
+        }
+      }
+      return { technical, answer };
+    }
+
+    async function submit(){
+      const q = (tQ.value||"").trim();
+      let a = (tA.value||"").trim();
+      if(!q){ tQ.focus(); return; }
+      const { technical, answer } = await autoAnswerIfNeeded(q);
+      if(!a && answer) a = answer;
+      const sb = await ensureSupabase();
+      if(!sb){
+        alert("저장 설정(Supabase url/key)이 아직 연결되지 않아 서버 저장은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        return;
+      }
+      const record = {
+        project: STATE.project, page_id: STATE.pageId,
+        user_id: (STATE.user && STATE.user.id) || null,
+        question: q, answer: a || null, is_admin: technical,
+        created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
+      };
+      const { error } = await sb.from("igdc_qna_threads").insert(record);
+      if(error){ alert("등록 실패"); return; }
+      tQ.value=""; tA.value = a || "";
+      await fetchThreads();
+    }
+    btnSubmit.addEventListener("click", submit);
+
+    // realtime refresh
+    (async()=>{ try{
+      const sb = await ensureSupabase(); if(!sb) return;
+      sb.channel('igdc_qna_changes').on('postgres_changes',{event:'*',schema:'public',table:'igdc_qna_threads'}, fetchThreads).subscribe();
+    }catch(e){} })();
+
+    window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
+    fetchThreads();
+  }
+
+  async function boot(){
+  window.SUPER_VARSAR = window.SUPER_VARSAR || {};
+  STATE.project = (window.SUPER_VARSAR.project || "IGDC");
+  STATE.pageId = (window.SUPER_VARSAR.pageId || (location.pathname + (location.hash||"")));
+  // 1) Always mount UI so the popup can open
+  mountUI();
+  // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+}
+if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
+})();
+</script>
+<script>
+(function(){
+  // Fallback: If Bootstrap's modal is unavailable, toggle display manually.
+  var btn = document.getElementById('qnaOpenBtn');
+  var modal = document.getElementById('qnaModal');
+  if (!btn || !modal) return;
+  function open(){ modal.style.display='block'; document.body.style.overflow='hidden'; }
+  function close(){ modal.style.display='none'; document.body.style.overflow=''; }
+  // If bootstrap is present and data attributes exist, let it handle.
+  var hasBootstrap = !!(window.bootstrap);
+  if(!hasBootstrap){
+    btn.addEventListener('click', function(e){ e.preventDefault(); open(); });
+    modal.addEventListener('click', function(e){ if(e.target===modal){ close(); } });
+    // close buttons
+    var closeEls = modal.querySelectorAll('[data-bs-dismiss="modal"], .btn-close, [data-close]');
+    closeEls.forEach(function(el){ el.addEventListener('click', function(){ close(); }); });
+  }
+})();
+</script>
+<script>
+(function(){
+  const mq=window.matchMedia('(max-width:1024px)');
+  const drawer=document.querySelector('.right');
+  if(!drawer) return;
+  let startX=0,tracking=false,opening=false,closing=false;
+  function open(){
+    if(!mq.matches) return;
+    if(!document.body.classList.contains('drawer-open')){
+      document.body.classList.add('drawer-open');
+      let bk=document.getElementById('drawerBackdrop');
+      if(!bk){
+        bk=document.createElement('div');
+        bk.id='drawerBackdrop';
+        bk.className='drawer-backdrop';
+        document.body/*__KILL__*/ appendChild_DISABLED(bk);
+        bk.addEventListener('click',close,{passive:true});
+      }
+    }
+  }
+  function close(){
+    document.body.classList.remove('drawer-open');
+    const bk=document.getElementById('drawerBackdrop');
+    if(bk) bk.parentNode.removeChild(bk);
+  }
+  document.addEventListener('touchstart',e=>{
+    if(!mq.matches) return;
+    const t=e.touches[0];
+    startX=t.clientX; tracking=true;
+    opening=!document.body.classList.contains('drawer-open')&&startX>(window.innerWidth-24);
+    closing=document.body.classList.contains('drawer-open')&&t.target.closest('.right');
+  },{passive:true});
+  document.addEventListener('touchmove',e=>{
+    if(!mq.matches||!tracking) return;
+    const x=e.touches[0].clientX,dx=x-startX;
+    if(opening&&dx<-30){open();tracking=false}
+    if(closing&&dx>30){close();tracking=false}
+  },{passive:true});
+  document.addEventListener('touchend',()=>{tracking=false;opening=false;closing=false},{passive:true});
+  window.addEventListener('resize',()=>{if(!mq.matches) close()});
+})();
+</script>
 <style id="left-hide-compact">
 @media (max-width: 768px),
        (max-width: 1024px) and (orientation: portrait){
@@ -2610,7 +4532,36 @@ footer{
 }
 </style>
 
+<script id="strict-right-swipe">
+(function(){
+  var rp = document.querySelector(".right, [data-role='right-panel'], #rightPanel");
+  if(!rp) return;
+  function vw(){ return Math.max(document.documentElement.clientWidth, window.innerWidth||0); }
 
+  var sx=null, sy=null, touching=false;
+  function onStart(e){ var t=e.touches?e.touches[0]:e; sx=t.clientX; sy=t.clientY; touching=true; }
+  function onEnd(e){
+    if(!touching) return;
+    var t = (e.changedTouches&&e.changedTouches[0]) ? e.changedTouches[0] : (e.touches?e.touches[0]:e);
+    if(!t){ touching=false; return; }
+    var dx=t.clientX - sx, dy=t.clientY - sy;
+    // open from right edge
+    if(vw()<=1180 && !rp.classList.contains("open") && sx > vw()-24 && dx < -40 && Math.abs(dy)<40){
+      rp.classList.add("open"); document.body.classList.add("rp-open");
+    }
+    // close with swipe inside panel
+    var rect = rp.getBoundingClientRect();
+    if(vw()<=1180 && rp.classList.contains("open") && sx > rect.left && dx > 40 && Math.abs(dy)<40){
+      rp.classList.remove("open"); document.body.classList.remove("rp-open");
+    }
+    touching=false; sx=null; sy=null;
+  }
+  function bind(){ document.addEventListener("touchstart", onStart, {passive:true}); document.addEventListener("touchend", onEnd, {passive:true}); }
+  function unbind(){ document.removeEventListener("touchstart", onStart); document.removeEventListener("touchend", onEnd); }
+  function sync(){ if(vw()<=1180) bind(); else { unbind(); rp.classList.remove("open"); document.body.classList.remove("rp-open"); } }
+  window.addEventListener("resize", sync); sync();
+})();
+</script>
 <style id="win-nowrap-guard">
 /* Prevent desktop window-resize wrapping: keep columns on one line */
 .container{
@@ -2649,18 +4600,544 @@ footer{
   }
 }
 </style>
+<script id="landscape-card-expand-js">
+(function(){
+  function vw(){ return Math.max(document.documentElement.clientWidth, window.innerWidth||0); }
+  function isLandscape(){ return (window.matchMedia && window.matchMedia("(orientation: landscape)").matches); }
+  function eligible(){ return isLandscape() && vw() <= 900; }
 
+  var overlay = document.getElementById("cardExpandOverlay");
+  if(!overlay){
+    overlay = document.createElement("div");
+    overlay.id = "cardExpandOverlay";
+    overlay.style.cssText = "position:fixed;inset:0;z-index:10000;display:none;background:rgba(0,0,0,.25)";
+    document.body.appendChild(overlay);
+  }
+
+  function closeAll(){
+    document.querySelectorAll(".card.expanded, .thumb.expanded").forEach(function(el){
+      el.classList.remove("expanded");
+    });
+    overlay.style.display = "none";
+    document.body.classList.remove("no-scroll-expanded");
+  }
+
+  overlay.addEventListener("click", closeAll);
+  document.addEventListener("keyup", function(e){ if(e.key==="Escape") closeAll(); });
+
+  function onTap(e){
+    // Only act on direct card/thumb taps in eligible mode
+    if(!eligible()) return;
+    var el = e.currentTarget;
+    // Toggle expand
+    var nowOpen = !el.classList.contains("expanded");
+    closeAll();
+    if(nowOpen){
+      el.classList.add("expanded");
+      overlay.style.display = "block";
+      document.body.classList.add("no-scroll-expanded");
+    }
+  }
+
+  function attach(){
+    // Delegate to likely containers to avoid over-binding
+    var candidates = Array.prototype.slice.call(document.querySelectorAll(".thumb, .card"));
+    candidates.forEach(function(node){
+      // skip if it's clearly a control/button
+      if(node.dataset && node.dataset.noExpand) return;
+      node.style.touchAction = "manipulation";
+      node.addEventListener("click", onTap, {passive:true});
+    });
+  }
+
+  // Prevent background scroll when expanded
+  var style = document.getElementById("cardExpandNoScroll");
+  if(!style){
+    style = document.createElement("style");
+    style.id = "cardExpandNoScroll";
+    style.textContent = "body.no-scroll-expanded{overflow:hidden;}";
+    document.head.appendChild(style);
+  }
+
+  // Init + keep in sync with orientation/resize
+  window.addEventListener("resize", function(){
+    if(!eligible()) closeAll();
+  });
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", attach);
+  } else {
+    attach();
+  }
+})();
+</script>
 
 <!-- 사이드바 '문학학술' 계열 링크 감추기 -->
+<script>
+(function () {
+  var side = document.querySelector('.sidebar');
+  if (!side) return;
 
-
-
+  side.querySelectorAll('a').forEach(function(a){
+    var t = (a.textContent || '').replace(/\s+/g, '');
+    // '문학학술', '문학/학술', '문학 학술', '문학학술교류' 등 변형 대응
+    if (/(문학.?학술|문학학술교류)/.test(t)) {
+      a.classList.add('hidden');        // 페이지에 이미 정의된 .hidden 활용
+      a.setAttribute('aria-hidden','true');
+      a.setAttribute('tabindex','-1');  // 키보드 포커스에서도 제외(접근성)
+    }
+  });
+})();
+</script>
+<script>
+window.IGDC_QA=window.IGDC_QA||{};
+if(typeof window.IGDC_QA.open!=="function"){
+  window.IGDC_QA.open=function(){
+    if(window.QnaCore&&typeof QnaCore.open==="function"){QnaCore.open();}
+    else if(typeof openModal==="function"){openModal();}
+  };
+}
+window.addEventListener("message",function(ev){
+  try{if(ev&&ev.data&&ev.data.type==="IGTC_OPEN_QNA"&&typeof IGDC_QA.open==="function"){IGDC_QA.open();}}catch(e){}
+});
+</script>
+<script id="igtc-checkout-trigger-v1">
+(function(){
+  if (window.__IGTC_CHECKOUT_READY__) return;
+  window.IGTC = window.IGTC || {};
+  function safeJSON(s){ try{ return JSON.parse(s); }catch(_){ return null; } }
+  IGTC.checkout = function(opts){
+    try{
+      // Normalize
+      var payload = Object.assign({ method: 'card', amount: 0, currency: 'KRW', meta: {} }, opts||{});
+      // 1) CustomEvent for same-page listeners (optional)
+      try{ window.dispatchEvent(new CustomEvent('IGTC_CHECKOUT', { detail: payload })); }catch(_){}
+      // 2) postMessage for index.html dispatcher (if present)
+      try{ window.postMessage({ type: 'CHECKOUT', payload: payload }, '*'); }catch(_){}
+      // 3) Fallback: call serverless function directly (no-op if not configured)
+      try{
+        fetch('/.netlify/functions/checkout', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+          .then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); })
+          .then(function(res){
+            if(res && res.redirectUrl){ window.location.assign(res.redirectUrl); }
+            else if(res && res.qr && res.qr.html){
+              // Minimal inline QR modal (scoped)
+              var wrap = document.getElementById('igtc-qr-modal'); 
+              if(!wrap){
+                wrap = document.createElement('div');
+                wrap.id = 'igtc-qr-modal';
+                wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+                wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>결제 QR</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">닫기</button></div>'
+                  + '<div id="igtc-qr-area"></div></div>';
+                document.body.appendChild(wrap);
+                var btn = document.getElementById('igtc-qr-close');
+                if(btn) btn.addEventListener('click', function(){ wrap.remove(); }, { passive:true });
+              }
+              var area = document.getElementById('igtc-qr-area'); if(area){ area.innerHTML = res.qr.html; }
+            }
+          })
+          .catch(function(){ /* silent fallback */ });
+      }catch(_){}
+    }catch(_){}
+  };
+  // Data-API: any element with [data-checkout] will trigger checkout with attributes
+  document.addEventListener('click', function(e){
+    var el = e.target.closest('[data-checkout]'); if(!el) return;
+    var metaAttr = el.getAttribute('data-meta');
+    var meta = metaAttr ? (safeJSON(metaAttr) || { note: metaAttr }) : {};
+    var amount = parseFloat(el.getAttribute('data-amount')||'0') || 0;
+    var currency = el.getAttribute('data-currency') || 'KRW';
+    var method = el.getAttribute('data-method') || 'card';
+    IGTC.checkout({ method: method, amount: amount, currency: currency, meta: meta });
+    e.preventDefault();
+  }, { passive:true });
+  window.__IGTC_CHECKOUT_READY__ = true;
+})();
+</script>
 
 <!-- /PATCH end v19 -->
+<script id="donation-qq-mobile-news-mapping">
+(function(){
+  if(window.__DONATION_QQ_MOBILE_NEWS__) return;
+  window.__DONATION_QQ_MOBILE_NEWS__ = true;
+
+  var topicPanels = {};
+  var captured = false;
+
+  function normalize(t){
+    return (t || "").replace(/\s+/g,"").toLowerCase();
+  }
+
+  function keyFromLabel(text){
+    var t = normalize(text);
+    if(!t) return null;
+
+    if(t.includes("global") || t.includes("글로벌") || t.includes("wam") || t.includes("iesf")) return "iesf";
+    if(t.includes("ngo")) return "ngo";
+    if(t.includes("선교") || t.includes("mission")) return "mission";
+    if(t.includes("봉사") || t.includes("volunteer") || t.includes("service")) return "service";
+    if(t.includes("구호") || t.includes("구제") || t.includes("재난") || t.includes("relief")) return "relief";
+    if(t.includes("교육") || t.includes("education") || t.includes("edu")) return "edu";
+    if(t.includes("환경") || t.includes("기후") || t.includes("environment") || t.includes("env")) return "env";
+    if(t.includes("기타") || t.includes("others") || t.includes("etc") || t.includes("misc")) return "etc";
+
+    return null;
+  }
+
+  function keyFromPanel(panel){
+    if(!panel) return null;
+    var list = panel.querySelector(".list[data-cat]");
+    if(list) return (list.getAttribute("data-cat") || "").trim().toLowerCase();
+    var h = panel.querySelector("h3");
+    return keyFromLabel(h ? h.textContent : panel.textContent);
+  }
+
+  function capture(){
+    if(captured) return;
+    var right = document.querySelector("aside.right");
+    if(!right) return;
+    right.querySelectorAll(".panel.topic-panel").forEach(function(panel){
+      var k = keyFromPanel(panel);
+      if(k && !topicPanels[k]) topicPanels[k] = panel;
+    });
+    captured = true;
+  }
+
+  function clearClones(){
+    document.querySelectorAll(".mobile-news-clone").forEach(function(el){
+      if(el.parentNode) el.parentNode.removeChild(el);
+    });
+  }
+
+  function setOriginalHidden(hidden){
+    Object.keys(topicPanels).forEach(function(k){
+      var el = topicPanels[k];
+      if(!el) return;
+      if(hidden) el.classList.add("is-mobile-hidden");
+      else el.classList.remove("is-mobile-hidden");
+    });
+  }
+
+  function isMobileWidth(){
+    var vw = window.innerWidth  || document.documentElement.clientWidth  || 0;
+    return (vw <= 1024);
+  }
+
+  function keyFromRow(row){
+    var d = row.dataset || {};
+    var cand;
+
+    if(d.cat){
+      cand = keyFromLabel(d.cat);
+      if(cand) return cand;
+    }
+    if(d.topic){
+      cand = keyFromLabel(d.topic);
+      if(cand) return cand;
+    }
+    if(d.section){
+      cand = keyFromLabel(d.section);
+      if(cand) return cand;
+    }
+
+    var id = row.id || "";
+    var m = id.match(/feed[_-](.+)$/i);
+    if(m && m[1]){
+      cand = keyFromLabel(m[1]);
+      if(cand) return cand;
+    }
+
+    var labelEl =
+      row.querySelector(".row-label") ||
+      row.querySelector(".feed-label") ||
+      row.querySelector("[data-label]") ||
+      row.querySelector("h2, h3");
+
+    var labelText =
+      (labelEl && (labelEl.innerText || labelEl.textContent)) ||
+      row.getAttribute("data-label") || "";
+
+    return keyFromLabel(labelText);
+  }
+
+  function normalizeItemFooter(root){
+    if(!root) root = document;
+    if(!root.querySelectorAll) return;
+
+    var items = root.querySelectorAll('.right .topic-panel .list .item, .mobile-news-clone .topic-panel .list .item');
+    items.forEach(function(item){
+      var footer = item.querySelector('.item-footer');
+      if(!footer){
+        footer = document.createElement('div');
+        footer.className = 'item-footer';
+        item.appendChild(footer);
+      }
+
+      // If footer already has controls, assume normalized
+      if(
+        footer.querySelector('.stats') ||
+        footer.querySelector('.btn-edit') ||
+        footer.querySelector('.btn-reco') ||
+        footer.querySelector('.btn-like') ||
+        footer.querySelector('.btn-delete') ||
+        footer.querySelector('.delete-post')
+      ){
+        return;
+      }
+
+      // Move stats block (views/recommend/like icons) into footer
+      var stats = item.querySelector('.stats');
+      if(stats){
+        footer.appendChild(stats);
+      }
+
+      // Move edit/delete buttons into footer
+      var editDel = item.querySelector('.edit-del');
+      if(editDel){
+        footer.appendChild(editDel);
+      }else{
+        var btns = item.querySelectorAll('button.btn-edit, button.btn-reco, button.btn-like, button.btn-delete, button.delete-post');
+        if(btns.length){
+          var wrap = document.createElement('div');
+          wrap.className = 'edit-del';
+          btns.forEach(function(btn){
+            wrap.appendChild(btn);
+          });
+          footer.appendChild(wrap);
+        }
+      }
+    });
+  }
+
+  function apply(){
+    capture();
+
+    if(!isMobileWidth()){
+      clearClones();
+      setOriginalHidden(false);
+      return;
+    }
+
+    clearClones();
+    setOriginalHidden(true);
+
+    var rows = document.querySelectorAll("#feedRows .feed-row");
+    if(!rows.length) return;
+
+    var orderKeys = ["iesf","ngo","mission","service","relief","edu","env","etc"];
+    var usedKeys = {};
+
+    rows.forEach(function(row, idx){
+      var key = keyFromRow(row);
+
+      if(!key || !topicPanels[key]){
+        if(idx < orderKeys.length){
+          key = orderKeys[idx];
+        }
+      }
+
+      if(!key) return;
+      if(usedKeys[key]) return;
+
+      var src = topicPanels[key];
+      if(!src) return;
+
+      usedKeys[key] = true;
+
+      var next = row.nextElementSibling;
+      if(next && next.classList && next.classList.contains("mobile-news-clone")) return;
+
+      var wrap = document.createElement("div");
+      wrap.className = "mobile-news-clone";
+      wrap.innerHTML = src.outerHTML;
+
+      normalizeItemFooter(wrap);
+
+      row.parentNode.insertBefore(wrap, row.nextSibling);
+    });
+  }
+
+  var timer = null;
+  function schedule(){
+    clearTimeout(timer);
+    timer = setTimeout(apply, 80);
+  }
+
+  document.addEventListener("DOMContentLoaded", apply);
+  window.addEventListener("resize", schedule);
+  window.addEventListener("orientationchange", schedule);
+})();
+</script>
 
 
+<script>
+(function(){
+  const $  = (s,r=document)=>r.querySelector(s);
+  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
+  // Preview targets (reuse existing modal if present)
+  const modal   = $('#newsPreviewModal') || $('#previewModal');
+  const npTitle = $('#npTitle') || $('#newsPreviewTitle');
+  const npTime  = $('#npTime') || $('#newsPreviewTime');
+  const npBody  = $('#npBody') || $('#newsPreviewBody');
+  const npAttach= $('#npAttach') || $('#newsPreviewAttach');
 
+  function openModal(){
+    if(!modal) return;
+    modal.style.display = 'flex';
+  }
+  function closeModal(){
+    if(!modal) return;
+    modal.style.display = 'none';
+  }
+
+  const closeBtn = modal ? (modal.querySelector('.close') || modal.querySelector('#npClose')) : null;
+  if(closeBtn){
+    closeBtn.addEventListener('click', closeModal);
+  }
+  if(modal){
+    modal.addEventListener('click', function(e){
+      if(e.target === modal) closeModal();
+    });
+  }
+
+  // Mark items that have attachments so CSS can show 📎
+  function markHasAttach(scope){
+    $$('.right .topic-panel .list .item, .mobile-news-clone .topic-panel .list .item', scope)
+      .forEach(function(item){
+        const hasAttach = item.querySelector('.attach') || item.querySelector('.attach-list li');
+        if(hasAttach){ item.classList.add('has-attach'); }
+      });
+  }
+  markHasAttach(document);
+  normalizeItemFooter(document);
+
+  // Watch dynamic additions
+  $$('.right .topic-panel .list, .mobile-news-clone .topic-panel .list').forEach(function(list){
+    const mo = new MutationObserver(function(muts){
+      muts.forEach(function(m){
+        (m.addedNodes || []).forEach(function(n){
+          if(n.nodeType !== 1) return;
+          if(n.classList.contains('item')){
+            markHasAttach(n);
+            normalizeItemFooter(n);
+          }else if(n.querySelectorAll){
+            n.querySelectorAll('.item').forEach(function(it){
+              markHasAttach(it);
+            });
+            normalizeItemFooter(n);
+          }});
+      });
+    });
+    mo.observe(list, {childList:true, subtree:true});
+  });
+
+  // Click handler: list item -> fill preview & open modal
+  document.addEventListener('click', function(e){
+    // Skip edit/delete/other control buttons
+    if(e.target.closest('.btn-edit') || e.target.closest('.btn-delete') || e.target.closest('.delete-post')) return;
+
+    const item = e.target.closest('.right .topic-panel .list .item, .mobile-news-clone .topic-panel .list .item');
+    if(!item) return;
+    if(!npTitle || !npBody){ return; }
+
+    const title = (item.querySelector('.h-title')?.textContent
+                || item.querySelector('.title')?.textContent || '').trim();
+    const meta  = (item.querySelector('.h-time')?.textContent
+                || item.querySelector('.meta')?.textContent || '').trim();
+    const body =
+      (item.querySelector('.preview')?.textContent
+    || item.querySelector('.body')?.textContent
+    || item.querySelector('.content')?.textContent
+    || '').trim();
+
+    const attachEl   = item.querySelector('.attach');
+    const attachList = item.querySelectorAll('.attach-list li');
+    let attachHtml = '';
+    if(attachEl){
+      attachHtml = attachEl.innerHTML;
+    }else if(attachList && attachList.length){
+      attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
+    }
+
+    npTitle.textContent = title || '제목 없음';
+    if(npTime)  npTime.textContent  = meta || '';
+    npBody.textContent = body || '(등록된 본문이 없습니다.)';
+    if(npAttach){
+      npAttach.innerHTML = attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml
+        : '';
+    }
+
+    openModal();
+  }, true);
+
+  // Supabase sync (uses same anonKey/url as Q&A: SUPER_VARSAR + ensureSupabase)
+  async function syncLatestToSupabase(cat){
+    try{
+      if(typeof window.ensureSupabase !== 'function') return;
+      const sb = window.ensureSupabase();
+      if(!sb || !sb.from) return;
+
+      const list = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
+      if(!list) return;
+      const item = list.querySelector('.item');
+      if(!item) return;
+
+      const title = (item.querySelector('.h-title')?.textContent
+                  || item.querySelector('.title')?.textContent || '').trim();
+      const meta  = (item.querySelector('.h-time')?.textContent
+                  || item.querySelector('.meta')?.textContent || '').trim();
+      const body  =
+        (item.querySelector('.preview')?.textContent
+      || item.querySelector('.body')?.textContent
+      || item.querySelector('.content')?.textContent
+      || '').trim() || null;
+
+      const attachEl   = item.querySelector('.attach');
+      const attachList = item.querySelectorAll('.attach-list li');
+      const attachments = [];
+      if(attachEl){
+        attachments.push(attachEl.textContent.trim());
+      }
+      if(attachList && attachList.length){
+        attachments.push.apply(attachments,
+          Array.from(attachList).map(li => (li.textContent || '').trim())
+        );
+      }
+
+      const payload = {
+        page: 'donation',
+        category: cat || 'etc',
+        title: title || null,
+        meta: meta || null,
+        body: body,
+        attachments: attachments.length ? attachments : null
+      };
+
+      const { error } = await sb.from('igdc_donation_posts').insert(payload);
+      if(error){
+        console.warn('[donation] Supabase 저장 실패:', error.message);
+      }
+    }catch(err){
+      console.warn('[donation] Supabase sync 예외:', err);
+    }
+  }
+
+  // 완전 저장 버튼 클릭 후 Supabase 동기화 시도
+  document.addEventListener('click', function(e){
+    const btn = e.target.closest('#btnSubmitPost');
+    if(!btn) return;
+    setTimeout(function(){
+      const catSel = document.getElementById('postCategory');
+      const cat = catSel ? (catSel.value || 'etc') : 'etc';
+      syncLatestToSupabase(cat);
+    }, 250);
+  });
+})();
+</script>
 
 
 
@@ -2709,14 +5186,142 @@ footer{
 }
 </style>
 
+<script id="hero-linebreak-fix">
+(function(){
+  function nobreak(s){ return s.replace(/NGO와\s*공유하며/g, "NGO와\u00A0공유하며"); }
+  var el = document.getElementById("topPostBody");
+  if(el){
+    if(el.value !== undefined){ el.value = nobreak(el.value); }
+    else{ el.innerHTML = nobreak(el.innerHTML); }
+  }
+})();
+</script>
+
+<script id="hero-mobile-nl-toggle">
+(function(){
+  var el = document.getElementById('topPostBody');
+  if(!el) return;
+  if(!el.dataset.orig){
+    el.dataset.orig = el.value !== undefined ? (el.value || '') : (el.textContent || '');
+  }
+  function isPortrait(){ return window.matchMedia && window.matchMedia('(orientation: portrait)').matches; }
+  function compactNewlines(s){ return (s||'').replace(/[ \t\f]*\r?\n[ \t\f]*/g, ' '); }
+  function apply(){
+    if(typeof el.value === 'string'){
+      el.value = isPortrait() ? compactNewlines(el.dataset.orig) : el.dataset.orig;
+    }else{
+      var src = el.dataset.orig;
+      if(isPortrait()){
+        // If it contains <br>, neutralize them only in portrait
+        src = src.replace(/<br\s*\/?>/gi, ' ');
+        src = compactNewlines(src);
+      }
+      el.innerHTML = src;
+      el.textContent = src;
+    }
+  }
+  // First run & on changes
+  apply();
+  window.addEventListener('resize', apply);
+  window.addEventListener('orientationchange', apply);
+})();
+</script>
+
+<script>
+// IGDC: report page height to parent index for iframe resizing
+(function(){
+  function sendHeight(){
+    try{
+      if(window.parent === window){ return; }
+      var docEl = document.documentElement;
+      var body = document.body;
+      var h = Math.max(
+        docEl ? docEl.scrollHeight : 0,
+        body ? body.scrollHeight : 0,
+        docEl ? docEl.offsetHeight : 0,
+        body ? body.offsetHeight : 0
+      );
+      if(!h || h < 100){ return; }
+      var payload = { type: "igdcFrameHeight", height: h, page: location.pathname };
+      if(window.parent && window.parent.postMessage){
+        window.parent.postMessage(payload, "*");
+      }
+    }catch(e){}
+  }
+  function schedule(){
+    sendHeight();
+    [200, 800, 1600].forEach(function(ms){
+      setTimeout(sendHeight, ms);
+    });
+  }
+  if(document.readyState === "complete" || document.readyState === "interactive"){
+    schedule();
+  }else{
+    document.addEventListener("DOMContentLoaded", schedule);
+  }
+  window.addEventListener("load", function(){ setTimeout(sendHeight, 400); });
+  window.addEventListener("resize", function(){ setTimeout(sendHeight, 250); });
+  window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
+})();
+</script>
 
 
+<script>
+// 모바일: WAM NAVER 카페 + Donations 패널 이동 (복사 아님, 이동)
+(function(){
+  var mq = window.matchMedia("(max-width:1023px)");
+  var main = document.querySelector("main.main");
+  var topWrite = document.getElementById("topWritePanel");
+  var feedSection = main ? main.querySelector("section.feed-wrapper") : null;
+  var right = document.querySelector("aside.right");
+  if (!main || !topWrite || !feedSection || !right) return;
 
+  var cafePanel = right.querySelector(".panel.cafe-link");
+  var accountPanel = right.querySelector(".panel.account-section");
+  if (!cafePanel || !accountPanel) return;
 
+  var dock = document.createElement("section");
+  dock.id = "mobileDonationDock";
+  dock.className = "panel";
+  dock.style.marginBottom = "16px";
 
+  function toMobile(){
+    if (dock.parentNode !== main){
+      main.insertBefore(dock, feedSection);
+    }
+    dock.appendChild(cafePanel);
+    dock.appendChild(accountPanel);
+  }
 
+  function toDesktop(){
+    if (dock.parentNode){
+      dock.parentNode.removeChild(dock);
+    }
+    if (right.firstChild){
+      right.insertBefore(cafePanel, right.firstChild);
+      right.insertBefore(accountPanel, cafePanel.nextSibling);
+    }else{
+      right.appendChild(cafePanel);
+      right.appendChild(accountPanel);
+    }
+  }
 
+  function apply(){
+    if (mq.matches){
+      toMobile();
+    } else {
+      toDesktop();
+    }
+  }
 
+  if (mq.addEventListener){
+    mq.addEventListener("change", apply);
+  } else if (mq.addListener){
+    mq.addListener(apply);
+  }
+  document.addEventListener("DOMContentLoaded", apply);
+})();
+</script>
 <style>
 /* 1024px 미만: 우측 패널 감춤 + 메인 전체 폭 사용 */
 @media (max-width:1023px){
@@ -2788,7 +5393,58 @@ footer{
 }
 </style>
 
+<script>
+/* === Auto Slot Generator (Donation Feed) === */
 
+(function(){
+
+  function createDummyCard(){
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    card.innerHTML = `
+      <div class="thumb"></div>
+      <div class="card-body">
+        <div class="card-title">Loading...</div>
+        <div class="card-meta">-</div>
+        <div class="card-preview">Preparing</div>
+      </div>
+    `;
+
+    return card;
+  }
+
+  function buildSlots(){
+
+    document.querySelectorAll('.feed-row').forEach(row=>{
+
+      const count = Number(row.dataset.count || 80);
+      const track = row.querySelector('.row-track');
+
+      if(!track) return;
+
+// ✅ 실데이터(오토맵) 들어오면 더미 비켜줌(삭제)
+if(track.querySelector('.donation-card')){
+  track.querySelectorAll('.card').forEach(c => c.remove());
+  return;
+}
+
+// ✅ 이미 더미 있으면 중복 생성 방지
+if(track.querySelectorAll('.card').length > 0) return;
+
+      // 슬롯 자동 생성
+      for(let i=0;i<count;i++){
+        track.appendChild(createDummyCard());
+      }
+
+    });
+
+  }
+
+  document.addEventListener('DOMContentLoaded', buildSlots);
+
+})();
+</script>
 
 <script defer src="/assets/js/auto-embed.instagram.js"></script>
 <script defer src="/assets/js/placeholder-sweeper.js"></script>
@@ -2804,130 +5460,22 @@ footer{
 
 
 <script>
-document.addEventListener('DOMContentLoaded', function(){
-
-  const $ = (s,r=document)=>r.querySelector(s);
-
-  const modal        = $('#composerModal');
-  const btnOpen      = $('#btnOpenComposer');
-  const btnSubmit    = $('#btnSubmitPost');
-  const btnSave      = $('#btnSave');
-  const btnCancel    = $('#btnCancel');
-  const btnDraft     = $('#btnDraftSave');
-
-  const titleI       = $('#composeTitle');
-  const bodyI        = $('#composeBody');
-  const catSel       = $('#postCategory');
-
-  const fileI        = $('#postImage');
-  const fileAttach   = $('#postFile');
-
-  const btnPickImg   = $('#btnPickImage');
-  const btnPickFile  = $('#btnPickFile');
-
-  const fileChosen   = $('#fileChosen');
-  const imgChosen    = $('#imgChosen');
-
-  const titlePreview = $('#titlePreview');
-  const tpText       = titlePreview ? titlePreview.querySelector('.tp-text') : null;
-
-  let draft = { title:'', body:'' };
-
-  function openModal(){
-    if(modal) modal.classList.remove('hidden');
-    if(titleI) titleI.focus();
-  }
-
-  function closeModal(){
-    if(modal) modal.classList.add('hidden');
-  }
-
-  if(btnOpen) btnOpen.addEventListener('click', openModal);
-  if(titlePreview) titlePreview.addEventListener('click', openModal);
-  if(btnCancel) btnCancel.addEventListener('click', closeModal);
-
-  if(btnPickFile) btnPickFile.addEventListener('click', ()=> fileAttach && fileAttach.click());
-  if(btnPickImg)  btnPickImg.addEventListener('click', ()=> fileI && fileI.click());
-
-  if(fileAttach){
-    fileAttach.addEventListener('change', ()=>{
-      if(fileChosen){
-        fileChosen.textContent = fileAttach.files[0]?.name || "";
-      }
-    });
-  }
-
-  if(fileI){
-    fileI.addEventListener('change', ()=>{
-      if(imgChosen){
-        imgChosen.textContent = fileI.files[0]?.name || "";
-      }
-    });
-  }
-
-  function updateTitlePreview(src){
-    if(!tpText) return;
-    const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || '제목 미입력';
-  }
-
-  if(titleI){
-    titleI.addEventListener('input', ()=> updateTitlePreview());
-  }
-
-  if(btnDraft){
-    btnDraft.addEventListener('click', function(e){
+function openQAModal(){
+  const m=document.getElementById('qa-modal');
+  if(m){ m.style.display='block'; }
+}
+function closeQAModal(){
+  const m=document.getElementById('qa-modal');
+  if(m){ m.style.display='none'; }
+}
+document.addEventListener("DOMContentLoaded",function(){
+  const btn=document.querySelector('[data-open-qa], #open-qa, a[href="#qa-section"]');
+  if(btn){
+    btn.addEventListener("click",function(e){
       e.preventDefault();
-      draft.title = titleI?.value || '';
-      draft.body  = bodyI?.value || '';
-      updateTitlePreview(draft.title);
+      openQAModal();
     });
   }
-
-  if(btnCancel){
-    btnCancel.addEventListener('click', function(){
-      draft.title='';
-      draft.body='';
-      if(titleI) titleI.value='';
-      if(bodyI) bodyI.value='';
-      updateTitlePreview('');
-    });
-  }
-
-  if(btnSubmit){
-    btnSubmit.addEventListener('click', ()=>{
-      if(btnSave) btnSave.click();
-    });
-  }
-
-  if(btnSave){
-    btnSave.addEventListener('click', function(){
-
-      const t = titleI?.value?.trim() || "(Title 없음)";
-      const b = bodyI?.value?.trim()  || "(Content 없음)";
-      const cat = catSel?.value || "etc";
-
-      const holder = document.querySelector(
-        '.right .topic-panel .list[data-cat="'+cat+'"]'
-      );
-
-      if(!holder) return;
-
-      const item = document.createElement('div');
-      item.className = 'item';
-
-      item.innerHTML = `
-        <div class="title">${t}</div>
-        <div class="meta">${new Date().toLocaleString()}</div>
-        <div class="preview" style="font-size:.85rem;color:#444;margin-top:4px;">${b}</div>
-      `;
-
-      holder.prepend(item);
-
-      closeModal();
-    });
-  }
-
 });
 </script>
 
