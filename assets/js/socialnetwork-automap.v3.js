@@ -216,6 +216,11 @@ cache=await loadSections();
 
 renderAll();
 
+setTimeout(()=>{
+renderRightPanel(cache[RIGHT_KEY] || []);
+mirrorRightPanel();
+},300);
+
 window.addEventListener("resize",()=>{
 
 setTimeout(mirrorRightPanel,300);
