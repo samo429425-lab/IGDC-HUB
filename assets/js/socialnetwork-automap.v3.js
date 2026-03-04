@@ -1,10 +1,11 @@
 
 /* =========================================================
-   socialnetwork-automap.mobilefix.js
-   Desktop logic unchanged / Mobile rail auto-fix
+   IGDC SOCIAL AUTOMAP v5 REBUILD
+   Desktop + Mobile Stable
    ========================================================= */
 
 (function(){
+
 "use strict";
 
 const SNAPSHOT_URLS=[
@@ -27,27 +28,23 @@ const MAIN_ROWS=[
 ];
 
 const RIGHT_KEY="socialnetwork";
-const MAIN_LIMIT=50;
-const RIGHT_LIMIT=100;
 
-let cache=null;
+let snapshotCache=null;
 
-/* ---------------- Card ---------------- */
+/* ---------------- CARD ---------------- */
 
-function createCard(it,row){
+function createCard(item){
 
 const a=document.createElement("a");
 a.className="social-card";
-a.href=it?.link||"#";
+a.href=item.link || "#";
 a.target="_blank";
-
-if(row) a.dataset.row=row;
 
 const thumb=document.createElement("div");
 thumb.className="thumb";
 
-if(it?.thumb){
-thumb.style.backgroundImage='url("'+it.thumb+'")';
+if(item.thumb){
+thumb.style.backgroundImage='url("'+item.thumb+'")';
 thumb.style.backgroundSize="cover";
 thumb.style.backgroundPosition="center";
 }
@@ -57,56 +54,58 @@ body.className="body";
 
 const title=document.createElement("div");
 title.className="title";
-title.textContent=it?.title||"Item";
-
-body.appendChild(title);
+title.textContent=item.title || "Item";
 
 const btn=document.createElement("div");
 btn.className="cta";
 btn.textContent="Open";
 
+body.appendChild(title);
 body.appendChild(btn);
 
 a.appendChild(thumb);
 a.appendChild(body);
 
 return a;
+
 }
 
-/* ---------------- Main Rows ---------------- */
+/* ---------------- MAIN GRID ---------------- */
 
-function renderMainRows(sections){
+function renderMain(){
 
-MAIN_ROWS.forEach((r,i)=>{
-
-if(r.key===RIGHT_KEY) return;
+MAIN_ROWS.forEach(function(r){
 
 const row=document.getElementById(r.rowId);
 if(!row) return;
 
-const grid=row.querySelector('.thumb-grid[data-psom-key="'+r.key+'"]');
+const grid=row.querySelector(".thumb-grid");
 if(!grid) return;
 
 grid.innerHTML="";
 
-(sections[r.key]||[]).slice(0,MAIN_LIMIT).forEach(it=>{
-grid.appendChild(createCard(it,i+1));
+const items=snapshotCache[r.key] || [];
+
+items.forEach(function(it){
+grid.appendChild(createCard(it));
 });
 
 });
 
 }
 
-/* ---------------- Right Panel ---------------- */
+/* ---------------- RIGHT PANEL ---------------- */
 
-function renderRightPanel(items){
+function renderRight(){
 
 const panel=document.getElementById("rightAutoPanel");
 if(!panel) return;
 
 panel.innerHTML="";
 
-(items||[]).slice(0,RIGHT_LIMIT).forEach(it=>{
+const items=snapshotCache[RIGHT_KEY] || [];
+
+items.forEach(function(it){
 
 const box=document.createElement("div");
 box.className="ad-box";
@@ -119,82 +118,69 @@ panel.appendChild(box);
 
 }
 
-/* ---------------- Mobile Mirror ---------------- */
+/* ---------------- MOBILE RAIL ---------------- */
 
-function mirrorRightPanel(){
+function ensureMobileRail(){
 
-const right=document.getElementById("rightAutoPanel");
-const rail=document.getElementById("socialMobileRailList");
+let rail=document.getElementById("socialMobileRailList");
 
-if(!right || !rail) return;
+if(!rail){
 
-const cards=right.querySelectorAll(".ad-box");
+const container=document.createElement("div");
+container.id="socialMobileRailList";
 
-if(cards.length===0) return;
+const target=document.querySelector("main, .container, body");
+
+if(target){
+target.appendChild(container);
+}
+
+rail=container;
+
+}
+
+return rail;
+
+}
+
+function mirrorRightToMobile(){
+
+const panel=document.getElementById("rightAutoPanel");
+if(!panel) return;
+
+const rail=ensureMobileRail();
 
 rail.innerHTML="";
 
-cards.forEach(card=>{
-rail.appendChild(card.cloneNode(true));
+panel.querySelectorAll(".ad-box").forEach(function(el){
+
+rail.appendChild(el.cloneNode(true));
+
 });
 
 }
 
-/* wait until mobile rail exists */
-
-function waitForMobileRail(){
-
-const rail=document.getElementById("socialMobileRailList");
-
-if(!rail){
-setTimeout(waitForMobileRail,200);
-return;
-}
-
-mirrorRightPanel();
-
-}
-
-/* ---------------- Render ---------------- */
-
-function renderAll(){
-
-if(!cache) return;
-
-renderMainRows(cache);
-
-const right=cache[RIGHT_KEY]||[];
-
-renderRightPanel(right);
-
-/* mobile fix */
-
-waitForMobileRail();
-
-}
-
-/* ---------------- Snapshot ---------------- */
+/* ---------------- SNAPSHOT LOAD ---------------- */
 
 async function fetchJson(url){
 
 const r=await fetch(url,{cache:"no-store"});
 if(!r.ok) throw new Error();
-
 return await r.json();
 
 }
 
-async function loadSections(){
+async function loadSnapshot(){
 
-for(const u of SNAPSHOT_URLS){
+for(const url of SNAPSHOT_URLS){
 
 try{
 
-const j=await fetchJson(u);
-const snap=j?.snapshot||j;
-const s=snap?.pages?.social?.sections;
+const j=await fetchJson(url);
+const snap=j.snapshot || j;
+const sections=snap?.pages?.social?.sections;
 
-if(s) return s;
+if(sections) return sections;
 
 }catch(e){}
 
@@ -204,32 +190,39 @@ throw new Error("snapshot load fail");
 
 }
 
-/* ---------------- Boot ---------------- */
+/* ---------------- RENDER ---------------- */
+
+function renderAll(){
+
+renderMain();
+renderRight();
+mirrorRightToMobile();
+
+}
+
+/* ---------------- BOOT ---------------- */
 
 async function boot(){
 
-if(!document.getElementById("rowGrid1")) return;
-
 try{
 
-cache=await loadSections();
+snapshotCache=await loadSnapshot();
 
 renderAll();
 
-setTimeout(()=>{
-renderRightPanel(cache[RIGHT_KEY] || []);
-mirrorRightPanel();
+window.addEventListener("resize",function(){
+
+setTimeout(function(){
+
+mirrorRightToMobile();
+
 },300);
-
-window.addEventListener("resize",()=>{
-
-setTimeout(mirrorRightPanel,300);
 
 },{passive:true});
 
 }catch(e){
 
-console.warn("social automap fail",e);
+console.warn("automap fail",e);
 
 }
 
