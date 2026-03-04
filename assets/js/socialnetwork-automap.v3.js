@@ -1,7 +1,7 @@
 
 /* =========================================================
-   socialnetwork-automap.v3.REBUILD-STABLE.js
-   (Rebuilt version – right panel slots safe + mobile mirror)
+   socialnetwork-automap.mobilefix.js
+   Desktop logic unchanged / Mobile rail auto-fix
    ========================================================= */
 
 (function(){
@@ -30,6 +30,10 @@ const RIGHT_KEY="socialnetwork";
 const MAIN_LIMIT=50;
 const RIGHT_LIMIT=100;
 
+let cache=null;
+
+/* ---------------- Card ---------------- */
+
 function createCard(it,row){
 
 const a=document.createElement("a");
@@ -57,13 +61,6 @@ title.textContent=it?.title||"Item";
 
 body.appendChild(title);
 
-if(it?.desc){
-const d=document.createElement("div");
-d.className="desc";
-d.textContent=it.desc;
-body.appendChild(d);
-}
-
 const btn=document.createElement("div");
 btn.className="cta";
 btn.textContent="Open";
@@ -76,17 +73,7 @@ a.appendChild(body);
 return a;
 }
 
-function renderList(container,list,limit,row){
-
-if(!container) return;
-
-container.innerHTML="";
-
-(list||[]).slice(0,limit).forEach(it=>{
-container.appendChild(createCard(it,row));
-});
-
-}
+/* ---------------- Main Rows ---------------- */
 
 function renderMainRows(sections){
 
@@ -98,16 +85,21 @@ const row=document.getElementById(r.rowId);
 if(!row) return;
 
 const grid=row.querySelector('.thumb-grid[data-psom-key="'+r.key+'"]');
-
 if(!grid) return;
 
-renderList(grid,sections[r.key],MAIN_LIMIT,i+1);
+grid.innerHTML="";
+
+(sections[r.key]||[]).slice(0,MAIN_LIMIT).forEach(it=>{
+grid.appendChild(createCard(it,i+1));
+});
 
 });
 
 }
 
-function renderRightDesktop(items){
+/* ---------------- Right Panel ---------------- */
+
+function renderRightPanel(items){
 
 const panel=document.getElementById("rightAutoPanel");
 if(!panel) return;
@@ -119,13 +111,69 @@ panel.innerHTML="";
 const box=document.createElement("div");
 box.className="ad-box";
 
-box.innerHTML='<a href="'+(it?.link||"#")+'" target="_blank">Item</a>';
+box.appendChild(createCard(it));
 
 panel.appendChild(box);
 
 });
 
 }
+
+/* ---------------- Mobile Mirror ---------------- */
+
+function mirrorRightPanel(){
+
+const right=document.getElementById("rightAutoPanel");
+const rail=document.getElementById("socialMobileRailList");
+
+if(!right || !rail) return;
+
+const cards=right.querySelectorAll(".ad-box");
+
+if(cards.length===0) return;
+
+rail.innerHTML="";
+
+cards.forEach(card=>{
+rail.appendChild(card.cloneNode(true));
+});
+
+}
+
+/* wait until mobile rail exists */
+
+function waitForMobileRail(){
+
+const rail=document.getElementById("socialMobileRailList");
+
+if(!rail){
+setTimeout(waitForMobileRail,200);
+return;
+}
+
+mirrorRightPanel();
+
+}
+
+/* ---------------- Render ---------------- */
+
+function renderAll(){
+
+if(!cache) return;
+
+renderMainRows(cache);
+
+const right=cache[RIGHT_KEY]||[];
+
+renderRightPanel(right);
+
+/* mobile fix */
+
+waitForMobileRail();
+
+}
+
+/* ---------------- Snapshot ---------------- */
 
 async function fetchJson(url){
 
@@ -156,42 +204,7 @@ throw new Error("snapshot load fail");
 
 }
 
-let cache=null;
-let timer=null;
-
-function mirrorRightPanelToMobile(){
-
-const rightPanel=document.querySelector("#rightAutoPanel");
-const mobileRail=document.querySelector("#socialMobileRailList");
-
-if(!rightPanel || !mobileRail) return;
-
-const cards=rightPanel.children;
-
-if(!cards.length) return;
-
-mobileRail.innerHTML="";
-
-[...cards].forEach(card=>{
-mobileRail.appendChild(card.cloneNode(true));
-});
-
-}
-
-function renderAll(){
-
-if(!cache) return;
-
-renderMainRows(cache);
-
-const right=cache[RIGHT_KEY]||[];
-
-renderRightDesktop(right);
-
-/* mirror AFTER automap rendering */
-setTimeout(mirrorRightPanelToMobile,800);
-
-}
+/* ---------------- Boot ---------------- */
 
 async function boot(){
 
@@ -205,8 +218,7 @@ renderAll();
 
 window.addEventListener("resize",()=>{
 
-clearTimeout(timer);
-timer=setTimeout(renderAll,150);
+setTimeout(mirrorRightPanel,300);
 
 },{passive:true});
 
