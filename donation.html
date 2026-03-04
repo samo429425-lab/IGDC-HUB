@@ -270,7 +270,7 @@
 /* === Gutter normalization: make left/right gaps equal === */
 .main{ padding-left:16px !important; padding-right:16px !important; }
 /* Keep container gap as the sole inter-column spacing */
-
+.container{ gap:16px !important; }
 /* Center the three top boxes so leftover space splits evenly */
 .hero, #topWritePanel, .people-news{ margin-left:auto !important; margin-right:auto !important; max-width:1210px !important; }
 @media (orientation: portrait){
@@ -999,7 +999,7 @@
 
 /* ====== Sidebar ↔ Main gap: half (from 16px→8px) ====== */
 :root{ --col-gap: 8px !important; }
-
+.container{ gap: var(--col-gap) !important; }
 
 /* Ensure the three top boxes and feed align to the reduced gutter */
 .main{ padding-left: 0 !important; padding-right: 0 !important; }
@@ -1063,7 +1063,7 @@
 /* === Bring labels & thumbnail tracks closer to the left sidebar wall === */
 /* Reduce the grid column gap between sidebar and main */
 :root{ --col-gap: 4px !important; }
-
+.container{ gap: var(--col-gap) !important; }
 
 /* Ensure main column has no extra left padding/margin */
 .main{ padding-left: 0 !important; margin-left: 0 !important; }
@@ -1595,7 +1595,12 @@ body > .container > .main > *{
     --left-col:210px;
     --right-col:340px;
   }
-
+  body > .container{
+    display:grid;
+    grid-template-columns: var(--left-col) minmax(0,1fr) var(--right-col);
+    gap: var(--grid-gap);
+    align-items:start;
+  }
   .sidebar{ grid-column:1; }
   .main{ grid-column:2; min-width:0; }
   .right, .right-panel, .ad-panel{ grid-column:3; }
@@ -2265,6 +2270,61 @@ body .right{ display:none !important; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="/assets/css/thumbs.standard.css">
+
+<style id="viewport-width-lock-final">
+/* === IGDC Donation: VIEWPORT WIDTH LOCK (FINAL OVERRIDE) ===
+   목적: 브라우저 줌(예: 70~75%)에서도 컨테이너가 뷰포트(윈도우) 끝까지 꽉 차도록 강제.
+   주의: 기능/트리거/파이프라인/모달/JS는 건드리지 않음. 레이아웃 폭 결정만 override.
+*/
+html, body{
+  width:100% !important;
+  max-width:none !important;
+  margin:0 !important;
+  padding:0 !important;
+  overflow-x:hidden !important;
+}
+
+/* 최상위 3열 컨테이너: "뷰포트 폭"으로 강제 */
+body > .container,
+body > div.container,
+.container{
+  width:100vw !important;
+  max-width:none !important;
+  margin:0 !important;
+  padding:0 !important;
+  box-sizing:border-box !important;
+  left:auto !important;
+  right:auto !important;
+  transform:none !important;
+}
+
+/* 3열 레이아웃: gap/auto-centering 제거, flex 기반으로 고정 */
+@media (min-width:1025px){
+  body > .container,
+  body > div.container{
+    display:flex !important;
+    flex-wrap:nowrap !important;
+    align-items:stretch !important;
+    gap:0 !important;              /* right가 벽에서 떨어지는 현상 제거 */
+  }
+  /* 좌/우 폭은 기존 변수/규격 유지(있으면)하되, 계산이 꼬이면 width 지정이 이김 */
+  body > .container > .sidebar{ flex:0 0 210px !important; }
+  body > .container > .right{ flex:0 0 auto !important; margin-right:0 !important; }
+  body > .container > .main{ flex:1 1 auto !important; min-width:0 !important; }
+}
+
+/* 혹시 남아있는 grid 레이아웃 선언 무력화 */
+@media (min-width:1025px){
+  body > .container{
+    grid-template-columns: none !important;
+  }
+}
+</style>
+
+
+<style id='layout-gap-fix'>
+.container{gap:15px !important; column-gap:15px !important;}
+</style>
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
