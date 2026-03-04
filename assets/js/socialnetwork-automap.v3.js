@@ -1,251 +1,159 @@
+
 /* =========================================================
-   socialnetwork-automap.v4.js  (A안 / KEY-LOCKED RENDER)
-   - 목표:
-     1) 9개 섹션은 각 섹션의 data-psom-key 컨테이너에만 렌더
-     2) 우측 패널은 #rightAutoPanel(Desktop) + #rpMobileGrid(Mobile)만 렌더
-     3) resize 더미 build()가 덮어써도 즉시 실데이터로 복구 (MutationObserver + debounce)
+   socialnetwork-automap.v3.js  (patched mobile split)
+   - Desktop: #rightAutoPanel (unchanged)
+   - Mobile : #rpMobileGrid only
    ========================================================= */
+
 (function () {
-  "use strict";
+"use strict";
 
-  // ---- Snapshot sources (same policy as v3) ----
-  const SNAPSHOT_URL_CANDIDATES = [
-    "/data/social.snapshot.json",
-    "/social.snapshot.json",
-    "/snapshots/social.snapshot.json",
-  ];
-  const FEED_FALLBACK_URLS = [
-    "/.netlify/functions/feed-social",
-    "/.netlify/functions/feed_social",
-    "/api/feed-social",
-  ];
+const MAIN_ROWS = [
+  { rowId:"rowGrid1", key:"social-youtube"},
+  { rowId:"rowGrid2", key:"social-instagram"},
+  { rowId:"rowGrid3", key:"social-tiktok"},
+  { rowId:"rowGrid4", key:"social-facebook"},
+  { rowId:"rowGrid5", key:"social-discord"},
+  { rowId:"rowGrid6", key:"social-community"},
+  { rowId:"rowGrid7", key:"social-threads"},
+  { rowId:"rowGrid8", key:"social-telegram"},
+  { rowId:"rowGrid9", key:"social-twitter"},
+];
 
-  // ---- Section keys & row mapping (socialnetwork.html 고정) ----
-  const MAIN_ROWS = [
-    { rowId: "rowGrid1", key: "social-youtube" },
-    { rowId: "rowGrid2", key: "social-instagram" },
-    { rowId: "rowGrid3", key: "social-tiktok" },
-    { rowId: "rowGrid4", key: "social-facebook" },
-    { rowId: "rowGrid5", key: "social-discord" },
-    { rowId: "rowGrid6", key: "social-community" },
-    { rowId: "rowGrid7", key: "social-threads" },
-    { rowId: "rowGrid8", key: "social-telegram" },
-    { rowId: "rowGrid9", key: "social-twitter" },
-  ];
+const RIGHT_PANEL_KEY="socialnetwork";
+const MAIN_ROW_LIMIT=50;
+const RIGHT_PANEL_LIMIT=100;
 
-  const RIGHT_PANEL_KEY = "socialnetwork";
-  const MAIN_ROW_LIMIT = 50;
-  const RIGHT_PANEL_LIMIT = 100;
+function $(s,r){return (r||document).querySelector(s);}
 
-  // ---- DOM helpers ----
-  function $(sel, root) { return (root || document).querySelector(sel); }
-  function safeStr(v, fallback = "") {
-    return (typeof v === "string" && v.trim()) ? v.trim() : fallback;
-  }
+function card(it,row){
+ const a=document.createElement("a");
+ a.className="social-card";
+ a.href=it?.link||"#";
+ a.target="_blank";
+ if(row)a.dataset.row=row;
 
-  // ---- Card builder (main rows + mobile rail) ----
-  function createSocialCard(item, rowIndex) {
-    const it = item || {};
-    const link = safeStr(it.link, "#");
-    const title = safeStr(it.title, "Loading...");
-    const desc = safeStr(it.desc, "");
-    const thumbUrl = safeStr(it.thumb, "");
+ const t=document.createElement("div");
+ t.className="thumb";
+ if(it?.thumb){
+   t.style.backgroundImage=`url("${it.thumb}")`;
+   t.style.backgroundSize="cover";
+   t.style.backgroundPosition="center";
+ }
 
-    const a = document.createElement("a");
-    a.className = "social-card";
-    a.href = link;
-    a.rel = "noopener";
-    a.target = "_blank";
-    if (rowIndex) a.dataset.row = String(rowIndex);
+ const b=document.createElement("div");
+ b.className="body";
 
-    const thumb = document.createElement("div");
-    thumb.className = "thumb";
-    if (thumbUrl) {
-      thumb.style.backgroundImage = `url("${thumbUrl}")`;
-      thumb.style.backgroundSize = "cover";
-      thumb.style.backgroundPosition = "center";
-    }
+ const h=document.createElement("div");
+ h.className="title";
+ h.textContent=it?.title||"Item";
 
-    const body = document.createElement("div");
-    body.className = "body";
+ b.appendChild(h);
+ a.appendChild(t);
+ a.appendChild(b);
+ return a;
+}
 
-    const h = document.createElement("div");
-    h.className = "title";
-    h.textContent = title;
+function renderCards(container,list,row){
+ if(!container)return;
+ container.innerHTML="";
+ (list||[]).slice(0,MAIN_ROW_LIMIT).forEach(it=>{
+   container.appendChild(card(it,row));
+ });
+}
 
-    const d = document.createElement("div");
-    d.className = "desc";
-    d.textContent = desc;
+function renderMainRows(sections){
+ MAIN_ROWS.forEach((r,i)=>{
+   const row=document.getElementById(r.rowId);
+   if(!row)return;
+   const target=row.querySelector('.thumb-grid[data-psom-key="'+r.key+'"]');
+   if(!target)return;
+   renderCards(target,sections[r.key],i+1);
+ });
+}
 
-    const cta = document.createElement("div");
-    cta.className = "cta";
-    cta.textContent = "Open";
+/* DESKTOP RIGHT PANEL */
+function renderRightDesktop(items){
+ const panel=document.getElementById("rightAutoPanel");
+ if(!panel)return;
 
-    body.appendChild(h);
-    if (desc) body.appendChild(d);
-    body.appendChild(cta);
+ if(typeof window.__IGDC_RIGHTPANEL_RENDER==="function"){
+   window.__IGDC_RIGHTPANEL_RENDER(items||[]);
+   return;
+ }
 
-    a.appendChild(thumb);
-    a.appendChild(body);
-    return a;
-  }
+ panel.innerHTML="";
+ (items||[]).slice(0,RIGHT_PANEL_LIMIT).forEach(it=>{
+   const d=document.createElement("div");
+   d.className="ad-box";
+   d.innerHTML='<a href="'+(it?.link||"#")+'" target="_blank">Item</a>';
+   panel.appendChild(d);
+ });
+}
 
-  function renderCardsInto(container, items, opts) {
-    if (!container) return;
-    const limit = opts?.limit ?? 50;
-    const rowIndex = opts?.rowIndex ?? null;
-    container.innerHTML = "";
+/* MOBILE RIGHT PANEL */
+function renderRightMobile(items){
+ if(window.innerWidth>1024)return;
 
-    const list = Array.isArray(items) ? items.slice(0, limit) : [];
-    for (const it of list) container.appendChild(createSocialCard(it, rowIndex));
-  }
+ const mobile=document.getElementById("rpMobileGrid");
+ if(!mobile)return;
 
-  // ---- Right panel renderer (use HTML dummy's official API if present) ----
-  function renderRightPanelDesktop(items) {
-    const panel = document.getElementById("rightAutoPanel");
-    if (!panel) return;
+ mobile.innerHTML="";
+ (items||[]).slice(0,RIGHT_PANEL_LIMIT).forEach(it=>{
+   mobile.appendChild(card(it,null));
+ });
+}
 
-    // Prefer the page's built-in renderer to preserve structure/height rules.
-    if (typeof window.__IGDC_RIGHTPANEL_RENDER === "function") {
-      const list = Array.isArray(items) ? items.slice(0, RIGHT_PANEL_LIMIT) : [];
-      // Feed expects {link:...}; keep minimal to avoid layout drift
-      const mapped = list.map(it => ({ link: safeStr(it?.link, "#") }));
-      window.__IGDC_RIGHTPANEL_RENDER(mapped);
-      return;
-    }
+async function loadSnapshot(){
+ const urls=[
+ "/data/social.snapshot.json",
+ "/social.snapshot.json",
+ "/snapshots/social.snapshot.json",
+ "/.netlify/functions/feed-social"
+ ];
 
-    // Fallback: minimal ad-box list
-    panel.innerHTML = "";
-    const list = Array.isArray(items) ? items.slice(0, RIGHT_PANEL_LIMIT) : [];
-    for (const it of list) {
-      const box = document.createElement("div");
-      box.className = "ad-box";
-      box.innerHTML = `<a href="${safeStr(it?.link, "#")}" target="_blank" rel="noopener">Item</a>`;
-      panel.appendChild(box);
-    }
-  }
+ for(const u of urls){
+   try{
+     const r=await fetch(u,{cache:"no-store"});
+     if(!r.ok)continue;
+     const j=await r.json();
+     const s=j?.snapshot||j;
+     if(s?.pages?.social?.sections)return s.pages.social.sections;
+   }catch(e){}
+ }
+ throw new Error("snapshot load fail");
+}
 
-  function renderRightPanelMobile(items) {
-    const mobileGrid = document.getElementById("rpMobileGrid")
-      || $('.thumb-grid.thumb-scroller[data-psom-key="socialnetwork"]');
-    if (!mobileGrid) return;
+let cache=null;
 
-    // Mobile rail is a thumb-grid scroller: render cards
-    renderCardsInto(mobileGrid, items, { limit: RIGHT_PANEL_LIMIT, rowIndex: null });
-  }
+function renderAll(){
+ if(!cache)return;
+ renderMainRows(cache);
+ const rp=cache[RIGHT_PANEL_KEY]||[];
+ renderRightDesktop(rp);
+ renderRightMobile(rp);
+}
 
-  // ---- KEY-LOCKED main rows: 반드시 rowGrid 안의 thumb-grid[data-psom-key="..."]에만 렌더 ----
-  function renderMainRows(sections) {
-    for (let i = 0; i < MAIN_ROWS.length; i++) {
-      const row = MAIN_ROWS[i];
-      const rowEl = document.getElementById(row.rowId);
-      if (!rowEl) continue;
+async function boot(){
+ if(!document.getElementById("rowGrid1"))return;
 
-      // Strict target: inside rowGridX, the thumb-grid thumb-scroller with exact key
-      const target = rowEl.querySelector(`.thumb-grid.thumb-scroller[data-psom-key="${row.key}"]`)
-        || rowEl.querySelector(`.thumb-grid[data-psom-key="${row.key}"]`);
-      if (!target) continue;
+ try{
+   cache=await loadSnapshot();
+   renderAll();
 
-      const items = sections?.[row.key];
-      renderCardsInto(target, items, { limit: MAIN_ROW_LIMIT, rowIndex: i + 1 });
-    }
-  }
+   window.addEventListener("resize",()=>{
+     setTimeout(renderAll,120);
+   });
 
-  // ---- Snapshot loader ----
-  async function tryFetchJson(url) {
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status} @ ${url}`);
-    return await res.json();
-  }
+ }catch(e){
+   console.warn("social automap fail",e);
+ }
+}
 
-  async function loadSnapshot() {
-    for (const url of SNAPSHOT_URL_CANDIDATES) {
-      try {
-        const j = await tryFetchJson(url);
-        if (j && j.pages && j.pages.social && j.pages.social.sections) return j;
-      } catch (_) {}
-    }
-    for (const url of FEED_FALLBACK_URLS) {
-      try {
-        const j = await tryFetchJson(url);
-        const snap = j?.snapshot || j;
-        if (snap && snap.pages && snap.pages.social && snap.pages.social.sections) return snap;
-      } catch (_) {}
-    }
-    throw new Error("social snapshot not reachable");
-  }
+if(document.readyState==="loading"){
+ document.addEventListener("DOMContentLoaded",boot,{once:true});
+}else{
+ boot();
+}
 
-  function getSections(snapshot) {
-    return snapshot?.pages?.social?.sections || {};
-  }
-
-  // ---- Re-render control (avoid dummy overwrite) ----
-  let _sectionsCache = null;
-  let _resizeTimer = null;
-
-  function rerenderAll() {
-    if (!_sectionsCache) return;
-    renderMainRows(_sectionsCache);
-    const rpItems = _sectionsCache[RIGHT_PANEL_KEY] || [];
-    renderRightPanelDesktop(rpItems);
-    renderRightPanelMobile(rpItems);
-  }
-
-  function installRightPanelObserver() {
-    const panel = document.getElementById("rightAutoPanel");
-    if (!panel || typeof MutationObserver === "undefined") return;
-
-    // If dummy rebuild inserts dummy cards, we re-render immediately
-    const obs = new MutationObserver(() => {
-      // Detect dummy state quickly (data-dummy=1 exists)
-      if (panel.querySelector('[data-dummy="1"]')) {
-        // Debounce micro-burst
-        clearTimeout(_resizeTimer);
-        _resizeTimer = setTimeout(rerenderAll, 50);
-      }
-    });
-    obs.observe(panel, { childList: true, subtree: true });
-  }
-
-  function installResizeRerender() {
-    window.addEventListener("resize", () => {
-      clearTimeout(_resizeTimer);
-      _resizeTimer = setTimeout(rerenderAll, 120);
-    }, { passive: true });
-  }
-
-  // ---- Page guard: run only if socialnetwork page skeleton exists ----
-  function isSocialNetworkPage() {
-    return !!document.getElementById("rowGrid1") && !!document.getElementById("rightAutoPanel");
-  }
-
-  async function boot() {
-    if (!isSocialNetworkPage()) return;
-
-    try {
-      const snapshot = await loadSnapshot();
-      const sections = getSections(snapshot);
-
-      // Guard: must have at least one target array
-      const hasAnyMain = MAIN_ROWS.some(r => Array.isArray(sections?.[r.key]));
-      const hasRight = Array.isArray(sections?.[RIGHT_PANEL_KEY]);
-      if (!hasAnyMain && !hasRight) return;
-
-      _sectionsCache = sections;
-
-      rerenderAll();
-      installRightPanelObserver();
-      installResizeRerender();
-
-    } catch (err) {
-      console.warn("[socialnetwork-automap.v4] failed:", err);
-    }
-  }
-
-  // DOM ready
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", boot, { once: true });
-  } else {
-    boot();
-  }
 })();
