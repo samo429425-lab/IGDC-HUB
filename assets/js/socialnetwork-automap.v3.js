@@ -108,8 +108,6 @@ renderList(grid,sections[r.key],MAIN_LIMIT,i+1);
 
 function renderRightDesktop(items){
 
-if(window.innerWidth<1025) return;
-
 const panel=document.getElementById("rightAutoPanel");
 if(!panel) return;
 
@@ -130,12 +128,9 @@ panel.appendChild(box);
 
 function renderRightMobile(items){
 
-if(window.innerWidth>1024) return;
-
-const grid=document.getElementById("rpMobileGrid");
-if(!grid) return;
-
-renderList(grid,items,RIGHT_LIMIT,null);
+  // Mobile: still render into #rightAutoPanel (hidden by CSS) so the page-level
+  // mobile-rail cloner can duplicate cards into #social-mobile-rail.
+  renderRightDesktop(items);
 
 }
 
