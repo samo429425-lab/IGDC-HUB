@@ -2319,6 +2319,39 @@ body > div.container,
     grid-template-columns: none !important;
   }
 }
+
+/* === IGDC Donation: COLUMN GAP + MAIN EXPAND (ADDED) ===
+   목적:
+   1) 좌측 사이드바↔메인, 메인↔우측패널 간격을 20px로 강제
+   2) 데스크탑 전체폭에서 메인이 남는 폭을 전부 채우도록 강제
+*/
+@media (min-width:1025px){
+  body > .container,
+  body > div.container{
+    gap:20px !important;
+    column-gap:20px !important;
+  }
+
+  body > .container > .sidebar{ flex:0 0 210px !important; }
+  body > .container > .right{ flex:0 0 300px !important; } /* right 폭은 기존 override(300px)와 일치 */
+  body > .container > .main{
+    flex:1 1 auto !important;
+    width:auto !important;
+    max-width:none !important;
+    min-width:0 !important;
+  }
+
+  /* main 안쪽 박스가 max-width로 메인 폭을 "착시"로 좁혀 보이게 하지 않도록: 메인 칸을 가득 채움 */
+  body > .container > .main .hero,
+  body > .container > .main #topWritePanel,
+  body > .container > .main .people-news,
+  body > .container > .main .feed-wrapper{
+    width:100% !important;
+    max-width:none !important;
+    margin-left:0 !important;
+    margin-right:0 !important;
+  }
+}
 </style>
 
 
