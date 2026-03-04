@@ -124,12 +124,42 @@ panel.appendChild(box);
 
 });
 
+s
+function syncRightToMobileRail(){
+  try{
+    const panel = document.getElementById("rightAutoPanel");
+    const mobileList = document.getElementById("socialMobileRailList") || document.querySelector("#social-mobile-rail .list");
+    if(!panel || !mobileList) return;
+
+    // clone existing right items into the mobile rail list (keeps desktop untouched)
+    const kids = Array.from(panel.children).filter(n => n && n.nodeType===1);
+    if(kids.length===0) return;
+
+    mobileList.innerHTML = "";
+    kids.slice(0, RIGHT_LIMIT).forEach((node)=>{
+      const clone = node.cloneNode(true);
+      // avoid duplicated ids
+      if(clone.id) clone.removeAttribute("id");
+      mobileList.appendChild(clone);
+    });
+  }catch(e){}
+}
+
+function watchRightPanelForMobileSync(){
+  const panel = document.getElementById("rightAutoPanel");
+  if(!panel || panel.__smrObs) return;
+  panel.__smrObs = new MutationObserver(()=>syncRightToMobileRail());
+  panel.__smrObs.observe(panel,{childList:true,subtree:false});
+}
+yncRightToMobileRail();
+
 }
 
 function renderRightMobile(items){
 
-// 모바일에서는 다시 렌더하지 않음
-return;
+  // Mobile: still render into #rightAutoPanel (hidden by CSS) so the page-level
+  // mobile-rail cloner can duplicate cards into #social-mobile-rail.
+  renderRightDesktop(items);
 
 }
 
@@ -181,6 +211,8 @@ renderRightMobile(right);
 async function boot(){
 
 if(!document.getElementById("rowGrid1")) return;
+
+watchRightPanelForMobileSync();
 
 try{
 
