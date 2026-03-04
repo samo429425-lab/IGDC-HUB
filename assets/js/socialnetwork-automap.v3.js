@@ -1,7 +1,6 @@
 
 /* =========================================================
-   socialnetwork-automap.v3.STABLE-FINAL.js
-   FIX: Right panel now uses real cards (createCard)
+   socialnetwork-automap.v3.js  (FINAL FIXED VERSION)
    ========================================================= */
 
 (function(){
@@ -115,13 +114,24 @@ if(!panel) return;
 panel.innerHTML="";
 
 (items||[]).slice(0,RIGHT_LIMIT).forEach(it=>{
-panel.appendChild(createCard(it));
+
+const box=document.createElement("div");
+box.className="ad-box";
+
+box.innerHTML='<a href="'+(it?.link||"#")+'" target="_blank">Item</a>';
+
+panel.appendChild(box);
+
 });
 
 }
 
 function renderRightMobile(items){
-renderRightDesktop(items);
+
+  // Mobile: still render into #rightAutoPanel (hidden by CSS) so the page-level
+  // mobile-rail cloner can duplicate cards into #social-mobile-rail.
+  renderRightDesktop(items);
+
 }
 
 async function fetchJson(url){
