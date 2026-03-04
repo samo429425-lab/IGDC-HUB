@@ -367,3 +367,11 @@ exports.runGlobalInsight = async function(params = {}, event = null){
   return await runGlobalInsightV2(event || {}, params || {});
 };
 
+// ===== Central Collector compatibility =====
+// Collector expects runEngine(event, {q,limit,...})
+exports.runEngine = async function(event, params){
+  // keep signature (event, params)
+  return await exports.runGlobalInsight(params || {}, event || {});
+};
+
+

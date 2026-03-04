@@ -542,3 +542,12 @@ async function maruSearchDispatcher(req = {}) {
 }
 
 exports.maruSearchDispatcher = maruSearchDispatcher;
+
+// ===== Central Collector compatibility =====
+// Collector expects runEngine(event, {q,limit,...})
+exports.runEngine = async function(event, params){
+  const q = String((params && (params.q || params.query)) || (event && event.queryStringParameters && (event.queryStringParameters.q || event.queryStringParameters.query)) || '').trim();
+  const limit = params && params.limit;
+  return await maruSearchDispatcher({ q, limit, mode: params && params.mode, context: params && params.context, headers: event && event.headers });
+};
+
