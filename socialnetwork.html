@@ -4417,11 +4417,10 @@ footer{
     const panel = getPanel();
     if(!panel) return;
 
-  if(panel.children.length === 0){
+ if(!panel.querySelector('.card')){
   panel.innerHTML = '';
   resetHeight(panel);
 }
-
     items.forEach(item=>{
       const card = document.createElement('div');
       card.className = 'ad-box';
