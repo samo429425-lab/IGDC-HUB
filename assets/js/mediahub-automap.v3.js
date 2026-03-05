@@ -167,14 +167,36 @@
     return ph;
   }
 
+  
+  function ensureContentId(item){
+    if(!item) return '';
+    return (
+      item.id ||
+      item._id ||
+      item.contentId ||
+      item.videoId ||
+      item.slug ||
+      (item.url ? btoa(item.url).replace(/=/g,'') : '')
+    );
+  }
+
   function fillAnchor(a, item){
     const title = (item && (item.title || item.name || item.text || '')) || '';
     const thumb = (item && (item.thumbnail || item.thumb || item.image || item.imageUrl || item.thumbnailUrl || '')) || '';
     const url = (item && (item.url || item.video || item.link || item.href || '#')) || '#';
 
-    a.href = url || '#';
-    a.target = '_blank';
-    a.rel = 'noopener';
+    
+    const videoId = ensureContentId(item);
+
+    if(videoId){
+      a.href = `/media/watch.html?id=${encodeURIComponent(videoId)}`;
+      a.removeAttribute('target');
+      a.removeAttribute('rel');
+    }else{
+      a.href = "javascript:void(0)";
+      a.onclick = function(){ alert("콘텐츠 준비 중입니다."); };
+    }
+
 
     if(item && item.provider) a.dataset.provider = item.provider;
 
