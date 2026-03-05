@@ -80,7 +80,9 @@ function renderList(container,list,limit,row){
 
 if(!container) return;
 
-container.innerHTML="";
+/* 기존 카드만 제거 */
+const old = container.querySelectorAll('.social-card');
+old.forEach(el=>el.remove());
 
 (list||[]).slice(0,limit).forEach(it=>{
 container.appendChild(createCard(it,row));
