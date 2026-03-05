@@ -1,159 +1,152 @@
-// netlify/functions/feed-media.js
-// IGDC Media Feed – Production Version
 
-const SNAPSHOT_URL = "https://YOUR_DOMAIN/data/search-bank.snapshot.json"
+// IGDC Media Feed (Production Stable)
 
-const SECTION_CONFIG = {
-  trending_now: { type: "trending", limit: 30 },
-  latest_movie: { type: "movie", limit: 20 },
-  latest_drama: { type: "drama", limit: 20 },
-  section_1: { type: "thriller", limit: 20 },
-  section_2: { type: "documentary", limit: 20 },
-  section_3: { type: "music", limit: 20 },
-  section_4: { type: "animation", limit: 20 },
-  section_5: { type: "shortfilm", limit: 20 },
-  section_6: { type: "interview", limit: 20 },
-  section_7: { type: "feature", limit: 20 }
-}
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 500;
+
+const KEY_ALIAS = {
+  "trending_now": "media-trending",
+  "latest_movie": "media-movie",
+  "latest_drama": "media-drama",
+
+  "media-trending": "media-trending",
+  "media-movie": "media-movie",
+  "media-drama": "media-drama",
+  "media-thriller": "media-thriller",
+  "media-romance": "media-romance",
+  "media-variety": "media-variety",
+  "media-documentary": "media-documentary",
+  "media-animation": "media-animation",
+  "media-music": "media-music",
+  "media-shorts": "media-shorts"
+};
+
+const TRENDING_SOURCES = [
+  "media-movie",
+  "media-drama",
+  "media-thriller",
+  "media-romance",
+  "media-variety",
+  "media-documentary",
+  "media-animation",
+  "media-music",
+  "media-shorts"
+];
 
 exports.handler = async (event) => {
 
-  try {
+  const qs = event.queryStringParameters || {};
+  const rawKey = (qs.key || qs.section || "media-trending").trim();
+  const key = KEY_ALIAS[rawKey] || rawKey;
 
-    const section = event.queryStringParameters?.section || "trending_now"
-    const config = SECTION_CONFIG[section]
+  const limit = Math.min(
+    MAX_LIMIT,
+    Math.max(1, parseInt(qs.limit || DEFAULT_LIMIT))
+  );
 
-    if (!config) {
-      return response({ items: [] })
+  const snapshot = await loadSnapshot(event);
+
+  const sections =
+    snapshot?.sections ||
+    snapshot?.by_page_section ||
+    {};
+
+  let items = [];
+
+  if (key === "media-trending") {
+
+    const pooled = [];
+
+    for (const k of TRENDING_SOURCES) {
+
+      const sec = sections[k];
+      const slots = sec?.slots || [];
+
+      for (const s of slots) pooled.push(s);
+
     }
 
-    const snapshot = await loadSnapshot()
+    pooled.sort((a,b)=>score(b)-score(a));
 
-    let items = []
+    items = slotsToItems(pooled, limit);
 
-    if (config.type === "trending") {
-      items = buildTrending(snapshot)
-    } else {
-      items = filterByType(snapshot, config.type)
-    }
+  } else {
 
-    items = normalize(items)
-      .sort(sortLogic)
-      .slice(0, config.limit)
+    const sec = sections[key];
+    const slots = sec?.slots || [];
 
-    return response({
-      section,
-      count: items.length,
-      items
-    })
-
-  } catch (err) {
-
-    return response({
-      error: "feed_media_error",
-      message: err.message
-    })
+    items = slotsToItems(slots, limit);
 
   }
-
-}
-
-async function loadSnapshot() {
-
-  const res = await fetch(SNAPSHOT_URL)
-  const data = await res.json()
-
-  if (!data) return []
-
-  return Array.isArray(data) ? data : data.items || []
-
-}
-
-function buildTrending(snapshot) {
-
-  const now = Date.now()
-
-  return snapshot.map(item => {
-
-    const views = Number(item.views || 0)
-    const likes = Number(item.likes || 0)
-    const comments = Number(item.comments || 0)
-
-    const published = new Date(item.published_at || item.date || 0).getTime()
-    const hours = (now - published) / 3600000 || 1
-
-    const score =
-      (views * 0.6) +
-      (likes * 3) +
-      (comments * 4) -
-      (hours * 0.1)
-
-    return {
-      ...item,
-      trending_score: score
-    }
-
-  }).sort((a, b) => b.trending_score - a.trending_score)
-
-}
-
-function filterByType(snapshot, type) {
-
-  return snapshot.filter(item => {
-
-    const tags = item.tags || []
-    const category = item.category || ""
-
-    if (category === type) return true
-
-    if (Array.isArray(tags) && tags.includes(type)) return true
-
-    return false
-
-  })
-
-}
-
-function normalize(items) {
-
-  return items.map(item => {
-
-    return {
-      id: item.id || "",
-      title: item.title || "",
-      description: item.description || "",
-      thumbnail: item.thumbnail || item.image || "",
-      url: item.url || "",
-      source: item.source || "",
-      category: item.category || "",
-      views: Number(item.views || 0),
-      likes: Number(item.likes || 0),
-      comments: Number(item.comments || 0),
-      published_at: item.published_at || item.date || ""
-    }
-
-  })
-
-}
-
-function sortLogic(a, b) {
-
-  const aViews = Number(a.views || 0)
-  const bViews = Number(b.views || 0)
-
-  return bViews - aViews
-
-}
-
-function response(data) {
 
   return {
-    statusCode: 200,
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "public, max-age=300"
-    },
-    body: JSON.stringify(data)
+    statusCode:200,
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({key,items})
+  };
+
+};
+
+function score(slot){
+
+  const m = slot?.metrics || {};
+
+  const view = Number(m.view)||0;
+  const like = Number(m.like)||0;
+  const rec  = Number(m.recommend)||0;
+  const click= Number(m.click)||0;
+
+  return view + like*2 + rec*3 + click;
+
+}
+
+function slotsToItems(slots,limit){
+
+  const out=[];
+
+  const n = Math.min(limit,slots.length);
+
+  for(let i=0;i<n;i++){
+
+    const s=slots[i];
+
+    out.push({
+      title:s?.title||"",
+      thumbnail:s?.thumb||"",
+      url:s?.url||s?.video||"",
+      video:s?.video||"",
+      provider:s?.provider||"",
+      _id:s?.contentId||i
+    });
+
   }
+
+  while(out.length<limit){
+
+    out.push({
+      title:"",
+      thumbnail:"",
+      url:"",
+      video:"",
+      provider:"",
+      _id:out.length
+    });
+
+  }
+
+  return out;
+
+}
+
+async function loadSnapshot(event){
+
+  const proto = event.headers["x-forwarded-proto"] || "https";
+  const host = event.headers.host;
+
+  const url = proto + "://" + host + "/data/media.snapshot.json";
+
+  const r = await fetch(url);
+
+  return await r.json();
 
 }
