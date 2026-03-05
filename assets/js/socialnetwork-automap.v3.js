@@ -145,8 +145,22 @@ for(const u of SNAPSHOT_URLS){
 try{
 
 const j=await fetchJson(u);
+
+/* accept multiple response shapes:
+   - raw snapshot JSON
+   - {snapshot: {...}}
+   - function response {sections:{...}}
+*/
 const snap=j?.snapshot||j;
-const s=snap?.pages?.social?.sections;
+
+const s=
+  snap?.pages?.social?.sections ||
+  snap?.pages?.social?.placeholder_cards ||
+  snap?.sections ||
+  snap?.placeholder_cards ||
+  j?.sections ||
+  j?.placeholder_cards ||
+  null;
 
 if(s) return s;
 
@@ -158,24 +172,38 @@ throw new Error("snapshot load fail");
 
 }
 
+
+throw new Error("snapshot load fail");
+
+}
+
 let cache=null;
 let timer=null;
 
 function mirrorRightPanelToMobile(){
 
-const rightPanel=document.querySelector("#rightAutoPanel");
-const mobileRail=document.querySelector("#socialMobileRailList");
+/* ✅ mobile target: #rpMobileGrid (in socialnetwork.html)
+   compat: #socialMobileRailList (legacy) */
+const mobileGrid=document.querySelector("#rpMobileGrid") || document.querySelector("#socialMobileRailList");
+if(!mobileGrid) return;
 
-if(!rightPanel || !mobileRail) return;
+/* prefer rendering from cached right list */
+const right=(cache && cache[RIGHT_KEY]) ? cache[RIGHT_KEY] : null;
+if(right){
+  renderList(mobileGrid,right,RIGHT_LIMIT,"R");
+  return;
+}
+
+/* fallback: clone desktop panel children */
+const rightPanel=document.querySelector("#rightAutoPanel");
+if(!rightPanel) return;
 
 const cards=rightPanel.children;
-
 if(!cards.length) return;
 
-mobileRail.innerHTML="";
-
+mobileGrid.innerHTML="";
 [...cards].forEach(card=>{
-mobileRail.appendChild(card.cloneNode(true));
+  mobileGrid.appendChild(card.cloneNode(true));
 });
 
 }
