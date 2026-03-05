@@ -144,7 +144,7 @@ try{
 
 const j=await fetchJson(u);
 const snap=j?.snapshot||j;
-const s = snap?.sections || snap?.pages?.social?.sections || snap;
+const s=snap?.pages?.social?.sections;
 
 if(s) return s;
 
