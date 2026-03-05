@@ -27,29 +27,38 @@
   ];
 
   const KEY_ALIAS = {
-    'trending_now': 'media-trending',
-    'media-trending': 'trending_now',
-    'latest_movie': 'media-movie',
-    'media-movie': 'latest_movie',
-    'latest_drama': 'media-drama',
-    'media-drama': 'latest_drama',
-    'section_1': 'media-thriller',
-    'section_2': 'media-romance',
-    'section_3': 'media-variety',
-    'section_4': 'media-documentary',
-    'section_5': 'media-animation',
-    'section_6': 'media-music',
-    'section_7': 'media-shorts'
-  };
+ 'trending_now': 'media-trending',
+ 'latest_movie': 'media-movie',
+ 'latest_drama': 'media-drama',
+ 'section_1': 'media-thriller',
+ 'section_2': 'media-romance',
+ 'section_3': 'media-variety',
+ 'section_4': 'media-documentary',
+ 'section_5': 'media-animation',
+ 'section_6': 'media-music',
+ 'section_7': 'media-shorts',
+ 'media-trending': 'trending_now',
+ 'media-movie': 'latest_movie',
+ 'media-drama': 'latest_drama',
+ 'media-thriller': 'section_1',
+ 'media-romance': 'section_2',
+ 'media-variety': 'section_3',
+ 'media-documentary': 'section_4',
+ 'media-animation': 'section_5',
+ 'media-music': 'section_6',
+ 'media-shorts': 'section_7'
+};
 
   function q(sel, root){ return (root||D).querySelector(sel); }
   function qa(sel, root){ return Array.prototype.slice.call((root||D).querySelectorAll(sel)); }
 
-  function canonKey(k){
-    if(!k) return '';
-    if(k.indexOf('media-') === 0) return k;
-    return KEY_ALIAS[k] || k;
-  }
+ function canonKey(k){
+  if(!k) return '';
+  // ✅ HTML/PSOM 키(media-*)는 그대로 유지 (snapshot lookup 깨지지 않게)
+  if(k.indexOf('media-') === 0) return k;
+  // ✅ feed용 키(trending_now 등)만 alias 적용
+  return KEY_ALIAS[k] || k;
+}
 
   async function fetchJson(url){
     const r = await fetch(url, { cache: 'no-store' });
@@ -105,22 +114,15 @@
   }
 
   async function loadFeedItems(key){
-    // 중요: feed-media가 'media-trending' 대신 'trending_now' 같은 원키를 요구하는 경우가 있음.
-    const keysToTry = [key];
-    const alt = KEY_ALIAS[key];
-    if(alt && alt !== key) keysToTry.push(alt);
-
-    for(const k of keysToTry){
-      const url = `/.netlify/functions/feed-media?key=${encodeURIComponent(k)}&limit=500`;
-      try{
-        const data = await fetchJson(url);
-        if(data && Array.isArray(data.items)) return data.items;
-        if(data && Array.isArray(data.sections)){
-          const found = data.sections.find(s => s && canonKey(s.key) === canonKey(key));
-          if(found && Array.isArray(found.items)) return found.items;
-        }
-      }catch(e){ /* try next */ }
-    }
+    const url = `/.netlify/functions/feed-media?key=${encodeURIComponent(key)}&limit=500`;
+    try{
+      const data = await fetchJson(url);
+      if(data && Array.isArray(data.items)) return data.items;
+      if(data && Array.isArray(data.sections)){
+        const found = data.sections.find(s => s && canonKey(s.key) === key);
+        if(found && Array.isArray(found.items)) return found.items;
+      }
+    }catch(e){ /* ignore */ }
     return [];
   }
 
