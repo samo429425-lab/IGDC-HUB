@@ -173,10 +173,6 @@ throw new Error("snapshot load fail");
 }
 
 
-throw new Error("snapshot load fail");
-
-}
-
 let cache=null;
 let timer=null;
 
