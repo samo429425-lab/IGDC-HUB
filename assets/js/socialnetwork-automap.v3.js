@@ -180,7 +180,7 @@ function mirrorRightPanelToMobile(){
 
 /* ✅ mobile target: #rpMobileGrid (in socialnetwork.html)
    compat: #socialMobileRailList (legacy) */
-const mobileGrid=document.querySelector("#rpMobileGrid") || document.querySelector("#socialMobileRailList");
+const mobileGrid=document.querySelector("#rpMobileGrid");
 if(!mobileGrid) return;
 
 /* prefer rendering from cached right list */
