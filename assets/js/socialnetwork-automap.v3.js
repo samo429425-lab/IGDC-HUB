@@ -190,19 +190,6 @@ if(right){
   return;
 }
 
-/* fallback: clone desktop panel children */
-const rightPanel=document.querySelector("#rightAutoPanel");
-if(!rightPanel) return;
-
-const cards=rightPanel.children;
-if(!cards.length) return;
-
-mobileGrid.innerHTML="";
-[...cards].forEach(card=>{
-  mobileGrid.appendChild(card.cloneNode(true));
-});
-
-}
 
 function renderAll(){
 
@@ -215,7 +202,7 @@ const right=cache[RIGHT_KEY]||[];
 renderRightDesktop(right);
 
 /* mirror AFTER automap rendering */
-setTimeout(mirrorRightPanelToMobile,800);
+setTimeout(mirrorRightPanelToMobile,120);
 
 }
 
