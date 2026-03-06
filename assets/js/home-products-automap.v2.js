@@ -281,7 +281,6 @@ function resolveTargets(psomEl, key){
     const sc = t.scroller;
     if (!sc) return;
 
-    // existing scroll loader
     sc.addEventListener('scroll', function(){
       if (offset >= items.length || offset >= limit) return;
 
@@ -291,15 +290,6 @@ function resolveTargets(psomEl, key){
 
       if (nearEnd) renderMore();
     }, { passive: true });
-    // MOBILE drag assist (does not change existing logic)
-    sc.addEventListener('touchmove', function(){
-      if (offset >= items.length || offset >= limit) return;
-      const nearEnd = isRight
-        ? (sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 20)
-        : (sc.scrollLeft + sc.clientWidth >= sc.scrollWidth - 20);
-      if (nearEnd) renderMore();
-    }, { passive:true });
-
   }
 
   function renderSlot(key, rawItems){
@@ -318,16 +308,6 @@ function resolveTargets(psomEl, key){
       }catch(e){}
     }
 
-
-
-    // MAIN scroller touch safety (mobile horizontal drag)
-    if (!t.isRight && t.scroller) {
-      try{
-        t.scroller.style.webkitOverflowScrolling = 'touch';
-        t.scroller.style.touchAction = 'pan-x';
-        // keep existing overflow-x from CSS; do not force display/transform
-      }catch(e){}
-    }
 
     const isRight = t.isRight;
 
