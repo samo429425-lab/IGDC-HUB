@@ -222,18 +222,32 @@ function resolveTargets(psomEl, key){
   }
 
    function buildRightCard(item){
-    const a = document.createElement('a');
-    a.className = 'ad-box news-btn';
-    a.href = item.url || '#';
-    a.target = '_blank';
-    const img = document.createElement('img');
-    img.loading = 'lazy';
-    img.decoding = 'async';
-    img.src = item.thumb || '';
-    img.alt = item.title || '';
-    a.appendChild(img);
-    return a;
-  }
+  const a = document.createElement('a');
+  a.className = 'ad-box news-btn';
+  a.href = item.url || '#';
+  a.target = '_blank';
+  a.draggable = false;
+
+  /* mobile drag friendliness */
+  a.style.touchAction = 'auto';
+  a.style.userSelect = 'none';
+  a.style.webkitUserSelect = 'none';
+  a.style.webkitTouchCallout = 'none';
+  a.style.flex = '0 0 auto';
+
+  const img = document.createElement('img');
+  img.loading = 'lazy';
+  img.decoding = 'async';
+  img.src = item.thumb || '';
+  img.alt = item.title || '';
+  img.draggable = false;
+  img.style.pointerEvents = 'none';
+  img.style.userSelect = 'none';
+  img.style.webkitUserSelect = 'none';
+
+  a.appendChild(img);
+  return a;
+}
 
 
   function indexSections(payload){
@@ -257,40 +271,92 @@ function resolveTargets(psomEl, key){
     return key.replace('home_','home-shop-');
   }
 
-  function bindIncremental(t, items){
-    const isRight = t.isRight;
-    const limit = isRight ? RIGHT_LIMIT : MAIN_LIMIT;
-    const batch = isRight ? RIGHT_BATCH : MAIN_BATCH;
+ function bindIncremental(t, items){
+  const isRight = t.isRight;
+  const limit = isRight ? RIGHT_LIMIT : MAIN_LIMIT;
+  const batch = isRight ? RIGHT_BATCH : MAIN_BATCH;
 
-    let offset = 0;
+  let offset = 0;
 
-    function renderMore(){
-      const end = Math.min(offset + batch, limit, items.length);
-      const frag = document.createDocumentFragment();
-      for (let i = offset; i < end; i++){
-        const it = items[i];
-        frag.appendChild(isRight ? buildRightCard(it) : buildMainCard(it));
+  function renderMore(){
+    const end = Math.min(offset + batch, limit, items.length);
+    const frag = document.createDocumentFragment();
+    for (let i = offset; i < end; i++){
+      const it = items[i];
+      frag.appendChild(isRight ? buildRightCard(it) : buildMainCard(it));
+    }
+    t.list.appendChild(frag);
+    offset = end;
+  }
+
+  t.list.innerHTML = '';
+  renderMore();
+
+  const sc = t.scroller;
+  if (!sc) return;
+
+  if (isRight){
+    try{
+      /* mobile 6/7/8 sections: horizontal card drag + normal page vertical scroll */
+      sc.style.overflowX = 'auto';
+      sc.style.overflowY = 'hidden';
+      sc.style.webkitOverflowScrolling = 'touch';
+      sc.style.touchAction = 'auto';
+      sc.style.overscrollBehaviorX = 'contain';
+    }catch(e){}
+
+    let startX = 0;
+    let startY = 0;
+    let startLeft = 0;
+    let dragging = false;
+    let axisLocked = '';
+
+    sc.addEventListener('pointerdown', function(e){
+      if (e.pointerType !== 'touch') return;
+      dragging = true;
+      axisLocked = '';
+      startX = e.clientX;
+      startY = e.clientY;
+      startLeft = sc.scrollLeft;
+    }, { passive: true });
+
+    sc.addEventListener('pointermove', function(e){
+      if (!dragging) return;
+
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      if (!axisLocked){
+        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+        axisLocked = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
       }
-      t.list.appendChild(frag);
-      offset = end;
+
+      if (axisLocked === 'x'){
+        e.preventDefault();
+        sc.scrollLeft = startLeft - dx;
+      }
+    }, { passive: false });
+
+    function endDrag(){
+      dragging = false;
+      axisLocked = '';
     }
 
-    t.list.innerHTML = '';
-    renderMore();
-
-    const sc = t.scroller;
-    if (!sc) return;
-
-    sc.addEventListener('scroll', function(){
-      if (offset >= items.length || offset >= limit) return;
-
-      const nearEnd = isRight
-        ? (sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 20)
-        : (sc.scrollLeft + sc.clientWidth >= sc.scrollWidth - 20);
-
-      if (nearEnd) renderMore();
-    }, { passive: true });
+    sc.addEventListener('pointerup', endDrag, { passive: true });
+    sc.addEventListener('pointercancel', endDrag, { passive: true });
+    sc.addEventListener('pointerleave', endDrag, { passive: true });
   }
+
+  sc.addEventListener('scroll', function(){
+    if (offset >= items.length || offset >= limit) return;
+
+    const nearEnd = isRight
+      ? (sc.scrollLeft + sc.clientWidth >= sc.scrollWidth - 120)
+      : (sc.scrollLeft + sc.clientWidth >= sc.scrollWidth - 20);
+
+    if (nearEnd) renderMore();
+  }, { passive: true });
+}
 
   function renderSlot(key, rawItems){
     const psomEl = qs(`[data-psom-key="${key}"]`);
