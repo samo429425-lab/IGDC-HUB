@@ -299,15 +299,15 @@ function resolveTargets(psomEl, key){
     const t = resolveTargets(psomEl, key);
     if (!t.list) return;
 
-    // RIGHT panel scroll safety (some CSS forces overflow:visible)
-    if (t.isRight && t.scroller) {
-      try{
-        t.scroller.style.overflowY = 'auto';
-        t.scroller.style.webkitOverflowScrolling = 'touch';
-        t.scroller.style.touchAction = 'pan-y';
-      }catch(e){}
-    }
-
+ // RIGHT panel scroll safety (mobile drag fix)
+if (t.isRight && t.scroller) {
+  try{
+    /* allow vertical page scroll + horizontal card drag */
+    t.scroller.style.overflow = 'auto';
+    t.scroller.style.webkitOverflowScrolling = 'touch';
+    t.scroller.style.touchAction = 'auto';
+  }catch(e){}
+}
 
     const isRight = t.isRight;
 
