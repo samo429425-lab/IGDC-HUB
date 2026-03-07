@@ -1125,17 +1125,14 @@ window.addEventListener('DOMContentLoaded', function() {
 <script>
 (function(){
   const AUTH0_DOMAIN = "login.igdcglobal.com";
-
   const CLIENT_ID =
   "4JeT1Fdy" +
   "DZaN7nEO" +
   "DVsKe2Sx8" +
   "kKMWagj";
-
-  const REDIRECT_URI = window.location.origin + "/callback.html";
-
-  const SCOPE   = "openid profile email";
-  const STORAGE = { TOKENS:"osauth.tokens.v2", PKCE:"osauth.pkce.v1" };
+  const REDIRECT_URI = "https://igdcglobal.com/callback.html";
+  const SCOPE        = "openid profile email";
+  const STORAGE      = { TOKENS:"osauth.tokens.v2", PKCE:"osauth.pkce.v1" };
 
   function b64url(buf){
     return btoa(String.fromCharCode.apply(null, new Uint8Array(buf))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
