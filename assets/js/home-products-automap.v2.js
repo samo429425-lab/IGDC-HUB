@@ -296,56 +296,16 @@ function resolveTargets(psomEl, key){
   if (!sc) return;
 
   if (isRight){
-    try{
-      /* mobile 6/7/8 sections: horizontal card drag + normal page vertical scroll */
-      sc.style.overflowX = 'auto';
-      sc.style.overflowY = 'hidden';
-      sc.style.webkitOverflowScrolling = 'touch';
-      sc.style.touchAction = 'auto';
-      sc.style.overscrollBehaviorX = 'contain';
-    }catch(e){}
+  try{
+    sc.style.overflowX = 'auto';
+    sc.style.overflowY = 'hidden';
+    sc.style.webkitOverflowScrolling = 'touch';
 
-    let startX = 0;
-    let startY = 0;
-    let startLeft = 0;
-    let dragging = false;
-    let axisLocked = '';
+    /* mobile drag sensitivity improve */
+    sc.style.scrollBehavior = 'smooth';
+    sc.style.touchAction = 'pan-x pan-y';
+  }catch(e){}
 
-    sc.addEventListener('pointerdown', function(e){
-      if (e.pointerType !== 'touch') return;
-      dragging = true;
-      axisLocked = '';
-      startX = e.clientX;
-      startY = e.clientY;
-      startLeft = sc.scrollLeft;
-    }, { passive: true });
-
-    sc.addEventListener('pointermove', function(e){
-      if (!dragging) return;
-
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-
-      if (!axisLocked){
-        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
-        axisLocked = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
-      }
-
-      if (axisLocked === 'x'){
-        e.preventDefault();
-        sc.scrollLeft = startLeft - dx;
-      }
-    }, { passive: false });
-
-    function endDrag(){
-      dragging = false;
-      axisLocked = '';
-    }
-
-    sc.addEventListener('pointerup', endDrag, { passive: true });
-    sc.addEventListener('pointercancel', endDrag, { passive: true });
-    sc.addEventListener('pointerleave', endDrag, { passive: true });
-  }
 
   sc.addEventListener('scroll', function(){
     if (offset >= items.length || offset >= limit) return;
