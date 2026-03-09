@@ -1,0 +1,130 @@
+{
+  "version": "1.0",
+  "description": "MARU Planetary Discovery Seed",
+  "categories": {
+    "search_engines": [
+      {
+        "name": "Google",
+        "url": "https://www.google.com"
+      },
+      {
+        "name": "Bing",
+        "url": "https://www.bing.com"
+      },
+      {
+        "name": "DuckDuckGo",
+        "url": "https://duckduckgo.com"
+      },
+      {
+        "name": "Naver",
+        "url": "https://www.naver.com"
+      },
+      {
+        "name": "Baidu",
+        "url": "https://www.baidu.com"
+      },
+      {
+        "name": "Yandex",
+        "url": "https://yandex.com"
+      }
+    ],
+    "news": [
+      {
+        "name": "Reuters",
+        "url": "https://www.reuters.com"
+      },
+      {
+        "name": "BBC",
+        "url": "https://www.bbc.com"
+      },
+      {
+        "name": "CNN",
+        "url": "https://www.cnn.com"
+      },
+      {
+        "name": "Al Jazeera",
+        "url": "https://www.aljazeera.com"
+      },
+      {
+        "name": "Yonhap",
+        "url": "https://www.yna.co.kr"
+      }
+    ],
+    "open_data": [
+      {
+        "name": "data.gov",
+        "url": "https://data.gov"
+      },
+      {
+        "name": "EU Open Data",
+        "url": "https://data.europa.eu"
+      },
+      {
+        "name": "World Bank Data",
+        "url": "https://data.worldbank.org"
+      },
+      {
+        "name": "UN Data",
+        "url": "http://data.un.org"
+      },
+      {
+        "name": "Korea Open Data",
+        "url": "https://www.data.go.kr"
+      }
+    ],
+    "research": [
+      {
+        "name": "Google Scholar",
+        "url": "https://scholar.google.com"
+      },
+      {
+        "name": "PubMed",
+        "url": "https://pubmed.ncbi.nlm.nih.gov"
+      },
+      {
+        "name": "arXiv",
+        "url": "https://arxiv.org"
+      },
+      {
+        "name": "Semantic Scholar",
+        "url": "https://www.semanticscholar.org"
+      }
+    ],
+    "media": [
+      {
+        "name": "YouTube",
+        "url": "https://www.youtube.com"
+      },
+      {
+        "name": "Vimeo",
+        "url": "https://vimeo.com"
+      },
+      {
+        "name": "Dailymotion",
+        "url": "https://www.dailymotion.com"
+      }
+    ],
+    "social_networks": [
+      {
+        "name": "X",
+        "url": "https://x.com"
+      },
+      {
+        "name": "Facebook",
+        "url": "https://www.facebook.com"
+      },
+      {
+        "name": "Instagram",
+        "url": "https://www.instagram.com"
+      },
+      {
+        "name": "LinkedIn",
+        "url": "https://www.linkedin.com"
+      },
+      {
+        "name": "Reddit",
+        "url": "https://www.reddit.com"
+      }
+    ]
+  }
+}
