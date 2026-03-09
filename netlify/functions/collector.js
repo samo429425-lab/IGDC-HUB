@@ -1,124 +1,173 @@
 
 /**
- * MARU Central Collector Engine
- * Unified gateway for all engines
+ * netlify/functions/central-collector.js
+ * ------------------------------------------------------------
+ * MARU CENTRAL COLLECTOR — v2
+ * ------------------------------------------------------------
+ * Purpose:
+ *  - Entry gateway for MARU search system
+ *  - Receives query requests
+ *  - Passes them to MARU Quality Router
+ *  - Handles request validation / rate guard
+ *
+ * Architecture
+ *
+ * Client
+ *   ↓
+ * Central Collector
+ *   ↓
+ * MARU Quality Router
+ *   ↓
+ * Search / Insight / Bank / Future Engines
  */
 
 "use strict";
 
-let searchBank = null;
-let maruSearch = null;
-let insightEngine = null;
+const Router = require("./maru-quality-router")
 
-try { searchBank = require("./search-bank-engine"); } catch(e){}
-try { maruSearch = require("./maru-search"); } catch(e){}
-try { insightEngine = require("./maru-global-insight-engine"); } catch(e){}
+/* ------------------------------------------------------------
+   CONFIG
+------------------------------------------------------------ */
 
-function now(){
-  return new Date().toISOString();
+const VERSION = "collector-v2-router-gateway"
+
+const MAX_QUERY_LENGTH = 200
+const DEFAULT_LIMIT = 20
+const MAX_LIMIT = 50
+
+/* ------------------------------------------------------------
+   UTIL
+------------------------------------------------------------ */
+
+function s(x){
+  return String(x==null?"":x)
 }
 
-function safeInt(n, def, min, max){
-  const v = Number(n);
-  if(!Number.isFinite(v)) return def;
-  return Math.max(min, Math.min(max, Math.trunc(v)));
+function sanitizeQuery(q){
+
+  q = s(q).replace(/[<>]/g,"").trim()
+
+  if(q.length > MAX_QUERY_LENGTH){
+    q = q.slice(0,MAX_QUERY_LENGTH)
+  }
+
+  return q
 }
 
-function normalizeQuery(q){
-  if(!q) return "";
-  return String(q).trim().slice(0,200);
+function parseLimit(v){
+
+  let n = parseInt(v || DEFAULT_LIMIT)
+
+  if(isNaN(n)) n = DEFAULT_LIMIT
+
+  if(n > MAX_LIMIT) n = MAX_LIMIT
+
+  return n
 }
 
-function buildResponse(data){
+function ok(body){
+
+  const origin =
+    process.env.ALLOWED_ORIGIN ||
+    "https://igdcglobal.com"
+
   return {
+    statusCode:200,
+    headers:{
+      "Content-Type":"application/json",
+      "Access-Control-Allow-Origin":origin
+    },
+    body:JSON.stringify(body)
+  }
+}
+
+/* ------------------------------------------------------------
+   COLLECTOR CORE
+------------------------------------------------------------ */
+
+async function runCollector(event){
+
+  const params = event.queryStringParameters || {}
+
+  const rawQuery =
+    params.q ||
+    params.query ||
+    ""
+
+  const q = sanitizeQuery(rawQuery)
+
+  const limit = parseLimit(params.limit)
+
+  if(!q){
+
+    return {
+      status:"ok",
+      engine:"central-collector",
+      version:VERSION,
+      items:[]
+    }
+
+  }
+
+  /* Pass request to Router */
+
+  const routerResult =
+    await Router.runEngine(event,{ q, limit })
+
+  return {
+
     status:"ok",
-    collector:"maru-central",
-    timestamp: now(),
-    data
-  };
+    engine:"central-collector",
+    version:VERSION,
+
+    query:q,
+
+    router:routerResult.engine,
+    routerVersion:routerResult.version,
+
+    items:routerResult.items,
+
+    meta:{
+      count: routerResult.items ? routerResult.items.length : 0
+    }
+
+  }
+
 }
 
-function fail(msg){
-  return {
-    status:"fail",
-    collector:"maru-central",
-    timestamp: now(),
-    message: msg
-  };
-}
-
-async function dispatch(event, params){
-
-  const mode = params.mode || params.engine || "search";
-  const q = normalizeQuery(params.q || params.query || "");
-  const limit = safeInt(params.limit, 30, 1, 200);
-
-  if(mode === "search"){
-    if(searchBank && searchBank.runEngine){
-      return await searchBank.runEngine(event, { q, limit });
-    }
-    return fail("SEARCH_ENGINE_NOT_AVAILABLE");
-  }
-
-  if(mode === "insight"){
-    if(insightEngine && insightEngine.runEngine){
-      return await insightEngine.runEngine(event, { q, limit });
-    }
-    return fail("INSIGHT_ENGINE_NOT_AVAILABLE");
-  }
-
-  if(mode === "maru-search"){
-    if(maruSearch && maruSearch.runEngine){
-      return await maruSearch.runEngine(event, { q, limit });
-    }
-    return fail("MARU_SEARCH_NOT_AVAILABLE");
-  }
-
-  if(mode === "media"){
-    return fail("MEDIA_ENGINE_NOT_CONNECTED");
-  }
-
-  if(mode === "revenue"){
-    return fail("REVENUE_ENGINE_NOT_CONNECTED");
-  }
-
-  return fail("UNKNOWN_MODE");
-}
+/* ------------------------------------------------------------
+   NETLIFY HANDLER
+------------------------------------------------------------ */
 
 exports.handler = async function(event){
 
   try{
 
-    const method = (event.httpMethod || "GET").toUpperCase();
+    const result = await runCollector(event)
 
-    if(method !== "GET"){
-      return {
-        statusCode:405,
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify(fail("METHOD_NOT_ALLOWED"))
-      };
-    }
-
-    const params = event.queryStringParameters || {};
-    const result = await dispatch(event, params);
-
-    return {
-      statusCode:200,
-      headers:{
-        "Content-Type":"application/json",
-        "Cache-Control":"no-store"
-      },
-      body: JSON.stringify(buildResponse(result))
-    };
+    return ok(result)
 
   }catch(err){
 
-    return {
-      statusCode:500,
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify(fail(err.message || "COLLECTOR_ERROR"))
-    };
+    return ok({
+      status:"error",
+      engine:"central-collector",
+      version:VERSION,
+      message:"collector failure"
+    })
 
   }
 
-};
+}
+
+/* ------------------------------------------------------------
+   INTERNAL CALL SUPPORT
+------------------------------------------------------------ */
+
+exports.runEngine = async function(event,params){
+
+  return await runCollector({
+    queryStringParameters: params || {}
+  })
+
+}
