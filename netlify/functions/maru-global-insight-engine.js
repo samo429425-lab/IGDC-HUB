@@ -375,3 +375,35 @@ exports.runEngine = async function(event, params){
 };
 
 
+
+
+
+// =========================================================
+// GLOBAL INSIGHT ENGINE EXPORT ADAPTER (Collector compatibility)
+// 기존 코드 수정 없음 / 확장 export만 추가
+// =========================================================
+
+async function runEngine(event = {}, params = {}) {
+
+  if (typeof runGlobalInsightV2 === "function") {
+
+    return await runGlobalInsightV2(event, {
+      q: params.q || params.query || "",
+      mode: params.mode || "search",
+      limit: params.limit || 20,
+      scope: params.scope,
+      target: params.target,
+      intent: params.intent
+    });
+
+  }
+
+  return {
+    status: "fail",
+    engine: "maru-global-insight",
+    message: "INSIGHT_ENGINE_NOT_AVAILABLE"
+  };
+}
+
+exports.runEngine = runEngine;
+

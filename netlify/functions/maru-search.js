@@ -551,3 +551,36 @@ exports.runEngine = async function(event, params){
   return await maruSearchDispatcher({ q, limit, mode: params && params.mode, context: params && params.context, headers: event && event.headers });
 };
 
+
+
+
+// =========================================================
+// MARU SEARCH ENGINE EXPORT ADAPTER (Collector compatibility)
+// 기존 코드 수정 없음 / 확장 export만 추가
+// =========================================================
+
+async function runEngine(event = {}, params = {}) {
+
+  const q = (params.q || params.query || "").trim();
+  const limit = params.limit || 20;
+
+  if (typeof maruSearchDispatcher === "function") {
+
+    return await maruSearchDispatcher({
+      q,
+      limit,
+      mode: "search",
+      context: params.context || null
+    });
+
+  }
+
+  return {
+    status: "fail",
+    engine: "maru-search",
+    message: "DISPATCHER_NOT_AVAILABLE"
+  };
+}
+
+exports.runEngine = runEngine;
+
