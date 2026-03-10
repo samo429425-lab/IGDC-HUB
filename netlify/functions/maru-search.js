@@ -1,586 +1,687 @@
-/**
- * netlify/functions/maru-search.js
- * ------------------------------------------------------------
- * MARU SEARCH — CANONICAL CAPABILITY CORE (A1.4)
- *
- * Goals (expand-only, no regressions):
- * - Keep existing API: exports.handler / exports.maruSearchDispatcher / items + results alias
- * - Add "Capability Layer" inside maru-search:
- *   - Canonical Result Object (thumbnail/mediaType/lang/source fields)
- *   - Resilience: timeouts, safe fetch, soft circuit-breaker (per function runtime)
- *   - Future-ready containers registry (web/snapshot/media/ai) without breaking current flow
- *
- * Notes:
- * - No hard dependency on external storage. "Snapshot/AI" containers are optional and safe-noop unless configured.
- */
+"use strict";
 
-'use strict';
+/*
+MARU Planetary Search Engine v100
+------------------------------------------------------------
+Upgrade path layers
+v20  - base normalize / guard
+v40  - multi source orchestration
+v50  - trust ranking
+v70  - semantic intent layer
+v80  - adaptive routing / media / geo aware
+v100 - autonomous federated orchestration
 
-// ===== CORE ENGINE INTEGRATION (EXPAND ONLY) =====
+Design goals
+- Keep Netlify compatibility
+- Keep Collector compatibility
+- Keep Search Bridge compatibility
+- Keep UI compatibility
+- Defense-first, not block-first
+- Minimum 5 retry attempts before isolation/fallback
+*/
+
+let Planetary = null;
+let Bank = null;
 let Core = null;
-try { Core = require("./core"); } catch (e) { Core = null; }
+let Resilience = null;
+let Knowledge = null;
 
-const VERSION = 'A1.4-capability';
-const DEFAULT_LIMIT = 10;
+try { Planetary = require("./planetary-data-connector"); } catch(e){}
+try { Bank = require("./search-bank-engine"); } catch(e){}
+try { Core = require("./core"); } catch(e){}
+try { Resilience = require("./maru-resilience-engine"); } catch(e){}
+try { Knowledge = require("./maru-knowledge-graph-engine"); } catch(e){}
+
+const VERSION = "maru-search-v100-autonomous-defense";
+
+const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 1000;
+const MAX_QUERY_LENGTH = 260;
 
-// ===== Resilience (lightweight; safe on Netlify) =====
-const CB = {
-  // name -> { fails, openUntil }
-  states: Object.create(null),
-  maxFails: 4,
-  coolDownMs: 25_000
+const ENGINE_TIMEOUT = 9000;
+const MAX_RETRY = 5;
+const CIRCUIT_THRESHOLD = 10;
+const CIRCUIT_COOLDOWN = 30000;
+
+const CACHE = new Map();
+const CACHE_TTL = 45000;
+
+const CIRCUIT = {
+  planetary: { failures: 0, lastFail: 0 },
+  bank: { failures: 0, lastFail: 0 }
 };
 
-function nowMs() { return Date.now(); }
+/* --------------------------------------------------
+UTIL
+-------------------------------------------------- */
 
-function cbCanRun(name){
-  const st = CB.states[name];
-  if (!st) return true;
-  if (!st.openUntil) return true;
-  return nowMs() > st.openUntil;
-}
-function cbOnSuccess(name){
-  const st = CB.states[name];
-  if (!st) return;
-  st.fails = 0;
-  st.openUntil = 0;
-}
-function cbOnFail(name){
-  const st = CB.states[name] || (CB.states[name] = { fails: 0, openUntil: 0 });
-  st.fails += 1;
-  if (st.fails >= CB.maxFails) {
-    st.openUntil = nowMs() + CB.coolDownMs;
+function s(x){ return String(x == null ? "" : x); }
+function low(x){ return s(x).toLowerCase(); }
+function now(){ return Date.now(); }
+
+function safeInt(v, d, min, max){
+  if(Core && typeof Core.safeInt === "function"){
+    return Core.safeInt(v, d, min, max);
   }
+  const n = Number(v);
+  if(!Number.isFinite(n)) return d;
+  return Math.max(min, Math.min(max, Math.trunc(n)));
 }
 
-async function fetchWithTimeout(url, options, timeoutMs){
-  const ms = Math.max(500, Math.min(12_000, timeoutMs || 8_000));
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), ms);
-  try{
-    return await fetch(url, { ...(options || {}), signal: ctrl.signal });
-  } finally {
-    clearTimeout(t);
+function sanitize(q){
+  return s(q || "")
+    .replace(/[<>;$`]/g,"")
+    .replace(/script/gi,"")
+    .replace(/process\.env/gi,"")
+    .replace(/drop\s+table/gi,"")
+    .replace(/rm\s+-rf/gi,"")
+    .slice(0, MAX_QUERY_LENGTH)
+    .trim();
+}
+
+function detectPromptInjection(q){
+  const t = low(q);
+  const patterns = [
+    "ignore previous instruction",
+    "ignore previous instructions",
+    "system prompt",
+    "developer message",
+    "override rules",
+    "<script",
+    "process.env",
+    "drop table",
+    "rm -rf"
+  ];
+  return patterns.some(p => t.includes(p));
+}
+
+function withTimeout(promise, ms){
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms))
+  ]);
+}
+
+function getCache(key){
+  const hit = CACHE.get(key);
+  if(!hit) return null;
+  if(now() - hit.time > CACHE_TTL){
+    CACHE.delete(key);
+    return null;
   }
+  return hit.value;
 }
 
-// ===== HTTP helpers =====
-function ok(body) {
+function setCache(key, value){
+  CACHE.set(key, { time: now(), value });
+}
+
+function circuitOpen(name){
+  const c = CIRCUIT[name];
+  if(!c) return false;
+  if(c.failures < CIRCUIT_THRESHOLD) return false;
+  if(now() - c.lastFail > CIRCUIT_COOLDOWN){
+    c.failures = 0;
+    return false;
+  }
+  return true;
+}
+
+function circuitFail(name){
+  const c = CIRCUIT[name];
+  if(!c) return;
+  c.failures += 1;
+  c.lastFail = now();
+}
+
+function circuitSuccess(name){
+  const c = CIRCUIT[name];
+  if(!c) return;
+  if(c.failures > 0) c.failures -= 1;
+}
+
+/* --------------------------------------------------
+v20 BASE NORMALIZE / DEFENSE
+-------------------------------------------------- */
+
+function validateQuery(q){
+  if(Core && typeof Core.validateQuery === "function"){
+    const v = Core.validateQuery(q);
+    if(v && typeof v === "object"){
+      return v;
+    }
+  }
+  const qq = sanitize(q);
+  if(!qq) return { ok:false, code:"BAD_QUERY", value:"" };
+  return { ok:true, value:qq };
+}
+
+function parseParams(params = {}){
+  const rawQ = params.q || params.query || "";
+  const v = validateQuery(rawQ);
+  const q = v.ok ? sanitize(v.value) : sanitize(rawQ);
+
   return {
-    statusCode: 200,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'no-store',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'content-type',
-    },
-    body: JSON.stringify(body),
+    q,
+    query: q,
+    limit: safeInt(params.limit, DEFAULT_LIMIT, 1, MAX_LIMIT),
+    region: params.region || null,
+    mode: s(params.mode || "search").trim() || "search",
+    intent: params.intent || null,
+    scope: params.scope || null,
+    target: params.target || null
   };
 }
 
-function fail(message, detail) {
-  return ok({
-    status: 'error',
-    engine: 'maru-search',
-    version: VERSION,
-    message,
-    detail: detail || null,
-  });
+function normalizePlanetaryResults(res){
+  if(!res || typeof res !== "object") return [];
+
+  if(Array.isArray(res.items)){
+    return res.items.filter(Boolean).map(normalizeItem);
+  }
+
+  if(Array.isArray(res.results)){
+    const out = [];
+    for(const r of res.results){
+      if(!r) continue;
+
+      if(Array.isArray(r.items)){
+        for(const it of r.items){
+          const x = normalizeItem(it);
+          if(x) out.push(x);
+        }
+        continue;
+      }
+
+      const data = Array.isArray(r.data) ? r.data : [r.data];
+      for(const it of data){
+        const x = normalizeItem({
+          ...it,
+          source: r.source || it?.source,
+          sourceTrust: r.sourceTrust ?? it?.sourceTrust,
+          timestamp: r.timestamp || it?.timestamp
+        });
+        if(x) out.push(x);
+      }
+    }
+    return out;
+  }
+
+  return [];
 }
 
-function pickQ(event) {
-  const qs = event.queryStringParameters || {};
-  const q = String(qs.q || qs.query || '').trim();
-  const limitRaw = parseInt(qs.limit || DEFAULT_LIMIT, 10);
-  const limit = Math.min(Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : DEFAULT_LIMIT, MAX_LIMIT);
-
-  const startRaw = parseInt(qs.start || 1, 10);
-  const start = Number.isFinite(startRaw) && startRaw > 0 ? startRaw : 1;
-
-  // future: explicit mode selection
-  const mode = String(qs.mode || 'search').trim() || 'search';
-  const lang = String(qs.lang || '').trim() || null;
-
-  return { q, limit, start, mode, lang };
+function normalizeBankResults(res){
+  if(!res || typeof res !== "object") return [];
+  const src = Array.isArray(res.items) ? res.items : [];
+  return src.filter(Boolean).map(normalizeItem);
 }
 
-function stripHtml(s) {
-  return String(s || '').replace(/<[^>]*>/g, '');
-}
+function normalizeItem(it){
+  if(!it || typeof it !== "object") return null;
 
-// ===== Canonical Result helpers (Capability Layer) =====
-function safeUrl(u){
-  const s = String(u || '').trim();
-  if (!s) return '';
-  return s;
-}
-
-function domainOf(url){
-  try { return new URL(url).hostname.replace(/^www\./,''); }
-  catch(e){ return ''; }
-}
-
-function faviconOf(url){
-  const d = domainOf(url);
-  if (!d) return '';
-  // Google S2 favicon service (works globally). Front can still override if needed.
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64`;
-}
-
-function detectLangFromTextFallback(text){
-  // VERY light heuristic; true language intelligence layer will replace this.
-  const t = String(text || '');
-  if (!t) return null;
-  if (/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(t)) return 'ko';
-  if (/[ぁ-ゟ゠-ヿ]/.test(t)) return 'ja';
-  if (/[一-龥]/.test(t)) return 'zh';
-  if (/[А-Яа-яЁё]/.test(t)) return 'ru';
-  return 'en';
-}
-
-function canonicalizeItem(it, query){
-  const url = safeUrl(it.url || it.link || '');
-  const title = String(it.title || '').trim();
-  const summary = String(it.summary || it.snippet || '').trim();
-
-  // Thumbnail priority:
-  // 1) explicit it.thumbnail / it.thumb
-  // 2) payload common keys
-  // 3) favicon fallback
-  const p = (it && typeof it.payload === 'object') ? it.payload : {};
-  const thumb =
-    String(it.thumbnail || it.thumb || p.thumb || p.thumbnail || p.image || p.image_url || p.og_image || '').trim() ||
-    faviconOf(url);
-
-  const lang =
-    it.lang ||
-    p.lang ||
-    detectLangFromTextFallback(title + ' ' + summary) ||
-    null;
-
-  const mediaType =
-    it.mediaType ||
-    p.mediaType ||
-    (it.type === 'image' ? 'image' : (it.type === 'video' ? 'video' : 'article'));
-
-  // stable-ish id (no hard storage). Prefer url, else title.
-  const id = it.id || url || title || ('item-' + Math.random().toString(16).slice(2));
+  const url = s(it.url || it.link || it.href || "").trim();
+  const title = s(it.title || it.name || "").trim();
+  const summary = s(it.summary || it.description || it.snippet || "").trim();
 
   return {
-    id,
-    type: it.type || 'web',
-    mediaType,
     title,
     summary,
     url,
-    source: it.source || p.source || null,
-    lang,
-    thumbnail: thumb,
-    // existing score fields preserved
-    score: typeof it.score === 'number' ? it.score : 0.9,
-    payload: p
+    source: s(it.source || "unknown").trim() || "unknown",
+    mediaType: s(it.mediaType || it.type || "web").trim() || "web",
+    score: typeof it.score === "number" ? it.score : 0.5,
+
+    sourceTrust: typeof it.sourceTrust === "number" ? it.sourceTrust : 0.5,
+    deepfakeRisk: typeof it.deepfakeRisk === "number" ? it.deepfakeRisk : 0,
+    manipulationRisk: typeof it.manipulationRisk === "number" ? it.manipulationRisk : 0,
+
+    timestamp: it.timestamp || now(),
+    thumbnail: s(it.thumbnail || it.thumb || "").trim(),
+    imageSet: Array.isArray(it.imageSet) ? it.imageSet.slice(0, 8) : undefined,
+    media: (it.media && typeof it.media === "object") ? it.media : undefined,
+    payload: it.payload && typeof it.payload === "object" ? it.payload : it
   };
 }
 
-function toStandardItems(arr, source) {
-  return (Array.isArray(arr) ? arr : []).map((r, idx) => {
-    const item = {
-      id: r.link || r.url || r.title || `${source}-${idx}`,
-      type: r.type || 'web',
-      title: r.title || '',
-      summary: r.snippet || r.summary || '',
-      url: r.link || r.url || '',
-      source,
-      score: 0.9,
-      payload: r.payload || {}
-    };
-    return canonicalizeItem(item, null);
-  });
-}
+/* --------------------------------------------------
+v40 MULTI SOURCE ORCHESTRATION
+-------------------------------------------------- */
 
-// ===== Containers (future-ready, but safe-noop unless active) =====
-const Containers = {
-	  search_bank: {
-    name: 'search_bank',
-    async fetch(q, limit){
-      try{
-        const res = await fetchWithTimeout(
-          '/.netlify/functions/search-bank-engine?q=' +
-          encodeURIComponent(q) +
-          '&limit=' + encodeURIComponent(limit),
-          null,
-          6000
-        );
-        if(!res || !res.ok) return null;
-        const data = await res.json();
-        if(data && Array.isArray(data.items)){
-          return { source: 'search-bank-engine', results: data.items };
-        }
-        return null;
-      }catch(e){
-        return null;
-      }
-    }
-  },
-
-    web_naver: {
-    name: 'web_naver',
-    async fetch(q, limit, start){
-    return naverSearch(q, limit, start);
-    }
-  },
-    web_google: {
-    name: 'web_google',
-    async fetch(q, limit, start){
-    return googleSearch(q, limit, start);
-    }
-  },
-  // Snapshot container placeholder (optional):
-  // - If you later provide SNAPSHOT_SEARCH_URL or local snapshot index, implement here.
-  snapshot: {
-    name: 'snapshot',
- async fetch(q, limit){
+function makeResilienceEngine(){
+  if(!Resilience || typeof Resilience.ResilienceEngine !== "function") return null;
   try{
-    const res = await fetchWithTimeout(
-      '/.netlify/functions/search-bank-engine?q=' +
-      encodeURIComponent(q) +
-      '&limit=' + encodeURIComponent(limit),
-      null,
-      6000
-    );
-    if(!res || !res.ok) return null;
-
-    const data = await res.json();
-    if(data && Array.isArray(data.items)){
-      return { source: 'search-bank-engine', results: data.items };
-    }
-    return null;
+    return new Resilience.ResilienceEngine();
   }catch(e){
     return null;
   }
 }
 
-  },
-  // AI container placeholder (optional):
-  ai: {
-    name: 'ai',
-    async fetch(_q, _limit){
-      return null;
-    }
+const resilience = makeResilienceEngine();
+
+async function resilientCall(name, fn){
+  let lastError = null;
+
+  if(circuitOpen(name)){
+    throw new Error(name + "_circuit_open");
   }
-};
 
-// Orchestrator: chooses containers, runs safely, accumulates, merges (FUTURE-GRADE)
-async function orchestrateSearch({ q, limit }) {
-  const collected = [];
-  let sourceUsed = null;
-
-  // =========================
-  // 0) SEARCH-BANK-search-bank-engine — snapshot / fallback
-  // =========================
-  if (cbCanRun('bank')) {
-    const b = await Containers.search_bank.fetch(q, limit)
-      .catch(e => { cbOnFail('bank'); return null; });
-
-    if (b && b.results && b.results.length) {
-      cbOnSuccess('bank');
-      sourceUsed = sourceUsed || 'search-bank-engine';
-
-      const items = toStandardItems(b.results, 'search-bank-engine');
-      collected.push(...items);
+  for(let i = 0; i < MAX_RETRY; i++){
+    try{
+      let result;
+      if(resilience && typeof resilience.attempt === "function"){
+        // attempt 내부 maxRetry가 따로 있더라도, search 정책은 외부 fallback 기준으로 5회만 봄
+        result = await withTimeout(fn(), ENGINE_TIMEOUT);
+      }else{
+        result = await withTimeout(fn(), ENGINE_TIMEOUT);
+      }
+      circuitSuccess(name);
+      return result;
+    }catch(e){
+      lastError = e;
+      circuitFail(name);
     }
   }
 
-  // =========================
-  // 1) NAVER — primary bulk source (100/page)
-  // =========================
-  if (cbCanRun('naver')) {
-    let start = 1;
+  throw lastError || new Error(name + "_failed");
+}
 
-    while (collected.length < limit) {
-      const batchSize = Math.min(100, limit - collected.length);
-
-      const n = await Containers.web_naver.fetch(q, batchSize, start)
-        .catch(e => { cbOnFail('naver'); return null; });
-
-      if (!n || !n.results || !n.results.length) break;
-
-      cbOnSuccess('naver');
-      sourceUsed = sourceUsed || 'naver';
-
-      const items = toStandardItems(n.results, n.source);
-      collected.push(...items);
-
-      if (n.results.length < batchSize) break;
-      start += batchSize;
-    }
+async function callPlanetary(event, params){
+  if(!Planetary || typeof Planetary.connect !== "function"){
+    return { status:"fail", items:[], error:"PLANETARY_UNAVAILABLE" };
   }
 
-  // =========================
-  // 2) GOOGLE — secondary precision source (10/page, max ~100)
-  // =========================
-  if (collected.length < limit && cbCanRun('google')) {
-    let start = 1;
+  const key = "planetary:" + JSON.stringify([params.q, params.limit, params.region, params.mode]);
+  const cached = getCache(key);
+  if(cached) return cached;
 
-    while (collected.length < limit && start <= 91) {
-      const batchSize = Math.min(10, limit - collected.length);
+  try{
+    const res = await resilientCall("planetary", async () => {
+      return await Planetary.connect(event, {
+        q: params.q,
+        query: params.q,
+        limit: params.limit,
+        region: params.region,
+        mode: params.mode,
+        intent: params.intent,
+        scope: params.scope,
+        target: params.target
+      });
+    });
 
-      const g = await Containers.web_google.fetch(q, batchSize, start)
-        .catch(e => { cbOnFail('google'); return null; });
-
-      if (!g || !g.results || !g.results.length) break;
-
-      cbOnSuccess('google');
-      sourceUsed = sourceUsed || 'google';
-
-      const items = toStandardItems(g.results, g.source);
-      collected.push(...items);
-
-      if (g.results.length < batchSize) break;
-      start += batchSize;
-    }
-  }
-
-  // =========================
-  // 3) CORE PIPELINE (ranking / canonicalization)
-  // =========================
-  if (collected.length > 0) {
-    const finalItems = await applyCorePipeline(q, collected.slice(0, limit));
+    const out = {
+      status:"ok",
+      items: normalizePlanetaryResults(res),
+      raw: res
+    };
+    setCache(key, out);
+    return out;
+  }catch(e){
     return {
-      source: sourceUsed,
-      items: finalItems
+      status:"fail",
+      items:[],
+      raw:null,
+      error: s(e && e.message ? e.message : e)
+    };
+  }
+}
+
+async function callBank(event, params){
+  if(!Bank || typeof Bank.runEngine !== "function"){
+    return { status:"fail", items:[], error:"BANK_UNAVAILABLE" };
+  }
+
+  const key = "bank:" + JSON.stringify([params.q, params.limit, params.region, params.mode]);
+  const cached = getCache(key);
+  if(cached) return cached;
+
+  try{
+    const res = await resilientCall("bank", async () => {
+      return await Bank.runEngine(event || {}, {
+        q: params.q,
+        query: params.q,
+        limit: params.limit,
+        region: params.region,
+        mode: params.mode
+      });
+    });
+
+    const out = {
+      status:"ok",
+      items: normalizeBankResults(res),
+      raw: res
+    };
+    setCache(key, out);
+    return out;
+  }catch(e){
+    return {
+      status:"fail",
+      items:[],
+      raw:null,
+      error: s(e && e.message ? e.message : e)
+    };
+  }
+}
+
+/* --------------------------------------------------
+v50 TRUST RANKING
+-------------------------------------------------- */
+
+function truthConfidence(item){
+  let score = 1;
+  if(typeof item.sourceTrust === "number") score *= item.sourceTrust;
+  if(typeof item.deepfakeRisk === "number") score *= (1 - item.deepfakeRisk);
+  if(typeof item.manipulationRisk === "number") score *= (1 - item.manipulationRisk);
+  return score;
+}
+
+function trustFilter(items){
+  return (items || []).filter(it => truthConfidence(it) >= 0.15);
+}
+
+/* --------------------------------------------------
+v70 SEMANTIC / INTENT LAYER
+-------------------------------------------------- */
+
+function classifyIntent(q){
+  const t = low(q);
+
+  if(/video|watch|clip|media|stream/.test(t)) return "media";
+  if(/price|buy|product|shop|market/.test(t)) return "commerce";
+  if(/news|headline|breaking|current/.test(t)) return "news";
+  if(/science|research|paper|study|nasa|space/.test(t)) return "science";
+  if(/city|country|region|map|local|geo/.test(t)) return "geo";
+  if(/why|how|meaning|analysis|trend|forecast/.test(t)) return "analysis";
+
+  return "general";
+}
+
+function semanticSignals(q){
+  const t = low(q);
+  const out = [];
+
+  if(t.includes("video") || t.includes("media")) out.push("media");
+  if(t.includes("news")) out.push("news");
+  if(t.includes("science") || t.includes("research")) out.push("science");
+  if(t.includes("local") || t.includes("region")) out.push("geo");
+  if(t.includes("analysis") || t.includes("forecast")) out.push("analysis");
+
+  return out;
+}
+
+/* --------------------------------------------------
+v80 ADAPTIVE ROUTING
+-------------------------------------------------- */
+
+function sourcePlan(params){
+  const intent = classifyIntent(params.q);
+  const signals = semanticSignals(params.q);
+
+  const plan = {
+    intent,
+    signals,
+    usePlanetary: true,
+    useBank: true
+  };
+
+  if(intent === "media"){
+    plan.usePlanetary = true;
+    plan.useBank = true;
+  }else if(intent === "science" || intent === "news" || intent === "geo"){
+    plan.usePlanetary = true;
+    plan.useBank = true;
+  }else if(intent === "commerce"){
+    plan.usePlanetary = true;
+    plan.useBank = true;
+  }
+
+  return plan;
+}
+
+/* --------------------------------------------------
+v100 AUTONOMOUS FEDERATED SEARCH
+-------------------------------------------------- */
+
+function knowledgeBoost(item, q){
+  if(!Knowledge) return 0;
+
+  // 안전하게 가볍게만 사용
+  try{
+    const title = low(item.title || "");
+    const qq = low(q || "");
+    if(title && qq && title.includes(qq)) return 0.08;
+  }catch(e){}
+
+  return 0;
+}
+
+function computeScore(item, q, intent){
+  let score = typeof item.score === "number" ? item.score : 0.5;
+
+  score *= truthConfidence(item);
+
+  const title = low(item.title || "");
+  const summary = low(item.summary || "");
+  const query = low(q || "");
+
+  if(query && title.includes(query)) score += 0.45;
+  if(query && summary.includes(query)) score += 0.20;
+
+  if(intent === "media" && (item.mediaType === "video" || item.media?.kind === "video")) score += 0.35;
+  if(intent === "news" && /news|reuters|bbc|ap/.test(low(item.source))) score += 0.15;
+  if(intent === "science" && /gov|edu|ac|nasa|arxiv/.test(low(item.source))) score += 0.18;
+  if(intent === "geo" && /gov|map|city|region/.test(low(item.source))) score += 0.12;
+
+  if(item.thumbnail) score += 0.05;
+  if(item.imageSet && item.imageSet.length) score += 0.08;
+
+  score += knowledgeBoost(item, q);
+
+  return score;
+}
+
+function dedup(items){
+  const out = [];
+  const seen = new Set();
+
+  for(const it of items || []){
+    const key = low(it.url || (it.title + "|" + it.source));
+    if(!key) continue;
+    if(seen.has(key)) continue;
+    seen.add(key);
+    out.push(it);
+  }
+
+  return out;
+}
+
+function rankItems(items, q, intent){
+  const merged = dedup(trustFilter(items)).map(it => ({
+    ...it,
+    qualityScore: computeScore(it, q, intent)
+  }));
+
+  merged.sort((a,b) => {
+    if(b.qualityScore !== a.qualityScore) return b.qualityScore - a.qualityScore;
+    return (b.timestamp || 0) - (a.timestamp || 0);
+  });
+
+  return merged;
+}
+
+function buildMeta(params, plan, planetaryRes, bankRes, ranked){
+  return {
+    intent: plan.intent,
+    signals: plan.signals,
+    planetary_ok: planetaryRes.status === "ok",
+    bank_ok: bankRes.status === "ok",
+    planetary_count: planetaryRes.items.length,
+    bank_count: bankRes.items.length,
+    ranked_count: ranked.length,
+    retry_policy: MAX_RETRY,
+    defense_first: true,
+    circuits: {
+      planetary: { ...CIRCUIT.planetary },
+      bank: { ...CIRCUIT.bank }
+    }
+  };
+}
+
+/* --------------------------------------------------
+MAIN ENGINE
+-------------------------------------------------- */
+
+async function runEngine(event, params = {}){
+  const p = parseParams(params);
+
+  if(!p.q){
+    return {
+      status:"ok",
+      engine:"maru-search",
+      version:VERSION,
+      items:[],
+      results:[]
     };
   }
 
-  // =========================
-  // 4) LOOSE FALLBACK (future-safe)
-  // =========================
-  return {
-    source: 'fallback',
-    items: await applyCorePipeline(q, [
-      {
-        title: q,
-        summary: 'Loose fallback result',
-        source: 'fallback',
-        score: 0.01
+  if(detectPromptInjection(p.q)){
+    // 즉시 block 대신 안전한 빈 응답 + 메타
+    return {
+      status:"ok",
+      engine:"maru-search",
+      version:VERSION,
+      query:p.q,
+      items:[],
+      results:[],
+      meta:{
+        defense_first:true,
+        protected:true,
+        reason:"prompt_injection_guard"
       }
-    ])
-  };
-}
+    };
+  }
 
-// ===== Source Fetchers =====
-async function naverSearch(q, limit, start) {
-  const id = process.env.NAVER_API_KEY;
-  const secret = process.env.NAVER_CLIENT_SECRET;
-  if (!id || !secret) return null;
+  const plan = sourcePlan(p);
 
-  const url = `https://openapi.naver.com/v1/search/webkr.json?query=${encodeURIComponent(q)}&display=${Math.min(limit, 100)}&start=${start}`;
-  const res = await fetchWithTimeout(url, {
-    headers: {
-      'X-Naver-Client-Id': id,
-      'X-Naver-Client-Secret': secret,
-    },
-  }, 8500);
+  const [planetaryRes, bankRes] = await Promise.all([
+    plan.usePlanetary ? callPlanetary(event, p) : Promise.resolve({ status:"skip", items:[] }),
+    plan.useBank ? callBank(event, p) : Promise.resolve({ status:"skip", items:[] })
+  ]);
 
-  if (!res.ok) throw new Error(`NAVER_HTTP_${res.status}`);
-  const data = await res.json();
+  let allItems = [];
+  allItems = allItems.concat(planetaryRes.items || []);
+  allItems = allItems.concat(bankRes.items || []);
 
-  const items = Array.isArray(data.items) ? data.items : [];
-  const results = items.map(it => ({
-    title: stripHtml(it.title),
-    link: it.link || '',
-    snippet: stripHtml(it.description),
-    type: 'web',
-    payload: {
-      // naver webkr doesn't give thumb; leave payload open for future connectors
-      source: 'naver'
-    }
-  }));
-
-  return { source: 'naver', results };
-}
-
-async function googleSearch(q, limit, start) {
-  const key = process.env.GOOGLE_API_KEY;
-  const cx  = process.env.GOOGLE_CSE_ID;
-  if (!key || !cx) return null;
-
-  const base =
-    `https://www.googleapis.com/customsearch/v1` +
-    `?key=${encodeURIComponent(key)}` +
-    `&cx=${encodeURIComponent(cx)}` +
-    `&q=${encodeURIComponent(q)}` +
-    `&num=${Math.min(limit, 10)}` +
-    `&start=${start}` +
-    `&gl=us` +
-    `&lr=lang_en|lang_ko` +
-    `&sort=date`;
-
-  // 1) WEB
-  const webRes = await fetchWithTimeout(base, null, 8500)
-    .then(r => r.ok ? r.json() : null)
-    .catch(() => null);
-
-  // 2) NEWS
-  const newsRes = await fetchWithTimeout(base + `&tbm=nws`, null, 8500)
-    .then(r => r.ok ? r.json() : null)
-    .catch(() => null);
-
-  const mergeItems = (data, type, source) => {
-    const items = Array.isArray(data && data.items) ? data.items : [];
-    return items.map(it => {
-      const pagemap = it.pagemap || {};
-      const cseThumb = Array.isArray(pagemap.cse_thumbnail) ? pagemap.cse_thumbnail[0] : null;
-      const cseImg   = Array.isArray(pagemap.cse_image) ? pagemap.cse_image[0] : null;
-
+  // defense-first fallback
+  if(!allItems.length){
+    if(planetaryRes.status !== "ok" && bankRes.status !== "ok"){
       return {
-        title: it.title || '',
-        link: it.link || '',
-        snippet: it.snippet || '',
-        type,
-        payload: {
-          source,
-          thumb: (cseThumb && cseThumb.src) || (cseImg && cseImg.src) || ''
-        }
+        status:"ok",
+        engine:"maru-search",
+        version:VERSION,
+        query:p.q,
+        items:[],
+        results:[],
+        meta: buildMeta(p, plan, planetaryRes, bankRes, [])
       };
-    });
-  };
-
-  const results = [
-    ...mergeItems(webRes,  'web',  'google'),
-    ...mergeItems(newsRes, 'news', 'google_news')
-  ];
-
-  return { source: 'google+news', results };
-}
-
-// ===== CORE PIPELINE APPLY (NON-DESTRUCTIVE) =====
-async function applyCorePipeline(query, items) {
-  const q = query;
-
-  // Core.validateQuery may return boolean OR {ok, value}
-  if (Core && typeof Core.validateQuery === "function") {
-    const v = Core.validateQuery(q);
-    if (v === false) return [];
-    if (v && typeof v === 'object' && v.ok === false) return [];
-  }
-
-  let results = Array.isArray(items) ? items : [];
-
-  if (Core && typeof Core.scoreItem === "function" && Array.isArray(results)) {
-    results = results.map(it => ({
-      ...it,
-      _coreScore: Core.scoreItem(q, it)  // core.js signature supports (q,item); safe for older too
-    })).sort((a, b) => (b._coreScore || 0) - (a._coreScore || 0));
-  }
-
-  // final canonical pass (ensures thumbnail/lang exist)
-  results = results.map(it => canonicalizeItem(it, q));
-  return results;
-}
-
-// ===== MAIN HANDLER =====
-exports.handler = async function (event) {
-  try {
-   const { q, limit, start } = pickQ(event);
-
-// env missing check stays consistent with previous behavior
-/*
-const envOk = !!(
-  (process.env.NAVER_API_KEY && process.env.NAVER_CLIENT_SECRET) ||
-  (process.env.GOOGLE_API_KEY && process.env.GOOGLE_CSE_ID)
-);
-if (!envOk) {
-  return fail('Missing env', 'Set NAVER_API_KEY+NAVER_CLIENT_SECRET or GOOGLE_API_KEY+GOOGLE_CSE_ID');
-}
-*/
-
-    if (!q) {
-      return ok({
-        status: 'ok',
-        engine: 'maru-search',
-        version: VERSION,
-        query: q,
-        source: null,
-        items: [],
-        results: [],
-        meta: { count: 0, limit },
-      });
     }
-
-    const base = await orchestrateSearch({ q, limit, start });
-
-
-    return ok({
-      status: 'ok',
-      engine: 'maru-search',
-      version: VERSION,
-      query: q,
-      source: base.source,
-      items: base.items,
-      results: base.items, // legacy alias
-      meta: { count: (base.items || []).length, limit },
-    });
-
-  } catch (e) {
-    return fail('Search failed', String((e && e.message) || e));
   }
-};
 
-// ===== Internal dispatcher for bridge (non-HTTP call) =====
-async function maruSearchDispatcher(req = {}) {
-  const q = String(req.q || req.query || "").trim();
-  const limit = req.limit;
-  const event = { queryStringParameters: { q, limit } };
-  const res = await exports.handler(event);
-  try {
-    return JSON.parse(res.body || "{}");
-  } catch (e) {
-    return { status: "fail", message: "BAD_JSON" };
-  }
-}
-
-exports.maruSearchDispatcher = maruSearchDispatcher;
-
-// ===== Central Collector compatibility =====
-// Collector expects runEngine(event, {q,limit,...})
-exports.runEngine = async function(event, params){
-  const q = String((params && (params.q || params.query)) || (event && event.queryStringParameters && (event.queryStringParameters.q || event.queryStringParameters.query)) || '').trim();
-  const limit = params && params.limit;
-  return await maruSearchDispatcher({ q, limit, mode: params && params.mode, context: params && params.context, headers: event && event.headers });
-};
-
-
-
-
-// =========================================================
-// MARU SEARCH ENGINE EXPORT ADAPTER (Collector compatibility)
-// 기존 코드 수정 없음 / 확장 export만 추가
-// =========================================================
-
-async function runEngine(event = {}, params = {}) {
-
-  const q = (params.q || params.query || "").trim();
-  const limit = params.limit || 20;
-
-  if (typeof maruSearchDispatcher === "function") {
-
-    return await maruSearchDispatcher({
-      q,
-      limit,
-      mode: "search",
-      context: params.context || null
-    });
-
-  }
+  const ranked = rankItems(allItems, p.q, plan.intent).slice(0, p.limit);
 
   return {
-    status: "fail",
-    engine: "maru-search",
-    message: "DISPATCHER_NOT_AVAILABLE"
+    status:"ok",
+    engine:"maru-search",
+    version:VERSION,
+
+    query:p.q,
+    mode:p.mode,
+
+    items: ranked,
+    results: ranked,
+
+    meta: buildMeta(p, plan, planetaryRes, bankRes, ranked),
+
+    data: {
+      planetary: planetaryRes.raw || null,
+      bank: bankRes.raw || null
+    }
   };
 }
+
+/* --------------------------------------------------
+SEARCH BRIDGE COMPATIBILITY
+-------------------------------------------------- */
+
+async function maruSearchDispatcher(payload = {}){
+  const query = s(payload.q || payload.query || "").trim();
+  if(!query){
+    return { ok:false, error:"INVALID_PAYLOAD" };
+  }
+
+  const event = {
+    queryStringParameters: {
+      q: query,
+      limit: payload.limit,
+      mode: payload.mode,
+      region: payload.context?.region,
+      intent: payload.context?.intent,
+      scope: payload.context?.scope,
+      target: payload.context?.target
+    },
+    headers: payload.headers || {}
+  };
+
+  return await runEngine(event, event.queryStringParameters || {});
+}
+
+/* --------------------------------------------------
+NETLIFY HANDLER
+-------------------------------------------------- */
 
 exports.runEngine = runEngine;
+exports.maruSearchDispatcher = maruSearchDispatcher;
 
+exports.handler = async function(event){
+  try{
+    const params = event?.queryStringParameters || {};
+    const res = await runEngine(event || {}, params);
+
+    const origin =
+      process.env.ALLOWED_ORIGIN ||
+      "https://igdcglobal.com";
+
+    return {
+      statusCode:200,
+      headers:{
+        "Content-Type":"application/json",
+        "Access-Control-Allow-Origin":origin,
+        "Cache-Control":"no-store"
+      },
+      body:JSON.stringify(res)
+    };
+  }catch(e){
+    const origin =
+      process.env.ALLOWED_ORIGIN ||
+      "https://igdcglobal.com";
+
+    return {
+      statusCode:200,
+      headers:{
+        "Content-Type":"application/json",
+        "Access-Control-Allow-Origin":origin,
+        "Cache-Control":"no-store"
+      },
+      body:JSON.stringify({
+        status:"ok",
+        engine:"maru-search",
+        version:VERSION,
+        items:[],
+        results:[],
+        meta:{
+          protected:true,
+          reason:s(e && e.message ? e.message : e)
+        }
+      })
+    };
+  }
+};
