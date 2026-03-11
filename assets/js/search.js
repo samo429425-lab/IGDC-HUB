@@ -67,10 +67,10 @@
 
     async function fetchMaru(q){
       const urls = [
-        `/.netlify/functions/collector?mode=maru-search&q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`,
-        `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`,
-        `/netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`
-      ];
+    `/.netlify/functions/collector?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`,
+    `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`,
+    `/netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`
+];
       let lastErr;
       for (const u of urls){
         try{
@@ -225,7 +225,16 @@ if (d && d.textContent) {
   d.style.textOverflow = 'ellipsis';
 }
 
-// 2) 썸네일이 "진짜 이미지"인지 판별 (favicon/ico 제외)
+// 1) imageSet 존재 판별
+const hasImageSet =
+  Array.isArray(it.imageSet) && it.imageSet.length > 0;
+
+// 2) Collector mediaCandidate 자동 썸네일 (먼저 보정)
+if (it.mediaCandidate && !it.thumbnail && hasImageSet){
+  it.thumbnail = it.imageSet[0];
+}
+
+// 3) 썸네일이 "진짜 이미지"인지 판별 (favicon/ico 제외)
 const thumbUrl = (it.thumbnail || '').trim();
 const isFaviconLike =
   thumbUrl.includes('google.com/s2/favicons') ||
@@ -234,14 +243,12 @@ const isFaviconLike =
 
 const isRealThumb = !!thumbUrl && !isFaviconLike;
 
-// 3) 미디어 존재 판별 (진짜로 있을 때만 미디어 영역 렌더)
+// 4) 미디어 존재 판별 (진짜로 있을 때만 미디어 영역 렌더)
 const hasVideoPreview =
-  it.media && ((it.media.type || it.media.kind) === 'video') &&
+  it.media &&
+  ((it.media.type || it.media.kind) === 'video') &&
   it.media.preview &&
   (it.media.preview.mp4 || it.media.preview.webm || it.media.preview.poster);
-
-const hasImageSet =
-  Array.isArray(it.imageSet) && it.imageSet.length > 0;
 
 // 4) 기본은 WEB/NEWS 카드 (텍스트 중심)
 //    미디어가 있으면 '보조 미디어'를 카드 안에 추가 (카드 크기 유지)
