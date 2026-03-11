@@ -180,40 +180,58 @@ return expanded.slice(0,MAX_EXPANSIONS);
 ENGINE REGISTRY
 ------------------------------------------------------------ */
 
-const ENGINE_REGISTRY={
+const ENGINE_REGISTRY = {
 
-search:async(event,params)=>{
+  search: async (event, params) => {
 
-if(!Search||!Search.runEngine) return[];
+    if (!Search || !Search.runEngine) return [];
 
-try{
-const r=await Search.runEngine(event,params);
-return r.items||[];
-}catch(e){return[]}
+    try {
 
-},
+      // 파라미터 정리: Search 엔진에 필요한 필드를 정확하게 전달
+      const r = await Search.runEngine(event, {
+        q: params.q || params.query || "", // query 또는 q 필드로 검색어 전달
+        query: params.q || params.query || "", // 중복 전달로 문제가 없게
+        limit: params.limit || 20, // 기본 limit 20
+        mode: params.mode || "search", // 기본 모드 'search'
+        context: params.context || null // context 정보 추가 (필요한 경우)
+      });
 
-insight:async(event,params)=>{
+      // 반환된 데이터에서 items 또는 results를 찾아 반환
+      return (r && (r.items || r.results)) || [];
 
-if(!Insight||!Insight.runEngine) return[];
+    } catch (e) {
+      console.error("Error in search engine:", e);
+      return [];
+    }
 
-try{
-const r=await Insight.runEngine(event,params);
-return r.items||[];
-}catch(e){return[]}
+  },
 
-},
+  insight: async (event, params) => {
 
-bank:async(event,params)=>{
+    if (!Insight || !Insight.runEngine) return [];
 
-if(!Bank||!Bank.runEngine) return[];
+    try {
+      const r = await Insight.runEngine(event, params);
+      return r.items || [];
+    } catch (e) {
+      return [];
+    }
 
-try{
-const r=await Bank.runEngine(event,params);
-return r.items||[];
-}catch(e){return[]}
+  },
 
-}
+  bank: async (event, params) => {
+
+    if (!Bank || !Bank.runEngine) return [];
+
+    try {
+      const r = await Bank.runEngine(event, params);
+      return r.items || [];
+    } catch (e) {
+      return [];
+    }
+
+  }
 
 };
 
