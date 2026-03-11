@@ -284,7 +284,7 @@ async function executeJob(job){
 
  try{
 
-  await dispatchToPublisher(job);
+//  await dispatchToPublisher(job);
   
   job.status="published";
   job.history.push({
@@ -582,10 +582,10 @@ function loadNetworkMap(){
 
 async function broadcastNetwork(job){
  const map=loadNetworkMap();
- const publisher=require("./maru-sns-publisher-engine");
+// const publisher=require("./maru-sns-publisher-engine");
  const tasks=[];
  for(const platform of map.platforms){
-  tasks.push(publisher.publish(platform,job.media));
+// tasks.push(publisher.publish(platform,job.media));
  }
  await Promise.all(tasks);
 }
@@ -596,11 +596,11 @@ AI Viral Expansion Engine
 
 async function viralBoost(job){
  const map=loadNetworkMap();
- const publisher=require("./maru-sns-publisher-engine");
+// const publisher=require("./maru-sns-publisher-engine");
  const targets=map.platforms||[];
  const rounds=3;
  for(let i=0;i<rounds;i++){
-  await Promise.all(targets.map(p=>publisher.publish(p,job.media)));
+//  await Promise.all(targets.map(p=>publisher.publish(p,job.media)));
  }
 }
 
