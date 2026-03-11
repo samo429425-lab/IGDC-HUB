@@ -28,7 +28,7 @@ const VERSION = "collector-v150";
 
 const MAX_QUERY_LENGTH = 260;
 const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 200;
+const MAX_LIMIT = 1000;
 
 const CACHE = new Map();
 const CACHE_TTL = 60000;
@@ -317,6 +317,7 @@ async function runCollector(event){
   /* AI engine chain */
 
   items = await runDynamicEngines(q,items);
+  items = items.map(x=>({...x,mediaCandidate:true}));
 
   /* trust scoring */
 
@@ -325,6 +326,7 @@ async function runCollector(event){
   /* resilience guard */
 
   const safeItems = Resilience.guard(items || []);
+  await require("./snapshot-engine").run({section:"collector",items:safeItems});
 
   const result = {
     status:"ok",
