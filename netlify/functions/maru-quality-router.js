@@ -34,7 +34,7 @@ let Logos = null;
 let Consciousness = null;
 let Resilience = null;
 
-try { Search = require("./maru-search"); } catch(e){}
+try { Search = require("./maru-search-bridge"); } catch(e){}
 try { Insight = require("./maru-global-insight-engine"); } catch(e){}
 try { Bank = require("./search-bank-engine"); } catch(e){}
 try { Logos = require("./maru-logos-engine"); } catch(e){}
