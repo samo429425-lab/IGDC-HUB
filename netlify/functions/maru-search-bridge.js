@@ -41,4 +41,14 @@ function dispatch(payload = {}) {
   });
 }
 
-module.exports = { callMaruSearch, dispatch };
+function runEngine(event, params = {}) {
+  return callMaruSearch({
+    q: params.q || params.query || "",
+    mode: params.mode || "search",
+    limit: params.limit,
+    context: params.context || null,
+    headers: event?.headers || null
+  });
+}
+
+module.exports = { callMaruSearch, dispatch, runEngine };
