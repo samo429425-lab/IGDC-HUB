@@ -66,11 +66,9 @@
     }
 
     async function fetchMaru(q){
-      const urls = [
-    `/.netlify/functions/collector?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`,
-    `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`,
-    `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`
-];
+    const urls = [
+    `/.netlify/functions/collector?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`
+    ];
       let lastErr;
       for (const u of urls){
         try{
