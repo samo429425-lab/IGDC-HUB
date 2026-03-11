@@ -253,7 +253,7 @@ async function getScheduleStatus(jobId){
 
 }
 
-/* PUBLISH */
+/* PUBLISH (disabled until publisher engine exists)
 
 async function dispatchToPublisher(job){
 
@@ -262,10 +262,12 @@ async function dispatchToPublisher(job){
  await Promise.all(
   targets.map(platform=>
    publisher.publish(platform,job.media)
-
   )
  );
+
 }
+
+*/
 
 /* EXECUTION */
 
