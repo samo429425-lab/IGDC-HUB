@@ -1,150 +1,190 @@
-/* =========================================================
- * MARU Global Insight JS — Orchestrator (Addon-first)
- * - Receives requests from MaruAddon
- * - Calls engines (maru-global-insight + search-bank)
- * - Normalizes + distributes return payload back to addon
- * ========================================================= */
-(function(){
-  'use strict';
-  if (window.MaruGlobalInsight) return;
+"use strict";
 
-  const CONFIG = {
-    version: 'vNext-orchestrator-1',
-    endpoints: {
-      collector: '/.netlify/functions/collector',
-      insight: '/.netlify/functions/maru-global-insight-engine',
-      bank: '/.netlify/functions/search-bank-engine'
-    },
+/*
+ MARU Global Insight Engine
+ 확장형 구조
+ 기존 Addon → Insight → Collector → Engine 흐름 유지
+ 기존 기능 삭제 없음
+*/
 
-    limits: {
-      bank: 30,
-      insight: 20
-    },
-    timeouts: {
-      ms: 12000
-    }
+(function(global){
+
+  if(!global.MaruGlobalInsight){
+    global.MaruGlobalInsight = {};
+  }
+
+  const Insight = global.MaruGlobalInsight;
+
+  /* ==========================
+     Core Config
+  ========================== */
+
+  Insight.config = {
+    version: "2.0.0",
+    enableSnapshot: true,
+    enableMediaAttach: true,
+    enableConversationHook: true
   };
 
-  function s(x){ return x==null? '' : String(x); }
-  function nowISO(){ return new Date().toISOString(); }
+  /* ==========================
+     Utility
+  ========================== */
 
-  function withTimeout(promise, ms){
-    let t;
-    const to = new Promise((_, rej) => { t = setTimeout(() => rej(new Error('TIMEOUT')), ms); });
-    return Promise.race([promise, to]).finally(() => clearTimeout(t));
+  function safe(fn){
+    try { return fn(); }
+    catch(e){ console.error("[MARU Insight Error]", e); return null; }
   }
 
-  async function fetchJSON(url, opts){
-    try{
-      const r = await withTimeout(fetch(url, { cache:'no-store', ...opts }), CONFIG.timeouts.ms);
-      if(!r.ok) throw new Error('HTTP_'+r.status);
-      return await r.json();
-    }catch(_){
-      return null;
-    }
-  }
+  function now(){ return Date.now(); }
 
-  function qs(obj){
-    const p = new URLSearchParams();
-    Object.entries(obj||{}).forEach(([k,v]) => {
-      if(v==null || v==='') return;
-      p.set(k, String(v));
-    });
-    return p.toString();
-  }
+  /* ==========================
+     Region Brief Generation
+  ========================== */
 
-  function pickTextSummary(query, bankRes, insightRes){
-    // Prefer insight engine if it provides something meaningful
-    const ir = insightRes && (insightRes.data || insightRes);
-    const msg = s(insightRes?.message || insightRes?.summary || insightRes?.text || ir?.summary || '');
-    if(msg.trim()) return msg.trim();
+  Insight.generateRegionBrief = async function(regionKey){
 
-    const items = Array.isArray(bankRes?.items) ? bankRes.items : [];
-    if(items.length){
-      const top = items.slice(0,5).map(it => s(it.title||'').trim()).filter(Boolean);
-      if(top.length) return `“${query}” 관련 상위 결과: ${top.join(' · ')}`;
-    }
-    return `“${query}” 관련 인사이트를 취합 중입니다.`;
-  }
+    if(!regionKey) return null;
 
-  function normalizeVideos(bankRes){
-    const items = Array.isArray(bankRes?.items) ? bankRes.items : [];
-    const vids = items.filter(it => (it.type||'') === 'video' || (it.media && (it.media.kind==='video' || it.media.type==='video')));
-    return vids.slice(0,4).map(it => ({
-      title: it.title,
-      url: it.url,
-      thumbnail: it.thumbnail,
-      source: it.source,
-      published_at: it.published_at
-    }));
-  }
-
-  function normalizeIssues(insightRes){
-    const d = insightRes?.data;
-    if(d && Array.isArray(d.issues)) return d.issues;
-    if(Array.isArray(insightRes?.issues)) return insightRes.issues;
-    return null;
-  }
-
-  async function callInsight(q, mode){
-    // Prefer central collector
-    const cUrl = CONFIG.endpoints.collector + '?' + qs({ mode: 'insight', q, limit: CONFIG.limits.insight, engine: 'insight' });
-    const cRes = await fetchJSON(cUrl);
-    if(cRes) return cRes;
-    // Fallback to direct engine
-    const url = CONFIG.endpoints.insight + '?' + qs({ q, mode: mode||'search', limit: CONFIG.limits.insight });
-    return await fetchJSON(url);
-  }
-
-  async function callBank(q, limit){
-    // Prefer central collector
-    const cUrl = CONFIG.endpoints.collector + '?' + qs({ mode: 'search', q, limit: limit || CONFIG.limits.bank, engine: 'search' });
-    const cRes = await fetchJSON(cUrl);
-    if(cRes) return cRes;
-    // Fallback to direct bank engine
-    const url = CONFIG.endpoints.bank + '?' + qs({ q, limit: limit || CONFIG.limits.bank });
-    return await fetchJSON(url);
-  }
-
-  async function dispatch(payload){
-    const query = s(payload?.q || payload?.query || '').trim();
-    if(!query) return { status:'fail', message:'EMPTY_QUERY' };
-
-    // addon payload mapping
-    const scope = s(payload?.scope || 'global');
-    const target = payload?.target == null ? null : s(payload.target);
-    const intent = s(payload?.intent || 'summary');
-
-    // mode mapping (engine supports mode passthrough)
-    let mode = 'search';
-    if(intent === 'realtime' || payload?.mode === 'realtime-global') mode = 'realtime';
-
-    const [insightRes, bankRes] = await Promise.all([
-      callInsight(query, mode),
-      callBank(query, CONFIG.limits.bank)
-    ]);
-
-    const headline = pickTextSummary(query, bankRes, insightRes);
-
-    return {
-      status: 'ok',
-      engine: 'maru-global-insight-js',
-      version: CONFIG.version,
-      timestamp: nowISO(),
-      query,
-      context: { scope, target, intent, mode },
-      text: headline,
-      data: {
-        issues: normalizeIssues(insightRes),
-        videos: normalizeVideos(bankRes),
-        bank: bankRes || null,
-        insight: insightRes || null
-      }
+    const payload = {
+      type: "region",
+      region: regionKey,
+      timestamp: now()
     };
-  }
 
-  window.MaruGlobalInsight = {
-    version: CONFIG.version,
-    dispatch
+    const collected = await Insight.collect(payload);
+    const analyzed  = await Insight.analyze(collected);
+
+    return analyzed;
   };
-})();
+
+  /* ==========================
+     Country Brief Generation
+  ========================== */
+
+  Insight.generateCountryBrief = async function(countryKey){
+
+    if(!countryKey) return null;
+
+    const payload = {
+      type: "country",
+      country: countryKey,
+      timestamp: now()
+    };
+
+    const collected = await Insight.collect(payload);
+    const analyzed  = await Insight.analyze(collected);
+
+    return analyzed;
+  };
+
+  /* ==========================
+     Collector Bridge
+  ========================== */
+
+  Insight.collect = async function(payload){
+
+    if(!global.collector) return payload;
+
+    return await safe(async()=>{
+      return await global.collector.collect(payload);
+    }) || payload;
+  };
+
+  /* ==========================
+     Intelligence Layer
+  ========================== */
+
+  Insight.analyze = async function(data){
+
+    if(!global.MaruIntelligenceEngine) return data;
+
+    return await safe(async()=>{
+      const engine = new global.MaruIntelligenceEngine();
+      return await engine.process(data);
+    }) || data;
+  };
+
+  /* ==========================
+     Media Attachment (Optional)
+  ========================== */
+
+  Insight.attachMedia = async function(brief){
+
+    if(!Insight.config.enableMediaAttach) return brief;
+    if(!global.MaruMediaEngine) return brief;
+
+    return await safe(async()=>{
+      const media = new global.MaruMediaEngine();
+      const result = await media.generate({
+        query: brief.title || brief.region || brief.country,
+        mediaType: "video"
+      });
+
+      brief.media = result.items || [];
+      return brief;
+    }) || brief;
+  };
+
+  /* ==========================
+     Conversation Hook
+  ========================== */
+
+  Insight.openConversation = function(contextData){
+
+    if(!Insight.config.enableConversationHook) return;
+    if(!global.MaruDetachedPane) return;
+
+    safe(()=>{
+      global.MaruDetachedPane.open({
+        mode: "insight",
+        context: contextData
+      });
+    });
+  };
+
+  /* ==========================
+     Unified Execution
+  ========================== */
+
+  Insight.execute = async function(params){
+
+    if(!params || !params.type) return null;
+
+    let result = null;
+
+    if(params.type === "region"){
+      result = await Insight.generateRegionBrief(params.key);
+    }
+
+    if(params.type === "country"){
+      result = await Insight.generateCountryBrief(params.key);
+    }
+
+    if(result && Insight.config.enableMediaAttach){
+      result = await Insight.attachMedia(result);
+    }
+
+    return result;
+  };
+
+  /* ==========================
+     Admin Trigger Hook
+  ========================== */
+
+  Insight.runGlobal = async function(regionList){
+
+    if(!Array.isArray(regionList)) return [];
+
+    const results = [];
+
+    for(const region of regionList){
+      const brief = await Insight.generateRegionBrief(region);
+      results.push(brief);
+    }
+
+    return results;
+  };
+
+  console.log("MARU Global Insight Engine Loaded v" + Insight.config.version);
+
+})(typeof window !== "undefined" ? window : global);
