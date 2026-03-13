@@ -320,11 +320,20 @@ async function runEngine(event, params={}){
   const bank = served.data || { items:[] };
   const rawItems = Array.isArray(bank.items) ? bank.items : [];
 
-  const normalized = [];
-  for(const r of rawItems){
-    const it = normalizeItem(r);
-    if(it) normalized.push(it);
+ const normalized = [];
+for(const r of rawItems){
+  const it = normalizeItem(r);
+  if(it){
+    normalized.push(it);
+
+    if(global.SearchBankExtensionCore?.pipeline){
+      try{
+        global.SearchBankExtensionCore.pipeline(it);
+      }catch(e){}
+    }
+
   }
+}
 
   const filters = {
     qLower: low(q),
@@ -391,3 +400,524 @@ exports.handler = async function(event){
     return { statusCode: 500, headers: { "Content-Type":"application/json", "Cache-Control":"no-store" }, body: JSON.stringify({ status:"fail", message: e?.message || "ENGINE_ERROR" }) };
   }
 };
+
+/* ===============================
+SEARCH BANK EXTENSION PART 1
+Region / Sector / Entity Graph
+================================ */
+
+class SBRegionManager {
+
+  constructor(){
+    this.regions = new Map();
+  }
+
+  register(id,data){
+    if(!id) return;
+    this.regions.set(id,{id,...data});
+  }
+
+  get(id){
+    return this.regions.get(id);
+  }
+
+  list(){
+    return Array.from(this.regions.values());
+  }
+
+}
+
+class SBSectorManager {
+
+  constructor(){
+    this.sectors = new Map();
+  }
+
+  register(id,data){
+    if(!id) return;
+    this.sectors.set(id,{id,...data});
+  }
+
+  get(id){
+    return this.sectors.get(id);
+  }
+
+  list(){
+    return Array.from(this.sectors.values());
+  }
+
+}
+
+class SBEntityManager {
+
+  constructor(){
+    this.entities = new Map();
+  }
+
+  create(entity){
+    const uuid = this.uuid();
+    entity.uuid = uuid;
+    this.entities.set(uuid,entity);
+    return entity;
+  }
+
+  get(id){
+    return this.entities.get(id);
+  }
+
+  list(){
+    return Array.from(this.entities.values());
+  }
+
+  uuid(){
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){
+      const r=Math.random()*16|0;
+      const v=c==='x'?r:(r&0x3|0x8);
+      return v.toString(16);
+    });
+  }
+
+}
+
+class SBKnowledgeGraph {
+
+  constructor(){
+    this.links = new Map();
+  }
+
+  link(a,b,type){
+    const id = a+"_"+type+"_"+b;
+    this.links.set(id,{a,b,type,t:Date.now()});
+  }
+
+  get(id){
+    const r = [];
+    for(const e of this.links.values()){
+      if(e.a===id || e.b===id) r.push(e);
+    }
+    return r;
+  }
+
+}
+
+global.SearchBankExtensionCore = {
+  regions:new SBRegionManager(),
+  sectors:new SBSectorManager(),
+  entities:new SBEntityManager(),
+  graph:new SBKnowledgeGraph()
+};
+
+/* ===============================
+SEARCH BANK EXTENSION PART 2
+Global Region System
+================================ */
+
+global.SearchBankExtensionCore.worldRegions = {
+
+  northAmerica:["USA","Canada","Mexico"],
+  southAmerica:["Brazil","Argentina","Chile","Peru"],
+
+  westEurope:["Germany","France","UK","Italy","Spain"],
+  eastEurope:["Poland","Ukraine","Romania","Russia"],
+
+  westAsia:["Turkey","Saudi","UAE","Israel","Iran"],
+
+  southAsia:["India","Pakistan","Bangladesh","SriLanka"],
+
+  southeastAsia:["Thailand","Vietnam","Indonesia","Malaysia","Philippines"],
+
+  farEastAsia:["Korea","Japan","China","Taiwan","Mongolia"],
+
+  africa:["Nigeria","Egypt","Kenya","Ethiopia","SouthAfrica"],
+
+  oceania:["Australia","NewZealand","PapuaNewGuinea","Fiji"]
+
+};
+
+global.SearchBankExtensionCore.getRegionByCountry = function(country){
+
+  for(const r in this.worldRegions){
+    if(this.worldRegions[r].includes(country)){
+      return r;
+    }
+  }
+
+  return null;
+
+};
+
+/* ===============================
+SEARCH BANK EXTENSION PART 3
+AI Query Router
+================================ */
+
+global.SearchBankExtensionCore.aiQuery = function(q){
+
+  q = (q || "").toLowerCase();
+  const res = [];
+
+  for(const e of this.entities.list()){
+    const t = JSON.stringify(e).toLowerCase();
+    if(t.includes(q)) res.push(e);
+  }
+
+  return res;
+
+};
+
+/* ===============================
+SEARCH BANK EXTENSION PART 4
+Security Layer
+================================ */
+
+global.SearchBankExtensionCore.security = {
+
+  req:new Map(),
+
+  check(ip){
+
+    const now = Date.now();
+    const t = this.req.get(ip) || [];
+
+    t.push(now);
+
+    const filtered = t.filter(v=>now-v<60000);
+
+    this.req.set(ip,filtered);
+
+    if(filtered.length>200) return false;
+
+    return true;
+
+  }
+
+};
+
+/* ===============================
+SEARCH BANK EXTENSION PART 5
+Self Healing Layer
+================================ */
+
+global.SearchBankExtensionCore.recovery = {
+
+  sources:[],
+
+  register(fn){
+    this.sources.push(fn);
+  },
+
+  async tryRecover(){
+
+    for(const f of this.sources){
+
+      try{
+        await f();
+      }catch(e){}
+
+    }
+
+  }
+
+};
+
+/* ===============================
+SEARCH BANK EXTENSION PART 6
+Global Entity Index Engine
+================================ */
+
+global.SearchBankExtensionCore.globalIndex = {
+
+  entities:new Map(),
+
+  generateID(region,sector,name){
+
+    const r=(region||"global").toLowerCase().replace(/\s/g,"");
+    const s=(sector||"general").toLowerCase().replace(/\s/g,"");
+    const n=(name||"entity").toLowerCase().replace(/\s/g,"");
+
+    const uid=Math.random().toString(36).substring(2,8);
+
+    return r+"_"+s+"_"+n+"_"+uid;
+
+  },
+
+  register(entity){
+
+    if(!entity) return null;
+
+    const id = this.generateID(entity.region,entity.sector,entity.name);
+
+    entity.globalId = id;
+
+    this.entities.set(id,entity);
+
+    return entity;
+
+  },
+
+  get(id){
+    return this.entities.get(id);
+  },
+
+  search(q){
+
+    q = (q||"").toLowerCase();
+    const res=[];
+
+    for(const e of this.entities.values()){
+
+      const t=JSON.stringify(e).toLowerCase();
+
+      if(t.includes(q)) res.push(e);
+
+    }
+
+    return res;
+
+  },
+
+  list(){
+    return Array.from(this.entities.values());
+  }
+
+};
+
+/* ===============================
+SEARCH BANK EXTENSION PART 7-9
+Router + Graph Bridge + Semantic Search
+================================ */
+
+(function(){
+
+  const root = typeof global!=="undefined"?global:window;
+  const core = root.SearchBankExtensionCore;
+
+  if(!core) return;
+
+  /* PART 7 */
+
+  core.regionRouter = {
+
+    route(entity){
+
+      if(!entity) return null;
+
+      const region = entity.region || "global";
+      const sector = entity.sector || "general";
+
+      if(!core.regions.get(region)){
+        core.regions.register(region,{name:region});
+      }
+
+      if(!core.sectors.get(sector)){
+        core.sectors.register(sector,{name:sector});
+      }
+
+      return {region,sector};
+
+    },
+
+    mapCountry(country){
+
+      if(!core.worldRegions) return null;
+
+      for(const r in core.worldRegions){
+        if(core.worldRegions[r].includes(country)){
+          return r;
+        }
+      }
+
+      return null;
+
+    }
+
+  };
+
+  /* PART 8 */
+
+  core.graphBridge = {
+
+    linkEntity(entity){
+
+      if(!entity) return;
+
+      const id = entity.globalId || entity.uuid;
+
+      if(!id) return;
+
+      if(entity.region){
+        core.graph.link(id,entity.region,"region");
+      }
+
+      if(entity.sector){
+        core.graph.link(id,entity.sector,"sector");
+      }
+
+      if(entity.country){
+
+        const region = core.regionRouter.mapCountry(entity.country);
+
+        if(region){
+          core.graph.link(id,region,"region");
+        }
+
+      }
+
+    },
+
+    queryRelations(id){
+      return core.graph.get(id);
+    }
+
+  };
+
+  /* PART 9 */
+
+  core.semanticSearch = function(query){
+
+    query = (query || "").toLowerCase();
+    const results = [];
+
+    for(const e of core.globalIndex.list()){
+
+      const text = JSON.stringify(e).toLowerCase();
+
+      if(text.includes(query)){
+        results.push(e);
+        continue;
+      }
+
+      const links = core.graph.get(e.globalId || e.uuid);
+
+      if(links){
+        for(const l of links){
+          if(JSON.stringify(l).toLowerCase().includes(query)){
+            results.push(e);
+            break;
+          }
+        }
+      }
+    }
+
+    return results;
+
+  };
+
+})();
+
+/* ===============================
+SEARCH BANK EXTENSION PART 10-12
+Planetary Router + Snapshot Sync + AI Learning Index
+================================ */
+
+(function(){
+
+const root=typeof global!=="undefined"?global:window;
+const core=root.SearchBankExtensionCore;
+if(!core) return;
+
+/* ===============================
+PART 10
+Planetary Data Router
+================================ */
+
+core.planetaryRouter={
+  route(entity){
+    if(!entity) return null;
+    let region=entity.region;
+    const sector=entity.sector||"general";
+    if(!region && entity.country) region=core.regionRouter.mapCountry(entity.country);
+    if(!region) region="global";
+    if(!core.regions.get(region)) core.regions.register(region,{name:region});
+    if(!core.sectors.get(sector)) core.sectors.register(sector,{name:sector});
+    return{region,sector,key:region+"."+sector};
+  }
+};
+
+/* ===============================
+PART 11
+Snapshot Sync Layer
+================================ */
+
+core.snapshotSync={
+  snapshots:new Map(),
+
+  push(entity){
+    if(!entity) return null;
+    const route=core.planetaryRouter.route(entity);
+    if(!route) return null;
+    const key=route.key;
+    if(!this.snapshots.has(key)){
+      this.snapshots.set(key,{region:route.region,sector:route.sector,items:[]});
+    }
+    const bucket=this.snapshots.get(key);
+    bucket.items.push({...entity,t:Date.now()});
+
+    const limit=Date.now()-(1000*60*60*24*60);
+    bucket.items=bucket.items.filter(x=>x.t>limit);
+
+    return bucket;
+  },
+
+  get(region,sector){
+    const key=region+"."+sector;
+    return this.snapshots.get(key);
+  },
+
+  list(){
+    return Array.from(this.snapshots.values());
+  }
+};
+
+/* ===============================
+PART 12
+AI Learning Index
+================================ */
+
+core.aiLearning={
+  relations:new Map(),
+
+  learn(entity){
+    if(!entity) return;
+    const id=entity.globalId||entity.uuid;
+    if(!id) return;
+    const tokens=[];
+    if(entity.name) tokens.push(entity.name);
+    if(entity.sector) tokens.push(entity.sector);
+    if(entity.region) tokens.push(entity.region);
+    if(entity.country) tokens.push(entity.country);
+    for(const t of tokens){
+      const k=t.toLowerCase();
+      if(!this.relations.has(k)) this.relations.set(k,new Set());
+      this.relations.get(k).add(id);
+    }
+  },
+
+  query(q){
+    q=(q||"").toLowerCase();
+    const set=this.relations.get(q);
+    if(!set) return[];
+    const res=[];
+    for(const id of set){
+      const e=core.globalIndex.get(id);
+      if(e) res.push(e);
+    }
+    return res;
+  }
+};
+
+/* ===============================
+AUTO PIPELINE
+================================ */
+
+core.pipeline=function(entity){
+  if(!entity) return;
+  const e=core.globalIndex.register(entity);
+  if(!e) return;
+  core.graphBridge.linkEntity(e);
+  core.aiLearning.learn(e);
+  core.snapshotSync.push(e);
+  return e;
+};
+
+})();

@@ -248,34 +248,50 @@ async function runGlobalInsightV2(event, params){
     search_bank: { ok:false, count:0, error:null }
   };
 
-  const [ms, bank] = await Promise.all([
-    callMaruSearch(query, mode, limit, context),
-    callSearchBank(event, query, Math.min(limit, 200), context) // bank is usually heavy; cap internally
-  ]);
+const [ms, bank] = await Promise.allSettled([
+  callMaruSearch(query, mode, limit, context),
+  callSearchBank(event, query, Math.min(limit, 200), context)
+]);
 
-  let msItems = [];
-  if(ms.ok && ms.data){
-    const d = ms.data;
-    const arr = Array.isArray(d.items) ? d.items : (Array.isArray(d.results) ? d.results : (Array.isArray(d.data && d.data.items) ? d.data.items : []));
-    msItems = arr.map(it => canonicalizeItem(it, query)).filter(Boolean);
-    trace.maru_search.ok = (d.status === 'ok');
-    trace.maru_search.count = msItems.length;
-  } else {
-    trace.maru_search.ok = false;
-    trace.maru_search.error = ms.error || 'SEARCH_FAIL';
-  }
+const msRes =
+  ms.status === "fulfilled"
+    ? ms.value
+    : { ok:false, error:"SEARCH_FAIL" };
 
-  let bankItems = [];
-  if(bank.ok && bank.data){
-    const d = bank.data;
-    const arr = Array.isArray(d.items) ? d.items : [];
-    bankItems = arr.map(it => canonicalizeItem(it, query)).filter(Boolean);
-    trace.search_bank.ok = (d.status === 'ok');
-    trace.search_bank.count = bankItems.length;
-  } else {
-    trace.search_bank.ok = false;
-    trace.search_bank.error = bank.error || 'BANK_FAIL';
-  }
+const bankRes =
+  bank.status === "fulfilled"
+    ? bank.value
+    : { ok:false, error:"BANK_FAIL" };
+
+let msItems = [];
+if(msRes.ok && msRes.data){
+  const d = msRes.data;
+  const arr = Array.isArray(d.items)
+    ? d.items
+    : (Array.isArray(d.results)
+        ? d.results
+        : (Array.isArray(d.data && d.data.items)
+            ? d.data.items
+            : []));
+  msItems = arr.map(it => canonicalizeItem(it, query)).filter(Boolean);
+  trace.maru_search.ok = (d.status === 'ok');
+  trace.maru_search.count = msItems.length;
+} else {
+  trace.maru_search.ok = false;
+  trace.maru_search.error = msRes.error || 'SEARCH_FAIL';
+}
+
+let bankItems = [];
+if(bankRes.ok && bankRes.data){
+  const d = bankRes.data;
+  const arr = Array.isArray(d.items) ? d.items : [];
+  bankItems = arr.map(it => canonicalizeItem(it, query)).filter(Boolean);
+  trace.search_bank.ok = (d.status === 'ok');
+  trace.search_bank.count = bankItems.length;
+} else {
+  trace.search_bank.ok = false;
+  trace.search_bank.error = bankRes.error || 'BANK_FAIL';
+}
 
   // merge + dedup + rank
   let merged = dedup([ ...bankItems, ...msItems ]);
@@ -311,17 +327,18 @@ async function runGlobalInsightV2(event, params){
       count: merged.length,
       limit,
       trace,
-      served_from: {
-        bank: bank.ok ? (bank.data && bank.data.served_from) : null,
-        search: ms.ok ? (ms.data && (ms.data.source || ms.data.engine)) : null
-      }
+	  
+    served_from: {
+    bank: bankRes.ok ? (bankRes.data && bankRes.data.served_from) : null,
+    search: msRes.ok ? (msRes.data && (msRes.data.source || msRes.data.engine)) : null
+}
     },
 
     // Raw passthrough (for debugging / future consumers)
     data: {
-      bank: bank.ok ? (bank.data || null) : null,
-      search: ms.ok ? (ms.data || null) : null
-    }
+      bank: bankRes.ok ? (bankRes.data || null) : null,
+      search: msRes.ok ? (msRes.data || null) : null
+}
   };
 
   // Optional normalizeResult hook (non-breaking)
@@ -366,17 +383,6 @@ exports.runGlobalInsight = async function(params = {}, event = null){
   // Compatibility: keep name "runGlobalInsight" exported
   return await runGlobalInsightV2(event || {}, params || {});
 };
-
-// ===== Central Collector compatibility =====
-// Collector expects runEngine(event, {q,limit,...})
-exports.runEngine = async function(event, params){
-  // keep signature (event, params)
-  return await exports.runGlobalInsight(params || {}, event || {});
-};
-
-
-
-
 
 // =========================================================
 // GLOBAL INSIGHT ENGINE EXPORT ADAPTER (Collector compatibility)

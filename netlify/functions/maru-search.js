@@ -563,13 +563,24 @@ async function runEngine(event, params = {}){
   const plan = sourcePlan(p);
 
   const [planetaryRes, bankRes] = await Promise.all([
-    plan.usePlanetary ? callPlanetary(event, p) : Promise.resolve({ status:"skip", items:[] }),
-    plan.useBank ? callBank(event, p) : Promise.resolve({ status:"skip", items:[] })
-  ]);
+    plan.usePlanetary
+    ? withTimeout(callPlanetary(event, p), ENGINE_TIMEOUT)
+    : Promise.resolve({ status:"skip", items:[] }),
 
-  let allItems = [];
-  allItems = allItems.concat(planetaryRes.items || []);
-  allItems = allItems.concat(bankRes.items || []);
+    plan.useBank
+    ? withTimeout(callBank(event, p), ENGINE_TIMEOUT)
+    : Promise.resolve({ status:"skip", items:[] })
+]);
+
+let allItems = [];
+
+if(Array.isArray(planetaryRes.items)){
+  allItems = allItems.concat(planetaryRes.items);
+}
+
+if(Array.isArray(bankRes.items)){
+  allItems = allItems.concat(bankRes.items);
+}
 
   // defense-first fallback
   if(!allItems.length){

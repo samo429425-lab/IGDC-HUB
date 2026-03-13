@@ -30,6 +30,28 @@ const Consciousness = require("./maru-consciousness-engine");
 const Logos = require("./maru-logos-engine");
 const Evolution = require("./maru-autonomous-evolution-engine");
 
+/* ===== 여기 추가 ===== */
+
+const ENGINE_TIMEOUT = 4000;
+
+async function withTimeout(promise, ms){
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error("engine_timeout"));
+    }, ms);
+
+    promise
+      .then(v => {
+        clearTimeout(timer);
+        resolve(v);
+      })
+      .catch(e => {
+        clearTimeout(timer);
+        reject(e);
+      });
+  });
+}
+
 const VERSION = "collector-v150";
 
 const MAX_QUERY_LENGTH = 260;
@@ -108,21 +130,29 @@ function rateLimit(ip){
 /* --------------------------------------------------
 CACHE
 -------------------------------------------------- */
+function cacheKey(q, params){
+  const mode = params?.mode || "search";
+  const engine = params?.engine || "search";
+  const limit = params?.limit || DEFAULT_LIMIT;
+  return `${q}|${mode}|${engine}|${limit}`;
+}
 
-function getCache(q){
-  const entry = CACHE.get(q);
+function getCache(q, params){
+  const key = cacheKey(q, params);
+  const entry = CACHE.get(key);
   if(!entry) return null;
 
   if(Date.now() - entry.time > CACHE_TTL){
-    CACHE.delete(q);
+    CACHE.delete(key);
     return null;
   }
 
   return entry.data;
 }
 
-function setCache(q, data){
-  CACHE.set(q, { data, time: Date.now() });
+function setCache(q, params, data){
+  const key = cacheKey(q, params);
+  CACHE.set(key, { data, time: Date.now() });
 }
 
 /* --------------------------------------------------
@@ -464,30 +494,36 @@ async function runCollector(event){
     return { status:"blocked", reason:"prompt_injection" };
   }
 
-  const cached = getCache(q);
+  const cached = getCache(q, params);
   if(cached) return cached;
 
   /* planetary federation */
   await retryPlanetary(event, q);
 
   /* router */
-  let routerResult = {};
+let routerResult = {};
 
-  try{
-    if(Router && typeof Router.runEngine === "function"){
-      routerResult = await Router.runEngine(event, {
+try{
+  if(Router && typeof Router.runEngine === "function"){
+
+    routerResult = await withTimeout(
+      Router.runEngine(event,{
         q,
         query:q,
         limit,
         mode: params.mode || "search",
         engine: params.engine || "search"
-      }) || {};
-    }else{
-      routerResult = {};
-    }
-  }catch(e){
+      }),
+      ENGINE_TIMEOUT
+    ) || {};
+
+  }else{
     routerResult = {};
   }
+
+}catch(e){
+  routerResult = {};
+}
 
   let items =
     routerResult.items ||
@@ -537,9 +573,34 @@ async function runCollector(event){
     }
   };
 
-  setCache(q, result);
+setCache(q, params, result);
 
-  return result;
+/* SNAPSHOT WRITE PIPELINE */
+try{
+  const Snapshot = require("./snapshot-engine");
+
+  if(
+    Snapshot &&
+    typeof Snapshot.run === "function" &&
+    Array.isArray(result?.items) &&
+    result.items.length
+  ){
+    await Snapshot.run({
+      section:"search",
+      items:result.items,
+      meta:{
+        source:"collector",
+        engine:VERSION,
+        timestamp:Date.now()
+      }
+    });
+  }
+
+}catch(e){
+  console.error("snapshot_write_fail",e?.message);
+}
+
+return result;
 }
 
 /* --------------------------------------------------

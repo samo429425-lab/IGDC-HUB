@@ -109,11 +109,30 @@ function mergeItems(snapshot, sectionKey, items, slotLimit) {
   return snapshot;
 }
 
-function run() {
-  const bank = loadSearchBank();
+function run(payload) {
+
+  const bankPath = path.join(ROOT,"search-bank.snapshot.json");
+
+  let bank = { items:[] };
+
+  if(fs.existsSync(bankPath)){
+    bank = readJson(bankPath);
+  }
+
+  bank.items = bank.items || [];
+
+  /* collector items 저장 */
+  if(payload && Array.isArray(payload.items)){
+    for(const item of payload.items){
+      bank.items.push(item);
+    }
+    writeJson(bankPath, bank);
+  }
+
   const pages = Object.keys(SNAPSHOT_FILES);
 
   for (const page of pages) {
+
     const snapshot = loadSnapshot(page);
     if (!snapshot) continue;
 

@@ -409,7 +409,7 @@ return merged;
 ENGINE EXECUTION
 ------------------------------------------------------------ */
 
-async function executeEngines(event,queries,engines){
+async function executeEngines(event,queries,engines,params,intent){
 
 const calls=[];
 
@@ -421,7 +421,15 @@ if(!runner) continue;
 for(const q of queries){
 
 const task = async () => {
-const items = await runner(event,{q,limit:ENGINE_COLLECT_LIMIT});
+const items = await runner(event,{
+q,
+query:q,
+limit:ENGINE_COLLECT_LIMIT,
+mode: params.mode || "search",
+context: params.context || null,
+region: params.region || null,
+intent: intent || null
+});
 return (items||[]).map(i=>({
 ...i,
 engine:eng
@@ -475,7 +483,7 @@ const engines=selectEngines(intent);
 const weights=computeWeights(intent);
 
 const results=
-await executeEngines(event,expandedQueries,engines);
+await executeEngines(event,expandedQueries,engines,params,intent);
 
 let ranked=
 mergeAndRank(results,weights);

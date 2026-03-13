@@ -643,6 +643,7 @@ class MaruMediaEngine {
     this.snsBroadcast = new MaruSNSBroadcaster();
 	this.snsRouter = new MaruSNSRouter();
 	this.snsPublisher = new MaruSNSPublisher();
+	this.scheduler = new MaruSNSScheduler();
 	
     /* ===== v8 v9 v10 EXTENSION CONNECT ===== */
 
@@ -706,11 +707,12 @@ class MaruMediaEngine {
     const immersive = await this.immersive.apply(executed, ctx);
     const broadcastReady = await this.broadcast.prepare(immersive, ctx);
     const snsReady = await this.snsBroadcast.publish(broadcastReady, ctx);
-    const routed = await this.snsRouter.route(snsReady, ctx);
+    const scheduled = await this.scheduler.schedule(snsReady, ctx);
+    const routed = await this.snsRouter.route(scheduled, ctx);
     const published = await this.snsPublisher.publish(routed, ctx);
     const qualityPassed = await this.safeQuality(published, ctx);
     const resilient = await this.safeResilience(qualityPassed, ctx);
- 
+
     const limited = resilient.slice(0, ctx.limit);
 
     await this.snapshot.store("media", limited, {
@@ -1419,9 +1421,45 @@ class MaruSNSPublisher {
       status: "queued",
       postId: "ig_" + Math.random().toString(36).slice(2)
     };
+  }
+}
+
+/* =========================================================
+SNS SCHEDULER ENGINE
+========================================================= */
+
+class MaruSNSScheduler {
+
+  async schedule(items = [], ctx = {}) {
+
+    const publishTime =
+      ctx.publishAt ||
+      ctx.scheduleTime ||
+      Date.now();
+
+    return items.map(item => ({
+
+      ...item,
+
+      snsSchedule: {
+
+        enabled: true,
+
+        scheduled: publishTime > Date.now(),
+
+        publishAt: publishTime,
+
+        scheduleId:
+          "sch_" +
+          Math.random().toString(36).slice(2),
+
+        createdAt: Date.now()
+
+      }
+
+    }));
 
   }
-
 }
 
 module.exports = MaruMediaEngine;
