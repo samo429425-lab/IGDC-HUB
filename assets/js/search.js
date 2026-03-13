@@ -121,41 +121,24 @@
       return out;
     }
 
-    async function fetchCollector(q){
-      const url = `/.netlify/functions/collector?mode=search&engine=search&q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`;
+async function fetchCollector(q){
+  const url = `/.netlify/functions/maru-quality-router?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`;
 
-      const r = await fetch(url, { cache: 'no-store' });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
+  const r = await fetch(url, { cache: 'no-store' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
 
-      const json = await r.json();
+  const json = await r.json();
 
-      if (json && json.status === 'error') {
-        throw new Error('COLLECTOR_ERROR');
-      }
+  if (json && json.status === 'error') {
+    throw new Error('ROUTER_ERROR');
+  }
 
-      if (json && json.status === 'blocked') {
-        throw new Error(json.reason || 'COLLECTOR_BLOCKED');
-      }
+  if (json && json.status === 'blocked') {
+    throw new Error(json.reason || 'ROUTER_BLOCKED');
+  }
 
-      return json;
-    }
-
-    async function fetchBank(){
-      const urls = [
-        '/data/search-bank.snapshot.json',
-        '/.netlify/functions/data/search-bank.snapshot.json'
-      ];
-
-      for (const u of urls){
-        try{
-          const r = await fetch(u, { cache: 'no-store' });
-          if (!r.ok) continue;
-          const j = await r.json();
-          if (j && Array.isArray(j.items)) return j;
-        }catch(e){}
-      }
-      return null;
-    }
+  return json;
+}
 
     function renderSkeleton(count = 6){
       results.innerHTML = '';
@@ -436,28 +419,19 @@
       clearPager();
 
       try {
-        const [collectorRes, bank] = await Promise.allSettled([
-          fetchCollector(q),
-          fetchBank()
-        ]);
+      const collectorRes = await fetchCollector(q);
 
-        let collectorItems = [];
-        let bankItems = [];
+    let collectorItems = [];
 
-        if (collectorRes.status === 'fulfilled') {
-          collectorItems = normalizeItems(collectorRes.value);
-        }
+    if (collectorRes) {
+        collectorItems = normalizeItems(collectorRes);
+}
 
-        if (bank && bank.status === 'fulfilled' && bank.value && Array.isArray(bank.value.items)) {
-          bankItems = bank.value.items.filter(it => matchesBankItem(it, q));
-        }
+    const merged = dedupeItems([
+      ...collectorItems
+]);
 
-        const merged = dedupeItems([
-          ...collectorItems,
-          ...bankItems
-        ]);
-
-        allItems = merged;
+    allItems = merged;
 
         status.textContent = `${allItems.length} results`;
         currentBlock = 0;
