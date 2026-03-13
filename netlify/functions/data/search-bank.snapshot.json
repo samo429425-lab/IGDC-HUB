@@ -262,6 +262,22 @@
       "bank_channel": "culture"
     }
   },
+  
+  "item_policy": {
+  "timestamp_field": "created_at",
+  "ttl_days": 60,
+  "dedupe_key": "id",
+  "ranking": ["relevance","freshness","authority"]
+},
+  
+  "snapshot_query_index": {
+  "enabled": true,
+  "fields": ["title","summary","tags","keywords"],
+  "cache_strategy": "memory+snapshot",
+  "max_cache_items": 5000,
+  "rebuild_on_ingest": true
+},
+  
   "bind": {
     "schema": "bind/page/section/psom_key.v3",
     "targets": [
@@ -1818,53 +1834,71 @@
         "seed-academic-humanities-001"
       ]
     },
-    "by_section": {
-      "home_1": [
-        "seed-web-001"
-      ],
-      "social-instagram": [
-        "seed-social-1-video-001"
-      ],
-      "donation-global": [
-        "seed-donation-001"
-      ],
-      "academic-literature": [
-        "seed-culture-001",
-        "seed-academic-literature-001"
-      ],
-      "dist_1": [
-        "seed-commerce-001"
-      ],
-      "academic-arts": [
-        "seed-academic-arts-001"
-      ],
-      "academic-humanities": [
-        "seed-academic-humanities-001"
-      ]
+    
+     "by_section": {
+        "home_1": [
+            "seed-web-001"
+        ],
+        "social-instagram": [
+            "seed-social-1-video-001"
+        ],
+        "donation-global": [
+            "seed-donation-001"
+        ],
+        "academic-literature": [
+            "seed-culture-001",
+            "seed-academic-literature-001"
+        ],
+        "dist_1": [
+            "seed-commerce-001"
+        ],
+        "academic-arts": [
+            "seed-academic-arts-001"
+        ],
+        "academic-humanities": [
+            "seed-academic-humanities-001"
+        ],
+        "media-trending": [
+            "seed-media-001"
+        ],
+        "right-tour-100": [
+            "seed-tour-001"
+        ],
+        "right-network-100": [
+            "seed-network-001"
+        ],
+    },	
+	
+     "by_page": {
+        "home": [
+            "seed-web-001"
+        ],
+        "distribution": [
+            "seed-commerce-001"
+        ],
+        "social": [
+            "seed-social-1-video-001"
+        ],
+        "media": [
+            "seed-media-001"
+        ],
+        "donation": [
+            "seed-donation-001"
+        ],
+        "network": [
+            "seed-network-001"
+        ],
+        "tour": [
+            "seed-tour-001"
+        ],
+        "academic": [
+            "seed-culture-001",
+            "seed-academic-literature-001",
+            "seed-academic-arts-001",
+            "seed-academic-humanities-001"
+        ]
     },
-    "by_page": {
-      "home": [
-        "seed-web-001"
-      ],
-      "distribution": [
-        "seed-commerce-001"
-      ],
-      "social": [
-        "seed-social-1-video-001"
-      ],
-      "media": [],
-      "donation": [
-        "seed-donation-001"
-      ],
-      "network": [],
-      "tour": [],
-      "academic": [
-        "seed-culture-001",
-        "seed-academic-literature-001",
-        "seed-academic-arts-001",
-        "seed-academic-humanities-001"
-      ]
-    },
+	
     "by_page_section": {
       "home.home_1": [
         "seed-web-001"
