@@ -655,3 +655,72 @@ module.exports = {
   canonicalizeAdapterData,
   registerFederationNode
 };
+
+registerSourceAdapter(
+ "search-bank",
+ async (query)=>{
+  const bank=require("./search-bank-engine");
+  const r=await bank.runEngine(null,{q:query.q||query.query});
+  return r && r.items ? r.items : [];
+ },
+ {type:"data",region:"global",priority:1}
+);
+
+/* =========================================================
+AI SOURCE DISCOVERY
+========================================================= */
+
+registerSourceAdapter(
+ "ai-source-discovery",
+ async (query,context)=>{
+   const engine=require("./ai-source-discovery-adapter");
+   const r=await engine.discover(query,context);
+   return r || [];
+ },
+ {type:"ai",region:"global",priority:0.9,discovery:true}
+);
+
+
+/* =========================================================
+AI CONTENT CLASSIFIER
+========================================================= */
+
+registerSourceAdapter(
+ "ai-content-classifier",
+ async (query,context)=>{
+   const engine=require("./ai-content-classifier-adapter");
+   const r=await engine.classify(query,context);
+   return r || [];
+ },
+ {type:"ai",region:"global",priority:0.9}
+);
+
+
+/* =========================================================
+AI QUALITY FILTER
+========================================================= */
+
+registerSourceAdapter(
+ "ai-quality",
+ async (query,context)=>{
+   const engine=require("./ai-quality-adapter");
+   const r=await engine.filter(query,context);
+   return r || [];
+ },
+ {type:"ai",region:"global",priority:0.9}
+);
+
+
+/* =========================================================
+AI AUTOMAP
+========================================================= */
+
+registerSourceAdapter(
+ "ai-automap",
+ async (query,context)=>{
+   const engine=require("./ai-automap-adapter");
+   const r=await engine.map(query,context);
+   return r || [];
+ },
+ {type:"ai",region:"global",priority:0.9}
+);
