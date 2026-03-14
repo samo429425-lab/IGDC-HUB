@@ -283,7 +283,52 @@ function dedup(items){
   return out;
 }
 
+function writeSearchBankSnapshots(bank){
+  const cwd = process.cwd();
+
+  const targets = [
+    path.join(cwd,"data","search-bank.snapshot.json"),
+    path.join(cwd,"netlify","functions","data","search-bank.snapshot.json")
+  ];
+
+  for(const p of targets){
+    try{
+      fs.mkdirSync(path.dirname(p), { recursive:true });
+      fs.writeFileSync(p, JSON.stringify(bank, null, 2), "utf8");
+    }catch(e){}
+  }
+}
+
+function mergeBankItems(existingItems, incomingItems){
+  const byId = new Map();
+
+  for(const it of Array.isArray(existingItems) ? existingItems : []){
+    if(!it || !it.id) continue;
+    byId.set(it.id, it);
+  }
+
+  for(const it of Array.isArray(incomingItems) ? incomingItems : []){
+    if(!it || !it.id) continue;
+
+    if(byId.has(it.id)) continue;
+
+    byId.set(it.id, it);
+  }
+
+  return Array.from(byId.values());
+}
+
 async function runEngine(event, params={}){
+  const ip =
+  event?.headers?.["x-forwarded-for"] ||
+  event?.headers?.["client-ip"] ||
+  "unknown";
+
+if(global.SearchBankExtensionCore?.security){
+  if(!global.SearchBankExtensionCore.security.check(ip)){
+    return {status:"fail",engine:"search-bank",message:"rate_limit"};
+  }
+}
   const rid = requestId();
   const ts = Date.now();
 
@@ -320,20 +365,30 @@ async function runEngine(event, params={}){
   const bank = served.data || { items:[] };
   const rawItems = Array.isArray(bank.items) ? bank.items : [];
 
- const normalized = [];
-for(const r of rawItems){
-  const it = normalizeItem(r);
-  if(it){
-    normalized.push(it);
+   const normalized = [];
+  for(const r of rawItems){
+    const it = normalizeItem(r);
+    if(it){
+      normalized.push(it);
 
-    if(global.SearchBankExtensionCore?.pipeline){
-      try{
-        global.SearchBankExtensionCore.pipeline(it);
-      }catch(e){}
+      if(global.SearchBankExtensionCore?.pipeline){
+        try{
+          global.SearchBankExtensionCore.pipeline(it);
+        }catch(e){}
+      }
     }
-
   }
-}
+
+  bank.items = mergeBankItems(bank.items || [], normalized);
+  bank.items = bank.items.slice(-50000);
+
+ bank.meta = {
+  ...(bank.meta || {}),
+  generated_at: nowIso(),
+  source: "search-bank-engine"
+};
+
+writeSearchBankSnapshots(bank);
 
   const filters = {
     qLower: low(q),
@@ -344,7 +399,7 @@ for(const r of rawItems){
     producer: producer || ""
   };
 
-  let filtered = dedup(applyFilters(normalized, filters));
+  let filtered = dedup(applyFilters(bank.items || [], filters));
 
   const qForScore = q || "";
   const scored = filtered.map(it=> ({...it, qualityScore: computeQualityScore(qForScore, it)}));
@@ -645,7 +700,8 @@ global.SearchBankExtensionCore.globalIndex = {
 
     if(!entity) return null;
 
-    const id = this.generateID(entity.region,entity.sector,entity.name);
+    const key = (entity.url || entity.name || JSON.stringify(entity)).toLowerCase();
+    const id = crypto.createHash("sha1").update(key).digest("hex").slice(0,16);
 
     entity.globalId = id;
 
@@ -906,6 +962,39 @@ core.aiLearning={
   }
 };
 
+global.SearchBankExtensionCore.queryIndex = {
+
+  map:new Map(),
+
+  add(item){
+
+    const tokens = [];
+
+    if(item.title) tokens.push(item.title);
+    if(item.summary) tokens.push(item.summary);
+    if(item.tags) tokens.push(...item.tags);
+
+    for(const t of tokens){
+      const k = String(t).toLowerCase();
+      if(!this.map.has(k)) this.map.set(k,[]);
+      this.map.get(k).push(item);
+    }
+  },
+
+  search(q){
+
+    q = (q||"").toLowerCase();
+
+    const res = [];
+    for(const [k,v] of this.map){
+      if(k.includes(q)) res.push(...v);
+    }
+
+    return res;
+  }
+
+};
+
 /* ===============================
 AUTO PIPELINE
 ================================ */
@@ -917,6 +1006,7 @@ core.pipeline=function(entity){
   core.graphBridge.linkEntity(e);
   core.aiLearning.learn(e);
   core.snapshotSync.push(e);
+  core.queryIndex.add(e);
   return e;
 };
 

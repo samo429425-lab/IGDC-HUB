@@ -19,8 +19,6 @@ FULL PATCH VERSION
 - null/crash 방지
 */
 
-const Router = require("./maru-quality-router");
-const Planetary = require("./planetary-data-connector");
 const Resilience = require("./maru-resilience-engine");
 
 const Intelligence = require("./maru-intelligence-engine");
@@ -29,7 +27,6 @@ const Cognitive = require("./maru-cognitive-engine");
 const Consciousness = require("./maru-consciousness-engine");
 const Logos = require("./maru-logos-engine");
 const Evolution = require("./maru-autonomous-evolution-engine");
-const searchBank = require("./search-bank-engine");
 
 /* ===== 여기 추가 ===== */
 
@@ -436,28 +433,6 @@ async function runDynamicEngines(query, items){
 }
 
 /* --------------------------------------------------
-RETRY LAYER
--------------------------------------------------- */
-
-async function retryPlanetary(event, q){
-  if(!Planetary || typeof Planetary.connect !== "function"){
-    return null;
-  }
-
-  let lastError = null;
-
-  for(let i=0; i<MAX_RETRY; i++){
-    try{
-      return await Planetary.connect(event, { q });
-    }catch(e){
-      lastError = e;
-    }
-  }
-
-  return null;
-}
-
-/* --------------------------------------------------
 COLLECTOR CORE
 -------------------------------------------------- */
 
@@ -499,7 +474,7 @@ async function runCollector(event){
   if(cached) return cached;
 
   /* planetary federation */
-  await retryPlanetary(event, q);
+
 
   /* router */
 let routerResult = {};
@@ -533,13 +508,6 @@ try{
     routerResult.baseResult?.items ||
     routerResult.baseResult?.data?.items ||
     [];
-
-if(!items.length){
-  const bank = await searchBank.runEngine(null,{ q });
-  if(bank && bank.items){
-    items = bank.items;
-  }
-}
 
   items = asArray(items).slice(0, limit);
 

@@ -40,18 +40,18 @@ const SOURCE_REPUTATION = {};
 const WHITELIST = new Set();
 
 const TELEMETRY = [];
-const TELEMETRY_MAX = 2000;
+const TELEMETRY_MAX = 5000;
 
 const FEDERATION_NODES = {};
 
 let LAST_CALL = 0;
 
-const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 100;
+const DEFAULT_LIMIT = 30;
+const MAX_LIMIT = 300;
 const MAX_QUERY_LENGTH = 200;
-const MIN_CALL_INTERVAL = 80;
+const MIN_CALL_INTERVAL = 60;
 const DEFAULT_TIMEOUT = 8000;
-const MAX_PARALLEL_SOURCES = 8;
+const MAX_PARALLEL_SOURCES = 20;
 
 /* ------------------------------------------------------------
 UTIL
@@ -155,13 +155,6 @@ function normalizeParams(event, params = {}){
   };
 }
 
-function rateLimit(){
-  const t = now();
-  if(t - LAST_CALL < MIN_CALL_INTERVAL){
-    throw new Error("rate_limit");
-  }
-  LAST_CALL = t;
-}
 
 /* ------------------------------------------------------------
 REGISTRY / FEDERATION
@@ -349,7 +342,7 @@ function selectSources(params){
 
   filtered.sort((a,b) => scoreSourceForQuery(b, params) - scoreSourceForQuery(a, params));
 
-  return filtered.slice(0, MAX_PARALLEL_SOURCES);
+  return filtered.slice(0, Math.min(filtered.length, MAX_PARALLEL_SOURCES));
 }
 
 /* ------------------------------------------------------------
@@ -590,19 +583,22 @@ CONNECT SOURCES
 ------------------------------------------------------------ */
 
 async function connect(event, params = {}){
-  rateLimit();
-
   const normalized = normalizeParams(event, params);
 
   const selectedSources = selectSources(normalized);
   const results = [];
 
-  for(const name of selectedSources){
-    const adapter = SOURCE_ADAPTERS[name];
-    if(!adapter) continue;
-    const res = await executeAdapter(name, adapter, event, normalized);
-    results.push(res);
-  }
+  const tasks = selectedSources.map(async name=>{
+  const adapter = SOURCE_ADAPTERS[name];
+  if(!adapter) return null;
+  return await executeAdapter(name, adapter, event, normalized);
+});
+
+const executed = await Promise.all(tasks);
+
+for(const r of executed){
+  if(r) results.push(r);
+}
 
   // aggregate canonical items for advanced consumers
   let aggregatedItems = [];
@@ -662,58 +658,62 @@ module.exports = {
   registerFederationNode
 };
 
-registerSourceAdapter(
- "search-bank",
- async (query)=>{
-  const bank=require("./search-bank-engine");
-  const r=await bank.runEngine(null,{q:query.q||query.query});
-  return r && r.items ? r.items : [];
- },
- {type:"data",region:"global",priority:1}
-);
 
 /* =========================================================
 AI SOURCE DISCOVERY
 ========================================================= */
 
-const AI = require("./ai-adapters");
+let AI = null;
+try { AI = require("./ai-adapters"); } catch(e){}
 
-registerSourceAdapter(
- "ai-discovery",
- async (query,context)=>{
-  return await AI.discover(query,context);
- },
- {type:"ai",region:"global",priority:0.9,discovery:true}
-);
+if(AI){
+  if(typeof AI.discover === "function"){
+    registerSourceAdapter(
+     "ai-discovery",
+     async (query,context)=>{
+      return await AI.discover(query,context);
+     },
+     {type:"ai",region:"global",priority:0.9,discovery:true}
+    );
+  }
 
-registerSourceAdapter(
- "ai-classifier",
- async (query,context)=>{
-  return await AI.classify(query,context);
- },
- {type:"ai",region:"global",priority:0.9}
-);
+  if(typeof AI.classify === "function"){
+    registerSourceAdapter(
+     "ai-classifier",
+     async (query,context)=>{
+      return await AI.classify(query,context);
+     },
+     {type:"ai",region:"global",priority:0.9}
+    );
+  }
 
-registerSourceAdapter(
- "ai-quality",
- async (query,context)=>{
-  return await AI.quality(query,context);
- },
- {type:"ai",region:"global",priority:0.9}
-);
+  if(typeof AI.quality === "function"){
+    registerSourceAdapter(
+     "ai-quality",
+     async (query,context)=>{
+      return await AI.quality(query,context);
+     },
+     {type:"ai",region:"global",priority:0.9}
+    );
+  }
 
-registerSourceAdapter(
- "ai-automap",
- async (query,context)=>{
-  return await AI.automap(query,context);
- },
- {type:"ai",region:"global",priority:0.9}
-);
+  if(typeof AI.automap === "function"){
+    registerSourceAdapter(
+     "ai-automap",
+     async (query,context)=>{
+      return await AI.automap(query,context);
+     },
+     {type:"ai",region:"global",priority:0.9}
+    );
+  }
 
-registerSourceAdapter(
- "sanmaru",
- async (query,context)=>{
-  return await AI.sanmaru(query,context);
- },
- {type:"ai",region:"global",priority:1}
-);
+  if(typeof AI.sanmaru === "function"){
+    registerSourceAdapter(
+     "sanmaru",
+     async (query,context)=>{
+      return await AI.sanmaru(query,context);
+     },
+     {type:"ai",region:"global",priority:1}
+    );
+  }
+}
