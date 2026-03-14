@@ -5,16 +5,14 @@
  * - For Netlify / Node runtime
  * - For maru-global-insight-engine and others
  */
-const { maruSearchDispatcher } = require("./maru-search");
+const maruSearch = require("./maru-search");
 
 async function callMaruSearch(params = {}) {
-  return maruSearchDispatcher({
-    mode: params.mode || "search",
-    q: params.q || params.query || "",
-    limit: params.limit,
-    context: params.context || null,
-    headers: params.headers || null
-  });
+ return maruSearch.runEngine(null,{
+  q: params.q || params.query || "",
+  limit: params.limit,
+  mode: params.mode || "search"
+});
 }
 
 /**
