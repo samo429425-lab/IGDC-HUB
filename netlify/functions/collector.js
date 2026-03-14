@@ -29,6 +29,7 @@ const Cognitive = require("./maru-cognitive-engine");
 const Consciousness = require("./maru-consciousness-engine");
 const Logos = require("./maru-logos-engine");
 const Evolution = require("./maru-autonomous-evolution-engine");
+const searchBank = require("./search-bank-engine");
 
 /* ===== 여기 추가 ===== */
 
@@ -532,6 +533,13 @@ try{
     routerResult.baseResult?.items ||
     routerResult.baseResult?.data?.items ||
     [];
+
+if(!items.length){
+  const bank = await searchBank.runEngine(null,{ q });
+  if(bank && bank.items){
+    items = bank.items;
+  }
+}
 
   items = asArray(items).slice(0, limit);
 
