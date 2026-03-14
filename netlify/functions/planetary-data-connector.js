@@ -458,11 +458,12 @@ ADAPTER EXECUTION
 ------------------------------------------------------------ */
 
 async function executeAdapter(name, adapter, event, params){
+
   const meta = SOURCE_REGISTRY[name] || {};
   const stats = ensureStats(name);
   const started = now();
 
-  const queryString = sanitizeQuery({
+  const adapterQuery = {
     q: params.q,
     query: params.q,
     region: params.region,
@@ -471,19 +472,21 @@ async function executeAdapter(name, adapter, event, params){
     intent: params.intent,
     mode: params.mode,
     type: params.type
-  });
+  };
 
   const context = buildAdapterContext(event, params, name);
 
   const runner = async () => {
     return await withTimeout(
-      Promise.resolve(adapter(queryString, context)),
+      Promise.resolve(adapter(adapterQuery, context)),
       DEFAULT_TIMEOUT
     );
   };
 
   try{
+
     let data;
+
     if(RESILIENCE_ENGINE && typeof RESILIENCE_ENGINE.attempt === "function"){
       data = await RESILIENCE_ENGINE.attempt(name, runner);
     }else{
@@ -500,23 +503,24 @@ async function executeAdapter(name, adapter, event, params){
     stats.lastStatus = "ok";
     stats.updatedAt = now();
 
-    learnSource(name, {
-      status: "ok",
-      itemCount: items.length
+    learnSource(name,{
+      status:"ok",
+      itemCount:items.length
     });
 
     return {
-      source: name,
-      region: meta.region,
-      type: meta.type,
-      sourceTrust: computeTrust(name),
-      timestamp: now(),
+      source:name,
+      region:meta.region,
+      type:meta.type,
+      sourceTrust:computeTrust(name),
+      timestamp:now(),
       duration,
       data,
       items
     };
 
   }catch(e){
+
     const duration = now() - started;
     const code = s(e && e.message ? e.message : e);
 
@@ -529,29 +533,31 @@ async function executeAdapter(name, adapter, event, params){
     if(code === "timeout") stats.timeout += 1;
     else stats.fail += 1;
 
-    learnSource(name, {
-      status: code === "timeout" ? "timeout" : "fail",
-      itemCount: 0
+    learnSource(name,{
+      status:code === "timeout" ? "timeout" : "fail",
+      itemCount:0
     });
 
     logTelemetry({
-      source: name,
-      status: stats.lastStatus,
-      error: code
+      source:name,
+      status:stats.lastStatus,
+      error:code
     });
 
     return {
-      source: name,
-      region: meta.region,
-      type: meta.type,
-      sourceTrust: computeTrust(name),
-      timestamp: now(),
+      source:name,
+      region:meta.region,
+      type:meta.type,
+      sourceTrust:computeTrust(name),
+      timestamp:now(),
       duration,
-      error: code,
-      data: [],
-      items: []
+      error:code,
+      data:[],
+      items:[]
     };
+
   }
+
 }
 
 /* ------------------------------------------------------------
