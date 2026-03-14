@@ -99,3 +99,173 @@ module.exports = {
   normalizeResult,
   tieredFetch,
 };
+
+/* ===== MARU CORE EXTENSION LAYER (SANMARU READY) ===== */
+const CORE = module.exports || {};
+
+
+/* ===== ENGINE REGISTRY ===== */
+CORE.engineRegistry = {
+  engines: new Map(),
+
+  register(name, engine) {
+    if (!name || !engine) return;
+    this.engines.set(name, engine);
+  },
+
+  get(name) {
+    return this.engines.get(name);
+  },
+
+  list() {
+    return Array.from(this.engines.keys());
+  }
+};
+
+
+/* ===== GLOBAL ENGINE BUS ===== */
+CORE.engineBus = {
+  listeners: new Map(),
+
+  on(event, fn) {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, []);
+    }
+    this.listeners.get(event).push(fn);
+  },
+
+emit: async function(event, payload) {
+  const list = this.listeners.get(event) || [];
+
+  for (const fn of list) {
+    try {
+      await fn(payload);
+    } catch (e) {}
+  }
+ }
+};
+
+
+/* ===== AI ADAPTER ===== */
+CORE.aiAdapter = {
+
+  normalizeAIResult(res) {
+    if (!res) return [];
+
+    if (Array.isArray(res)) return res;
+
+    if (res.items && Array.isArray(res.items)) {
+      return res.items;
+    }
+
+    return [res];
+  },
+
+  mergeResults(searchResults = [], aiResults = []) {
+
+    const merged = [
+      ...(searchResults || []),
+      ...(aiResults || [])
+    ];
+
+    const seen = new Set();
+    const out = [];
+
+    for (const it of merged) {
+      const key = (it.url || it.title || "").toLowerCase();
+      if (!key) continue;
+      if (seen.has(key)) continue;
+
+      seen.add(key);
+      out.push(it);
+    }
+
+    return out;
+  }
+
+};
+
+
+/* ===== TRUST LAYER ===== */
+CORE.trustLayer = {
+
+  trustScore(item) {
+
+    let score = 1;
+
+    if (typeof item.sourceTrust === "number") {
+      score *= item.sourceTrust;
+    }
+
+    if (typeof item.deepfakeRisk === "number") {
+      score *= (1 - item.deepfakeRisk);
+    }
+
+    if (typeof item.manipulationRisk === "number") {
+      score *= (1 - item.manipulationRisk);
+    }
+
+    return score;
+  }
+
+};
+
+
+/* ===== FEDERATION ROUTER ===== */
+CORE.federation = {
+
+  async route(query, engines = []) {
+
+    const tasks = [];
+
+    for (const name of engines) {
+
+      const engine = CORE.engineRegistry.get(name);
+
+      if (!engine || typeof engine.search !== "function") {
+        continue;
+      }
+
+      try {
+        tasks.push(engine.search(query));
+      } catch (e) {}
+    }
+
+    const results = await Promise.allSettled(tasks);
+
+    const items = [];
+
+    for (const r of results) {
+      if (r.status === "fulfilled" && Array.isArray(r.value)) {
+        items.push(...r.value);
+      }
+    }
+
+    return items;
+  }
+
+};
+
+
+/* ===== PLUGIN SYSTEM ===== */
+CORE.plugins = {
+
+  list: [],
+
+  load(plugin) {
+
+    if (!plugin) return;
+
+    this.list.push(plugin);
+
+    if (typeof plugin.init === "function") {
+      try {
+        plugin.init(CORE);
+      } catch (e) {}
+    }
+  }
+
+};
+
+
+module.exports = CORE;
