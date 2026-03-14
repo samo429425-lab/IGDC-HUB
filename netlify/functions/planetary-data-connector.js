@@ -670,57 +670,44 @@ registerSourceAdapter(
 AI SOURCE DISCOVERY
 ========================================================= */
 
+const AI = require("./ai-adapters");
+
 registerSourceAdapter(
- "ai-source-discovery",
+ "ai-discovery",
  async (query,context)=>{
-   const engine=require("./ai-source-discovery-adapter");
-   const r=await engine.discover(query,context);
-   return r || [];
+  return await AI.discover(query,context);
  },
  {type:"ai",region:"global",priority:0.9,discovery:true}
 );
 
-
-/* =========================================================
-AI CONTENT CLASSIFIER
-========================================================= */
-
 registerSourceAdapter(
- "ai-content-classifier",
+ "ai-classifier",
  async (query,context)=>{
-   const engine=require("./ai-content-classifier-adapter");
-   const r=await engine.classify(query,context);
-   return r || [];
+  return await AI.classify(query,context);
  },
  {type:"ai",region:"global",priority:0.9}
 );
-
-
-/* =========================================================
-AI QUALITY FILTER
-========================================================= */
 
 registerSourceAdapter(
  "ai-quality",
  async (query,context)=>{
-   const engine=require("./ai-quality-adapter");
-   const r=await engine.filter(query,context);
-   return r || [];
+  return await AI.quality(query,context);
  },
  {type:"ai",region:"global",priority:0.9}
 );
 
-
-/* =========================================================
-AI AUTOMAP
-========================================================= */
-
 registerSourceAdapter(
  "ai-automap",
  async (query,context)=>{
-   const engine=require("./ai-automap-adapter");
-   const r=await engine.map(query,context);
-   return r || [];
+  return await AI.automap(query,context);
  },
  {type:"ai",region:"global",priority:0.9}
+);
+
+registerSourceAdapter(
+ "sanmaru",
+ async (query,context)=>{
+  return await AI.sanmaru(query,context);
+ },
+ {type:"ai",region:"global",priority:1}
 );
