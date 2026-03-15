@@ -1,455 +1,544 @@
 /**
- * maru-search.js — v1.0 (OPENAI-LIVE, PRODUCTION-SAFE)
- * MARU Engine unified endpoint for Netlify Functions
+ * netlify/functions/maru-search.js
+ * ------------------------------------------------------------
+ * MARU SEARCH — CANONICAL CAPABILITY CORE (A1.4)
  *
- * Modes:
- *  - Recommend: /.netlify/functions/maru-search?domain=media&lang=ko&limit=12
- *  - Search   : /.netlify/functions/maru-search?q=keyword&lang=ko&limit=24
+ * Goals (expand-only, no regressions):
+ * - Keep existing API: exports.handler / exports.maruSearchDispatcher / items + results alias
+ * - Add "Capability Layer" inside maru-search:
+ *   - Canonical Result Object (thumbnail/mediaType/lang/source fields)
+ *   - Resilience: timeouts, safe fetch, soft circuit-breaker (per function runtime)
+ *   - Future-ready containers registry (web/snapshot/media/ai) without breaking current flow
  *
- * Always returns:
- * {
- *   meta: {...},
- *   items: []
- * }
- *
- * Env:
- *  - MARU_USE_OPENAI=true|false   (default: false)
- *  - OPENAI_API_KEY=sk-...
- *  - MARU_OPENAI_MODEL=gpt-4o-mini (optional)
- *  - MARU_OPENAI_TIMEOUT_MS=12000  (optional)
- *
- * Data:
- *  - ./data/snapshot.internal.v1.json  (fallback / bootstrap)
+ * Notes:
+ * - No hard dependency on external storage. "Snapshot/AI" containers are optional and safe-noop unless configured.
  */
 
-const fs = require("fs");
-const path = require("path");
+'use strict';
 
-const SNAPSHOT_PATH = path.join(__dirname, "data", "snapshot.internal.v1.json");
+// ===== CORE ENGINE INTEGRATION (EXPAND ONLY) =====
+let Core = null;
+try { Core = require("./core"); } catch (e) { Core = null; }
 
-const USE_OPENAI = String(process.env.MARU_USE_OPENAI || "false").toLowerCase() === "true";
-const OPENAI_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_MODEL = process.env.MARU_OPENAI_MODEL || "gpt-4o-mini";
-const OPENAI_TIMEOUT_MS = Math.max(2000, parseInt(process.env.MARU_OPENAI_TIMEOUT_MS || "12000", 10) || 12000);
+const VERSION = 'A1.4-capability';
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 1000;
 
-// ---------- helpers ----------
-function nowISO() {
-  return new Date().toISOString();
+// ===== Resilience (lightweight; safe on Netlify) =====
+const CB = {
+  // name -> { fails, openUntil }
+  states: Object.create(null),
+  maxFails: 4,
+  coolDownMs: 25_000
+};
+
+function nowMs() { return Date.now(); }
+
+function cbCanRun(name){
+  const st = CB.states[name];
+  if (!st) return true;
+  if (!st.openUntil) return true;
+  return nowMs() > st.openUntil;
 }
-
-function safeInt(v, def, min, max) {
-  const n = parseInt(v, 10);
-  if (!Number.isFinite(n)) return def;
-  return Math.min(max, Math.max(min, n));
+function cbOnSuccess(name){
+  const st = CB.states[name];
+  if (!st) return;
+  st.fails = 0;
+  st.openUntil = 0;
 }
-
-function safeText(s, maxLen) {
-  if (typeof s !== "string") return "";
-  const t = s.replace(/\s+/g, " ").trim();
-  return t.length > maxLen ? t.slice(0, maxLen) : t;
-}
-
-function safeUrl(u) {
-  if (typeof u !== "string") return "";
-  const t = u.trim();
-  if (!t) return "";
-  const lower = t.toLowerCase();
-  if (lower.startsWith("javascript:") || lower.startsWith("data:")) return "";
-  if (t.startsWith("/") || t.startsWith("./") || t.startsWith("../")) return t;
-  try {
-    const url = new URL(t);
-    if (url.protocol === "https:" || url.protocol === "http:") return url.toString();
-  } catch (_) {}
-  return "";
-}
-
-function uniqueStrings(arr) {
-  if (!Array.isArray(arr)) return [];
-  const out = [];
-  const seen = new Set();
-  for (const v of arr) {
-    const s = safeText(String(v), 40);
-    if (!s) continue;
-    const k = s.toLowerCase();
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push(s);
-    if (out.length >= 20) break;
+function cbOnFail(name){
+  const st = CB.states[name] || (CB.states[name] = { fails: 0, openUntil: 0 });
+  st.fails += 1;
+  if (st.fails >= CB.maxFails) {
+    st.openUntil = nowMs() + CB.coolDownMs;
   }
-  return out;
 }
 
-function normalizeItem(item) {
-  const o = item || {};
-  const tags = uniqueStrings(o.tags);
+async function fetchWithTimeout(url, options, timeoutMs){
+  const ms = Math.max(500, Math.min(12_000, timeoutMs || 8_000));
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try{
+    return await fetch(url, { ...(options || {}), signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+// ===== HTTP helpers =====
+function ok(body) {
   return {
-    id: o.id ? String(o.id) : null,
-    title: safeText(o.title || "", 120),
-    summary: safeText(o.summary || "", 240),
-    url: safeUrl(o.url || ""),
-    thumb: safeUrl(o.thumb || ""),
-    type: safeText(o.type || "", 40),
-    platform: safeText(o.platform || "", 40),
-    license: safeText(o.license || "", 40),
-    tags,
-    lang: safeText(o.lang || "all", 8) || "all",
-    active: o.active !== false,
-    score: Number.isFinite(o.score) ? o.score : 0
+    statusCode: 200,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'content-type',
+    },
+    body: JSON.stringify(body),
   };
 }
 
-function safeLoadSnapshot() {
-  try {
-    const raw = fs.readFileSync(SNAPSHOT_PATH, "utf-8");
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : { items: [] };
-  } catch (_) {
-    return { items: [] };
-  }
+function fail(message, detail) {
+  return ok({
+    status: 'error',
+    engine: 'maru-search',
+    version: VERSION,
+    message,
+    detail: detail || null,
+  });
 }
 
-function scoreItem(item, query) {
-  if (!query) return 0;
-  const q = query.toLowerCase();
-  let score = 0;
+function pickQ(event) {
+  const qs = event.queryStringParameters || {};
+  const q = String(qs.q || qs.query || '').trim();
+  const limitRaw = parseInt(qs.limit || DEFAULT_LIMIT, 10);
+  const limit = Math.min(Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : DEFAULT_LIMIT, MAX_LIMIT);
 
-  const title = (item.title || "").toLowerCase();
-  const summary = (item.summary || "").toLowerCase();
+  const startRaw = parseInt(qs.start || 1, 10);
+  const start = Number.isFinite(startRaw) && startRaw > 0 ? startRaw : 1;
 
-  if (title.includes(q)) score += 6;
-  if (summary.includes(q)) score += 3;
+  // future: explicit mode selection
+  const mode = String(qs.mode || 'search').trim() || 'search';
+  const lang = String(qs.lang || '').trim() || null;
 
-  if (Array.isArray(item.tags)) {
-    for (const t of item.tags) {
-      const tt = String(t).toLowerCase();
-      if (tt.includes(q)) score += 2;
+  return { q, limit, start, mode, lang };
+}
+
+function stripHtml(s) {
+  return String(s || '').replace(/<[^>]*>/g, '');
+}
+
+// ===== Canonical Result helpers (Capability Layer) =====
+function safeUrl(u){
+  const s = String(u || '').trim();
+  if (!s) return '';
+  return s;
+}
+
+function domainOf(url){
+  try { return new URL(url).hostname.replace(/^www\./,''); }
+  catch(e){ return ''; }
+}
+
+function faviconOf(url){
+  const d = domainOf(url);
+  if (!d) return '';
+  // Google S2 favicon service (works globally). Front can still override if needed.
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64`;
+}
+
+function detectLangFromTextFallback(text){
+  // VERY light heuristic; true language intelligence layer will replace this.
+  const t = String(text || '');
+  if (!t) return null;
+  if (/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(t)) return 'ko';
+  if (/[ぁ-ゟ゠-ヿ]/.test(t)) return 'ja';
+  if (/[一-龥]/.test(t)) return 'zh';
+  if (/[А-Яа-яЁё]/.test(t)) return 'ru';
+  return 'en';
+}
+
+function canonicalizeItem(it, query){
+  const url = safeUrl(it.url || it.link || '');
+  const title = String(it.title || '').trim();
+  const summary = String(it.summary || it.snippet || '').trim();
+
+  // Thumbnail priority:
+  // 1) explicit it.thumbnail / it.thumb
+  // 2) payload common keys
+  // 3) favicon fallback
+  const p = (it && typeof it.payload === 'object') ? it.payload : {};
+  const thumb =
+    String(it.thumbnail || it.thumb || p.thumb || p.thumbnail || p.image || p.image_url || p.og_image || '').trim() ||
+    faviconOf(url);
+
+  const lang =
+    it.lang ||
+    p.lang ||
+    detectLangFromTextFallback(title + ' ' + summary) ||
+    null;
+
+  const mediaType =
+    it.mediaType ||
+    p.mediaType ||
+    (it.type === 'image' ? 'image' : (it.type === 'video' ? 'video' : 'article'));
+
+  // stable-ish id (no hard storage). Prefer url, else title.
+  const id = it.id || url || title || ('item-' + Math.random().toString(16).slice(2));
+
+  return {
+    id,
+    type: it.type || 'web',
+    mediaType,
+    title,
+    summary,
+    url,
+    source: it.source || p.source || null,
+    lang,
+    thumbnail: thumb,
+    // existing score fields preserved
+    score: typeof it.score === 'number' ? it.score : 0.9,
+    payload: p
+  };
+}
+
+function toStandardItems(arr, source) {
+  return (Array.isArray(arr) ? arr : []).map((r, idx) => {
+    const item = {
+      id: r.link || r.url || r.title || `${source}-${idx}`,
+      type: r.type || 'web',
+      title: r.title || '',
+      summary: r.snippet || r.summary || '',
+      url: r.link || r.url || '',
+      source,
+      score: 0.9,
+      payload: r.payload || {}
+    };
+    return canonicalizeItem(item, null);
+  });
+}
+
+// ===== Containers (future-ready, but safe-noop unless active) =====
+const Containers = {
+	  search_bank: {
+    name: 'search_bank',
+    async fetch(q, limit){
+      try{
+        const res = await fetchWithTimeout(
+          '/.netlify/functions/search-bank-engine?q=' +
+          encodeURIComponent(q) +
+          '&limit=' + encodeURIComponent(limit),
+          null,
+          6000
+        );
+        if(!res || !res.ok) return null;
+        const data = await res.json();
+        if(data && Array.isArray(data.items)){
+          return { source: 'search-bank-engine', results: data.items };
+        }
+        return null;
+      }catch(e){
+        return null;
+      }
     }
-  }
-  return score;
-}
+  },
 
-function extractJsonFromText(text) {
-  if (typeof text !== "string") return null;
-  const s = text.trim();
-  try {
-    return JSON.parse(s);
-  } catch (_) {}
+    web_naver: {
+    name: 'web_naver',
+    async fetch(q, limit, start){
+    return naverSearch(q, limit, start);
+    }
+  },
+    web_google: {
+    name: 'web_google',
+    async fetch(q, limit, start){
+    return googleSearch(q, limit, start);
+    }
+  },
+  // Snapshot container placeholder (optional):
+  // - If you later provide SNAPSHOT_SEARCH_URL or local snapshot index, implement here.
+  snapshot: {
+    name: 'snapshot',
+ async fetch(q, limit){
+  try{
+    const res = await fetchWithTimeout(
+      '/.netlify/functions/search-bank-engine?q=' +
+      encodeURIComponent(q) +
+      '&limit=' + encodeURIComponent(limit),
+      null,
+      6000
+    );
+    if(!res || !res.ok) return null;
 
-  const match = s.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
-  if (!match) return null;
-  try {
-    return JSON.parse(match[1]);
-  } catch (_) {
+    const data = await res.json();
+    if(data && Array.isArray(data.items)){
+      return { source: 'search-bank-engine', results: data.items };
+    }
+    return null;
+  }catch(e){
     return null;
   }
 }
 
-async function openaiJson(prompt) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
+  },
+  // AI container placeholder (optional):
+  ai: {
+    name: 'ai',
+    async fetch(_q, _limit){
+      return null;
+    }
+  }
+};
 
+// Orchestrator: chooses containers, runs safely, accumulates, merges (FUTURE-GRADE)
+async function orchestrateSearch({ q, limit }) {
+  const collected = [];
+  let sourceUsed = null;
+
+  // =========================
+  // 0) SEARCH-BANK-search-bank-engine — snapshot / fallback
+  // =========================
+  if (cbCanRun('bank')) {
+    const b = await Containers.search_bank.fetch(q, limit)
+      .catch(e => { cbOnFail('bank'); return null; });
+
+    if (b && b.results && b.results.length) {
+      cbOnSuccess('bank');
+      sourceUsed = sourceUsed || 'search-bank-engine';
+
+      const items = toStandardItems(b.results, 'search-bank-engine');
+      collected.push(...items);
+    }
+  }
+
+  // =========================
+  // 1) NAVER — primary bulk source (100/page)
+  // =========================
+  if (cbCanRun('naver')) {
+    let start = 1;
+
+    while (collected.length < limit) {
+      const batchSize = Math.min(100, limit - collected.length);
+
+      const n = await Containers.web_naver.fetch(q, batchSize, start)
+        .catch(e => { cbOnFail('naver'); return null; });
+
+      if (!n || !n.results || !n.results.length) break;
+
+      cbOnSuccess('naver');
+      sourceUsed = sourceUsed || 'naver';
+
+      const items = toStandardItems(n.results, n.source);
+      collected.push(...items);
+
+      if (n.results.length < batchSize) break;
+      start += batchSize;
+    }
+  }
+
+  // =========================
+  // 2) GOOGLE — secondary precision source (10/page, max ~100)
+  // =========================
+  if (collected.length < limit && cbCanRun('google')) {
+    let start = 1;
+
+    while (collected.length < limit && start <= 91) {
+      const batchSize = Math.min(10, limit - collected.length);
+
+      const g = await Containers.web_google.fetch(q, batchSize, start)
+        .catch(e => { cbOnFail('google'); return null; });
+
+      if (!g || !g.results || !g.results.length) break;
+
+      cbOnSuccess('google');
+      sourceUsed = sourceUsed || 'google';
+
+      const items = toStandardItems(g.results, g.source);
+      collected.push(...items);
+
+      if (g.results.length < batchSize) break;
+      start += batchSize;
+    }
+  }
+
+  // =========================
+  // 3) CORE PIPELINE (ranking / canonicalization)
+  // =========================
+  if (collected.length > 0) {
+    const finalItems = await applyCorePipeline(q, collected.slice(0, limit));
+    return {
+      source: sourceUsed,
+      items: finalItems
+    };
+  }
+
+  // =========================
+  // 4) LOOSE FALLBACK (future-safe)
+  // =========================
+  return {
+    source: 'fallback',
+    items: await applyCorePipeline(q, [
+      {
+        title: q,
+        summary: 'Loose fallback result',
+        source: 'fallback',
+        score: 0.01
+      }
+    ])
+  };
+}
+
+// ===== Source Fetchers =====
+async function naverSearch(q, limit, start) {
+  const id = process.env.NAVER_API_KEY;
+  const secret = process.env.NAVER_CLIENT_SECRET;
+  if (!id || !secret) return null;
+
+  const url = `https://openapi.naver.com/v1/search/webkr.json?query=${encodeURIComponent(q)}&display=${Math.min(limit, 100)}&start=${start}`;
+  const res = await fetchWithTimeout(url, {
+    headers: {
+      'X-Naver-Client-Id': id,
+      'X-Naver-Client-Secret': secret,
+    },
+  }, 8500);
+
+  if (!res.ok) throw new Error(`NAVER_HTTP_${res.status}`);
+  const data = await res.json();
+
+  const items = Array.isArray(data.items) ? data.items : [];
+  const results = items.map(it => ({
+    title: stripHtml(it.title),
+    link: it.link || '',
+    snippet: stripHtml(it.description),
+    type: 'web',
+    payload: {
+      // naver webkr doesn't give thumb; leave payload open for future connectors
+      source: 'naver'
+    }
+  }));
+
+  return { source: 'naver', results };
+}
+
+async function googleSearch(q, limit, start) {
+  const key = process.env.GOOGLE_API_KEY;
+  const cx  = process.env.GOOGLE_CSE_ID;
+  if (!key || !cx) return null;
+
+  const base =
+    `https://www.googleapis.com/customsearch/v1` +
+    `?key=${encodeURIComponent(key)}` +
+    `&cx=${encodeURIComponent(cx)}` +
+    `&q=${encodeURIComponent(q)}` +
+    `&num=${Math.min(limit, 10)}` +
+    `&start=${start}` +
+    `&gl=us` +
+    `&lr=lang_en|lang_ko` +
+    `&sort=date`;
+
+  // 1) WEB
+  const webRes = await fetchWithTimeout(base, null, 8500)
+    .then(r => r.ok ? r.json() : null)
+    .catch(() => null);
+
+  // 2) NEWS
+  const newsRes = await fetchWithTimeout(base + `&tbm=nws`, null, 8500)
+    .then(r => r.ok ? r.json() : null)
+    .catch(() => null);
+
+  const mergeItems = (data, type, source) => {
+    const items = Array.isArray(data && data.items) ? data.items : [];
+    return items.map(it => {
+      const pagemap = it.pagemap || {};
+      const cseThumb = Array.isArray(pagemap.cse_thumbnail) ? pagemap.cse_thumbnail[0] : null;
+      const cseImg   = Array.isArray(pagemap.cse_image) ? pagemap.cse_image[0] : null;
+
+      return {
+        title: it.title || '',
+        link: it.link || '',
+        snippet: it.snippet || '',
+        type,
+        payload: {
+          source,
+          thumb: (cseThumb && cseThumb.src) || (cseImg && cseImg.src) || ''
+        }
+      };
+    });
+  };
+
+  const results = [
+    ...mergeItems(webRes,  'web',  'google'),
+    ...mergeItems(newsRes, 'news', 'google_news')
+  ];
+
+  return { source: 'google+news', results };
+}
+
+// ===== CORE PIPELINE APPLY (NON-DESTRUCTIVE) =====
+async function applyCorePipeline(query, items) {
+  const q = query;
+
+  // Core.validateQuery may return boolean OR {ok, value}
+  if (Core && typeof Core.validateQuery === "function") {
+    const v = Core.validateQuery(q);
+    if (v === false) return [];
+    if (v && typeof v === 'object' && v.ok === false) return [];
+  }
+
+  let results = Array.isArray(items) ? items : [];
+
+  if (Core && typeof Core.scoreItem === "function" && Array.isArray(results)) {
+    results = results.map(it => ({
+      ...it,
+      _coreScore: Core.scoreItem(q, it)  // core.js signature supports (q,item); safe for older too
+    })).sort((a, b) => (b._coreScore || 0) - (a._coreScore || 0));
+  }
+
+  // final canonical pass (ensures thumbnail/lang exist)
+  results = results.map(it => canonicalizeItem(it, q));
+  return results;
+}
+
+// ===== MAIN HANDLER =====
+exports.handler = async function (event) {
   try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${OPENAI_KEY}`
-      },
-      body: JSON.stringify({
-        model: OPENAI_MODEL,
-        temperature: 0.6,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are MARU, a strict recommendation/search engine. " +
-              "Return ONLY valid JSON (no markdown, no commentary). " +
-              "Never invent copyrighted media downloads. Prefer CC0/public-domain sources and official pages. " +
-              "Output items as an array of objects with: title, summary, url, thumb(optional), type, platform(optional), license(optional), tags(optional), lang(optional)."
-          },
-          { role: "user", content: prompt }
-        ]
-      }),
-      signal: controller.signal
+   const { q, limit, start } = pickQ(event);
+
+// env missing check stays consistent with previous behavior
+/*
+const envOk = !!(
+  (process.env.NAVER_API_KEY && process.env.NAVER_CLIENT_SECRET) ||
+  (process.env.GOOGLE_API_KEY && process.env.GOOGLE_CSE_ID)
+);
+if (!envOk) {
+  return fail('Missing env', 'Set NAVER_API_KEY+NAVER_CLIENT_SECRET or GOOGLE_API_KEY+GOOGLE_CSE_ID');
+}
+*/
+
+    if (!q) {
+      return ok({
+        status: 'ok',
+        engine: 'maru-search',
+        version: VERSION,
+        query: q,
+        source: null,
+        items: [],
+        results: [],
+        meta: { count: 0, limit },
+      });
+    }
+
+    const base = await orchestrateSearch({ q, limit, start });
+
+
+    return ok({
+      status: 'ok',
+      engine: 'maru-search',
+      version: VERSION,
+      query: q,
+      source: base.source,
+      items: base.items,
+      results: base.items, // legacy alias
+      meta: { count: (base.items || []).length, limit },
     });
 
-    const txt = await res.text();
-    if (!res.ok) {
-      return { ok: false, error: `OpenAI HTTP ${res.status}`, raw: txt };
-    }
-
-    const parsed = JSON.parse(txt);
-    const content = parsed?.choices?.[0]?.message?.content || "";
-    const jsonCandidate = extractJsonFromText(content);
-    return { ok: true, json: jsonCandidate, raw: content };
   } catch (e) {
-    return { ok: false, error: e?.name === "AbortError" ? "OpenAI timeout" : (e?.message || String(e)) };
-  } finally {
-    clearTimeout(timer);
+    return fail('Search failed', String((e && e.message) || e));
   }
-}
-
-function corsHeaders() {
-  return {
-    "Content-Type": "application/json; charset=utf-8",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Cache-Control": "no-store"
-  };
-}
-
-// ---------- handler ----------
-exports.handler = async (event) => {
-  if (event.httpMethod === "OPTIONS") {
-    return { statusCode: 200, headers: corsHeaders(), body: "" };
-  }
-
-  const params = event.queryStringParameters || {};
-  const domain = safeText(params.domain || "", 40) || null;
-  const query = safeText(params.q || "", 120) || null;
-  const lang = safeText(params.lang || "", 8) || "all";
-  const limit = safeInt(params.limit, query ? 24 : 12, 1, 60);
-  const debug = String(params.debug || "0") === "1";
-
-  const snapshot = safeLoadSnapshot();
-  // Support BOTH snapshot.items (legacy) and snapshot.sections[].items (new)
-  const flatFromSections = (snap) => {
-    try {
-      if (!snap || !Array.isArray(snap.sections)) return [];
-      const out = [];
-      for (const sec of snap.sections) {
-        const sid = (sec && (sec.id || sec.sectionId) || '').toString();
-        const arr = Array.isArray(sec?.items) ? sec.items : (Array.isArray(sec?.cards) ? sec.cards : []);
-        for (const it of arr) {
-          if (!it) continue;
-          // annotate section id for routing/debug
-          if (!it.sectionId && sid) it.sectionId = sid;
-          out.push(it);
-        }
-      }
-      return out;
-    } catch (_) { return []; }
-  };
-
-  const baseItems = (Array.isArray(snapshot.items) ? snapshot.items : []).concat(flatFromSections(snapshot));
-
-
-  let normalized = baseItems.map(normalizeItem).filter((i) => i.active !== false);
-
-  if (lang && lang !== "all") {
-    normalized = normalized.filter((i) => !i.lang || i.lang === "all" || i.lang === lang);
-  }
-
-  // ---------- SEARCH MODE ----------
-  if (query) {
-    const scored = normalized
-      .map((i) => ({ ...i, score: scoreItem(i, query) }))
-      .filter((i) => i.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
-
-    if (USE_OPENAI && OPENAI_KEY && scored.length < Math.min(8, limit)) {
-      const prompt =
-        `Task: Provide up to ${limit} external resources relevant to the query.\n` +
-        `Query: "${query}"\n` +
-        `Language: ${lang}\n` +
-        `Constraints:\n` +
-        `- Prefer CC0/public-domain or official/free resource pages.\n` +
-        `- Provide direct page URLs (not file downloads).\n` +
-        `- If unsure, omit the item.\n` +
-        `Return: JSON array only.`;
-
-      const ai = await openaiJson(prompt);
-
-      if (ai.ok && Array.isArray(ai.json)) {
-        const aiItems = ai.json.map(normalizeItem).filter((i) => i.url);
-        const seen = new Set(scored.map((i) => i.url));
-        const merged = [...scored];
-        for (const it of aiItems) {
-          if (!it.url || seen.has(it.url)) continue;
-          seen.add(it.url);
-          merged.push(it);
-          if (merged.length >= limit) break;
-        }
-
-        return {
-          statusCode: 200,
-          headers: corsHeaders(),
-          body: JSON.stringify({
-            meta: {
-              mode: "search",
-              query,
-              domain: domain || null,
-              count: merged.length,
-              engine: "maru",
-              ai: true,
-              model: OPENAI_MODEL,
-              updated: nowISO(),
-              ...(debug ? { debug: { localCount: scored.length, aiOk: ai.ok, aiError: ai.error || null } } : {})
-            },
-            items: merged
-          })
-        };
-      }
-
-      return {
-        statusCode: 200,
-        headers: corsHeaders(),
-        body: JSON.stringify({
-          meta: {
-            mode: "search",
-            query,
-            domain: domain || null,
-            count: scored.length,
-            engine: "maru",
-            ai: false,
-            updated: nowISO(),
-            ...(debug ? { debug: { localCount: scored.length, aiOk: false, aiError: ai.error || "AI parse failed" } } : {})
-          },
-          items: scored
-        })
-      };
-    }
-
-    return {
-      statusCode: 200,
-      headers: corsHeaders(),
-      body: JSON.stringify({
-        meta: {
-          mode: "search",
-          query,
-          domain: domain || null,
-          count: scored.length,
-          engine: "maru",
-          ai: false,
-          updated: nowISO()
-        },
-        items: scored
-      })
-    };
-  }
-
-  // ---------- RECOMMEND MODE ----------
-  let recommended = normalized;
-  if (domain) {
-    // 1) Exact section match (preferred): snapshot.sections[].id === domain (or domain variants)
-    const d = String(domain).toLowerCase();
-    const variants = new Set([
-      d,
-      d.replace(/_/g, "-"),
-      d.replace(/-/g, "_"),
-      d.replace(/^homeproducts$/i, "home-1"),
-      d.replace(/^homeproducts$/i, "home_1")
-    ]);
-
-    let secItems = [];
-    if (snapshot && Array.isArray(snapshot.sections)) {
-      for (const sec of snapshot.sections) {
-        const sid = String((sec && (sec.id || sec.sectionId) || "")).toLowerCase();
-        if (!sid) continue;
-        if (variants.has(sid)) {
-          const arr = Array.isArray(sec.items) ? sec.items : (Array.isArray(sec.cards) ? sec.cards : []);
-          secItems = arr;
-          break;
-        }
-      }
-    }
-
-    if (secItems.length) {
-      recommended = secItems.map(normalizeItem).filter((i) => i.url);
-    } else {
-      // 2) Fallback: type/tags match in flattened items
-      recommended = normalized.filter((i) =>
-        (i.sectionId && variants.has(String(i.sectionId).toLowerCase())) ||
-        (i.type && variants.has(String(i.type).toLowerCase())) ||
-        (Array.isArray(i.tags) && i.tags.some(t => variants.has(String(t).toLowerCase())))
-      );
-    }
-  }
-
-  if (USE_OPENAI && OPENAI_KEY) {
-    const prompt =
-      `Task: Recommend up to ${limit} resources for the domain "${domain || "general"}" for a content hub.\n` +
-      `Language: ${lang}\n` +
-      `Constraints:\n` +
-      `- Prefer CC0/public-domain/free-to-use media libraries (videos, images, audio) and official resource hubs.\n` +
-      `- Provide direct page URLs (not downloads), and avoid copyrighted content.\n` +
-      `- For products, recommend legitimate external marketplaces or official product pages (we only link out).\n` +
-      `Return: JSON array only.`;
-
-    const ai = await openaiJson(prompt);
-
-    if (ai.ok && Array.isArray(ai.json)) {
-      const aiItems = ai.json.map(normalizeItem).filter((i) => i.url);
-      const merged = [];
-      const seen = new Set();
-
-      for (const it of aiItems) {
-        if (!it.url || seen.has(it.url)) continue;
-        seen.add(it.url);
-        merged.push(it);
-        if (merged.length >= limit) break;
-      }
-      for (const it of recommended) {
-        if (!it.url || seen.has(it.url)) continue;
-        seen.add(it.url);
-        merged.push(it);
-        if (merged.length >= limit) break;
-      }
-
-      return {
-        statusCode: 200,
-        headers: corsHeaders(),
-        body: JSON.stringify({
-          meta: {
-            mode: "recommend",
-            domain: domain || "all",
-            count: merged.length,
-            engine: "maru",
-            ai: true,
-            model: OPENAI_MODEL,
-            updated: nowISO(),
-            ...(debug ? { debug: { aiOk: ai.ok, aiError: ai.error || null, snapshotCount: recommended.length } } : {})
-          },
-          items: merged
-        })
-      };
-    }
-
-    const snapOut = recommended.slice(0, limit);
-    return {
-      statusCode: 200,
-      headers: corsHeaders(),
-      body: JSON.stringify({
-        meta: {
-          mode: "recommend",
-          domain: domain || "all",
-          count: snapOut.length,
-          engine: "maru",
-          ai: false,
-          updated: nowISO(),
-          ...(debug ? { debug: { aiOk: false, aiError: ai.error || "AI parse failed", snapshotCount: recommended.length } } : {})
-        },
-        items: snapOut
-      })
-    };
-  }
-
-  recommended = recommended.slice(0, limit);
-  return {
-    statusCode: 200,
-    headers: corsHeaders(),
-    body: JSON.stringify({
-      meta: {
-        mode: "recommend",
-        domain: domain || "all",
-        count: recommended.length,
-        engine: "maru",
-        ai: false,
-        updated: nowISO()
-      },
-      items: recommended
-    })
-  };
 };
+
+// ===== Internal dispatcher for bridge (non-HTTP call) =====
+async function maruSearchDispatcher(req = {}) {
+  const q = String(req.q || req.query || "").trim();
+  const limit = req.limit;
+  const event = { queryStringParameters: { q, limit } };
+  const res = await exports.handler(event);
+  try {
+    return JSON.parse(res.body || "{}");
+  } catch (e) {
+    return { status: "fail", message: "BAD_JSON" };
+  }
+}
+
+exports.maruSearchDispatcher = maruSearchDispatcher;
