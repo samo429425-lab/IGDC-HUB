@@ -122,28 +122,19 @@
     }
 
 async function fetchCollector(q){
-
-  /* 정상 트리거 : maru-search 직접 호출 */
-  const url = `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`;
+  const url = `/.netlify/functions/maru-quality-router?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`;
 
   const r = await fetch(url, { cache: 'no-store' });
-
-  if (!r.ok){
-    throw new Error('HTTP ' + r.status);
-  }
+  if (!r.ok) throw new Error('HTTP ' + r.status);
 
   const json = await r.json();
 
-  if (!json){
-    throw new Error('MARU_SEARCH_EMPTY');
+  if (json && json.status === 'error') {
+    throw new Error('ROUTER_ERROR');
   }
 
-  if (json.status === 'error'){
-    throw new Error('MARU_SEARCH_ERROR');
-  }
-
-  if (json.status === 'blocked'){
-    throw new Error(json.reason || 'MARU_SEARCH_BLOCKED');
+  if (json && json.status === 'blocked') {
+    throw new Error(json.reason || 'ROUTER_BLOCKED');
   }
 
   return json;
