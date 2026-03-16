@@ -25,6 +25,7 @@ const QualityRouterModule = safeRequire("./maru-quality-router");
 const ResilienceModule = safeRequire("./maru-resilience-engine");
 const SnapshotModule = safeRequire("./snapshot-engine");
 const SearchBankModule = safeRequire("./search-bank-engine");
+const SNSSchedulerModule = safeRequire("./maru-sns-scheduler-engine");
 
 /* =========================================================
 CORE CONST

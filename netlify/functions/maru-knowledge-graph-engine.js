@@ -501,6 +501,12 @@ EXPORT
 
 exports.runEngine=runEngine;
 
+let CrossGraph = null;
+try { CrossGraph = require("./maru-cross-graph-engine"); } catch (e) { CrossGraph = null; }
+
+let GraphIndex = null;
+try { GraphIndex = require("./maru-graph-index-engine"); } catch (e) { GraphIndex = null; }
+
 module.exports={
 runEngine
 };

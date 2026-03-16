@@ -22,6 +22,12 @@ const http = require("http");
 let Core = null;
 try { Core = require("./core"); } catch (e) { Core = null; }
 
+let SearchBankSync = null;
+try { SearchBankSync = require("./maru-searchbank-sync"); } catch (e) { SearchBankSync = null; }
+
+let CommerceEngine = null;
+try { CommerceEngine = require("./maru-commerce-engine"); } catch (e) { CommerceEngine = null; }
+
 // ---------- small utils ----------
 function nowIso(){ return (Core && Core.nowIso) ? Core.nowIso() : new Date().toISOString(); }
 function requestId(){ return (Core && Core.requestId) ? Core.requestId() : crypto.randomBytes(12).toString("hex"); }
