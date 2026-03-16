@@ -15,10 +15,10 @@
 const VERSION = "v2-aggregator";
 
 let Core = null;
-try { Core = require("./core"); } catch (_) { Core = null; }
+try { Core = require("../maru/core"); } catch (_) { Core = null; }
 
-let Bridge = null;
-try { Bridge = require("./maru-search-bridge"); } catch (_) { Bridge = null; }
+let MaruSearch = null;
+try { MaruSearch = require("./maru-search"); } catch (_) { MaruSearch = null; }
 
 let BankEngine = null;
 try { BankEngine = require("./search-bank-engine"); } catch (_) { BankEngine = null; }
@@ -155,24 +155,28 @@ function fail(message, detail){
 
 // ---------- ENGINE CALLS ----------
 async function callMaruSearch(query, mode, limit, context){
-  if(!Bridge || typeof Bridge.dispatch !== 'function') {
-    return { ok:false, error:"SEARCH_BRIDGE_UNAVAILABLE" };
+
+  if(!MaruSearch || typeof MaruSearch.runEngine !== "function"){
+    return { ok:false, error:"MARU_SEARCH_UNAVAILABLE" };
   }
+
   try{
-    const res = await Bridge.dispatch({
+    const res = await MaruSearch.runEngine({}, {
       q: query,
-      mode: mode || 'search',
+      mode: mode || "search",
       limit,
-      context: context || null
+      scope: context ? context.scope : null,
+      target: context ? context.target : null,
+      intent: context ? context.intent : null
     });
-    if(res && (res.status === 'ok' || res.status === 'error')) {
-      return { ok: true, data: res };
+
+    if(res && res.status === "ok"){
+      return { ok:true, data:res };
     }
-    // Bridge may return {ok:false,...}
-    if(res && res.ok === false) return { ok:false, error: s(res.error || "SEARCH_FAIL") };
-    return { ok:true, data: res || { status:'ok', items:[] } };
+
+    return { ok:false, error:"SEARCH_FAIL" };
   }catch(e){
-    return { ok:false, error: s(e && e.message ? e.message : "SEARCH_EXCEPTION") };
+    return { ok:false, error:(e && e.message) ? e.message : "SEARCH_EXCEPTION" };
   }
 }
 

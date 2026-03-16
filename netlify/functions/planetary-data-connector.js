@@ -333,10 +333,16 @@ function scoreSourceForQuery(name, params){
 
 function selectSources(params){
   const names = Array.from(WHITELIST);
+
   const filtered = names.filter(name => {
     const meta = SOURCE_REGISTRY[name] || {};
+
     if(params.source && low(params.source) !== low(name)) return false;
     if(!regionMatch(meta.region, params.region)) return false;
+
+    const isAI = meta.type === "ai";
+    if(isAI && params.mode !== "intelligence" && params.ai !== "true") return false;
+
     return true;
   });
 
@@ -583,6 +589,19 @@ CONNECT SOURCES
 ------------------------------------------------------------ */
 
 async function connect(event, params = {}){
+  if(params && params.usePlanetary === false){
+  return {
+    status: "skipped",
+    engine: "planetary-data-connector",
+    version: VERSION,
+    reason: "not_requested",
+    results: [],
+    items: [],
+    meta: {
+      generated_at: nowIso()
+    }
+  };
+}	
   const normalized = normalizeParams(event, params);
 
   const selectedSources = selectSources(normalized);
