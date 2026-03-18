@@ -668,6 +668,54 @@ try {
 /* ===== CORE FETCH ===== */
 const fetched = await fetchViaCore(event || {}, p, plan);
 
+/* ===== DIRECT FETCH FALLBACK (CRITICAL) ===== */
+let directItems = [];
+
+if (!fetched.items || fetched.items.length === 0) {
+  try {
+    const https = require("https");
+    const q = encodeURIComponent(p.q);
+
+    const data = await new Promise((resolve, reject) => {
+      https.get(`https://api.duckduckgo.com/?q=${q}&format=json&no_redirect=1&no_html=1`, (res) => {
+        let body = "";
+
+        res.on("data", chunk => body += chunk);
+        res.on("end", () => {
+          try {
+            resolve(JSON.parse(body));
+          } catch (e) {
+            reject(e);
+          }
+        });
+      }).on("error", reject);
+    });
+
+    if (data && data.RelatedTopics && Array.isArray(data.RelatedTopics)) {
+      directItems = data.RelatedTopics
+        .flatMap(t => t.Topics || [t])
+        .map(it => ({
+          title: it.Text || "",
+          summary: it.Text || "",
+          url: it.FirstURL || "",
+          source: "direct-duckduckgo",
+          score: 0.6,
+          sourceTrust: 0.6,
+          timestamp: Date.now()
+        }))
+        .filter(it => it.url);
+    }
+
+  } catch (e) {
+    console.warn("direct fetch failed:", e && e.message ? e.message : e);
+  }
+}
+
+/* ===== DIRECT MERGE ===== */
+if (directItems.length) {
+  fetched.items = [...directItems, ...(fetched.items || [])];
+}
+
 /* ===== BANK AUTO FILL LOGIC ===== */
 const BANK_MIN_THRESHOLD = Math.min(10, p.limit);
 let needFill = false;
