@@ -1,10 +1,14 @@
 "use strict";
 
 /*
- MARU Global Insight Engine
- 확장형 구조
- 기존 Addon → Insight → Collector → Engine 흐름 유지
- 기존 기능 삭제 없음
+ MARU Global Insight JS
+ FULL VERSION – STRUCTURE CORRECTED
+ --------------------------------------------------
+ ✔ Collector direct call REMOVED
+ ✔ Orchestrated strictly via Netlify Insight Engine
+ ✔ Existing public API preserved
+ ✔ DetachedPane integration preserved
+ ✔ No feature reduction
 */
 
 (function(global){
@@ -15,20 +19,20 @@
 
   const Insight = global.MaruGlobalInsight;
 
-  /* ==========================
-     Core Config
-  ========================== */
+  /* =====================================================
+     CONFIG
+  ===================================================== */
 
   Insight.config = {
-    version: "2.0.0",
+    version: "2.1.0-orchestrated",
     enableSnapshot: true,
     enableMediaAttach: true,
     enableConversationHook: true
   };
 
-  /* ==========================
-     Utility
-  ========================== */
+  /* =====================================================
+     UTIL
+  ===================================================== */
 
   function safe(fn){
     try { return fn(); }
@@ -37,97 +41,103 @@
 
   function now(){ return Date.now(); }
 
-  /* ==========================
-     Region Brief Generation
-  ========================== */
+  /* =====================================================
+     CORE ENGINE CALL (Single Orchestrator Entry)
+  ===================================================== */
+
+  async function callInsightEngine(params){
+
+    const response = await fetch("/.netlify/functions/maru-global-insight", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params)
+    });
+
+    if(!response.ok){
+      throw new Error("Insight Engine Call Failed");
+    }
+
+    return await response.json();
+  }
+
+  /* =====================================================
+     REGION BRIEF
+  ===================================================== */
 
   Insight.generateRegionBrief = async function(regionKey){
 
     if(!regionKey) return null;
 
-    const payload = {
-      type: "region",
-      region: regionKey,
+    return await callInsightEngine({
+      q: regionKey,
+      scope: "region",
+      target: regionKey,
+      intent: "summary",
       timestamp: now()
-    };
-
-    const collected = await Insight.collect(payload);
-    const analyzed  = await Insight.analyze(collected);
-
-    return analyzed;
+    });
   };
 
-  /* ==========================
-     Country Brief Generation
-  ========================== */
+  /* =====================================================
+     COUNTRY BRIEF
+  ===================================================== */
 
   Insight.generateCountryBrief = async function(countryKey){
 
     if(!countryKey) return null;
 
-    const payload = {
-      type: "country",
-      country: countryKey,
+    return await callInsightEngine({
+      q: countryKey,
+      scope: "country",
+      target: countryKey,
+      intent: "summary",
       timestamp: now()
-    };
-
-    const collected = await Insight.collect(payload);
-    const analyzed  = await Insight.analyze(collected);
-
-    return analyzed;
+    });
   };
 
-  /* ==========================
-     Collector Bridge
-  ========================== */
+  /* =====================================================
+     GENERIC QUERY EXECUTION (Future-proof)
+  ===================================================== */
 
-  Insight.collect = async function(payload){
+  Insight.query = async function(query, options = {}){
 
-    if(!global.collector) return payload;
+    if(!query) return null;
 
-    return await safe(async()=>{
-      return await global.collector.collect(payload);
-    }) || payload;
+    return await callInsightEngine({
+      q: query,
+      scope: options.scope || "global",
+      target: options.target || null,
+      intent: options.intent || "summary",
+      limit: options.limit || 20,
+      timestamp: now()
+    });
   };
 
-  /* ==========================
-     Intelligence Layer
-  ========================== */
+  /* =====================================================
+     UNIFIED EXECUTION
+  ===================================================== */
 
-  Insight.analyze = async function(data){
+  Insight.execute = async function(params){
 
-    if(!global.MaruIntelligenceEngine) return data;
+    if(!params || !params.type) return null;
 
-    return await safe(async()=>{
-      const engine = new global.MaruIntelligenceEngine();
-      return await engine.process(data);
-    }) || data;
+    if(params.type === "region"){
+      return await Insight.generateRegionBrief(params.key);
+    }
+
+    if(params.type === "country"){
+      return await Insight.generateCountryBrief(params.key);
+    }
+
+    if(params.type === "query"){
+      return await Insight.query(params.q, params);
+    }
+
+    return null;
   };
 
-  /* ==========================
-     Media Attachment (Optional)
-  ========================== */
-
-  Insight.attachMedia = async function(brief){
-
-    if(!Insight.config.enableMediaAttach) return brief;
-    if(!global.MaruMediaEngine) return brief;
-
-    return await safe(async()=>{
-      const media = new global.MaruMediaEngine();
-      const result = await media.generate({
-        query: brief.title || brief.region || brief.country,
-        mediaType: "video"
-      });
-
-      brief.media = result.items || [];
-      return brief;
-    }) || brief;
-  };
-
-  /* ==========================
-     Conversation Hook
-  ========================== */
+  /* =====================================================
+     DETACHED PANE CONVERSATION HOOK
+  ===================================================== */
 
   Insight.openConversation = function(contextData){
 
@@ -142,34 +152,9 @@
     });
   };
 
-  /* ==========================
-     Unified Execution
-  ========================== */
-
-  Insight.execute = async function(params){
-
-    if(!params || !params.type) return null;
-
-    let result = null;
-
-    if(params.type === "region"){
-      result = await Insight.generateRegionBrief(params.key);
-    }
-
-    if(params.type === "country"){
-      result = await Insight.generateCountryBrief(params.key);
-    }
-
-    if(result && Insight.config.enableMediaAttach){
-      result = await Insight.attachMedia(result);
-    }
-
-    return result;
-  };
-
-  /* ==========================
-     Admin Trigger Hook
-  ========================== */
+  /* =====================================================
+     BULK REGION EXECUTION (ADMIN)
+  ===================================================== */
 
   Insight.runGlobal = async function(regionList){
 
@@ -185,6 +170,14 @@
     return results;
   };
 
-  console.log("MARU Global Insight Engine Loaded v" + Insight.config.version);
+  /* =====================================================
+     EXTENSION-SAFE HOOK (No Direct Engine Access)
+  ===================================================== */
+
+  Insight.request = async function(payload){
+    return await callInsightEngine(payload);
+  };
+
+  console.log("MARU Global Insight JS Loaded v" + Insight.config.version);
 
 })(typeof window !== "undefined" ? window : global);

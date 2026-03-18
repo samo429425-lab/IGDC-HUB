@@ -64,14 +64,33 @@
       return x;
     }
 
-    function normalizeItems(payload){
-      const d = unwrap(payload) || {};
-      return Array.isArray(d.items) ? d.items
-           : Array.isArray(d.results) ? d.results
-           : Array.isArray(payload?.items) ? payload.items
-           : Array.isArray(payload?.results) ? payload.results
-           : [];
-    }
+function normalizeItems(payload){
+
+  if (!payload) return [];
+
+  if (Array.isArray(payload.items)) return payload.items;
+
+  if (payload.data && Array.isArray(payload.data)) return payload.data;
+
+  if (payload.data && Array.isArray(payload.data.items)) return payload.data.items;
+
+  if (Array.isArray(payload.results)) return payload.results;
+
+  if (payload.baseResult && Array.isArray(payload.baseResult.items)) {
+    return payload.baseResult.items;
+  }
+
+  if (payload.baseResult && payload.baseResult.data && Array.isArray(payload.baseResult.data.items)) {
+    return payload.baseResult.data.items;
+  }
+
+  const d = unwrap(payload) || {};
+
+  if (Array.isArray(d.items)) return d.items;
+  if (Array.isArray(d.results)) return d.results;
+
+  return [];
+}
 
     function safeText(v){
       return String(v || '').toLowerCase();
@@ -121,10 +140,9 @@
       return out;
     }
 
-async function fetchCollector(q){
+async function fetchSearch(q){
 
-  /* 정상 트리거 : maru-search 직접 호출 */
-  const url = `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`;
+  const url = `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=1000`;
 
   const r = await fetch(url, { cache: 'no-store' });
 
@@ -135,18 +153,18 @@ async function fetchCollector(q){
   const json = await r.json();
 
   if (!json){
-    throw new Error('MARU_SEARCH_EMPTY');
+    throw new Error('MARU_EMPTY');
   }
 
   if (json.status === 'error'){
-    throw new Error('MARU_SEARCH_ERROR');
+    throw new Error('MARU_ERROR');
   }
 
   if (json.status === 'blocked'){
-    throw new Error(json.reason || 'MARU_SEARCH_BLOCKED');
+    throw new Error(json.reason || 'BLOCKED');
   }
 
-  return json;
+  return normalizeItems(json);
 }
 
     function renderSkeleton(count = 6){
@@ -422,23 +440,20 @@ async function fetchCollector(q){
       }
     }
 
-    async function runSearch(q){
+async function runSearch(q){
       status.textContent = 'Searching…';
       renderSkeleton();
       clearPager();
 
       try {
-      const collectorRes = await fetchCollector(q);
 
-    let collectorItems = [];
+        const items = await fetchSearch(q);
 
-    if (collectorRes) {
-        collectorItems = normalizeItems(collectorRes);
-}
+        let collectorItems = items;
 
-    const merged = dedupeItems([
-      ...collectorItems
-]);
+        const merged = dedupeItems([
+          ...collectorItems
+        ]);
 
     allItems = merged;
 
