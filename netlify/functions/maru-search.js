@@ -613,10 +613,6 @@ function buildMeta(reqId, params, plan, fetched, ranked) {
 /* ===== MAIN ENGINE ===== */
 async function runEngine(event, params = {}) {
   const nowTime = Date.now();
-  if (global.__MARU_LAST_CALL && (nowTime - global.__MARU_LAST_CALL) < 150) {
-  return { status:"rate_limited", engine:"maru-search" };
-}
-global.__MARU_LAST_CALL = nowTime;
   const p = parseParams(params);
   const reqId = requestId();
 
