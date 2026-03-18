@@ -713,7 +713,7 @@ if (directItems.length) {
 }
 
 /* ===== BANK AUTO FILL LOGIC ===== */
-const BANK_MIN_THRESHOLD = Math.min(10, p.limit);
+const BANK_MIN_THRESHOLD = 0;
 let needFill = false;
 
 if (!bankSeed.length) {
@@ -729,19 +729,16 @@ if (needFill && externalItems.length) {
     bankSeed.map(it => (it.url || (it.title + "|" + it.source) || "").toLowerCase())
   );
 
-  const newItems = externalItems.filter(it => {
-    const key = (it.url || (it.title + "|" + it.source) || "").toLowerCase();
-    if (!key || bankKeys.has(key)) return false;
+const newItems = externalItems.filter(it => {
+  const key = (it.url || (it.title + "|" + it.source) || "").toLowerCase();
+  if (!key || bankKeys.has(key)) return false;
 
-    const score = computeScore(it, p.q, plan.intent);
+  // 최소 필터만 유지
+  if (it.deepfakeRisk > 0.8) return false;
+  if (it.manipulationRisk > 0.8) return false;
 
-    if (score < 0.6) return false;
-    if (it.deepfakeRisk > 0.4) return false;
-    if (it.manipulationRisk > 0.4) return false;
-    if (it.sourceTrust && it.sourceTrust < 0.3) return false;
-
-    return true;
-  });
+  return true;
+});
 
   if (newItems.length && Bank && typeof Bank.runEngine === "function") {
     try {
