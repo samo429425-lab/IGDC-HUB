@@ -16,7 +16,7 @@ let GlobalInsight = null;
 let Resilience = null;
 let Knowledge = null;
 
-try { Core = require("../maru/core"); } catch (e) {}
+try { Core = require("./core"); } catch (e) {}
 try { Planetary = require("./planetary-data-connector"); } catch (e) {}
 try { Bank = require("./search-bank-engine"); } catch (e) {}
 try { Collector = require("./collector"); } catch (e) {}
@@ -384,7 +384,7 @@ function semanticSignals(q) {
 function sourcePlan(params) {
   const intent = classifyIntent(params.q);
   const signals = semanticSignals(params.q);
-  const engines = ["planetary", "bank"];
+  const engines = ["planetary"];
 
   if (intent === "news" || intent === "analysis" || intent === "science") {
     engines.unshift("collector");
@@ -463,37 +463,6 @@ async function fetchViaCore(event, params, plan) {
     }
   }
 
-  if (!usedCoreFederation) {
-    const fallbackTasks = [];
-
-    if (Collector) {
-      fallbackTasks.push(
-        resilientCall("collector", async () => await collectorHook(payload))
-          .then(raw => ({ name: "collector", status: "ok", items: normalizeEnginePayload(raw, "collector"), raw, error: null }))
-          .catch(e => ({ name: "collector", status: "fail", items: [], raw: null, error: s(e && e.message ? e.message : e) }))
-      );
-    }
-    if (Planetary && typeof Planetary.connect === "function") {
-      fallbackTasks.push(
-        resilientCall("planetary", async () => await Planetary.connect(event || {}, payload.params))
-          .then(raw => ({ name: "planetary", status: "ok", items: normalizeEnginePayload(raw, "planetary"), raw, error: null }))
-          .catch(e => ({ name: "planetary", status: "fail", items: [], raw: null, error: s(e && e.message ? e.message : e) }))
-      );
-    }
-    if (Bank && typeof Bank.runEngine === "function") {
-      fallbackTasks.push(
-        resilientCall("bank", async () => await Bank.runEngine(event || {}, payload.params))
-          .then(raw => ({ name: "bank", status: "ok", items: normalizeEnginePayload(raw, "bank"), raw, error: null }))
-          .catch(e => ({ name: "bank", status: "fail", items: [], raw: null, error: s(e && e.message ? e.message : e) }))
-      );
-    }
-
-    const settled = await Promise.all(fallbackTasks);
-    for (const row of settled) {
-      grouped[row.name] = row;
-      flatItems = flatItems.concat(row.items || []);
-    }
-  }
 
   if (flatItems.length && GlobalInsight) {
     try {
@@ -677,8 +646,80 @@ global.__MARU_LAST_CALL = nowTime;
     };
   }
 
-  const plan = sourcePlan(p);
-  const fetched = await fetchViaCore(event || {}, p, plan);
+const plan = sourcePlan(p);
+
+/* ===== SEARCH BANK PREFILL CHECK ===== */
+let bankSeed = [];
+
+try {
+  if (Bank && typeof Bank.runEngine === "function") {
+    const bankRes = await Bank.runEngine(event || {}, {
+      action: "search",
+      q: p.q,
+      limit: p.limit
+    });
+
+    if (bankRes && Array.isArray(bankRes.items)) {
+      bankSeed = bankRes.items;
+    }
+  }
+} catch (e) {}
+
+/* ===== CORE FETCH ===== */
+const fetched = await fetchViaCore(event || {}, p, plan);
+
+/* ===== BANK AUTO FILL LOGIC ===== */
+const BANK_MIN_THRESHOLD = Math.min(10, p.limit);
+let needFill = false;
+
+if (!bankSeed.length) {
+  needFill = true;
+} else if (bankSeed.length < BANK_MIN_THRESHOLD) {
+  needFill = true;
+}
+
+let externalItems = fetched.items || [];
+
+if (needFill && externalItems.length) {
+  const bankKeys = new Set(
+    bankSeed.map(it => (it.url || (it.title + "|" + it.source) || "").toLowerCase())
+  );
+
+  const newItems = externalItems.filter(it => {
+    const key = (it.url || (it.title + "|" + it.source) || "").toLowerCase();
+    if (!key || bankKeys.has(key)) return false;
+
+    const score = computeScore(it, p.q, plan.intent);
+
+    if (score < 0.6) return false;
+    if (it.deepfakeRisk > 0.4) return false;
+    if (it.manipulationRisk > 0.4) return false;
+    if (it.sourceTrust && it.sourceTrust < 0.3) return false;
+
+    return true;
+  });
+
+  if (newItems.length && Bank && typeof Bank.runEngine === "function") {
+    try {
+      await Bank.runEngine(event || {}, {
+        action: "store",
+        items: newItems.slice(0, 50),
+        source: "maru-search-autofill",
+        region: p.region || "global",
+        lang: p.lang || "auto",
+        intent: plan.intent,
+        timestamp: nowIso()
+      });
+    } catch (e) {
+      console.warn("bank autofill failed:", e && e.message ? e.message : e);
+    }
+  }
+}
+
+/* ===== MERGE BANK SEED ===== */
+if (bankSeed.length) {
+  fetched.items = [...bankSeed, ...fetched.items];
+}
 
   if (!fetched.items.length) {
     return {
@@ -699,7 +740,42 @@ global.__MARU_LAST_CALL = nowTime;
     };
   }
 
-  const ranked = rankItems(fetched.items, p.q, plan.intent).slice(0, p.limit);
+  /* ===== DEDUP + PRIORITY ===== */
+let mergedItems = fetched.items || [];
+
+/* 1차 중복 제거 */
+const seen = new Set();
+mergedItems = mergedItems.filter(it => {
+  const key = (it.url || (it.title + "|" + it.source) || "").toLowerCase();
+  if (!key) return false;
+  if (seen.has(key)) return false;
+  seen.add(key);
+  return true;
+});
+
+/* 2차: Bank 우선 (앞쪽 유지) */
+if (bankSeed.length) {
+  const bankKeys = new Set(
+    bankSeed.map(it => (it.url || (it.title + "|" + it.source) || "").toLowerCase())
+  );
+
+  mergedItems = [
+    ...mergedItems.filter(it => bankKeys.has((it.url || (it.title + "|" + it.source) || "").toLowerCase())),
+    ...mergedItems.filter(it => !bankKeys.has((it.url || (it.title + "|" + it.source) || "").toLowerCase()))
+  ];
+}
+
+/* 최종 랭킹 */
+const ranked = mergedItems
+  .map(it => ({
+    ...it,
+    qualityScore: computeScore(it, p.q, plan.intent)
+  }))
+  .sort((a, b) => {
+    if (b.qualityScore !== a.qualityScore) return b.qualityScore - a.qualityScore;
+    return (b.timestamp || 0) - (a.timestamp || 0);
+  })
+  .slice(0, p.limit);
 
   return {
     status: "ok",
