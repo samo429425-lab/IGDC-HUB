@@ -556,7 +556,7 @@ function truthConfidence(item) {
   return score;
 }
 function trustFilter(items) {
-  return (items || []).filter(it => truthConfidence(it) >= 0.15);
+  return (items || []);
 }
 function knowledgeBoost(item, q) {
   if (!Knowledge) return 0;
