@@ -24,21 +24,21 @@
     const btn     = document.getElementById('searchBtn');
     const status  = document.getElementById('searchStatus');
     const results = document.getElementById('searchResults');
-	const backBtn = document.createElement('button');
-          backBtn.id = 'searchBackBtn';
-          backBtn.textContent = '← Back';
-          backBtn.style.marginRight = '10px';
-          backBtn.style.padding = '8px 12px';
-          backBtn.style.borderRadius = '8px';
-          backBtn.style.border = '1px solid #cfd8e3';
-          backBtn.style.background = '#fff';
-          backBtn.style.cursor = 'pointer';
+    const backBtn = document.createElement('button');
+backBtn.id = 'searchBackBtn';
+backBtn.textContent = '← 홈으로';
+backBtn.style.marginRight = '10px';
+backBtn.style.padding = '8px 12px';
+backBtn.style.borderRadius = '8px';
+backBtn.style.border = '1px solid #cfd8e3';
+backBtn.style.background = '#fff';
+backBtn.style.cursor = 'pointer';
 
-          backBtn.onclick = () => {
+backBtn.onclick = () => {
   if (window.history.length > 1) {
     history.back();
   } else {
-    window.location.href = '/';
+    window.location.href = '/index.html';
   }
 };
 
@@ -55,27 +55,63 @@ if (isSearchPage && input && input.parentNode) {
     let currentPage = 1;
     let currentBlock = 0;
 
-    const params = new URLSearchParams(location.search);
-    const q0 = (params.get('q') || '').trim();
-    if (q0) {
-      input.value = q0;
-      runSearch(q0);
-    } else {
-      status.textContent = '';
+const params = new URLSearchParams(location.search);
+const q0 = (params.get('q') || '').trim();
+
+function syncSearchFromUrl(run = true) {
+  const qp = (new URLSearchParams(location.search).get('q') || '').trim();
+  input.value = qp;
+
+  if (run && qp) {
+    runSearch(qp);
+  } else if (run && !qp) {
+    allItems = [];
+    results.innerHTML = '';
+    clearPager();
+    status.textContent = '';
+  }
+}
+
+if (q0) {
+  input.value = q0;
+  runSearch(q0);
+} else {
+  status.textContent = '';
+}
+
+btn.onclick = () => {
+  const q = input.value.trim();
+  if (!q) return;
+
+  if (isSearchPage) {
+    const currentQ = (new URLSearchParams(location.search).get('q') || '').trim();
+
+    if (currentQ === q) {
+      runSearch(q);
+      return;
     }
 
-    btn.onclick = () => {
-      const q = input.value.trim();
-      if (!q) return;
-      const u = new URL(location.href);
-      u.searchParams.set('q', q);
-      history.replaceState(null, '', u.toString());
-      runSearch(q);
-    };
+    const u = new URL(location.href);
+    u.searchParams.set('q', q);
+    history.pushState({ q }, '', u.toString());
+    runSearch(q);
+    return;
+  }
 
-    input.addEventListener('keydown', e => {
-      if (e.key === 'Enter') btn.click();
-    });
+  window.location.href = `/search.html?q=${encodeURIComponent(q)}`;
+};
+
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    btn.click();
+  }
+});
+
+window.addEventListener('popstate', () => {
+  if (!isSearchPage) return;
+  syncSearchFromUrl(true);
+});
 
     function unwrap(x){
       if (!x) return {};
@@ -163,7 +199,7 @@ function normalizeItems(payload){
 
 async function fetchSearch(q){
 
-  const url = `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=1000`;
+  const url = `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`;
 
   const r = await fetch(url, { cache: 'no-store' });
 
