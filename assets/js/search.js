@@ -563,7 +563,6 @@ async function fetchSearch(q){
       slice.forEach(renderItem);
       drawPager();
     }
-
 function updateSearchPageHistory(page, block) {
   if (!isSearchPage) return;
 
@@ -581,7 +580,7 @@ function updateSearchPageHistory(page, block) {
     u.searchParams.set('from', safeReturnUrl);
   }
 
-  history.pushState(
+  history.replaceState(
     {
       ...(history.state || {}),
       page,
