@@ -1,6 +1,6 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
 // - collector first
-// - collector search pipeline
+// - bank fallback + supplement
 // - silent error prevention
 // - same-tab navigation
 // - block pagination
@@ -24,7 +24,6 @@
     const btn     = document.getElementById('searchBtn');
     const status  = document.getElementById('searchStatus');
     const results = document.getElementById('searchResults');
-
     if (!input || !btn || !status || !results) return;
 
     const PAGE_SIZE = 15;
@@ -35,205 +34,44 @@
     let currentPage = 1;
     let currentBlock = 0;
 
-const params = new URLSearchParams(location.search);
-const q0 = (params.get('q') || '').trim();
-const from0 = (params.get('from') || '').trim();
+    const params = new URLSearchParams(location.search);
+    const q0 = (params.get('q') || '').trim();
+    if (q0) {
+      input.value = q0;
+      runSearch(q0);
+    } else {
+      status.textContent = '';
+    }
 
-function getSafeReturnUrl() {
-  try {
-    const from = (new URLSearchParams(location.search).get('from') || '').trim();
-    if (!from) return '';
-    const u = new URL(from, location.origin);
-    if (u.origin !== location.origin) return '';
-    return u.pathname + u.search + u.hash;
-  } catch (e) {
-    return '';
-  }
-}
-
-function buildSearchUrl(q) {
-  const u = new URL('/search.html', location.origin);
-  u.searchParams.set('q', q);
-
-  const currentFrom = getSafeReturnUrl();
-  if (currentFrom) {
-    u.searchParams.set('from', currentFrom);
-  } else if (!isSearchPage) {
-    const fallbackFrom = location.pathname + location.search + location.hash;
-    u.searchParams.set('from', fallbackFrom);
-  }
-
-  return u.pathname + u.search + u.hash;
-}
-
-function ensureSearchHistoryBridge() {
-  if (!isSearchPage) return;
-
-  const returnUrl = getSafeReturnUrl();
-  if (!returnUrl) return;
-
-  const state = history.state || {};
-  if (state && state.__searchBridgeInstalled) return;
-
-  history.replaceState(
-    {
-      ...(state || {}),
-      __searchBridgeInstalled: true,
-      __searchEntry: true,
-      q: q0 || '',
-      from: returnUrl
-    },
-    '',
-    location.href
-  );
-
-  history.pushState(
-    {
-      __searchBridgeMarker: true,
-      from: returnUrl
-    },
-    '',
-    location.href
-  );
-}
-
-function syncSearchFromUrl(run = true) {
-  const qp = (new URLSearchParams(location.search).get('q') || '').trim();
-  input.value = qp;
-
-  if (run && qp) {
-    runSearch(qp);
-  } else if (run && !qp) {
-    allItems = [];
-    results.innerHTML = '';
-    clearPager();
-    status.textContent = '';
-  }
-}
-
-if (q0) {
-  input.value = q0;
-}
-
-ensureSearchHistoryBridge();
-
-if (q0) {
-  runSearch(q0);
-} else {
-  status.textContent = '';
-}
-
-btn.addEventListener('click', (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-
-  const q = input.value.trim();
-  if (!q) return;
-
-  if (isSearchPage) {
-    const currentQ = (new URLSearchParams(location.search).get('q') || '').trim();
-
-    if (currentQ === q) {
+    btn.onclick = () => {
+      const q = input.value.trim();
+      if (!q) return;
+      const u = new URL(location.href);
+      u.searchParams.set('q', q);
+      history.replaceState(null, '', u.toString());
       runSearch(q);
-      return;
+    };
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') btn.click();
+    });
+
+    function unwrap(x){
+      if (!x) return {};
+      if (x.data && Array.isArray(x.data.items)) return x.data;
+      if (x.baseResult && Array.isArray(x.baseResult.items)) return x.baseResult;
+      if (x.baseResult && x.baseResult.data && Array.isArray(x.baseResult.data.items)) return x.baseResult.data;
+      return x;
     }
 
-    const u = new URL(location.href);
-    u.searchParams.set('q', q);
-
-    const safeReturnUrl = getSafeReturnUrl();
-    if (safeReturnUrl) {
-      u.searchParams.set('from', safeReturnUrl);
+    function normalizeItems(payload){
+      const d = unwrap(payload) || {};
+      return Array.isArray(d.items) ? d.items
+           : Array.isArray(d.results) ? d.results
+           : Array.isArray(payload?.items) ? payload.items
+           : Array.isArray(payload?.results) ? payload.results
+           : [];
     }
-
-    history.pushState({ q, from: safeReturnUrl || '' }, '', u.toString());
-    runSearch(q);
-    return;
-  }
-
-  window.location.assign(buildSearchUrl(q));
-});
-
-input.addEventListener('keydown', (e) => {
-  if (e.key !== 'Enter') return;
-
-  e.preventDefault();
-  e.stopPropagation();
-
-  const q = input.value.trim();
-  if (!q) return;
-
-  if (isSearchPage) {
-    const currentQ = (new URLSearchParams(location.search).get('q') || '').trim();
-
-    if (currentQ === q) {
-      runSearch(q);
-      return;
-    }
-
-    const u = new URL(location.href);
-    u.searchParams.set('q', q);
-
-    const safeReturnUrl = getSafeReturnUrl();
-    if (safeReturnUrl) {
-      u.searchParams.set('from', safeReturnUrl);
-    }
-
-    history.pushState({ q, from: safeReturnUrl || '' }, '', u.toString());
-    runSearch(q);
-    return;
-  }
-
-  window.location.assign(buildSearchUrl(q));
-});
-
-window.addEventListener('popstate', (e) => {
-  if (!isSearchPage) return;
-
-  const state = e.state || {};
-  if (state.__searchEntry && state.from) {
-    location.href = state.from;
-    return;
-  }
-
-  syncSearchFromUrl(true);
-});
-
-function unwrap(x){
-  if (!x) return {};
-  if (x.data && Array.isArray(x.data.items)) return x.data;
-  if (x.baseResult && Array.isArray(x.baseResult.items)) return x.baseResult;
-  if (x.baseResult && x.baseResult.data && Array.isArray(x.baseResult.data.items)) return x.baseResult.data;
-  return x;
-}
-
-function normalizeItems(payload){
-
-  if (!payload) return [];
-
-  if (Array.isArray(payload.items)) return payload.items;
-
-  if (payload.data && Array.isArray(payload.data)) return payload.data;
-
-  if (payload.data && Array.isArray(payload.data.items)) return payload.data.items;
-
-  if (Array.isArray(payload.results)) return payload.results;
-
-  if (payload.baseResult && Array.isArray(payload.baseResult.items)) {
-    return payload.baseResult.items;
-  }
-
-  if (payload.baseResult && payload.baseResult.data && Array.isArray(payload.baseResult.data.items)) {
-    return payload.baseResult.data.items;
-  }
-
-  const d = unwrap(payload) || {};
-
-  if (Array.isArray(d.items)) return d.items;
-  if (Array.isArray(d.results)) return d.results;
-
-  return [];
-}
 
     function safeText(v){
       return String(v || '').toLowerCase();
@@ -283,23 +121,32 @@ function normalizeItems(payload){
       return out;
     }
 
-async function fetchSearch(q){
+async function fetchCollector(q){
+
+  /* 정상 트리거 : maru-search 직접 호출 */
   const url = `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`;
 
-  try {
-    const r = await fetch(url, { cache: 'no-store' });
-    if (!r.ok) return [];
+  const r = await fetch(url, { cache: 'no-store' });
 
-    const json = await r.json();
-    if (!json) return [];
-    if (json.status === 'error') return [];
-    if (json.status === 'blocked') return [];
-
-    return normalizeItems(json);
-  } catch (e) {
-    console.error('fetchSearch failed:', e);
-    return [];
+  if (!r.ok){
+    throw new Error('HTTP ' + r.status);
   }
+
+  const json = await r.json();
+
+  if (!json){
+    throw new Error('MARU_SEARCH_EMPTY');
+  }
+
+  if (json.status === 'error'){
+    throw new Error('MARU_SEARCH_ERROR');
+  }
+
+  if (json.status === 'blocked'){
+    throw new Error(json.reason || 'MARU_SEARCH_BLOCKED');
+  }
+
+  return json;
 }
 
     function renderSkeleton(count = 6){
@@ -406,21 +253,6 @@ async function fetchSearch(q){
       d.textContent = (it.summary || it.description || '').trim();
 
       body.appendChild(t);
-	  const risk = document.createElement('div');
-      risk.textContent = it.riskLabel || 'safe';
-      risk.style.fontSize = '11px';
-      risk.style.fontWeight = '700';
-      risk.style.marginTop = '6px';
-
-      if ((it.riskLabel || '') === '⚠️ high-risk') {
-      risk.style.color = 'red';
-    } else if ((it.riskLabel || '') === '⚠️ medium-risk') {
-      risk.style.color = 'orange';
-    } else {
-      risk.style.color = 'green';
-    }
-
-      body.appendChild(risk);
       body.appendChild(l);
       if (d.textContent) body.appendChild(d);
 
@@ -590,41 +422,37 @@ async function fetchSearch(q){
       }
     }
 
-async function runSearch(q){
-  const qq = (q || '').trim();
-  if (!qq){
-    allItems = [];
-    results.innerHTML = '';
-    clearPager();
-    status.textContent = '';
-    return;
-  }
+    async function runSearch(q){
+      status.textContent = 'Searching…';
+      renderSkeleton();
+      clearPager();
 
-  status.textContent = `Searching for "${qq}"...`;
-  renderSkeleton();
-  clearPager();
+      try {
+      const collectorRes = await fetchCollector(q);
 
-  try {
-    const items = await fetchSearch(qq);
-    allItems = dedupeItems([...(items || [])]);
+    let collectorItems = [];
 
-    currentBlock = 0;
-    currentPage = 1;
-    renderPage(currentPage);
-
-    if (!allItems.length) {
-      status.textContent = `No results for "${qq}"`;
-    } else {
-      status.textContent = `${allItems.length} results for "${qq}"`;
-    }
-  } catch(e){
-    console.error(e);
-    allItems = [];
-    results.innerHTML = '';
-    clearPager();
-    status.textContent = `No results for "${qq}"`;
-  }
+    if (collectorRes) {
+        collectorItems = normalizeItems(collectorRes);
 }
+
+    const merged = dedupeItems([
+      ...collectorItems
+]);
+
+    allItems = merged;
+
+        status.textContent = `${allItems.length} results`;
+        currentBlock = 0;
+        currentPage = 1;
+        renderPage(currentPage);
+
+      } catch(e){
+        console.error(e);
+        results.innerHTML = '';
+        status.textContent = 'Search error';
+      }
+    }
 
   });
 })();
@@ -633,15 +461,9 @@ async function runSearch(q){
   function runGlobalSearch() {
     const input = document.getElementById('globalSearchInput');
     if (!input) return;
-
     const q = input.value.trim();
     if (!q) return;
-
-    const u = new URL('/search.html', location.origin);
-    u.searchParams.set('q', q);
-    u.searchParams.set('from', location.pathname + location.search + location.hash);
-
-    window.location.href = u.pathname + u.search + u.hash;
+    window.location.href = `/search.html?q=${encodeURIComponent(q)}`;
   }
 
   document.addEventListener('DOMContentLoaded', function () {
