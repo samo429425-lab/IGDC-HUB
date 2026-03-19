@@ -479,39 +479,6 @@
 @media (max-width: 600px){
   .shop-scroller{ padding-left:0; padding-right:0; }
 }
-
-/* === Mobile fix: horizontal drag for moved right-panel sections (home_right_* becomes section 6/7/8) === */
-@media (max-width:1024px){
-  .ad-section .ad-scroll{
-    overflow-x:auto !important;
-    overflow-y:hidden !important;
-    -webkit-overflow-scrolling:touch !important;
-    touch-action:pan-x !important;
-    overscroll-behavior-x:contain !important;
-  }
-  .ad-section .ad-list{
-    display:flex !important;
-    flex-direction:row !important;
-    gap:12px !important;
-    padding:10px 8px 16px !important;
-    margin:0 !important;
-  }
-  .ad-section .ad-list > .ad-box{
-    flex:0 0 86vw !important;
-    max-width:86vw !important;
-    scroll-snap-align:start !important;
-  }
-  .ad-section .ad-list{
-    scroll-snap-type:x mandatory !important;
-  }
-  @media (orientation:landscape){
-    .ad-section .ad-list > .ad-box{
-      flex-basis:44vw !important;
-      max-width:44vw !important;
-    }
-  }
-}
-
 </style>
 <style>
 /* Flush arrows to main content box walls (ignore inner paddings) */
@@ -2139,20 +2106,22 @@ document.addEventListener('DOMContentLoaded', () => {
   const btn = document.getElementById('homeSearchBtn');
   if (!input || !btn) return;
 
-  const openSearch = () => {
+  const openSearch = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
     const q = input.value.trim();
     if (!q) return;
 
-    // ✅ 새 탭 / 독립 웹페이지 / 팝업 아님
-    window.open(
-      `/search.html?q=${encodeURIComponent(q)}`,
-      '_blank'
-    );
+    window.location.assign(`/search.html?q=${encodeURIComponent(q)}`);
   };
 
   btn.addEventListener('click', openSearch);
   input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') openSearch();
+    if (e.key !== 'Enter') return;
+    openSearch(e);
   });
 });
 </script>
