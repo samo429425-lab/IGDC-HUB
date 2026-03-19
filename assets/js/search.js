@@ -24,27 +24,7 @@
     const btn     = document.getElementById('searchBtn');
     const status  = document.getElementById('searchStatus');
     const results = document.getElementById('searchResults');
-    const backBtn = document.createElement('button');
-backBtn.id = 'searchBackBtn';
-backBtn.textContent = '← 홈으로';
-backBtn.style.marginRight = '10px';
-backBtn.style.padding = '8px 12px';
-backBtn.style.borderRadius = '8px';
-backBtn.style.border = '1px solid #cfd8e3';
-backBtn.style.background = '#fff';
-backBtn.style.cursor = 'pointer';
 
-backBtn.onclick = () => {
-  if (window.history.length > 1) {
-    history.back();
-  } else {
-    window.location.href = '/index.html';
-  }
-};
-
-if (isSearchPage && input && input.parentNode) {
-  input.parentNode.insertBefore(backBtn, input);
-}
     if (!input || !btn || !status || !results) return;
 
     const PAGE_SIZE = 15;
@@ -220,30 +200,22 @@ function normalizeItems(payload){
     }
 
 async function fetchSearch(q){
-
   const url = `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`;
 
-  const r = await fetch(url, { cache: 'no-store' });
+  try {
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) return [];
 
-  if (!r.ok){
-    throw new Error('HTTP ' + r.status);
+    const json = await r.json();
+    if (!json) return [];
+    if (json.status === 'error') return [];
+    if (json.status === 'blocked') return [];
+
+    return normalizeItems(json);
+  } catch (e) {
+    console.error('fetchSearch failed:', e);
+    return [];
   }
-
-  const json = await r.json();
-
-  if (!json){
-    throw new Error('MARU_EMPTY');
-  }
-
-  if (json.status === 'error'){
-    throw new Error('MARU_ERROR');
-  }
-
-  if (json.status === 'blocked'){
-    throw new Error(json.reason || 'BLOCKED');
-  }
-
-  return normalizeItems(json);
 }
 
     function renderSkeleton(count = 6){
@@ -535,33 +507,40 @@ async function fetchSearch(q){
     }
 
 async function runSearch(q){
-      status.textContent = 'Searching…';
-      renderSkeleton();
-      clearPager();
+  const qq = (q || '').trim();
+  if (!qq){
+    allItems = [];
+    results.innerHTML = '';
+    clearPager();
+    status.textContent = '';
+    return;
+  }
 
-      try {
+  status.textContent = `Searching for "${qq}"...`;
+  renderSkeleton();
+  clearPager();
 
-        const items = await fetchSearch(q);
+  try {
+    const items = await fetchSearch(qq);
+    allItems = dedupeItems([...(items || [])]);
 
-        let collectorItems = items;
+    currentBlock = 0;
+    currentPage = 1;
+    renderPage(currentPage);
 
-        const merged = dedupeItems([
-          ...collectorItems
-        ]);
-
-    allItems = merged;
-
-        status.textContent = `${allItems.length} results`;
-        currentBlock = 0;
-        currentPage = 1;
-        renderPage(currentPage);
-
-      } catch(e){
-        console.error(e);
-        results.innerHTML = '';
-        status.textContent = 'Search error';
-      }
+    if (!allItems.length) {
+      status.textContent = `No results for "${qq}"`;
+    } else {
+      status.textContent = `${allItems.length} results for "${qq}"`;
     }
+  } catch(e){
+    console.error(e);
+    allItems = [];
+    results.innerHTML = '';
+    clearPager();
+    status.textContent = `No results for "${qq}"`;
+  }
+}
 
   });
 })();
