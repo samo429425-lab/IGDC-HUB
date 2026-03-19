@@ -658,45 +658,41 @@ function drawPager(){
 }
 
 async function runSearch(q){
-      status.textContent = 'Searching…';
-      renderSkeleton();
-      clearPager();
+  const qq = (q || '').trim();
+  if (!qq){
+    allItems = [];
+    results.innerHTML = '';
+    clearPager();
+    status.textContent = '';
+    return;
+  }
 
-      currentBlock = 0;
-      currentPage = 1;
-      allItems = [];
+  status.textContent = `Searching for "${qq}"...`;
+  renderSkeleton();
+  clearPager();
 
-      try {
-        const collectorRes = await fetchCollector(q);
+  try {
+    const items = await fetchSearch(qq);
+    allItems = dedupeItems([...(items || [])]);
 
-        let collectorItems = [];
-        if (collectorRes) {
-          collectorItems = normalizeItems(collectorRes);
-        }
+    currentBlock = 0;
+    currentPage = 1;
+    renderPage(currentPage);
 
-        allItems = dedupeItems([
-          ...collectorItems
-        ]);
-
-        status.textContent = `${allItems.length} results`;
-
-        if (!allItems.length) {
-          results.innerHTML = '';
-          return;
-        }
-
-        results.innerHTML = '';
-        allItems.slice(0, PAGE_SIZE).forEach(renderItem);
-        drawPager();
-
-      } catch(e){
-        console.error(e);
-        allItems = [];
-        results.innerHTML = '';
-        clearPager();
-        status.textContent = 'Search error';
-      }
+    if (!allItems.length) {
+      status.textContent = `No results for "${qq}"`;
+    } else {
+      status.textContent = `${allItems.length} results for "${qq}"`;
     }
+  } catch(e){
+    console.error(e);
+    allItems = [];
+    results.innerHTML = '';
+    clearPager();
+    status.textContent = `No results for "${qq}"`;
+  }
+}
+
   });
 })();
 
