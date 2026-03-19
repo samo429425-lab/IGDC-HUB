@@ -1,6 +1,6 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
 // - collector first
-// - bank fallback + supplement
+// - collector search pipeline
 // - silent error prevention
 // - same-tab navigation
 // - block pagination
@@ -78,8 +78,10 @@ if (q0) {
 } else {
   status.textContent = '';
 }
+btn.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
 
-btn.onclick = () => {
   const q = input.value.trim();
   if (!q) return;
 
@@ -98,14 +100,34 @@ btn.onclick = () => {
     return;
   }
 
-  window.location.href = `/search.html?q=${encodeURIComponent(q)}`;
-};
+  window.location.assign(`/search.html?q=${encodeURIComponent(q)}`);
+});
 
-input.addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    btn.click();
+input.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  const q = input.value.trim();
+  if (!q) return;
+
+  if (isSearchPage) {
+    const currentQ = (new URLSearchParams(location.search).get('q') || '').trim();
+
+    if (currentQ === q) {
+      runSearch(q);
+      return;
+    }
+
+    const u = new URL(location.href);
+    u.searchParams.set('q', q);
+    history.pushState({ q }, '', u.toString());
+    runSearch(q);
+    return;
   }
+
+  window.location.assign(`/search.html?q=${encodeURIComponent(q)}`);
 });
 
 window.addEventListener('popstate', () => {
@@ -113,13 +135,13 @@ window.addEventListener('popstate', () => {
   syncSearchFromUrl(true);
 });
 
-    function unwrap(x){
-      if (!x) return {};
-      if (x.data && Array.isArray(x.data.items)) return x.data;
-      if (x.baseResult && Array.isArray(x.baseResult.items)) return x.baseResult;
-      if (x.baseResult && x.baseResult.data && Array.isArray(x.baseResult.data.items)) return x.baseResult.data;
-      return x;
-    }
+function unwrap(x){
+  if (!x) return {};
+  if (x.data && Array.isArray(x.data.items)) return x.data;
+  if (x.baseResult && Array.isArray(x.baseResult.items)) return x.baseResult;
+  if (x.baseResult && x.baseResult.data && Array.isArray(x.baseResult.data.items)) return x.baseResult.data;
+  return x;
+}
 
 function normalizeItems(payload){
 
