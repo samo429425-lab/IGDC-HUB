@@ -24,21 +24,7 @@
     const btn     = document.getElementById('searchBtn');
     const status  = document.getElementById('searchStatus');
     const results = document.getElementById('searchResults');
-        const qs = new URLSearchParams(location.search);
-    const fromHome = qs.get('from') === 'home';
-    const homeUrl = qs.get('home') || '/';
-
-    if (fromHome && !sessionStorage.getItem('search_back_ready')) {
-      history.pushState({ searchBackTrap: true }, '', location.href);
-      sessionStorage.setItem('search_back_ready', '1');
-    }
-
-    window.addEventListener('popstate', (e) => {
-      if (fromHome) {
-        sessionStorage.removeItem('search_back_ready');
-        location.href = homeUrl;
-      }
-    });
+        
     if (!input || !btn || !status || !results) return;
 
     const PAGE_SIZE = 15;
