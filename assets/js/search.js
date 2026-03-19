@@ -677,13 +677,18 @@ async function runSearch(q){
 
     currentBlock = 0;
     currentPage = 1;
-    renderPage(currentPage);
 
     if (!allItems.length) {
+      results.innerHTML = '';
       status.textContent = `No results for "${qq}"`;
-    } else {
-      status.textContent = `${allItems.length} results for "${qq}"`;
+      return;
     }
+
+    results.innerHTML = '';
+    allItems.slice(0, PAGE_SIZE).forEach(renderItem);
+    drawPager();
+    status.textContent = `${allItems.length} results for "${qq}"`;
+
   } catch(e){
     console.error(e);
     allItems = [];
@@ -692,7 +697,6 @@ async function runSearch(q){
     status.textContent = `No results for "${qq}"`;
   }
 }
-
   });
 })();
 
