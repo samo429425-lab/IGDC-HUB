@@ -2106,22 +2106,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const btn = document.getElementById('homeSearchBtn');
   if (!input || !btn) return;
 
-  const openSearch = (e) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-
+  const openSearch = () => {
     const q = input.value.trim();
     if (!q) return;
 
-    window.location.assign(`/search.html?q=${encodeURIComponent(q)}`);
+    // ✅ 새 탭 / 독립 웹페이지 / 팝업 아님
+    window.open(
+      `/search.html?q=${encodeURIComponent(q)}`,
+      '_blank'
+    );
   };
 
   btn.addEventListener('click', openSearch);
   input.addEventListener('keydown', e => {
-    if (e.key !== 'Enter') return;
-    openSearch(e);
+    if (e.key === 'Enter') openSearch();
   });
 });
 </script>
