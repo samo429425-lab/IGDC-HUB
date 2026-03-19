@@ -271,6 +271,21 @@ async function fetchSearch(q){
       d.textContent = (it.summary || it.description || '').trim();
 
       body.appendChild(t);
+	  const risk = document.createElement('div');
+      risk.textContent = it.riskLabel || 'safe';
+      risk.style.fontSize = '11px';
+      risk.style.fontWeight = '700';
+      risk.style.marginTop = '6px';
+
+      if ((it.riskLabel || '') === '⚠️ high-risk') {
+      risk.style.color = 'red';
+    } else if ((it.riskLabel || '') === '⚠️ medium-risk') {
+      risk.style.color = 'orange';
+    } else {
+      risk.style.color = 'green';
+    }
+
+      body.appendChild(risk);
       body.appendChild(l);
       if (d.textContent) body.appendChild(d);
 
