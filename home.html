@@ -2109,12 +2109,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const openSearch = () => {
     const q = input.value.trim();
     if (!q) return;
-
-    // ✅ 새 탭 / 독립 웹페이지 / 팝업 아님
-    window.open(
-      `/search.html?q=${encodeURIComponent(q)}`,
-      '_blank'
-    );
+    window.location.href = `/search.html?q=${encodeURIComponent(q)}`;
   };
 
   btn.addEventListener('click', openSearch);
