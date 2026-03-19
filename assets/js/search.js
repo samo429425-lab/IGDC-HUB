@@ -24,6 +24,27 @@
     const btn     = document.getElementById('searchBtn');
     const status  = document.getElementById('searchStatus');
     const results = document.getElementById('searchResults');
+	const backBtn = document.createElement('button');
+          backBtn.id = 'searchBackBtn';
+          backBtn.textContent = '← Back';
+          backBtn.style.marginRight = '10px';
+          backBtn.style.padding = '8px 12px';
+          backBtn.style.borderRadius = '8px';
+          backBtn.style.border = '1px solid #cfd8e3';
+          backBtn.style.background = '#fff';
+          backBtn.style.cursor = 'pointer';
+
+          backBtn.onclick = () => {
+  if (window.history.length > 1) {
+    history.back();
+  } else {
+    window.location.href = '/';
+  }
+};
+
+if (isSearchPage && input && input.parentNode) {
+  input.parentNode.insertBefore(backBtn, input);
+}
     if (!input || !btn || !status || !results) return;
 
     const PAGE_SIZE = 15;
