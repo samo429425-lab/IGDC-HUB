@@ -95,8 +95,6 @@ function ensureSearchHistoryBridge() {
     '',
     location.href
   );
-
-  history.back();
 }
 
 function syncSearchFromUrl(run = true) {
@@ -189,8 +187,15 @@ input.addEventListener('keydown', (e) => {
   window.location.assign(buildSearchUrl(q));
 });
 
-window.addEventListener('popstate', () => {
+window.addEventListener('popstate', (e) => {
   if (!isSearchPage) return;
+
+  const state = e.state || {};
+  if (state.__searchEntry && state.from) {
+    location.href = state.from;
+    return;
+  }
+
   syncSearchFromUrl(true);
 });
 
