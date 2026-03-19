@@ -1,9 +1,10 @@
-// IGDC Search.js — FULL SEARCH PIPELINE PATCH
-// - collector first
-// - bank fallback + supplement
-// - silent error prevention
-// - same-tab navigation
-// - block pagination
+// IGDC Search.js — QA (Stable Pipeline + Block Pagination) v2
+// Fixes:
+// 1) Open results in SAME tab (back button works).
+// 2) Request up to 1000 items so page blocks beyond 10 pages can exist (◀ ▶ appear when needed).
+// - 15 items per page
+// - 10-page blocks with ◀ ▶ shifting
+// - maru-search compatible: {status, items, results}
 
 (function () {
   'use strict';
@@ -28,7 +29,7 @@
 
     const PAGE_SIZE = 15;
     const BLOCK_SIZE = 10;
-    const FETCH_LIMIT = 1000;
+    const FETCH_LIMIT = 1000; // ✅ allow more than 10 pages
 
     let allItems = [];
     let currentPage = 1;
@@ -57,97 +58,43 @@
     });
 
     function unwrap(x){
-      if (!x) return {};
+      if (!x) return x;
       if (x.data && Array.isArray(x.data.items)) return x.data;
       if (x.baseResult && Array.isArray(x.baseResult.items)) return x.baseResult;
       if (x.baseResult && x.baseResult.data && Array.isArray(x.baseResult.data.items)) return x.baseResult.data;
       return x;
     }
 
-    function normalizeItems(payload){
-      const d = unwrap(payload) || {};
-      return Array.isArray(d.items) ? d.items
-           : Array.isArray(d.results) ? d.results
-           : Array.isArray(payload?.items) ? payload.items
-           : Array.isArray(payload?.results) ? payload.results
-           : [];
-    }
-
-    function safeText(v){
-      return String(v || '').toLowerCase();
-    }
-
-    function matchesBankItem(it, q){
-      const qq = safeText(q);
-      const haystack = [
-        it.title,
-        it.summary,
-        it.description,
-        it.url,
-        it.link,
-        it.channel,
-        it.section,
-        it.lang,
-        it.source?.name,
-        it.source?.platform,
-        it.bind?.page,
-        it.bind?.section,
-        it.bind?.psom_key,
-        Array.isArray(it.tags) ? it.tags.join(' ') : '',
-        it.producer?.name,
-        it.geo?.country,
-        it.geo?.state,
-        it.geo?.city
-      ].map(safeText).join(' ');
-      return haystack.includes(qq);
-    }
-
-    function dedupeItems(items){
-      const out = [];
-      const seen = new Set();
-
-      for (const it of Array.isArray(items) ? items : []) {
-        const key =
-          (it.url || it.link || '').trim().toLowerCase() ||
-          (it.id || '').trim().toLowerCase() ||
-          ((it.title || '').trim().toLowerCase() + '|' + (it.source || it.source?.name || '').trim().toLowerCase());
-
-        if (!key) continue;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push(it);
+    async function fetchMaru(q){
+      const urls = [
+        `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`,
+        `/netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`
+      ];
+      let lastErr;
+      for (const u of urls){
+        try{
+          const r = await fetch(u, { cache: 'no-store' });
+          if (!r.ok) { lastErr = new Error('HTTP ' + r.status); continue; }
+          return await r.json();
+        }catch(e){ lastErr = e; }
       }
-
-      return out;
+      throw lastErr;
     }
 
-async function fetchCollector(q){
-
-  /* 정상 트리거 : maru-search 직접 호출 */
-  const url = `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`;
-
-  const r = await fetch(url, { cache: 'no-store' });
-
-  if (!r.ok){
-    throw new Error('HTTP ' + r.status);
+  async function fetchBank(){
+    const urls = [
+    '/.netlify/functions/data/search-bank.snapshot.json',
+    '/data/search-bank.snapshot.json'
+    ];
+  for (const u of urls){
+    try{
+      const r = await fetch(u, { cache: 'no-store' });
+      if (!r.ok) continue;
+      return await r.json();
+    }catch(e){}
   }
-
-  const json = await r.json();
-
-  if (!json){
-    throw new Error('MARU_SEARCH_EMPTY');
-  }
-
-  if (json.status === 'error'){
-    throw new Error('MARU_SEARCH_ERROR');
-  }
-
-  if (json.status === 'blocked'){
-    throw new Error(json.reason || 'MARU_SEARCH_BLOCKED');
-  }
-
-  return json;
-}
+  return null;
+ }
 
     function renderSkeleton(count = 6){
       results.innerHTML = '';
@@ -202,13 +149,14 @@ async function fetchCollector(q){
       const card = document.createElement('div');
       card.className = 'card';
 
+      // ✅ SAME TAB navigation so browser back works
       if (url) {
         card.style.cursor = 'pointer';
         card.addEventListener('click', () => { window.location.href = url; });
       }
 
       const body = document.createElement('div');
-      body.style.overflow = 'hidden';
+	  body.style.overflow = 'hidden';
 
       const t = document.createElement('div');
       t.className = 'title';
@@ -216,7 +164,7 @@ async function fetchCollector(q){
       if (url) {
         const a = document.createElement('a');
         a.href = url;
-        a.target = '_self';
+        a.target = '_self'; // ✅
         a.rel = 'noopener';
         a.textContent = (it.title || '').trim() || '(no title)';
         a.style.color = 'inherit';
@@ -235,15 +183,19 @@ async function fetchCollector(q){
       fav.style.height = '23px';
       fav.style.verticalAlign = 'middle';
       fav.style.marginRight = '10px';
-      fav.style.borderRadius = '6px';
+
+      /* IGDC style: rounded-rect + clean light-blue border */
+      fav.style.borderRadius = '6px';                 // 라디우스 사각형 유지
       fav.style.background = '#ffffff';
-      fav.style.border = '1px solid #d6e4ff';
-      fav.style.boxShadow = '0 0 0 0 rgba(0,0,0,0)';
-      fav.style.padding = '2px';
+      fav.style.border = '1px solid #d6e4ff';         // 구글 느낌의 아주 연한 블루
+      fav.style.boxShadow = '0 0 0 0 rgba(0,0,0,0)';  // 그림자 제거 (깔끔함 우선)
+      fav.style.padding = '2px';                      // 아이콘 숨 고르기용 최소 패딩
+
       fav.onerror = () => fav.remove();
 
+
       const span = document.createElement('span');
-      span.textContent = domain || (it.source?.name || it.source || '');
+      span.textContent = domain || (it.source || '');
 
       l.appendChild(fav);
       l.appendChild(span);
@@ -255,118 +207,140 @@ async function fetchCollector(q){
       body.appendChild(t);
       body.appendChild(l);
       if (d.textContent) body.appendChild(d);
+      
+	  
+/* ===============================
+   HYBRID SEARCH CARD RENDER (FINAL)
+   - WEB/NEWS: stable card (no oversize)
+   - MEDIA: show only when real media exists
+   =============================== */
 
-      if (d && d.textContent) {
-        d.style.display = '-webkit-box';
-        d.style.webkitLineClamp = '3';
-        d.style.webkitBoxOrient = 'vertical';
-        d.style.overflow = 'hidden';
-        d.style.textOverflow = 'ellipsis';
-      }
+// 1) 뉴스/기사 요약 절단 (웹/뉴스 공통)
+if (d && d.textContent) {
+  d.style.display = '-webkit-box';
+  d.style.webkitLineClamp = '3';
+  d.style.webkitBoxOrient = 'vertical';
+  d.style.overflow = 'hidden';
+  d.style.textOverflow = 'ellipsis';
+}
 
-      const hasImageSet = Array.isArray(it.imageSet) && it.imageSet.length > 0;
+// 2) 썸네일이 "진짜 이미지"인지 판별 (favicon/ico 제외)
+const thumbUrl = (it.thumbnail || '').trim();
+const isFaviconLike =
+  thumbUrl.includes('google.com/s2/favicons') ||
+  thumbUrl.includes('favicon') ||
+  thumbUrl.toLowerCase().endsWith('.ico');
 
-      if (it.mediaCandidate && !it.thumbnail && hasImageSet){
-        it.thumbnail = it.imageSet[0];
-      }
+const isRealThumb = !!thumbUrl && !isFaviconLike;
 
-      const thumbUrl = (it.thumbnail || '').trim();
-      const isFaviconLike =
-        thumbUrl.includes('google.com/s2/favicons') ||
-        thumbUrl.includes('favicon') ||
-        thumbUrl.toLowerCase().endsWith('.ico');
+// 3) 미디어 존재 판별 (진짜로 있을 때만 미디어 영역 렌더)
+const hasVideoPreview =
+  it.media && ((it.media.type || it.media.kind) === 'video') &&
+  it.media.preview &&
+  (it.media.preview.mp4 || it.media.preview.webm || it.media.preview.poster);
 
-      const isRealThumb = !!thumbUrl && !isFaviconLike;
+const hasImageSet =
+  Array.isArray(it.imageSet) && it.imageSet.length > 0;
 
-      const hasVideoPreview =
-        it.media &&
-        ((it.media.type || it.media.kind) === 'video') &&
-        it.media.preview &&
-        (it.media.preview.mp4 || it.media.preview.webm || it.media.preview.poster);
+// 4) 기본은 WEB/NEWS 카드 (텍스트 중심)
+//    미디어가 있으면 '보조 미디어'를 카드 안에 추가 (카드 크기 유지)
 
-      if (isRealThumb) {
-        const thumb = document.createElement('img');
-        thumb.src = thumbUrl;
-        thumb.loading = 'lazy';
-        thumb.style.maxWidth = '120px';
-        thumb.style.maxHeight = '80px';
-        thumb.style.objectFit = 'cover';
-        thumb.style.float = 'right';
-        thumb.style.marginLeft = '8px';
-        thumb.style.borderRadius = '4px';
-        body.appendChild(thumb);
-      }
+// 4-1) 보조 썸네일 (우측 작은 썸네일)
+if (isRealThumb) {
+  const thumb = document.createElement('img');
+  thumb.src = thumbUrl;
+  thumb.loading = 'lazy';
 
-      if (hasVideoPreview) {
-        const videoWrap = document.createElement('div');
-        videoWrap.style.marginTop = '8px';
-        videoWrap.style.maxHeight = '120px';
-        videoWrap.style.overflow = 'hidden';
-        videoWrap.style.borderRadius = '6px';
+  thumb.style.maxWidth = '120px';
+  thumb.style.maxHeight = '80px';
+  thumb.style.objectFit = 'cover';
+  thumb.style.float = 'right';
+  thumb.style.marginLeft = '8px';
+  thumb.style.borderRadius = '4px';
 
-        const video = document.createElement('video');
-        const hasPlayableSource = !!(it.media.preview.mp4 || it.media.preview.webm);
+  // 텍스트 영역 안에서 우측 썸네일처럼 동작
+  body.appendChild(thumb);
+}
 
-        if (!hasPlayableSource) {
-          video.controls = false;
-        }
+// 4-2) 비디오 프리뷰 (있을 때만, 카드 과대확대 금지)
+if (hasVideoPreview) {
+  const videoWrap = document.createElement('div');
+  videoWrap.style.marginTop = '8px';
+  videoWrap.style.maxHeight = '120px';
+  videoWrap.style.overflow = 'hidden';
+  videoWrap.style.borderRadius = '6px';
 
-        video.muted = true;
-        video.loop = true;
-        video.playsInline = true;
-        video.preload = 'none';
-        video.style.width = '100%';
-        video.style.maxHeight = '120px';
-        video.style.objectFit = 'cover';
+  const video = document.createElement('video');
+  // poster만 있고 mp4/webm이 없을 경우: 정적 미디어 카드로 처리
+const hasPlayableSource =
+  !!(it.media.preview.mp4 || it.media.preview.webm);
 
-        if (it.media.preview.poster) video.poster = it.media.preview.poster;
+if (!hasPlayableSource) {
+  // 재생 비활성 (hover play 금지)
+  video.controls = false;
+}
 
-        if (it.media.preview.webm) {
-          const s = document.createElement('source');
-          s.src = it.media.preview.webm;
-          s.type = 'video/webm';
-          video.appendChild(s);
-        }
-        if (it.media.preview.mp4) {
-          const s = document.createElement('source');
-          s.src = it.media.preview.mp4;
-          s.type = 'video/mp4';
-          video.appendChild(s);
-        }
+  video.muted = true;
+  video.loop = true;
+  video.playsInline = true;
+  video.preload = 'none';
+  video.style.width = '100%';
+  video.style.maxHeight = '120px';
+  video.style.objectFit = 'cover';
 
-        videoWrap.addEventListener('mouseenter', () => {
-          if (hasPlayableSource) video.play().catch(()=>{});
-        });
-        videoWrap.addEventListener('mouseleave', () => {
-          video.pause();
-          video.currentTime = 0;
-        });
+  if (it.media.preview.poster) video.poster = it.media.preview.poster;
 
-        videoWrap.appendChild(video);
-        body.appendChild(videoWrap);
-      }
+  if (it.media.preview.webm) {
+    const s = document.createElement('source');
+    s.src = it.media.preview.webm;
+    s.type = 'video/webm';
+    video.appendChild(s);
+  }
+  if (it.media.preview.mp4) {
+    const s = document.createElement('source');
+    s.src = it.media.preview.mp4;
+    s.type = 'video/mp4';
+    video.appendChild(s);
+  }
 
-      if (hasImageSet) {
-        const gallery = document.createElement('div');
-        gallery.style.display = 'flex';
-        gallery.style.gap = '6px';
-        gallery.style.marginTop = '8px';
-        gallery.style.maxHeight = '90px';
-        gallery.style.overflow = 'hidden';
+  // hover play (데스크톱)
+  videoWrap.addEventListener('mouseenter', () => {
+if (hasPlayableSource) {
+  video.play().catch(()=>{});
+}
 
-        it.imageSet.slice(0,3).forEach(src => {
-          const img = document.createElement('img');
-          img.src = src;
-          img.loading = 'lazy';
-          img.style.width = '33%';
-          img.style.maxHeight = '90px';
-          img.style.objectFit = 'cover';
-          img.style.borderRadius = '4px';
-          gallery.appendChild(img);
-        });
+  });
+  videoWrap.addEventListener('mouseleave', () => {
+    video.pause();
+    video.currentTime = 0;
+  });
 
-        body.appendChild(gallery);
-      }
+  videoWrap.appendChild(video);
+  body.appendChild(videoWrap);
+}
+
+// 4-3) 포토뷰(갤러리) (있을 때만, 최대 3장)
+if (hasImageSet) {
+  const gallery = document.createElement('div');
+  gallery.style.display = 'flex';
+  gallery.style.gap = '6px';
+  gallery.style.marginTop = '8px';
+  gallery.style.maxHeight = '90px';
+  gallery.style.overflow = 'hidden';
+
+  it.imageSet.slice(0,3).forEach(src => {
+    const img = document.createElement('img');
+    img.src = src;
+    img.loading = 'lazy';
+    img.style.width = '33%';
+    img.style.maxHeight = '90px';
+    img.style.objectFit = 'cover';
+    img.style.borderRadius = '4px';
+    gallery.appendChild(img);
+  });
+
+  body.appendChild(gallery);
+}
 
       card.appendChild(body);
       results.appendChild(card);
@@ -422,59 +396,58 @@ async function fetchCollector(q){
       }
     }
 
-    async function runSearch(q){
-      status.textContent = 'Searching…';
-      renderSkeleton();
-      clearPager();
+async function runSearch(q){
+  status.textContent = 'Searching…';
+  renderSkeleton();
+  clearPager();
 
-      try {
-      const collectorRes = await fetchCollector(q);
+  try {
 
-    let collectorItems = [];
+const bank = await fetchBank();
+const bankItems = Array.isArray(bank && bank.items)
+  ? bank.items.filter(it =>
+      (it.title || '').toLowerCase().includes(q.toLowerCase()) ||
+      (it.summary || '').toLowerCase().includes(q.toLowerCase())
+    )
+  : [];
 
-    if (collectorRes) {
-        collectorItems = normalizeItems(collectorRes);
+// [UPGRADE] 검색 전용 미디어 아이템 우선 추출
+const mediaItems = bankItems.filter(it =>
+  it.media &&
+  it.media.kind &&
+  it.media.kind !== 'none' &&
+  (
+    it.thumbnail ||
+    (it.media.preview && it.media.preview.poster)
+  )
+);
+
+// [POLICY] 미디어는 있을 때만, bank → maru 순서 유지
+if (mediaItems.length){
+  allItems = mediaItems.concat(
+    bankItems.filter(it => !mediaItems.includes(it))
+  );
+} else if (bankItems.length){
+  allItems = bankItems;
+} else {
+  const j0 = await fetchMaru(q);
+  const d = unwrap(j0) || {};
+  const items = d.items || d.results || [];
+  allItems = Array.isArray(items) ? items : [];
 }
 
-    const merged = dedupeItems([
-      ...collectorItems
-]);
 
-    allItems = merged;
+    status.textContent = `${allItems.length} results`;
+    currentBlock = 0;
+    currentPage = 1;
+    renderPage(currentPage);
 
-        status.textContent = `${allItems.length} results`;
-        currentBlock = 0;
-        currentPage = 1;
-        renderPage(currentPage);
-
-      } catch(e){
-        console.error(e);
-        results.innerHTML = '';
-        status.textContent = 'Search error';
-      }
-    }
-
-  });
-})();
-
-(function () {
-  function runGlobalSearch() {
-    const input = document.getElementById('globalSearchInput');
-    if (!input) return;
-    const q = input.value.trim();
-    if (!q) return;
-    window.location.href = `/search.html?q=${encodeURIComponent(q)}`;
+  } catch(e){
+    console.error(e);
+    results.innerHTML = '';
+    status.textContent = 'Search error';
   }
+}
 
-  document.addEventListener('DOMContentLoaded', function () {
-    const btn = document.getElementById('globalSearchBtn');
-    const input = document.getElementById('globalSearchInput');
-
-    if (btn) btn.addEventListener('click', runGlobalSearch);
-    if (input) {
-      input.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') runGlobalSearch();
-      });
-    }
   });
 })();
