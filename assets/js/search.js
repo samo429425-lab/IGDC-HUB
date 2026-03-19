@@ -37,6 +37,67 @@
 
 const params = new URLSearchParams(location.search);
 const q0 = (params.get('q') || '').trim();
+const from0 = (params.get('from') || '').trim();
+
+function getSafeReturnUrl() {
+  try {
+    const from = (new URLSearchParams(location.search).get('from') || '').trim();
+    if (!from) return '';
+    const u = new URL(from, location.origin);
+    if (u.origin !== location.origin) return '';
+    return u.pathname + u.search + u.hash;
+  } catch (e) {
+    return '';
+  }
+}
+
+function buildSearchUrl(q) {
+  const u = new URL('/search.html', location.origin);
+  u.searchParams.set('q', q);
+
+  const currentFrom = getSafeReturnUrl();
+  if (currentFrom) {
+    u.searchParams.set('from', currentFrom);
+  } else if (!isSearchPage) {
+    const fallbackFrom = location.pathname + location.search + location.hash;
+    u.searchParams.set('from', fallbackFrom);
+  }
+
+  return u.pathname + u.search + u.hash;
+}
+
+function ensureSearchHistoryBridge() {
+  if (!isSearchPage) return;
+
+  const returnUrl = getSafeReturnUrl();
+  if (!returnUrl) return;
+
+  const state = history.state || {};
+  if (state && state.__searchBridgeInstalled) return;
+
+  history.replaceState(
+    {
+      ...(state || {}),
+      __searchBridgeInstalled: true,
+      __searchEntry: true,
+      q: q0 || '',
+      from: returnUrl
+    },
+    '',
+    location.href
+  );
+
+  history.pushState(
+    {
+      __searchBridgeMarker: true,
+      from: returnUrl
+    },
+    '',
+    location.href
+  );
+
+  history.back();
+}
 
 function syncSearchFromUrl(run = true) {
   const qp = (new URLSearchParams(location.search).get('q') || '').trim();
@@ -54,10 +115,16 @@ function syncSearchFromUrl(run = true) {
 
 if (q0) {
   input.value = q0;
+}
+
+ensureSearchHistoryBridge();
+
+if (q0) {
   runSearch(q0);
 } else {
   status.textContent = '';
 }
+
 btn.addEventListener('click', (e) => {
   e.preventDefault();
   e.stopPropagation();
@@ -75,12 +142,18 @@ btn.addEventListener('click', (e) => {
 
     const u = new URL(location.href);
     u.searchParams.set('q', q);
-    history.pushState({ q }, '', u.toString());
+
+    const safeReturnUrl = getSafeReturnUrl();
+    if (safeReturnUrl) {
+      u.searchParams.set('from', safeReturnUrl);
+    }
+
+    history.pushState({ q, from: safeReturnUrl || '' }, '', u.toString());
     runSearch(q);
     return;
   }
 
-  window.location.assign(`/search.html?q=${encodeURIComponent(q)}`);
+  window.location.assign(buildSearchUrl(q));
 });
 
 input.addEventListener('keydown', (e) => {
@@ -102,12 +175,18 @@ input.addEventListener('keydown', (e) => {
 
     const u = new URL(location.href);
     u.searchParams.set('q', q);
-    history.pushState({ q }, '', u.toString());
+
+    const safeReturnUrl = getSafeReturnUrl();
+    if (safeReturnUrl) {
+      u.searchParams.set('from', safeReturnUrl);
+    }
+
+    history.pushState({ q, from: safeReturnUrl || '' }, '', u.toString());
     runSearch(q);
     return;
   }
 
-  window.location.assign(`/search.html?q=${encodeURIComponent(q)}`);
+  window.location.assign(buildSearchUrl(q));
 });
 
 window.addEventListener('popstate', () => {
@@ -549,9 +628,15 @@ async function runSearch(q){
   function runGlobalSearch() {
     const input = document.getElementById('globalSearchInput');
     if (!input) return;
+
     const q = input.value.trim();
     if (!q) return;
-    window.location.href = `/search.html?q=${encodeURIComponent(q)}`;
+
+    const u = new URL('/search.html', location.origin);
+    u.searchParams.set('q', q);
+    u.searchParams.set('from', location.pathname + location.search + location.hash);
+
+    window.location.href = u.pathname + u.search + u.hash;
   }
 
   document.addEventListener('DOMContentLoaded', function () {
