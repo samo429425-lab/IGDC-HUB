@@ -139,6 +139,7 @@ function validateQuery(q) {
   if (!qq) return { ok: false, code: "BAD_QUERY", value: "" };
   return { ok: true, value: qq };
 }
+
 function parseParams(params = {}) {
   const rawQ = params.q || params.query || "";
   const v = validateQuery(rawQ);
@@ -159,10 +160,21 @@ function parseParams(params = {}) {
 
 /* ===== NORMALIZE ===== */
 function normalizeItem(it, fallbackSource) {
-  if (!it || typeof it !== "object") return null;
-  const url = s(it.url || it.link || it.href || "").trim();
-  const title = s(it.title || it.name || "").trim();
+  if (!it) return null;
+
+  if (typeof it !== "object") {
+    it = {
+      title: s(it),
+      summary: s(it),
+      url: "#",
+      source: fallbackSource || "unknown"
+    };
+  }
+
+  const url = s(it.url || it.link || it.href || "#").trim();
+  const title = s(it.title || it.name || it.label || "no-title").trim();
   const summary = s(it.summary || it.description || it.snippet || "").trim();
+
   return {
     id: it.id ? s(it.id) : null,
     title,
@@ -174,8 +186,18 @@ function normalizeItem(it, fallbackSource) {
     license: s(it.license || "").trim(),
     score: typeof it.score === "number" ? it.score : 0.5,
     sourceTrust: typeof it.sourceTrust === "number" ? it.sourceTrust : 0.5,
+
     deepfakeRisk: typeof it.deepfakeRisk === "number" ? it.deepfakeRisk : 0,
     manipulationRisk: typeof it.manipulationRisk === "number" ? it.manipulationRisk : 0,
+
+    // 🔥 추가된 핵심 (라벨)
+    riskLabel:
+      (it.deepfakeRisk > 0.8 || it.manipulationRisk > 0.8)
+        ? "⚠️ high-risk"
+        : (it.deepfakeRisk > 0.4 || it.manipulationRisk > 0.4)
+          ? "⚠️ medium-risk"
+          : "safe",
+
     timestamp: it.timestamp || now(),
     thumbnail: s(it.thumbnail || it.thumb || "").trim(),
     imageSet: Array.isArray(it.imageSet) ? it.imageSet.slice(0, 8) : undefined,
@@ -185,61 +207,24 @@ function normalizeItem(it, fallbackSource) {
     payload: it.payload && typeof it.payload === "object" ? it.payload : it
   };
 }
+
 function normalizeEnginePayload(res, fallbackSource) {
-  if (!res || typeof res !== "object") return [];
+  if (!res) return [];
 
-  if (Core && Core.aiAdapter && typeof Core.aiAdapter.normalizeAIResult === "function") {
-    try {
-      const aiNorm = Core.aiAdapter.normalizeAIResult(res);
-      if (Array.isArray(aiNorm) && aiNorm.length && typeof aiNorm[0] === "object") {
-        return aiNorm.map(it => normalizeItem(it, fallbackSource)).filter(Boolean);
-      }
-    } catch (e) {}
-  }
+  let arr = [];
 
-  if (Array.isArray(res.items)) {
-    return res.items.map(it => normalizeItem(it, fallbackSource)).filter(Boolean);
-  }
+  if (Array.isArray(res)) arr = res;
+  else if (Array.isArray(res.items)) arr = res.items;
+  else if (Array.isArray(res.results)) arr = res.results;
+  else if (Array.isArray(res.data)) arr = res.data;
+  else if (res.data && Array.isArray(res.data.items)) arr = res.data.items;
+  else if (Array.isArray(res.list)) arr = res.list;
+  else if (res.item && typeof res.item === "object") arr = [res.item];
+  else if (typeof res === "object") arr = [res];
 
-  if (Array.isArray(res.results)) {
-    const out = [];
-    for (const r of res.results) {
-      if (!r) continue;
-      if (Array.isArray(r.items)) {
-        for (const it of r.items) {
-          const x = normalizeItem({ ...it, source: it?.source || r.source || fallbackSource }, fallbackSource);
-          if (x) out.push(x);
-        }
-        continue;
-      }
-      const data = Array.isArray(r.data) ? r.data : [r.data];
-      for (const it of data) {
-        const x = normalizeItem({
-          ...it,
-          source: r.source || it?.source || fallbackSource,
-          sourceTrust: r.sourceTrust ?? it?.sourceTrust,
-          timestamp: r.timestamp || it?.timestamp
-        }, fallbackSource);
-        if (x) out.push(x);
-      }
-    }
-    return out;
-  }
-
-  if (res.data && Array.isArray(res.data.items)) {
-    return res.data.items.map(it => normalizeItem(it, fallbackSource)).filter(Boolean);
-  }
-
-  if (Array.isArray(res.data)) {
-    return res.data.map(it => normalizeItem(it, fallbackSource)).filter(Boolean);
-  }
-
-  if (res.item && typeof res.item === "object") {
-    const single = normalizeItem(res.item, fallbackSource);
-    return single ? [single] : [];
-  }
-
-  return [];
+  return arr
+    .map(it => normalizeItem(it, fallbackSource))
+    .filter(Boolean);
 }
 
 /* ===== RESILIENCE ===== */
@@ -346,17 +331,21 @@ function engineSearchAdapter(name, engine) {
   }
   return null;
 }
+
 function ensureCoreRegistry() {
   if (!Core || !Core.engineRegistry || typeof Core.engineRegistry.register !== "function") return;
 
   const adapters = [
     engineSearchAdapter("planetary", Planetary),
     engineSearchAdapter("bank", Bank),
-    engineSearchAdapter("collector", Collector)
+    engineSearchAdapter("collector", Collector),
+    engineSearchAdapter("globalInsight", GlobalInsight)
   ].filter(Boolean);
 
   for (const adapter of adapters) {
-    Core.engineRegistry.register(adapter.name, adapter);
+    if (adapter && adapter.name && adapter.search) {
+      Core.engineRegistry.register(adapter.name, adapter);
+    }
   }
 }
 
@@ -440,21 +429,56 @@ async function fetchViaCore(event, params, plan) {
   if (Core && Core.federation && typeof Core.federation.route === "function" && Core.engineRegistry) {
     usedCoreFederation = true;
 
-    const tasks = plan.engines.map(async (name) => {
-      try {
-        const adapter = Core.engineRegistry.get(name);
-        if (!adapter || typeof adapter.search !== "function") {
-          return { name, status: "fail", items: [], raw: null, error: "ENGINE_UNAVAILABLE" };
-        }
-        const raw = await resilientCall(name, async () => {
-          return await adapter.search(payload);
-        });
-        const items = normalizeEnginePayload(raw, name).slice(0, MAX_RESULTS_PER_ENGINE);
-        return { name, status: "ok", items, raw, error: null };
-      } catch (e) {
-        return { name, status: "fail", items: [], raw: null, error: s(e && e.message ? e.message : e) };
-      }
-    });
+const tasks = plan.engines.map(async (name) => {
+  try {
+    const adapter = Core.engineRegistry.get(name);
+
+    if (!adapter || typeof adapter.search !== "function") {
+      return { name, status: "fail", items: [], raw: null, error: "ENGINE_UNAVAILABLE" };
+    }
+
+    let raw = null;
+
+    // 1️⃣ Collector 직접 실행
+    if (name === "collector" && Collector) {
+      raw = (typeof Collector.collect === "function")
+        ? await Collector.collect({ event: payload.event || {}, ...(payload.params || {}) })
+        : (typeof Collector.runEngine === "function")
+          ? await Collector.runEngine(payload.event || {}, { action: "collect", ...(payload.params || {}) })
+          : null;
+    }
+
+    // 2️⃣ Planetary 직접 실행
+    else if (name === "planetary" && Planetary) {
+      raw = (typeof Planetary.connect === "function")
+        ? await Planetary.connect(payload.event || {}, payload.params || {})
+        : (typeof Planetary.search === "function")
+          ? await Planetary.search(payload)
+          : null;
+    }
+
+    // 3️⃣ fallback (core adapter)
+    if (!raw) {
+      raw = await resilientCall(name, async () => {
+        return await adapter.search(payload);
+      });
+    }
+
+    const items = normalizeEnginePayload(raw, name).slice(0, MAX_RESULTS_PER_ENGINE);
+
+    return { name, status: "ok", items, raw, error: null };
+
+  } catch (e) {
+    return {
+      name,
+      status: "fail",
+      items: [],
+      raw: null,
+      error: String(e && e.message ? e.message : e)
+    };
+  }
+});
+
 
     const settled = await Promise.all(tasks);
     for (const row of settled) {
@@ -644,6 +668,7 @@ async function runEngine(event, params = {}) {
 
 const plan = sourcePlan(p);
 
+
 /* ===== SEARCH BANK PREFILL CHECK ===== */
 let bankSeed = [];
 
@@ -663,11 +688,43 @@ try {
 
 /* ===== CORE FETCH ===== */
 const fetched = await fetchViaCore(event || {}, p, plan);
+let forcedItems = [];
+
+if (!fetched.items || !fetched.items.length) {
+  try {
+    const https = require("https");
+    const q = encodeURIComponent(p.q);
+
+    const html = await new Promise((resolve, reject) => {
+      https.get(`https://html.duckduckgo.com/html/?q=${q}`, (res) => {
+        let data = "";
+        res.on("data", chunk => data += chunk);
+        res.on("end", () => resolve(data));
+      }).on("error", reject);
+    });
+
+    const matches = [...html.matchAll(/<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)<\/a>/g)];
+
+    forcedItems = matches.slice(0, 20).map(m => ({
+      title: m[2].replace(/<[^>]+>/g, ""),
+      summary: "",
+      url: m[1],
+      source: "forced-duckduckgo",
+      score: 0.8,
+      sourceTrust: 0.6,
+      timestamp: Date.now()
+    }));
+
+  } catch (e) {
+    console.warn("forced search failed:", e && e.message ? e.message : e);
+  }
+}
+
 
 /* ===== DIRECT FETCH FALLBACK (CRITICAL) ===== */
 let directItems = [];
 
-if (!fetched.items || fetched.items.length === 0) {
+if (!fetched.items || fetched.items.length < p.limit) {
   try {
     const https = require("https");
     const q = encodeURIComponent(p.q);
@@ -712,15 +769,10 @@ if (directItems.length) {
   fetched.items = [...directItems, ...(fetched.items || [])];
 }
 
-/* ===== BANK AUTO FILL LOGIC ===== */
-const BANK_MIN_THRESHOLD = 0;
-let needFill = false;
-
-if (!bankSeed.length) {
-  needFill = true;
-} else if (bankSeed.length < BANK_MIN_THRESHOLD) {
-  needFill = true;
-}
+/* ===== BANK AUTO FILL LOGIC (LIMIT BASED) ===== */
+const REQUIRED_COUNT = p.limit || 20;
+const currentCount = (fetched.items || []).length;
+const needFill = currentCount < REQUIRED_COUNT;
 
 let externalItems = fetched.items || [];
 
@@ -729,22 +781,17 @@ if (needFill && externalItems.length) {
     bankSeed.map(it => (it.url || (it.title + "|" + it.source) || "").toLowerCase())
   );
 
-const newItems = externalItems.filter(it => {
-  const key = (it.url || (it.title + "|" + it.source) || "").toLowerCase();
-  if (!key || bankKeys.has(key)) return false;
-
-  // 최소 필터만 유지
-  if (it.deepfakeRisk > 0.8) return false;
-  if (it.manipulationRisk > 0.8) return false;
-
-  return true;
-});
+  const newItems = externalItems.filter(it => {
+    const key = (it.url || (it.title + "|" + it.source) || "").toLowerCase();
+    if (!key || bankKeys.has(key)) return false;
+    return true;
+  });
 
   if (newItems.length && Bank && typeof Bank.runEngine === "function") {
     try {
       await Bank.runEngine(event || {}, {
         action: "store",
-        items: newItems.slice(0, 50),
+        items: newItems.slice(0, REQUIRED_COUNT - currentCount),
         source: "maru-search-autofill",
         region: p.region || "global",
         lang: p.lang || "auto",
@@ -756,33 +803,14 @@ const newItems = externalItems.filter(it => {
     }
   }
 }
-
 /* ===== MERGE BANK SEED ===== */
 if (bankSeed.length) {
   fetched.items = [...bankSeed, ...fetched.items];
 }
 
-  if (!fetched.items.length) {
-    return {
-      status: "ok",
-      engine: "maru-search",
-      version: VERSION,
-      query: p.q,
-      mode: p.mode,
-      items: [],
-      results: [],
-      meta: buildMeta(reqId, p, plan, fetched, []),
-      data: {
-        collector: fetched.grouped.collector?.raw || null,
-        planetary: fetched.grouped.planetary?.raw || null,
-        bank: fetched.grouped.bank?.raw || null,
-        globalInsight: fetched.grouped.globalInsight?.raw || null
-      }
-    };
-  }
-
   /* ===== DEDUP + PRIORITY ===== */
 let mergedItems = fetched.items || [];
+mergedItems = [...forcedItems, ...mergedItems];
 
 /* 1차 중복 제거 */
 const seen = new Set();
