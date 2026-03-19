@@ -2109,7 +2109,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const openSearch = () => {
     const q = input.value.trim();
     if (!q) return;
-    window.location.href = `/search.html?q=${encodeURIComponent(q)}`;
+
+    const homeUrl = location.href;
+    const searchUrl = `/search.html?q=${encodeURIComponent(q)}&from=home&home=${encodeURIComponent(homeUrl)}`;
+
+    window.open(searchUrl, '_blank');
   };
 
   btn.addEventListener('click', openSearch);
