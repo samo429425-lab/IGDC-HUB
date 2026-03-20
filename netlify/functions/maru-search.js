@@ -317,15 +317,17 @@ function loadSnapshotLocal(q, limit){
 
 // ===== Containers (future-ready, but safe-noop unless active) =====
 const Containers = {
-  search_bank: {
+	  search_bank: {
     name: 'search_bank',
-    async fetch(q, limit){
+    async fetch(q, limit, offset){
       try{
         const base = process.env.URL || "";
+        const off = Number.isFinite(Number(offset)) ? Math.max(0, Number(offset)) : 0;
         const res = await fetchWithTimeout(
           (base + '/.netlify/functions/search-bank-engine?q=') +
           encodeURIComponent(q) +
-          '&limit=' + encodeURIComponent(limit),
+          '&limit=' + encodeURIComponent(limit) +
+          '&offset=' + encodeURIComponent(off),
           null,
           6000
         );
@@ -341,20 +343,20 @@ const Containers = {
     }
   },
 
-  web_naver: {
+    web_naver: {
     name: 'web_naver',
     async fetch(q, limit, start){
-      return naverSearch(q, limit, start);
+    return naverSearch(q, limit, start);
     }
   },
-
-  web_google: {
+    web_google: {
     name: 'web_google',
     async fetch(q, limit, start){
-      return googleSearch(q, limit, start);
+    return googleSearch(q, limit, start);
     }
   },
-
+  // Snapshot container placeholder (optional):
+  // - If you later provide SNAPSHOT_SEARCH_URL or local snapshot index, implement here.
   snapshot: {
     name: 'snapshot',
     async fetch(q, limit){
@@ -362,8 +364,16 @@ const Containers = {
       if(local) return { source:'snapshot-local', results: local };
       return null;
     }
-  },
+  };
+    }
+    return null;
+  }catch(e){
+    return null;
+  }
+}
 
+  },
+  // AI container placeholder (optional):
   ai: {
     name: 'ai',
     async fetch(_q, _limit){
@@ -373,6 +383,7 @@ const Containers = {
 };
 
 // Orchestrator: chooses containers, runs safely, accumulates, merges (FUTURE-GRADE)
+
 
 async function orchestrateSearch({ event, q, limit, start, lang }) {
   const cacheKey = cacheKeyFor(q, limit, start, lang);
@@ -385,20 +396,37 @@ async function orchestrateSearch({ event, q, limit, start, lang }) {
   const sourceOrder = sourceOrderForRegion(region);
 
   async function pullFromSearchBank(){
-    if (!cbCanRun('bank')) return;
-    const b = await Containers.search_bank.fetch(q, limit)
-      .catch(() => { cbOnFail('bank'); return null; });
+    if (!cbCanRun('bank')) return false;
 
-    if (b && b.results && b.results.length) {
+    let offset = 0;
+    let progress = false;
+
+    while (collected.length < limit) {
+      const batchSize = Math.min(100, limit - collected.length);
+      const b = await Containers.search_bank.fetch(q, batchSize, offset)
+        .catch(() => { cbOnFail('bank'); return null; });
+
+      if (!b || !b.results || !b.results.length) break;
+
       cbOnSuccess('bank');
       sourceUsed = sourceUsed || 'search-bank-engine';
+
+      const before = collected.length;
       collected.push(...toStandardItems(b.results, 'search-bank-engine'));
+      offset += b.results.length;
+      if (collected.length > before) progress = true;
+
+      if (b.results.length < batchSize) break;
     }
+
+    return progress;
   }
 
   async function pullFromNaver(){
-    if (!cbCanRun('naver')) return;
+    if (!cbCanRun('naver')) return false;
+
     let pageStart = Math.max(1, start || 1);
+    let progress = false;
 
     while (collected.length < limit) {
       const batchSize = Math.min(100, limit - collected.length);
@@ -409,16 +437,24 @@ async function orchestrateSearch({ event, q, limit, start, lang }) {
 
       cbOnSuccess('naver');
       sourceUsed = sourceUsed || 'naver';
+
+      const before = collected.length;
       collected.push(...toStandardItems(n.results, n.source));
+      if (collected.length > before) progress = true;
 
       if (n.results.length < batchSize) break;
       pageStart += batchSize;
+      if (pageStart > 1000) break;
     }
+
+    return progress;
   }
 
   async function pullFromGoogle(){
-    if (!cbCanRun('google')) return;
+    if (!cbCanRun('google')) return false;
+
     let pageStart = Math.max(1, start || 1);
+    let progress = false;
 
     while (collected.length < limit && pageStart <= 91) {
       const batchSize = Math.min(10, limit - collected.length);
@@ -429,18 +465,29 @@ async function orchestrateSearch({ event, q, limit, start, lang }) {
 
       cbOnSuccess('google');
       sourceUsed = sourceUsed || 'google';
+
+      const before = collected.length;
       collected.push(...toStandardItems(g.results, g.source));
+      if (collected.length > before) progress = true;
 
       if (g.results.length < batchSize) break;
       pageStart += batchSize;
     }
+
+    return progress;
   }
 
-  for(const sourceName of sourceOrder){
-    if (collected.length >= limit) break;
-    if (sourceName === 'search_bank') await pullFromSearchBank();
-    if (sourceName === 'web_naver') await pullFromNaver();
-    if (sourceName === 'web_google') await pullFromGoogle();
+  while (collected.length < limit) {
+    const beforeRound = collected.length;
+
+    for (const sourceName of sourceOrder) {
+      if (collected.length >= limit) break;
+      if (sourceName === 'search_bank') await pullFromSearchBank();
+      if (sourceName === 'web_naver') await pullFromNaver();
+      if (sourceName === 'web_google') await pullFromGoogle();
+    }
+
+    if (collected.length <= beforeRound) break;
   }
 
   const uniqueCollected = dedupeCanonicalItems(collected);
@@ -622,6 +669,51 @@ async function applyCorePipeline(query, items) {
 }
 
 
+
+// ===== QUALITY / VALIDITY LAYER =====
+function isValidResult(it){
+  try{
+    if(!it) return false;
+    const url = String(it.url || it.link || '').trim().toLowerCase();
+    const title = String(it.title || '').trim().toLowerCase();
+    if(!url && !title) return false;
+    if(url.includes('/404') || url.includes('error=404') || url.includes('notfound')) return false;
+    if(title === '404' || title.includes('not found')) return false;
+    return true;
+  }catch(e){
+    return false;
+  }
+}
+
+function domainScore(url){
+  const d = domainOf(url || '').toLowerCase();
+  if(!d) return 0;
+  if(d.endsWith('.gov') || d.endsWith('.go.kr')) return 2.5;
+  if(d.includes('naver.com')) return 2.0;
+  if(d.includes('google.com')) return 1.8;
+  if(d.includes('youtube.com')) return 1.6;
+  if(d.includes('wikipedia.org')) return 1.6;
+  if(d.includes('korea.kr')) return 2.2;
+  return 0;
+}
+
+function freshnessBoost(it){
+  try{
+    const p = (it && it.payload) || {};
+    const raw = p.date || p.publishedAt || p.published_at || it.publishedAt || it.published_at || '';
+    if(!raw) return 0;
+    const ts = new Date(raw).getTime();
+    if(!Number.isFinite(ts)) return 0;
+    const age = Date.now() - ts;
+    if(age < 7 * 24 * 60 * 60 * 1000) return 2;
+    if(age < 30 * 24 * 60 * 60 * 1000) return 1;
+    if(age < 180 * 24 * 60 * 60 * 1000) return 0.4;
+    return 0;
+  }catch(e){
+    return 0;
+  }
+}
+
 // ===== AI INTENT LAYER =====
 function detectIntent(q){
   const text = String(q||"").toLowerCase();
@@ -647,20 +739,24 @@ function applyServerSideBoosts(items, opts){
   const q = String((opts && opts.q) || "").toLowerCase();
   const lang = String((opts && opts.lang) || "").toLowerCase();
 
-  const ranked = (Array.isArray(items) ? items : []).map((it, idx) => {
-    let bonus = 0;
-    const title = String(it.title || "").toLowerCase();
-    const summary = String(it.summary || "").toLowerCase();
-    const source = String(it.source || "").toLowerCase();
+  const ranked = (Array.isArray(items) ? items : [])
+    .filter(isValidResult)
+    .map((it, idx) => {
+      let bonus = 0;
+      const title = String(it.title || "").toLowerCase();
+      const summary = String(it.summary || "").toLowerCase();
+      const source = String(it.source || "").toLowerCase();
 
-    if (q && title.includes(q)) bonus += 3;
-    if (q && summary.includes(q)) bonus += 1.5;
-    if (lang && String(it.lang || "").toLowerCase() === lang) bonus += 1;
-    if (source.includes("search-bank")) bonus += 0.6;
-    if (it.mediaType === "image" || it.mediaType === "video") bonus += 0.25;
+      if (q && title.includes(q)) bonus += 3;
+      if (q && summary.includes(q)) bonus += 1.5;
+      if (lang && String(it.lang || "").toLowerCase() === lang) bonus += 1;
+      if (source.includes("search-bank")) bonus += 0.6;
+      if (it.mediaType === "image" || it.mediaType === "video") bonus += 0.25;
+      bonus += domainScore(it.url || it.link || "");
+      bonus += freshnessBoost(it);
 
-    return { ...it, _bonus: bonus, _finalScore: Number(it._coreScore || it.score || 0) + bonus, _seq: idx };
-  });
+      return { ...it, _bonus: bonus, _finalScore: Number(it._coreScore || it.score || 0) + bonus, _seq: idx };
+    });
 
   ranked.sort((a,b) => {
     if ((b._finalScore || 0) !== (a._finalScore || 0)) return (b._finalScore || 0) - (a._finalScore || 0);
