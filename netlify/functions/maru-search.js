@@ -542,3 +542,23 @@ async function maruSearchDispatcher(req = {}) {
 }
 
 exports.maruSearchDispatcher = maruSearchDispatcher;
+
+
+// ===== PRODUCER REVENUE DISTRIBUTION =====
+async function distributeRevenue(items){
+  try{
+    for(const item of items){
+      if(item.type === "ad" || item.type === "product"){
+        await fetch("/.netlify/functions/revenue-engine", {
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body: JSON.stringify({
+            action:"distribute",
+            producerId: item.producerId || "global",
+            amount: item._score || 1
+          })
+        });
+      }
+    }
+  }catch(e){}
+}

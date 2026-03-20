@@ -533,6 +533,17 @@ try{
       : (items || []);
 
   const safeItems = asArray(items).slice(0, limit);
+// ===== SEARCH-BANK PIPELINE CONNECT =====
+try{
+  if(global.SearchBankExtensionCore && typeof global.SearchBankExtensionCore.pipeline === "function"){
+    for(const item of safeItems){
+      try{
+        global.SearchBankExtensionCore.pipeline(item);
+      }catch(e){}
+    }
+  }
+}catch(e){}
+
 
   const result = {
     status:"ok",
