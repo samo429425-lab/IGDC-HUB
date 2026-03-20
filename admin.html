@@ -1361,6 +1361,38 @@ function openPopup(url){
 
   if(!placeInflowPanel()) fallbackFloat();
 
+setTimeout(async function(){
+
+  try{
+    const res = await fetch("/.netlify/functions/maru-revenue-engine?action=report");
+    const data = await res.json();
+
+    if(!data) return;
+
+    const box = document.createElement("div");
+    box.style.marginTop = "12px";
+    box.style.padding = "10px";
+    box.style.border = "1px solid #eee";
+    box.style.borderRadius = "10px";
+    box.style.background = "#fff";
+
+    let html = "<strong>💰 수익 현황</strong>";
+    html += "<div>총 수익: " + (data.totalRevenue || 0) + "</div>";
+
+    const bd = data.breakdown || {};
+    for(const k in bd){
+      html += "<div>" + k + " : " + bd[k] + "</div>";
+    }
+
+    box.innerHTML = html;
+    inflow.appendChild(box);
+
+  }catch(e){
+    console.warn("revenue load fail", e);
+  }
+
+}, 500);
+
   // 2-3. DOM 레퍼런스
   var $tb   = document.getElementById('igdc-inflow-tbody');
   var $cnt  = document.getElementById('igdc-inflow-cnt');
