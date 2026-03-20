@@ -134,9 +134,11 @@ window.addEventListener('popstate', (e) => {
   if (page > 0) {
     currentPage = page;
     currentBlock = Math.max(0, block);
+    renderPage(currentPage);
+    return;
   }
 
-  syncSearchFromUrl(true);
+  syncSearchFromUrl(false);
 });
 
 if (q0) {
