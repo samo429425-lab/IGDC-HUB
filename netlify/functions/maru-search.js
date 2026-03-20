@@ -317,7 +317,7 @@ function loadSnapshotLocal(q, limit){
 
 // ===== Containers (future-ready, but safe-noop unless active) =====
 const Containers = {
-	  search_bank: {
+  search_bank: {
     name: 'search_bank',
     async fetch(q, limit){
       try{
@@ -341,20 +341,20 @@ const Containers = {
     }
   },
 
-    web_naver: {
+  web_naver: {
     name: 'web_naver',
     async fetch(q, limit, start){
-    return naverSearch(q, limit, start);
+      return naverSearch(q, limit, start);
     }
   },
-    web_google: {
+
+  web_google: {
     name: 'web_google',
     async fetch(q, limit, start){
-    return googleSearch(q, limit, start);
+      return googleSearch(q, limit, start);
     }
   },
-  // Snapshot container placeholder (optional):
-  // - If you later provide SNAPSHOT_SEARCH_URL or local snapshot index, implement here.
+
   snapshot: {
     name: 'snapshot',
     async fetch(q, limit){
@@ -362,16 +362,8 @@ const Containers = {
       if(local) return { source:'snapshot-local', results: local };
       return null;
     }
-  };
-    }
-    return null;
-  }catch(e){
-    return null;
-  }
-}
-
   },
-  // AI container placeholder (optional):
+
   ai: {
     name: 'ai',
     async fetch(_q, _limit){
