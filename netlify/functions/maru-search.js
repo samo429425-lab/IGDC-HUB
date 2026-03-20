@@ -20,9 +20,29 @@
 let Core = null;
 try { Core = require("./core"); } catch (e) { Core = null; }
 
-const VERSION = 'A1.4-capability';
+const VERSION = 'A1.5-runtime-routing';
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 1000;
+
+// ===== Query Cache (runtime memory) =====
+const QUERY_CACHE = new Map();
+const QUERY_CACHE_TTL = 10_000;
+
+function cacheKeyFor(q, limit, start, lang){
+  return [String(q||""), Number(limit||0), Number(start||0), String(lang||"")].join("|");
+}
+function getQueryCache(key){
+  const hit = QUERY_CACHE.get(key);
+  if(!hit) return null;
+  if ((Date.now() - hit.t) > QUERY_CACHE_TTL){
+    QUERY_CACHE.delete(key);
+    return null;
+  }
+  return hit.v;
+}
+function setQueryCache(key, value){
+  QUERY_CACHE.set(key, { t: Date.now(), v: value });
+}
 
 // ===== Resilience (lightweight; safe on Netlify) =====
 const CB = {
@@ -65,13 +85,27 @@ async function fetchWithTimeout(url, options, timeoutMs){
   }
 }
 
+
+function eventBaseUrl(event){
+  try{
+    const headers = (event && event.headers) || {};
+    const host = headers['x-forwarded-host'] || headers['host'] || "";
+    const proto = headers['x-forwarded-proto'] || "https";
+    if(!host) return "";
+    return `${proto}://${host}`;
+  }catch(e){
+    return "";
+  }
+}
+
 // ===== HTTP helpers =====
 function ok(body) {
   return {
     statusCode: 200,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'no-store',
+      'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+      'Vary': 'Accept-Language, Query-String',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Headers': 'content-type',
     },
@@ -199,14 +233,97 @@ function toStandardItems(arr, source) {
   });
 }
 
+
+// ===== Runtime Routing / Dedup helpers =====
+function parseAcceptLanguage(header){
+  return String(header || '')
+    .split(',')
+    .map(x => x.trim().split(';')[0].toLowerCase())
+    .filter(Boolean);
+}
+
+function detectRuntimeRegion(event, lang, q){
+  try{
+    const qs = (event && event.queryStringParameters) || {};
+    const forcedRegion = String(qs.region || qs.geo || '').trim().toUpperCase();
+    const forcedCountry = String(qs.country || '').trim().toUpperCase();
+    if (forcedRegion) return forcedRegion;
+    if (forcedCountry === 'KR') return 'KR';
+    if (forcedCountry === 'US') return 'US';
+
+    const headers = (event && event.headers) || {};
+    const xfCountry = String(headers['x-country'] || headers['cf-ipcountry'] || headers['x-vercel-ip-country'] || '').trim().toUpperCase();
+    if (xfCountry === 'KR') return 'KR';
+    if (xfCountry === 'US') return 'US';
+
+    const langs = [
+      String(lang || '').toLowerCase(),
+      ...parseAcceptLanguage(headers['accept-language'] || headers['Accept-Language'] || '')
+    ].filter(Boolean);
+
+    if (langs.some(x => x.startsWith('ko'))) return 'KR';
+    if (langs.some(x => x.startsWith('en-us'))) return 'US';
+    if (langs.some(x => x.startsWith('en'))) return 'US';
+
+    const text = String(q || '');
+    if (/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(text)) return 'KR';
+    return 'GLOBAL';
+  }catch(e){
+    return 'GLOBAL';
+  }
+}
+
+function sourceOrderForRegion(region){
+  switch(String(region || '').toUpperCase()){
+    case 'KR':
+      return ['search_bank', 'web_naver', 'web_google'];
+    case 'US':
+      return ['search_bank', 'web_google', 'web_naver'];
+    default:
+      return ['search_bank', 'web_google', 'web_naver'];
+  }
+}
+
+function dedupeCanonicalItems(items){
+  const seen = new Set();
+  const out = [];
+  for(const it of (Array.isArray(items) ? items : [])){
+    const key =
+      String(it && (it.url || it.id || it.title || ''), '').trim().toLowerCase() ||
+      JSON.stringify(it || {}).toLowerCase();
+    if(!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(it);
+  }
+  return out;
+}
+
+
+// ===== SNAPSHOT DIRECT ACCESS =====
+const fs = require('fs');
+function loadSnapshotLocal(q, limit){
+  try{
+    const path = './snapshot.json';
+    if(!fs.existsSync(path)) return null;
+    const data = JSON.parse(fs.readFileSync(path,'utf-8'));
+    if(!Array.isArray(data)) return null;
+    return data
+      .filter(it => String(it.title||'').toLowerCase().includes(String(q).toLowerCase()))
+      .slice(0, limit);
+  }catch(e){
+    return null;
+  }
+}
+
 // ===== Containers (future-ready, but safe-noop unless active) =====
 const Containers = {
 	  search_bank: {
     name: 'search_bank',
     async fetch(q, limit){
       try{
+        const base = process.env.URL || "";
         const res = await fetchWithTimeout(
-          '/.netlify/functions/search-bank-engine?q=' +
+          (base + '/.netlify/functions/search-bank-engine?q=') +
           encodeURIComponent(q) +
           '&limit=' + encodeURIComponent(limit),
           null,
@@ -240,20 +357,12 @@ const Containers = {
   // - If you later provide SNAPSHOT_SEARCH_URL or local snapshot index, implement here.
   snapshot: {
     name: 'snapshot',
- async fetch(q, limit){
-  try{
-    const res = await fetchWithTimeout(
-      '/.netlify/functions/search-bank-engine?q=' +
-      encodeURIComponent(q) +
-      '&limit=' + encodeURIComponent(limit),
-      null,
-      6000
-    );
-    if(!res || !res.ok) return null;
-
-    const data = await res.json();
-    if(data && Array.isArray(data.items)){
-      return { source: 'search-bank-engine', results: data.items };
+    async fetch(q, limit){
+      const local = loadSnapshotLocal(q, limit);
+      if(local) return { source:'snapshot-local', results: local };
+      return null;
+    }
+  };
     }
     return null;
   }catch(e){
@@ -272,102 +381,117 @@ const Containers = {
 };
 
 // Orchestrator: chooses containers, runs safely, accumulates, merges (FUTURE-GRADE)
-async function orchestrateSearch({ q, limit }) {
+
+async function orchestrateSearch({ event, q, limit, start, lang }) {
+  const cacheKey = cacheKeyFor(q, limit, start, lang);
+  const cached = getQueryCache(cacheKey);
+  if (cached) return cached;
+
   const collected = [];
   let sourceUsed = null;
+  const region = detectRuntimeRegion(event, lang, q);
+  const sourceOrder = sourceOrderForRegion(region);
 
-  // =========================
-  // 0) SEARCH-BANK-search-bank-engine — snapshot / fallback
-  // =========================
-  if (cbCanRun('bank')) {
+  async function pullFromSearchBank(){
+    if (!cbCanRun('bank')) return;
     const b = await Containers.search_bank.fetch(q, limit)
-      .catch(e => { cbOnFail('bank'); return null; });
+      .catch(() => { cbOnFail('bank'); return null; });
 
     if (b && b.results && b.results.length) {
       cbOnSuccess('bank');
       sourceUsed = sourceUsed || 'search-bank-engine';
-
-      const items = toStandardItems(b.results, 'search-bank-engine');
-      collected.push(...items);
+      collected.push(...toStandardItems(b.results, 'search-bank-engine'));
     }
   }
 
-  // =========================
-  // 1) NAVER — primary bulk source (100/page)
-  // =========================
-  if (cbCanRun('naver')) {
-    let start = 1;
+  async function pullFromNaver(){
+    if (!cbCanRun('naver')) return;
+    let pageStart = Math.max(1, start || 1);
 
     while (collected.length < limit) {
       const batchSize = Math.min(100, limit - collected.length);
-
-      const n = await Containers.web_naver.fetch(q, batchSize, start)
-        .catch(e => { cbOnFail('naver'); return null; });
+      const n = await Containers.web_naver.fetch(q, batchSize, pageStart)
+        .catch(() => { cbOnFail('naver'); return null; });
 
       if (!n || !n.results || !n.results.length) break;
 
       cbOnSuccess('naver');
       sourceUsed = sourceUsed || 'naver';
-
-      const items = toStandardItems(n.results, n.source);
-      collected.push(...items);
+      collected.push(...toStandardItems(n.results, n.source));
 
       if (n.results.length < batchSize) break;
-      start += batchSize;
+      pageStart += batchSize;
     }
   }
 
-  // =========================
-  // 2) GOOGLE — secondary precision source (10/page, max ~100)
-  // =========================
-  if (collected.length < limit && cbCanRun('google')) {
-    let start = 1;
+  async function pullFromGoogle(){
+    if (!cbCanRun('google')) return;
+    let pageStart = Math.max(1, start || 1);
 
-    while (collected.length < limit && start <= 91) {
+    while (collected.length < limit && pageStart <= 91) {
       const batchSize = Math.min(10, limit - collected.length);
-
-      const g = await Containers.web_google.fetch(q, batchSize, start)
-        .catch(e => { cbOnFail('google'); return null; });
+      const g = await Containers.web_google.fetch(q, batchSize, pageStart)
+        .catch(() => { cbOnFail('google'); return null; });
 
       if (!g || !g.results || !g.results.length) break;
 
       cbOnSuccess('google');
       sourceUsed = sourceUsed || 'google';
-
-      const items = toStandardItems(g.results, g.source);
-      collected.push(...items);
+      collected.push(...toStandardItems(g.results, g.source));
 
       if (g.results.length < batchSize) break;
-      start += batchSize;
+      pageStart += batchSize;
     }
   }
 
-  // =========================
-  // 3) CORE PIPELINE (ranking / canonicalization)
-  // =========================
-  if (collected.length > 0) {
-    const finalItems = await applyCorePipeline(q, collected.slice(0, limit));
-    return {
-      source: sourceUsed,
-      items: finalItems
-    };
+  for(const sourceName of sourceOrder){
+    if (collected.length >= limit) break;
+    if (sourceName === 'search_bank') await pullFromSearchBank();
+    if (sourceName === 'web_naver') await pullFromNaver();
+    if (sourceName === 'web_google') await pullFromGoogle();
   }
 
-  // =========================
-  // 4) LOOSE FALLBACK (future-safe)
-  // =========================
-  return {
+  const uniqueCollected = dedupeCanonicalItems(collected);
+
+  if (uniqueCollected.length > 0) {
+    let finalItems = await applyCorePipeline(q, uniqueCollected.slice(0, limit));
+    finalItems = applyServerSideBoosts(finalItems, { q, lang }).slice(0, limit);
+
+    await syncSearchAnalytics(event, q, finalItems);
+    await distributeRevenue(event, finalItems);
+
+    const out = {
+      source: sourceUsed,
+      route: sourceOrder,
+      region,
+      items: finalItems
+    };
+    setQueryCache(cacheKey, out);
+    return out;
+  }
+
+  let fallbackItems = await applyCorePipeline(q, [
+    {
+      title: q,
+      summary: 'Loose fallback result',
+      source: 'fallback',
+      score: 0.01
+    }
+  ]);
+  fallbackItems = applyServerSideBoosts(fallbackItems, { q, lang }).slice(0, limit);
+
+  await syncSearchAnalytics(event, q, fallbackItems);
+
+  const out = {
     source: 'fallback',
-    items: await applyCorePipeline(q, [
-      {
-        title: q,
-        summary: 'Loose fallback result',
-        source: 'fallback',
-        score: 0.01
-      }
-    ])
+    route: sourceOrder,
+    region,
+    items: fallbackItems
   };
+  setQueryCache(cacheKey, out);
+  return out;
 }
+
 
 // ===== Source Fetchers =====
 async function naverSearch(q, limit, start) {
@@ -455,6 +579,31 @@ async function googleSearch(q, limit, start) {
   return { source: 'google+news', results };
 }
 
+
+
+async function postJson(url, body){
+  try{
+    const res = await fetchWithTimeout(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body || {})
+    }, 8000);
+
+    if(!res || !res.ok) return null;
+
+    const text = await res.text();
+    try{
+      return JSON.parse(text);
+    }catch(e){
+      return { ok:true, raw:text };
+    }
+  }catch(e){
+    return null;
+  }
+}
+
 // ===== CORE PIPELINE APPLY (NON-DESTRUCTIVE) =====
 async function applyCorePipeline(query, items) {
   const q = query;
@@ -480,10 +629,100 @@ async function applyCorePipeline(query, items) {
   return results;
 }
 
+
+// ===== AI INTENT LAYER =====
+function detectIntent(q){
+  const text = String(q||"").toLowerCase();
+  if(text.includes("buy") || text.includes("price")) return "commerce";
+  if(text.includes("news")) return "news";
+  if(text.includes("video")) return "media";
+  return "general";
+}
+
+function applyIntentBoost(items, q){
+  const intent = detectIntent(q);
+  return items.map(it=>{
+    let boost = 0;
+    if(intent === "commerce" && (it.type==="product"||it.mediaType==="product")) boost+=2;
+    if(intent === "media" && (it.mediaType==="video"||it.mediaType==="image")) boost+=1.5;
+    if(intent === "news" && String(it.source||"").includes("news")) boost+=1.2;
+    return {...it, _intentBoost: boost, _finalScore:(it._finalScore||0)+boost};
+  }).sort((a,b)=>b._finalScore-a._finalScore);
+}
+
+// ===== SERVER-SIDE BOOSTS (safe on Netlify) =====
+function applyServerSideBoosts(items, opts){
+  const q = String((opts && opts.q) || "").toLowerCase();
+  const lang = String((opts && opts.lang) || "").toLowerCase();
+
+  const ranked = (Array.isArray(items) ? items : []).map((it, idx) => {
+    let bonus = 0;
+    const title = String(it.title || "").toLowerCase();
+    const summary = String(it.summary || "").toLowerCase();
+    const source = String(it.source || "").toLowerCase();
+
+    if (q && title.includes(q)) bonus += 3;
+    if (q && summary.includes(q)) bonus += 1.5;
+    if (lang && String(it.lang || "").toLowerCase() === lang) bonus += 1;
+    if (source.includes("search-bank")) bonus += 0.6;
+    if (it.mediaType === "image" || it.mediaType === "video") bonus += 0.25;
+
+    return { ...it, _bonus: bonus, _finalScore: Number(it._coreScore || it.score || 0) + bonus, _seq: idx };
+  });
+
+  ranked.sort((a,b) => {
+    if ((b._finalScore || 0) !== (a._finalScore || 0)) return (b._finalScore || 0) - (a._finalScore || 0);
+    return (a._seq || 0) - (b._seq || 0);
+  });
+
+  return applyIntentBoost(ranked, q);
+}
+
+// ===== ANALYTICS / REVENUE SYNC =====
+async function syncSearchAnalytics(event, q, items){
+  try{
+    const base = eventBaseUrl(event);
+    if(!base) return null;
+    return await postJson(`${base}/.netlify/functions/revenue-engine`, {
+      action: "track",
+      event: {
+        type: "search",
+        query: q,
+        count: Array.isArray(items) ? items.length : 0,
+        timestamp: Date.now()
+      }
+    });
+  }catch(e){
+    return null;
+  }
+}
+
+async function distributeRevenue(event, items){
+  try{
+    const base = eventBaseUrl(event);
+    if(!base) return null;
+
+    const queue = (Array.isArray(items) ? items : []).filter(item =>
+      item && (item.type === "ad" || item.type === "product" || item.mediaType === "product")
+    );
+
+    for (const item of queue){
+      await postJson(`${base}/.netlify/functions/revenue-engine`, {
+        action: "distribute",
+        producerId: item.producerId || item.payload?.producerId || "global",
+        amount: item._finalScore || item._coreScore || item.score || 1
+      });
+    }
+    return { ok:true, count: queue.length };
+  }catch(e){
+    return null;
+  }
+}
+
 // ===== MAIN HANDLER =====
 exports.handler = async function (event) {
   try {
-   const { q, limit, start } = pickQ(event);
+   const { q, limit, start, lang } = pickQ(event);
 
 // env missing check stays consistent with previous behavior
 /*
@@ -509,7 +748,7 @@ if (!envOk) {
       });
     }
 
-    const base = await orchestrateSearch({ q, limit, start });
+    const base = await orchestrateSearch({ event, q, limit, start, lang });
 
 
     return ok({
@@ -520,7 +759,7 @@ if (!envOk) {
       source: base.source,
       items: base.items,
       results: base.items, // legacy alias
-      meta: { count: (base.items || []).length, limit },
+      meta: { count: (base.items || []).length, limit, region: base.region || null, route: base.route || null },
     });
 
   } catch (e) {
@@ -532,7 +771,8 @@ if (!envOk) {
 async function maruSearchDispatcher(req = {}) {
   const q = String(req.q || req.query || "").trim();
   const limit = req.limit;
-  const event = { queryStringParameters: { q, limit } };
+  const lang = req.lang;
+  const event = { queryStringParameters: { q, limit, lang } };
   const res = await exports.handler(event);
   try {
     return JSON.parse(res.body || "{}");
@@ -544,21 +784,3 @@ async function maruSearchDispatcher(req = {}) {
 exports.maruSearchDispatcher = maruSearchDispatcher;
 
 
-// ===== PRODUCER REVENUE DISTRIBUTION =====
-async function distributeRevenue(items){
-  try{
-    for(const item of items){
-      if(item.type === "ad" || item.type === "product"){
-        await fetch("/.netlify/functions/revenue-engine", {
-          method:"POST",
-          headers:{ "Content-Type":"application/json" },
-          body: JSON.stringify({
-            action:"distribute",
-            producerId: item.producerId || "global",
-            amount: item._score || 1
-          })
-        });
-      }
-    }
-  }catch(e){}
-}
