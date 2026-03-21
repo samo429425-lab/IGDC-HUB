@@ -423,20 +423,25 @@ async function fetchSearch(q){
       d.className = 'desc';
       d.textContent = (it.summary || it.description || '').trim();
 
-      body.appendChild(t);
-	  const risk = document.createElement('div');
-      risk.textContent = it.riskLabel || 'safe';
-      risk.style.fontSize = '11px';
-      risk.style.fontWeight = '700';
-      risk.style.marginTop = '6px';
+  body.appendChild(t);
 
-      if ((it.riskLabel || '') === '⚠️ high-risk') {
-      risk.style.color = 'red';
-    } else if ((it.riskLabel || '') === '⚠️ medium-risk') {
-      risk.style.color = 'orange';
-    } else {
-      risk.style.color = 'green';
-    }
+const risk = document.createElement('div');
+risk.style.fontSize = '11px';
+risk.style.fontWeight = '700';
+risk.style.marginTop = '6px';
+
+if (it.riskLabel === '⚠️ high-risk') {
+  risk.textContent = it.riskLabel;
+  risk.style.color = 'red';
+  body.appendChild(risk);
+
+} else if (it.riskLabel === '⚠️ medium-risk') {
+  risk.textContent = it.riskLabel;
+  risk.style.color = 'orange';
+  body.appendChild(risk);
+
+}
+// 그 외는 아예 표시 안 함 (safe 제거)
 
       body.appendChild(risk);
       body.appendChild(l);
