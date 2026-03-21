@@ -588,7 +588,6 @@ function updateSearchPageHistory(page, block) {
   const currentPageParam = (new URLSearchParams(location.search).get('page') || '1').trim();
   const currentBlockParam = (new URLSearchParams(location.search).get('block') || '0').trim();
 
-  if (currentPageParam === String(page) && currentBlockParam === String(block)) return;
 
   const safeReturnUrl = getSafeReturnUrl();
   if (safeReturnUrl) {
@@ -727,3 +726,4 @@ async function runSearch(q){
     }
   });
 })();
+
