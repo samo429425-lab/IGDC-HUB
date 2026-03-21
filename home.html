@@ -2109,6 +2109,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const openSearch = () => {
     const q = input.value.trim();
     if (!q) return;
+	
+	history.pushState({}, '', location.href);
 
     // ✅ 새 탭 / 독립 웹페이지 / 팝업 아님
     window.open(
