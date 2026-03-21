@@ -2078,27 +2078,35 @@ section.shopping-section, section.shopping-section .shopping-rows {
 </div>
 </div>
 
-<!-- ========== HERO SEARCH BAR (FINAL) ========== -->
-<section class="hero-search" aria-label="사이트 검색">
-  <div class="hero-search-inner">
-    <div class="hero-search-bar" role="search">
-      <input
-        id="homeSearchInput"
-        type="search"
-        placeholder="검색어를 입력하세요"
-        autocomplete="off"
-      />
-      <button
-        id="homeSearchBtn"
-        type="button"
-        aria-label="검색 실행"
-      >
-        검색
-      </button>
-    </div>
-    <div class="hero-search-hint">검색 결과는 새 창으로 표시됩니다.</div>
-  </div>
-</section>
+<script>
+(function(){
+  const input = document.getElementById('homeSearchInput');
+  const btn   = document.getElementById('homeSearchBtn');
+  if (!input || !btn) return;
+
+  function goSearch(e){
+    if(e){
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    const q = input.value.trim();
+    if (!q) return;
+
+    // 🔥 pushState 제거 (핵심)
+    window.location.href = '/search.html?q=' + encodeURIComponent(q);
+  }
+
+  btn.addEventListener('click', goSearch);
+
+  input.addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){
+      goSearch(e);
+    }
+  });
+
+})();
+</script>
 
 <script>
 (function(){
