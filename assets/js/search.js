@@ -130,29 +130,53 @@ window.addEventListener('popstate', (e) => {
   if (!isSearchPage) return;
 
   const state = e.state || {};
+
+  // 1️⃣ 검색 진입 이전 페이지로 복귀
   if (state.__searchEntry && state.from) {
     location.href = state.from;
     return;
   }
 
-  const page = Number(state.page || 0);
-  const block = Number(state.block || 0);
+  // 2️⃣ URL 기준으로 항상 복원 (state 의존 제거)
+  const sp = new URLSearchParams(location.search);
 
-  if (page > 0) {
-    currentPage = page;
-    currentBlock = Math.max(0, block);
-    renderPage(currentPage);
+  const page = Math.max(
+    1,
+    parseInt(sp.get('page') || state.page || '1', 10) || 1
+  );
+
+  const block = Math.max(
+    0,
+    parseInt(sp.get('block') || state.block || '0', 10) || 0
+  );
+
+  const q = (sp.get('q') || state.q || '').trim();
+
+  // 3️⃣ 검색어 동기화
+  if (q && input.value !== q) {
+    input.value = q;
+  }
+
+  // 4️⃣ 데이터 없으면 다시 검색 (최초 복귀 대응)
+  if (!allItems || !allItems.length) {
+    runSearch(q).then(() => {
+      currentPage = page;
+      currentBlock = block;
+      renderPage(currentPage);
+    });
     return;
   }
 
-  syncSearchFromUrl(false);
+  // 5️⃣ 바로 페이지 복원
+  currentPage = page;
+  currentBlock = block;
+  renderPage(currentPage);
 });
 
 if (q0) {
   input.value = q0;
 }
 
-ensureSearchHistoryBridge();
 
 if (q0) {
   syncSearchFromUrl(true);
@@ -588,6 +612,7 @@ function updateSearchPageHistory(page, block) {
   const currentPageParam = (new URLSearchParams(location.search).get('page') || '1').trim();
   const currentBlockParam = (new URLSearchParams(location.search).get('block') || '0').trim();
 
+  if (currentPageParam === String(page) && currentBlockParam === String(block)) return;
 
   const safeReturnUrl = getSafeReturnUrl();
   if (safeReturnUrl) {
