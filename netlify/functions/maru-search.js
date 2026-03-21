@@ -705,11 +705,12 @@ async function applyCorePipeline(query, items) {
   const q = query;
 
   // Core.validateQuery may return boolean OR {ok, value}
-  if (Core && typeof Core.validateQuery === "function") {
-    const v = Core.validateQuery(q);
-    if (v === false) return [];
-    if (v && typeof v === 'object' && v.ok === false) return [];
-  }
+// validate 막지 않도록 변경
+if (Core && typeof Core.validateQuery === "function") {
+  const v = Core.validateQuery(q);
+  if (v === false) { /* pass */ }
+  if (v && typeof v === 'object' && v.ok === false) { /* pass */ }
+}
 
   let results = Array.isArray(items) ? items : [];
 
