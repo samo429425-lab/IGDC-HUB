@@ -136,28 +136,56 @@ function run(payload) {
     const snapshot = loadSnapshot(page);
     if (!snapshot) continue;
 
-    const defaultSection = getDefaultSection(bank, page);
-    if (!defaultSection) continue;
+ const bankItems = bank.items || [];
 
-    const bankItems = bank.items || [];
+// 👉 snapshot section 목록
+const sectionKeys = Object.keys(snapshot.sections || {});
 
-    const filtered = bankItems.filter(i => {
-      const sec = resolveSection(i, defaultSection);
-      return sec === defaultSection;
-    });
+// 👉 section별 slot-fill
+for (const sectionKey of sectionKeys) {
 
-    const slotLimit = getSlotLimit(snapshot, defaultSection);
+  const slotLimit = getSlotLimit(snapshot, sectionKey);
 
-    const updated = mergeItems(
-      snapshot,
-      defaultSection,
-      filtered,
-      slotLimit
-    );
+  const existing = snapshot.sections[sectionKey] || [];
+  const existingIds = new Set(existing.map(i => i.id));
 
-    const filePath = path.join(ROOT, SNAPSHOT_FILES[page]);
-    writeJson(filePath, updated);
+  let count = existing.length;
+
+  // 👉 해당 section에 맞는 데이터만 공급
+  const supply = bankItems.filter(item => {
+    const sec = resolveSection(item, sectionKey);
+    return sec === sectionKey;
+  });
+
+  for (const item of supply) {
+
+    if (count >= slotLimit) break;
+
+    const id = item.id || stableId(JSON.stringify(item));
+    if (existingIds.has(id)) continue;
+
+    const converted = {
+      id,
+      title: item.title || item.name || "Untitled",
+      summary: item.summary || "",
+      url: item.url || "#",
+      thumb: item.thumb || item.image || "/assets/img/placeholder.png",
+      priority: item.priority || 0
+    };
+
+    existing.push(converted);
+    existingIds.add(id);
+    count++;
   }
+
+  snapshot.sections[sectionKey] = existing;
+}
+
+// 👉 저장
+const filePath = path.join(ROOT, SNAPSHOT_FILES[page]);
+writeJson(filePath, snapshot);
+
+  } // ← for (const page of pages)
 
   console.log("Snapshot Engine vNext completed successfully.");
 }

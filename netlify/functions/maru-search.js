@@ -320,9 +320,9 @@ const Containers = {
 
   search_bank: {
     name: 'search_bank',
-    async fetch(q, limit, offset){
+    async fetch(q, limit, offset, event){
       try{
-        const base = process.env.URL || "";
+        const base = process.env.URL || eventBaseUrl(event);
         const off = Number.isFinite(Number(offset)) ? Math.max(0, Number(offset)) : 0;
 
         const res = await fetchWithTimeout(
@@ -396,14 +396,25 @@ async function orchestrateSearch({ event, q, limit, start, lang }) {
 
   async function pullFromSearchBank(){
     if (!cbCanRun('bank')) return;
-    const b = await Containers.search_bank.fetch(q, limit)
-      .catch(() => { cbOnFail('bank'); return null; });
+let offset = 0;
+const batchSize = 100;
 
-    if (b && b.results && b.results.length) {
-      cbOnSuccess('bank');
-      sourceUsed = sourceUsed || 'search-bank-engine';
-      collected.push(...toStandardItems(b.results, 'search-bank-engine'));
-    }
+while (collected.length < limit) {
+
+  const b = await Containers.search_bank.fetch(q, batchSize, offset, event)
+    .catch(() => { cbOnFail('bank'); return null; });
+
+  if (!b || !b.results || !b.results.length) break;
+
+  cbOnSuccess('bank');
+  sourceUsed = sourceUsed || 'search-bank-engine';
+
+  collected.push(...toStandardItems(b.results, 'search-bank-engine'));
+
+  if (b.results.length < batchSize) break;
+
+  offset += batchSize;
+}
   }
 
   async function pullFromNaver(){

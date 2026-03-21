@@ -385,8 +385,40 @@ if(global.SearchBankExtensionCore?.security){
     }
   }
 
-  bank.items = mergeBankItems(bank.items || [], normalized);
-  bank.items = bank.items.slice(-50000);
+const existing = Array.isArray(bank.items) ? bank.items : [];
+const existingIds = new Set(existing.map(i => i.id));
+
+// 👉 신규 데이터만 추출
+const newItems = [];
+for (const it of normalized) {
+  if (!it || !it.id) continue;
+  if (!existingIds.has(it.id)) {
+    newItems.push(it);
+  }
+}
+
+// 👉 append (기존 유지)
+let combined = existing.concat(newItems);
+
+// 👉 랭킹 기준 정렬 (위치만 변경, 데이터는 그대로)
+combined.sort((a, b) => {
+const qa = computeQualityScore(q || "", a);
+const qb = computeQualityScore(q || "", b);
+
+  if (qb !== qa) return qb - qa;
+
+  const da = a.published_at ? Date.parse(a.published_at) : 0;
+  const db = b.published_at ? Date.parse(b.published_at) : 0;
+
+  return db - da;
+});
+
+// 👉 최대 50,000 유지
+if (combined.length > 50000) {
+  combined = combined.slice(0, 50000);
+}
+
+bank.items = combined;
 
  bank.meta = {
   ...(bank.meta || {}),
