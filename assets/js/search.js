@@ -13,19 +13,26 @@
     else fn();
   }
 
-  ready(function () {
-    const p = location.pathname || '';
-    const isSearchPage = p.endsWith('/search.html') || p.endsWith('/search') || p.endsWith('/search/');
-    if (!isSearchPage) {
-      if (!document.getElementById('searchInput') || !document.getElementById('searchResults')) return;
-    }
+ready(function () {
+  const p = location.pathname || '';
+  const isSearchPage =
+    p.endsWith('/search.html') ||
+    p.endsWith('/search') ||
+    p.endsWith('/search/');
+
+  // 🔥 홈에서도 search.js 동작 허용 (핵심 수정)
+  const hasSearchUI =
+    document.getElementById('searchInput') ||
+    document.getElementById('globalSearchInput');
+
+  if (!isSearchPage && !hasSearchUI) return;
 
     const input   = document.getElementById('searchInput');
     const btn     = document.getElementById('searchBtn');
     const status  = document.getElementById('searchStatus');
     const results = document.getElementById('searchResults');
         
-    if (!input || !btn || !status || !results) return;
+    if (!input || !btn) return;
 
     const PAGE_SIZE = 15;
     const BLOCK_SIZE = 10;
