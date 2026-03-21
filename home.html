@@ -2101,33 +2101,27 @@ section.shopping-section, section.shopping-section .shopping-rows {
 </section>
 
 <script>
-(function(){
+document.addEventListener('DOMContentLoaded', () => {
   const input = document.getElementById('homeSearchInput');
-  const btn   = document.getElementById('homeSearchBtn');
+  const btn = document.getElementById('homeSearchBtn');
   if (!input || !btn) return;
 
-  function goSearch(e){
-    if(e){
-      e.preventDefault();
-      e.stopPropagation();
-    }
-
+  const openSearch = () => {
     const q = input.value.trim();
     if (!q) return;
 
-    // 🔥 pushState 제거 (핵심)
-    window.location.href = '/search.html?q=' + encodeURIComponent(q);
-  }
+    // ✅ 새 탭 / 독립 웹페이지 / 팝업 아님
+    window.open(
+      `/search.html?q=${encodeURIComponent(q)}`,
+      '_blank'
+    );
+  };
 
-  btn.addEventListener('click', goSearch);
-
-  input.addEventListener('keydown', function(e){
-    if(e.key === 'Enter'){
-      goSearch(e);
-    }
+  btn.addEventListener('click', openSearch);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') openSearch();
   });
-
-})();
+});
 </script>
 
 <!-- ========== NEWS (Middle) ========== -->
