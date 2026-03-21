@@ -2101,22 +2101,31 @@ section.shopping-section, section.shopping-section .shopping-rows {
 </section>
 
 <script>
-document.addEventListener('DOMContentLoaded', () => {
+(function(){
   const input = document.getElementById('homeSearchInput');
-  const btn = document.getElementById('homeSearchBtn');
+  const btn   = document.getElementById('homeSearchBtn');
   if (!input || !btn) return;
 
-  const openSearch = () => {
+  function goSearch(){
     const q = input.value.trim();
     if (!q) return;
-    window.location.href = `/search.html?q=${encodeURIComponent(q)}`;
-  };
 
-  btn.addEventListener('click', openSearch);
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') openSearch();
+    // 히스토리 보장 (백버튼 활성화 핵심)
+    history.pushState({q}, '', '/search.html?q=' + encodeURIComponent(q));
+
+    // 이동
+    location.href = '/search.html?q=' + encodeURIComponent(q);
+  }
+
+  btn.addEventListener('click', goSearch);
+
+  input.addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){
+      goSearch();
+    }
   });
-});
+
+})();
 </script>
 
 <!-- ========== NEWS (Middle) ========== -->
