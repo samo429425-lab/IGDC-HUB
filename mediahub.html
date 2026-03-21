@@ -4588,7 +4588,17 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     cards.forEach(function(card){
       if(card.__fsReady) return;
       card.__fsReady = true;
-      card.addEventListener('click', function(){ openFullscreenFromCard(card); }, {passive:true});
+      card.addEventListener('click', function(e){
+  var link = card.closest('a[href]') || (card.matches('a[href]') ? card : null);
+  var href = link ? (link.getAttribute('href') || '').trim() : '';
+
+  if (href && href !== '#' && !/^javascript:/i.test(href)) {
+    return; // 정상 링크가 있으면 페이지 이동 허용
+  }
+
+  e.preventDefault();
+  openFullscreenFromCard(card);
+}, false);
     });
   }
 
@@ -5129,6 +5139,9 @@ window.addEventListener("message",function(ev){
   }
 })();
 </script>
+
+<script src="/assets/js/maru-search.js"></script>
+<script src="/assets/js/maru-searchbank-sync.js"></script>
 
 </body>
 </html>
