@@ -318,55 +318,37 @@ function loadSnapshotLocal(q, limit){
 // ===== Containers (future-ready, but safe-noop unless active) =====
 const Containers = {
 
+  // ===== SEARCH BANK (유지, 안정화) =====
   search_bank: {
     name: 'search_bank',
     async fetch(q, limit, offset, event){
       try{
-        // 🔥 핵심 수정 (base 안정화)
         const base = process.env.DEPLOY_URL
           ? "https://" + process.env.DEPLOY_URL
           : eventBaseUrl(event);
-
-        const off = Number.isFinite(Number(offset)) ? Math.max(0, Number(offset)) : 0;
 
         const url =
           base +
           '/.netlify/functions/search-bank-engine?q=' +
           encodeURIComponent(q) +
           '&limit=' + encodeURIComponent(limit) +
-          '&offset=' + encodeURIComponent(off);
-
-        console.log("SEARCH_BANK URL:", url);
+          '&offset=' + encodeURIComponent(offset || 0);
 
         const res = await fetchWithTimeout(url, null, 6000);
-
-        // 🔥 디버깅 강화
-        if(!res){
-          console.log("FETCH FAIL:", url);
-          return null;
-        }
-
-        if(!res.ok){
-          console.log("HTTP ERROR:", res.status, url);
-          return null;
-        }
+        if(!res || !res.ok) return null;
 
         const data = await res.json();
-
         if(data && Array.isArray(data.items)){
-          return { source: 'search-bank-engine', results: data.items };
+          return { source: 'search-bank', results: data.items };
         }
-
-        console.log("INVALID DATA:", data);
         return null;
-
-      }catch(e){
-        console.log("SEARCH_BANK ERROR:", e);
+      }catch{
         return null;
       }
     }
   },
 
+  // ===== NAVER =====
   web_naver: {
     name: 'web_naver',
     async fetch(q, limit, start){
@@ -374,6 +356,7 @@ const Containers = {
     }
   },
 
+  // ===== GOOGLE =====
   web_google: {
     name: 'web_google',
     async fetch(q, limit, start){
@@ -381,6 +364,64 @@ const Containers = {
     }
   },
 
+  // ===== BING (신규 핵심) =====
+  web_bing: {
+    name: 'web_bing',
+    async fetch(q, limit, start){
+      try{
+        const key = process.env.BING_API_KEY;
+        if (!key) return null;
+
+        const url = `https://api.bing.microsoft.com/v7.0/search?q=${encodeURIComponent(q)}&count=${limit}&offset=${start}`;
+
+        const res = await fetchWithTimeout(url, {
+          headers: { 'Ocp-Apim-Subscription-Key': key }
+        }, 8000);
+
+        if (!res.ok) return null;
+        const data = await res.json();
+
+        return {
+          source: 'bing',
+          results: (data.webPages?.value || []).map(it => ({
+            title: it.name,
+            link: it.url,
+            snippet: it.snippet,
+            type: 'web'
+          }))
+        };
+      }catch{
+        return null;
+      }
+    }
+  },
+
+  // ===== WIKIPEDIA (강화) =====
+  web_wikipedia: {
+    name: 'web_wikipedia',
+    async fetch(q){
+      try{
+        const url = 'https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(q);
+        const res = await fetch(url);
+        if(!res.ok) return null;
+        const d = await res.json();
+
+        return {
+          source: 'wikipedia',
+          results: [{
+            title: d.title,
+            link: d.content_urls?.desktop?.page || '',
+            snippet: d.extract,
+            type: 'web'
+          }]
+        };
+      }catch{
+        return null;
+      }
+    }
+  },
+
+  // ===== SNAPSHOT (유지) =====
   snapshot: {
     name: 'snapshot',
     async fetch(q, limit){
@@ -390,24 +431,105 @@ const Containers = {
     }
   },
 
+  // ===== AI (향후 확장용) =====
   ai: {
     name: 'ai',
-    async fetch(_q, _limit){
+    async fetch(){
+      return null;
+    }
+  },
+  
+web_youtube: {
+  name: 'web_youtube',
+  async fetch(q, limit){
+    try{
+      const key = process.env.YOUTUBE_API_KEY;
+      if(!key) return null;
+
+      const url =
+        'https://www.googleapis.com/youtube/v3/search' +
+        '?part=snippet&type=video&maxResults=' + Math.min(limit,50) +
+        '&q=' + encodeURIComponent(q) +
+        '&key=' + key;
+
+      const res = await fetchWithTimeout(url, null, 8000);
+      if(!res.ok) return null;
+
+      const data = await res.json();
+
+      return {
+        source: 'youtube',
+        results: (data.items || []).map(it => ({
+          title: it.snippet.title,
+          link: 'https://www.youtube.com/watch?v=' + it.id.videoId,
+          snippet: it.snippet.description,
+          type: 'video',
+          payload: {
+            thumb: it.snippet.thumbnails?.medium?.url
+          }
+        }))
+      };
+
+    }catch{
       return null;
     }
   }
+},
 
+web_image: {
+  name: 'web_image',
+  async fetch(q, limit){
+    try{
+      const key = process.env.GOOGLE_API_KEY;
+      const cx  = process.env.GOOGLE_CSE_ID;
+      if(!key || !cx) return null;
+
+      const url =
+        'https://www.googleapis.com/customsearch/v1' +
+        '?key=' + key +
+        '&cx=' + cx +
+        '&q=' + encodeURIComponent(q) +
+        '&searchType=image' +
+        '&num=' + Math.min(limit,10);
+
+      const res = await fetchWithTimeout(url, null, 8000);
+      if(!res.ok) return null;
+
+      const data = await res.json();
+
+      return {
+        source: 'google_image',
+        results: (data.items || []).map(it => ({
+          title: it.title,
+          link: it.link,
+          snippet: '',
+          type: 'image',
+          payload: {
+            thumb: it.link
+          }
+        }))
+      };
+
+    }catch{
+      return null;
+    }
+  }
+}
 };
-// Orchestrator: chooses containers, runs safely, accumulates, merges (FUTURE-GRADE)
+
+
+
+// Orchestrator: chooses containers, runs safely, accumulates, merges (UPGRADED)
 
 async function orchestrateSearch({ event, q, limit, start, lang }) {
 
-  limit = Math.min(limit || 50, 500);
+  limit = Math.min(limit || 50, 1000);
+
   globalThis.__MARU_CACHE = globalThis.__MARU_CACHE || new Map();
-  const cacheKey = q + "::" + limit + "::" + start + "::" + (lang||"");
+  const cacheKey = q + "::" + limit + "::" + start + "::" + (lang || "");
 
   const cached = globalThis.__MARU_CACHE.get(cacheKey);
-  if(cached && Date.now() - cached.t < 300000){
+  if (cached && Date.now() - cached.t < 300000) {
     return cached.v;
   }
 
@@ -417,80 +539,69 @@ async function orchestrateSearch({ event, q, limit, start, lang }) {
   const region = detectRuntimeRegion(event, lang, q);
   const sourceOrder = sourceOrderForRegion(region);
 
-  // ===== 기본 수집 =====
   async function pullFromSearchBank(){
     let offset = 0;
-    while (collected.length < limit && offset < 500) {
-      const b = await Containers.search_bank.fetch(q, 100, offset, event).catch(()=>null);
+    while (offset < 1000) {
+      const b = await Containers.search_bank.fetch(q, 100, offset, event).catch(() => null);
       if (!b?.results?.length) break;
 
       sourceUsed = sourceUsed || 'search-bank';
-      collected.push(...toStandardItems(b.results, 'search-bank'));
+      collected.push(...toStandardItems(b.results, b.source || 'search-bank'));
 
+      if (b.results.length < 100) break;
       offset += 100;
     }
   }
 
   async function pullFromNaver(){
     let pageStart = start || 1;
-    let calls = 0;
-
-    while(collected.length < limit && calls < 3){
-      const n = await Containers.web_naver.fetch(q, 100, pageStart).catch(()=>null);
+    while (pageStart <= 1000) {
+      const n = await Containers.web_naver.fetch(q, 100, pageStart).catch(() => null);
       if (!n?.results?.length) break;
 
       sourceUsed = sourceUsed || 'naver';
-      collected.push(...toStandardItems(n.results, n.source));
+      collected.push(...toStandardItems(n.results, n.source || 'naver'));
 
+      if (n.results.length < 100) break;
       pageStart += 100;
-      calls++;
     }
   }
 
   async function pullFromGoogle(){
     let pageStart = start || 1;
-    let calls = 0;
-
-    while(collected.length < limit && calls < 5){
-      const g = await Containers.web_google.fetch(q, 10, pageStart).catch(()=>null);
+    while (pageStart <= 100) {
+      const g = await Containers.web_google.fetch(q, 10, pageStart).catch(() => null);
       if (!g?.results?.length) break;
 
       sourceUsed = sourceUsed || 'google';
-      collected.push(...toStandardItems(g.results, g.source));
+      collected.push(...toStandardItems(g.results, g.source || 'google'));
 
+      if (g.results.length < 10) break;
       pageStart += 10;
-      calls++;
     }
   }
 
-  // ===== 확장 =====
-  async function fetchWikipedia(){
-    try{
-      const url = 'https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(q);
-      const res = await fetch(url);
-      if(!res.ok) return [];
-      const d = await res.json();
+  async function pullFromBing(){
+    if (!Containers.web_bing) return;
+    let offset = 0;
+    while (offset <= 450) {
+      const b = await Containers.web_bing.fetch(q, 50, offset).catch(() => null);
+      if (!b?.results?.length) break;
 
-      return [{
-        title: d.title,
-        summary: d.extract,
-        url: d.content_urls?.desktop?.page || '',
-        source: 'wikipedia',
-        thumbnail: d.thumbnail?.source || '',
-        score: 0.95
-      }];
-    }catch{ return []; }
+      sourceUsed = sourceUsed || 'bing';
+      collected.push(...toStandardItems(b.results, b.source || 'bing'));
+
+      if (b.results.length < 50) break;
+      offset += 50;
+    }
   }
 
-  function fetchYouTube(){
-    return [{
-      title: `[YouTube] ${q}`,
-      url: 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q),
-      source: 'youtube',
-      mediaType: 'video',
-      thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg',
-      score: 0.7
-    }];
+  async function pullFromWikipedia(){
+    if (!Containers.web_wikipedia) return;
+    const w = await Containers.web_wikipedia.fetch(q).catch(() => null);
+    if (w?.results?.length) {
+      collected.push(...toStandardItems(w.results, w.source || 'wikipedia'));
+    }
   }
 
   function fetchNews(){
@@ -498,7 +609,8 @@ async function orchestrateSearch({ event, q, limit, start, lang }) {
       title: `[News] ${q}`,
       url: 'https://www.google.com/search?tbm=nws&q=' + encodeURIComponent(q),
       source: 'news',
-      thumbnail: 'https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico',
+      mediaType: 'article',
+      thumbnail: '',
       score: 0.7
     }];
   }
@@ -509,35 +621,53 @@ async function orchestrateSearch({ event, q, limit, start, lang }) {
       url: 'https://www.google.com/search?tbm=shop&q=' + encodeURIComponent(q),
       source: 'shopping',
       mediaType: 'product',
-      thumbnail: 'https://cdn-icons-png.flaticon.com/512/263/263142.png',
+      thumbnail: '',
       score: 0.6
     }];
   }
 
   // ===== 실행 =====
+
+  await pullFromSearchBank();
+  await pullFromWikipedia();
+
+async function pullFromYouTube(){
+  if (!Containers.web_youtube) return;
+  const y = await Containers.web_youtube.fetch(q, 20).catch(() => null);
+  if (y?.results?.length) {
+    collected.push(...toStandardItems(y.results, y.source || 'youtube'));
+  }
+}
+
+async function pullFromImage(){
+  if (!Containers.web_image) return;
+  const img = await Containers.web_image.fetch(q, 10).catch(() => null);
+  if (img?.results?.length) {
+    collected.push(...toStandardItems(img.results, img.source || 'google_image'));
+  }
+}
+
 await Promise.all([
   pullFromNaver(),
-  pullFromGoogle()
+  pullFromGoogle(),
+  pullFromBing(),
+  pullFromYouTube(),
+  pullFromImage()
 ]);
 
-await pullFromSearchBank();
-
-  const wiki = await fetchWikipedia();
-  const yt = fetchYouTube();
-  const news = fetchNews();
-  const shop = fetchShopping();
-
-  collected.push(...wiki, ...yt, ...news, ...shop);
+  collected.push(...fetchNews(), ...fetchShopping());
 
   const unique = dedupeCanonicalItems(collected);
 
-  // ===== AI 요약 =====
   async function generateAISummary(items){
     try{
       const apiKey = process.env.OPENAI_API_KEY;
-      if(!apiKey) return null;
+      if (!apiKey) return null;
 
-      const text = items.slice(0,5).map(i => i.title).join("\n");
+      const text = items
+        .slice(0, 8)
+        .map((i, idx) => `${idx + 1}. ${i.title} | ${i.summary || ''} | ${i.url || ''}`)
+        .join("\n");
 
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
@@ -548,36 +678,50 @@ await pullFromSearchBank();
         body: JSON.stringify({
           model: "gpt-4o-mini",
           messages: [
-            { role: "system", content: "검색 결과를 요약하고 핵심 답변을 제공하라." },
-            { role: "user", content: text }
+            {
+              role: "system",
+              content: "검색 결과를 3~5줄로 간단히 요약하고, 핵심 키워드와 신뢰 가능한 방향을 짧게 정리하라."
+            },
+            {
+              role: "user",
+              content: text
+            }
           ]
         })
       });
 
       const d = await res.json();
       return d?.choices?.[0]?.message?.content || null;
-
     }catch{
       return null;
     }
   }
 
-  const aiSummary = await generateAISummary(unique);
-
-  // ===== 신뢰도 =====
   function markTrust(item){
     let trust = "normal";
-    if(item.source === "wikipedia") trust = "high";
-    if((item.url || '').includes("blog")) trust = "low";
+    const url = String(item.url || '').toLowerCase();
+    const src = String(item.source || '').toLowerCase();
+
+    if (src === 'wikipedia') trust = "high";
+    if (url.includes("blog") || url.includes("cafe")) trust = "low";
+    if (!url) trust = "low";
+
     return { ...item, trust };
   }
 
- let finalItems = await applyCorePipeline(q, unique.slice(0, 800));
-finalItems = applyServerSideBoosts(finalItems, { q, lang });
-finalItems = finalItems.map(markTrust).slice(0, limit);
+  const aiSummary = await generateAISummary(unique);
+
+  let finalItems = await applyCorePipeline(q, unique);
+  finalItems = applyServerSideBoosts(finalItems, { q, lang });
+  finalItems = finalItems.map(markTrust);
+
+  if (limit && limit < finalItems.length) {
+     finalItems = finalItems.slice(0, limit);
+}
 
   const out = {
-    source: sourceUsed,
+    source: sourceUsed || 'multi',
+    route: [...sourceOrder, 'web_bing', 'web_wikipedia', 'youtube', 'news', 'shopping'],
     region,
     aiSummary,
     items: finalItems
@@ -587,7 +731,6 @@ finalItems = finalItems.map(markTrust).slice(0, limit);
 
   return out;
 }
-
 
 // ===== Source Fetchers =====
 async function naverSearch(q, limit, start) {
