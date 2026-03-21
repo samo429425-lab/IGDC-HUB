@@ -322,19 +322,34 @@ const Containers = {
     name: 'search_bank',
     async fetch(q, limit, offset, event){
       try{
-        const base = process.env.URL || eventBaseUrl(event);
+        // 🔥 핵심 수정 (base 안정화)
+        const base = process.env.DEPLOY_URL
+          ? "https://" + process.env.DEPLOY_URL
+          : eventBaseUrl(event);
+
         const off = Number.isFinite(Number(offset)) ? Math.max(0, Number(offset)) : 0;
 
-        const res = await fetchWithTimeout(
-          (base + '/.netlify/functions/search-bank-engine?q=') +
+        const url =
+          base +
+          '/.netlify/functions/search-bank-engine?q=' +
           encodeURIComponent(q) +
           '&limit=' + encodeURIComponent(limit) +
-          '&offset=' + encodeURIComponent(off),
-          null,
-          6000
-        );
+          '&offset=' + encodeURIComponent(off);
 
-        if(!res || !res.ok) return null;
+        console.log("SEARCH_BANK URL:", url);
+
+        const res = await fetchWithTimeout(url, null, 6000);
+
+        // 🔥 디버깅 강화
+        if(!res){
+          console.log("FETCH FAIL:", url);
+          return null;
+        }
+
+        if(!res.ok){
+          console.log("HTTP ERROR:", res.status, url);
+          return null;
+        }
 
         const data = await res.json();
 
@@ -342,9 +357,11 @@ const Containers = {
           return { source: 'search-bank-engine', results: data.items };
         }
 
+        console.log("INVALID DATA:", data);
         return null;
 
       }catch(e){
+        console.log("SEARCH_BANK ERROR:", e);
         return null;
       }
     }
@@ -381,127 +398,193 @@ const Containers = {
   }
 
 };
-
 // Orchestrator: chooses containers, runs safely, accumulates, merges (FUTURE-GRADE)
 
 async function orchestrateSearch({ event, q, limit, start, lang }) {
-  const cacheKey = cacheKeyFor(q, limit, start, lang);
-  const cached = getQueryCache(cacheKey);
-  if (cached) return cached;
+
+  limit = Math.min(limit || 50, 500);
+  globalThis.__MARU_CACHE = globalThis.__MARU_CACHE || new Map();
+  const cacheKey = q + "::" + limit + "::" + start + "::" + (lang||"");
+
+  const cached = globalThis.__MARU_CACHE.get(cacheKey);
+  if(cached && Date.now() - cached.t < 300000){
+    return cached.v;
+  }
 
   const collected = [];
   let sourceUsed = null;
+
   const region = detectRuntimeRegion(event, lang, q);
   const sourceOrder = sourceOrderForRegion(region);
 
+  // ===== 기본 수집 =====
   async function pullFromSearchBank(){
-    if (!cbCanRun('bank')) return;
-let offset = 0;
-const batchSize = 100;
+    let offset = 0;
+    while (collected.length < limit && offset < 500) {
+      const b = await Containers.search_bank.fetch(q, 100, offset, event).catch(()=>null);
+      if (!b?.results?.length) break;
 
-while (collected.length < limit) {
+      sourceUsed = sourceUsed || 'search-bank';
+      collected.push(...toStandardItems(b.results, 'search-bank'));
 
-  const b = await Containers.search_bank.fetch(q, batchSize, offset, event)
-    .catch(() => { cbOnFail('bank'); return null; });
-
-  if (!b || !b.results || !b.results.length) break;
-
-  cbOnSuccess('bank');
-  sourceUsed = sourceUsed || 'search-bank-engine';
-
-  collected.push(...toStandardItems(b.results, 'search-bank-engine'));
-
-  if (b.results.length < batchSize) break;
-
-  offset += batchSize;
-}
+      offset += 100;
+    }
   }
 
   async function pullFromNaver(){
-    if (!cbCanRun('naver')) return;
-    let pageStart = Math.max(1, start || 1);
+    let pageStart = start || 1;
+    let calls = 0;
 
-    while (collected.length < limit) {
-      const batchSize = Math.min(100, limit - collected.length);
-      const n = await Containers.web_naver.fetch(q, batchSize, pageStart)
-        .catch(() => { cbOnFail('naver'); return null; });
+    while(collected.length < limit && calls < 3){
+      const n = await Containers.web_naver.fetch(q, 100, pageStart).catch(()=>null);
+      if (!n?.results?.length) break;
 
-      if (!n || !n.results || !n.results.length) break;
-
-      cbOnSuccess('naver');
       sourceUsed = sourceUsed || 'naver';
       collected.push(...toStandardItems(n.results, n.source));
 
-      if (n.results.length < batchSize) break;
-      pageStart += batchSize;
+      pageStart += 100;
+      calls++;
     }
   }
 
   async function pullFromGoogle(){
-    if (!cbCanRun('google')) return;
-    let pageStart = Math.max(1, start || 1);
+    let pageStart = start || 1;
+    let calls = 0;
 
-    while (collected.length < limit && pageStart <= 91) {
-      const batchSize = Math.min(10, limit - collected.length);
-      const g = await Containers.web_google.fetch(q, batchSize, pageStart)
-        .catch(() => { cbOnFail('google'); return null; });
+    while(collected.length < limit && calls < 5){
+      const g = await Containers.web_google.fetch(q, 10, pageStart).catch(()=>null);
+      if (!g?.results?.length) break;
 
-      if (!g || !g.results || !g.results.length) break;
-
-      cbOnSuccess('google');
       sourceUsed = sourceUsed || 'google';
       collected.push(...toStandardItems(g.results, g.source));
 
-      if (g.results.length < batchSize) break;
-      pageStart += batchSize;
+      pageStart += 10;
+      calls++;
     }
   }
 
-  for(const sourceName of sourceOrder){
-    if (collected.length >= limit) break;
-    if (sourceName === 'search_bank') await pullFromSearchBank();
-    if (sourceName === 'web_naver') await pullFromNaver();
-    if (sourceName === 'web_google') await pullFromGoogle();
+  // ===== 확장 =====
+  async function fetchWikipedia(){
+    try{
+      const url = 'https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(q);
+      const res = await fetch(url);
+      if(!res.ok) return [];
+      const d = await res.json();
+
+      return [{
+        title: d.title,
+        summary: d.extract,
+        url: d.content_urls?.desktop?.page || '',
+        source: 'wikipedia',
+        thumbnail: d.thumbnail?.source || '',
+        score: 0.95
+      }];
+    }catch{ return []; }
   }
 
-  const uniqueCollected = dedupeCanonicalItems(collected);
-
-  if (uniqueCollected.length > 0) {
-    let finalItems = await applyCorePipeline(q, uniqueCollected.slice(0, limit));
-    finalItems = applyServerSideBoosts(finalItems, { q, lang }).slice(0, limit);
-
-    await syncSearchAnalytics(event, q, finalItems);
-    await distributeRevenue(event, finalItems);
-
-    const out = {
-      source: sourceUsed,
-      route: sourceOrder,
-      region,
-      items: finalItems
-    };
-    setQueryCache(cacheKey, out);
-    return out;
+  function fetchYouTube(){
+    return [{
+      title: `[YouTube] ${q}`,
+      url: 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q),
+      source: 'youtube',
+      mediaType: 'video',
+      thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg',
+      score: 0.7
+    }];
   }
 
-  let fallbackItems = await applyCorePipeline(q, [
-    {
-      title: q,
-      summary: 'Loose fallback result',
-      source: 'fallback',
-      score: 0.01
+  function fetchNews(){
+    return [{
+      title: `[News] ${q}`,
+      url: 'https://www.google.com/search?tbm=nws&q=' + encodeURIComponent(q),
+      source: 'news',
+      thumbnail: 'https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico',
+      score: 0.7
+    }];
+  }
+
+  function fetchShopping(){
+    return [{
+      title: `[Shopping] ${q}`,
+      url: 'https://www.google.com/search?tbm=shop&q=' + encodeURIComponent(q),
+      source: 'shopping',
+      mediaType: 'product',
+      thumbnail: 'https://cdn-icons-png.flaticon.com/512/263/263142.png',
+      score: 0.6
+    }];
+  }
+
+  // ===== 실행 =====
+await Promise.all([
+  pullFromNaver(),
+  pullFromGoogle()
+]);
+
+await pullFromSearchBank();
+
+  const wiki = await fetchWikipedia();
+  const yt = fetchYouTube();
+  const news = fetchNews();
+  const shop = fetchShopping();
+
+  collected.push(...wiki, ...yt, ...news, ...shop);
+
+  const unique = dedupeCanonicalItems(collected);
+
+  // ===== AI 요약 =====
+  async function generateAISummary(items){
+    try{
+      const apiKey = process.env.OPENAI_API_KEY;
+      if(!apiKey) return null;
+
+      const text = items.slice(0,5).map(i => i.title).join("\n");
+
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer " + apiKey,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: "검색 결과를 요약하고 핵심 답변을 제공하라." },
+            { role: "user", content: text }
+          ]
+        })
+      });
+
+      const d = await res.json();
+      return d?.choices?.[0]?.message?.content || null;
+
+    }catch{
+      return null;
     }
-  ]);
-  fallbackItems = applyServerSideBoosts(fallbackItems, { q, lang }).slice(0, limit);
+  }
 
-  await syncSearchAnalytics(event, q, fallbackItems);
+  const aiSummary = await generateAISummary(unique);
+
+  // ===== 신뢰도 =====
+  function markTrust(item){
+    let trust = "normal";
+    if(item.source === "wikipedia") trust = "high";
+    if((item.url || '').includes("blog")) trust = "low";
+    return { ...item, trust };
+  }
+
+ let finalItems = await applyCorePipeline(q, unique.slice(0, 800));
+finalItems = applyServerSideBoosts(finalItems, { q, lang });
+finalItems = finalItems.map(markTrust).slice(0, limit);
 
   const out = {
-    source: 'fallback',
-    route: sourceOrder,
+    source: sourceUsed,
     region,
-    items: fallbackItems
+    aiSummary,
+    items: finalItems
   };
-  setQueryCache(cacheKey, out);
+
+  globalThis.__MARU_CACHE.set(cacheKey, { t: Date.now(), v: out });
+
   return out;
 }
 
@@ -763,6 +846,8 @@ if (!envOk) {
 
     const base = await orchestrateSearch({ event, q, limit, start, lang });
 
+    await syncSearchAnalytics(event, q, base.items);
+    await distributeRevenue(event, base.items);
 
     return ok({
       status: 'ok',
