@@ -30182,6 +30182,7 @@
           "lastUpdate": null
         }
       },
+	  
       "revenueDestination": {
         "entity": {
           "nameKo": "국제종합상사(IGTC)",
@@ -30428,6 +30429,18 @@
       "debug": true
     }
   ],
+  
+    "layers": {
+    "tour_feed": {
+      "source": "search-bank",
+      "type": "tour",
+      "route": "tour",
+      "binding": "right-tour-100",
+      "mode": "append",
+      "psom": true
+    }
+  },
+  
   "engine_layer": {
     "cs_version": "CS1",
     "generated_at": "2026-02-26T09:34:59.444472+00:00",
