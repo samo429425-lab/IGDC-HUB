@@ -67,6 +67,17 @@
   "sections": {
     "donation-global": []
   },
+  
+  "layers": {
+  "donation_feed": {
+    "source": "search-bank",
+    "type": "donation",
+    "route": "donation",
+    "binding": "items",
+    "mode": "append",
+    "psom": true
+  }
+},
   "items": [
     {
       "uid": "donation:donation-global:000001",
