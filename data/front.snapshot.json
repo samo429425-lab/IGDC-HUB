@@ -4831,9 +4831,50 @@
             "url": "https://example.com/home_right_bottom/80",
             "priority": 119
           }
-        ]
-      }
-    },
+          ]
+      },
+
+      "layers": {
+        "sourcePipeline": {
+          "enabled": true,
+          "sources": [
+            "search-bank",
+            "distribution",
+            "media",
+            "network"
+          ],
+          "mode": "aggregated",
+          "dedupe": true,
+          "maxItems": 1200
+        },
+        "renderPipeline": {
+          "enabled": true,
+          "strategy": "priority-first",
+          "sort": [
+            "priority",
+            "score",
+            "recency"
+          ],
+          "limitPerSection": 50,
+          "fallback": "latest"
+        },
+        "monetizationBridge": {
+          "enabled": true,
+          "types": [
+            "impression",
+            "click",
+            "referral"
+          ],
+          "trackForward": true,
+          "allowOutbound": true
+        },
+        "cachePolicy": {
+          "enabled": true,
+          "ttlSeconds": 300,
+          "staleWhileRevalidate": true
+        }
+      },
+  
 
   "platform_profile": {
     "org_name_kr": "국제종합상사(IGTC)",
