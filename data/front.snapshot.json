@@ -10459,16 +10459,8 @@
             "id": "distribution-right-100"
           }
         ]
-      },
-	  "layers": {
-  "home_feed": {
-    "source": "search-bank",
-    "type": "mixed",
-    "route": "home",
-    "binding": "sections",
-    "mode": "append",
-    "psom": true
-   }
+      }
+    }
   },
   "platform_profile": {
     "org_name_kr": "국제종합상사(IGTC)",
