@@ -30138,6 +30138,17 @@
       }
     }
   ],
+  
+  "layers": {
+  "network_feed": {
+    "source": "search-bank",
+    "type": "network",
+    "route": "network",
+    "binding": "right-network-100",
+    "mode": "append",
+    "psom": true
+  }
+},
   "engine_layer": {
     "cs_version": "CS1",
     "generated_at": "2026-02-26T09:34:59.419176+00:00",
