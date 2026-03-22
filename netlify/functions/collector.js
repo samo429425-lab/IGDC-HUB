@@ -566,15 +566,16 @@ setCache(q, params, result);
 try{
   const Snapshot = require("./snapshot-engine");
 
+  const items = result?.items || result?.results || [];
+
   if(
     Snapshot &&
     typeof Snapshot.run === "function" &&
-    Array.isArray(result?.items) &&
-    result.items.length
+    Array.isArray(items)
   ){
     await Snapshot.run({
       section:"search",
-      items:result.items,
+      items: items,
       meta:{
         source:"collector",
         engine:VERSION,
@@ -584,11 +585,10 @@ try{
   }
 
 }catch(e){
-  console.error("snapshot_write_fail",e?.message);
+  console.error("snapshot_write_fail", e?.message);
 }
 
 return result;
-}
 
 /* --------------------------------------------------
 HTTP RESPONSE

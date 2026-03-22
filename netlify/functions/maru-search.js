@@ -988,7 +988,15 @@ if (!envOk) {
       });
     }
 
-    const base = await orchestrateSearch({ event, q, limit, start, lang });
+    const Collector = require("./collector");
+
+const base = await Collector.runEngine(event, {
+  q,
+  query:q,
+  limit,
+  mode:"search",
+  engine:"search"
+});
 
     await syncSearchAnalytics(event, q, base.items);
     await distributeRevenue(event, base.items);
