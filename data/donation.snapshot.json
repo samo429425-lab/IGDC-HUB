@@ -80,6 +80,131 @@
 },
   "items": [
     {
+      "uid": "donation:donation-global:000001",
+      "id": "donation:donation-global:000001",
+      "psom_key": "donation-global",
+      "category": "donation-global",
+      "type": "org-slot",
+      "title": "Donation Partner 1",
+      "summary": "Auto-replace when verified data arrives",
+      "org": {
+        "id": null,
+        "name": null,
+        "homepage": null,
+        "country": null,
+        "verified": false,
+        "legal_name": null,
+        "registration": {
+          "country": null,
+          "authority": null,
+          "id": null
+        },
+        "contact": {
+          "email": null,
+          "phone": null
+        },
+        "social": {
+          "x": null,
+          "youtube": null,
+          "instagram": null,
+          "facebook": null,
+          "linkedin": null
+        },
+        "locales": {
+          "name": {},
+          "summary": {}
+        }
+      },
+      "donation": {
+        "enabled": false,
+        "external": true,
+        "checkout_url": null,
+        "currency": null,
+        "min_amount": null,
+        "methods": [],
+        "campaign_id": null,
+        "receipt_supported": null
+      },
+      "bank_ref": {
+        "source": "search-bank",
+        "channel": "donation",
+        "record_id": null
+      },
+      "rank": {
+        "global": 0,
+        "section": 0,
+        "score": 0
+      },
+      "track": {
+        "track_id": "donation:donation-global:000001",
+        "pointable": true
+      },
+      "engagement": {
+        "click": 0,
+        "like": 0,
+        "share": 0,
+        "point": 0
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/img/placeholder.png",
+        "src": "#",
+        "ratio": "1:1"
+      },
+      "link": {
+        "mode": "org-homepage",
+        "url": "#",
+        "target": "_blank"
+      },
+      "collector": {
+        "engine": null,
+        "query": null,
+        "fetched_at": null
+      },
+      "verify": {
+        "status": "pending",
+        "score": 0,
+        "engine": null,
+        "checked_at": null
+      },
+      "replace_policy": {
+        "mode": "bank-first",
+        "fallback": "seed",
+        "locked": false
+      },
+      "meta": {
+        "source": "seed",
+        "replaceable": true,
+        "created_at": "2026-02-12T13:01:46Z",
+        "updated_at": "2026-02-12T13:01:46Z",
+        "schema_version": 7
+      },
+      "provenance": {
+        "fetched_from": null,
+        "source_urls": [],
+        "captured_at": null
+      },
+      "evidence": {
+        "homepage_snapshot": null,
+        "logo_url": null,
+        "documents": []
+      },
+      "compliance": {
+        "sanctions_screened": false,
+        "restricted_country_screened": false,
+        "flags": []
+      },
+      "i18n": {
+        "lang": null,
+        "title": {},
+        "summary": {}
+      },
+      "analytics": {
+        "impression": 0,
+        "click_through_rate": 0
+      }
+    },
+    {
       "uid": "donation:donation-global:000002",
       "id": "donation:donation-global:000002",
       "psom_key": "donation-global",
