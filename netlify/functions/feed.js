@@ -26,14 +26,45 @@ let Core = null;
 try { Core = require("./core"); } catch (e) { Core = null; }
 
 // ---- PATH RESOLUTION ----------------------------------------
-const DATA_ROOT = path.join(__dirname, "data");
-const FRONT_SNAPSHOT_PATH = path.join(DATA_ROOT, "front.snapshot.json");
-const PSOM_PATH = path.join(DATA_ROOT, "psom.json");
+const CWD = process.cwd();
+const DIR = __dirname;
+
+const FRONT_SNAPSHOT_CANDIDATES = [
+  path.join(CWD, "data", "front.snapshot.json"),
+  path.join(CWD, "netlify", "functions", "data", "front.snapshot.json"),
+  path.join(DIR, "data", "front.snapshot.json"),
+  path.join(DIR, "..", "data", "front.snapshot.json"),
+  path.join(DIR, "..", "..", "data", "front.snapshot.json")
+];
+
+// ✅ 추가 (SearchBank)
+const SEARCHBANK_SNAPSHOT_CANDIDATES = [
+  path.join(CWD, "data", "searchbank.snapshot.json"),
+  path.join(CWD, "netlify", "functions", "data", "searchbank.snapshot.json"),
+  path.join(DIR, "data", "searchbank.snapshot.json"),
+  path.join(DIR, "..", "data", "searchbank.snapshot.json")
+];
+
+const PSOM_CANDIDATES = [
+  path.join(CWD, "data", "psom.json"),
+  path.join(CWD, "netlify", "functions", "data", "psom.json"),
+  path.join(DIR, "data", "psom.json"),
+  path.join(DIR, "..", "data", "psom.json"),
+  path.join(DIR, "..", "..", "data", "psom.json")
+];
 
 // ---- UTIL ---------------------------------------------------
 function safeReadJSON(p) {
   try { return JSON.parse(fs.readFileSync(p, "utf-8")); }
   catch (e) { return null; }
+}
+
+function safeReadJSONFromCandidates(paths) {
+  for (const p of paths) {
+    const json = safeReadJSON(p);
+    if (json) return json;
+  }
+  return null;
 }
 
 function toArr(v){ return Array.isArray(v) ? v : []; }
@@ -225,24 +256,43 @@ exports.handler = async function (event) {
     const qs = (event && event.queryStringParameters) || {};
     const pageQuery = qs.page || qs.p || "";
 
-    const snap = safeReadJSON(FRONT_SNAPSHOT_PATH) || {};
-    const psom = safeReadJSON(PSOM_PATH) || [];
+    // 🔥 1. front + searchbank 로드
+    const frontSnap = safeReadJSONFromCandidates(FRONT_SNAPSHOT_CANDIDATES) || {};
+    const searchbankSnap = safeReadJSONFromCandidates(SEARCHBANK_SNAPSHOT_CANDIDATES) || {};
+    const psom = safeReadJSONFromCandidates(PSOM_CANDIDATES) || [];
 
+    // 🔥 2. SearchBank → Front 주입
+    if (searchbankSnap && searchbankSnap.pages) {
+      if (!frontSnap.pages) frontSnap.pages = {};
+
+      for (const [page, pageObj] of Object.entries(searchbankSnap.pages)) {
+        if (!frontSnap.pages[page]) frontSnap.pages[page] = { sections:{} };
+
+        const sections = pageObj.sections || {};
+        for (const [section, items] of Object.entries(sections)) {
+          frontSnap.pages[page].sections[section] = items;
+        }
+      }
+    }
+
+    // 🔥 3. 기존 로직 그대로 유지
+    const snap = frontSnap;
     const items = compileFlatItems(snap, psom);
 
-    // sections only when page query is provided & supported
-    const sections = pageQuery ? (buildSectionsForPageQuery(pageQuery, snap) || []) : [];
+    const sections = pageQuery
+      ? (buildSectionsForPageQuery(pageQuery, snap) || [])
+      : [];
 
     const body = {
       status: "ok",
-      version: "feed.v3.single-snapshot",
+      version: "feed.v3.injected",
       generated: new Date().toISOString(),
       count: items.length,
       items
     };
 
     if (pageQuery) {
-      body.meta = { page: String(pageQuery), source: "front.snapshot.json" };
+      body.meta = { page: String(pageQuery), source: "front+searchbank" };
       body.sections = sections;
     }
 
@@ -254,6 +304,7 @@ exports.handler = async function (event) {
       },
       body: JSON.stringify(body)
     };
+
   } catch (e) {
     return {
       statusCode: 500,
@@ -264,12 +315,28 @@ exports.handler = async function (event) {
 
 // ---- INTERNAL CALL (ENGINE / INSIGHT) -----------------------
 exports.compileFeed = function(){
-  const snap = safeReadJSON(FRONT_SNAPSHOT_PATH) || {};
-  const psom = safeReadJSON(PSOM_PATH) || [];
-  const items = compileFlatItems(snap, psom);
+  const frontSnap = safeReadJSONFromCandidates(FRONT_SNAPSHOT_CANDIDATES) || {};
+  const searchbankSnap = safeReadJSONFromCandidates(SEARCHBANK_SNAPSHOT_CANDIDATES) || {};
+  const psom = safeReadJSONFromCandidates(PSOM_CANDIDATES) || [];
+
+  // 🔥 SearchBank → Front 주입
+  if (searchbankSnap && searchbankSnap.pages) {
+    if (!frontSnap.pages) frontSnap.pages = {};
+
+    for (const [page, pageObj] of Object.entries(searchbankSnap.pages)) {
+      if (!frontSnap.pages[page]) frontSnap.pages[page] = { sections:{} };
+
+      for (const [section, items] of Object.entries(pageObj.sections || {})) {
+        frontSnap.pages[page].sections[section] = items;
+      }
+    }
+  }
+
+  const items = compileFlatItems(frontSnap, psom);
+
   return {
     status: "ok",
-    version: "feed.v3.single-snapshot",
+    version: "feed.v3.injected",
     generated: new Date().toISOString(),
     count: items.length,
     items

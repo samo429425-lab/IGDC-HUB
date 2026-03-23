@@ -1,16 +1,24 @@
-// feed-distribution.js (DISTRIBUTION FEED - PRODUCTION)
-// - Reads snapshot via:
-//   1) local FS (multiple candidate paths)
-//   2) HTTP fetch from deployed site (/data/distribution.snapshot.json)
-// - CORS enabled
-// - OPTIONS preflight supported
+// feed-distribution.js (FINAL - DISTRIBUTION FEED ENGINE)
 
 import fs from "fs/promises";
 import path from "path";
 
-const SNAPSHOT_NAME = "distribution.snapshot.json";
+// -------------------- CONFIG --------------------
 
-// ---- CORS (allow secret/incognito too) ----
+const SEARCHBANK_SNAPSHOT_CANDIDATES = [
+  "/var/task/data/searchbank.snapshot.json",
+  "./data/searchbank.snapshot.json",
+  "data/searchbank.snapshot.json"
+];
+
+const PSOM_CANDIDATES = [
+  "/var/task/data/psom.json",
+  "./data/psom.json",
+  "data/psom.json"
+];
+
+// -------------------- CORS --------------------
+
 function corsHeaders() {
   return {
     "Content-Type": "application/json; charset=utf-8",
@@ -20,121 +28,207 @@ function corsHeaders() {
   };
 }
 
-function ok(bodyObj) {
-  return { statusCode: 200, headers: corsHeaders(), body: JSON.stringify(bodyObj) };
-}
-
-function err(statusCode, code, extra = {}) {
+function ok(body) {
   return {
-    statusCode,
+    statusCode: 200,
     headers: corsHeaders(),
-    body: JSON.stringify({ error: code, ...extra })
+    body: JSON.stringify(body)
   };
 }
 
-function extractSections(snapshot) {
-  return snapshot?.pages?.distribution?.sections || snapshot?.sections || null;
+function err(code, message, extra = {}) {
+  return {
+    statusCode: code,
+    headers: corsHeaders(),
+    body: JSON.stringify({ error: message, ...extra })
+  };
 }
 
-// ---- 1) FS read (multi-path) ----
-async function readJsonIfExists(filePath) {
-  try {
-    const raw = await fs.readFile(filePath, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return null;
+// -------------------- FS SAFE READ --------------------
+
+async function safeReadJSONFromCandidates(paths) {
+  for (const p of paths) {
+    try {
+      const raw = await fs.readFile(p, "utf-8");
+      return JSON.parse(raw);
+    } catch {}
   }
+  return null;
 }
 
-function fsCandidatePaths() {
-  // Netlify functions run from a bundled directory; cwd/dirname differ by build.
-  const cwd = process.cwd();
-  const dir = typeof __dirname === "string" ? __dirname : cwd;
+// -------------------- LOAD SEARCHBANK --------------------
 
-  return [
-    path.join(cwd, "data", SNAPSHOT_NAME),
-    path.join(cwd, "netlify", "functions", "data", SNAPSHOT_NAME),
-    path.join(dir, "data", SNAPSHOT_NAME),
-    path.join(dir, "..", "data", SNAPSHOT_NAME),
-    path.join(dir, "..", "..", "data", SNAPSHOT_NAME),
-    path.join(dir, "functions", "data", SNAPSHOT_NAME)
-  ];
-}
+async function loadSearchBankSnapshot() {
+  // 1. FS
+  const local = await safeReadJSONFromCandidates(SEARCHBANK_SNAPSHOT_CANDIDATES);
+  if (local) return local;
 
-// ---- 2) HTTP fetch fallback ----
-function guessSiteBaseUrl() {
-  // Netlify provides these in most deploys
-  return (
+  // 2. HTTP fallback
+  const base =
     process.env.URL ||
     process.env.DEPLOY_PRIME_URL ||
     process.env.DEPLOY_URL ||
-    "" // if empty, we will try relative fetch as last attempt
-  );
-}
+    "";
 
-async function fetchSnapshotOverHttp() {
-  const base = guessSiteBaseUrl();
-
-  // Try absolute first, then relative
   const urls = [];
-  if (base) urls.push(`${base.replace(/\/$/, "")}/data/${SNAPSHOT_NAME}`);
-  urls.push(`/data/${SNAPSHOT_NAME}`);
+  if (base) {
+    urls.push(`${base.replace(/\/$/, "")}/data/searchbank.snapshot.json`);
+  }
+  urls.push(`/data/searchbank.snapshot.json`);
 
   for (const url of urls) {
     try {
       const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) continue;
       return await res.json();
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
+
   return null;
 }
 
-async function loadSnapshot() {
-  // FS candidates
-  for (const p of fsCandidatePaths()) {
-    const json = await readJsonIfExists(p);
-    if (json) return json;
-  }
-  // HTTP fallback
-  return await fetchSnapshotOverHttp();
+// -------------------- LOAD PSOM --------------------
+
+async function loadPSOM() {
+  return await safeReadJSONFromCandidates(PSOM_CANDIDATES);
 }
 
+// -------------------- SEARCHBANK FLATTEN --------------------
+
+function flattenSearchbank(searchbank) {
+  // 다양한 구조 대응 (items / pages / sections)
+  if (!searchbank) return [];
+
+  if (Array.isArray(searchbank.items)) return searchbank.items;
+
+  if (searchbank.pages) {
+    const out = [];
+    for (const p of Object.values(searchbank.pages)) {
+      if (p.sections) {
+        for (const sec of Object.values(p.sections)) {
+          if (Array.isArray(sec)) out.push(...sec);
+        }
+      }
+    }
+    return out;
+  }
+
+  return [];
+}
+
+// -------------------- BUILD SECTIONS --------------------
+
+function buildSectionsFromPSOM({ page, searchbank, psom }) {
+
+  if (!Array.isArray(psom)) return {};
+
+  const pageDef = psom.find(p => p.page === page);
+  if (!pageDef || !Array.isArray(pageDef.sections)) return {};
+
+  const allItems = flattenSearchbank(searchbank);
+
+  const result = {};
+
+  for (const sec of pageDef.sections) {
+
+    const key = sec.key;
+    const filter = sec.filter || {};
+
+    const items = allItems.filter(item => {
+
+      if (filter.type && item.type !== filter.type) return false;
+      if (filter.category && item.category !== filter.category) return false;
+
+      if (filter.tag) {
+        const tags = item.tags || [];
+        if (!tags.includes(filter.tag)) return false;
+      }
+
+      return true;
+    });
+
+    result[key] = items.slice(0, sec.limit || 20);
+  }
+
+  return result;
+}
+
+// -------------------- SNAPSHOT WRITE --------------------
+
+async function writeDistributionSnapshot(sections) {
+  const outputPath = "/tmp/distribution.snapshot.json";
+
+  const snapshot = {
+    updatedAt: new Date().toISOString(),
+    pages: {
+      distribution: {
+        sections
+      }
+    }
+  };
+
+  try {
+    await fs.writeFile(outputPath, JSON.stringify(snapshot, null, 2));
+  } catch {}
+
+  return snapshot;
+}
+
+// -------------------- HANDLER --------------------
+
 export async function handler(event) {
-  // Preflight
+
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 200, headers: corsHeaders(), body: "" };
   }
 
-  const qs = event.queryStringParameters || {};
-  const key = (qs.key || qs.section || "").trim();
+  try {
 
-  const snapshot = await loadSnapshot();
-  if (!snapshot) {
-    return err(500, "SNAPSHOT_NOT_FOUND", {
-      hint: "Put /data/distribution.snapshot.json in site root AND/OR include snapshot accessible to function."
-    });
-  }
+    const qs = event.queryStringParameters || {};
+    const key = (qs.key || qs.section || "").trim();
 
-  const sections = extractSections(snapshot);
-  if (!sections) {
-    return err(500, "INVALID_SNAPSHOT_STRUCTURE", {
-      hint: "Need snapshot.pages.distribution.sections"
-    });
-  }
+    // 1. load sources
+    const searchbank = await loadSearchBankSnapshot();
+    const psom = await loadPSOM();
 
-  // Section specific request
-  if (key) {
-    const items = sections[key];
-    if (!Array.isArray(items) || items.length === 0) {
-      // 운영형: 404 대신 200 empty로 돌려서 UI가 죽지 않게
-      return ok({ items: [] });
+    if (!searchbank) {
+      return err(500, "SEARCHBANK_NOT_FOUND");
     }
-    return ok({ items });
-  }
 
-  // All sections
-  return ok({ sections });
+    if (!psom) {
+      return err(500, "PSOM_NOT_FOUND");
+    }
+
+    // 2. build sections
+    const sections = buildSectionsFromPSOM({
+      page: "distribution",
+      searchbank,
+      psom
+    });
+
+    if (!sections || Object.keys(sections).length === 0) {
+      return err(500, "EMPTY_SECTIONS");
+    }
+
+    // 3. snapshot 생성
+    const snapshot = await writeDistributionSnapshot(sections);
+
+    // 4. single section
+    if (key) {
+      const items = sections[key] || [];
+      return ok({ items });
+    }
+
+    // 5. full
+    return ok({
+      status: "ok",
+      page: "distribution",
+      sections: snapshot.pages.distribution.sections
+    });
+
+  } catch (e) {
+    return err(500, "FEED_FAIL", {
+      message: String(e?.message || e)
+    });
+  }
 }

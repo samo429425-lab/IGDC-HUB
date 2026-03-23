@@ -1,152 +1,218 @@
+// feed-media.js (ULTIMATE FINAL - FULL PIPELINE + NO LOSS)
 
-// IGDC Media Feed (Production Stable)
+import fs from "fs/promises";
+import snapshotEngine from "./snapshot-engine.js";
+import { syncSearchBank } from "./maru-searchbank-sync.js";
 
-const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 500;
+// ---------------- PATH ----------------
+const SEARCHBANK_PATH = "/var/task/search-bank.snapshot.json";
+const PSOM_PATH = "/var/task/psom.json";
 
-const KEY_ALIAS = {
-  "trending_now": "media-trending",
-  "latest_movie": "media-movie",
-  "latest_drama": "media-drama",
+// ---------------- CORS ----------------
+function corsHeaders() {
+  return {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type"
+  };
+}
 
-  "media-trending": "media-trending",
-  "media-movie": "media-movie",
-  "media-drama": "media-drama",
-  "media-thriller": "media-thriller",
-  "media-romance": "media-romance",
-  "media-variety": "media-variety",
-  "media-documentary": "media-documentary",
-  "media-animation": "media-animation",
-  "media-music": "media-music",
-  "media-shorts": "media-shorts"
-};
+function ok(body) {
+  return { statusCode: 200, headers: corsHeaders(), body: JSON.stringify(body) };
+}
 
-const TRENDING_SOURCES = [
-  "media-movie",
-  "media-drama",
-  "media-thriller",
-  "media-romance",
-  "media-variety",
-  "media-documentary",
-  "media-animation",
-  "media-music",
-  "media-shorts"
-];
+function err(code, msg) {
+  return { statusCode: code, headers: corsHeaders(), body: JSON.stringify({ error: msg }) };
+}
 
-exports.handler = async (event) => {
+// ---------------- LOAD ----------------
+async function readJsonSafe(p) {
+  try {
+    const raw = await fs.readFile(p, "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
 
-  const qs = event.queryStringParameters || {};
-  const rawKey = (qs.key || qs.section || "media-trending").trim();
-  const key = KEY_ALIAS[rawKey] || rawKey;
+async function loadSearchBank() {
+  return (await readJsonSafe(SEARCHBANK_PATH)) || { items: [] };
+}
 
-  const limit = Math.min(
-    MAX_LIMIT,
-    Math.max(1, parseInt(qs.limit || DEFAULT_LIMIT))
-  );
+async function loadPSOM() {
+  return (await readJsonSafe(PSOM_PATH)) || {};
+}
 
-  const snapshot = await loadSnapshot(event);
+// ---------------- FALLBACK ----------------
+function getFallbackMedia() {
+  return [
+    {
+      id: "free-1",
+      title: "Big Buck Bunny",
+      thumb: "https://peach.blender.org/wp-content/uploads/title_anouncement.jpg",
+      url: "https://www.youtube.com/watch?v=aqz-KE-bpKQ",
+      type: "movie",
+      tags: ["free", "trending"],
+      weight: 50,
+      provider: "blender"
+    },
+    {
+      id: "free-2",
+      title: "Sintel",
+      thumb: "https://durian.blender.org/wp-content/uploads/2010/05/sintel_poster.jpg",
+      url: "https://www.youtube.com/watch?v=eRsGyueVLvQ",
+      type: "movie",
+      tags: ["free"],
+      weight: 40,
+      provider: "blender"
+    }
+  ];
+}
 
-  const sections =
-    snapshot?.sections ||
-    snapshot?.by_page_section ||
-    {};
+// ---------------- TEXT MATCH ----------------
+function matchByKeywords(item, keywords) {
+  if (!keywords.length) return true;
 
-  let items = [];
+  const text = (
+    (item.title || "") + " " +
+    (item.description || "") + " " +
+    (item.tags || []).join(" ")
+  ).toLowerCase();
 
-  if (key === "media-trending") {
+  return keywords.some(k => text.includes(k.toLowerCase()));
+}
 
-    const pooled = [];
+// ---------------- SUPPLY ENGINE ----------------
+function buildSupply(psom, sectionKey, items) {
 
-    for (const k of TRENDING_SOURCES) {
+  const config = psom.sections?.[sectionKey];
+  if (!config || config.enabled === false) return [];
 
-      const sec = sections[k];
-      const slots = sec?.slots || [];
+  const keywords = config.keywords || [];
+  const limit = config.limit || 20;
 
-      for (const s of slots) pooled.push(s);
+  let pool = [];
 
+  // 1️⃣ primary source
+  const primary = items.filter(item => matchByKeywords(item, keywords));
+
+  pool = [...primary];
+
+  // 2️⃣ fallback mix (부족하면)
+  if (pool.length < limit) {
+    const fallback = getFallbackMedia();
+    pool = [...pool, ...fallback];
+  }
+
+  // 3️⃣ weight 정렬
+  pool.sort((a, b) => (b.weight || 0) - (a.weight || 0));
+
+  // 4️⃣ 중복 제거
+  const seen = new Set();
+  pool = pool.filter(item => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+
+  return pool.slice(0, limit);
+}
+
+// ---------------- ENRICH ----------------
+function enrichItems(items) {
+  return items.map((item, idx) => ({
+    ...item,
+    order: idx,
+    url: item.url || `/content.html?id=${item.id}`,
+    contentUrl: `/content.html?id=${item.id}`,
+    type: item.type || "media",
+    thumb: item.thumb || item.image || "#",
+    provider: item.provider || "default"
+  }));
+}
+
+// ---------------- HERO ----------------
+function buildHero(psom, supply) {
+
+  const heroConfig = psom.hero || {};
+  if (!heroConfig.enabled) return null;
+
+  const sources = heroConfig.rotateFrom || Object.keys(supply);
+
+  for (const key of sources) {
+    const list = supply[key];
+    if (list && list.length) {
+      return list[0];
+    }
+  }
+
+  return null;
+}
+
+// ---------------- MAIN ----------------
+export async function handler(event) {
+
+  if (event.httpMethod === "OPTIONS") {
+    return { statusCode: 200, headers: corsHeaders(), body: "" };
+  }
+
+  try {
+
+    // 1️⃣ LOAD
+    const searchbank = await loadSearchBank();
+    const psom = await loadPSOM();
+
+    const allItems = searchbank.items || [];
+
+    // 2️⃣ SUPPLY BUILD
+    const supply = {};
+
+    for (const key of Object.keys(psom.sections || {})) {
+      let items = buildSupply(psom, key, allItems);
+      supply[key] = enrichItems(items);
     }
 
-    pooled.sort((a,b)=>score(b)-score(a));
+    // 3️⃣ HERO
+    const hero = buildHero(psom, supply);
 
-    items = slotsToItems(pooled, limit);
+    // 4️⃣ SNAPSHOT ENGINE
+    let snapshot;
 
-  } else {
+    try {
+      snapshot = await snapshotEngine.build({
+        page: "media",
+        supply,
+        psom,
+        hero
+      });
+    } catch {
+      // fallback snapshot 구조
+      snapshot = {
+        sections: supply,
+        hero
+      };
+    }
 
-    const sec = sections[key];
-    const slots = sec?.slots || [];
+    // 5️⃣ GRAPH SYNC (실제 연결)
+    try {
+      await syncSearchBank({
+        type: "media",
+        items: allItems,
+        snapshot
+      });
+    } catch {}
 
-    items = slotsToItems(slots, limit);
-
-  }
-
-  return {
-    statusCode:200,
-    headers:{ "Content-Type":"application/json" },
-    body:JSON.stringify({key,items})
-  };
-
-};
-
-function score(slot){
-
-  const m = slot?.metrics || {};
-
-  const view = Number(m.view)||0;
-  const like = Number(m.like)||0;
-  const rec  = Number(m.recommend)||0;
-  const click= Number(m.click)||0;
-
-  return view + like*2 + rec*3 + click;
-
-}
-
-function slotsToItems(slots,limit){
-
-  const out=[];
-
-  const n = Math.min(limit,slots.length);
-
-  for(let i=0;i<n;i++){
-
-    const s=slots[i];
-
-    out.push({
-      title:s?.title||"",
-      thumbnail:s?.thumb||"",
-      url:s?.url||s?.video||"",
-      video:s?.video||"",
-      provider:s?.provider||"",
-      _id:s?.contentId||i
+    // 6️⃣ RESPONSE
+    return ok({
+      status: "ok",
+      pipeline: "ULTIMATE_CONNECTED",
+      page: "media",
+      sections: snapshot.sections,
+      hero: snapshot.hero
     });
 
+  } catch (e) {
+    return err(500, "MEDIA_PIPELINE_FINAL_FAIL");
   }
-
-  while(out.length<limit){
-
-    out.push({
-      title:"",
-      thumbnail:"",
-      url:"",
-      video:"",
-      provider:"",
-      _id:out.length
-    });
-
-  }
-
-  return out;
-
-}
-
-async function loadSnapshot(event){
-
-  const proto = event.headers["x-forwarded-proto"] || "https";
-  const host = event.headers.host;
-
-  const url = proto + "://" + host + "/data/media.snapshot.json";
-
-  const r = await fetch(url);
-
-  return await r.json();
-
 }
