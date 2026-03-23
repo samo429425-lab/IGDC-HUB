@@ -261,19 +261,25 @@ exports.handler = async function (event) {
     const searchbankSnap = safeReadJSONFromCandidates(SEARCHBANK_SNAPSHOT_CANDIDATES) || {};
     const psom = safeReadJSONFromCandidates(PSOM_CANDIDATES) || [];
 
-    // 🔥 2. SearchBank → Front 주입
-    if (searchbankSnap && searchbankSnap.pages) {
-      if (!frontSnap.pages) frontSnap.pages = {};
+// 🔥 2. SearchBank → Front 주입 (MERGE 방식으로 수정)
+if (searchbankSnap && searchbankSnap.pages) {
+  if (!frontSnap.pages) frontSnap.pages = {};
 
-      for (const [page, pageObj] of Object.entries(searchbankSnap.pages)) {
-        if (!frontSnap.pages[page]) frontSnap.pages[page] = { sections:{} };
+  for (const [page, pageObj] of Object.entries(searchbankSnap.pages)) {
+    if (!frontSnap.pages[page]) frontSnap.pages[page] = { sections:{} };
 
-        const sections = pageObj.sections || {};
-        for (const [section, items] of Object.entries(sections)) {
-          frontSnap.pages[page].sections[section] = items;
-        }
-      }
+    const sections = pageObj.sections || {};
+    for (const [section, items] of Object.entries(sections)) {
+      const existing = frontSnap.pages[page].sections[section] || [];
+      const incoming = Array.isArray(items) ? items : [];
+
+      frontSnap.pages[page].sections[section] = [
+        ...existing,
+        ...incoming
+      ];
     }
+  }
+}
 
     // 🔥 3. 기존 로직 그대로 유지
     const snap = frontSnap;
