@@ -42,6 +42,52 @@
     ],
     "version": "1.1",
     "updated": "2025-12-27"
+	,
+"enginePolicy": {
+  "dataSource": {
+    "primary": "search-bank",
+    "collector": true,
+    "planetary": true,
+    "fallback": ["media", "social", "network", "tour"],
+    "external": true
+  },
+  "autofill": {
+    "enabled": true,
+    "minItems": 30,
+    "strategy": "hybrid",
+    "priority": ["search-bank", "collector", "external", "openai"],
+    "openai": {
+      "enabled": true,
+      "mode": "generate-or-enhance",
+      "fields": ["title", "description", "thumbnail", "tags"]
+    }
+  },
+  "routing": {
+    "geo": {
+      "enabled": true,
+      "source": "ip"
+    },
+    "match": ["geo", "lang", "interest"],
+    "priority": ["local", "producer", "global"]
+  },
+  "entity": {
+    "producer": true,
+    "community": true,
+    "user": true,
+    "directConnect": true
+  },
+  "snapshot": {
+    "autoGenerate": true,
+    "syncWith": ["search-bank"],
+    "updateCycle": "realtime"
+  },
+  "distribution": {
+    "mode": "hybrid",
+    "initial": "aggregator",
+    "target": "direct-producer",
+    "replaceStrategy": "progressive"
+  }
+}
   },
   {
     "id": "distribution-hub",
