@@ -47,18 +47,19 @@
 
   async function callInsightEngine(params){
 
-    const response = await fetch("/.netlify/functions/maru-global-insight", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params)
-    });
+  const query = new URLSearchParams(params).toString();
 
-    if(!response.ok){
-      throw new Error("Insight Engine Call Failed");
-    }
+  const response = await fetch(
+    "/.netlify/functions/maru-global-insight?" + query,
+    { method: "GET" }
+  );
 
-    return await response.json();
+  if(!response.ok){
+    throw new Error("Insight Engine Call Failed");
   }
+
+  return await response.json();
+}
 
   /* =====================================================
      REGION BRIEF
