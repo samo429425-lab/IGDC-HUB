@@ -83,17 +83,39 @@ function fetchJsonNode(url){
     }
   });
 }
-
 async function fetchJson(url){
   try{
     if (typeof fetch === "function") {
-      const r = await fetch(url, { headers: { "cache-control":"no-store" }});
-      if(!r.ok) return null;
-      return await r.json();
+      const r = await fetch(url, {
+        method: "GET",
+        headers: { "cache-control":"no-store" }
+      });
+
+      if(!r || !r.ok) return { results: [] };
+
+      const data = await r.json().catch(()=>null);
+
+      if(!data) return { results: [] };
+
+      // 🔥 핵심: 구조 강제 통일
+      if(Array.isArray(data)) return { results: data };
+      if(data.results) return data;
+      if(data.items) return { results: data.items };
+
+      return { results: [] };
     }
-    return await fetchJsonNode(url);
+
+    const data = await fetchJsonNode(url);
+    if(!data) return { results: [] };
+
+    if(Array.isArray(data)) return { results: data };
+    if(data.results) return data;
+    if(data.items) return { results: data.items };
+
+    return { results: [] };
+
   }catch(e){
-    return null;
+    return { results: [] };
   }
 }
 

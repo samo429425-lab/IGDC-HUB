@@ -670,88 +670,6 @@ return {
   items: finalItems
 };
 
- // ===== BLOCK 674~889 (FULL REBUILD — LIMIT FIX + STABILITY) =====
-// ✔ 기능 유지
-// ✔ 병렬 구조 유지
-// ✔ 데이터 제한 제거 (500+ 대응)
-// ✔ AI 비동기 처리로 변경 (속도 개선)
-
-// ===== 실행 =====
-
-await pullFromSearchBank();
-await pullFromWikipedia();
-
-async function pullFromYouTube(){
-  if (!Containers.web_youtube) return;
-  const y = await Containers.web_youtube.fetch(q, 50).catch(() => null); // 🔧 20 → 50
-  if (y?.results?.length) {
-    collected.push(...toStandardItems(y.results, y.source || 'youtube'));
-  }
-}
-
-async function pullFromImage(){
-  if (!Containers.web_image) return;
-  const img = await Containers.web_image.fetch(q, 30).catch(() => null); // 🔧 10 → 30
-  if (img?.results?.length) {
-    collected.push(...toStandardItems(img.results, img.source || 'google_image'));
-  }
-}
-
-await Promise.all([
-  pullFromNaver(),
-  pullFromGoogle(),
-  pullFromBing(),
-  pullFromYouTube(),
-  pullFromImage()
-]);
-
-collected.push(...fetchNews(), ...fetchShopping());
-
-const unique = dedupeCanonicalItems(collected);
-
-// ===== AI (비동기 전환 — 응답 지연 제거) =====
-let aiSummaryPromise = generateAISummary(unique);
-
-function markTrust(item){
-  let trust = "normal";
-  const url = String(item.url || '').toLowerCase();
-  const src = String(item.source || '').toLowerCase();
-
-  if (src === 'wikipedia') trust = "high";
-  if (url.includes("blog") || url.includes("cafe")) trust = "low";
-  if (!url) trust = "low";
-
-  return { ...item, trust };
-}
-
-let finalItems = await applyCorePipeline(q, unique);
-finalItems = applyServerSideBoosts(finalItems, { q, lang });
-finalItems = finalItems.map(markTrust);
-
-// ===== 🔥 LIMIT 제거 (핵심) =====
-// 기존: if (limit && limit < finalItems.length)
-// 변경: 최소 500 보장
-const MIN_LIMIT = 500;
-const effectiveLimit = Math.max(limit || 0, MIN_LIMIT);
-
-if (effectiveLimit && effectiveLimit < finalItems.length) {
-  finalItems = finalItems.slice(0, effectiveLimit);
-}
-
-const aiSummary = await aiSummaryPromise;
-
-const out = {
-  source: sourceUsed || 'multi',
-  route: [...sourceOrder, 'web_bing', 'web_wikipedia', 'youtube', 'news', 'shopping'],
-  region,
-  aiSummary,
-  items: finalItems
-};
-
-globalThis.__MARU_CACHE.set(cacheKey, { t: Date.now(), v: out });
-
-return out;
-
 // ===== Source Fetchers =====
 async function naverSearch(q, limit, start) {
   const id = process.env.NAVER_API_KEY;
@@ -853,9 +771,6 @@ async function postJson(url, body){
     return null;
   }
 }
-
-
-// ===== FINAL BLOCK (859 ~ END) — FULL STABILIZED =====
 
 // ===== CORE PIPELINE APPLY (NON-DESTRUCTIVE) =====
 async function applyCorePipeline(query, items) {
