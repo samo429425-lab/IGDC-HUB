@@ -121,38 +121,48 @@ function run(payload) {
 
   bank.items = bank.items || [];
   
-/* ===== FRONT SNAPSHOT MERGE (feed.js 통합 1차) ===== */
-
 function mergeFrontFromSearchBank(frontSnap, searchbankSnap) {
 
-  if (!frontSnap.pages) frontSnap.pages = {};
-  if (!searchbankSnap || !searchbankSnap.pages) return frontSnap;
+  // 기존 pages 구조 제거
+  if (frontSnap.pages) {
+    delete frontSnap.pages;
+  }
 
-  for (const [page, pageObj] of Object.entries(searchbankSnap.pages)) {
+  // sections 구조 강제
+  if (!frontSnap.sections || typeof frontSnap.sections !== "object") {
+    frontSnap.sections = {};
+  }
 
-    if (!frontSnap.pages[page]) {
-      frontSnap.pages[page] = { sections: {} };
+  const items = Array.isArray(searchbankSnap?.items) ? searchbankSnap.items : [];
+
+  for (const item of items) {
+    const section =
+      item.psom_key ||
+      item.category ||
+      "default";
+
+    if (!frontSnap.sections[section]) {
+      frontSnap.sections[section] = [];
     }
 
-    const targetSections = frontSnap.pages[page].sections || {};
-    const sourceSections = pageObj.sections || {};
+    const existing = frontSnap.sections[section];
+    const id = item.id || stableId(JSON.stringify(item));
 
-    for (const [section, items] of Object.entries(sourceSections)) {
+    const exists = existing.find(i => i.id === id);
+    if (exists) continue;
 
-      if (!targetSections[section]) targetSections[section] = [];
-
-      const existing = targetSections[section];
-      const map = new Map();
-
-      [...existing, ...(Array.isArray(items) ? items : [])].forEach(item => {
-        const key = item && (item.id || stableId(JSON.stringify(item)));
-        if (key) map.set(key, item);
-      });
-
-      targetSections[section] = Array.from(map.values());
-    }
-
-    frontSnap.pages[page].sections = targetSections;
+    existing.push({
+      id,
+      title: item.title || item.name || "Untitled",
+      summary: item.summary || "",
+      url: item.url || item.link || "#",
+      thumb:
+        item.thumbnail ||
+        item.thumb ||
+        item.image ||
+        "/assets/img/placeholder.png",
+      priority: item.priority || item.score || 0
+    });
   }
 
   return frontSnap;
