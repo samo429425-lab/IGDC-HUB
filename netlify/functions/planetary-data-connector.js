@@ -605,7 +605,29 @@ async function connect(event, params = {}){
   const normalized = normalizeParams(event, params);
 
   const selectedSources = selectSources(normalized);
-  const results = [];
+  const selectedSources = selectSources(normalized);
+
+/* ===== maru-search fallback (통합) ===== */
+let maruBase = null;
+
+try{
+  const MaruSearch = require("./maru-search");
+
+  if(MaruSearch && typeof MaruSearch.runEngine === "function"){
+    maruBase = await MaruSearch.runEngine(event,{
+      q: normalized.q,
+      query: normalized.q,
+      limit: normalized.limit,
+      mode: normalized.mode || "search",
+      engine: "search"
+    });
+  }
+
+}catch(e){
+  maruBase = null;
+}
+
+const results = [];
 
   const tasks = selectedSources.map(async name=>{
   const adapter = SOURCE_ADAPTERS[name];
@@ -621,6 +643,9 @@ for(const r of executed){
 
   // aggregate canonical items for advanced consumers
   let aggregatedItems = [];
+  if(maruBase && Array.isArray(maruBase.items)){
+  aggregatedItems = aggregatedItems.concat(maruBase.items);
+}
   for(const r of results){
     if(Array.isArray(r.items)){
       aggregatedItems = aggregatedItems.concat(r.items);

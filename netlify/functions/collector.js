@@ -14,7 +14,6 @@ v150  autonomous collector + AI integration
 --------------------------------------------------
 FULL PATCH VERSION
 - 기능 축소 없음
-- router 반환 구조 호환
 - module shape 호환
 - null/crash 방지
 */
@@ -433,7 +432,7 @@ async function runDynamicEngines(query, items){
 }
 
 /* --------------------------------------------------
-COLLECTOR CORE
+COLLECTOR CORE (FINAL FIXED)
 -------------------------------------------------- */
 
 function parseLimit(v){
@@ -473,40 +472,36 @@ async function runCollector(event){
   const cached = getCache(q, params);
   if(cached) return cached;
 
-  /* planetary federation */
+  /* ===== maru-search direct call ===== */
 
+  let baseResult = {};
 
-  /* router */
-let routerResult = {};
+  try{
+    const MaruSearch = require("./maru-search");
 
-try{
-  if(Router && typeof Router.runEngine === "function"){
+    if(MaruSearch && typeof MaruSearch.runEngine === "function"){
+      baseResult = await withTimeout(
+        MaruSearch.runEngine(event,{
+          q,
+          query:q,
+          limit,
+          mode: params.mode || "search",
+          engine: params.engine || "search"
+        }),
+        ENGINE_TIMEOUT
+      ) || {};
+    }
 
-    routerResult = await withTimeout(
-      Router.runEngine(event,{
-        q,
-        query:q,
-        limit,
-        mode: params.mode || "search",
-        engine: params.engine || "search"
-      }),
-      ENGINE_TIMEOUT
-    ) || {};
-
-  }else{
-    routerResult = {};
+  }catch(e){
+    baseResult = {};
   }
 
-}catch(e){
-  routerResult = {};
-}
-
   let items =
-    routerResult.items ||
-    routerResult.results ||
-    routerResult.data?.items ||
-    routerResult.baseResult?.items ||
-    routerResult.baseResult?.data?.items ||
+    baseResult.items ||
+    baseResult.results ||
+    baseResult.data?.items ||
+    baseResult.baseResult?.items ||
+    baseResult.baseResult?.data?.items ||
     [];
 
   items = asArray(items).slice(0, limit);
@@ -533,25 +528,25 @@ try{
       : (items || []);
 
   const safeItems = asArray(items).slice(0, limit);
-// ===== SEARCH-BANK PIPELINE CONNECT =====
-try{
-  if(global.SearchBankExtensionCore && typeof global.SearchBankExtensionCore.pipeline === "function"){
-    for(const item of safeItems){
-      try{
-        global.SearchBankExtensionCore.pipeline(item);
-      }catch(e){}
+  
+  // ===== SEARCH-BANK PIPELINE CONNECT =====
+  try{
+    if(global.SearchBankExtensionCore && typeof global.SearchBankExtensionCore.pipeline === "function"){
+      for(const item of safeItems){
+        try{
+          global.SearchBankExtensionCore.pipeline(item);
+        }catch(e){}
+      }
     }
-  }
-}catch(e){}
-
+  }catch(e){}
 
   const result = {
     status:"ok",
     engine:"central-collector",
     version:VERSION,
     query:q,
-    router:routerResult?.engine || "router",
-    routerVersion:routerResult?.version || "unknown",
+    router:baseResult?.engine || "maru-search",
+    routerVersion:baseResult?.version || "unknown",
     items:safeItems,
     meta:{
       count:safeItems.length,
@@ -560,9 +555,19 @@ try{
     }
   };
 
-setCache(q, params, result);
+  setCache(q, params, result);
+  
+  /* SNAPSHOT WRITE PIPELINE */
+try{
+  const Snapshot = require("./snapshot-engine");
+  if(Snapshot && typeof Snapshot.run === "function"){
+    await Snapshot.run(result);
+  }
+}catch(e){}
 
-/* SNAPSHOT WRITE PIPELINE */
+return result;
+  
+  /* SNAPSHOT WRITE PIPELINE */
 try{
   const Snapshot = require("./snapshot-engine");
 
@@ -588,7 +593,7 @@ try{
   console.error("snapshot_write_fail", e?.message);
 }
 
-return result;
+  return result;
 }
 
 /* --------------------------------------------------

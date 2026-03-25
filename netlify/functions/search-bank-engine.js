@@ -470,6 +470,19 @@ writeSearchBankSnapshots(bank);
       limit, offset
     },
     total,
+	
+	/* ===== SNAPSHOT AUTO PIPELINE ===== */
+try{
+  if(SearchBankSync && typeof SearchBankSync.run === "function"){
+    await SearchBankSync.run({
+      source: "search-bank",
+      items: page || [],
+      query: q
+    });
+  }
+}catch(e){
+  console.error("Snapshot Sync Error:", e.message);
+}
     items: page,
     meta: { bank_meta: bank.meta || undefined, generated_at: nowIso() }
   };
