@@ -1,5 +1,5 @@
-// home-products-automap.v3.js
-// HOME AUTOMAP — FEED-COMPAT + SNAPSHOT-DIRECT FALLBACK
+// home-products-automap.v2.js
+// HOME AUTOMAP — FULL RESTORE + FEED FIRST + SNAPSHOT FALLBACK
 // Goals:
 // 1) Keep existing DOM behavior for MAIN and RIGHT panel.
 // 2) Keep current feed contract working as-is.
@@ -9,8 +9,8 @@
 (function () {
   'use strict';
 
-  if (window.__HOME_PRODUCTS_AUTOMAP_V3__) return;
-  window.__HOME_PRODUCTS_AUTOMAP_V3__ = true;
+  if (window.__HOME_PRODUCTS_AUTOMAP_V2__) return;
+  window.__HOME_PRODUCTS_AUTOMAP_V2__ = true;
 
   const FEED_URL = '/.netlify/functions/feed?page=homeproducts';
   const SNAPSHOT_CANDIDATES = [
@@ -334,11 +334,12 @@
     const batch = isRight ? RIGHT_BATCH : MAIN_BATCH;
 
     let offset = 0;
-    let lastBoundKey = target.list.__HOME_AUTOMAP_BOUND_KEY__ || null;
+    const bindKey = target.psomEl.dataset.psomKey || '';
+    const lastBoundKey = target.list.__HOME_AUTOMAP_BOUND_KEY__ || null;
 
-    if (lastBoundKey !== target.psomEl.dataset.psomKey) {
+    if (lastBoundKey !== bindKey) {
       target.list.__HOME_AUTOMAP_SCROLL_BOUND__ = false;
-      target.list.__HOME_AUTOMAP_BOUND_KEY__ = target.psomEl.dataset.psomKey || '';
+      target.list.__HOME_AUTOMAP_BOUND_KEY__ = bindKey;
     }
 
     function renderMore() {
@@ -442,23 +443,16 @@
   }
 
   async function loadSections() {
-    // DIRECT SNAPSHOT ONLY (Feed completely bypassed)
     try {
-      return await loadFromSnapshot();
-    } catch (e) {
-      throw new Error(
-        'HOME_AUTOMAP_SNAPSHOT_ONLY_FAILED :: ' +
-        String(e && e.message || e)
-      );
-    }
-  } catch (feedErr) {
+      return await loadFromFeed();
+    } catch (feedErr) {
       try {
         return await loadFromSnapshot();
       } catch (snapshotErr) {
         throw new Error(
           'HOME_AUTOMAP_LOAD_FAILED :: ' +
-          String(feedErr && feedErr.message || feedErr) + ' :: ' +
-          String(snapshotErr && snapshotErr.message || snapshotErr)
+          String((feedErr && feedErr.message) || feedErr) + ' :: ' +
+          String((snapshotErr && snapshotErr.message) || snapshotErr)
         );
       }
     }
@@ -477,7 +471,7 @@
         renderSlot(key, resolveSectionItems(sections, key));
       }
 
-      window.__HOME_PRODUCTS_AUTOMAP_V3_SOURCE__ = loaded.source;
+      window.__HOME_PRODUCTS_AUTOMAP_V2_SOURCE__ = loaded.source;
     } catch (e) {
       for (const key of ALL_KEYS) {
         const psomEl = qs('[data-psom-key="' + key + '"]');
@@ -486,7 +480,7 @@
         showEmpty(target);
       }
       try {
-        console.error('[HOME AUTOMAP V3] Error:', e);
+        console.error('[HOME AUTOMAP V2] Error:', e);
       } catch (_) {}
     }
   }

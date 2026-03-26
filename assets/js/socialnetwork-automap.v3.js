@@ -206,19 +206,36 @@
         renderRow(grid, items);
       }
 
-      // RIGHT panel
-      const rightBox = qs('[data-psom-key="' + RIGHT_SECTION_KEY + '"]');
-      if(rightBox){
-        const rightItems = sections[RIGHT_SECTION_KEY] || [];
-        renderRight(rightBox, rightItems);
-      }
+// RIGHT panel
+const rightBox = qs('[data-psom-key="' + RIGHT_SECTION_KEY + '"]');
+if(rightBox){
 
-      window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
+  const page = snapshot.pages.social || {};
+  const sections = page.sections || {};
 
-    }catch(e){
-      console.error('[social-automap] fail', e);
-    }
+  let rightItems = sections[RIGHT_SECTION_KEY];
+
+  // 1차 fallback (right 구조)
+  if(!rightItems && page.right && page.right.sections){
+    rightItems = page.right.sections[RIGHT_SECTION_KEY];
   }
+
+  // 2차 fallback (items 구조 대응)
+  if(rightItems && !Array.isArray(rightItems)){
+    rightItems = rightItems.items || [];
+  }
+
+  // 최종 정리
+  rightItems = Array.isArray(rightItems) ? rightItems : [];
+
+  renderRight(rightBox, rightItems);
+}
+
+window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
+
+}catch(e){
+  console.error('[social-automap] fail', e);
+}
 
   // run after DOM is ready + one micro delay (so dummy bootstrap has finished first paint)
   function boot(){
