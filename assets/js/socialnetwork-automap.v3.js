@@ -77,46 +77,60 @@
   }
 
   function renderRow(gridEl, items){
-    if(!gridEl) return;
+  if(!gridEl) return;
 
-    // Hard rule: never move/append outside. Only touch inside gridEl.
-    const cards = ensureCards(gridEl, MAIN_LIMIT);
-    const list = Array.isArray(items) ? items.slice(0, MAIN_LIMIT) : [];
+  // 기존 더미/잔존 카드 제거 후 오토맵 결과만 다시 렌더
+  gridEl.innerHTML = '';
 
-    for(let i=0;i<MAIN_LIMIT;i++){
-      const card = cards[i];
-      if(!card) continue;
+  const list = Array.isArray(items) ? items.slice(0, MAIN_LIMIT) : [];
+  const frag = document.createDocumentFragment();
 
-      const it = list[i] || null;
-      const url = it ? pickUrl(it) : '#';
-      const title = it ? pickTitle(it) : 'Loading…';
-      const platform = it ? (pickPlatform(it) || '') : '';
+  for(let i=0;i<MAIN_LIMIT;i++){
+    const it = list[i] || null;
 
-      card.href = url || '#';
-      card.target = (url && url !== '#') ? '_blank' : '_self';
+    const url = it ? pickUrl(it) : '#';
+    const title = it ? pickTitle(it) : 'Loading…';
+    const platform = it ? (pickPlatform(it) || '') : '';
+    const thumb = it ? pickThumb(it) : '';
 
-      const pic = card.querySelector('.pic');
-      const metaTitle = card.querySelector('.title');
-      const desc = card.querySelector('.desc');
+    const card = document.createElement('a');
+    card.className = gridEl.closest('#rightAutoPanel') ? 'ad-box' : 'card';
+    card.href = url || '#';
+    card.target = (url && url !== '#') ? '_blank' : '_self';
+    card.rel = 'noopener';
 
-      if(metaTitle) metaTitle.textContent = title || 'Item';
-      if(desc) desc.textContent = platform ? platform : ' ';
+    card.innerHTML =
+      '<div class="pic">•</div>' +
+      '<div class="meta">' +
+        '<div class="title">Loading…</div>' +
+        '<div class="desc">Preparing</div>' +
+        '<span class="cta">Open</span>' +
+      '</div>';
 
-      // thumb as background image if exists, else keep emoji dot
-      if(pic){
-        const thumb = it ? pickThumb(it) : '';
-        if(thumb){
-          pic.textContent = '';
-          pic.style.backgroundImage = "url('" + thumb.replace(/'/g, "%27") + "')";
-          pic.style.backgroundSize = 'cover';
-          pic.style.backgroundPosition = 'center';
-        }else{
-          pic.style.backgroundImage = '';
-          pic.textContent = '•';
-        }
+    const pic = card.querySelector('.pic');
+    const metaTitle = card.querySelector('.title');
+    const desc = card.querySelector('.desc');
+
+    if(metaTitle) metaTitle.textContent = title || 'Item';
+    if(desc) desc.textContent = platform ? platform : ' ';
+
+    if(pic){
+      if(thumb){
+        pic.textContent = '';
+        pic.style.backgroundImage = "url('" + thumb.replace(/'/g, "%27") + "')";
+        pic.style.backgroundSize = 'cover';
+        pic.style.backgroundPosition = 'center';
+      }else{
+        pic.style.backgroundImage = '';
+        pic.textContent = '•';
       }
     }
+
+    frag.appendChild(card);
   }
+
+  gridEl.appendChild(frag);
+}
 
   function ensureThumbCards(boxEl, count){
     if(!boxEl) return [];
@@ -235,9 +249,9 @@ window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
 }
 
   // run after DOM is ready + one micro delay (so dummy bootstrap has finished first paint)
-  function boot(){
-    setTimeout(run, 0);
-  }
+ function boot(){
+  run();
+}
 
   if(document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', boot, { once: true });
