@@ -484,24 +484,6 @@ writeSearchBankSnapshots(bank);
   const total = scored.length;
   const page = scored.slice(offset, offset+limit);
 
-  return {
-    status:"ok",
-    engine:"search-bank",
-    served_from: served.served_from || "snapshot",
-    request_id: rid,
-    timestamp: ts,
-    query: q,
-    filters: {
-      type: (type!=="any")?type:undefined,
-      channel: channel||undefined,
-      lang: lang||undefined,
-      country: country||undefined,
-      state: state||undefined,
-      city: city||undefined,
-      producer: producer||undefined,
-      limit, offset
-    },
-    total,
 	
 /* ===== SNAPSHOT AUTO PIPELINE ===== */
 try{
