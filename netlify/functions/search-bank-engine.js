@@ -374,8 +374,18 @@ if(global.SearchBankExtensionCore?.security){
   const city = low(params.city || params.geo_city || "");
   const producer = low(params.producer || params.producer_id || params.producer_name || "");
 
-  const limit = safeInt(params.limit, 100, 1, 1000);
-  const offset = safeInt(params.offset, 0, 0, 100000);
+let limit = safeInt(params.limit, 100, 1, 1000);
+const offset = safeInt(params.offset, 0, 0, 100000);
+
+// ===== SOCIAL LIMIT OVERRIDE =====
+const isSocial =
+  (params.channel && params.channel === "social") ||
+  (params.type && params.type === "social") ||
+  (params.category && params.category === "social");
+
+if (isSocial) {
+  limit = Math.min(limit, 300);
+}
 
   const allowListMode = truthy(params.list) || (!q && (type!=="any" || channel || lang || country || state || city || producer));
   if(!q && !allowListMode){

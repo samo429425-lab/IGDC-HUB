@@ -23,6 +23,114 @@ const SNAPSHOT_FILES = {
   donation: "donation.snapshot.json"
 };
 
+const LIMIT_MAP = {
+  home: 740,
+  distribution: 700,
+  donation: 800,
+  media: 500,
+  social: 1000,
+  network: 80,
+  tour: 80,
+  default: 300
+};
+
+function getSnapshotSections(snapshot, pageName) {
+  if (snapshot?.pages?.[pageName]?.sections && typeof snapshot.pages[pageName].sections === "object") {
+    return snapshot.pages[pageName].sections;
+  }
+  if (snapshot?.sections && typeof snapshot.sections === "object") {
+    return snapshot.sections;
+  }
+  return null;
+}
+
+function setSnapshotSections(snapshot, pageName, sections) {
+  if (snapshot?.pages?.[pageName]?.sections && typeof snapshot.pages[pageName].sections === "object") {
+    snapshot.pages[pageName].sections = sections;
+    return snapshot;
+  }
+  if (snapshot?.sections && typeof snapshot.sections === "object") {
+    snapshot.sections = sections;
+    return snapshot;
+  }
+  if (!snapshot.pages) snapshot.pages = {};
+  if (!snapshot.pages[pageName]) snapshot.pages[pageName] = {};
+  snapshot.pages[pageName].sections = sections;
+  return snapshot;
+}
+
+function normalizeLimitCard(raw) {
+  return {
+    id: raw.id || stableId(JSON.stringify(raw)),
+    title: raw.title || raw.name || "Untitled",
+    summary: raw.summary || "",
+    url: raw.url || raw.link || "#",
+    thumb:
+      raw.thumbnail ||
+      raw.thumb ||
+      raw.image ||
+      "/assets/img/placeholder.png",
+    priority: raw.priority || raw.score || 0
+  };
+}
+
+function enforceSnapshotFileLimit(pageName, bankItems) {
+  const fileName = SNAPSHOT_FILES[pageName];
+  if (!fileName) return;
+
+  const filePath = path.join(ROOT, fileName);
+  if (!fs.existsSync(filePath)) return;
+
+  const snapshot = readJson(filePath) || {};
+  const sections = getSnapshotSections(snapshot, pageName);
+  if (!sections) return;
+
+  const limit = LIMIT_MAP[pageName] || LIMIT_MAP.default;
+
+  let currentCount = 0;
+  const usedIds = new Set();
+
+  Object.values(sections).forEach(arr => {
+    if (!Array.isArray(arr)) return;
+    currentCount += arr.length;
+    arr.forEach(item => {
+      if (item && item.id) usedIds.add(item.id);
+    });
+  });
+
+  if (currentCount >= limit) return;
+
+  const need = limit - currentCount;
+  let filled = 0;
+
+  const preferredSections = Object.keys(sections);
+  if (!preferredSections.length) return;
+
+  for (const raw of (Array.isArray(bankItems) ? bankItems : [])) {
+    if (filled >= need) break;
+
+    const id = raw?.id || stableId(JSON.stringify(raw));
+    if (usedIds.has(id)) continue;
+
+    let sectionKey =
+      raw?.psom_key ||
+      raw?.bind?.section ||
+      raw?.category ||
+      preferredSections[0];
+
+    if (!sections[sectionKey]) {
+      sectionKey = preferredSections[0];
+    }
+
+    sections[sectionKey].push(normalizeLimitCard(raw));
+    usedIds.add(id);
+    filled++;
+  }
+
+  setSnapshotSections(snapshot, pageName, sections);
+  writeJson(filePath, snapshot);
+}
+
 function readJson(p) {
   return JSON.parse(fs.readFileSync(p, "utf8"));
 }
@@ -123,45 +231,34 @@ function run(payload) {
   
 function mergeFrontFromSearchBank(frontSnap, searchbankSnap) {
 
-  // 기존 pages 구조 제거
-  if (frontSnap.pages) {
-    delete frontSnap.pages;
-  }
+  if (!frontSnap.pages) frontSnap.pages = {};
+  if (!frontSnap.pages.home) frontSnap.pages.home = { sections: {} };
+  if (!frontSnap.pages.home.sections) frontSnap.pages.home.sections = {};
 
-  // sections 구조 강제
-  if (!frontSnap.sections || typeof frontSnap.sections !== "object") {
-    frontSnap.sections = {};
-  }
-
+  const homeSections = frontSnap.pages.home.sections;
   const items = Array.isArray(searchbankSnap?.items) ? searchbankSnap.items : [];
 
   for (const item of items) {
-    const section =
-      item.psom_key ||
-      item.category ||
-      "default";
 
-    if (!frontSnap.sections[section]) {
-      frontSnap.sections[section] = [];
-    }
+    const sectionKey =
+      item?.bind?.section ||
+      item?.psom_key ||
+      item?.category;
 
-    const existing = frontSnap.sections[section];
-    const id = item.id || stableId(JSON.stringify(item));
+    if (!sectionKey) continue;
+    if (!homeSections[sectionKey]) continue;
 
-    const exists = existing.find(i => i.id === id);
-    if (exists) continue;
+    const existing = homeSections[sectionKey];
+    const id = item.id || JSON.stringify(item);
+
+    if (existing.find(i => i.id === id)) continue;
 
     existing.push({
       id,
-      title: item.title || item.name || "Untitled",
+      title: item.title || "Untitled",
       summary: item.summary || "",
-      url: item.url || item.link || "#",
-      thumb:
-        item.thumbnail ||
-        item.thumb ||
-        item.image ||
-        "/assets/img/placeholder.png",
-      priority: item.priority || item.score || 0
+      url: item.url || "#",
+      thumb: item.thumbnail || "/assets/img/placeholder.png"
     });
   }
 
@@ -230,8 +327,7 @@ function handleNetworkSnapshot(bank) {
   writeJson(filePath, snapshot);
 }
 
-/* ===== DISTRIBUTION SNAPSHOT MERGE ===== */
-
+/* ===== DISTRIBUTION SNAPSHOT ENGINE (PSOM FULL + FALLBACK) ===== */
 function handleDistributionSnapshot(bank) {
 
   const fileName = "distribution.snapshot.json";
@@ -240,48 +336,148 @@ function handleDistributionSnapshot(bank) {
   if (!fs.existsSync(filePath)) return;
 
   const snapshot = readJson(filePath) || {};
-  const bankItems = bank.items || [];
+  const bankItems = Array.isArray(bank?.items) ? bank.items : [];
+  const now = Date.now();
 
-  const sectionKeys = Object.keys(snapshot.sections || {});
+  if (!snapshot.pages) snapshot.pages = {};
+  if (!snapshot.pages.distribution) snapshot.pages.distribution = { sections: {} };
+  if (!snapshot.pages.distribution.sections) snapshot.pages.distribution.sections = {};
 
-  for (const sectionKey of sectionKeys) {
+  const sections = snapshot.pages.distribution.sections;
 
-    const existing = snapshot.sections[sectionKey] || [];
+  const SECTION_KEYS = [
+    "distribution-recommend",
+    "distribution-new",
+    "distribution-trending",
+    "distribution-special",
+    "distribution-sponsor",
+    "distribution-others",
+    "distribution-right"
+  ];
+
+  SECTION_KEYS.forEach(key => {
+    if (!Array.isArray(sections[key])) sections[key] = [];
+  });
+
+  function normalize(item) {
+    if (!item || typeof item !== "object") return null;
+
+    return {
+      id: item.id || stableId(JSON.stringify(item)),
+      title: item.title || item.name || "Untitled",
+      summary: item.summary || "",
+      url: item.url || item.link || "#",
+      thumb:
+        item.thumbnail ||
+        item.thumb ||
+        item.image ||
+        "/assets/img/placeholder.png",
+      price: item.price || "",
+      currency: item.currency || "USD",
+      priority: item.priority || item.score || 0,
+      score: item._finalScore || item.score || 0,
+      createdAt: item.createdAt || item.timestamp || 0,
+      views: item.views || 0,
+      sponsor: item.sponsor === true,
+      tag: item.tag || "",
+      psom_key: item.psom_key || null,
+      source: item.source || "",
+      seller: item.seller || item.source || ""
+    };
+  }
+
+  function pushUnique(sectionKey, items, limit) {
+    if (!Array.isArray(sections[sectionKey])) sections[sectionKey] = [];
+
+    const existing = sections[sectionKey];
     const existingIds = new Set(existing.map(i => i.id));
-    let count = existing.length;
 
-    const supply = bankItems.filter(item => {
-      const sec = item.psom_key || item.category;
-      return sec === sectionKey;
-    });
-
-    for (const item of supply) {
-
+    for (const raw of items) {
+      const item = normalize(raw);
+      if (!item) continue;
       if (existingIds.has(item.id)) continue;
 
-      const id = item.id || stableId(JSON.stringify(item));
+      existing.push(item);
+      existingIds.add(item.id);
 
-      const converted = {
-        id,
-        title: item.title || item.name || "Untitled",
-        summary: item.summary || "",
-        url: item.url || "#",
-        thumb: item.thumb || item.image || "/assets/img/placeholder.png",
-        priority: item.priority || 0
-      };
+      if (typeof limit === "number" && existing.length >= limit) break;
+    }
+  }
 
-      existing.push(converted);
-      existingIds.add(id);
-      count++;
+  function isCommerceLike(raw) {
+    const text = (
+      (raw.title || "") + " " +
+      (raw.summary || "") + " " +
+      (raw.description || "")
+    ).toLowerCase();
+
+    return (
+      raw.type === "product" ||
+      raw.category === "distribution" ||
+      text.includes("shop") ||
+      text.includes("buy") ||
+      text.includes("price") ||
+      text.includes("상품") ||
+      text.includes("구매") ||
+      text.includes("판매")
+    );
+  }
+
+  const commercePool = bankItems.filter(isCommerceLike);
+
+  for (const raw of commercePool) {
+    const item = normalize(raw);
+    if (!item) continue;
+
+    // 1) PSOM 우선
+    if (item.psom_key && sections[item.psom_key]) {
+      pushUnique(item.psom_key, [raw]);
+      continue;
     }
 
-    snapshot.sections[sectionKey] = existing;
+    // 2) fallback
+    if (item.sponsor === true) {
+      pushUnique("distribution-sponsor", [raw], 100);
+      continue;
+    }
+
+    if (item.tag === "special") {
+      pushUnique("distribution-special", [raw], 100);
+      continue;
+    }
+
+    if (item.createdAt && (now - item.createdAt) < (86400000 * 3)) {
+      pushUnique("distribution-new", [raw], 100);
+      continue;
+    }
+
+    if (item.views > 1000 || item.score >= 0.6) {
+      pushUnique("distribution-trending", [raw], 100);
+      continue;
+    }
+
+    if (item.score >= 0.8 || item.priority >= 0.8) {
+      pushUnique("distribution-recommend", [raw], 100);
+      continue;
+    }
+
+    pushUnique("distribution-others", [raw], 100);
   }
+
+  // right panel
+  const rightPool = commercePool.filter(raw => {
+    const item = normalize(raw);
+    return item && (item.sponsor === true || item.priority >= 0.8 || item.score >= 0.8);
+  });
+
+  pushUnique("distribution-right", rightPool, 80);
+
+  snapshot.pages.distribution.sections = sections;
 
   writeJson(filePath, snapshot);
 }
 
-/* ===== SOCIAL SNAPSHOT ENGINE (FINAL) ===== */
+/* ===== SOCIAL SNAPSHOT MERGE ===== */
 
 function handleSocialSnapshot(bank) {
 
@@ -291,58 +487,28 @@ function handleSocialSnapshot(bank) {
   if (!fs.existsSync(filePath)) return;
 
   const snapshot = readJson(filePath) || {};
+
+  // 🔥 pages 구조 강제
+  if (!snapshot.pages) snapshot.pages = {};
+  if (!snapshot.pages.social) snapshot.pages.social = { sections: {} };
+  if (!snapshot.pages.social.sections) snapshot.pages.social.sections = {};
+
+  const sections = snapshot.pages.social.sections;
   const bankItems = bank.items || [];
 
-  const sectionKeys = Object.keys(snapshot.sections || {});
-
-  function isSocial(item){
-    return (
-      item.channel ||
-      item.platform ||
-      item.source ||
-      item.type === "social"
-    );
-  }
-
-  function detectSection(item){
-
-    const text = (
-      item.channel ||
-      item.platform ||
-      item.source ||
-      item.title ||
-      ""
-    ).toLowerCase();
-
-    for (const key of sectionKeys) {
-      if (text.includes(key.toLowerCase())) {
-        return key;
-      }
-    }
-
-    return null;
-  }
+  const sectionKeys = Object.keys(sections);
 
   for (const sectionKey of sectionKeys) {
 
-    const existing = snapshot.sections[sectionKey] || [];
+    const existing = sections[sectionKey] || [];
     const existingIds = new Set(existing.map(i => i.id));
 
-    let count = existing.length;
-
     const supply = bankItems.filter(item => {
-
-      if (!isSocial(item)) return false;
-
-      const sec = detectSection(item);
-
-      // 🔴 정확 매칭
-      if (sec === sectionKey) return true;
-
-      // 🔴 fallback (all 섹션)
-      if (!sec && sectionKey === "all") return true;
-
-      return false;
+      const sec =
+        item?.bind?.section ||
+        item?.psom_key ||
+        item?.category;
+      return sec === sectionKey;
     });
 
     for (const item of supply) {
@@ -350,41 +516,31 @@ function handleSocialSnapshot(bank) {
       const id = item.id || stableId(JSON.stringify(item));
       if (existingIds.has(id)) continue;
 
-      const converted = {
+      existing.push({
         id,
-
-        // 🔴 핵심: 썸네일 그대로 사용
+        title: item.title || item.name || "Untitled",
+        summary: item.summary || "",
+        url: item.url || "#",
         thumb:
           item.thumbnail ||
           item.thumb ||
           item.image ||
-          (item.payload && item.payload.thumbnail) ||
           "/assets/img/placeholder.png",
-
-        title: item.title || item.name || "",
-        summary: item.summary || "",
-
-        url: item.url || item.link || "#",
-
-        channel: item.channel || item.platform || "",
-        duration: item.duration || "",
-        views: item.viewCount || item.views || 0,
-
         priority: item.priority || item.score || 0
-      };
+      });
 
-      existing.push(converted);
       existingIds.add(id);
-      count++;
     }
 
-    snapshot.sections[sectionKey] = existing;
+    sections[sectionKey] = existing;
   }
+
+  snapshot.pages.social.sections = sections;
 
   writeJson(filePath, snapshot);
 }
 
-/* ===== MEDIA SNAPSHOT ENGINE (IGDC REBUILD + FEED INTEGRATION) ===== */
+/* ===== MEDIA SNAPSHOT MERGE ===== */
 
 function handleMediaSnapshot(bank) {
 
@@ -396,91 +552,88 @@ function handleMediaSnapshot(bank) {
   const snapshot = readJson(filePath) || {};
   const bankItems = bank.items || [];
 
-  const sectionKeys = Object.keys(snapshot.sections || {});
+  // 🔥 pages 구조 보장
+  if (!snapshot.pages) snapshot.pages = {};
+  if (!snapshot.pages.media) snapshot.pages.media = { sections: {} };
+  if (!snapshot.pages.media.sections) snapshot.pages.media.sections = {};
 
-  /* ===== MEDIA FILTER ===== */
-  function isMedia(item){
+  const sections = snapshot.pages.media.sections;
+  const sectionKeys = Object.keys(sections);
+
+  // 🔥 전체 영상 풀
+  const videoPool = bankItems.filter(item => {
     return (
-      item.mediaType ||
-      item.type === "media" ||
       item.type === "video" ||
-      item.type === "image" ||
-      item.type === "article" ||
-      item.type === "news"
+      item.mediaType === "video" ||
+      item.videoUrl ||
+      (item.url && item.url.includes("youtu")) ||
+      (item.url && item.url.includes("vimeo"))
     );
-  }
+  });
 
-  /* ===== SECTION DETECT ===== */
-  function detectSection(item){
+  // 🔥 최신 정렬
+  videoPool.sort((a, b) => {
+    return (b.timestamp || b.date || 0) - (a.timestamp || a.date || 0);
+  });
 
-    const text = (
-      item.mediaType ||
-      item.type ||
-      item.category ||
-      item.title ||
-      ""
-    ).toLowerCase();
-
-    for (const key of sectionKeys) {
-      if (text.includes(key.toLowerCase())) {
-        return key;
-      }
-    }
-
-    return null;
-  }
-
-  /* ===== IGDC THUMBNAIL BUILDER (핵심) ===== */
-  function buildIGDCThumbnail(item){
-
-    const title = encodeURIComponent(item.title || "IGDC");
-    const url = String(item.url || item.link || "");
-
-    // 🔴 1. 유튜브 → 프레임 기반
-    const ytMatch = url.match(/(?:v=|youtu\.be\/)([^&]+)/);
-    if (ytMatch) {
-      const vid = ytMatch[1];
-      return `https://img.youtube.com/vi/${vid}/hqdefault.jpg`;
-    }
-
-    // 🔴 2. 이미지 → 그대로
-    if (item.type === "image") {
-      return item.url;
-    }
-
-    // 🔴 3. 기사/뉴스 → IGDC 생성 썸네일
-    if (item.type === "article" || item.type === "news") {
-      return `https://dummyimage.com/600x400/111/fff&text=${title}`;
-    }
-
-    // 🔴 4. 일반 영상 → IGDC 생성
-    if (item.type === "video") {
-      return `https://dummyimage.com/600x400/000/fff&text=VIDEO`;
-    }
-
-    // 🔴 5. fallback
-    return `https://dummyimage.com/600x400/222/fff&text=IGDC`;
-  }
-
-  /* ===== MAIN LOOP ===== */
   for (const sectionKey of sectionKeys) {
 
-    const existing = snapshot.sections[sectionKey] || [];
+    const existing = sections[sectionKey] || [];
     const existingIds = new Set(existing.map(i => i.id));
 
-    let count = existing.length;
+    // =========================
+    // 🔥 1️⃣ MAIN (최신 섹션)
+    // =========================
+    if (sectionKey === "main") {
 
-    /* ===== FEED 역할 (여기서 수행됨) ===== */
-    const supply = bankItems.filter(item => {
+      const supply = videoPool.slice(0, 30);
 
-      if (!isMedia(item)) return false;
+      for (const item of supply) {
 
-      const sec = detectSection(item);
+        const id = item.id || stableId(JSON.stringify(item));
+        if (existingIds.has(id)) continue;
 
-      if (sec === sectionKey) return true;
-      if (!sec && sectionKey === "all") return true;
+        const videoUrl =
+          item.videoUrl ||
+          item.url ||
+          item.link ||
+          "#";
 
-      return false;
+        const thumb =
+          item.thumbnail ||
+          item.thumb ||
+          item.image ||
+          (videoUrl.includes("youtu")
+            ? `https://img.youtube.com/vi/${extractYouTubeId(videoUrl)}/hqdefault.jpg`
+            : "/assets/img/placeholder.png");
+
+        existing.push({
+          id,
+          title: item.title || item.name || "Untitled",
+          summary: item.summary || "",
+          url: videoUrl,
+          thumb,
+          priority: item.priority || item.score || 0
+        });
+
+        existingIds.add(id);
+      }
+
+      sections[sectionKey] = existing;
+      continue;
+    }
+
+    // =========================
+    // 🔥 2️⃣ 일반 섹션 (카테고리별)
+    // =========================
+    const supply = videoPool.filter(item => {
+
+      const sec =
+        item?.bind?.section ||
+        item?.psom_key ||
+        item?.category;
+
+      return sec === sectionKey;
     });
 
     for (const item of supply) {
@@ -488,34 +641,47 @@ function handleMediaSnapshot(bank) {
       const id = item.id || stableId(JSON.stringify(item));
       if (existingIds.has(id)) continue;
 
-      /* ===== IGDC 콘텐츠 카드 생성 ===== */
-      const converted = {
+      const videoUrl =
+        item.videoUrl ||
+        item.url ||
+        item.link ||
+        "#";
+
+      const thumb =
+        item.thumbnail ||
+        item.thumb ||
+        item.image ||
+        (videoUrl.includes("youtu")
+          ? `https://img.youtube.com/vi/${extractYouTubeId(videoUrl)}/hqdefault.jpg`
+          : "/assets/img/placeholder.png");
+
+      existing.push({
         id,
-
-        // 🔴 핵심: IGDC 재생성 썸네일
-        thumb: buildIGDCThumbnail(item),
-
-        title: item.title || item.name || "",
+        title: item.title || item.name || "Untitled",
         summary: item.summary || "",
-
-        url: item.url || item.link || "#",
-
-        mediaType: item.mediaType || item.type || "",
-        duration: item.duration || "",
-        views: item.viewCount || item.views || 0,
-
+        url: videoUrl,
+        thumb,
         priority: item.priority || item.score || 0
-      };
+      });
 
-      existing.push(converted);
       existingIds.add(id);
-      count++;
     }
 
-    snapshot.sections[sectionKey] = existing;
+    sections[sectionKey] = existing;
   }
 
+  snapshot.pages.media.sections = sections;
+
   writeJson(filePath, snapshot);
+}
+
+/* ===== 유튜브 ID 추출 ===== */
+function extractYouTubeId(url) {
+  if (!url) return "";
+  const match =
+    url.match(/v=([^&]+)/) ||
+    url.match(/youtu\.be\/([^?]+)/);
+  return match ? match[1] : "";
 }
 
 /* ===== TOUR SNAPSHOT ENGINE (FEED INTEGRATION) ===== */
@@ -637,8 +803,6 @@ function handleTourSnapshot(bank) {
   writeJson(filePath, snapshot);
 }
 
-/* ===== DONATION SNAPSHOT ENGINE (FEED INTEGRATION) ===== */
-
 function handleDonationSnapshot(bank) {
 
   const fileName = "donation.snapshot.json";
@@ -649,115 +813,147 @@ function handleDonationSnapshot(bank) {
   const snapshot = readJson(filePath) || {};
   const bankItems = bank.items || [];
 
-  const sectionKeys = Object.keys(snapshot.sections || {});
+  // 구조 보장
+  if (!snapshot.pages) snapshot.pages = {};
+  if (!snapshot.pages.donation) snapshot.pages.donation = { sections: {} };
+  if (!snapshot.pages.donation.sections) snapshot.pages.donation.sections = {};
 
-  /* ===== DONATION FILTER ===== */
-  function isDonation(item){
-    return (
-      item.type === "donation" ||
-      item.category === "donation" ||
-      item.ngo ||
-      item.charity ||
-      item.fundraising
-    );
+  const sections = snapshot.pages.donation.sections;
+
+  // =========================
+  // 🔥 공통 유틸
+  // =========================
+
+  function normalizeItem(item) {
+    return {
+      id: item.id || stableId(JSON.stringify(item)),
+      title: item.title || item.name || "Untitled",
+      summary: item.summary || "",
+      url: item.url || item.link || "#",
+      thumb:
+        item.thumbnail ||
+        item.image ||
+        "/assets/img/placeholder.png",
+      priority: item.priority || item.score || 0,
+
+      // 🔥 도네이션 확장 필드
+      orgName: item.orgName || item.source || "",
+      donationType: item.donationType || "general",
+      region: item.region || "",
+      urgencyLevel: item.urgencyLevel || "mid",
+      verified: item.verified || false
+    };
   }
 
-  /* ===== SECTION DETECT ===== */
-  function detectSection(item){
+  function pushUnique(sectionKey, items) {
+    if (!sections[sectionKey]) sections[sectionKey] = [];
 
-    const text = (
-      item.category ||
-      item.type ||
-      item.title ||
-      ""
-    ).toLowerCase();
-
-    for (const key of sectionKeys) {
-      if (text.includes(key.toLowerCase())) {
-        return key;
-      }
-    }
-
-    return null;
-  }
-
-  /* ===== DONATION CARD THUMB ===== */
-  function buildDonationThumbnail(item){
-
-    // 1️⃣ 기존 이미지 있으면 사용
-    if (item.image || item.thumb || item.thumbnail) {
-      return item.image || item.thumb || item.thumbnail;
-    }
-
-    const title = encodeURIComponent(item.title || "DONATION");
-
-    // 2️⃣ NGO/기부 카드 생성
-    if (item.ngo || item.charity) {
-      return `https://dummyimage.com/600x400/2ecc71/ffffff&text=${title}`;
-    }
-
-    // 3️⃣ 뉴스형 (글로벌 뉴스 등)
-    if (item.type === "article" || item.type === "news") {
-      return `https://dummyimage.com/600x400/27ae60/ffffff&text=NEWS`;
-    }
-
-    // 4️⃣ fallback
-    return `https://dummyimage.com/600x400/16a085/ffffff&text=DONATION`;
-  }
-
-  /* ===== MAIN LOOP ===== */
-  for (const sectionKey of sectionKeys) {
-
-    const existing = snapshot.sections[sectionKey] || [];
+    const existing = sections[sectionKey];
     const existingIds = new Set(existing.map(i => i.id));
 
-    let count = existing.length;
+    for (const item of items) {
+      const normalized = normalizeItem(item);
+      if (existingIds.has(normalized.id)) continue;
 
-    /* ===== FEED 흡수 ===== */
-    const supply = bankItems.filter(item => {
-
-      if (!isDonation(item)) return false;
-
-      const sec = detectSection(item);
-
-      if (sec === sectionKey) return true;
-      if (!sec && sectionKey === "all") return true;
-
-      return false;
-    });
-
-    for (const item of supply) {
-
-      const id = item.id || stableId(JSON.stringify(item));
-      if (existingIds.has(id)) continue;
-
-      const converted = {
-        id,
-
-        // 🔴 썸네일 생성
-        thumb: buildDonationThumbnail(item),
-
-        title: item.title || item.name || "",
-        summary: item.summary || "",
-
-        url: item.url || item.link || "#",
-
-        // 🔴 도네이션 특화 필드
-        organization: item.organization || item.ngo || "",
-        goal: item.goal || "",
-        raised: item.raised || "",
-        progress: item.progress || 0,
-
-        priority: item.priority || item.score || 0
-      };
-
-      existing.push(converted);
-      existingIds.add(id);
-      count++;
+      existing.push(normalized);
+      existingIds.add(normalized.id);
     }
-
-    snapshot.sections[sectionKey] = existing;
   }
+
+  function textOf(item) {
+    return ((item.title || "") + " " + (item.summary || "")).toLowerCase();
+  }
+
+  // =========================
+  // 🔥 1️⃣ GLOBAL NEWS
+  // =========================
+
+  const newsPool = bankItems.filter(item => {
+    const text = textOf(item);
+
+    const keywords = [
+      "earthquake","tsunami","flood","wildfire",
+      "disaster","emergency","relief","aid",
+      "famine","refugee","war","conflict",
+      "crisis","climate","pandemic","outbreak",
+      "humanitarian","ngo","charity","donation",
+      "지진","홍수","산불","재난","구호",
+      "기근","난민","전쟁","분쟁","위기",
+      "기후","전염병","기부","봉사"
+    ];
+
+    const isGlobal = keywords.some(k => text.includes(k));
+
+    const isNews =
+      item.type === "news" ||
+      item.mediaType === "article";
+
+    return isGlobal && isNews;
+  });
+
+  newsPool.sort((a,b)=>(b.timestamp||0)-(a.timestamp||0));
+
+  pushUnique("global-news", newsPool.slice(0, 30));
+
+  // =========================
+  // 🔥 2️⃣ EMERGENCY (긴급 구호)
+  // =========================
+
+  const emergencyPool = bankItems.filter(item => {
+    const text = textOf(item);
+
+    return (
+      text.includes("emergency") ||
+      text.includes("urgent") ||
+      text.includes("relief") ||
+      text.includes("긴급") ||
+      text.includes("구호")
+    );
+  });
+
+  pushUnique("emergency", emergencyPool.slice(0, 40));
+
+  // =========================
+  // 🔥 3️⃣ CAMPAIGN
+  // =========================
+
+  const campaignPool = bankItems.filter(item => {
+    const text = textOf(item);
+
+    return (
+      text.includes("campaign") ||
+      text.includes("fundraising") ||
+      text.includes("모금") ||
+      text.includes("캠페인")
+    );
+  });
+
+  pushUnique("campaign", campaignPool.slice(0, 40));
+
+  // =========================
+  // 🔥 4️⃣ NGO / 기관
+  // =========================
+
+  const ngoPool = bankItems.filter(item => {
+    const text = textOf(item);
+
+    return (
+      text.includes("ngo") ||
+      text.includes("foundation") ||
+      text.includes("charity") ||
+      text.includes("비영리") ||
+      text.includes("재단")
+    );
+  });
+
+  pushUnique("ngo", ngoPool.slice(0, 40));
+
+  // =========================
+  // 🔥 기존 정적 링크 보호
+  // =========================
+  // 👉 이미 snapshot에 있는 기관/링크 절대 삭제 안 됨
+
+  snapshot.pages.donation.sections = sections;
 
   writeJson(filePath, snapshot);
 }
@@ -802,10 +998,18 @@ try {
     handleDonationSnapshot(bank);
   }
 
+  enforceSnapshotFileLimit("home", bank.items);
+  enforceSnapshotFileLimit("distribution", bank.items);
+  enforceSnapshotFileLimit("donation", bank.items);
+  enforceSnapshotFileLimit("media", bank.items);
+  enforceSnapshotFileLimit("social", bank.items);
+  enforceSnapshotFileLimit("network", bank.items);
+  enforceSnapshotFileLimit("tour", bank.items);
+
 } catch (e) {
   console.error("Snapshot Engine Execution Error:", e);
 }
-
+}
 
 module.exports = { run };
 
