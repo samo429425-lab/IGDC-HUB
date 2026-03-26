@@ -501,7 +501,7 @@ html, body {
 
 
   /* Mobile & narrow tablets: main takes 100%, sidebar off, ad -> drawer */
-  @media (max-width:1024px){
+  @media (max-width:1023px){
     .container{ display:block!important; width:100%!important; max-width:100%!important; overflow-x:hidden!important;}
 
     /* Drawer shell */
@@ -979,7 +979,7 @@ html, body {
 }
 
 /* Ensure same breakpoint behavior as panel (<=1100px both are hidden) */
-@media (max-width:1024px){
+@media (max-width:1023px){
   #rightPanel, .right-panel,
   #ad-title, .ad-title, .ad-headline, #adHeadline {
     display: none !important;
@@ -1126,7 +1126,7 @@ html, body {
   }
 }
 </style><style data-origin="qna-btn-style">
-@media (max-width:1024px){
+@media (max-width:1023px){
 .sidebar,.left-sidebar,#leftSidebar,.right-rail,.right-panel,#rightPanel,.ad-panel,.right-ad-panel{display:none!important;width:0!important;max-width:0!important;min-width:0!important;margin:0!important;padding:0!important;visibility:hidden!important}
 .container,.layout,.wrap,.page{display:block!important;width:100%!important;max-width:100%!important;margin:0!important;padding:0 12px!important;box-sizing:border-box!important;column-gap:0!important;row-gap:0!important}
 #main,.main-content,main,.content{display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;margin:0!important;box-sizing:border-box!important}
@@ -1564,7 +1564,7 @@ body{ overflow-y:auto !important; }
   #rpMobileBox{ display:none !important; }
 }
 
-@media (max-width:1024px){
+@media (max-width:1023px){
   #influencer-sections + #rpMobileBox,
   #mainContent + #rpMobileBox,
   .content-box + #rpMobileBox,
@@ -1574,7 +1574,7 @@ body{ overflow-y:auto !important; }
 }
 
 /* Tablet & Mobile (<=1100px): 표시 + 가로 배열 + 부모 잠금 최소 해제 */
-@media (max-width:1024px){
+@media (max-width:1023px){
   html, body, main{ height:auto !important; max-height:none !important; overflow:visible !important; }
   #rpMobileBox{
     display:block !important;
@@ -1607,7 +1607,7 @@ body{ overflow-y:auto !important; }
 </style>
 <style id="hide-row-arrows-mobile-1100">
   /* 모바일·세로태블릿(<=1100px): 섹션 좌/우 스크롤 버튼 숨김 */
-  @media (max-width:1024px){
+  @media (max-width:1023px){
     .rscroll,
     .row-arrow,
     .scroll-left, .scroll-right,
@@ -1693,7 +1693,7 @@ body{ overflow-y:auto !important; }
 }
 </style>
 <style id="rpMobileGrid-unlock-aspect-v7">
-@media (max-width:1024px) and (orientation:portrait){
+@media (max-width:1023px) and (orientation:portrait){
   #rpMobileGrid *[style*="height:144px"]{ height:auto !important; }
   #rpMobileGrid *[style*="line-height:144px"]{ line-height:normal !important; }
   #rpMobileGrid .ad-card, #rpMobileGrid .ad-box, #rpMobileGrid .thumbnail-card,
@@ -1772,7 +1772,7 @@ body{ overflow-y:auto !important; }
     -webkit-line-clamp:2;-webkit-box-orient:vertical
   }
 </style>
-<style id="rail-lock-1024-plus-gap">
+<style id="rail-lock-1023-plus-gap">
   @media (min-width:1024px){
     body,.page{padding-left:16px!important;padding-right:16px!important}
     .layout{display:grid!important;grid-template-columns:1fr 274px!important;column-gap:15px!important}
@@ -1780,7 +1780,7 @@ body{ overflow-y:auto !important; }
     #rightRail .ad-panel{height:auto!important}
     #rightRail .ad-card img{width:100%!important;height:auto!important;aspect-ratio:5/3!important;object-fit:cover!important;max-height:220px!important}
   }
-  @media (max-width:1024px){
+  @media (max-width:1023px){
     .layout{grid-template-columns:1fr!important;column-gap:0!important}
     #section-10 .thumb-card{display:flex;flex-direction:column;min-width:0}
     #section-10 .thumb-media{display:block;width:100%;height:auto!important;max-height:200px!important;aspect-ratio:5/3!important;object-fit:cover}
@@ -1843,7 +1843,7 @@ footer{
 /* =====================
    Mobile / Tablet
 ===================== */
-@media (max-width:1024px){
+@media (max-width:1023px){
 
   /* Collapse layout */
   .container{
@@ -2010,26 +2010,6 @@ footer{
 </style>
 
 <link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
-
-<style id="mobile-rightpanel-final-lock">
-/* FINAL LOCK: mobile always uses #rpMobileBox as the 10th section.
-   Prevent legacy right-rail / ad-panel blocks from re-entering the flow on real mobile portrait. */
-@media (max-width:1024px){
-  .right-rail, .right-panel, .ad-panel, .right-ad-panel, #rightRail, #rightAutoPanel { 
-    display:none !important;
-    visibility:hidden !important;
-    width:0 !important;
-    max-width:0 !important;
-    min-width:0 !important;
-    margin:0 !important;
-    padding:0 !important;
-    border:0 !important;
-  }
-  #rpMobileBox{ display:block !important; width:100% !important; }
-  #rpMobileScroller{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
-}
-</style>
-
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -2072,22 +2052,22 @@ footer{
 <button aria-label="scroll right" class="rscroll right" id="rsRight4">›</button>
 </div>
 <div class="row-viewport" data-row="5">
-<div class="row-scroller" id="rowScroller5"><div aria-live="polite" class="row-grid" id="rowGrid5"><div class="thumb-grid thumb-scroller" data-psom-key="social-discord"></div></div></div>
+<div class="row-scroller" id="rowScroller5"><div aria-live="polite" class="row-grid" id="rowGrid5"><div class="thumb-grid thumb-scroller" data-psom-key="social-wechat"></div></div></div>
 <button aria-label="scroll left" class="rscroll left" id="rsLeft5">‹</button>
 <button aria-label="scroll right" class="rscroll right" id="rsRight5">›</button>
 </div>
 <div class="row-viewport" data-row="6">
-<div class="row-scroller" id="rowScroller6"><div aria-live="polite" class="row-grid" id="rowGrid6"><div class="thumb-grid thumb-scroller" data-psom-key="social-community"></div></div></div>
+<div class="row-scroller" id="rowScroller6"><div aria-live="polite" class="row-grid" id="rowGrid6"><div class="thumb-grid thumb-scroller" data-psom-key="social-weibo"></div></div></div>
 <button aria-label="scroll left" class="rscroll left" id="rsLeft6">‹</button>
 <button aria-label="scroll right" class="rscroll right" id="rsRight6">›</button>
 </div>
 <div class="row-viewport" data-row="7">
-<div class="row-scroller" id="rowScroller7"><div aria-live="polite" class="row-grid" id="rowGrid7"><div class="thumb-grid thumb-scroller" data-psom-key="social-threads"></div></div></div>
+<div class="row-scroller" id="rowScroller7"><div aria-live="polite" class="row-grid" id="rowGrid7"><div class="thumb-grid thumb-scroller" data-psom-key="social-pinterest"></div></div></div>
 <button aria-label="scroll left" class="rscroll left" id="rsLeft7">‹</button>
 <button aria-label="scroll right" class="rscroll right" id="rsRight7">›</button>
 </div>
 <div class="row-viewport" data-row="8">
-<div class="row-scroller" id="rowScroller8"><div aria-live="polite" class="row-grid" id="rowGrid8"><div class="thumb-grid thumb-scroller" data-psom-key="social-telegram"></div></div></div>
+<div class="row-scroller" id="rowScroller8"><div aria-live="polite" class="row-grid" id="rowGrid8"><div class="thumb-grid thumb-scroller" data-psom-key="social-reddit"></div></div></div>
 <button aria-label="scroll left" class="rscroll left" id="rsLeft8">‹</button>
 <button aria-label="scroll right" class="rscroll right" id="rsRight8">›</button>
 </div>
@@ -2096,7 +2076,11 @@ footer{
 <button aria-label="scroll left" class="rscroll left" id="rsLeft9">‹</button>
 <button aria-label="scroll right" class="rscroll right" id="rsRight9">›</button>
 </div>
-
+<section id="rpMobileBox">
+<div id="rpMobileScroller">
+<div id="rpMobileGrid"></div>
+</div>
+</section>
 </div>
 <style id="qa-empty-state-style">
 .igdc-qa-threads:empty::before,
@@ -2131,16 +2115,12 @@ footer{
   margin-top: 8px;
   font-size: 0.95rem;
 }
-</style></div>
-
-<div class="right-rail" id="rightRail">
-  <h3 class="ad-headline" style="display:block; margin:0 auto; text-align:center; width:clamp(230px,100%,274px); margin:0 0 10px; text-align:center; line-height:1; height:1em; white-space:nowrap;">
-    💎 인기 아이템 💎
-  </h3>
-
-  <!-- 우측 패널 자동 렌더 전용 -->
-  <div class="ad-panel" id="rightAutoPanel"></div>
-
+</style></div><div class="right-rail" id="rightRail">
+<h3 class="ad-headline" style="display:block; margin:0 auto; text-align:center; width:clamp(230px,100%,274px); margin:0 0 10px; text-align:center; line-height:1; height:1em; white-space:nowrap;">
+  💎 인기 아이템 💎
+</h3>
+<div class="ad-panel" id="rightAutoPanel"></div>
+<div class="ad-panel thumb-grid thumb-scroller" id="rightAutoPanel" data-psom-key="socialnetwork"></div>
 </div>
 </div>
 
@@ -2245,10 +2225,10 @@ function build(){
 
   var boxes = src.querySelectorAll('.ad-box');
 
-if(!boxes.length){
-  setTimeout(build,120);
-  return;
-}
+  if(!boxes.length){
+    built = false;   // ❗ 절대 잠그지 않음
+    return;
+  }
 
   list.innerHTML = "";
 
@@ -3049,10 +3029,10 @@ const baseItems=[
   {emoji:"📸", title:"Instagram", url:"https://www.instagram.com/"},
   {emoji:"🎵", title:"TikTok", url:"https://www.tiktok.com/"},
   {emoji:"📘", title:"Facebook", url:"https://www.facebook.com/"},
-  {emoji:"💬", title:"Discord", url:"https://www.wechat.com/"},
-  {emoji:"📰", title:"Community", url:"https://weibo.com/"},
-  {emoji:"📌", title:"Threads", url:"https://www.pinterest.com/"},
-  {emoji:"👽", title:"Telegram", url:"https://www.reddit.com/"},
+  {emoji:"💬", title:"WeChat", url:"https://www.wechat.com/"},
+  {emoji:"📰", title:"Weibo", url:"https://weibo.com/"},
+  {emoji:"📌", title:"Pinterest", url:"https://www.pinterest.com/"},
+  {emoji:"👽", title:"Reddit", url:"https://www.reddit.com/"},
   {emoji:"✖️", title:"X (Twitter)", url:"https://twitter.com/"}
 ];
 
@@ -3060,9 +3040,12 @@ function renderRows(){
   for(let i=1;i<=9;i++){
     const grid = qs(`#rowGrid${i}`);
     if(!grid) continue;
+
+    // 👉 핵심: 이미 오토맵이 채웠으면 스킵
+    if(grid.children.length > 0) continue;
+
     grid.innerHTML="";
-    // keep 6 cards per row (old version visual baseline), can be raised later
-    for(let c=0;c<100;c++){
+    for(let c=0;c<20;c++){
       const item = baseItems[(i-1) % baseItems.length];
       const a=document.createElement("a");
       a.className="card"; a.href=item.url; a.target="_blank"; a.rel="noopener";
@@ -3070,12 +3053,13 @@ function renderRows(){
         <div class="pic">${item.emoji}</div>
         <div class="meta">
           <div class="title">${item.title}</div>
-          <div class="desc">Row ${i} · Preview</div>
+          <div class="desc">Row ${i} · Loading</div>
           <span class="cta">Open</span>
         </div>`;
       grid.appendChild(a);
     }
   }
+
   queueMicrotask(()=>{ updateAllRowUI(); (window.__scheduleArrows||function(){})(); });
 }
 
@@ -3106,7 +3090,6 @@ function bindRowControls(){
   window.addEventListener("resize", ()=>{ updateAllRowUI(); (window.__scheduleArrows||function(){})(); });
 }
 
-// --- Coalesced, jitter-free arrow reposition scheduler (keeps wall attachment logic intact) ---
 (function(){
   let rafId = null;
   function scheduleArrows(){
@@ -3120,7 +3103,6 @@ function bindRowControls(){
       }catch(e){}
     });
   }
-  // Observe elements whose size affects the walls
   const ro = new ResizeObserver(scheduleArrows);
   ['.sidebar','.ad-panel','.main-content','.container'].forEach(sel=>{
     const el = document.querySelector(sel);
@@ -3129,7 +3111,6 @@ function bindRowControls(){
   window.addEventListener('resize', scheduleArrows);
   window.addEventListener('DOMContentLoaded', scheduleArrows);
   window.addEventListener('load', ()=>{ scheduleArrows(); setTimeout(scheduleArrows, 120); });
-  // expose
   window.__scheduleArrows = scheduleArrows;
 })();
 
@@ -3160,8 +3141,11 @@ function positionAllLeftArrows(){
 }
 
 (function init(){
-  renderRows();
+  // 👉 핵심: 오토맵이 먼저 실행될 시간 확보
+  setTimeout(renderRows, 300);
+
   bindRowControls();
+
   queueMicrotask(()=>{ updateAllRowUI(); (window.__scheduleArrows||function(){})(); });
 })();
 </script>
@@ -3650,7 +3634,7 @@ function positionAllLeftArrows(){
   let filled=false;
 
   function isMobile(){
-    return matchMedia('(max-width:1024px)').matches;
+    return matchMedia('(max-width:1023px)').matches;
   }
 
   function isPortrait(){
@@ -4343,7 +4327,7 @@ footer{
 
   const PANEL_ID = 'rightAutoPanel';
   const DESKTOP_COUNT = 100;
-  const MOBILE_COUNT = 100;
+  const MOBILE_COUNT = 1;
 
   function isMobile(){
     return window.innerWidth <= 768;

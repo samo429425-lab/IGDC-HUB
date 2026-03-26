@@ -4096,16 +4096,6 @@ footer{
     var cards = track.querySelectorAll('.card');
     var current = cards.length;
 
-    if(current === 0){
-      // Create a simple placeholder card if none exist
-      var placeholder = document.createElement('div');
-      placeholder.className = 'card';
-      placeholder.innerHTML = '<div class="thumb"></div><div class="card-body"><div class="card-title">Global News</div><div class="card-meta">Auto</div></div>';
-      track.appendChild(placeholder);
-      cards = track.querySelectorAll('.card');
-      current = cards.length;
-    }
-
     // Use the first card as a template for cloning
     var template = track.querySelector('.card');
     if(!template) return;
