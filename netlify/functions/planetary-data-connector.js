@@ -605,7 +605,6 @@ async function connect(event, params = {}){
   const normalized = normalizeParams(event, params);
 
   const selectedSources = selectSources(normalized);
-  const selectedSources = selectSources(normalized);
 
 /* ===== maru-search fallback (통합) ===== */
 let maruBase = null;
