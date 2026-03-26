@@ -210,22 +210,19 @@
 const rightBox = qs('[data-psom-key="' + RIGHT_SECTION_KEY + '"]');
 if(rightBox){
 
-  const page = snapshot.pages.social || {};
-  const sections = page.sections || {};
+  const page = snap.pages.social || {};
+  const pageSections = page.sections || {};
 
-  let rightItems = sections[RIGHT_SECTION_KEY];
+  let rightItems = pageSections[RIGHT_SECTION_KEY];
 
-  // 1차 fallback (right 구조)
   if(!rightItems && page.right && page.right.sections){
     rightItems = page.right.sections[RIGHT_SECTION_KEY];
   }
 
-  // 2차 fallback (items 구조 대응)
   if(rightItems && !Array.isArray(rightItems)){
     rightItems = rightItems.items || [];
   }
 
-  // 최종 정리
   rightItems = Array.isArray(rightItems) ? rightItems : [];
 
   renderRight(rightBox, rightItems);
