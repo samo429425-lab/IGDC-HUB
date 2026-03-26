@@ -2120,7 +2120,7 @@ footer{
   💎 인기 아이템 💎
 </h3>
 <div class="ad-panel" id="rightAutoPanel"></div>
-<div class="ad-panel thumb-grid thumb-scroller" id="rightAutoPanel" data-psom-key="socialnetwork"></div>
+<div class="thumb-grid thumb-scroller" data-psom-key="socialnetwork"></div>
 </div>
 </div>
 
@@ -3040,12 +3040,9 @@ function renderRows(){
   for(let i=1;i<=9;i++){
     const grid = qs(`#rowGrid${i}`);
     if(!grid) continue;
-
-    // 👉 핵심: 이미 오토맵이 채웠으면 스킵
-    if(grid.children.length > 0) continue;
-
     grid.innerHTML="";
-    for(let c=0;c<20;c++){
+    // keep 6 cards per row (old version visual baseline), can be raised later
+    for(let c=0;c<100;c++){
       const item = baseItems[(i-1) % baseItems.length];
       const a=document.createElement("a");
       a.className="card"; a.href=item.url; a.target="_blank"; a.rel="noopener";
@@ -3053,13 +3050,12 @@ function renderRows(){
         <div class="pic">${item.emoji}</div>
         <div class="meta">
           <div class="title">${item.title}</div>
-          <div class="desc">Row ${i} · Loading</div>
+          <div class="desc">Row ${i} · Preview</div>
           <span class="cta">Open</span>
         </div>`;
       grid.appendChild(a);
     }
   }
-
   queueMicrotask(()=>{ updateAllRowUI(); (window.__scheduleArrows||function(){})(); });
 }
 
@@ -3090,6 +3086,7 @@ function bindRowControls(){
   window.addEventListener("resize", ()=>{ updateAllRowUI(); (window.__scheduleArrows||function(){})(); });
 }
 
+// --- Coalesced, jitter-free arrow reposition scheduler (keeps wall attachment logic intact) ---
 (function(){
   let rafId = null;
   function scheduleArrows(){
@@ -3103,6 +3100,7 @@ function bindRowControls(){
       }catch(e){}
     });
   }
+  // Observe elements whose size affects the walls
   const ro = new ResizeObserver(scheduleArrows);
   ['.sidebar','.ad-panel','.main-content','.container'].forEach(sel=>{
     const el = document.querySelector(sel);
@@ -3111,6 +3109,7 @@ function bindRowControls(){
   window.addEventListener('resize', scheduleArrows);
   window.addEventListener('DOMContentLoaded', scheduleArrows);
   window.addEventListener('load', ()=>{ scheduleArrows(); setTimeout(scheduleArrows, 120); });
+  // expose
   window.__scheduleArrows = scheduleArrows;
 })();
 
@@ -3141,11 +3140,8 @@ function positionAllLeftArrows(){
 }
 
 (function init(){
-  // 👉 핵심: 오토맵이 먼저 실행될 시간 확보
-  setTimeout(renderRows, 300);
-
+  renderRows();
   bindRowControls();
-
   queueMicrotask(()=>{ updateAllRowUI(); (window.__scheduleArrows||function(){})(); });
 })();
 </script>
