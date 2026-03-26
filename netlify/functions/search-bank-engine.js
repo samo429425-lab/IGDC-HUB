@@ -503,7 +503,7 @@ writeSearchBankSnapshots(bank);
     },
     total,
 	
-	/* ===== SNAPSHOT AUTO PIPELINE ===== */
+/* ===== SNAPSHOT AUTO PIPELINE ===== */
 try{
   if(SearchBankSync && typeof SearchBankSync.run === "function"){
     await SearchBankSync.run({
@@ -515,9 +515,32 @@ try{
 }catch(e){
   console.error("Snapshot Sync Error:", e.message);
 }
-    items: page,
-    meta: { bank_meta: bank.meta || undefined, generated_at: nowIso() }
-  };
+
+return {
+  status:"ok",
+  engine:"search-bank",
+  served_from: served.served_from || "snapshot",
+  request_id: rid,
+  timestamp: ts,
+  query: q,
+  filters: {
+    type: (type!=="any")?type:undefined,
+    channel: channel||undefined,
+    lang: lang||undefined,
+    country: country||undefined,
+    state: state||undefined,
+    city: city||undefined,
+    producer: producer||undefined,
+    limit,
+    offset
+  },
+  total,
+  items: page,
+  meta: {
+    bank_meta: bank.meta || undefined,
+    generated_at: nowIso()
+  }
+};
 }
 
 exports.runEngine = runEngine;

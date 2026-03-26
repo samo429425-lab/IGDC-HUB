@@ -669,6 +669,7 @@ return {
   region,
   items: finalItems
 };
+}
 
 // ===== Source Fetchers =====
 async function naverSearch(q, limit, start) {
