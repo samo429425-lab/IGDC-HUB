@@ -1,405 +1,262 @@
+// socialnetwork-automap.v3.js (PRODUCTION — PSOM/SNAPSHOT LOCKED)
+// A: Slot-out / wrong append issue
+// A-1: No fallback append. Only renders into fixed slots (rowGrid1..9 + [data-psom-key="socialnetwork"]).
+// B: What we do: fetch social.snapshot.json and mount 9*100 + right*100 safely.
+// FIX ONLY: key mapping alignment (HTML ↔ snapshot ↔ automap). No feature reduction.
+
 (function () {
   'use strict';
 
-  if (window.__SOCIALNETWORK_AUTOMAP_V4_REBUILT__) return;
-  window.__SOCIALNETWORK_AUTOMAP_V4_REBUILT__ = true;
+  if (window.__SOCIALNETWORK_AUTOMAP_V3_PROD__) return;
+  window.__SOCIALNETWORK_AUTOMAP_V3_PROD__ = true;
 
   const SNAPSHOT_URL = '/data/social.snapshot.json';
+
+  const MAIN_ROWS = 9;
   const MAIN_LIMIT = 100;
   const RIGHT_LIMIT = 100;
-  const BLANK_GIF = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
 
-  // HTML 실제 메인 9섹션 순서 기준 정본
+  // FIXED: aligned with socialnetwork.html / social.snapshot.json / feed-social.js canon
   const MAIN_SECTION_ORDER = [
     'social-youtube',
-    'social-instagram',
     'social-tiktok',
+    'social-instagram',
     'social-facebook',
-    'social-wechat',
-    'social-weibo',
+    'social-twitter',
     'social-pinterest',
     'social-reddit',
-    'social-twitter'
+    'social-wechat',
+    'social-weibo'
   ];
 
   const RIGHT_SECTION_KEY = 'socialnetwork';
 
-  function qs(sel, root) {
-    return (root || document).querySelector(sel);
+  function qs(sel, root){ return (root || document).querySelector(sel); }
+
+  function safeText(v){ return (v == null) ? '' : String(v); }
+
+  function pickTitle(it){
+    return safeText(it && (it.title || it.name || it.text || it.label));
+  }
+  function pickUrl(it){
+    return safeText(it && (it.url || it.href || it.link)) || '#';
+  }
+  function pickThumb(it){
+    return safeText(it && (it.thumb || it.image || it.thumbnail || it.imageUrl || it.thumbnailUrl));
+  }
+  function pickPlatform(it){
+    return safeText(it && it.source && (it.source.platform || it.source.site || it.source.provider));
   }
 
-  function qsa(sel, root) {
-    return Array.from((root || document).querySelectorAll(sel));
+  function ensureCards(gridEl, count){
+    if(!gridEl) return [];
+    const existing = Array.from(gridEl.querySelectorAll('a.card'));
+    const need = count - existing.length;
+    if(need > 0){
+      const frag = document.createDocumentFragment();
+      for(let i=0;i<need;i++){
+        const a = document.createElement('a');
+        a.className = 'card';
+        a.href = '#';
+        a.target = '_blank';
+        a.rel = 'noopener';
+
+        a.innerHTML =
+          '<div class="pic">•</div>' +
+          '<div class="meta">' +
+            '<div class="title">Loading…</div>' +
+            '<div class="desc">Preparing</div>' +
+            '<span class="cta">Open</span>' +
+          '</div>';
+
+        frag.appendChild(a);
+      }
+      gridEl.appendChild(frag);
+    }
+    return Array.from(gridEl.querySelectorAll('a.card'));
   }
 
-  function safeText(v) {
-    return v == null ? '' : String(v);
-  }
+  function renderRow(gridEl, items){
+  if(!gridEl) return;
 
-  function safeUrl(v) {
-    const s = safeText(v).trim();
-    if (!s) return '#';
-    if (/^javascript:/i.test(s)) return '#';
-    return s;
-  }
+  // 기존 더미/잔존 카드 제거 후 오토맵 결과만 다시 렌더
+  gridEl.innerHTML = '';
 
-  function pickTitle(it) {
-    return safeText(
-      it && (
-        it.title ||
-        it.name ||
-        it.text ||
-        it.label ||
-        it.caption
-      )
-    ).trim();
-  }
+  const list = Array.isArray(items) ? items.slice(0, MAIN_LIMIT) : [];
+  const frag = document.createDocumentFragment();
 
-  function pickUrl(it) {
-    return safeUrl(
-      it && (
-        it.url ||
-        it.href ||
-        it.link ||
-        it.detailUrl ||
-        it.productUrl
-      )
-    );
-  }
+  for(let i=0;i<MAIN_LIMIT;i++){
+    const it = list[i] || null;
 
-  function pickThumb(it) {
-    const media = (it && typeof it.media === 'object') ? it.media : null;
-    const preview = media && typeof media.preview === 'object' ? media.preview : null;
+    const url = it ? pickUrl(it) : '#';
+    const title = it ? pickTitle(it) : 'Loading…';
+    const platform = it ? (pickPlatform(it) || '') : '';
+    const thumb = it ? pickThumb(it) : '';
 
-    const thumb = safeText(
-      it && (
-        it.thumb ||
-        it.image ||
-        it.img ||
-        it.thumbnail ||
-        it.imageUrl ||
-        it.thumbnailUrl ||
-        it.cover ||
-        it.poster
-      )
-    ).trim();
+    const card = document.createElement('a');
+    card.className = gridEl.closest('#rightAutoPanel') ? 'ad-box' : 'card';
+    card.href = url || '#';
+    card.target = (url && url !== '#') ? '_blank' : '_self';
+    card.rel = 'noopener';
 
-    if (thumb) return thumb;
+    card.innerHTML =
+      '<div class="pic">•</div>' +
+      '<div class="meta">' +
+        '<div class="title">Loading…</div>' +
+        '<div class="desc">Preparing</div>' +
+        '<span class="cta">Open</span>' +
+      '</div>';
 
-    const nested = safeText(
-      preview && (
-        preview.poster ||
-        preview.thumbnail ||
-        preview.image
-      )
-    ).trim();
+    const pic = card.querySelector('.pic');
+    const metaTitle = card.querySelector('.title');
+    const desc = card.querySelector('.desc');
 
-    return nested || '';
-  }
+    if(metaTitle) metaTitle.textContent = title || 'Item';
+    if(desc) desc.textContent = platform ? platform : ' ';
 
-  function pickPlatform(it) {
-    const src = (it && typeof it.source === 'object') ? it.source : null;
-    return safeText(
-      src && (
-        src.platform ||
-        src.site ||
-        src.provider ||
-        src.name
-      )
-    ).trim();
-  }
-
-  function isPlaceholderItem(it) {
-    if (!it || typeof it !== 'object') return true;
-
-    const type = safeText(it.type).trim().toLowerCase();
-    const title = pickTitle(it);
-    const url = pickUrl(it);
-    const thumb = pickThumb(it);
-    const platform = pickPlatform(it).toLowerCase();
-    const origin = safeText(it?.audit?.origin).trim().toLowerCase();
-
-    if (type === 'placeholder') return true;
-    if (origin === 'placeholder_seed') return true;
-    if (platform === 'placeholder') return true;
-    if (title === 'Loading…' || title === 'Loading...' || title === 'Loading') return true;
-    if (url === '#' && (!thumb || thumb === BLANK_GIF)) return true;
-
-    return false;
-  }
-
-  function normalizeItem(it, idx, sectionKey) {
-    if (!it || typeof it !== 'object') return null;
-
-    return {
-      id: safeText(it.id || it.uid || `${sectionKey}-${idx + 1}`),
-      title: pickTitle(it) || 'Item',
-      url: pickUrl(it),
-      thumb: pickThumb(it),
-      platform: pickPlatform(it),
-      raw: it
-    };
-  }
-
-  function normalizeList(rawList, sectionKey, limit) {
-    const src = Array.isArray(rawList) ? rawList : [];
-    const out = [];
-
-    for (let i = 0; i < src.length; i++) {
-      const raw = src[i];
-      if (isPlaceholderItem(raw)) continue;
-      const norm = normalizeItem(raw, i, sectionKey);
-      if (!norm) continue;
-      out.push(norm);
-      if (out.length >= limit) break;
+    if(pic){
+      if(thumb){
+        pic.textContent = '';
+        pic.style.backgroundImage = "url('" + thumb.replace(/'/g, "%27") + "')";
+        pic.style.backgroundSize = 'cover';
+        pic.style.backgroundPosition = 'center';
+      }else{
+        pic.style.backgroundImage = '';
+        pic.textContent = '•';
+      }
     }
 
-    return out;
+    frag.appendChild(card);
   }
 
-  function buildSnapshotAccessor(snapshot) {
-    const page = snapshot && snapshot.pages && snapshot.pages.social ? snapshot.pages.social : {};
-    const pageSections = page && page.sections && typeof page.sections === 'object' ? page.sections : {};
+  gridEl.appendChild(frag);
+}
 
-    return {
-      page,
-      sections: pageSections,
-      get(sectionKey) {
-        const value = pageSections[sectionKey];
-        if (Array.isArray(value)) return value;
-        if (value && typeof value === 'object' && Array.isArray(value.items)) return value.items;
-        return [];
+  function ensureThumbCards(boxEl, count){
+    if(!boxEl) return [];
+    const existing = Array.from(boxEl.querySelectorAll('a.thumb-card'));
+    const need = count - existing.length;
+    if(need > 0){
+      const frag = document.createDocumentFragment();
+      for(let i=0;i<need;i++){
+        const a = document.createElement('a');
+        a.className = 'thumb-card';
+        a.href = '#';
+        a.target = '_blank';
+        a.rel = 'noopener';
+
+        const img = document.createElement('img');
+        img.className = 'thumb-media';
+        img.alt = '';
+        a.appendChild(img);
+
+        const t = document.createElement('div');
+        t.className = 'thumb-title';
+        t.textContent = 'Loading…';
+        a.appendChild(t);
+
+        frag.appendChild(a);
       }
-    };
+      boxEl.appendChild(frag);
+    }
+    return Array.from(boxEl.querySelectorAll('a.thumb-card'));
   }
 
-  async function loadSnapshot() {
+  function renderRight(boxEl, items){
+    if(!boxEl) return;
+
+    const cards = ensureThumbCards(boxEl, RIGHT_LIMIT);
+    const list = Array.isArray(items) ? items.slice(0, RIGHT_LIMIT) : [];
+
+    for(let i=0;i<RIGHT_LIMIT;i++){
+      const a = cards[i];
+      if(!a) continue;
+
+      const it = list[i] || null;
+      const url = it ? pickUrl(it) : '#';
+      const title = it ? pickTitle(it) : 'Loading…';
+      const thumb = it ? pickThumb(it) : '';
+
+      a.href = url || '#';
+      a.target = (url && url !== '#') ? '_blank' : '_self';
+
+      const img = a.querySelector('img.thumb-media') || a.querySelector('img');
+      if(img){
+        img.src = thumb || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+        img.alt = title || '';
+      }
+      const t = a.querySelector('.thumb-title');
+      if(t) t.textContent = title || 'Item';
+    }
+  }
+
+  function getSections(snapshot){
+    try{
+      return snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections;
+    }catch(e){
+      return null;
+    }
+  }
+
+  async function loadSnapshot(){
     const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
-    if (!res.ok) throw new Error('snapshot_load_failed:' + res.status);
+    if(!res.ok) throw new Error('snapshot_load_failed:' + res.status);
     return res.json();
   }
 
-  function findMainContainerByKey(key) {
-    const direct = qs('[data-psom-key="' + key + '"]');
-    if (direct) return direct;
+  async function run(){
+    try{
+      const snap = await loadSnapshot();
+      const sections = getSections(snap);
+      if(!sections) return;
 
-    const all = qsa('[data-psom-key]');
-    for (const el of all) {
-      if ((el.dataset.psomKey || '') === key) return el;
-    }
+      // MAIN 9 rows
+      for(let i=1;i<=MAIN_ROWS;i++){
+        const grid = qs('#rowGrid' + i);
+        if(!grid) continue;
 
-    return null;
+        const key = MAIN_SECTION_ORDER[i-1];
+        const items = sections[key] || [];
+        renderRow(grid, items);
+      }
+
+// RIGHT panel
+const rightBox = qs('[data-psom-key="' + RIGHT_SECTION_KEY + '"]');
+if(rightBox){
+
+  const page = snap.pages.social || {};
+  const pageSections = page.sections || {};
+
+  let rightItems = pageSections[RIGHT_SECTION_KEY];
+
+  if(!rightItems && page.right && page.right.sections){
+    rightItems = page.right.sections[RIGHT_SECTION_KEY];
   }
 
-  function findMainContainerByRow(rowIndex) {
-    return qs('#rowGrid' + rowIndex);
+  if(rightItems && !Array.isArray(rightItems)){
+    rightItems = rightItems.items || [];
   }
 
-  function resolveMainContainer(key, rowIndex) {
-    return findMainContainerByKey(key) || findMainContainerByRow(rowIndex);
-  }
+  rightItems = Array.isArray(rightItems) ? rightItems : [];
 
-  function clearNode(el) {
-    if (el) el.innerHTML = '';
-  }
+  renderRight(rightBox, rightItems);
+}
 
-  function makeMainCard(item) {
-    const a = document.createElement('a');
-    a.className = 'card';
-    a.href = item.url || '#';
-    a.target = item.url && item.url !== '#' ? '_blank' : '_self';
-    a.rel = 'noopener';
+window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
 
-    const pic = document.createElement('div');
-    pic.className = 'pic';
-    if (item.thumb) {
-      pic.textContent = '';
-      pic.style.backgroundImage = "url('" + item.thumb.replace(/'/g, '%27') + "')";
-      pic.style.backgroundSize = 'cover';
-      pic.style.backgroundPosition = 'center';
-    } else {
-      pic.textContent = '•';
-      pic.style.backgroundImage = '';
-    }
+}catch(e){
+  console.error('[social-automap] fail', e);
+}
 
-    const meta = document.createElement('div');
-    meta.className = 'meta';
+  // run after DOM is ready + one micro delay (so dummy bootstrap has finished first paint)
+ function boot(){
+  run();
+}
 
-    const title = document.createElement('div');
-    title.className = 'title';
-    title.textContent = item.title || 'Item';
-
-    const desc = document.createElement('div');
-    desc.className = 'desc';
-    desc.textContent = item.platform || ' ';
-
-    const cta = document.createElement('span');
-    cta.className = 'cta';
-    cta.textContent = 'Open';
-
-    meta.appendChild(title);
-    meta.appendChild(desc);
-    meta.appendChild(cta);
-
-    a.appendChild(pic);
-    a.appendChild(meta);
-
-    return a;
-  }
-
-  function renderMainSection(container, items) {
-    if (!container) return;
-    clearNode(container);
-
-    const frag = document.createDocumentFragment();
-    const list = Array.isArray(items) ? items : [];
-
-    for (let i = 0; i < list.length; i++) {
-      frag.appendChild(makeMainCard(list[i]));
-    }
-
-    container.appendChild(frag);
-  }
-
-  function makeRightCard(item) {
-    const box = document.createElement('div');
-    box.className = 'ad-box';
-
-    const link = document.createElement('a');
-    link.href = item.url || '#';
-    link.target = item.url && item.url !== '#' ? '_blank' : '_self';
-    link.rel = 'noopener';
-    link.style.display = 'block';
-    link.style.height = '100%';
-    link.style.textDecoration = 'none';
-    link.style.color = 'inherit';
-
-    const wrap = document.createElement('div');
-    wrap.style.display = 'flex';
-    wrap.style.flexDirection = 'column';
-    wrap.style.height = '100%';
-    wrap.style.alignItems = 'stretch';
-    wrap.style.justifyContent = 'flex-start';
-
-    const media = document.createElement('div');
-    media.style.height = '94px';
-    media.style.background = '#f5f5f5 center/cover no-repeat';
-    if (item.thumb) media.style.backgroundImage = "url('" + item.thumb.replace(/'/g, '%27') + "')";
-
-    const title = document.createElement('div');
-    title.style.padding = '8px 10px 4px';
-    title.style.fontSize = '.85rem';
-    title.style.fontWeight = '700';
-    title.style.lineHeight = '1.25';
-    title.textContent = item.title || 'Item';
-
-    const meta = document.createElement('div');
-    meta.style.padding = '0 10px 8px';
-    meta.style.fontSize = '.75rem';
-    meta.style.color = '#666';
-    meta.textContent = item.platform || ' '; 
-
-    wrap.appendChild(media);
-    wrap.appendChild(title);
-    wrap.appendChild(meta);
-    link.appendChild(wrap);
-    box.appendChild(link);
-
-    return box;
-  }
-
-  function renderRightPanel(panel, items) {
-    if (!panel) return;
-    clearNode(panel);
-
-    const frag = document.createDocumentFragment();
-    const list = Array.isArray(items) ? items : [];
-
-    for (let i = 0; i < list.length; i++) {
-      frag.appendChild(makeRightCard(list[i]));
-    }
-
-    panel.appendChild(frag);
-  }
-
-  function syncShadowRightBucket(items) {
-    const shadow = qs('[data-psom-key="socialnetwork"]');
-    if (!shadow) return;
-
-    clearNode(shadow);
-    const frag = document.createDocumentFragment();
-
-    (Array.isArray(items) ? items : []).forEach((item) => {
-      const a = document.createElement('a');
-      a.className = 'thumb-card';
-      a.href = item.url || '#';
-      a.target = item.url && item.url !== '#' ? '_blank' : '_self';
-      a.rel = 'noopener';
-
-      const img = document.createElement('img');
-      img.className = 'thumb-media';
-      img.alt = item.title || '';
-      img.src = item.thumb || BLANK_GIF;
-
-      const t = document.createElement('div');
-      t.className = 'thumb-title';
-      t.textContent = item.title || 'Item';
-
-      a.appendChild(img);
-      a.appendChild(t);
-      frag.appendChild(a);
-    });
-
-    shadow.appendChild(frag);
-  }
-
-  function renderMain(accessor) {
-    for (let i = 0; i < MAIN_SECTION_ORDER.length; i++) {
-      const key = MAIN_SECTION_ORDER[i];
-      const mount = resolveMainContainer(key, i + 1);
-      const items = normalizeList(accessor.get(key), key, MAIN_LIMIT);
-      renderMainSection(mount, items);
-    }
-  }
-
-  function renderRight(accessor) {
-    const items = normalizeList(accessor.get(RIGHT_SECTION_KEY), RIGHT_SECTION_KEY, RIGHT_LIMIT);
-    const panel = qs('#rightAutoPanel');
-    renderRightPanel(panel, items);
-    syncShadowRightBucket(items);
-
-    if (typeof window.__IGDC_RIGHTPANEL_RENDER === 'function') {
-      const bridged = items.map((item) => ({
-        link: item.url,
-        title: item.title,
-        thumb: item.thumb,
-        platform: item.platform
-      }));
-      try {
-        window.__IGDC_RIGHTPANEL_RENDER(bridged);
-      } catch (_e) {}
-    }
-  }
-
-  async function run() {
-    try {
-      const snapshot = await loadSnapshot();
-      const accessor = buildSnapshotAccessor(snapshot);
-      renderMain(accessor);
-      renderRight(accessor);
-      window.__SOCIALNETWORK_AUTOMAP_V4_DONE__ = true;
-    } catch (e) {
-      console.error('[socialnetwork-automap.v4.rebuilt] fail', e);
-    }
-  }
-
-  function boot() {
-    run();
-  }
-
-  if (document.readyState === 'loading') {
+  if(document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', boot, { once: true });
-  } else {
+  }else{
     boot();
   }
+
 })();

@@ -313,26 +313,10 @@
     const groups = groupBySection(items);
 
     Object.keys(limits).forEach((key)=>{
-  let list = groups[key] || [];
-
-  // donation-global만 필터
-  if(key === 'donation-global'){
-    list = list.filter((it)=>{
-      const thumb = String(it?.media?.thumb || '').trim();
-      const url = String(it?.link?.url || '').trim();
-      const bankId = String(it?.bank_ref?.record_id || '').trim();
-
-      return !(
-        thumb === '/assets/img/placeholder.png' &&
-        (url === '#' || url === '' || url === 'null') &&
-        !bankId
-      );
+      let list = groups[key] || [];
+      list = sortSection(list);
+      mountSection(key, list, limits[key]);
     });
-  }
-
-  list = sortSection(list);
-  mountSection(key, list, limits[key]);
-});
   }
 
   function bindClicks(){
