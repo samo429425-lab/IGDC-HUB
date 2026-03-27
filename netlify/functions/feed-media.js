@@ -60,7 +60,8 @@ export function runMediaFeed(snapshot) {
   }));
 
   // === 5. 결과 반환 (오직 첫 섹션만)
-  return {
-    'media-trending': items
-  };
+ return {
+  key: 'media-trending',
+  items: items
+};
 }
