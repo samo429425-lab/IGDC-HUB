@@ -18,16 +18,16 @@
 
   // FIXED: aligned with socialnetwork.html / social.snapshot.json / feed-social.js canon
   const MAIN_SECTION_ORDER = [
-    'social-youtube',
-    'social-tiktok',
-    'social-instagram',
-    'social-facebook',
-    'social-twitter',
-    'social-pinterest',
-    'social-reddit',
-    'social-wechat',
-    'social-weibo'
-  ];
+  'social-youtube',
+  'social-instagram',
+  'social-tiktok',
+  'social-facebook',
+  'social-wechat',
+  'social-weibo',
+  'social-pinterest',
+  'social-reddit',
+  'social-twitter'
+];
 
   const RIGHT_SECTION_KEY = 'socialnetwork';
 
@@ -212,16 +212,19 @@
 
       // MAIN 9 rows
       for(let i=1;i<=MAIN_ROWS;i++){
-        const grid = qs('#rowGrid' + i);
+        const key = MAIN_SECTION_ORDER[i-1];
+
+        // rowGrid 자체를 비우지 말고, 그 안의 실제 슬롯 컨테이너만 잡는다
+    const grid = qs('#rowGrid' + i + ' [data-psom-key="' + key + '"]');
+
         if(!grid) continue;
 
-        const key = MAIN_SECTION_ORDER[i-1];
         const items = sections[key] || [];
         renderRow(grid, items);
       }
 
-// RIGHT panel
-const rightBox = qs('[data-psom-key="' + RIGHT_SECTION_KEY + '"]');
+// RIGHT panel (실제 화면 기준 + psom 동기화 포함)
+const rightBox = qs('#rightAutoPanel');
 if(rightBox){
 
   const page = snap.pages.social || {};
@@ -237,9 +240,16 @@ if(rightBox){
     rightItems = rightItems.items || [];
   }
 
-  rightItems = Array.isArray(rightItems) ? rightItems : [];
+  rightItems = (Array.isArray(rightItems) ? rightItems : [])
+    .filter(it => it && it.type !== 'placeholder'); // 🔴 더미 제거
 
   renderRight(rightBox, rightItems);
+
+  // 🔴 psom-key 영역도 동기화 (기존 구조 유지)
+  const shadow = qs('[data-psom-key="' + RIGHT_SECTION_KEY + '"]');
+  if(shadow){
+    shadow.innerHTML = rightBox.innerHTML;
+  }
 }
 
 window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;

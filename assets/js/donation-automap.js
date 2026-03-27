@@ -284,21 +284,28 @@
     `;
   }
 
-  function mountSection(key, items, limit){
-    const box = document.querySelector(`[data-psom-key="${key}"]`);
-    if(!box) return;
+function mountSection(key, items, limit){
+  const box = document.querySelector(`[data-psom-key="${key}"]`);
+  if(!box) return;
 
-    const row = box.closest?.('.feed-row');
-    const htmlCount = row ? Number(row.dataset.count || 0) : 0;
-    const finalLimit = clampLimit(htmlCount || limit || 80);
+  const row = box.closest?.('.feed-row');
+  const htmlCount = row ? Number(row.dataset.count || 0) : 0;
+  const finalLimit = clampLimit(htmlCount || limit || 80);
 
-    box.innerHTML = '';
+  const list = (Array.isArray(items) ? items : []);
 
-    const slice = (Array.isArray(items) ? items : []).slice(0, finalLimit);
-    for(const it of slice){
-      box.insertAdjacentHTML('beforeend', renderCard(it));
-    }
+  // 🔴 핵심: 데이터 없으면 기존 HTML 유지
+  if(list.length === 0){
+    return;
   }
+
+  box.innerHTML = '';
+
+  const slice = list.slice(0, finalLimit);
+  for(const it of slice){
+    box.insertAdjacentHTML('beforeend', renderCard(it));
+  }
+}
 
   async function main(){
     const snapshot = await loadSnapshot();
