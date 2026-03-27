@@ -71,13 +71,31 @@ function buildMediaSections(snap){
 
   const sections = snap?.sections || {};
 
-  // 🔴 1번 (feed)
-  const media1 = {
-    id:"media-trending",
-    items: buildMediaFeed(snap)
-  };
+  // 🔴 1차: feed (정식)
+  let items = buildMediaFeed(snap);
 
-  return [media1];
+  // 🔴 2차: feed 실패 시 fallback (샘플)
+  if(!items || items.length === 0){
+
+    const SOURCE_KEYS = ["media-movie","media-drama","media-thriller","media-romance"];
+
+    let pool = [];
+
+    SOURCE_KEYS.forEach(key=>{
+      const arr = Array.isArray(sections[key])
+        ? sections[key]
+        : (sections[key]?.slots || []);
+
+      pool = pool.concat(arr);
+    });
+
+    items = pool.slice(0,20);
+  }
+
+  return [{
+    id:"media-trending",
+    items
+  }];
 }
 
 // ===== 라우팅 =====
