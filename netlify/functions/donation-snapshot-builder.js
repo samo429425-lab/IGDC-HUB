@@ -388,15 +388,15 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
     rec.href
   ));
 
-const thumb = safeUrl(pickFirst(
-  rec.media?.thumb,
-  rec.thumbnail,
-  rec.thumb,
-  rec.image,
-  rec.og_image,
-  rec.logo,
-  rec.logo_url
-)) || null;
+  const thumb = safeUrl(pickFirst(
+    rec.media?.thumb,
+    rec.thumbnail,
+    rec.thumb,
+    rec.image,
+    rec.og_image,
+    rec.logo,
+    rec.logo_url
+  )) || "/assets/img/placeholder.png";
 
   const bankId = pickFirst(rec.bank_ref?.record_id, rec.record_id, rec.id);
   const sourceName = pickFirst(rec.source?.name, rec.source, rec.collector?.engine, rec.engine, "bank");
