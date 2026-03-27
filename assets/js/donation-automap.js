@@ -207,18 +207,34 @@
     return score;
   }
 
-  function groupBySection(items){
-    const map = {};
+function groupBySection(items){
+  const map = {};
+  let globalSeedSkipped = false;
 
-    (Array.isArray(items) ? items : []).forEach((it)=>{
-      const k = it?.psom_key;
-      if(!k) return;
-      if(!map[k]) map[k] = [];
-      map[k].push(it);
-    });
+  (Array.isArray(items) ? items : []).forEach((it)=>{
 
-    return map;
-  }
+    const isSeed =
+      it?.meta?.source === 'seed' &&
+      !it?.bank_ref?.record_id;
+
+    // global 첫 더미 1개만 제거
+    if(
+      !globalSeedSkipped &&
+      isSeed &&
+      it?.psom_key === 'donation-global'
+    ){
+      globalSeedSkipped = true;
+      return;
+    }
+
+    const k = it?.psom_key;
+    if(!k) return;
+    if(!map[k]) map[k] = [];
+    map[k].push(it);
+  });
+
+  return map;
+}
 
   function sortSection(items){
     return (Array.isArray(items) ? items : []).sort((a,b)=>{

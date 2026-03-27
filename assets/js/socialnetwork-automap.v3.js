@@ -1,66 +1,92 @@
-// socialnetwork-automap.v3.js (PRODUCTION — PSOM/SNAPSHOT LOCKED)
-// A: Slot-out / wrong append issue
-// A-1: No fallback append. Only renders into fixed slots (rowGrid1..9 + [data-psom-key="socialnetwork"]).
-// B: What we do: fetch social.snapshot.json and mount 9*100 + right*100 safely.
-// FIX ONLY: key mapping alignment (HTML ↔ snapshot ↔ automap). No feature reduction.
+// socialnetwork-automap.v3.fixed.js
+// 목적:
+// 1) social.snapshot.json 실데이터가 있으면 메인 9섹션 + 우측 패널에 꽂는다.
+// 2) 실데이터가 없으면 기존 HTML/더미를 절대 지우지 않는다.
+// 3) key는 하드코딩 최소화: HTML의 data-psom-key를 그대로 읽는다.
+// 4) 우측 패널도 실데이터가 있을 때만 기존 더미를 밀어내고 교체한다.
 
 (function () {
   'use strict';
 
-  if (window.__SOCIALNETWORK_AUTOMAP_V3_PROD__) return;
-  window.__SOCIALNETWORK_AUTOMAP_V3_PROD__ = true;
+  if (window.__SOCIALNETWORK_AUTOMAP_V3_FIXED__) return;
+  window.__SOCIALNETWORK_AUTOMAP_V3_FIXED__ = true;
 
   const SNAPSHOT_URL = '/data/social.snapshot.json';
-
   const MAIN_ROWS = 9;
   const MAIN_LIMIT = 100;
   const RIGHT_LIMIT = 100;
-
-  // FIXED: aligned with socialnetwork.html / social.snapshot.json / feed-social.js canon
-  const MAIN_SECTION_ORDER = [
-  'social-youtube',
-  'social-instagram',
-  'social-tiktok',
-  'social-facebook',
-  'social-wechat',
-  'social-weibo',
-  'social-pinterest',
-  'social-reddit',
-  'social-twitter'
-];
-
   const RIGHT_SECTION_KEY = 'socialnetwork';
 
   function qs(sel, root){ return (root || document).querySelector(sel); }
-
-  function safeText(v){ return (v == null) ? '' : String(v); }
+  function qsa(sel, root){ return Array.from((root || document).querySelectorAll(sel)); }
+  function safeText(v){ return v == null ? '' : String(v); }
 
   function pickTitle(it){
     return safeText(it && (it.title || it.name || it.text || it.label));
   }
+
   function pickUrl(it){
-    return safeText(it && (it.url || it.href || it.link)) || '#';
+    return safeText(it && (it.url || it.href || it.link || it.productUrl || it.detailUrl)) || '#';
   }
+
   function pickThumb(it){
     return safeText(it && (it.thumb || it.image || it.thumbnail || it.imageUrl || it.thumbnailUrl));
   }
-  function pickPlatform(it){
-    return safeText(it && it.source && (it.source.platform || it.source.site || it.source.provider));
+
+  function pickDesc(it){
+    return safeText(
+      it && (
+        it.description ||
+        it.summary ||
+        (it.source && (it.source.platform || it.source.site || it.source.provider)) ||
+        ''
+      )
+    );
   }
 
-  function ensureCards(gridEl, count){
+  function isRealItem(it){
+    if (!it || typeof it !== 'object') return false;
+    if (it.type === 'placeholder') return false;
+
+    const url = pickUrl(it);
+    const title = pickTitle(it);
+    const thumb = pickThumb(it);
+
+    if (url && url !== '#') return true;
+    if (title && title !== 'Loading…' && title !== 'Loading...') return true;
+    if (thumb && !thumb.startsWith('data:image/gif;base64,')) return true;
+
+    return false;
+  }
+
+  function getSections(snapshot){
+    try{
+      return snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections;
+    }catch(_e){
+      return null;
+    }
+  }
+
+  async function loadSnapshot(){
+    const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
+    if(!res.ok) throw new Error('snapshot_load_failed:' + res.status);
+    return res.json();
+  }
+
+  function getMainSlots(gridEl){
     if(!gridEl) return [];
-    const existing = Array.from(gridEl.querySelectorAll('a.card'));
-    const need = count - existing.length;
-    if(need > 0){
+
+    let cards = qsa('a.card', gridEl);
+
+    if(cards.length === 0){
       const frag = document.createDocumentFragment();
-      for(let i=0;i<need;i++){
+      for(let i=0;i<MAIN_LIMIT;i++){
         const a = document.createElement('a');
         a.className = 'card';
         a.href = '#';
-        a.target = '_blank';
+        a.target = '_self';
         a.rel = 'noopener';
-
+        a.dataset.dummy = '1';
         a.innerHTML =
           '<div class="pic">•</div>' +
           '<div class="meta">' +
@@ -68,51 +94,34 @@
             '<div class="desc">Preparing</div>' +
             '<span class="cta">Open</span>' +
           '</div>';
-
         frag.appendChild(a);
       }
       gridEl.appendChild(frag);
+      cards = qsa('a.card', gridEl);
     }
-    return Array.from(gridEl.querySelectorAll('a.card'));
+
+    return cards;
   }
 
-  function renderRow(gridEl, items){
-  if(!gridEl) return;
+  function paintMainCard(card, it){
+    if(!card) return;
 
-  // 기존 더미/잔존 카드 제거 후 오토맵 결과만 다시 렌더
-  gridEl.innerHTML = '';
+    const url = pickUrl(it);
+    const title = pickTitle(it) || 'Item';
+    const desc = pickDesc(it) || ' ';
+    const thumb = pickThumb(it);
 
-  const list = Array.isArray(items) ? items.slice(0, MAIN_LIMIT) : [];
-  const frag = document.createDocumentFragment();
-
-  for(let i=0;i<MAIN_LIMIT;i++){
-    const it = list[i] || null;
-
-    const url = it ? pickUrl(it) : '#';
-    const title = it ? pickTitle(it) : 'Loading…';
-    const platform = it ? (pickPlatform(it) || '') : '';
-    const thumb = it ? pickThumb(it) : '';
-
-    const card = document.createElement('a');
-    card.className = gridEl.closest('#rightAutoPanel') ? 'ad-box' : 'card';
     card.href = url || '#';
     card.target = (url && url !== '#') ? '_blank' : '_self';
     card.rel = 'noopener';
+    card.removeAttribute('data-dummy');
 
-    card.innerHTML =
-      '<div class="pic">•</div>' +
-      '<div class="meta">' +
-        '<div class="title">Loading…</div>' +
-        '<div class="desc">Preparing</div>' +
-        '<span class="cta">Open</span>' +
-      '</div>';
+    const pic = qs('.pic', card);
+    const metaTitle = qs('.title', card);
+    const metaDesc = qs('.desc', card);
 
-    const pic = card.querySelector('.pic');
-    const metaTitle = card.querySelector('.title');
-    const desc = card.querySelector('.desc');
-
-    if(metaTitle) metaTitle.textContent = title || 'Item';
-    if(desc) desc.textContent = platform ? platform : ' ';
+    if(metaTitle) metaTitle.textContent = title;
+    if(metaDesc) metaDesc.textContent = desc;
 
     if(pic){
       if(thumb){
@@ -125,83 +134,129 @@
         pic.textContent = '•';
       }
     }
-
-    frag.appendChild(card);
   }
 
-  gridEl.appendChild(frag);
-}
+  function resetMainCardToDummy(card){
+    if(!card) return;
+    card.href = '#';
+    card.target = '_self';
+    card.rel = 'noopener';
+    card.dataset.dummy = '1';
 
-  function ensureThumbCards(boxEl, count){
-    if(!boxEl) return [];
-    const existing = Array.from(boxEl.querySelectorAll('a.thumb-card'));
-    const need = count - existing.length;
-    if(need > 0){
+    const pic = qs('.pic', card);
+    const metaTitle = qs('.title', card);
+    const metaDesc = qs('.desc', card);
+
+    if(metaTitle) metaTitle.textContent = 'Loading…';
+    if(metaDesc) metaDesc.textContent = 'Preparing';
+
+    if(pic){
+      pic.style.backgroundImage = '';
+      pic.textContent = '•';
+    }
+  }
+
+  function mountMainRow(gridEl, items){
+    if(!gridEl) return;
+
+    const realItems = (Array.isArray(items) ? items : []).filter(isRealItem).slice(0, MAIN_LIMIT);
+
+    // 실데이터가 없으면 기존 더미/기존 카드 그대로 유지
+    if(realItems.length === 0) return;
+
+    const cards = getMainSlots(gridEl);
+    const count = Math.max(cards.length, MAIN_LIMIT);
+
+    if(cards.length < count){
+      getMainSlots(gridEl);
+    }
+
+    const finalCards = qsa('a.card', gridEl);
+
+    for(let i=0;i<finalCards.length;i++){
+      const card = finalCards[i];
+      const it = realItems[i] || null;
+      if(it) paintMainCard(card, it);
+      else resetMainCardToDummy(card);
+    }
+  }
+
+  function getRightCards(panel){
+    if(!panel) return [];
+
+    let cards = qsa('.ad-box', panel);
+
+    if(cards.length === 0){
       const frag = document.createDocumentFragment();
-      for(let i=0;i<need;i++){
-        const a = document.createElement('a');
-        a.className = 'thumb-card';
-        a.href = '#';
-        a.target = '_blank';
-        a.rel = 'noopener';
-
-        const img = document.createElement('img');
-        img.className = 'thumb-media';
-        img.alt = '';
-        a.appendChild(img);
-
-        const t = document.createElement('div');
-        t.className = 'thumb-title';
-        t.textContent = 'Loading…';
-        a.appendChild(t);
-
-        frag.appendChild(a);
+      for(let i=0;i<RIGHT_LIMIT;i++){
+        const box = document.createElement('div');
+        box.className = 'ad-box';
+        box.dataset.dummy = '1';
+        box.innerHTML = '<a href="#">Loading...</a>';
+        frag.appendChild(box);
       }
-      boxEl.appendChild(frag);
+      panel.appendChild(frag);
+      cards = qsa('.ad-box', panel);
     }
-    return Array.from(boxEl.querySelectorAll('a.thumb-card'));
+
+    return cards;
   }
 
-  function renderRight(boxEl, items){
-    if(!boxEl) return;
+  function paintRightCard(box, it){
+    if(!box) return;
 
-    const cards = ensureThumbCards(boxEl, RIGHT_LIMIT);
-    const list = Array.isArray(items) ? items.slice(0, RIGHT_LIMIT) : [];
+    const url = pickUrl(it);
+    const title = pickTitle(it) || 'Item';
 
-    for(let i=0;i<RIGHT_LIMIT;i++){
-      const a = cards[i];
-      if(!a) continue;
+    box.removeAttribute('data-dummy');
+    box.innerHTML = '';
 
-      const it = list[i] || null;
-      const url = it ? pickUrl(it) : '#';
-      const title = it ? pickTitle(it) : 'Loading…';
-      const thumb = it ? pickThumb(it) : '';
+    const a = document.createElement('a');
+    a.href = url || '#';
+    a.target = (url && url !== '#') ? '_blank' : '_self';
+    a.rel = 'noopener';
+    a.textContent = title;
+    box.appendChild(a);
+  }
 
-      a.href = url || '#';
-      a.target = (url && url !== '#') ? '_blank' : '_self';
+  function resetRightCardToDummy(box){
+    if(!box) return;
+    box.dataset.dummy = '1';
+    box.innerHTML = '<a href="#">Loading...</a>';
+  }
 
-      const img = a.querySelector('img.thumb-media') || a.querySelector('img');
-      if(img){
-        img.src = thumb || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
-        img.alt = title || '';
-      }
-      const t = a.querySelector('.thumb-title');
-      if(t) t.textContent = title || 'Item';
+  function mountRightPanel(panel, items){
+    if(!panel) return;
+
+    const realItems = (Array.isArray(items) ? items : []).filter(isRealItem).slice(0, RIGHT_LIMIT);
+
+    // 실데이터 없으면 rightpanel-dummy-bootstrap이 만든 더미 유지
+    if(realItems.length === 0) return;
+
+    const cards = getRightCards(panel);
+    for(let i=0;i<cards.length;i++){
+      const box = cards[i];
+      const it = realItems[i] || null;
+      if(it) paintRightCard(box, it);
+      else resetRightCardToDummy(box);
     }
   }
 
-  function getSections(snapshot){
-    try{
-      return snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections;
-    }catch(e){
-      return null;
+  function collectRightItems(sections){
+    if(!sections || typeof sections !== 'object') return [];
+
+    let rightItems = sections[RIGHT_SECTION_KEY] || [];
+    if(rightItems && !Array.isArray(rightItems)){
+      rightItems = rightItems.items || [];
     }
+
+    return Array.isArray(rightItems) ? rightItems : [];
   }
 
-  async function loadSnapshot(){
-    const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
-    if(!res.ok) throw new Error('snapshot_load_failed:' + res.status);
-    return res.json();
+  function getMainGridByRow(i){
+    const rowGrid = qs('#rowGrid' + i);
+    if(!rowGrid) return null;
+    return qs('[data-psom-key]', rowGrid);
   }
 
   async function run(){
@@ -210,63 +265,41 @@
       const sections = getSections(snap);
       if(!sections) return;
 
-      // MAIN 9 rows
       for(let i=1;i<=MAIN_ROWS;i++){
-        const key = MAIN_SECTION_ORDER[i-1];
-
-        // rowGrid 자체를 비우지 말고, 그 안의 실제 슬롯 컨테이너만 잡는다
-const grid = qs('#rowGrid' + i + ' [data-psom-key="' + key + '"]');
-
+        const grid = getMainGridByRow(i);
         if(!grid) continue;
 
+        const key = grid.dataset.psomKey;
+        if(!key) continue;
+
         const items = sections[key] || [];
-        renderRow(grid, items);
+        mountMainRow(grid, items);
       }
 
-// RIGHT panel (실제 화면 기준 + psom 동기화 포함)
-const rightBox = qs('#rightAutoPanel');
-if(rightBox){
+      const rightPanel = qs('#rightAutoPanel');
+      if(rightPanel){
+        const rightItems = collectRightItems(sections);
+        mountRightPanel(rightPanel, rightItems);
 
-  const page = snap.pages.social || {};
-  const pageSections = page.sections || {};
+        const shadow = qs('[data-psom-key="' + RIGHT_SECTION_KEY + '"]');
+        if(shadow && rightItems.filter(isRealItem).length > 0){
+          shadow.innerHTML = rightPanel.innerHTML;
+        }
+      }
 
-  let rightItems = pageSections[RIGHT_SECTION_KEY];
-
-  if(!rightItems && page.right && page.right.sections){
-    rightItems = page.right.sections[RIGHT_SECTION_KEY];
+      window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
+    }catch(e){
+      console.error('[social-automap-fixed] fail', e);
+    }
   }
 
-  if(rightItems && !Array.isArray(rightItems)){
-    rightItems = rightItems.items || [];
+  function boot(){
+    run();
   }
-
-  rightItems = (Array.isArray(rightItems) ? rightItems : [])
-    .filter(it => it && it.type !== 'placeholder'); // 🔴 더미 제거
-
-  renderRight(rightBox, rightItems);
-
-  // 🔴 psom-key 영역도 동기화 (기존 구조 유지)
-  const shadow = qs('[data-psom-key="' + RIGHT_SECTION_KEY + '"]');
-  if(shadow){
-    shadow.innerHTML = rightBox.innerHTML;
-  }
-}
-
-window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
-
-}catch(e){
-  console.error('[social-automap] fail', e);
-}
-
-  // run after DOM is ready + one micro delay (so dummy bootstrap has finished first paint)
- function boot(){
-  run();
-}
 
   if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', boot, { once: true });
+    document.addEventListener('DOMContentLoaded', boot, { once:true });
   }else{
     boot();
   }
-
 })();
