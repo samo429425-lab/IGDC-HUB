@@ -60,12 +60,18 @@
   }
 
   function getSections(snapshot){
-    try{
-      return snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections;
-    }catch(_e){
-      return null;
-    }
+  if(!snapshot) return null;
+
+  if(snapshot.sections){
+    return snapshot.sections;
   }
+
+  if(snapshot.pages?.social?.sections){
+    return snapshot.pages.social.sections;
+  }
+
+  return null;
+}
 
   async function loadSnapshot(){
     const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
@@ -242,16 +248,23 @@
     }
   }
 
-  function collectRightItems(sections){
-    if(!sections || typeof sections !== 'object') return [];
+ function collectRightItems(sections){
+  if(!sections || typeof sections !== 'object') return [];
 
-    let rightItems = sections[RIGHT_SECTION_KEY] || [];
-    if(rightItems && !Array.isArray(rightItems)){
-      rightItems = rightItems.items || [];
-    }
+  let all = [];
 
-    return Array.isArray(rightItems) ? rightItems : [];
-  }
+  Object.keys(sections).forEach(key=>{
+    const sec = sections[key];
+
+    const arr = Array.isArray(sec)
+      ? sec
+      : (Array.isArray(sec?.items) ? sec.items : []);
+
+    all = all.concat(arr);
+  });
+
+  return all;
+}
 
   function getMainGridByRow(i){
     const rowGrid = qs('#rowGrid' + i);
