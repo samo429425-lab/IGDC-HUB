@@ -281,6 +281,115 @@
 
     const snapshot = await loadSnapshotAny();
     const sectionMap = normalizeSectionMap(snapshot);
+	
+// ===== MEDIA TRENDING AUTO-COMBINE (FINAL PRO) =====
+(function(){
+
+  if(!sectionMap) return;
+
+  const existing = extractItems(sectionMap["media-trending"]);
+  if(Array.isArray(existing) && existing.length > 0){
+    return;
+  }
+
+  const sourceKeys = [
+    "media-movie",
+    "media-drama",
+    "media-variety",
+    "media-music"
+  ];
+
+  let merged = [];
+
+ sourceKeys.forEach(key => {
+  const items = extractItems(sectionMap[key]);
+
+  if(Array.isArray(items)){
+    items.forEach(item => {
+
+      // 🔥 여기서 바로 섹션 정보 주입
+      item._sectionKey = key;
+
+      merged.push(item);
+    });
+  }
+});
+
+  // 🔥 최신성 점수 (0~1)
+  function getRecency(item){
+    const now = Date.now();
+
+    const t =
+      item.publishedAt ||
+      item.releaseDate ||
+      item.createdAt ||
+      item.date ||
+      null;
+
+    if(!t) return 0;
+
+    const time = new Date(t).getTime();
+    if(isNaN(time)) return 0;
+
+    const diffDays = (now - time) / (1000 * 60 * 60 * 24);
+
+    return Math.max(0, 1 - (diffDays / 30)); // 30일 기준
+  }
+
+  // 🔥 섹션 가중치 (영화/드라마 우선)
+  function getSectionWeight(item){
+    const key = item._sectionKey || '';
+
+    if(key === "media-movie") return 1.2;
+    if(key === "media-drama") return 1.15;
+    if(key === "media-variety") return 1.05;
+    if(key === "media-music") return 1.0;
+
+    return 1.0;
+  }
+
+  // 🔥 점수 계산 (완성형)
+  function getScore(item){
+
+    const views = item.views || item.viewCount || 0;
+    const popularity = item.popularity || item.score || 0;
+    const rating = item.rating || item.voteAverage || 0;
+    const recency = getRecency(item);
+    const weight = getSectionWeight(item);
+
+    const base =
+      views * 0.5 +
+      popularity * 0.2 +
+      rating * 0.1 +
+      recency * 100 * 0.2;
+
+    return base * weight;
+  }
+
+  // 🔥 정렬
+  merged.sort((a, b) => getScore(b) - getScore(a));
+
+  // 🔥 중복 제거
+  const seen = new Set();
+  const filtered = [];
+
+  for(const item of merged){
+    const key =
+      item.url ||
+      item.video ||
+      item.id ||
+      JSON.stringify(item);
+
+    if(seen.has(key)) continue;
+    seen.add(key);
+    filtered.push(item);
+  }
+
+  sectionMap["media-trending"] = {
+    items: filtered.slice(0, 50)
+  };
+
+})();
 
     // hero
     const heroRotateFrom = snapshot && snapshot.hero && (snapshot.hero.rotateFrom || snapshot.hero.source);

@@ -217,7 +217,7 @@ function groupBySection(items){
       it?.meta?.source === 'seed' &&
       !it?.bank_ref?.record_id;
 
-    // global 첫 더미 1개만 제거
+    // 👉 donation-global 첫 더미 1개만 제거
     if(
       !globalSeedSkipped &&
       isSeed &&
@@ -229,6 +229,7 @@ function groupBySection(items){
 
     const k = it?.psom_key;
     if(!k) return;
+
     if(!map[k]) map[k] = [];
     map[k].push(it);
   });
