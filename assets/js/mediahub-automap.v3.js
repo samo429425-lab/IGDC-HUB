@@ -168,17 +168,23 @@
   }
 
   
-  function ensureContentId(item){
-    if(!item) return '';
-    return (
-      item.id ||
-      item._id ||
-      item.contentId ||
-      item.videoId ||
-      item.slug ||
-      (item.url ? btoa(item.url).replace(/=/g,'') : '')
-    );
-  }
+ function ensureContentId(item){
+  if(!item) return '';
+
+  const hasRealContent =
+    !!(item.title || item.name || item.text || item.thumbnail || item.thumb || item.image || item.imageUrl || item.thumbnailUrl || item.url || item.video || item.link || item.href);
+
+  if(!hasRealContent) return '';
+
+  return (
+    item.id ||
+    item._id ||
+    item.contentId ||
+    item.videoId ||
+    item.slug ||
+    (item.url ? btoa(item.url).replace(/=/g,'') : '')
+  );
+}
 
   function fillAnchor(a, item){
     const title = (item && (item.title || item.name || item.text || '')) || '';

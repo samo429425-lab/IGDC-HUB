@@ -260,7 +260,7 @@
   }
 
   function renderCard(it){
-    const img = safeUrl(it?.media?.thumb) || '/assets/img/placeholder.png';
+    const img = safeUrl(it?.media?.thumb) || '';
     const title = escHtml(it?.org?.name || it?.title || '');
     const meta = escHtml(
       it?.org?.country ||
