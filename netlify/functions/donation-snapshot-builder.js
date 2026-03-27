@@ -422,7 +422,7 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
     id: uid,
 
     psom_key: sectionKey,
-    category: categoryFromSection(sectionKey),
+    category: semanticCategory,
     section_category: sectionKey,
     type: "org-slot",
 
@@ -701,65 +701,35 @@ function buildSnapshot({ seed, psomList, bank, optional }){
   });
 
   const outItems = [];
-SECTION_KEYS.forEach(k=>{
-  const limit = limits[k];
-  const list = sortSection(grouped[k] || []);
+  SECTION_KEYS.forEach(k=>{
+    const limit = limits[k];
+    const list = sortSection(grouped[k] || []);
+    const chosen = list.slice(0, limit);
 
-  // 1. 실제 데이터 먼저
-  const chosen = list.slice(0, limit);
-
-  // 🔥 NGO는 seed 절대 금지 (핵심 수정)
-  if(k === "donation-ngo"){
-    outItems.push(...chosen);
-    return;
-  }
-
-  // 2. 부족하면 seed 채움 (NGO 제외)
-  if(chosen.length < limit){
-    const need = limit - chosen.length;
-
-    const filler = (seedByKey[k] || []).slice(0, need).map((s)=>{
-      const copy = JSON.parse(JSON.stringify(s));
-
-      copy.psom_key = k;
-      copy.section_category = k;
-      copy.category = isValidCategoryKey(copy.category)
-        ? copy.category
-        : categoryFromSection(k);
-
-      copy.meta = copy.meta || {};
-      copy.meta.source = copy.meta.source || "seed";
-      copy.meta.replaceable = true;
-      copy.meta.updated_at = generatedAt;
-
-      if(!copy.bank_ref) copy.bank_ref = { source:"search-bank", channel:"donation", record_id:null };
-      if(!copy.rank) copy.rank = { global:0, section:0, score:0 };
-      if(!copy.verify) copy.verify = { status:"pending", score:0, engine:"seed", checked_at: generatedAt };
-      if(!copy.org) copy.org = {
-        id:null,
-        name: copy.title || null,
-        legal_name:null,
-        homepage: copy.link?.url || null,
-        country:null,
-        verified:false
-      };
-      if(!copy.replace_policy) copy.replace_policy = { mode:"bank-first", fallback:"seed", locked:false };
-      if(!copy.psom_mapping) copy.psom_mapping = {
-        page:"donation",
-        section:k,
-        category:copy.category,
-        type:null,
-        keywords:[]
-      };
-
-      return copy;
-    });
-
-    outItems.push(...chosen, ...filler);
-  }else{
-    outItems.push(...chosen);
-  }
-});
+    if(chosen.length < limit){
+      const need = limit - chosen.length;
+      const filler = (seedByKey[k] || []).slice(0, need).map((s)=>{
+        const copy = JSON.parse(JSON.stringify(s));
+        copy.psom_key = k;
+        copy.section_category = k;
+        copy.category = isValidCategoryKey(copy.category) ? copy.category : categoryFromSection(k);
+        copy.meta = copy.meta || {};
+        copy.meta.source = copy.meta.source || "seed";
+        copy.meta.replaceable = true;
+        copy.meta.updated_at = generatedAt;
+        if(!copy.bank_ref) copy.bank_ref = { source:"search-bank", channel:"donation", record_id:null };
+        if(!copy.rank) copy.rank = { global:0, section:0, score:0 };
+        if(!copy.verify) copy.verify = { status:"pending", score:0, engine:"seed", checked_at: generatedAt };
+        if(!copy.org) copy.org = { id:null, name: copy.title || null, legal_name:null, homepage: copy.link?.url || null, country:null, verified:false };
+        if(!copy.replace_policy) copy.replace_policy = { mode:"bank-first", fallback:"seed", locked:false };
+        if(!copy.psom_mapping) copy.psom_mapping = { page:"donation", section:k, category:copy.category, type:null, keywords:[] };
+        return copy;
+      });
+      outItems.push(...chosen, ...filler);
+    }else{
+      outItems.push(...chosen);
+    }
+  });
 
   const outSections = SECTION_KEYS.map(k=>{
     const seedS = seedSections.find(s=>s && s.psom_key===k) || {};
