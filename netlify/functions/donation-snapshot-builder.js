@@ -1,16 +1,20 @@
 "use strict";
 
 /**
- * donation-snapshot-builder.enterprise.v8.js
+ * donation-snapshot-builder.enterprise.v8.fixed.js
  *
  * Goal: Long-term, enterprise-grade donation snapshot builder.
  * - Inputs: SearchBank / Insight / other engines (when present) + Seed snapshot fallback
  * - Output: donation.snapshot.enterprise.v7+ compatible snapshot (bank-first, seed fallback)
  * - PSOM-aligned: emits psom_key values that match donation.html data-psom-key slots
  *
- * Notes:
- * - This builder does NOT crawl the web. It normalizes and validates upstream data.
- * - If upstream data is missing/insufficient, it fills remaining slots from seed snapshot.
+ * FIX APPLIED
+ * - Keeps all existing features
+ * - Corrects the mapping mismatch by separating:
+ *   1) semantic category classification
+ *   2) UI section / psom_key resolution
+ * - category is no longer forced to equal sectionKey
+ * - explicit valid section mapping is still honored first
  */
 
 const fs = require("fs");
@@ -50,7 +54,6 @@ function sha1(s){
   try{
     return require("crypto").createHash("sha1").update(String(s||"")).digest("hex");
   }catch(_e){
-    // fallback (weak but stable)
     let h=0; const str=String(s||"");
     for(let i=0;i<str.length;i++){ h=((h<<5)-h)+str.charCodeAt(i); h|=0; }
     return "h"+Math.abs(h);
@@ -84,7 +87,6 @@ function pickFirst(...vals){
 function safeUrl(u){
   const s = toStr(u).trim();
   if(!s) return "";
-  // basic sanitization
   if(/^javascript:/i.test(s)) return "";
   return s;
 }
@@ -123,7 +125,6 @@ function candidatePaths(rel){
    Load Seed Snapshot (v7+)
 ========================= */
 function loadSeedSnapshot(){
-
   const paths = candidatePaths("donation.snapshot.json");
 
   for(const p of paths){
@@ -131,7 +132,6 @@ function loadSeedSnapshot(){
     if(j && j.items && j.sections) return j;
   }
 
-  // fallback minimal
   return {
     meta:{ schema:"donation.snapshot.enterprise.seed" },
     policy:{},
@@ -145,7 +145,6 @@ function loadSeedSnapshot(){
    Load PSOM (optional)
 ========================= */
 function loadPSOM(){
-
   const paths = candidatePaths("psom.json");
 
   for(const p of paths){
@@ -160,7 +159,6 @@ function loadPSOM(){
    Load Sources (SearchBank + optional Insight)
 ========================= */
 function loadSearchBank(){
-
   const paths = candidatePaths("search-bank.snapshot.json");
 
   for(const p of paths){
@@ -194,63 +192,142 @@ const SECTION_KEYS = [
   "donation-others"
 ];
 
-/* =========================
-   Section Classification
-   (PSOM-aligned keywords, long-term stable)
-========================= */
-function classifySection(rec){
+const DEFAULT_SECTION_KEY = "donation-ngo";
+const DEFAULT_GLOBAL_SECTION_KEY = "donation-global";
 
-  const explicit = pickFirst(rec.psom_key, rec.section, rec.category);
-  if(SECTION_KEYS.includes(explicit)) return explicit;
+const CATEGORY_KEYS = [
+  "global",
+  "ngo",
+  "mission",
+  "service",
+  "relief",
+  "education",
+  "environment",
+  "others"
+];
+
+function isValidSectionKey(v){
+  return SECTION_KEYS.includes(toStr(v).trim());
+}
+
+function isValidCategoryKey(v){
+  return CATEGORY_KEYS.includes(toStr(v).trim());
+}
+
+function sectionFromCategory(category){
+  switch(category){
+    case "global": return "donation-global";
+    case "mission": return "donation-mission";
+    case "service": return "donation-service";
+    case "relief": return "donation-relief";
+    case "education": return "donation-education";
+    case "environment": return "donation-environment";
+    case "others": return "donation-others";
+    case "ngo":
+    default:
+      return DEFAULT_SECTION_KEY;
+  }
+}
+
+function categoryFromSection(sectionKey){
+  switch(sectionKey){
+    case "donation-global": return "global";
+    case "donation-mission": return "mission";
+    case "donation-service": return "service";
+    case "donation-relief": return "relief";
+    case "donation-education": return "education";
+    case "donation-environment": return "environment";
+    case "donation-others": return "others";
+    case "donation-ngo":
+    default:
+      return "ngo";
+  }
+}
+
+/* =========================
+   Semantic Classification
+   - semantic category only
+========================= */
+function classifyCategory(rec){
+  const explicitCategory = pickFirst(rec.semantic_category, rec.taxonomy?.category);
+  if(isValidCategoryKey(explicitCategory)) return explicitCategory;
+
+  const explicitSection = pickFirst(rec.psom_key, rec.bind?.section, rec.section);
+  if(isValidSectionKey(explicitSection)) return categoryFromSection(explicitSection);
+
+  const categoryHint = pickFirst(rec.category, rec.type_category);
+  if(isValidCategoryKey(categoryHint)) return categoryHint;
+  if(isValidSectionKey(categoryHint)) return categoryFromSection(categoryHint);
 
   const name = cleanName(pickFirst(rec.org_name, rec.name, rec.title));
   const summary = cleanName(pickFirst(rec.summary, rec.description, rec.about));
-  const tags = arr(rec.tags).map(t=>normalizeKey(t)).join(" ");
-
+  const tags = arr(rec.tags).concat(arr(rec.keywords)).map(t=>normalizeKey(t)).join(" ");
   const blob = normalizeKey([name, summary, tags].join(" "));
 
-  // Global / international
   if(/\bun\b|\bunhcr\b|\bunicef\b|\bworld\b|\binternational\b|\bglobal\b|\bifrc\b|\bred cross\b|\bred crescent\b/.test(blob)){
-    return "donation-global";
+    return "global";
   }
 
-  // Relief / disaster
   if(/\brelief\b|\bdisaster\b|\bemergency\b|\brescue\b|\bhumanitarian\b|\bfamine\b|\breadiness\b|\bearthquake\b|\bflood\b|\bconflict\b/.test(blob)){
-    return "donation-relief";
+    return "relief";
   }
 
-  // Mission / faith-based
   if(/\bmission\b|\bchurch\b|\bgospel\b|\bevangel\b|\bfaith\b|\bchristian\b|\bcatholic\b|\bprotestant\b|\bmosque\b|\btemple\b|\bministry\b/.test(blob)){
-    return "donation-mission";
+    return "mission";
   }
 
-  // Education
   if(/\beducation\b|\bschool\b|\bstudent\b|\byouth\b|\bchild\b|\bscholar\b|\buniversity\b|\btraining\b|\bliteracy\b/.test(blob)){
-    return "donation-education";
+    return "education";
   }
 
-  // Environment
   if(/\benvironment\b|\bclimate\b|\bforest\b|\bocean\b|\bwildlife\b|\bconservation\b|\bcarbon\b|\brenewable\b|\bplastic\b/.test(blob)){
-    return "donation-environment";
+    return "environment";
   }
 
-  // Service / welfare / medical
   if(/\bservice\b|\bwelfare\b|\bmedical\b|\bhealth\b|\bhospital\b|\bcare\b|\bsupport\b|\bcommunity\b|\bfood bank\b|\bshelter\b|\bhousing\b/.test(blob)){
-    return "donation-service";
+    return "service";
   }
 
-  // Default NGO bucket
-  return "donation-ngo";
+  if(/\bngo\b|\bnonprofit\b|\bnon profit\b|\bcharity\b|\bfoundation\b|\bassociation\b/.test(blob)){
+    return "ngo";
+  }
+
+  return "ngo";
+}
+
+/* =========================
+   Section Resolution
+   - UI section / psom_key only
+========================= */
+function resolveSection(rec, semanticCategory){
+  const explicitSection = pickFirst(
+    rec.psom_key,
+    rec.bind?.section,
+    rec.section,
+    rec.psom_mapping?.section,
+    rec.ui_section
+  );
+
+  if(isValidSectionKey(explicitSection)) return explicitSection;
+
+  const categoryHint = pickFirst(rec.category, rec.type_category);
+  if(isValidSectionKey(categoryHint)) return categoryHint;
+
+  if(isValidCategoryKey(categoryHint)){
+    return sectionFromCategory(categoryHint);
+  }
+
+  const fallbackSection = sectionFromCategory(semanticCategory);
+  if(isValidSectionKey(fallbackSection)) return fallbackSection;
+
+  return DEFAULT_SECTION_KEY;
 }
 
 /* =========================
    Verification Heuristics (offline)
-   - Not "truth"; produces a stable, explainable confidence scaffold.
 ========================= */
 function verifyHeuristic(rec){
-
   const homepage = safeUrl(pickFirst(rec.homepage, rec.website, rec.url, rec.link, rec.href));
-
   const host = hostOf(homepage);
 
   let score = 0;
@@ -284,7 +361,6 @@ function verifyHeuristic(rec){
     score -= 15;
   }
 
-  // clamp
   if(score < 0) score = 0;
   if(score > 100) score = 100;
 
@@ -298,9 +374,7 @@ function verifyHeuristic(rec){
 /* =========================
    Normalize incoming records into v7+ items
 ========================= */
-function normalizeRecord(rec, sectionKey, idx, psomInfo){
-
-  // Collect raw fields from heterogeneous inputs
+function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
   const org_name = cleanName(pickFirst(rec.org?.name, rec.org_name, rec.name, rec.title, rec.organization));
   const legal_name = cleanName(pickFirst(rec.org?.legal_name, rec.legal_name, rec.legalName));
   const summary = cleanName(pickFirst(rec.summary, rec.description, rec.about, rec.snippet));
@@ -326,34 +400,30 @@ function normalizeRecord(rec, sectionKey, idx, psomInfo){
 
   const bankId = pickFirst(rec.bank_ref?.record_id, rec.record_id, rec.id);
   const sourceName = pickFirst(rec.source?.name, rec.source, rec.collector?.engine, rec.engine, "bank");
-
   const tags = Array.isArray(rec.tags) ? rec.tags : (Array.isArray(rec.keywords) ? rec.keywords : []);
-
   const vh = verifyHeuristic({ ...rec, org_name, homepage });
 
   const uidBase = `${sectionKey}|${vh.host||""}|${normalizeKey(org_name)||""}|${bankId||""}`;
   const uid = `donation:${sectionKey}:${sha1(uidBase).slice(0,12)}`;
 
-  // Ranking scaffold
   const rankScore =
     (vh.score * 10) +
     (bankId ? 500 : 0) +
     (rec.rank?.score ? Number(rec.rank.score) : 0);
 
-  // i18n scaffold (PSOM provides supported languages list; content can be filled upstream)
   const i18n = {
     lang: rec.i18n?.lang || rec.lang || rec.language || null,
     title: rec.i18n?.title || {},
     summary: rec.i18n?.summary || {}
   };
 
-  // Compose v7+ item (enterprise stable)
   return {
     uid,
     id: uid,
 
     psom_key: sectionKey,
-    category: sectionKey,
+    category: categoryFromSection(sectionKey),
+    section_category: sectionKey,
     type: "org-slot",
 
     title: pickFirst(rec.title, org_name) || org_name || `Donation Partner ${idx+1}`,
@@ -365,7 +435,7 @@ function normalizeRecord(rec, sectionKey, idx, psomInfo){
       legal_name: legal_name || null,
       homepage: homepage || null,
       country: rec.org?.country || rec.country || null,
-      verified: (vh.status==="verified"),
+      verified: (vh.status === "verified"),
 
       registration: rec.org?.registration || {
         country: rec.reg_country || null,
@@ -434,12 +504,11 @@ function normalizeRecord(rec, sectionKey, idx, psomInfo){
 
     media:{
       kind: "image",
-      thumb: thumb,
+      thumb,
       src: null,
       ratio: rec.media?.ratio || "1:1"
     },
 
-    // Backward compatibility
     image: thumb,
     og_image: rec.og_image || null,
 
@@ -489,10 +558,9 @@ function normalizeRecord(rec, sectionKey, idx, psomInfo){
     },
 
     psom_mapping:{
-      // Optional: populated by upstream engines later; we keep a stable scaffold
       page: "donation",
       section: sectionKey,
-      category: pickFirst(psomInfo?.category, null),
+      category: semanticCategory,
       type: pickFirst(psomInfo?.type, null),
       keywords: psomInfo?.keywords || []
     },
@@ -511,19 +579,16 @@ function normalizeRecord(rec, sectionKey, idx, psomInfo){
 
 /* =========================
    Deduplication
-   - Prefer bank/verified records
 ========================= */
 function dedupe(items){
-
   const best = new Map();
 
   for(const it of items){
-
     const keyHost = hostOf(it?.org?.homepage || it?.link?.url || "");
     const keyName = normalizeKey(it?.org?.name || it?.title || "");
 
     const k = keyHost ? `h:${keyHost}` : `n:${keyName}`;
-    if(!k || k==="n:") continue;
+    if(!k || k === "n:") continue;
 
     const prev = best.get(k);
     if(!prev){
@@ -537,8 +602,8 @@ function dedupe(items){
     const aBank = Boolean(a.bank_ref && a.bank_ref.record_id);
     const bBank = Boolean(b.bank_ref && b.bank_ref.record_id);
 
-    const aScore = Number(a?.rank?.score || 0) + (a.verify?.status==="verified" ? 1000 : 0) + (aBank ? 500 : 0);
-    const bScore = Number(b?.rank?.score || 0) + (b.verify?.status==="verified" ? 1000 : 0) + (bBank ? 500 : 0);
+    const aScore = Number(a?.rank?.score || 0) + (a.verify?.status === "verified" ? 1000 : 0) + (aBank ? 500 : 0);
+    const bScore = Number(b?.rank?.score || 0) + (b.verify?.status === "verified" ? 1000 : 0) + (bBank ? 500 : 0);
 
     if(bScore > aScore){
       best.set(k, b);
@@ -552,10 +617,8 @@ function dedupe(items){
    Build Snapshot (Enterprise v8)
 ========================= */
 function buildSnapshot({ seed, psomList, bank, optional }){
-
   const generatedAt = nowIso();
 
-  // Section limits from seed (preferred), else defaults
   const limits = {};
   const seedSections = Array.isArray(seed.sections) ? seed.sections : [];
   seedSections.forEach(s=>{
@@ -563,12 +626,11 @@ function buildSnapshot({ seed, psomList, bank, optional }){
       limits[s.psom_key] = Number(s.slot_limit || s.slotLimit || 40);
     }
   });
-  // defaults if seed missing
+
   SECTION_KEYS.forEach(k=>{
-    if(!limits[k]) limits[k] = (k==="donation-global" ? 100 : 80);
+    if(!limits[k]) limits[k] = (k === DEFAULT_GLOBAL_SECTION_KEY ? 100 : 80);
   });
 
-  // PSOM (optional) -> info map
   const psomInfoMap = {};
   (Array.isArray(psomList) ? psomList : []).forEach(p=>{
     if(!p || typeof p !== "object") return;
@@ -576,21 +638,16 @@ function buildSnapshot({ seed, psomList, bank, optional }){
     psomInfoMap["donation"] = p;
   });
 
-  // Collect source records
   const candidates = [];
-
-  // SearchBank donation channel items
   const src = bank && Array.isArray(bank.items) ? bank.items : [];
   const donationList = src.filter(x => String(x.channel||"").toLowerCase() === "donation");
 
   donationList.forEach((rec, i)=>{
-    const sectionKey = classifySection(rec);
-    candidates.push(normalizeRecord(rec, sectionKey, i, psomInfoMap["donation"]));
+    const semanticCategory = classifyCategory(rec);
+    const sectionKey = resolveSection(rec, semanticCategory);
+    candidates.push(normalizeRecord(rec, sectionKey, semanticCategory, i, psomInfoMap["donation"]));
   });
 
-  // Optional sources (future-proof):
-  // - optional.insight.items, optional.maru_search.items, etc. if present.
-  // We only accept arrays; caller may pass any object.
   const optItems = [];
   if(optional && typeof optional === "object"){
     for(const k of Object.keys(optional)){
@@ -600,15 +657,15 @@ function buildSnapshot({ seed, psomList, bank, optional }){
       }
     }
   }
+
   optItems.forEach((rec, i)=>{
-    const sectionKey = classifySection(rec);
-    candidates.push(normalizeRecord(rec, sectionKey, i, psomInfoMap["donation"]));
+    const semanticCategory = classifyCategory(rec);
+    const sectionKey = resolveSection(rec, semanticCategory);
+    candidates.push(normalizeRecord(rec, sectionKey, semanticCategory, i, psomInfoMap["donation"]));
   });
 
-  // Deduplicate across sources
   const unique = dedupe(candidates);
 
-  // Group by section
   const grouped = {};
   SECTION_KEYS.forEach(k=>grouped[k]=[]);
   unique.forEach(it=>{
@@ -617,7 +674,6 @@ function buildSnapshot({ seed, psomList, bank, optional }){
     grouped[k].push(it);
   });
 
-  // Sort per section (bank-first via rank.score which already boosts bank_ref)
   function sortSection(list){
     return list.sort((a,b)=>{
       const sa = Number(a?.rank?.score || 0);
@@ -634,53 +690,77 @@ function buildSnapshot({ seed, psomList, bank, optional }){
     });
   }
 
-  // Seed fallback items (must match keys)
   const seedItems = Array.isArray(seed.items) ? seed.items : [];
   const seedByKey = {};
   SECTION_KEYS.forEach(k=>seedByKey[k]=[]);
   seedItems.forEach(it=>{
-    const k = pickFirst(it.psom_key, it.category);
+    const k = pickFirst(it.psom_key, it.section_category, isValidSectionKey(it.category) ? it.category : "");
     if(SECTION_KEYS.includes(k)){
       seedByKey[k].push(it);
     }
   });
 
-  // Fill slots per section
   const outItems = [];
-  SECTION_KEYS.forEach(k=>{
-    const limit = limits[k];
-    const list = sortSection(grouped[k] || []);
+SECTION_KEYS.forEach(k=>{
+  const limit = limits[k];
+  const list = sortSection(grouped[k] || []);
 
-    // take top real items
-    const chosen = list.slice(0, limit);
+  // 1. 실제 데이터 먼저
+  const chosen = list.slice(0, limit);
 
-    // if 부족하면 seed로 채움
-    if(chosen.length < limit){
-      const need = limit - chosen.length;
-      const filler = (seedByKey[k] || []).slice(0, need).map((s, idx)=>{
-        // preserve seed but enforce keys, and mark seed source
-        const copy = JSON.parse(JSON.stringify(s));
-        copy.psom_key = k;
-        copy.category = k;
-        copy.meta = copy.meta || {};
-        copy.meta.source = copy.meta.source || "seed";
-        copy.meta.replaceable = true;
-        copy.meta.updated_at = generatedAt;
-        // ensure v7 compatible fields exist minimally for automap ordering
-        if(!copy.bank_ref) copy.bank_ref = { source:"search-bank", channel:"donation", record_id:null };
-        if(!copy.rank) copy.rank = { global:0, section:0, score:0 };
-        if(!copy.verify) copy.verify = { status:"pending", score:0, engine:"seed", checked_at: generatedAt };
-        if(!copy.org) copy.org = { id:null, name: copy.title || null, legal_name:null, homepage: copy.link?.url || null, country:null, verified:false };
-        if(!copy.replace_policy) copy.replace_policy = { mode:"bank-first", fallback:"seed", locked:false };
-        return copy;
-      });
-      outItems.push(...chosen, ...filler);
-    }else{
-      outItems.push(...chosen);
-    }
-  });
+  // 🔥 NGO는 seed 절대 금지 (핵심 수정)
+  if(k === "donation-ngo"){
+    outItems.push(...chosen);
+    return;
+  }
 
-  // Build sections output: prefer seed sections, but normalize required fields
+  // 2. 부족하면 seed 채움 (NGO 제외)
+  if(chosen.length < limit){
+    const need = limit - chosen.length;
+
+    const filler = (seedByKey[k] || []).slice(0, need).map((s)=>{
+      const copy = JSON.parse(JSON.stringify(s));
+
+      copy.psom_key = k;
+      copy.section_category = k;
+      copy.category = isValidCategoryKey(copy.category)
+        ? copy.category
+        : categoryFromSection(k);
+
+      copy.meta = copy.meta || {};
+      copy.meta.source = copy.meta.source || "seed";
+      copy.meta.replaceable = true;
+      copy.meta.updated_at = generatedAt;
+
+      if(!copy.bank_ref) copy.bank_ref = { source:"search-bank", channel:"donation", record_id:null };
+      if(!copy.rank) copy.rank = { global:0, section:0, score:0 };
+      if(!copy.verify) copy.verify = { status:"pending", score:0, engine:"seed", checked_at: generatedAt };
+      if(!copy.org) copy.org = {
+        id:null,
+        name: copy.title || null,
+        legal_name:null,
+        homepage: copy.link?.url || null,
+        country:null,
+        verified:false
+      };
+      if(!copy.replace_policy) copy.replace_policy = { mode:"bank-first", fallback:"seed", locked:false };
+      if(!copy.psom_mapping) copy.psom_mapping = {
+        page:"donation",
+        section:k,
+        category:copy.category,
+        type:null,
+        keywords:[]
+      };
+
+      return copy;
+    });
+
+    outItems.push(...chosen, ...filler);
+  }else{
+    outItems.push(...chosen);
+  }
+});
+
   const outSections = SECTION_KEYS.map(k=>{
     const seedS = seedSections.find(s=>s && s.psom_key===k) || {};
     return {
@@ -694,12 +774,11 @@ function buildSnapshot({ seed, psomList, bank, optional }){
     };
   });
 
-  // Compose snapshot meta/policy/taxonomy
   const out = {
     meta:{
       schema:"donation.snapshot.enterprise.v7",
       generated_at: generatedAt,
-      producer:"donation-snapshot-builder.enterprise.v8",
+      producer:"donation-snapshot-builder.enterprise.v8.fixed",
       mode:"bank-first-seed-fallback",
       version: 7,
       builder_version: 8,
@@ -714,8 +793,7 @@ function buildSnapshot({ seed, psomList, bank, optional }){
     items: outItems
   };
 
-  // Ensure long-term policy scaffolds exist (do not overwrite if seed already has them)
-  out.policy = out.policy && typeof out.policy==="object" ? out.policy : {};
+  out.policy = out.policy && typeof out.policy === "object" ? out.policy : {};
   if(!out.policy.replace){
     out.policy.replace = { priority:["bank","insight","seed"], fallback:"seed", merge:"rank-first" };
   }
@@ -736,26 +814,20 @@ function buildSnapshot({ seed, psomList, bank, optional }){
    Netlify Handler
 ========================= */
 exports.handler = async function(){
-
   const seed = loadSeedSnapshot();
   const psomList = loadPSOM();
-
   const bank = loadSearchBank();
 
-  // Optional future sources (safe if missing)
   const optional = {
-    // these are only loaded if present as JSON files in /data
     "maru-global-insight.snapshot.json": loadOptional("maru-global-insight.snapshot.json"),
     "maru-search.snapshot.json": loadOptional("maru-search.snapshot.json")
   };
 
-  // If no bank and no optional items, return seed 그대로
   const hasOptionalItems = Object.values(optional).some(v => v && Array.isArray(v.items) && v.items.length);
   if(!bank && !hasOptionalItems){
     return ok(seed);
   }
 
   const snap = buildSnapshot({ seed, psomList, bank, optional });
-
   return ok(snap);
 };
