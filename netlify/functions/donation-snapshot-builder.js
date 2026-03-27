@@ -700,65 +700,34 @@ function buildSnapshot({ seed, psomList, bank, optional }){
     }
   });
 
-  const outItems = [];
+const outItems = [];
+
 SECTION_KEYS.forEach(k=>{
   const limit = limits[k];
   const list = sortSection(grouped[k] || []);
 
-  // 1. 실제 데이터 먼저
+  // 실제 데이터만 사용 (seed 완전 제거)
   const chosen = list.slice(0, limit);
 
-  // 🔥 NGO는 seed 절대 금지 (핵심 수정)
-  if(k === "donation-ngo"){
-    outItems.push(...chosen);
-    return;
-  }
+  const normalized = chosen.map(item => ({
+    ...item,
 
-  // 2. 부족하면 seed 채움 (NGO 제외)
-  if(chosen.length < limit){
-    const need = limit - chosen.length;
+    // 필수 키 정리
+    psom_key: item.psom_key || k,
+    section_category: k,
+    category: item.category || k,
 
-    const filler = (seedByKey[k] || []).slice(0, need).map((s)=>{
-      const copy = JSON.parse(JSON.stringify(s));
+    // 구조 보정 (없으면 기본 구조 유지)
+    meta: item.meta || {},
+    org: item.org || {},
+    verify: item.verify || {},
+    rank: item.rank || {},
 
-      copy.psom_key = k;
-      copy.section_category = k;
-      copy.category = isValidCategoryKey(copy.category)
-        ? copy.category
-        : categoryFromSection(k);
+    // 이미지 (없어도 유지)
+    thumb: item.thumb ?? item.thumbnail ?? item.image ?? null
+  }));
 
-      copy.meta = copy.meta || {};
-      copy.meta.source = copy.meta.source || "seed";
-      copy.meta.replaceable = true;
-      copy.meta.updated_at = generatedAt;
-
-      if(!copy.bank_ref) copy.bank_ref = { source:"search-bank", channel:"donation", record_id:null };
-      if(!copy.rank) copy.rank = { global:0, section:0, score:0 };
-      if(!copy.verify) copy.verify = { status:"pending", score:0, engine:"seed", checked_at: generatedAt };
-      if(!copy.org) copy.org = {
-        id:null,
-        name: copy.title || null,
-        legal_name:null,
-        homepage: copy.link?.url || null,
-        country:null,
-        verified:false
-      };
-      if(!copy.replace_policy) copy.replace_policy = { mode:"bank-first", fallback:"seed", locked:false };
-      if(!copy.psom_mapping) copy.psom_mapping = {
-        page:"donation",
-        section:k,
-        category:copy.category,
-        type:null,
-        keywords:[]
-      };
-
-      return copy;
-    });
-
-    outItems.push(...chosen, ...filler);
-  }else{
-    outItems.push(...chosen);
-  }
+  outItems.push(...normalized);
 });
 
   const outSections = SECTION_KEYS.map(k=>{
