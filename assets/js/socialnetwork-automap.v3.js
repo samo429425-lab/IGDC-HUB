@@ -215,7 +215,7 @@
         const key = MAIN_SECTION_ORDER[i-1];
 
         // rowGrid 자체를 비우지 말고, 그 안의 실제 슬롯 컨테이너만 잡는다
-    const grid = qs('#rowGrid' + i + ' [data-psom-key="' + key + '"]');
+const grid = qs('#rowGrid' + i + ' [data-psom-key="' + key + '"]');
 
         if(!grid) continue;
 
