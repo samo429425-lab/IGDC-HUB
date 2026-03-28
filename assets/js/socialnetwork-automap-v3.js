@@ -62,18 +62,20 @@ function isRealItem(it){
   return false;
 }
 
-  function getSections(snapshot){
-  if(!snapshot) return null;
+ function getSections(snapshot){
+  if(!snapshot) return { main:{}, right:{} };
 
-  if(snapshot.sections){
-    return snapshot.sections;
+  if(snapshot.pages?.social){
+    return {
+      main: snapshot.pages.social.sections || {},
+      right: snapshot.pages.social.rightPanel || {}
+    };
   }
 
-  if(snapshot.pages?.social?.sections){
-    return snapshot.pages.social.sections;
-  }
-
-  return null;
+  return {
+    main: snapshot.sections || {},
+    right: snapshot.rightPanel || {}
+  };
 }
 
   async function loadSnapshot(){
@@ -259,8 +261,8 @@ function mountRightPanel(panel, items){
 
   let all = [];
 
-  Object.keys(sections).forEach(key=>{
-    const sec = sections[key];
+  Object.keys(sections.right || {}).forEach(key=>{
+    const sec = sections.right[key];
 
     const arr = Array.isArray(sec)
       ? sec
@@ -279,7 +281,19 @@ function mountRightPanel(panel, items){
   }
 
   async function run(){
+	  
     try{
+	  const MAIN_SECTION_ORDER = [
+      "social-youtube",
+      "social-instagram",
+      "social-tiktok",
+      "social-facebook",
+      "social-wechat",
+      "social-weibo",
+      "social-pinterest",
+      "social-reddit",
+      "social-twitter"
+];
       const snap = await loadSnapshot();
       const sections = getSections(snap);
       if(!sections) return;
@@ -288,10 +302,10 @@ function mountRightPanel(panel, items){
         const grid = getMainGridByRow(i);
         if(!grid) continue;
 
-        const key = grid.dataset.psomKey;
+        const key = MAIN_SECTION_ORDER[i - 1];
         if(!key) continue;
 
-        const items = sections[key] || [];
+        const items = sections.main?.[key] || [];
         mountMainRow(grid, items);
       }
 
