@@ -384,18 +384,8 @@ function handleDistributionSnapshot(bank) {
   if (!snapshot.pages.distribution) snapshot.pages.distribution = { sections: {} };
   if (!snapshot.pages.distribution.sections) snapshot.pages.distribution.sections = {};
 
+snapshot.pages.distribution.sections = {};
 const sections = snapshot.pages.distribution.sections;
-
-// distribution.snapshot.json 정본 기준으로 엔진 키 통일
-const DISTRIBUTION_SECTION_ALIASES = {
-  "distribution_1": "distribution-recommend",
-  "distribution_2": "distribution-new",
-  "distribution_3": "distribution-trending",
-  "distribution_4": "distribution-special",
-  "distribution_5": "distribution-sponsor",
-  "distribution_6": "distribution-others",
-  "distribution_7": "distribution-right"
-};
 
 const REQUIRED_SECTION_KEYS = [
   "distribution-recommend",
@@ -407,18 +397,8 @@ const REQUIRED_SECTION_KEYS = [
   "distribution-right"
 ];
 
-// 1) 기존 snapshot 안에 legacy key가 있으면 표준 key로 승격
-for (const [oldKey, newKey] of Object.entries(DISTRIBUTION_SECTION_ALIASES)) {
-  if (Array.isArray(sections[oldKey])) {
-    if (!Array.isArray(sections[newKey])) sections[newKey] = [];
-    sections[newKey] = sections[newKey].concat(sections[oldKey]);
-    delete sections[oldKey];
-  }
-}
-
-// 2) 표준 key는 모두 보장
 REQUIRED_SECTION_KEYS.forEach(key => {
-  if (!Array.isArray(sections[key])) sections[key] = [];
+  sections[key] = [];
 });
 
   function normalize(item) {
