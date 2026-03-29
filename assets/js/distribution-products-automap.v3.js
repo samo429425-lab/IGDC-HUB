@@ -11,7 +11,7 @@
   const SNAPSHOT_URL = '/data/distribution.snapshot.json';
 
   const LIMIT_MAIN = 100;
-  const LIMIT_RIGHT = 80;
+  const LIMIT_RIGHT = 100;
 
   const SECTION_MAP = [
     { key: 'distribution-recommend', selector: '[data-psom-key="distribution-recommend"]', limit: LIMIT_MAIN },
@@ -115,7 +115,19 @@
       const box = document.querySelector(cfg.selector);
       if (!box) return;
 
-      const raw = sections && sections[cfg.key];
+      const KEY_ALIAS = {
+  "distribution-recommend": "distribution_1",
+  "distribution-new": "distribution_2",
+  "distribution-trending": "distribution_3",
+  "distribution-special": "distribution_4",
+  "distribution-sponsor": "distribution_5",
+  "distribution-others": "distribution_6",
+  "distribution-right": "distribution_7"
+};
+
+      const raw =
+        (sections && sections[cfg.key]) ||
+        (sections && sections[KEY_ALIAS[cfg.key]]);
       const arr = Array.isArray(raw) ? raw : [];
       const limit = cfg.limit || LIMIT_MAIN;
 
