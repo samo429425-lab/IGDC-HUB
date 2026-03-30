@@ -545,7 +545,7 @@
   -ms-overflow-style: none;         /* IE/Edge scrollbar hidden */
   scrollbar-width: none;            /* Firefox scrollbar hidden */
   -webkit-overflow-scrolling: touch;/* iOS momentum scroll */
-  touch-action: pan-y;              /* touch scroll vertical */
+  touch-action: pan-x pan-y;              /* touch scroll vertical */
   overscroll-behavior: contain;     /* avoid page stealing wheel */
   pointer-events: auto;             /* ensure it catches events */
   position: relative;
@@ -570,7 +570,7 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
+  touch-action: pan-x pan-y;
   overscroll-behavior: contain;
   pointer-events: auto;
   position: relative;
@@ -1804,8 +1804,8 @@ section.shopping-section, section.shopping-section .shopping-rows {
       overflow-x: auto !important;
       overflow-y: hidden !important;
       -webkit-overflow-scrolling: touch !important;
-      scroll-snap-type: x mandatory !important;
-      touch-action: pan-x !important;              /* allow finger horizontal drag */
+      scroll-snap-type: x proximity !important;
+      touch-action: pan-x pan-y !important;              /* allow finger horizontal drag */
       overscroll-behavior-x: contain !important;  /* prevent viewport scroll hijack */
     }
 
@@ -1866,7 +1866,7 @@ section.shopping-section, section.shopping-section .shopping-rows {
     min-width: 25vw !important;
   }
   /* 강한 스냅은 유지하되 세로 제스처는 통과 */
-  .ad-panel[data-mobile-in-main="1"] .ad-scroll{ scroll-snap-type: x mandatory !important; }
+  .ad-panel[data-mobile-in-main="1"] .ad-scroll{ scroll-snap-type: x proximity !important; }
 }
 </style>
 <style id="vdrag-mobile-ad-sections-fix-20251028">
@@ -1875,7 +1875,7 @@ section.shopping-section, section.shopping-section .shopping-rows {
   .ad-panel .ad-section .ad-scroll{
     overflow-x: auto !important;
     overflow-y: hidden !important;
-    touch-action: pan-x !important;
+    touch-action: pan-x pan-y !important;
     -webkit-overflow-scrolling: touch !important;
   }
 
@@ -1954,8 +1954,8 @@ section.shopping-section, section.shopping-section .shopping-rows {
     overflow-x: auto !important;
     overflow-y: hidden !important;
     -webkit-overflow-scrolling: touch !important;
-    scroll-snap-type: x mandatory !important;
-    touch-action: pan-x !important;
+    scroll-snap-type: x proximity !important;
+    touch-action: pan-x pan-y !important;
     overscroll-behavior-x: contain !important;
   }
   /* Force the list to be horizontal, beating earlier !important column rules */
@@ -1985,6 +1985,20 @@ section.shopping-section, section.shopping-section .shopping-rows {
     display: block !important;
     object-fit: cover !important;
     aspect-ratio: 16/9 !important;
+  }
+}
+</style>
+<style id="final-mobile-scroll-fix">
+@media (max-width:1024px){
+  html body .ad-panel .ad-section .ad-scroll,
+  html body .ad-panel .ad-section .ad-list{
+    touch-action: pan-x pan-y !important;
+    -ms-touch-action: pan-x pan-y !important;
+    overscroll-behavior-y: auto !important;
+  }
+
+  html body .ad-panel .ad-section .ad-scroll{
+    scroll-snap-type: x proximity !important;
   }
 }
 </style>
