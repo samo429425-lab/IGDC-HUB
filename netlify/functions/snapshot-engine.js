@@ -322,12 +322,10 @@ function handleNetworkSnapshot(bank) {
   const snapshot = readJson(filePath) || {};
   const bankItems = Array.isArray(bank?.items) ? bank.items : [];
 
-  // 🔥 items 초기화
   if (!Array.isArray(snapshot.items)) snapshot.items = [];
 
   const NETWORK_LIMIT = 100;
 
-  // 🔥 기존 데이터 컷 (초과 제거)
   if (snapshot.items.length > NETWORK_LIMIT) {
     snapshot.items = snapshot.items.slice(0, NETWORK_LIMIT);
   }
@@ -340,8 +338,15 @@ function handleNetworkSnapshot(bank) {
 
   for (const item of bankItems) {
 
+    const rawKey =
+      item?.psom_key ||
+      item?.bind?.section ||
+      item?.category ||
+      item?.section ||
+      "";
+
+    if (rawKey !== "networkhub_right_panel") continue;
     if (count >= NETWORK_LIMIT) break;
-    if (!item?.tags?.includes("networkhub")) continue;
 
     const id = item.id || stableId(JSON.stringify(item));
     if (existingIds.has(id)) continue;
@@ -356,8 +361,9 @@ function handleNetworkSnapshot(bank) {
         item.thumbnail ||
         item.image ||
         "/assets/img/placeholder.png",
-      tags: Array.isArray(item.tags) ? item.tags : [],
-      psom_key: "networkhub",
+      psom_key: "networkhub_right_panel",
+      route: item.route || "distribution",
+      type: item.type || "product",
       priority: item.priority || 0
     });
 
