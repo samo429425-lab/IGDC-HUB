@@ -545,7 +545,7 @@
   -ms-overflow-style: none;         /* IE/Edge scrollbar hidden */
   scrollbar-width: none;            /* Firefox scrollbar hidden */
   -webkit-overflow-scrolling: touch;/* iOS momentum scroll */
-  touch-action: pan-y;              /* touch scroll vertical */
+  touch-action: pan-x pan-y;      /* touch scroll vertical */
   overscroll-behavior: contain;     /* avoid page stealing wheel */
   pointer-events: auto;             /* ensure it catches events */
   position: relative;
@@ -558,6 +558,7 @@
   gap: var(--ad-gap) !important;
   padding: 0 !important;
   margin: 0 !important;
+  width: max-content !important;
 }
 
 </style><style>
@@ -570,7 +571,7 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
+  touch-action: pan-x pan-y;
   overscroll-behavior: contain;
   pointer-events: auto;
   position: relative;
@@ -583,6 +584,7 @@
   gap: var(--ad-gap) !important;
   padding: 0 !important;
   margin: 0 !important;
+  width: max-content !important;
 }
 
 
@@ -1875,7 +1877,7 @@ section.shopping-section, section.shopping-section .shopping-rows {
   .ad-panel .ad-section .ad-scroll{
     overflow-x: auto !important;
     overflow-y: hidden !important;
-    touch-action: pan-x !important;
+    touch-action: pan-x pan-y !important;
     -webkit-overflow-scrolling: touch !important;
   }
 
@@ -1884,6 +1886,7 @@ section.shopping-section, section.shopping-section .shopping-rows {
     flex-direction: row !important;
     flex-wrap: nowrap !important;
     gap: 10px !important;
+    width: max-content !important;
   }
 
   .ad-panel .ad-section .ad-list > *{
@@ -3703,37 +3706,78 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <!-- removed stray text:  -->
 <script id="edge-autohide-mobile-js">
 (function(){
-  if (!matchMedia('(pointer:coarse)').matches) return;
-  const q=s=>document.querySelector(s);
-  const top=q('nav')||q('.topbar'), left=q('.sidebar'), right=q('.right-panel')||q('.ad-panel');
-  if(!q('.edge-top')) document.body.insertAdjacentHTML('beforeend','<div class="edge-top"></div><div class="edge-left"></div><div class="edge-right"></div>');
-  if(top) document.body.classList.add('hide-top'); if(left) document.body.classList.add('hide-left'); if(right) document.body.classList.add('hide-right');
-  const S=44; let drag=null,sx=0,sy=0,dx=0,dy=0;
-  function bind(sel,dir,showCls){
-    const edge=q(sel); if(!edge) return;
-    const down=e=>{const t=e.touches?e.touches[0]:e; drag=dir; sx=t.clientX; sy=t.clientY; dx=0; dy=0;
-      addEventListener('pointermove',move,{passive:true}); addEventListener('touchmove',move,{passive:true});
-      addEventListener('pointerup',up); addEventListener('touchend',up);
-    };
-    const move=e=>{const t=e.touches?e.touches[0]:e; dx=t.clientX-sx; dy=t.clientY-sy;
-      if(drag==='top'&&dy>8) document.body.classList.add(showCls);
-      if(drag==='left'&&dx>8) document.body.classList.add(showCls);
-      if(drag==='right'&&dx<-8) document.body.classList.add(showCls);
-    };
-    const up=()=>{const pass=(drag==='top'&&dy>S)||(drag==='left'&&dx>S)||(drag==='right'&&dx<-S);
-      if(!pass) document.body.classList.remove(showCls);
-      drag=null; removeEventListener('pointermove',move); removeEventListener('touchmove',move);
-      removeEventListener('pointerup',up); removeEventListener('touchend',up);
-    };
-    edge.addEventListener('pointerdown',down); edge.addEventListener('touchstart',down,{passive:true});
-    document.addEventListener('click',e=>{const p=(dir==='top'?top:dir==='left'?left:right); if(!p) return;
-      if(document.body.classList.contains(showCls)&&!p.contains(e.target)) document.body.classList.remove(showCls);
-    });
-    addEventListener('scroll',()=>{if(document.body.classList.contains(showCls)) document.body.classList.remove(showCls)},{passive:true});
+
+  // 🔥 모바일만 적용
+  if (!window.matchMedia('(pointer:coarse)').matches) return;
+
+  const q = s => document.querySelector(s);
+
+  const top   = q('nav') || q('.topbar');
+  const left  = q('.sidebar');
+  const right = q('.right-panel') || q('.ad-panel');
+
+  // 🔥 엣지 생성 (없을 때만)
+  if (!q('.edge-top')) {
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      '<div class="edge-top"></div><div class="edge-left"></div><div class="edge-right"></div>'
+    );
   }
-  if(top) bind('.edge-top','top','show-top');
-  if(left) bind('.edge-left','left','show-left');
-  if(right) bind('.edge-right','right','show-right');
+
+  // 🔥 기본 숨김
+  if (top)   document.body.classList.add('hide-top');
+  if (left)  document.body.classList.add('hide-left');
+  if (right) document.body.classList.add('hide-right');
+
+  const S = 44;
+  let drag = null;
+  let sx = 0, sy = 0;
+
+  function bind(sel, dir, showCls){
+
+    const edge = q(sel);
+    if (!edge) return;
+
+    edge.addEventListener('touchstart', e => {
+
+      const t = e.touches[0];
+      drag = dir;
+      sx = t.clientX;
+      sy = t.clientY;
+
+    }, { passive: true });
+
+    edge.addEventListener('touchend', e => {
+
+      if (!drag) return;
+
+      const t = e.changedTouches[0];
+      const dx = t.clientX - sx;
+      const dy = t.clientY - sy;
+
+      // 🔥 방향 판정만 하고 끝 (전역 move 없음)
+      if (drag === 'top' && Math.abs(dy) > 30 && dy > 0) {
+        document.body.classList.toggle(showCls);
+      }
+
+      if (drag === 'left' && Math.abs(dx) > 30 && dx > 0) {
+        document.body.classList.toggle(showCls);
+      }
+
+      if (drag === 'right' && Math.abs(dx) > 30 && dx < 0) {
+        document.body.classList.toggle(showCls);
+      }
+
+      drag = null;
+
+    });
+
+  }
+
+  bind('.edge-top', 'top', 'show-top');
+  bind('.edge-left', 'left', 'show-left');
+  bind('.edge-right', 'right', 'show-right');
+
 })();
 </script>
 <!-- removed stray text:  -->
