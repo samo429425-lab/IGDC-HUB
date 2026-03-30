@@ -3709,12 +3709,12 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   if(!q('.edge-top')) document.body.insertAdjacentHTML('beforeend','<div class="edge-top"></div><div class="edge-left"></div><div class="edge-right"></div>');
   if(top) document.body.classList.add('hide-top'); if(left) document.body.classList.add('hide-left'); if(right) document.body.classList.add('hide-right');
   const S=44; let drag=null,sx=0,sy=0,dx=0,dy=0;
-  function bind(sel,dir,showCls){
-    const edge=q(sel); if(!edge) return;
-    const down=e=>{const t=e.touches?e.touches[0]:e; drag=dir; sx=t.clientX; sy=t.clientY; dx=0; dy=0;
-      addEventListener('pointermove',move,{passive:true}); addEventListener('touchmove',move,{passive:true});
-      addEventListener('pointerup',up); addEventListener('touchend',up);
-    };
+ function bind(sel,dir,showCls){
+  const edge=q(sel); if(!edge) return;
+  const down=e=>{const t=e.touches?e.touches[0]:e; drag=dir; sx=t.clientX; sy=t.clientY; dx=0; dy=0;
+    addEventListener('pointermove',move,{passive:false}); addEventListener('touchmove',move,{passive:false});
+    addEventListener('pointerup',up); addEventListener('touchend',up);
+  };
     const move=e=>{const t=e.touches?e.touches[0]:e; dx=t.clientX-sx; dy=t.clientY-sy;
       if(drag==='top'&&dy>8) document.body.classList.add(showCls);
       if(drag==='left'&&dx>8) document.body.classList.add(showCls);
@@ -3961,7 +3961,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     var right = row.querySelector('.arrow-layer .row-arrow.right, .row-arrow.right');
     if(!track || (!left && !right)) return;
 
-    var STEP_FACTOR = 0.80; // 보이는 개수의 약 80%
+    var STEP_FACTOR = 8.0; 
     function stepCount(){
       var avg = avgItemWidth(track);
       var n = Math.floor((track.clientWidth * STEP_FACTOR) / Math.max(1, avg));
