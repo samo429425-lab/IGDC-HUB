@@ -4249,7 +4249,52 @@ window.addEventListener("message",function(ev){
   window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
 })();
 </script>
+<script>
+(function(){
+  function dragScroll(el){
+    let isDown=false, startX=0, scrollLeft=0;
 
+    el.addEventListener('mousedown', e=>{
+      isDown = true;
+      startX = e.pageX;
+      scrollLeft = el.scrollLeft;
+    });
+
+    el.addEventListener('mouseleave', ()=> isDown=false);
+    el.addEventListener('mouseup', ()=> isDown=false);
+
+    el.addEventListener('mousemove', e=>{
+      if(!isDown) return;
+      e.preventDefault();
+      const walk = (e.pageX - startX);
+      el.scrollLeft = scrollLeft - walk;
+    });
+
+    // 모바일
+    let touchStartX = 0;
+    el.addEventListener('touchstart', e=>{
+      touchStartX = e.touches[0].clientX;
+      scrollLeft = el.scrollLeft;
+    }, {passive:true});
+
+    el.addEventListener('touchmove', e=>{
+      const dx = e.touches[0].clientX - touchStartX;
+      el.scrollLeft = scrollLeft - dx;
+    }, {passive:true});
+  }
+
+  function init(){
+    document.querySelectorAll('.row-scroller, .thumb-scroller, .shop-scroller')
+      .forEach(dragScroll);
+  }
+
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
 <script id="igdc-unified-commerce-script">
 /*
  IGDC Unified Commerce Script
