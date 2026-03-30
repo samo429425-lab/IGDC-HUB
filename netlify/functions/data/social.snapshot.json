@@ -72073,16 +72073,16 @@
             }
           }
         ],
-        "socialnetwork": [
+        "rightPanel": [
           {
-            "id": "ph_socialnetwork_001",
+            "id": "ph_rightPanel_001",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -72147,14 +72147,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_002",
+            "id": "ph_rightPanel_002",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -72219,14 +72219,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_003",
+            "id": "ph_rightPanel_003",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -72291,14 +72291,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_004",
+            "id": "ph_rightPanel_004",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -72363,14 +72363,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_005",
+            "id": "ph_rightPanel_005",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -72435,14 +72435,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_006",
+            "id": "ph_rightPanel_006",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -72507,14 +72507,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_007",
+            "id": "ph_rightPanel_007",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -72579,14 +72579,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_008",
+            "id": "ph_rightPanel_008",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -72651,14 +72651,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_009",
+            "id": "ph_rightPanel_009",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -72723,14 +72723,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_010",
+            "id": "ph_rightPanel_010",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -72795,14 +72795,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_011",
+            "id": "ph_rightPanel_011",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -72867,14 +72867,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_012",
+            "id": "ph_rightPanel_012",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -72939,14 +72939,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_013",
+            "id": "ph_rightPanel_013",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -73011,14 +73011,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_014",
+            "id": "ph_rightPanel_014",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -73083,14 +73083,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_015",
+            "id": "ph_rightPanel_015",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -73155,14 +73155,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_016",
+            "id": "ph_rightPanel_016",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -73227,14 +73227,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_017",
+            "id": "ph_rightPanel_017",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -73299,14 +73299,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_018",
+            "id": "ph_rightPanel_018",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -73371,14 +73371,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_019",
+            "id": "ph_rightPanel_019",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -73443,14 +73443,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_020",
+            "id": "ph_rightPanel_020",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -73515,14 +73515,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_021",
+            "id": "ph_rightPanel_021",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -73587,14 +73587,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_022",
+            "id": "ph_rightPanel_022",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -73659,14 +73659,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_023",
+            "id": "ph_rightPanel_023",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -73731,14 +73731,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_024",
+            "id": "ph_rightPanel_024",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -73803,14 +73803,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_025",
+            "id": "ph_rightPanel_025",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -73875,14 +73875,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_026",
+            "id": "ph_rightPanel_026",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -73947,14 +73947,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_027",
+            "id": "ph_rightPanel_027",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -74019,14 +74019,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_028",
+            "id": "ph_rightPanel_028",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -74091,14 +74091,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_029",
+            "id": "ph_rightPanel_029",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -74163,14 +74163,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_030",
+            "id": "ph_rightPanel_030",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -74235,14 +74235,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_031",
+            "id": "ph_rightPanel_031",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -74307,14 +74307,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_032",
+            "id": "ph_rightPanel_032",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -74379,14 +74379,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_033",
+            "id": "ph_rightPanel_033",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -74451,14 +74451,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_034",
+            "id": "ph_rightPanel_034",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -74523,14 +74523,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_035",
+            "id": "ph_rightPanel_035",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -74595,14 +74595,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_036",
+            "id": "ph_rightPanel_036",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -74667,14 +74667,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_037",
+            "id": "ph_rightPanel_037",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -74739,14 +74739,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_038",
+            "id": "ph_rightPanel_038",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -74811,14 +74811,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_039",
+            "id": "ph_rightPanel_039",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -74883,14 +74883,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_040",
+            "id": "ph_rightPanel_040",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -74955,14 +74955,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_041",
+            "id": "ph_rightPanel_041",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -75027,14 +75027,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_042",
+            "id": "ph_rightPanel_042",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -75099,14 +75099,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_043",
+            "id": "ph_rightPanel_043",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -75171,14 +75171,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_044",
+            "id": "ph_rightPanel_044",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -75243,14 +75243,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_045",
+            "id": "ph_rightPanel_045",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -75315,14 +75315,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_046",
+            "id": "ph_rightPanel_046",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -75387,14 +75387,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_047",
+            "id": "ph_rightPanel_047",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -75459,14 +75459,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_048",
+            "id": "ph_rightPanel_048",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -75531,14 +75531,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_049",
+            "id": "ph_rightPanel_049",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -75603,14 +75603,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_050",
+            "id": "ph_rightPanel_050",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -75675,14 +75675,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_051",
+            "id": "ph_rightPanel_051",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -75747,14 +75747,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_052",
+            "id": "ph_rightPanel_052",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -75819,14 +75819,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_053",
+            "id": "ph_rightPanel_053",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -75891,14 +75891,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_054",
+            "id": "ph_rightPanel_054",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -75963,14 +75963,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_055",
+            "id": "ph_rightPanel_055",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -76035,14 +76035,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_056",
+            "id": "ph_rightPanel_056",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -76107,14 +76107,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_057",
+            "id": "ph_rightPanel_057",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -76179,14 +76179,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_058",
+            "id": "ph_rightPanel_058",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -76251,14 +76251,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_059",
+            "id": "ph_rightPanel_059",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -76323,14 +76323,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_060",
+            "id": "ph_rightPanel_060",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -76395,14 +76395,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_061",
+            "id": "ph_rightPanel_061",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -76467,14 +76467,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_062",
+            "id": "ph_rightPanel_062",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -76539,14 +76539,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_063",
+            "id": "ph_rightPanel_063",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -76611,14 +76611,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_064",
+            "id": "ph_rightPanel_064",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -76683,14 +76683,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_065",
+            "id": "ph_rightPanel_065",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -76755,14 +76755,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_066",
+            "id": "ph_rightPanel_066",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -76827,14 +76827,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_067",
+            "id": "ph_rightPanel_067",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -76899,14 +76899,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_068",
+            "id": "ph_rightPanel_068",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -76971,14 +76971,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_069",
+            "id": "ph_rightPanel_069",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -77043,14 +77043,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_070",
+            "id": "ph_rightPanel_070",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -77115,14 +77115,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_071",
+            "id": "ph_rightPanel_071",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -77187,14 +77187,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_072",
+            "id": "ph_rightPanel_072",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -77259,14 +77259,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_073",
+            "id": "ph_rightPanel_073",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -77331,14 +77331,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_074",
+            "id": "ph_rightPanel_074",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -77403,14 +77403,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_075",
+            "id": "ph_rightPanel_075",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -77475,14 +77475,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_076",
+            "id": "ph_rightPanel_076",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -77547,14 +77547,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_077",
+            "id": "ph_rightPanel_077",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -77619,14 +77619,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_078",
+            "id": "ph_rightPanel_078",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -77691,14 +77691,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_079",
+            "id": "ph_rightPanel_079",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -77763,14 +77763,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_080",
+            "id": "ph_rightPanel_080",
             "type": "placeholder",
             "title": "Loading…",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -77835,14 +77835,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_081",
+            "id": "ph_rightPanel_081",
             "type": "placeholder",
             "title": "Loading… 81",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -77907,14 +77907,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_082",
+            "id": "ph_rightPanel_082",
             "type": "placeholder",
             "title": "Loading… 83",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -77979,14 +77979,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_083",
+            "id": "ph_rightPanel_083",
             "type": "placeholder",
             "title": "Loading… 85",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -78051,14 +78051,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_084",
+            "id": "ph_rightPanel_084",
             "type": "placeholder",
             "title": "Loading… 87",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -78123,14 +78123,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_085",
+            "id": "ph_rightPanel_085",
             "type": "placeholder",
             "title": "Loading… 89",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -78195,14 +78195,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_086",
+            "id": "ph_rightPanel_086",
             "type": "placeholder",
             "title": "Loading… 91",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -78267,14 +78267,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_087",
+            "id": "ph_rightPanel_087",
             "type": "placeholder",
             "title": "Loading… 93",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -78339,14 +78339,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_088",
+            "id": "ph_rightPanel_088",
             "type": "placeholder",
             "title": "Loading… 95",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -78411,14 +78411,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_089",
+            "id": "ph_rightPanel_089",
             "type": "placeholder",
             "title": "Loading… 97",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -78483,14 +78483,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_090",
+            "id": "ph_rightPanel_090",
             "type": "placeholder",
             "title": "Loading… 99",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -78555,14 +78555,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_091",
+            "id": "ph_rightPanel_091",
             "type": "placeholder",
             "title": "Loading… 101",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -78627,14 +78627,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_092",
+            "id": "ph_rightPanel_092",
             "type": "placeholder",
             "title": "Loading… 103",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -78699,14 +78699,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_093",
+            "id": "ph_rightPanel_093",
             "type": "placeholder",
             "title": "Loading… 105",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -78771,14 +78771,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_094",
+            "id": "ph_rightPanel_094",
             "type": "placeholder",
             "title": "Loading… 107",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -78843,14 +78843,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_095",
+            "id": "ph_rightPanel_095",
             "type": "placeholder",
             "title": "Loading… 109",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -78915,14 +78915,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_096",
+            "id": "ph_rightPanel_096",
             "type": "placeholder",
             "title": "Loading… 111",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -78987,14 +78987,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_097",
+            "id": "ph_rightPanel_097",
             "type": "placeholder",
             "title": "Loading… 113",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -79059,14 +79059,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_098",
+            "id": "ph_rightPanel_098",
             "type": "placeholder",
             "title": "Loading… 115",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -79131,14 +79131,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_099",
+            "id": "ph_rightPanel_099",
             "type": "placeholder",
             "title": "Loading… 117",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
@@ -79203,14 +79203,14 @@
             }
           },
           {
-            "id": "ph_socialnetwork_100",
+            "id": "ph_rightPanel_100",
             "type": "placeholder",
             "title": "Loading… 119",
             "url": "#",
             "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "source": {
               "platform": "placeholder",
-              "section_key": "socialnetwork"
+              "section_key": "rightPanel"
             },
             "engagement": {
               "impressions": 0,
