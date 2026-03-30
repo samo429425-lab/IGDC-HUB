@@ -3706,78 +3706,37 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <!-- removed stray text:  -->
 <script id="edge-autohide-mobile-js">
 (function(){
-
-  // 🔥 모바일만 적용
-  if (!window.matchMedia('(pointer:coarse)').matches) return;
-
-  const q = s => document.querySelector(s);
-
-  const top   = q('nav') || q('.topbar');
-  const left  = q('.sidebar');
-  const right = q('.right-panel') || q('.ad-panel');
-
-  // 🔥 엣지 생성 (없을 때만)
-  if (!q('.edge-top')) {
-    document.body.insertAdjacentHTML(
-      'beforeend',
-      '<div class="edge-top"></div><div class="edge-left"></div><div class="edge-right"></div>'
-    );
-  }
-
-  // 🔥 기본 숨김
-  if (top)   document.body.classList.add('hide-top');
-  if (left)  document.body.classList.add('hide-left');
-  if (right) document.body.classList.add('hide-right');
-
-  const S = 44;
-  let drag = null;
-  let sx = 0, sy = 0;
-
-  function bind(sel, dir, showCls){
-
-    const edge = q(sel);
-    if (!edge) return;
-
-    edge.addEventListener('touchstart', e => {
-
-      const t = e.touches[0];
-      drag = dir;
-      sx = t.clientX;
-      sy = t.clientY;
-
-    }, { passive: true });
-
-    edge.addEventListener('touchend', e => {
-
-      if (!drag) return;
-
-      const t = e.changedTouches[0];
-      const dx = t.clientX - sx;
-      const dy = t.clientY - sy;
-
-      // 🔥 방향 판정만 하고 끝 (전역 move 없음)
-      if (drag === 'top' && Math.abs(dy) > 30 && dy > 0) {
-        document.body.classList.toggle(showCls);
-      }
-
-      if (drag === 'left' && Math.abs(dx) > 30 && dx > 0) {
-        document.body.classList.toggle(showCls);
-      }
-
-      if (drag === 'right' && Math.abs(dx) > 30 && dx < 0) {
-        document.body.classList.toggle(showCls);
-      }
-
-      drag = null;
-
+  if (!matchMedia('(pointer:coarse)').matches) return;
+  const q=s=>document.querySelector(s);
+  const top=q('nav')||q('.topbar'), left=q('.sidebar'), right=q('.right-panel')||q('.ad-panel');
+  if(!q('.edge-top')) document.body.insertAdjacentHTML('beforeend','<div class="edge-top"></div><div class="edge-left"></div><div class="edge-right"></div>');
+  if(top) document.body.classList.add('hide-top'); if(left) document.body.classList.add('hide-left'); if(right) document.body.classList.add('hide-right');
+  const S=44; let drag=null,sx=0,sy=0,dx=0,dy=0;
+  function bind(sel,dir,showCls){
+    const edge=q(sel); if(!edge) return;
+    const down=e=>{const t=e.touches?e.touches[0]:e; drag=dir; sx=t.clientX; sy=t.clientY; dx=0; dy=0;
+      addEventListener('pointermove',move,{passive:true}); addEventListener('touchmove',move,{passive:true});
+      addEventListener('pointerup',up); addEventListener('touchend',up);
+    };
+    const move=e=>{const t=e.touches?e.touches[0]:e; dx=t.clientX-sx; dy=t.clientY-sy;
+      if(drag==='top'&&dy>8) document.body.classList.add(showCls);
+      if(drag==='left'&&dx>8) document.body.classList.add(showCls);
+      if(drag==='right'&&dx<-8) document.body.classList.add(showCls);
+    };
+    const up=()=>{const pass=(drag==='top'&&dy>S)||(drag==='left'&&dx>S)||(drag==='right'&&dx<-S);
+      if(!pass) document.body.classList.remove(showCls);
+      drag=null; removeEventListener('pointermove',move); removeEventListener('touchmove',move);
+      removeEventListener('pointerup',up); removeEventListener('touchend',up);
+    };
+    edge.addEventListener('pointerdown',down); edge.addEventListener('touchstart',down,{passive:true});
+    document.addEventListener('click',e=>{const p=(dir==='top'?top:dir==='left'?left:right); if(!p) return;
+      if(document.body.classList.contains(showCls)&&!p.contains(e.target)) document.body.classList.remove(showCls);
     });
-
+    addEventListener('scroll',()=>{if(document.body.classList.contains(showCls)) document.body.classList.remove(showCls)},{passive:true});
   }
-
-  bind('.edge-top', 'top', 'show-top');
-  bind('.edge-left', 'left', 'show-left');
-  bind('.edge-right', 'right', 'show-right');
-
+  if(top) bind('.edge-top','top','show-top');
+  if(left) bind('.edge-left','left','show-left');
+  if(right) bind('.edge-right','right','show-right');
 })();
 </script>
 <!-- removed stray text:  -->
@@ -4249,52 +4208,7 @@ window.addEventListener("message",function(ev){
   window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
 })();
 </script>
-<script>
-(function(){
-  function dragScroll(el){
-    let isDown=false, startX=0, scrollLeft=0;
 
-    el.addEventListener('mousedown', e=>{
-      isDown = true;
-      startX = e.pageX;
-      scrollLeft = el.scrollLeft;
-    });
-
-    el.addEventListener('mouseleave', ()=> isDown=false);
-    el.addEventListener('mouseup', ()=> isDown=false);
-
-    el.addEventListener('mousemove', e=>{
-      if(!isDown) return;
-      e.preventDefault();
-      const walk = (e.pageX - startX);
-      el.scrollLeft = scrollLeft - walk;
-    });
-
-    // 모바일
-    let touchStartX = 0;
-    el.addEventListener('touchstart', e=>{
-      touchStartX = e.touches[0].clientX;
-      scrollLeft = el.scrollLeft;
-    }, {passive:true});
-
-    el.addEventListener('touchmove', e=>{
-      const dx = e.touches[0].clientX - touchStartX;
-      el.scrollLeft = scrollLeft - dx;
-    }, {passive:true});
-  }
-
-  function init(){
-    document.querySelectorAll('.row-scroller, .thumb-scroller, .shop-scroller')
-      .forEach(dragScroll);
-  }
-
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-})();
-</script>
 <script id="igdc-unified-commerce-script">
 /*
  IGDC Unified Commerce Script
