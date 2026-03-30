@@ -1870,49 +1870,24 @@ section.shopping-section, section.shopping-section .shopping-rows {
 }
 </style>
 <style id="vdrag-mobile-ad-sections-fix-20251028">
-/* Mobile home right-panel sections: force horizontal drag for sections 6/7/8 */
+/* Precise fix: enable vertical dragging/scroll on the 3 migrated sections */
 @media (max-width: 1024px){
+  /* Allow Y scroll on the wrapper and its ancestors */
+  .ad-panel .ad-section, 
+  .ad-panel .ad-section .ad-scroll{
+    touch-action: pan-y !important;
+    -ms-touch-action: pan-y !important;
+    pointer-events: auto !important;
+    overscroll-behavior: contain !important;
+  }
+  /* Prevent horizontal-only override from winning in this range */
+  html body .ad-panel .ad-section .ad-scroll{
+    overflow-y: auto !important;
+  }
+  /* Make the whole block draggable to scroll the page (fallback) */
   .ad-panel .ad-section{
     user-select: none;
     -webkit-user-drag: none;
-    overflow: hidden !important;
-  }
-
-  .ad-panel .ad-section .ad-scroll{
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    touch-action: pan-x !important;
-    -ms-touch-action: pan-x !important;
-    pointer-events: auto !important;
-    overscroll-behavior-x: contain !important;
-    overscroll-behavior-y: none !important;
-    -webkit-overflow-scrolling: touch !important;
-    scroll-snap-type: x mandatory !important;
-  }
-
-  .ad-panel .ad-section .ad-list{
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    gap: 10px !important;
-    width: max-content !important;
-  }
-
-  .ad-panel .ad-section .ad-list > .ad-box,
-  .ad-panel .ad-section .ad-list > .thumb-card{
-    flex: 0 0 47vw !important;
-    min-width: 47vw !important;
-    max-width: 47vw !important;
-    scroll-snap-align: start !important;
-  }
-}
-
-@media (max-width: 1024px) and (orientation: landscape){
-  .ad-panel .ad-section .ad-list > .ad-box,
-  .ad-panel .ad-section .ad-list > .thumb-card{
-    flex: 0 0 47vw !important;
-    min-width: 47vw !important;
-    max-width: 47vw !important;
   }
 }
 </style>
