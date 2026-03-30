@@ -1870,25 +1870,27 @@ section.shopping-section, section.shopping-section .shopping-rows {
 }
 </style>
 <style id="vdrag-mobile-ad-sections-fix-20251028">
-/* Precise fix: enable vertical dragging/scroll on the 3 migrated sections */
 @media (max-width: 1024px){
-  /* Allow Y scroll on the wrapper and its ancestors */
-  .ad-panel .ad-section, 
+
   .ad-panel .ad-section .ad-scroll{
-    touch-action: pan-y !important;
-    -ms-touch-action: pan-y !important;
-    pointer-events: auto !important;
-    overscroll-behavior: contain !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    touch-action: pan-x !important;
+    -webkit-overflow-scrolling: touch !important;
   }
-  /* Prevent horizontal-only override from winning in this range */
-  html body .ad-panel .ad-section .ad-scroll{
-    overflow-y: auto !important;
+
+  .ad-panel .ad-section .ad-list{
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 10px !important;
   }
-  /* Make the whole block draggable to scroll the page (fallback) */
-  .ad-panel .ad-section{
-    user-select: none;
-    -webkit-user-drag: none;
+
+  .ad-panel .ad-section .ad-list > *{
+    flex: 0 0 47vw !important;
+    min-width: 47vw !important;
   }
+
 }
 </style>
 <style id="mobile-tidy-fix2">
@@ -4095,35 +4097,7 @@ window.addEventListener("message",function(ev){
   }catch(e){}
 })();
 </script>
-<script id="vdrag-3sections-20251028">
-(function(){
-  const MIN_DRAG = 6;
-  function bind(el){
-    if(!el || el.__vdragBound) return;
-    el.__vdragBound = true;
-    let dragging=false, y0=0, moved=0;
-    const down = e => { dragging=true; moved=0; y0=(e.touches?e.touches[0].clientY:e.clientY); };
-    const move = e => {
-      if(!dragging) return;
-      const y=(e.touches?e.touches[0].clientY:e.clientY);
-      const dy=y-y0; moved+=Math.abs(dy);
-      window.scrollBy(0,-dy);
-      y0=y; e.preventDefault();
-    };
-    const up = ()=> dragging=false;
-    el.addEventListener('mousedown', down, {passive:false});
-    el.addEventListener('mousemove', move, {passive:false});
-    window.addEventListener('mouseup', up, {passive:true});
-    el.addEventListener('touchstart', down, {passive:false});
-    el.addEventListener('touchmove', move, {passive:false});
-    el.addEventListener('touchend', up, {passive:true});
-    el.addEventListener('click', evt=>{ if(moved>MIN_DRAG) evt.preventDefault(); }, true);
-  }
-  document.querySelectorAll('.ad-panel .ad-section').forEach(bind);
-  const mo=new MutationObserver(m=>m.forEach(x=>x.addedNodes&&x.addedNodes.forEach(n=>{ if(n.nodeType===1) n.matches&&n.matches('.ad-panel .ad-section')&&bind(n); })));
-  mo.observe(document.body,{childList:true,subtree:true});
-})();
-</script>
+
 <script id="igtc-checkout-trigger-v1">
 (function(){
   if (window.__IGTC_CHECKOUT_READY__) return;
