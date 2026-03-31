@@ -8,14 +8,16 @@
 (function () {
   'use strict';
 
-  if (window.__SOCIALNETWORK_AUTOMAP_V3_FIXED__) return;
-  window.__SOCIALNETWORK_AUTOMAP_V3_FIXED__ = true;
+ // --- bootstrap guard ---
+ if (window.__SOCIALNETWORK_AUTOMAP_V3_FIXED__ === true) return;
+ window.__SOCIALNETWORK_AUTOMAP_V3_FIXED__ = true;
 
-  const SNAPSHOT_URL = '/data/social.snapshot.json';
-  const MAIN_ROWS = 9;
-  const MAIN_LIMIT = 100;
-  const RIGHT_LIMIT = 100;
-  const RIGHT_SECTION_KEY = 'rightPanel';
+ // --- config ---
+ const SNAPSHOT_URL = "/data/social.snapshot.json";
+ const MAIN_ROWS = 9;
+ const MAIN_LIMIT = 100;
+ const RIGHT_LIMIT = 100;
+ const RIGHT_SECTION_KEY = "rightPanel";
 
   function qs(sel, root){ return (root || document).querySelector(sel); }
   function qsa(sel, root){ return Array.from((root || document).querySelectorAll(sel)); }
