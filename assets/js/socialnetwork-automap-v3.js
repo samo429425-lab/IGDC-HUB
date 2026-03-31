@@ -65,7 +65,7 @@ function isRealItem(it){
 function getSections(snapshot){
   if(!snapshot) return { main:{}, right:{} };
 
-  const social = snapshot.pages?.social || {};
+  const social = snapshot.pages?.social || snapshot.social || {};
 
   return {
     main: social.sections || {},
