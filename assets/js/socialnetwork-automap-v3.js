@@ -15,7 +15,7 @@
   const MAIN_ROWS = 9;
   const MAIN_LIMIT = 100;
   const RIGHT_LIMIT = 100;
-  const RIGHT_SECTION_KEY = 'socialnetwork';
+  const RIGHT_SECTION_KEY = 'rightPanel';
 
   function qs(sel, root){ return (root || document).querySelector(sel); }
   function qsa(sel, root){ return Array.from((root || document).querySelectorAll(sel)); }
@@ -65,16 +65,20 @@ function isRealItem(it){
  function getSections(snapshot){
   if(!snapshot) return { main:{}, right:{} };
 
-  if(snapshot.pages?.social){
-    return {
-      main: snapshot.pages.social.sections || {},
-      right: snapshot.pages.social.rightPanel || {}
-    };
-  }
+  const social = snapshot.pages?.social || {};
 
   return {
-    main: snapshot.sections || {},
-    right: snapshot.rightPanel || {}
+    // ✅ 메인: 반드시 sections 기준
+    main: social.sections || {},
+
+    // ✅ 우측: sections 안에 있으면 그걸 우선 사용
+    right: (
+      social.sections?.rightPanel
+        ? { rightPanel: social.sections.rightPanel }
+        : (social.rightPanel
+            ? { rightPanel: social.rightPanel }
+            : {})
+    )
   };
 }
 
@@ -259,19 +263,13 @@ function mountRightPanel(panel, items){
  function collectRightItems(sections){
   if(!sections || typeof sections !== 'object') return [];
 
-  let all = [];
+  const sec = sections.right?.rightPanel;
 
-  Object.keys(sections.right || {}).forEach(key=>{
-    const sec = sections.right[key];
+  if(!sec) return [];
 
-    const arr = Array.isArray(sec)
-      ? sec
-      : (Array.isArray(sec?.items) ? sec.items : []);
-
-    all = all.concat(arr);
-  });
-
-  return all;
+  return Array.isArray(sec)
+    ? sec
+    : (Array.isArray(sec?.items) ? sec.items : []);
 }
 
   function getMainGridByRow(i){
@@ -283,31 +281,22 @@ function mountRightPanel(panel, items){
   async function run(){
 	  
     try{
-	  const MAIN_SECTION_ORDER = [
-      "social-youtube",
-      "social-instagram",
-      "social-tiktok",
-      "social-facebook",
-      "social-wechat",
-      "social-weibo",
-      "social-pinterest",
-      "social-reddit",
-      "social-twitter"
-];
       const snap = await loadSnapshot();
       const sections = getSections(snap);
       if(!sections) return;
 
-      for(let i=1;i<=MAIN_ROWS;i++){
-        const grid = getMainGridByRow(i);
-        if(!grid) continue;
+const grids = document.querySelectorAll('[data-psom-key]');
 
-        const key = MAIN_SECTION_ORDER[i - 1];
-        if(!key) continue;
+grids.forEach(grid => {
+  const key = grid.getAttribute('data-psom-key');
+  if(!key) return;
 
-        const items = sections.main?.[key] || [];
-        mountMainRow(grid, items);
-      }
+  // social-maru는 현재 제외
+  if(key === 'social-maru') return;
+
+  const items = sections.main?.[key] || [];
+  mountMainRow(grid, items);
+});
 
       const rightPanel = qs('#rightAutoPanel');
       if(rightPanel){
