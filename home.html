@@ -1910,7 +1910,6 @@ section.shopping-section, section.shopping-section .shopping-rows {
 
   /* make sure the scroller is actually the x-axis container (to ensure above works) */
   .ad-panel .ad-section .ad-scroll{ overflow-x: auto !important; overflow-y: hidden !important; }
-  .ad-panel .ad-section .ad-list{ overflow-x: auto !important; overflow-y: hidden !important; }
 
   /* ---- B. Remove the one-card-tall vertical gap between sections ---- */
   /* Neutralize margins/paddings/min-heights on all relevant wrappers */
@@ -1969,7 +1968,7 @@ section.shopping-section, section.shopping-section .shopping-rows {
   /* Each child acts as a card with snap and width */
   html body .ad-panel .ad-section .ad-list > *{
     scroll-snap-align: start !important;
-    min-width: 92vw !important;
+    min-width: 47vw !important;
     box-sizing: border-box !important;
   }
 }
