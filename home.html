@@ -331,10 +331,21 @@
 }
 .ad-panel .ad-box img, .ad-panel .ad-box .thumb{ width:100%; height:100%; object-fit:cover; }
 
-/* === FIX: stack sections; no internal scroll; 3 cards visible, next title below === */
+/* === MOBILE SCROLL FINAL FIX === */
 .ad-panel .ad-scroll{
-  overflow: visible !important;
-  max-height: none !important;
+  display:flex !important;
+  flex-direction:row !important;
+  flex-wrap:nowrap !important;
+
+  overflow-x:auto !important;
+  overflow-y:hidden !important;
+
+  gap:12px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ad-panel .ad-scroll > *{
+  flex:0 0 92vw !important;
 }
 .ad-panel .ad-scroll::-webkit-scrollbar{ display:none !important; } /* no effect but safe */
 
@@ -2914,7 +2925,7 @@ function reorderRow(rowId){
         const list = sec.querySelector('.ad-list');
         if(list){
           list.innerHTML = '';
-         data.slice(0,30).forEach(item=>{
+         data.slice(0,80).forEach(item=>{
          list.appendChild(buildCard(item));
     });
 
@@ -2924,6 +2935,7 @@ function reorderRow(rowId){
   }
 
   function startRotator(sec){
+   if (window.matchMedia('(max-width:1024px)').matches) return;
     const list = sec.querySelector('.ad-list');
     if(!list) return;
     const items = Array.from(list.children).filter(el => el.classList && el.classList.contains('ad-box'));
@@ -2948,7 +2960,9 @@ function reorderRow(rowId){
     const sections = document.querySelectorAll('.ad-panel .ad-section');
     for(const sec of sections){
       await hydrateSection(sec); // optional, fast-fail
-      startRotator(sec);
+      if (!window.matchMedia('(max-width:1024px)').matches) {
+  startRotator(sec);
+}
     }
   });
 })();
