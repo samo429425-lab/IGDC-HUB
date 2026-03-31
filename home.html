@@ -331,21 +331,10 @@
 }
 .ad-panel .ad-box img, .ad-panel .ad-box .thumb{ width:100%; height:100%; object-fit:cover; }
 
-/* === MOBILE SCROLL FINAL FIX === */
+/* === FIX: stack sections; no internal scroll; 3 cards visible, next title below === */
 .ad-panel .ad-scroll{
-  display:flex !important;
-  flex-direction:row !important;
-  flex-wrap:nowrap !important;
-
-  overflow-x:auto !important;
-  overflow-y:hidden !important;
-
-  gap:12px;
-  -webkit-overflow-scrolling: touch;
-}
-
-.ad-panel .ad-scroll > *{
-  flex:0 0 92vw !important;
+  overflow: visible !important;
+  max-height: none !important;
 }
 .ad-panel .ad-scroll::-webkit-scrollbar{ display:none !important; } /* no effect but safe */
 
