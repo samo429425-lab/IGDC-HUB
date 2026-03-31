@@ -62,16 +62,14 @@ function isRealItem(it){
   return false;
 }
 
- function getSections(snapshot){
+function getSections(snapshot){
   if(!snapshot) return { main:{}, right:{} };
 
   const social = snapshot.pages?.social || {};
 
   return {
-    // ✅ 메인: 반드시 sections 기준
     main: social.sections || {},
 
-    // ✅ 우측: sections 안에 있으면 그걸 우선 사용
     right: (
       social.sections?.rightPanel
         ? { rightPanel: social.sections.rightPanel }
