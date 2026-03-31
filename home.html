@@ -1026,43 +1026,7 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
 </style>
 <link href="/assets/css/thumbs.standard.css?v=20250914" rel="stylesheet"/>
 <!-- Mobile Optimization Patch v1 -->
-<style id="igdc-mobile-patch">
-@media (max-width: 768px){
-  .sidebar,
-  .right,
-  .right-panel,
-  .ad-panel,
-  .bottom-nav,
-  .bottom-bar,
-  .mobile-dock { display:none !important; }
 
-  .container,
-  .layout { display:block !important; padding:0 !important; margin:0 !important; }
-  .main, .main-content, main, .content-area {
-    max-width:none !important;
-    width:100% !important;
-    margin:0 !important;
-    padding:16px !important;
-    box-shadow:none !important;
-  }
-
-  .scroll-btn, .btn-scroll-left, .btn-scroll-right { display:none !important; }
-  .scroll-wrapper { padding:0 !important; }
-
-  .grid {
-    display:grid !important;
-    grid-template-columns:repeat(2, minmax(0,1fr)) !important;
-    gap:10px 10px !important;
-  }
-}
-@media (max-width: 768px) and (orientation: landscape){
-  .grid { grid-template-columns:repeat(3, minmax(0,1fr)) !important; }
-}
-@media (max-width: 768px){
-  nav a { padding:8px 10px !important; font-size:.95rem !important; }
-  .language-select { top:10px !important; right:12px !important; transform:none !important; }
-}
-</style>
 <script defer="" id="igdc-mobile-qna">
 (function(){
   var isMobile = matchMedia("(max-width:768px)").matches;
@@ -1098,44 +1062,7 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   hdr.appendChild(btn);
 })();
 </script>
-<!-- Mobile Ad Drawer v3 (push layout: stage shifts left while right drawer appears) -->
-<style id="igdc-mobile-ad-drawer">
-@media (max-width:768px){
-  :root{ --adw: min(86vw, 320px); }
-  #ad-stage{ transition: transform .25s ease; }
-  html.ad-open #ad-stage{ transform: translateX(calc(-1 * var(--adw))); }
 
-  #ad-drawer{
-    position:fixed; top:0; right:0; height:100vh; width:var(--adw);
-    background:#fff; box-shadow:-4px 0 16px rgba(0,0,0,.18);
-    transform:translateX(100%); transition:transform .25s ease;
-    z-index:99998; display:flex; flex-direction:column;
-  }
-  #ad-drawer.open{ transform:translateX(0); }
-
-  #ad-drawer-header{
-    padding:10px 12px; border-bottom:1px solid rgba(0,0,0,.06);
-    display:flex; align-items:center; justify-content:space-between;
-  }
-  #ad-drawer-title{ font-weight:800; }
-  #ad-drawer-close{ border:none; background:transparent; font-size:22px; line-height:1; padding:6px; }
-  #ad-drawer-body{ flex:1; overflow:auto; -webkit-overflow-scrolling:touch; padding:10px; }
-
-  #ad-backdrop{
-    position:fixed; inset:0; background:rgba(0,0,0,.15);
-    opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:99997;
-  }
-  #ad-backdrop.show{ opacity:1; pointer-events:auto; }
-
-  #ad-tab{
-    position:fixed; top:50%; right:0; transform:translate(42%, -50%) rotate(-90deg);
-    background:#004080; color:#fff; border:1px solid rgba(0,0,0,.1); border-radius:10px;
-    padding:6px 10px; font-weight:800; letter-spacing:.02em; z-index:99996;
-    box-shadow:0 2px 8px rgba(0,0,0,.25);
-  }
-  .ad-panel{ display:none !important; }
-}
-</style>
 <style id="notice-hero-style">
 /* === Notice Hero (정리된 최종 버전) === */
 .notice-hero {
@@ -1356,45 +1283,7 @@ section.shopping-section, section.shopping-section .shopping-rows {
 <style id="news-hotfix-20250926-v18-stamplabel">
 .news-section .continent-tag .label{ letter-spacing:.04em; }
 </style>
-<style id="igdc-home-mobile-hotfix-20251009">
-  /* 1) Mobile: hide any shopping sections that accidentally render *after* the footer */
-  @media (max-width: 768px){
-    footer ~ .shopping-section,
-    footer ~ section.shopping-section,
-    body > footer ~ .shopping-section { display: none !important; }
-  }
 
-  /* 2) Right panel as swipe drawer (mobile only) */
-  @media (max-width: 768px){
-    :root{ --drawerW: min(86vw, 320px); }
-
-    /* Ensure the original .ad-panel content is not displayed inline on mobile */
-    .ad-panel { display: none !important; }
-
-    /* Drawer container (we will move .ad-panel into this) */
-    #ad-drawer-right{
-      position: fixed; top: 0; right: 0; height: 100vh; width: var(--drawerW);
-      background: #ffffff; transform: translateX(100%); transition: transform .25s ease;
-      z-index: 2147483000; box-shadow: -4px 0 16px rgba(0,0,0,.18); overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-    html.pv-open-right #ad-drawer-right{ transform: translateX(0); }
-
-    /* Backdrop */
-    #ad-backdrop-right{
-      position: fixed; inset: 0; background: rgba(0,0,0,.35);
-      opacity: 0; pointer-events: none; transition: opacity .2s ease; z-index: 2147482999;
-    }
-    html.pv-open-right #ad-backdrop-right{ opacity: 1; pointer-events: auto; }
-
-    /* Edge hotspot */
-    #edge-right-hotspot{
-      position: fixed; top: 0; right: 0; width: 16px; height: 100vh; z-index: 2147483001;
-      /* transparent; acts as swipe area */
-    }
-    html.pv-open-right #edge-right-hotspot{ right: var(--drawerW); }
-  }
-</style>
 <style>
 /* Others (desktop & landscape): keep original behavior */
 @media (orientation:landscape), (min-width:901px), (pointer:fine){
