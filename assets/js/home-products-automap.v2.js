@@ -331,51 +331,24 @@
 function bindIncremental(target, items) {
 
   const isRight = target.isRight;
-  const limit = isRight ? RIGHT_LIMIT : MAIN_LIMIT;
 
-  let offset = 0;
+  // 🔥 슬롯 개수 고정 (핵심)
+  const SLOT_LIMIT = isRight ? 5 : 5;
 
-  function renderMore() {
-    const end = Math.min(offset + 20, limit, items.length); // 🔥 강제 확장
-    const frag = document.createDocumentFragment();
-
-    for (let i = offset; i < end; i++) {
-      const it = items[i];
-      frag.appendChild(isRight ? buildRightCard(it) : buildMainCard(it));
-    }
-
-    target.list.appendChild(frag);
-    offset = end;
-  }
+  const list = items.slice(0, SLOT_LIMIT);
 
   target.list.innerHTML = '';
 
-  // 🔥 핵심: 초기 한번에 많이 뿌림
-  renderMore();
-  renderMore();  // 2번 실행 → 최소 10~40개 확보
+  const frag = document.createDocumentFragment();
 
-  // 🔥 모바일 대응: 강제 전체 렌더
-  if (window.innerWidth <= 768) {
-    while (offset < items.length && offset < limit) {
-      renderMore();
-    }
-    return;
+  for (let i = 0; i < list.length; i++) {
+    const it = list[i];
+    frag.appendChild(isRight ? buildRightCard(it) : buildMainCard(it));
   }
 
-  const scroller = target.scroller;
-  if (!scroller) return;
+  target.list.appendChild(frag);
 
-  scroller.addEventListener('scroll', function () {
-
-    if (offset >= items.length || offset >= limit) return;
-
-    const nearEnd = isRight
-      ? (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 20)
-      : (scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 20);
-
-    if (nearEnd) renderMore();
-
-  }, { passive: true });
+  // ❌ 스크롤 / 추가 렌더 완전 제거
 }
 
   function renderSlot(key, rawItems) {
