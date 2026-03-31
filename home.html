@@ -1948,35 +1948,43 @@ section.shopping-section, section.shopping-section .shopping-rows {
 <!-- mrp-mobile-fix-strong: final mobile overrides (appended last) -->
 <style id="mrp-mobile-fix-strong">
 @media (max-width:1024px){
-  /* Ensure the scroll wrapper allows horizontal scroll */
+
+  /* 1. 스크롤은 ad-scroll 하나만 */
   html body .ad-panel .ad-section .ad-scroll{
     overflow-x: auto !important;
     overflow-y: hidden !important;
     -webkit-overflow-scrolling: touch !important;
-    scroll-snap-type: x proximity !important;
     touch-action: pan-x pan-y !important;
     overscroll-behavior-x: contain !important;
   }
-  /* Force the list to be horizontal, beating earlier !important column rules */
+
+  /* 2. 리스트는 단순 flex (스크롤 X) */
   html body .ad-panel .ad-section .ad-list{
     display: flex !important;
     flex-direction: row !important;
     flex-wrap: nowrap !important;
-    gap: 12px !important;
-    padding: 10px 8px 16px !important;
+    gap: 10px !important;
+    padding: 8px !important;
   }
-  /* Each child acts as a card with snap and width */
+
+  /* 3. 카드: 한 장씩 나오게 (핵심) */
   html body .ad-panel .ad-section .ad-list > *{
-    scroll-snap-align: start !important;
-    min-width: 47vw !important;
+    flex: 0 0 92vw !important;
+    min-width: 92vw !important;
     box-sizing: border-box !important;
   }
+
 }
+
+/* 가로모드만 2장 */
 @media (max-width:1024px) and (orientation:landscape){
   html body .ad-panel .ad-section .ad-list > *{
+    flex: 0 0 47vw !important;
     min-width: 47vw !important;
   }
 }
+
+/* 이미지 안정화 */
 @media (max-width:1024px){
   html body .ad-panel .ad-section img{
     width: 100% !important;
@@ -1989,16 +1997,20 @@ section.shopping-section, section.shopping-section .shopping-rows {
 </style>
 <style id="final-mobile-scroll-fix">
 @media (max-width:1024px){
-  html body .ad-panel .ad-section .ad-scroll,
-  html body .ad-panel .ad-section .ad-list{
+
+  /* 스크롤은 ad-scroll만 담당 */
+  html body .ad-panel .ad-section .ad-scroll{
     touch-action: pan-x pan-y !important;
     -ms-touch-action: pan-x pan-y !important;
     overscroll-behavior-y: auto !important;
-  }
-
-  html body .ad-panel .ad-section .ad-scroll{
     scroll-snap-type: x proximity !important;
   }
+
+  /* ad-list는 터치 제거 (핵심) */
+  html body .ad-panel .ad-section .ad-list{
+    touch-action: auto !important;
+  }
+
 }
 </style>
 <style id="news-arrows-layer-guard-20251112-clean">
