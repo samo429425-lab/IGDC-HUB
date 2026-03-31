@@ -1357,22 +1357,42 @@ section.shopping-section, section.shopping-section .shopping-rows {
 .news-section .continent-tag .label{ letter-spacing:.04em; }
 </style>
 <style id="igdc-home-mobile-hotfix-20251009">
-  /* === CLEAN MOBILE HOTFIX (DRAWER 제거 / PANEL 정상 유지) === */
-
-  /* footer 아래 잘못 붙는 쇼핑 섹션만 제거 */
+  /* 1) Mobile: hide any shopping sections that accidentally render *after* the footer */
   @media (max-width: 768px){
     footer ~ .shopping-section,
     footer ~ section.shopping-section,
-    body > footer ~ .shopping-section {
-      display: none !important;
-    }
+    body > footer ~ .shopping-section { display: none !important; }
   }
 
-  /* 🔥 핵심: ad-panel은 절대 숨기지 않는다 */
+  /* 2) Right panel as swipe drawer (mobile only) */
   @media (max-width: 768px){
-    .ad-panel{
-      display: block !important;
+    :root{ --drawerW: min(86vw, 320px); }
+
+    /* Ensure the original .ad-panel content is not displayed inline on mobile */
+    .ad-panel { display: none !important; }
+
+    /* Drawer container (we will move .ad-panel into this) */
+    #ad-drawer-right{
+      position: fixed; top: 0; right: 0; height: 100vh; width: var(--drawerW);
+      background: #ffffff; transform: translateX(100%); transition: transform .25s ease;
+      z-index: 2147483000; box-shadow: -4px 0 16px rgba(0,0,0,.18); overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }
+    html.pv-open-right #ad-drawer-right{ transform: translateX(0); }
+
+    /* Backdrop */
+    #ad-backdrop-right{
+      position: fixed; inset: 0; background: rgba(0,0,0,.35);
+      opacity: 0; pointer-events: none; transition: opacity .2s ease; z-index: 2147482999;
+    }
+    html.pv-open-right #ad-backdrop-right{ opacity: 1; pointer-events: auto; }
+
+    /* Edge hotspot */
+    #edge-right-hotspot{
+      position: fixed; top: 0; right: 0; width: 16px; height: 100vh; z-index: 2147483001;
+      /* transparent; acts as swipe area */
+    }
+    html.pv-open-right #edge-right-hotspot{ right: var(--drawerW); }
   }
 </style>
 <style>
