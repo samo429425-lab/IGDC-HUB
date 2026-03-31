@@ -331,24 +331,51 @@
 function bindIncremental(target, items) {
 
   const isRight = target.isRight;
+  const limit = isRight ? RIGHT_LIMIT : MAIN_LIMIT;
 
-  // 🔥 슬롯 개수 고정 (핵심)
-  const SLOT_LIMIT = isRight ? 5 : 5;
+  let offset = 0;
 
-  const list = items.slice(0, SLOT_LIMIT);
+  function renderMore() {
+    const end = Math.min(offset + 20, limit, items.length); // 🔥 강제 확장
+    const frag = document.createDocumentFragment();
+
+    for (let i = offset; i < end; i++) {
+      const it = items[i];
+      frag.appendChild(isRight ? buildRightCard(it) : buildMainCard(it));
+    }
+
+    target.list.appendChild(frag);
+    offset = end;
+  }
 
   target.list.innerHTML = '';
 
-  const frag = document.createDocumentFragment();
+  // 🔥 핵심: 초기 한번에 많이 뿌림
+  renderMore();
+  renderMore();  // 2번 실행 → 최소 10~40개 확보
 
-  for (let i = 0; i < list.length; i++) {
-    const it = list[i];
-    frag.appendChild(isRight ? buildRightCard(it) : buildMainCard(it));
+  // 🔥 모바일 대응: 강제 전체 렌더
+  if (window.innerWidth <= 768) {
+    while (offset < items.length && offset < limit) {
+      renderMore();
+    }
+    return;
   }
 
-  target.list.appendChild(frag);
+  const scroller = target.scroller;
+  if (!scroller) return;
 
-  // ❌ 스크롤 / 추가 렌더 완전 제거
+  scroller.addEventListener('scroll', function () {
+
+    if (offset >= items.length || offset >= limit) return;
+
+    const nearEnd = isRight
+      ? (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 20)
+      : (scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 20);
+
+    if (nearEnd) renderMore();
+
+  }, { passive: true });
 }
 
   function renderSlot(key, rawItems) {
