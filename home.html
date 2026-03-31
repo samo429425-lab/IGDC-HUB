@@ -2080,7 +2080,24 @@ section.shopping-section, section.shopping-section .shopping-rows {
   #homeSearchBtn{ border:none; cursor:pointer; padding: 10px 14px; border-radius: 12px; background:#2563eb; color:#fff; font-weight:700; }
   .hero-search-hint{ margin-top: 8px; color:#6b7280; font-size: 12.5px; }
 </style>
+<style>
+/* ===== FINAL MOBILE SCROLL OVERRIDE ===== */
+.ad-panel .ad-scroll{
+  display:flex !important;
+  flex-direction:row !important;
+  flex-wrap:nowrap !important;
 
+  overflow-x:auto !important;
+  overflow-y:hidden !important;
+
+  gap:12px;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+.ad-panel .ad-scroll > *{
+  flex:0 0 92vw !important;
+}
+</style>
 </head>
 <body>
 <div class="container">
