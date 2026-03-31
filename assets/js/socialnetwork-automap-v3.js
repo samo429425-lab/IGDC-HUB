@@ -69,13 +69,10 @@ function getSections(snapshot){
 
   return {
     main: social.sections || {},
-
     right: (
       social.sections?.rightPanel
         ? { rightPanel: social.sections.rightPanel }
-        : (social.rightPanel
-            ? { rightPanel: social.rightPanel }
-            : {})
+        : {}
     )
   };
 }
@@ -289,7 +286,10 @@ grids.forEach(grid => {
   const key = grid.getAttribute('data-psom-key');
   if(!key) return;
 
-  // social-maru는 현재 제외
+  // ❗ 우측 패널 제외
+  if(key === 'rightPanel') return;
+
+  // social-maru 제외
   if(key === 'social-maru') return;
 
   const items = sections.main?.[key] || [];
@@ -300,11 +300,6 @@ grids.forEach(grid => {
       if(rightPanel){
         const rightItems = collectRightItems(sections);
         mountRightPanel(rightPanel, rightItems);
-
-        const shadow = qs('[data-psom-key="' + RIGHT_SECTION_KEY + '"]');
-        if(shadow && rightItems.filter(isRealItem).length > 0){
-          shadow.innerHTML = rightPanel.innerHTML;
-        }
       }
 
       window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
