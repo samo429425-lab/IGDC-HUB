@@ -328,50 +328,55 @@
     return sectionMap[key] || sectionMap[alt] || sectionMap[legacyKey(key)] || [];
   }
 
-  function bindIncremental(target, items) {
-    const isRight = target.isRight;
-    const limit = isRight ? RIGHT_LIMIT : MAIN_LIMIT;
-    const batch = isRight ? RIGHT_BATCH : MAIN_BATCH;
+function bindIncremental(target, items) {
 
-    let offset = 0;
-    const bindKey = target.psomEl.dataset.psomKey || '';
-    const lastBoundKey = target.list.__HOME_AUTOMAP_BOUND_KEY__ || null;
+  const isRight = target.isRight;
+  const limit = isRight ? RIGHT_LIMIT : MAIN_LIMIT;
 
-    if (lastBoundKey !== bindKey) {
-      target.list.__HOME_AUTOMAP_SCROLL_BOUND__ = false;
-      target.list.__HOME_AUTOMAP_BOUND_KEY__ = bindKey;
+  let offset = 0;
+
+  function renderMore() {
+    const end = Math.min(offset + 20, limit, items.length); // 🔥 강제 확장
+    const frag = document.createDocumentFragment();
+
+    for (let i = offset; i < end; i++) {
+      const it = items[i];
+      frag.appendChild(isRight ? buildRightCard(it) : buildMainCard(it));
     }
 
-    function renderMore() {
-      const end = Math.min(offset + batch, limit, items.length);
-      const frag = document.createDocumentFragment();
-      for (let i = offset; i < end; i += 1) {
-        const it = items[i];
-        frag.appendChild(isRight ? buildRightCard(it) : buildMainCard(it));
-      }
-      target.list.appendChild(frag);
-      offset = end;
-    }
-
-    target.list.innerHTML = '';
-    renderMore();
-
-    const scroller = target.scroller;
-    if (!scroller) return;
-    if (target.list.__HOME_AUTOMAP_SCROLL_BOUND__) return;
-
-    scroller.addEventListener('scroll', function () {
-      if (offset >= items.length || offset >= limit) return;
-
-      const nearEnd = isRight
-        ? (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 20)
-        : (scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 20);
-
-      if (nearEnd) renderMore();
-    }, { passive: true });
-
-    target.list.__HOME_AUTOMAP_SCROLL_BOUND__ = true;
+    target.list.appendChild(frag);
+    offset = end;
   }
+
+  target.list.innerHTML = '';
+
+  // 🔥 핵심: 초기 한번에 많이 뿌림
+  renderMore();
+  renderMore();  // 2번 실행 → 최소 10~40개 확보
+
+  // 🔥 모바일 대응: 강제 전체 렌더
+  if (window.innerWidth <= 768) {
+    while (offset < items.length && offset < limit) {
+      renderMore();
+    }
+    return;
+  }
+
+  const scroller = target.scroller;
+  if (!scroller) return;
+
+  scroller.addEventListener('scroll', function () {
+
+    if (offset >= items.length || offset >= limit) return;
+
+    const nearEnd = isRight
+      ? (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 20)
+      : (scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 20);
+
+    if (nearEnd) renderMore();
+
+  }, { passive: true });
+}
 
   function renderSlot(key, rawItems) {
     const psomEl = qs('[data-psom-key="' + key + '"]');
