@@ -8,7 +8,7 @@
 // 6) 런타임 에러를 window.__SOCIALNETWORK_AUTOMAP_V4_STATE__에 남긴다
 // 7) 기존 mobile rail / rightpanel bootstrap과 충돌하지 않도록 안전하게 동작한다
 
-(function () {
+function initSocialAutomap() {
   'use strict';
 
   if (window.__SOCIALNETWORK_AUTOMAP_V4__) return;
@@ -406,7 +406,7 @@ while(items.length < MAIN_LIMIT){
     STATE.mainKeys = targets.map(function (t) { return t.key; });
 
     targets.forEach(function (target) {
-      const items = sectionMap[target.key];
+      const items = sectionMap[target.key] || sectionMap[target.key]?.items;
       mountMainGrid(target.el, items);
     });
   }
@@ -451,4 +451,10 @@ async function run() {
   } else {
     run();
   }
-})();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initSocialAutomap);
+} else {
+  initSocialAutomap();
+}
