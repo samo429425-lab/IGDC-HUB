@@ -4503,11 +4503,81 @@ footer{
 
 })();
 </script>
+<script>
+(function(){
+
+  function applyAutomapData(sections){
+
+    if(!sections) return;
+
+    for(let i=1;i<=9;i++){
+
+      const rowWrap = document.querySelector(`#rowGrid${i}`);
+      if(!rowWrap) continue;
+
+      const grid = rowWrap.querySelector('[data-psom-key]');
+      if(!grid) continue;
+
+      const key = grid.getAttribute('data-psom-key');
+      if(!key) continue;
+
+      const items = sections[key];
+      if(!Array.isArray(items) || items.length === 0) continue;
+
+      const cards = grid.querySelectorAll('.card');
+
+      items.forEach((item, idx)=>{
+        const card = cards[idx];
+        if(!card) return;
+
+        const title = item.title || item.name || item.text || "Item";
+        const desc = item.description || item.summary || "";
+        const url = item.url || item.href || item.link || "#";
+        const thumb = item.thumb || item.image || "";
+
+        card.href = url;
+        card.target = url !== "#" ? "_blank" : "_self";
+
+        const t = card.querySelector('.title');
+        const d = card.querySelector('.desc');
+        const p = card.querySelector('.pic');
+
+        if(t) t.textContent = title;
+        if(d) d.textContent = desc;
+
+        if(p){
+          if(thumb){
+            p.style.backgroundImage = `url('${thumb}')`;
+            p.style.backgroundSize = 'cover';
+            p.textContent = "";
+          }
+        }
+
+        card.removeAttribute('data-dummy');
+      });
+
+    }
+  }
+
+  // 🔥 오토맵 감지 루프
+  function waitForData(){
+    if(window.__SOCIAL_DATA__){
+      applyAutomapData(window.__SOCIAL_DATA__.sections || window.__SOCIAL_DATA__);
+      return;
+    }
+    setTimeout(waitForData, 200);
+  }
+
+  waitForData();
+
+})();
+</script>
+
 <script defer="" src="/assets/js/auto-embed.instagram.js"></script>
 <script defer="" src="/assets/js/placeholder-sweeper.js"></script>
 <script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
 
-<script src="/assets/js/socialnetwork-automap-v4.js" defer></script>
+<script src="/assets/js/socialnetwork-automap-v3.js" defer></script>
 
 </body>
 </html>
