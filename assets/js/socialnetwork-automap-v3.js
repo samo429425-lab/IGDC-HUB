@@ -8,7 +8,6 @@
 (function () {
   'use strict';
 
- const SNAPSHOT_URL = '/data/social.snapshot.json';
  // --- bootstrap guard ---
  if (window.__SOCIALNETWORK_AUTOMAP_V3_FIXED__ === true) return;
  window.__SOCIALNETWORK_AUTOMAP_V3_FIXED__ = true;
@@ -46,6 +45,10 @@
       )
     );
   }
+
+function isRealItem(it){
+  return !!it;
+}
 
 function getSections(snapshot){
   if(!snapshot) return { main:{}, right:{} };
@@ -252,12 +255,17 @@ grids.forEach(grid => {
   if(key === 'rightPanel') return;
   if(key === 'social-maru') return;
 
-  const rawItems = sections.main?.[key];
+ const raw = sections.main?.[key];
 
-  // 🔥 핵심 분기
-const items = Array.isArray(rawItems) ? rawItems : [];
+const items = Array.isArray(raw)
+  ? raw
+  : (Array.isArray(raw?.items) ? raw.items : []);
 
- mountMainRow(grid, items);
+if(items.length === 0){
+  return;
+}
+
+mountMainRow(grid, items);
 });
 
       const rightPanel = qs('#rightAutoPanel');
