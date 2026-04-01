@@ -4388,27 +4388,31 @@ footer{
     build();
   });
 
-  window.__IGDC_RIGHTPANEL_RENDER = function(items){
+window.__IGDC_RIGHTPANEL_RENDER = function(items){
 
-    const panel = getPanel();
-    if(!panel) return;
+  const panel = getPanel();
+  if(!panel) return;
 
-    panel.innerHTML = '';
-    resetHeight(panel);
+  panel.innerHTML = '';
+  resetHeight(panel);
 
-    items.forEach(item=>{
-      const card = document.createElement('div');
-      card.className = 'ad-box';
-      card.innerHTML = `<a href="${item.link||'#'}">Item</a>`;
-      panel.appendChild(card);
-    });
+  items.forEach(item=>{
+    const card = document.createElement('div');
+    card.className = 'ad-box';
 
-  };
+    const a = document.createElement('a');
+    a.href = (item && item.link) ? item.link : '#';
+    a.textContent = 'Item';
 
-  init();
+    card.appendChild(a);
+    panel.appendChild(card);
+  });
+
+};
+
+init();
 
 })();
-</script>
 
 <script defer="" src="/assets/js/auto-embed.instagram.js"></script>
 <script defer="" src="/assets/js/placeholder-sweeper.js"></script>
