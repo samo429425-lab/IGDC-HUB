@@ -132,25 +132,50 @@ function getMainSlots(gridEl){
   }
 }
 
- function mountMainRow(gridEl, items){
+function mountMainRow(gridEl, items){
   if(!gridEl) return;
 
-  const displayItems = (Array.isArray(items) ? items : []).filter(isRealItem).slice(0, MAIN_LIMIT);
+const raw = Array.isArray(items) ? items : [];
+const displayItems = raw.slice(0, MAIN_LIMIT);
 
-  // 표시할 게 없으면 기존 더미 유지
-  if(displayItems.length === 0) return;
+// 🔥 핵심: slot 강제 채움 (디스트리뷰션 방식)
+while (displayItems.length < MAIN_LIMIT) {
+  displayItems.push(null);
+}
 
-  const cards = getMainSlots(gridEl);
-  const count = Math.max(cards.length, MAIN_LIMIT);
+  // 기존 카드 가져오기
+  let cards = getMainSlots(gridEl);
 
-  if(cards.length < count){
-    getMainSlots(gridEl);
+  // 부족하면 카드 생성
+  if(cards.length < MAIN_LIMIT){
+
+    const frag = document.createDocumentFragment();
+
+    for(let i = cards.length; i < MAIN_LIMIT; i++){
+      const a = document.createElement('a');
+      a.className = 'card';
+      a.href = '#';
+
+      a.innerHTML = `
+        <div class="pic"></div>
+        <div class="meta">
+          <div class="title"></div>
+          <div class="desc"></div>
+        </div>
+      `;
+
+      frag.appendChild(a);
+    }
+
+    gridEl.appendChild(frag);
+
+    // 다시 카드 목록 갱신
+    cards = getMainSlots(gridEl);
   }
 
-  const finalCards = qsa('a.card', gridEl);
-
-  for(let i=0;i<finalCards.length;i++){
-    const card = finalCards[i];
+  // 데이터 렌더
+  for(let i = 0; i < cards.length; i++){
+    const card = cards[i];
     const it = displayItems[i] || null;
 
     if(it) paintMainCard(card, it);
@@ -205,10 +230,13 @@ function getMainSlots(gridEl){
 function mountRightPanel(panel, items){
   if(!panel) return;
 
-  const displayItems = (Array.isArray(items) ? items : []).filter(isRealItem).slice(0, RIGHT_LIMIT);
+  const raw = Array.isArray(items) ? items : [];
+  const displayItems = raw.slice(0, RIGHT_LIMIT);
 
-  // 표시할 게 없으면 기존 더미 유지
-  if(displayItems.length === 0) return;
+  // 🔥 슬롯 강제 채움 (핵심)
+  while (displayItems.length < RIGHT_LIMIT) {
+    displayItems.push(null);
+  }
 
   const cards = getRightCards(panel);
 
@@ -261,11 +289,7 @@ const items = Array.isArray(raw)
   ? raw
   : (Array.isArray(raw?.items) ? raw.items : []);
 
-if(items.length === 0){
-  return;
-}
-
-mountMainRow(grid, items);
+   mountMainRow(grid, items);
 });
 
       const rightPanel = qs('#rightAutoPanel');
