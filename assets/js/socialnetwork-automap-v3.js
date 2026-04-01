@@ -51,20 +51,16 @@ function isRealItem(it){
 }
 
 function getSections(snapshot){
-  if(!snapshot) return { main:{}, right:{} };
+  if(!snapshot) return null;
 
-  // pages.social.sections 우선
   const sec =
     snapshot?.pages?.social?.sections ||
     snapshot?.sections ||
-    {};
+    null;
 
-  const rightPanel = sec.rightPanel || [];
+  if(!sec) return null;
 
-  return {
-    main: sec,
-    right: { rightPanel }
-  };
+  return sec;
 }
 
   async function loadSnapshot(){
@@ -249,24 +245,6 @@ function mountRightPanel(panel, items){
   }
 }
 
- function collectRightItems(sections){
-  if(!sections || typeof sections !== 'object') return [];
-
-  const sec = sections.right?.rightPanel;
-
-  if(!sec) return [];
-
-  return Array.isArray(sec)
-    ? sec
-    : (Array.isArray(sec?.items) ? sec.items : []);
-}
-
-  function getMainGridByRow(i){
-    const rowGrid = qs('#rowGrid' + i);
-    if(!rowGrid) return null;
-    return qs('[data-psom-key]', rowGrid);
-  }
-
   async function run(){
 	  
     try{
@@ -283,7 +261,7 @@ grids.forEach(grid => {
   if(key === 'rightPanel') return;
   if(key === 'social-maru') return;
 
- const raw = sections.main?.[key];
+const raw = sections[key];
 
 const items = Array.isArray(raw)
   ? raw
@@ -292,11 +270,15 @@ const items = Array.isArray(raw)
    mountMainRow(grid, items);
 });
 
-      const rightPanel = qs('#rightAutoPanel');
-      if(rightPanel){
-        const rightItems = collectRightItems(sections);
-        mountRightPanel(rightPanel, rightItems);
-      }
+const rightPanel = qs('#rightAutoPanel');
+if(rightPanel){
+  const rightItems =
+    Array.isArray(sections.rightPanel)
+      ? sections.rightPanel
+      : (Array.isArray(sections.rightPanel?.items) ? sections.rightPanel.items : []);
+
+  mountRightPanel(rightPanel, rightItems);
+}
 
       window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
     }catch(e){
@@ -308,9 +290,6 @@ const items = Array.isArray(raw)
     run();
   }
 
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', boot, { once:true });
-  }else{
-    boot();
-  }
+  boot();
+
 })();
