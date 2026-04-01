@@ -46,22 +46,20 @@
     );
   }
 
-function isRealItem(it){
-  return !!it;
-}
-
 function getSections(snapshot){
   if(!snapshot) return { main:{}, right:{} };
 
-  const social = snapshot.pages?.social || snapshot.social || {};
+  // pages.social.sections 우선
+  const sec =
+    snapshot?.pages?.social?.sections ||
+    snapshot?.sections ||
+    {};
+
+  const rightPanel = sec.rightPanel || [];
 
   return {
-    main: social.sections || {},
-    right: (
-      social.sections?.rightPanel
-        ? { rightPanel: social.sections.rightPanel }
-        : {}
-    )
+    main: sec,
+    right: { rightPanel }
   };
 }
 
