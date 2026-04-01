@@ -8,164 +8,126 @@
 <title>쇼셜 네트워크</title>
 <style>
 
-/* =========================
-   BASE
-========================= */
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background-color: #f2f2f2;
+    }
 
-body{
-  margin:0;
-  font-family:sans-serif;
-  background:#f2f2f2;
+    .container {
+      align-items: stretch;
+      display: flex;
+      flex-direction: row;
+      min-height: auto;
+    }
+
+     .sidebar {
+      width: 210px;
+      background-color: #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      padding-top: 30px; /* 중간쯤 위치 조정 */
+    
+      min-width: clamp(180px, 30vw, 260px);
+      flex: 0 0 auto;}
+
+    .sidebar a {
+  display: block;
+  background-color: #fff4e0;
+  color: #804000;
+  text-decoration: none;
+  padding: 10px 12px;
+  font-weight: bold;
+  font-size: 1rem;
+  border: 1px solid #f3d9b0;
+  border-radius: 8px;
+  margin: 10px 12px;
+  transition: background-color 0.3s, text-decoration 0.3s;
+}
+.sidebar a:hover {
+  background-color: #ffe5b4;
+  text-decoration: underline;
 }
 
-.container{
-  display:flex;
-  flex-direction:row;
-  align-items:stretch;
-}
+    .main-content {
+      flex: 1 1 auto; /* allow shrinking/growing within JS limits */
+      flex: 1;
+      background-color: #ffffff;
+      padding: 40px 30px;
+      max-width: none;
+      Xpx;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      text-align: center;
+    
+      min-width: 25vw
+      min-width: 0;}
 
-.sidebar{
-  width:210px;
-  min-width:clamp(180px,30vw,260px);
-  background:#e0e0e0;
-  display:flex;
-  flex-direction:column;
-  padding-top:30px;
-  flex:0 0 auto;
-}
+    .main-content h2 {
+      color: #004080;
+      margin-bottom: 20px;
+    }
 
-.sidebar a{
-  display:block;
-  background:#fff4e0;
-  color:#804000;
-  text-decoration:none;
-  padding:10px 12px;
-  font-weight:700;
-  border:1px solid #f3d9b0;
-  border-radius:8px;
-  margin:10px 12px;
-}
+    .main-content p {
+      font-size: 1rem;
+      line-height: 1.8;
+      color: #333;
+    }
 
-.sidebar a:hover{
-  background:#ffe5b4;
-  text-decoration:underline;
-}
-
-.main-content{
-  flex:1 1 auto;
-  min-width:0;
-  background:#fff;
-  padding:40px 30px;
-  box-shadow:0 0 10px rgba(0,0,0,.1);
-  text-align:center;
-}
-
-footer{
-  background:#004080;
-  color:#fff;
-  text-align:center;
-  padding:20px 15px;
-  font-size:.9rem;
-}
-
-
-/* =========================
-   GLOBAL VARS
-========================= */
-
-:root{
-  --card-min:200px;
-  --card-max:260px;
-  --pic-h:84px;
-  --gap:12px;
-}
-
-
-/* =========================
-   AD PANEL
-========================= */
+/* @SAFE-PATCH: visually hide ad-panel scrollbars without layout impact */
+.ad-panel::-webkit-scrollbar { width:0; height:0; }
 
 .ad-panel{
-  position:sticky !important;
-  top:16px !important;
-  max-height:calc(100dvh - 32px);
-  overflow-y:auto;
-  overscroll-behavior:contain;
-  -webkit-overflow-scrolling:touch;
-  cursor:grab;
-
-  scrollbar-width:none;
-  -ms-overflow-style:none;
+  scrollbar-width: none;          /* Firefox */
+  -ms-overflow-style: none;       /* IE/Edge(레거시) */
+  overscroll-behavior: contain;   /* 바운스/오버스크롤 제어 */
+  -webkit-overflow-scrolling: touch; /* iOS 관성 스크롤 */
 }
 
-.ad-panel.dragging{
-  cursor:grabbing;
-  user-select:none;
+/* 광고 카드 스타일 */
+.ad-box {
+  background-color: #fff;
+  width: 274px;
+  max-width: 274px;
+  height: 144px;
+  border: 1px solid #ccc;
+  text-align: center;
+  font-size: 0.9em;
+  color: #444;
+  cursor: pointer;
+  border-radius: 12px;  /* subtle rounded corners */
+  overflow: hidden;
 }
-
-.ad-panel::-webkit-scrollbar{
-  width:0!important;
-  height:0!important;
-}
-
-.ad-panel .rscroll{
-  display:none!important;
-}
-
-.ad-panel .ad-box{
-  width:100%!important;
-  min-height:144px!important;
-  height:144px!important;
-  line-height:144px!important;
-  border-radius:12px!important;
-  box-sizing:border-box;
-  display:block!important;
-  scroll-snap-align:unset!important;
+.ad-box a {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  height: 100%;
+  line-height: 144px;
 }
 
 
-/* =========================
-   AD CARD
-========================= */
+    footer {
+      background-color: #004080;
+      color: white;
+      text-align: center;
+      padding: 10px 15px;
+      font-size: 0.9rem;
+    }
+  
+/* === SOCIAL THUMB GRID (additive; layout preserved) === */
+/* viewport with overlay arrows */
+.thumb-viewport{position:relative;margin-top:10px}
+.thumb-scroller{overflow-x:auto;overflow-y:hidden;scroll-behavior:smooth;padding-bottom:4px}
+.thumb-scroller::-webkit-scrollbar{height:8px}
+.thumb-scroller::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:8px}
 
-.ad-box{
-  background:#fff;
-  width:274px;
-  max-width:274px;
-  height:144px;
-  border:1px solid #ccc;
-  border-radius:12px;
-  text-align:center;
-  font-size:.9em;
-  color:#444;
-  cursor:pointer;
-  overflow:hidden;
+/* 6-row horizontal grid, 4 cards per line baseline */
+:root{
+  --card-min: 200px;   /* 200 * 0.7 */
+  --card-max: 260px;   /* 260 * 0.7 */
+  --pic-h: 84px;       /* 120 * 0.7 */
+  --gap: 12px;
 }
-
-.ad-box a{
-  display:block;
-  height:100%;
-  color:inherit;
-  text-decoration:none;
-}
-
-
-/* =========================
-   THUMB GRID
-========================= */
-
-.thumb-viewport{
-  position:relative;
-  margin-top:10px;
-}
-
-.thumb-scroller{
-  overflow-x:auto;
-  overflow-y:hidden;
-  scroll-behavior:smooth;
-  padding-bottom:4px;
-}
-
 .thumb-grid{
   display:grid;
   grid-auto-flow:column;
@@ -173,145 +135,117 @@ footer{
   grid-auto-columns:minmax(var(--card-min),var(--card-max));
   gap:var(--gap);
 }
-
-
-/* =========================
-   CARD
-========================= */
-
 .card{
-  border:1px solid #e6e6e6;
-  border-radius:10px;
-  overflow:hidden;
-  background:#fff;
-  display:flex;
-  flex-direction:column;
-  min-width:var(--card-min);
-  max-width:var(--card-max);
+  border:1px solid #e6e6e6;border-radius:10px;overflow:hidden;background:#fff;
+  display:flex;flex-direction:column;text-decoration:none;color:inherit;
+  min-width:var(--card-min);max-width:var(--card-max)
 }
-
 .pic{
-  height:var(--pic-h);
-  background:linear-gradient(135deg,#e8f1ff,#fdf6e8);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size:32px;
+  height:var(--pic-h);background:linear-gradient(135deg,#e8f1ff,#fdf6e8);
+  display:flex;align-items:center;justify-content:center;font-size:32px
 }
+.meta{padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.title{font-weight:700;font-size:.9rem;color:#222}
+.desc{font-size:.8rem;color:#555;min-height:32px}
+.cta{margin-top:auto;display:inline-block;text-align:center;padding:6px 8px;background:#004080;color:#fff;border-radius:8px;text-decoration:none;font-weight:700}
 
-.meta{
-  padding:8px 10px;
-  display:flex;
-  flex-direction:column;
-  gap:6px;
+.status{margin:14px 0 8px;font-size:.85rem;color:#666;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.chip{background:#eef5ff;color:#004080;border:1px solid #cfe2ff;padding:4px 8px;border-radius:99px;font-weight:600}
+
+/* overlay arrows (on top of cards) */
+.hscroll{
+  position:absolute;top:50%;transform:translateY(-50%);z-index:5;border:none;
+  background:rgba(0,0,0,.35);color:#fff;font-size:24px;line-height:1;
+  padding:8px 10px;border-radius:10px;cursor:pointer;cursor:default}
+
+/* Responsive optimization */
+@media (max-width:980px){ :root{ --pic-h: 84px; }  /* mobile-ish reduce to 4 rows */
 }
+@media (max-width:720px){ :root{ --pic-h: 84px; }  /* small phones */
+} 
+/* keep sidebar/ad layout intact; grid stays inside main-content and scrolls horizontally */
 
-.title{
-  font-weight:700;
-  font-size:.9rem;
-  color:#222;
-}
+/* viewport + overlay arrows */
 
-.desc{
-  font-size:.8rem;
-  color:#555;
-  min-height:32px;
-}
+/* 6x5 grid, width unchanged, height reduced 30% */
+:root{ --card-min:200px; --card-max:260px; --pic-h:84px; --gap:12px; }
 
-.cta{
-  margin-top:auto;
-  text-align:center;
-  padding:6px 8px;
-  background:#004080;
-  color:#fff;
-  border-radius:8px;
-  font-weight:700;
-  text-decoration:none;
-}
+.card{border:1px solid #e6e6e6;border-radius:10px;overflow:hidden;background:#fff;display:flex;flex-direction:column;text-decoration:none;color:inherit;min-width:var(--card-min);max-width:var(--card-max)}
+.pic{height:var(--pic-h);background:linear-gradient(135deg,#e8f1ff,#fdf6e8);display:flex;align-items:center;justify-content:center;font-size:32px}
+.meta{padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.title{font-weight:700;font-size:.9rem;color:#222}
+.desc{font-size:.8rem;color:#555;min-height:32px}
+.cta{margin-top:auto;display:inline-block;text-align:center;padding:6px 8px;background:#004080;color:#fff;border-radius:8px;text-decoration:none;font-weight:700}
+.hscroll{position:absolute;top:50%;transform:translateY(-50%);z-index:5;border:none;background:rgba(0,0,0,.35);color:#fff;font-size:24px;line-height:1;padding:8px 10px;border-radius:10px;cursor:pointer;cursor:default}
+
+/* Ensure arrows are always visible; disable via opacity/pointer-events */
+.hscroll{display:block}
+.hscroll.disabled{opacity:.35;pointer-events:none}
+
+/* === per-row horizontal scrollers (added) === */
+.rows{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.row-viewport{position:relative}
+.row-scroller{overflow-x:auto;overflow-y:hidden;scroll-behavior:smooth;padding-bottom:4px}
+.row-scroller::-webkit-scrollbar{height:8px}
+.row-scroller::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:8px}
+:root{ --card-min:200px; --card-max:260px; --pic-h:84px; --gap:12px; }
+.row-grid{display:grid;grid-auto-flow:column;grid-template-rows:repeat(1,minmax(0,1fr));grid-auto-columns:minmax(var(--card-min),var(--card-max));gap:var(--gap)}
+.rscroll{ z-index:999 !important; position:absolute;top:50%;transform:translateY(-50%);z-index:5;border:none;background:rgba(0,0,0,.35);color:#fff;font-size:24px;line-height:1;padding:8px 10px;border-radius:10px;cursor:pointer;display:block;opacity:0;}
+.rscroll.disabled{opacity:.35;pointer-events:none}
+
+/* --- Jitter-free arrow positioning --- */
+.rscroll{ z-index:999 !important;  transition: left .12s linear, right .12s linear, opacity .12s linear; will-change: left,right; }
+
+/* @ADPANEL: natural clipping + hidden scrollbar + drag scroll */
+.ad-panel{ overflow-y:auto; -webkit-overflow-scrolling:touch; cursor:grab; }
+.ad-panel.dragging{ cursor:grabbing; user-select:none; }
+.ad-panel::-webkit-scrollbar{ width:0; height:0; }
+.ad-panel{ scrollbar-width:none; -ms-overflow-style:none; }
+/* Ensure any arrow UI inside ad-panel remains hidden */
+.ad-panel .rscroll{ z-index:999 !important;  display:none !important; }
 
 
-/* =========================
-   ROW SCROLL
-========================= */
-
-.rows{
-  display:flex;
-  flex-direction:column;
-  gap:12px;
-  margin-top:12px;
-}
-
-.row-viewport{
-  position:relative;
-}
-
-.row-scroller{
-  overflow-x:auto;
-  overflow-y:hidden;
-  scroll-behavior:smooth;
-  padding-bottom:4px;
-}
-
-.row-grid{
-  display:grid;
-  grid-auto-flow:column;
-  grid-template-rows:1fr;
-  grid-auto-columns:minmax(var(--card-min),var(--card-max));
-  gap:var(--gap);
-}
-
-.rscroll{
-  position:absolute;
-  top:50%;
-  transform:translateY(-50%);
-  z-index:999;
-  border:none;
-  background:rgba(0,0,0,.35);
-  color:#fff;
-  font-size:24px;
-  padding:8px 10px;
-  border-radius:10px;
-  cursor:pointer;
-  opacity:0;
-  transition:.12s;
-}
-
-.rscroll.disabled{
-  opacity:.35;
-  pointer-events:none;
+/* Do NOT alter card sizing */
+.ad-panel .ad-box{ /* unchanged sizing; just ensure snap is off so partial cards show */
+  scroll-snap-align: unset !important;
 }
 
 
-/* =========================
-   RESPONSIVE
-========================= */
-
-@media (max-width:980px){
-  :root{ --pic-h:84px; }
+/* Explicit card box sizing so it doesn't collapse to a bar */
+ .container .ad-panel .ad-box{
+  box-sizing: border-box !important;
+  width: 100% !important; 
+  height: 144px !important;
+  line-height: 144px !important;
+  border-radius: 12px !important;
+  display: block !important;
 }
 
-@media (max-width:720px){
-  :root{ --pic-h:84px; }
+/* === AD PANEL: decouple from right wall & viewport (append-only override) === */
+:root{ --ad-gap-right: 15px; }
+.ad-panel{
+  position: sticky !important;   /* not fixed to viewport */
+  top: 16px !important;          /* gentle stick within page flow */
+  right: auto !important;        /* detach from right:0 */
+  left: auto !important;
+  max-height: calc(100dvh - 32px) !important;  /* internal scroll space */
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain !important;
+  scrollbar-width: none !important;
 }
+.ad-panel::-webkit-scrollbar{ width:0 !important; height:0 !important; }
+ 
+/* Main content should not reserve extra right gutter anymore */
+.main-content{ margin-right: 0 !important; }
 
-@media (max-width:900px){
-
-  .container{
-    display:block!important;
-    width:100%!important;
-    overflow-x:hidden!important;
-  }
-
-  .sidebar{
-    display:none!important;
-  }
-
-  .main-content{
-    width:100%!important;
-    margin:0!important;
-    max-width:100%!important;
-  }
-
+/* Ensure ad-box tiles keep their intended size inside panel */
+.ad-panel .ad-box{
+  width: 100% !important;
+  min-height: 144px !important;
+  height: 144px !important;
+  border-radius: 12px !important;
+  display: block !important;
 }
 
 </style>
@@ -414,7 +348,13 @@ html, body {
 <!-- Mobile Optimization Patch v1 -->
 <!-- Mobile Ad Drawer v3 (push layout: stage shifts left while right drawer appears) -->
 <!-- Mobile Section Pager v1 (group sections into horizontal slides on mobile) -->
-
+<style>
+/* === Stabilizer: paint containment for rows, reduces initial layout cost === */
+[id*="feed"] > .row, [id*="feed"] > .card-row, [class*="feed"] > .row, [class*="feed"] > .card-row {
+  content-visibility: auto;
+  contain-intrinsic-size: 400px 220px;
+}
+</style>
 <style>
 /* Q&A modal layering & visibility safety */
 .igdc-qa-modal, #qnaModal, #igdcQnaModal, [data-qa-modal] {
@@ -436,8 +376,61 @@ html, body {
   }
 }
 </style>
+<style>
+/* === v12: stronger thinning for initial paint === */
+[id*="feed"] > .row > *:nth-child(n+13),
+[id*="feed"] > .card-row > *:nth-child(n+13),
+[class*="feed"] > .row > *:nth-child(n+13),
+[class*="feed"] > .card-row > *:nth-child(n+13) {
+  display: none !important; /* prevent initial paint of >12 items per row */
+}
 
+/* Defer entire rows 3..N until they are near viewport */
+[id*="feed"] > .row:nth-of-type(n+3),
+[id*="feed"] > .card-row:nth-of-type(n+3),
+[class*="feed"] > .row:nth-of-type(n+3),
+[class*="feed"] > .card-row:nth-of-type(n+3) {
+  content-visibility: auto;
+  contain-intrinsic-size: 420px 240px;
+}
 
+/* Smoother scroll perf hints */
+.row, .card-row { contain: content; will-change: contents; }
+</style>
+<style id="sn-right-panel-sync">
+:root{
+  --rp-duration: .32s;
+  --rp-ease: cubic-bezier(.22,.61,.36,1);
+}
+
+/* Normalize transitions so panel and its title animate identically */
+#rightPanel, .right-panel,
+#ad-title, .ad-title, .ad-headline, #adHeadline {
+  transition:
+    transform var(--rp-duration) var(--rp-ease),
+    opacity   var(--rp-duration) var(--rp-ease),
+    visibility 0s linear var(--rp-duration);
+  will-change: transform, opacity;
+}
+
+/* Default hidden (off-canvas) state for both */
+.rp-closed #rightPanel, .rp-closed .right-panel,
+.rp-closed #ad-title, .rp-closed .ad-title, .rp-closed .ad-headline, .rp-closed #adHeadline {
+  transform: translateX(100%);
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* Open state for both */
+.rp-open #rightPanel, .rp-open .right-panel,
+.rp-open #ad-title, .rp-open .ad-title, .rp-open .ad-headline, .rp-open #adHeadline {
+  transform: translateX(0);
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s, 0s, 0s;
+}
+
+</style>
 <style id="sn-final-rail-gap-cards">
   @media (min-width:1024px){
     .container{
@@ -502,7 +495,7 @@ html, body {
 
   /* Mobile & narrow tablets: main takes 100%, sidebar off, ad -> drawer */
   @media (max-width:1023px){
-    .container{ display:block!important; width:100%!important; max-width:100%!important; overflow-x:hidden!important;}
+    .container{ display:block!important; width:100%!important; max-width:100%!important; overflow-x:hidden!important; 
 
     /* Drawer shell */
     #ad-drawer{ position: fixed; top:0; right:-84vw; width:84vw; max-width:420px;
@@ -589,8 +582,7 @@ html, body {
 /* Ensure any arrow UI inside ad-panel remains hidden */
 .ad-panel .rscroll{ z-index:999 !important;  display:none !important; }
 
-</style>
-<style data-origin="qna-btn-style">
+</style><style data-origin="qna-btn-style">
     body {
       margin: 0;
       font-family: sans-serif;
@@ -601,7 +593,7 @@ html, body {
       align-items: stretch;
       display: flex;
       flex-direction: row;
-      min-height: auto;   /* override */
+      min-height: 90vh;
     }
 
      .sidebar {
@@ -632,17 +624,17 @@ html, body {
   text-decoration: underline;
 }
 
-    .main-content{
-  flex: 1 1 auto;
-  min-width: 0;              /* 핵심: flex 안에서 폭/갭 폭발 방지 */
-  background-color: #ffffff;
-  padding: 40px 30px;
-  max-width: 950px;
-  margin: 30px auto;
-  box-shadow: 0 0 10px rgba(0,0,0,0.1);
-  text-align: center;
-}
-
+    .main-content {
+      flex: 1 1 auto; /* allow shrinking/growing within JS limits */
+      flex: 1;
+      background-color: #ffffff;
+      padding: 40px 30px;
+      max-width: 950px;
+      margin: 30px auto;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      text-align: center;
+    
+      min-width: 25vw}
 
     .main-content h2 {
       color: #004080;
@@ -1134,121 +1126,140 @@ html, body {
 }
 </style>
 
-<style id="donor-adpanel-css-v2">
+<style id="donor-adpanel-css">
 /* =========================================================
-   donor right-rail css — PRODUCTION STABLE
-   - No mobile vh bug
-   - No fake height
-   - Desktop safe rail
-   - Mobile natural flow
+   donor right-rail css — FINAL CENTERED STABLE VERSION
+   목적:
+   - 타이틀/패널 중앙 정렬 완전 일치
+   - 좌우 갭 균형 유지
+   - 카드/디자인/간격 유지
+   - 찌그러짐 최소화
    ========================================================= */
 
 /* =========================
    ROOT
-========================= */
+   ========================= */
 :root{
-  --top-pad:18px;
-  --gap:15px;
-  --ad-width:274px;
+  --top-pad: 18px;
+  --gap: 15px;
+  --ad-width: 274px;
 
-  --ad-bg:#eef7ff;
-  --ad-border:#c6ddf5;
-  --ad-title-bg:#f7f9fb;
-  --ad-title-color:#0a4599;
+  --ad-bg: #eef7ff;
+  --ad-border: #c6ddf5;
+  --ad-title-bg: #f7f9fb;
+  --ad-title-color: #0a4599;
 }
 
-/* Scroll normalize */
+/* 스크롤 안정화 */
 html{ scrollbar-gutter: stable; }
-body{ overflow-y:auto !important; }
+body{ overflow-y: scroll; }
 
 /* =========================
-   BASE
-========================= */
+   BASE LAYOUT
+   ========================= */
 .container{
-  padding-top:var(--top-pad) !important;
-  padding-left:var(--gap) !important;
-  padding-right:var(--gap) !important;
+  padding-top: var(--top-pad) !important;
+  padding-left: var(--gap) !important;
+  padding-right: var(--gap) !important;
 }
 
 /* =========================
-   CORE
-========================= */
+   SIDEBAR / MAIN
+   ========================= */
+.sidebar{
+  position: sticky;
+  top: var(--top-pad);
+  padding-top: 0 !important;
+}
+
+.main-content{
+  margin-top: 0 !important;
+  min-width: 0 !important;
+}
+
+/* =========================
+   RIGHT PANEL (CORE)
+   ========================= */
 .ad-panel{
+  /* 중앙 정렬 핵심 */
+  width: var(--ad-width) !important;
+  max-width: var(--ad-width) !important;
+  justify-self: center !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
 
-  width:var(--ad-width) !important;
-  max-width:var(--ad-width) !important;
+  position: relative !important;
+  top: auto !important;
 
-  margin:0 auto !important;
+  background: var(--ad-bg) !important;
+  border: 1px solid var(--ad-border) !important;
+  border-radius: 12px !important;
+  padding: 12px !important;
 
-  position:relative !important;
+  /* 세로 안정화 */
+  max-height: calc(100dvh - var(--top-pad) - 24px) !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
 
-  background:var(--ad-bg) !important;
-  border:1px solid var(--ad-border) !important;
-  border-radius:12px !important;
-
-  padding:12px !important;
-
-  /* ❗ height 자유화 */
-  height:auto !important;
-  min-height:0 !important;
-  max-height:none !important;
-
-  overflow:visible !important;
-
-  cursor:grab;
+  cursor: grab;
 }
 
 .ad-panel.dragging{
-  cursor:grabbing;
-  user-select:none;
+  cursor: grabbing;
+  user-select: none;
 }
 
+/* 스크롤바 숨김 */
+.ad-panel::-webkit-scrollbar{ width:0; height:0; }
+.ad-panel{ scrollbar-width:none !important; -ms-overflow-style:none !important; }
+
 /* =========================
-   TITLE
-========================= */
+   PANEL TITLE
+   ========================= */
 .ad-panel .ad-stamp{
+  position: sticky;
+  top: 0;
+  z-index: 3;
 
-  position:sticky;
-  top:0;
-  z-index:2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
-  display:flex;
-  align-items:center;
-  justify-content:center;
+  width: 100%;
+  padding: 8px 4px;
+  margin-bottom: 10px;
 
-  width:100%;
+  font-weight: 900;
+  font-size: 16px;
+  letter-spacing: .3px;
+  color: var(--ad-title-color);
 
-  padding:8px 4px;
-  margin-bottom:8px;
+  background: var(--ad-title-bg);
+  border-bottom: 1px solid #d6dce0;
+  text-align: center;
+}
 
-  font-weight:900;
-  font-size:16px;
-
-  color:var(--ad-title-color);
-
-  background:var(--ad-title-bg);
-  border-bottom:1px solid #d6dce0;
+.ad-panel .ad-stamp .emoji{
+  margin: 0 6px;
 }
 
 /* =========================
-   CARDS
-========================= */
+   AD CARDS
+   ========================= */
 .ad-panel .ad-box{
-
   height:150px !important;
   min-height:150px !important;
+  max-height:150px !important;
 
-  margin-bottom:10px !important;
+  margin-bottom: 10px !important;
 
   background:#fff !important;
   border-radius:8px !important;
-
   box-shadow:0 1px 3px rgba(0,0,0,.1) !important;
 
   display:flex !important;
   align-items:center !important;
   justify-content:center !important;
-
   overflow:hidden !important;
 }
 
@@ -1260,69 +1271,59 @@ body{ overflow-y:auto !important; }
   justify-content:center !important;
 }
 
-/* =========================
-   DESKTOP
-========================= */
-@media (min-width:901px){
+.ad-panel .ad-box:first-of-type{
+  margin-top:4px !important;
+}
 
+/* =========================
+   DESKTOP GRID
+   ========================= */
+@media (min-width: 901px){
   .container{
-    display:grid !important;
-    grid-template-columns:220px 1fr var(--ad-width) !important;
-    column-gap:var(--gap) !important;
+    display: grid !important;
+    grid-template-columns: 220px 1fr var(--ad-width) !important;
+    column-gap: var(--gap) !important;
   }
 
-  /* Desktop only scroll */
+  .sidebar,
+  .main-content,
   .ad-panel{
-    max-height:calc(100vh - var(--top-pad) - 24px) !important;
-    overflow-y:auto !important;
+    margin: 0 !important;
   }
-
 }
 
 /* =========================
-   MOBILE
-========================= */
-@media (max-width:1024px){
-
-  .ad-panel,
-  .right-panel{
-
-    width:100% !important;
-    max-width:100% !important;
-
-    margin:0 !important;
-
-    height:auto !important;
-    min-height:0 !important;
-    max-height:none !important;
-
-    overflow:visible !important;
-  }
-
-  .ad-panel .thumb-list,
-  .ad-panel .thumb-scroller{
-
-    display:flex !important;
-    overflow-x:auto !important;
-
-    gap:12px;
-
-    margin:0 !important;
-    padding:0 !important;
-  }
-
-  .ad-panel .rscroll{
-    display:none !important;
-  }
-
+   MISC / ROW UI
+   ========================= */
+.row, .card-row, .row-viewport, .row-scroller, .row-grid{
+  position: relative;
 }
 
-/* =========================
-   MISC
-========================= */
+.row-arrow, .scroll-left, .scroll-right,
+.row-left, .row-right, [data-arrow], .arrow{
+  position:absolute;
+  top:50%;
+  transform:translateY(-50%);
+  width:42px;
+  height:42px;
+  border-radius:50%;
+  background:rgba(0,0,0,.35);
+  color:#fff;
+  z-index:10000;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.row-arrow.left, .scroll-left, .row-left{ left:8px; }
+.row-arrow.right, .scroll-right, .row-right{ right:8px; }
+
+.ad-panel, .right-pane, .sidebar, .left-pane{ z-index:1; }
+
 .is-hidden-lit{ display:none !important; }
-
+.ad-panel .rscroll{ display:none !important; }
 </style>
+
 
 <script id="donor-adpanel-js">
 (function(){
@@ -1362,6 +1363,18 @@ body{ overflow-y:auto !important; }
 })();
 </script>
 
+<style id="BC_TILE_LOCK_V1">
+/* --- Blockchain pills: narrow glyphs + lighter weight, no underline --- */
+
+.section-blockchain .bc-tile,
+
+.bc-tile:hover{ text-decoration: none !important; }
+/* Mobile wrap (no overflow) */
+@media (max-width: 640px){
+  
+  .section-blockchain 
+}
+</style>
 <style id="CARD_SPACING_LOCK_V1">
 /* --- Card inter-item spacing lock: 15px between cards only --- */
 .thumb-grid, .row-grid {
@@ -1619,7 +1632,21 @@ body{ overflow-y:auto !important; }
     }
   }
 </style>
-
+<style id="edge-autohide-mobile">
+@media (pointer:coarse){
+  :root{--edge:10px;--spd:.14s;--e:ease-out}
+  body.hide-top .sn-top{transform:translateY(-100%);transition:transform var(--spd) var(--e)}
+  body.hide-left .sidebar{transform:translateX(-100%);transition:transform var(--spd) var(--e)}
+  body.hide-right .right-panel, body.hide-right .ad-panel{transform:translateX(100%);transition:transform var(--spd) var(--e)}
+  .edge-top, .edge-left, .edge-right{position:fixed;z-index:9999}
+  .edge-top{top:0;left:0;right:0;height:var(--edge)}
+  .edge-left{top:0;left:0;bottom:0;width:var(--edge)}
+  .edge-right{top:0;right:0;bottom:0;width:var(--edge)}
+  body.show-top .sn-top{transform:none}
+  body.show-left .sidebar{transform:none}
+  body.show-right .right-panel, body.show-right .ad-panel{transform:none}
+}
+</style>
 <style id="portrait-oneup-v5">
 /* === Mobile Portrait: 1-up horizontal cards (keep row scroll), 16:9 visuals === */
 @media (max-width: 768px) and (orientation: portrait){
@@ -1787,151 +1814,227 @@ body{ overflow-y:auto !important; }
     #section-10 .thumb-title{overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
   }
 </style>
-
-<style id="sn-layout-stable-unified-v2">
-/* ===================================================
-   SocialNetwork Layout Guard - Production Stable
-   - No bottom gap
-   - No mobile overflow
-   - No double padding
-   - Safe portrait / landscape
-   =================================================== */
-
-/* =====================
-   Base Reset
-===================== */
-html, body{
-  margin:0 !important;
-  padding:0 !important;
-  width:100%;
-  overflow-x:hidden !important;
+<style id="bc-mobile-80-gap3-sn-20251113">
+/* Mobile (<=900px): shrink blockchain pills (text+box) ~20% and tighten gaps to 3px */
+@media (max-width: 900px){
+  /* Normalize any prior locks so real box size applies */
+  .section-blockchain .bc-tile,
+  .section-blockchain .platform-tile,
+  .section-blockchain a.bc-btn{
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 0 0 auto !important;
+    box-sizing: border-box !important;
+    white-space: nowrap !important;
+    transform: none !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  /* ~20% shrink (focus horizontal): padding 5x8 -> 4x6; text ~0.85em */
+  .section-blockchain .bc-tile,
+  .section-blockchain .platform-tile,
+  .section-blockchain a.bc-btn{
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+    font-size: 0.85em !important;
+    letter-spacing: -0.015em !important;
+    font-stretch: 85% !important;
+  }
+  /* Inter-button gap locked to 3px (both axes) */
+  .section-blockchain{
+    gap: 3px 3px !important;
+    row-gap: 3px !important;
+    column-gap: 3px !important;
+  }
 }
+</style>
+<style id="bc-mobile-padding-4x3-sn-20251113">
+@media (max-width: 900px){
+  .section-blockchain .bc-tile,
+  .section-blockchain .platform-tile,
+  .section-blockchain a.bc-btn{
+    /* neutralize hidden width locks so padding takes full effect */
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 0 0 auto !important;
+    box-sizing: border-box !important;
+    white-space: nowrap !important;
 
-/* =====================
-   Core Containers
-===================== */
-.container,
-.layout,
-.wrap,
-.page,
-main,
-.main-content{
-  box-sizing:border-box !important;
-  max-width:100% !important;
-  min-height:auto !important;
-  overflow-x:hidden !important;
+    /* set precise inner paddings */
+    padding-top: 3px !important;
+    padding-bottom: 3px !important;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+  }
 }
+</style>
+<style id="sn-mobile-fullbleed-final-20251113">
+@media (max-width: 900px) and (orientation: portrait){
+  /* Prevent horizontal scroll and side gutters */
+  html, body { margin:0 !important; padding:0 !important; max-width:100vw !important; overflow-x:hidden !important; }
 
-/* =====================
-   Main Content
-===================== */
-.main-content{
-  min-width:0 !important;
-  padding:32px 24px !important;   /* unified */
-  margin:0 !important;
-}
-
-/* =====================
-   Footer
-===================== */
-footer{
-  position:static !important;
-  margin:0 !important;
-  padding:0 !important;          /* ❗ gap source 제거 */
-}
-
-/* =====================
-   Mobile / Tablet
-===================== */
-@media (max-width:1023px){
-
-  /* Collapse layout */
-  .container{
-    display:block !important;
-    width:100% !important;
+  /* Remove side padding from common containers so we can clamp to viewport */
+  .container, .layout, .wrap, .page, .content, .main-content, #main, main, .rows, .row-viewport {
+    padding-left:0 !important; padding-right:0 !important; margin-left:0 !important; margin-right:0 !important;
+    box-sizing: border-box !important; max-width:100vw !important;
   }
 
-  /* Mobile padding normalize */
-  .main-content{
-    padding:20px 14px 8px !important;
-  }
+  /* One card per row; card spans full viewport width */
+  .thumb-grid { grid-template-columns: 1fr !important; gap: 10px !important; }
+  .inf-card  { width:100vw !important; margin-left:calc(50% - 50vw) !important; margin-right:calc(50% - 50vw) !important; }
 
-  /* Kill auto margins */
-  .container,
-  main,
-  .main-content{
-    margin:0 !important;
-  }
-
+  /* Ensure internal thumbnail media fills card width */
+  .inf-thumb { width:100% !important; height:auto !important; }
 }
+</style>
+<style id="mobile-footer-guard">
+  /* Base: ensure full-page flow */
+  html, body { height: auto; min-height: 100% !important; }
+  #app, .app, .page, .wrapper { min-height: 100% !important; }
 
-/* =====================
-   Mobile Portrait
-===================== */
-@media (max-width:900px) and (orientation:portrait){
+  /* Address bar-aware height */
+  @supports (height: 100dvh) {
+    .container, .layout, main, .main-content { min-height: 100dvh !important; }
+  }
+  @supports not (height: 100dvh) {
+    .container, .layout, main, .main-content { min-height: 100vh !important; }
+  }
 
-  /* Full width safe */
+  /* iOS WebKit fill-available fallback */
+  @supports (-webkit-touch-callout: none) {
+    html, body { height: -webkit-fill-available; }
+    .container, .layout, main, .main-content { min-height: -webkit-fill-available !important; }
+  }
+
+  /* Mobile overflow clipping guard */
+  @media (max-width: 980px) {
+    main, .content-area, .main-content, .container, .layout {
+      overflow: visible !important;
+      max-height: none !important;
+    }
+    /* Social grid width guard */
+    .main-content { min-width: 0 !important; }
+    /* Ensure the last content block can't butt against footer */
+    main > :last-child, .main-content > :last-child, .container > :last-child {
+      margin-bottom: max(24px, env(safe-area-inset-bottom)) !important;
+    }
+  }
+
+  /* Footer safety: home bar overlap */
+  footer { padding-bottom: max(24px, env(safe-area-inset-bottom)) !important; position: static !important; }
+</style>
+<style>
+/* Unified thumbnail size override */
+.brand-rail, .right-rail, #right-rail {
+  width: 320px !important;
+}
+.brand-card img, .thumb-card img, .thumb-media {
+  aspect-ratio: 4 / 3 !important;
+  width: 100% !important;
+  height: auto !important;
+}
+</style>
+<style id="sn-bottomgap-harmonize-20251124">
+  /* 소셜네트워크: 유통허브 수준으로 메인/우측패널+푸터 하단 여백 최소화 */
   .container,
   .layout,
-  .wrap,
-  .page,
   main,
-  .main-content{
-    width:100vw !important;
-    max-width:100vw !important;
-    padding-left:0 !important;
-    padding-right:0 !important;
+  .main-content {
+    min-height: auto !important;
   }
-
-  /* One column cards */
-  .thumb-grid{
-    grid-template-columns:1fr !important;
-    gap:10px !important;
-  }
-
-  /* Full-bleed cards (no height inflation) */
-  .inf-card{
-    width:100% !important;
-    margin:0 !important;     /* ❗ calc 제거 */
-  }
-
-  /* Remove last-child gap */
   main > :last-child,
-  .main-content > :last-child{
-    margin-bottom:0 !important;
-    padding-bottom:0 !important;
+  .main-content > :last-child,
+  .container > :last-child {
+    margin-bottom: 0 !important;
   }
-
-}
-
-/* =====================
-   Desktop
-===================== */
-@media (min-width:1024px){
-
-  .brand-rail,
-  .right-rail,
-  #right-rail{
-    width:320px !important;
-    flex-shrink:0;
+  footer {
+    margin-top: 0 !important;
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
   }
-
-}
-
-/* =====================
-   Thumbnails
-===================== */
-.brand-card img,
-.thumb-card img,
-.thumb-media{
-  aspect-ratio:4/3 !important;
-  width:100% !important;
-  height:auto !important;
-  display:block;
-}
-
 </style>
+<style id="sn-bottom-gap-final-20251124">
+  /* 소셜네트워크: 메인/우측 패널 섹션들과 푸터 사이 여백 제거 전용 */
+  .container{
+    min-height: auto !important;
+    padding-bottom: 0 !important;
+    margin-bottom: 0 !important;
+  }
+  .main-content{
+    margin-bottom: 0 !important;
+    padding-bottom: 16px !important; /* 콘텐츠 바로 아래 약간의 숨 쉬는 공간만 남김 */
+  }
+  footer{
+    margin-top: 0 !important;
+  }
+</style>
+<style id="sn-final-layout-guard-20251124">
+  /* 가로 스크롤 제거 및 하단 여백 최소화 (이 파일 전용, 레이아웃은 그대로 유지) */
+  html, body{
+    margin:0 !important;
+    padding:0 !important;
+    overflow-x:hidden !important; /* 가로 스크롤바 강제 제거 */
+  }
+  @media (max-width: 980px){
+    .main-content{
+      padding-bottom: 8px !important;  /* 콘텐츠 바로 아래 숨쉬는 공간만 최소로 */
+    }
+    footer{
+      margin-top: 4px !important;
+      padding-top: 4px !important;
+      padding-bottom: 4px !important;
+    }
+  }
+</style>
+<style id="sn-gap-tune-20251124">
+  /* Mobile-only fine tuning for footer gap & layout stretch */
+  @media (max-width: 980px){
+    /* Relax over-aggressive min-height so content doesn't force extra blank space */
+    .container, .layout, main, .main-content{
+      min-height: 0 !important;
+    }
+    /* Keep a small safety gap above the footer, but not a whole card's height */
+    main > :last-child,
+    .main-content > :last-child,
+    .container > :last-child{
+      margin-bottom: 5px !important;
+    }
+  }
+</style>
+<style id="sn-card-size-tuning-v2">
+  /* 데스크탑 + 모바일 가로 환경에서 썸네일 카드 크기 조정 */
 
+  /* 1) 데스크탑: 카드 조금 더 크게 */
+  @media (min-width: 1024px){
+    :root{
+      --card-min: 240px;
+      --card-max: 320px;
+      --pic-h: 110px;
+    }
+  }
+
+  /* 2) 모바일 가로(landscape): 메인 9섹션 + 우측 패널 카드 크기 통일 */
+  @media (max-width: 1023px) and (orientation: landscape){
+    /* 메인 9섹션 (row-grid / thumb-grid 공통) */
+    .row-grid,
+    .thumb-grid{
+      --card-min: 240px;
+      --card-max: 300px;
+      --pic-h: 100px;
+    }
+    /* 우측 패널 rpMobileGrid 썸네일 폭/간격 맞추기 */
+    #rpMobileGrid{
+      --thumb-min: 240px;
+      --thumb-w: 300px;
+      --thumb-gap: 14px;
+    }
+  }
+</style>
 <style id="qna-brand-only">
 /* === Q&A sidebar link color only (no other changes) === */
 :root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
@@ -1944,71 +2047,6 @@ footer{
 }
 .sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
 </style>
-
-<style id="igdc-mobile-layout-fix-202602">
-/* ===============================
-   MOBILE VERTICAL HARD RESET
-================================ */
-
-@media (max-width:1024px){
-
-  html, body{
-    height:auto !important;
-    min-height:0 !important;
-    overflow-y:auto !important;
-    overflow-x:hidden !important;
-  }
-
-  /* 전체 래퍼 강제 리셋 */
-  .container,
-  .wrap,
-  .page,
-  .content-box,
-  .main-content,
-  #main,
-  #mainFrame{
-    height:auto !important;
-    min-height:0 !important;
-    max-height:none !important;
-    padding-bottom:0 !important;
-    margin-bottom:0 !important;
-  }
-
-  /* 메인 + 우측패널 구조 재정렬 */
-  .layout,
-  .grid,
-  .grid-wrap,
-  .page-wrap{
-    display:flex !important;
-    flex-direction:column !important;
-    gap:0 !important;
-  }
-
-  /* 우측패널 모바일 하단 고정 */
-  .right,
-  .right-rail,
-  .ad-panel,
-  .right-panel{
-    position:relative !important;
-    width:100% !important;
-    max-width:100% !important;
-    margin:12px 0 0 0 !important;
-    padding:0 !important;
-    left:0 !important;
-    right:0 !important;
-  }
-
-  /* 섹션 여백 제거 */
-  section,
-  .section,
-  .block,
-  .panel{
-    margin-bottom:12px !important;
-  }
-
-}
-</style>
-
 <link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
 </head>
 <body>
@@ -2023,147 +2061,65 @@ footer{
 <a href="tour.html">🧳 여행·관광·숙박</a>
 <a href="literature_academic">📚 문학 학술교류</a>
 <a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A 문의</a></div>
-
 <div class="main-content">
-
-<section class="section-blockchain">
-<a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
+<section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
 </section>
-
-<h2 id="pageTitle">👥 쇼셜 네트워크 · 추천 채널</h2>
-<div class="status"></div>
-
+<h2 id="pageTitle">👥 쇼셜 네트워크 · 추천 채널</h2><div class="status"></div>
 <div class="rows">
-
-<!-- 1 -->
 <div class="row-viewport" data-row="1">
-<div class="row-scroller" id="rowScroller1">
-<div class="row-grid" id="rowGrid1">
-<div class="thumb-grid thumb-scroller" data-psom-key="social-youtube">
-<div class="thumb-inner"></div>
+<div class="row-scroller" id="rowScroller1"><div aria-live="polite" class="row-grid" id="rowGrid1"><div class="thumb-grid thumb-scroller" data-psom-key="social-youtube"></div></div></div>
+<button aria-label="scroll left" class="rscroll left" id="rsLeft1">‹</button>
+<button aria-label="scroll right" class="rscroll right" id="rsRight1">›</button>
 </div>
-</div>
-</div>
-<button class="rscroll left" id="rsLeft1">‹</button>
-<button class="rscroll right" id="rsRight1">›</button>
-</div>
-
-<!-- 2 -->
 <div class="row-viewport" data-row="2">
-<div class="row-scroller" id="rowScroller2">
-<div class="row-grid" id="rowGrid2">
-<div class="thumb-grid thumb-scroller" data-psom-key="social-instagram">
-<div class="thumb-inner"></div>
+<div class="row-scroller" id="rowScroller2"><div aria-live="polite" class="row-grid" id="rowGrid2"><div class="thumb-grid thumb-scroller" data-psom-key="social-instagram"></div></div></div>
+<button aria-label="scroll left" class="rscroll left" id="rsLeft2">‹</button>
+<button aria-label="scroll right" class="rscroll right" id="rsRight2">›</button>
 </div>
-</div>
-</div>
-<button class="rscroll left" id="rsLeft2">‹</button>
-<button class="rscroll right" id="rsRight2">›</button>
-</div>
-
-<!-- 3 -->
 <div class="row-viewport" data-row="3">
-<div class="row-scroller" id="rowScroller3">
-<div class="row-grid" id="rowGrid3">
-<div class="thumb-grid thumb-scroller" data-psom-key="social-tiktok">
-<div class="thumb-inner"></div>
+<div class="row-scroller" id="rowScroller3"><div aria-live="polite" class="row-grid" id="rowGrid3"><div class="thumb-grid thumb-scroller" data-psom-key="social-tiktok"></div></div></div>
+<button aria-label="scroll left" class="rscroll left" id="rsLeft3">‹</button>
+<button aria-label="scroll right" class="rscroll right" id="rsRight3">›</button>
 </div>
-</div>
-</div>
-<button class="rscroll left" id="rsLeft3">‹</button>
-<button class="rscroll right" id="rsRight3">›</button>
-</div>
-
-<!-- 4 -->
 <div class="row-viewport" data-row="4">
-<div class="row-scroller" id="rowScroller4">
-<div class="row-grid" id="rowGrid4">
-<div class="thumb-grid thumb-scroller" data-psom-key="social-facebook">
-<div class="thumb-inner"></div>
+<div class="row-scroller" id="rowScroller4"><div aria-live="polite" class="row-grid" id="rowGrid4"><div class="thumb-grid thumb-scroller" data-psom-key="social-facebook"></div></div></div>
+<button aria-label="scroll left" class="rscroll left" id="rsLeft4">‹</button>
+<button aria-label="scroll right" class="rscroll right" id="rsRight4">›</button>
 </div>
-</div>
-</div>
-<button class="rscroll left" id="rsLeft4">‹</button>
-<button class="rscroll right" id="rsRight4">›</button>
-</div>
-
-<!-- 5 -->
 <div class="row-viewport" data-row="5">
-<div class="row-scroller" id="rowScroller5">
-<div class="row-grid" id="rowGrid5">
-<div class="thumb-grid thumb-scroller" data-psom-key="social-wechat">
-<div class="thumb-inner"></div>
+<div class="row-scroller" id="rowScroller5"><div aria-live="polite" class="row-grid" id="rowGrid5"><div class="thumb-grid thumb-scroller" data-psom-key="social-wechat"></div></div></div>
+<button aria-label="scroll left" class="rscroll left" id="rsLeft5">‹</button>
+<button aria-label="scroll right" class="rscroll right" id="rsRight5">›</button>
 </div>
-</div>
-</div>
-<button class="rscroll left" id="rsLeft5">‹</button>
-<button class="rscroll right" id="rsRight5">›</button>
-</div>
-
-<!-- 6 -->
 <div class="row-viewport" data-row="6">
-<div class="row-scroller" id="rowScroller6">
-<div class="row-grid" id="rowGrid6">
-<div class="thumb-grid thumb-scroller" data-psom-key="social-weibo">
-<div class="thumb-inner"></div>
+<div class="row-scroller" id="rowScroller6"><div aria-live="polite" class="row-grid" id="rowGrid6"><div class="thumb-grid thumb-scroller" data-psom-key="social-weibo"></div></div></div>
+<button aria-label="scroll left" class="rscroll left" id="rsLeft6">‹</button>
+<button aria-label="scroll right" class="rscroll right" id="rsRight6">›</button>
 </div>
-</div>
-</div>
-<button class="rscroll left" id="rsLeft6">‹</button>
-<button class="rscroll right" id="rsRight6">›</button>
-</div>
-
-<!-- 7 -->
 <div class="row-viewport" data-row="7">
-<div class="row-scroller" id="rowScroller7">
-<div class="row-grid" id="rowGrid7">
-<div class="thumb-grid thumb-scroller" data-psom-key="social-pinterest">
-<div class="thumb-inner"></div>
+<div class="row-scroller" id="rowScroller7"><div aria-live="polite" class="row-grid" id="rowGrid7"><div class="thumb-grid thumb-scroller" data-psom-key="social-pinterest"></div></div></div>
+<button aria-label="scroll left" class="rscroll left" id="rsLeft7">‹</button>
+<button aria-label="scroll right" class="rscroll right" id="rsRight7">›</button>
 </div>
-</div>
-</div>
-<button class="rscroll left" id="rsLeft7">‹</button>
-<button class="rscroll right" id="rsRight7">›</button>
-</div>
-
-<!-- 8 -->
 <div class="row-viewport" data-row="8">
-<div class="row-scroller" id="rowScroller8">
-<div class="row-grid" id="rowGrid8">
-<div class="thumb-grid thumb-scroller" data-psom-key="social-reddit">
-<div class="thumb-inner"></div>
+<div class="row-scroller" id="rowScroller8"><div aria-live="polite" class="row-grid" id="rowGrid8"><div class="thumb-grid thumb-scroller" data-psom-key="social-reddit"></div></div></div>
+<button aria-label="scroll left" class="rscroll left" id="rsLeft8">‹</button>
+<button aria-label="scroll right" class="rscroll right" id="rsRight8">›</button>
 </div>
-</div>
-</div>
-<button class="rscroll left" id="rsLeft8">‹</button>
-<button class="rscroll right" id="rsRight8">›</button>
-</div>
-
-<!-- 9 -->
 <div class="row-viewport" data-row="9">
-<div class="row-scroller" id="rowScroller9">
-<div class="row-grid" id="rowGrid9">
-<div class="thumb-grid thumb-scroller" data-psom-key="social-twitter">
-<div class="thumb-inner"></div>
+<div class="row-scroller" id="rowScroller9"><div aria-live="polite" class="row-grid" id="rowGrid9"><div class="thumb-grid thumb-scroller" data-psom-key="social-twitter"></div></div></div>
+<button aria-label="scroll left" class="rscroll left" id="rsLeft9">‹</button>
+<button aria-label="scroll right" class="rscroll right" id="rsRight9">›</button>
 </div>
-</div>
-</div>
-<button class="rscroll left" id="rsLeft9">‹</button>
-<button class="rscroll right" id="rsRight9">›</button>
-</div>
-
-<!-- 모바일 우측 패널 -->
 <section id="rpMobileBox">
 <div id="rpMobileScroller">
-<div id="rpMobileGrid" data-psom-key="rightPanel"></div>
+<div id="rpMobileGrid"></div>
 </div>
 </section>
-
 </div>
-
 <style id="qa-empty-state-style">
 .igdc-qa-threads:empty::before,
 .qna-threads:empty::before,
@@ -2197,270 +2153,122 @@ footer{
   margin-top: 8px;
   font-size: 0.95rem;
 }
-</style></div>
-<!-- 우측 패널 -->
-<div class="right-rail" id="rightRail">
-
+</style></div><div class="right-rail" id="rightRail">
 <h3 class="ad-headline" style="display:block; margin:0 auto; text-align:center; width:clamp(230px,100%,274px); margin:0 0 10px; text-align:center; line-height:1; height:1em; white-space:nowrap;">
-💎 인기 아이템 💎
+  💎 인기 아이템 💎
 </h3>
-
-<div class="ad-panel" id="rightAutoPanel" data-psom-key="rightPanel"></div>
-
+<div class="ad-panel"><div class="ad-offset"></div>
+<div class="thumb-grid thumb-scroller" data-psom-key="socialnetwork"></div>
+<div class="ad-box"><a href="#">📢 광고 1</a></div>
+<div class="ad-box"><a href="#">📢 광고 2</a></div>
+<div class="ad-box"><a href="#">📢 광고 3</a></div>
+<div class="ad-box"><a href="#">📢 광고 4</a></div>
+<div class="ad-box"><a href="#">📢 광고 5</a></div>
+<div class="ad-box"><a href="#">📢 광고 6</a></div>
+<div class="ad-box"><a href="#">📢 광고 7</a></div>
+<div class="ad-box"><a href="#">📢 광고 8</a></div>
+<div class="ad-box"><a href="#">📢 광고 9</a></div>
+<div class="ad-box"><a href="#">📢 광고 10</a></div>
+<div class="ad-box"><a href="#">📢 광고 11</a></div>
+<div class="ad-box"><a href="#">📢 광고 12</a></div>
+<div class="ad-box"><a href="#">📢 광고 13</a></div>
+<div class="ad-box"><a href="#">📢 광고 14</a></div>
+<div class="ad-box"><a href="#">📢 광고 15</a></div>
+<div class="ad-box"><a href="#">📢 광고 16</a></div>
+<div class="ad-box"><a href="#">📢 광고 17</a></div>
+<div class="ad-box"><a href="#">📢 광고 18</a></div>
+<div class="ad-box"><a href="#">📢 광고 19</a></div>
+<div class="ad-box"><a href="#">📢 광고 20</a></div>
+<div class="ad-box"><a href="#ad21">📢 광고 21</a></div>
+<div class="ad-box"><a href="#ad22">📢 광고 22</a></div>
+<div class="ad-box"><a href="#ad23">📢 광고 23</a></div>
+<div class="ad-box"><a href="#ad24">📢 광고 24</a></div>
+<div class="ad-box"><a href="#ad25">📢 광고 25</a></div>
+<div class="ad-box"><a href="#ad26">📢 광고 26</a></div>
+<div class="ad-box"><a href="#ad27">📢 광고 27</a></div>
+<div class="ad-box"><a href="#ad28">📢 광고 28</a></div>
+<div class="ad-box"><a href="#ad29">📢 광고 29</a></div>
+<div class="ad-box"><a href="#ad30">📢 광고 30</a></div>
+<div class="ad-box"><a href="#ad31">📢 광고 31</a></div>
+<div class="ad-box"><a href="#ad32">📢 광고 32</a></div>
+<div class="ad-box"><a href="#ad33">📢 광고 33</a></div>
+<div class="ad-box"><a href="#ad34">📢 광고 34</a></div>
+<div class="ad-box"><a href="#ad35">📢 광고 35</a></div>
+<div class="ad-box"><a href="#ad36">📢 광고 36</a></div>
+<div class="ad-box"><a href="#ad37">📢 광고 37</a></div>
+<div class="ad-box"><a href="#ad38">📢 광고 38</a></div>
+<div class="ad-box"><a href="#ad39">📢 광고 39</a></div>
+<div class="ad-box"><a href="#ad40">📢 광고 40</a></div>
+<div class="ad-box"><a href="#ad41">📢 광고 41</a></div>
+<div class="ad-box"><a href="#ad42">📢 광고 42</a></div>
+<div class="ad-box"><a href="#ad43">📢 광고 43</a></div>
+<div class="ad-box"><a href="#ad44">📢 광고 44</a></div>
+<div class="ad-box"><a href="#ad45">📢 광고 45</a></div>
+<div class="ad-box"><a href="#ad46">📢 광고 46</a></div>
+<div class="ad-box"><a href="#ad47">📢 광고 47</a></div>
+<div class="ad-box"><a href="#ad48">📢 광고 48</a></div>
+<div class="ad-box"><a href="#ad49">📢 광고 49</a></div>
+<div class="ad-box"><a href="#ad50">📢 광고 50</a></div>
+<div class="ad-box"><a href="#ad51">📢 광고 51</a></div>
+<div class="ad-box"><a href="#ad52">📢 광고 52</a></div>
+<div class="ad-box"><a href="#ad53">📢 광고 53</a></div>
+<div class="ad-box"><a href="#ad54">📢 광고 54</a></div>
+<div class="ad-box"><a href="#ad55">📢 광고 55</a></div>
+<div class="ad-box"><a href="#ad56">📢 광고 56</a></div>
+<div class="ad-box"><a href="#ad57">📢 광고 57</a></div>
+<div class="ad-box"><a href="#ad58">📢 광고 58</a></div>
+<div class="ad-box"><a href="#ad59">📢 광고 59</a></div>
+<div class="ad-box"><a href="#ad60">📢 광고 60</a></div>
+<div class="ad-box"><a href="#ad61">📢 광고 61</a></div>
+<div class="ad-box"><a href="#ad62">📢 광고 62</a></div>
+<div class="ad-box"><a href="#ad63">📢 광고 63</a></div>
+<div class="ad-box"><a href="#ad64">📢 광고 64</a></div>
+<div class="ad-box"><a href="#ad65">📢 광고 65</a></div>
+<div class="ad-box"><a href="#ad66">📢 광고 66</a></div>
+<div class="ad-box"><a href="#ad67">📢 광고 67</a></div>
+<div class="ad-box"><a href="#ad68">📢 광고 68</a></div>
+<div class="ad-box"><a href="#ad69">📢 광고 69</a></div>
+<div class="ad-box"><a href="#ad70">📢 광고 70</a></div>
+<div class="ad-box"><a href="#ad71">📢 광고 71</a></div>
+<div class="ad-box"><a href="#ad72">📢 광고 72</a></div>
+<div class="ad-box"><a href="#ad73">📢 광고 73</a></div>
+<div class="ad-box"><a href="#ad74">📢 광고 74</a></div>
+<div class="ad-box"><a href="#ad75">📢 광고 75</a></div>
+<div class="ad-box"><a href="#ad76">📢 광고 76</a></div>
+<div class="ad-box"><a href="#ad77">📢 광고 77</a></div>
+<div class="ad-box"><a href="#ad78">📢 광고 78</a></div>
+<div class="ad-box"><a href="#ad79">📢 광고 79</a></div>
+<div class="ad-box"><a href="#ad80">📢 광고 80</a></div>
+<div class="ad-box"><a href="#ad81">📢 광고 81</a></div>
+<div class="ad-box"><a href="#ad82">📢 광고 82</a></div>
+<div class="ad-box"><a href="#ad83">📢 광고 83</a></div>
+<div class="ad-box"><a href="#ad84">📢 광고 84</a></div>
+<div class="ad-box"><a href="#ad85">📢 광고 85</a></div>
+<div class="ad-box"><a href="#ad86">📢 광고 86</a></div>
+<div class="ad-box"><a href="#ad87">📢 광고 87</a></div>
+<div class="ad-box"><a href="#ad88">📢 광고 88</a></div>
+<div class="ad-box"><a href="#ad89">📢 광고 89</a></div>
+<div class="ad-box"><a href="#ad90">📢 광고 90</a></div>
+<div class="ad-box"><a href="#ad91">📢 광고 91</a></div>
+<div class="ad-box"><a href="#ad92">📢 광고 92</a></div>
+<div class="ad-box"><a href="#ad93">📢 광고 93</a></div>
+<div class="ad-box"><a href="#ad94">📢 광고 94</a></div>
+<div class="ad-box"><a href="#ad95">📢 광고 95</a></div>
+<div class="ad-box"><a href="#ad96">📢 광고 96</a></div>
+<div class="ad-box"><a href="#ad97">📢 광고 97</a></div>
+<div class="ad-box"><a href="#ad98">📢 광고 98</a></div>
+<div class="ad-box"><a href="#ad99">📢 광고 99</a></div>
+<div class="ad-box"><a href="#ad100">📢 광고 100</a></div>
 </div>
 </div>
-
-<!-- Mobile rail for SOCIAL: directly above the footer (NOT inside) -->
-<style id="social-mobile-rail-style">
-@media (max-width:1024px){
-  #social-mobile-rail{
-    display:block !important;
-    background:#f7f9fb; border:1px solid #d6dce0; border-radius:10px;
-    padding:10px 10px 14px; box-shadow:0 1px 4px rgba(0,0,0,.06);
-    margin-top:14px;
-  }
-  #social-mobile-rail .list{
-    display:flex; gap:10px; overflow-x:auto; padding:6px 4px;
-    scroll-snap-type:x mandatory;
-  }
-  #social-mobile-rail .list::-webkit-scrollbar{ display:none; width:0; height:0; }
-  #social-mobile-rail .list{ scrollbar-width:none; -ms-overflow-style:none; }
-}
-@media (max-width:1024px) and (orientation:portrait){
-  #social-mobile-rail .list > .card,
-  #social-mobile-rail .list > .ad-box{
-    flex: 0 0 100% !important; max-width:100% !important;
-    scroll-snap-align:start;
-  }
-  #social-mobile-rail .list img,
-  #social-mobile-rail .list video,
-  #social-mobile-rail .list iframe{
-    width:100% !important; height:100% !important; object-fit:cover !important;
-  }
-}
-@media (max-width:1024px) and (orientation:landscape){
-  #social-mobile-rail .list > .card,
-  #social-mobile-rail .list > .ad-box{
-    flex:0 0 min(300px,80%); max-width:min(300px,80%);
-    scroll-snap-align:start;
-  }
-}
-</style>
-
-<script id="social-mobile-rail-js">
+</div>
+<script>
 (function(){
-
-/* ===================================================
-   Social Mobile Rail - Production Stable Version
-   - Safe against Ctrl+F5
-   - Safe against late renderer load
-   - No empty-lock
-   - No duplication
-   =================================================== */
-
-var built = false;
-var lastMode = null;
-var hookAttached = false;
-var observer = null;
-
-/* ---------------------------
-   Aspect ratio sync
----------------------------- */
-function setAspect(card){
-  var media = card.querySelector('img, video');
-  if(!media){
-    card.style.aspectRatio = "16 / 9";
-    return;
-  }
-
-  function apply(w,h){
-    card.style.aspectRatio = (w>0 && h>0) ? (w + " / " + h) : "16 / 9";
-  }
-
-  if(media.tagName === 'IMG'){
-    if(media.complete && media.naturalWidth){
-      apply(media.naturalWidth, media.naturalHeight);
-    }else{
-      media.addEventListener('load', function(){
-        apply(media.naturalWidth, media.naturalHeight);
-      }, { once:true });
-    }
-  }
-
-  if(media.tagName === 'VIDEO'){
-    if(media.readyState >= 1){
-      apply(media.videoWidth, media.videoHeight);
-    }else{
-      media.addEventListener('loadedmetadata', function(){
-        apply(media.videoWidth, media.videoHeight);
-      }, { once:true });
-    }
-  }
-}
-
-/* ---------------------------
-   Build rail safely
----------------------------- */
-function build(){
-
-  var rail = document.getElementById('social-mobile-rail');
-  var list = rail && rail.querySelector('.list');
-  var src  = document.getElementById('rightAutoPanel');
-
-  if(!rail || !list || !src) return;
-
-  var boxes = src.querySelectorAll('.ad-box');
-
-  if(!boxes.length){
-    built = false;   // ❗ 절대 잠그지 않음
-    return;
-  }
-
-  list.innerHTML = "";
-
-  boxes.forEach(function(box){
-    var clone = box.cloneNode(true);
-    clone.classList.add('card');
-    clone.style.height = 'auto';
-    clone.style.minHeight = '0';
-    clone.style.maxHeight = 'none';
-    list.appendChild(clone);
-    setAspect(clone);
-  });
-
-  built = true;
-}
-
-/* ---------------------------
-   Mode switch
----------------------------- */
-function toggle(){
-
-  var isMobile = window.matchMedia('(max-width:1024px)').matches;
-  var rail = document.getElementById('social-mobile-rail');
-  if(!rail) return;
-
-  var mode = isMobile ? 'mobile' : 'desktop';
-  if(mode === lastMode) return;
-
-  lastMode = mode;
-
-  if(isMobile){
-    rail.style.display = 'block';
-    built = false;
-    build();
-  }else{
-    rail.style.display = 'none';
-    built = false;
-    var list = rail.querySelector('.list');
-    if(list) list.innerHTML = "";
-  }
-}
-
-/* ---------------------------
-   Hook renderer (safe loop)
----------------------------- */
-function attachHook(){
-
-  if(hookAttached) return;
-
-  var fn = window.__IGDC_RIGHTPANEL_RENDER || window.__RIGHT_PANEL_RENDER;
-
-  if(typeof fn !== 'function'){
-    setTimeout(attachHook, 150);  // ❗ 렌더러 생길 때까지 재시도
-    return;
-  }
-
-  function wrapped(items){
-    fn(items);
-    if(window.matchMedia('(max-width:1024px)').matches){
-      built = false;
-      build();
-    }
-  }
-
-  window.__IGDC_RIGHTPANEL_RENDER = wrapped;
-  window.__RIGHT_PANEL_RENDER = wrapped;
-
-  hookAttached = true;
-}
-
-/* ---------------------------
-   Observe right panel changes
----------------------------- */
-function observeSource(){
-
-  var src = document.getElementById('rightAutoPanel');
-  if(!src) return;
-
-  if(observer) observer.disconnect();
-
-  observer = new MutationObserver(function(){
-    if(window.matchMedia('(max-width:1024px)').matches){
-      built = false;
-      build();
-    }
-  });
-
-  observer.observe(src, { childList:true, subtree:false });
-}
-
-/* ---------------------------
-   Init
----------------------------- */
-function init(){
-  toggle();
-  attachHook();
-  observeSource();
-}
-
-/* DOM Ready */
-if(document.readyState === 'loading'){
-  document.addEventListener('DOMContentLoaded', init, { once:true });
-}else{
-  init();
-}
-
-/* Debounced resize */
-var rsTimer = null;
-window.addEventListener('resize', function(){
-  clearTimeout(rsTimer);
-  rsTimer = setTimeout(toggle, 250);
-});
-
+  function px(n){ return Math.max(0, Math.floor(n)); }
+  function adjustLayout(){ try{ /* disabled by UNLOCK */ }catch(e){} });
+  window.__enforceGuards = enforceGuards;
 })();
-</script>
-<section id="social-mobile-rail" style="display:none;">
-  <div class="wrap">
-    <h3 class="title" style="margin:8px 0 6px; text-align:left;">💎 인기 아이템 💎</h3>
-    <div class="list" aria-label="추천"></div>
-  </div>
-</section>
-
-<script id="igdc-layout-guard">
-(function(){
-
-/* Basic clamp */
-function px(n){
-  return Math.max(0, Math.floor(n||0));
-}
-
-/* Layout guard (safe stub) */
-function enforceGuards(){
-  try{
-    /* reserved for future layout sync */
-  }catch(e){
-    console.warn('[IGDC] layout guard error', e);
-  }
-}
-
-/* Expose */
-window.__enforceGuards = enforceGuards;
-
-})();
-</script>
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/assets/js/igdc-core.min.js"></script>
 <script id="igdc-qa-config">
   (function () {
@@ -3106,7 +2914,14 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   window.__QNA_CLOSE__ = closeAny;
 })();
 </script>
-
+<style data-lock="final" id="sn-lock-1100">
+@media (max-width:1023px){
+.sidebar,.left-sidebar,#leftSidebar,.right-rail,.right-panel,#rightPanel,.ad-panel,.right-ad-panel{display:none!important;width:0!important;max-width:0!important;min-width:0!important;margin:0!important;padding:0!important;visibility:hidden!important}
+.container,.layout,.wrap,.page{display:block!important;width:100%!important;max-width:100%!important;margin:0!important;padding:0 12px!important;box-sizing:border-box!important;column-gap:0!important;row-gap:0!important}
+#main,.main-content,main,.content{display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;margin:0!important;box-sizing:border-box!important}
+.container,.layout,.wrap,.page,.content,.main-content{grid-template-columns:unset!important}
+}
+</style>
 <script id="sn-rows-restore-1">
 const qs=(s,r=document)=>r.querySelector(s),qsa=(s,r=document)=>Array.from(r.querySelectorAll(s));
 
@@ -3230,9 +3045,7 @@ function positionAllLeftArrows(){
   bindRowControls();
   queueMicrotask(()=>{ updateAllRowUI(); (window.__scheduleArrows||function(){})(); });
 })();
-</script>
-
-<script id="sn-rows-restore-2">
+</script><script id="sn-rows-restore-2">
 (function(){
   function px(v){ return parseFloat(v||0) || 0; }
   function sync(){
@@ -3288,198 +3101,201 @@ function positionAllLeftArrows(){
   if(left) bind('.edge-left','left','show-left');
   if(right) bind('.edge-right','right','show-right');
 })();
-</script>
-
-<script id="sn-rows-restore-4">
-/* DISABLED lazy/defer engine for layout stability */
+</script><script id="sn-rows-restore-4">
+/* === v13: Smooth scroll-time batching + AD panel initial 20 === */
 (function(){
-  function normalize(){
-    document.querySelectorAll('[data-deferred="1"]').forEach(el=>{
-      el.removeAttribute('data-deferred');
-      el.style.display='';
-    });
+  // Time-sliced reveal: keep per-frame work under ~8ms
+  function timeSlicedReveal(nodes, perChunk){ 
+    let i = 0;
+    function step(){
+      const start = performance.now();
+      let count = 0;
+      while(i < nodes.length){
+        const n = nodes[i++];
+        // reveal
+        if(n && n.style){ n.style.display=''; n.removeAttribute('data-deferred'); }
+        count++;
+        // stop if over time or count
+        if((performance.now() - start) > 8 || count >= perChunk) break;
+      }
+      if(i < nodes.length){ requestAnimationFrame(step); }
+    }
+    requestAnimationFrame(step);
   }
 
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded', normalize, {once:true});
-  }else{
-    normalize();
+  function revealWhenVisible(container, selector, chunkSize){
+    if(!container) return;
+    const hidden = Array.from(container.querySelectorAll(selector+'[data-deferred="1"], '+selector+'[style*="display: none"]'));
+    if(!hidden.length) return;
+    const sentry = document.createElement('div');
+    sentry.setAttribute('data-sentry','reveal');
+    sentry.style.width='1px'; sentry.style.height='1px';
+    container.appendChild(sentry);
+    const io = new IntersectionObserver((entries)=>{
+      for(const en of entries){
+        if(en.isIntersecting){
+          io.disconnect();
+          // Reveal with time-slicing
+          timeSlicedReveal(hidden, chunkSize);
+          sentry.remove();
+        }
+      }
+    }, {root: container===document.body?null:container, rootMargin: '900px 0px 900px 0px'});
+    io.observe(sentry);
   }
-})();
+
+  function deferChildren(container, selector, keep){
+    if(!container) return;
+    const kids = Array.from(container.querySelectorAll(selector));
+    if(kids.length <= keep) return;
+    for(let i=keep;i<kids.length;i++){
+      const el = kids[i];
+      el.setAttribute('data-deferred','1');
+      el.style.display='none';
+      // images/icons lazy
+      el.querySelectorAll('img').forEach(img=>{
+        if(!img.hasAttribute('loading')) img.setAttribute('loading','lazy');
+        if(!img.hasAttribute('decoding')) img.setAttribute('decoding','async');
+      });
+    }
+  }
+
+  function enhanceFeed(){
+    const rowSelectors = ['#feed > .row', '#feed > .card-row', '.feed > .row', '.feed > .card-row'];
+    for(const rs of rowSelectors){
+      document.querySelectorAll(rs).forEach(row=>{
+        // Already limited to 12 via CSS; ensure any pre-rendered nodes beyond 12 are deferred
+        const cards = Array.from(row.children);
+        for(let i=12;i<cards.length;i++){
+          const el = cards[i];
+          if(el.getAttribute('data-deferred')!=='1'){
+            el.setAttribute('data-deferred','1');
+            el.style.display='none';
+            el.querySelectorAll('img').forEach(img=>{
+              if(!img.hasAttribute('loading')) img.setAttribute('loading','lazy');
+              if(!img.hasAttribute('decoding')) img.setAttribute('decoding','async');
+            });
+          }
+        }
+        // Reveal when row near viewport
+        revealWhenVisible(row, ':scope > *', 24);
+      });
+    }
+  }
+
+  function enhanceAdPanel(){
+    // Pick the existing right panel
+    const panel = document.querySelector('.right-pane') || document.querySelector('#rightPanel') || document.querySelector('.ad-panel');
+    if(!panel) return;
+    // Children selector heuristic: direct children (cards/ads)
+    const childSel = ':scope > *';
+    // Keep first 20 visible, defer the rest
+    deferChildren(panel, childSel, 12);
+    revealWhenVisible(panel, childSel, 30);
+  }
+
+  function onReady(){
+    enhanceFeed();
+    enhanceAdPanel();
+  }
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', onReady, { once: true });
+} else {
+  onReady();
+}
+
+/* resize에서는 절대 onReady() 호출하지 않음 */
+window.addEventListener('resize', () => {
+  if (typeof enhanceFeed === 'function') {
+    enhanceFeed();
+  }
+});
+
 </script>
-
-<!-- ===== Influencer Lanes (Stable Unified v2) ===== -->
-<section id="influencer-sections" aria-label="Influencer Lanes"></section>
-
+<!-- ==== BEGIN: Influencer lanes + product/detail-ready cards (minimal, non-intrusive) ==== -->
+<section aria-label="Influencer Lanes" id="influencer-sections"></section>
 <template id="inf-card">
-  <article class="inf-card" role="listitem">
-    <a class="inf-thumb" rel="noopener">
-      <img alt="thumbnail" loading="lazy" decoding="async"/>
-    </a>
-    <div class="inf-body">
-      <div class="inf-name"></div>
-      <div class="inf-meta"></div>
-    </div>
-  </article>
-</template>
-
-<!-- Viewer -->
-<div id="inf-viewer" class="infv infv-hidden" aria-hidden="true" role="dialog" tabindex="-1">
-  <button class="infv-close" aria-label="닫기">✕</button>
-  <div class="infv-stage">
-    <div class="infv-track"></div>
-  </div>
-  <button class="infv-prev" aria-label="이전">‹</button>
-  <button class="infv-next" aria-label="다음">›</button>
+<article class="inf-card" role="listitem">
+<a class="inf-thumb" rel="noopener" target="_self">
+<img alt="thumbnail" loading="lazy"/>
+</a>
+<div class="inf-body">
+<div class="inf-name"></div>
+<div class="inf-meta"></div>
 </div>
-
+</article>
+</template>
+<!-- Fullscreen viewer (mobile portrait: single card full) -->
+<div aria-hidden="true" aria-label="콘텐츠 뷰어" class="infv infv-hidden" id="inf-viewer" role="dialog" tabindex="-1">
+<button aria-label="닫기" class="infv-close">✕</button>
+<div class="infv-stage">
+<div class="infv-track"></div>
+</div>
+<button aria-label="이전" class="infv-prev">‹</button>
+<button aria-label="다음" class="infv-next">›</button>
+</div>
 <style>
-/* =============================
-   Scoped Influencer Layout
-   ============================= */
+  /* Grid & cards (scoped) */
+  #influencer-sections{display:flex;flex-direction:column;gap:18px;padding:8px 10px 16px
+  padding-bottom: 0;}
+  .inf-section{display:flex;flex-direction:column;gap:10px}
+  .inf-title{font-weight:700}
+  .inf-grid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px}
+  @media (max-width:1280px){.inf-grid{grid-template-columns:repeat(6,minmax(0,1fr));}}
+  @media (max-width:1024px){.inf-grid{grid-template-columns:repeat(4,minmax(0,1fr));}}
+  @media (max-width:720px){.inf-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+  .inf-card{background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+  .inf-thumb{display:block;aspect-ratio:16/9;background:#f6f6f6}
+  .inf-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .inf-body{padding:8px}
+  .inf-name{font-weight:600;line-height:1.3}
+  .inf-meta{color:#666;font-size:.85rem}
 
-#influencer-sections{
-  display:flex;
-  flex-direction:column;
-  gap:18px;
-  padding:8px 10px 16px;
-  box-sizing:border-box;
-}
+  /* Viewer */
+  .infv{position: fixed;inset: 0;z-index:9999;background:#000;color:#fff;display:flex;align-items:center;justify-content:center}
+  .infv-hidden{display:none}
+  .infv-close{position:absolute;top:10px;right:12px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:999px;padding:6px 10px}
+  .infv-prev,.infv-next{position:absolute;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.12);border:0;color:#fff;border-radius:10px;padding:10px 12px;cursor:pointer}
+  .infv-prev{left:8px}.infv-next{right:8px}
+  .infv-stage{position:relative;width:100%;height:100%}
+  .infv-track{display:flex;width:100%;height:100%;touch-action:pan-y}
+  .infv-item{flex:0 0 100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:40px 14px}
+  .infv-media{position:relative;max-width:960px;width:100%;aspect-ratio:16/9;background:#111;border-radius:12px;overflow:hidden}
+  .infv-poster{width:100%;height:100%;object-fit:cover;display:block}
+  .infv-iframe{width:100%;height:100%;border:0;display:block}
+  .infv-caption{max-width:960px;width:100%;font-size:.95rem;color:#ddd;text-align:left}
+  @media (max-width:720px) and (orientation:portrait){
+    .infv-item{padding:16px 8px}
+  }
 
-/* Section */
-.inf-section{
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-  position:relative;
-}
-
-.inf-title{ font-weight:700; }
-
-/* Horizontal rail (stable, no layout conflict) */
+/* === Horizontal rails for sections (drag-to-scroll) === */
 .inf-grid{
   display:flex;
-  gap:10px;
   overflow-x:auto;
-  -webkit-overflow-scrolling:touch;
+  -webkit-overflow-scrolling: touch;
+  gap:10px;
+  padding-bottom:8px; /* space for hidden scrollbar area */
   scroll-snap-type:x proximity;
-  padding-bottom:6px;
-  scrollbar-width:none;
+  scrollbar-width:none; /* Firefox hide scrollbar track (visual) */
 }
-.inf-grid::-webkit-scrollbar{ display:none; }
+.inf-grid::-webkit-scrollbar{ display:none; } /* WebKit hide scrollbar visuals */
 
 .inf-card{
   flex:0 0 auto;
-  width:clamp(220px,28vw,360px);
-  background:#fff;
-  border:1px solid rgba(0,0,0,.06);
-  border-radius:12px;
-  overflow:hidden;
-  display:flex;
-  flex-direction:column;
+  width:clamp(220px, 28vw, 360px); /* show 2–3+ cards on wide screens */
   scroll-snap-align:start;
 }
 
-.inf-thumb{
-  display:block;
-  aspect-ratio:16/9;
-  background:#f6f6f6;
-}
-.inf-thumb img{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-  display:block;
-}
-
-.inf-body{ padding:8px; }
-.inf-name{ font-weight:600; line-height:1.3; }
-.inf-meta{ color:#666; font-size:.85rem; }
-
-/* Viewer */
-.infv{
-  position:fixed;
-  inset:0;
-  z-index:9999;
-  background:#000;
-  color:#fff;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-}
-.infv-hidden{ display:none; }
-
-.infv-close{
-  position:absolute;
-  top:10px;
-  right:12px;
-  background:rgba(255,255,255,.1);
-  border:1px solid rgba(255,255,255,.2);
-  color:#fff;
-  border-radius:999px;
-  padding:6px 10px;
-}
-
-.infv-prev,.infv-next{
-  position:absolute;
-  top:50%;
-  transform:translateY(-50%);
-  background:rgba(255,255,255,.12);
-  border:0;
-  color:#fff;
-  border-radius:10px;
-  padding:10px 12px;
-  cursor:pointer;
-}
-
-.infv-prev{ left:8px; }
-.infv-next{ right:8px; }
-
-.infv-stage{
+/* Optional edge fade hint that more content exists (non-blocking if unsupported) */
+.inf-section{
   position:relative;
-  width:100%;
-  height:100%;
-}
-.infv-track{
-  display:flex;
-  width:100%;
-  height:100%;
+  mask-image: linear-gradient(to right, rgba(0,0,0,0.85) 0%, #000 6%, #000 94%, rgba(0,0,0,0.85) 100%);
+  -webkit-mask-image: linear-gradient(to right, rgba(0,0,0,0.85) 0%, #000 6%, #000 94%, rgba(0,0,0,0.85) 100%);
 }
 
-.infv-item{
-  flex:0 0 100%;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  gap:10px;
-  padding:40px 14px;
-}
-
-.infv-media{
-  max-width:960px;
-  width:100%;
-  aspect-ratio:16/9;
-  background:#111;
-  border-radius:12px;
-  overflow:hidden;
-}
-
-.infv-poster,
-.infv-iframe{
-  width:100%;
-  height:100%;
-  border:0;
-  display:block;
-}
-
-/* Mobile adjustments */
-@media (max-width:720px) and (orientation:portrait){
-  .infv-item{ padding:16px 8px; }
-}
-
-/* Hide only section-level arrows on mobile */
-@media (max-width:1024px){
+/* === MOBILE: hide section scroll buttons while keeping scrolling functional === */
+/* These classes cover common button ids/classes if present in the project */
+@media (max-width: 1024px){
   .section-scroll-prev,
   .section-scroll-next,
   .hscroll-prev,
@@ -3488,9 +3304,9 @@ function positionAllLeftArrows(){
   .inf-scroll-next{
     display:none !important;
   }
+  /* Keep viewer arrows visible; only section-level arrows are hidden */
 }
 </style>
-
 <script>
 (function(){
   // Configuration (non-temporary, production-safe)
@@ -3705,111 +3521,99 @@ function positionAllLeftArrows(){
 })();
 </script>
 <!-- ==== END: Influencer lanes block ==== -->
-
-<script id="mobile-rightpanel-stable-v1">
-/* Stable mobile right panel handler (no clone, no repeat, reversible) */
+<script id="mobile-rightpanel-A-script">
+// A) Mobile portrait DOM relocation: move right/ad panel below main once
 (function(){
-
-  let moved=false;
-  let originalParent=null;
-  let originalNext=null;
-  let filled=false;
-
-  function isMobile(){
-    return matchMedia('(max-width:1023px)').matches;
-  }
-
-  function isPortrait(){
-    return matchMedia('(max-width:900px) and (orientation:portrait)').matches;
-  }
-
-  function getMain(){
-    return document.querySelector('.main, .main-content, main, [data-main]');
-  }
-
-  function getRight(){
-    return document.querySelector('.right-panel, .ad-panel, .right-ad-panel, aside[role="complementary"]');
-  }
-
-  function relocate(){
-
-    const main=getMain();
-    const right=getRight();
-
-    if(!main||!right) return;
-
-    if(!originalParent){
-      originalParent=right.parentNode;
-      originalNext=right.nextSibling;
-    }
-
-    if(isMobile() && isPortrait()){
-
-      if(!moved){
-        main.parentNode.insertBefore(right, main.nextSibling);
-        moved=true;
-      }
-
+  const whenReady = (fn)=>{
+    if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, {once:true});
+    else fn();
+  };
+  whenReady(()=>{
+    const isPortrait = () => window.matchMedia('(max-width: 900px) and (orientation: portrait)').matches;
+    if(!isPortrait()) return;
+    // Heuristics for main and right panel containers
+    const main = document.querySelector('.main, .main-content, main, .grid, .cards, [data-main]') || document.body;
+    const right = document.querySelector('.right-panel, .ad-panel, .right-ad-panel, aside[role="complementary"]');
+    if(!right || !main) return;
+    // If right is already after main, skip
+    const parent = main.parentElement;
+    if(parent && right.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING){
+      // already after main
     }else{
-
-      if(moved && originalParent){
-        if(originalNext) originalParent.insertBefore(right, originalNext);
-        else originalParent.appendChild(right);
-        moved=false;
-      }
+      parent && parent.insertBefore(right, main.nextSibling);
     }
-  }
-
-  function fillMobileGrid(){
-
-    if(!isMobile()) return;
-    if(filled) return;
-
-    const grid=document.querySelector('#rpMobileGrid');
-    if(!grid) return;
-
-    const right=getRight();
-    if(!right) return;
-
-    const cards=Array.from(
-      right.querySelectorAll('.ad-box,.thumb-card,.card,.thumbnail-card,.sn-card')
-    ).slice(0,60);
-
-    if(!cards.length) return;
-
-    grid.innerHTML='';
-
-    cards.forEach(el=>{
-      const n=el.cloneNode(true);
-      n.removeAttribute('id');
-      grid.appendChild(n);
-    });
-
-    filled=true;
-  }
-
-  function init(){
-    relocate();
-    fillMobileGrid();
-
-    window.addEventListener('resize', ()=>{
-      requestAnimationFrame(relocate);
-    });
-
-    window.addEventListener('orientationchange', ()=>{
-      setTimeout(relocate,150);
-    });
-  }
-
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded', init, {once:true});
-  }else{
-    init();
-  }
-
+    // make drag/up-scroll feel natural
+    right.addEventListener('touchstart', ()=>{ right.style.cursor='grabbing'; }, {passive:true});
+    right.addEventListener('touchend', ()=>{ right.style.cursor=''; }, {passive:true});
+  });
 })();
 </script>
-
+<script id="mobile-rightpanel-B-script">
+// B) Mobile landscape: convert right panel into a horizontal section with drag-to-scroll
+(function(){
+  const ready = (fn)=> (document.readyState === 'loading') ? document.addEventListener('DOMContentLoaded', fn, {once:true}) : fn();
+  const qs = (sel)=> document.querySelector(sel);
+  function isMobileLandscape(){
+     return matchMedia('(max-width:1023px) and (orientation: landscape)').matches;
+}
+  function ensureHScroll(container){
+    if(!container) return;
+    // wrap children into rp-hscroll if not already
+    if(!container.querySelector('.rp-hscroll')){
+      const wrap = document.createElement('div');
+      wrap.className = 'rp-hscroll';
+      // move only card-like nodes
+      const kids = Array.from(container.children);
+      kids.forEach(ch => wrap.appendChild(ch));
+      container.appendChild(wrap);
+    }
+    const scroller = container.querySelector('.rp-hscroll');
+    if(!scroller) return;
+    // drag-to-scroll (mouse + touch)
+    let isDown=false, startX=0, scrollX=0;
+    scroller.addEventListener('pointerdown', (e)=>{
+      isDown=true; scroller.setPointerCapture(e.pointerId);
+      startX=e.clientX; scrollX=scroller.scrollLeft;
+    });
+    scroller.addEventListener('pointerup', ()=>{ isDown=false; });
+    scroller.addEventListener('pointercancel', ()=>{ isDown=false; });
+    scroller.addEventListener('pointermove', (e)=>{
+      if(!isDown) return;
+      const dx = e.clientX - startX;
+      scroller.scrollLeft = scrollX - dx;
+    }, {passive:true});
+  }
+  ready(()=>{
+    if(!isMobileLandscape()) return;
+    const main = qs('.main, .main-content, main, .grid, .cards, [data-main]') || document.body;
+    const right = qs('.right-panel, .ad-panel, .right-ad-panel, aside[role="complementary"]');
+    if(!right || !main) return;
+    // move panel below main (if not already)
+    const parent = main.parentElement;
+    if(!(parent && (right.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING))){
+      parent && parent.insertBefore(right, main.nextSibling);
+    }
+    // prepare horizontal scroller
+    ensureHScroll(right);
+  });
+  // re-evaluate on orientation change
+  window.addEventListener('orientationchange', ()=>{
+    setTimeout(()=>{
+      if(isMobileLandscape()){
+        const main = qs('.main, .main-content, main, .grid, .cards, [data-main]') || document.body;
+        const right = qs('.right-panel, .ad-panel, .right-ad-panel, aside[role="complementary"]');
+        if(right && main){
+          const parent = main.parentElement;
+          if(!(parent && (right.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING))){
+            parent && parent.insertBefore(right, main.nextSibling);
+          }
+          ensureHScroll(right);
+        }
+      }
+    }, 200);
+  }, {passive:true});
+})();
+</script>
 <script id="bc-narrow-js">
 (function(){
   var tiles = document.querySelectorAll('.section-blockchain .bc-tile');
@@ -3831,7 +3635,50 @@ function positionAllLeftArrows(){
     }
   });
 })();</script>
-
+<script id="rpMobileBox-js-v23">
+(function(){
+  var W=window, D=document;
+  function isMobile(){ return W.matchMedia && W.matchMedia("(max-width:1023px)").matches; }
+  function qs(s,c){ return (c||D).querySelector(s); }
+  function qsa(s,c){ return Array.prototype.slice.call((c||D).querySelectorAll(s)); }
+  function rail(){
+    return qs("#rightRail")||qs(".ad-panel")||qs(".right-panel")||qs("#rightPanel")||qs(".right");
+  }
+  function pick(root){
+    if(!root) return [];
+    var items=qsa(".ad-box, .thumbnail-card, .thumb-card, .sn-card, .card, li, .item, .ad-card", root);
+    return items.filter(function(el){
+      // 링크/이미지 포함 요소만
+      return el.querySelector("a, img, picture, .thumb, .image, .cover");
+    }).slice(0,100);
+  }
+  function fill(){
+    if(!isMobile()) return;
+    var grid=qs("#rpMobileGrid"); if(!grid) return;
+    if(grid.getAttribute("data-filled")==="1") return;
+    var r=rail(), ads=pick(r);
+    if(!ads.length){
+      // 비어 있어도 박스는 보이게 간단 플레이스홀더
+      var ph=D.createElement("div");
+      ph.textContent="AD Panel (mobile)";
+      ph.style.cssText="display:flex;align-items:center;justify-content:center;min-width:200px;max-width:260px;height:144px;line-height:144px;font-size:12px;opacity:.6;";      grid.appendChild(ph);
+      grid.setAttribute("data-filled","1");
+      return;
+    }
+    ads.forEach(function(a){
+      var n=a.cloneNode(true);
+      n.style.margin="0"; n.style.width="auto"; n.style.removeProperty("height"); n.style.removeProperty("line-height");
+      grid.appendChild(n);
+    var media=n.querySelector(".thumb-media, .media, figure, img, video");
+    if(media){ media.style.removeProperty("height"); media.style.removeProperty("line-height"); media.style.width="100%"; }
+    });
+    grid.setAttribute("data-filled","1");
+  }
+  ["DOMContentLoaded","load"].forEach(function(ev){ W.addEventListener(ev, fill, {passive:true}); });
+  ["resize","orientationchange"].forEach(function(ev){ W.addEventListener(ev, function(){ if(isMobile()) fill(); }, {passive:true}); });
+  [120,300,600].forEach(function(t){ setTimeout(fill, t); });
+})();
+</script>
 <script id="edge-autohide-mobile-js">
 (function(){
   if (!matchMedia('(pointer:coarse)').matches) return;
@@ -3900,8 +3747,54 @@ function positionAllLeftArrows(){
   }catch(_){}
 })();
 </script>
-
-<script id="rpMobileGrid-horizontal-unlock-fix-v4">
+<style id='\"rpMobileGrid-horizontal-unlock-v4\"'>
+@media (max-width:1023px) and (orientation: portrait){
+  .right-panel, .ad-panel, .panel-right, .rightpanel, 
+  [data-section=\"10\"], #section10, .section-10, 
+  #rpMobileBox {
+    width:100% !important; max-width:100% !important; min-width:0 !important;
+    overflow:visible !important; contain: none !important;
+    position: static !important; transform: none !important;
+  }
+  #rpMobileBox, #rpMobileScroller {
+    display:block !important;
+    width:100% !important; max-width:100% !important; min-width:0 !important;
+    flex: 1 1 auto !important;
+  }
+  #rpMobileScroller {
+    overflow-x:auto !important; overflow-y:hidden !important;
+    -webkit-overflow-scrolling: touch; scroll-snap-type: x mandatory;
+    touch-action: pan-x; overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  #rpMobileScroller::-webkit-scrollbar{ display:none; }
+  #rpMobileGrid {
+    display:grid !important;
+    grid-auto-flow: column !important;
+    grid-auto-columns: 100% !important;
+    grid-template-rows: auto !important;
+    column-gap: var(--thumb-gap, 12px) !important;
+    width:100% !important; max-width:100% !important; margin:0 !important; padding:0 !important;
+  }
+  #rpMobileGrid > *, 
+  #rpMobileGrid .thumb-card, 
+  #rpMobileGrid .card, 
+  #rpMobileGrid .thumb, 
+  #rpMobileGrid .item {
+    width:100% !important; max-width:100% !important; box-sizing:border-box !important;
+    scroll-snap-align: start;
+  }
+  #rpMobileGrid .thumb-card .thumb-media,
+  #rpMobileGrid .thumb-card .media,
+  #rpMobileGrid .thumb-card figure,
+  #rpMobileGrid .card figure,
+  #rpMobileGrid .item figure { aspect-ratio: 5 / 3; }
+  #rpMobileGrid img, #rpMobileGrid video{
+    width:100% !important; height:auto !important; object-fit: cover;
+  }
+}
+</style>
+<script id='\"rpMobileGrid-horizontal-unlock-fix-v4\"'>
 (function(){
   var GRID = document.querySelector('#rpMobileGrid');
   var SCROLLER = document.querySelector('#rpMobileScroller') || document.querySelector('#rpMobileBox');
@@ -3938,7 +3831,68 @@ function positionAllLeftArrows(){
   window.addEventListener('orientationchange', sweep);
 })();
 </script>
-
+<script id="rpMobileGrid-ratio-enforcer-portrait-v10">
+(function(){
+  // 모바일(세로/가로 공통)에서만 카드 비율을 맞추고,
+  // 데스크탑으로 넘어가면 높이를 원래대로 되돌립니다.
+  function isMobile(){
+    return matchMedia('(max-width:1023px)').matches;
+  }
+  var R = 3/5; // height = width * 3/5  (i.e., width:height = 5:3)
+  function size(el){
+    var w = el.getBoundingClientRect().width || el.clientWidth || window.innerWidth;
+    return Math.max(0, Math.round(w * R));
+  }
+  function apply(){
+    var grid = document.querySelector('#rpMobileGrid'); if(!grid) return;
+    var kids = Array.prototype.slice.call(grid.children);
+    if(!isMobile()){
+      // 모바일이 아니면 높이 강제값 제거 (원상복구)
+      kids.forEach(function(k){
+        k.style.removeProperty('height');
+        k.style.removeProperty('min-height');
+        var media = k.querySelector('.thumb-media, .media, figure, img, video, .ad-box, .ad-card') || k;
+        media.style.removeProperty('width');
+        media.style.removeProperty('height');
+        media.style.removeProperty('min-height');
+        media.style.removeProperty('line-height');
+        if (media.tagName === 'IMG' || media.tagName === 'VIDEO') {
+          media.style.removeProperty('object-fit');
+        }
+      });
+      return;
+    }
+    kids.forEach(function(k){
+      var h = size(k);
+      k.style.setProperty('height', h + 'px', 'important');
+      k.style.setProperty('min-height', h + 'px', 'important');
+      // pick best media container or fall back to self
+      var media = k.querySelector('.thumb-media, .media, figure, img, video, .ad-box, .ad-card') || k;
+      media.style.setProperty('width','100%','important');
+      media.style.setProperty('height', h + 'px', 'important');
+      media.style.setProperty('min-height', h + 'px', 'important');
+      media.style.setProperty('line-height', h + 'px', 'important');
+      if (media.tagName === 'IMG' || media.tagName === 'VIDEO') {
+        media.style.setProperty('object-fit','cover','important');
+      }
+    });
+  }
+  ['DOMContentLoaded','load','resize','orientationchange'].forEach(function(ev){
+    window.addEventListener(ev, apply, {passive:true});
+  });
+  [50,150,300,600,1200].forEach(function(t){ setTimeout(apply, t); });
+  // observe for dynamically added cards
+  var moStarted=false;
+  function startMO(){
+    var grid = document.querySelector('#rpMobileGrid'); if(!grid || moStarted) return;
+    moStarted=true;
+    var mo = new MutationObserver(function(muts){ apply(); });
+    mo.observe(grid, {childList:true, subtree:false});
+  }
+  window.addEventListener('load', startMO, {once:true});
+  window.__RP_RATIO_APPLY__ = apply;
+})();
+</script>
 <script id="rpMobile-photoview-js-v1">
 (function(){
   function getUrlFrom(el){
@@ -4100,20 +4054,13 @@ function positionAllLeftArrows(){
   if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('전송 실패'));});
 })();
 </script>
-
 <style id="sn-container-minheight-fix-20251124">
-/* SocialNetwork: bottom-gap stabilizer (safe version) */
-
+/* SocialNetwork: final bottom-gap + min-height stabilizer (desktop+mobile 공통) */
 .container{
-  min-height: 100vh !important;
+  min-height: auto !important;
   padding-bottom: 0 !important;
   margin-bottom: 0 !important;
 }
-
-main, .main-content{
-  min-height: auto !important;
-}
-
 footer{
   margin-top: 8px !important;
   padding-top: 8px !important;
@@ -4121,79 +4068,56 @@ footer{
 }
 </style>
 
-<script id="igdc-frame-resize-bridge-v2">
+<script id="sn-iframe-height-bridge-20251124">
+// IGDC: report socialnetwork page height to parent index for iframe resizing
 (function(){
-  if (window.__IGDC_FRAME_BRIDGE__) return;
-  window.__IGDC_FRAME_BRIDGE__ = true;
-
-  function getRealHeight(){
-    const body = document.body;
-    const html = document.documentElement;
-
-    let h = Math.max(
-      body.scrollHeight,
-      body.offsetHeight,
-      html.clientHeight,
-      html.scrollHeight,
-      html.offsetHeight
-    );
-
-    /* 제거 대상: 숨김/더미 영역 */
-    document.querySelectorAll('[data-deferred], .loading, .skeleton, .dummy')
-      .forEach(el=>{
-        if(el.offsetParent === null){
-          h -= el.scrollHeight || 0;
-        }
-      });
-
-    return Math.max(h, 300);
-  }
-
-  function post(){
+  function sendHeight(){
     try{
-      if (window.parent === window) return;
+      if (window.parent === window) return; // not inside iframe
 
-      window.parent.postMessage({
-        type: 'IGDC_FRAME_RESIZE',
-        page: location.pathname,
-        height: getRealHeight()
-      }, '*');
-    }catch(e){}
+      var docEl = document.documentElement;
+      var body  = document.body;
+
+      var h = Math.max(
+        docEl ? docEl.scrollHeight  : 0,
+        body  ? body.scrollHeight   : 0,
+        docEl ? docEl.offsetHeight  : 0,
+        body  ? body.offsetHeight   : 0
+      );
+
+      if (!h || h < 100) return;
+
+      var payload = {
+        type:   "igdcFrameHeight",
+        height: h,
+        page:   (window.location && window.location.pathname) ? window.location.pathname : "socialnetwork"
+      };
+
+      window.parent.postMessage(payload, "*");
+    } catch(e){
+      // silent
+    }
   }
 
   function schedule(){
-    post();
-    requestAnimationFrame(post);
-    setTimeout(post, 200);
-    setTimeout(post, 600);
-    setTimeout(post, 1200);
-  }
-
-  /* DOM 변화 감지 */
-  const mo = new MutationObserver(schedule);
-
-  function init(){
-    schedule();
-
-    mo.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true
+    sendHeight();
+    [200, 800, 1600].forEach(function(ms){
+      setTimeout(sendHeight, ms);
     });
   }
 
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', init, {once:true});
-  }else{
-    init();
+  if (document.readyState === "complete" || document.readyState === "interactive") {
+    schedule();
+  } else {
+    document.addEventListener("DOMContentLoaded", schedule);
   }
 
-  window.addEventListener('load', schedule);
-  window.addEventListener('resize', schedule);
-  window.addEventListener('orientationchange', schedule);
-
+  window.addEventListener("load", function(){ setTimeout(sendHeight, 400); });
+  window.addEventListener("resize", function(){ setTimeout(sendHeight, 250); });
+  window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
 })();
 </script>
+
 <script id="igdc-unified-commerce-script">
 /*
  IGDC Unified Commerce Script
@@ -4404,180 +4328,13 @@ footer{
 })(window, document);
 </script>
 
-<script id="rightpanel-dummy-bootstrap">
-(function(){
-
-  const PANEL_ID = 'rightAutoPanel';
-  const DESKTOP_COUNT = 100;
-  const MOBILE_COUNT = 1;
-
-  function isMobile(){
-    return window.innerWidth <= 768;
-  }
-
-  function getCount(){
-    return isMobile() ? MOBILE_COUNT : DESKTOP_COUNT;
-  }
-
-  function getPanel(){
-    return document.getElementById(PANEL_ID);
-  }
-
-  function resetHeight(panel){
-    panel.style.minHeight = '0';
-    panel.style.height = 'auto';
-    panel.style.maxHeight = 'none';
-  }
-
-  function applyMobileHeight(panel){
-    panel.style.maxHeight = 'none';
-  }
-
-  function build(){
-    const panel = getPanel();
-    if(!panel) return;
-
-    resetHeight(panel);
-    panel.innerHTML = '';
-
-    const count = getCount();
-
-    for(let i = 0; i < count; i++){
-      const card = document.createElement('div');
-      card.className = 'ad-box';
-      card.dataset.dummy = '1';
-
-      const inner = document.createElement('div');
-      inner.style.height = '144px';
-      inner.style.display = 'flex';
-      inner.style.alignItems = 'center';
-      inner.style.justifyContent = 'center';
-      inner.textContent = 'Loading...';
-
-      card.appendChild(inner);
-      panel.appendChild(card);
-    }
-
-    if(isMobile()){
-      applyMobileHeight(panel);
-    }
-  }
-
-  function init(){
-    const wait = setInterval(function(){
-      const panel = getPanel();
-      if(panel){
-        clearInterval(wait);
-        build();
-      }
-    }, 50);
-  }
-
-  window.addEventListener('resize', function(){
-    build();
-  });
-
-  window.__IGDC_RIGHTPANEL_RENDER = function(items){
-    const panel = getPanel();
-    if(!panel) return;
-
-    panel.innerHTML = '';
-    resetHeight(panel);
-
-    (Array.isArray(items) ? items : []).forEach(function(item){
-      const card = document.createElement('div');
-      card.className = 'ad-box';
-
-      const a = document.createElement('a');
-      a.href = item && (item.url || item.href || item.link || item.productUrl || item.detailUrl) ? (item.url || item.href || item.link || item.productUrl || item.detailUrl) : '#';
-      a.textContent = item && (item.title || item.name || item.text || item.label) ? (item.title || item.name || item.text || item.label) : 'Item';
-      a.target = a.href !== '#' ? '_blank' : '_self';
-      a.rel = 'noopener';
-
-      card.appendChild(a);
-      panel.appendChild(card);
-    });
-  };
-
-  init();
-
-})();
-</script>
-<script>
-(function(){
-
-  function applyAutomapData(sections){
-
-    if(!sections) return;
-
-    for(let i=1;i<=9;i++){
-
-      const rowWrap = document.querySelector(`#rowGrid${i}`);
-      if(!rowWrap) continue;
-
-      const grid = rowWrap.querySelector('[data-psom-key]');
-      if(!grid) continue;
-
-      const key = grid.getAttribute('data-psom-key');
-      if(!key) continue;
-
-      const items = sections[key];
-      if(!Array.isArray(items) || items.length === 0) continue;
-
-      const cards = grid.querySelectorAll('.card');
-
-      items.forEach((item, idx)=>{
-        const card = cards[idx];
-        if(!card) return;
-
-        const title = item.title || item.name || item.text || "Item";
-        const desc = item.description || item.summary || "";
-        const url = item.url || item.href || item.link || "#";
-        const thumb = item.thumb || item.image || "";
-
-        card.href = url;
-        card.target = url !== "#" ? "_blank" : "_self";
-
-        const t = card.querySelector('.title');
-        const d = card.querySelector('.desc');
-        const p = card.querySelector('.pic');
-
-        if(t) t.textContent = title;
-        if(d) d.textContent = desc;
-
-        if(p){
-          if(thumb){
-            p.style.backgroundImage = `url('${thumb}')`;
-            p.style.backgroundSize = 'cover';
-            p.textContent = "";
-          }
-        }
-
-        card.removeAttribute('data-dummy');
-      });
-
-    }
-  }
-
-  // 🔥 오토맵 감지 루프
-  function waitForData(){
-    if(window.__SOCIAL_DATA__){
-      applyAutomapData(window.__SOCIAL_DATA__.sections || window.__SOCIAL_DATA__);
-      return;
-    }
-    setTimeout(waitForData, 200);
-  }
-
-  waitForData();
-
-})();
-</script>
-
 <script defer="" src="/assets/js/auto-embed.instagram.js"></script>
 <script defer="" src="/assets/js/placeholder-sweeper.js"></script>
 <script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
 
-<script src="/assets/js/socialnetwork-automap-v3.js" defer></script>
+<script defer src="/assets/js/feed.js"></script>
+
+<script defer src="/assets/js/socialnetwork-automap.v1.js"></script>
 
 </body>
 </html>
