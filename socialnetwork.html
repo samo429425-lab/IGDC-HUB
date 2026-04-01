@@ -4348,7 +4348,6 @@ footer{
   }
 
   function build(){
-
     const panel = getPanel();
     if(!panel) return;
 
@@ -4357,11 +4356,19 @@ footer{
 
     const count = getCount();
 
-    for(let i=0;i<count;i++){
+    for(let i = 0; i < count; i++){
       const card = document.createElement('div');
       card.className = 'ad-box';
       card.dataset.dummy = '1';
-      card.innerHTML = '<div style="height:144px;display:flex;align-items:center;justify-content:center;">Loading...</div>';
+
+      const inner = document.createElement('div');
+      inner.style.height = '144px';
+      inner.style.display = 'flex';
+      inner.style.alignItems = 'center';
+      inner.style.justifyContent = 'center';
+      inner.textContent = 'Loading...';
+
+      card.appendChild(inner);
       panel.appendChild(card);
     }
 
@@ -4371,49 +4378,45 @@ footer{
   }
 
   function init(){
-
-    const wait = setInterval(()=>{
-
+    const wait = setInterval(function(){
       const panel = getPanel();
       if(panel){
         clearInterval(wait);
         build();
       }
-
-    },50);
-
+    }, 50);
   }
 
-  window.addEventListener('resize',()=>{
+  window.addEventListener('resize', function(){
     build();
   });
 
-window.__IGDC_RIGHTPANEL_RENDER = function(items){
+  window.__IGDC_RIGHTPANEL_RENDER = function(items){
+    const panel = getPanel();
+    if(!panel) return;
 
-  const panel = getPanel();
-  if(!panel) return;
+    panel.innerHTML = '';
+    resetHeight(panel);
 
-  panel.innerHTML = '';
-  resetHeight(panel);
+    (Array.isArray(items) ? items : []).forEach(function(item){
+      const card = document.createElement('div');
+      card.className = 'ad-box';
 
-  items.forEach(item=>{
-    const card = document.createElement('div');
-    card.className = 'ad-box';
+      const a = document.createElement('a');
+      a.href = item && (item.url || item.href || item.link || item.productUrl || item.detailUrl) ? (item.url || item.href || item.link || item.productUrl || item.detailUrl) : '#';
+      a.textContent = item && (item.title || item.name || item.text || item.label) ? (item.title || item.name || item.text || item.label) : 'Item';
+      a.target = a.href !== '#' ? '_blank' : '_self';
+      a.rel = 'noopener';
 
-    const a = document.createElement('a');
-    a.href = (item && item.link) ? item.link : '#';
-    a.textContent = 'Item';
+      card.appendChild(a);
+      panel.appendChild(card);
+    });
+  };
 
-    card.appendChild(a);
-    panel.appendChild(card);
-  });
-
-};
-
-init();
+  init();
 
 })();
-
+</script>
 <script defer="" src="/assets/js/auto-embed.instagram.js"></script>
 <script defer="" src="/assets/js/placeholder-sweeper.js"></script>
 <script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
