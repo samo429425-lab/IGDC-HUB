@@ -406,9 +406,12 @@ while(items.length < MAIN_LIMIT){
     STATE.mainKeys = targets.map(function (t) { return t.key; });
 
     targets.forEach(function (target) {
-      const items = sectionMap[target.key] || sectionMap[target.key]?.items;
-      mountMainGrid(target.el, items);
-    });
+
+    const raw = sectionMap && sectionMap[target.key];
+    const items = raw && raw.items ? raw.items : raw;
+
+    mountMainGrid(target.el, items);
+});
   }
 function runRight(sectionMap) {
   const panel = document.getElementById('rightAutoPanel');
