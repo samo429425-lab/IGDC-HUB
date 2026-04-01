@@ -261,7 +261,7 @@ grids.forEach(grid => {
   if(key === 'rightPanel') return;
   if(key === 'social-maru') return;
 
-const raw = sections[key];
+const raw = (snap.items || []).filter(it => it.section === key);
 
 const items = Array.isArray(raw)
   ? raw
