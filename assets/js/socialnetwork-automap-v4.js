@@ -20,18 +20,16 @@
   const MOBILE_RIGHT_LIMIT = 1;
 
   const RIGHT_KEY_ALIASES = [
-    'rightPanel',
-    'rightpanel',
-    'right_panel',
-    'social-right',
-    'social_right',
-    'social-right-panel',
-    'social_right_panel',
-    'socialnetwork',
-    'rightAutoPanel'
-  ];
+  'rightPanel',
+  'rightpanel',
+  'right_panel',
+  'social-right',
+  'social_right',
+  'social-right-panel',
+  'social_right_panel'
+];
 
-  const EXCLUDED_MAIN_KEYS = new Set(['social-maru', 'rightPanel']);
+  const EXCLUDED_MAIN_KEYS = new Set(['rightPanel']);
 
   const STATE = {
     version: 'v4',
@@ -104,6 +102,15 @@
     return false;
   }
 
+function makeSocialDummy(key, idx){
+  const n = idx + 1;
+  return {
+    title: key + ' sample ' + n,
+    url: '#',
+    thumb: ''
+  };
+}
+
   async function loadSnapshot() {
     const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
     if (!res.ok) {
@@ -124,6 +131,17 @@
     const sections = socialRoot && typeof socialRoot.sections === 'object' ? socialRoot.sections : {};
     return sections || {};
   }
+
+function getSections(snapshot){
+  const sec = getSectionMap(snapshot);
+
+  return {
+    main: sec,
+    right: {
+      rightPanel: sec.rightPanel || []
+    }
+  };
+}
 
   function pickRightSectionKey(sectionMap) {
     for (const key of RIGHT_KEY_ALIASES) {
@@ -264,8 +282,14 @@
   function mountMainGrid(gridEl, rawItems) {
     if (!gridEl) return;
 
-    const items = normalizeItems(rawItems).filter(isRenderableItem).slice(0, MAIN_LIMIT);
-    if (items.length === 0) return;
+let items = normalizeItems(rawItems)
+  .filter(isRenderableItem)
+  .slice(0, MAIN_LIMIT);
+
+// ✅ 핵심 fallback
+while(items.length < MAIN_LIMIT){
+  items.push(makeSocialDummy('social', items.length));
+}
 
     const cards = ensureMainCards(gridEl, MAIN_LIMIT);
 
@@ -331,24 +355,29 @@
     box.appendChild(a);
   }
 
-  function mountRightPanel(panel, rawItems) {
-    if (!panel) return;
+ function mountRightPanel(panel, rawItems) {
+  if (!panel) return;
 
-    const items = normalizeItems(rawItems).filter(isRenderableItem);
-    if (items.length === 0) return;
+  let items = normalizeItems(rawItems).filter(isRenderableItem);
 
-    const desired = isMobile() ? MOBILE_RIGHT_LIMIT : DESKTOP_RIGHT_LIMIT;
-    const existingCards = qsa('.ad-box', panel).length;
-    const limit = existingCards > 0 ? Math.min(existingCards, desired) : desired;
-    const renderItems = items.slice(0, limit);
-    const cards = ensureRightCards(panel, limit);
+  const desired = isMobile() ? MOBILE_RIGHT_LIMIT : DESKTOP_RIGHT_LIMIT;
+  const existingCards = qsa('.ad-box', panel).length;
+  const limit = existingCards > 0 ? Math.min(existingCards, desired) : desired;
 
-    for (let i = 0; i < cards.length; i++) {
-      const item = renderItems[i];
-      if (item) paintRightCard(cards[i], item);
-      else resetRightCard(cards[i]);
-    }
+  // ✅ fallback (핵심)
+  while(items.length < limit){
+    items.push(makeSocialDummy('right', items.length));
   }
+
+  const renderItems = items.slice(0, limit);
+  const cards = ensureRightCards(panel, limit);
+
+  for (let i = 0; i < cards.length; i++) {
+    const item = renderItems[i];
+    if (item) paintRightCard(cards[i], item);
+    else resetRightCard(cards[i]);
+  }
+}
 
   function callExistingRightRenderer(rawItems) {
     if (typeof window.__IGDC_RIGHTPANEL_RENDER !== 'function') return false;
@@ -381,36 +410,41 @@
       mountMainGrid(target.el, items);
     });
   }
+function runRight(sectionMap) {
+  const panel = document.getElementById('rightAutoPanel');
+  if (!panel) return;
 
-  function runRight(sectionMap) {
-    const panel = document.getElementById('rightAutoPanel');
-    if (!panel) return;
+  const items = sectionMap.rightPanel || [];
 
-    const rightKey = pickRightSectionKey(sectionMap);
-    if (!rightKey) return;
+  const renderedByExisting = callExistingRightRenderer(items);
 
-    const items = sectionMap[rightKey];
-    const renderedByExisting = callExistingRightRenderer(items);
-
-    if (!renderedByExisting) {
-      mountRightPanel(panel, items);
-    }
+  if (!renderedByExisting) {
+    mountRightPanel(panel, items);
   }
+}
 
-  async function run() {
-    try {
-      const snapshot = await loadSnapshot();
-      const sectionMap = getSectionMap(snapshot);
+async function run() {
+  try {
+    const snapshot = await loadSnapshot();
 
-      runMain(sectionMap);
-      runRight(sectionMap);
+    // ✅ 핵심 구조 분리
+    const { main, right } = getSections(snapshot);
 
-      STATE.rendered = true;
-      window.__SOCIALNETWORK_AUTOMAP_V4_DONE__ = true;
-    } catch (e) {
-      logError('run', e);
-    }
+    // ✅ 메인 렌더
+    runMain(main);
+
+    // ✅ 우측 패널 렌더
+    runRight({
+      rightPanel: right.rightPanel
+    });
+
+    STATE.rendered = true;
+    window.__SOCIALNETWORK_AUTOMAP_V4_DONE__ = true;
+
+  } catch (e) {
+    logError('run', e);
   }
+}
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', run, { once: true });
