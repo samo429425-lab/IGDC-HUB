@@ -479,3 +479,9 @@ if (document.readyState === 'loading') {
 } else {
   initSocialAutomap();
 }
+window.addEventListener('DOMContentLoaded', function(){
+  console.log('🔥 automap start');
+  if (typeof runSocialAutoMap === 'function') {
+    runSocialAutoMap();
+  }
+});
