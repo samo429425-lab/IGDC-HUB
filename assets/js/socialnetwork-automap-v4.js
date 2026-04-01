@@ -289,7 +289,6 @@ function getSections(snapshot) {
     if (!gridEl) return;
 
 let items = normalizeItems(rawItems)
-  .filter(isRenderableItem)
   .slice(0, MAIN_LIMIT);
 
 // ✅ 핵심 fallback
