@@ -132,13 +132,19 @@ function makeSocialDummy(key, idx){
     return sections || {};
   }
 
-function getSections(snapshot){
-  const sec = getSectionMap(snapshot);
+function getSections(snapshot) {
+
+  if (!snapshot?.pages?.social?.sections) {
+    console.error("❌ social snapshot 구조 깨짐");
+    return { main: {}, right: {} };
+  }
+
+  const sections = snapshot.pages.social.sections;
 
   return {
-    main: sec,
+    main: sections,
     right: {
-      rightPanel: sec.rightPanel || []
+      rightPanel: sections.rightPanel || []
     }
   };
 }
@@ -410,7 +416,8 @@ while(items.length < MAIN_LIMIT){
     const raw = sectionMap && sectionMap[target.key];
     const items = raw && raw.items ? raw.items : raw;
 
-    mountMainGrid(target.el, items);
+    const inner = target.el.querySelector('.thumb-inner') || target.el;
+    mountMainGrid(inner, items);
 });
   }
 function runRight(sectionMap) {
