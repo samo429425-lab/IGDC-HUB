@@ -413,9 +413,22 @@ while(items.length < MAIN_LIMIT){
     targets.forEach(function (target) {
 
     const raw = sectionMap && sectionMap[target.key];
-    const items = raw && raw.items ? raw.items : raw;
 
-    mountMainGrid(target.el, items);
+// 🔥 무조건 배열 보장
+let items = [];
+
+if (Array.isArray(raw)) {
+  items = raw;
+} else if (raw && Array.isArray(raw.items)) {
+  items = raw.items;
+}
+
+// 🔥 강제 fallback (절대 빈 배열 방지)
+if (!items || items.length === 0) {
+  items = [makeSocialDummy(target.key, 0)];
+}
+
+mountMainGrid(target.el, items);
 });
   }
 function runRight(sectionMap) {
