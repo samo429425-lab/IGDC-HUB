@@ -415,8 +415,7 @@ while(items.length < MAIN_LIMIT){
     const raw = sectionMap && sectionMap[target.key];
     const items = raw && raw.items ? raw.items : raw;
 
-    const inner = target.el.querySelector('.thumb-inner') || target.el;
-    mountMainGrid(inner, items);
+    mountMainGrid(target.el, items);
 });
   }
 function runRight(sectionMap) {
