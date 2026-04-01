@@ -267,17 +267,29 @@ const items = Array.isArray(raw)
   ? raw
   : (Array.isArray(raw?.items) ? raw.items : []);
 
-   mountMainRow(grid, items);
+// 🔥 샘플 자동 주입 (데이터 없을 때)
+const finalItems = items.length > 0 ? items : [{
+  title: key + " SAMPLE",
+  url: "#",
+  thumbnail: ""
+}];
+
+  mountMainRow(grid, finalItems);
 });
 
 const rightPanel = qs('#rightAutoPanel');
 if(rightPanel){
-  const rightItems =
+  const raw =
     Array.isArray(sections.rightPanel)
       ? sections.rightPanel
       : (Array.isArray(sections.rightPanel?.items) ? sections.rightPanel.items : []);
 
-  mountRightPanel(rightPanel, rightItems);
+  const finalItems = raw.length > 0 ? raw : [{
+    title: "RIGHT SAMPLE",
+    url: "#"
+  }];
+
+  mountRightPanel(rightPanel, finalItems);
 }
 
       window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
