@@ -148,25 +148,26 @@ function getSections(snapshot){
     }
   }
 
-  function resetMainCardToDummy(card){
-    if(!card) return;
-    card.href = '#';
-    card.target = '_self';
-    card.rel = 'noopener';
-    card.dataset.dummy = '1';
+ function resetMainCardToDummy(card){
+  if(!card) return;
 
-    const pic = qs('.pic', card);
-    const metaTitle = qs('.title', card);
-    const metaDesc = qs('.desc', card);
+  card.href = '#';
+  card.target = '_self';
+  card.rel = 'noopener';
+  card.dataset.dummy = '1';
 
-    if(metaTitle) metaTitle.textContent = 'Loading…';
-    if(metaDesc) metaDesc.textContent = 'Preparing';
+  const pic = qs('.pic', card);
+  const metaTitle = qs('.title', card);
+  const metaDesc = qs('.desc', card);
 
-    if(pic){
-      pic.style.backgroundImage = '';
-      pic.textContent = '•';
-    }
+  if(metaTitle) metaTitle.textContent = 'Loading';
+  if(metaDesc) metaDesc.textContent = 'Preparing';
+
+  if(pic){
+    pic.style.backgroundImage = '';
+    pic.textContent = '';
   }
+}
 
  function mountMainRow(gridEl, items){
   if(!gridEl) return;
