@@ -8,6 +8,7 @@
 (function () {
   'use strict';
 
+ const SNAPSHOT_URL = '/data/social.snapshot.json';
  // --- bootstrap guard ---
  if (window.__SOCIALNETWORK_AUTOMAP_V3_FIXED__ === true) return;
  window.__SOCIALNETWORK_AUTOMAP_V3_FIXED__ = true;
