@@ -135,7 +135,7 @@ function makeSocialDummy(key, idx){
 function getSections(snapshot) {
 
   if (!snapshot?.pages?.social?.sections) {
-    console.error("❌ social snapshot 구조 깨짐");
+    console.error("social snapshot structure error");
     return { main: {}, right: {} };
   }
 
@@ -479,9 +479,3 @@ if (document.readyState === 'loading') {
 } else {
   initSocialAutomap();
 }
-window.addEventListener('DOMContentLoaded', function(){
-  console.log('🔥 automap start');
-  if (typeof runSocialAutoMap === 'function') {
-    runSocialAutoMap();
-  }
-});
