@@ -47,21 +47,7 @@
   }
 
 function isRealItem(it){
-  if (!it || typeof it !== 'object') return false;
-
-  const url = pickUrl(it);
-  const title = pickTitle(it);
-  const thumb = pickThumb(it);
-
-  // placeholder도 슬롯이면 허용
-  if (it.type === 'placeholder') return true;
-
-  // 일반 데이터도 허용
-  if (url && url !== '#') return true;
-  if (title) return true;
-  if (thumb) return true;
-
-  return false;
+  return !!it;
 }
 
 function getSections(snapshot){
@@ -85,35 +71,10 @@ function getSections(snapshot){
     return res.json();
   }
 
-  function getMainSlots(gridEl){
-    if(!gridEl) return [];
-
-    let cards = qsa('a.card', gridEl);
-
-    if(cards.length === 0){
-      const frag = document.createDocumentFragment();
-      for(let i=0;i<MAIN_LIMIT;i++){
-        const a = document.createElement('a');
-        a.className = 'card';
-        a.href = '#';
-        a.target = '_self';
-        a.rel = 'noopener';
-        a.dataset.dummy = '1';
-        a.innerHTML =
-          '<div class="pic">•</div>' +
-          '<div class="meta">' +
-            '<div class="title">Loading…</div>' +
-            '<div class="desc">Preparing</div>' +
-            '<span class="cta">Open</span>' +
-          '</div>';
-        frag.appendChild(a);
-      }
-      gridEl.appendChild(frag);
-      cards = qsa('a.card', gridEl);
-    }
-
-    return cards;
-  }
+function getMainSlots(gridEl){
+  if(!gridEl) return [];
+  return qsa('a.card', gridEl);
+}
 
   function paintMainCard(card, it){
     if(!card) return;
@@ -289,14 +250,15 @@ grids.forEach(grid => {
   const key = grid.getAttribute('data-psom-key');
   if(!key) return;
 
-  // ❗ 우측 패널 제외
   if(key === 'rightPanel') return;
-
-  // social-maru 제외
   if(key === 'social-maru') return;
 
-  const items = sections.main?.[key] || [];
-  mountMainRow(grid, items);
+  const rawItems = sections.main?.[key];
+
+  // 🔥 핵심 분기
+const items = Array.isArray(rawItems) ? rawItems : [];
+
+ mountMainRow(grid, items);
 });
 
       const rightPanel = qs('#rightAutoPanel');
