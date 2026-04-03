@@ -707,8 +707,14 @@ function buildSnapshot({ seed, psomList, bank, optional }){
     const chosen = list.slice(0, limit);
 
     if(chosen.length < limit){
-      const need = limit - chosen.length;
-      const filler = (seedByKey[k] || []).slice(0, need).map((s)=>{
+    const need = limit - chosen.length;
+        let source = (seedByKey[k] || []);
+
+        if (k === "donation-global"){  source = source.slice(1); 
+		// 👉 첫 더미 제거
+}
+
+const filler = source.slice(0, need).map((s)=>{
         const copy = JSON.parse(JSON.stringify(s));
         copy.psom_key = k;
         copy.section_category = k;
