@@ -28,13 +28,13 @@
       "group": "network-global"
     }
   },
-  "version": "FINAL-v1.0",
-  "type": "right-panel",
-  "page": "network",
-  "key": "right-network-100",
-  "limit": 100,
-  "updated": "2026-02-16T00:07:22",
-  "slots": [
+ "version": "FINAL-v1.0",
+ "type": "right-panel",
+ "page": "network",
+ "key": "network-right",
+ "limit": 100,
+ "updated": "2026-02-16T00:07:22",
+ "items": [
     {
       "title": "network 1",
       "thumb": "data:image/gif;base64,R0lGODlhAQABAAAAACw=",
@@ -30138,13 +30138,12 @@
       }
     }
   ],
-  
-  "layers": {
+ "layers": {
   "network_feed": {
     "source": "search-bank",
     "type": "network",
     "route": "network",
-    "binding": "right-network-100",
+    "binding": "network-right",
     "mode": "append",
     "psom": true
   }
@@ -30164,10 +30163,10 @@
       "buffer": []
     }
   },
-  "sections": {
-    "right-network-100": []
+    "sections": {
+    "network-right": []
   },
-  "capacity": {
+    "capacity": {
     "sections_default": 100
   }
 }
