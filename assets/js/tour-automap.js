@@ -174,21 +174,21 @@ document.head.appendChild(style);
   }
 
   async function run() {
-    disablePsomThumbGrid();
 
     // 1) snapshot 우선
     const snap = await fetchJson(SNAPSHOT_URL);
     let items = [];
 
-    if (snap && snap.meta && snap.meta.hub === HUB && Array.isArray(snap.items)) {
-      items = normalizeItems(snap.items);
-    }
+   // ✅ items 기반 단일 구조
+  items = normalizeItems(snap?.items || []);
 
-    // 2) feed fallback
-    if (!items.length) {
-      const feed = await fetchJson(FEED_URL);
-      items = feed && Array.isArray(feed.items) ? normalizeItems(feed.items) : [];
-    }
+   // 2) feed fallback 유지
+  if (!items.length) {
+    const feed = await fetchJson(FEED_URL);
+    items = (feed && Array.isArray(feed.items))
+    ? normalizeItems(feed.items)
+    : [];
+}
 
     renderMobileRail(items);
     renderRightPanel(items);

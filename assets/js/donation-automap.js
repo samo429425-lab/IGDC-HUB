@@ -213,9 +213,16 @@ function groupBySection(items){
 
   (Array.isArray(items) ? items : []).forEach((it)=>{
 
-    const isSeed =
-      it?.meta?.source === 'seed' &&
-      !it?.bank_ref?.record_id;
+const isSeed =
+  (
+    it?.meta?.source === 'seed' ||
+    it?.meta?.type === 'seed' ||
+    it?.id === 'seed' ||
+    it?.uid === 'seed' ||
+    (it?.title && it.title.toLowerCase().includes('seed')) ||
+    (it?.org?.name && it.org.name.toLowerCase().includes('seed'))
+  ) &&
+  !it?.bank_ref?.record_id;
 
     // 👉 donation-global 첫 더미 1개만 제거
     if(

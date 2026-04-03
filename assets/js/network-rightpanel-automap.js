@@ -135,7 +135,33 @@
     const snap = await fetchJson(SNAPSHOT_URL);
 
     // snapshot이 직접 items를 갖고 있으면 그걸 우선
-    let items = snap && Array.isArray(snap.items) ? normalizeItems(snap.items) : [];
+    let items = [];
+
+if (snap) {
+
+  // 1순위: PSOM 구조
+  if (
+    snap.pages &&
+    snap.pages.network &&
+    snap.pages.network.sections &&
+    Array.isArray(snap.pages.network.sections["network-right"])
+  ) {
+    items = normalizeItems(snap.pages.network.sections["network-right"]);
+  }
+
+  // 2순위: root sections fallback
+  else if (
+    snap.sections &&
+    Array.isArray(snap.sections["network-right"])
+  ) {
+    items = normalizeItems(snap.sections["network-right"]);
+  }
+
+  // 3순위: 기존 items fallback
+  else if (Array.isArray(snap.items)) {
+    items = normalizeItems(snap.items);
+  }
+}
 
     // snapshot items 없으면 feed 함수로 시도
     if (!items.length){
