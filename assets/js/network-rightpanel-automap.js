@@ -122,66 +122,56 @@
     list.appendChild(frag);
   }
 
-  function renderDesktopViaHook(items){
-    if (typeof window.__IGDC_RIGHTPANEL_RENDER === 'function'){
-      window.__IGDC_RIGHTPANEL_RENDER(items);
-      return true;
-    }
-    return false;
+ // ✅ 데스크탑 직접 렌더 함수 (hook 제거)
+function renderDesktopDirect(items){
+  const panel = document.getElementById('rightAutoPanel');
+  if (!panel) return;
+
+  // 데이터 없으면 기존 유지 (안전)
+  if (!items || !items.length) return;
+
+  panel.innerHTML = '';
+
+  const frag = document.createDocumentFragment();
+
+  for (const item of items){
+    const box = document.createElement('div');
+    box.className = 'ad-card';
+
+    box.innerHTML = `
+      <a href="${item.link || '#'}" target="_blank" rel="noopener">
+        <img src="${item.thumb}" alt="${item.title || ''}" />
+        <div class="ad-title">${item.title || ''}</div>
+      </a>
+    `;
+
+    frag.appendChild(box);
   }
 
-  async function run(){
-    // 데스크탑/모바일 공통: feed → items → (desktop hook / mobile rail)
-    const snap = await fetchJson(SNAPSHOT_URL);
-
-    // snapshot이 직접 items를 갖고 있으면 그걸 우선
-    let items = [];
-
-if (snap) {
-
-  // 1순위: PSOM 구조
-  if (
-    snap.pages &&
-    snap.pages.network &&
-    snap.pages.network.sections &&
-    Array.isArray(snap.pages.network.sections["network-right"])
-  ) {
-    items = normalizeItems(snap.pages.network.sections["network-right"]);
-  }
-
-  // 2순위: root sections fallback
-  else if (
-    snap.sections &&
-    Array.isArray(snap.sections["network-right"])
-  ) {
-    items = normalizeItems(snap.sections["network-right"]);
-  }
-
-  // 3순위: 기존 items fallback
-  else if (Array.isArray(snap.items)) {
-    items = normalizeItems(snap.items);
-  }
+  panel.appendChild(frag);
 }
 
-    // snapshot items 없으면 feed 함수로 시도
-    if (!items.length){
-      const feed = await fetchJson(FEED_URL);
-      items = feed && Array.isArray(feed.items) ? normalizeItems(feed.items) : [];
-    }
+// ✅ run 함수 교체
+async function run(){
+  const snap = await fetchJson(SNAPSHOT_URL);
 
-    // ✅ 모바일 rail: 항상 시도 (존재할 때만)
-    renderMobile(items);
+  let items = snap && Array.isArray(snap.items)
+    ? normalizeItems(snap.items)
+    : [];
 
-    // ✅ 데스크탑 우측패널: hook이 준비된 뒤 실행
-    if (!renderDesktopViaHook(items)){
-      // hook이 늦게 준비될 수 있어 짧게 재시도
-      let tries = 0;
-      const t = setInterval(()=>{
-        tries++;
-        if (renderDesktopViaHook(items) || tries >= 20) clearInterval(t);
-      }, 100);
-    }
+  if (!items.length){
+    const feed = await fetchJson(FEED_URL);
+    items = feed && Array.isArray(feed.items)
+      ? normalizeItems(feed.items)
+      : [];
   }
+
+  // 모바일
+  renderMobile(items);
+
+  // 🔥 데스크탑 → 직접 렌더 (핵심 변경)
+  renderDesktopDirect(items);
+}
 
   // load + DOMContentLoaded 이중 안전
   if (document.readyState === 'complete' || document.readyState === 'interactive'){
