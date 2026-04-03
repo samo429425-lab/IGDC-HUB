@@ -76,7 +76,7 @@ function enforceSnapshotFileLimit(pageName, bankItems) {
   const fileName = SNAPSHOT_FILES[pageName];
   if (!fileName) return;
 
-  if (pageName === "network") return;
+  if (pageName === "network" || pageName === "media") return;
 
   const filePath = path.join(ROOT, fileName);
   if (!fs.existsSync(filePath)) return;
@@ -345,7 +345,7 @@ function handleNetworkSnapshot(bank) {
       item?.section ||
       "";
 
-    if (rawKey !== "networkhub_right_panel") continue;
+    if (rawKey !== "network-right") continue;
     if (count >= NETWORK_LIMIT) break;
 
     const id = item.id || stableId(JSON.stringify(item));
@@ -361,7 +361,7 @@ function handleNetworkSnapshot(bank) {
         item.thumbnail ||
         item.image ||
         "/assets/img/placeholder.png",
-      psom_key: "networkhub_right_panel",
+      psom_key: "network-right",
       route: item.route || "distribution",
       type: item.type || "product",
       priority: item.priority || 0
@@ -677,125 +677,214 @@ function handleMediaSnapshot(bank) {
   if (!fs.existsSync(filePath)) return;
 
   const snapshot = readJson(filePath) || {};
-  const bankItems = bank.items || [];
+  const bankItems = Array.isArray(bank?.items) ? bank.items : [];
 
-  if (!snapshot.sections) snapshot.sections = {};
+  if (!snapshot.sections || typeof snapshot.sections !== "object") return;
 
   const sections = snapshot.sections;
-  const sectionKeys = Object.keys(sections);
-  
-  // 🔥 전체 영상 풀
-  const videoPool = bankItems.filter(item => {
-    return (
-      item.type === "video" ||
-      item.mediaType === "video" ||
-      item.videoUrl ||
-      (item.url && item.url.includes("youtu")) ||
-      (item.url && item.url.includes("vimeo"))
-    );
-  });
 
-  // 🔥 최신 정렬
-  videoPool.sort((a, b) => {
-    return (b.timestamp || b.date || 0) - (a.timestamp || a.date || 0);
-  });
+  const MEDIA_ALIAS = {
+    "trending_now": "media-trending",
+    "latest_movie": "media-movie",
+    "latest_drama": "media-drama",
+    "section_1": "media-thriller",
+    "section_2": "media-romance",
+    "section_3": "media-variety",
+    "section_4": "media-documentary",
+    "section_5": "media-animation",
+    "section_6": "media-music",
+    "section_7": "media-shorts"
+  };
 
-  for (const sectionKey of sectionKeys) {
+  const MEDIA_KEYS = new Set([
+    "media-trending",
+    "media-movie",
+    "media-drama",
+    "media-thriller",
+    "media-romance",
+    "media-variety",
+    "media-documentary",
+    "media-animation",
+    "media-music",
+    "media-shorts"
+  ]);
 
-    const existing = sections[sectionKey] || [];
-    const existingIds = new Set(existing.map(i => i.id));
+function resolveMediaKey(rawKey) {
+  if (!rawKey) return null;
 
-    // =========================
-    // 🔥 1️⃣ MAIN (최신 섹션)
-    // =========================
-    if (sectionKey === "main") {
+  const key = String(rawKey).toLowerCase();
 
-      const supply = videoPool.slice(0, 30);
+  // ===== 직접 키 =====
+  if (MEDIA_KEYS.has(key)) return key;
 
-      for (const item of supply) {
+  // ===== 기존 alias =====
+  if (MEDIA_ALIAS[key]) return MEDIA_ALIAS[key];
 
-        const id = item.id || stableId(JSON.stringify(item));
-        if (existingIds.has(id)) continue;
+  // ===== 확장 alias =====
+  const EXTENDED = {
+    "movie": "media-movie",
+    "film": "media-movie",
 
-        const videoUrl =
-          item.videoUrl ||
-          item.url ||
-          item.link ||
-          "#";
+    "drama": "media-drama",
+    "series": "media-drama",
 
-        const thumb =
-          item.thumbnail ||
-          item.thumb ||
-          item.image ||
-          (videoUrl.includes("youtu")
-            ? `https://img.youtube.com/vi/${extractYouTubeId(videoUrl)}/hqdefault.jpg`
-            : "/assets/img/placeholder.png");
+    "thriller": "media-thriller",
+    "mystery": "media-thriller",
 
-        existing.push({
-          id,
-          title: item.title || item.name || "Untitled",
-          summary: item.summary || "",
-          url: videoUrl,
-          thumb,
-          priority: item.priority || item.score || 0
-        });
+    "romance": "media-romance",
+    "love": "media-romance",
 
-        existingIds.add(id);
+    "variety": "media-variety",
+    "entertainment": "media-variety",
+    "show": "media-variety",
+
+    "documentary": "media-documentary",
+    "docu": "media-documentary",
+
+    "animation": "media-animation",
+    "anime": "media-animation",
+    "cartoon": "media-animation",
+
+    "music": "media-music",
+    "mv": "media-music",
+
+    "shorts": "media-shorts",
+    "short": "media-shorts",
+    "clip": "media-shorts"
+  };
+
+  if (EXTENDED[key]) return EXTENDED[key];
+
+  return null;
+}
+
+function isVideoLike(item) {
+  if (!item) return false;
+
+  const t = String(item.type || "").toLowerCase();
+  const m = String(item.mediaType || "").toLowerCase();
+  const p = String(item.platform || "").toLowerCase();
+  const c = String(item.category || "").toLowerCase();
+  const u = String(item.url || item.link || item.videoUrl || "").toLowerCase();
+
+  return !!(
+    t === "video" ||
+    t === "movie" ||
+    t === "clip" ||
+    t === "shorts" ||
+
+    m === "video" ||
+    m === "movie" ||
+    m === "clip" ||
+    m === "shorts" ||
+
+    p === "youtube" ||
+    p === "vimeo" ||
+    p === "tiktok" ||
+
+    c === "video" ||
+    c === "movie" ||
+    c === "clip" ||
+    c === "shorts" ||
+
+    item.videoUrl ||
+
+    u.includes("youtu") ||
+    u.includes("vimeo") ||
+    u.includes("tiktok") ||
+    u.includes("/shorts/")
+  );
+}
+
+  function buildSlot(raw, fallbackSlotId) {
+    const videoUrl =
+      raw.videoUrl ||
+      raw.url ||
+      raw.link ||
+      "#";
+
+    const thumb =
+  raw.thumbnail ||
+  raw.poster ||
+  raw.thumb ||
+  raw.image ||
+  (typeof videoUrl === "string" && videoUrl.includes("youtu")
+    ? `https://img.youtube.com/vi/${extractYouTubeId(videoUrl)}/hqdefault.jpg`
+    : "/assets/img/placeholder.png");
+	
+    return {
+      slotId: fallbackSlotId,
+      contentId: raw.id || stableId(JSON.stringify(raw)),
+      title: raw.title || raw.name || "Untitled",
+      thumb,
+      provider: raw.provider || raw.source || null,
+      url: videoUrl,
+      video: raw.videoUrl || raw.url || raw.link || "",
+      metrics: {
+        click: Number(raw.clicks || 0),
+        view: Number(raw.views || 0),
+        like: Number(raw.likes || 0),
+        recommend: Number(raw.recommend || raw.recommends || 0),
+        watchTime: Number(raw.watchTime || 0)
+      },
+      outbound: {
+        enabled: true,
+        track: true
+      },
+      payment: {
+        enabled: true,
+        type: "rent|buy|sub",
+        price: raw.price || null,
+        currency: raw.currency || "KRW",
+        pg: "default",
+        productId: raw.productId || null
+      },
+      revenue: {
+        ads: true,
+        affiliate: true,
+        provider: true,
+        directSale: true
       }
+    };
+  }
 
-      sections[sectionKey] = existing;
-      continue;
-    }
+  for (const raw of bankItems) {
 
-    // =========================
-    // 🔥 2️⃣ 일반 섹션 (카테고리별)
-    // =========================
-    const supply = videoPool.filter(item => {
+    if (!isVideoLike(raw)) continue;
 
-      const sec =
-        item?.bind?.section ||
-        item?.psom_key ||
-        item?.category;
+    const rawKey =
+      raw?.psom_key ||
+      raw?.bind?.section ||
+      raw?.category;
 
-      return sec === sectionKey;
-    });
+    const sectionKey = resolveMediaKey(rawKey);
 
-    for (const item of supply) {
+    if (!sectionKey) continue;
 
-      const id = item.id || stableId(JSON.stringify(item));
-      if (existingIds.has(id)) continue;
+    if (sectionKey === "media-trending") continue;
 
-      const videoUrl =
-        item.videoUrl ||
-        item.url ||
-        item.link ||
-        "#";
+    const sectionObj = sections[sectionKey];
+    if (!sectionObj || typeof sectionObj !== "object") continue;
 
-      const thumb =
-        item.thumbnail ||
-        item.thumb ||
-        item.image ||
-        (videoUrl.includes("youtu")
-          ? `https://img.youtube.com/vi/${extractYouTubeId(videoUrl)}/hqdefault.jpg`
-          : "/assets/img/placeholder.png");
+    if (!Array.isArray(sectionObj.slots)) sectionObj.slots = [];
 
-      existing.push({
-        id,
-        title: item.title || item.name || "Untitled",
-        summary: item.summary || "",
-        url: videoUrl,
-        thumb,
-        priority: item.priority || item.score || 0
-      });
+    const slots = sectionObj.slots;
+    const existingIds = new Set(
+      slots.map(s => s?.contentId).filter(Boolean)
+    );
 
-      existingIds.add(id);
-    }
+    const contentId = raw.id || stableId(JSON.stringify(raw));
+    if (existingIds.has(contentId)) continue;
 
-    sections[sectionKey] = existing;
+    const nextSlotId =
+      slots.length > 0
+        ? Math.max(...slots.map(s => Number(s?.slotId) || 0)) + 1
+        : 1;
+
+    slots.push(buildSlot(raw, nextSlotId));
   }
 
   snapshot.sections = sections;
-
   writeJson(filePath, snapshot);
 }
 
@@ -809,7 +898,6 @@ function extractYouTubeId(url) {
 }
 
 /* ===== TOUR SNAPSHOT ENGINE (FEED INTEGRATION) ===== */
-
 function handleTourSnapshot(bank) {
 
   const fileName = "tour-snapshot.json";
@@ -818,9 +906,11 @@ function handleTourSnapshot(bank) {
   if (!fs.existsSync(filePath)) return;
 
   const snapshot = readJson(filePath) || {};
-  const bankItems = bank.items || [];
+  const bankItems = Array.isArray(bank?.items) ? bank.items : [];
 
-  let items = snapshot.items || [];
+  let items = Array.isArray(snapshot.items) ? snapshot.items : [];
+
+  const TOUR_LIMIT = 100;
 
   /* ===== TOUR FILTER ===== */
   function isTour(item){
@@ -833,51 +923,62 @@ function handleTourSnapshot(bank) {
     );
   }
 
-for (const item of bankItems) {
-
-  if (!item) continue;
-  if (!isTour(item)) continue;
-
-  items.push({
-    id: item.id || "",
-    title: item.title || "",
-    thumb: item.thumb || item.image || item.thumbnail || "",
-    link: item.link || item.url || "#"
-  });
-}
-
-
-  /* ===== TOUR CARD THUMB ===== */
+  /* ===== THUMB BUILDER ===== */
   function buildTourThumbnail(item){
 
-    // 1. 이미지 있으면 그대로
     if (item.image || item.thumb || item.thumbnail) {
       return item.image || item.thumb || item.thumbnail;
     }
 
     const title = encodeURIComponent(item.title || "TOUR");
 
-    // 2. 지역 기반 썸네일 생성
     if (item.location || item.region) {
       return `https://dummyimage.com/600x400/0a3d62/ffffff&text=${title}`;
     }
 
-    // 3. fallback
     return `https://dummyimage.com/600x400/1e3799/ffffff&text=TOUR`;
   }
 
-    snapshot.items = items;
-    writeJson(filePath, snapshot);
-}
+  /* ===== 기존 ID 추출 ===== */
+  const existingIds = new Set(
+    items.map(i => i?.id).filter(Boolean)
+  );
 
+  /* ===== MERGE ===== */
+  for (const item of bankItems) {
 
-  /* collector items 저장 */
-  if(payload && Array.isArray(payload.items)){
-    for(const item of payload.items){
-      bank.items.push(item);
-    }
-    writeJson(bankPath, bank);
+    if (!item) continue;
+    if (!isTour(item)) continue;
+
+    const id = item.id || stableId(JSON.stringify(item));
+    if (existingIds.has(id)) continue;
+
+    items.push({
+      id,
+      title: item.title || "",
+      thumb: buildTourThumbnail(item),
+      link: item.link || item.url || "#",
+      priority: item.priority || 0,
+      createdAt: item.createdAt || 0
+    });
+
+    existingIds.add(id);
   }
+
+  /* ===== 정렬 (최신 + 우선순위) ===== */
+  items.sort((a, b) => {
+    return (b.priority || 0) - (a.priority || 0) ||
+           (b.createdAt || 0) - (a.createdAt || 0);
+  });
+
+  /* ===== LIMIT ===== */
+  if (items.length > TOUR_LIMIT) {
+    items = items.slice(0, TOUR_LIMIT);
+  }
+
+  snapshot.items = items;
+  writeJson(filePath, snapshot);
+}
   
   /* ===== SNAPSHOT ENGINE FULL EXECUTION ===== */
 
