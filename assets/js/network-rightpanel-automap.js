@@ -136,7 +136,7 @@ function renderDesktopDirect(items){
 
   for (const item of items){
     const box = document.createElement('div');
-    box.className = 'ad-card';
+    box.className = 'ad-box';
 
     box.innerHTML = `
       <a href="${item.link || '#'}" target="_blank" rel="noopener">
