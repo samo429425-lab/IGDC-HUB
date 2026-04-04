@@ -711,20 +711,18 @@ if(chosen.length < limit){
   let source = (seedByKey[k] || []);
 
  if (k === "donation-global"){
-  source = source.filter((s)=>{
+  source = source.filter((s, idx)=>{
     const title = String(s?.title || s?.org?.name || "").toLowerCase();
     const summary = String(s?.summary || s?.org?.legal_name || "").toLowerCase();
-    const thumb = String(s?.media?.thumb || s?.image || "").toLowerCase();
-    const linkUrl = String(s?.link?.url || "").trim();
 
-    const isExactPlaceholder =
-      title.includes("seed placeholder") ||
-      summary.includes("seed placeholder") ||
-      summary.includes("replace with ngo") ||
-      thumb.includes("/assets/img/placeholder.png") ||
-      linkUrl === "#";
+    const isExactProblemSeed =
+      idx === 0 &&
+      (
+        title.includes("seed placeholder") ||
+        summary.includes("seed placeholder")
+      );
 
-    return !isExactPlaceholder;
+    return !isExactProblemSeed;
   });
 }
 
