@@ -648,6 +648,7 @@ async function orchestrateSearch({ event, q, limit, start, lang }) {
   }
 
 await Promise.all([
+  pullFromSearchBank(),
   pullFromNaver(),
   pullFromGoogle(),
   pullFromBing(),
