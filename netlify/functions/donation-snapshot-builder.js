@@ -710,17 +710,23 @@ if(chosen.length < limit){
   const need = limit - chosen.length;
   let source = (seedByKey[k] || []);
 
-  if (k === "donation-global"){
-    source = source.filter((s)=>{
-      const title = String(s?.title || "").toLowerCase();
-      const summary = String(s?.summary || "").toLowerCase();
+ if (k === "donation-global"){
+  source = source.filter((s)=>{
+    const title = String(s?.title || s?.org?.name || "").toLowerCase();
+    const summary = String(s?.summary || s?.org?.legal_name || "").toLowerCase();
+    const thumb = String(s?.media?.thumb || s?.image || "").toLowerCase();
+    const linkUrl = String(s?.link?.url || "").trim();
 
-      return !(
-        title.includes("seed placeholder") ||
-        summary.includes("seed placeholder")
-      );
-    });
-  }
+    const isExactPlaceholder =
+      title.includes("seed placeholder") ||
+      summary.includes("seed placeholder") ||
+      summary.includes("replace with ngo") ||
+      thumb.includes("/assets/img/placeholder.png") ||
+      linkUrl === "#";
+
+    return !isExactPlaceholder;
+  });
+}
 
   const filler = source.slice(0, need).map((s)=>{
         const copy = JSON.parse(JSON.stringify(s));
