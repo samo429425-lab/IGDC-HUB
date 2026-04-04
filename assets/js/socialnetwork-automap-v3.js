@@ -218,9 +218,14 @@ function paintRightCard(box, it){
   box.dataset.productId = productId;
   box.dataset.productTitle = title;
   box.dataset.productLink = url;
-  box.innerHTML = '';
 
-  const a = document.createElement('a');
+  let a = qs('a', box);
+  if(!a){
+    box.innerHTML = '';
+    a = document.createElement('a');
+    box.appendChild(a);
+  }
+
   a.href = url;
   a.target = (url && url !== '#' && !url.includes('/pages/coming-soon.html')) ? '_blank' : '_self';
   a.rel = 'noopener';
@@ -228,8 +233,6 @@ function paintRightCard(box, it){
   a.dataset.productId = productId;
   a.dataset.productTitle = title;
   a.dataset.productLink = url;
-
-  box.appendChild(a);
 }
 
 function resetRightCardToDummy(box){
@@ -242,15 +245,40 @@ function resetRightCardToDummy(box){
   box.dataset.productId = '';
   box.dataset.productTitle = 'RIGHT SAMPLE';
   box.dataset.productLink = fallback;
-  box.innerHTML = '<a href="' + fallback + '" data-product-id="" data-product-title="RIGHT SAMPLE" data-product-link="' + fallback + '">RIGHT SAMPLE</a>';
+
+  let a = qs('a', box);
+  if(!a){
+    box.innerHTML = '';
+    a = document.createElement('a');
+    box.appendChild(a);
+  }
+
+  a.href = fallback;
+  a.target = '_self';
+  a.rel = 'noopener';
+  a.textContent = 'RIGHT SAMPLE';
+  a.dataset.productId = '';
+  a.dataset.productTitle = 'RIGHT SAMPLE';
+  a.dataset.productLink = fallback;
 }
 
 function mountRightPanel(panel, items){
   if(!panel) return;
 
   const raw = Array.isArray(items) ? items : [];
+
   const usable = raw.filter(function(it){
-    return !!it && (pickTitle(it) || pickUrl(it) || pickThumb(it));
+    if(!it) return false;
+
+    const title = pickTitle(it).trim();
+    const url = pickUrl(it).trim();
+    const thumb = pickThumb(it).trim();
+
+    // placeholder/빈데이터는 실카드로 취급하지 않음
+    if(title === 'Loading…' || title === 'Loading...' || title === 'RIGHT SAMPLE') return false;
+    if(url === '#' && !thumb) return false;
+
+    return !!(title || thumb || (url && url !== '#'));
   });
 
   const displayItems = usable.slice(0, RIGHT_LIMIT);
@@ -263,10 +291,13 @@ function mountRightPanel(panel, items){
 
   for(let i = 0; i < cards.length; i++){
     const box = cards[i];
-    const it = displayItems[i] || null;
+    const it = displayItems[i];
 
-    if(it) paintRightCard(box, it);
-    else resetRightCardToDummy(box);
+    if(it){
+      paintRightCard(box, it);
+    }else{
+      resetRightCardToDummy(box);
+    }
   }
 }
 
