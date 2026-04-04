@@ -209,33 +209,27 @@
 
 function groupBySection(items){
   const map = {};
-  let globalSeedSkipped = false;
+  let globalPlaceholderSkipped = false;
 
   (Array.isArray(items) ? items : []).forEach((it)=>{
-
-const isSeed =
-  (
-    it?.meta?.source === 'seed' ||
-    it?.meta?.type === 'seed' ||
-    it?.id === 'seed' ||
-    it?.uid === 'seed' ||
-    (it?.title && it.title.toLowerCase().includes('seed')) ||
-    (it?.org?.name && it.org.name.toLowerCase().includes('seed'))
-  ) &&
-  !it?.bank_ref?.record_id;
-
-    // 👉 donation-global 첫 더미 1개만 제거
-    if(
-      !globalSeedSkipped &&
-      isSeed &&
-      it?.psom_key === 'donation-global'
-    ){
-      globalSeedSkipped = true;
-      return;
-    }
-
     const k = it?.psom_key;
     if(!k) return;
+
+    const title = String(it?.title || it?.org?.name || '').toLowerCase();
+    const summary = String(it?.summary || it?.org?.legal_name || '').toLowerCase();
+
+    const isExactGlobalPlaceholder =
+      k === 'donation-global' &&
+      !globalPlaceholderSkipped &&
+      (
+        title.includes('seed placeholder') ||
+        summary.includes('seed placeholder')
+      );
+
+    if(isExactGlobalPlaceholder){
+      globalPlaceholderSkipped = true;
+      return;
+    }
 
     if(!map[k]) map[k] = [];
     map[k].push(it);
