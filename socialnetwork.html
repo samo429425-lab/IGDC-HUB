@@ -267,13 +267,18 @@
 }
       .rscroll{display:none!important;pointer-events:none!important;opacity:0!important}
     }
-    @media (max-width:768px) and (orientation:portrait){
-      .row-grid{grid-auto-columns:100%!important;gap:14px!important}
-      .row-grid .card{min-width:100%!important;max-width:100%!important}
-      .card .pic{height:auto!important;aspect-ratio:4/3!important}
-      .card .pic img,.card img{width:100%!important;height:100%!important;object-fit:cover!important;display:block!important}
-      .card{height:auto!important}
-    }
+  @media (max-width:768px) and (orientation:portrait){
+    .row-scroller{overflow-x:auto!important;overflow-y:hidden!important;padding:0!important}
+    .row-grid{display:block!important;width:100%!important}
+    .thumb-grid[data-psom-key]{display:grid!important;grid-auto-flow:column!important;grid-auto-columns:100%!important;grid-template-columns:none!important;width:100%!important;gap:14px!important}
+    .thumb-grid[data-psom-key] .thumb-inner{display:contents!important}
+    .thumb-grid[data-psom-key] .card{width:100%!important;min-width:100%!important;max-width:100%!important;margin:0!important}
+    .thumb-grid[data-psom-key] .pic{width:100%!important;height:auto!important;aspect-ratio:16/9!important;background:#000!important;display:flex!important;align-items:center!important;justify-content:center!important;overflow:hidden!important}
+    .thumb-grid[data-psom-key] img,.thumb-grid[data-psom-key] video{width:100%!important;height:100%!important;object-fit:cover!important}
+    .main-content{padding-left:0!important;padding-right:0!important}
+    .rows{gap:16px!important}
+    .row-viewport{padding-left:0!important;padding-right:0!important}
+}
 
     footer{background:var(--brand);color:#fff;text-align:center;padding:19px 16px;font-size:.9rem;line-height:1.6;margin-top:21px;margin-bottom:19px}
 
@@ -312,6 +317,23 @@
     .contact-email a{color:#2563eb;text-decoration:underline}
     @media (max-width:900px){ .igdc-qa-panel{left:12px;width:min(92vw,560px)} }
   </style>
+  <style id="social-fullscreen-viewer-v1">
+    .snfv{position:fixed;inset:0;z-index:2147483600;background:#000;display:none;align-items:center;justify-content:center}
+    .snfv.open{display:flex}
+    .snfv-panel{position:relative;width:100vw;height:100dvh;background:#000;display:flex;flex-direction:column}
+    .snfv-close{position:absolute;top:10px;right:10px;z-index:3;border:0;border-radius:10px;padding:10px 12px;background:rgba(0,0,0,.68);color:#fff;font-weight:700;cursor:pointer}
+    .snfv-media{flex:1 1 auto;display:flex;align-items:center;justify-content:center;background:#000;overflow:hidden}
+    .snfv-media img,.snfv-media video{width:100%;height:100%;object-fit:contain;background:#000}
+    .snfv-fallback{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.2rem;padding:24px;text-align:center}
+    .snfv-meta{flex:0 0 auto;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:12px 14px;background:rgba(0,0,0,.82);color:#fff}
+    .snfv-text{min-width:0;flex:1 1 auto}
+    .snfv-title{font-weight:700;font-size:1rem;line-height:1.4}
+    .snfv-desc{font-size:.92rem;opacity:.88;line-height:1.45;margin-top:4px}
+    .snfv-actions{display:flex;gap:8px;flex:0 0 auto}
+    .snfv-btn{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:0 14px;border-radius:10px;background:#0b4a8b;color:#fff;text-decoration:none;font-weight:700;border:1px solid rgba(255,255,255,.18)}
+    @media (max-width:768px) and (orientation:portrait){.snfv-meta{padding:10px 12px}.snfv-title{font-size:.96rem}.snfv-desc{font-size:.86rem}}
+</style>
+  
 </head>
 <body>
   <div id="hero"><div class="hero-title"></div></div>
@@ -628,23 +650,29 @@
   }
 
   /* 1) 카드 클릭 추적 */
-  document.addEventListener('click', function(e){
-    var card = e.target.closest('.thumb-grid[data-psom-key] a.card');
-    if(!card) return;
+ document.addEventListener('click', function(e){
+  var card = e.target.closest('.thumb-grid[data-psom-key] a.card');
+  if(!card) return;
 
-    var payload = getCardPayload(card);
-    if(!payload) return;
+  var grid = card.closest('.thumb-grid[data-psom-key]');
+  var key = grid ? (grid.getAttribute('data-psom-key') || '') : '';
 
-    pushEvent('card_click', payload);
+  var payload = getCardPayload(card);
+  if(!payload) return;
 
-    /* 더미(#) 카드일 경우 기본 이동 막고 안내 */
-    if ((payload.href || '#') === '#'){
-      e.preventDefault();
-      try{
-        alert('콘텐츠나 자료 준비 중입니다.');
-      }catch(_){}
-    }
-  }, { passive:false });
+  pushEvent('card_click', payload);
+
+  if(key && key !== 'rightPanel'){
+    return;
+  }
+
+  if ((payload.href || '#') === '#'){
+    e.preventDefault();
+    try{
+      alert('콘텐츠나 자료 준비 중입니다.');
+    }catch(_){}
+  }
+}, { passive:false });
 
   /* 2) 카드 노출(첫 진입 1회만) */
   function bindImpressionObserver(){
@@ -1208,8 +1236,145 @@ window.addEventListener('resize', function(){
   }, { passive:true });
 })();
 </script>
-  
-  <script defer src="/assets/js/socialnetwork-automap-v3.js?v=20260404psom"></script>
+ <script id="social-main-fullscreen-viewer-v1">
+(function(){
+  if(window.__SOCIAL_MAIN_FULLSCREEN_READY__) return;
+  window.__SOCIAL_MAIN_FULLSCREEN_READY__ = true;
+
+  function qs(sel, root){ return (root || document).querySelector(sel); }
+
+  function ensureViewer(){
+    var root = document.getElementById('snfvRoot');
+    if(root) return root;
+
+    root = document.createElement('div');
+    root.id = 'snfvRoot';
+    root.className = 'snfv';
+    root.innerHTML =
+      '<div class="snfv-panel">'
+      + '<button type="button" class="snfv-close" aria-label="닫기">✕</button>'
+      + '<div class="snfv-media" id="snfvMedia"></div>'
+      + '<div class="snfv-meta">'
+      +   '<div class="snfv-text"><div class="snfv-title" id="snfvTitle"></div><div class="snfv-desc" id="snfvDesc"></div></div>'
+      +   '<div class="snfv-actions"><a id="snfvOpenBtn" class="snfv-btn" href="#" target="_blank" rel="noopener">Open</a></div>'
+      + '</div>'
+      + '</div>';
+
+    document.body.appendChild(root);
+
+    qs('.snfv-close', root).addEventListener('click', closeViewer, { passive:true });
+    root.addEventListener('click', function(e){
+      if(e.target === root) closeViewer();
+    }, { passive:true });
+
+    document.addEventListener('keydown', function(e){
+      if(e.key === 'Escape') closeViewer();
+    });
+
+    return root;
+  }
+
+  function getBgUrl(el){
+    if(!el) return '';
+    var bg = getComputedStyle(el).backgroundImage || '';
+    var m = bg.match(/url\\(["']?(.*?)["']?\\)/);
+    return m && m[1] ? m[1] : '';
+  }
+
+  function extractCardData(card){
+    var pic = qs('.pic', card);
+    var img = qs('img', card);
+    var video = qs('video', card);
+    var title = (qs('.title', card) && qs('.title', card).textContent || '').trim();
+    var desc = (qs('.desc', card) && qs('.desc', card).textContent || '').trim();
+    var href = (card.getAttribute('href') || '#').trim();
+
+    return {
+      title: title,
+      desc: desc,
+      href: href,
+      img: img && img.src ? img.src : '',
+      video: video && (video.currentSrc || video.src) ? (video.currentSrc || video.src) : '',
+      poster: video && video.poster ? video.poster : '',
+      bg: getBgUrl(pic)
+    };
+  }
+
+  function openViewer(card){
+    var data = extractCardData(card);
+    var root = ensureViewer();
+    var media = document.getElementById('snfvMedia');
+    var title = document.getElementById('snfvTitle');
+    var desc = document.getElementById('snfvDesc');
+    var openBtn = document.getElementById('snfvOpenBtn');
+
+    media.innerHTML = '';
+    title.textContent = data.title || 'Preview';
+    desc.textContent = data.desc || '';
+
+    if(data.video){
+      var v = document.createElement('video');
+      v.src = data.video;
+      if(data.poster) v.poster = data.poster;
+      v.controls = true;
+      v.autoplay = true;
+      v.playsInline = true;
+      media.appendChild(v);
+    }else if(data.img || data.bg){
+      var im = document.createElement('img');
+      im.src = data.img || data.bg;
+      im.alt = data.title || 'preview';
+      media.appendChild(im);
+    }else{
+      var fb = document.createElement('div');
+      fb.className = 'snfv-fallback';
+      fb.textContent = data.title || 'Preview';
+      media.appendChild(fb);
+    }
+
+    if(data.href && data.href !== '#'){
+      openBtn.href = data.href;
+      openBtn.style.display = 'inline-flex';
+    }else{
+      openBtn.href = '#';
+      openBtn.style.display = 'none';
+    }
+
+    root.classList.add('open');
+
+    var panel = qs('.snfv-panel', root);
+    if(panel && panel.requestFullscreen){
+      panel.requestFullscreen().catch(function(){});
+    }
+  }
+
+  function closeViewer(){
+    var root = document.getElementById('snfvRoot');
+    if(root) root.classList.remove('open');
+    if(document.fullscreenElement && document.exitFullscreen){
+      document.exitFullscreen().catch(function(){});
+    }
+  }
+
+  document.addEventListener('click', function(e){
+    var card = e.target.closest('.thumb-grid[data-psom-key] a.card');
+    if(!card) return;
+
+    var grid = card.closest('.thumb-grid[data-psom-key]');
+    if(!grid) return;
+
+    var key = grid.getAttribute('data-psom-key') || '';
+    if(!key || key === 'rightPanel') return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    openViewer(card);
+  }, true);
+})();
+</script>
+ 
+<script defer src="/assets/js/socialnetwork-automap-v3.js?v=20260404psom"></script>
   
   <script id="igtc-checkout-trigger-v1">
 (function(){
