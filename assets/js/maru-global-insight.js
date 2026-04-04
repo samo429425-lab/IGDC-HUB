@@ -179,6 +179,10 @@
     return await callInsightEngine(payload);
   };
 
+  Insight.dispatch = async function(payload){
+    return await Insight.request(payload);
+  };
+
   console.log("MARU Global Insight JS Loaded v" + Insight.config.version);
 
 })(typeof window !== "undefined" ? window : global);
