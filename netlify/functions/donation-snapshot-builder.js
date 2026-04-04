@@ -706,15 +706,27 @@ function buildSnapshot({ seed, psomList, bank, optional }){
     const list = sortSection(grouped[k] || []);
     const chosen = list.slice(0, limit);
 
-    if(chosen.length < limit){
-    const need = limit - chosen.length;
-        let source = (seedByKey[k] || []);
+if(chosen.length < limit){
+  const need = limit - chosen.length;
+  let source = (seedByKey[k] || []);
 
-        if (k === "donation-global"){  source = source.slice(1); 
-		// 👉 첫 더미 제거
-}
+  if (k === "donation-global"){
+    source = source.filter((s)=>{
+      const title = String(s?.title || "").toLowerCase();
+      const summary = String(s?.summary || "").toLowerCase();
+      const thumb = String(s?.media?.thumb || s?.thumb || s?.image || "").toLowerCase();
 
-const filler = source.slice(0, need).map((s)=>{
+      return !(
+        title.includes("seed placeholder") ||
+        title.includes("placeholder") ||
+        summary.includes("seed placeholder") ||
+        summary.includes("placeholder") ||
+        thumb.includes("/assets/img/placeholder.png")
+      );
+    });
+  }
+
+  const filler = source.slice(0, need).map((s)=>{
         const copy = JSON.parse(JSON.stringify(s));
         copy.psom_key = k;
         copy.section_category = k;
