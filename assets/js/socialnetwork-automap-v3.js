@@ -360,7 +360,9 @@ if(rightPanels.length){
   function boot(){
     run();
   }
-
+window.addEventListener('igdc:rightpanel:refresh', function(){
+  run();
+});
   boot();
 
 })();
