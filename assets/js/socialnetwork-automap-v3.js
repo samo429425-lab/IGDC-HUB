@@ -179,64 +179,89 @@ while (displayItems.length < MAIN_LIMIT) {
   }
 }
 
-  function getRightCards(panel){
-    if(!panel) return [];
+ function getRightPanels(){
+  return qsa('[data-psom-key="rightPanel"]');
+}
 
-    let cards = qsa('.ad-box', panel);
+function getRightCards(panel){
+  if(!panel) return [];
 
-    if(cards.length === 0){
-      const frag = document.createDocumentFragment();
-      for(let i=0;i<RIGHT_LIMIT;i++){
-        const box = document.createElement('div');
-        box.className = 'ad-box';
-        box.dataset.dummy = '1';
-        box.innerHTML = '<a href="#">Loading...</a>';
-        frag.appendChild(box);
-      }
-      panel.appendChild(frag);
-      cards = qsa('.ad-box', panel);
+  let cards = qsa('.ad-box', panel);
+
+  if(cards.length === 0){
+    const frag = document.createDocumentFragment();
+
+    for(let i = 0; i < RIGHT_LIMIT; i++){
+      const box = document.createElement('div');
+      box.className = 'ad-box product-card';
+      box.dataset.dummy = '1';
+      box.innerHTML = '<a href="/pages/coming-soon.html?from=social-rightpanel" data-product-id="" data-product-title="RIGHT SAMPLE" data-product-link="/pages/coming-soon.html?from=social-rightpanel">RIGHT SAMPLE</a>';
+      frag.appendChild(box);
     }
 
-    return cards;
+    panel.appendChild(frag);
+    cards = qsa('.ad-box', panel);
   }
 
-  function paintRightCard(box, it){
-    if(!box) return;
+  return cards;
+}
 
-    const url = pickUrl(it);
-    const title = pickTitle(it) || 'Item';
+function paintRightCard(box, it){
+  if(!box) return;
 
-    box.removeAttribute('data-dummy');
-    box.innerHTML = '';
+  const url = pickUrl(it) || '/pages/coming-soon.html?from=social-rightpanel';
+  const title = pickTitle(it) || 'RIGHT SAMPLE';
+  const productId = safeText(it && (it.productId || it.product_id || it.id || it.sku || it.code));
 
-    const a = document.createElement('a');
-    a.href = url || '#';
-    a.target = (url && url !== '#') ? '_blank' : '_self';
-    a.rel = 'noopener';
-    a.textContent = title;
-    box.appendChild(a);
-  }
+  box.className = 'ad-box product-card';
+  box.removeAttribute('data-dummy');
+  box.dataset.productId = productId;
+  box.dataset.productTitle = title;
+  box.dataset.productLink = url;
+  box.innerHTML = '';
 
-  function resetRightCardToDummy(box){
-    if(!box) return;
-    box.dataset.dummy = '1';
-    box.innerHTML = '<a href="#">Loading...</a>';
-  }
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = (url && url !== '#' && !url.includes('/pages/coming-soon.html')) ? '_blank' : '_self';
+  a.rel = 'noopener';
+  a.textContent = title;
+  a.dataset.productId = productId;
+  a.dataset.productTitle = title;
+  a.dataset.productLink = url;
+
+  box.appendChild(a);
+}
+
+function resetRightCardToDummy(box){
+  if(!box) return;
+
+  const fallback = '/pages/coming-soon.html?from=social-rightpanel';
+
+  box.className = 'ad-box product-card';
+  box.dataset.dummy = '1';
+  box.dataset.productId = '';
+  box.dataset.productTitle = 'RIGHT SAMPLE';
+  box.dataset.productLink = fallback;
+  box.innerHTML = '<a href="' + fallback + '" data-product-id="" data-product-title="RIGHT SAMPLE" data-product-link="' + fallback + '">RIGHT SAMPLE</a>';
+}
 
 function mountRightPanel(panel, items){
   if(!panel) return;
 
   const raw = Array.isArray(items) ? items : [];
-  const displayItems = raw.slice(0, RIGHT_LIMIT);
+  const usable = raw.filter(function(it){
+    return !!it && (pickTitle(it) || pickUrl(it) || pickThumb(it));
+  });
 
-  // 🔥 슬롯 강제 채움 (핵심)
-  while (displayItems.length < RIGHT_LIMIT) {
+  const displayItems = usable.slice(0, RIGHT_LIMIT);
+
+  while(displayItems.length < RIGHT_LIMIT){
     displayItems.push(null);
   }
 
   const cards = getRightCards(panel);
 
-  for(let i=0;i<cards.length;i++){
+  for(let i = 0; i < cards.length; i++){
     const box = cards[i];
     const it = displayItems[i] || null;
 
@@ -277,8 +302,9 @@ const finalItems = items.length > 0 ? items : [{
   mountMainRow(grid, finalItems);
 });
 
-const rightPanel = qs('#rightAutoPanel');
-if(rightPanel){
+const rightPanels = getRightPanels();
+
+if(rightPanels.length){
   const raw =
     Array.isArray(sections.rightPanel)
       ? sections.rightPanel
@@ -286,10 +312,12 @@ if(rightPanel){
 
   const finalItems = raw.length > 0 ? raw : [{
     title: "RIGHT SAMPLE",
-    url: "#"
+    url: "/pages/coming-soon.html?from=social-rightpanel"
   }];
 
-  mountRightPanel(rightPanel, finalItems);
+  rightPanels.forEach(function(panel){
+    mountRightPanel(panel, finalItems);
+  });
 }
 
       window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
