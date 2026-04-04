@@ -710,21 +710,6 @@ if(chosen.length < limit){
   const need = limit - chosen.length;
   let source = (seedByKey[k] || []);
 
- if (k === "donation-global"){
-  source = source.filter((s, idx)=>{
-    const title = String(s?.title || s?.org?.name || "").toLowerCase();
-    const summary = String(s?.summary || s?.org?.legal_name || "").toLowerCase();
-
-    const isExactProblemSeed =
-      idx === 0 &&
-      (
-        title.includes("seed placeholder") ||
-        summary.includes("seed placeholder")
-      );
-
-    return !isExactProblemSeed;
-  });
-}
 
   const filler = source.slice(0, need).map((s)=>{
         const copy = JSON.parse(JSON.stringify(s));
