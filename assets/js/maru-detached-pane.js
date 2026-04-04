@@ -123,12 +123,53 @@ function openMusic({ title, audioSrc }) {
 
   window.MaruDetachedPane = {
     open(opts = {}) {
-      switch (opts.type) {
-        case 'video': openVideo(opts); break;
-        case 'music': openMusic(opts); break;
-        case 'iframe': openIframe(opts); break;
+      const mode = String(opts.mode || '').trim().toLowerCase();
+      const type = String(opts.type || '').trim().toLowerCase();
+
+      if (mode === 'insight' || type === 'insight') {
+        const title =
+          opts.title ||
+          'MARU Insight';
+
+        const ctx = opts.context;
+        let text = '';
+
+        if (typeof ctx === 'string') {
+          text = ctx;
+        } else if (ctx && typeof ctx === 'object') {
+          text =
+            ctx.text ||
+            ctx.summary ||
+            ctx.message ||
+            JSON.stringify(ctx, null, 2);
+        } else {
+          text =
+            opts.text ||
+            opts.summary ||
+            '';
+        }
+
+        openDetail({ title, text });
+        return;
+      }
+
+      switch (type) {
+        case 'video':
+          openVideo(opts);
+          break;
+        case 'music':
+          openMusic(opts);
+          break;
+        case 'iframe':
+          openIframe(opts);
+          break;
         case 'detail':
-        default: openDetail(opts);
+        default:
+          openDetail({
+            title: opts.title,
+            text: opts.text || opts.content || ''
+          });
+          break;
       }
     }
   };
