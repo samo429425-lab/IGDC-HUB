@@ -170,8 +170,26 @@ async function callMaruSearch(query, mode, limit, context){
       intent: context ? context.intent : null
     });
 
-    if(res && res.status === "ok"){
-      return { ok:true, data:res };
+    const items =
+      Array.isArray(res?.items) ? res.items :
+      Array.isArray(res?.results) ? res.results :
+      Array.isArray(res?.data?.items) ? res.data.items :
+      [];
+
+    if(res && (items.length || res.source || res.region || res.route)){
+      return {
+        ok:true,
+        data:{
+          status:"ok",
+          engine:"maru-search",
+          version: res.version || null,
+          source: res.source || "maru-search",
+          region: res.region || null,
+          route: res.route || null,
+          items,
+          results: items
+        }
+      };
     }
 
     return { ok:false, error:"SEARCH_FAIL" };
