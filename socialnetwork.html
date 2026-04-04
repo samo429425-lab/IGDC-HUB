@@ -1005,7 +1005,19 @@ function boot(){
       function init(){
         build();
       }
-      window.addEventListener('resize', build);
+      var __rpResizeTimer = null;
+
+window.addEventListener('resize', function(){
+  clearTimeout(__rpResizeTimer);
+
+  __rpResizeTimer = setTimeout(function(){
+    build();
+
+    try{
+      window.dispatchEvent(new Event('igdc:rightpanel:refresh'));
+    }catch(_){}
+  }, 80);
+});
       window.__IGDC_RIGHTPANEL_RENDER = function(items){
        var panel = getPanel();
        if(!panel) return;
