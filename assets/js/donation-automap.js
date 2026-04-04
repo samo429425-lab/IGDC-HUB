@@ -316,11 +316,65 @@ function mountSection(key, items, limit){
   const htmlCount = row ? Number(row.dataset.count || 0) : 0;
   const finalLimit = clampLimit(htmlCount || limit || 80);
 
-  const list = (Array.isArray(items) ? items : []);
+  function sampleLabel(sectionKey){
+    switch(sectionKey){
+      case 'donation-global': return 'Global News';
+      case 'donation-ngo': return 'NGO';
+      case 'donation-mission': return 'Mission';
+      case 'donation-service': return 'Service';
+      case 'donation-relief': return 'Relief';
+      case 'donation-education': return 'Education';
+      case 'donation-environment': return 'Environment';
+      case 'donation-others': return 'Others';
+      default: return 'Donation';
+    }
+  }
 
-  // 🔴 핵심: 데이터 없으면 기존 HTML 유지
+  function buildFallbackSamples(sectionKey, count){
+    const label = sampleLabel(sectionKey);
+    const out = [];
+
+    for(let i = 0; i < count; i++){
+      out.push({
+        uid: `sample:${sectionKey}:${String(i+1).padStart(3,'0')}`,
+        id: `sample:${sectionKey}:${String(i+1).padStart(3,'0')}`,
+        psom_key: sectionKey,
+        category: sectionKey.replace(/^donation-/, '') || 'donation',
+        title: `${label} Partner ${i+1}`,
+        summary: 'Verified data will replace this sample automatically.',
+        org: {
+          name: `${label} Partner ${i+1}`,
+          country: '-',
+          legal_name: ''
+        },
+        donation: {
+          checkout_url: ''
+        },
+        link: {
+          url: '#'
+        },
+        media: {
+          thumb: '/assets/img/placeholder.png'
+        },
+        bank_ref: {
+          record_id: null
+        },
+        verify: {
+          status: 'sample'
+        },
+        meta: {
+          source: 'automap-sample'
+        }
+      });
+    }
+
+    return out;
+  }
+
+  let list = (Array.isArray(items) ? items : []).filter(Boolean);
+
   if(list.length === 0){
-    return;
+    list = buildFallbackSamples(key, finalLimit);
   }
 
   box.innerHTML = '';
