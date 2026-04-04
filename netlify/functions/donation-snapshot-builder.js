@@ -714,14 +714,10 @@ if(chosen.length < limit){
     source = source.filter((s)=>{
       const title = String(s?.title || "").toLowerCase();
       const summary = String(s?.summary || "").toLowerCase();
-      const thumb = String(s?.media?.thumb || s?.thumb || s?.image || "").toLowerCase();
 
       return !(
         title.includes("seed placeholder") ||
-        title.includes("placeholder") ||
-        summary.includes("seed placeholder") ||
-        summary.includes("placeholder") ||
-        thumb.includes("/assets/img/placeholder.png")
+        summary.includes("seed placeholder")
       );
     });
   }
