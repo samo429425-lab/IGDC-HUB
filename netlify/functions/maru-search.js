@@ -287,14 +287,29 @@ function sourceOrderForRegion(region){
 function dedupeCanonicalItems(items){
   const seen = new Set();
   const out = [];
-  for(const it of (Array.isArray(items) ? items : [])){
-    const key =
-      String(it && (it.url || it.id || it.title || ''), '').trim().toLowerCase() ||
-      JSON.stringify(it || {}).toLowerCase();
-    if(!key || seen.has(key)) continue;
+
+  for (const it of (Array.isArray(items) ? items : [])) {
+    const rawUrl = String(it?.url || '').trim();
+    const normUrl = rawUrl.toLowerCase();
+
+    const isPlaceholderUrl =
+      !rawUrl ||
+      rawUrl === '#' ||
+      rawUrl === '/' ||
+      normUrl === 'javascript:void(0)' ||
+      normUrl.startsWith('javascript:');
+
+    const key = (
+      !isPlaceholderUrl
+        ? rawUrl
+        : (String(it?.id || '').trim() || String(it?.title || '').trim())
+    ).toLowerCase() || JSON.stringify(it || {}).toLowerCase();
+
+    if (!key || seen.has(key)) continue;
     seen.add(key);
     out.push(it);
   }
+
   return out;
 }
 
