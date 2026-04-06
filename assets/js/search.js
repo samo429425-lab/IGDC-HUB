@@ -313,24 +313,36 @@ function normalizeItems(payload){
       return haystack.includes(qq);
     }
 
-    function dedupeItems(items){
-      const out = [];
-      const seen = new Set();
+   function dedupeItems(items){
+  const out = [];
+  const seen = new Set();
 
-      for (const it of Array.isArray(items) ? items : []) {
-        const key =
-          (it.url || it.link || '').trim().toLowerCase() ||
-          (it.id || '').trim().toLowerCase() ||
-          ((it.title || '').trim().toLowerCase() + '|' + (it.source || it.source?.name || '').trim().toLowerCase());
+  for (const it of Array.isArray(items) ? items : []) {
+    const rawUrl = String(it?.url || it?.link || '').trim();
+    const normUrl = rawUrl.toLowerCase();
 
-        if (!key) continue;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push(it);
-      }
+    const isPlaceholderUrl =
+      !rawUrl ||
+      rawUrl === '#' ||
+      rawUrl === '/' ||
+      normUrl === 'javascript:void(0)' ||
+      normUrl.startsWith('javascript:');
 
-      return out;
-    }
+    const key = (
+      !isPlaceholderUrl
+        ? rawUrl
+        : (String(it?.id || '').trim() ||
+           ((String(it?.title || '').trim()) + '|' + String(it?.source?.name || it?.source || '').trim()))
+    ).toLowerCase();
+
+    if (!key) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(it);
+  }
+
+  return out;
+}
 
 async function fetchSearch(q){
   const url = `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`;
