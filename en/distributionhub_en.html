@@ -5,8 +5,9 @@
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Distribution Hub - IGDC Global (Localized Ads)</title>
-<meta content="width=device-width, initial-scale=1" name="viewport"/>
+
 <style>
 
     body { margin: 0; font-family: sans-serif; background-color: #f2f2f2; }
@@ -18,7 +19,7 @@
     .sidebar a{
       display:block;background:#fff4e0;color:#804000;text-decoration:none;
       padding:12px 18px;font-weight:bold;font-size:0.9rem;border:1px solid #f3d9b0;border-radius:8px;
-      margin:18px 12px;transition:background-color .3s, text-decoration .3s;
+      margin: 10px 12px;transition:background-color .3s, text-decoration .3s;
     }
     .sidebar a:hover{ background:#ffe5b4; text-decoration:underline; }
 
@@ -29,7 +30,7 @@
     footer{ background:#004080;color:#fff;text-align:center;padding:20px 15px;font-size:.9rem; }
 
     .main-content{
-      flex:1; background:#fff; padding:24px; max-width:920px; margin:30px auto;
+      flex:1; background:#fff; padding:24px; max-width:none; margin:30px auto;
       box-shadow:0 0 10px rgba(0,0,0,.08);
     }
     .page-title{ margin:0 0 6px; color:#004080; font-size:1.35rem; }
@@ -140,7 +141,7 @@
   --blue:#2563eb; --muted:#9ca3af;
 }
 /* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
-#qnaOpenBtn{ background-color:#001f4d; color:#ffffff; display:block; text-decoration:none; }
+#qnaOpenBtn{ display:block; text-decoration:none; }
 /* Modal near the left sidebar, with smooth transitions */
 .igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
 .igdc-qa-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;transition:opacity .18s ease}
@@ -187,24 +188,20 @@
   .igdc-qa-panel{ left:calc(12px + var(--qa-left,0px)); width:min(92vw,560px) }
 }
 </style>
-<!-- Mobile-only drawer layer (non-intrusive) -->
-<style id="ml-drawer-css">
-@media (max-width: 1023.98px){
-  /* Left/Right panels -> off-canvas; main stays single view */
-  .sidebar{position:fixed !important; inset:0 auto 0 0; width:min(86vw,340px); max-width:100%;
-           transform:translateX(-101%); transition:transform .25s ease; z-index:1000; background:inherit;}
-  .ad-panel{position:fixed !important; inset:0 0 0 auto; width:min(86vw,340px); max-width:100%;
-           transform:translateX(101%); transition:transform .25s ease; z-index:1000; background:inherit;}
-  .main-content{width:100% !important; max-width:100% !important; margin:20px auto !important;}
-  /* Dim overlay */
-  .ml-overlay{position:fixed; inset:0; background:rgba(0,0,0,.25); opacity:0; pointer-events:none; transition:opacity .2s; z-index:999;}
-  .ml-overlay.active{opacity:1; pointer-events:auto;}
-  /* Open states (toggled without touching existing buttons) */
-  .ml-open-left  .sidebar{transform:translateX(0);}
-  .ml-open-right .ad-panel{transform:translateX(0);}
+<style id="qna-brand-only">
+/* === Q&A sidebar link color only (no other changes) === */
+:root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
+.sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
+  display:block;
+  background: var(--qa-brand);
+  color:#fff !important;
+  border:1px solid var(--qa-brand-border);
+  border-radius:10px;
 }
+.sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
 </style>
-<script>window.IGDC_FEATURES=Object.freeze({externalHooks:true,healthCheck:false});</script>
+<style id="prelayout-guard">.prelayout *{transition:none!important}</style>
+<script>window.IGDC_PAGE = window.IGDC_PAGE || { project:"IGDC", pageId:"distributionhub", title:(document.title||"") };</script>
 <link href="/assets/css/mobile-fix.css" rel="stylesheet"/>
 <!-- Mobile-only off-canvas overlay (non-intrusive) -->
 <style id="rscroll-from-socialnet">
@@ -371,22 +368,7 @@
     border-radius:8px; 
   }
 </style>
-<style id="edge-autohide-mobile">
-@media (pointer:coarse){
-:root{--edge:10px;--spd:.14s;--e:ease-out}
-body.hide-top nav,body.hide-top .topbar{transform:translateY(-100%);transition:transform var(--spd) var(--e)}
-body.hide-left .sidebar{transform:translateX(-100%);transition:transform var(--spd) var(--e)}
-body.hide-right .right-panel,body.hide-right .brand-rail{transform:translateX(100%);transition:transform var(--spd) var(--e)}
-nav,.topbar,.sidebar,.right-panel,.brand-rail{will-change:transform}
-.edge-top,.edge-left,.edge-right{position:fixed;z-index:9999}
-.edge-top{top:0;left:0;right:0;height:var(--edge)}
-.edge-left{top:0;left:0;bottom:0;width:var(--edge)}
-.edge-right{top:0;right:0;bottom:0;width:var(--edge)}
-body.show-top nav,body.show-top .topbar{transform:none}
-body.show-left .sidebar{transform:none}
-body.show-right .right-panel,body.show-right .brand-rail{transform:none}
-}
-</style>
+
 <link href="/assets/css/thumbs.standard.css?v=20250914" rel="stylesheet"/>
 <link href="/assets/css/hero.css?v=20250914" rel="stylesheet"/>
 <style id="igdc-mobile-distributionhub-patch">
@@ -394,7 +376,21 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
 </style>
 <style id="igdc-q-mobile-kit">
 @media (max-width:768px){
-  .sidebar{ display:none !important; }
+
+  .sidebar{
+    display:block !important;
+    width:100% !important;
+    margin-top:20px;
+  }
+
+  .sidebar .thumb-list,
+  .sidebar .thumb-scroller{
+    display:flex !important;
+    overflow-x:auto !important;
+    gap:12px;
+  }
+
+}
   .content-box{
     background: transparent !important;
     border: 0 !important;
@@ -438,10 +434,28 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
 <style id="mobile-overrides-20251009v2">
 /* === Unified breakpoints: 1024 / 900 / 768 === */
 
-/* 1) Tablet & down: hide right/ad panel to free width */
-@media (max-width: 1024px){
-  .right-panel, .brand-rail, .right-ad-panel { display: none !important; }
+/* 1) Tablet & down: keep panel in DOM, move offscreen */
+@media (max-width:1024px){
+
+  .right-panel,
+  .brand-rail,
+  .right-ad-panel{
+
+    position:absolute !important;
+    left:-99999px !important;
+    top:-99999px !important;
+
+    width:1px !important;
+    height:1px !important;
+
+    overflow:hidden !important;
+    visibility:hidden !important;
+
+    display:block !important;
+  }
+
 }
+
 
 /* 2) Small tablet & large phones: hide left sidebar too; main = 100% */
 @media (max-width: 1024px){
@@ -504,41 +518,50 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
 }
 </style>
 <style id="mobile-rightgap-fix-20251009">
-/* Remove transient right gap when the right panel hides */
 
-/* Right panel hides here; also kill reserved padding/margins so main expands instantly */
+/* Mobile: hide side panels only, DO NOT touch grid structure */
+
 @media (max-width: 1024px){
-  #tour-adpanel-core, .right, .brand-rail, .edge-right { display: none !important; }
 
-  /* kill any right-side reserved space */
-  .container, .wrap, .page, .content-box, .main-content, #main {
-    width: 100vw !important;
-    max-width: 100vw !important;
-    margin-right: 0 !important;
-    padding-right: 0 !important;
+  /* hide side panels */
+  #tour-adpanel-core,
+  .right,
+  .edge-right,
+  .left,
+  .sidebar,
+  .edge-left {
+    display: none !important;
+  }
+
+  /* expand main area only */
+  .container,
+  .wrap,
+  .page,
+  .content-box,
+  .main-content,
+  #main {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
     box-sizing: border-box !important;
   }
-  .with-right, .has-right, .right-gap, .ad-gap,
-  .main-sidebar-innerpadding-override,
-  .container-padding-override,
-  .sidebar-hide-and-gap-fix {
-    margin-right: 0 !important; padding-right: 0 !important;
+
+  /* remove right-gap only */
+  .with-right,
+  .has-right,
+  .right-gap,
+  .ad-gap {
+    margin-right: 0 !important;
+    padding-right: 0 !important;
   }
 
-  /* if grid/flex reserved a right column, collapse it */
-  .layout, .grid, .grid-wrap { grid-template-columns: 1fr !important; }
-  .row, .flex-row, .split { gap: 0 !important; }
 }
 
-/* Keep left+right both hidden at 900px and expand main (from previous patch) */
-@media (max-width: 1024px){
-  .left, .sidebar, .edge-left { display: none !important; }
-  .container, #main, .page, .wrap, .content-box {
-    width: 100% !important; max-width: 100% !important;
-    margin: 0 !important; padding: 0 !important; box-sizing: border-box !important;
-  }
-}
+/* DO NOT TOUCH GRID / FLEX / ROW / LAYOUT */
+
 </style>
+
 <style id="mobile-1024-grid-collapse">
 /* Collapse desktop 3-column grid at the same breakpoint so there are no ghost columns */
 @media (max-width: 1024px){
@@ -554,7 +577,7 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
 }
 </style>
 <style id="mobile-title-fontsize">
-@media (max-width: 768px){
+@media (max-width: 1024px){
   .page-title {
     font-size: 1.5em !important;
   }
@@ -683,11 +706,7 @@ body.show-right .right-panel,body.show-right .brand-rail{transform:none}
     }
   }
 </style>
-<style id="distribution-footer-fix">
-html,body{overflow-x:hidden;min-height:100%}
-footer,.site-footer{position:static !important; clear:both !important; width:100% !important; transform:none !important;}
-.container, .wrap, .layout, main, .main-content, #main { max-width:100vw !important; width:100% !important; box-sizing:border-box !important; }
-</style>
+
 <style id="dh-rail-style">
 /* Desktop default: hidden */
 #mobile-ad-rail-wrap{ display:none !important; }
@@ -908,34 +927,85 @@ footer,.site-footer{position:static !important; clear:both !important; width:100
   /* Footer safety: home bar overlap */
   footer { padding-bottom: max(24px, env(safe-area-inset-bottom)) !important; position: static !important; }
 </style>
-<style id="igdc-rightpanel-scrollbar-hide">
-/* Hide ONLY the right ad panel's scrollbar but keep scrolling functional */
+
+<style id="igdc-rightpanel-final">
+
+/* ================= RIGHT PANEL FINAL ================= */
+
+/* 외곽 컨테이너 */
 .brand-rail{
-  scrollbar-width: none;        /* Firefox */
-  -ms-overflow-style: none;     /* IE/Edge legacy */
+  background:#fff;
+  border-radius:12px;
+  padding:12px;
+  box-shadow:0 2px 6px rgba(0,0,0,.06);
+
+  overflow:visible !important;
+  max-height:none !important;
 }
-.brand-rail::-webkit-scrollbar{
-  display: none;                /* WebKit browsers */
-  width: 0;
-  height: 0;
+
+/* 실제 스크롤 영역 */
+.brand-rail .thumb-grid{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+
+  /* 카드 약 4.5장 높이 */
+  max-height:720px;
+
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+
+  scrollbar-width:none;
+}
+
+/* 스크롤바 숨김 */
+.brand-rail .thumb-grid::-webkit-scrollbar{
+  display:none;
+  width:0;
+  height:0;
+}
+
+/* 슬롯 카드 */
+.brand-rail .thumb-card{
+  height:150px;
+  min-height:150px;
+
+  border-radius:8px;
+  background:#eee;
+
+  flex:0 0 auto;
+}
+
+/* 더미 이미지 */
+.brand-rail .thumb-card .thumb-img{
+  height:100px;
+  background:#ddd;
+  border-radius:6px;
+}
+
+/* 더미 텍스트 */
+.brand-rail .thumb-card .thumb-title{
+  margin-top:6px;
+  font-size:12px;
+  color:#777;
+  text-align:center;
+}
+
+</style>
+
+<style id="rightpanel-ad-headline-center">
+.brand-rail .ad-headline{
+  text-align: center !important;
+  
+  margin: 4px 0 6px !important;   /* 위/아래 여백 축소 */
+  padding: 0 !important;
+
+  line-height: 1.2 !important;
 }
 </style>
-<style id="igdc-rightpanel-10cards">
-/* Desktop: right panel height tuned to show about 10~10.5 thumbnail cards */
-@media (min-width: 1024px){
-  .brand-rail{
-    max-height: 1680px !important;  /* 160px * 10.5 */
-    overflow-y: auto !important;
-    -webkit-overflow-scrolling: touch;
-  }
-  .brand-rail .brand-card{
-    height: 150px !important;
-    max-height: 150px !important;
-    margin: 0 0 10px 0 !important;
-    flex: 0 0 auto !important;
-  }
-}
-</style>
+
+
 <link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
 </head>
 <body>
@@ -948,8 +1018,8 @@ footer,.site-footer{position:static !important; clear:both !important; width:100
 <a href="distributionhub.html">🏭 Distribution Hub</a>
 <a href="socialnetwork.html">📢 Social Network</a>
 <a href="mediahub.html">🎬 Media Hub</a>
-<a href="tour.html">🧳 Travel · Tourism · Accommodation</a>
-<a href="literature_academic" style="display:none;">📚 Literature &amp; Academic Exchange</a>
+<a href="tour.html">🧳 Travel · Tourism · Travel · Tourism · Travel · Tourism · Accommodation</a>
+<a href="literature_academic.html">📚 Literature &amp; Academic Exchange</a>
 <a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A Contact</a>
 </div>
 <main class="main-content" style="margin:0">
@@ -959,46 +1029,110 @@ footer,.site-footer{position:static !important; clear:both !important; width:100
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
 </section>
 <h1 class="page-title" style="font-size: 2em; margin-bottom: 20px;">📦 Distribution Hub</h1>
+
+<!-- ================= DISTRIBUTION LAYOUT ================= -->
 <section class="content-box" id="sec-reco">
-<h3>🔥 Today's Picks</h3>
-<div class="scroller-wrap"><div class="thumb-list thumb-scroller" data-psom-key="distribution-recommend"></div><button aria-label="왼쪽으로 스크롤" class="rscroll left" type="button">‹</button><button aria-label="오른쪽으로 스크롤" class="rscroll right" type="button">›</button></div>
-<a class="more-link" href="#">See more</a>
+<h3>🔥 Today’s Picks</h3>
+<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-recommend"></div><button aria-label="Scroll left" class="rscroll left" type="button">‹</button><button aria-label="Scroll right" class="rscroll right" type="button">›</button></div>
+<a class="more-link" href="#">See More</a>
 </section>
 <section class="content-box" id="sec-ads">
 <h3>📣 Sponsors</h3>
-<div class="scroller-wrap"><div class="thumb-list thumb-scroller" data-psom-key="distribution-sponsor"></div><button aria-label="왼쪽으로 스크롤" class="rscroll left" type="button">‹</button><button aria-label="오른쪽으로 스크롤" class="rscroll right" type="button">›</button></div>
+<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-sponsor"></div><button aria-label="Scroll left" class="rscroll left" type="button">‹</button><button aria-label="Scroll right" class="rscroll right" type="button">›</button></div>
 </section>
 <section class="content-box" id="sec-trend">
-<h3>📈 Trending Now</h3>
-<div class="scroller-wrap"><div class="thumb-list thumb-scroller" data-psom-key="distribution-trending"></div><button aria-label="왼쪽으로 스크롤" class="rscroll left" type="button">‹</button><button aria-label="오른쪽으로 스크롤" class="rscroll right" type="button">›</button></div>
-<a class="more-link" href="#">Full ranking</a>
+<h3>📈 Real-Time Popularity</h3>
+<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-trending"></div><button aria-label="Scroll left" class="rscroll left" type="button">‹</button><button aria-label="Scroll right" class="rscroll right" type="button">›</button></div>
+<a class="more-link" href="#">Full Ranking</a>
 </section>
 <section class="content-box" id="sec-new">
-<h3>🆕 Newly Added Items</h3>
-<div class="scroller-wrap"><div class="thumb-list thumb-scroller" data-psom-key="distribution-new"></div><button aria-label="왼쪽으로 스크롤" class="rscroll left" type="button">‹</button><button aria-label="오른쪽으로 스크롤" class="rscroll right" type="button">›</button></div>
+<h3>🆕 Newly Listed Products</h3>
+<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-new"></div><button aria-label="Scroll left" class="rscroll left" type="button">‹</button><button aria-label="Scroll right" class="rscroll right" type="button">›</button></div>
 </section>
 <section class="content-box" id="sec-special">
-<h3>🌟 Special Deals</h3>
-<div class="scroller-wrap"><div class="thumb-list thumb-scroller" data-psom-key="distribution-special"></div>
-<button aria-label="왼쪽으로 스크롤" class="rscroll left" type="button">‹</button>
-<button aria-label="오른쪽으로 스크롤" class="rscroll right" type="button">›</button>
+<h3>🌟 Special Products</h3>
+<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-special"></div>
+<button aria-label="Scroll left" class="rscroll left" type="button">‹</button>
+<button aria-label="Scroll right" class="rscroll right" type="button">›</button>
 </div>
 </section>
 <section class="content-box" id="sec-others">
-<h3>🧺 Other Items</h3>
+<h3>🧺 Other Products</h3>
 <div class="scroller-wrap">
-<div class="thumb-list thumb-scroller" data-psom-key="distribution-others"></div>
-<button aria-label="왼쪽으로 스크롤" class="rscroll left" type="button">‹</button>
-<button aria-label="오른쪽으로 스크롤" class="rscroll right" type="button">›</button>
+<div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-others"></div>
+<button aria-label="Scroll left" class="rscroll left" type="button">‹</button>
+<button aria-label="Scroll right" class="rscroll right" type="button">›</button>
 </div>
-</section><div class="scroller-wrap" id="mobile-ad-rail-wrap"><div class="rail-title">💎 Featured Brands 💎</div><div class="thumb-list thumb-scroller" id="mobile-ad-rail-list"></div></div></main>
-<div class="brand-rail"><h3 class="ad-headline" style="margin:2px 0 2px; text-align:center; line-height:1.0; height:1em; white-space:nowrap;">💎 Featured Brands 💎</h3>
-<div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution"></div>
-<div class="brand-card"><a href="#ad1" title="광고 1"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 Ad 1</span></a></div><div class="brand-card"><a href="#ad2" title="광고 2"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 Ad 2</span></a></div><div class="brand-card"><a href="#ad3" title="광고 3"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 Ad 3</span></a></div><div class="brand-card"><a href="#ad4" title="광고 4"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 Ad 4</span></a></div><div class="brand-card"><a href="#ad5" title="광고 5"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 Ad 5</span></a></div><div class="brand-card"><a href="#ad6" title="광고 6"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 Ad 6</span></a></div><div class="brand-card"><a href="#ad7" title="광고 7"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 Ad 7</span></a></div><div class="brand-card"><a href="#ad8" title="광고 8"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 Ad 8</span></a></div><div class="brand-card"><a href="#ad9" title="광고 9"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 Ad 9</span></a></div><div class="brand-card"><a href="#ad10" title="광고 10"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 Ad 10</span></a></div><div class="brand-card"><a href="#ad11" title="광고 11"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 Ad 11</span></a></div><div class="brand-card"><a href="#ad12" title="광고 12"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 Ad 12</span></a></div><div class="brand-card"><a href="#ad13" title="광고 13"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 Ad 13</span></a></div><div class="brand-card"><a href="#ad14" title="광고 14"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 Ad 14</span></a></div><div class="brand-card"><a href="#ad15" title="광고 15"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 Ad 15</span></a></div><div class="brand-card"><a href="#ad16" title="광고 16"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 Ad 16</span></a></div><div class="brand-card"><a href="#ad17" title="광고 17"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 Ad 17</span></a></div><div class="brand-card"><a href="#ad18" title="광고 18"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 Ad 18</span></a></div><div class="brand-card"><a href="#ad19" title="광고 19"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 Ad 19</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📣 Ad 20</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 21</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 22</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 23</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 24</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 25</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 26</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 27</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 28</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 29</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 30</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 31</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 32</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 33</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 34</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 35</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 36</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 37</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 38</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 39</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 40</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 41</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 42</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 43</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 44</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 45</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 46</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 47</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 48</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 49</span></a></div><div class="brand-card"><a href="#ad20" title="광고 20"><span style="display:inline-block; vertical-align:middle; line-height:normal; padding-left:12px;">📢 Ad 50</span></a></div></div>
+</section>
+<div class="scroller-wrap" id="mobile-ad-rail-wrap"><div class="rail-title">💎 Featured Brands 💎</div><div class="thumb-list thumb-scroller" id="mobile-ad-rail-list"></div></div>
+</main>
+
+  <!-- ===== RIGHT COLUMN ===== -->
+  <aside class="right-col">
+    <div class="brand-rail">
+      <h3 class="ad-headline">💎 Featured Brands 💎</h3>
+      <div class="thumb-grid thumb-scroller vertical"
+           data-psom-key="distribution-right">
+      </div>
+    </div>
+  </aside>
+
 </div>
+<!-- ================= SLOT GENERATOR ================= -->
+<script>
+(function(){
+
+  const MAIN_COUNT = 100;
+  const RIGHT_COUNT = 80;
+
+  function makeSlot(){
+    const d = document.createElement('div');
+    d.className = 'thumb-card placeholder';
+    d.innerHTML = `
+      <div class="thumb-img"></div>
+      <div class="thumb-title">Auto-filled</div>
+    `;
+    return d;
+  }
+
+  function fillGrid(grid, count){
+
+    if(!grid) return;
+
+    // 이미 데이터 있으면 중단
+    if(grid.children.length > 0) return;
+
+    for(let i=0;i<count;i++){
+      grid.appendChild(makeSlot());
+    }
+  }
+
+  function initSlots(){
+
+    document
+      .querySelectorAll('.thumb-grid[data-psom-key]')
+      .forEach(grid=>{
+
+        const key = grid.dataset.psomKey;
+
+        if(key === 'distribution-right'){
+          fillGrid(grid, RIGHT_COUNT);
+        }else{
+          fillGrid(grid, MAIN_COUNT);
+        }
+
+      });
+  }
+
+  document.addEventListener('DOMContentLoaded', initSlots);
+
+})();
+</script>
+</div>
+
 <footer>
     IGDC Global Hub © 2025 | International General Distribution Company<br/>
-    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, <br/>
+    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Korea<br/>
 </footer>
 <!-- 내부 로직은 숨김 처리(코드 최소 노출) -->
 <script>
@@ -1079,7 +1213,6 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     border-radius: 4px;
   }
 </style>
-
 <script id="igdc-scroller-overlay">
 (function(){
   function scrollAmountFor(container){
@@ -1149,7 +1282,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">All features will be enabled after the save settings (Supabase url/key) are connected.</div>';
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
         document.body.appendChild(m);
@@ -1169,57 +1302,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   else { ensureButton(); }
 })();
 </script>
-<script id="igdc-layout-hotfix-v2">
-(function(){
-  function applyHotfix(){
-    var container = document.querySelector('.container');
-    var sidebar   = document.querySelector('.sidebar');
-    var adpanel   = document.querySelector('.ad-panel');
-    var main      = document.querySelector('.main-content');
-    if(!container || !sidebar || !adpanel || !main) return;
 
-    [sidebar, adpanel].forEach(function(el){
-      el.style.flex = '0 0 220px';
-      el.style.minWidth = '220px';
-      el.style.maxWidth = '220px';
-    });
-
-    container.style.overflow = 'visible';
-
-    main.style.flex = '1 1 720px';
-    main.style.maxWidth = '920px';
-    main.style.minWidth = '360px';
-    main.style.margin = '30px';
-    main.style.boxSizing = 'border-box';
-
-    document.querySelectorAll('.thumb-list:not(.thumb-scroller)').forEach(function(list){
-      list.style.display = 'grid';
-      list.style.gridTemplateColumns = 'repeat(auto-fill, minmax(240px, 1fr))';
-      list.style.gap = '12px';
-    });
-
-    document.querySelectorAll('.thumb-scroller .thumb-card').forEach(function(card){
-      card.style.minWidth = '240px';
-    });
-    document.querySelectorAll('.thumb-card').forEach(function(card){
-      if(!card.style.minWidth) card.style.minWidth = '240px';
-    });
-  }
-
-  var _t;
-  function onResize(){
-    clearTimeout(_t);
-    _t = setTimeout(applyHotfix, 50);
-  }
-
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', applyHotfix, { once: true });
-  } else {
-    applyHotfix();
-  }
-  window.addEventListener('resize', onResize);
-})();
-</script>
 <script id="igdc-scroller-position-fix-v1">// neutralized by igdc-scroller-outside-v1 (replaced igdc-scroller-position-fix-v1)</script>
 <script id="igdc-scroller-position-final-v2">// neutralized by igdc-scroller-outside-v1 (replaced igdc-scroller-position-final-v2)</script>
 <script id="igdc-scroller-smooth-v3">// neutralized: IGDC Scroller Smooth v3</script>
@@ -1288,7 +1371,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
       <div class="igtc-body">
         <p class="igtc-desc" style="opacity:.9"></p>
         <div class="igtc-actions">
-          <button class="igtc-btn" data-act="cta">바로가기</button>
+          <button class="igtc-btn" data-act="cta">Open</button>
           <button class="igtc-btn secondary" data-act="like">Like</button>
           <button class="igtc-btn ghost" data-act="recommend">Recommend</button>
         </div>
@@ -1386,11 +1469,11 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     // Feedback handlers (optional)
     el.btnLike.onclick = async function(){
       const id = this.dataset.itemId || info.id; if(!id) return;
-      try{ await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); this.textContent='Like 완료'; this.disabled=true; }catch(_){}
+      try{ await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); this.textContent='Liked'; this.disabled=true; }catch(_){}
     };
     el.btnRec.onclick = async function(){
       const id = this.dataset.itemId || info.id; if(!id) return;
-      try{ await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); this.textContent='Recommend 완료'; this.disabled=true; }catch(_){}
+      try{ await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); this.textContent='Recommended'; this.disabled=true; }catch(_){}
     };
   }
 
@@ -1522,7 +1605,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      console.warn("[Q&A] Supabase credentials/library not configured: UI is visible but saving is disabled.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -1548,7 +1631,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
+    const title = el("div","igdc-qa-title"); title.textContent = "Questions & Answers";
     const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
     header.append(title, close);
 
@@ -1560,7 +1643,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Submit";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Simple questions are answered immediately by AI. Technical or operational issues are automatically forwarded to the admin Q&A.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Simple questions are answered immediately by AI. Technical, error, or operation-related issues are automatically forwarded to the admin Q&A.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -1631,18 +1714,18 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (대기중)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "Admin Request":"일반";
+        const tag = el("span"); tag.textContent = row.is_admin? "Admin Request":"General";
         const actions = el("div","igdc-qa-thread-actions");
         const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
         if(canDelete){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="삭제";
+          const del = el("button","igdc-qa-btn muted"); del.textContent="Delete";
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("삭제 실패(권한/정책)"); return; }
+            if(error){ alert("Delete failed (permission/policy)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -1666,7 +1749,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
         }
         if(!answer){
           if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 확인 후 회신됩니다.";
-          else if(/가격|비용|요금/.test(text)) answer="For pricing or fee details, please refer to the information on this page. If you have additional questions, please leave a message.";
+          else if(/가격|비용|요금/.test(text)) answer="가격/요금 정보는 페이지 내 안내를 참고해주세요. 추가 문의는 남겨주세요.";
           else answer="문의 감사합니다. 빠르게 확인하여 도와드리겠습니다.";
         }
       }
@@ -1681,7 +1764,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("저장 설정(Supabase url/key)이 아직 연결되지 않아 서버 저장은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        alert("Save settings (Supabase url/key) are not connected yet, so server-side saving is disabled. When deploying to the web, set SUPER_VARSAR.url/anonKey and it will be connected automatically.");
         return;
       }
       const record = {
@@ -1691,7 +1774,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("등록 실패"); return; }
+      if(error){ alert("Registration failed"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -1714,7 +1797,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth initialization failed:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -1740,33 +1823,33 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("구매 요청이 접수되었습니다."); }
-      else { alert("구매 요청 실패"); }
-    }catch(e){ console.warn(e); alert("네트워크 오류"); }
+      if (res.ok){ alert("Your purchase request has been received."); }
+      else { alert("Purchase request failed."); }
+    }catch(e){ console.warn(e); alert("Network error."); }
   };
 
   window.requestSettlement = async function(amount, currency){
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("Settlement request has been received."); }
-      else { alert("Settlement request failed"); }
-    }catch(e){ console.warn(e); alert("네트워크 오류"); }
+      if (res.ok){ alert("Your settlement request has been received."); }
+      else { alert("Settlement request failed."); }
+    }catch(e){ console.warn(e); alert("Network error."); }
   };
 
   // ===== 2) AI Recommend·회전(로테이션) 보강 =====
-  // 조건: 상품 카드가 거의 없거나(3개 미만) thumbnail이 비어 있으면 → 서버 Recommend을 요청해 채움.
+  // 조건: Product 카드가 거의 없거나(3개 미만) 썸네일이 비어 있으면 → 서버 Recommend을 요청해 채움.
   document.addEventListener('DOMContentLoaded', function(){
     try{
       // 컨테이너 후보 탐색
       var grid = document.querySelector('#productGrid, .product-grid, .grid-products, .cards.products') || null;
       if(!grid) return;  // 레이아웃을 건드리지 않음
 
-      // 카드/thumbnail 탐지
+      // 카드/썸네일 탐지
       var cards = grid.querySelectorAll('[data-product-id], .product-card, .card');
       var needFill = (cards.length < 3);
 
-      // thumbnail 없는 카드가 많으면 보강 필요
+      // 썸네일 없는 카드가 많으면 보강 필요
       if (!needFill && cards.length){
   var emptyThumbs = 0;
   cards.forEach(function(c){
@@ -1800,7 +1883,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || item.name || '상품';
+              t.textContent = item.title || item.name || 'Product';
 
               a.appendChild(img);
               a.appendChild(t);
@@ -1826,7 +1909,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || '상품';
+              t.textContent = item.title || 'Product';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -1839,7 +1922,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </script>
 <script src="/assets/js/igdc-core.min.js"></script>
 <script src="/assets/js/igdc-pay.min.js"></script>
-<!-- @SAFE-PATCH: hide '문학 학술교류' sidebar/menu entry -->
+<!-- @SAFE-PATCH: hide 'Literature & Academic Exchange' sidebar/menu entry -->
 <script>
 (function(){
   function hideLiteratureAcademic(){
@@ -1943,6 +2026,14 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     window.addEventListener('resize', function(){ update(wrap); }, {passive:true});
     // initial
     setTimeout(function(){ update(wrap); }, 0);
+    // 🔧 FIX: 카드가 나중에 들어오면 update 재호출
+    try{
+    const mo = new MutationObserver(function(){
+    update(wrap);
+  });
+  mo.observe(scroller, { childList:true, subtree:true });
+}catch(_){}
+
   }
   function init(){
     document.querySelectorAll('.scroller-wrap').forEach(bind);
@@ -2300,9 +2391,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       h.appendChild(t); h.appendChild(x);
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
-      body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
+      body.innerHTML = '<div class="igdc-qa-note">All features will be enabled after the save settings (Supabase url/key) are connected.</div>';
 
-      // ensure the "Primary Email" is shown only inside the modal
+      // ensure the "대표 이메일" is shown only inside the modal
       var ce = document.createElement('p');
       ce.className = 'contact-email';
       ce.innerHTML = 'Primary Email: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
@@ -2383,7 +2474,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
             parent.innerHTML = html;
           }
         });
-        // Remove any plain-text "Primary Email: ..." remnants
+        // Remove any plain-text "대표 이메일: ..." remnants
         f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
       });
     }catch(e){}
@@ -2403,7 +2494,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
       var note = document.createElement('div'); note.className='igdc-qa-note';
-      note.textContent = '저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.';
+      note.textContent = 'All features will be enabled after the save settings (Supabase url/key) are connected.';
       body.appendChild(note);
 
       // (1) Inject the contact email in creation path
@@ -2578,11 +2669,38 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       min-width: 0 !important; margin: 0 !important;
     }
     .right-rail, .brand-rail{ grid-column: 3; }
-    .brand-rail{
-      position: sticky !important; top: 16px !important;
-      width: 274px !important; min-width: 274px !important; max-width: 274px !important;
-      right: auto !important; transform: none !important;
-    }
+/* RIGHT PANEL SCROLL FIX - PRODUCTION */
+
+@media (max-width:1024px){
+  /* Mobile / Tablet: keep sticky */
+  .brand-rail{
+    position: sticky !important;
+    top:16px !important;
+
+    width:274px !important;
+    min-width:274px !important;
+    max-width:274px !important;
+
+    right:auto !important;
+    transform:none !important;
+  }
+}
+
+@media (min-width:1025px){
+  /* Desktop: follow page scroll */
+  .brand-rail{
+    position: relative !important;
+    top:auto !important;
+
+    width:274px !important;
+    min-width:274px !important;
+    max-width:274px !important;
+
+    right:auto !important;
+    transform:none !important;
+  }
+}
+
   }
 
   /* Narrow tablet & mobile: instant 1-col takeover by main */
@@ -2704,7 +2822,7 @@ window.addEventListener("message",function(ev){
       var title = document.querySelector('#mobile-ad-rail-wrap .rail-title, #mobile-ad-rail-wrap h3, #mobile-ad-rail-wrap header h3');
       if (title){
         var t=(title.textContent||'').trim();
-        if (t.length>8) title.textContent='💎 Featured Brands 💎';
+        if (t.length>8) title.textContent='💎 Recommend 브랜드 💎';
       }
       // Capture-phase guard to preserve native vertical scroll
       var zone = list || wrap;
@@ -2759,7 +2877,7 @@ window.addEventListener("message",function(ev){
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
                   + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">닫기</button></div>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -2796,9 +2914,9 @@ window.addEventListener("message",function(ev){
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
     ta.value=''; alert('Sent successfully.');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('Sending failed'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('Sending failed.'));});
   const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('Sending failed'));});
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('Sending failed.'));});
 })();
 </script>
 <script>
@@ -2838,11 +2956,218 @@ window.addEventListener("message",function(ev){
   window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
 })();
 </script>
-<script defer="" src="/assets/js/auto-embed.instagram.js"></script>
+<script id="igdc-product-review-script">
+/*
+ IGDC Product Review – Auto Hook Version
+ - Distribution page thumbnail click auto-detect
+ - Product detail review auto-mount (Coupang-style)
+ *
+ * Requirement:
+ *  - Product thumbnail or detail container must have: data-product-id="..."
+ *  - window.__IGDC_ROLE (guest | member | admin ...)
+ */
+
+(function (window, document) {
+  'use strict';
+
+  const Review = {
+    config: {
+      apiBase: '/.netlify/functions/reviews',
+      rootId: 'product-review-root',
+      minChars: 10,
+      maxChars: 2000
+    },
+
+    state: {
+      productId: null,
+      role: 'guest',
+      mountedFor: null
+    },
+
+    init() {
+      this.state.role = window.__IGDC_ROLE || 'guest';
+      this.bindAutoHook();
+    },
+
+    /* 🔑 핵심: 디스트리부션 썸네일 클릭 자동 감지 */
+    bindAutoHook() {
+      document.addEventListener('click', (e) => {
+        const card = e.target.closest('[data-product-id]');
+        if (!card) return;
+
+        const productId = card.dataset.productId;
+        if (!productId) return;
+
+        // 상세 Product이 열릴 시간을 약간 준 뒤 마운트
+        setTimeout(() => {
+          this.mount(productId);
+        }, 50);
+      });
+    },
+
+    mount(productId) {
+      if (!productId) return;
+      if (this.state.mountedFor === productId) return;
+
+      this.state.productId = productId;
+      this.state.mountedFor = productId;
+
+      const root = this.ensureRoot();
+      root.innerHTML = this.renderShell();
+
+      this.bindForm(root);
+      this.loadReviews();
+    },
+
+    ensureRoot() {
+      let root = document.getElementById(this.config.rootId);
+      if (!root) {
+        root = document.createElement('div');
+        root.id = this.config.rootId;
+
+        // 상세 Product 영역 하단에 삽입
+        const detail =
+          document.querySelector('.product-detail') ||
+          document.querySelector('.product-modal') ||
+          document.body;
+
+        detail.appendChild(root);
+      }
+      return root;
+    },
+
+    renderShell() {
+      const canWrite = this.state.role !== 'guest';
+      return `
+        <section class="igdc-review">
+          <h3 class="igdc-review-title">Product Reviews</h3>
+          <div id="igdc-review-list" class="igdc-review-list">Loading...</div>
+          ${canWrite ? this.renderForm() : this.renderLoginHint()}
+        </section>
+      `;
+    },
+
+    renderForm() {
+      return `
+        <form id="igdc-review-form" class="igdc-review-form">
+          <textarea
+            placeholder="Share your product experience"
+            minlength="${this.config.minChars}"
+            maxlength="${this.config.maxChars}"
+            required></textarea>
+          <div class="igdc-review-actions">
+            <button type="submit">Submit Review</button>
+          </div>
+        </form>
+      `;
+    },
+
+    renderLoginHint() {
+      return `<div class="igdc-review-login-hint">
+        Review posting is available after logging in.
+      </div>`;
+    },
+
+    bindForm(root) {
+      const form = root.querySelector('#igdc-review-form');
+      if (!form) return;
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const textarea = form.querySelector('textarea');
+        const content = textarea.value.trim();
+
+        if (content.length < this.config.minChars) {
+          alert(`Reviews must be at least ${this.config.minChars} characters long.`);
+          return;
+        }
+
+        this.submitReview(content)
+          .then(() => {
+            textarea.value = '';
+            this.loadReviews();
+          })
+          .catch(() => alert('Submit Review 실패'));
+      });
+    },
+
+    async loadReviews() {
+      const list = document.getElementById('igdc-review-list');
+      if (!list) return;
+
+      list.textContent = 'Loading...';
+
+      try {
+        const res = await fetch(
+          `${this.config.apiBase}?productId=${encodeURIComponent(this.state.productId)}`
+        );
+        const data = await res.json();
+
+        if (!Array.isArray(data) || data.length === 0) {
+          list.innerHTML = '<div class="igdc-review-empty">No reviews yet.</div>';
+          return;
+        }
+
+        list.innerHTML = data.map(this.renderItem).join('');
+      } catch {
+        list.textContent = 'Failed to load reviews.';
+      }
+    },
+
+    async submitReview(content) {
+      const res = await fetch(this.config.apiBase, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productId: this.state.productId,
+          content
+        })
+      });
+
+      if (!res.ok) throw new Error('submit failed');
+    },
+
+    renderItem(item) {
+      const esc = (v) => String(v || '').replace(/[<>]/g, '');
+      return `
+        <div class="igdc-review-item">
+          <div class="igdc-review-meta">
+            <span>${esc(item.user || 'Anonymous')}</span>
+            <span>${esc(item.date || '')}</span>
+          </div>
+          <div class="igdc-review-content">${esc(item.content)}</div>
+        </div>
+      `;
+    }
+  };
+
+  /* 기본 스타일 */
+  const style = document.createElement('style');
+  style.textContent = `
+    .igdc-review { margin-top:24px; border-top:1px solid #eee; padding-top:16px; }
+    .igdc-review-title { margin:0 0 12px; font-size:1.05rem; }
+    .igdc-review-list { display:flex; flex-direction:column; gap:10px; }
+    .igdc-review-item { border:1px solid #eee; border-radius:10px; padding:10px; background:#fafafa; }
+    .igdc-review-meta { font-size:.8rem; color:#666; display:flex; gap:8px; }
+    .igdc-review-content { margin-top:6px; line-height:1.5; }
+    .igdc-review-form textarea { width:100%; min-height:90px; padding:10px; border-radius:10px; border:1px solid #ddd; }
+    .igdc-review-actions { margin-top:8px; text-align:right; }
+    .igdc-review-actions button { padding:8px 14px; border-radius:10px; border:none; background:#2563eb; color:#fff; }
+    .igdc-review-empty, .igdc-review-login-hint { color:#666; }
+  `;
+  document.head.appendChild(style);
+
+  Review.init();
+  window.IGDCProductReview = Review;
+
+})(window, document);
+</script>
+
 <script defer="" src="/assets/js/placeholder-sweeper.js"></script>
 <script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
 
-<script defer src="/assets/js/feed.js"></script>
+<script src="/assets/js/distribution-products-automap.v3.js" defer></script>
+
 
 </body>
 </html>

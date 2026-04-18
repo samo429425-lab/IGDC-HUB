@@ -6,82 +6,141 @@
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
 <meta charset="utf-8"/>
 <title>Tour</title>
-<style>body {
-      margin: 0;
-      font-family: sans-serif;
-      background-color: #f2f2f2;
-    }
 
-    .container {
-      display: flex;
-      flex-direction: row;
-      min-height: 90vh;
-    }
-
-    .main-content {
-      flex: 1;
-      background-color: #ffffff;
-      padding: 40px 30px;
-	  border-radius: 10px;
-      max-width: 900px;
-      margin: 30px auto;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-      text-align: center;
-    }
-
-    .main-content h2 {
-      color: #004080;
-      margin-bottom: 20px;
-    }
-
-    .main-content p {
-      font-size: 1rem;
-      line-height: 1.8;
-      color: #333;
-    }
-
-       
-
-    .ad-box a {
-      text-decoration: none;
-      color: inherit;
-      display: block;
-      height: 100px;
-      line-height: 100px;
-    }
-
-    footer {
-      background-color: #004080;
-      color: white;
-      text-align: center;
-      padding: 20px 15px;
-      font-size: 0.9rem;
-    }</style>
-
-<style id="adpanel-adbox-round8">/* Round only the right ad panel's thumbnail/card boxes */
-  .ad-panel 
-  .ad-panel .ad-box a, .ad-panel .ad-box img { border-radius: inherit; display: block; }</style>
-
-<style id="adpanel-override-v1">/* === Right AD panel: same "normal" as previous success === */
-
-.ad-panel 
-
-/* anchor fills the card */
-.ad-panel .ad-box > a{
-  display: block !important;
-  width: 100% !important;
-  height: 100% !important;
-  line-height: 150px !important;
-  border-radius: 8px !important;
-  text-decoration: none !important;
-  color: inherit !important;
+<style>
+body {
+  margin: 0;
+  font-family: sans-serif;
+  background-color: #f2f2f2;
 }
 
-/* Hint: slightly fade items after 10 for visual cue they are behind the fold */
-.ad-panel .ad-box:nth-child(n+11){ opacity: 0.96; }
+.container {
+  display: flex;
+  flex-direction: row;
+  min-height: 90vh;
+  align-items: flex-start;
+}
 
-/* Make sure the main content doesn't stretch under the panel in flex layouts */
-.container{ align-items: flex-start; }</style>
+.main-content {
+  flex: 1;
+  background-color: #ffffff;
+  padding: 40px 30px;
+  border-radius: 10px;
+  max-width: 900px;
+  margin: 30px auto;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+  text-align: center;
+}
+
+.main-content h2 {
+  color: #004080;
+  margin-bottom: 20px;
+}
+
+.main-content p {
+  font-size: 1rem;
+  line-height: 1.8;
+  color: #333;
+}
+
+/* ===== RIGHT PANEL CARD (TOUR) - REPLACE WHOLE BLOCK ===== */
+.ad-panel .ad-box a{
+  text-decoration:none;
+  color:inherit;
+  display:block;
+  width:100%;
+  height:100%;
+  position:relative;
+  line-height:normal;
+}
+
+.ad-panel .ad-box img{
+  width:100%;
+  height:100%;
+  display:block;
+  object-fit:cover;
+}
+
+.ad-panel .ad-box .tour-card-title{
+  position:absolute;
+  left:0; right:0; bottom:0;
+  padding:6px 10px;
+  font-size:14px;
+  line-height:1.15;
+  font-weight:800;
+  color:#fff;
+  background:linear-gradient(to top, rgba(0,0,0,.65), rgba(0,0,0,0));
+  text-shadow:0 1px 2px rgba(0,0,0,.55);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+} /* ✅ 이 닫는 괄호가 꼭 필요 */
+
+/* footer */
+footer {
+  background-color: #004080;
+  color: white;
+  text-align: center;
+  padding: 20px 15px;
+  font-size: 0.9rem;
+}
+</style>
+
+<style id="adpanel-adbox-round8">
+/* === Right AD panel card base (stable) === */
+
+.ad-panel .ad-box{
+
+  border-radius:8px;
+  overflow:hidden;
+  background:#fff;
+  border:1px solid #d7dce1;
+}
+
+.ad-panel .ad-box a{
+  display:block;
+  width:100%;
+  height:100%;
+  text-decoration:none;
+  color:inherit;
+  position:relative;
+}
+
+.ad-panel .ad-box img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+</style>
+<style id="adpanel-override-v1">
+/* === Right AD panel override (clean final) === */
+
+.ad-panel .ad-box .tour-card-title{
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  padding:6px 10px;
+  font-size:14px;
+  line-height:1.15;
+  font-weight:800;
+  color:#fff;
+  background:linear-gradient(to top, rgba(0,0,0,.65), rgba(0,0,0,0));
+  text-shadow:0 1px 2px rgba(0,0,0,.55);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.ad-panel .ad-box:nth-child(n+11){
+  opacity:0.96;
+}
+
+.container{
+  align-items:flex-start;
+}
+</style>
 <style id="adpanel-independent-scroll">.container {
   display: flex !important;
   flex-direction: row !important;
@@ -348,40 +407,78 @@ function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
   .bc-tile.orange{background:#f97316;color:#fff}
   .bc-tile.orange:hover{background:#fb923c}
   
-  .ad-panel{ position:sticky; top:20px; background:#f7f9fb; border:1px solid #d6dce0; border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:12px; max-height:80vh; overflow:auto; box-shadow:0 1px 4px rgba(0,0,0,.08) }
-  .ad-box{ background:#fff; border:1px solid #d7dce1; border-radius:8px; height:165px; display:flex; align-items:center; justify-content:center; font-weight:600; color:#444 }
+  .ad-panel{ position:sticky; top:20px; background:#f7f9fb; border:1px solid #d6dce0; border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:12px; max-height:100vh; overflow:auto; box-shadow:0 1px 4px rgba(0,0,0,.08) }
+  .ad-box{
+    background:#fff;
+    border:1px solid #d7dce1;
+    border-radius:8px;
+}
 
 /* --- Strong rules for right panel thumbnail boxes --- */
 .ad-panel { grid-column: 3; }
-.ad-box{
-  height:165px !important;
-  min-height:165px !important;
-  max-height:165px !important;
-  display:flex !important;
-  align-items:center !important;
-  justify-content:center !important;
-  overflow:hidden !important;
-}
-.ad-box > a{
-  display:flex !important;
-  align-items:center !important;
-  justify-content:center !important;
-  width:100% !important;
-  height:100% !important;
-  line-height:normal !important;
-  text-align:center !important;
-  padding:0 !important;
-}
-.ad-box img, .ad-box iframe, .ad-box video, .ad-box picture, .ad-box canvas{
-  width:100% !important;
-  height:100% !important;
-  object-fit:cover !important;
-  display:block !important;
-  border:0 !important;
+
+/* Mobile/tablet: keep 4:5 ratio (matches NetworkHub) */
+@media (max-width:1024px){
+  .ad-box{
+    aspect-ratio: 4 / 5 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    overflow:hidden !important;
+  }
+  .ad-box > a{
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    width:100% !important;
+    height:100% !important;
+    line-height:normal !important;
+    text-align:center !important;
+    padding:0 !important;
+  }
+  .ad-box img, .ad-box iframe, .ad-box video, .ad-box picture, .ad-box canvas{
+    width:100% !important;
+    height:100% !important;
+    object-fit:cover !important;
+    display:block !important;
+    border:0 !important;
+  }
 }
 
-
-
+/* Desktop: lock to stable fixed-height cards (prevents collapse into thin bars) */
+@media (min-width:1025px){
+  .ad-box{
+    width:100% !important;
+    height:285px !important;
+    min-height:285px !important;
+    max-height:285px !important;
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    overflow:hidden !important;
+  }
+  .ad-box > a{
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    width:100% !important;
+    height:100% !important;
+    line-height:normal !important;
+    text-align:center !important;
+    padding:0 !important;
+  }
+  .ad-box img, .ad-box iframe, .ad-box video, .ad-box picture, .ad-box canvas{
+    width:100% !important;
+    height:100% !important;
+    object-fit:cover !important;
+    display:block !important;
+    border:0 !important;
+  }
+}
 /* Right panel: 8 full cards + 20% of 9th; scrollbar hidden; wheel/touch/drag work */
 .ad-panel::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }</style><style id="adpanel-visible-8-kr">/* Right panel: 8 full cards + 20% of 9th; scrollbar hidden; wheel/touch/drag work */
 .ad-panel {
@@ -524,7 +621,7 @@ html, body {
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Todavía no hay Q&A registrados.";
+  content: "Aún no se han publicado entradas de Q&A";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -795,6 +892,35 @@ html, body {
 </style>
 
 <link rel="stylesheet" href="/assets/css/thumbs.standard.css">
+
+<style id="tour-desktop-fill-and-scroll-fix">
+/* Desktop: main area must expand to fill space between sidebar and right panel */
+@media (min-width:1025px){
+  .container{
+    display:grid !important;
+    grid-template-columns:210px 1fr 274px !important;
+    gap:24px !important;
+    align-items:start !important;
+    padding:28px 24px !important;
+    max-width:none !important;
+  }
+  .main-content{
+    max-width:none !important;
+    width:100% !important;
+    margin:0 !important;
+    justify-self:stretch !important;
+  }
+  .right-rail{ width:274px !important; }
+  .ad-panel{
+    max-height:100vh !important;
+    overflow-y:auto !important;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior:contain;
+    touch-action:pan-y;
+  }
+}
+</style>
+
 </head>
 
 <body>
@@ -806,9 +932,9 @@ html, body {
 <a href="distributionhub.html">🏭 Centro de Distribución</a>
 <a href="socialnetwork.html">📢 Red Social</a>
 <a href="mediahub.html">🎬 Centro de Medios</a>
-<a href="tour.html">🧳 Viajes y Turismo</a>
-<a href="literature_academic" style="display:none">📚 Literatura e Intercambio Académico</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A / Contact</a></div>
+<a href="tour.html">🧳 Viajes · Turismo · Alojamiento</a>
+<a href="literature_academic">📚 Intercambio Literario y Académico</a>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Consulta Q&amp;A</a></div>
 <div class="main-content">
 <section class="section-blockchain">
 <a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
@@ -817,8 +943,8 @@ html, body {
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
 </section>
 <div style="background-color:#dfefff; padding:24px; border-radius:10px; box-shadow:1px 1px 8px rgba(0,0,0,0.05); margin-bottom:24px; max-width: 980px; margin-left:auto; margin-right:auto;">
-<h2 style="font-size:1.9em; margin:0 0 8px 0; color:#004080; text-align:center;">🌍 HUB global de viajes</h2>
-<p style="margin:0; color:#335; font-size:0.95rem; text-align:center;">Se han colocado botones de enlace en cada cuadro de contenido regional.</p>
+<h2 style="font-size:1.9em; margin:0 0 8px 0; color:#004080; text-align:center;">🌍 HUB Global de Plataformas de Viaje</h2>
+<p style="margin:0; color:#335; font-size:0.95rem; text-align:center;">Los botones de enlace están organizados por región dentro de los cuadros de contenido.</p>
 </div>
 <style id="region-cards-grid">.region-card { border:1px solid #c8d6e5; background:linear-gradient(180deg, #f9fbff, #eef5ff); border-radius:14px; padding:18px 20px; margin:16px 0 22px 0; box-shadow:0 2px 6px rgba(0,0,0,0.08); }
     .region-title { font-size:1.1rem; font-weight:800; color:#003366; margin:4px 0 14px 0; text-align:center; }
@@ -877,7 +1003,7 @@ html, body {
 </div>
 </div>
 <div class="region-card">
-<div class="region-title">Medio Oriente · África</div>
+<div class="region-title">Oriente Medio · África</div>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.almosafer.com" target="_blank">Almosafer <small>(المسافر)</small></a>
 <a class="link-btn" href="https://www.rehlat.com" target="_blank">Rehlat <small>(رحلات)</small></a>
@@ -888,7 +1014,7 @@ html, body {
 </div>
 </div>
 <div class="region-card">
-<div class="region-title">Oceania · Other Europa</div>
+<div class="region-title">Oceanía · Otra Europa</div>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.webjet.com.au" target="_blank">Webjet</a>
 <a class="link-btn" href="https://www.flightcentre.com.au" target="_blank">Flight Centre</a>
@@ -901,110 +1027,10 @@ html, body {
 </div>
 <div class="right-rail">
 <h3 class="ad-headline" style="margin:0 0 6px; text-align:center; line-height:1; height:1em; white-space:nowrap;">
-  💎 Marcas populares 💎
+  💎 Marcas Populares 💎
 </h3>
-<div class="ad-panel">
+<div class="ad-panel" id="rightAutoPanel"></div>
 <div class="thumb-grid" data-psom-key="tour"></div>
-<div class="ad-box"><a href="#ad1">Ad 1 (📣 Ad 1)</a></div>
-<div class="ad-box"><a href="#ad2">Ad 2 (📣 Ad 2)</a></div>
-<div class="ad-box"><a href="#ad3">Ad 3 (📣 Ad 3)</a></div>
-<div class="ad-box"><a href="#ad4">Ad 4 (📣 Ad 4)</a></div>
-<div class="ad-box"><a href="#ad5">Ad 5 (📣 Ad 5)</a></div>
-<div class="ad-box"><a href="#ad6">Ad 6 (📣 Ad 6)</a></div>
-<div class="ad-box"><a href="#ad7">Ad 7 (📣 Ad 7)</a></div>
-<div class="ad-box"><a href="#ad8">Ad 8 (📣 Ad 8)</a></div>
-<div class="ad-box"><a href="#ad9">Ad 9 (📣 Ad 9)</a></div>
-<div class="ad-box"><a href="#ad10">Ad 10 (📣 Ad 10)</a></div>
-<div class="ad-box"><a href="#ad11">Ad 11 (📣 Ad 11)</a></div>
-<div class="ad-box"><a href="#ad12">Ad 12 (📣 Ad 12)</a></div>
-<div class="ad-box"><a href="#ad13">Ad 13 (📣 Ad 13)</a></div>
-<div class="ad-box"><a href="#ad14">Ad 14 (📣 Ad 14)</a></div>
-<div class="ad-box"><a href="#ad15">Ad 15 (📣 Ad 15)</a></div>
-<div class="ad-box"><a href="#ad16">Ad 16 (📣 Ad 16)</a></div>
-<div class="ad-box"><a href="#ad17">Ad 17 (📣 Ad 17)</a></div>
-<div class="ad-box"><a href="#ad18">Ad 18 (📣 Ad 18)</a></div>
-<div class="ad-box"><a href="#ad19">Ad 19 (📣 Ad 19)</a></div>
-<div class="ad-box"><a href="#ad20">Ad 20 (📣 Ad 20)</a></div>
-<div class="ad-box"><a href="#ad21">Ad 21 (📣 Ad 21)</a></div>
-<div class="ad-box"><a href="#ad22">Ad 22 (📣 Ad 22)</a></div>
-<div class="ad-box"><a href="#ad23">Ad 23 (📣 Ad 23)</a></div>
-<div class="ad-box"><a href="#ad24">Ad 24 (📣 Ad 24)</a></div>
-<div class="ad-box"><a href="#ad25">Ad 25 (📣 Ad 25)</a></div>
-<div class="ad-box"><a href="#ad26">Ad 26 (📣 Ad 26)</a></div>
-<div class="ad-box"><a href="#ad27">Ad 27 (📣 Ad 27)</a></div>
-<div class="ad-box"><a href="#ad28">Ad 28 (📣 Ad 28)</a></div>
-<div class="ad-box"><a href="#ad29">Ad 29 (📣 Ad 29)</a></div>
-<div class="ad-box"><a href="#ad30">Ad 30 (📣 Ad 30)</a></div>
-<div class="ad-box"><a href="#ad31">Ad 31 (📣 Ad 31)</a></div>
-<div class="ad-box"><a href="#ad32">Ad 32 (📣 Ad 32)</a></div>
-<div class="ad-box"><a href="#ad33">Ad 33 (📣 Ad 33)</a></div>
-<div class="ad-box"><a href="#ad34">Ad 34 (📣 Ad 34)</a></div>
-<div class="ad-box"><a href="#ad35">Ad 35 (📣 Ad 35)</a></div>
-<div class="ad-box"><a href="#ad36">Ad 36 (📣 Ad 36)</a></div>
-<div class="ad-box"><a href="#ad37">Ad 37 (📣 Ad 37)</a></div>
-<div class="ad-box"><a href="#ad38">Ad 38 (📣 Ad 38)</a></div>
-<div class="ad-box"><a href="#ad39">Ad 39 (📣 Ad 39)</a></div>
-<div class="ad-box"><a href="#ad40">Ad 40 (📣 Ad 40)</a></div>
-<div class="ad-box"><a href="#ad41">Ad 41 (📣 Ad 41)</a></div>
-<div class="ad-box"><a href="#ad42">Ad 42 (📣 Ad 42)</a></div>
-<div class="ad-box"><a href="#ad43">Ad 43 (📣 Ad 43)</a></div>
-<div class="ad-box"><a href="#ad44">Ad 44 (📣 Ad 44)</a></div>
-<div class="ad-box"><a href="#ad45">Ad 45 (📣 Ad 45)</a></div>
-<div class="ad-box"><a href="#ad46">Ad 46 (📣 Ad 46)</a></div>
-<div class="ad-box"><a href="#ad47">Ad 47 (📣 Ad 47)</a></div>
-<div class="ad-box"><a href="#ad48">Ad 48 (📣 Ad 48)</a></div>
-<div class="ad-box"><a href="#ad49">Ad 49 (📣 Ad 49)</a></div>
-<div class="ad-box"><a href="#ad50">Ad 50 (📣 Ad 50)</a></div>
-<div class="ad-box"><a href="#ad51">Ad 51 (📣 Ad 51)</a></div>
-<div class="ad-box"><a href="#ad52">Ad 52 (📣 Ad 52)</a></div>
-<div class="ad-box"><a href="#ad53">Ad 53 (📣 Ad 53)</a></div>
-<div class="ad-box"><a href="#ad54">Ad 54 (📣 Ad 54)</a></div>
-<div class="ad-box"><a href="#ad55">Ad 55 (📣 Ad 55)</a></div>
-<div class="ad-box"><a href="#ad56">Ad 56 (📣 Ad 56)</a></div>
-<div class="ad-box"><a href="#ad57">Ad 57 (📣 Ad 57)</a></div>
-<div class="ad-box"><a href="#ad58">Ad 58 (📣 Ad 58)</a></div>
-<div class="ad-box"><a href="#ad59">Ad 59 (📣 Ad 59)</a></div>
-<div class="ad-box"><a href="#ad60">Ad 60 (📣 Ad 60)</a></div>
-<div class="ad-box"><a href="#ad61">Ad 61 (📣 Ad 61)</a></div>
-<div class="ad-box"><a href="#ad62">Ad 62 (📣 Ad 62)</a></div>
-<div class="ad-box"><a href="#ad63">Ad 63 (📣 Ad 63)</a></div>
-<div class="ad-box"><a href="#ad64">Ad 64 (📣 Ad 64)</a></div>
-<div class="ad-box"><a href="#ad65">Ad 65 (📣 Ad 65)</a></div>
-<div class="ad-box"><a href="#ad66">Ad 66 (📣 Ad 66)</a></div>
-<div class="ad-box"><a href="#ad67">Ad 67 (📣 Ad 67)</a></div>
-<div class="ad-box"><a href="#ad68">Ad 68 (📣 Ad 68)</a></div>
-<div class="ad-box"><a href="#ad69">Ad 69 (📣 Ad 69)</a></div>
-<div class="ad-box"><a href="#ad70">Ad 70 (📣 Ad 70)</a></div>
-<div class="ad-box"><a href="#ad71">Ad 71 (📣 Ad 71)</a></div>
-<div class="ad-box"><a href="#ad72">Ad 72 (📣 Ad 72)</a></div>
-<div class="ad-box"><a href="#ad73">Ad 73 (📣 Ad 73)</a></div>
-<div class="ad-box"><a href="#ad74">Ad 74 (📣 Ad 74)</a></div>
-<div class="ad-box"><a href="#ad75">Ad 75 (📣 Ad 75)</a></div>
-<div class="ad-box"><a href="#ad76">Ad 76 (📣 Ad 76)</a></div>
-<div class="ad-box"><a href="#ad77">Ad 77 (📣 Ad 77)</a></div>
-<div class="ad-box"><a href="#ad78">Ad 78 (📣 Ad 78)</a></div>
-<div class="ad-box"><a href="#ad79">Ad 79 (📣 Ad 79)</a></div>
-<div class="ad-box"><a href="#ad80">Ad 80 (📣 Ad 80)</a></div>
-<div class="ad-box"><a href="#ad81">Ad 81 (📣 Ad 81)</a></div>
-<div class="ad-box"><a href="#ad82">Ad 82 (📣 Ad 82)</a></div>
-<div class="ad-box"><a href="#ad83">Ad 83 (📣 Ad 83)</a></div>
-<div class="ad-box"><a href="#ad84">Ad 84 (📣 Ad 84)</a></div>
-<div class="ad-box"><a href="#ad85">Ad 85 (📣 Ad 85)</a></div>
-<div class="ad-box"><a href="#ad86">Ad 86 (📣 Ad 86)</a></div>
-<div class="ad-box"><a href="#ad87">Ad 87 (📣 Ad 87)</a></div>
-<div class="ad-box"><a href="#ad88">Ad 88 (📣 Ad 88)</a></div>
-<div class="ad-box"><a href="#ad89">Ad 89 (📣 Ad 89)</a></div>
-<div class="ad-box"><a href="#ad90">Ad 90 (📣 Ad 90)</a></div>
-<div class="ad-box"><a href="#ad91">Ad 91 (📣 Ad 91)</a></div>
-<div class="ad-box"><a href="#ad92">Ad 92 (📣 Ad 92)</a></div>
-<div class="ad-box"><a href="#ad93">Ad 93 (📣 Ad 93)</a></div>
-<div class="ad-box"><a href="#ad94">Ad 94 (📣 Ad 94)</a></div>
-<div class="ad-box"><a href="#ad95">Ad 95 (📣 Ad 95)</a></div>
-<div class="ad-box"><a href="#ad96">Ad 96 (📣 Ad 96)</a></div>
-<div class="ad-box"><a href="#ad97">Ad 97 (📣 Ad 97)</a></div>
-<div class="ad-box"><a href="#ad98">Ad 98 (📣 Ad 98)</a></div>
-<div class="ad-box"><a href="#ad99">Ad 99 (📣 Ad 99)</a></div>
-<div class="ad-box"><a href="#ad100">Ad 100 (📣 Ad 100)</a></div>
 </div>
 </div>
 <script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.tour.json" data-interval="20000" src="/assets/js/hero.rotator.js"></script>
@@ -1012,14 +1038,14 @@ html, body {
 <!-- Mobile rail for TOUR: directly above the footer (NOT inside) -->
 <section id="tour-mobile-rail" style="display:none; margin-top:14px;">
   <div class="wrap">
-    <h3 class="title" style="margin:8px 0 6px; text-align:left;">💎 Artículos destacados (móvil) 💎</h3>
-    <div class="list" aria-label="Miniaturas recomendadas en móvil"></div>
+    <h3 class="title" style="margin:8px 0 6px; text-align:left;">💎 Marcas Populares 💎</h3>
+    <div class="list" aria-label="Miniaturas recomendadas para móvil"></div>
   </div>
 </section>
 
 <footer>
     IGDC Global Hub © 2025 | International General Distribution Company<br/>
-    50, Godeok Galpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea<br/>
+    50 Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea <br/>
 </footer>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- @SAFE-PATCH: hide '문학 학술교류' in sidebar -->
@@ -1180,7 +1206,7 @@ a[href^="mailto:"]:hover {
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">Todas las funciones se activarán una vez que se haya configurado la conexión de URL/Key de Supabase.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">Full functionality will be enabled after the storage settings (Supabase url/key) are connected.</div>';
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
         document.body.appendChild(m);
@@ -1284,7 +1310,7 @@ a[href^="mailto:"]:hover {
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Las credenciales/biblioteca de Supabase no están configuradas: la interfaz es visible, pero el guardado está deshabilitado.");
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -1311,18 +1337,18 @@ a[href^="mailto:"]:hover {
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
     const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","닫기");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
     const lQ = el("label"); lQ.textContent="Pregunta";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Escribe tu pregunta aquí...";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Escriba su pregunta...";
     const lA = el("label"); lA.textContent="Respuesta";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Espera un momento mientras preparamos una respuesta.";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Espere un momento. Le responderemos en breve.";
     const actions = el("div","igdc-qa-actions");
     const btnEnviar = el("button","igdc-qa-btn primary"); btnEnviar.textContent="Enviar";
     const btnBorrar = el("button","igdc-qa-btn muted"); btnBorrar.textContent="Borrar";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Las preguntas simples se responden al instante mediante IA. Las cuestiones técnicas, errores o temas operativos se envían automáticamente al Q&A del administrador.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Simple questions are answered immediately by AI. Technical/error/operations-related issues are automatically forwarded to admin Q&A.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -1392,11 +1418,11 @@ a[href^="mailto:"]:hover {
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pendiente)";
+        const q = el("div","igdc-qa-thread-q"); q.textContent="P. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "Solicitud al administrador":"General";
+        const tag = el("span"); tag.textContent = row.is_admin? "Admin request":"General";
         const actions = el("div","igdc-qa-thread-actions");
         const canEliminar = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
         if(canEliminar){
@@ -1404,7 +1430,7 @@ a[href^="mailto:"]:hover {
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("Eliminar failed (permission/policy)"); return; }
+            if(error){ alert("Deletion failed (permission/policy)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -1427,9 +1453,9 @@ a[href^="mailto:"]:hover {
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="Preguntas about operations will be reviewed and answered by an admin.";
-          else if(/가격|비용|요금/.test(text)) answer="Para información sobre precios o tarifas, consulta las indicaciones de esta página. Si tienes más preguntas, deja un mensaje.";
-          else answer="Gracias por tu consulta. La revisaremos en breve y te ayudaremos.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="Operational inquiries will be answered after review by the administrator.";
+          else if(/가격|비용|요금/.test(text)) answer="Please refer to the information on the page for price/fee details. Leave an additional inquiry if needed.";
+          else answer="Thank you for your inquiry. We will review it quickly and assist you.";
         }
       }
       return { technical, answer };
@@ -1443,7 +1469,7 @@ a[href^="mailto:"]:hover {
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("La configuración de guardado (URL/clave de Supabase) aún no está conectada, por lo que el guardado en el servidor está deshabilitado. Al desplegar en la web, configura SUPER_VARSAR.url/anonKey para habilitar la conexión automática.");
+        alert("The storage settings (Supabase url/key) are not connected yet, so server-side saving is disabled. When deployed to the web, it will connect automatically if SUPER_VARSAR.url/anonKey is configured.");
         return;
       }
       const record = {
@@ -1453,7 +1479,7 @@ a[href^="mailto:"]:hover {
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("Registration failed"); return; }
+      if(error){ alert("Submission failed"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -1476,7 +1502,7 @@ a[href^="mailto:"]:hover {
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth init failed:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -1580,12 +1606,12 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       h.appendChild(t); h.appendChild(x);
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
-      body.innerHTML = '<div class="igdc-qa-note">Todas las funciones se activarán una vez que se haya configurado la conexión de URL/Key de Supabase.</div>';
+      body.innerHTML = '<div class="igdc-qa-note">Full functionality will be enabled after the storage settings (Supabase url/key) are connected.</div>';
 
-      // ensure the "Primary email" is shown only inside the modal
+      // ensure the "대표 이메일" is shown only inside the modal
       var ce = document.createElement('p');
       ce.className = 'contact-email';
-      ce.innerHTML = 'Correo electrónico principal: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+      ce.innerHTML = 'Correo principal: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
       body.appendChild(ce);
 
       p.appendChild(h); p.appendChild(body);
@@ -1605,7 +1631,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       if(body && !body.querySelector('.contact-email')){
         var ce = document.createElement('p');
         ce.className = 'contact-email';
-        ce.innerHTML = 'Correo electrónico principal: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+        ce.innerHTML = 'Correo principal: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
         body.appendChild(ce);
       }
     }
@@ -1620,12 +1646,12 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
           if(parent){
             parent.removeChild(a);
             var html = parent.innerHTML;
-            html = html.replace(/Primary\s*email\s*:\s*/g, '');
+            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
             html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
             parent.innerHTML = html;
           }
         });
-        f.innerHTML = f.innerHTML.replace(/Primary\s*email\s*:[^<]*<br\s*\/?>?/gi, '');
+        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
       });
     }catch(e){}
   }
@@ -1646,7 +1672,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   if (window.__IGDC_QA_EMAIL_ENSURE__) return;
   window.__IGDC_QA_EMAIL_ENSURE__ = true;
 
-  var CONTACT_HTML = 'Correo electrónico principal: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+  var CONTACT_HTML = 'Correo principal: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
 
   function stripFooterEmail(){
     try{
@@ -1658,13 +1684,13 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
           if(parent){
             parent.removeChild(a);
             var html = parent.innerHTML;
-            html = html.replace(/Primary\s*email\s*:\s*/g, '');
+            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
             html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
             parent.innerHTML = html;
           }
         });
-        // Remove any plain-text "Primary email: ..." remnants
-        f.innerHTML = f.innerHTML.replace(/Primary\s*email\s*:[^<]*<br\s*\/?>?/gi, '');
+        // Remove any plain-text "Correo de contacto: ..." remnants
+        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
       });
     }catch(e){}
   }
@@ -1683,7 +1709,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
       var note = document.createElement('div'); note.className='igdc-qa-note';
-      note.textContent = 'Todas las funciones se activarán una vez que se haya configurado la conexión de URL/Key de Supabase.';
+      note.textContent = 'Full functionality will be enabled after the storage settings (Supabase url/key) are connected.';
       body.appendChild(note);
 
       // (1) Inject the contact email in creation path
@@ -1829,8 +1855,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>결제 QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>QR de pago</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Cerrar</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -1865,11 +1891,11 @@ window.addEventListener("message",function(ev){
   async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
     await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
-    ta.value=''; alert('Tu mensaje ha sido enviado.');
+    ta.value=''; alert('Sent successfully.');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('El envío ha fallado.'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('Sending failed'));});
   const btn=document.querySelector('#qnaEnviarBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('El envío ha fallado.'));});
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('Sending failed'));});
 })();
 </script>
 
@@ -1911,13 +1937,365 @@ window.addEventListener("message",function(ev){
 })();
 </script>
 
-<script defer src="/assets/js/auto-embed.instagram.js"></script>
+<script id="igdc-unified-commerce-script">
+/*
+ IGDC Unified Commerce Script
+ --------------------------------------------------
+ 적용 대상:
+  - Distribution (이미 적용 가능)
+  - 나머지 4개 사이트 (Donation 제외, Media 제외)
+ 목적:
+  - 썸네일 클릭 자동 감지
+  - 상세 상품 자동 오픈 훅
+  - 구매하기 / 결제 / 장바구니 기존 버튼 그대로 사용
+  - 상세 하단에 리뷰 시스템 자동 장착 (쿠팡 방식)
+ --------------------------------------------------
+ 전제:
+  - 썸네일 카드 또는 상세 컨테이너에 data-product-id 존재
+  - IGTC.checkout(...) 기존 결제 로직 존재
+  - window.__IGDC_ROLE 존재
+ --------------------------------------------------
+ 삽입 위치:
+  - 각 페이지 </body> 바로 위
+*/
+
+(function (window, document) {
+  'use strict';
+
+  const IGDCCommerce = {
+    config: {
+      reviewApi: '/.netlify/functions/reviews',
+      reviewRootId: 'igdc-review-root',
+      minReviewChars: 10,
+      maxReviewChars: 2000
+    },
+
+    state: {
+      role: 'guest',
+      activeProductId: null
+    },
+
+    init() {
+      this.state.role = window.__IGDC_ROLE || 'guest';
+      this.bindThumbnailAutoHook();
+    },
+
+    /* 1️⃣ 썸네일 카드 클릭 자동 감지 */
+    bindThumbnailAutoHook() {
+      document.addEventListener('click', (e) => {
+        const card = e.target.closest('[data-product-id]');
+        if (!card) return;
+
+        const productId = card.dataset.productId;
+        if (!productId) return;
+
+        // 기존 상세 상품 오픈 로직은 이미 각 페이지에 있음
+        // 여기서는 리뷰만 자동 부착
+        setTimeout(() => {
+          this.mountReview(productId);
+        }, 50);
+      });
+    },
+
+    /* 2️⃣ 리뷰 시스템 장착 */
+    mountReview(productId) {
+      if (this.state.activeProductId === productId) return;
+      this.state.activeProductId = productId;
+
+      let root = document.getElementById(this.config.reviewRootId);
+      if (!root) {
+        root = document.createElement('div');
+        root.id = this.config.reviewRootId;
+
+        const detailContainer =
+          document.querySelector('.product-detail') ||
+          document.querySelector('.product-modal') ||
+          document.querySelector('.detail-view') ||
+          document.body;
+
+        detailContainer.appendChild(root);
+      }
+
+      root.innerHTML = this.renderReviewShell();
+      this.bindReviewForm(root, productId);
+      this.loadReviews(productId);
+    },
+
+    /* 3️⃣ 리뷰 UI */
+    renderReviewShell() {
+      const canWrite = this.state.role !== 'guest';
+      return `
+        <section class="igdc-review">
+          <h3 class="igdc-review-title">Product Reviews</h3>
+          <div id="igdc-review-list" class="igdc-review-list">Loading...</div>
+          ${canWrite ? this.renderReviewForm() : this.renderLoginHint()}
+        </section>
+      `;
+    },
+
+    renderReviewForm() {
+      return `
+        <form id="igdc-review-form" class="igdc-review-form">
+          <textarea
+            placeholder="Please share your experience using the product."
+            minlength="${this.config.minReviewChars}"
+            maxlength="${this.config.maxReviewChars}"
+            required></textarea>
+          <div class="igdc-review-actions">
+            <button type="submit">Post Review</button>
+          </div>
+        </form>
+      `;
+    },
+
+    renderLoginHint() {
+      return `<div class="igdc-review-login-hint">
+        Review posting is available after logging in.
+      </div>`;
+    },
+
+    /* 4️⃣ 리뷰 이벤트 */
+    bindReviewForm(root, productId) {
+      const form = root.querySelector('#igdc-review-form');
+      if (!form) return;
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const textarea = form.querySelector('textarea');
+        const content = textarea.value.trim();
+
+        if (content.length < this.config.minReviewChars) {
+          alert(`리뷰는 최소 ${this.config.minReviewChars}자 이상 작성해 주세요.`);
+          return;
+        }
+
+        this.submitReview(productId, content)
+          .then(() => {
+            textarea.value = '';
+            this.loadReviews(productId);
+          })
+          .catch(() => alert('리뷰 Submission failed'));
+      });
+    },
+
+    /* 5️⃣ 리뷰 로딩 */
+    async loadReviews(productId) {
+      const list = document.getElementById('igdc-review-list');
+      if (!list) return;
+
+      list.textContent = 'Loading...';
+
+      try {
+        const res = await fetch(
+          `${this.config.reviewApi}?productId=${encodeURIComponent(productId)}`
+        );
+        const data = await res.json();
+
+        if (!Array.isArray(data) || data.length === 0) {
+          list.innerHTML = '<div class="igdc-review-empty">No reviews yet.</div>';
+          return;
+        }
+
+        list.innerHTML = data.map(this.renderReviewItem).join('');
+      } catch {
+        list.textContent = 'Failed to load reviews.';
+      }
+    },
+
+    async submitReview(productId, content) {
+      const res = await fetch(this.config.reviewApi, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, content })
+      });
+      if (!res.ok) throw new Error('submit failed');
+    },
+
+    renderReviewItem(item) {
+      const esc = (v) => String(v || '').replace(/[<>]/g, '');
+      return `
+        <div class="igdc-review-item">
+          <div class="igdc-review-meta">
+            <span>${esc(item.user || 'Anonymous')}</span>
+            <span>${esc(item.date || '')}</span>
+          </div>
+          <div class="igdc-review-content">${esc(item.content)}</div>
+        </div>
+      `;
+    }
+  };
+
+  /* 6️⃣ 기본 스타일 */
+  const style = document.createElement('style');
+  style.textContent = `
+    .igdc-review { margin-top:24px; border-top:1px solid #eee; padding-top:16px; }
+    .igdc-review-title { margin:0 0 12px; font-size:1.05rem; }
+    .igdc-review-list { display:flex; flex-direction:column; gap:10px; }
+    .igdc-review-item { border:1px solid #eee; border-radius:10px; padding:10px; background:#fafafa; }
+    .igdc-review-meta { font-size:.8rem; color:#666; display:flex; gap:8px; }
+    .igdc-review-content { margin-top:6px; line-height:1.5; }
+    .igdc-review-form textarea { width:100%; min-height:90px; padding:10px; border-radius:10px; border:1px solid #ddd; }
+    .igdc-review-actions { margin-top:8px; text-align:right; }
+    .igdc-review-actions button { padding:8px 14px; border-radius:10px; border:none; background:#2563eb; color:#fff; }
+    .igdc-review-empty, .igdc-review-login-hint { color:#666; }
+  `;
+  document.head.appendChild(style);
+
+  IGDCCommerce.init();
+  window.IGDCCommerce = IGDCCommerce;
+
+})(window, document);
+</script>
+
+<script id="rightpanel-dummy-engine-v2">
+(function(){
+
+  /* ===============================
+     설정
+  =============================== */
+
+  const PANEL_ID   = 'rightAutoPanel';
+  const DUMMY_CNT  = 100;
+
+
+  /* ===============================
+     패널 찾기
+  =============================== */
+
+  const panel = document.getElementById(PANEL_ID);
+
+  if(!panel){
+    console.warn('[RightPanel] panel not found');
+    return;
+  }
+
+
+  /* ===============================
+     더미 생성
+  =============================== */
+
+  function buildDummy(){
+
+    panel.innerHTML = '';
+
+    for(let i=1;i<=DUMMY_CNT;i++){
+
+      const card = document.createElement('div');
+
+      card.className = 'ad-box dummy-card';
+      card.dataset.dummy = '1';
+
+      card.innerHTML = `
+        <div class="dummy-thumb"
+             style="
+               width:100%;
+               height:100%;
+               border-radius:12px;
+               background:linear-gradient(135deg,#eef2f7,#dbe4f0);
+               display:flex;
+               flex-direction:column;
+               justify-content:center;
+               align-items:center;
+               box-shadow:0 2px 6px rgba(0,0,0,.08);
+               border:1px solid rgba(0,0,0,.05);
+               font-family:system-ui;
+             ">
+
+          <div style="
+               font-size:26px;
+               font-weight:700;
+               color:#4a6fa5;
+               line-height:1;
+               margin-bottom:4px;
+             ">
+            ${i}
+          </div>
+
+          <div style="
+               font-size:11px;
+               color:#7a8da8;
+               letter-spacing:.5px;
+             ">
+            Loading
+          </div>
+
+        </div>
+      `;
+
+      panel.appendChild(card);
+    }
+  }
+
+
+  /* ===============================
+     더미 제거
+  =============================== */
+
+  function clearDummy(){
+
+    panel
+      .querySelectorAll('[data-dummy="1"]')
+      .forEach(el=>el.remove());
+  }
+
+
+  /* ===============================
+     실데이터 렌더
+  =============================== */
+
+  function renderReal(items){
+
+    if(!items || !items.length) return;
+
+    clearDummy();
+
+    items.forEach(item=>{
+
+      const card = document.createElement('div');
+
+      card.className = 'ad-box';
+
+      card.innerHTML = `
+        <a href="${item.link||'#'}"
+           data-product-id="${item.id||''}">
+          <img src="${item.thumb||''}"
+               loading="lazy"
+               alt="">
+        </a>
+      `;
+
+      panel.appendChild(card);
+    });
+  }
+
+
+  /* ===============================
+     초기 실행
+  =============================== */
+
+  buildDummy();
+
+
+  /* ===============================
+     외부 연동 훅
+  =============================== */
+
+  window.__IGDC_RIGHTPANEL_RENDER = function(items){
+
+    renderReal(items);
+
+  };
+
+})();
+</script>
+
 <script defer src="/assets/js/placeholder-sweeper.js"></script>
 <script defer src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
 
-<script defer src="/assets/js/feed.js"></script>
+<script defer src="/assets/js/tour-automap.js"></script>
 
-<script defer src="/assets/js/tour-rightpanel-automap.js"></script>
+<script src="/assets/js/maru-search.js"></script>
+<script src="/assets/js/maru-searchbank-sync.js"></script>
 
 </body>
 </html>

@@ -2048,6 +2048,12 @@ body{ overflow-y: scroll; }
 .sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
 </style>
 <link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
+
+<style id="sn-top-gap-fix-only">
+.sidebar{ padding-top:30px !important; }
+.sidebar a:first-child{ margin-top:10px !important; }
+</style>
+
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -2060,7 +2066,7 @@ body{ overflow-y: scroll; }
 <a href="mediahub.html">🎬 Centro de Medios</a>
 <a href="tour.html">🧳 Viajes · Turismo · Alojamiento</a>
 <a href="literature_academic">📚 Literatura e Intercambio Académico</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Soporte Q&amp;A</a></div>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Consulta Q&amp;A</a></div>
 <div class="main-content">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
@@ -2691,7 +2697,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       // ensure the "Correo electrónico principal" is shown only inside the modal
       var ce = document.createElement('p');
       ce.className = 'contact-email';
-      ce.innerHTML = 'Correo electrónico principal: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+      ce.innerHTML = 'Correo principal: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
       body.appendChild(ce);
 
       p.appendChild(h); p.appendChild(body);
@@ -2711,7 +2717,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       if(body && !body.querySelector('.contact-email')){
         var ce = document.createElement('p');
         ce.className = 'contact-email';
-        ce.innerHTML = 'Correo electrónico principal: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+        ce.innerHTML = 'Correo principal: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
         body.appendChild(ce);
       }
     }
@@ -2751,7 +2757,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   if (window.__IGDC_QA_EMAIL_ENSURE__) return;
   window.__IGDC_QA_EMAIL_ENSURE__ = true;
 
-  var CONTACT_HTML = 'Correo electrónico principal: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+  var CONTACT_HTML = 'Correo principal: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
 
   function stripFooterEmail(){
     try{
@@ -2768,7 +2774,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
             parent.innerHTML = html;
           }
         });
-        // Remove any plain-text "Correo electrónico principal: ..." remnants
+        // Remove any plain-text "Correo principal: ..." remnants
         f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
       });
     }catch(e){}

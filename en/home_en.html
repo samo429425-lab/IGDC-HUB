@@ -32,12 +32,12 @@
       background-color: #fff4e0;
       color: #804000;
       text-decoration: none;
-      padding: 12px 8px;
+      padding: 12px 12px;
       font-weight: bold;
       font-size: 1rem;
       border: 1px solid #f3d9b0;
       border-radius: 8px;
-      margin: 10px 5px;
+      margin: 10px 12px;
       transition: background-color 0.3s, text-decoration 0.3s;
     }
     .sidebar a:hover {
@@ -2038,6 +2038,28 @@ section.shopping-section, section.shopping-section .shopping-rows {
   footer { padding-bottom: max(24px, env(safe-area-inset-bottom)) !important; position: static !important; }
 </style>
 <link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
+
+<style id="donation-center-disabled-style">
+a[href=""], a:not([href]).center-donation-disabled, button.center-donation-disabled{
+  pointer-events:none !important;
+  cursor:default !important;
+}
+</style>
+
+<style id="hero-search-style">
+  .hero-search{ padding: 14px 0 18px; }
+  .hero-search-inner{ max-width: 1100px; margin: 0 auto; padding: 0 14px; }
+  .hero-search-bar{
+    display:flex; gap:10px; align-items:center;
+    background:#fff; border:1px solid #d7dde6; border-radius: 14px;
+    padding: 10px 12px;
+    box-shadow: 0 8px 18px rgba(0,0,0,.06);
+  }
+  #homeSearchInput{ flex:1; border:none; outline:none; font-size: 16px; padding: 8px 6px; background:transparent; }
+  #homeSearchBtn{ border:none; cursor:pointer; padding: 10px 14px; border-radius: 12px; background:#2563eb; color:#fff; font-weight:700; }
+  .hero-search-hint{ margin-top: 8px; color:#6b7280; font-size: 12.5px; }
+</style>
+
 </head>
 <body>
 <div class="container">
@@ -2061,6 +2083,53 @@ section.shopping-section, section.shopping-section .shopping-rows {
 <div class="desc desc2">We wish good fortune to everyone in the world..</div>
 </div>
 </div>
+<!-- ========== HERO SEARCH BAR (FINAL) ========== -->
+<section class="hero-search" aria-label="Site Search">
+  <div class="hero-search-inner">
+    <div class="hero-search-bar" role="search">
+      <input
+        id="homeSearchInput"
+        type="search"
+        placeholder="Enter your search term"
+        autocomplete="off"
+      />
+      <button
+        id="homeSearchBtn"
+        type="button"
+        aria-label="Run search"
+      >
+        Search
+      </button>
+    </div>
+    <div class="hero-search-hint">Search results will open in a new window.</div>
+  </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const input = document.getElementById('homeSearchInput');
+  const btn = document.getElementById('homeSearchBtn');
+  if (!input || !btn) return;
+
+  const openSearch = () => {
+    const q = input.value.trim();
+    if (!q) return;
+
+    history.pushState({}, '', location.href);
+
+    window.open(
+      `/search.html?q=${encodeURIComponent(q)}`,
+      '_blank'
+    );
+  };
+
+  btn.addEventListener('click', openSearch);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') openSearch();
+  });
+});
+</script>
+
 <!-- ========== NEWS (Middle) ========== -->
 <section aria-label="News by Region" class="news-section">
 <div class="news-row-wrap" data-row="1">
@@ -2194,7 +2263,7 @@ section.shopping-section, section.shopping-section .shopping-rows {
 <a class="our-site-btn" href="socialnetwork.html">Social Hub</a>
 <a class="our-site-btn" href="mediahub.html">Media Hub</a>
 <a class="our-site-btn" href="tour.html">Travel·Tourism</a>
-<a class="our-site-btn" href="donation.html">Donation</a>
+<a class="our-site-btn" >&nbsp;</a>
 </div>
 </section>
 <section aria-label="Trending Shopping Picks" class="shopping-section">
@@ -2251,42 +2320,7 @@ section.shopping-section, section.shopping-section .shopping-rows {
     50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, <br/>
 </footer>
 <!-- 🔒 Keep original script (API hook, ledger, etc.) -->
-<script>
-  const APIGateway = [
-    "https://api.netflix.com/hook",
-    "https://api.amazon.com/relay",
-    "https://api.naver.com/data",
-    "https://ads.google.com/impress"
-  ];
 
-  const triggerAPILinks = () => {
-    APIGateway.forEach(url => {
-      fetch(url, { method: 'POST', mode: 'no-cors' });
-    });
-  };
-
-  const orphanFundsSeed = () => {
-    fetch("https://foundation.global/seed/orphan-funds", {
-      method: "POST",
-      body: JSON.stringify({ ref: "IGDC_HomeSeed" }),
-      headers: { "Content-Type": "application/json" }
-    });
-  };
-
-  const logToAdminLedger = (event, value) => {
-    fetch("/admin/api/log", {
-      method: "POST",
-      body: JSON.stringify({ event, value }),
-      headers: { "Content-Type": "application/json" }
-    });
-  };
-
-  window.addEventListener("DOMContentLoaded", () => {
-    triggerAPILinks();
-    orphanFundsSeed();
-    logToAdminLedger("home_page_boot", Date.now());
-  });
-</script>
 <!-- removed stray text:  -->
 <script>
 // ===== AI/Backend-driven ad auto-update (thumb-only) =====
@@ -3309,18 +3343,18 @@ function reorderRow(row, cc, region){
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (대기중)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "관리요청":"일반";
+        const tag = el("span"); tag.textContent = row.is_admin? "Admin Request":"General";
         const actions = el("div","igdc-qa-thread-actions");
         const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
         if(canDelete){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="삭제";
+          const del = el("button","igdc-qa-btn muted"); del.textContent="Delete";
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("삭제 실패(권한/정책)"); return; }
+            if(error){ alert("Delete failed (permissions/policy)."); return; }
             await fetchThreads();
           });
           actions.append(del);

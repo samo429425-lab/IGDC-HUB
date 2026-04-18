@@ -1,0 +1,1517 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>সোশ্যাল নেটওয়ার্ক</title>
+  <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
+  <link rel="stylesheet" href="/assets/css/thumbs.standard.css?v=20250914" />
+  <link rel="stylesheet" href="/assets/css/hero.css?v=20250914" />
+  <style>
+    :root{
+      --card-min:200px;
+      --card-max:260px;
+      --pic-h:84px;
+      --gap:12px;
+      --sidebar-w:210px;
+      --rail-w:274px;
+      --brand:#004080;
+      --panel-bg:#e0e0e0;
+      --panel-accent:#fff4e0;
+      --panel-accent-border:#f3d9b0;
+      --panel-accent-text:#804000;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;overflow-x:hidden;background:#f2f2f2;font-family:sans-serif}
+    body{color:#222}
+    .container{
+      display:flex;
+      flex-direction:row;
+      align-items:flex-start;
+      gap:15px;
+      width:100%;
+      padding:10px 16px 0;
+    }
+    .sidebar{
+      width:var(--sidebar-w);
+      min-width:var(--sidebar-w);
+      background:var(--panel-bg);
+      display:flex;
+      flex-direction:column;
+      padding-top:20px;
+      border-radius:10px;
+      overflow:hidden;
+      flex:0 0 auto;
+    }
+    .sidebar a{
+      display:block;
+      background:var(--panel-accent);
+      color:var(--panel-accent-text);
+      text-decoration:none;
+      padding:10px 12px;
+      font-weight:700;
+      font-size:1rem;
+      border:1px solid var(--panel-accent-border);
+      border-radius:8px;
+      margin:10px 12px;
+    }
+    .sidebar a:hover{text-decoration:underline;background:#ffe5b4}
+    .sidebar a.active{background:#ffdfcc}
+    #qnaখুলুনBtn{background:#0b2a6f;color:#fff;border-color:#004080}
+
+    .main-content{
+      flex:1 1 auto;
+      min-width:0;
+      background:#fff;
+      padding:20px 24px 24px;
+      box-shadow:0 0 10px rgba(0,0,0,.1);
+      text-align:center;
+      border-radius:10px;
+      overflow:hidden;
+    }
+
+    .section-blockchain{
+      margin:12px 0 18px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:5px 5px;
+      justify-content:flex-start;
+      align-items:center;
+      text-align:left;
+    }
+    .bc-tile{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:4px 6px;
+      border-radius:999px;
+      background:#a7f3d0;
+      color:#064e3b;
+      font-weight:400;
+      text-decoration:none;
+      border:1px solid rgba(0,0,0,.15);
+      box-shadow:0 0 2px rgba(0,0,0,.05);
+      white-space:nowrap;
+      font-size:.92rem;
+      letter-spacing:-0.2px;
+      font-stretch:85%;
+      letter-spacing:0;
+      font-variation-settings:"wdth" 70;
+      font-stretch:80%;
+      line-height:1.1;
+      transform:none;
+      margin:0;
+    }
+    .bc-tile:hover{background:#86efac}
+    @media (max-width:1024px){
+      .section-blockchain{gap:5px !important;}
+      .section-blockchain .bc-tile{transform:scale(0.9);transform-origin:left top;display:inline-block;}
+    }
+
+    #pageTitle{color:var(--brand);margin:0 0 20px}
+    .status{margin:14px 0 8px;font-size:.85rem;color:#666;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+
+    .maru-broadware-slot{
+     width:100%;
+     min-height:180px;
+     margin:0 0 18px;
+     border-radius:12px;
+     background:transparent;
+     box-sizing:border-box;
+}
+
+   .maru-broadware-slot:not([hidden]){
+     display:block;
+}
+
+   @media (max-width:1023px){
+     .maru-broadware-slot{
+      min-height:140px;
+      margin:0 0 14px;
+  }
+}
+
+    .rows{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+    .row-viewport{position:relative;isolation:isolate}
+	.row-controls{position:absolute;inset:0;z-index:40;pointer-events:none;}
+    .row-scroller{overflow-x:auto;overflow-y:hidden;scroll-behavior:smooth;padding-bottom:4px;-ms-overflow-style:none;scrollbar-width:none}
+    .row-scroller::-webkit-scrollbar{display:none;width:0;height:0}
+    .row-grid{display:grid;grid-auto-flow:column;grid-template-rows:1fr;grid-auto-columns:minmax(var(--card-min),var(--card-max));gap:var(--gap)}
+    .thumb-grid{display:grid;grid-auto-flow:column;grid-template-rows:1fr;grid-auto-columns:minmax(var(--card-min),var(--card-max));gap:var(--gap)}
+    .thumb-inner{display:contents}
+
+    a.card{
+      border:1px solid #e6e6e6;
+      border-radius:10px;
+      overflow:hidden;
+      background:#fff;
+      display:flex;
+      flex-direction:column;
+      min-width:var(--card-min);
+      max-width:var(--card-max);
+      text-decoration:none;
+      color:inherit;
+    }
+    .pic{
+      height:var(--pic-h);
+      background:linear-gradient(135deg,#e8f1ff,#fdf6e8);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:32px;
+      background-size:cover;
+      background-position:center;
+    }
+    .meta{padding:8px 10px;display:flex;flex-direction:column;gap:6px;min-height:100px}
+    .title{font-weight:700;font-size:.9rem;color:#222}
+    .desc{font-size:.8rem;color:#555;min-height:32px}
+    .cta{margin-top:auto;text-align:center;padding:6px 8px;background:var(--brand);color:#fff;border-radius:8px;font-weight:700}
+
+    .rscroll{
+      position:absolute;
+      top:50%;
+      transform:translateY(-50%);
+      z-index:41;
+      pointer-events:auto;
+      border:none;
+      background:rgba(0,0,0,.35);
+      color:#fff;
+      font-size:24px;
+      padding:8px 10px;
+      border-radius:10px;
+      cursor:pointer;
+      opacity:.88;
+      transition:.12s;
+    }
+    .rscroll.left{left:-18px}
+    .rscroll.right{right:-18px}
+    .row-viewport:hover .rscroll{opacity:1}
+    .rscroll.disabled{opacity:.35}
+
+    .right-rail{
+      width:var(--rail-w);
+      min-width:var(--rail-w);
+      max-width:var(--rail-w);
+      flex:0 0 auto;
+      margin-top:16px;
+    }
+    .ad-headline{
+      display:block;
+      margin:0 0 10px;
+      text-align:center;
+      line-height:1;
+      height:1em;
+      white-space:nowrap;
+      font-size:.92rem;
+      letter-spacing:-0.2px;
+      font-stretch:85%;
+      width:100%;
+    }
+    .ad-panel{
+      position:sticky;
+      top:16px;
+      max-height:calc(180dvh - 32px);
+      overflow-y:auto;
+      overscroll-behavior:contain;
+      -webkit-overflow-scrolling:touch;
+      cursor:grab;
+      scrollbar-width:none;
+      -ms-overflow-style:none;
+      background:#eef4fa;
+      border:1px solid #d7e3ef;
+      border-radius:12px;
+      padding:8px;
+      display:flex;
+      flex-direction:column;
+      gap:5px;
+      box-shadow:0 1px 3px rgba(0,0,0,.04);
+    }
+    .ad-panel::-webkit-scrollbar{display:none;width:0;height:0}
+    .ad-panel.dragging{cursor:grabbing;user-select:none}
+    .ad-panel .rscroll{display:none!important}
+    .ad-box{
+      background:#fff;
+      width:100%;
+      min-height:320px;
+      height:320px;
+      line-height:320px;
+      border:1px solid #ccc;
+      border-radius:12px;
+      text-align:center;
+      font-size:.9em;
+      color:#444;
+      cursor:pointer;
+      overflow:hidden;
+      box-sizing:border-box;
+    }
+    .ad-box + .ad-box{margin-top:5px}
+    .ad-box a{
+      display:block;
+      height:100%;
+      color:inherit;
+      text-decoration:none
+    }
+
+    #rpMobileBox{display:none}
+    @media (max-width:1023px){
+      .container{display:block;padding:10px 0 0}
+      .sidebar{display:none!important}
+      .main-content{width:100%!important;max-width:100%!important;margin:0!important;border-radius:0;padding:20px 14px 8px}
+      .right-rail{display:none!important}
+      #rpMobileBox{display:block!important;width:100%;max-width:100%;margin:0;padding:0 0px 12px;clear:both}
+    
+      #rpMobileBox .ad-headline{display:flex !important; align-items:center !important; justify-content:center !important; width:200px !important; min-width:200px !important;
+       max-width:200px !important; margin:0 0 10px 0 !important; padding:0 !important; line-height:1 !important; white-space:nowrap !important;
+}
+   	  #rpMobileScroller{overflow-x:auto;overflow-y:hidden;-ms-overflow-style:none;scrollbar-width:none}
+      #rpMobileScroller::-webkit-scrollbar{display:none;width:0;height:0}
+      #rpMobileGrid{display:grid;grid-auto-flow:column;grid-template-rows:1fr;grid-auto-columns:minmax(var(--card-min),var(--card-max));gap:15px}
+      #rpMobileGrid .ad-box{min-height:280px !important; height:280px !important; line-height:280px !important;
+}
+      .rscroll{display:none!important;pointer-events:none!important;opacity:0!important}
+    }
+  @media (max-width:768px) and (orientation:portrait){
+    .row-scroller{overflow-x:auto!important;overflow-y:hidden!important;padding:0!important}
+    .row-grid{display:block!important;width:100%!important}
+    .thumb-grid[data-psom-key]{display:grid!important;grid-auto-flow:column!important;grid-auto-columns:100%!important;grid-template-columns:none!important;width:100%!important;gap:14px!important}
+    .thumb-grid[data-psom-key] .thumb-inner{display:contents!important}
+    .thumb-grid[data-psom-key] .card{width:100%!important;min-width:100%!important;max-width:100%!important;margin:0!important}
+    .thumb-grid[data-psom-key] .pic{width:100%!important;height:auto!important;aspect-ratio:16/9!important;background:#000!important;display:flex!important;align-items:center!important;justify-content:center!important;overflow:hidden!important}
+    .thumb-grid[data-psom-key] img,.thumb-grid[data-psom-key] video{width:100%!important;height:100%!important;object-fit:cover!important}
+    .main-content{padding-left:0!important;padding-right:0!important}
+    .rows{gap:16px!important}
+    .row-viewport{padding-left:0!important;padding-right:0!important}
+}
+
+    footer{background:var(--brand);color:#fff;text-align:center;padding:19px 16px;font-size:.9rem;line-height:1.6;margin-top:21px;margin-bottom:19px}
+
+    .igdc-qa-modal{position:fixed;inset:0;z-index:2147483000;pointer-events:none}
+    .igdc-qa-modal.open{pointer-events:auto}
+    .igdc-qa-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;transition:opacity .18s ease}
+    .igdc-qa-modal.open .igdc-qa-backdrop{opacity:1}
+    .igdc-qa-panel{
+      position:fixed;left:260px;bottom:84px;width:min(560px,50vw);max-height:min(88vh,1100px);
+      display:flex;flex-direction:column;background:#fff;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.18);
+      overflow:hidden;opacity:0;transform:translateY(12px) scale(.98);transition:opacity .18s ease, transform .18s ease;
+      border:1px solid #f3d9b0;
+    }
+    .igdc-qa-modal.open .igdc-qa-panel{opacity:1;transform:none}
+    .igdc-qa-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #f3d9b0;background:#fff4e0}
+    .igdc-qa-title{font:700 14px/1.2 system-ui;color:#804000}
+    .igdc-qa-close{cursor:pointer;border:none;background:transparent;font-size:18px;color:#333}
+    .igdc-qa-body{display:flex;flex-direction:column;gap:10px;padding:14px;overflow:auto}
+    .igdc-qa-field label,.igdc-qa-body label{display:block;font:700 12px/1.2 system-ui;margin-bottom:6px;color:#333;text-align:left}
+    .igdc-qa-text{width:100%;max-width:100%;box-sizing:border-box;resize:vertical;border:1px solid #f3d9b0;border-radius:10px;padding:10px 12px;font:500 14px system-ui;min-height:44px;background:#fffdf8}
+    .igdc-qa-text.q{min-height:96px}
+    .igdc-qa-text.a{min-height:128px}
+    .igdc-qa-actions{display:flex;gap:8px;align-items:center}
+    .igdc-qa-btn{border:none;border-radius:10px;padding:10px 14px;font:700 14px system-ui;cursor:pointer}
+    .igdc-qa-btn.primary{background:#2563eb;color:#fff}
+    .igdc-qa-btn.muted{background:#9ca3af;color:#fff}
+    .igdc-qa-threads{display:flex;flex-direction:column;gap:10px;overflow:auto;border-top:1px solid #f3d9b0;padding-top:10px}
+    .igdc-qa-threads:empty::before{content:"এখনও কোনো Q&A এন্ট্রি পোস্ট করা হয়নি";display:block;padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;margin-top:8px;font-size:.95rem}
+    .igdc-qa-thread{border:1px solid #f3d9b0;border-radius:12px;padding:10px 12px;background:#fffdf8}
+    .igdc-qa-thread-q{font:700 13px/1.5 system-ui;color:#222}
+    .igdc-qa-thread-a{font:13px/1.5 system-ui;color:#333;margin-top:6px}
+    .igdc-qa-thread-meta{display:flex;gap:8px;align-items:center;color:#775;font:12px/1.2 system-ui;margin-top:8px}
+    .igdc-qa-thread-actions{margin-left:auto;display:flex;gap:6px}
+    .igdc-qa-note{font:12px/1.4 system-ui;color:#666}
+    .contact-email{margin:6px 0 0;font:500 13px/1.4 system-ui;color:#333}
+    .contact-email a{color:#2563eb;text-decoration:underline}
+    @media (max-width:900px){ .igdc-qa-panel{left:12px;width:min(92vw,560px)} }
+  </style>
+  <style id="social-fullscreen-viewer-v1">
+    .snfv{position:fixed;inset:0;z-index:2147483600;background:#000;display:none;align-items:center;justify-content:center}
+    .snfv.open{display:flex}
+    .snfv-panel{position:relative;width:100vw;height:100dvh;background:#000;display:flex;flex-direction:column}
+    .snfv-close{position:absolute;top:10px;right:10px;z-index:3;border:0;border-radius:10px;padding:10px 12px;background:rgba(0,0,0,.68);color:#fff;font-weight:700;cursor:pointer}
+    .snfv-media{flex:1 1 auto;display:flex;align-items:center;justify-content:center;background:#000;overflow:hidden}
+    .snfv-media img,.snfv-media video{width:100%;height:100%;object-fit:contain;background:#000}
+    .snfv-fallback{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.2rem;padding:24px;text-align:center}
+    .snfv-meta{flex:0 0 auto;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:12px 14px;background:rgba(0,0,0,.82);color:#fff}
+    .snfv-text{min-width:0;flex:1 1 auto}
+    .snfv-title{font-weight:700;font-size:1rem;line-height:1.4}
+    .snfv-desc{font-size:.92rem;opacity:.88;line-height:1.45;margin-top:4px}
+    .snfv-actions{display:flex;gap:8px;flex:0 0 auto}
+    .snfv-btn{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:0 14px;border-radius:10px;background:#0b4a8b;color:#fff;text-decoration:none;font-weight:700;border:1px solid rgba(255,255,255,.18)}
+    @media (max-width:768px) and (orientation:portrait){.snfv-meta{padding:10px 12px}.snfv-title{font-size:.96rem}.snfv-desc{font-size:.86rem}}
+</style>
+  
+</head>
+<body>
+  <div id="hero"><div class="hero-title"></div></div>
+
+  <div class="container">
+    <div class="sidebar">
+      <a href="home.html">🏠 হোম</a>
+      <a href="networkhub.html">🛒 মার্কেট হাব</a>
+      <a href="distributionhub.html">🏭 ডিস্ট্রিবিউশন হাব</a>
+      <a href="socialnetwork.html">📢 সোশ্যাল নেটওয়ার্ক</a>
+      <a href="mediahub.html">🎬 মিডিয়া হাব</a>
+      <a href="tour.html">🧳 ভ্রমণ · পর্যটন · আবাসন</a>
+      <a href="literature_academic">📚 সাহিত্য ও একাডেমিক বিনিময়</a>
+      <a href="javascript:void(0)" id="qnaখুলুনBtn">💬 প্রশ্ন ও উত্তর</a>
+    </div>
+
+    <div class="main-content">
+      <section class="section-blockchain">
+        <a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
+        <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">খুলুনSea</a>
+        <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
+        <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
+      </section>
+
+      <h2 id="pageTitle">👥 সোশ্যাল নেটওয়ার্ক · প্রস্তাবিত চ্যানেল</h2>
+      <div class="status"></div>
+
+    <section id="maruSocialBroadwareSlot" class="maru-broadware-slot" hidden></section>
+
+      <div class="rows">
+        <div class="row-viewport" data-row="1"><div class="row-scroller" id="rowScroller1"><div class="row-grid" id="rowGrid1"><div class="thumb-grid thumb-scroller" data-psom-key="social-youtube"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft1">‹</button><button class="rscroll right" id="rsRight1">›</button></div>
+        <div class="row-viewport" data-row="2"><div class="row-scroller" id="rowScroller2"><div class="row-grid" id="rowGrid2"><div class="thumb-grid thumb-scroller" data-psom-key="social-instagram"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft2">‹</button><button class="rscroll right" id="rsRight2">›</button></div>
+        <div class="row-viewport" data-row="3"><div class="row-scroller" id="rowScroller3"><div class="row-grid" id="rowGrid3"><div class="thumb-grid thumb-scroller" data-psom-key="social-tiktok"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft3">‹</button><button class="rscroll right" id="rsRight3">›</button></div>
+        <div class="row-viewport" data-row="4"><div class="row-scroller" id="rowScroller4"><div class="row-grid" id="rowGrid4"><div class="thumb-grid thumb-scroller" data-psom-key="social-facebook"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft4">‹</button><button class="rscroll right" id="rsRight4">›</button></div>
+        <div class="row-viewport" data-row="5"><div class="row-scroller" id="rowScroller5"><div class="row-grid" id="rowGrid5"><div class="thumb-grid thumb-scroller" data-psom-key="social-wechat"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft5">‹</button><button class="rscroll right" id="rsRight5">›</button></div>
+        <div class="row-viewport" data-row="6"><div class="row-scroller" id="rowScroller6"><div class="row-grid" id="rowGrid6"><div class="thumb-grid thumb-scroller" data-psom-key="social-weibo"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft6">‹</button><button class="rscroll right" id="rsRight6">›</button></div>
+        <div class="row-viewport" data-row="7"><div class="row-scroller" id="rowScroller7"><div class="row-grid" id="rowGrid7"><div class="thumb-grid thumb-scroller" data-psom-key="social-pinterest"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft7">‹</button><button class="rscroll right" id="rsRight7">›</button></div>
+        <div class="row-viewport" data-row="8"><div class="row-scroller" id="rowScroller8"><div class="row-grid" id="rowGrid8"><div class="thumb-grid thumb-scroller" data-psom-key="social-reddit"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft8">‹</button><button class="rscroll right" id="rsRight8">›</button></div>
+        <div class="row-viewport" data-row="9"><div class="row-scroller" id="rowScroller9"><div class="row-grid" id="rowGrid9"><div class="thumb-grid thumb-scroller" data-psom-key="social-twitter"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft9">‹</button><button class="rscroll right" id="rsRight9">›</button></div>
+
+        <section id="rpMobileBox">
+		<h3 class="ad-headline">💎 জনপ্রিয় আইটেম 💎</h3>
+          <div id="rpMobileScroller">
+            <div id="rpMobileGrid" data-psom-key="rightPanel"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div class="right-rail" id="rightRail">
+      <h3 class="ad-headline">💎 জনপ্রিয় আইটেম 💎</h3>
+      <div class="ad-panel" id="rightAutoPanel" data-psom-key="rightPanel"></div>
+    </div>
+  </div>
+<div id="igdcProductDetailRoot" class="product-detail-root" hidden></div>
+
+  <footer>
+    IGDC Global Hub © 2025 | International General Distribution Company<br/>
+    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea<br/>
+  </footer>
+
+  <script>
+    (function(){
+      function norm(u){
+        u = (u||"").toString().trim().toLowerCase().split('#')[0].split('?')[0];
+        var f = u.split('/').pop();
+        if(f === '' || f === 'index.html') f = 'home.html';
+        f = f.replace(/_ko\.html$|_en\.html$|_zh\.html$/,'.html');
+        return f;
+      }
+      var current = norm(location.pathname);
+      document.querySelectorAll('.sidebar a[href]').forEach(function(a){
+        var href = norm(a.getAttribute('href')||'');
+        if(href && href === current){
+          a.classList.add('active');
+          a.setAttribute('aria-current','page');
+        }
+      });
+    })();
+  </script>
+
+<script id="hide-lit-links-script">
+(function(){
+  function hideLitLinks(){
+    try{
+      var links = document.querySelectorAll('nav a, aside a, .sidebar a, .side a, a');
+      for(var i=0;i<links.length;i++){
+        var a = links[i];
+        var txt = (a.textContent || '').trim();
+        var href = (a.getAttribute('href') || '').trim();
+
+        if (href.includes('literature_academic') || (txt.includes('문학') && txt.includes('학술'))) {
+          a.setAttribute('aria-hidden','true');
+          a.setAttribute('tabindex','-1');
+          a.classList.add('is-hidden-lit');
+          a.style.display = 'none';
+        }
+      }
+    }catch(e){/* silent */}
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', hideLitLinks, {once:true});
+  } else {
+    hideLitLinks();
+  }
+})();
+</script>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script id="igdc-qa-config">
+    (function () {
+      const baseConfig = { url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "", project: "IGDC", pageId: null, aiEndpoint: null };
+      function applyConfig(env) {
+        const url = (env && env.SUPABASE_URL) || baseConfig.url;
+        const anonKey = (env && env.SUPABASE_ANON_KEY) || "";
+        window.SUPER_VARSAR = Object.assign(window.SUPER_VARSAR || {}, baseConfig, { url, anonKey });
+      }
+      if (window.IGDC_ENV && (window.IGDC_ENV.SUPABASE_ANON_KEY || window.IGDC_ENV.SUPABASE_URL)) { applyConfig(window.IGDC_ENV); return; }
+      fetch('/.netlify/functions/secureEnvBridge?public=supabase', { cache: 'no-store' })
+        .then(function (res) { if (!res.ok) throw new Error('http ' + res.status); return res.json(); })
+        .then(function (data) { var env = data && (data.env || data) || {}; window.IGDC_ENV = Object.assign(window.IGDC_ENV || {}, env); applyConfig(window.IGDC_ENV); })
+        .catch(function () { applyConfig(null); });
+    })();
+  </script>
+
+  <script>
+    (function(){
+      if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
+      function ensureButton(){
+        var btn = document.getElementById('qnaখুলুনBtn');
+        if(!btn) return;
+        btn.addEventListener('click', function(){
+          if (window.IGDC_QA && typeof window.IGDC_QA.open === 'function'){ window.IGDC_QA.open(); return; }
+          var modal = document.querySelector('.igdc-qa-modal');
+          if(!modal){
+            var m = document.createElement('div'); m.className='igdc-qa-modal';
+            var b = document.createElement('div'); b.className='igdc-qa-backdrop';
+            var p = document.createElement('div'); p.className='igdc-qa-panel';
+            var h = document.createElement('div'); h.className='igdc-qa-header';
+            var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+            var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
+            h.appendChild(t); h.appendChild(x);
+            var body = document.createElement('div'); body.className='igdc-qa-body';
+            body.innerHTML = '<label>প্রশ্ন</label><textarea class="igdc-qa-text q" placeholder="আপনার প্রশ্ন লিখুন..."></textarea><label>উত্তর</label><textarea class="igdc-qa-text a" placeholder="একটু অপেক্ষা করুন। আমরা শিগগিরই উত্তর দেব।"></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">জমা দিন</button><button class="igdc-qa-btn muted">মুছে ফেলুন</button></div><div class="igdc-qa-note">※ সহজ প্রশ্নের উত্তর AI সঙ্গে সঙ্গে দেয়। প্রযুক্তিগত, ত্রুটি বা পরিচালনাসংক্রান্ত বিষয় স্বয়ংক্রিয়ভাবে অ্যাডমিন Q&A-তে পাঠানো হয়।</div><div class="igdc-qa-threads"></div><p class="contact-email">প্রতিনিধি ইমেইল: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
+            p.appendChild(h); p.appendChild(body); m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
+            function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
+            function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
+            x.addEventListener('click', close); b.addEventListener('click', close);
+            window.IGDC_QA = window.IGDC_QA || {}; window.IGDC_QA.open = open;
+          }
+          if (window.IGDC_QA && typeof window.IGDC_QA.open==='function'){ window.IGDC_QA.open(); }
+        }, { passive:false });
+      }
+      if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', ensureButton, { once:true }); } else { ensureButton(); }
+    })();
+  </script>
+
+  <script>
+    (function(){
+      if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
+      const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
+      let isখুলুন=false, isAnimating=false;
+      function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
+      const nowISO = ()=> new Date().toISOString();
+      const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
+      const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+      async function ensureSupabase(){
+        if(STATE.sb) return STATE.sb;
+        const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url; const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
+        if(!url || !key || !window.supabase || !window.supabase.createClient) return null;
+        STATE.sb = window.supabase.createClient(url, key); return STATE.sb;
+      }
+      async function ensureAuth(){
+        const sb = await ensureSupabase(); if(!sb) return;
+        let { data: { session } } = await sb.auth.getSession();
+        if(!session){ try{ await sb.auth.signInAnonymously(); }catch(e){} ({ data: { session } } = await sb.auth.getSession()); }
+        if(session){ const uid = session.user.id; const { data } = await sb.from('igdc_admins').select('uid').eq('uid', uid).limit(1); STATE.user = session.user; STATE.isAdmin = Array.isArray(data) && data.length>0; }
+      }
+      function mountUI(){
+        const existing = document.querySelector('.igdc-qa-modal'); if(existing){ return bindExisting(existing); }
+        const modal = el('div','igdc-qa-modal'); const backdrop = el('div','igdc-qa-backdrop'); const panel = el('div','igdc-qa-panel');
+        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='Q&A'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','বন্ধ করুন');
+        header.append(title, close);
+        const body = el('div','igdc-qa-body');
+        const lQ = el('label'); lQ.textContent='প্রশ্ন'; const tQ = el('textarea','igdc-qa-text q'); tQ.placeholder='আপনার প্রশ্ন লিখুন...';
+        const lA = el('label'); lA.textContent='উত্তর'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='একটু অপেক্ষা করুন। আমরা শিগগিরই উত্তর দেব।';
+        const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='Submit'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='Clear';
+        const note = el('div','igdc-qa-note'); note.textContent='※ সহজ প্রশ্নের উত্তর AI সঙ্গে সঙ্গে দেয়। প্রযুক্তিগত, ত্রুটি বা পরিচালনাসংক্রান্ত বিষয় স্বয়ংক্রিয়ভাবে অ্যাডমিন Q&A-তে পাঠানো হয়।';
+        const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='প্রতিনিধি ইমেইল: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+        actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
+        return bindExisting(modal);
+      }
+      function bindExisting(modal){
+        const panel = modal.querySelector('.igdc-qa-panel'); const backdrop = modal.querySelector('.igdc-qa-backdrop'); const close = modal.querySelector('.igdc-qa-close');
+        const sideBtn = document.querySelector('#qnaখুলুনBtn');
+        const tQ = modal.querySelector('.igdc-qa-text.q'); const tA = modal.querySelector('.igdc-qa-text.a'); const list = modal.querySelector('.igdc-qa-threads');
+        const btnSubmit = modal.querySelector('.igdc-qa-btn.primary'); const btnClear = modal.querySelector('.igdc-qa-btn.muted');
+        function positionNearSidebar(){ try{ const sb = document.querySelector('.sidebar'); if(sb){ const rect = sb.getBoundingClientRect(); panel.style.left = Math.round(rect.right + 12) + 'px'; } }catch(e){} }
+        function openModal(){ if(isAnimating || isখুলুন) return; isAnimating = true; modal.style.display='block'; requestAnimationFrame(()=>{ modal.classList.add('open'); isখুলুন = true; setTimeout(()=>{ isAnimating=false; },220); }); }
+        function closeModal(){ if(isAnimating || !isখুলুন) return; isAnimating=true; modal.classList.remove('open'); setTimeout(()=>{ modal.style.display='none'; isখুলুন=false; isAnimating=false; },220); }
+        positionNearSidebar(); window.addEventListener('resize', positionNearSidebar); window.addEventListener('scroll', positionNearSidebar, { passive:true });
+        if(sideBtn && !sideBtn.dataset.qaBound){ sideBtn.addEventListener('click', openModal); sideBtn.dataset.qaBound='1'; }
+        close && close.addEventListener('click', closeModal); backdrop && backdrop.addEventListener('click', closeModal); document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
+        btnClear && btnClear.addEventListener('click', ()=>{ if(tQ) tQ.value=''; if(tA) tA.value=''; });
+        async function fetchThreads(){ const sb = await ensureSupabase(); if(!sb || !list) return; const { data } = await sb.from('igdc_qna_threads').select('*').eq('project', STATE.project).eq('page_id', STATE.pageId).order('created_at', { ascending:false }).limit(100); renderList(data||[]); }
+        function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='Q. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('A. '+row.answer):'A. (অপেক্ষমাণ)'; box.append(q,a); list.append(box); }); }
+        async function autoউত্তরIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'দাম ও ফি সম্পর্কে এই পৃষ্ঠার তথ্য দেখুন। প্রয়োজন হলে অতিরিক্ত প্রশ্ন রেখে যান।':'আপনার জিজ্ঞাসার জন্য ধন্যবাদ। আমরা দ্রুত পর্যালোচনা করে সহায়তা করব।'; } } return { technical, answer }; }
+        async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoউত্তরIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'Your inquiry has been received.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
+        btnSubmit && btnSubmit.addEventListener('click', submit);
+        window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
+        fetchThreads(); return modal;
+      }
+      async function boot(){ window.SUPER_VARSAR = window.SUPER_VARSAR || {}; STATE.project = (window.SUPER_VARSAR.project || 'IGDC'); STATE.pageId = (window.SUPER_VARSAR.pageId || (location.pathname + (location.hash||''))); mountUI(); try{ await ensureAuth(); }catch(e){} }
+      if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', boot, { once:true }); } else { boot(); }
+    })();
+  </script>
+
+  <script>
+    (function(){
+      function stripFooterEmail(){
+        document.querySelectorAll('footer a[href^="mailto:"]').forEach(function(a){ a.closest('footer').innerHTML = a.closest('footer').innerHTML.replace(/대표\s*이메일\s*:[^<]*(<br\s*\/?>)?/gi,''); });
+      }
+      function ensureContactEmail(){
+        var modal = document.querySelector('.igdc-qa-modal');
+        if(!modal) return;
+        var body = modal.querySelector('.igdc-qa-body') || modal;
+        if(body && !body.querySelector('.contact-email')){ var ce = document.createElement('p'); ce.className='contact-email'; ce.innerHTML='প্রতিনিধি ইমেইল: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>'; body.appendChild(ce); }
+      }
+      if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', function(){ stripFooterEmail(); ensureContactEmail(); }, { once:true }); } else { stripFooterEmail(); ensureContactEmail(); }
+    })();
+  </script>
+
+  <script>
+    (function(){
+      var DEMO = {
+        'social-youtube': { icon:'▶️', title:'YouTube', row:'Row 1 · পূর্বরূপ' },
+        'social-instagram': { icon:'📷', title:'Instagram', row:'Row 2 · পূর্বরূপ' },
+        'social-tiktok': { icon:'🎵', title:'TikTok', row:'Row 3 · পূর্বরূপ' },
+        'social-facebook': { icon:'📘', title:'Facebook', row:'Row 4 · পূর্বরূপ' },
+        'social-wechat': { icon:'💬', title:'WeChat', row:'Row 5 · পূর্বরূপ' },
+        'social-weibo': { icon:'🌐', title:'Weibo', row:'Row 6 · পূর্বরূপ' },
+        'social-pinterest': { icon:'📌', title:'Pinterest', row:'Row 7 · পূর্বরূপ' },
+        'social-reddit': { icon:'👽', title:'Reddit', row:'Row 8 · পূর্বরূপ' },
+        'social-twitter': { icon:'✖️', title:'X (Twitter)', row:'Row 9 · পূর্বরূপ' }
+      };
+      function makeCard(meta){
+        var a = document.createElement('a'); a.className='card'; a.href='#';
+        a.innerHTML = '<div class="pic"><span>'+meta.icon+'</span></div><div class="meta"><div class="title">'+meta.title+'</div><div class="desc">'+meta.row+'</div><div class="cta">খুলুন</div></div>';
+        return a;
+      }
+      function seedMainPlaceholders(){
+        document.querySelectorAll('.thumb-grid[data-psom-key]').forEach(function(grid){
+          if(grid.getAttribute('data-psom-key') === 'rightPanel') return;
+          if(grid.querySelector('a.card')) return;
+          var key = grid.getAttribute('data-psom-key'); var meta = DEMO[key]; if(!meta) return;
+          var inner = grid.querySelector('.thumb-inner') || grid;
+          if(inner.children.length) inner.innerHTML='';
+          for(var i=0;i<100;i++) inner.appendChild(makeCard(meta));
+        });
+      }
+      if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', seedMainPlaceholders, {once:true}); } else { seedMainPlaceholders(); }
+      window.__SOCIAL_PLACEHOLDER_SEED__ = seedMainPlaceholders;
+    })();
+  </script>
+
+<script id="social-main-tracking-hooks-v1">
+(function(){
+  if (window.__SOCIAL_MAIN_TRACKING_READY__) return;
+  window.__SOCIAL_MAIN_TRACKING_READY__ = true;
+
+  window.__SOCIAL_TRACK_BUFFER__ = window.__SOCIAL_TRACK_BUFFER__ || [];
+
+  function nowISO(){
+    return new Date().toISOString();
+  }
+
+  function getCardPayload(card){
+    if(!card) return null;
+
+    var grid = card.closest('.thumb-grid[data-psom-key]');
+    var sectionKey = grid ? (grid.getAttribute('data-psom-key') || '') : '';
+    var titleEl = card.querySelector('.title');
+    var descEl  = card.querySelector('.desc');
+    var href    = card.getAttribute('href') || '#';
+
+    return {
+      event_id: 'evt_' + Date.now() + '_' + Math.random().toString(36).slice(2,8),
+      page: 'social',
+      section_key: sectionKey,
+      title: titleEl ? (titleEl.textContent || '').trim() : '',
+      desc: descEl ? (descEl.textContent || '').trim() : '',
+      href: href,
+      ts: nowISO()
+    };
+  }
+
+  function pushEvent(type, payload){
+    var eventPayload = Object.assign({ type: type }, payload || {});
+    window.__SOCIAL_TRACK_BUFFER__.push(eventPayload);
+
+    try{
+      window.dispatchEvent(new CustomEvent('IGDC_SOCIAL_TRACK', {
+        detail: eventPayload
+      }));
+    }catch(_){}
+
+    try{
+      window.postMessage({
+        type: 'IGDC_SOCIAL_TRACK',
+        payload: eventPayload
+      }, '*');
+    }catch(_){}
+  }
+
+  /* 1) 카드 클릭 추적 */
+ document.addEventListener('click', function(e){
+  var card = e.target.closest('.thumb-grid[data-psom-key] a.card');
+  if(!card) return;
+
+  var grid = card.closest('.thumb-grid[data-psom-key]');
+  var key = grid ? (grid.getAttribute('data-psom-key') || '') : '';
+
+  var payload = getCardPayload(card);
+  if(!payload) return;
+
+  pushEvent('card_click', payload);
+
+  if(key && key !== 'rightPanel'){
+    return;
+  }
+
+  if ((payload.href || '#') === '#'){
+    e.preventDefault();
+    try{
+      alert('Content or materials are being prepared.');
+    }catch(_){}
+  }
+}, { passive:false });
+
+  /* 2) 카드 노출(첫 진입 1회만) */
+  function bindImpressionObserver(){
+    if (!('IntersectionObserver' in window)) return;
+
+    var seen = new WeakSet();
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if (!entry.isIntersecting) return;
+        var card = entry.target;
+        if (seen.has(card)) return;
+        seen.add(card);
+
+        var payload = getCardPayload(card);
+        if(!payload) return;
+        pushEvent('card_impression', payload);
+      });
+    }, {
+      root: null,
+      rootMargin: '0px',
+      threshold: 0.35
+    });
+
+    document.querySelectorAll('.thumb-grid[data-psom-key] a.card').forEach(function(card){
+      io.observe(card);
+    });
+  }
+
+  /* 3) 카드 체류/시청 시작 훅 */
+  function bindHoverWatchHooks(){
+    var activeMap = new WeakMap();
+
+    document.addEventListener('mouseenter', function(e){
+      var card = e.target.closest('.thumb-grid[data-psom-key] a.card');
+      if(!card) return;
+      activeMap.set(card, Date.now());
+    }, true);
+
+    document.addEventListener('mouseleave', function(e){
+      var card = e.target.closest('.thumb-grid[data-psom-key] a.card');
+      if(!card) return;
+
+      var started = activeMap.get(card);
+      if(!started) return;
+
+      var sec = Math.max(0, Math.round((Date.now() - started) / 1000));
+      activeMap.delete(card);
+
+      var payload = getCardPayload(card);
+      if(!payload) return;
+      payload.watch_time_sec = sec;
+
+      pushEvent('card_watch_time', payload);
+    }, true);
+  }
+
+function bindTouchWatchHooks(){
+  var activeTouchMap = new WeakMap();
+
+  document.addEventListener('touchstart', function(e){
+    var card = e.target.closest('.thumb-grid[data-psom-key] a.card');
+    if(!card) return;
+    activeTouchMap.set(card, Date.now());
+  }, { passive:true });
+
+  document.addEventListener('touchend', function(e){
+    var card = e.target.closest('.thumb-grid[data-psom-key] a.card');
+    if(!card) return;
+
+    var started = activeTouchMap.get(card);
+    if(!started) return;
+
+    var sec = Math.max(0, Math.round((Date.now() - started) / 1000));
+    activeTouchMap.delete(card);
+
+    var payload = getCardPayload(card);
+    if(!payload) return;
+    payload.watch_time_sec = sec;
+
+    pushEvent('card_watch_time_touch', payload);
+  }, { passive:true });
+
+  document.addEventListener('touchcancel', function(e){
+    var card = e.target.closest('.thumb-grid[data-psom-key] a.card');
+    if(!card) return;
+    activeTouchMap.delete(card);
+  }, { passive:true });
+
+  window.__IGDC_SOCIAL_TOUCH_ACTIVE_MAP__ = activeTouchMap;
+}
+
+function bindVisibilityFlush(){
+  function flushActiveTouchWatch(){
+    var active = window.__IGDC_SOCIAL_TOUCH_ACTIVE_CARD__;
+    var started = window.__IGDC_SOCIAL_TOUCH_ACTIVE_AT__;
+    if(!active || !started) return;
+
+    var sec = Math.max(0, Math.round((Date.now() - started) / 1000));
+    var payload = getCardPayload(active);
+    if(payload){
+      payload.watch_time_sec = sec;
+      pushEvent('card_watch_time_flush', payload);
+    }
+
+    window.__IGDC_SOCIAL_TOUCH_ACTIVE_CARD__ = null;
+    window.__IGDC_SOCIAL_TOUCH_ACTIVE_AT__ = null;
+  }
+
+  document.addEventListener('touchstart', function(e){
+    var card = e.target.closest('.thumb-grid[data-psom-key] a.card');
+    if(!card) return;
+    window.__IGDC_SOCIAL_TOUCH_ACTIVE_CARD__ = card;
+    window.__IGDC_SOCIAL_TOUCH_ACTIVE_AT__ = Date.now();
+  }, { passive:true });
+
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'hidden'){
+      flushActiveTouchWatch();
+    }
+  });
+
+  window.addEventListener('pagehide', flushActiveTouchWatch);
+  window.addEventListener('beforeunload', flushActiveTouchWatch);
+}
+
+function boot(){
+  bindImpressionObserver();
+  bindHoverWatchHooks();
+  bindTouchWatchHooks();
+  bindVisibilityFlush();
+}
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot, { once:true });
+  } else {
+    boot();
+  }
+
+  /* automap이 나중에 카드 치환해도 다시 스캔 가능하게 공개 */
+  window.__IGDC_SOCIAL_REBIND_TRACKING__ = function(){
+  bindImpressionObserver();
+  bindHoverWatchHooks();
+  bindTouchWatchHooks();
+  bindVisibilityFlush();
+};
+})();
+</script>
+
+<script id="social-track-sink-bridge-v1">
+(function(){
+  if (window.__IGDC_SOCIAL_TRACK_SINK_READY__) return;
+  window.__IGDC_SOCIAL_TRACK_SINK_READY__ = true;
+
+  var ENDPOINT = '/.netlify/functions/social-track';
+  var TABLE = 'igdc_social_events';
+  var FLUSH_SIZE = 10;
+  var FLUSH_INTERVAL = 4000;
+  var queue = [];
+  var flushing = false;
+  var timer = null;
+
+  function nowISO(){
+    return new Date().toISOString();
+  }
+
+  function getSupabaseClient(){
+    try{
+      var url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
+      var key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
+      if(!url || !key || !window.supabase || !window.supabase.createClient) return null;
+
+      if(!window.__IGDC_SOCIAL_TRACK_SB__){
+        window.__IGDC_SOCIAL_TRACK_SB__ = window.supabase.createClient(url, key);
+      }
+      return window.__IGDC_SOCIAL_TRACK_SB__;
+    }catch(_){
+      return null;
+    }
+  }
+
+  function normalizeEvent(ev){
+    return {
+      type: ev && ev.type || 'unknown',
+      page: ev && ev.page || 'social',
+      section_key: ev && ev.section_key || null,
+      title: ev && ev.title || null,
+      desc: ev && ev.desc || null,
+      href: ev && ev.href || null,
+      watch_time_sec: Number(ev && ev.watch_time_sec || 0),
+      event_id: ev && ev.event_id || ('evt_' + Date.now() + '_' + Math.random().toString(36).slice(2,8)),
+      ts: ev && ev.ts || nowISO(),
+      raw: ev || {}
+    };
+  }
+
+  function enqueue(ev){
+    queue.push(normalizeEvent(ev));
+    scheduleFlush();
+  }
+
+  function scheduleFlush(){
+    if(queue.length >= FLUSH_SIZE){
+      flush();
+      return;
+    }
+    if(timer) return;
+    timer = setTimeout(function(){
+      timer = null;
+      flush();
+    }, FLUSH_INTERVAL);
+  }
+
+  async function sendToFunction(batch){
+    try{
+      var res = await fetch(ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({
+          page: 'social',
+          events: batch
+        })
+      });
+      if(!res.ok) throw new Error('http ' + res.status);
+      return true;
+    }catch(_){
+      return false;
+    }
+  }
+
+  async function sendToSupabase(batch){
+    try{
+      var sb = getSupabaseClient();
+      if(!sb) return false;
+
+      var rows = batch.map(function(ev){
+        return {
+          page: ev.page,
+          section_key: ev.section_key,
+          event_type: ev.type,
+          title: ev.title,
+          description: ev.desc,
+          href: ev.href,
+          watch_time_sec: ev.watch_time_sec,
+          event_id: ev.event_id,
+          event_ts: ev.ts,
+          payload: ev.raw,
+          created_at: nowISO()
+        };
+      });
+
+      var out = await sb.from(TABLE).insert(rows);
+      if(out && out.error) throw out.error;
+      return true;
+    }catch(_){
+      return false;
+    }
+  }
+
+  async function flush(){
+    if(flushing) return;
+    if(!queue.length) return;
+
+    flushing = true;
+    var batch = queue.splice(0, FLUSH_SIZE);
+
+    var ok = await sendToFunction(batch);
+    if(!ok){
+      ok = await sendToSupabase(batch);
+    }
+
+    if(!ok){
+      window.__SOCIAL_TRACK_FAILED__ = (window.__SOCIAL_TRACK_FAILED__ || []).concat(batch);
+    }
+
+    flushing = false;
+
+    if(queue.length){
+      scheduleFlush();
+    }
+  }
+
+  window.addEventListener('IGDC_SOCIAL_TRACK', function(e){
+    var detail = e && e.detail ? e.detail : null;
+    if(!detail) return;
+    enqueue(detail);
+  });
+
+  window.addEventListener('pagehide', function(){
+    if(queue.length){
+      try{
+        navigator.sendBeacon(
+          ENDPOINT,
+          new Blob([JSON.stringify({ page:'social', events: queue })], { type:'application/json' })
+        );
+        queue = [];
+      }catch(_){}
+    }
+  });
+
+  window.__IGDC_SOCIAL_TRACK_FLUSH__ = flush;
+  window.__IGDC_SOCIAL_TRACK_ENQUEUE__ = enqueue;
+})();
+</script>
+
+  <script>
+    (function(){
+      function bindRow(viewport, scroller, leftBtn, rightBtn){
+        if(!viewport || !scroller || !leftBtn || !rightBtn) return;
+
+        function amount(){
+          return Math.max(240, Math.floor(scroller.clientWidth * 0.85));
+        }
+
+        function sync(){
+          var max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+          leftBtn.classList.toggle('disabled', scroller.scrollLeft <= 4);
+          rightBtn.classList.toggle('disabled', scroller.scrollLeft >= max - 4);
+        }
+
+        function scrollLeftNow(e){
+          if(e){
+            e.preventDefault();
+            e.stopPropagation();
+          }
+          scroller.scrollBy({ left:-amount(), behavior:'smooth' });
+          requestAnimationFrame(sync);
+        }
+
+        function scrollRightNow(e){
+          if(e){
+            e.preventDefault();
+            e.stopPropagation();
+          }
+          scroller.scrollBy({ left: amount(), behavior:'smooth' });
+          requestAnimationFrame(sync);
+        }
+
+        leftBtn.addEventListener('click', scrollLeftNow, false);
+        rightBtn.addEventListener('click', scrollRightNow, false);
+        scroller.addEventListener('scroll', sync, {passive:true});
+        window.addEventListener('resize', sync);
+
+        if('ResizeObserver' in window){
+          var ro = new ResizeObserver(sync);
+          ro.observe(scroller);
+          var grid = scroller.querySelector('.row-grid');
+          if(grid) ro.observe(grid);
+        }
+
+        if('MutationObserver' in window){
+          var mo = new MutationObserver(function(){ sync(); });
+          mo.observe(scroller, { childList:true, subtree:true });
+        }
+
+        if(document.readyState === 'loading'){
+          document.addEventListener('DOMContentLoaded', sync, { once:true });
+        } else {
+          sync();
+        }
+
+        window.addEventListener('load', sync, { once:true });
+        [80, 240, 600, 1200, 2000].forEach(function(t){
+          setTimeout(sync, t);
+        });
+      }
+      for(var i=1;i<=9;i++){
+        bindRow(
+          document.querySelector('.row-viewport[data-row="'+i+'"]'),
+          document.getElementById('rowScroller'+i),
+          document.getElementById('rsLeft'+i),
+          document.getElementById('rsRight'+i)
+        );
+      }
+    })();
+  </script>
+
+  <script>
+    (function(){
+      function isMobile(){ return window.matchMedia('(max-width:1023px)').matches; }
+      function getPanel(){ return isMobile() ? document.getElementById('rpMobileGrid') : document.getElementById('rightAutoPanel'); }
+      function getCount(){ return 100; }
+      function resetHeight(panel){ if(panel) panel.style.minHeight = ''; }
+      function applyMobileHeight(panel){ if(panel && isMobile()) panel.style.minHeight = '280px'; }
+      function build(){
+        var panel = getPanel();
+        if(!panel) return;
+        panel.innerHTML = '';
+        for(var i=0;i<getCount();i++){
+          var card = document.createElement('div');
+          card.className = 'ad-box';
+          card.dataset.dummy = '1';
+          var inner = document.createElement('div');
+          inner.style.height = '280px';
+          inner.style.display = 'flex';
+          inner.style.alignআইটেমs = 'center';
+          inner.style.justifyContent = 'center';
+          inner.textContent = 'লোড হচ্ছে...';
+          card.appendChild(inner);
+          panel.appendChild(card);
+        }
+        applyMobileHeight(panel);
+      }
+      function init(){
+        build();
+      }
+      var __rpResizeTimer = null;
+
+window.addEventListener('resize', function(){
+  clearTimeout(__rpResizeTimer);
+
+  __rpResizeTimer = setTimeout(function(){
+    build();
+
+    try{
+      window.dispatchEvent(new Event('igdc:rightpanel:refresh'));
+    }catch(_){}
+  }, 80);
+});
+      window.__IGDC_RIGHTPANEL_RENDER = function(items){
+       var panel = getPanel();
+       if(!panel) return;
+
+       panel.innerHTML = '';
+       resetHeight(panel);
+
+  (Array.isArray(items) ? items : []).forEach(function(item){
+    var card = document.createElement('div');
+    card.className = 'ad-box product-card';
+
+    var productId =
+      (item && (item.productId || item.product_id || item.id || item.sku || item.code))
+      ? String(item.productId || item.product_id || item.id || item.sku || item.code)
+      : '';
+
+    var productTitle =
+      item && (item.title || item.name || item.text || item.label)
+        ? String(item.title || item.name || item.text || item.label)
+        : '';
+
+    var a = document.createElement('a');
+
+    var resolvedHref = item && (item.url || item.href || item.link || item.productUrl || item.detailUrl)
+      ? (item.url || item.href || item.link || item.productUrl || item.detailUrl)
+      : '/pages/coming-soon.html?from=social-rightpanel';
+
+    a.href = resolvedHref;
+
+    card.dataset.productId = productId;
+    card.dataset.productTitle = productTitle;
+    card.dataset.productLink = resolvedHref;
+
+    a.dataset.productId = productId;
+    a.dataset.productTitle = productTitle;
+    a.dataset.productLink = resolvedHref;
+
+    a.textContent = productTitle || 'আইটেম';
+    a.target = resolvedHref.indexOf('/pages/coming-soon.html') === 0 ? '_self' : '_blank';
+    a.rel = 'noopener';
+
+    card.appendChild(a);
+    panel.appendChild(card);
+  });
+};
+      init();
+    })();
+  </script>
+<script id="rpMobileScroller-drag-wheel-v1">
+(function(){
+  function getScroller(){
+    return document.getElementById('rpMobileScroller');
+  }
+
+  function isMobileOrTablet(){
+    return window.matchMedia('(max-width:1023px)').matches;
+  }
+
+  function bindMobileScroller(){
+    var scroller = getScroller();
+    if(!scroller || scroller.dataset.dragWheelBound === '1') return;
+    scroller.dataset.dragWheelBound = '1';
+
+    /* 마우스 휠을 가로 스크롤로 전환 */
+    scroller.addEventListener('wheel', function(e){
+      if(!isMobileOrTablet()) return;
+      if(Math.abs(e.deltaY) > Math.abs(e.deltaX)){
+        scroller.scrollLeft += e.deltaY;
+        e.preventDefault();
+      }
+    }, { passive:false });
+
+    /* 마우스 드래그 */
+    var isDown = false;
+    var startX = 0;
+    var startLeft = 0;
+
+    scroller.addEventListener('mousedown', function(e){
+      if(!isMobileOrTablet()) return;
+      if(e.button !== 0) return;
+      isDown = true;
+      startX = e.clientX;
+      startLeft = scroller.scrollLeft;
+      scroller.classList.add('dragging');
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', function(e){
+      if(!isDown) return;
+      var dx = e.clientX - startX;
+      scroller.scrollLeft = startLeft - dx;
+    });
+
+    window.addEventListener('mouseup', function(){
+      if(!isDown) return;
+      isDown = false;
+      scroller.classList.remove('dragging');
+    });
+
+    /* 터치 상태에서 부모 세로 스크롤 간섭 최소화 */
+    scroller.addEventListener('touchmove', function(e){
+      if(!isMobileOrTablet()) return;
+      e.stopPropagation();
+    }, { passive:true });
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', bindMobileScroller, { once:true });
+  } else {
+    bindMobileScroller();
+  }
+
+  window.addEventListener('resize', bindMobileScroller, { passive:true });
+})();
+</script>
+
+  <script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.socialnetwork.json" data-interval="20000" src="/assets/js/hero.rotator.js"></script>
+  <script defer src="/assets/js/auto-embed.instagram.js"></script>
+  <script defer src="/assets/js/placeholder-sweeper.js"></script>
+  <script defer src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
+  
+  <style id="sn-desktop-antisquish-v2">
+@media (min-width: 1024px) {
+  .thumb-card img, .thumb-card video, .card img, .card video {
+    width: 100% !important;
+    height: auto !important;
+    object-fit: cover !important;
+  }
+  .thumb-card .thumb-media, .thumb-card figure, .card figure {
+    height: auto !important;
+    line-height: normal !important;
+  }
+}
+</style>
+<script id="sn-desktop-antisquish-fallback-v2">
+(function(){
+  if (!window.matchMedia) return;
+
+  function isDesktop(){
+    return window.matchMedia('(min-width: 1024px)').matches;
+  }
+
+  function fixDistortion(root){
+    if(!isDesktop()) return;
+
+    var media = (root || document).querySelectorAll(
+      '.thumb-card img, .thumb-card video, .card img, .card video'
+    );
+
+    media.forEach(function(m){
+      var cw = m.clientWidth || 0;
+      var ch = m.clientHeight || 0;
+      var nw = m.naturalWidth || m.videoWidth || 0;
+      var nh = m.naturalHeight || m.videoHeight || 0;
+
+      if (cw <= 0 || nw <= 0 || nh <= 0) return;
+
+      var r_dom = ch > 0 ? (cw / ch) : 0;
+      var r_nat = nw / nh;
+
+      if (r_dom > 0 && Math.abs(r_dom - r_nat) / r_nat > 0.2){
+        m.style.height = Math.round(cw / r_nat) + 'px';
+        m.style.objectFit = 'cover';
+      }
+    });
+  }
+
+  function schedule(){
+    fixDistortion();
+    [120, 360, 800].forEach(function(t){
+      setTimeout(fixDistortion, t);
+    });
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', schedule, { once:true });
+  } else {
+    schedule();
+  }
+
+  window.addEventListener('load', fixDistortion, { once:true });
+  window.addEventListener('resize', function(){
+    if(isDesktop()) fixDistortion();
+  }, { passive:true });
+
+  window.addEventListener('orientationchange', function(){
+    if(isDesktop()) fixDistortion();
+  }, { passive:true });
+})();
+</script>
+ <script id="social-main-fullscreen-viewer-v1">
+(function(){
+  if(window.__SOCIAL_MAIN_FULLSCREEN_READY__) return;
+  window.__SOCIAL_MAIN_FULLSCREEN_READY__ = true;
+
+  function qs(sel, root){ return (root || document).querySelector(sel); }
+
+  function ensureViewer(){
+    var root = document.getElementById('snfvRoot');
+    if(root) return root;
+
+    root = document.createElement('div');
+    root.id = 'snfvRoot';
+    root.className = 'snfv';
+    root.innerHTML =
+      '<div class="snfv-panel">'
+      + '<button type="button" class="snfv-close" aria-label="বন্ধ করুন">✕</button>'
+      + '<div class="snfv-media" id="snfvMedia"></div>'
+      + '<div class="snfv-meta">'
+      +   '<div class="snfv-text"><div class="snfv-title" id="snfvTitle"></div><div class="snfv-desc" id="snfvDesc"></div></div>'
+      +   '<div class="snfv-actions"><a id="snfvখুলুনBtn" class="snfv-btn" href="#" target="_blank" rel="noopener">খুলুন</a></div>'
+      + '</div>'
+      + '</div>';
+
+    document.body.appendChild(root);
+
+    qs('.snfv-close', root).addEventListener('click', closeViewer, { passive:true });
+    root.addEventListener('click', function(e){
+      if(e.target === root) closeViewer();
+    }, { passive:true });
+
+    document.addEventListener('keydown', function(e){
+      if(e.key === 'Escape') closeViewer();
+    });
+
+    return root;
+  }
+
+  function getBgUrl(el){
+    if(!el) return '';
+    var bg = getComputedStyle(el).backgroundImage || '';
+    var m = bg.match(/url\\(["']?(.*?)["']?\\)/);
+    return m && m[1] ? m[1] : '';
+  }
+
+  function extractCardData(card){
+    var pic = qs('.pic', card);
+    var img = qs('img', card);
+    var video = qs('video', card);
+    var title = (qs('.title', card) && qs('.title', card).textContent || '').trim();
+    var desc = (qs('.desc', card) && qs('.desc', card).textContent || '').trim();
+    var href = (card.getAttribute('href') || '#').trim();
+
+    return {
+      title: title,
+      desc: desc,
+      href: href,
+      img: img && img.src ? img.src : '',
+      video: video && (video.currentSrc || video.src) ? (video.currentSrc || video.src) : '',
+      poster: video && video.poster ? video.poster : '',
+      bg: getBgUrl(pic)
+    };
+  }
+
+  function openViewer(card){
+    var data = extractCardData(card);
+    var root = ensureViewer();
+    var media = document.getElementById('snfvMedia');
+    var title = document.getElementById('snfvTitle');
+    var desc = document.getElementById('snfvDesc');
+    var openBtn = document.getElementById('snfvখুলুনBtn');
+
+    media.innerHTML = '';
+    title.textContent = data.title || 'পূর্বরূপ';
+    desc.textContent = data.desc || '';
+
+    if(data.video){
+      var v = document.createElement('video');
+      v.src = data.video;
+      if(data.poster) v.poster = data.poster;
+      v.controls = true;
+      v.autoplay = true;
+      v.playsInline = true;
+      media.appendChild(v);
+    }else if(data.img || data.bg){
+      var im = document.createElement('img');
+      im.src = data.img || data.bg;
+      im.alt = data.title || 'preview';
+      media.appendChild(im);
+    }else{
+      var fb = document.createElement('div');
+      fb.className = 'snfv-fallback';
+      fb.textContent = data.title || 'পূর্বরূপ';
+      media.appendChild(fb);
+    }
+
+    if(data.href && data.href !== '#'){
+      openBtn.href = data.href;
+      openBtn.style.display = 'inline-flex';
+    }else{
+      openBtn.href = '#';
+      openBtn.style.display = 'none';
+    }
+
+    root.classList.add('open');
+
+    var panel = qs('.snfv-panel', root);
+    if(panel && panel.requestFullscreen){
+      panel.requestFullscreen().catch(function(){});
+    }
+  }
+
+  function closeViewer(){
+    var root = document.getElementById('snfvRoot');
+    if(root) root.classList.remove('open');
+    if(document.fullscreenElement && document.exitFullscreen){
+      document.exitFullscreen().catch(function(){});
+    }
+  }
+
+  document.addEventListener('click', function(e){
+    if(e.target && e.target.closest && e.target.closest('.rscroll')) return;
+
+    var card = e.target.closest('.thumb-grid[data-psom-key] a.card');
+    if(!card) return;
+
+    var grid = card.closest('.thumb-grid[data-psom-key]');
+    if(!grid) return;
+
+    var key = grid.getAttribute('data-psom-key') || '';
+    if(!key || key === 'rightPanel') return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    openViewer(card);
+  }, true);
+})();
+</script>
+ 
+<script defer src="/assets/js/socialnetwork-automap-v3.js?v=20260404psom"></script>
+  
+  <script id="igtc-checkout-trigger-v1">
+(function(){
+  if (window.__IGTC_CHECKOUT_READY__) return;
+  window.IGTC = window.IGTC || {};
+
+  function safeJSON(s){
+    try{ return JSON.parse(s); }catch(_){ return null; }
+  }
+
+  IGTC.checkout = function(opts){
+    try{
+      var payload = Object.assign(
+        { method: 'card', amount: 0, currency: 'KRW', meta: {} },
+        opts || {}
+      );
+
+      try{ window.dispatchEvent(new CustomEvent('IGTC_CHECKOUT', { detail: payload })); }catch(_){}
+      try{ window.postMessage({ type: 'CHECKOUT', payload: payload }, '*'); }catch(_){}
+
+      try{
+        fetch('/.netlify/functions/checkout', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(payload)
+        })
+        .then(function(r){
+          return r.ok ? r.json() : Promise.reject(r.status);
+        })
+        .then(function(res){
+          if(res && res.redirectUrl){
+            window.location.assign(res.redirectUrl);
+          }else if(res && res.qr && res.qr.html){
+            var wrap = document.getElementById('igtc-qr-modal');
+            if(!wrap){
+              wrap = document.createElement('div');
+              wrap.id = 'igtc-qr-modal';
+              wrap.style.cssText =
+                'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+
+              wrap.innerHTML =
+                '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
+                + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>পেমেন্ট QR</b>'
+                + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">বন্ধ করুন</button></div>'
+                + '<div id="igtc-qr-area"></div></div>';
+
+              document.body.appendChild(wrap);
+
+              var btn = document.getElementById('igtc-qr-close');
+              if(btn){
+                btn.addEventListener('click', function(){ wrap.remove(); }, { passive:true });
+              }
+            }
+
+            var area = document.getElementById('igtc-qr-area');
+            if(area){ area.innerHTML = res.qr.html; }
+          }
+        })
+        .catch(function(){});
+      }catch(_){}
+    }catch(_){}
+  };
+
+  document.addEventListener('click', function(e){
+    var el = e.target.closest('[data-checkout]');
+    if(!el) return;
+
+    var metaAttr = el.getAttribute('data-meta');
+    var meta = metaAttr ? (safeJSON(metaAttr) || { note: metaAttr }) : {};
+    var amount = parseFloat(el.getAttribute('data-amount') || '0') || 0;
+    var currency = el.getAttribute('data-currency') || 'KRW';
+    var method = el.getAttribute('data-method') || 'card';
+
+    IGTC.checkout({
+      method: method,
+      amount: amount,
+      currency: currency,
+      meta: meta
+    });
+
+    e.preventDefault();
+  }, { passive:true });
+
+  window.__IGTC_CHECKOUT_READY__ = true;
+})();
+</script>
+
+  <script id="socialnetwork-stable-note">window.__SOCIALNETWORK_STABLE_BUILD__ = '2026-04-04-psom-twin';</script>
+</body>
+</html>
