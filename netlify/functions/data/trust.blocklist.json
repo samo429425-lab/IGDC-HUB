@@ -1,0 +1,152 @@
+{
+  "domains": [
+    /* URL SHORTENERS (무조건 차단) */
+    "bit.ly",
+    "t.co",
+    "tinyurl.com",
+    "shorturl.at",
+    "rebrand.ly",
+
+    /* TOR / ANON GATEWAYS */
+    "onion.to",
+    "tor2web.org",
+
+    /* KNOWN SCAM PLACEHOLDERS */
+    "example-scam.com",
+    "secure-payment-check.click",
+    "free-gift-now.xyz"
+  ],
+
+  "tlds": [
+    "zip","mov","click","top","xyz","tk","gq","ml","cf"
+  ],
+
+  "patterns": [
+    /* =========================
+       PHISHING / SCAM
+    ========================= */
+    "free.*gift",
+    "you.*won",
+    "verify.*account",
+    "urgent.*payment",
+    "limited.*time.*offer",
+    "claim.*reward",
+    "risk.*free",
+    "100%.*guarantee",
+
+    /* =========================
+       DRUGS
+    ========================= */
+    "cocaine","heroin","meth","lsd","ecstasy","mdma",
+    "fentanyl","opioid","narcotic","drug.*deal","buy.*drugs",
+
+    /* =========================
+       WEAPONS / EXPLOSIVES
+    ========================= */
+    "gun","firearm","rifle","assault.*weapon","automatic.*gun",
+    "silencer","ammunition","explosive","grenade","bomb",
+
+    /* =========================
+       ILLEGAL TRADE / CRIME
+    ========================= */
+    "human.*trafficking",
+    "organ.*trade",
+    "counterfeit",
+    "fake.*passport",
+    "forged.*document",
+    "money.*laundering",
+    "crime.*syndicate",
+    "cartel",
+    "darkweb",
+    "hacking.*service",
+
+    /* =========================
+       EXTREMISM / TERROR
+    ========================= */
+    "terror",
+    "extremist",
+    "militia",
+    "terror.*fund",
+
+    /* =========================
+       GAMBLING / BETTING / SCHEMES
+    ========================= */
+    "casino",
+    "online.*casino",
+    "slot.*machine",
+    "slot.*game",
+    "roulette",
+    "blackjack",
+    "poker",
+    "sports.*bet",
+    "betting",
+    "odds",
+    "wager",
+    "lottery",
+    "raffle",
+    "jackpot",
+    "lucky.*draw",
+    "prize.*draw",
+    "get.*rich.*quick",
+    "pyramid.*scheme",
+    "ponzi",
+    "mlm",
+    "binary.*option",
+    "forex.*signal",
+    "investment.*guarantee",
+
+    /* =========================
+       ADULT / DEPRAVITY / ENTERTAINMENT (퇴폐·유흥·향락성)
+    ========================= */
+    "porn",
+    "adult.*video",
+    "sex.*toy",
+    "sex.*shop",
+    "escort",
+    "prostitution",
+    "brothel",
+    "sexual.*service",
+    "strip.*club",
+    "gentlemen.*club",
+    "hostess",
+    "karaoke.*bar",
+    "room.*salon",
+    "massage.*parlor",
+    "안마",
+    "유흥",
+    "성인용품",
+    "성매매",
+    "노래방.*도우미",
+
+    /* =========================
+       CHILD / UNDERAGE (즉시 차단)
+    ========================= */
+    "child.*porn",
+    "underage",
+    "minor.*sex"
+  ],
+
+  "categories": [
+    "financial-scam",
+    "phishing",
+    "drugs",
+    "illegal-weapons",
+    "explosives",
+    "terrorism",
+    "organized-crime",
+    "human-trafficking",
+    "counterfeit-goods",
+    "money-laundering",
+    "gambling",
+    "online-casino",
+    "sports-betting",
+    "lottery",
+    "ponzi-scheme",
+    "mlm-scam",
+    "binary-options",
+    "adult-content",
+    "adult-services",
+    "depravity-entertainment",
+    "child-exploitation"
+  ]
+}

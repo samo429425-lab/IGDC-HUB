@@ -1,0 +1,34 @@
+{
+  "platform_profile": {
+    "org_name_kr": "국제종합상사(IGTC)",
+    "org_name_en": "International General Trading Company",
+    "biz_no": "205-82-62136",
+    "banking": {
+      "domestic_account": "852501-04-168683",
+      "foreign_account": "238-910004-99638",
+      "swift": "KOEXKRSE",
+      "bank_country": "KR"
+    },
+    "settlement": {
+      "base_currency": "KRW",
+      "auto_remit": true,
+      "cycle": "monthly",
+      "audit": true,
+      "primary_wallet": "igdc_main_wallet"
+    },
+    "legal": {
+      "entity_type": "corporation",
+      "jurisdiction": "KR",
+      "vat_enabled": true
+    },
+    "usage_scope": [
+      "home_snapshot",
+      "search_ads",
+      "donation",
+      "global_insight",
+      "affiliate",
+      "direct_payment"
+    ],
+    "last_updated": "2026-02-08"
+  }
+}

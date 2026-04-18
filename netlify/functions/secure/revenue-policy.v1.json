@@ -1,0 +1,71 @@
+{
+  "version": "1.0",
+  "updated": "2026-02",
+
+  "marketplace": {
+    "general": 0.10,
+    "fashion_beauty": 0.18,
+    "digital_goods": 0.20,
+    "electronics_furniture": 0.07,
+    "food_living": 0.09
+  },
+
+  "advertising": {
+    "banner_cpm_usd": 2.5,
+    "video_cpm_usd": 5.0,
+    "cpc_usd": 0.25
+  },
+
+  "media": {
+    "ad_revenue_share": 0.50,
+    "subscription_fee_ratio": 0.25,
+    "pay_per_view_ratio": 0.30
+  },
+
+  "click_search": {
+    "general_click_usd": 0.02,
+    "search_cpc_usd": 0.40,
+    "recommend_conversion_rate": 0.05
+  },
+
+  "affiliate": {
+    "shopping": 0.05,
+    "travel": 0.04,
+    "finance": 0.07
+  },
+
+  "tour_travel": {
+    "flight": 0.02,
+    "hotel": 0.15,
+    "package": 0.10
+  },
+
+  "subscription": {
+    "platform_fee_ratio": 0.25,
+    "premium_monthly_usd": 7.0
+  },
+
+  "academic_data": {
+    "paper_access_usd": 2.0,
+    "download_usd": 3.0,
+    "institution_monthly_usd": 200.0,
+    "api_call_usd": 0.03
+  },
+
+  "license": {
+    "royalty_ratio": 0.12
+  },
+
+  "regional_adjustment": {
+    "enabled": true,
+    "gdp_weight": 0.4,
+    "currency_weight": 0.6
+  },
+
+  "policy_rules": {
+    "max_deviation": 0.10,
+    "initial_discount_allowed": true,
+    "gradual_increase": true,
+    "auto_update_by_region": true
+  }
+}

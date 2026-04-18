@@ -1,0 +1,14 @@
+{
+  "igtc_main": {
+    "org": "International General Trading Company",
+    "bizNo": "205-82-62136",
+    "bank": [
+      "KB",
+      "Hana"
+    ],
+    "account": "SECURE_STORAGE_ONLY",
+    "swift": "KOEXKRSE",
+    "currency": "USD",
+    "method": "swift"
+  }
+}

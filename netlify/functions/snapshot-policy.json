@@ -1,0 +1,60 @@
+{
+  "front": {},
+  "media": {
+    "sections.trending_now": {
+      "limit": 50,
+      "reserve": 10
+    },
+    "sections.latest_movie": {
+      "limit": 40,
+      "reserve": 8
+    },
+    "sections.latest_drama": {
+      "limit": 40,
+      "reserve": 8
+    },
+    "sections.section_1": {
+      "limit": 30,
+      "reserve": 6
+    },
+    "sections.section_2": {
+      "limit": 30,
+      "reserve": 6
+    },
+    "sections.section_3": {
+      "limit": 30,
+      "reserve": 6
+    },
+    "sections.section_4": {
+      "limit": 30,
+      "reserve": 6
+    },
+    "sections.section_5": {
+      "limit": 30,
+      "reserve": 6
+    },
+    "sections.section_6": {
+      "limit": 30,
+      "reserve": 6
+    },
+    "sections.section_7": {
+      "limit": 30,
+      "reserve": 6
+    }
+  },
+  "social": {},
+  "distribution": {},
+  "donation": {},
+  "network": {
+    "right": {
+      "limit": 100,
+      "reserve": 20
+    }
+  },
+  "tour": {
+    "right": {
+      "limit": 100,
+      "reserve": 20
+    }
+  }
+}

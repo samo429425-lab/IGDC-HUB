@@ -1,0 +1,77 @@
+{
+  "version": "1.0",
+  "engine": "MARU-Revenue-Core",
+  "updated": "2026-02",
+
+  "event": {
+    "event_id": "uuid",
+    "timestamp": "ISO-8601",
+
+    "type": [
+      "sale",
+      "click",
+      "view",
+      "search",
+      "download",
+      "subscription",
+      "access",
+      "affiliate",
+      "ad_impression",
+      "ad_click",
+      "license"
+    ],
+
+    "source": {
+      "service": [
+        "home",
+        "media",
+        "distribution",
+        "social",
+        "network",
+        "tour",
+        "academic",
+        "donation"
+      ],
+      "page": "string",
+      "referrer": "string"
+    },
+
+    "user": {
+      "user_id": "string",
+      "role": ["guest", "member", "premium", "partner", "admin"],
+      "region": "ISO-3166"
+    },
+
+    "content": {
+      "item_id": "string",
+      "category": "string",
+      "provider_id": "string",
+      "license_type": ["free", "cc", "commercial", "exclusive"]
+    },
+
+    "transaction": {
+      "price": "float",
+      "currency": "ISO-4217",
+      "quantity": "int",
+      "gross_amount": "float"
+    },
+
+    "metrics": {
+      "watch_time_sec": "int",
+      "click_depth": "int",
+      "search_rank": "int",
+      "conversion": "boolean"
+    },
+
+    "policy": {
+      "policy_id": "string",
+      "rate_applied": "float",
+      "adjustment": "float"
+    },
+
+    "security": {
+      "signature": "hash",
+      "verified": "boolean"
+    }
+  }
+}
