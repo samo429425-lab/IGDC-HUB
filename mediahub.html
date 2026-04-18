@@ -391,8 +391,7 @@ html, body {
   -webkit-overflow-scrolling: touch;
 }
 </style>
-<style id="qa-empty-state-style-kr">
-/* QnA 리스트가 비어 있을 때 안내문 표시 */
+<style id="qa-empty-state-style">
 .igdc-qa-threads:empty::before,
 .qna-threads:empty::before,
 .qa-list:empty::before,
@@ -1159,6 +1158,29 @@ html, body {
 }
 </style>
 
+
+<style id="qa-label-contrast-fix">
+.igdc-qa-title,
+.igdc-qa-field label,
+.igdc-qa-body label{
+  color:#555555 !important;
+  opacity:1 !important;
+  font-weight:500 !important;
+}
+</style>
+<style id="ko-sidebar-spacing-unified">
+/* KO sidebar spacing: unify only button-to-button vertical spacing */
+.sidebar{
+  padding-top: 20px !important;
+}
+.sidebar a,
+.sidebar a#qnaOpenBtn,
+#qnaOpenBtn,
+.sidebar a[id*="qna"],
+a[id*="qna"]{
+  margin: 10px 12px !important;
+}
+</style>
 </head>
 <body>
 <div id="hero" data-psom-key="media-hero"><div class="hero-title"></div></div>
@@ -3609,7 +3631,7 @@ function handleVideoSearch(e){
   --blue:#2563eb; --muted:#9ca3af;
 }
 /* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
-#qnaOpenBtn{ display:block; text-decoration:none; }
+#qnaOpenBtn{ background-color:#001f4d; color:#ffffff;  color:#001f4d;  display:block; text-decoration:none; }
 /* Modal near the left sidebar, with smooth transitions */
 .igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
 .igdc-qa-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;transition:opacity .18s ease}
@@ -3655,6 +3677,9 @@ function handleVideoSearch(e){
 @media (max-width:900px){
   .igdc-qa-panel{ left:calc(12px + var(--qa-left,0px)); width:min(92vw,560px) }
 }
+
+.contact-email{font:700 14px/1.45 var(--igdc-font); color:#555 !important; opacity:1 !important;}
+.contact-email a{color:#1d4ed8 !important; font-weight:700; text-decoration:underline;}
 </style>
 <style id="qna-brand-only">
 /* === Q&A sidebar link color only (no other changes) === */
@@ -3840,6 +3865,9 @@ function handleVideoSearch(e){
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
+	const ce = el("p","contact-email");
+    ce.innerHTML = '대표 이메일: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+    body.append(ce);
     actions.append(btnSubmit, btnClear);
     panel.append(header, body);
     modal.append(backdrop, panel);

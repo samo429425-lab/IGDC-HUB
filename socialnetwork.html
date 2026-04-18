@@ -56,7 +56,7 @@
     }
     .sidebar a:hover{text-decoration:underline;background:#ffe5b4}
     .sidebar a.active{background:#ffdfcc}
-    #qnaOpenBtn{background:#0b2a6f;color:#fff;border-color:#004080}
+    #qna열기Btn{background:#0b2a6f;color:#fff;border-color:#004080}
 
     .main-content{
       flex:1 1 auto;
@@ -131,7 +131,8 @@
 }
 
     .rows{display:flex;flex-direction:column;gap:12px;margin-top:12px}
-    .row-viewport{position:relative}
+    .row-viewport{position:relative;isolation:isolate}
+	.row-controls{position:absolute;inset:0;z-index:40;pointer-events:none;}
     .row-scroller{overflow-x:auto;overflow-y:hidden;scroll-behavior:smooth;padding-bottom:4px;-ms-overflow-style:none;scrollbar-width:none}
     .row-scroller::-webkit-scrollbar{display:none;width:0;height:0}
     .row-grid{display:grid;grid-auto-flow:column;grid-template-rows:1fr;grid-auto-columns:minmax(var(--card-min),var(--card-max));gap:var(--gap)}
@@ -169,7 +170,8 @@
       position:absolute;
       top:50%;
       transform:translateY(-50%);
-      z-index:20;
+      z-index:41;
+      pointer-events:auto;
       border:none;
       background:rgba(0,0,0,.35);
       color:#fff;
@@ -183,7 +185,7 @@
     .rscroll.left{left:-18px}
     .rscroll.right{right:-18px}
     .row-viewport:hover .rscroll{opacity:1}
-    .rscroll.disabled{opacity:.35;pointer-events:none}
+    .rscroll.disabled{opacity:.35}
 
     .right-rail{
       width:var(--rail-w);
@@ -334,6 +336,19 @@
     @media (max-width:768px) and (orientation:portrait){.snfv-meta{padding:10px 12px}.snfv-title{font-size:.96rem}.snfv-desc{font-size:.86rem}}
 </style>
   
+<style id="ko-sidebar-spacing-unified">
+/* KO sidebar spacing: unify only button-to-button vertical spacing */
+.sidebar{
+  padding-top: 20px !important;
+}
+.sidebar a,
+.sidebar a#qnaOpenBtn,
+#qnaOpenBtn,
+.sidebar a[id*="qna"],
+a[id*="qna"]{
+  margin: 10px 12px !important;
+}
+</style>
 </head>
 <body>
   <div id="hero"><div class="hero-title"></div></div>
@@ -347,13 +362,13 @@
       <a href="mediahub.html">🎬 미디어 허브</a>
       <a href="tour.html">🧳 여행·관광·숙박</a>
       <a href="literature_academic">📚 문학 학술교류</a>
-      <a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A 문의</a>
+      <a href="javascript:void(0)" id="qna열기Btn">💬 Q&amp;A 문의</a>
     </div>
 
     <div class="main-content">
       <section class="section-blockchain">
         <a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
-        <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
+        <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">열기Sea</a>
         <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
         <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
       </section>
@@ -392,7 +407,7 @@
 
   <footer>
     IGDC Global Hub © 2025 | International General Distribution Company<br/>
-    경기도 평택시 고덕갈평3로 50, <br/>
+    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea<br/>
   </footer>
 
   <script>
@@ -464,7 +479,7 @@
     (function(){
       if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
       function ensureButton(){
-        var btn = document.getElementById('qnaOpenBtn');
+        var btn = document.getElementById('qna열기Btn');
         if(!btn) return;
         btn.addEventListener('click', function(){
           if (window.IGDC_QA && typeof window.IGDC_QA.open === 'function'){ window.IGDC_QA.open(); return; }
@@ -496,7 +511,7 @@
     (function(){
       if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
       const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
-      let isOpen=false, isAnimating=false;
+      let is열기=false, isAnimating=false;
       function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
       const nowISO = ()=> new Date().toISOString();
       const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
@@ -521,7 +536,7 @@
         const body = el('div','igdc-qa-body');
         const lQ = el('label'); lQ.textContent='질문'; const tQ = el('textarea','igdc-qa-text q'); tQ.placeholder='질문을 입력하세요...';
         const lA = el('label'); lA.textContent='답변'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='조금만 기다리시면 금방 답변을 드리겠습니다.';
-        const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='등록하기'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='지우기';
+        const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='Submit'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='Clear';
         const note = el('div','igdc-qa-note'); note.textContent='※ 가벼운 질문은 AI가 즉시 답변합니다. 기술/오류/운영 관련은 관리자 Q&A로 자동 전달됩니다.';
         const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='대표 이메일: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
         actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
@@ -529,20 +544,20 @@
       }
       function bindExisting(modal){
         const panel = modal.querySelector('.igdc-qa-panel'); const backdrop = modal.querySelector('.igdc-qa-backdrop'); const close = modal.querySelector('.igdc-qa-close');
-        const sideBtn = document.querySelector('#qnaOpenBtn');
+        const sideBtn = document.querySelector('#qna열기Btn');
         const tQ = modal.querySelector('.igdc-qa-text.q'); const tA = modal.querySelector('.igdc-qa-text.a'); const list = modal.querySelector('.igdc-qa-threads');
         const btnSubmit = modal.querySelector('.igdc-qa-btn.primary'); const btnClear = modal.querySelector('.igdc-qa-btn.muted');
         function positionNearSidebar(){ try{ const sb = document.querySelector('.sidebar'); if(sb){ const rect = sb.getBoundingClientRect(); panel.style.left = Math.round(rect.right + 12) + 'px'; } }catch(e){} }
-        function openModal(){ if(isAnimating || isOpen) return; isAnimating = true; modal.style.display='block'; requestAnimationFrame(()=>{ modal.classList.add('open'); isOpen = true; setTimeout(()=>{ isAnimating=false; },220); }); }
-        function closeModal(){ if(isAnimating || !isOpen) return; isAnimating=true; modal.classList.remove('open'); setTimeout(()=>{ modal.style.display='none'; isOpen=false; isAnimating=false; },220); }
+        function openModal(){ if(isAnimating || is열기) return; isAnimating = true; modal.style.display='block'; requestAnimationFrame(()=>{ modal.classList.add('open'); is열기 = true; setTimeout(()=>{ isAnimating=false; },220); }); }
+        function closeModal(){ if(isAnimating || !is열기) return; isAnimating=true; modal.classList.remove('open'); setTimeout(()=>{ modal.style.display='none'; is열기=false; isAnimating=false; },220); }
         positionNearSidebar(); window.addEventListener('resize', positionNearSidebar); window.addEventListener('scroll', positionNearSidebar, { passive:true });
         if(sideBtn && !sideBtn.dataset.qaBound){ sideBtn.addEventListener('click', openModal); sideBtn.dataset.qaBound='1'; }
         close && close.addEventListener('click', closeModal); backdrop && backdrop.addEventListener('click', closeModal); document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
         btnClear && btnClear.addEventListener('click', ()=>{ if(tQ) tQ.value=''; if(tA) tA.value=''; });
         async function fetchThreads(){ const sb = await ensureSupabase(); if(!sb || !list) return; const { data } = await sb.from('igdc_qna_threads').select('*').eq('project', STATE.project).eq('page_id', STATE.pageId).order('created_at', { ascending:false }).limit(100); renderList(data||[]); }
         function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='Q. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('A. '+row.answer):'A. (대기중)'; box.append(q,a); list.append(box); }); }
-        async function autoAnswerIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'가격/요금 정보는 페이지 내 안내를 참고해주세요. 추가 문의는 남겨주세요.':'문의 감사합니다. 빠르게 확인하여 도와드리겠습니다.'; } } return { technical, answer }; }
-        async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoAnswerIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'문의가 접수되었습니다.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
+        async function auto답변IfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'Please refer to the information on this page for pricing and fees. Leave an additional inquiry if needed.':'Thank you for your inquiry. We will review it promptly and assist you.'; } } return { technical, answer }; }
+        async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await auto답변IfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'Your inquiry has been received.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
         btnSubmit && btnSubmit.addEventListener('click', submit);
         window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
         fetchThreads(); return modal;
@@ -570,19 +585,19 @@
   <script>
     (function(){
       var DEMO = {
-        'social-youtube': { icon:'▶️', title:'YouTube', row:'Row 1 · Preview' },
-        'social-instagram': { icon:'📷', title:'Instagram', row:'Row 2 · Preview' },
-        'social-tiktok': { icon:'🎵', title:'TikTok', row:'Row 3 · Preview' },
-        'social-facebook': { icon:'📘', title:'Facebook', row:'Row 4 · Preview' },
-        'social-wechat': { icon:'💬', title:'WeChat', row:'Row 5 · Preview' },
-        'social-weibo': { icon:'🌐', title:'Weibo', row:'Row 6 · Preview' },
-        'social-pinterest': { icon:'📌', title:'Pinterest', row:'Row 7 · Preview' },
-        'social-reddit': { icon:'👽', title:'Reddit', row:'Row 8 · Preview' },
-        'social-twitter': { icon:'✖️', title:'X (Twitter)', row:'Row 9 · Preview' }
+        'social-youtube': { icon:'▶️', title:'YouTube', row:'Row 1 · 미리보기' },
+        'social-instagram': { icon:'📷', title:'Instagram', row:'Row 2 · 미리보기' },
+        'social-tiktok': { icon:'🎵', title:'TikTok', row:'Row 3 · 미리보기' },
+        'social-facebook': { icon:'📘', title:'Facebook', row:'Row 4 · 미리보기' },
+        'social-wechat': { icon:'💬', title:'WeChat', row:'Row 5 · 미리보기' },
+        'social-weibo': { icon:'🌐', title:'Weibo', row:'Row 6 · 미리보기' },
+        'social-pinterest': { icon:'📌', title:'Pinterest', row:'Row 7 · 미리보기' },
+        'social-reddit': { icon:'👽', title:'Reddit', row:'Row 8 · 미리보기' },
+        'social-twitter': { icon:'✖️', title:'X (Twitter)', row:'Row 9 · 미리보기' }
       };
       function makeCard(meta){
         var a = document.createElement('a'); a.className='card'; a.href='#';
-        a.innerHTML = '<div class="pic"><span>'+meta.icon+'</span></div><div class="meta"><div class="title">'+meta.title+'</div><div class="desc">'+meta.row+'</div><div class="cta">Open</div></div>';
+        a.innerHTML = '<div class="pic"><span>'+meta.icon+'</span></div><div class="meta"><div class="title">'+meta.title+'</div><div class="desc">'+meta.row+'</div><div class="cta">열기</div></div>';
         return a;
       }
       function seedMainPlaceholders(){
@@ -669,7 +684,7 @@
   if ((payload.href || '#') === '#'){
     e.preventDefault();
     try{
-      alert('콘텐츠나 자료 준비 중입니다.');
+      alert('Content or materials are being prepared.');
     }catch(_){}
   }
 }, { passive:false });
@@ -981,17 +996,62 @@ function boot(){
     (function(){
       function bindRow(viewport, scroller, leftBtn, rightBtn){
         if(!viewport || !scroller || !leftBtn || !rightBtn) return;
-        function amount(){ return Math.max(240, Math.floor(viewport.clientWidth * 0.85)); }
+
+        function amount(){
+          return Math.max(240, Math.floor(scroller.clientWidth * 0.85));
+        }
+
         function sync(){
-          var max = scroller.scrollWidth - scroller.clientWidth;
+          var max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
           leftBtn.classList.toggle('disabled', scroller.scrollLeft <= 4);
           rightBtn.classList.toggle('disabled', scroller.scrollLeft >= max - 4);
         }
-        leftBtn.addEventListener('click', function(){ scroller.scrollBy({left:-amount(), behavior:'smooth'}); });
-        rightBtn.addEventListener('click', function(){ scroller.scrollBy({left: amount(), behavior:'smooth'}); });
+
+        function scrollLeftNow(e){
+          if(e){
+            e.preventDefault();
+            e.stopPropagation();
+          }
+          scroller.scrollBy({ left:-amount(), behavior:'smooth' });
+          requestAnimationFrame(sync);
+        }
+
+        function scrollRightNow(e){
+          if(e){
+            e.preventDefault();
+            e.stopPropagation();
+          }
+          scroller.scrollBy({ left: amount(), behavior:'smooth' });
+          requestAnimationFrame(sync);
+        }
+
+        leftBtn.addEventListener('click', scrollLeftNow, false);
+        rightBtn.addEventListener('click', scrollRightNow, false);
         scroller.addEventListener('scroll', sync, {passive:true});
         window.addEventListener('resize', sync);
-        sync();
+
+        if('ResizeObserver' in window){
+          var ro = new ResizeObserver(sync);
+          ro.observe(scroller);
+          var grid = scroller.querySelector('.row-grid');
+          if(grid) ro.observe(grid);
+        }
+
+        if('MutationObserver' in window){
+          var mo = new MutationObserver(function(){ sync(); });
+          mo.observe(scroller, { childList:true, subtree:true });
+        }
+
+        if(document.readyState === 'loading'){
+          document.addEventListener('DOMContentLoaded', sync, { once:true });
+        } else {
+          sync();
+        }
+
+        window.addEventListener('load', sync, { once:true });
+        [80, 240, 600, 1200, 2000].forEach(function(t){
+          setTimeout(sync, t);
+        });
       }
       for(var i=1;i<=9;i++){
         bindRow(
@@ -1022,9 +1082,9 @@ function boot(){
           var inner = document.createElement('div');
           inner.style.height = '280px';
           inner.style.display = 'flex';
-          inner.style.alignItems = 'center';
+          inner.style.align아이템s = 'center';
           inner.style.justifyContent = 'center';
-          inner.textContent = 'Loading...';
+          inner.textContent = '불러오는 중...';
           card.appendChild(inner);
           panel.appendChild(card);
         }
@@ -1083,7 +1143,7 @@ window.addEventListener('resize', function(){
     a.dataset.productTitle = productTitle;
     a.dataset.productLink = resolvedHref;
 
-    a.textContent = productTitle || 'Item';
+    a.textContent = productTitle || '아이템';
     a.target = resolvedHref.indexOf('/pages/coming-soon.html') === 0 ? '_self' : '_blank';
     a.rel = 'noopener';
 
@@ -1252,11 +1312,11 @@ window.addEventListener('resize', function(){
     root.className = 'snfv';
     root.innerHTML =
       '<div class="snfv-panel">'
-      + '<button type="button" class="snfv-close" aria-label="닫기">✕</button>'
+      + '<button type="button" class="snfv-close" aria-label="Close">✕</button>'
       + '<div class="snfv-media" id="snfvMedia"></div>'
       + '<div class="snfv-meta">'
       +   '<div class="snfv-text"><div class="snfv-title" id="snfvTitle"></div><div class="snfv-desc" id="snfvDesc"></div></div>'
-      +   '<div class="snfv-actions"><a id="snfvOpenBtn" class="snfv-btn" href="#" target="_blank" rel="noopener">Open</a></div>'
+      +   '<div class="snfv-actions"><a id="snfv열기Btn" class="snfv-btn" href="#" target="_blank" rel="noopener">열기</a></div>'
       + '</div>'
       + '</div>';
 
@@ -1306,10 +1366,10 @@ window.addEventListener('resize', function(){
     var media = document.getElementById('snfvMedia');
     var title = document.getElementById('snfvTitle');
     var desc = document.getElementById('snfvDesc');
-    var openBtn = document.getElementById('snfvOpenBtn');
+    var openBtn = document.getElementById('snfv열기Btn');
 
     media.innerHTML = '';
-    title.textContent = data.title || 'Preview';
+    title.textContent = data.title || '미리보기';
     desc.textContent = data.desc || '';
 
     if(data.video){
@@ -1328,7 +1388,7 @@ window.addEventListener('resize', function(){
     }else{
       var fb = document.createElement('div');
       fb.className = 'snfv-fallback';
-      fb.textContent = data.title || 'Preview';
+      fb.textContent = data.title || '미리보기';
       media.appendChild(fb);
     }
 
@@ -1357,6 +1417,8 @@ window.addEventListener('resize', function(){
   }
 
   document.addEventListener('click', function(e){
+    if(e.target && e.target.closest && e.target.closest('.rscroll')) return;
+
     var card = e.target.closest('.thumb-grid[data-psom-key] a.card');
     if(!card) return;
 
@@ -1417,8 +1479,8 @@ window.addEventListener('resize', function(){
 
               wrap.innerHTML =
                 '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>결제 QR</b>'
-                + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">닫기</button></div>'
+                + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
+                + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
                 + '<div id="igtc-qr-area"></div></div>';
 
               document.body.appendChild(wrap);

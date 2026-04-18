@@ -129,6 +129,7 @@
 <link href="/home.html" hreflang="ko" rel="alternate"/>
 <link href="/en/home.html" hreflang="en" rel="alternate"/>
 <link href="/zh/home.html" hreflang="zh" rel="alternate"/>
+<link href="/zht/home.html" hreflang="zh-Hant" rel="alternate"/>
 <link href="/ja/home.html" hreflang="ja" rel="alternate"/>
 <link href="/es/home.html" hreflang="es" rel="alternate"/>
 <link href="/fr/home.html" hreflang="fr" rel="alternate"/>
@@ -147,6 +148,14 @@
 <link href="/ur/home.html" hreflang="ur" rel="alternate"/>
 <link href="/bn/home.html" hreflang="bn" rel="alternate"/>
 <link href="/fa/home.html" hreflang="fa" rel="alternate"/>
+<link href="/hu/home.html" hreflang="hu" rel="alternate"/>
+<link href="/ms/home.html" hreflang="ms" rel="alternate"/>
+<link href="/nl/home.html" hreflang="nl" rel="alternate"/>
+<link href="/pl/home.html" hreflang="pl" rel="alternate"/>
+<link href="/sv/home.html" hreflang="sv" rel="alternate"/>
+<link href="/tl/home.html" hreflang="tl" rel="alternate"/>
+<link href="/uk/home.html" hreflang="uk" rel="alternate"/>
+<link href="/uz/home.html" hreflang="uz" rel="alternate"/>
 <link href="/en/home.html" hreflang="x-default" rel="alternate"/>
 <link href="/index.html" rel="canonical"/>
 <meta content="IGDC Global Hub — Multilingual distribution, media, travel, donation, and admin portal." name="description"/>
@@ -166,174 +175,245 @@
   </style>
 <script>
     const menuText = {
-      ko: [["🏠 홈", "🛒 마켓 허브", "🏭 유통허브", "📢 소셜 네트워크", "🎬 미디어 허브", "🧳 관광", "💝 후원", "🛠 Admin"]],
-      en: [["🏠 Home", "🛒 Network Hub", "🏭 Distribution Hub", "📢 Social Network", "🎬 Media Hub", "🧳 Travel", "💝 Donation", "🛠 Admin"]],
-      zh: [["🏠 主页", "🛒 网络中心", "🏭 分销中心", "📢 社交网络", "🎬 媒体中心", "🧳 旅游", "💝 捐赠", "🛠 管理员"]],
-      ja: [["🏠 ホーム", "🛒 ネットワークハブ", "🏭 流通ハブ", "📢 ソーシャルネットワーク", "🎬 メディアハブ", "🧳 観光", "💝 寄付", "🛠 管理者"]],
-      es: [["🏠 Inicio", "🛒 Centro de Red", "🏭 Centro de Distribución", "📢 Red Social", "🎬 Centro de Medios", "🧳 Turismo", "💝 Donación", "🛠 Administrador"]],
-      fr: [["🏠 Accueil", "🛒 Hub Réseau", "🏭 Hub Distribution", "📢 Réseau Social", "🎬 Hub Média", "🧳 Tourisme", "💝 Don", "🛠 Admin"]],
-      de: [["🏠 Startseite", "🛒 Netzwerk-Hub", "🏭 Distributions-Hub", "📢 Soziales Netzwerk", "🎬 Medien-Hub", "🧳 Tourismus", "💝 Spende", "🛠 Admin"]],
-      ru: [["🏠 Главная", "🛒 Сетевой центр", "🏭 Центр дистрибуции", "📢 Соцсеть", "🎬 Медиацентр", "🧳 Туризм", "💝 Пожертвование", "🛠 Админ"]],
-      pt: [["🏠 Início", "🛒 Hub de Rede", "🏭 Hub de Distribuição", "📢 Rede Social", "🎬 Hub de Mídia", "🧳 Turismo", "💝 Doação"]],
-      it: [["🏠 Home", "🛒 Hub di Rete", "🏭 Hub di Distribuzione", "📢 Rete Sociale", "🎬 Hub Media", "🧳 Turismo", "💝 Donazione"]],
-      ar: [["🏠 الصفحة الرئيسية", "🛒 مركز الشبكة", "🏭 مركز التوزيع", "📢 الشبكة الاجتماعية", "🎬 مركز الوسائط", "🧳 السياحة", "💝 تبرع"]],
-      vi: [["🏠 Trang chủ", "🛒 Trung tâm mạng", "🏭 Trung tâm phân phối", "📢 Mạng xã hội", "🎬 Trung tâm truyền thông", "🧳 Du lịch", "💝 Quyên góp"]],
-      th: [["🏠 หน้าหลัก", "🛒 เครือข่ายฮับ", "🏭 ศูนย์กระจายสินค้า", "📢 โซเชียลเน็ตเวิร์ก", "🎬 ศูนย์สื่อ", "🧳 ท่องเที่ยว", "💝 บริจาค"]],
-      id: [["🏠 Beranda", "🛒 Hub Jaringan", "🏭 Hub Distribusi", "📢 Jejaring Sosial", "🎬 Hub Media", "🧳 Pariwisata", "💝 Donasi"]],
-      hi: [["🏠 होम", "🛒 नेटवर्क हब", "🏭 वितरण केंद्र", "📢 सोशल नेटवर्क", "🎬 मीडिया हब", "🧳 पर्यटन", "💝 दान", "🛠 व्यवस्थापक"]],
-      tr: [["🏠 Ana sayfa", "🛒 Ağ Merkezi", "🏭 Dağıtım Merkezi", "📢 Sosyal Ağ", "🎬 Medya Merkezi", "🧳 Turizm", "💝 Bağış"]],   
-      fa: [["🏠 خانه", "🛒 مرکز شبکه", "🏭 مرکز توزیع", "📢 شبکه اجتماعی", "🎬 مرکز رسانه", "🧳 گردشگری", "💝 اهداء"]],
-      bn: [["🏠 হোম", "🛒 নেটওয়ার্ক হাব", "🏭 ডিস্ট্রিবিউশন হাব", "📢 সোশ্যাল নেটওয়ার্ক", "🎬 মিডিয়া হাব", "🧳 পর্যটন", "💝 অনুদান"]],
-      ur: [["🏠 ہوم", "🛒 نیٹ ورک ہب", "🏭 ڈسٹری بیوشن ہب", "📢 سوشل نیٹ ورک", "🎬 میڈیا ہب", "🧳 سیاحت", "💝 عطیہ"]],
-      sw: [["🏠 Nyumbani", "🛒 Kitovu cha Mtandao", "🏭 Kitovu cha Usambazaji", "📢 Mtandao wa Kijamii", "🎬 Kitovu cha Vyombo vya Habari", "🧳 Utalii", "💝 Mchango"]],
-      ta: [["🏠 முகப்பு", "🛒 நெட்வொர்க் ஹப்", "🏭 விநியோக மையம்", "📢 சமூக வலை", "🎬 ஊடக மையம்", "🧳 சுற்றுலா", "💝 நன்கொடை"]]};
-    const pageMap = {
-      ko: ["home.html", "networkhub.html", "distributionhub.html", "socialnetwork.html", "mediahub.html", "tour.html", "donation.html", "admin.html"],
-      en: ["en/home_en.html","en/networkhub_en.html","en/distributionhub_en.html","en/socialnetwork_en.html","en/mediahub_en.html","en/tour_en.html","en/donation_en.html","admin.html"],
-      zh: ["zh/home_zh.html","zh/networkhub_zh.html","zh/distributionhub_zh.html","zh/socialnetwork_zh.html","zh/mediahub_zh.html","zh/tour_zh.html","zh/donation_zh.html","admin.html"],
-      ja: ["ja/home_ja.html","ja/networkhub_ja.html","ja/distributionhub_ja.html","ja/socialnetwork_ja.html","ja/mediahub_ja.html","ja/tour_ja.html","ja/donation_ja.html","admin.html"],
-      es: ["es/home_es.html","es/networkhub_es.html","es/distributionhub_es.html","es/socialnetwork_es.html","es/mediahub_es.html","es/tour_es.html","es/donation_es.html","admin.html"],
-      fr: ["fr/home_fr.html","fr/networkhub_fr.html","fr/distributionhub_fr.html","fr/socialnetwork_fr.html","fr/mediahub_fr.html","fr/tour_fr.html","fr/donation_fr.html","admin.html"],
-      de: ["de/home_de.html","de/networkhub_de.html","de/distributionhub_de.html","de/socialnetwork_de.html","de/mediahub_de.html","de/tour_de.html","de/donation_de.html","admin.html"],
-      ru: ["ru/home_ru.html","ru/networkhub_ru.html","ru/distributionhub_ru.html","ru/socialnetwork_ru.html","ru/mediahub_ru.html","ru/tour_ru.html","ru/donation_ru.html","admin.html"],
-      pt: ["pt/home_pt.html","pt/networkhub_pt.html","pt/distributionhub_pt.html","pt/socialnetwork_pt.html","pt/mediahub_pt.html","pt/tour_pt.html","pt/donation_pt.html","admin.html"],
-      it: ["it/home_it.html","it/networkhub_it.html","it/distributionhub_it.html","it/socialnetwork_it.html","it/mediahub_it.html","it/tour_it.html","it/donation_it.html","admin.html"],
-      ar: ["ar/home_ar.html","ar/networkhub_ar.html","ar/distributionhub_ar.html","ar/socialnetwork_ar.html","ar/mediahub_ar.html","ar/tour_ar.html","ar/donation_ar.html","admin.html"],
-      vi: ["vi/home_vi.html","vi/networkhub_vi.html","vi/distributionhub_vi.html","vi/socialnetwork_vi.html","vi/mediahub_vi.html","vi/tour_vi.html","vi/donation_vi.html","admin.html"],
-      th: ["th/home_th.html","th/networkhub_th.html","th/distributionhub_th.html","th/socialnetwork_th.html","th/mediahub_th.html","th/tour_th.html","th/donation_th.html","admin.html"],
-      id: ["id/home_id.html","id/networkhub_id.html","id/distributionhub_id.html","id/socialnetwork_id.html","id/mediahub_id.html","id/tour_id.html","id/donation_id.html","admin.html"],
-      hi: ["hi/home_hi.html","hi/networkhub_hi.html","hi/distributionhub_hi.html","hi/socialnetwork_hi.html","hi/mediahub_hi.html","hi/tour_hi.html","hi/donation_hi.html","admin.html"],
-      tr: ["tr/home_tr.html","tr/networkhub_tr.html","tr/distributionhub_tr.html","tr/socialnetwork_tr.html","tr/mediahub_tr.html","tr/tour_tr.html","tr/donation_tr.html","admin.html"],
-      fa: ["fa/home_fa.html","fa/networkhub_fa.html","fa/distributionhub_fa.html","fa/socialnetwork_fa.html","fa/mediahub_fa.html","fa/tour_fa.html","fa/donation_fa.html","admin.html"],
-      bn: ["bn/home_bn.html","bn/networkhub_bn.html","bn/distributionhub_bn.html","bn/socialnetwork_bn.html","bn/mediahub_bn.html","bn/tour_bn.html","bn/donation_bn.html","admin.html"],
-      ur: ["ur/home_ur.html","ur/networkhub_ur.html","ur/distributionhub_ur.html","ur/socialnetwork_ur.html","ur/mediahub_ur.html","ur/tour_ur.html","ur/donation_ur.html","admin.html"],
-      sw: ["sw/home_sw.html","sw/networkhub_sw.html","sw/distributionhub_sw.html","sw/socialnetwork_sw.html","sw/mediahub_sw.html","sw/tour_sw.html","sw/donation_sw.html","admin.html"],
-      ta: ["ta/home_ta.html","ta/networkhub_ta.html","ta/distributionhub_ta.html","ta/socialnetwork_ta.html","ta/mediahub_ta.html","ta/tour_ta.html","ta/donation_ta.html","admin.html"]
-    };
-    const titleText = {
-      ko: { title: "IGDC 글로벌 허브", subtitle: "International General Distribution Company" },
-      en: { title: "IGDC Global Hub", subtitle: "International General Distribution Company" },
-      zh: { title: "IGDC全球枢纽", subtitle: "国际综合流通公司" },
-      ja: { title: "IGDCグローバルハブ", subtitle: "国際総合流通会社" },
-      es: { title: "IGDC Centro Global", subtitle: "Compañía General Internacional de Distribución" },
-      fr: { title: "IGDC Hub Global", subtitle: "Société Générale Internationale de Distribution" },
-      de: { title: "IGDC Globales Zentrum", subtitle: "Internationale Generalvertriebsfirma" },
-      ru: { title: "IGDC Глобальный Центр", subtitle: "Международная Генеральная Дистрибуционная Компания" },
-      pt: { title: "IGDC Hub Global", subtitle: "Companhia Geral Internacional de Distribuição" },
-      it: { title: "IGDC Hub Globale", subtitle: "Compagnia Generale Internazionale di Distribuzione" },
-      ar: { title: "مركز IGDC العالمي", subtitle: "شركة التوزيع العامة الدولية" },
-      vi: { title: "Trung Tâm Toàn Cầu IGDC", subtitle: "Công Ty Phân Phối Tổng Hợp Quốc Tế" },
-      th: { title: "ศูนย์กลาง IGDC ระดับโลก", subtitle: "บริษัทจัดจำหน่ายทั่วไปสากล" },
-      id: { title: "IGDC Pusat Global", subtitle: "Perusahaan Distribusi Umum Internasional" },
-      hi: { title: "IGDC ग्लोबल हब", subtitle: "अंतर्राष्ट्रीय जनरल डिस्ट्रीब्यूशन कंपनी" },
-      tr: { title: "IGDC Küresel Merkez", subtitle: "Uluslararası Genel Dağıtım Şirketi" },
-      fa: { title: "IGDC مرکز جهانی", subtitle: "شرکت بین‌المللی توزیع عمومی" },
-      bn: { title: "IGDC গ্লোবাল হাব", subtitle: "ইন্টারন্যাশনাল জেনারেল ডিস্ট্রিবিউশন কোম্পানি" },
-      ur: { title: "IGDC عالمی حب", subtitle: "انٹرنیشنل جنرل ڈسٹری بیوشن کمپنی" },
-      sw: { title: "Kituo Kikuu cha IGDC", subtitle: "Kampuni ya Usambazaji wa Jumla ya Kimataifa" },
-      ta: { title: "IGDC உலக மையம்", subtitle: "சர்வதேச பொது விநியோக நிறுவனம்" }};
-  function detectPreferredLang(){
+  ko: [["🏠 홈", "🛒 마켓 허브", "🏭 유통허브", "📢 소셜 네트워크", "🎬 미디어 허브", "🧳 관광", "💝 후원", "🛠 관리자"]],
+  en: [["🏠 Home", "🛒 Network Hub", "🏭 Distribution Hub", "📢 Social Network", "🎬 Media Hub", "🧳 Travel", "💝 Donation", "🛠 Admin"]],
+  zh: [["🏠 主页", "🛒 网络中心", "🏭 分销中心", "📢 社交网络", "🎬 媒体中心", "🧳 旅游", "💝 捐赠", "🛠 管理员"]],
+  zht: [["🏠 主頁", "🛒 網絡中心", "🏭 分銷中心", "📢 社交網絡", "🎬 媒體中心", "🧳 旅遊", "💝 捐贈", "🛠 管理員"]],
+  ja: [["🏠 ホーム", "🛒 ネットワークハブ", "🏭 流通ハブ", "📢 ソーシャルネットワーク", "🎬 メディアハブ", "🧳 観光", "💝 寄付", "🛠 管理者"]],
+  es: [["🏠 Inicio", "🛒 Centro de Red", "🏭 Centro de Distribución", "📢 Red Social", "🎬 Centro de Medios", "🧳 Turismo", "💝 Donación", "🛠 Administrador"]],
+  fr: [["🏠 Accueil", "🛒 Hub Réseau", "🏭 Hub Distribution", "📢 Réseau Social", "🎬 Hub Média", "🧳 Tourisme", "💝 Don", "🛠 Admin"]],
+  de: [["🏠 Startseite", "🛒 Netzwerk-Hub", "🏭 Distributions-Hub", "📢 Soziales Netzwerk", "🎬 Medien-Hub", "🧳 Tourismus", "💝 Spende", "🛠 Admin"]],
+  ru: [["🏠 Главная", "🛒 Сетевой центр", "🏭 Центр дистрибуции", "📢 Соцсеть", "🎬 Медиацентр", "🧳 Туризм", "💝 Пожертвование", "🛠 Админ"]],
+  pt: [["🏠 Início", "🛒 Hub de Rede", "🏭 Hub de Distribuição", "📢 Rede Social", "🎬 Hub de Mídia", "🧳 Turismo", "💝 Doação", "🛠 Admin"]],
+  it: [["🏠 Home", "🛒 Hub di Rete", "🏭 Hub di Distribuzione", "📢 Rete Sociale", "🎬 Hub Media", "🧳 Turismo", "💝 Donazione", "🛠 Admin"]],
+  ar: [["🏠 الصفحة الرئيسية", "🛒 مركز الشبكة", "🏭 مركز التوزيع", "📢 الشبكة الاجتماعية", "🎬 مركز الوسائط", "🧳 السياحة", "💝 تبرع", "🛠 المسؤول"]],
+  vi: [["🏠 Trang chủ", "🛒 Trung tâm mạng", "🏭 Trung tâm phân phối", "📢 Mạng xã hội", "🎬 Trung tâm truyền thông", "🧳 Du lịch", "💝 Quyên góp", "🛠 Quản trị"]],
+  th: [["🏠 หน้าหลัก", "🛒 เครือข่ายฮับ", "🏭 ศูนย์กระจายสินค้า", "📢 โซเชียลเน็ตเวิร์ก", "🎬 ศูนย์สื่อ", "🧳 ท่องเที่ยว", "💝 บริจาค", "🛠 ผู้ดูแล"]],
+  id: [["🏠 Beranda", "🛒 Hub Jaringan", "🏭 Hub Distribusi", "📢 Jejaring Sosial", "🎬 Hub Media", "🧳 Pariwisata", "💝 Donasi", "🛠 Admin"]],
+  hi: [["🏠 होम", "🛒 नेटवर्क हब", "🏭 वितरण केंद्र", "📢 सोशल नेटवर्क", "🎬 मीडिया हब", "🧳 पर्यटन", "💝 दान", "🛠 व्यवस्थापक"]],
+  tr: [["🏠 Ana sayfa", "🛒 Ağ Merkezi", "🏭 Dağıtım Merkezi", "📢 Sosyal Ağ", "🎬 Medya Merkezi", "🧳 Turizm", "💝 Bağış", "🛠 Yönetici"]],
+  fa: [["🏠 خانه", "🛒 مرکز شبکه", "🏭 مرکز توزیع", "📢 شبکه اجتماعی", "🎬 مرکز رسانه", "🧳 گردشگری", "💝 اهداء", "🛠 مدیر"]],
+  bn: [["🏠 হোম", "🛒 নেটওয়ার্ক হাব", "🏭 ডিস্ট্রিবিউশন হাব", "📢 সোশ্যাল নেটওয়ার্ক", "🎬 মিডিয়া হাব", "🧳 পর্যটন", "💝 অনুদান", "🛠 অ্যাডমিন"]],
+  ur: [["🏠 ہوم", "🛒 نیٹ ورک ہب", "🏭 ڈسٹری بیوشن ہب", "📢 سوشل نیٹ ورک", "🎬 میڈیا ہب", "🧳 سیاحت", "💝 عطیہ", "🛠 ایڈمن"]],
+  sw: [["🏠 Nyumbani", "🛒 Kitovu cha Mtandao", "🏭 Kitovu cha Usambazaji", "📢 Mtandao wa Kijamii", "🎬 Kitovu cha Vyombo vya Habari", "🧳 Utalii", "💝 Mchango", "🛠 Admin"]],
+  ta: [["🏠 முகப்பு", "🛒 நெட்வொர்க் ஹப்", "🏭 விநியோக மையம்", "📢 சமூக வலை", "🎬 ஊடக மையம்", "🧳 சுற்றுலா", "💝 நன்கொடை", "🛠 நிர்வாகி"]],
+  hu: [["🏠 Kezdőlap", "🛒 Hálózati Központ", "🏭 Disztribúciós Központ", "📢 Közösségi Hálózat", "🎬 Médiaközpont", "🧳 Utazás", "💝 Adomány", "🛠 Admin"]],
+  ms: [["🏠 Laman Utama", "🛒 Hab Rangkaian", "🏭 Hab Pengedaran", "📢 Rangkaian Sosial", "🎬 Hab Media", "🧳 Pelancongan", "💝 Sumbangan", "🛠 Admin"]],
+  nl: [["🏠 Home", "🛒 Netwerk Hub", "🏭 Distributie Hub", "📢 Sociaal Netwerk", "🎬 Media Hub", "🧳 Reizen", "💝 Donatie", "🛠 Admin"]],
+  pl: [["🏠 Strona Główna", "🛒 Centrum Sieci", "🏭 Centrum Dystrybucji", "📢 Sieć Społecznościowa", "🎬 Centrum Mediów", "🧳 Podróże", "💝 Darowizna", "🛠 Admin"]],
+  sv: [["🏠 Hem", "🛒 Nätverkshubb", "🏭 Distributionshubb", "📢 Socialt Nätverk", "🎬 Mediehubb", "🧳 Resor", "💝 Donation", "🛠 Admin"]],
+  tl: [["🏠 Home", "🛒 Network Hub", "🏭 Distribution Hub", "📢 Social Network", "🎬 Media Hub", "🧳 Paglalakbay", "💝 Donasyon", "🛠 Admin"]],
+  uk: [["🏠 Головна", "🛒 Мережевий Хаб", "🏭 Дистрибуційний Хаб", "📢 Соціальна Мережа", "🎬 Медіа Хаб", "🧳 Туризм", "💝 Пожертва", "🛠 Адмін"]],
+  uz: [["🏠 Bosh Sahifa", "🛒 Tarmoq Markazi", "🏭 Taqsimot Markazi", "📢 Ijtimoiy Tarmoq", "🎬 Media Markazi", "🧳 Sayohat", "💝 Xayriya", "🛠 Admin"]]
+};
+const pageMap = {
+  ko: ["home.html", "networkhub.html", "distributionhub.html", "socialnetwork.html", "mediahub.html", "tour.html", "donation.html", "admin.html"],
+  en: ["en/home_en.html","en/networkhub_en.html","en/distributionhub_en.html","en/socialnetwork_en.html","en/mediahub_en.html","en/tour_en.html","en/donation_en.html","admin.html"],
+  zh: ["zh/home_zh.html","zh/networkhub_zh.html","zh/distributionhub_zh.html","zh/socialnetwork_zh.html","zh/mediahub_zh.html","zh/tour_zh.html","zh/donation_zh.html","admin.html"],
+  zht: ["zht/home_zht.html","zht/networkhub_zht.html","zht/distributionhub_zht.html","zht/socialnetwork_zht.html","zht/mediahub_zht.html","zht/tour_zht.html","zht/donation_zht.html","admin.html"],
+  ja: ["ja/home_ja.html","ja/networkhub_ja.html","ja/distributionhub_ja.html","ja/socialnetwork_ja.html","ja/mediahub_ja.html","ja/tour_ja.html","ja/donation_ja.html","admin.html"],
+  es: ["es/home_es.html","es/networkhub_es.html","es/distributionhub_es.html","es/socialnetwork_es.html","es/mediahub_es.html","es/tour_es.html","es/donation_es.html","admin.html"],
+  fr: ["fr/home_fr.html","fr/networkhub_fr.html","fr/distributionhub_fr.html","fr/socialnetwork_fr.html","fr/mediahub_fr.html","fr/tour_fr.html","fr/donation_fr.html","admin.html"],
+  de: ["de/home_de.html","de/networkhub_de.html","de/distributionhub_de.html","de/socialnetwork_de.html","de/mediahub_de.html","de/tour_de.html","de/donation_de.html","admin.html"],
+  ru: ["ru/home_ru.html","ru/networkhub_ru.html","ru/distributionhub_ru.html","ru/socialnetwork_ru.html","ru/mediahub_ru.html","ru/tour_ru.html","ru/donation_ru.html","admin.html"],
+  pt: ["pt/home_pt.html","pt/networkhub_pt.html","pt/distributionhub_pt.html","pt/socialnetwork_pt.html","pt/mediahub_pt.html","pt/tour_pt.html","pt/donation_pt.html","admin.html"],
+  it: ["it/home_it.html","it/networkhub_it.html","it/distributionhub_it.html","it/socialnetwork_it.html","it/mediahub_it.html","it/tour_it.html","it/donation_it.html","admin.html"],
+  ar: ["ar/home_ar.html","ar/networkhub_ar.html","ar/distributionhub_ar.html","ar/socialnetwork_ar.html","ar/mediahub_ar.html","ar/tour_ar.html","ar/donation_ar.html","admin.html"],
+  vi: ["vi/home_vi.html","vi/networkhub_vi.html","vi/distributionhub_vi.html","vi/socialnetwork_vi.html","vi/mediahub_vi.html","vi/tour_vi.html","vi/donation_vi.html","admin.html"],
+  th: ["th/home_th.html","th/networkhub_th.html","th/distributionhub_th.html","th/socialnetwork_th.html","th/mediahub_th.html","th/tour_th.html","th/donation_th.html","admin.html"],
+  id: ["id/home_id.html","id/networkhub_id.html","id/distributionhub_id.html","id/socialnetwork_id.html","id/mediahub_id.html","id/tour_id.html","id/donation_id.html","admin.html"],
+  hi: ["hi/home_hi.html","hi/networkhub_hi.html","hi/distributionhub_hi.html","hi/socialnetwork_hi.html","hi/mediahub_hi.html","hi/tour_hi.html","hi/donation_hi.html","admin.html"],
+  tr: ["tr/home_tr.html","tr/networkhub_tr.html","tr/distributionhub_tr.html","tr/socialnetwork_tr.html","tr/mediahub_tr.html","tr/tour_tr.html","tr/donation_tr.html","admin.html"],
+  fa: ["fa/home_fa.html","fa/networkhub_fa.html","fa/distributionhub_fa.html","fa/socialnetwork_fa.html","fa/mediahub_fa.html","fa/tour_fa.html","fa/donation_fa.html","admin.html"],
+  bn: ["bn/home_bn.html","bn/networkhub_bn.html","bn/distributionhub_bn.html","bn/socialnetwork_bn.html","bn/mediahub_bn.html","bn/tour_bn.html","bn/donation_bn.html","admin.html"],
+  ur: ["ur/home_ur.html","ur/networkhub_ur.html","ur/distributionhub_ur.html","ur/socialnetwork_ur.html","ur/mediahub_ur.html","ur/tour_ur.html","ur/donation_ur.html","admin.html"],
+  sw: ["sw/home_sw.html","sw/networkhub_sw.html","sw/distributionhub_sw.html","sw/socialnetwork_sw.html","sw/mediahub_sw.html","sw/tour_sw.html","sw/donation_sw.html","admin.html"],
+  ta: ["ta/home_ta.html","ta/networkhub_ta.html","ta/distributionhub_ta.html","ta/socialnetwork_ta.html","ta/mediahub_ta.html","ta/tour_ta.html","ta/donation_ta.html","admin.html"],
+  hu: ["hu/home_hu.html","hu/networkhub_hu.html","hu/distributionhub_hu.html","hu/socialnetwork_hu.html","hu/mediahub_hu.html","hu/tour_hu.html","hu/donation_hu.html","admin.html"],
+  ms: ["ms/home_ms.html","ms/networkhub_ms.html","ms/distributionhub_ms.html","ms/socialnetwork_ms.html","ms/mediahub_ms.html","ms/tour_ms.html","ms/donation_ms.html","admin.html"],
+  nl: ["nl/home_nl.html","nl/networkhub_nl.html","nl/distributionhub_nl.html","nl/socialnetwork_nl.html","nl/mediahub_nl.html","nl/tour_nl.html","nl/donation_nl.html","admin.html"],
+  pl: ["pl/home_pl.html","pl/networkhub_pl.html","pl/distributionhub_pl.html","pl/socialnetwork_pl.html","pl/mediahub_pl.html","pl/tour_pl.html","pl/donation_pl.html","admin.html"],
+  sv: ["sv/home_sv.html","sv/networkhub_sv.html","sv/distributionhub_sv.html","sv/socialnetwork_sv.html","sv/mediahub_sv.html","sv/tour_sv.html","sv/donation_sv.html","admin.html"],
+  tl: ["tl/home_tl.html","tl/networkhub_tl.html","tl/distributionhub_tl.html","tl/socialnetwork_tl.html","tl/mediahub_tl.html","tl/tour_tl.html","tl/donation_tl.html","admin.html"],
+  uk: ["uk/home_uk.html","uk/networkhub_uk.html","uk/distributionhub_uk.html","uk/socialnetwork_uk.html","uk/mediahub_uk.html","uk/tour_uk.html","uk/donation_uk.html","admin.html"],
+  uz: ["uz/home_uz.html","uz/networkhub_uz.html","uz/distributionhub_uz.html","uz/socialnetwork_uz.html","uz/mediahub_uz.html","uz/tour_uz.html","uz/donation_uz.html","admin.html"]
+};
+
+const titleText = {
+  ko: { title: "IGDC 글로벌 허브", subtitle: "International General Distribution Company" },
+  en: { title: "IGDC Global Hub", subtitle: "International General Distribution Company" },
+  zh: { title: "IGDC全球枢纽", subtitle: "国际综合流通公司" },
+  zht: { title: "IGDC全球樞紐", subtitle: "國際綜合流通公司" },
+  ja: { title: "IGDCグローバルハブ", subtitle: "国際総合流通会社" },
+  es: { title: "IGDC Centro Global", subtitle: "Compañía General Internacional de Distribución" },
+  fr: { title: "IGDC Hub Global", subtitle: "Société Générale Internationale de Distribution" },
+  de: { title: "IGDC Globales Zentrum", subtitle: "Internationale Generalvertriebsfirma" },
+  ru: { title: "IGDC Глобальный Центр", subtitle: "Международная Генеральная Дистрибуционная Компания" },
+  pt: { title: "IGDC Hub Global", subtitle: "Companhia Geral Internacional de Distribuição" },
+  it: { title: "IGDC Hub Globale", subtitle: "Compagnia Generale Internazionale di Distribuzione" },
+  ar: { title: "مركز IGDC العالمي", subtitle: "شركة التوزيع العامة الدولية" },
+  vi: { title: "Trung Tâm Toàn Cầu IGDC", subtitle: "Công Ty Phân Phối Tổng Hợp Quốc Tế" },
+  th: { title: "ศูนย์กลาง IGDC ระดับโลก", subtitle: "บริษัทจัดจำหน่ายทั่วไปสากล" },
+  id: { title: "IGDC Pusat Global", subtitle: "Perusahaan Distribusi Umum Internasional" },
+  hi: { title: "IGDC ग्लोबल हब", subtitle: "अंतर्राष्ट्रीय जनरल डिस्ट्रीब्यूशन कंपनी" },
+  tr: { title: "IGDC Küresel Merkez", subtitle: "Uluslararası Genel Dağıtım Şirketi" },
+  fa: { title: "IGDC مرکز جهانی", subtitle: "شرکت بین‌المللی توزیع عمومی" },
+  bn: { title: "IGDC গ্লোবাল হাব", subtitle: "ইন্টারন্যাশনাল জেনারেল ডিস্ট্রিবিউশন কোম্পানি" },
+  ur: { title: "IGDC عالمی حب", subtitle: "انٹرنیشنل جنرل ڈسٹری بیوشن کمپنی" },
+  sw: { title: "Kituo Kikuu cha IGDC", subtitle: "Kampuni ya Usambazaji wa Jumla ya Kimataifa" },
+  ta: { title: "IGDC உலக மையம்", subtitle: "சர்வதேச பொது விநியோக நிறுவனம்" },
+  hu: { title: "IGDC Globális Központ", subtitle: "Nemzetközi Általános Forgalmazó Vállalat" },
+  ms: { title: "Hab Global IGDC", subtitle: "Syarikat Pengedaran Am Antarabangsa" },
+  nl: { title: "IGDC Wereldwijde Hub", subtitle: "Internationaal Algemeen Distributiebedrijf" },
+  pl: { title: "IGDC Globalne Centrum", subtitle: "Międzynarodowa Generalna Firma Dystrybucyjna" },
+  sv: { title: "IGDC Globalt Nav", subtitle: "Internationellt Allmänt Distributionsföretag" },
+  tl: { title: "IGDC Pandaigdigang Hub", subtitle: "Pandaigdigang Pangkalahatang Kumpanya ng Distribusyon" },
+  uk: { title: "Глобальний Хаб IGDC", subtitle: "Міжнародна Генеральна Дистрибуційна Компанія" },
+  uz: { title: "IGDC Global Markaz", subtitle: "Xalqaro Umumiy Distribyutsiya Kompaniyasi" }
+};
+ function detectPreferredLang(){
   try{
-    const SUPPORTED = Object.keys(pageMap || {});
-    const raw = (navigator.languages && navigator.languages[0]) || navigator.language || "";
-    let code = String(raw).toLowerCase();
-    if (!code) return null;
+    const supported = Object.keys(pageMap || {});
+    const langs = (navigator.languages && navigator.languages.length)
+      ? navigator.languages
+      : [navigator.language || ""];
 
-    if (code.startsWith("zh")) return "zh";
-    if (code.startsWith("pt")) return "pt";
-    if (code.startsWith("ar")) return "ar";
+    for (const raw of langs) {
+      const code = String(raw || "").trim().toLowerCase();
+      if (!code) continue;
 
-    const base = code.split(/[-_]/)[0];
-    if (SUPPORTED.includes(base)) return base;
+      // Traditional Chinese first
+      if (
+        code === "zht" ||
+        code === "zh-hant" || code === "zh_hant" ||
+        code === "zh-tw"   || code === "zh_tw"   ||
+        code === "zh-hk"   || code === "zh_hk"   ||
+        code === "zh-mo"   || code === "zh_mo"
+      ) return "zht";
 
-    return "en";
-  }catch(e){ return "en"; }
+      // Simplified / generic Chinese
+      if (
+        code === "zh-hans" || code === "zh_hans" ||
+        code === "zh-cn"   || code === "zh_cn"   ||
+        code === "zh-sg"   || code === "zh_sg"   ||
+        code === "zh"
+      ) return "zh";
+
+      if (code.startsWith("pt")) return "pt";
+      if (code.startsWith("ar")) return "ar";
+
+      const base = code.split(/[-_]/)[0];
+      if (supported.includes(base)) return base;
+    }
+
+    return "ko";
+  } catch(e){
+    return "ko";
+  }
 }
-    let currentLang = (localStorage.getItem('igdc_lang') || document.documentElement.lang || 'en');
-    let currentPageIndex = 0;
-    function changeLanguage(lang) {
-  // keep currentLang + persist
-  currentLang = lang || currentLang || 'en';
-  try{ localStorage.setItem('igdc_lang', currentLang); }catch(e){}
-  if (document.documentElement) document.documentElement.setAttribute('lang', currentLang);
+
+let currentLang = (function () {
+  try {
+    const saved = (localStorage.getItem('igdc_lang') || '').toLowerCase();
+    if (saved && pageMap[saved]) return saved;
+
+    const docLang = (document.documentElement.lang || '').toLowerCase();
+    if (docLang && pageMap[docLang]) return docLang;
+
+    return detectPreferredLang();
+  } catch(e){
+    return detectPreferredLang();
+  }
+})();
+
+let currentPageIndex = 0;
+
+function changeLanguage(lang) {
+  const nextLang =
+    (lang && pageMap[lang]) ? lang :
+    (currentLang && pageMap[currentLang]) ? currentLang :
+    detectPreferredLang();
+
+  currentLang = nextLang || "ko";
+
+  try { localStorage.setItem('igdc_lang', currentLang); } catch(e){}
+  if (document.documentElement) {
+    document.documentElement.setAttribute('lang', currentLang);
+  }
 
   // 1) Title/subtitle
   try{
-    var tt = (titleText && (titleText[currentLang] || titleText['en'])) || {};
-    var mt = document.getElementById('mainTitle'), st = document.getElementById('subTitle');
-    if (mt) mt.textContent = tt.title || (titleText['en'] && titleText['en'].title) || '';
-    if (st) st.textContent = tt.subtitle || (titleText['en'] && titleText['en'].subtitle) || '';
+    var tt =
+      (titleText && titleText[currentLang]) ||
+      (titleText && titleText[detectPreferredLang()]) ||
+      (titleText && titleText['ko']) ||
+      {};
+
+    var mt = document.getElementById('mainTitle');
+    var st = document.getElementById('subTitle');
+
+    if (mt) mt.textContent = tt.title || '';
+    if (st) st.textContent = tt.subtitle || '';
   }catch(e){}
 
-  // 2) Nav labels (flatten if nested [[...]]), single pass, no intervals
+  // 2) Nav labels
   try{
     var navLinks = document.querySelectorAll('nav a');
-    var src = (menuText && (menuText[currentLang] || menuText['en'])) || [];
-    if (Array.isArray(src) && src.length && Array.isArray(src[0])) { src = src[0]; }
-    navLinks.forEach(function(a,i){ if (src[i] != null) a.textContent = src[i]; });
+    var src =
+      (menuText && menuText[currentLang]) ||
+      (menuText && menuText[detectPreferredLang()]) ||
+      (menuText && menuText['ko']) ||
+      [];
+
+    if (Array.isArray(src) && src.length && Array.isArray(src[0])) {
+      src = src[0];
+    }
+
+    navLinks.forEach(function(a, i){
+      if (src[i] != null) a.textContent = src[i];
+    });
   }catch(e){}
 
   // 3) Keep current page index, map to page, set iframe
   try{
-    var pageList = (pageMap && (pageMap[currentLang] || pageMap['en'])) || [];
-    var page = pageList[currentPageIndex] || (pageMap['en'] && pageMap['en'][currentPageIndex]) || 'home.html';
-    var f = document.getElementById('mainFrame'); if (f) f.src = page;
+    var pageList =
+      (pageMap && pageMap[currentLang]) ||
+      (pageMap && pageMap[detectPreferredLang()]) ||
+      (pageMap && pageMap['ko']) ||
+      [];
+
+    var page =
+      pageList[currentPageIndex] ||
+      (pageMap['ko'] && pageMap['ko'][currentPageIndex]) ||
+      'home.html';
+
+    var f = document.getElementById('mainFrame');
+    if (f) f.src = page;
   }catch(e){}
 }
 
-    function loadPage(index){
+function loadPage(index){
   try{
     var role = (window.__IGDC_ROLE || "guest").toLowerCase();
     if (index === 7 && role !== "admin") {
     }
   }catch(e){}
+
   currentPageIndex = index;
-      let pageList = pageMap[currentLang] || pageMap["en"];
-      let page = pageList[index] || pageMap["en"][index] || "home_en.html";
-      document.getElementById("mainFrame").src = page;
-    }
-    
-  </script>
- <script>
-/*! augmentation: ensure Admin + remap to en/ for non-ko/en/zh */
-(function(){
-  'use strict';
 
-  // 1) 관리자 라벨 보강
-  const ADMIN_LABELS = {
-    ko:'관리자', en:'Admin', zh:'管理员'
-  };
-  Object.keys(menuText).forEach(function(l){
-    if (!Array.isArray(menuText[l])) return;
-    const hasAdmin = menuText[l].some(t => /admin|관리자|管理员|管理者/i.test(t));
-    if (!hasAdmin) menuText[l].push(ADMIN_LABELS[l] || 'Admin');
-  });
+  let pageList =
+    pageMap[currentLang] ||
+    pageMap[detectPreferredLang()] ||
+    pageMap["ko"];
 
-  // 2) pageMap remap
-  const BASE = ['ko','en','zh','ja','es','fr','de','ru','pt','id','th','vi','tr'];
-  const ADMIN_INDEX = 7;
-  const ADMIN_ROOT_PATH = '/admin.html';
-  const enList = pageMap['en'] || [];
+  let page =
+    pageList[index] ||
+    (pageMap["ko"] && pageMap["ko"][index]) ||
+    "home.html";
 
-  function toEnPath(p){
-    if (typeof p !== 'string') return p;
-    let clean = p.replace(/^\//,'');
-    if (/^[a-z]{2}\//i.test(clean)) clean = clean.replace(/^[a-z]{2}\//i,'en/');
-    else clean = 'en/' + clean;
-    return '/' + clean;
-  }
-
-  Object.keys(menuText).forEach(function(l){
-    if (BASE.includes(l)) return;
-    const mapped = (enList||[]).map(function(it,i){
-      if (i===ADMIN_INDEX) return ADMIN_ROOT_PATH;
-      return toEnPath(String(it||''));
-    });
-    pageMap[l] = mapped;
-  });
-
-})();
-</script> 
+  document.getElementById("mainFrame").src = page;
+}
+</script>
   
 <script>
 (function(){
@@ -681,6 +761,7 @@ nav{transition:transform .1s ease;}
 <option value="ko">한국어</option>
 <option value="en">English</option>
 <option value="zh">中文</option>
+<option value="zht">繁體中文</option>
 <option value="ja">日本語</option>
 <option value="es">Español</option>
 <option value="fr">Français</option>
@@ -699,6 +780,14 @@ nav{transition:transform .1s ease;}
 <option value="ur">اردو</option>
 <option value="sw">Kiswahili</option>
 <option value="ta">தமிழ்</option>
+<option value="hu">Magyar</option>
+<option value="ms">Bahasa Melayu</option>
+<option value="nl">Nederlands</option>
+<option value="pl">Polski</option>
+<option value="sv">Svenska</option>
+<option value="tl">Filipino</option>
+<option value="uk">Українська</option>
+<option value="uz">Oʻzbekcha</option>
 </select>
 <div id="mo-wrap" style="position:absolute; z-index:1000; text-align:center;">
 <a class="js-seller-modal-trigger" href="#" id="mo-btn" style="color:#FFD700; text-decoration:none; font-weight:600;">🔒 회원전용</a>
@@ -755,9 +844,10 @@ nav{transition:transform .1s ease;}
 <script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script><!-- (removed local login JS for Auth0) --><script>
 const popupText = {
   ko: { loginTitle:"로그인 또는 회원가입", signupTitle:"회원가입", idPlaceholder:"아이디 또는 이메일", pwPlaceholder:"비밀번호", loginBtn:"로그인", signupBtn:"회원가입", signupSubmit:"가입하기", namePlaceholder:"이름", emailPlaceholder:"이메일", addressPlaceholder:"주소", addressButton:"주소 찾기" },
-  en: { loginTitle:"Login or Sign Up",    signupTitle:"Sign Up",      idPlaceholder:"ID or Email",          pwPlaceholder:"Password", loginBtn:"Login",  signupBtn:"Sign Up",  signupSubmit:"Submit",  namePlaceholder:"Name",  emailPlaceholder:"Email",  addressPlaceholder:"Address", addressButton:"Find Address" },
-  zh: { loginTitle:"登录或注册",               signupTitle:"注册",           idPlaceholder:"账号或邮箱",             pwPlaceholder:"密码",       loginBtn:"登录",   signupBtn:"注册",    signupSubmit:"提交",    namePlaceholder:"姓名",   emailPlaceholder:"邮箱",   addressPlaceholder:"地址",   addressButton:"查找地址" },
-  ja: { loginTitle:"ログインまたは登録",      signupTitle:"新規登録",       idPlaceholder:"ID またはメール",       pwPlaceholder:"パスワード",  loginBtn:"ログイン", signupBtn:"登録",    signupSubmit:"送信",    namePlaceholder:"名前",   emailPlaceholder:"メール", addressPlaceholder:"住所",   addressButton:"住所検索" },
+  en: { loginTitle:"Login or Sign Up", signupTitle:"Sign Up", idPlaceholder:"ID or Email", pwPlaceholder:"Password", loginBtn:"Login", signupBtn:"Sign Up", signupSubmit:"Submit", namePlaceholder:"Name", emailPlaceholder:"Email", addressPlaceholder:"Address", addressButton:"Find Address" },
+  zh: { loginTitle:"登录或注册", signupTitle:"注册", idPlaceholder:"账号或邮箱", pwPlaceholder:"密码", loginBtn:"登录", signupBtn:"注册", signupSubmit:"提交", namePlaceholder:"姓名", emailPlaceholder:"邮箱", addressPlaceholder:"地址", addressButton:"查找地址" },
+  zht: { loginTitle:"登入或註冊", signupTitle:"註冊", idPlaceholder:"帳號或電子郵件", pwPlaceholder:"密碼", loginBtn:"登入", signupBtn:"註冊", signupSubmit:"提交", namePlaceholder:"姓名", emailPlaceholder:"電子郵件", addressPlaceholder:"地址", addressButton:"查找地址" },
+  ja: { loginTitle:"ログインまたは登録", signupTitle:"新規登録", idPlaceholder:"ID またはメール", pwPlaceholder:"パスワード", loginBtn:"ログイン", signupBtn:"登録", signupSubmit:"送信", namePlaceholder:"名前", emailPlaceholder:"メール", addressPlaceholder:"住所", addressButton:"住所検索" },
   es: { loginTitle:"Iniciar sesión o crear cuenta", signupTitle:"Crear cuenta", idPlaceholder:"ID o correo", pwPlaceholder:"Contraseña", loginBtn:"Entrar", signupBtn:"Crear", signupSubmit:"Enviar", namePlaceholder:"Nombre", emailPlaceholder:"Correo", addressPlaceholder:"Dirección", addressButton:"Buscar dirección" },
   fr: { loginTitle:"Se connecter ou s'inscrire", signupTitle:"Inscription", idPlaceholder:"Identifiant ou e-mail", pwPlaceholder:"Mot de passe", loginBtn:"Connexion", signupBtn:"Inscription", signupSubmit:"Valider", namePlaceholder:"Nom", emailPlaceholder:"E-mail", addressPlaceholder:"Adresse", addressButton:"Trouver l'adresse" },
   de: { loginTitle:"Anmelden oder Registrieren", signupTitle:"Registrierung", idPlaceholder:"ID oder E-Mail", pwPlaceholder:"Passwort", loginBtn:"Anmelden", signupBtn:"Registrieren", signupSubmit:"Senden", namePlaceholder:"Name", emailPlaceholder:"E-Mail", addressPlaceholder:"Adresse", addressButton:"Adresse finden" },
@@ -769,15 +859,21 @@ const popupText = {
   th: { loginTitle:"เข้าสู่ระบบหรือสมัครสมาชิก", signupTitle:"สมัครสมาชิก", idPlaceholder:"ID หรืออีเมล", pwPlaceholder:"รหัสผ่าน", loginBtn:"เข้าสู่ระบบ", signupBtn:"สมัคร", signupSubmit:"ยืนยัน", namePlaceholder:"ชื่อ", emailPlaceholder:"อีเมล", addressPlaceholder:"ที่อยู่", addressButton:"ค้นหาที่อยู่" },
   id: { loginTitle:"Masuk atau Daftar", signupTitle:"Daftar", idPlaceholder:"ID atau Email", pwPlaceholder:"Kata sandi", loginBtn:"Masuk", signupBtn:"Daftar", signupSubmit:"Kirim", namePlaceholder:"Nama", emailPlaceholder:"Email", addressPlaceholder:"Alamat", addressButton:"Cari Alamat" },
   hi: { loginTitle:"लॉगिन या साइन अप", signupTitle:"साइन अप", idPlaceholder:"आईडी या ईमेल", pwPlaceholder:"पासवर्ड", loginBtn:"लॉगिन", signupBtn:"साइन अप", signupSubmit:"भेजें", namePlaceholder:"नाम", emailPlaceholder:"ईमेल", addressPlaceholder:"पता", addressButton:"पता खोजें" },
-  tr: { loginTitle:"Giriş yap veya Kayıt ol", signupTitle:"Kayıt ol", idPlaceholder:"ID veya E-posta", pwPlaceholder:"Şifre", loginBtn:"Giriş", signupBtn:"Kayıt", signupSubmit:"Gönder", namePlaceholder:"Ad", emailPlaceholder:"E-posta", addressPlaceholder:"Adres", addressButton:"Adresi bul" }
-
-  , fa: { loginTitle:"Login or Sign Up",    signupTitle:"Sign Up",      idPlaceholder:"ID or Email",          pwPlaceholder:"Password", loginBtn:"Login",  signupBtn:"Sign Up",  signupSubmit:"Submit",  namePlaceholder:"Name",  emailPlaceholder:"Email",  addressPlaceholder:"Address", addressButton:"Find Address" }
-
-  , bn: { loginTitle:"Login or Sign Up",    signupTitle:"Sign Up",      idPlaceholder:"ID or Email",          pwPlaceholder:"Password", loginBtn:"Login",  signupBtn:"Sign Up",  signupSubmit:"Submit",  namePlaceholder:"Name",  emailPlaceholder:"Email",  addressPlaceholder:"Address", addressButton:"Find Address" }
-  , ur: { loginTitle:"Login or Sign Up",    signupTitle:"Sign Up",      idPlaceholder:"ID or Email",          pwPlaceholder:"Password", loginBtn:"Login",  signupBtn:"Sign Up",  signupSubmit:"Submit",  namePlaceholder:"Name",  emailPlaceholder:"Email",  addressPlaceholder:"Address", addressButton:"Find Address" }
-  , sw: { loginTitle:"Login or Sign Up",    signupTitle:"Sign Up",      idPlaceholder:"ID or Email",          pwPlaceholder:"Password", loginBtn:"Login",  signupBtn:"Sign Up",  signupSubmit:"Submit",  namePlaceholder:"Name",  emailPlaceholder:"Email",  addressPlaceholder:"Address", addressButton:"Find Address" }
-  , ta: { loginTitle:"Login or Sign Up",    signupTitle:"Sign Up",      idPlaceholder:"ID or Email",          pwPlaceholder:"Password", loginBtn:"Login",  signupBtn:"Sign Up",  signupSubmit:"Submit",  namePlaceholder:"Name",  emailPlaceholder:"Email",  addressPlaceholder:"Address", addressButton:"Find Address" }};
-
+  tr: { loginTitle:"Giriş yap veya Kayıt ol", signupTitle:"Kayıt ol", idPlaceholder:"ID veya E-posta", pwPlaceholder:"Şifre", loginBtn:"Giriş", signupBtn:"Kayıt", signupSubmit:"Gönder", namePlaceholder:"Ad", emailPlaceholder:"E-posta", addressPlaceholder:"Adres", addressButton:"Adresi bul" },
+  fa: { loginTitle:"ورود یا ثبت‌نام", signupTitle:"ثبت‌نام", idPlaceholder:"شناسه یا ایمیل", pwPlaceholder:"رمز عبور", loginBtn:"ورود", signupBtn:"ثبت‌نام", signupSubmit:"ارسال", namePlaceholder:"نام", emailPlaceholder:"ایمیل", addressPlaceholder:"آدرس", addressButton:"یافتن آدرس" },
+  bn: { loginTitle:"লগইন বা সাইন আপ", signupTitle:"সাইন আপ", idPlaceholder:"আইডি বা ইমেইল", pwPlaceholder:"পাসওয়ার্ড", loginBtn:"লগইন", signupBtn:"সাইন আপ", signupSubmit:"জমা দিন", namePlaceholder:"নাম", emailPlaceholder:"ইমেইল", addressPlaceholder:"ঠিকানা", addressButton:"ঠিকানা খুঁজুন" },
+  ur: { loginTitle:"لاگ اِن یا سائن اپ", signupTitle:"سائن اپ", idPlaceholder:"آئی ڈی یا ای میل", pwPlaceholder:"پاس ورڈ", loginBtn:"لاگ اِن", signupBtn:"سائن اپ", signupSubmit:"جمع کریں", namePlaceholder:"نام", emailPlaceholder:"ای میل", addressPlaceholder:"پتہ", addressButton:"پتہ تلاش کریں" },
+  sw: { loginTitle:"Ingia au Jisajili", signupTitle:"Jisajili", idPlaceholder:"Kitambulisho au Barua Pepe", pwPlaceholder:"Nenosiri", loginBtn:"Ingia", signupBtn:"Jisajili", signupSubmit:"Wasilisha", namePlaceholder:"Jina", emailPlaceholder:"Barua Pepe", addressPlaceholder:"Anwani", addressButton:"Tafuta Anwani" },
+  ta: { loginTitle:"உள்நுழையவும் அல்லது பதிவு செய்யவும்", signupTitle:"பதிவு செய்யவும்", idPlaceholder:"அடையாளம் அல்லது மின்னஞ்சல்", pwPlaceholder:"கடவுச்சொல்", loginBtn:"உள்நுழை", signupBtn:"பதிவு செய்", signupSubmit:"சமர்ப்பிக்கவும்", namePlaceholder:"பெயர்", emailPlaceholder:"மின்னஞ்சல்", addressPlaceholder:"முகவரி", addressButton:"முகவரியைத் தேடு" },
+  hu: { loginTitle:"Bejelentkezés vagy regisztráció", signupTitle:"Regisztráció", idPlaceholder:"Azonosító vagy e-mail", pwPlaceholder:"Jelszó", loginBtn:"Bejelentkezés", signupBtn:"Regisztráció", signupSubmit:"Beküldés", namePlaceholder:"Név", emailPlaceholder:"E-mail", addressPlaceholder:"Cím", addressButton:"Cím keresése" },
+  ms: { loginTitle:"Log masuk atau Daftar", signupTitle:"Daftar", idPlaceholder:"ID atau E-mel", pwPlaceholder:"Kata Laluan", loginBtn:"Log masuk", signupBtn:"Daftar", signupSubmit:"Hantar", namePlaceholder:"Nama", emailPlaceholder:"E-mel", addressPlaceholder:"Alamat", addressButton:"Cari Alamat" },
+  nl: { loginTitle:"Inloggen of registreren", signupTitle:"Registreren", idPlaceholder:"ID of e-mail", pwPlaceholder:"Wachtwoord", loginBtn:"Inloggen", signupBtn:"Registreren", signupSubmit:"Verzenden", namePlaceholder:"Naam", emailPlaceholder:"E-mail", addressPlaceholder:"Adres", addressButton:"Adres zoeken" },
+  pl: { loginTitle:"Logowanie lub rejestracja", signupTitle:"Rejestracja", idPlaceholder:"ID lub e-mail", pwPlaceholder:"Hasło", loginBtn:"Zaloguj się", signupBtn:"Zarejestruj się", signupSubmit:"Wyślij", namePlaceholder:"Imię", emailPlaceholder:"E-mail", addressPlaceholder:"Adres", addressButton:"Znajdź adres" },
+  sv: { loginTitle:"Logga in eller registrera dig", signupTitle:"Registrera dig", idPlaceholder:"ID eller e-post", pwPlaceholder:"Lösenord", loginBtn:"Logga in", signupBtn:"Registrera", signupSubmit:"Skicka", namePlaceholder:"Namn", emailPlaceholder:"E-post", addressPlaceholder:"Adress", addressButton:"Sök adress" },
+  tl: { loginTitle:"Mag-login o Mag-sign up", signupTitle:"Mag-sign up", idPlaceholder:"ID o Email", pwPlaceholder:"Password", loginBtn:"Mag-login", signupBtn:"Mag-sign up", signupSubmit:"Isumite", namePlaceholder:"Pangalan", emailPlaceholder:"Email", addressPlaceholder:"Address", addressButton:"Hanapin ang Address" },
+  uk: { loginTitle:"Вхід або реєстрація", signupTitle:"Реєстрація", idPlaceholder:"ID або Email", pwPlaceholder:"Пароль", loginBtn:"Увійти", signupBtn:"Зареєструватися", signupSubmit:"Надіслати", namePlaceholder:"Ім’я", emailPlaceholder:"Email", addressPlaceholder:"Адреса", addressButton:"Знайти адресу" },
+  uz: { loginTitle:"Kirish yoki ro‘yxatdan o‘tish", signupTitle:"Ro‘yxatdan o‘tish", idPlaceholder:"ID yoki Email", pwPlaceholder:"Parol", loginBtn:"Kirish", signupBtn:"Ro‘yxatdan o‘tish", signupSubmit:"Yuborish", namePlaceholder:"Ism", emailPlaceholder:"Email", addressPlaceholder:"Manzil", addressButton:"Manzilni topish" }
+};
 function changePopupLanguage(lang){
   try{var a=document.getElementById("loginModal"),b=document.getElementById("signupModal");if(!a && !b){return;}}catch(e){return;}var t = popupText[lang] || popupText['en'];
   document.querySelector("#loginModal h2").textContent = t.loginTitle;
@@ -2601,15 +2697,38 @@ function setActive(i){
 <script></script>
 <script>
 (function(){
-  var MAP={ko:'🔒 회원전용',en:'🔒 Members Only',zh:'🔒 会员专用',ja:'🔒 会員専用',ru:'🔒 Только для членов',es:'🔒 Solo miembros',fr:'🔒 Réservé aux membres',de:'🔒 Nur für Mitglieder',it:'🔒 Solo per membri',pt:'🔒 Somente membros',ar:'🔒 للأعضاء فقط',vi:'🔒 Chỉ dành cho thành viên',th:'🔒 สำหรับสมาชิกเท่านั้น',id:'🔒 Hanya anggota',hi:'🔒 केवल सदस्यों के लिए',tr:'🔒 Yalnızca üyelere özel',fa:'🔒 فقط برای اعضا',bn:'🔒 শুধু সদস্যদের জন্য',ur:'🔒 صرف اراکین کے لئے',sw:'🔒 Kwa wanachama pekee',ta:'🔒 உறுப்பினர்களுக்கே'};
-  function cur(){
-    try{
-      var l=(document.documentElement.getAttribute('lang')||'en').toLowerCase();
-      var map=['zh','ja','ru','es','fr','de','it','pt','ar','vi','th','id','hi','tr','fa','bn','ur','sw','ta','ko','en'];
-      for(var i=0;i<map.length;i++){ if(l.indexOf(map[i])===0) return map[i]; }
-      return 'en';
-    }catch(e){ return 'en'; }
+var MAP={ko:'🔒 회원전용',en:'🔒 Members Only',zh:'🔒 会员专用',zht:'🔒 會員專用',ja:'🔒 会員専用',ru:'🔒 Только для членов',es:'🔒 Solo miembros',fr:'🔒 Réservé aux membres',de:'🔒 Nur für Mitglieder',it:'🔒 Solo per membri',pt:'🔒 Somente membros',ar:'🔒 للأعضاء فقط',vi:'🔒 Chỉ dành cho thành viên',th:'🔒 สำหรับสมาชิกเท่านั้น',id:'🔒 Hanya anggota',hi:'🔒 केवल सदस्यों के लिए',tr:'🔒 Yalnızca üyelere özel',fa:'🔒 فقط برای اعضا',bn:'🔒 শুধু সদস্যদের জন্য',ur:'🔒 صرف اراکین کے لئے',sw:'🔒 Kwa wanachama pekee',ta:'🔒 உறுப்பினர்களுக்கே',hu:'🔒 Csak tagoknak',ms:'🔒 Ahli sahaja',nl:'🔒 Alleen voor leden',pl:'🔒 Tylko dla członków',sv:'🔒 Endast för medlemmar',tl:'🔒 Para sa mga miyembro lamang',uk:'🔒 Лише для учасників',uz:'🔒 Faqat a’zolar uchun'};
+ function cur(){
+  try{
+    var l = (document.documentElement.getAttribute('lang') || 'en').toLowerCase();
+
+    if (
+      l === 'zht' ||
+      l.indexOf('zh-hant') === 0 ||
+      l.indexOf('zh_tw') === 0 ||
+      l.indexOf('zh-tw') === 0 ||
+      l.indexOf('zh_hk') === 0 ||
+      l.indexOf('zh-hk') === 0 ||
+      l.indexOf('zh_mo') === 0 ||
+      l.indexOf('zh-mo') === 0
+    ) return 'zht';
+
+    var map = [
+      'zh', 'ja', 'ru', 'es', 'fr', 'de', 'it', 'pt', 'ar',
+      'vi', 'th', 'id', 'hi', 'tr', 'fa', 'bn', 'ur', 'sw',
+      'ta', 'hu', 'ms', 'nl', 'pl', 'sv', 'tl', 'uk', 'uz',
+      'ko', 'en'
+    ];
+
+    for (var i = 0; i < map.length; i++) {
+      if (l.indexOf(map[i]) === 0) return map[i];
+    }
+
+    return 'en';
+  }catch(e){
+    return 'en';
   }
+}
   function setLabel(){
     var a=document.getElementById('mo-btn'); if(!a) return;
     var l=cur();
@@ -2743,16 +2862,39 @@ function setActive(i){
 <script>
 (function(){
   'use strict';
-  function normLang(l){
-    if(!l) return null;
-    var s = String(l).trim().toLowerCase();
-    var map = {'kr':'ko','ko-kr':'ko','ko_kr':'ko','korean':'ko','jp':'ja','ja-jp':'ja',
-               'zh-cn':'zh','zh_cn':'zh','zh-hans':'zh','zh-tw':'zh','zh-hant':'zh',
-               'en-us':'en','en-gb':'en'};
-    if(map[s]) s = map[s];
-    if(s.indexOf('-')!==-1) s = s.split(/[-_]/)[0];
-    return s;
+function normLang(l){
+  if(!l) return null;
+  var s = String(l).trim().toLowerCase();
+
+  var map = {
+    'kr':'ko','ko-kr':'ko','ko_kr':'ko','korean':'ko',
+    'jp':'ja','ja-jp':'ja',
+
+    // Simplified Chinese
+    'zh-cn':'zh','zh_cn':'zh',
+    'zh-hans':'zh','zh_hans':'zh',
+    'zh-sg':'zh','zh_sg':'zh',
+
+    // Traditional Chinese
+    'zht':'zht',
+    'zh-tw':'zht','zh_tw':'zht',
+    'zh-hant':'zht','zh_hant':'zht',
+    'zh-hk':'zht','zh_hk':'zht',
+    'zh-mo':'zht','zh_mo':'zht',
+
+    'en-us':'en','en-gb':'en'
+  };
+
+  if(map[s]) return map[s];
+
+  if(s.indexOf('-') !== -1 || s.indexOf('_') !== -1){
+    var base = s.split(/[-_]/)[0];
+    if(base === 'zh') return 'zh';
+    return base;
   }
+
+  return s;
+}
 
   function getQueryLang(){
     try{ var p = new URLSearchParams(location.search); return p.get('lang'); }catch(e){return null;}

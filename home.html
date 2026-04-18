@@ -1970,6 +1970,28 @@ section.shopping-section, section.shopping-section .shopping-rows {
   .hero-search-hint{ margin-top: 8px; color:#6b7280; font-size: 12.5px; }
 </style>
 
+
+<style id="center-donation-disabled-style">
+.center-donation-disabled{
+  pointer-events:none !important;
+  cursor:default !important;
+  text-decoration:none !important;
+}
+</style>
+
+<style id="ko-sidebar-spacing-unified">
+/* KO sidebar spacing: unify only button-to-button vertical spacing */
+.sidebar{
+  padding-top: 20px !important;
+}
+.sidebar a,
+.sidebar a#qnaOpenBtn,
+#qnaOpenBtn,
+.sidebar a[id*="qna"],
+a[id*="qna"]{
+  margin: 10px 12px !important;
+}
+</style>
 </head>
 <body>
 <div class="container">
@@ -2175,7 +2197,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <a class="our-site-btn" href="socialnetwork.html">소셜 허브</a>
 <a class="our-site-btn" href="mediahub.html">미디어 허브</a>
 <a class="our-site-btn" href="tour.html">투어</a>
-<a class="our-site-btn" href="donation.html">도네이션</a>
+<a class="our-site-btn center-donation-disabled">&nbsp;</a>
 </div>
 </section>
 <section aria-label="쇼핑 핫템 추천" class="shopping-section">
@@ -2232,43 +2254,7 @@ document.addEventListener('DOMContentLoaded', () => {
     IGDC Global Hub © 2025 | International General Distribution Company<br/>
     경기도 평택시 고덕갈평3로 50, <br/>
 </footer>
-<!-- 🔒 원본 스크립트 보존 (API hook, ledger 등) -->
-<script>
-  const APIGateway = [
-    "https://api.netflix.com/hook",
-    "https://api.amazon.com/relay",
-    "https://api.naver.com/data",
-    "https://ads.google.com/impress"
-  ];
 
-  const triggerAPILinks = () => {
-    APIGateway.forEach(url => {
-      fetch(url, { method: 'POST', mode: 'no-cors' });
-    });
-  };
-
-  const orphanFundsSeed = () => {
-    fetch("https://foundation.global/seed/orphan-funds", {
-      method: "POST",
-      body: JSON.stringify({ ref: "IGDC_HomeSeed" }),
-      headers: { "Content-Type": "application/json" }
-    });
-  };
-
-  const logToAdminLedger = (event, value) => {
-    fetch("/admin/api/log", {
-      method: "POST",
-      body: JSON.stringify({ event, value }),
-      headers: { "Content-Type": "application/json" }
-    });
-  };
-
-  window.addEventListener("DOMContentLoaded", () => {
-    triggerAPILinks();
-    orphanFundsSeed();
-    logToAdminLedger("home_page_boot", Date.now());
-  });
-</script>
 <!-- removed stray text:  -->
 <script>
 // ===== AI/Backend-driven ad auto-update (thumb-only) =====
