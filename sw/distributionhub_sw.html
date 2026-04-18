@@ -1,0 +1,3179 @@
+<!-- patched: ad-* classes renamed to brand-* to avoid adblock; media query hiding adjusted only via class rename. -->
+<!DOCTYPE html>
+
+<html class="prelayout" lang="sw">
+<head>
+<script src="/assets/js/igtc-language-role-bridge.min.js"></script>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kitovu cha Usambazaji - IGDC Global (Localized Ads)</title>
+
+<style>
+
+    body { margin: 0; font-family: sans-serif; background-color: #f2f2f2; }
+	body { padding: 0 10px 10px 10px;}
+    .container { display: flex; flex-direction: row; min-height: 90vh; }
+    .sidebar {
+      width: 220px; background:#e0e0e0; display:flex; flex-direction:column; padding-top:30px;
+    }
+    .sidebar a{
+      display:block;background:#fff4e0;color:#804000;text-decoration:none;
+      padding:12px 18px;font-weight:bold;font-size:0.9rem;border:1px solid #f3d9b0;border-radius:8px;
+      margin:18px 12px;transition:background-color .3s, text-decoration .3s;
+    }
+    .sidebar a:hover{ background:#ffe5b4; text-decoration:underline; }
+
+    .brand-rail{ width:220px;background:#e0e0e0;padding:15px;display:flex;flex-direction:column;gap:15px; }
+    .brand-card{ background:#fff; aspect-ratio:3/2; border:1px solid #ccc; text-align:center; font-size:.9em; color:#444; cursor:pointer; overflow:hidden; display:block; }
+    .brand-card a{ text-decoration:none; color:inherit; display:block; width:100%; height:100%; }
+
+    footer{ background:#004080;color:#fff;text-align:center;padding:20px 15px;font-size:.9rem; }
+
+    .main-content{
+      flex:1; background:#fff; padding:24px; max-width:none; margin:30px auto;
+      box-shadow:0 0 10px rgba(0,0,0,.08);
+    }
+    .page-title{ margin:0 0 6px; color:#004080; font-size:1.35rem; }
+    .page-desc{ margin:0 0 20px; color:#555; font-size:.95rem; }
+
+    .content-box{
+      border:1px solid #eee; border-radius:12px; padding:14px; margin-bottom:18px;
+      background:#fafafa;
+    }
+    .content-box h3{
+      margin:0 0 12px; font-size:0.9450000000000001rem; color:#222; display:flex; align-items:center; gap:8px;
+    }
+    .thumb-list{
+      display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px;
+    }
+
+    .thumb-card{
+      background:#fff;border:1px solid #e9e9e9;border-radius:10px; overflow:hidden; cursor:pointer;
+      display:flex; flex-direction:column; transition:transform .15s ease, box-shadow .15s ease;
+    }
+    .thumb-card:hover{ transform:translateY(-2px); box-shadow:0 6px 16px rgba(0,0,0,.08); }
+    .thumb-img{
+      width:100%; aspect-ratio:4/3; object-fit:cover; background:#f4f4f4;
+    }
+    .thumb-body{ padding:10px 12px; display:flex; flex-direction:column; gap:6px; }
+    .thumb-title{ font-size:.95rem; color:#222; line-height:1.3; max-height:2.6em; overflow:hidden; }
+    .thumb-meta{ display:flex; justify-content:space-between; align-items:center; }
+    .thumb-price{ font-weight:700; color:#C5372F; font-size:.95rem; }
+    .thumb-tag{
+      font-size:.72rem; padding:2px 6px; border-radius:999px; border:1px solid #ddd; color:#555; background:#fff;
+    }
+    .thumb-tag.ad{ color:#006400; border-color:#bfe3bf; background:#eef8ee; }
+    .thumb-tag.hot{ color:#8a2be2; border-color:#dac4ff; background:#f5efff; }
+    .thumb-tag.new{ color:#005bb5; border-color:#bcd9ff; background:#eef5ff; }
+
+    .more-link{
+      display:inline-block; margin-top:10px; font-size:.9rem; color:#005bb5; text-decoration:none;
+    }
+    .more-link:hover{ text-decoration:underline; }
+  
+/* === Horizontal scroller upgrade (max 20 items per line) === */
+.thumb-scroller {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  position: relative;
+  scroll-behavior: smooth;
+  /* still scrollable programmatically */
+  scrollbar-width: none;
+  /* Firefox hide */
+  -ms-overflow-style: none;
+  /* IE/Edge legacy */
+  position: relative;
+}
+
+.thumb-scroller::-webkit-scrollbar { display: none; }
+
+/* WebKit hide */
+
+.scroller-wrap {
+  position: relative;
+}
+
+.scroller-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.4);
+  color: #fff;
+  font-size: 19.8px;
+  line-height: 40px;
+  cursor: pointer;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(2px);
+  user-select: none;
+}
+.scroller-btn:hover { background: rgba(0,0,0,0.55); }
+.scroller-btn:active { transform: translateY(-50%) scale(0.98); }
+.scroller-btn.prev { left: 6px; }
+.scroller-btn.next { right: 6px; }
+
+/* ensure headings don't overlay buttons */
+.section-block { position: relative; }
+
+/* spacing so buttons aren't on top of content too much on mobile */
+@media (max-width: 520px){
+  .scroller-btn { width: 36px; height: 36px; font-size: 18.0px; }
+}
+</style>
+<style id="igdc-qa-style">
+:root{
+  --igdc-z:2147483000; --igdc-radius:14px; --igdc-shadow:0 10px 30px rgba(0,0,0,.18);
+  --igdc-gap:10px; --igdc-font:system-ui,Segoe UI,Apple SD Gothic Neo,Malgun Gothic,Roboto,sans-serif;
+  --qa-left:260px;
+  --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
+  --blue:#2563eb; --muted:#9ca3af;
+}
+/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+#qnaOpenBtn{ display:block; text-decoration:none; }
+/* Modal near the left sidebar, with smooth transitions */
+.igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
+.igdc-qa-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;transition:opacity .18s ease}
+.igdc-qa-panel{
+  position:fixed; left:var(--qa-left); bottom:84px; width:min(560px,50vw);
+  max-height:min(82vh,900px); display:flex; flex-direction:column;
+  background:#fff; border-radius:var(--igdc-radius); box-shadow:var(--igdc-shadow);
+  overflow:hidden; opacity:0; transform:translateY(12px) scale(.98);
+  transition:opacity .18s ease, transform .18s ease;
+  border:1px solid var(--old-border);
+}
+.igdc-qa-modal.open{pointer-events:auto}
+.igdc-qa-modal.open .igdc-qa-backdrop{opacity:1}
+.igdc-qa-modal.open .igdc-qa-panel{opacity:1; transform:none}
+/* Old-style header tint */
+.igdc-qa-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 14px; border-bottom:1px solid var(--old-border);
+  background:var(--old-bg);
+}
+.igdc-qa-title{font:700 14px/1.2 var(--igdc-font); color:var(--old-text)}
+.igdc-qa-close{cursor:pointer; border:none; background:transparent; font-size:18px; color:#333}
+.igdc-qa-body{display:flex; flex-direction:column; gap:10px; padding:12px; overflow:auto}
+.igdc-qa-field label{display:block; font:700 12px/1.2 var(--igdc-font); margin-bottom:6px; color:#333}
+.igdc-qa-text{
+  width:100%; max-width:100%; box-sizing:border-box; resize:vertical;
+  border:1px solid var(--old-border); border-radius:10px; padding:10px 12px;
+  font:500 14px var(--igdc-font); min-height:44px; background:#fffdf8;
+}
+.igdc-qa-text.q{ min-height: 96px; }
+.igdc-qa-text.a{ min-height: 128px; }
+.igdc-qa-actions{display:flex; gap:8px; align-items:center}
+.igdc-qa-btn{border:none; border-radius:10px; padding:10px 14px; font:700 14px; cursor:pointer}
+.igdc-qa-btn.primary{background:var(--blue); color:#fff}
+.igdc-qa-btn.muted{background:var(--muted); color:#fff}
+.igdc-qa-threads{display:flex; flex-direction:column; gap:10px; overflow:auto; border-top:1px solid var(--old-border); padding-top:10px}
+.igdc-qa-thread{border:1px solid var(--old-border); border-radius:12px; padding:10px 12px; background:#fffdf8}
+.igdc-qa-thread-q{font:700 13px/1.5 var(--igdc-font); color:#222}
+.igdc-qa-thread-a{font:13px/1.5 var(--igdc-font); color:#333; margin-top:6px}
+.igdc-qa-thread-meta{display:flex; gap:8px; align-items:center; color:#775; font:12px/1.2 var(--igdc-font); margin-top:8px}
+.igdc-qa-thread-actions{margin-left:auto; display:flex; gap:6px}
+.igdc-qa-note{font:12px/1.4 var(--igdc-font); color:#666}
+@media (max-width:900px){
+  .igdc-qa-panel{ left:calc(12px + var(--qa-left,0px)); width:min(92vw,560px) }
+}
+</style>
+<style id="qna-brand-only">
+/* === Q&A sidebar link color only (no other changes) === */
+:root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
+.sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
+  display:block;
+  background: var(--qa-brand);
+  color:#fff !important;
+  border:1px solid var(--qa-brand-border);
+  border-radius:10px;
+}
+.sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
+</style>
+<style id="prelayout-guard">.prelayout *{transition:none!important}</style>
+<script>window.IGDC_PAGE = window.IGDC_PAGE || { project:"IGDC", pageId:"distributionhub", title:(document.title||"") };</script>
+<link href="/assets/css/mobile-fix.css" rel="stylesheet"/>
+<!-- Mobile-only off-canvas overlay (non-intrusive) -->
+<style id="rscroll-from-socialnet">
+/* === RSCROLL (from socialnetwork main page style; minimal) === */
+.rscroll{
+  position:absolute; top:50%; transform:translateY(-50%);
+  z-index:5; border:none; background:rgba(0,0,0,.35);
+  color:#fff; font-size:24px; line-height:1;
+  padding:8px 10px; border-radius:10px; cursor:pointer; display:block;
+  transition: none;
+  
+}
+.rscroll.left { left: 6px; }
+.rscroll.right{ right: 6px; }
+.rscroll.disabled{ opacity:.35; pointer-events:none; }
+@media (max-width:520px){
+  .rscroll{ font-size:22px; padding:8px; }
+}
+</style>
+<style id="igdc-scroller-noshrink-v3">
+/* 3rd issue fix: prevent thumb-cards from squeezing; ensure horizontal scroll */
+.scroller-wrap > .thumb-scroller > .thumb-card{
+  flex: 0 0 240px !important;   /* no shrink, fixed basis */
+  min-width: 240px !important;
+}
+/* keep images sane if any global img rules interfere */
+.scroller-wrap > .thumb-scroller > .thumb-card .thumb-img{
+  width: 100% !important;
+  height: auto !important;
+  object-fit: cover;
+}
+</style>
+<style id="igdc-arrow-clamp-css">
+.scroller-wrap{ position: relative !important; }
+.rscroll{ z-index: 5000 !important; }
+</style>
+
+<style id="tour-adpanel-core">
+/* === TOUR AD PANEL CORE (conflict-free) === */
+.brand-rail{
+  position: relative;
+  box-sizing: border-box;
+  width: 274px; min-width: 274px; max-width: 274px;
+  padding: 12px;
+  background: #f7f9fb;
+  border: 1px solid #d6dce0;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  display: flex; flex-direction: column;
+  gap: 7px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.brand-rail::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.brand-rail .brand-card{
+  box-sizing: border-box;
+  width: 100%; max-width: 250px;
+  height: 150px; line-height: 150px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #d7dce1;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.brand-rail .brand-card > a, .brand-rail .brand-card img{
+  display: block;
+  width: 100%; height: 100%;
+  line-height: 150px;
+  border-radius: inherit;
+  text-decoration: none; color: inherit;
+}
+</style>
+<style id="hotfix-adbox-rounded">
+/* Rounded corners for ad-panel thumbnail boxes */
+.brand-rail .brand-card {
+    border-radius: 10px;
+    overflow: hidden;
+}
+.brand-rail .brand-card img {
+    border-radius: 10px;
+}
+</style>
+<style id="adpanel-title-style">
+.brand-rail .ad-title{margin:6px 8px 12px 8px;font-size:.98rem;opacity:.92;letter-spacing:.2px;text-align:center;}
+</style><style id="igdc-adpanel-override-final">
+/* Ensure panel itself doesn't clip; delegate clipping to .ad-scroll */
+.brand-rail{ overflow: visible !important; max-height: none !important; }
+/* .ad-scroll controls the visible window */
+.brand-rail .ad-scroll{ overflow-y: auto !important; }
+/* Hide scrollbars for a clean look */
+.brand-rail .ad-scroll::-webkit-scrollbar{ display: none; width:0; height:0; }
+.brand-rail .ad-scroll{ scrollbar-width: none; -ms-overflow-style: none; }
+</style><style id="igdc-rscroll-fixedsize">
+/* Force small, consistent arrow buttons to avoid stretch */
+.rscroll{
+  width:40px !important; height:40px !important;
+  padding:0 !important; box-sizing:border-box !important;
+  display:flex !important; align-items:center !important; justify-content:center !important;
+  border-radius:12px !important;
+  transform:none !important; /* JS handles centering via top */
+}
+</style><style id="igdc-adpanel-gap-10px">
+/* 10px vertical gap between ad thumbnails */
+.brand-rail .brand-card + .brand-card{ margin-top:10px !important; }
+</style>
+<style id="qa-empty-state-style">
+.igdc-qa-threads:empty::before,
+.qna-threads:empty::before,
+.qa-list:empty::before,
+.qna-list:empty::before,
+.igdc-qa-list:empty::before{
+  content: "Hakuna maingizo ya Q&A yaliyosajiliwa bado";
+  display: block;
+  padding: 10px 12px;
+  color: #666;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  margin-top: 8px;
+  font-size: 0.95rem;
+}
+</style>
+<style id="qa-empty-state-style-kr">
+/* QnA 리스트가 비어 있을 때 안내문 표시 */
+.igdc-qa-threads:empty::before,
+.qna-threads:empty::before,
+.qa-list:empty::before,
+.qna-list:empty::before,
+.igdc-qa-list:empty::before{
+  content: "Hakuna maingizo ya Q&A yaliyosajiliwa bado";
+  display: block;
+  padding: 10px 12px;
+  color: #666;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  margin-top: 8px;
+  font-size: 0.95rem;
+}
+</style>
+<style id="container-padding-override">
+/* Global container top padding for main + sidebar (not right panel separately) */
+.container {
+  padding-top: 5px !important;
+}
+</style>
+<style id="main-sidebar-innerpadding-override">
+/* Inner padding adjustments */
+.container .sidebar {
+  padding-top: 20px !important;
+}
+.container .main-content {
+  padding: 15px !important;
+}
+</style>
+<style id="sidebar-active-style">
+  .sidebar a.active { 
+    background:#ffdfcc; 
+    color:#804000; 
+    border:1px solid #f3d9b0; 
+    border-radius:8px; 
+  }
+</style>
+
+<link href="/assets/css/thumbs.standard.css?v=20250914" rel="stylesheet"/>
+<link href="/assets/css/hero.css?v=20250914" rel="stylesheet"/>
+<style id="igdc-mobile-distributionhub-patch">
+/* === Mobile Optimization Patch — distributionhub-Q === */
+</style>
+<style id="igdc-q-mobile-kit">
+@media (max-width:768px){
+
+  .sidebar{
+    display:block !important;
+    width:100% !important;
+    margin-top:20px;
+  }
+
+  .sidebar .thumb-list,
+  .sidebar .thumb-scroller{
+    display:flex !important;
+    overflow-x:auto !important;
+    gap:12px;
+  }
+
+}
+  .content-box{
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 12px 0 !important;
+  }
+  .content-box > h3{
+    font-size: 0.95em !important;
+    font-weight: 600 !important;
+    color: #555 !important;
+    margin: 6px 8px 8px 8px !important;
+  }
+  .content-box > .scroller-wrap > .thumb-scroller,
+  .content-box > .thumb-list{
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    gap: 12px !important;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+  }
+  .thumb-card{
+    flex: 0 0 auto !important;
+    scroll-snap-align: start;
+  }
+}
+@media (max-width:600px) and (orientation:portrait){
+  .thumb-card{
+    flex-basis: calc(100vw - 28px) !important;
+    max-width: calc(100vw - 28px) !important;
+  }
+}
+@media (max-width:600px) and (orientation:landscape){
+  .thumb-card{
+    flex-basis: 45vw !important;
+    max-width: 45vw !important;
+  }
+}
+</style>
+<style id="mobile-overrides-20251009v2">
+/* === Unified breakpoints: 1024 / 900 / 768 === */
+
+/* 1) Tablet & down: keep panel in DOM, move offscreen */
+@media (max-width:1024px){
+
+  .right-panel,
+  .brand-rail,
+  .right-ad-panel{
+
+    position:absolute !important;
+    left:-99999px !important;
+    top:-99999px !important;
+
+    width:1px !important;
+    height:1px !important;
+
+    overflow:hidden !important;
+    visibility:hidden !important;
+
+    display:block !important;
+  }
+
+}
+
+
+/* 2) Small tablet & large phones: hide left sidebar too; main = 100% */
+@media (max-width: 1024px){
+  .sidebar, .left-sidebar { display: none !important; }
+  .container, .layout, .wrap { display: block !important; }
+  .main-content, main, #main, .content, .page {
+    width: 100% !important; max-width: 100% !important;
+    margin: 0 !important; padding: 12px !important; box-sizing: border-box !important;
+  }
+}
+
+/* 3) Mobile core: single-row scrollers, buttons hidden */
+@media (max-width: 768px){
+  /* hide any scroll/arrow buttons on mobile */
+  .igdc-scroll-left, .igdc-scroll-right, .ml-nav-left, .ml-nav-right,
+  .scroller-wrap .rscroll, nav button, nav .toggle, nav .collapse {
+    display: none !important;
+  }
+
+  /* horizontal scrollers per section */
+  .content-box > .scroller-wrap > .thumb-scroller,
+  .content-box > .thumb-list,
+  .thumb-row, .cards-row, .hscroll {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    gap: 12px !important;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .content-box > .scroller-wrap > .thumb-scroller::-webkit-scrollbar,
+  .content-box > .thumb-list::-webkit-scrollbar,
+  .thumb-row::-webkit-scrollbar, .cards-row::-webkit-scrollbar, .hscroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .thumb-card, .card {
+    flex: 0 0 auto !important;
+    scroll-snap-align: start;
+  }
+}
+
+/* Portrait phones: 1 card per viewport */
+@media (max-width: 600px) and (orientation: portrait){
+  .thumb-card, .card {
+    flex-basis: calc(100vw - 28px) !important;
+    max-width: calc(100vw - 28px) !important;
+  }
+}
+
+/* Mobile landscape: ~3 cards visible */
+@media (max-width: 1024px) and (orientation: landscape){
+  .thumb-card, .card {
+    flex-basis: 33.33vw !important;
+    max-width: 33.33vw !important;
+  }
+}
+</style>
+<style id="mobile-rightgap-fix-20251009">
+
+/* Mobile: hide side panels only, DO NOT touch grid structure */
+
+@media (max-width: 1024px){
+
+  /* hide side panels */
+  #tour-adpanel-core,
+  .right,
+  .edge-right,
+  .left,
+  .sidebar,
+  .edge-left {
+    display: none !important;
+  }
+
+  /* expand main area only */
+  .container,
+  .wrap,
+  .page,
+  .content-box,
+  .main-content,
+  #main {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* remove right-gap only */
+  .with-right,
+  .has-right,
+  .right-gap,
+  .ad-gap {
+    margin-right: 0 !important;
+    padding-right: 0 !important;
+  }
+
+}
+
+/* DO NOT TOUCH GRID / FLEX / ROW / LAYOUT */
+
+</style>
+
+<style id="mobile-1024-grid-collapse">
+/* Collapse desktop 3-column grid at the same breakpoint so there are no ghost columns */
+@media (max-width: 1024px){
+  .container{
+    display: block !important;
+    grid-template-columns: 1fr !important;
+    column-gap: 0 !important;
+  }
+  .main-content{
+    max-width: 100% !important;
+    margin: 0 !important;
+  }
+}
+</style>
+<style id="mobile-title-fontsize">
+@media (max-width: 1024px){
+  .page-title {
+    font-size: 1.5em !important;
+  }
+}
+</style>
+<style id="main-always-100">
+/* Always fill: ensure main-content takes 100% of page width on narrow viewports */
+@media (max-width: 1200px){
+  html body .container > .main-content{
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: 1 1 auto !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+  /* collapse any lingering grid/flex gaps */
+  html body .container{
+    column-gap: 0 !important;
+    row-gap: 0 !important;
+  }
+}
+</style>
+<style id="layout-unify-override-final">
+/* Final guard: when the layout crosses the panel-hide breakpoint,
+   collapse container to block and force main to occupy full width immediately. */
+@media (max-width: 1024px){
+  html body .container, html body .layout, html body .wrap, html body .page{
+    display: block !important;
+    width: 100vw !important; max-width: 100vw !important;
+    margin: 0 !important; padding: 0 !important; box-sizing: border-box !important;
+    column-gap: 0 !important; row-gap: 0 !important;
+  }
+  html body #main, html body .main-content, html body .content-box{
+    flex: none !important;
+    width: 100% !important; max-width: 100% !important;
+    margin: 0 !important;
+  }
+}
+</style>
+<!-- Injected: exact blockchain styles cloned from socialnetwork.html -->
+<style id="bc-style-from-sn-20251013">
+.bc-tile{display:inline-block;padding:5px 8px;border-radius:999px;background:#a7f3d0;color:#064e3b;font-weight:500;text-decoration:none}
+  .bc-tile:hover{background:#86efac}
+  .bc-tile.orange{background:#f97316;color:#fff}
+  .bc-tile.orange:hover{background:#fb923c}
+  .section-blockchain{margin:12px 0 18px; text-align:left;}/* === BlockChain 버튼 테두리 (시각 약한 강조용) === */
+.bc-tile, .platform-tile, .button{
+  border: 1px solid rgba(0,0,0,0.15);
+  box-shadow: 0 0 2px rgba(0,0,0,0.05);
+}
+.bc-tile:hover, .platform-tile:hover, .button:hover {
+  border-color: rgba(0,0,0,0.25);
+}
+
+/* --- Blockchain pills: narrow glyphs + lighter weight, no underline --- */
+.section-blockchain{ display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; }
+.section-blockchain .bc-tile,
+.bc-tile{
+  text-decoration: none !important;
+  font-weight: 500 !important;                 /* lighter */
+  letter-spacing: 0 !important;                /* neutral tracking */
+  font-variation-settings: "wdth" 70 !important; /* narrow glyphs if supported */
+  font-stretch: 80% !important;                /* fallback for non-variable fonts */
+  padding: 5px 8px !important;                /* slightly tighter left/right */
+  line-height: 1.1 !important;
+  white-space: nowrap;
+}
+.bc-tile:hover{ text-decoration: none !important; }
+/* Mobile wrap (no overflow) */
+@media (max-width: 640px){
+  .section-blockchain{ gap:6px 8px; }
+  .section-blockchain .bc-tile{ max-width: 100%; }
+}
+</style>
+<!-- BC text-condense + tight-gap patch -->
+<style id="bc-tight-text-20251013">/* 1) Buttons between-blockchain spacing: ~3px */
+  .section-blockchain{ gap: 3px 3px !important; }
+
+  /* 2) Keep height; reduce horizontal width via glyph width (condense) */
+  .section-blockchain .bc-tile{
+    /* Prefer variable-font width if available */
+    font-variation-settings: "wdth" 72, "wght" 600;
+    /* Fallbacks for non-variable fonts */
+    font-stretch: 75%;
+    letter-spacing: -0.2px;
+    /* Keep vertical size, don't alter line-height; avoid shrinking height */
+    line-height: inherit;
+    /* Do NOT change padding vertically; only a subtle horizontal trim if needed */
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  /* Hover unaffected except border/bg from the base design */
+</style>
+<!-- BC ultra-tight adjust: shrink button width slightly, gap=5px -->
+<!-- BC tight correction: text-only narrow, keep font size, exact 5px gaps -->
+<style id="bc-tight-correct-20251013">/* Exact inter-button gap */
+  .section-blockchain{ gap:5px 5px !important; }/* Button container: DO NOT scale; remove extra margins; tighten L/R padding only */
+  .section-blockchain .bc-tile{
+    transform:none !important;
+    margin:0 !important;
+    padding-left: 3.6px !important; padding-right: 3.6px !important;
+    line-height: inherit !important; font-size:inherit !important;
+    display:inline-flex !important; align-items:center; justify-content:center;
+  }
+
+  /* Text-only narrow wrapper */
+  .section-blockchain .bc-tile .bc-narrow{
+    display:inline-block;
+    transform:scaleX(0.82);
+    transform-origin:center center;
+    font-size:inherit; /* keep original size */
+    letter-spacing:normal;
+  }
+</style>
+<style id="bc-size-override-20251017">
+  /* Mobile-only: shrink blockchain buttons by 10% and unify gap to 5px */
+  @media (max-width: 900px) {
+    .section-blockchain .bc-tile, 
+    .section-blockchain .platform-tile {
+      transform: scale(0.9);
+      transform-origin: left top;
+      display: inline-block;
+    }
+    .section-blockchain {
+      gap: 5px !important;
+    }
+  }
+</style>
+
+<style id="dh-rail-style">
+/* Desktop default: hidden */
+#mobile-ad-rail-wrap{ display:none !important; }
+
+@media (max-width:1024px){
+  /* Hide original right panel container */
+  .brand-rail{ display:none !important; }
+
+  /* Mobile rail uses SAME classes as main sections */
+  #mobile-ad-rail-wrap{ display:block !important; width:100%; margin:12px 0; }
+  #mobile-ad-rail-wrap .rail-title{
+    margin:0 8px 6px; font-weight:800; font-size:1rem; line-height:1.3; text-align:left;
+  }
+  /* Horizontal scroller (finger drag) */
+  #mobile-ad-rail-list{
+    display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
+    gap:12px !important; padding:10px 0px 16px !important;
+    overflow-x:auto !important; overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important; scroll-snap-type:x mandatory !important;
+    touch-action:pan-x !important; overscroll-behavior-x:contain !important;
+    -ms-overflow-style:none !important; scrollbar-width:none !important;
+  }
+  #mobile-ad-rail-list::-webkit-scrollbar{ display:none; height:0; width:0; }
+  #mobile-ad-rail-list > *{
+    position:relative; flex:0 0 auto; scroll-snap-align:start;
+    min-width:100vw; max-width:100vw;
+    box-sizing:border-box; margin:0;
+  }
+}
+@media (max-width:1024px) and (orientation:landscape){
+  #mobile-ad-rail-list > *{ min-width:45vw; max-width:45vw; }
+}
+</style>
+<!-- IGDC Mobile Cards v26: portrait hard clamp (main unlock + brand rail cap), keep radius -->
+<style id="igdc-mobilecards-v26">
+:root{ --igdc-gap: 10px; --card-radius: 12px; }
+
+@media (orientation: portrait){
+  /* Safety: viewport context */
+  html, body { width:100% !important; max-width:100% !important; overflow-x:hidden !important; }
+
+  /* MAIN rows -> horizontal flex scroller */
+  .content-box > .scroller-wrap > .thumb-scroller,
+  .content-box > .thumb-list,
+  .rail .thumb-scroller, .rail .thumb-list{
+    display:flex !important; flex-wrap:nowrap !important;
+    width:100vw !important; margin-left:calc(50% - 50vw) !important; margin-right:calc(50% - 50vw) !important;
+    overflow-x:auto !important; overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch; scroll-snap-type:x mandatory;
+    gap:10px !important; padding-left:0 !important; padding-right:10px !important;
+    grid-template-columns:none !important; grid-auto-columns:auto !important; column-gap:10px !important; row-gap:0 !important;
+  }
+  /* Each direct child = one viewport */
+  .content-box > .scroller-wrap > .thumb-scroller > *,
+  .content-box > .thumb-list > *,
+  .rail .thumb-scroller > *, .rail .thumb-list > *{
+    flex:0 0 100vw !important; width:100vw !important; min-width:100vw !important; max-width:100vw !important;
+    box-sizing:border-box !important; border-radius:var(--card-radius) !important; scroll-snap-align:start;
+  }
+
+  /* BRAND rail: clamp EVERYTHING to viewport; remove transforms/positions/fixed widths */
+  #mobile-ad-rail-wrap, #mobile-ad-rail-list{
+    width:100vw !important; max-width:100vw !important; min-width:0 !important;
+    margin:0 !important; padding:0 !important; overflow:hidden !important;
+  }
+  #mobile-ad-rail-list *{
+    max-width:100% !important; width:auto !important;
+    transform:none !important; translate:none !important; scale:1 !important;
+    position:static !important; left:auto !important; right:auto !important;
+    box-sizing:border-box !important;
+  }
+  /* Ensure items inside brand rail are also 100vw one-by-one */
+  #mobile-ad-rail-list > *{
+    flex:0 0 100vw !important; width:100vw !important; min-width:100vw !important; max-width:100vw !important;
+    border-radius:var(--card-radius) !important; scroll-snap-align:start;
+  }
+
+  /* Media should never overflow and keep radius */
+  img, video, canvas, svg{ max-width:100% !important; height:auto !important; display:block !important; border-radius:inherit !important; }
+}
+</style>
+<style id="mobile-enforce-portrait-20251025">
+@media (max-width:768px) and (orientation:portrait){
+  html,body{margin:0!important;padding:0!important;max-width:100vw!important;overflow-x:hidden!important;}
+  .main-content,#main,.container,main{margin:0!important;padding:0!important;max-width:100vw!important;box-sizing:border-box!important;}
+
+  /* Normalize rail (brand) to match main content-box rules */
+  #mobile-ad-rail-wrap,#mobile-ad-rail-list{margin:0!important;padding:0!important;width:100vw!important;max-width:100vw!important;}
+  #mobile-ad-rail-wrap .rail-title{margin:0 0 6px 0!important;padding:0!important;text-align:left!important;}
+  #mobile-ad-rail-list{display:flex!important;flex-wrap:nowrap!important;gap:10px!important;overflow-x:auto!important;scroll-snap-type:x mandatory!important;-webkit-overflow-scrolling:touch!important;
+    margin-left:calc(50% - 50vw)!important;margin-right:calc(50% - 50vw)!important;}
+  #mobile-ad-rail-list>*{flex:0 0 100vw!important;min-width:100vw!important;max-width:100vw!important;width:100vw!important;box-sizing:border-box!important;scroll-snap-align:start!important;margin:0!important;}
+
+  /* If ad-panel is used as the 7th section */
+  .brand-rail .ad-scroll,.brand-rail .ad-list,.brand-rail .brand-card,.brand-rail .cards,.brand-rail .items,.brand-rail .thumbs{padding:0!important;margin:0!important;gap:10px!important;}
+  .brand-rail .ad-list>*,
+  .brand-rail .brand-card>*,
+  .brand-rail .cards>*,
+  .brand-rail .items>*,
+  .brand-rail .thumbs>*{flex:0 0 100vw!important;min-width:100vw!important;max-width:100vw!important;width:100vw!important;margin:0!important;scroll-snap-align:start!important;}
+
+  /* Remove residual paddings from parent wrappers like main sections */
+  .content-box>.scroller-wrap{padding:0!important;margin:0!important;}
+  .content-box>.thumb-list{padding-left:0!important;padding-right:0!important;margin:0!important;gap:10px!important;}
+  .thumb-card .thumb-body,.thumb-card .thumb-meta{padding:0!important;margin:0!important;}
+}
+</style>
+<style id="m7-gap-portrait-landscape-20251027">
+@media (max-width:1366px){
+  /* Portrait: no left gap */
+  @media (orientation:portrait){
+    #mobile-ad-rail-wrap{ padding-left:0 !important; margin-left:0 !important; }
+    #mobile-ad-rail-list > *:first-child{ margin-left:0 !important; }
+  }
+  /* Landscape: 5px lead on first card only */
+  @media (orientation:landscape){
+    #mobile-ad-rail-wrap{ padding-left:0 !important; margin-left:0 !important; }
+    #mobile-ad-rail-list > .thumb-card:first-child{ margin-left:5px !important; }
+  }
+}
+</style>
+<style id="m7-vert-scroll-20251027">
+@media (max-width:1366px){
+  #mobile-ad-rail-wrap, #mobile-ad-rail-list,
+  #mobile-ad-rail-wrap *, #mobile-ad-rail-list *{
+    touch-action:auto !important; -ms-touch-action:auto !important;
+  }
+  #mobile-ad-rail-wrap{
+    overflow-y:auto !important; -webkit-overflow-scrolling:touch; max-height:100vh;
+  }
+  #mobile-ad-rail-list{ overscroll-behavior-y:auto !important; }
+}
+</style>
+<style id="portrait-left-clamp-1024-final">
+@media (max-width:1024px) and (orientation:portrait){
+  /* Zero any residual gutters from global bodies */
+  html, body { margin:0 !important; padding:0 !important; max-width:100vw !important; overflow-x:hidden !important; }
+
+  /* Ensure containers don't reintroduce horizontal padding in portrait */
+  .container, .main-content, #main, main { margin:0 !important; padding-left:0 !important; padding-right:0 !important; max-width:100vw !important; box-sizing:border-box !important; }
+
+  /* 7th section rail: full-bleed clamp */
+  #mobile-ad-rail-wrap { width:100vw !important; max-width:100vw !important; margin-left:calc(50% - 50vw) !important; margin-right:calc(50% - 50vw) !important; padding-left:0 !important; padding-right:0 !important; }
+
+  /* Prevent children from adding side padding */
+  #mobile-ad-rail-list { padding-left:0 !important; padding-right:0 !important; }
+}
+</style>
+<style id="bc-mobile-force-shrink-20251113d">
+@media (max-width: 900px){
+  .section-blockchain .bc-tile,
+  .section-blockchain .platform-tile,
+  .section-blockchain a.bc-btn{
+    /* Kill hidden width constraints */
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 0 0 auto !important;
+    /* Horizontal shrink */
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    /* Vertical modest */
+    padding-top: 3px !important;
+    padding-bottom: 3px !important;
+    /* Text slightly smaller + tighter */
+    font-size: 0.88em !important;
+    letter-spacing: -0.01em !important;
+    white-space: nowrap;
+    box-sizing: border-box !important;
+    transform: none !important;
+  }
+  /* Extra: squeeze only the label span if present */
+  .section-blockchain .bc-tile .stamp,
+  .section-blockchain .platform-tile .stamp,
+  .section-blockchain a.bc-btn .stamp{
+    display: inline-block;
+    transform: scaleX(0.94);
+    transform-origin: center;
+  }
+  /* Tighten only horizontal gap; keep vertical */
+  .section-blockchain{
+    row-gap: 8px !important;
+    column-gap: 3px !important;
+  }
+}
+</style>
+<style id="mobile-footer-guard">
+  /* Base: ensure full-page flow */
+  html, body { height: auto; min-height: 100% !important; }
+  #app, .app, .page, .wrapper { min-height: 100% !important; }
+
+  /* Address bar-aware height */
+  @supports (height: 100dvh) {
+    .container, .layout, main, .main-content { min-height: 100dvh !important; }
+  }
+  @supports not (height: 100dvh) {
+    .container, .layout, main, .main-content { min-height: 100vh !important; }
+  }
+
+  /* iOS WebKit fill-available fallback */
+  @supports (-webkit-touch-callout: none) {
+    html, body { height: -webkit-fill-available; }
+    .container, .layout, main, .main-content { min-height: -webkit-fill-available !important; }
+  }
+
+  /* Mobile overflow clipping guard */
+  @media (max-width: 980px) {
+    main, .content-area, .main-content, .container, .layout {
+      overflow: visible !important;
+      max-height: none !important;
+    }
+    .main-content { min-width: 0 !important; }
+    main > :last-child, .main-content > :last-child, .container > :last-child {
+      margin-bottom: max(24px, env(safe-area-inset-bottom)) !important;
+    }
+  }
+
+  /* Footer safety: home bar overlap */
+  footer { padding-bottom: max(24px, env(safe-area-inset-bottom)) !important; position: static !important; }
+</style>
+
+<style id="igdc-rightpanel-final">
+
+/* ================= RIGHT PANEL FINAL ================= */
+
+/* 외곽 컨테이너 */
+.brand-rail{
+  background:#fff;
+  border-radius:12px;
+  padding:12px;
+  box-shadow:0 2px 6px rgba(0,0,0,.06);
+
+  overflow:visible !important;
+  max-height:none !important;
+}
+
+/* 실제 스크롤 영역 */
+.brand-rail .thumb-grid{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+
+  /* 카드 약 4.5장 높이 */
+  max-height:720px;
+
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+
+  scrollbar-width:none;
+}
+
+/* 스크롤바 숨김 */
+.brand-rail .thumb-grid::-webkit-scrollbar{
+  display:none;
+  width:0;
+  height:0;
+}
+
+/* 슬롯 카드 */
+.brand-rail .thumb-card{
+  height:150px;
+  min-height:150px;
+
+  border-radius:8px;
+  background:#eee;
+
+  flex:0 0 auto;
+}
+
+/* 더미 이미지 */
+.brand-rail .thumb-card .thumb-img{
+  height:100px;
+  background:#ddd;
+  border-radius:6px;
+}
+
+/* 더미 텍스트 */
+.brand-rail .thumb-card .thumb-title{
+  margin-top:6px;
+  font-size:12px;
+  color:#777;
+  text-align:center;
+}
+
+</style>
+
+<style id="rightpanel-ad-headline-center">
+.brand-rail .ad-headline{
+  text-align: center !important;
+  
+  margin: 4px 0 6px !important;   /* 위/아래 여백 축소 */
+  padding: 0 !important;
+
+  line-height: 1.2 !important;
+}
+</style>
+
+
+<link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
+
+  <style id="sidebar-spacing-unify-v2">
+    .sidebar{padding-top:30px !important;}
+    .sidebar a{padding:12px 12px !important;margin:10px 12px !important;}
+  </style>
+
+</head>
+<body>
+<div id="hero"><div class="hero-title"></div></div>
+<script>(function(){document.addEventListener("DOMContentLoaded",function(){document.documentElement.classList.remove("prelayout");var s=document.getElementById("prelayout-guard");if(s&&s.parentNode){s.parentNode.removeChild(s);}});})();</script>
+<div class="container">
+<div class="sidebar">
+<a href="home.html">🏠 Nyumbani</a>
+<a href="networkhub.html">🛒 Kitovu cha Soko</a>
+<a href="distributionhub.html">🏭 Kitovu cha Usambazaji</a>
+<a href="socialnetwork.html">📢 Mtandao wa Kijamii</a>
+<a href="mediahub.html">🎬 Kitovu cha Vyombo vya Habari</a>
+<a href="tour.html">🧳 Safari · Utalii · Malazi</a>
+<a href="literature_academic.html">📚 Fasihi na Mabadilishano ya Kitaaluma</a>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Mawasiliano ya Q&amp;A</a>
+</div>
+<main class="main-content" style="margin:0">
+<section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
+<a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
+<a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
+<a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
+</section>
+<h1 class="page-title" style="font-size: 2em; margin-bottom: 20px;">📦 Kitovu cha Usambazaji</h1>
+
+<!-- ================= DISTRIBUTION LAYOUT ================= -->
+<section class="content-box" id="sec-reco">
+<h3>🔥 Mapendekezo ya Leo</h3>
+<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-recommend"></div><button aria-label="Tembeza kushoto" class="rscroll left" type="button">‹</button><button aria-label="Tembeza kulia" class="rscroll right" type="button">›</button></div>
+<a class="more-link" href="#">Ona zaidi</a>
+</section>
+<section class="content-box" id="sec-ads">
+<h3>📣 Wadhamini</h3>
+<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-sponsor"></div><button aria-label="Tembeza kushoto" class="rscroll left" type="button">‹</button><button aria-label="Tembeza kulia" class="rscroll right" type="button">›</button></div>
+</section>
+<section class="content-box" id="sec-trend">
+<h3>📈 Umaarufu wa wakati halisi</h3>
+<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-trending"></div><button aria-label="Tembeza kushoto" class="rscroll left" type="button">‹</button><button aria-label="Tembeza kulia" class="rscroll right" type="button">›</button></div>
+<a class="more-link" href="#">Orodha kamili</a>
+</section>
+<section class="content-box" id="sec-new">
+<h3>🆕 Bidhaa mpya zilizosajiliwa</h3>
+<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-new"></div><button aria-label="Tembeza kushoto" class="rscroll left" type="button">‹</button><button aria-label="Tembeza kulia" class="rscroll right" type="button">›</button></div>
+</section>
+<section class="content-box" id="sec-special">
+<h3>🌟 Bidhaa maalum</h3>
+<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-special"></div>
+<button aria-label="Tembeza kushoto" class="rscroll left" type="button">‹</button>
+<button aria-label="Tembeza kulia" class="rscroll right" type="button">›</button>
+</div>
+</section>
+<section class="content-box" id="sec-others">
+<h3>🧺 Bidhaa nyingine</h3>
+<div class="scroller-wrap">
+<div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-others"></div>
+<button aria-label="Tembeza kushoto" class="rscroll left" type="button">‹</button>
+<button aria-label="Tembeza kulia" class="rscroll right" type="button">›</button>
+</div>
+</section>
+<div class="scroller-wrap" id="mobile-ad-rail-wrap"><div class="rail-title">💎 Bidhaa bora zilizopendekezwa 💎</div><div class="thumb-list thumb-scroller" id="mobile-ad-rail-list"></div></div>
+</main>
+
+  <!-- ===== RIGHT COLUMN ===== -->
+  <aside class="right-col">
+    <div class="brand-rail">
+      <h3 class="ad-headline">💎 Bidhaa bora zilizopendekezwa 💎</h3>
+      <div class="thumb-grid thumb-scroller vertical"
+           data-psom-key="distribution-right">
+      </div>
+    </div>
+  </aside>
+
+</div>
+<!-- ================= SLOT GENERATOR ================= -->
+<script>
+(function(){
+
+  const MAIN_COUNT = 100;
+  const RIGHT_COUNT = 80;
+
+  function makeSlot(){
+    const d = document.createElement('div');
+    d.className = 'thumb-card placeholder';
+    d.innerHTML = `
+      <div class="thumb-img"></div>
+      <div class="thumb-title">Imejazwa kiotomatiki</div>
+    `;
+    return d;
+  }
+
+  function fillGrid(grid, count){
+
+    if(!grid) return;
+
+    // 이미 데이터 있으면 중단
+    if(grid.children.length > 0) return;
+
+    for(let i=0;i<count;i++){
+      grid.appendChild(makeSlot());
+    }
+  }
+
+  function initSlots(){
+
+    document
+      .querySelectorAll('.thumb-grid[data-psom-key]')
+      .forEach(grid=>{
+
+        const key = grid.dataset.psomKey;
+
+        if(key === 'distribution-right'){
+          fillGrid(grid, RIGHT_COUNT);
+        }else{
+          fillGrid(grid, MAIN_COUNT);
+        }
+
+      });
+  }
+
+  document.addEventListener('DOMContentLoaded', initSlots);
+
+})();
+</script>
+</div>
+
+<footer>
+    IGDC Global Hub © 2025 | International General Distribution Company<br/>
+    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Korea<br/>
+</footer>
+<!-- 내부 로직은 숨김 처리(코드 최소 노출) -->
+<script>
+/*
+  Distribution Hub – Mobile Skeleton Stabilizer (FULL REPLACE BLOCK)
+  목적:
+  1) 모바일 세로 화면에서 썸네일 영역 붕괴 방지
+  2) 초기 렌더링 시 빈 컨테이너로 인한 레이아웃 흔들림 제거
+
+  원칙:
+  - 이 스크립트는 '자리만' 만든다 (Skeleton)
+  - 실제 데이터 렌더링은 distribution-automap.v1.js 단독 담당
+  - innerHTML 초기화 / 실제 데이터 렌더링 금지
+*/
+
+(function () {
+  'use strict';
+
+  // 모바일/터치 환경에서만 동작
+  const isMobile = matchMedia('(max-width: 768px), (pointer: coarse)').matches;
+  if (!isMobile) return;
+
+if (document.querySelector('.thumb-list .thumb-card')) return;
+
+  const SKELETON_COUNT = 7; // 초기 안정화용 카드 수
+
+  function createSkeletonCard() {
+    const card = document.createElement('article');
+    card.className = 'thumb-card skeleton';
+    card.innerHTML = `
+      <div class="thumb-img sk-img"></div>
+      <div class="thumb-body">
+        <div class="thumb-title sk-text"></div>
+        <div class="thumb-meta">
+          <div class="thumb-price sk-text"></div>
+        </div>
+      </div>`;
+    return card;
+  }
+
+  function mountSkeleton(listEl) {
+    if (!listEl) return;
+    if (listEl.dataset.skeletonMounted === '1') return;
+    listEl.dataset.skeletonMounted = '1';
+
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < SKELETON_COUNT; i++) {
+      frag.appendChild(createSkeletonCard());
+    }
+    listEl.appendChild(frag);
+  }
+
+  function init() {
+    document.querySelectorAll('.thumb-list').forEach(mountSkeleton);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
+})();
+</script>
+
+<!-- 필수 CSS (같이 추가) -->
+<style>
+  .thumb-card.skeleton { pointer-events: none; }
+  .thumb-card.skeleton .sk-img {
+    width: 100%;
+    aspect-ratio: 3 / 2;
+    background: #e5e7eb;
+    border-radius: 8px;
+  }
+  .thumb-card.skeleton .sk-text {
+    height: 12px;
+    margin: 6px 0;
+    background: #e5e7eb;
+    border-radius: 4px;
+  }
+</style>
+<script id="igdc-scroller-overlay">
+(function(){
+  function scrollAmountFor(container){
+    // Prefer near-full viewport width, fallback to single card width
+    const vw = Math.max(container.clientWidth * 0.9, 1);
+    const card = container.querySelector('.thumb-card');
+    const cw = card ? (card.clientWidth + 12) : 200; // 12 = gap
+    return Math.max(vw, cw);
+  }
+  function bind(wrap){
+    const scroller = wrap.querySelector('.thumb-scroller');
+    const prev = wrap.querySelector('.rscroll.left');
+    const next = wrap.querySelector('.rscroll.right');
+    if(!scroller || !prev || !next) return;
+    const step = () => scrollAmountFor(scroller);
+    prev.addEventListener('click', function(){ scroller.scrollBy({left: -step(), behavior:'smooth'}); });
+    next.addEventListener('click', function(){ scroller.scrollBy({left:  step(), behavior:'smooth'}); });
+
+    // optional: show/hide buttons at extremes
+    function update(){
+      const max = scroller.scrollWidth - scroller.clientWidth - 1;
+      if (scroller.scrollLeft <= 0) {
+        prev.style.visibility = 'hidden';
+      } else {
+        prev.style.visibility = 'visible';
+      }
+      if (scroller.scrollLeft >= max) {
+        next.style.visibility = 'hidden';
+      } else {
+        next.style.visibility = 'visible';
+      }
+    }
+    scroller.addEventListener('scroll', update, {passive:true});
+    window.addEventListener('resize', update);
+    setTimeout(update, 0);
+  }
+  function init(){
+    document.querySelectorAll('.scroller-wrap').forEach(bind);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+<script id="igdc-qa-safety-bootstrap">
+// Ensures the Q&A popup opens when clicking the sidebar link,
+// even if Supabase URL/Key are not configured yet.
+(function(){
+  if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
+  function ensureButton(){
+    var btn = document.getElementById('qnaOpenBtn');
+    if(!btn) return;
+    // If the main script exposed IGDC_QA, use it
+    btn.addEventListener('click', function(){
+      if (window.IGDC_QA && typeof window.IGDC_QA.open === 'function'){
+        window.IGDC_QA.open();
+        return;
+      }
+      // Fallback: if modal not in DOM, create a very small stub so user sees something
+      var modal = document.querySelector('.igdc-qa-modal');
+      if(!modal){
+        // create minimal skeleton matching the CSS already present
+        var m = document.createElement('div'); m.className='igdc-qa-modal';
+        var b = document.createElement('div'); b.className='igdc-qa-backdrop';
+        var p = document.createElement('div'); p.className='igdc-qa-panel';
+        var h = document.createElement('div'); h.className='igdc-qa-header';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
+        h.appendChild(t); h.appendChild(x);
+        var body = document.createElement('div'); body.className='igdc-qa-body';
+        body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
+        p.appendChild(h); p.appendChild(body);
+        m.appendChild(b); m.appendChild(p);
+        document.body.appendChild(m);
+        function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
+        function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
+        x.addEventListener('click', close);
+        b.addEventListener('click', close);
+        // expose temporary open so later main script can reuse
+        window.IGDC_QA = window.IGDC_QA || {};
+        window.IGDC_QA.open = open;
+      }
+      // open (either stub or full impl)
+      if (window.IGDC_QA && typeof window.IGDC_QA.open==='function'){ window.IGDC_QA.open(); }
+    }, { passive:false });
+  }
+  if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', ensureButton, { once:true }); }
+  else { ensureButton(); }
+})();
+</script>
+
+<script id="igdc-scroller-position-fix-v1">// neutralized by igdc-scroller-outside-v1 (replaced igdc-scroller-position-fix-v1)</script>
+<script id="igdc-scroller-position-final-v2">// neutralized by igdc-scroller-outside-v1 (replaced igdc-scroller-position-final-v2)</script>
+<script id="igdc-scroller-smooth-v3">// neutralized: IGDC Scroller Smooth v3</script>
+<script id="igtc-modal-hooks-inline">
+/*! IGTC Modal & API Hooks (inline) - v1.1 (2025-08-16)
+ * - Works without editing existing markup
+ * - Hooks both .thumb-card (no <a>) and .brand-rail a[href]
+ * - Safe with credentials:'same-origin' and X-CSRF from <meta name="csrf-token">
+ */
+(function(){
+  'use strict';
+  if (window.IGTC && window.IGTC.modalHooksLoaded) return;
+  window.IGTC = window.IGTC || {};
+  window.IGTC.modalHooksLoaded = true;
+
+  const qs  = (s,root=document)=>root.querySelector(s);
+  const qsa = (s,root=document)=>Array.from(root.querySelectorAll(s));
+
+  function readMeta(name){ const el = qs(`meta[name="${name}"]`); return el?el.getAttribute('content'):null; }
+  const CSRF = readMeta('csrf-token');
+  const AFF  = readMeta('igdc:aff');
+
+  function fetchJSON(url,opts={}){
+    const headers = new Headers(opts.headers||{});
+    if (!headers.has('Content-Type')) headers.set('Content-Type','application/json');
+    if (CSRF) headers.set('X-CSRF', CSRF);
+    const init = Object.assign({method:'GET',credentials:'same-origin'}, opts, {headers});
+    return fetch(url, init).then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
+  }
+  function postJSON(url, body){ return fetchJSON(url, {method:'POST', body: JSON.stringify(body||{})}); }
+
+  // ---- Styles ----
+  (function addStyle(){
+    const st = document.createElement('style');
+    st.setAttribute('data-igtc','modal-hooks');
+    st.textContent = `
+      .igtc-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:9998;}
+      .igtc-modal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9999;
+        width:min(920px,96vw);max-height:86vh;background:#0b0c0f;color:#fff;border-radius:16px;
+        box-shadow:0 10px 40px rgba(0,0,0,.5);display:none;overflow:hidden}
+      .igtc-modal header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+      .igtc-modal h3{margin:0;font-size:18px;font-weight:700}
+      .igtc-modal .igtc-content{display:grid;grid-template-columns:1fr 1.1fr;gap:16px;padding:16px;overflow:auto;max-height:calc(86vh - 60px)}
+      .igtc-modal .igtc-media img{width:100%;height:auto;border-radius:12px;display:block}
+      .igtc-modal .igtc-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+      .igtc-btn{appearance:none;border:0;border-radius:12px;padding:10px 14px;background:#1c64f2;color:#fff;font-weight:600;cursor:pointer}
+      .igtc-btn.secondary{background:#2d2f36}
+      .igtc-btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.18)}
+      .igtc-close{background:transparent;border:0;color:#fff;font-size:18px;cursor:pointer}
+      .igtc-hidden{display:none !important}
+      @media (max-width:860px){ .igtc-modal .igtc-content{grid-template-columns:1fr} }
+    `;
+    document.head.appendChild(st);
+  })();
+
+  // ---- Modal DOM ----
+  const backdrop = document.createElement('div'); backdrop.className='igtc-modal-backdrop igtc-hidden'; backdrop.setAttribute('aria-hidden','true');
+  const modal = document.createElement('div'); modal.className='igtc-modal igtc-hidden'; modal.setAttribute('role','dialog'); modal.setAttribute('aria-modal','true'); modal.setAttribute('aria-labelledby','igtc-modal-title');
+  modal.innerHTML = `
+    <header>
+      <h3 id="igtc-modal-title">Loading…</h3>
+      <button class="igtc-close" aria-label="Close">✕</button>
+    </header>
+    <div class="igtc-content" tabindex="0">
+      <div class="igtc-media"><img alt=""></div>
+      <div class="igtc-body">
+        <p class="igtc-desc" style="opacity:.9"></p>
+        <div class="igtc-actions">
+          <button class="igtc-btn" data-act="cta">바로가기</button>
+          <button class="igtc-btn secondary" data-act="like">좋아요</button>
+          <button class="igtc-btn ghost" data-act="recommend">추천</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop); document.body.appendChild(modal);
+
+  const el = {
+    title: qs('#igtc-modal-title', modal),
+    img: qs('.igtc-media img', modal),
+    desc: qs('.igtc-desc', modal),
+    btnCta: qs('[data-act="cta"]', modal),
+    btnLike: qs('[data-act="like"]', modal),
+    btnRec: qs('[data-act="recommend"]', modal),
+    close: qs('.igtc-close', modal),
+  };
+
+  // ---- Open/Close & Focus ----
+  let lastActive=null;
+  function openModal(){ lastActive=document.activeElement; backdrop.classList.remove('igtc-hidden'); modal.classList.remove('igtc-hidden'); backdrop.style.display='block'; modal.style.display='block'; modal.focus({preventScroll:true}); document.addEventListener('keydown', onKeydown, true); }
+  function closeModal(){ document.removeEventListener('keydown', onKeydown, true); backdrop.classList.add('igtc-hidden'); modal.classList.add('igtc-hidden'); backdrop.style.display='none'; modal.style.display='none'; if(lastActive&&lastActive.focus) lastActive.focus({preventScroll:true}); }
+  function onKeydown(e){ if(e.key==='Escape'){ e.preventDefault(); closeModal(); } if(e.key==='Tab'){ const f=qsa('button,a,[tabindex]:not([tabindex="-1"])',modal).filter(x=>!x.classList.contains('igtc-hidden')); if(f.length){ const first=f[0], last=f[f.length-1]; if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); } else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); } } } }
+  backdrop.addEventListener('click', closeModal); el.close.addEventListener('click', closeModal);
+
+  // ---- Targets ----
+  const SELECTORS = [
+    '.thumb-card',              // main cards (no anchor in markup)
+    '.ad-panel a[href]'         // right panel ads
+  ];
+
+  function findTargets(root=document){
+    const arr=[]; SELECTORS.forEach(sel=>arr.push(...qsa(sel,root)));
+    return Array.from(new Set(arr));
+  }
+
+  function resolveInfo(node){
+    const card = node.closest('.thumb-card') || node;
+    const id = card.getAttribute('data-item-id') || null;
+    const img = (card.querySelector('img')||{}).src || null;
+    const title = (card.querySelector('.thumb-title')||{}).textContent || card.getAttribute('aria-label') || '';
+    let href = null;
+    // If anchored link exists (ad-panel or card contains <a>), use it
+    const a = card.querySelector('a[href]') || (node.tagName==='A' ? node : null);
+    if (a) href = a.getAttribute('href');
+    return { id, img, title: (title||'').trim(), href };
+  }
+
+  async function showDetail(node, placement){
+    const info = resolveInfo(node);
+    el.title.textContent = info.title || '상세 보기';
+    if (info.img) el.img.src = info.img;
+    el.desc.textContent = '불러오는 중…';
+    el.btnCta.disabled = true;
+
+    // stash
+    el.btnCta.dataset.itemId = info.id || '';
+    el.btnLike.dataset.itemId = info.id || '';
+    el.btnRec.dataset.itemId = info.id || '';
+
+    openModal();
+
+    let href = info.href || null;
+    try{
+      if (info.id){
+        const detail = await fetchJSON(`/api/items/${encodeURIComponent(info.id)}`);
+        el.title.textContent = detail.title || info.title || '상세 보기';
+        if (detail.image) el.img.src = detail.image;
+        el.desc.textContent = detail.description || '';
+        if (detail.ctaLabel) el.btnCta.textContent = detail.ctaLabel;
+        if (detail.href) href = detail.href;
+      } else {
+        el.desc.textContent = el.desc.textContent==='불러오는 중…' ? '' : el.desc.textContent;
+      }
+    }catch(_){ el.desc.textContent = ''; }
+
+    // Enable CTA only if we have a destination
+    if (href){ el.btnCta.disabled = false; }
+    else { el.btnCta.disabled = true; el.btnCta.title = '이 항목에 연결된 이동 링크가 없습니다.'; }
+
+    // CTA handler
+    el.btnCta.onclick = async function(){
+      if (!href){ return; }
+      try{
+        const payload = { id: el.btnCta.dataset.itemId || info.id || null, href, placement, aff: AFF || null, ts: Date.now() };
+        const res = await postJSON('/api/click', payload);
+        const url = (res && (res.redirectUrl || res.url)) || href;
+        window.open(url, '_blank', 'noopener');
+        closeModal();
+      }catch(_){
+        window.open(href, '_blank', 'noopener');
+        closeModal();
+      }
+    };
+
+    // Feedback handlers (optional)
+    el.btnLike.onclick = async function(){
+      const id = this.dataset.itemId || info.id; if(!id) return;
+      try{ await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); this.textContent='좋아요 완료'; this.disabled=true; }catch(_){}
+    };
+    el.btnRec.onclick = async function(){
+      const id = this.dataset.itemId || info.id; if(!id) return;
+      try{ await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); this.textContent='추천 완료'; this.disabled=true; }catch(_){}
+    };
+  }
+
+  function attach(root=document){
+    // main cards
+    qsa('.thumb-card', root).forEach(card=>{
+      if (card.dataset.igtcHooked==='1') return;
+      card.dataset.igtcHooked='1';
+      card.addEventListener('click', function(ev){
+        // allow middle/multi-key open (doesn't exist here but safe)
+        if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button===1) return;
+        ev.preventDefault();
+        showDetail(card, 'main');
+      }, {passive:false});
+      if (!card.hasAttribute('tabindex')) card.setAttribute('tabindex','0');
+      card.addEventListener('keydown', (e)=>{
+        if (e.key==='Enter' || e.key===' '){ e.preventDefault(); card.click(); }
+      });
+    });
+    // ad thumbnails
+    qsa('.ad-panel a[href]', root).forEach(a=>{
+      if (a.dataset.igtcHooked==='1') return;
+      a.dataset.igtcHooked='1';
+      a.addEventListener('click', function(ev){
+        if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button===1) return;
+        ev.preventDefault();
+        showDetail(a, 'ad-panel');
+      }, {passive:false});
+    });
+  }
+
+  // Observe dynamic changes (AI fills, ads, etc.)
+  const mo = new MutationObserver((muts)=>{
+    for (const m of muts){
+      if (m.addedNodes && m.addedNodes.length){
+        m.addedNodes.forEach(n=>{ if (n.nodeType===1) attach(n); });
+      }
+    }
+  });
+  mo.observe(document.documentElement, {childList:true, subtree:true});
+
+  // Initial attach
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', ()=>attach(document), {once:true});
+  else attach(document);
+
+})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script id="igdc-qa-config">
+  (function () {
+    // 1) 민감정보 없는 기본 설정
+    const baseConfig = {
+      url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "",
+      project: "IGDC",
+      pageId: null,
+      aiEndpoint: null
+    };
+
+    // Supabase 환경을 SUPER_VARSAR에 적용하는 함수
+    function applyConfig(env) {
+      const url =
+        (env && env.SUPABASE_URL) ||
+        baseConfig.url;
+
+      const anonKey =
+        (env && env.SUPABASE_ANON_KEY) ||
+        "";
+
+      if (!anonKey) {
+        console.warn("[IGDC] Supabase anonKey is not configured.");
+      }
+
+      window.SUPER_VARSAR = Object.assign(
+        window.SUPER_VARSAR || {},
+        baseConfig,
+        {
+          url: url,
+          anonKey: anonKey
+        }
+      );
+    }
+
+    // 2) 이미 window.IGDC_ENV가 있다면(로컬 테스트 등) 그걸 우선 사용
+    if (window.IGDC_ENV &&
+        (window.IGDC_ENV.SUPABASE_ANON_KEY || window.IGDC_ENV.SUPABASE_URL)) {
+      applyConfig(window.IGDC_ENV);
+      return;
+    }
+
+    // 3) 없으면 Netlify Functions에서 환경변수 읽어오기
+    var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
+
+    fetch(endpoint, { cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("http " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        var env = data && (data.env || data);
+        window.IGDC_ENV = Object.assign(window.IGDC_ENV || {}, env || {});
+        applyConfig(window.IGDC_ENV);
+        console.log("[IGDC] Supabase env loaded from secureEnvBridge.");
+      })
+      .catch(function (err) {
+        console.warn("[IGDC] Failed to load Supabase env:", err && err.message);
+        applyConfig(null);
+      });
+  })();
+</script>
+<script id="igdc-qa-script">
+(function(){
+  if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
+  const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
+  let isOpen=false, isAnimating=false;
+
+  function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
+  const fmtDate = (s)=> new Date(s).toLocaleString();
+  const nowISO = ()=> new Date().toISOString();
+  const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
+  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+
+  function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
+  function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
+
+  async function ensureSupabase(){
+    if(STATE.sb) return STATE.sb;
+    const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
+    const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
+    if(!url || !key || !window.supabase || !window.supabase.createClient){
+      console.warn("[Q&A] Stakabadhi/maktaba ya Supabase haijasanidiwa: UI inaonekana lakini kuhifadhi kumezimwa.");
+      return null;
+    }
+    STATE.sb = window.supabase.createClient(url, key);
+    return STATE.sb;
+  }
+  async function ensureAuth(){
+    const sb = await ensureSupabase(); if(!sb) return;
+    let { data: { session } } = await sb.auth.getSession();
+    if(!session){
+      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      ({ data: { session } } = await sb.auth.getSession());
+    }
+    if(session){
+      const uid = session.user.id;
+      const { data } = await sb.from("igdc_admins").select("uid").eq("uid", uid).limit(1);
+      STATE.user = session.user;
+      STATE.isAdmin = Array.isArray(data) && data.length>0;
+    }
+  }
+
+  function mountUI(){
+    const modal = el("div","igdc-qa-modal");
+    const backdrop = el("div","igdc-qa-backdrop");
+    const panel = el("div","igdc-qa-panel");
+    const header = el("div","igdc-qa-header");
+    const title = el("div","igdc-qa-title"); title.textContent = "Maswali na Majibu";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Funga");
+    header.append(title, close);
+
+    const body = el("div","igdc-qa-body");
+    const lQ = el("label"); lQ.textContent="Swali";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Tafadhali weka swali lako...";
+    const lA = el("label"); lA.textContent="Jibu";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Tafadhali subiri kidogo, tutajibu hivi karibuni.";
+    const actions = el("div","igdc-qa-actions");
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Wasilisha";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Futa";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Maswali rahisi yanajibiwa mara moja na AI. Masuala ya kiufundi, hitilafu au uendeshaji hutumwa kiotomatiki kwa Q&A ya msimamizi.";
+    const list = el("div","igdc-qa-threads");
+
+    body.append(lQ,tQ,lA,tA,actions,note,list);
+    actions.append(btnSubmit, btnClear);
+    panel.append(header, body);
+    modal.append(backdrop, panel);
+    document.body.append(modal);
+
+    // position near sidebar
+    function positionNearSidebar(){
+      try{
+        const sb = document.querySelector('.sidebar');
+        if(sb){
+          const rect = sb.getBoundingClientRect();
+          const left = Math.round(rect.right + 12);
+          panel.style.left = left + "px";
+        }
+      }catch(e){}
+    }
+    positionNearSidebar();
+    window.addEventListener('resize', positionNearSidebar);
+    window.addEventListener('scroll', positionNearSidebar, { passive:true });
+
+    function openModal(){
+      if(isAnimating || isOpen) return;
+      isAnimating = true;
+      modal.style.display = "block";
+      requestAnimationFrame(()=>{
+        modal.classList.add('open');
+        isOpen = true;
+        setTimeout(()=>{ isAnimating = false; }, 220);
+      });
+    }
+    function closeModal(){
+      if(isAnimating || !isOpen) return;
+      isAnimating = true;
+      modal.classList.remove('open');
+      setTimeout(()=>{
+        modal.style.display = "none";
+        isOpen = false;
+        isAnimating = false;
+      }, 220);
+    }
+
+    // Sidebar trigger
+    const sideBtn = document.querySelector('#qnaOpenBtn');
+    if(sideBtn){ sideBtn.addEventListener('click', openModal); }
+    close.addEventListener("click", closeModal);
+    backdrop.addEventListener("click", closeModal);
+    document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
+
+    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
+    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+
+    async function fetchThreads(){
+      const sb = await ensureSupabase(); if(!sb) return;
+      const { data, error } = await sb.from("igdc_qna_threads")
+        .select("*")
+        .eq("project", STATE.project)
+        .eq("page_id", STATE.pageId)
+        .order("created_at", { ascending:false }).limit(100);
+      if(error){ console.error(error); return; }
+      renderList(data||[]);
+    }
+    function renderList(rows){
+      list.innerHTML="";
+      rows.forEach(row=>{
+        const box = el("div","igdc-qa-thread");
+        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Inasubiri)";
+        const meta = el("div","igdc-qa-thread-meta");
+        const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
+        const tag = el("span"); tag.textContent = row.is_admin? "Ombi la msimamizi":"Jumla";
+        const actions = el("div","igdc-qa-thread-actions");
+        const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
+        if(canDelete){
+          const del = el("button","igdc-qa-btn muted"); del.textContent="Futa";
+          del.addEventListener("click", async ()=>{
+            const sb = await ensureSupabase(); if(!sb) return;
+            const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
+            if(error){ alert("Kufuta kumeshindikana (ruhusa/sera)"); return; }
+            await fetchThreads();
+          });
+          actions.append(del);
+        }
+        meta.append(time, tag, actions);
+        box.append(q,a,meta);
+        list.append(box);
+      });
+    }
+
+    async function autoAnswerIfNeeded(text){
+      const technical = classifyTech(text);
+      let answer = null;
+      if(!technical){
+        const ep = getAIEndpoint();
+        if(ep){
+          try{
+            const res = await fetch(ep,{method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({question:text, pageId: STATE.pageId})});
+            const j = await res.json(); answer = j && (j.answer||j.text||null);
+          }catch(e){}
+        }
+        if(!answer){
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 확인 후 회신됩니다.";
+          else if(/가격|비용|요금/.test(text)) answer="가격/요금 정보는 페이지 내 안내를 참고해주세요. 추가 문의는 남겨주세요.";
+          else answer="문의 감사합니다. 빠르게 확인하여 도와드리겠습니다.";
+        }
+      }
+      return { technical, answer };
+    }
+
+    async function submit(){
+      const q = (tQ.value||"").trim();
+      let a = (tA.value||"").trim();
+      if(!q){ tQ.focus(); return; }
+      const { technical, answer } = await autoAnswerIfNeeded(q);
+      if(!a && answer) a = answer;
+      const sb = await ensureSupabase();
+      if(!sb){
+        alert("Mipangilio ya kuhifadhi (Supabase url/key) bado haijaunganishwa, kwa hivyo kuhifadhi upande wa seva kumezimwa. Wakati wa kusambaza kwenye wavuti, weka SUPER_VARSAR.url/anonKey na itaunganishwa kiotomatiki.");
+        return;
+      }
+      const record = {
+        project: STATE.project, page_id: STATE.pageId,
+        user_id: (STATE.user && STATE.user.id) || null,
+        question: q, answer: a || null, is_admin: technical,
+        created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
+      };
+      const { error } = await sb.from("igdc_qna_threads").insert(record);
+      if(error){ alert("Usajili umeshindikana"); return; }
+      tQ.value=""; tA.value = a || "";
+      await fetchThreads();
+    }
+    btnSubmit.addEventListener("click", submit);
+
+    // realtime refresh
+    (async()=>{ try{
+      const sb = await ensureSupabase(); if(!sb) return;
+      sb.channel('igdc_qna_changes').on('postgres_changes',{event:'*',schema:'public',table:'igdc_qna_threads'}, fetchThreads).subscribe();
+    }catch(e){} })();
+
+    window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
+    fetchThreads();
+  }
+
+  async function boot(){
+  window.SUPER_VARSAR = window.SUPER_VARSAR || {};
+  STATE.project = (window.SUPER_VARSAR.project || "IGDC");
+  STATE.pageId = (window.SUPER_VARSAR.pageId || (location.pathname + (location.hash||"")));
+  // 1) Always mount UI so the popup can open
+  mountUI();
+  // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] uanzishaji wa auth umeshindikana:", e); }
+}
+if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
+})();
+</script>
+<!-- IGDC: order/settlement wiring + AI fallback rotation (safe, same-origin) -->
+<script>
+(function(){
+  // ===== 1) 구매/정산 스니펫 (서버 전담) =====
+  async function postJSON(url, data){
+    const headers = {"Content-Type":"application/json"};
+    const csrf = document.querySelector('meta[name="csrf-token"]');
+    if (csrf && csrf.content) headers["X-CSRF-Token"] = csrf.content;
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      credentials: "include",
+      body: JSON.stringify(data||{})
+    });
+    return res;
+  }
+
+  window.orderItem = async function(itemId, qty){
+    try{
+      const res = await postJSON("/api/order", { itemId, qty: qty||1 });
+      if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
+      if (res.ok){ alert("구매 요청이 접수되었습니다."); }
+      else { alert("구매 요청 실패"); }
+    }catch(e){ console.warn(e); alert("네트워크 오류"); }
+  };
+
+  window.requestSettlement = async function(amount, currency){
+    try{
+      const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
+      if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
+      if (res.ok){ alert("정산 요청이 접수되었습니다."); }
+      else { alert("정산 요청 실패"); }
+    }catch(e){ console.warn(e); alert("네트워크 오류"); }
+  };
+
+  // ===== 2) AI 추천·회전(로테이션) 보강 =====
+  // 조건: 상품 카드가 거의 없거나(3개 미만) 썸네일이 비어 있으면 → 서버 추천을 요청해 채움.
+  document.addEventListener('DOMContentLoaded', function(){
+    try{
+      // 컨테이너 후보 탐색
+      var grid = document.querySelector('#productGrid, .product-grid, .grid-products, .cards.products') || null;
+      if(!grid) return;  // 레이아웃을 건드리지 않음
+
+      // 카드/썸네일 탐지
+      var cards = grid.querySelectorAll('[data-product-id], .product-card, .card');
+      var needFill = (cards.length < 3);
+
+      // 썸네일 없는 카드가 많으면 보강 필요
+      if (!needFill && cards.length){
+  var emptyThumbs = 0;
+  cards.forEach(function(c){
+    var img = c.querySelector('img');
+    if(!img || !img.getAttribute('src')) emptyThumbs++;
+  });
+  if (emptyThumbs >= 3) needFill = true;
+}
+
+      if(!needFill) return;
+
+      // 서버 추천 시도 (동일 도메인)
+      fetch('/api/recommendations?limit=12', { credentials:'include' })
+        .then(function(r){ if(!r.ok) throw new Error('recommendations failed'); return r.json(); })
+        .then(function(list){
+          try{
+            if(!Array.isArray(list) || !list.length) throw new Error('empty recos');
+
+            // 기존 스타일을 해치지 않기 위해, 매우 보수적으로 카드만 추가
+            list.slice(0, 8).forEach(function(item){
+              var a = document.createElement('a');
+              a.className = 'product-card';
+              a.href = item.url || '#';
+              a.setAttribute('data-product-id', item.id || '');
+
+              var img = document.createElement('img');
+              img.alt = item.title || 'item';
+              img.loading = 'lazy';
+              img.referrerPolicy = 'no-referrer';
+              img.src = item.thumb || item.image || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
+
+              var t = document.createElement('div');
+              t.className = 'title';
+              t.textContent = item.title || item.name || '상품';
+
+              a.appendChild(img);
+              a.appendChild(t);
+              grid.appendChild(a);
+            });
+
+            if (window.IGDC && IGDC.log) IGDC.log({ event:'ai_reco_fill', source:'server', count: Math.min(8, list.length) });
+          }catch(err){ console.warn(err); }
+        })
+        .catch(function(){
+          // 서버 실패 시, 로컬 폴백 목록 사용 (있을 때만)
+          try{
+            var fb = (window.IGDC_RECO_FALLBACK || []);
+            if(!fb.length) return;
+            fb.slice(0,8).forEach(function(item){
+              var a = document.createElement('a');
+              a.className = 'product-card';
+              a.href = item.url || '#';
+              a.setAttribute('data-product-id', item.id || '');
+              var img = document.createElement('img');
+              img.alt = item.title || 'item';
+              img.loading = 'lazy';
+              img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
+              var t = document.createElement('div');
+              t.className = 'title';
+              t.textContent = item.title || '상품';
+              a.appendChild(img); a.appendChild(t);
+              grid.appendChild(a);
+            });
+            if (window.IGDC && IGDC.log) IGDC.log({ event:'ai_reco_fill', source:'fallback', count: Math.min(8, fb.length) });
+          }catch(err){ console.warn(err); }
+        });
+    }catch(e){ console.warn(e); }
+  });
+})();
+</script>
+<script src="/assets/js/igdc-core.min.js"></script>
+<script src="/assets/js/igdc-pay.min.js"></script>
+<!-- @SAFE-PATCH: hide '문학 학술교류' sidebar/menu entry -->
+<script>
+(function(){
+  function hideLiteratureAcademic(){
+    try{
+      var links = document.querySelectorAll('nav a, aside a, .sidebar a, a');
+      for (var i=0;i<links.length;i++){
+        var a = links[i];
+        var txt = (a.textContent||'').trim();
+        var href = (a.getAttribute('href')||'').trim();
+        if (href.includes('literature_academic') ||
+            (txt.includes('문학') && txt.includes('학술'))) {
+          a.setAttribute('aria-hidden','true');
+          a.setAttribute('tabindex','-1');
+          a.classList.add('is-hidden-lit');
+          a.style.display='none';
+          var li = a.closest('li'); if(li){ li.style.display='none'; li.setAttribute('aria-hidden','true'); }
+        }
+      }
+    }catch(e){/* silent */}
+  }
+  if (document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', hideLiteratureAcademic, {once:true});
+  } else {
+    hideLiteratureAcademic();
+  }
+})(
+<!-- Minimal runtime to toggle off-canvas; no bindings to existing logic -->
+<script id="ml-offcanvas-js">
+(function(){
+  if (window.__ML_OFFCANVAS__) return; window.__ML_OFFCANVAS__=true;
+  function ensureOverlay(){
+    var el=document.querySelector('.ml-overlay');
+    if(!el){ el=document.createElement('div'); el.className='ml-overlay'; document.body.appendChild(el); }
+    return el;
+  }
+  function openLeft(){ document.documentElement.classList.add('ml-open-left');  ensureOverlay().classList.add('active'); }
+  function openRight(){document.documentElement.classList.add('ml-open-right'); ensureOverlay().classList.add('active'); }
+  function closeAll(){ document.documentElement.classList.remove('ml-open-left','ml-open-right'); var ov=document.querySelector('.ml-overlay'); if(ov){ ov.classList.remove('active'); } }
+  // Edge swipe only; no hook to existing buttons to avoid touching logic
+  var startX=0, edge=24;
+  window.addEventListener('touchstart', function(e){ if(!e.touches||!e.touches[0]) return; startX=e.touches[0].clientX; }, {passive:true});
+  window.addEventListener('touchend', function(e){
+    if(!e.changedTouches||!e.changedTouches[0]) return;
+    var endX=e.changedTouches[0].clientX;
+    if(startX<edge && endX-startX>60) openLeft();
+    if(startX>window.innerWidth-edge && startX-endX>60) openRight();
+  }, {passive:true});
+  document.addEventListener('click', function(e){ if(e.target && e.target.classList && e.target.classList.contains('ml-overlay')) closeAll(); }, {passive:true});
+  window.addEventListener('keydown', function(e){ if(e.key==='Escape') closeAll(); });
+  // Expose safe controls (optional use)
+  window.ML = { openLeft:openLeft, openRight:openRight, close:closeAll };
+})();
+</script>
+<style>.is-hidden-lit{ display:none !important; }</style>
+<script>
+(function(){
+  var mount = document.getElementById('cards');
+  if(!mount) return; // 안전모드: 이 페이지에 #cards가 없으면 아무것도 안 함
+  var name = document.body.dataset.page || (location.pathname.split('/').pop().split('.')[0] || 'news');
+  fetch('/api/feed?page=' + name, { cache: 'no-store' })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      var items = (data && data.items) ? data.items : [];
+      mount.innerHTML = items.map(function(i){
+        return '<article class="card">'
+             + '<img src="' + (i.image||'') + '" alt="' + (i.title||'') + '" loading="lazy">'
+             + '<h3>' + (i.title||'') + '</h3>'
+             + '<p>' + (i.subtitle||'') + '</p>'
+             + '</article>';
+      }).join('');
+    })
+    .catch(function(e){ console && console.warn && console.warn('feed error', e); });
+})();
+</script>
+<script id="rscroll-bind-from-socialnet">
+(function(){
+  function stepFor(scroller){
+    const vw = Math.max(scroller.clientWidth * 0.9, 1);
+    const card = scroller.querySelector('.thumb-card');
+    const cw = card ? (card.clientWidth + 12) : 200; // 12 = gap
+    return Math.max(vw, cw);
+  }
+  function update(wrap){
+    var scroller = wrap.querySelector('.thumb-scroller');
+    var left = wrap.querySelector('.rscroll.left');
+    var right= wrap.querySelector('.rscroll.right');
+    if(!scroller||!left||!right) return;
+    var max = scroller.scrollWidth - scroller.clientWidth - 1;
+    left.classList.toggle('disabled', scroller.scrollLeft <= 0);
+    right.classList.toggle('disabled', scroller.scrollLeft >= max);
+  }
+  function bind(wrap){
+    var scroller = wrap.querySelector('.thumb-scroller');
+    var left = wrap.querySelector('.rscroll.left');
+    var right= wrap.querySelector('.rscroll.right');
+    if(!scroller||!left||!right) return;
+    var step = ()=> stepFor(scroller);
+    left.addEventListener('click', function(){ scroller.scrollBy({left: -step(), behavior:'smooth'}); });
+    right.addEventListener('click', function(){ scroller.scrollBy({left:  step(), behavior:'smooth'}); });
+    scroller.addEventListener('scroll', function(){ update(wrap); }, {passive:true});
+    window.addEventListener('resize', function(){ update(wrap); }, {passive:true});
+    // initial
+    setTimeout(function(){ update(wrap); }, 0);
+    // 🔧 FIX: 카드가 나중에 들어오면 update 재호출
+    try{
+    const mo = new MutationObserver(function(){
+    update(wrap);
+  });
+  mo.observe(scroller, { childList:true, subtree:true });
+}catch(_){}
+
+  }
+  function init(){
+    document.querySelectorAll('.scroller-wrap').forEach(bind);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init, {once:true});
+  else init();
+})();
+</script>
+<script id="rscroll-anchor-walls-v1">// neutralized: Anchor .rscroll buttons</script>
+<script id="adpanel-drag-scroll">
+(function(){
+  var panel = document.querySelector('.ad-panel');
+  if(!panel) return;
+  var target = panel.querySelector('.ad-scroll') || panel;
+
+  var isDown = false, startY = 0, startTop = 0;
+  function onDown(e){
+    isDown = true;
+    startY = e.clientY;
+    startTop = target.scrollTop;
+    (panel || target).style.cursor = 'grabbing';
+    e.preventDefault();
+  }
+  function onMove(e){
+    if(!isDown) return;
+    var dy = e.clientY - startY;
+    target.scrollTop = startTop - dy;
+  }
+  function onUp(){
+    if(!isDown) return;
+    isDown = false;
+    (panel || target).style.cursor = '';
+  }
+
+  target.addEventListener('mousedown', onDown);
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onUp);
+
+  // Touch support
+  var tStartY = 0, tStartTop = 0;
+  target.addEventListener('touchstart', function(e){
+    var t = e.touches[0];
+    tStartY = t.clientY;
+    tStartTop = target.scrollTop;
+  }, {passive:true});
+  target.addEventListener('touchmove', function(e){
+    var t = e.touches[0];
+    target.scrollTop = tStartTop - (t.clientY - tStartY);
+  }, {passive:true});
+})();</script>
+<script id="thumb-autofill-js">
+  (function(){
+    function createCard(item) {
+      var card = document.createElement("div");
+      card.className = "thumb-card";
+      var img = document.createElement("div");
+      img.className = "thumb-img";
+      if (item && item.image) {
+        img.style.backgroundImage = "url('" + item.image.replace(/'/g, "%27") + "')";
+        img.style.backgroundSize = "cover";
+        img.style.backgroundPosition = "center";
+      }
+      var title = document.createElement("div");
+      title.className = "thumb-title";
+      title.textContent = (item && item.title) ? item.title : "Iliyopendekezwa";
+      var meta = document.createElement("div");
+      meta.className = "thumb-meta";
+      meta.textContent = (item && item.meta) ? item.meta : "Imejazwa kiotomatiki";
+      card.appendChild(img);
+      card.appendChild(title);
+      card.appendChild(meta);
+      if (item && item.href) {
+        card.addEventListener("click", function(){ location.href = item.href; });
+        card.style.cursor = "pointer";
+      }
+      return card;
+    }
+
+    async function backfillList(list){
+      var TARGET = 20;
+      var cards = list.querySelectorAll(".thumb-card");
+      if (cards.length >= TARGET) return;
+
+      var need = TARGET - cards.length;
+      var section = list.getAttribute("data-source") || "general";
+      var filled = 0;
+
+      try {
+        var url = "/api/recommend?section=" + encodeURIComponent(section) + "&need=" + need;
+        var r = await fetch(url, { credentials: "include" });
+        if (r.ok) {
+          var data = await r.json();
+          if (Array.isArray(data)) {
+            data.slice(0, need).forEach(function(item){
+              list.appendChild(createCard(item));
+              filled++;
+            });
+          }
+        }
+      } catch (e) {}
+
+      while (filled < need) {
+        list.appendChild(createCard(null));
+        filled++;
+      }
+    }
+
+    function run(){
+      document.querySelectorAll(".thumb-list.thumb-scroller").forEach(backfillList);
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", run);
+    } else {
+      run();
+    }
+    setTimeout(run, 1500);
+  })();
+</script>
+<script src="frontbus.child.js"></script>
+<script>
+(function(){
+  try{
+    function notify(top){
+      parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*');
+    }
+    function atTop(){
+      var se=document.scrollingElement||document.documentElement||document.body;
+      return (window.scrollY||window.pageYOffset||0)<=0 && (se?(se.scrollTop||0)<=0:true);
+    }
+    function onAnyScroll(){ notify(atTop()); }
+    window.addEventListener('scroll', onAnyScroll, {passive:true});
+    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
+    document.addEventListener('wheel', e=>{ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
+    document.addEventListener('touchmove', ()=>notify(false), {passive:true,capture:true});
+    setTimeout(()=>notify(atTop()),50);
+  }catch(_){}
+})();
+</script>
+<script id="igdc-adpanel-12p-js">
+(function(){
+  function setup(){
+    var panel = document.querySelector('.ad-panel');
+    if(!panel) return;
+    // make scroll container if missing
+    var scroll = panel.querySelector('.ad-scroll');
+    if(!scroll){
+      scroll = document.createElement('div');
+      scroll.className = 'ad-scroll';
+      var items = Array.from(panel.querySelectorAll('.ad-box'));
+      // move boxes after title
+      var title = panel.querySelector('.ad-title');
+      if(title){
+        items.forEach(function(b){ scroll.appendChild(b); });
+        title.insertAdjacentElement('afterend', scroll);
+      }else{
+        items.forEach(function(b){ scroll.appendChild(b); });
+        panel.appendChild(scroll);
+      }
+    }
+    var first = scroll.querySelector('.ad-box');
+    var second = first && first.nextElementSibling;
+    if(!first){ return; }
+
+    var rect1 = first.getBoundingClientRect();
+    var h = rect1.height || 150;
+    var gap = 7;
+    if(second){
+      var rect2 = second.getBoundingClientRect();
+      var d = Math.round(rect2.top - rect1.bottom);
+      if(!isNaN(d) && Math.abs(d) < 40) gap = Math.max(0, d);
+    }
+    var target = Math.round((12 * h) + (11 * gap) + 0.35 * (h + gap));
+    scroll.style.height = target + 'px';
+    scroll.style.maxHeight = target + 'px';
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setup, {once:true});
+  else setup();
+  window.addEventListener('load', setup);
+  window.addEventListener('resize', setup);
+})();</script><script id="igdc-scroller-outside-v1">
+// IGDC Placement V5 (offset tuned):
+// - Left button: midpoint between sidebar.right and content-box.left, then +4px toward box
+// - Right button: content-box right inner wall, 10px inset
+(function(){
+  if (window.__IGDC_OUTSIDE_V5__) return; window.__IGDC_OUTSIDE_V5__=true;
+
+  var sidebar = document.querySelector('.sidebar');
+
+  function size(el){
+    var cs = getComputedStyle(el);
+    var w = parseFloat(cs.width) || el.getBoundingClientRect().width || 40;
+    var h = parseFloat(cs.height) || el.getBoundingClientRect().height || 40;
+    return {w:w, h:h};
+  }
+
+  function placeOne(wrap){
+    var scroller = wrap.querySelector('.thumb-scroller');
+    var leftBtn  = wrap.querySelector('.rscroll.left');
+    var rightBtn = wrap.querySelector('.rscroll.right');
+    if(!scroller || (!leftBtn && !rightBtn)) return;
+
+    var box = wrap.closest('.content-box') || wrap;
+    var brect = box.getBoundingClientRect();
+    var srect = sidebar ? sidebar.getBoundingClientRect() : { right: 0 };
+
+    // Midpoint for left, then nudge +4px toward content box
+    var leftMid  = Math.round((srect.right + brect.left) / 2) + 4;
+
+    // Right inner placement: 4px inset from right wall
+    var rightInner = Math.round(brect.right) - 4;
+
+    var wrect = wrap.getBoundingClientRect();
+    var cy = Math.round(wrect.top + (wrect.height/2));
+
+    if (leftBtn){
+      var L = size(leftBtn);
+      leftBtn.style.position = 'fixed';
+      leftBtn.style.left = (leftMid - Math.round(L.w/2)) + 'px';
+      leftBtn.style.top  = (cy - Math.round(L.h/2)) + 'px';
+      leftBtn.style.zIndex = '5000'; leftBtn.style.visibility = 'visible';
+    }
+    if (rightBtn){
+      var R = size(rightBtn);
+      rightBtn.style.position = 'fixed';
+      rightBtn.style.left = (rightInner - R.w) + 'px';
+      rightBtn.style.top  = (cy - Math.round(R.h/2)) + 'px';
+      rightBtn.style.zIndex = '5000'; rightBtn.style.visibility = 'visible';
+    }
+  }
+
+  function placeAll(){ document.querySelectorAll('.scroller-wrap').forEach(placeOne); }
+
+  var raf=0; function schedule(){ cancelAnimationFrame(raf); raf=requestAnimationFrame(function(){ setTimeout(placeAll,20); }); }
+
+  if (document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', schedule, { once:true }); } else { schedule(); }
+  window.addEventListener('resize', schedule, { passive:true });
+  window.addEventListener('scroll', schedule, { passive:true });
+  try{ var ro=new ResizeObserver(schedule); ['.sidebar','.ad-panel','.main-content','.content-box'].forEach(function(sel){ var el=document.querySelector(sel); if(el) ro.observe(el); }); }catch(_){}
+})();
+</script>
+<style id="match-tour-top-and-round">
+  @media (min-width:1100px){
+    .sidebar,
+    .main-content,
+    .brand-rail{
+      margin-top:10px !important;   /* 투어 페이지와 동일한 상단 여백 */
+      border-top-left-radius:10px !important;
+      border-top-right-radius:10px !important;
+      overflow:hidden;
+    }
+    .brand-rail{ top:16px !important; } /* sticky인 경우도 같은 위치에서 시작 */
+  }
+</style>
+<style id="sidebar-hide-and-gap-fix">
+  .sidebar a[href="literature_academic.html"] {
+    display: none !important;
+  }
+  .container {
+    grid-column-gap: 10px !important;
+    column-gap: 10px !important;
+  }
+</style>
+<script id="sidebar-active-script">
+(function(){
+  function norm(u){
+    u = (u||"").toString().trim().toLowerCase();
+    u = u.split("#")[0].split("?")[0];
+    var f = u.split("/").pop();
+    if(f === "" || f === "index.html") f = "home.html";
+    f = f.replace(/_ko\.html$|_en\.html$|_zh\.html$/,".html");
+    return f;
+  }
+  function apply(root){
+    var current = norm(location.pathname);
+    var links = root.querySelectorAll(".sidebar a[href], nav a[href]");
+    links.forEach(function(a){
+      var href = norm(a.getAttribute("href")||"");
+      var on = href && href === current;
+      a.classList.toggle("active", !!on);
+      if(on){ a.setAttribute("aria-current","page"); }
+      else  { a.removeAttribute("aria-current"); }
+    });
+  }
+  function run(){
+    // current document
+    apply(document);
+    // also inside same-origin iframes (e.g., admin srcdoc)
+    document.querySelectorAll("iframe").forEach(function(fr){
+      try{
+        var doc = fr.contentDocument || (fr.contentWindow && fr.contentWindow.document);
+        if(doc) apply(doc);
+      }catch(e){ /* cross-origin or not ready */ }
+    });
+  }
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", run, {once:true});
+  } else {
+    run();
+  }
+  window.addEventListener("hashchange", run);
+  window.addEventListener("popstate", run);
+})();
+</script>
+<script id="edge-autohide-mobile-js">
+(function(){
+  if (!matchMedia('(pointer:coarse)').matches) return;
+  const q=s=>document.querySelector(s);
+  const top=q('nav')||q('.topbar'), left=q('.sidebar'), right=q('.right-panel')||q('.ad-panel');
+  if(!q('.edge-top')) document.body.insertAdjacentHTML('beforeend','<div class="edge-top"></div><div class="edge-left"></div><div class="edge-right"></div>');
+  if(top) document.body.classList.add('hide-top'); if(left) document.body.classList.add('hide-left'); if(right) document.body.classList.add('hide-right');
+  const S=44; let drag=null,sx=0,sy=0,dx=0,dy=0;
+  function bind(sel,dir,showCls){
+    const edge=q(sel); if(!edge) return;
+    const down=e=>{const t=e.touches?e.touches[0]:e; drag=dir; sx=t.clientX; sy=t.clientY; dx=0; dy=0;
+      addEventListener('pointermove',move,{passive:true}); addEventListener('touchmove',move,{passive:true});
+      addEventListener('pointerup',up); addEventListener('touchend',up);
+    };
+    const move=e=>{const t=e.touches?e.touches[0]:e; dx=t.clientX-sx; dy=t.clientY-sy;
+      if(drag==='top'&&dy>8) document.body.classList.add(showCls);
+      if(drag==='left'&&dx>8) document.body.classList.add(showCls);
+      if(drag==='right'&&dx<-8) document.body.classList.add(showCls);
+    };
+    const up=()=>{const pass=(drag==='top'&&dy>S)||(drag==='left'&&dx>S)||(drag==='right'&&dx<-S);
+      if(!pass) document.body.classList.remove(showCls);
+      drag=null; removeEventListener('pointermove',move); removeEventListener('touchmove',move);
+      removeEventListener('pointerup',up); removeEventListener('touchend',up);
+    };
+    edge.addEventListener('pointerdown',down); edge.addEventListener('touchstart',down,{passive:true});
+    document.addEventListener('click',e=>{const p=(dir==='top'?top:dir==='left'?left:right); if(!p) return;
+      if(document.body.classList.contains(showCls)&&!p.contains(e.target)) document.body.classList.remove(showCls);
+    });
+    addEventListener('scroll',()=>{if(document.body.classList.contains(showCls)) document.body.classList.remove(showCls)},{passive:true});
+  }
+  if(top) bind('.edge-top','top','show-top');
+  if(left) bind('.edge-left','left','show-left');
+  if(right) bind('.edge-right','right','show-right');
+})();
+</script>
+<script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.distributionhub.json" data-interval="20000" src="/assets/js/hero.rotator.js"></script>
+<script id="igdc-qa-ensure-modal">
+(function(){
+  if (window.__IGDC_QA_ENSURE__) return; window.__IGDC_QA_ENSURE__ = true;
+
+  function ensureModal(){
+    var modal = document.querySelector('.igdc-qa-modal');
+    if(!modal){
+      // minimal modal skeleton
+      var m = document.createElement('div'); m.className='igdc-qa-modal';
+      var b = document.createElement('div'); b.className='igdc-qa-backdrop';
+      var p = document.createElement('div'); p.className='igdc-qa-panel';
+      var h = document.createElement('div'); h.className='igdc-qa-header';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+      var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
+      h.appendChild(t); h.appendChild(x);
+
+      var body = document.createElement('div'); body.className='igdc-qa-body';
+      body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
+
+      // ensure the "대표 이메일" is shown only inside the modal
+      var ce = document.createElement('p');
+      ce.className = 'contact-email';
+      ce.innerHTML = 'Barua pepe ya mwakilishi: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+      body.appendChild(ce);
+
+      p.appendChild(h); p.appendChild(body);
+      m.appendChild(b); m.appendChild(p);
+      document.body.appendChild(m);
+
+      function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
+      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }
+      x.addEventListener('click', close);
+      b.addEventListener('click', close);
+
+      window.IGDC_QA = window.IGDC_QA || {};
+      if (!window.IGDC_QA.open) window.IGDC_QA.open = open;
+    }else{
+      // if exists, make sure contact email is present exactly once
+      var body = modal.querySelector('.igdc-qa-body') || modal;
+      if(body && !body.querySelector('.contact-email')){
+        var ce = document.createElement('p');
+        ce.className = 'contact-email';
+        ce.innerHTML = 'Barua pepe ya mwakilishi: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+        body.appendChild(ce);
+      }
+    }
+  }
+
+  function stripFooterEmail(){
+    try{
+      var footers = document.querySelectorAll('footer');
+      footers.forEach(function(f){
+        f.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
+          var parent = a.parentNode;
+          if(parent){
+            parent.removeChild(a);
+            var html = parent.innerHTML;
+            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
+            html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
+            parent.innerHTML = html;
+          }
+        });
+        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
+      });
+    }catch(e){}
+  }
+
+  function run(){
+    stripFooterEmail();
+    ensureModal();
+  }
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', run, {once:true});
+  } else {
+    run();
+  }
+})();
+</script>
+<script id="igdc-qa-email-ensure">
+(function(){
+  if (window.__IGDC_QA_EMAIL_ENSURE__) return;
+  window.__IGDC_QA_EMAIL_ENSURE__ = true;
+
+  var CONTACT_HTML = 'Barua pepe ya mwakilishi: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+
+  function stripFooterEmail(){
+    try{
+      var footers = document.querySelectorAll('footer');
+      footers.forEach(function(f){
+        // Remove any mailto links
+        f.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
+          var parent = a.parentNode;
+          if(parent){
+            parent.removeChild(a);
+            var html = parent.innerHTML;
+            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
+            html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
+            parent.innerHTML = html;
+          }
+        });
+        // Remove any plain-text "대표 이메일: ..." remnants
+        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
+      });
+    }catch(e){}
+  }
+
+  function ensureModal(){
+    var modal = document.querySelector('.igdc-qa-modal');
+    if(!modal){
+      // Create minimal modal skeleton matching the site's QnA structure
+      var m = document.createElement('div'); m.className='igdc-qa-modal';
+      var b = document.createElement('div'); b.className='igdc-qa-backdrop';
+      var p = document.createElement('div'); p.className='igdc-qa-panel';
+      var h = document.createElement('div'); h.className='igdc-qa-header';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+      var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
+      h.appendChild(t); h.appendChild(x);
+
+      var body = document.createElement('div'); body.className='igdc-qa-body';
+      var note = document.createElement('div'); note.className='igdc-qa-note';
+      note.textContent = '저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.';
+      body.appendChild(note);
+
+      // (1) Inject the contact email in creation path
+      var ce = document.createElement('p');
+      ce.className = 'contact-email';
+      ce.innerHTML = CONTACT_HTML;
+      body.appendChild(ce);
+
+      p.appendChild(h); p.appendChild(body);
+      m.appendChild(b); m.appendChild(p);
+      document.body.appendChild(m);
+
+      function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
+      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
+      x.addEventListener('click', close);
+      b.addEventListener('click', close);
+
+      window.IGDC_QA = window.IGDC_QA || {};
+      if (!window.IGDC_QA.open) window.IGDC_QA.open = open;
+    }else{
+      // (2) If modal exists already, ensure the contact email is present exactly once
+      var body = modal.querySelector('.igdc-qa-body') || modal;
+      if(body){
+        var exists = body.querySelector('.contact-email');
+        if(!exists){
+          var ce = document.createElement('p');
+          ce.className = 'contact-email';
+          ce.innerHTML = CONTACT_HTML;
+          body.appendChild(ce);
+        }
+      }
+    }
+  }
+
+
+  function run(){
+    stripFooterEmail();
+    ensureModal();
+    // keep FAB minimal; many files already include it
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', run, {once:true});
+  } else {
+    run();
+  }
+})();
+</script>
+<script id="igdc-mobile-rightdrawer-swipe">
+/* === Right-edge swipe/tap to reveal the ad panel (mobile only) === */
+(function(){
+  if (window.__IGDC_MOBILE_RIGHTDRAWER__) return; window.__IGDC_MOBILE_RIGHTDRAWER__ = true;
+  var mq = window.matchMedia && window.matchMedia("(max-width: 768px)");
+  function active(){ return mq && mq.matches; }
+
+  // Create edge sensor if missing
+  var edge = document.querySelector('.edge-right');
+  if (!edge){
+    edge = document.createElement('div');
+    edge.className = 'edge-right';
+    document.body.appendChild(edge);
+  }
+
+  // Tap edge to open
+  edge.addEventListener('click', function(){ if(active()){ document.body.classList.add('show-right'); } }, {passive:true});
+
+  // Close when tapping outside panel
+  document.addEventListener('click', function(e){
+    if(!active()) return;
+    var panel = document.querySelector('.ad-panel');
+    if (!panel) return;
+    if (document.body.classList.contains('show-right')){
+      var r = panel.getBoundingClientRect();
+      if (e.clientX < r.left) document.body.classList.remove('show-right');
+    }
+  }, {passive:true});
+
+  // Minimal swipe detection, restricted to 18px from right edge to avoid conflict with scrollers
+  var startX=0, startY=0, touching=false;
+  var EDGE=18, THRESH=45;
+  document.addEventListener('touchstart', function(e){
+    if(!active()) return;
+    if (!e.touches || !e.touches.length) return;
+    var t = e.touches[0];
+    // Only start if from right edge
+    if ((window.innerWidth - t.clientX) <= EDGE){
+      startX = t.clientX; startY = t.clientY; touching = true;
+    }
+  }, {passive:true});
+
+  document.addEventListener('touchend', function(e){
+    if(!active()) return;
+    if (!touching) return; touching=false;
+    var t = (e.changedTouches && e.changedTouches[0]) || null;
+    if (!t) return;
+    var dx = t.clientX - startX;
+    var dy = t.clientY - startY;
+    if (Math.abs(dx) < Math.abs(dy)) return; // ignore vertical swipes
+    if (dx < -THRESH){
+      // swipe left from right edge => open drawer
+      document.body.classList.add('show-right');
+    }
+  }, {passive:true});
+
+  // Allow closing with a standard back gesture: swipe right starting outside the panel
+  document.addEventListener('touchstart', function(e){
+    if(!active()) return;
+    if (!document.body.classList.contains('show-right')) return;
+    var panel = document.querySelector('.ad-panel'); if(!panel) return;
+    var r = panel.getBoundingClientRect();
+    if (e.touches[0].clientX < r.left){
+      startX = e.touches[0].clientX; startY = e.touches[0].clientY; touching = true;
+    }
+  }, {passive:true});
+  document.addEventListener('touchend', function(e){
+    if(!active()) return;
+    if (!document.body.classList.contains('show-right')) return;
+    if (!touching) return; touching=false;
+    var dx = e.changedTouches[0].clientX - startX;
+    var dy = e.changedTouches[0].clientY - startY;
+    if (Math.abs(dx) < Math.abs(dy)) return;
+    if (dx > THRESH){ document.body.classList.remove('show-right'); }
+  }, {passive:true});
+})();
+</script>
+<script id="igdc-q-ad-swipe">
+(function(){
+  var panel = document.querySelector('.ad-panel, #ads');
+  if(!panel) return;
+  var open = false, startX=0, startY=0, tracking=false;
+  function setOpen(v){ open = v; document.body.classList.toggle('ads-open', !!v); }
+  window.addEventListener('touchstart', function(e){
+    if(open) return;
+    var t=e.touches[0]; startX=t.clientX; startY=t.clientY; tracking=false;
+    if(window.innerWidth - startX <= 24){ tracking = true; }
+  }, {passive:true});
+  window.addEventListener('touchmove', function(e){
+    if(!tracking) return; var t=e.touches[0];
+    var dx = startX - t.clientX, dy = Math.abs(t.clientY - startY);
+    if(dy > 40){ tracking=false; return; }
+    if(dx > 24){ setOpen(true); tracking=false; }
+  }, {passive:true});
+  panel.addEventListener('touchstart', function(e){
+    var t=e.touches[0]; startX=t.clientX; startY=t.clientY; tracking=true;
+  }, {passive:true});
+  panel.addEventListener('touchmove', function(e){
+    if(!tracking) return; var t=e.touches[0];
+    var dx = t.clientX - startX, dy = Math.abs(t.clientY - startY);
+    if(dy > 40){ tracking=false; return; }
+    if(dx > 24){ setOpen(false); tracking=false; }
+  }, {passive:true});
+})();
+</script>
+<!-- IGTC DistributionHub: breakpoint hardening patch (3-col → 1-col at 900px) -->
+<style id="igtc-distributionhub-breakpoint-patch">
+  .container { box-sizing: border-box; }
+
+  /* Desktop & wide tablet: strict 3-col with matched widths */
+  @media (min-width: 901px){
+    .container{
+      display: grid !important;
+      grid-template-columns: 220px minmax(0,1fr) 274px !important;
+      column-gap: 16px !important;
+      overflow: clip;
+    }
+    .sidebar{
+      grid-column: 1;
+      min-width: 220px !important; max-width: 220px !important;
+    }
+    .main-content{
+      grid-column: 2;
+      min-width: 0 !important; margin: 0 !important;
+    }
+    .right-rail, .brand-rail{ grid-column: 3; }
+/* RIGHT PANEL SCROLL FIX - PRODUCTION */
+
+@media (max-width:1024px){
+  /* Mobile / Tablet: keep sticky */
+  .brand-rail{
+    position: sticky !important;
+    top:16px !important;
+
+    width:274px !important;
+    min-width:274px !important;
+    max-width:274px !important;
+
+    right:auto !important;
+    transform:none !important;
+  }
+}
+
+@media (min-width:1025px){
+  /* Desktop: follow page scroll */
+  .brand-rail{
+    position: relative !important;
+    top:auto !important;
+
+    width:274px !important;
+    min-width:274px !important;
+    max-width:274px !important;
+
+    right:auto !important;
+    transform:none !important;
+  }
+}
+
+  }
+
+  /* Narrow tablet & mobile: instant 1-col takeover by main */
+  @media (max-width: 900px){
+    .container{
+      display: block !important;
+      width: 100% !important; max-width: 100% !important;
+      overflow-x: hidden !important;
+    }
+    .sidebar, .right-rail, .brand-rail{
+      display: none !important;
+    }
+    .main-content{
+      width: 100% !important;
+      max-width: 100% !important;
+      margin: 0 !important;
+    }
+  }
+</style>
+<script id="bc-narrow-js">
+(function(){
+  var tiles = document.querySelectorAll('.section-blockchain .bc-tile');
+  tiles.forEach(function(t){
+    if (t.querySelector('.bc-narrow')) return;
+    // Create wrapper span
+    var span = document.createElement('span');
+    span.className = 'bc-narrow';
+    // Move only text nodes into wrapper; keep icons/imgs as-is
+    var nodes = Array.prototype.slice.call(t.childNodes);
+    nodes.forEach(function(n){
+      if (n.nodeType === Node.TEXT_NODE || (n.nodeType===1 && n.tagName==='SPAN' && n.childNodes.length && Array.prototype.every.call(n.childNodes, function(c){return c.nodeType===Node.TEXT_NODE;}))) {
+        span.appendChild(n);
+      }
+    });
+    // Insert wrapper at the beginning if it has content
+    if (span.childNodes.length){
+      t.insertBefore(span, t.firstChild);
+    }
+  });
+})();</script><script>
+window.IGDC_QA=window.IGDC_QA||{};
+if(typeof window.IGDC_QA.open!=="function"){
+  window.IGDC_QA.open=function(){
+    if(window.QnaCore&&typeof QnaCore.open==="function"){QnaCore.open();}
+    else if(typeof openModal==="function"){openModal();}
+  };
+}
+window.addEventListener("message",function(ev){
+  try{if(ev&&ev.data&&ev.data.type==="IGTC_OPEN_QNA"&&typeof IGDC_QA.open==="function"){IGDC_QA.open();}}catch(e){}
+});
+</script>
+<style id="dh-mobile-inline-style">
+/* Mobile: when .brand-rail is moved into <main>, make it a horizontal rail */
+@media (max-width:1024px){
+  html, body, main, .content, .page, .container, .wrap, .wrapper{
+    height:auto !important; min-height:0 !important; overflow:visible !important;
+  }
+  /* Only target the panel that has been moved (flag attribute) */
+  .brand-rail[data-mobile-in-main="1"]{
+    display:block !important; width:100% !important; margin:16px 0 12px !important;
+    overflow:visible !important;
+  }
+  /* Horizontal scroller inside the panel */
+  .brand-rail[data-mobile-in-main="1"] .ad-scroll,
+  .brand-rail[data-mobile-in-main="1"] .ad-list,
+  .brand-rail[data-mobile-in-main="1"] .brand-card,
+  .brand-rail[data-mobile-in-main="1"] .cards,
+  .brand-rail[data-mobile-in-main="1"] .items,
+  .brand-rail[data-mobile-in-main="1"] .thumbs{
+    display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
+    gap:12px !important; padding:10px 8px 16px !important;
+    overflow-x:auto !important; overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important; scroll-snap-type:x mandatory !important;
+    touch-action:pan-x !important; overscroll-behavior-x:contain !important;
+    -ms-overflow-style:none !important; scrollbar-width:none !important;
+  }
+  .brand-rail[data-mobile-in-main="1"] .ad-scroll::-webkit-scrollbar,
+  .brand-rail[data-mobile-in-main="1"] .ad-list::-webkit-scrollbar,
+  .brand-rail[data-mobile-in-main="1"] .brand-card::-webkit-scrollbar,
+  .brand-rail[data-mobile-in-main="1"] .cards::-webkit-scrollbar,
+  .brand-rail[data-mobile-in-main="1"] .items::-webkit-scrollbar,
+  .brand-rail[data-mobile-in-main="1"] .thumbs::-webkit-scrollbar{
+    display:none !important; height:0 !important; width:0 !important;
+  }
+  /* Cards width tuned to avoid slight cut-off (account for padding) */
+  .brand-rail[data-mobile-in-main="1"] .ad-list > *,
+  .brand-rail[data-mobile-in-main="1"] .brand-card > *,
+  .brand-rail[data-mobile-in-main="1"] .cards > *,
+  .brand-rail[data-mobile-in-main="1"] .items > *,
+  .brand-rail[data-mobile-in-main="1"] .thumbs > *{
+    scroll-snap-align:start !important;
+    flex:0 0 auto !important;
+    min-width:calc(100vw - 16px) !important;
+    max-width:100% !important;
+    box-sizing:border-box !important;
+    margin:0 !important;
+  }
+}
+@media (max-width:1024px) and (orientation:landscape){
+  .brand-rail[data-mobile-in-main="1"] .ad-list > *,
+  .brand-rail[data-mobile-in-main="1"] .brand-card > *,
+  .brand-rail[data-mobile-in-main="1"] .cards > *,
+  .brand-rail[data-mobile-in-main="1"] .items > *,
+  .brand-rail[data-mobile-in-main="1"] .thumbs > *{
+    min-width:calc(50vw - 16px) !important;
+  }
+}
+</style>
+<script id="m7-guard-and-title-20251027">
+(function(){
+  try{
+    function isMobile(){ return (window.innerWidth||0) <= 1366; }
+    function arm(){
+      if(!isMobile()) return;
+      var wrap = document.getElementById('mobile-ad-rail-wrap');
+      var list = document.getElementById('mobile-ad-rail-list');
+      if (wrap){ wrap.style.touchAction='auto'; wrap.style.msTouchAction='auto'; wrap.style.overflowY='auto'; }
+      // Shorten long title
+      var title = document.querySelector('#mobile-ad-rail-wrap .rail-title, #mobile-ad-rail-wrap h3, #mobile-ad-rail-wrap header h3');
+      if (title){
+        var t=(title.textContent||'').trim();
+        if (t.length>8) title.textContent='💎 Bidhaa bora zilizopendekezwa 💎';
+      }
+      // Capture-phase guard to preserve native vertical scroll
+      var zone = list || wrap;
+      if(!zone) return;
+      var sx=0, sy=0, active=false;
+      zone.addEventListener('touchstart', function(ev){
+        if(!ev.touches||!ev.touches.length) return;
+        sx=ev.touches[0].clientX; sy=ev.touches[0].clientY; active=true;
+      }, {capture:true, passive:true});
+      zone.addEventListener('touchmove', function(ev){
+        if(!active||!ev.touches||!ev.touches.length) return;
+        var dx=ev.touches[0].clientX - sx, dy=ev.touches[0].clientY - sy;
+        if (Math.abs(dy) > Math.abs(dx)+4){
+          if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+        }
+      }, {capture:true, passive:true});
+      zone.addEventListener('touchend', function(){ active=false; }, {capture:true, passive:true});
+      zone.addEventListener('touchcancel', function(){ active=false; }, {capture:true, passive:true});
+    }
+    if (document.readyState==='complete'||document.readyState==='interactive') arm();
+    else document.addEventListener('DOMContentLoaded', arm);
+    window.addEventListener('resize', arm);
+    window.addEventListener('orientationchange', arm);
+  }catch(e){}
+})();
+</script>
+<script id="igtc-checkout-trigger-v1">
+(function(){
+  if (window.__IGTC_CHECKOUT_READY__) return;
+  window.IGTC = window.IGTC || {};
+  function safeJSON(s){ try{ return JSON.parse(s); }catch(_){ return null; } }
+  IGTC.checkout = function(opts){
+    try{
+      // Normalize
+      var payload = Object.assign({ method: 'card', amount: 0, currency: 'KRW', meta: {} }, opts||{});
+      // 1) CustomEvent for same-page listeners (optional)
+      try{ window.dispatchEvent(new CustomEvent('IGTC_CHECKOUT', { detail: payload })); }catch(_){}
+      // 2) postMessage for index.html dispatcher (if present)
+      try{ window.postMessage({ type: 'CHECKOUT', payload: payload }, '*'); }catch(_){}
+      // 3) Fallback: call serverless function directly (no-op if not configured)
+      try{
+        fetch('/.netlify/functions/checkout', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+          .then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); })
+          .then(function(res){
+            if(res && res.redirectUrl){ window.location.assign(res.redirectUrl); }
+            else if(res && res.qr && res.qr.html){
+              // Minimal inline QR modal (scoped)
+              var wrap = document.getElementById('igtc-qr-modal'); 
+              if(!wrap){
+                wrap = document.createElement('div');
+                wrap.id = 'igtc-qr-modal';
+                wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+                wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>결제 QR</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">닫기</button></div>'
+                  + '<div id="igtc-qr-area"></div></div>';
+                document.body.appendChild(wrap);
+                var btn = document.getElementById('igtc-qr-close');
+                if(btn) btn.addEventListener('click', function(){ wrap.remove(); }, { passive:true });
+              }
+              var area = document.getElementById('igtc-qr-area'); if(area){ area.innerHTML = res.qr.html; }
+            }
+          })
+          .catch(function(){ /* silent fallback */ });
+      }catch(_){}
+    }catch(_){}
+  };
+  // Data-API: any element with [data-checkout] will trigger checkout with attributes
+  document.addEventListener('click', function(e){
+    var el = e.target.closest('[data-checkout]'); if(!el) return;
+    var metaAttr = el.getAttribute('data-meta');
+    var meta = metaAttr ? (safeJSON(metaAttr) || { note: metaAttr }) : {};
+    var amount = parseFloat(el.getAttribute('data-amount')||'0') || 0;
+    var currency = el.getAttribute('data-currency') || 'KRW';
+    var method = el.getAttribute('data-method') || 'card';
+    IGTC.checkout({ method: method, amount: amount, currency: currency, meta: meta });
+    e.preventDefault();
+  }, { passive:true });
+  window.__IGTC_CHECKOUT_READY__ = true;
+})();
+</script>
+<script>
+(()=> {
+  const form=document.querySelector('#qnaForm,[data-qna-form]');
+  const ta=document.querySelector('#qnaText, textarea[name="question"]');
+  if(!ta) return; const pageId=location.pathname+(location.hash||'');
+  async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
+    await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
+    ta.value=''; alert('전송되었습니다.');
+  }
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('전송 실패'));});
+  const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('전송 실패'));});
+})();
+</script>
+<script>
+// IGDC: report page height to parent index for iframe resizing
+(function(){
+  function sendHeight(){
+    try{
+      if(window.parent === window){ return; }
+      var docEl = document.documentElement;
+      var body = document.body;
+      var h = Math.max(
+        docEl ? docEl.scrollHeight : 0,
+        body ? body.scrollHeight : 0,
+        docEl ? docEl.offsetHeight : 0,
+        body ? body.offsetHeight : 0
+      );
+      if(!h || h < 100){ return; }
+      var payload = { type: "igdcFrameHeight", height: h, page: location.pathname };
+      if(window.parent && window.parent.postMessage){
+        window.parent.postMessage(payload, "*");
+      }
+    }catch(e){}
+  }
+  function schedule(){
+    sendHeight();
+    [200, 800, 1600].forEach(function(ms){
+      setTimeout(sendHeight, ms);
+    });
+  }
+  if(document.readyState === "complete" || document.readyState === "interactive"){
+    schedule();
+  }else{
+    document.addEventListener("DOMContentLoaded", schedule);
+  }
+  window.addEventListener("load", function(){ setTimeout(sendHeight, 400); });
+  window.addEventListener("resize", function(){ setTimeout(sendHeight, 250); });
+  window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
+})();
+</script>
+<script id="igdc-product-review-script">
+/*
+ IGDC Product Review – Auto Hook Version
+ - Distribution page thumbnail click auto-detect
+ - Product detail review auto-mount (Coupang-style)
+ *
+ * Requirement:
+ *  - Product thumbnail or detail container must have: data-product-id="..."
+ *  - window.__IGDC_ROLE (guest | member | admin ...)
+ */
+
+(function (window, document) {
+  'use strict';
+
+  const Review = {
+    config: {
+      apiBase: '/.netlify/functions/reviews',
+      rootId: 'product-review-root',
+      minChars: 10,
+      maxChars: 2000
+    },
+
+    state: {
+      productId: null,
+      role: 'guest',
+      mountedFor: null
+    },
+
+    init() {
+      this.state.role = window.__IGDC_ROLE || 'guest';
+      this.bindAutoHook();
+    },
+
+    /* 🔑 핵심: 디스트리부션 썸네일 클릭 자동 감지 */
+    bindAutoHook() {
+      document.addEventListener('click', (e) => {
+        const card = e.target.closest('[data-product-id]');
+        if (!card) return;
+
+        const productId = card.dataset.productId;
+        if (!productId) return;
+
+        // 상세 상품이 열릴 시간을 약간 준 뒤 마운트
+        setTimeout(() => {
+          this.mount(productId);
+        }, 50);
+      });
+    },
+
+    mount(productId) {
+      if (!productId) return;
+      if (this.state.mountedFor === productId) return;
+
+      this.state.productId = productId;
+      this.state.mountedFor = productId;
+
+      const root = this.ensureRoot();
+      root.innerHTML = this.renderShell();
+
+      this.bindForm(root);
+      this.loadReviews();
+    },
+
+    ensureRoot() {
+      let root = document.getElementById(this.config.rootId);
+      if (!root) {
+        root = document.createElement('div');
+        root.id = this.config.rootId;
+
+        // 상세 상품 영역 하단에 삽입
+        const detail =
+          document.querySelector('.product-detail') ||
+          document.querySelector('.product-modal') ||
+          document.body;
+
+        detail.appendChild(root);
+      }
+      return root;
+    },
+
+    renderShell() {
+      const canWrite = this.state.role !== 'guest';
+      return `
+        <section class="igdc-review">
+          <h3 class="igdc-review-title">상품 리뷰</h3>
+          <div id="igdc-review-list" class="igdc-review-list">로딩 중...</div>
+          ${canWrite ? this.renderForm() : this.renderLoginHint()}
+        </section>
+      `;
+    },
+
+    renderForm() {
+      return `
+        <form id="igdc-review-form" class="igdc-review-form">
+          <textarea
+            placeholder="상품 사용 경험을 공유해 주세요"
+            minlength="${this.config.minChars}"
+            maxlength="${this.config.maxChars}"
+            required></textarea>
+          <div class="igdc-review-actions">
+            <button type="submit">리뷰 등록</button>
+          </div>
+        </form>
+      `;
+    },
+
+    renderLoginHint() {
+      return `<div class="igdc-review-login-hint">
+        리뷰 작성은 로그인 후 가능합니다.
+      </div>`;
+    },
+
+    bindForm(root) {
+      const form = root.querySelector('#igdc-review-form');
+      if (!form) return;
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const textarea = form.querySelector('textarea');
+        const content = textarea.value.trim();
+
+        if (content.length < this.config.minChars) {
+          alert(`리뷰는 최소 ${this.config.minChars}자 이상 작성해 주세요.`);
+          return;
+        }
+
+        this.submitReview(content)
+          .then(() => {
+            textarea.value = '';
+            this.loadReviews();
+          })
+          .catch(() => alert('리뷰 등록 실패'));
+      });
+    },
+
+    async loadReviews() {
+      const list = document.getElementById('igdc-review-list');
+      if (!list) return;
+
+      list.textContent = '로딩 중...';
+
+      try {
+        const res = await fetch(
+          `${this.config.apiBase}?productId=${encodeURIComponent(this.state.productId)}`
+        );
+        const data = await res.json();
+
+        if (!Array.isArray(data) || data.length === 0) {
+          list.innerHTML = '<div class="igdc-review-empty">아직 리뷰가 없습니다.</div>';
+          return;
+        }
+
+        list.innerHTML = data.map(this.renderItem).join('');
+      } catch {
+        list.textContent = '리뷰를 불러오지 못했습니다.';
+      }
+    },
+
+    async submitReview(content) {
+      const res = await fetch(this.config.apiBase, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productId: this.state.productId,
+          content
+        })
+      });
+
+      if (!res.ok) throw new Error('submit failed');
+    },
+
+    renderItem(item) {
+      const esc = (v) => String(v || '').replace(/[<>]/g, '');
+      return `
+        <div class="igdc-review-item">
+          <div class="igdc-review-meta">
+            <span>${esc(item.user || '익명')}</span>
+            <span>${esc(item.date || '')}</span>
+          </div>
+          <div class="igdc-review-content">${esc(item.content)}</div>
+        </div>
+      `;
+    }
+  };
+
+  /* 기본 스타일 */
+  const style = document.createElement('style');
+  style.textContent = `
+    .igdc-review { margin-top:24px; border-top:1px solid #eee; padding-top:16px; }
+    .igdc-review-title { margin:0 0 12px; font-size:1.05rem; }
+    .igdc-review-list { display:flex; flex-direction:column; gap:10px; }
+    .igdc-review-item { border:1px solid #eee; border-radius:10px; padding:10px; background:#fafafa; }
+    .igdc-review-meta { font-size:.8rem; color:#666; display:flex; gap:8px; }
+    .igdc-review-content { margin-top:6px; line-height:1.5; }
+    .igdc-review-form textarea { width:100%; min-height:90px; padding:10px; border-radius:10px; border:1px solid #ddd; }
+    .igdc-review-actions { margin-top:8px; text-align:right; }
+    .igdc-review-actions button { padding:8px 14px; border-radius:10px; border:none; background:#2563eb; color:#fff; }
+    .igdc-review-empty, .igdc-review-login-hint { color:#666; }
+  `;
+  document.head.appendChild(style);
+
+  Review.init();
+  window.IGDCProductReview = Review;
+
+})(window, document);
+</script>
+
+<script defer="" src="/assets/js/placeholder-sweeper.js"></script>
+<script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
+
+<script src="/assets/js/distribution-products-automap.v3.js" defer></script>
+
+
+</body>
+</html>

@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="vi">
+<html class="prelayout" lang="en">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
-<title>MediaHub | Full Interface</title>
+<title>Trung tâm truyền thông | Full Interface</title>
 <style>
   :root {
     --bg:#0f1116;
@@ -143,6 +143,50 @@ html, body {
   pointer-events: auto !important;
 }
 
+
+/* === 10 Media Sections Layout Stabilizer (2026-02-23) === */
+/* Allow both vertical page scroll and horizontal row scroll */
+.thumb-line > .scroll-content{
+  touch-action: pan-x pan-y !important;
+}
+/* Force both scroll buttons visible on desktop/tablet (>1024) for media sections */
+@media (min-width:1025px){
+  .thumb-line[data-psom-key^="media-"] > .scroll-btn{
+    display:block !important;
+    opacity:1 !important;
+    visibility:visible !important;
+  }
+}
+/* Mobile portrait: YouTube-like full-width cards */
+@media (max-width:900px) and (orientation: portrait){
+  .thumb-line[data-psom-key^="media-"] .card{
+    flex:0 0 100% !important;
+    max-width:100% !important;
+  }
+  .thumb-line[data-psom-key^="media-"] .thumb{
+    aspect-ratio:16/9;
+  }
+}
+
+/* Force hide BOTH scroll buttons cleanly on tablet/mobile */
+@media (max-width:1024px){
+
+  .scroll-wrapper > .scroll-btn.left,
+  .scroll-wrapper > .scroll-btn.right{
+    display:none !important;
+    opacity:0 !important;
+    visibility:hidden !important;
+    pointer-events:none !important;
+  }
+
+}
+
+/* Improve touch scrolling behavior */
+.scroll-content{
+  -webkit-overflow-scrolling: touch;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
 </style>
 <style>
 
@@ -347,14 +391,13 @@ html, body {
   -webkit-overflow-scrolling: touch;
 }
 </style>
-<style id="qa-empty-state-style-kr">
-/* QnA 리스트가 비어 있을 때 안내문 표시 */
+<style id="qa-empty-state-style">
 .igdc-qa-threads:empty::before,
 .qna-threads:empty::before,
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Chưa có chủ đề Hỏi &amp; Đáp nào được đăng.";
+  content: "Hiện chưa có mục Hỏi & Đáp nào được đăng ký.";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -535,9 +578,9 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   var drawer = document.createElement("aside"); drawer.id="providers-drawer-left";
   drawer.innerHTML = [
     '<div id="providers-header-left">',
-      '<div id="providers-title-left">Nhà cung cấp</div>',
-      '<input id="providers-search-left" type="search" placeholder="Tìm kiếm..." aria-label="Search providers" />',
-      '<button id="providers-close-left" aria-label="Close">✕</button>',
+      '<div id="providers-title-left" >Providers</div>',
+      '<input id="providers-search-left" type="search" placeholder="Tìm kiếm..." aria-label="Tìm kiếm providers" />',
+      '<button id="providers-close-left" aria-label="Đóng">✕</button>',
     '</div>',
     '<div id="providers-body-left"></div>'
   ].join("");
@@ -602,129 +645,20 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
 })();
 </script>
 <!-- Mobile Section Pager v1 (group sections into horizontal slides on mobile) -->
-<style id="igdc-mobile-section-pager">
-@media (max-width:768px){
-  .section-pager{position:relative;overflow:hidden}
-  .section-track{display:flex;transition:transform .25s ease}
-  .section-slide{flex:0 0 100%;padding:0 10px;box-sizing:border-box}
-  .section-dots{position:sticky;bottom:8px;display:flex;gap:6px;justify-content:center;padding:10px 0}
-  .section-dots button{width:8px;height:8px;border-radius:999px;border:0;background:#cfd3da}
-  .section-dots button[aria-current="true"]{background:#111}
-}
-@media (max-width:768px) and (orientation:landscape){
-  .section-slide{padding:0 8px}
-}
-</style>
-<script defer="" id="igdc-mobile-section-pager-script">
-(function(){
-  var isMobile = matchMedia("(max-width:768px)").matches;
-  if(!isMobile) return;
-  if(document.getElementById("igdc-mobile-section-pager-ready")) return;
-  var m=document.createElement("meta"); m.id="igdc-mobile-section-pager-ready"; document.head.appendChild(m);
 
-  var host = document.querySelector("main") || document.querySelector(".main") || document.querySelector(".main-content");
-  if(!host) return;
+<!-- igdc-mobile-section-pager removed for MediaHub to preserve native scroll -->
 
-  var sections = Array.from(host.querySelectorAll(":scope > section"));
-  if(sections.length < 6) return;
 
-  function perPage(){ return matchMedia("(orientation:landscape)").matches ? 4 : 3; }
+<!-- igdc-mobile-section-pager removed for MediaHub to preserve native scroll -->
 
-  var pager = document.createElement("div"); pager.className = "section-pager";
-  var track = document.createElement("div"); track.className = "section-track";
-  pager.appendChild(track);
-
-  function build(){
-    track.innerHTML = "";
-    var n = perPage();
-    for(var i=0;i<sections.length;i+=n){
-      var slide = document.createElement("div");
-      slide.className = "section-slide";
-      for(var j=i;j<i+n && j<sections.length;j++){
-        slide.appendChild(sections[j]);
-      }
-      track.appendChild(slide);
-    }
-  }
-  build();
-
-  host.insertBefore(pager, host.firstChild);
-
-  var dots = document.createElement("div"); dots.className="section-dots";
-  pager.appendChild(dots);
-
-  function pageCount(){ return track.children.length; }
-  var idx = 0;
-  function renderDots(){
-    dots.innerHTML = "";
-    for(var i=0;i<pageCount();i++){
-      var b=document.createElement("button");
-      b.type="button"; b.setAttribute("aria-label","Go to page "+(i+1));
-      if(i===idx) b.setAttribute("aria-current","true");
-      (function(ii){ b.addEventListener("click", function(){ go(ii); }); })(i);
-      dots.appendChild(b);
-    }
-  }
-  function go(i){
-    idx = Math.max(0, Math.min(i, pageCount()-1));
-    track.style.transform = "translateX(" + (-100*idx) + "%)";
-    Array.from(dots.children).forEach(function(d,k){
-      if(k===idx) d.setAttribute("aria-current","true"); else d.removeAttribute("aria-current");
-    });
-    requestAnimationFrame(function(){
-      var h = track.children[idx].offsetHeight;
-      pager.style.minHeight = h + 20 + "px";
-    });
-  }
-
-  var startX=0, curX=0, dragging=false;
-  function onStart(e){
-    var x = (e.touches?e.touches[0].clientX:e.clientX);
-    if((window.innerWidth - x) <= 24) return; // allow full width for ad drawer (if any)
-    dragging=true; startX=x; curX=x; track.style.transition="none";
-  }
-  function onMove(e){
-    if(!dragging) return;
-    curX = (e.touches?e.touches[0].clientX:e.clientX);
-    var dx = curX - startX;
-    var base = -idx * pager.clientWidth;
-    track.style.transform = "translateX(" + (base + dx) + "px)";
-  }
-  function onEnd(){
-    if(!dragging) return;
-    dragging=false; track.style.transition="";
-    var dx = curX - startX;
-    if(Math.abs(dx) > 40){
-      if(dx<0) go(idx+1); else go(idx-1);
-    }else{
-      go(idx);
-    }
-  }
-  pager.addEventListener("touchstart", onStart, {passive:true});
-  pager.addEventListener("touchmove", onMove, {passive:true});
-  pager.addEventListener("touchend", onEnd, {passive:true});
-  pager.addEventListener("mousedown", onStart);
-  window.addEventListener("mousemove", onMove);
-  window.addEventListener("mouseup", onEnd);
-
-  window.addEventListener("resize", function(){
-    var oldPages = pageCount();
-    build();
-    if(pageCount() !== oldPages){
-      renderDots(); go(0);
-    }else{
-      go(idx);
-    }
-  });
-
-  renderDots(); go(0);
-})();
-</script>
 <style id="igdc-mobile-mediahub-patch-v3">
 /* === Mobile Optimization Patch — MediaHub (KR/ZH/EN) === */
 @media (max-width:768px){
   /* 1) Hide left sidebar on mobile */
   .sidebar{ display:none !important; }
+
+  /* 1.1) Allow page vertical scroll (avoid trapping in main overflow:hidden) */
+  main{ overflow: visible !important; }
 
   /* 2) Relax layout paddings for full-width content */
   .container,.layout{ display:block !important; padding:0 !important; margin:0 !important; }
@@ -1142,6 +1076,103 @@ body {
 </style>
 
 <link rel="stylesheet" href="/assets/css/thumbs.standard.css">
+
+<style id="media-placeholder-style">
+.media-card{position:relative;width:320px;height:180px;flex:0 0 320px;border-radius:12px;overflow:hidden;background:#111;margin-right:12px}
+.media-card .thumb.ph{width:100%;height:100%;background:linear-gradient(135deg,#222,#333)}
+.media-card .meta{position:absolute;left:0;right:0;bottom:0;padding:10px;color:#eee;background:linear-gradient(to top,rgba(0,0,0,.6),transparent)}
+</style>
+
+<style id="mediahub-scroll-fix-2026-02">
+/* === MEDIA SCROLL BUTTON FINAL FIX === */
+
+.scroll-wrapper{
+  position:relative !important;
+  padding: 0 72px !important;
+  overflow: hidden !important;
+}
+
+.scroll-btn{
+  z-index:10000 !important;
+}
+
+.scroll-btn.left{
+  left:0px !important;
+}
+
+.scroll-btn.right{
+  right:0px !important;
+}
+
+/* content 영역은 버튼만큼 안쪽으로 */
+.scroll-content,
+.thumb-line{
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 10px !important;
+  padding-right: 5px !important;
+}
+</style>
+<style id="mediahub-mobile-drag-fix">
+@media (max-width:1024px){
+
+  /* 버튼은 숨김 유지 */
+  .scroll-btn{ display:none !important; }
+
+  /* 카드 행 드래그 활성화 */
+  .thumb-line,
+  .scroll-content{
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    touch-action: pan-x pan-y !important;
+    pointer-events:auto !important;
+  }
+
+  /* 카드 자체 클릭 가능 */
+  .thumb-line a.card{
+    pointer-events:auto !important;
+  }
+
+  /* 상위 래퍼가 막지 못하게 */
+  .scroll-wrapper{
+    overflow:visible !important;
+  }
+
+  /* 페이지 세로 스크롤 보장 */
+  html, body{
+    overflow-y:auto !important;
+  }
+}
+</style>
+<style>
+.scroll-content {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+}
+
+html, body {
+  overflow-y: auto;
+}
+</style>
+
+
+<style id="qa-label-contrast-fix">
+.igdc-qa-field label,
+.igdc-qa-body label{
+  color:#666666 !important;
+  opacity:1 !important;
+  font-weight:600 !important;
+}
+</style>
+
+  <style id="sidebar-spacing-unify-v2">
+    .sidebar{padding-top:30px !important;}
+    .sidebar a{padding:12px 12px !important;margin:10px 12px !important;}
+  </style>
+
 </head>
 <body>
 <div id="hero" data-psom-key="media-hero"><div class="hero-title"></div></div>
@@ -1153,10 +1184,10 @@ body {
 <a href="networkhub.html">🛒 Trung tâm thị trường</a>
 <a href="distributionhub.html">🏭 Trung tâm phân phối</a>
 <a href="socialnetwork.html">📢 Mạng xã hội</a>
-<a href="mediahub.html">🎬 Trung tâm media</a>
-<a href="tour.html">🧳 Du lịch · Tham quan</a>
-<a href="literature_academic.html">📚 Văn học & giao lưu học thuật</a>
-<a href="javascript:void(0)" id="qnaOpenBtn" onclick="(function(){var m=document.querySelector('.igdc-qa-modal');if(!m){var d=document.createElement('div');d.className='igdc-qa-modal open';var b=document.createElement('div');b.className='igdc-qa-backdrop';var p=document.createElement('div');p.className='igdc-qa-panel';var h=document.createElement('div');h.className='igdc-qa-header';var t=document.createElement('div');t.className='igdc-qa-title';t.textContent='Q&A';var x=document.createElement('button');x.className='igdc-qa-close';x.innerHTML='&#10005;';h.appendChild(t);h.appendChild(x);var body=document.createElement('div');body.className='igdc-qa-body';body.innerHTML='<div class=&quot;igdc-qa-note&quot;>Chức năng Hỏi &amp; Đáp sẽ sớm được kích hoạt.</div>';p.appendChild(h);p.appendChild(body);d.appendChild(b);d.appendChild(p);document.body.appendChild(d);x.onclick=b.onclick=function(){d.classList.remove('open');setTimeout(function(){d.style.display='none';},180);};}else{m.style.display='block';m.classList.add('open');}})();return false;">💬 Liên hệ Hỏi &amp; Đáp</a></aside>
+<a href="mediahub.html">🎬 Trung tâm truyền thông</a>
+<a href="tour.html">🧳 Du lịch · Lữ hành · Lưu trú</a>
+<a href="literature_academic.html">📚 Giao lưu Văn học &amp; Học thuật</a>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Hỏi &amp; Đáp</a></aside>
 <main>
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
@@ -1175,86 +1206,2066 @@ body {
 <select name="provider" style="padding:8px 10px; border-radius:10px; border:none; outline:none;"></select>
 <button style="padding:10px 16px; border-radius:10px; border:none; background:#2e6bff; color:#fff; font-weight:700; cursor:pointer;" type="submit">Tìm kiếm</button>
 </form>
-<!-- Platform link line -->
+<!-- 플랫폼 링크 라인 -->
 <div class="section-title">Nhà cung cấp nội dung</div>
 <div class="platform-line"><a class="platform-tile" href="https://www.netflix.com" target="_blank">Netflix</a><a class="platform-tile" href="https://www.disneyplus.com" target="_blank">Disney+</a><a class="platform-tile" href="https://www.amazon.com/primevideo" target="_blank">Amazon Prime</a><a class="platform-tile" href="https://tv.apple.com" target="_blank">Apple TV+</a><a class="platform-tile" href="https://www.youtube.com" target="_blank">YouTube</a><a class="platform-tile" href="https://spotify.com" target="_blank">Spotify</a><a class="platform-tile" href="https://www.melon.com" target="_blank">Melon</a><a class="platform-tile" href="https://www.wavve.com" target="_blank">Wavve</a><a class="platform-tile" href="https://www.hulu.com" target="_blank">Hulu</a><a class="platform-tile" href="https://www.paramountplus.com" target="_blank">Paramount+</a><a class="platform-tile" href="https://www.peacocktv.com" target="_blank">Peacock</a><a class="platform-tile" href="https://www.tving.com" target="_blank">Tving</a><a class="platform-tile" href="https://www.coupangplay.com" target="_blank">Coupang Play</a><a class="platform-tile" href="https://music.youtube.com" target="_blank">YouTube Music</a><a class="platform-tile" href="https://tidal.com" target="_blank">Tidal</a><a class="platform-tile" href="https://www.deezer.com" target="_blank">Deezer</a><a class="platform-tile" href="https://music.amazon.com" target="_blank">Amazon Music</a><a class="platform-tile" href="https://www.bbc.co.uk/iplayer" target="_blank">BBC iPlayer</a><a class="platform-tile" href="https://www.viki.com" target="_blank">Rakuten Viki</a><a class="platform-tile" href="https://mubi.com" target="_blank">Mubi</a><a class="platform-tile" href="https://www.crunchyroll.com" target="_blank">Crunchyroll</a><a class="platform-tile" href="https://tv.kakao.com" target="_blank">Kakao TV</a><a class="platform-tile" href="https://video.unext.jp" target="_blank">U-NEXT</a></div>
-<!-- Trending Content -->
-<div class="section-title">🔥 Nội dung thịnh hành</div>
-<div class="thumb-line" data-psom-key="media-trending"></div>
+
+<!-- Trending Now -->
+<div class="section-title">🔥 Đang thịnh hành</div>
+<div class="thumb-line" data-psom-key="media-trending">
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+</div>
+
 <!-- Latest Movies -->
 <div class="section-title">🎬 Phim mới nhất</div>
-<div class="thumb-line" data-psom-key="media-movie"></div>
+<div class="thumb-line" data-psom-key="media-movie">
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+</div>
+
 <!-- Latest Dramas -->
-<div class="section-title">📺 Phim truyền hình mới nhất</div>
-<div class="thumb-line" data-psom-key="media-drama"></div>
+<div class="section-title">📺 Phim bộ mới nhất</div>
+<div class="thumb-line" data-psom-key="media-drama">
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+</div>
+
 <!-- Mystery / Thriller -->
 <div class="section-title">🕵️‍♂️ Bí ẩn / Giật gân</div>
-<div class="thumb-line" data-psom-key="media-thriller"></div>
+<div class="thumb-line" data-psom-key="media-thriller">
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+</div>
+
 <!-- Romance -->
 <div class="section-title">💖 Lãng mạn</div>
-<div class="thumb-line" data-psom-key="media-romance"></div>
-<!-- Variety & Entertainment -->
-<div class="section-title">😂 Giải trí tổng hợp</div>
-<div class="thumb-line" data-psom-key="media-variety"></div>
-<!-- Docs & Insights -->
-<div class="section-title">🎥 Phim tài liệu &amp; góc nhìn</div>
-<div class="thumb-line" data-psom-key="media-documentary"></div>
+<div class="thumb-line" data-psom-key="media-romance">
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+</div>
+
+<!-- Variety / Entertainment -->
+<div class="section-title">😂 Tạp kỹ / Giải trí</div>
+<div class="thumb-line" data-psom-key="media-variety">
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+</div>
+
+<!-- Documentary / Culture -->
+<div class="section-title">🎥 Tài liệu / Văn hóa</div>
+<div class="thumb-line" data-psom-key="media-documentary">
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+</div>
+
 <!-- Animation -->
 <div class="section-title">🐱 Hoạt hình</div>
-<div class="thumb-line" data-psom-key="media-animation"></div>
+<div class="thumb-line" data-psom-key="media-animation">
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+</div>
+
 <!-- Music Videos -->
-<div class="section-title">🎵 Video ca nhạc</div>
-<div class="thumb-line" data-psom-key="media-music"></div>
-<!-- Hot Shorts & Clips -->
-<div class="section-title">🔥 Shorts &amp; clip nổi bật</div>
-<div class="thumb-line" data-psom-key="media-shorts"></div>
+<div class="section-title">🎵 Video âm nhạc</div>
+<div class="thumb-line" data-psom-key="media-music">
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+</div>
+
+<!-- Hot Shorts & Video Movies -->
+<div class="section-title">🔥 Shorts & video nổi bật</div>
+<div class="thumb-line" data-psom-key="media-shorts">
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+  <div class="thumb ph"></div>
+  <div class="meta">Sắp ra mắt</div>
+</a>
+
+</div>
 </div>
 </main>
 </div>
+
 <script>
-function getGapPx(el){
-  const style = window.getComputedStyle(el);
-  const gapStr = style.columnGap || style.gap || "0";
-  return parseFloat(gapStr) || 0;
+/**
+ * MediaHub Unified Scroll Script (SAFE FULL BLOCK)
+ * ✅ thumb-line + platform-line 모두 지원
+ * ✅ "원본 라인 요소(.thumb-line/.platform-line)는 절대 교체/삭제하지 않음" (replaceChild 금지)
+ * ✅ 내부만 .scroll-content로 래핑하여 렌더러/초기화 코드와 충돌 방지
+ * - 짧은 클릭: 1장
+ * - 꾹 누름: "화면에 완전히(80%↑) 보이는 카드 수"만큼 이동
+ */
+
+(function () {
+  const CARD_SELECTOR = '.card';
+  const SHORT_CLICK_MS = 180;
+  const HOLD_INTERVAL_MS = 140;
+  const VISIBLE_RATIO = 0.8;
+
+  function getGapPx(el) {
+    const s = getComputedStyle(el);
+    return parseFloat(s.gap || s.columnGap || 0) || 0;
+  }
+
+  function getStride(container) {
+    const card = container.querySelector(CARD_SELECTOR);
+    return card ? (card.offsetWidth + getGapPx(container)) : container.clientWidth;
+  }
+
+  function getFullyVisibleCount(container) {
+    const L = container.scrollLeft;
+    const R = L + container.clientWidth;
+    let count = 0;
+
+    container.querySelectorAll(CARD_SELECTOR).forEach(card => {
+      const l = card.offsetLeft;
+      const r = l + card.offsetWidth;
+      const visible = Math.min(r, R) - Math.max(l, L);
+      const ratio = visible / (card.offsetWidth || 1);
+      if (ratio >= VISIBLE_RATIO) count++;
+    });
+
+    return Math.max(1, count);
+  }
+
+  function scrollByCards(container, count) {
+    const stride = getStride(container);
+    container.scrollTo({
+      left: container.scrollLeft + stride * count,
+      behavior: 'smooth'
+    });
+  }
+
+  // ✅ 원본 line 요소를 교체하지 않고, 내부만 래핑 + 버튼을 line 안에 생성
+  function ensureLineWrapped(line) {
+    if (!line || line.dataset.scrollWrapped === '1') return;
+
+    // scroll-content 없으면 생성해서 기존 자식들을 이동
+    let content = line.querySelector(':scope > .scroll-content');
+    if (!content) {
+      content = document.createElement('div');
+      content.className = 'scroll-content';
+
+      // 기존 자식들을 content로 이동 (버튼이 이미 있을 수 있으니, 생성 전에는 통째 이동)
+      const children = Array.from(line.childNodes);
+      children.forEach(n => content.appendChild(n));
+
+      line.appendChild(content);
+    }
+
+    // 버튼이 없으면 생성
+    let leftBtn = line.querySelector(':scope > .scroll-btn.left');
+    let rightBtn = line.querySelector(':scope > .scroll-btn.right');
+
+    if (!leftBtn) {
+      leftBtn = document.createElement('button');
+      leftBtn.className = 'scroll-btn left';
+      leftBtn.type = 'button';
+      leftBtn.textContent = '‹';
+      line.insertBefore(leftBtn, content);
+    } else {
+      // 혹시 content 뒤에 있으면 앞으로
+      if (leftBtn.nextSibling !== content) line.insertBefore(leftBtn, content);
+    }
+
+    if (!rightBtn) {
+      rightBtn = document.createElement('button');
+      rightBtn.className = 'scroll-btn right';
+      rightBtn.type = 'button';
+      rightBtn.textContent = '›';
+      line.appendChild(rightBtn);
+    } else {
+      // 혹시 content 앞에 있으면 뒤로
+      if (rightBtn.previousSibling !== content) line.appendChild(rightBtn);
+    }
+
+    // line에 wrapper 역할 클래스 부여 (CSS가 scroll-wrapper를 기대하는 경우 대응)
+    line.classList.add('scroll-wrapper');
+
+    // 바인딩 (중복 방지)
+    bindScroll(line);
+
+    line.dataset.scrollWrapped = '1';
+  }
+
+  function bindScroll(line) {
+    if (!line || line.dataset.scrollBound === '1') return;
+
+    const container = line.querySelector(':scope > .scroll-content');
+    if (!container) return;
+
+    const leftBtn = line.querySelector(':scope > .scroll-btn.left');
+    const rightBtn = line.querySelector(':scope > .scroll-btn.right');
+
+    let timer = null;
+    let pressStart = 0;
+
+    function clearTimer() {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    }
+
+ function start(dir) {
+  pressStart = Date.now();
+  clearTimer();
+
+  const isPlatform = line.classList.contains('platform-line');
+
+  // ✅ Nhà cung cấp nội dung 전용: "타일 100% 노출 기준"으로만 페이지 이동 + 항상 offsetLeft로 스냅
+  function providerStep(stepDir){
+    const items = Array.from(container.querySelectorAll('.platform-tile'));
+    if(!items.length) return;
+
+    const crect = container.getBoundingClientRect();
+    const EPS = 1;
+
+    // 1) 현재 화면에서 "완전 100% 보이는 타일"만
+    const fully = [];
+    for(let i=0;i<items.length;i++){
+      const r = items[i].getBoundingClientRect();
+      if(r.left >= crect.left - EPS && r.right <= crect.right + EPS) fully.push(i);
+    }
+
+    // 2) 기준 인덱스(완전노출이 없으면: 현재 L 기준으로 걸쳐진 다음 타일)
+    const L = container.scrollLeft;
+    let firstIdx = (fully.length ? fully[0] : (() => {
+      for(let i=0;i<items.length;i++){
+        const l = items[i].offsetLeft;
+        const rr = l + items[i].offsetWidth;
+        if(rr > L + EPS) return i;
+      }
+      return 0;
+    })());
+
+    const pageCount = Math.max(1, fully.length || 1);
+    const targetIdx = Math.max(0, Math.min(items.length - 1, firstIdx + stepDir * pageCount));
+
+    container.scrollTo({ left: items[targetIdx].offsetLeft, behavior:'smooth' });
+  }
+
+  timer = setInterval(() => {
+    if(isPlatform){
+      providerStep(dir);                 // ✅ Nhà cung cấp nội dung: 반 잘리면 다음번에 "그 타일이 통으로" 시작되게 스냅
+    } else {
+      const visible = getFullyVisibleCount(container);  // ✅ 메인 10섹션(thumb-line): 기존 방식 유지
+      scrollByCards(container, dir * visible);
+    }
+  }, HOLD_INTERVAL_MS);
 }
-function scrollByViewport(wrapper, dir){
-  const scroller = wrapper.querySelector('.scroll-content');
-  if (!scroller) return;
-  const children = Array.from(scroller.children);
-  if (!children.length) return;
-  const firstW = children[0].getBoundingClientRect().width;
-  const stride = firstW + getGapPx(scroller);
-  const visible = Math.max(1, Math.floor(scroller.clientWidth / stride));
-  const currentIndex = Math.round(scroller.scrollLeft / stride);
-  const delta = (dir === 'left' ? -visible : visible);
-  const maxIndex = Math.max(0, children.length - visible);
-  const nextIndex = Math.min(Math.max(0, currentIndex + delta), maxIndex);
-  scroller.scrollTo({ left: Math.round(nextIndex * stride), behavior: 'smooth' });
+
+function end(dir) {
+  const elapsed = Date.now() - pressStart;
+  clearTimer();
+
+  if (elapsed < SHORT_CLICK_MS) {
+    const isPlatform = line.classList.contains('platform-line');
+
+    if(isPlatform){
+      // ✅ Nhà cung cấp nội dung: 클릭도 "페이지 스냅"으로 (반 잘린 타일이 다음에 통으로 보이도록)
+      const items = Array.from(container.querySelectorAll('.platform-tile'));
+      if(!items.length) return;
+
+      const crect = container.getBoundingClientRect();
+      const EPS = 1;
+
+      const fully = [];
+      for(let i=0;i<items.length;i++){
+        const r = items[i].getBoundingClientRect();
+        if(r.left >= crect.left - EPS && r.right <= crect.right + EPS) fully.push(i);
+      }
+
+      const L = container.scrollLeft;
+      let firstIdx = (fully.length ? fully[0] : (() => {
+        for(let i=0;i<items.length;i++){
+          const l = items[i].offsetLeft;
+          const rr = l + items[i].offsetWidth;
+          if(rr > L + EPS) return i;
+        }
+        return 0;
+      })());
+
+      const pageCount = Math.max(1, fully.length || 1);
+      const targetIdx = Math.max(0, Math.min(items.length - 1, firstIdx + dir * pageCount));
+
+      container.scrollTo({ left: items[targetIdx].offsetLeft, behavior:'smooth' });
+    } else {
+      scrollByCards(container, dir * 1); // 기존: 짧은 클릭=1장
+    }
+  }
 }
-function wrapLines(selector){
-  document.querySelectorAll(selector).forEach(line => {
-    const wrapper = document.createElement('div');
-    wrapper.classList.add('scroll-wrapper');
-    const content = document.createElement('div');
-    content.classList.add('scroll-content');
-    while (line.firstChild) content.appendChild(line.firstChild);
-    const leftBtn = document.createElement('button');
-    leftBtn.className = 'scroll-btn left'; leftBtn.innerHTML = '‹';
-    const rightBtn = document.createElement('button');
-    rightBtn.className = 'scroll-btn right'; rightBtn.innerHTML = '›';
-    leftBtn.onclick = () => scrollByViewport(wrapper, 'left');
-    rightBtn.onclick = () => scrollByViewport(wrapper, 'right');
-    wrapper.appendChild(leftBtn);
-    wrapper.appendChild(content);
-    wrapper.appendChild(rightBtn);
-    line.parentNode.replaceChild(wrapper, line);
-  });
-}
-window.addEventListener('DOMContentLoaded', () => {
-  wrapLines('.platform-line');
-  wrapLines('.thumb-line');
-});
+
+
+    function end(dir) {
+      const elapsed = Date.now() - pressStart;
+      clearTimer();
+      if (elapsed < SHORT_CLICK_MS) {
+        scrollByCards(container, dir * 1);
+      }
+    }
+
+    // ✅ 마우스 + 터치/펜 모두 대응 (pointer 이벤트)
+    function bindBtn(btn, dir) {
+      if (!btn) return;
+
+      btn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        try { btn.setPointerCapture(e.pointerId); } catch(_) {}
+        start(dir);
+      });
+
+      btn.addEventListener('pointerup', (e) => {
+        e.preventDefault();
+        end(dir);
+      });
+
+      btn.addEventListener('pointercancel', () => {
+        clearTimer();
+      });
+
+      btn.addEventListener('pointerleave', () => {
+        // 포인터가 밖으로 나가면 멈춤 (길게 누르다 이탈 시)
+        clearTimer();
+      });
+    }
+
+    bindBtn(rightBtn, 1);
+    bindBtn(leftBtn, -1);
+
+    line.dataset.scrollBound = '1';
+  }
+
+  function initAll() {
+    // ✅ 두 라인 모두 안전하게 처리 (원본 노드 유지)
+    document.querySelectorAll('.thumb-line, .platform-line').forEach(ensureLineWrapped);
+  }
+
+  document.addEventListener('DOMContentLoaded', initAll);
+
+  // ✅ Nhà cung cấp nội dung 목록/카드가 "나중에 렌더"되는 경우 재적용 (원본 노드 유지라 충돌 없음)
+  const mo = new MutationObserver(() => initAll());
+  mo.observe(document.documentElement, { childList: true, subtree: true });
+
+})();
 </script>
+
+
 <script>
 // Open provider search in a new tab, no backend dependency
 function handleVideoSearch(e){
@@ -1481,7 +3492,7 @@ function handleVideoSearch(e){
     // Save selected provider on change
     sel.addEventListener('change', ()=>{ localStorage.setItem('mediahub_provider', sel.value); });
     const saved = localStorage.getItem('mediahub_provider');
-    if (saved && [...sel.options].some(o=>o.value===saved)) sel.value = saved;
+    if (saved && [...sel.options].some(o => o.value === saved)) sel.value = saved;
   }
 
   // Intercept search submit to use selected provider
@@ -1612,7 +3623,7 @@ function handleVideoSearch(e){
   --blue:#2563eb; --muted:#9ca3af;
 }
 /* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
-#qnaOpenBtn{ display:block; text-decoration:none; }
+#qnaOpenBtn{ background-color:#001f4d; color:#ffffff;  color:#001f4d;  display:block; text-decoration:none; }
 /* Modal near the left sidebar, with smooth transitions */
 .igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
 .igdc-qa-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;transition:opacity .18s ease}
@@ -1658,6 +3669,9 @@ function handleVideoSearch(e){
 @media (max-width:900px){
   .igdc-qa-panel{ left:calc(12px + var(--qa-left,0px)); width:min(92vw,560px) }
 }
+
+.contact-email{font:700 14px/1.45 var(--igdc-font); color:#555 !important; opacity:1 !important;}
+.contact-email a{color:#1d4ed8 !important; font-weight:700; text-decoration:underline;}
 </style>
 <style id="qna-brand-only">
 /* === Q&A sidebar link color only (no other changes) === */
@@ -1697,7 +3711,7 @@ function handleVideoSearch(e){
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">Cần kết nối cài đặt lưu (Supabase URL/Key) trước khi tất cả chức năng được kích hoạt.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
         document.body.appendChild(m);
@@ -1801,7 +3815,7 @@ function handleVideoSearch(e){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase (URL/Key) chưa được cấu hình: giao diện vẫn hiển thị nhưng chức năng lưu sẽ bị vô hiệu hóa.");
+      console.warn("[Q&A] Supabase credentials/library not configured: the UI is visible, but saving is disabled.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -1833,16 +3847,19 @@ function handleVideoSearch(e){
 
     const body = el("div","igdc-qa-body");
     const lQ = el("label"); lQ.textContent="Câu hỏi";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Nhập câu hỏi của bạn...";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Vui lòng nhập câu hỏi của bạn...";
     const lA = el("label"); lA.textContent="Trả lời";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Vui lòng chờ trong giây lát, chúng tôi đang chuẩn bị câu trả lời.";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Vui lòng chờ một chút. Chúng tôi sẽ sớm trả lời.";
     const actions = el("div","igdc-qa-actions");
-    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Submit";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Các câu hỏi đơn giản sẽ được AI trả lời ngay lập tức. Các vấn đề kỹ thuật / lỗi / vận hành sẽ tự động được chuyển tới mục Hỏi & Đáp của quản trị viên.";
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Gửi";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Xóa";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Những câu hỏi đơn giản sẽ được AI trả lời ngay. Các vấn đề kỹ thuật, lỗi hoặc vận hành sẽ tự động được chuyển đến phần Hỏi & Đáp của quản trị viên.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
+	const ce = el("p","contact-email");
+    ce.innerHTML = 'Email đại diện: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+    body.append(ce);
     actions.append(btnSubmit, btnClear);
     panel.append(header, body);
     modal.append(backdrop, panel);
@@ -1909,11 +3926,11 @@ function handleVideoSearch(e){
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Đang chờ trả lời)";
+        const q = el("div","igdc-qa-thread-q"); q.textContent="H. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("Đ. "+row.answer):"Đ. (Đang chờ)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "Yêu cầu gửi đến quản trị viên":"Chung";
+        const tag = el("span"); tag.textContent = row.is_admin? "Yêu cầu quản trị":"Chung";
         const actions = el("div","igdc-qa-thread-actions");
         const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
         if(canDelete){
@@ -1921,7 +3938,7 @@ function handleVideoSearch(e){
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("Xóa không thành công (quyền hạn/chính sách)"); return; }
+            if(error){ alert("Xóa thất bại (quyền/chính sách)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -1944,9 +3961,9 @@ function handleVideoSearch(e){
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="Đối với các câu hỏi về vận hành, quản trị viên sẽ xem xét và phản hồi.";
-          else if(/가격|비용|요금/.test(text)) answer="Đối với thông tin về giá, vui lòng xem phần hướng dẫn trên trang này. Nếu cần, bạn có thể để lại thêm câu hỏi.";
-          else answer="Cảm ơn bạn đã gửi câu hỏi. Chúng tôi sẽ xem xét nhanh chóng và hỗ trợ bạn.";
+          if(/시간|운영시간|오픈|Liên hệ/.test(text)) answer="Các liên hệ liên quan đến vận hành sẽ được quản trị viên xem xét và trả lời sau.";
+          else if(/가격|비용|요금/.test(text)) answer="Vui lòng xem hướng dẫn trên trang này để biết thông tin về giá/phí và để lại câu hỏi bổ sung nếu cần.";
+          else answer="Cảm ơn bạn đã liên hệ. Chúng tôi sẽ kiểm tra sớm và hỗ trợ bạn.";
         }
       }
       return { technical, answer };
@@ -1960,7 +3977,7 @@ function handleVideoSearch(e){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Cài đặt lưu (Supabase URL/Key) chưa được kết nối. Hãy đặt SUPER_VARSAR.url/anonKey và hệ thống sẽ tự động kết nối.d yet, so server storage is disabled. When deploying to the web, set SUPER_VARSAR.url/anonKey and it will connect automatically.");
+        alert("Cài đặt lưu trữ (Supabase url/key) chưa được kết nối nên việc lưu phía máy chủ đang bị tắt. Khi triển khai lên web, hãy đặt SUPER_VARSAR.url/anonKey để tự động kết nối.");
         return;
       }
       const record = {
@@ -1970,7 +3987,7 @@ function handleVideoSearch(e){
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("Đăng ký không thành công"); return; }
+      if(error){ alert("Đăng ký thất bại"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -1993,7 +4010,7 @@ function handleVideoSearch(e){
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth initialization failed:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -2268,44 +4285,10 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     setTimeout(()=>notify(atTop()),50);
   }catch(_){}
 })();
-</script><script id="thumbline-drag-script">
-(function(){
-  function enableDrag(el){
-    let down=false, sx=0, sl=0;
-    el.addEventListener('mousedown', function(e){
-      down = true; sx = e.pageX; sl = el.scrollLeft;
-    }, {passive:true});
-    window.addEventListener('mousemove', function(e){
-      if(!down) return;
-      el.scrollLeft = sl - (e.pageX - sx);
-      e.preventDefault();
-    }, {passive:false});
-    window.addEventListener('mouseup', function(){ down=false; }, {passive:true});
-    el.addEventListener('touchstart', function(e){
-      const t = e.touches[0]; down=true; sx=t.pageX; sl=el.scrollLeft;
-    }, {passive:true});
-    window.addEventListener('touchmove', function(e){
-      if(!down) return;
-      const t = e.touches[0]; el.scrollLeft = sl - (t.pageX - sx);
-      e.preventDefault();
-    }, {passive:false});
-    window.addEventListener('touchend', function(){ down=false; }, {passive:true});
-    window.addEventListener('touchcancel', function(){ down=false; }, {passive:true});
-    el.addEventListener('wheel', function(e){
-      if(Math.abs(e.deltaY) > Math.abs(e.deltaX)){
-        el.scrollLeft += e.deltaY;
-        e.preventDefault();
-      }
-    }, {passive:false});
-  }
-  function init(){
-    document.querySelectorAll('.thumb-line').forEach(enableDrag);
-  }
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', init);
-  } else { init(); }
-})();
-</script><script id="sidebar-active-script-ko">
+</script>
+
+</script>
+<script id="sidebar-active-script-ko">
 (function(){
   function norm(n){
     n = (n||"").trim().toLowerCase();
@@ -2335,103 +4318,238 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   window.addEventListener("hashchange", applyActive);
   window.addEventListener("popstate", applyActive);
 })();
-</script><script id="edge-autohide-mobile-js">
+</script>
+
+<script id="edge-autohide-mobile-js">
 (function(){
-  if (!matchMedia('(pointer:coarse)').matches) return;
-  const q=s=>document.querySelector(s);
-  const top=q('nav')||q('.topbar'), left=q('.sidebar'), right=q('.right-panel')||q('.ad-panel');
-  if(!q('.edge-top')) document.body.insertAdjacentHTML('beforeend','<div class="edge-top"></div><div class="edge-left"></div><div class="edge-right"></div>');
-  if(top) document.body.classList.add('hide-top'); if(left) document.body.classList.add('hide-left'); if(right) document.body.classList.add('hide-right');
-  const S=44; let drag=null,sx=0,sy=0,dx=0,dy=0;
-  function bind(sel,dir,showCls){
-    const edge=q(sel); if(!edge) return;
-    const down=e=>{const t=e.touches?e.touches[0]:e; drag=dir; sx=t.clientX; sy=t.clientY; dx=0; dy=0;
-      addEventListener('pointermove',move,{passive:true}); addEventListener('touchmove',move,{passive:true});
-      addEventListener('pointerup',up); addEventListener('touchend',up);
-    };
-    const move=e=>{const t=e.touches?e.touches[0]:e; dx=t.clientX-sx; dy=t.clientY-sy;
-      if(drag==='top'&&dy>8) document.body.classList.add(showCls);
-      if(drag==='left'&&dx>8) document.body.classList.add(showCls);
-      if(drag==='right'&&dx<-8) document.body.classList.add(showCls);
-    };
-    const up=()=>{const pass=(drag==='top'&&dy>S)||(drag==='left'&&dx>S)||(drag==='right'&&dx<-S);
-      if(!pass) document.body.classList.remove(showCls);
-      drag=null; removeEventListener('pointermove',move); removeEventListener('touchmove',move);
-      removeEventListener('pointerup',up); removeEventListener('touchend',up);
-    };
-    edge.addEventListener('pointerdown',down); edge.addEventListener('touchstart',down,{passive:true});
-    document.addEventListener('click',e=>{const p=(dir==='top'?top:dir==='left'?left:right); if(!p) return;
-      if(document.body.classList.contains(showCls)&&!p.contains(e.target)) document.body.classList.remove(showCls);
-    });
-    addEventListener('scroll',()=>{if(document.body.classList.contains(showCls)) document.body.classList.remove(showCls)},{passive:true});
+  "use strict";
+
+  // 모바일(터치)에서만 동작
+  if (!window.matchMedia('(pointer:coarse)').matches) return;
+
+  const q = s => document.querySelector(s);
+
+  const top   = q('nav') || q('.topbar');
+  const left  = q('.sidebar');
+  const right = q('.right-panel') || q('.ad-panel');
+
+  // 엣지 트리거 삽입 (중복 방지)
+  if(!q('.edge-top')){
+    document.body.insertAdjacentHTML('beforeend',
+      '<div class="edge-top"></div>' +
+      '<div class="edge-left"></div>' +
+      '<div class="edge-right"></div>'
+    );
   }
-  if(top) bind('.edge-top','top','show-top');
-  if(left) bind('.edge-left','left','show-left');
-  if(right) bind('.edge-right','right','show-right');
+
+  if(top)   document.body.classList.add('hide-top');
+  if(left)  document.body.classList.add('hide-left');
+  if(right) document.body.classList.add('hide-right');
+
+  const S = 44; // reveal threshold
+  let drag = null, sx=0, sy=0, dx=0, dy=0;
+
+  function bindEdge(sel, dir, showCls){
+    const edge = q(sel);
+    if(!edge) return;
+
+    function down(e){
+      const t = e.touches ? e.touches[0] : e;
+      drag = dir;
+      sx = t.clientX; sy = t.clientY; dx = 0; dy = 0;
+      window.addEventListener('pointermove', move, { passive:true });
+      window.addEventListener('touchmove',   move, { passive:true });
+      window.addEventListener('pointerup',   up);
+      window.addEventListener('touchend',    up);
+    }
+
+    function move(e){
+      const t = e.touches ? e.touches[0] : e;
+      dx = t.clientX - sx;
+      dy = t.clientY - sy;
+
+      if(dir==='top'   && dy >  8) document.body.classList.add(showCls);
+      if(dir==='left'  && dx >  8) document.body.classList.add(showCls);
+      if(dir==='right' && dx < -8) document.body.classList.add(showCls);
+    }
+
+    function up(){
+      const pass =
+        (dir==='top'   && dy >  S) ||
+        (dir==='left'  && dx >  S) ||
+        (dir==='right' && dx < -S);
+
+      if(!pass) document.body.classList.remove(showCls);
+
+      drag = null;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('touchmove',   move);
+      window.removeEventListener('pointerup',   up);
+      window.removeEventListener('touchend',    up);
+    }
+
+    edge.addEventListener('pointerdown', down, { passive:true });
+    edge.addEventListener('touchstart',  down, { passive:true });
+  }
+
+  bindEdge('.edge-top',   'top',   'show-top');
+  bindEdge('.edge-left',  'left',  'show-left');
+  bindEdge('.edge-right', 'right', 'show-right');
 })();
-</script><script id="igdc-qa-ensure-modal">
+</script>
+
+
+<script id="thumbline-drag-script">
+/*
+  MediaHub row drag (safe version)
+  - 세로 스크롤 방해 안 함
+  - pointerCapture 사용 안 함
+  - 가로 의도 명확할 때만 hijack
+*/
 (function(){
-  if (window.__IGDC_QA_ENSURE__) return; window.__IGDC_QA_ENSURE__ = true;
+  "use strict";
+
+  const THRESHOLD = 10;
+
+  function enableDrag(scroller){
+    if(!scroller) return;
+
+    let isDown = false;
+    let isDraggingX = false;
+    let startX = 0, startY = 0, startScrollLeft = 0;
+
+    function onDown(e){
+      isDown = true;
+      isDraggingX = false;
+      startX = e.clientX;
+      startY = e.clientY;
+      startScrollLeft = scroller.scrollLeft;
+    }
+
+    function onMove(e){
+      if(!isDown) return;
+
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      if(!isDraggingX){
+        if(Math.abs(dx) > THRESHOLD && Math.abs(dx) > Math.abs(dy) + 4){
+          isDraggingX = true;
+        }else{
+          return; // 세로 스크롤 허용
+        }
+      }
+
+      // 가로 드래그일 때만 차단
+      e.preventDefault();
+      scroller.scrollLeft = startScrollLeft - dx;
+    }
+
+    function onUp(){
+      isDown = false;
+      isDraggingX = false;
+    }
+
+    scroller.addEventListener('pointerdown', onDown, { passive:true });
+    scroller.addEventListener('pointermove', onMove, { passive:false });
+    scroller.addEventListener('pointerup', onUp, { passive:true });
+    scroller.addEventListener('pointercancel', onUp, { passive:true });
+  }
+
+  function boot(){
+    document.querySelectorAll('.thumb-line').forEach(line=>{
+      const scroller =
+        line.querySelector(':scope > .scroll-content') || line;
+      enableDrag(scroller);
+    });
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot);
+  }else{
+    boot();
+  }
+})();
+</script>
+<script id="igdc-qa-modal-script">
+(function(){
+  "use strict";
 
   function ensureModal(){
-    var modal = document.querySelector('.igdc-qa-modal');
-    if(!modal){
-      // minimal modal skeleton
-      var m = document.createElement('div'); m.className='igdc-qa-modal';
-      var b = document.createElement('div'); b.className='igdc-qa-backdrop';
-      var p = document.createElement('div'); p.className='igdc-qa-panel';
-      var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
-      var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
-      h.appendChild(t); h.appendChild(x);
 
-      var body = document.createElement('div'); body.className='igdc-qa-body';
-      body.innerHTML = '<div class="igdc-qa-note">Cần kết nối cài đặt lưu trữ (Supabase URL/Key) trước khi kích hoạt đầy đủ chức năng.</div>';
+    var existing = document.getElementById('igdc-qa-modal');
+    if(existing) return;
 
-      // ensure the "대표 이메일" is shown only inside the modal
-      var ce = document.createElement('p');
-      ce.className = 'contact-email';
-      ce.innerHTML = 'Email chính: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-      body.appendChild(ce);
+    var overlay = document.createElement('div');
+    overlay.id = 'igdc-qa-modal';
+    overlay.className = 'igdc-qa-overlay';
 
-      p.appendChild(h); p.appendChild(body);
-      m.appendChild(b); m.appendChild(p);
-      document.body.appendChild(m);
+    var panel = document.createElement('div');
+    panel.className = 'igdc-qa-panel';
 
-      function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }
-      x.addEventListener('click', close);
-      b.addEventListener('click', close);
+    var header = document.createElement('div');
+    header.className = 'igdc-qa-header';
 
-      window.IGDC_QA = window.IGDC_QA || {};
-      if (!window.IGDC_QA.open) window.IGDC_QA.open = open;
-    }else{
-      // if exists, make sure contact email is present exactly once
-      var body = modal.querySelector('.igdc-qa-body') || modal;
-      if(body && !body.querySelector('.contact-email')){
-        var ce = document.createElement('p');
-        ce.className = 'contact-email';
-        ce.innerHTML = 'Email chính: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        body.appendChild(ce);
-      }
+    var title = document.createElement('div');
+    title.className = 'igdc-qa-title';
+    title.textContent = 'Q&A';
+
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'igdc-qa-close';
+    closeBtn.innerHTML = '&#10005;';
+
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+
+    var body = document.createElement('div');
+    body.className = 'igdc-qa-body';
+
+    body.innerHTML =
+      '<div class="igdc-qa-note">' +
+      '저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.' +
+      '</div>';
+
+    var email = document.createElement('p');
+    email.className = 'contact-email';
+    email.innerHTML =
+      'Email liên hệ: <a href="mailto:igdcplatform@gmail.com">' +
+      'igdcplatform@gmail.com</a>';
+
+    body.appendChild(email);
+
+    panel.appendChild(header);
+    panel.appendChild(body);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+
+    function close(){
+      overlay.classList.remove('open');
+      setTimeout(function(){
+        overlay.style.display = 'none';
+      }, 180);
     }
+
+    function open(){
+      overlay.style.display = 'flex';
+      requestAnimationFrame(function(){
+        overlay.classList.add('open');
+      });
+    }
+
+    closeBtn.addEventListener('click', close);
+    overlay.addEventListener('click', function(e){
+      if(e.target === overlay) close();
+    });
+
+    window.IGDC_QA = window.IGDC_QA || {};
+    window.IGDC_QA.open = open;
   }
 
   function stripFooterEmail(){
     try{
-      var footers = document.querySelectorAll('footer');
-      footers.forEach(function(f){
-        f.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
-          var parent = a.parentNode;
-          if(parent){
-            parent.removeChild(a);
-            var html = parent.innerHTML;
-            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
-            html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
-            parent.innerHTML = html;
-          }
-        });
-        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
+      document.querySelectorAll('footer a[href^="mailto:"]').forEach(function(a){
+        var p = a.parentNode;
+        if(p) p.removeChild(a);
       });
     }catch(e){}
   }
@@ -2440,18 +4558,21 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     stripFooterEmail();
     ensureModal();
   }
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', run, {once:true});
-  } else {
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', run, { once:true });
+  }else{
     run();
   }
+
 })();
-</script><script id="igdc-qa-email-ensure">
+</script>
+<script id="igdc-qa-email-ensure">
 (function(){
   if (window.__IGDC_QA_EMAIL_ENSURE__) return;
   window.__IGDC_QA_EMAIL_ENSURE__ = true;
 
-  var CONTACT_HTML = 'Email chính: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+  var CONTACT_HTML = 'Email đại diện: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
 
   function stripFooterEmail(){
     try{
@@ -2468,7 +4589,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
             parent.innerHTML = html;
           }
         });
-        // Remove any plain-text "대표 이메일: ..." remnants
+        // Remove any plain-text "Email đại diện: ..." remnants
         f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
       });
     }catch(e){}
@@ -2487,7 +4608,17 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     cards.forEach(function(card){
       if(card.__fsReady) return;
       card.__fsReady = true;
-      card.addEventListener('click', function(){ openFullscreenFromCard(card); }, {passive:true});
+      card.addEventListener('click', function(e){
+  var link = card.closest('a[href]') || (card.matches('a[href]') ? card : null);
+  var href = link ? (link.getAttribute('href') || '').trim() : '';
+
+  if (href && href !== '#' && !/^javascript:/i.test(href)) {
+    return; // 정상 링크가 있으면 페이지 이동 허용
+  }
+
+  e.preventDefault();
+  openFullscreenFromCard(card);
+}, false);
     });
   }
 
@@ -2508,7 +4639,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     var src = card.getAttribute('data-src');
     var wrap = document.createElement('div');
     wrap.className = 'fs-stage';
-    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="미디어 뷰어"></div><button class="fs-close" aria-label="Close">✕</button>';
+    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="Media Viewer"></div><button class="fs-close" aria-label="Đóng">✕</button>';
     var inner = wrap.querySelector('.fs-inner');
 
     if(yt){
@@ -2602,6 +4733,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div');  -->
 <script>document.addEventListener("DOMContentLoaded",()=>{if(matchMedia("(max-width:768px)").matches){const p=document.querySelector(".platform-line");if(p)p.setAttribute("data-providers","");}});</script>
 
+<!-- thumbnail automapping -->
 
 <script>
 window.IGDC_QA=window.IGDC_QA||{};
@@ -2615,6 +4747,7 @@ window.addEventListener("message",function(ev){
   try{if(ev&&ev.data&&ev.data.type==="IGTC_OPEN_QNA"&&typeof IGDC_QA.open==="function"){IGDC_QA.open();}}catch(e){}
 });
 </script>
+
 
 <script id="igtc-checkout-trigger-v1">
 (function(){
@@ -2643,8 +4776,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Mã QR thanh toán</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Đóng</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -2679,7 +4812,7 @@ window.addEventListener("message",function(ev){
   async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
     await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
-    ta.value=''; alert('Gửited.');
+    ta.value=''; alert('Đã gửi thành công.');
   }
   if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('Gửi thất bại'));});
   const btn=document.querySelector('#qnaGửiBtn,[data-qna-submit], form [type="submit"]');
@@ -2709,52 +4842,74 @@ window.addEventListener("message",function(ev){
   /* MOBILE-FOOTER-GUARD: final */
 </style>
 
-<script>
-// IGDC MediaHub: per-section lazy card reveal (initial 7, then on scroll)
+<script id="media-lazy-reveal-v2">
 (function(){
-  function setupLazySections(){
-    var sections = document.querySelectorAll('.thumb-line, .section-row, .scroll-wrapper');
-    if(!sections.length) return;
-    sections.forEach(function(sec){
-      var cards = Array.prototype.slice.call(sec.querySelectorAll('.card'));
-      if(cards.length <= 7) return;
-      // Mark extra cards as lazy and hide them
-      cards.forEach(function(card, idx){
-        if(idx >= 7){
-          card.dataset.lazy = "true";
-          card.style.display = "none";
-        }
-      });
-      // Reveal next batch when user scrolls near end
-      function revealMore(){
-        var hidden = sec.querySelectorAll('.card[data-lazy="true"]');
-        if(!hidden.length) return;
-        // If horizontal scroll is near end, reveal a few more
-        var maxScroll = sec.scrollWidth - sec.clientWidth;
-        var nearEnd = sec.scrollLeft > (maxScroll - 40);
-        if(maxScroll <= 0 || nearEnd){
-          var batch = Array.prototype.slice.call(hidden).slice(0, 6); // reveal up to 6 more each time
-          batch.forEach(function(card){
-            card.style.display = "";
-            card.dataset.lazy = "loaded";
-          });
-        }
+  const INITIAL = 7;
+  const STEP = 6;
+  const MAX = 50;
+
+  function setupSection(line){
+    if(!line) return;
+
+    const scroller = line.querySelector(':scope > .scroll-content') || line;
+    const cards = Array.from(scroller.querySelectorAll(':scope > .card'));
+    if(cards.length <= INITIAL) return;
+
+    // 1️⃣ 초기 표시
+    cards.forEach((card, i)=>{
+      if(i >= INITIAL){
+        card.dataset.lazy = "true";
+        card.style.visibility = "hidden";
+        card.style.position = "absolute";
       }
-      sec.addEventListener('scroll', function(){
-        window.requestAnimationFrame(revealMore);
-      });
-      // Also reveal on first paint if container is not scrollable yet
-      setTimeout(revealMore, 600);
     });
+
+    let revealed = INITIAL;
+
+    function revealBatch(){
+      const hidden = cards.filter(c => c.dataset.lazy === "true");
+      if(!hidden.length) return;
+
+      hidden.slice(0, STEP).forEach(card=>{
+        card.dataset.lazy = "loaded";
+        card.style.visibility = "";
+        card.style.position = "";
+      });
+
+      revealed += STEP;
+      if(revealed > MAX) revealed = MAX;
+    }
+
+    // 2️⃣ 버튼 클릭 시 확장
+    const wrapper = line.closest('.section-row') || line.parentElement;
+    if(wrapper){
+      wrapper.addEventListener('click', function(e){
+        if(e.target.closest('.scroll-btn')){
+          revealBatch();
+        }
+      });
+    }
+
+    // 3️⃣ 모바일 드래그 끝나면 확장
+    scroller.addEventListener('scroll', function(){
+      const maxScroll = scroller.scrollWidth - scroller.clientWidth;
+      if(scroller.scrollLeft > maxScroll - 60){
+        revealBatch();
+      }
+    }, {passive:true});
   }
-  if(document.readyState === "complete" || document.readyState === "interactive"){
-    setTimeout(setupLazySections, 200);
+
+  function boot(){
+    document.querySelectorAll('.thumb-line[data-psom-key]').forEach(setupSection);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
   }else{
-    document.addEventListener("DOMContentLoaded", function(){ setTimeout(setupLazySections, 200); });
+    boot();
   }
 })();
 </script>
-
 <script>
 // IGDC: report page height to parent index for iframe resizing
 (function(){
@@ -2794,14 +4949,216 @@ window.addEventListener("message",function(ev){
 </script>
 
 <script defer src="/assets/js/auto-embed.instagram.js"></script>
-<script defer src="/assets/js/placeholder-sweeper.js"></script>
-<script defer src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
-
-<script defer src="/assets/js/feed.js"></script>
 
 <script defer src="/assets/js/media-hero-engine.js"></script>
-<script defer src="/assets/js/mediahub-automap.v1.js"></script>
 <script defer src="/assets/js/media-empty-handler.js"></script>
+
+<script id="igdc-media-access-script">
+
+/*
+ IGDC Media Access Script
+ ----------------------------------------
+ - MediaHub 전용 (Netflix / KT / Amazon 스타일)
+ - 썸네일 클릭 → 상세 오버레이
+ - Watch / Rent / Buy / Save
+ - 외부 PG 결제 트리거 연동
+ ----------------------------------------
+ 전제:
+  - 썸네일 카드에 data-media-id 존재
+  - IGTC.checkout() 존재
+  - window.__IGDC_ROLE, window.__IGDC_USER 존재
+*/
+
+(function (window, document) {
+  'use strict';
+
+  const MediaAccess = {
+    state: {
+      role: 'guest',
+      user: null,
+      activeMediaId: null
+    },
+
+    init() {
+      this.state.role = window.__IGDC_ROLE || 'guest';
+      this.state.user = window.__IGDC_USER || null;
+      this.bindThumbnailClick();
+    },
+
+    /* 1️⃣ 썸네일 클릭 */
+    bindThumbnailClick() {
+      document.addEventListener('click', (e) => {
+        const card = e.target.closest('[data-media-id]');
+        if (!card) return;
+
+        const mediaId = card.dataset.mediaId;
+        if (!mediaId) return;
+
+        this.openDetail(mediaId, card);
+      });
+    },
+
+    /* 2️⃣ 상세 오버레이 */
+    openDetail(mediaId, card) {
+      this.state.activeMediaId = mediaId;
+
+      this.closeDetail();
+
+      const overlay = document.createElement('div');
+      overlay.id = 'igdc-media-overlay';
+      overlay.innerHTML = `
+        <div class="media-modal">
+          <button class="media-close">✕</button>
+          <h2>${card.dataset.title || 'Media Content'}</h2>
+          <p>${card.dataset.description || ''}</p>
+
+          <div class="media-actions">
+            <button data-action="play">▶ Watch Now</button>
+            <button data-action="rent">💳 Rent</button>
+            <button data-action="own">💳 Mua</button>
+            <button data-action="wish">⭐ Thêm vào danh sách yêu thích</button>
+          </div>
+
+          <div class="media-review">
+            <textarea placeholder="Đánh giá một dòng (không bắt buộc)" maxlength="200"></textarea>
+            <button data-action="review">Gửi đánh giá</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(overlay);
+
+      overlay.querySelector('.media-close').onclick = () => this.closeDetail();
+      overlay.onclick = (e) => { if (e.target === overlay) this.closeDetail(); };
+
+      overlay.querySelectorAll('[data-action]').forEach(btn => {
+        btn.onclick = () => this.handleAction(btn.dataset.action);
+      });
+    },
+
+    /* 3️⃣ 버튼 액션 */
+    handleAction(action) {
+      const mediaId = this.state.activeMediaId;
+
+      switch (action) {
+        case 'play':
+          alert('Playback will begin after viewing rights are confirmed.');
+          break;
+
+        case 'rent':
+        case 'own':
+          IGTC.checkout({
+            type: 'media',
+            mediaId,
+            mode: action, // rent | own
+            user: this.state.user
+          });
+          break;
+
+        case 'wish':
+          alert('Added to your wishlist.');
+          break;
+
+        case 'review':
+          alert('Your review has been submitted.');
+          break;
+      }
+    },
+
+    closeDetail() {
+      const el = document.getElementById('igdc-media-overlay');
+      if (el) el.remove();
+    }
+  };
+
+  /* 기본 스타일 */
+  const style = document.createElement('style');
+  style.textContent = `
+    #igdc-media-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.6);
+      z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .media-modal {
+      background: #fff; padding: 20px;
+      border-radius: 12px; width: 420px;
+    }
+    .media-actions button {
+      margin: 6px 4px;
+    }
+    .media-close {
+      float: right; border: none; background: none; font-size: 18px;
+    }
+    .media-review textarea {
+      width: 100%; margin-top: 10px;
+    }
+  `;
+  document.head.appendChild(style);
+
+  MediaAccess.init();
+  window.IGDCMediaAccess = MediaAccess;
+
+})(window, document);
+</script>
+
+<!-- Trung tâm truyền thông AutoMap (정본) -->
+<script defer src="/assets/js/mediahub-automap-v3.js"></script>
+
+<script id="igdc-media-10section-frame">
+(function(){
+  const LIMIT = 50;
+  function isMediaKey(key){
+    return key && key.indexOf('media-') === 0 && key !== 'media-hero';
+  }
+  function makePlaceholder(){
+    const a = document.createElement('a');
+    a.className = 'card media-card';
+    a.setAttribute('data-placeholder','true');
+    a.href = 'javascript:void(0)';
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb ph';
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = 'Sắp ra mắt';
+    a.appendChild(thumb);
+    a.appendChild(meta);
+    return a;
+  }
+  function ensureLine(line){
+    if(!line) return;
+    const key = line.getAttribute('data-psom-key') || '';
+    if(!isMediaKey(key)) return;
+
+    // If wrapped, placeholders belong inside .scroll-content; else inside line
+    const container = line.querySelector(':scope > .scroll-content') || line;
+
+    // Count current cards (including placeholders)
+    const cards = container.querySelectorAll(':scope > a.card');
+    const need = LIMIT - cards.length;
+    if(need <= 0) return;
+
+    const frag = document.createDocumentFragment();
+    for(let i=0;i<need;i++) frag.appendChild(makePlaceholder());
+    container.appendChild(frag);
+  }
+  function run(){
+    document.querySelectorAll('.thumb-line[data-psom-key]').forEach(ensureLine);
+  }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', function(){
+      run();
+      // run again after wrappers/buttons may be injected
+      setTimeout(run, 200);
+      setTimeout(run, 600);
+    });
+  }else{
+    run();
+    setTimeout(run, 200);
+    setTimeout(run, 600);
+  }
+})();
+</script>
 
 </body>
 </html>

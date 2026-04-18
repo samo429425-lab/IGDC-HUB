@@ -8,7 +8,7 @@
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
 <meta charset="utf-8"/>
-<title>Hub de Mercado</title>
+<title>Centro de Mercado</title>
 <style>body {
       margin: 0;
       font-family: sans-serif;
@@ -44,17 +44,6 @@
       color: #333;
     }
 
-    
-
-    
-
-    .ad-box a {
-      text-decoration: none;
-      color: inherit;
-      display: block;
-      height: 100px;
-      line-height: 100px;
-    }
 
     footer {
       background-color: #004080;
@@ -63,31 +52,74 @@
       padding: 20px 15px;
       font-size: 0.9rem;
     }</style>
+	
 <style id="adpanel-adbox-round8">/* Round only the right ad panel's thumbnail/card boxes */
   .ad-panel 
   .ad-panel .ad-box a, .ad-panel .ad-box img { border-radius: inherit; display: block; }</style>
-<style id="adpanel-override-v1">/* === Right AD panel: same "normal" as previous success === */
 
+<style id="adpanel-override-v1">
+/* === Right AD panel: stable 16:9 card system (production-safe) === */
 
-.ad-panel 
+.ad-panel .ad-box{
+  position: relative;
+  background:#fff;
+  border:1px solid #d7dce1;
+  border-radius:10px;
+
+  /* 🔒 핵심 안정화 */
+  box-sizing:border-box;          /* border 포함 계산 */
+  aspect-ratio: 4 / 5;           /* 고정 비율 (4:5) */
+  width:100%;
+  flex-shrink:0;
+  overflow:hidden;
+  display:block;
+}
 
 /* anchor fills the card */
 .ad-panel .ad-box > a{
-  display: block !important;
-  width: 100% !important;
-  height: 100% !important;
-  line-height: 150px !important;
-  border-radius: 8px !important;
-  text-decoration: none !important;
-  color: inherit !important;
+  display:block !important;
+  width:100% !important;
+  height:100% !important;
+  line-height:normal !important;
+  border-radius:10px !important;
+  text-decoration:none !important;
+  color:inherit !important;
 }
 
-/* Hint: slightly fade items after 10 for visual cue they are behind the fold */
-.ad-panel .ad-box:nth-child(n+11){ opacity: 0.96; }
+/* image always fills frame safely */
+.ad-panel .ad-box img{
+  width:100% !important;
+  height:100% !important;
+  object-fit:cover !important;      /* 항상 꽉 채움 */
+  object-position:center !important;/* 중앙 기준 */
+  display:block !important;
+}
 
-/* Make sure the main content doesn't stretch under the panel in flex layouts */
-.container{ align-items: flex-start; }</style>
+/* caption overlay */
+.ad-panel .ad-box .cap{
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  padding:8px 10px;
+  font-weight:700;
+  font-size:0.95rem;
+  color:#fff;
+  background:linear-gradient(to top, rgba(0,0,0,.55), rgba(0,0,0,0));
+  text-shadow:0 1px 2px rgba(0,0,0,.35);
+  box-sizing:border-box;
+}
 
+/* subtle fade after 10 */
+.ad-panel .ad-box:nth-child(n+11){
+  opacity:0.96;
+}
+
+/* flex 안정화 */
+.container{
+  align-items:flex-start;
+}
+</style>
 
 <style id="adpanel-visible-7">/* Show ~7 cards before scroll (7 full + 20% of 8th) */</style>
 
@@ -159,12 +191,10 @@ a{ color:inherit }
   background:#fff;
   border:1px solid #d7dce1;
   border-radius:8px;
-
-  height:165px;
-  min-height:165px;
-  max-height:165px;
-
-  width:100%;
+  /* 4:5 ratio (portrait product-style) */
+  aspect-ratio: 4 / 5;
+  height:auto;
+width:100%;
   display:flex;
   align-items:center;
   justify-content:center;
@@ -277,7 +307,8 @@ html, body {
       margin-top:16px !important;   /* 투어 페이지와 동일한 상단 여백 */
       border-top-left-radius:10px !important;
       border-top-right-radius:10px !important;
-      overflow:hidden;}
+      overflow-x:hidden !important;
+      overflow-y:auto !important;}
 
 .sidebar{ padding-top: 20px !important;}
 
@@ -331,7 +362,7 @@ html, body {
 <link href="/assets/css/thumbs.standard.css?v=20250914" rel="stylesheet"/>
 <link href="/assets/css/hero.css?v=20250914" rel="stylesheet"/>
 <!-- Mobile Optimization Patch v1 -->
-<!-- Mobile Anúncio Drawer v3 (push layout: stage shifts left while right drawer appears) -->
+<!-- Mobile Ad Drawer v3 (push layout: stage shifts left while right drawer appears) -->
 <!-- Mobile Section Pager v1 (group sections into horizontal slides on mobile) -->
 <!-- Injected: exact blockchain styles cloned from socialnetwork.html -->
 <style id="bc-style-from-sn-20251013">
@@ -442,7 +473,7 @@ html, body {
     flex:0 0 100%; max-width:100%;
     background:#fff; border:1px solid #d7dce1; border-radius:10px;
     display:flex; align-items:center; justify-content:center;
-    scroll-snap-align:center; aspect-ratio: 16 / 9; overflow:hidden;
+    scroll-snap-align:center; aspect-ratio: 4 / 5; overflow:hidden;
   }
   /* landscape shows multiple */
   @media (orientation:landscape){
@@ -546,6 +577,11 @@ html, body {
 </style>
 
 <link rel="stylesheet" href="/assets/css/thumbs.standard.css">
+
+<style id="igdc-sidebar-spacing-unify-v1">
+.sidebar{padding-top:30px !important;}
+.sidebar a{padding:12px 12px !important;margin:10px 12px !important;}
+</style>
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -557,8 +593,8 @@ html, body {
 <a href="socialnetwork.html">📢 Rede Social</a>
 <a href="mediahub.html">🎬 Hub de Mídia</a>
 <a href="tour.html">🧳 Viagem · Turismo · Hospedagem</a>
-<a href="literature_academic">📚 Literatura · Intercâmbio Acadêmico</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A Consulta</a></div><main id="main">
+<a href="literature_academic">📚 Intercâmbio Literário e Acadêmico</a>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Consulta Q&A</a></div><main id="main">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
@@ -600,8 +636,8 @@ html, body {
 </style>
 <!-- HERO -->
 <section aria-label="network-hero" class="hero">
-<h1>Hub de Mercado</h1>
-<div class="hero-inline"><input aria-label="Busca de Plataforma/Região" id="platform-region-search" placeholder="Buscar plataformas / regiões" type="search"/><span class="subtext">Detectar automaticamente sua região → priorizar seções relevantes</span><span class="count"></span></div>
+<h1>Centro de Mercado</h1>
+<div class="hero-inline"><input aria-label="Pesquisar plataforma/região" id="platform-region-search" placeholder="Pesquisar plataforma / região" type="search"/><span class="subtext">Detectar automaticamente sua região de acesso → priorizar essa região primeiro</span><span class="count"></span></div>
 <script>
 (function(){
   var root = document.getElementById('igdc-networkhub-main');
@@ -633,7 +669,7 @@ html, body {
       var anyVisible = Array.prototype.slice.call(card.querySelectorAll('a.link-btn')).some(function(a){ return a.style.display !== 'none'; });
       card.style.display = anyVisible ? '' : 'none';
     });
-    if(count){ count.textContent = q ? ('검색 결과: ' + visibleCount + '개') : ''; }
+    if(count){ count.textContent = q ? ('Resultados da pesquisa: ' + visibleCount) : ''; }
   }
   if(input){
     input.addEventListener('input', filter);
@@ -643,13 +679,13 @@ html, body {
 })();</script></section>
 <!-- ASIA -->
 <section class="region-card" id="asia">
-<h2 class="region-title">Ásia (Ásia)</h2>
+<h2 class="region-title">Ásia</h2>
 <div class="subregion" id="east-asia">
-<h3>Leste Asiático (Leste Asiático)</h3>
+<h3>Leste Asiático</h3>
 <div class="btn-grid">
-<a class="link-btn" href="https://www.coupang.com" target="_blank"><div>쿠팡</div><div class="en">Coupang</div></a>
-<a class="link-btn" href="https://www.gmarket.co.kr" target="_blank"><div>지마켓</div><div class="en">Gmarket</div></a>
-<a class="link-btn" href="https://smartstore.naver.com" target="_blank"><div>네이버 스마트스토어</div><div class="en">Naver Smart Store</div></a>
+<a class="link-btn" href="https://www.coupang.com" target="_blank">Coupang</a>
+<a class="link-btn" href="https://www.gmarket.co.kr" target="_blank">Gmarket</a>
+<a class="link-btn" href="https://smartstore.naver.com" target="_blank">Naver Smart Store</a>
 <a class="link-btn" href="https://www.taobao.com" target="_blank"><div>淘宝网</div><div class="en">Taobao</div></a>
 <a class="link-btn" href="https://www.tmall.com" target="_blank"><div>天猫</div><div class="en">Tmall</div></a>
 <a class="link-btn" href="https://www.jd.com" target="_blank"><div>京东</div><div class="en">JD.com</div></a>
@@ -660,7 +696,7 @@ html, body {
 </div>
 </div>
 <div class="subregion" id="southeast-asia">
-<h3>Sudeste Asiático (Sudeste Asiático)</h3>
+<h3>Sudeste Asiático</h3>
 <div class="btn-grid"><a class="link-btn" href="https://www.amazon.com" target="_blank">Amazon Global</a>
 <a class="link-btn" href="https://shopee.com" target="_blank">Shopee</a>
 <a class="link-btn" href="https://www.lazada.com" target="_blank">Lazada</a>
@@ -673,7 +709,7 @@ html, body {
 </div>
 </div>
 <div class="subregion" id="south-asia-india">
-<h3>Sul da Ásia / Índia (Sul da Ásia / Índia)</h3>
+<h3>Sul da Ásia / Índia</h3>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.amazon.in" target="_blank"><div>Amazon भारत</div><div class="en">Amazon India</div></a>
 <a class="link-btn" href="https://www.flipkart.com" target="_blank">Flipkart</a>
@@ -685,7 +721,7 @@ html, body {
 </div>
 </div>
 <div class="subregion" id="central-asia">
-<h3>Ásia Central (Ásia Central)</h3>
+<h3>Ásia Central</h3>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.wildberries.ru" target="_blank"><div>Вайлдберриз</div><div class="en">Wildberries</div></a>
 <a class="link-btn" href="https://www.ozon.ru" target="_blank"><div>Озон</div><div class="en">Ozon</div></a>
@@ -698,9 +734,9 @@ html, body {
 </section>
 <!-- EUROPE -->
 <section class="region-card" id="europe">
-<h2 class="region-title">Europa (Europa)</h2>
+<h2 class="region-title">Europa</h2>
 <div class="subregion" id="western-europe">
-<h3>Europa Ocidental (Europa Ocidental)</h3>
+<h3>Europa Ocidental</h3>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.amazon.de" target="_blank"><div>Amazon</div><div class="en">(EU/UK)</div></a>
 <a class="link-btn" href="https://www.zalando.de" target="_blank">Zalando</a>
@@ -714,7 +750,7 @@ html, body {
 </div>
 </div>
 <div class="subregion" id="eastern-europe">
-<h3>Europa Oriental (Europa Oriental)</h3>
+<h3>Europa Oriental</h3>
 <div class="btn-grid">
 <a class="link-btn" href="https://allegro.pl" target="_blank">Allegro</a>
 <a class="link-btn" href="https://www.emag.ro" target="_blank">eMAG</a>
@@ -728,7 +764,7 @@ html, body {
 </section>
 <!-- NORTH AMERICA -->
 <section class="region-card" id="north-america">
-<h2 class="region-title">América do Norte (América do Norte)</h2>
+<h2 class="region-title">América do Norte</h2>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.amazon.com" target="_blank">Amazon</a>
 <a class="link-btn" href="https://www.walmart.com" target="_blank">Walmart</a>
@@ -741,7 +777,7 @@ html, body {
 </section>
 <!-- SOUTH AMERICA -->
 <section class="region-card" id="south-america">
-<h2 class="region-title">América do Sul (América do Sul)</h2>
+<h2 class="region-title">América do Sul</h2>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.mercadolibre.com" target="_blank">Mercado Libre</a>
 <a class="link-btn" href="https://www.americanas.com.br" target="_blank">Americanas</a>
@@ -754,7 +790,7 @@ html, body {
 </section>
 <!-- MIDDLE EAST -->
 <section class="region-card" id="middle-east">
-<h2 class="region-title">Oriente Médio (Oriente Médio)</h2>
+<h2 class="region-title">Oriente Médio</h2>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.noon.com" target="_blank"><div>نون</div><div class="en">Noon</div></a>
 <a class="link-btn" href="https://www.amazon.sa" target="_blank"><div>أمازون السعودية</div><div class="en">Amazon.sa</div></a>
@@ -766,7 +802,7 @@ html, body {
 </section>
 <!-- OCEANIA -->
 <section class="region-card" id="oceania">
-<h2 class="region-title">Oceania (Oceania)</h2>
+<h2 class="region-title">Oceania</h2>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.amazon.com.au" target="_blank"><div>Amazon Australia</div><div class="en">Amazon AU</div></a>
 <a class="link-btn" href="https://www.catch.com.au" target="_blank">Catch</a>
@@ -778,7 +814,7 @@ html, body {
 </section>
 <!-- AFRICA -->
 <section class="region-card" id="africa">
-<h2 class="region-title">África (África)</h2>
+<h2 class="region-title">África</h2>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.jumia.com.ng" target="_blank">Jumia</a>
 <a class="link-btn" href="https://www.takealot.com" target="_blank">Takealot</a>
@@ -790,125 +826,30 @@ html, body {
 </section>
 </div>
 
-<section id="nh-mobile-rail" aria-label="Destaques(모바일)">
+<section id="nh-mobile-rail" aria-label="Popular Recommended Products (Mobile)">
   <div class="wrap">
-    <div class="title">💎 Destaques 💎</div>
+    <div class="title">💎 Produtos recomendados populares 💎</div>
     <div class="list" id="nh-mobile-rail-list" role="list"></div>
   </div>
 </section>
 
 </main>
 <div class="right-rail">
-<h3 class="ad-headline" style="margin:3 0 3px; text-align:center; line-height:1; height:1em; white-space:nowrap;">
-  💎 Destaques 💎
-</h3>
-<div class="ad-panel">
-<div class="thumb-grid" data-psom-key="network"></div>
-<div class="ad-box"><a href="#ad1">Anúncio 1 (📣 Anúncio 1)</a></div>
-<div class="ad-box"><a href="#ad2">Anúncio 2 (📣 Anúncio 2)</a></div>
-<div class="ad-box"><a href="#ad3">Anúncio 3 (📣 Anúncio 3)</a></div>
-<div class="ad-box"><a href="#ad4">Anúncio 4 (📣 Anúncio 4)</a></div>
-<div class="ad-box"><a href="#ad5">Anúncio 5 (📣 Anúncio 5)</a></div>
-<div class="ad-box"><a href="#ad6">Anúncio 6 (📣 Anúncio 6)</a></div>
-<div class="ad-box"><a href="#ad7">Anúncio 7 (📣 Anúncio 7)</a></div>
-<div class="ad-box"><a href="#ad8">Anúncio 8 (📣 Anúncio 8)</a></div>
-<div class="ad-box"><a href="#ad9">Anúncio 9 (📣 Anúncio 9)</a></div>
-<div class="ad-box"><a href="#ad10">Anúncio 10 (📣 Anúncio 10)</a></div>
-<div class="ad-box"><a href="#ad11">Anúncio 11 (📣 Anúncio 11)</a></div>
-<div class="ad-box"><a href="#ad12">Anúncio 12 (📣 Anúncio 12)</a></div>
-<div class="ad-box"><a href="#ad13">Anúncio 13 (📣 Anúncio 13)</a></div>
-<div class="ad-box"><a href="#ad14">Anúncio 14 (📣 Anúncio 14)</a></div>
-<div class="ad-box"><a href="#ad15">Anúncio 15 (📣 Anúncio 15)</a></div>
-<div class="ad-box"><a href="#ad16">Anúncio 16 (📣 Anúncio 16)</a></div>
-<div class="ad-box"><a href="#ad17">Anúncio 17 (📣 Anúncio 17)</a></div>
-<div class="ad-box"><a href="#ad18">Anúncio 18 (📣 Anúncio 18)</a></div>
-<div class="ad-box"><a href="#ad19">Anúncio 19 (📣 Anúncio 19)</a></div>
-<div class="ad-box"><a href="#ad20">Anúncio 20 (📣 Anúncio 20)</a></div>
-<div class="ad-box"><a href="#ad21">Anúncio 21 (📣 Anúncio 21)</a></div>
-<div class="ad-box"><a href="#ad22">Anúncio 22 (📣 Anúncio 22)</a></div>
-<div class="ad-box"><a href="#ad23">Anúncio 23 (📣 Anúncio 23)</a></div>
-<div class="ad-box"><a href="#ad24">Anúncio 24 (📣 Anúncio 24)</a></div>
-<div class="ad-box"><a href="#ad25">Anúncio 25 (📣 Anúncio 25)</a></div>
-<div class="ad-box"><a href="#ad26">Anúncio 26 (📣 Anúncio 26)</a></div>
-<div class="ad-box"><a href="#ad27">Anúncio 27 (📣 Anúncio 27)</a></div>
-<div class="ad-box"><a href="#ad28">Anúncio 28 (📣 Anúncio 28)</a></div>
-<div class="ad-box"><a href="#ad29">Anúncio 29 (📣 Anúncio 29)</a></div>
-<div class="ad-box"><a href="#ad30">Anúncio 30 (📣 Anúncio 30)</a></div>
-<div class="ad-box"><a href="#ad31">Anúncio 31 (📣 Anúncio 31)</a></div>
-<div class="ad-box"><a href="#ad32">Anúncio 32 (📣 Anúncio 32)</a></div>
-<div class="ad-box"><a href="#ad33">Anúncio 33 (📣 Anúncio 33)</a></div>
-<div class="ad-box"><a href="#ad34">Anúncio 34 (📣 Anúncio 34)</a></div>
-<div class="ad-box"><a href="#ad35">Anúncio 35 (📣 Anúncio 35)</a></div>
-<div class="ad-box"><a href="#ad36">Anúncio 36 (📣 Anúncio 36)</a></div>
-<div class="ad-box"><a href="#ad37">Anúncio 37 (📣 Anúncio 37)</a></div>
-<div class="ad-box"><a href="#ad38">Anúncio 38 (📣 Anúncio 38)</a></div>
-<div class="ad-box"><a href="#ad39">Anúncio 39 (📣 Anúncio 39)</a></div>
-<div class="ad-box"><a href="#ad40">Anúncio 40 (📣 Anúncio 40)</a></div>
-<div class="ad-box"><a href="#ad41">Anúncio 41 (📣 Anúncio 41)</a></div>
-<div class="ad-box"><a href="#ad42">Anúncio 42 (📣 Anúncio 42)</a></div>
-<div class="ad-box"><a href="#ad43">Anúncio 43 (📣 Anúncio 43)</a></div>
-<div class="ad-box"><a href="#ad44">Anúncio 44 (📣 Anúncio 44)</a></div>
-<div class="ad-box"><a href="#ad45">Anúncio 45 (📣 Anúncio 45)</a></div>
-<div class="ad-box"><a href="#ad46">Anúncio 46 (📣 Anúncio 46)</a></div>
-<div class="ad-box"><a href="#ad47">Anúncio 47 (📣 Anúncio 47)</a></div>
-<div class="ad-box"><a href="#ad48">Anúncio 48 (📣 Anúncio 48)</a></div>
-<div class="ad-box"><a href="#ad49">Anúncio 49 (📣 Anúncio 49)</a></div>
-<div class="ad-box"><a href="#ad50">Anúncio 50 (📣 Anúncio 50)</a></div>
-<div class="ad-box"><a href="#ad51">Anúncio 51 (📣 Anúncio 51)</a></div>
-<div class="ad-box"><a href="#ad52">Anúncio 52 (📣 Anúncio 52)</a></div>
-<div class="ad-box"><a href="#ad53">Anúncio 53 (📣 Anúncio 53)</a></div>
-<div class="ad-box"><a href="#ad54">Anúncio 54 (📣 Anúncio 54)</a></div>
-<div class="ad-box"><a href="#ad55">Anúncio 55 (📣 Anúncio 55)</a></div>
-<div class="ad-box"><a href="#ad56">Anúncio 56 (📣 Anúncio 56)</a></div>
-<div class="ad-box"><a href="#ad57">Anúncio 57 (📣 Anúncio 57)</a></div>
-<div class="ad-box"><a href="#ad58">Anúncio 58 (📣 Anúncio 58)</a></div>
-<div class="ad-box"><a href="#ad59">Anúncio 59 (📣 Anúncio 59)</a></div>
-<div class="ad-box"><a href="#ad60">Anúncio 60 (📣 Anúncio 60)</a></div>
-<div class="ad-box"><a href="#ad61">Anúncio 61 (📣 Anúncio 61)</a></div>
-<div class="ad-box"><a href="#ad62">Anúncio 62 (📣 Anúncio 62)</a></div>
-<div class="ad-box"><a href="#ad63">Anúncio 63 (📣 Anúncio 63)</a></div>
-<div class="ad-box"><a href="#ad64">Anúncio 64 (📣 Anúncio 64)</a></div>
-<div class="ad-box"><a href="#ad65">Anúncio 65 (📣 Anúncio 65)</a></div>
-<div class="ad-box"><a href="#ad66">Anúncio 66 (📣 Anúncio 66)</a></div>
-<div class="ad-box"><a href="#ad67">Anúncio 67 (📣 Anúncio 67)</a></div>
-<div class="ad-box"><a href="#ad68">Anúncio 68 (📣 Anúncio 68)</a></div>
-<div class="ad-box"><a href="#ad69">Anúncio 69 (📣 Anúncio 69)</a></div>
-<div class="ad-box"><a href="#ad70">Anúncio 70 (📣 Anúncio 70)</a></div>
-<div class="ad-box"><a href="#ad71">Anúncio 71 (📣 Anúncio 71)</a></div>
-<div class="ad-box"><a href="#ad72">Anúncio 72 (📣 Anúncio 72)</a></div>
-<div class="ad-box"><a href="#ad73">Anúncio 73 (📣 Anúncio 73)</a></div>
-<div class="ad-box"><a href="#ad74">Anúncio 74 (📣 Anúncio 74)</a></div>
-<div class="ad-box"><a href="#ad75">Anúncio 75 (📣 Anúncio 75)</a></div>
-<div class="ad-box"><a href="#ad76">Anúncio 76 (📣 Anúncio 76)</a></div>
-<div class="ad-box"><a href="#ad77">Anúncio 77 (📣 Anúncio 77)</a></div>
-<div class="ad-box"><a href="#ad78">Anúncio 78 (📣 Anúncio 78)</a></div>
-<div class="ad-box"><a href="#ad79">Anúncio 79 (📣 Anúncio 79)</a></div>
-<div class="ad-box"><a href="#ad80">Anúncio 80 (📣 Anúncio 80)</a></div>
-<div class="ad-box"><a href="#ad81">Anúncio 81 (📣 Anúncio 81)</a></div>
-<div class="ad-box"><a href="#ad82">Anúncio 82 (📣 Anúncio 82)</a></div>
-<div class="ad-box"><a href="#ad83">Anúncio 83 (📣 Anúncio 83)</a></div>
-<div class="ad-box"><a href="#ad84">Anúncio 84 (📣 Anúncio 84)</a></div>
-<div class="ad-box"><a href="#ad85">Anúncio 85 (📣 Anúncio 85)</a></div>
-<div class="ad-box"><a href="#ad86">Anúncio 86 (📣 Anúncio 86)</a></div>
-<div class="ad-box"><a href="#ad87">Anúncio 87 (📣 Anúncio 87)</a></div>
-<div class="ad-box"><a href="#ad88">Anúncio 88 (📣 Anúncio 88)</a></div>
-<div class="ad-box"><a href="#ad89">Anúncio 89 (📣 Anúncio 89)</a></div>
-<div class="ad-box"><a href="#ad90">Anúncio 90 (📣 Anúncio 90)</a></div>
-<div class="ad-box"><a href="#ad91">Anúncio 91 (📣 Anúncio 91)</a></div>
-<div class="ad-box"><a href="#ad92">Anúncio 92 (📣 Anúncio 92)</a></div>
-<div class="ad-box"><a href="#ad93">Anúncio 93 (📣 Anúncio 93)</a></div>
-<div class="ad-box"><a href="#ad94">Anúncio 94 (📣 Anúncio 94)</a></div>
-<div class="ad-box"><a href="#ad95">Anúncio 95 (📣 Anúncio 95)</a></div>
-<div class="ad-box"><a href="#ad96">Anúncio 96 (📣 Anúncio 96)</a></div>
-<div class="ad-box"><a href="#ad97">Anúncio 97 (📣 Anúncio 97)</a></div>
-<div class="ad-box"><a href="#ad98">Anúncio 98 (📣 Anúncio 98)</a></div>
-<div class="ad-box"><a href="#ad99">Anúncio 99 (📣 Anúncio 99)</a></div>
-<div class="ad-box"><a href="#ad100">Anúncio 100 (📣 Anúncio 100)</a></div></div></div>
+<h4 class="ad-headline" style="margin:3 0 3px; text-align:center; line-height:1; height:1em; white-space:nowrap;">
+  💎 Produtos recomendados populares 💎
+</h4>
+<div class="ad-panel" id="rightAutoPanel"></div>
+<div class="thumb-grid"
+     data-psom-key="network-right"
+     data-psom-mode="data"
+     style="display:none"></div>
+
 </div>
-<script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.networkhub.json" data-interval="20000" src="/assets/js/hero.rotator.js"></script>
+</div>
+
 <footer>
     IGDC Global Hub © 2025 | International General Distribution Company<br/>
-    50 Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea, <br/>
+    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea <br/>
 </footer>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- @SAFE-PATCH: hide '문학 학술교류' in sidebar -->
@@ -1041,7 +982,7 @@ a[href^="mailto:"]:hover {
 }
 
 .igdc-qa-threads:empty::before{
-  content:"Nenhuma Q&A foi publicada ainda";
+  content:"Ainda não há entradas de Q&A publicadas";
   display:block; padding:10px 12px; color:#666;
   background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px;
   margin-top:4px; font-size:.95rem;
@@ -1146,7 +1087,7 @@ a[href^="mailto:"]:hover {
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase credentials/library not configured: UI is visible, but saving is disabled.");
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -1182,16 +1123,16 @@ a[href^="mailto:"]:hover {
     const lA = el("label"); lA.textContent="Resposta";
     const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Aguarde um momento. Responderemos em breve.";
     const actions = el("div","igdc-qa-actions");
-    const btnEnviar = el("button","igdc-qa-btn primary"); btnEnviar.textContent="Enviar";
-    const btnLimpar = el("button","igdc-qa-btn muted"); btnLimpar.textContent="Limpar";
-    const note = el("div","igdc-qa-note"); note.textContent="Nota: Para perguntas simples, a IA pode responder instantaneamente. Questões técnicas/erros/operação são encaminhadas automaticamente ao Q&A do administrador.";
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Enviar";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Limpar";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Perguntas simples são respondidas imediatamente pela IA. Questões técnicas, erros ou assuntos operacionais são encaminhados automaticamente para o Q&A do administrador.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
 	const ce = el("p","contact-email");
-    ce.innerHTML = 'E-mail de contato: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+    ce.innerHTML = 'Representative Email: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
     body.append(ce);
-    actions.append(btnEnviar, btnLimpar);
+    actions.append(btnSubmit, btnClear);
     panel.append(header, body);
     modal.append(backdrop, panel);
     document.body.append(modal);
@@ -1239,9 +1180,9 @@ a[href^="mailto:"]:hover {
     backdrop.addEventListener("click", closeModal);
     document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
 
-    btnLimpar.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
-    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnEnviar.click(); }});
-    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnEnviar.click(); }});
+    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
+    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
 
     async function fetchThreads(){
       const sb = await ensureSupabase(); if(!sb) return;
@@ -1258,18 +1199,18 @@ a[href^="mailto:"]:hover {
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (대기중)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "관리요청":"일반";
+        const tag = el("span"); tag.textContent = row.is_admin? "Solicitação ao administrador":"Geral";
         const actions = el("div","igdc-qa-thread-actions");
         const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
         if(canDelete){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="삭제";
+          const del = el("button","igdc-qa-btn muted"); del.textContent="Excluir";
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("삭제 실패(권한/정책)"); return; }
+            if(error){ alert("Falha ao excluir (permissão/política)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -1280,7 +1221,7 @@ a[href^="mailto:"]:hover {
       });
     }
 
-    async function autoRespostaIfNeeded(text){
+    async function autoAnswerIfNeeded(text){
       const technical = classifyTech(text);
       let answer = null;
       if(!technical){
@@ -1292,9 +1233,9 @@ a[href^="mailto:"]:hover {
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 확인 후 회신됩니다.";
-          else if(/가격|비용|요금/.test(text)) answer="가격/요금 정보는 페이지 내 안내를 참고해주세요. 추가 문의는 남겨주세요.";
-          else answer="문의 감사합니다. 빠르게 확인하여 도와드리겠습니다.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="Operations-related inquiries will be reviewed by an administrator and answered afterward.";
+          else if(/가격|비용|요금/.test(text)) answer="Please refer to the information on this page for pricing/fees. Leave an additional inquiry if needed.";
+          else answer="Thank you for your inquiry. We will review it quickly and assist you.";
         }
       }
       return { technical, answer };
@@ -1304,11 +1245,11 @@ a[href^="mailto:"]:hover {
       const q = (tQ.value||"").trim();
       let a = (tA.value||"").trim();
       if(!q){ tQ.focus(); return; }
-      const { technical, answer } = await autoRespostaIfNeeded(q);
+      const { technical, answer } = await autoAnswerIfNeeded(q);
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("저장 설정(Supabase url/key)이 아직 연결되지 않아 서버 저장은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        alert("Server-side saving is disabled because the save settings (Supabase url/key) are not connected yet. When deployed to the web, it will connect automatically if SUPER_VARSAR.url/anonKey is configured.");
         return;
       }
       const record = {
@@ -1318,11 +1259,11 @@ a[href^="mailto:"]:hover {
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("등록 실패"); return; }
+      if(error){ alert("Submission failed"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
-    btnEnviar.addEventListener("click", submit);
+    btnSubmit.addEventListener("click", submit);
 
     // realtime refresh
     (async()=>{ try{
@@ -1414,11 +1355,11 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         h.appendChild(t); h.appendChild(x);
 
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">※ Perguntas simples são respondidas imediatamente pela IA. Questões técnicas, erros ou assuntos operacionais são encaminhados automaticamente para o Q&A do administrador.</div>';
 
         var ce = document.createElement('p');
         ce.className = 'contact-email';
-        ce.innerHTML = 'E-mail de contato: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+        ce.innerHTML = 'Representative Email: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
         body.appendChild(ce);
 
         p.appendChild(h); p.appendChild(body);
@@ -1511,6 +1452,7 @@ window.addEventListener("message",function(ev){
   try{if(ev&&ev.data&&ev.data.type==="IGTC_OPEN_QNA"&&typeof IGDC_QA.open==="function"){IGDC_QA.open();}}catch(e){}
 });
 </script>
+
 <script id="nh-mobile-rail-mount">
 (function(){
   const isMobile = matchMedia('(max-width:1100px)').matches || matchMedia('(pointer:coarse)').matches;
@@ -1518,89 +1460,49 @@ window.addEventListener("message",function(ev){
   const mobileSec = document.getElementById('nh-mobile-rail-list');
 
   // 1) Mobile: clone right rail cards to bottom (max 15)
+  // ✅ 핵심: 우측 레일에 복제할 "실 카드"가 1개도 없으면, 기존 더미(HTML)를 절대 지우지 않는다.
   if(isMobile && rail && mobileSec){
-    const items = Array.from(rail.querySelectorAll('.ad-box a, .ad-box img, .ad-box'));
+    const items = Array.from(rail.querySelectorAll('.ad-box'));
     const take = Math.min(15, items.length || 0);
+
+    if(take <= 0){
+      // 더미 유지 (아무것도 안 함)
+      return;
+    }
+
     mobileSec.innerHTML = '';
     for(let i=0;i<take;i++){
       const box = items[i];
-      const a = box.tagName==='A' ? box : (box.querySelector && box.querySelector('a'));
-      const img = (box.querySelector && box.querySelector('img')) || (box.tagName==='IMG' ? box : null);
+      const a = box.querySelector && box.querySelector('a');
+      const img = box.querySelector && box.querySelector('img');
       const href = a ? a.getAttribute('href') : '#';
-      const src  = img ? img.getAttribute('src') : (box.getAttribute && box.getAttribute('src'));
-      const card = document.createElement('a');
+      const src  = img ? img.getAttribute('src') : '';
+
+      // 기존 모바일 카드 스타일을 망가뜨리지 않게 "가벼운" 카드로 복제
+      const card = document.createElement('div');
       card.className = 'card';
-      card.href = href || '#';
-      card.target = '_blank'; card.rel = 'noopener';
-      if(src){
-        const im = document.createElement('img');
-        im.src = src;
-        im.loading='lazy'; im.decoding='async';
-        im.style.width='100%'; im.style.height='auto'; im.style.objectFit='cover';
-        card.appendChild(im);
+
+      const link = document.createElement('a');
+      link.href = href || '#';
+      if(href && href !== '#'){
+        link.target = '_blank';
+        link.rel = 'noopener';
       }else{
-        card.textContent = (a && a.textContent) || '상품';
-        card.style.display='block'; card.style.padding='20px'; card.style.background='#fff';
+        link.tabIndex = -1;
+        link.setAttribute('aria-hidden','true');
       }
+
+      const im = document.createElement('img');
+      if(src) im.src = src;
+      im.alt = 'thumb';
+      im.loading = 'lazy';
+      im.decoding = 'async';
+
+      link.appendChild(im);
+      card.appendChild(link);
       mobileSec.appendChild(card);
     }
   }
-
-  // 2) Automap: replace dummies with feed (filters incl. harmful content)
-  function blocked(c){
-    const bad=[/도박|베팅|카지노|바카라|토토|먹튀/i,/성매매|성인용|19\+|야동|AV|porn|sex/i,/마약|대마|코카인|필로폰|스테로이드/i,/총기|무기거래|테러/i,/보이스피싱|폰테크|작전주|묻지마 코인|러그풀|scam/i];
-    const t=[c.title,c.brand,c.desc,c.url].filter(Boolean).join(' ');
-    return bad.some(rx=>rx.test(t)) || !c.url || !c.thumb;
-  }
-  function cardHTML(c){
-    const u = c.url || '#';
-    return `<a class="card" href="${u}" target="_blank" rel="noopener">
-      <img src="${c.thumb}" alt="${(c.title||'상품').replace(/\"/g,'')}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;display:block">
-    </a>`;
-  }
-
-  /* ✅ FIX: do NOT clear rail/mobile unless we have valid cards */
-  function replaceWithFeed(rows){
-    const railBox = document.querySelector('.right-rail .ad-panel, .right-panel .ad-panel, .ad-panel');
-    const mobile = document.getElementById('nh-mobile-rail-list');
-
-    const cards=[];
-    (rows||[]).forEach(r => (r.items||r.cards||[]).forEach(c=>{ if(!blocked(c)) cards.push(c); }));
-    const take = Math.min(cards.length, 15);
-
-    // 핵심: 피드가 0개면 기존(더미/기존맵핑) DOM을 유지
-    if(!take) return;
-
-    if(mobile) mobile.innerHTML='';
-    if(railBox) railBox.innerHTML='';
-
-    for(let i=0;i<take;i++){
-      const c = cards[i];
-      if(mobile) mobile.insertAdjacentHTML('beforeend', cardHTML(c));
-      if(railBox){
-        const b=document.createElement('div');
-        b.className='ad-box';
-        b.innerHTML=cardHTML(c);
-        railBox.appendChild(b);
-      }
-    }
-  }
-
-  // Try to load feed automatically (optional)
-  (async function(){
-    const tries=['/assets/data/ad_feed.network.json','/.netlify/functions/feed?page=networkhub'];
-    for(const u of tries){
-      try{
-        const r=await fetch(u,{cache:'no-cache'});
-        if(r.ok){
-          const j=await r.json();
-          const rows = j.rows ? j.rows : (j.items||j.cards ? [{items:(j.items||j.cards)}] : []);
-          replaceWithFeed(rows);
-          break;
-        }
-      }catch(e){}
-    }
-  })();
 })();
 </script>
 
@@ -1631,8 +1533,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>결제 QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">닫기</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>QR de pagamento</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Fechar</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -1700,7 +1602,7 @@ window.addEventListener("message",function(ev){
     ta.value=''; alert('전송되었습니다.');
   }
   if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('전송 실패'));});
-  const btn=document.querySelector('#qnaEnviarBtn,[data-qna-submit], form [type="submit"]');
+  const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
   if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('전송 실패'));});
 })();
 </script>
@@ -1764,13 +1666,366 @@ window.addEventListener("message",function(ev){
 })();
 </script>
 
-<script defer src="/assets/js/auto-embed.instagram.js"></script>
-<script defer src="/assets/js/placeholder-sweeper.js"></script>
+<script id="igdc-unified-commerce-script">
+/*
+ IGDC Unified Commerce Script
+ --------------------------------------------------
+ 적용 대상:
+  - Distribution (이미 적용 가능)
+  - 나머지 4개 사이트 (Donation 제외, Media 제외)
+ 목적:
+  - 썸네일 클릭 자동 감지
+  - 상세 상품 자동 오픈 훅
+  - 구매하기 / 결제 / 장바구니 기존 버튼 그대로 사용
+  - 상세 하단에 리뷰 시스템 자동 장착 (쿠팡 방식)
+ --------------------------------------------------
+ 전제:
+  - 썸네일 카드 또는 상세 컨테이너에 data-product-id 존재
+  - IGTC.checkout(...) 기존 결제 로직 존재
+  - window.__IGDC_ROLE 존재
+ --------------------------------------------------
+ 삽입 위치:
+  - 각 페이지 </body> 바로 위
+*/
+
+(function (window, document) {
+  'use strict';
+
+  const IGDCCommerce = {
+    config: {
+      reviewApi: '/.netlify/functions/reviews',
+      reviewRootId: 'igdc-review-root',
+      minReviewChars: 10,
+      maxReviewChars: 2000
+    },
+
+    state: {
+      role: 'guest',
+      activeProductId: null
+    },
+
+    init() {
+      this.state.role = window.__IGDC_ROLE || 'guest';
+      this.bindThumbnailAutoHook();
+    },
+
+    /* 1️⃣ 썸네일 카드 클릭 자동 감지 */
+    bindThumbnailAutoHook() {
+      document.addEventListener('click', (e) => {
+        const card = e.target.closest('[data-product-id]');
+        if (!card) return;
+
+        const productId = card.dataset.productId;
+        if (!productId) return;
+
+        // 기존 상세 상품 오픈 로직은 이미 각 페이지에 있음
+        // 여기서는 리뷰만 자동 부착
+        setTimeout(() => {
+          this.mountReview(productId);
+        }, 50);
+      });
+    },
+
+    /* 2️⃣ 리뷰 시스템 장착 */
+    mountReview(productId) {
+      if (this.state.activeProductId === productId) return;
+      this.state.activeProductId = productId;
+
+      let root = document.getElementById(this.config.reviewRootId);
+      if (!root) {
+        root = document.createElement('div');
+        root.id = this.config.reviewRootId;
+
+        const detailContainer =
+          document.querySelector('.product-detail') ||
+          document.querySelector('.product-modal') ||
+          document.querySelector('.detail-view') ||
+          document.body;
+
+        detailContainer.appendChild(root);
+      }
+
+      root.innerHTML = this.renderReviewShell();
+      this.bindReviewForm(root, productId);
+      this.loadReviews(productId);
+    },
+
+    /* 3️⃣ 리뷰 UI */
+    renderReviewShell() {
+      const canWrite = this.state.role !== 'guest';
+      return `
+        <section class="igdc-review">
+          <h3 class="igdc-review-title">Avaliações do produto</h3>
+          <div id="igdc-review-list" class="igdc-review-list">Carregando...</div>
+          ${canWrite ? this.renderReviewForm() : this.renderLoginHint()}
+        </section>
+      `;
+    },
+
+    renderReviewForm() {
+      return `
+        <form id="igdc-review-form" class="igdc-review-form">
+          <textarea
+            placeholder="Compartilhe sua experiência com o produto"
+            minlength="${this.config.minReviewChars}"
+            maxlength="${this.config.maxReviewChars}"
+            required></textarea>
+          <div class="igdc-review-actions">
+            <button type="submit">Publicar avaliação</button>
+          </div>
+        </form>
+      `;
+    },
+
+    renderLoginHint() {
+      return `<div class="igdc-review-login-hint">
+        É necessário fazer login para escrever uma avaliação.
+      </div>`;
+    },
+
+    /* 4️⃣ 리뷰 이벤트 */
+    bindReviewForm(root, productId) {
+      const form = root.querySelector('#igdc-review-form');
+      if (!form) return;
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const textarea = form.querySelector('textarea');
+        const content = textarea.value.trim();
+
+        if (content.length < this.config.minReviewChars) {
+          alert(`리뷰는 최소 ${this.config.minReviewChars}자 이상 작성해 주세요.`);
+          return;
+        }
+
+        this.submitReview(productId, content)
+          .then(() => {
+            textarea.value = '';
+            this.loadReviews(productId);
+          })
+          .catch(() => alert('Falha ao enviar a avaliação'));
+      });
+    },
+
+    /* 5️⃣ 리뷰 로딩 */
+    async loadReviews(productId) {
+      const list = document.getElementById('igdc-review-list');
+      if (!list) return;
+
+      list.textContent = 'Carregando...';
+
+      try {
+        const res = await fetch(
+          `${this.config.reviewApi}?productId=${encodeURIComponent(productId)}`
+        );
+        const data = await res.json();
+
+        if (!Array.isArray(data) || data.length === 0) {
+          list.innerHTML = '<div class="igdc-review-empty">Ainda não há avaliações.</div>';
+          return;
+        }
+
+        list.innerHTML = data.map(this.renderReviewItem).join('');
+      } catch {
+        list.textContent = 'Não foi possível carregar as avaliações.';
+      }
+    },
+
+    async submitReview(productId, content) {
+      const res = await fetch(this.config.reviewApi, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, content })
+      });
+      if (!res.ok) throw new Error('submit failed');
+    },
+
+    renderReviewItem(item) {
+      const esc = (v) => String(v || '').replace(/[<>]/g, '');
+      return `
+        <div class="igdc-review-item">
+          <div class="igdc-review-meta">
+            <span>${esc(item.user || 'Anônimo')}</span>
+            <span>${esc(item.date || '')}</span>
+          </div>
+          <div class="igdc-review-content">${esc(item.content)}</div>
+        </div>
+      `;
+    }
+  };
+
+  /* 6️⃣ 기본 스타일 */
+  const style = document.createElement('style');
+  style.textContent = `
+    .igdc-review { margin-top:24px; border-top:1px solid #eee; padding-top:16px; }
+    .igdc-review-title { margin:0 0 12px; font-size:1.05rem; }
+    .igdc-review-list { display:flex; flex-direction:column; gap:10px; }
+    .igdc-review-item { border:1px solid #eee; border-radius:10px; padding:10px; background:#fafafa; }
+    .igdc-review-meta { font-size:.8rem; color:#666; display:flex; gap:8px; }
+    .igdc-review-content { margin-top:6px; line-height:1.5; }
+    .igdc-review-form textarea { width:100%; min-height:90px; padding:10px; border-radius:10px; border:1px solid #ddd; }
+    .igdc-review-actions { margin-top:8px; text-align:right; }
+    .igdc-review-actions button { padding:8px 14px; border-radius:10px; border:none; background:#2563eb; color:#fff; }
+    .igdc-review-empty, .igdc-review-login-hint { color:#666; }
+  `;
+  document.head.appendChild(style);
+
+  IGDCCommerce.init();
+  window.IGDCCommerce = IGDCCommerce;
+
+})(window, document);
+</script>
+
+<script id="rightpanel-dummy-engine-v2">
+(function(){
+
+  /* ===============================
+     설정
+  =============================== */
+
+  const PANEL_ID   = 'rightAutoPanel';
+  const DUMMY_CNT  = 100;
+
+
+  /* ===============================
+     패널 찾기
+  =============================== */
+
+  const panel = document.getElementById(PANEL_ID);
+
+  if(!panel){
+    console.warn('[RightPanel] panel not found');
+    return;
+  }
+
+
+  /* ===============================
+     더미 생성
+  =============================== */
+
+  function buildDummy(){
+
+    panel.innerHTML = '';
+
+    for(let i=1;i<=DUMMY_CNT;i++){
+
+      const card = document.createElement('div');
+
+      card.className = 'ad-box dummy-card';
+      card.dataset.dummy = '1';
+
+      card.innerHTML = `
+        <div class="dummy-thumb"
+             style="
+               width:100%;
+               height:100%;
+               border-radius:12px;
+               background:linear-gradient(135deg,#eef2f7,#dbe4f0);
+               display:flex;
+               flex-direction:column;
+               justify-content:center;
+               align-items:center;
+               box-shadow:0 2px 6px rgba(0,0,0,.08);
+               border:1px solid rgba(0,0,0,.05);
+               font-family:system-ui;
+             ">
+
+          <div style="
+               font-size:26px;
+               font-weight:700;
+               color:#4a6fa5;
+               line-height:1;
+               margin-bottom:4px;
+             ">
+            ${i}
+          </div>
+
+          <div style="
+               font-size:11px;
+               color:#7a8da8;
+               letter-spacing:.5px;
+             ">
+            Loading
+          </div>
+
+        </div>
+      `;
+
+      panel.appendChild(card);
+    }
+  }
+
+
+  /* ===============================
+     더미 제거
+  =============================== */
+
+  function clearDummy(){
+
+    panel
+      .querySelectorAll('[data-dummy="1"]')
+      .forEach(el=>el.remove());
+  }
+
+
+ function renderReal(items){
+
+  if(!items || !items.length) return;
+
+  clearDummy();
+
+  // 기존 실카드 제거 (중복 방지)
+  panel.querySelectorAll('.ad-box[data-real="1"]').forEach(el=>el.remove());
+
+  items.forEach(item=>{
+
+    const title = item.title || item.name || '';
+    const link  = item.link  || '#';
+    const thumb = item.thumb || item.image || '';
+
+    const card = document.createElement('div');
+    card.className = 'ad-box';
+    card.setAttribute('data-real','1');
+
+    card.innerHTML = `
+      <a href="${link}" target="_blank" rel="noopener">
+        <img src="${thumb}"
+             loading="lazy"
+             alt="${title}"
+             onerror="this.style.display='none';">
+      </a>
+      <div class="cap">${title}</div>
+    `;
+
+    panel.appendChild(card);
+  });
+}
+
+  /* ===============================
+     초기 실행
+  =============================== */
+
+  buildDummy();
+
+
+  /* ===============================
+     외부 연동 훅
+  =============================== */
+
+  window.__IGDC_RIGHTPANEL_RENDER = function(items){
+
+    renderReal(items);
+
+  };
+
+})();
+</script>
+
 <script defer src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
+<script defer src="/assets/js/network-rightpanel-automap.js?v=20260225a"></script>
 
-<script defer src="/assets/js/feed.js"></script>
-
-<script defer src="/assets/js/network-rightpanel-automap.js"></script>
+<script src="/assets/js/maru-search.js"></script>
+<script src="/assets/js/maru-searchbank-sync.js"></script>
 
 </body>
 </html>

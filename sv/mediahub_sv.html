@@ -1,0 +1,4753 @@
+<!DOCTYPE html>
+
+<html class="prelayout" lang="en">
+<head>
+<script src="/assets/js/igtc-language-role-bridge.min.js"></script>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>Mediehubb | Fullständigt gränssnitt</title>
+<style>
+  :root {
+    --bg:#0f1116;
+    --bg-alt:#151922;
+    --text:#e9eef7;
+    --muted:#9aa3b5;
+    --accent:#2e6bff;
+    --card:#1b2030;
+    --gap:12px;
+    --sidebar-w:210px;
+    --thumb-w:180px;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow-x: hidden;
+   }
+
+  .layout { display:flex; }
+  .sidebar {
+    width: var(--sidebar-w);
+    background: var(--bg-alt);
+    padding-top: 30px;
+    display: flex; flex-direction: column;
+     top: 0; bottom: 0; left: 0;
+    
+    z-index:20;
+  
+  
+  left: 0;
+  top: 0;
+  height: auto;
+}
+  .sidebar a {
+    display:block; color:#cfd6e4; text-decoration:none;
+    padding:10px 12px; font-weight:600; border-radius:6px;
+    margin:15px 10px; background-color:rgba(255,255,255,0.05);
+    text-align:15px;
+  }
+  .sidebar a:hover { background-color:rgba(255,255,255,0.15); color:#fff; }
+
+  main { flex:1; position: relative; overflow: hidden; }
+  .content-area { padding:20px; }
+  .section-title {
+    background-color: #FF886A !important; /* 연하고 따뜻한 주홍-분홍 계열 */
+    padding: 10px 14px;
+    border-radius: 999px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    margin: 20px 0 14px;
+    display: inline-block;
+    color: #ffffff; /* 흰색 글자 */
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.4); /* 살짝 진한 회색 음영 효과 */
+   }
+  .hero img { display:block; width:100%; height:auto; object-fit:cover; }
+  .card { background: var(--card); border-radius:12px; overflow:hidden; flex:0 0 var(--thumb-w, 320px); }
+  .thumb { width:100%; aspect-ratio:16/9; background:#222 center/cover no-repeat; }
+  .meta { padding:8px; font-size:0.85rem; }
+
+  .platform-tile {
+    background: linear-gradient(135deg, #f7b17a, #d1b66e, #96c3a4, #3b9e86);
+    padding: 18px 12px;
+    border-radius: 8px;
+    text-align: center;
+    font-weight: 700;
+    color: #fff;
+    flex: 0 0 150px;
+    cursor: pointer;
+    transition:transform .12s;
+  }
+  .platform-tile:hover { transform:translateY(-2px); }
+
+  /* Scroll Wrapper and Buttons */
+  .scroll-wrapper {
+    position: relative;
+    margin: 10px 0 30px;
+    padding: 0 70px;
+    overflow: hidden;
+  }
+  .scroll-content {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: var(--gap);
+    scroll-behavior: smooth;
+  }
+  .scroll-content::-webkit-scrollbar { display:none; }
+  .scroll-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0,0,0,0.75);
+    border: none;
+    width: 50px; height: 50px; line-height: 50px;
+    border-radius: 50%; color: #fff; font-size: 1.6rem;
+    cursor: pointer; z-index: 9999;
+  }
+  .scroll-btn.left { left: 10px; }
+  .scroll-btn.right { right: 10px; }
+
+html, body {
+  min-height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.layout {
+  min-height: 100%;
+  display: flex;
+  align-items: flex-start;
+}
+
+/* patch: 2025-08-20 scroll UX improvements */
+.section-row, .scroll-wrapper{
+  scroll-behavior: smooth !important;
+  scroll-snap-type: x mandatory;
+}
+.section-row .card, .scroll-wrapper .card{
+  scroll-snap-align: start;
+}
+/* Make scroll buttons fully clickable and more responsive */
+.scroll-btn, .scroll-button, .btn-scroll-left, .btn-scroll-right{
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 12px !important;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  z-index: 20;
+}
+.scroll-btn:active, .scroll-button:active, .btn-scroll-left:active, .btn-scroll-right:active{
+  transform: scale(0.98);
+}
+/* Ensure overlay buttons capture clicks above content */
+.scroll-btn, .scroll-button, .btn-scroll-left, .btn-scroll-right{
+  pointer-events: auto !important;
+}
+
+
+/* === 10 Media Sections Layout Stabilizer (2026-02-23) === */
+/* Allow both vertical page scroll and horizontal row scroll */
+.thumb-line > .scroll-content{
+  touch-action: pan-x pan-y !important;
+}
+/* Force both scroll buttons visible on desktop/tablet (>1024) for media sections */
+@media (min-width:1025px){
+  .thumb-line[data-psom-key^="media-"] > .scroll-btn{
+    display:block !important;
+    opacity:1 !important;
+    visibility:visible !important;
+  }
+}
+/* Mobile portrait: YouTube-like full-width cards */
+@media (max-width:900px) and (orientation: portrait){
+  .thumb-line[data-psom-key^="media-"] .card{
+    flex:0 0 100% !important;
+    max-width:100% !important;
+  }
+  .thumb-line[data-psom-key^="media-"] .thumb{
+    aspect-ratio:16/9;
+  }
+}
+
+/* Force hide BOTH scroll buttons cleanly on tablet/mobile */
+@media (max-width:1024px){
+
+  .scroll-wrapper > .scroll-btn.left,
+  .scroll-wrapper > .scroll-btn.right{
+    display:none !important;
+    opacity:0 !important;
+    visibility:hidden !important;
+    pointer-events:none !important;
+  }
+
+}
+
+/* Improve touch scrolling behavior */
+.scroll-content{
+  -webkit-overflow-scrolling: touch;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+</style>
+<style>
+
+/* === Non-destructive hide: Literature & Academic (sidebar only) === */
+.sidebar a[href$="literature_academic.html"] { display: none !important; }
+
+</style>
+<style id="prelayout-guard">.prelayout *{transition:none!important}</style>
+<style id="igdc-clean-ui">
+/* Section title: text-only, no stamp */
+h2.section-title{
+  background:none!important;
+  box-shadow:none!important;
+  padding:0.25rem 0;
+  margin:0.25rem 0 0.75rem;
+  font-weight:700;
+  font-size:1.125rem;
+  letter-spacing:0.02em;
+  color:inherit;
+}
+h2.section-title img{display:none!important}
+
+/* Simple, clean buttons */
+button, .button, .btn, .cta-button, a.button, a.btn{
+  border:1px solid rgba(0,0,0,0.14);
+  background:#ffffff;
+  color:#111111;
+  padding:.5rem .9rem;
+  border-radius:9999px;
+  line-height:1.25;
+  cursor:pointer;
+  text-decoration:none;
+  display:inline-flex;
+  align-items:center;
+  gap:.35rem;
+  transition:filter .2s ease, transform .02s ease;
+}
+button:hover, .button:hover, .btn:hover, .cta-button:hover, a.button:hover, a.btn:hover{
+  filter:brightness(0.97);
+}
+button:active, .button:active, .btn:active, .cta-button:active, a.button:active, a.btn:active{
+  transform:translateY(1px);
+}
+/* Icon inside button (optional) */
+button svg, .btn svg, .button svg, .cta-button svg{ width:1em; height:1em; }
+</style>
+<style id="igdc-footer-style">footer{ background:#004080;color:#fff;text-align:center;padding:20px 15px;font-size:.9rem; }</style>
+<!-- patch: 2025-08-20 mediahub section title cleanup -->
+<style id="patch-mediahub-titles">
+/* Section titles: text-only, slightly larger, white text */
+.section-title{
+  background: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  text-shadow: none !important;
+  padding: 2px 0 !important;
+  margin: 8px 0 6px !important; /* closer to the rows */
+  font-size: 1.2rem !important; /* ~one step larger */
+  font-weight: 700 !important;
+  color: #ffffff !important;
+  display: block !important;
+}
+
+/* Tighten gaps between thumbnails and provider tiles */
+:root{
+  --gap: 8px; /* 12px -> 8px (reduce by 4px within 3~5px range) */
+}
+
+/* Minor wrapper spacing tighten (no layout/count change) */
+.scroll-wrapper{
+  margin: 8px 0 20px !important;
+  padding: 0 64px !important; /* was 70px */
+}
+</style>
+<!-- patch: 2025-08-20 main page card adjustments -->
+<style id="patch-mainpage-cards">
+/* Allow up to 20 cards per content section */
+.section-row .card, .scroll-wrapper .card{
+  flex: 0 0 23.26%; max-width: 23.26%; max-width: 23.8%; /* 4 full + ~20% next */
+  max-width: calc(25% + 5%);
+}
+
+/* Ensure container can scroll horizontally to accommodate 20 */
+.section-row, .scroll-wrapper{
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+}
+
+/* Increase count of generated cards (if limited via CSS grid-template-columns) */
+.section-row{
+  grid-template-columns: repeat(20, minmax(0,1fr)) !important;
+}
+</style>
+<style id="patch-hide-providerbar">
+/* Remove the stamp bar below search (keep dropdown only) */
+.provider-bar{ display:none !important; }
+</style>
+<style id="mediahub-clean-scroll-and-bc">
+:root{
+  --scroll-btn-w: 56px;   /* keep modest; not oversized */
+  --scroll-btn-h: 56px;
+  --scroll-btn-pad: 0px;
+  --scroll-btn-gap: 16px;
+  --scroll-btn-bg: #4D81FF; /* light sky */
+  --scroll-btn-fg: #FFFFFF;
+}
+
+/* Scroll buttons: pill (round-rect near circle), subtle bright color */
+.scroll-wrapper{ position:relative; }
+.scroll-btn{
+  position:absolute; top:50%; transform:translateY(-50%);
+  width:var(--scroll-btn-w); height:var(--scroll-btn-h);
+  padding:var(--scroll-btn-pad);
+  display:flex; align-items:center; justify-content:center;
+  background:var(--scroll-btn-bg);
+  color:var(--scroll-btn-fg);
+  border-radius:9999px;      /* pill */
+  box-shadow:0 4px 10px rgba(0,0,0,.15);
+  cursor:pointer; user-select:none;
+  border:1px solid rgba(0,0,0,.06);
+}
+.scroll-btn.left{ left:0; }
+.scroll-btn.right{ right:0; }
+/* Make whole surface clickable */
+.scroll-btn *{ pointer-events:none; }
+
+/* Pull content in so buttons never overlay thumbnails */
+.scroll-content{ margin-left: 8px; margin-right: calc(var(--scroll-btn-w) + var(--scroll-btn-gap) - (0.3 * var(--thumb-w))); overflow-x:auto; overflow-y:hidden; }
+.scroll-content::-webkit-scrollbar{ display:none; }
+.scroll-content{ scrollbar-width:none; -ms-overflow-style:none; }
+
+/* Blockchain tiles: pastel between light green & light orange (peach-green) */
+.section-blockchain 
+.section-blockchain .bc-tile:hover{
+  background:#DDF2E6;
+  border-color:rgba(20,80,40,.28);
+}
+
+/* Responsive: keep gutters modest on small screens */
+@media (max-width: 900px){
+  :root{ --scroll-btn-w: 52px; --scroll-btn-h: 52px; --scroll-btn-gap: 12px; }
+}
+@media (max-width: 640px){
+  :root{ --scroll-btn-w: 48px; --scroll-btn-h: 48px; --scroll-btn-gap: 10px; }
+}
+</style>
+<style id="scroll-btn-simple-override">
+/* Make entire button clickable and remove any bouncy active effects */
+.scroll-btn{
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  position:absolute; top:50%; transform:translateY(-50%) !important;
+  cursor:pointer !important; user-select:none !important;
+  z-index:10 !important;
+  transition:none !important; /* no animations */
+}
+/* Child glyphs don't steal events; click anywhere on button */
+.scroll-btn *{ pointer-events:none !important; }
+/* Ensure no visual shift on press */
+.scroll-btn:active{ transform:translateY(-50%) !important; }
+/* In case a parent is intercepting events above the vertical midpoint, make sure button is above it */
+.scroll-wrapper{ position:relative; overflow:visible; }
+</style>
+<style id="mediahub-right-overlap-30">
+.scroll-content{ margin-right: calc(var(--scroll-btn-w,56px) + var(--scroll-btn-gap,16px) - 54px) !important; }
+</style>
+<style id="thumbline-drag-style">
+/* Make main thumbnail rows draggable & hide native scrollbar */
+.thumb-line{
+  display:flex;
+  gap: var(--gap, 12px);
+  overflow-x:auto;
+  overflow-y:hidden;
+  scroll-behavior:smooth;
+  -ms-overflow-style:none;
+  scrollbar-width:none;
+}
+.thumb-line::-webkit-scrollbar{ display:none; }
+/* Reveal about 30% of the 5th card by trimming right gutter a bit */
+.thumb-line{ margin-right: calc(-0.10 * var(--thumb-w, 180px)); }
+</style>
+<style id="thumbline-drag-style-final">
+.thumb-line{
+  margin-left: 4px !important;
+  margin-right: calc(var(--scroll-btn-w,56px) + var(--scroll-btn-gap,16px) - (0.3 * var(--thumb-w,180px))) !important;
+}
+</style>
+<style id="final-5th-30-strong">
+:root{ --thumb-w: 320px; } /* keep fallback */
+.scroll-content, .thumb-line{
+  margin-right: calc(var(--scroll-btn-w,56px) + var(--scroll-btn-gap,16px) - (0.30 * var(--thumb-w,320px))) !important;
+  margin-left: 4px !important;
+}
+</style>
+<style id="embedded-restore-scroll">
+/* Enable vertical scrolling when embedded in index (safe, minimal) */
+html, body {
+  overflow-y: auto !important;
+  height: auto;
+  min-height: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+</style>
+<style id="qa-empty-state-style">
+.igdc-qa-threads:empty::before,
+.qna-threads:empty::before,
+.qa-list:empty::before,
+.qna-list:empty::before,
+.igdc-qa-list:empty::before{
+  content: "Inga Q&A-poster har registrerats ännu.";
+  display: block;
+  padding: 10px 12px;
+  color: #666;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  margin-top: 8px;
+  font-size: 0.95rem;
+}
+</style>
+<style>
+.hero{
+  position:relative !important;
+  overflow:hidden !important;
+  border-radius:6px !important;
+  max-height:55vh;
+  width:100% !important;
+  height:auto !important;
+  min-height:0 !important;
+  margin-top:0 !important;
+}
+.hero img,.hero video{
+  display:block !important;
+  width:100% !important;
+  height:100% !important;
+  max-height:100% !important;
+  min-height:0 !important;
+  object-fit:cover !important;
+}
+@media (max-width:768px){
+  .hero{ max-height:34vh !important; }
+}
+.search-bar{
+  position:relative;
+  z-index:2;
+  margin-top:16px;
+}
+
+.hero img{ -webkit-user-drag:none; }
+
+</style>
+<style id="sidebar-active-style">
+  .sidebar a.active{ 
+    background:#22384f; 
+    color:#e9eef7; 
+    border:1px solid rgba(46,107,255,.18); 
+    border-radius:8px; 
+  }
+</style>
+<script src="https://api.netlify.com/ssWPpvocB8_DNBlkRL5vooxk4cLu-j_3dfgSMsYwZGuZ-gYyfOItbhvPMTHsOcDWmUP_r5LS7009iz1kYKNnAYkyAFvLWnPcEY9YgwxaATPhJ4vbVpksLzw3A87RHmECK22GmJOgo1U4H2PkQGQYF5dSasv1yjaRnYbOlfc1PhA=" type="text/javascript"></script><script src="https://api.netlify.com/aw590GDSw75orZIqC7a0EDxiydfxNq9xk28EyQRd_F6__zGwUVBEAL4Ia-sa71hk88NW3GUCFsIxOkQkWNRqfP0yS18CNn-E5P_hnlmbzZ54l4ZTb0L9cFjEHegl3KEQPa2-bkbKPGEYrg-8YfMPxHgIVkvdtRi5zmGQofQj3vI=" type="text/javascript"></script><style id="edge-autohide-mobile">
+@media (pointer:coarse){
+:root{--edge:10px;--spd:.14s;--e:ease-out}
+body.hide-top nav,body.hide-top .topbar{transform:translateY(-100%);transition:transform var(--spd) var(--e)}
+body.hide-left .sidebar{transform:translateX(-100%);transition:transform var(--spd) var(--e)}
+body.hide-right .right-panel,body.hide-right .ad-panel{transform:translateX(100%);transition:transform var(--spd) var(--e)}
+nav,.topbar,.sidebar,.right-panel,.ad-panel{will-change:transform}
+.edge-top,.edge-left,.edge-right{position:fixed;z-index:9999}
+.edge-top{top:0;left:0;right:0;height:var(--edge)}
+.edge-left{top:0;left:0;bottom:0;width:var(--edge)}
+.edge-right{top:0;right:0;bottom:0;width:var(--edge)}
+body.show-top nav,body.show-top .topbar{transform:none}
+body.show-left .sidebar{transform:none}
+body.show-right .right-panel,body.show-right .ad-panel{transform:none}
+}
+</style>
+<link href="/assets/css/thumbs.standard.css?v=20250914" rel="stylesheet"/>
+<link href="/assets/css/hero.css?v=20250914" rel="stylesheet"/>
+<!-- Mobile Optimization Patch v1 -->
+<style id="igdc-mobile-patch">
+@media (max-width: 768px){
+  .sidebar,
+  .right,
+  .right-panel,
+  .ad-panel,
+  .bottom-nav,
+  .bottom-bar,
+  .mobile-dock { display:none !important; }
+
+  .container,
+  .layout { display:block !important; padding:0 !important; margin:0 !important; }
+  .main, .main-content, main, .content-area {
+    max-width:none !important;
+    width:100% !important;
+    margin:0 !important;
+    padding:16px !important;
+    box-shadow:none !important;
+  }
+
+  header h1 { font-size:1.4rem !important; }
+  header p, .hero p { font-size:.95rem !important; }
+  .hero { margin:0 0 12px !important; padding:12px !important; border-radius:10px !important; }
+
+  .scroll-btn, .btn-scroll-left, .btn-scroll-right { display:none !important; }
+  .scroll-wrapper { padding:0 !important; }
+
+  .grid {
+    display:grid !important;
+    grid-template-columns:repeat(2, minmax(0,1fr)) !important;
+    gap:10px 10px !important;
+  }
+}
+@media (max-width: 768px) and (orientation: landscape){
+  .grid { grid-template-columns:repeat(3, minmax(0,1fr)) !important; }
+}
+@media (max-width: 768px){
+  nav a { padding:8px 10px !important; font-size:.95rem !important; }
+  .language-select { top:10px !important; right:12px !important; transform:none !important; }
+}
+</style>
+<!-- Mobile Providers Drawer v2 (MediaHub: LEFT-side push drawer + top banner) -->
+<style id="igdc-mobile-providers-drawer-left">
+@media (max-width:768px){
+  :root{ --pvw: min(86vw, 320px); }
+  html.pv-open-left #ad-stage{ transform: translateX(var(--pvw)); transition: transform .25s ease; }
+
+  #providers-drawer-left{
+    position:fixed; top:0; left:0; height:100vh; width:var(--pvw);
+    background:#fff; box-shadow:4px 0 16px rgba(0,0,0,.18);
+    transform:translateX(-100%); transition:transform .25s ease;
+    z-index:99998; display:flex; flex-direction:column;
+  }
+  #providers-drawer-left.open{ transform:translateX(0); }
+
+  #providers-header-left{
+    padding:8px 10px; border-bottom:1px solid rgba(0,0,0,.06);
+    display:flex; align-items:center; gap:8px;
+  }
+  #providers-title-left{ font-weight:800; flex:0 0 auto; }
+  #providers-search-left{
+    margin-left:auto; flex:1 1 auto; max-width: 60%;
+    height:32px; border:1px solid rgba(0,0,0,.15); border-radius:8px; padding:0 10px;
+    font-size:14px;
+  }
+  #providers-close-left{ border:none; background:transparent; font-size:22px; line-height:1; padding:6px; margin-left:4px; }
+
+  #providers-body-left{ flex:1; overflow:auto; -webkit-overflow-scrolling:touch; padding:10px; }
+
+  #providers-backdrop-left{
+    position:fixed; inset:0; background:rgba(0,0,0,.15);
+    opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:99997;
+  }
+  #providers-backdrop-left.show{ opacity:1; pointer-events:auto; }
+
+  #providers-tab-left{
+    position:fixed; top:50%; left:0; transform:translate(-42%, -50%) rotate(90deg);
+    background:#111; color:#fff; border:1px solid rgba(0,0,0,.1); border-radius:10px;
+    padding:6px 10px; font-weight:800; letter-spacing:.02em; z-index:99996;
+    box-shadow:0 2px 8px rgba(0,0,0,.25);
+  }
+
+  #providers-banner{
+    position:fixed; top:10px; left:10px; z-index:99995;
+    background:#111; color:#fff; border-radius:999px; padding:6px 10px;
+    font-weight:800; letter-spacing:.02em; border:1px solid rgba(0,0,0,.1);
+    box-shadow:0 2px 8px rgba(0,0,0,.25);
+  }
+
+  .providers, #providers, .content-providers, [data-providers]{ display:none !important; }
+}
+</style>
+<script defer="" id="igdc-mobile-providers-drawer-left-script">
+(function(){
+  var isMobile = matchMedia("(max-width:768px)").matches;
+  if(!isMobile) return;
+  if(document.getElementById("igdc-mobile-providers-drawer-left-ready")) return;
+  var marker = document.createElement("meta"); marker.id="igdc-mobile-providers-drawer-left-ready"; document.head.appendChild(marker);
+
+  var stage = document.getElementById("ad-stage");
+  if(!stage){
+    stage = document.createElement("div");
+    stage.id = "ad-stage";
+    while(document.body.firstChild){ stage.appendChild(document.body.firstChild); }
+    document.body.appendChild(stage);
+  }
+
+  var src = stage.querySelector("#providers, .providers, .content-providers, [data-providers]");
+
+  var drawer = document.createElement("aside"); drawer.id="providers-drawer-left";
+  drawer.innerHTML = [
+    '<div id="providers-header-left">',
+      '<div id="providers-title-left" >Providers</div>',
+      '<input id="providers-search-left" type="search" placeholder="Sök..." aria-label="Sök leverantörer" />',
+      '<button id="providers-close-left" aria-label="Stäng">✕</button>',
+    '</div>',
+    '<div id="providers-body-left"></div>'
+  ].join("");
+  var bodyBox = drawer.querySelector("#providers-body-left");
+  if(src){
+    while(src.firstChild){ bodyBox.appendChild(src.firstChild); }
+  }
+
+  var backdrop = document.createElement("div"); backdrop.id="providers-backdrop-left";
+  var tab = document.createElement("button"); tab.id="providers-tab-left"; tab.type="button"; tab.textContent="Providers";
+  var banner = document.createElement("button"); banner.id="providers-banner"; banner.type="button"; banner.textContent="Providers";
+
+  function open(){ drawer.classList.add("open"); backdrop.classList.add("show"); document.documentElement.classList.add("pv-open-left"); }
+  function close(){ drawer.classList.remove("open"); backdrop.classList.remove("show"); document.documentElement.classList.remove("pv-open-left"); }
+
+  tab.addEventListener("click", open, {passive:true});
+  banner.addEventListener("click", open, {passive:true});
+  backdrop.addEventListener("click", close, {passive:true});
+  drawer.querySelector("#providers-close-left").addEventListener("click", close, {passive:true});
+
+  document.body.appendChild(drawer);
+  document.body.appendChild(backdrop);
+  document.body.appendChild(tab);
+  document.body.appendChild(banner);
+
+  var startX=0, startOpen=false, tracking=false;
+  window.addEventListener("touchstart", function(e){
+    if(!e.touches || !e.touches[0]) return;
+    var x = e.touches[0].clientX;
+    if(!drawer.classList.contains("open") && x <= 24){
+      tracking = true; startX = x; startOpen = false;
+    }else if(drawer.classList.contains("open") && x <= drawer.offsetWidth){
+      tracking = true; startX = x; startOpen = true;
+    }
+  }, {passive:true});
+  window.addEventListener("touchmove", function(e){
+    if(!tracking || !e.touches || !e.touches[0]) return;
+    var x = e.touches[0].clientX;
+    var dx = x - startX;
+    if(!startOpen && dx > 30){ open(); tracking=false; }
+    if(startOpen && dx < -30){ close(); tracking=false; }
+  }, {passive:true});
+  window.addEventListener("touchend", function(){ tracking=false; }, {passive:true});
+
+  var input = drawer.querySelector('#providers-search-left');
+  if(input){
+    var timer = null;
+    input.addEventListener('input', function(){
+      clearTimeout(timer);
+      timer = setTimeout(function(){
+        var q = (input.value || '').trim().toLowerCase();
+        var items = bodyBox.querySelectorAll('a, li, .item, .card, div, span');
+        items.forEach(function(el){
+          var text = (el.textContent || '').trim().toLowerCase();
+          if(!text) return;
+          var match = !q || text.indexOf(q) !== -1;
+          el.style.display = match ? '' : 'none';
+        });
+      }, 150);
+    }, {passive:true});
+  }
+})();
+</script>
+<!-- Mobile Section Pager v1 (group sections into horizontal slides on mobile) -->
+<!-- igdc-mobile-section-pager removed for MediaHub to preserve native scroll -->
+<!-- igdc-mobile-section-pager removed for MediaHub to preserve native scroll -->
+<style id="igdc-mobile-mediahub-patch-v3">
+/* === Mobile Optimization Patch — MediaHub (KR/ZH/EN) === */
+@media (max-width:768px){
+  /* 1) Hide left sidebar on mobile */
+  .sidebar{ display:none !important; }
+
+  /* 1.1) Allow page vertical scroll (avoid trapping in main overflow:hidden) */
+  main{ overflow: visible !important; }
+
+  /* 2) Relax layout paddings for full-width content */
+  .container,.layout{ display:block !important; padding:0 !important; margin:0 !important; }
+  .main,.main-content,main,.content-area{
+    width:100% !important; max-width:none !important;
+    margin:0 !important; padding:14px !important; box-shadow:none !important;
+  }
+
+  /* 3) Hide horizontal scroll arrows on mobile (drag with finger) */
+  .scroll-btn,.btn-scroll-left,.btn-scroll-right{ display:none !important; }
+  .scroll-wrapper{ padding:0 !important; }
+
+  /* 4) Provider line: when flagged for mobile drawer, hide the inline bar */
+  .platform-line[data-providers]{ display:none !important; }
+
+  /* 5) Keep tiles/lists readable: >=2 columns in any generic grid */
+  .grid{ display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr)) !important; gap:10px 10px !important; }
+}
+@media (max-width:768px) and (orientation:landscape){
+  .grid{ grid-template-columns:repeat(3,minmax(0,1fr)) !important; }
+}
+</style>
+<style id="igdc-mediahub-mobile-patch">
+/* === IGDC MediaHub Mobile & Card Behavior Patch (2025-10-02 KST) === */
+/* 1) Sidebar off on mobile + main 100% */
+@media (max-width: 1024px), (hover: none) and (pointer: coarse) {
+  .sidebar, #sidebar, [data-role="sidebar"], [class*="sidebar"] {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  main, .main, #main, .content, #content, .page, .container, .layout-main {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    padding-left: min(var(--content-padding, 16px), 4vw) !important;
+  }
+}
+
+/* 2) Thumbnail cards fixed size */
+.thumb-card, .thumbnail-card, .card, .media-card {
+  width:320px !important;
+  height:180px !important;
+  flex: 0 0 260px !important;
+  overflow: hidden;
+}
+.thumb-card img, .thumbnail-card img, .card img, .media-card img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+.card-grid, .thumb-grid, .thumbnail-grid, .cards, .media-grid, .grid-cards {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 12px !important;
+  align-content: flex-start;
+}
+
+/* 3) Search row always inline */
+.igdc-inline-search { display:flex !important; flex-wrap:nowrap !important; gap:8px !important; align-items:center !important; }
+.igdc-inline-search input[type="search"], .igdc-inline-search input[type="text"] { min-width:90px !important; flex:1 1 auto !important; }
+.igdc-inline-search select { flex:0 0 160px !important; }
+.igdc-inline-search button, .igdc-inline-search input[type="submit"] { flex:0 0 auto !important; white-space:nowrap !important; }
+
+@media (max-width:360px){
+  .igdc-inline-search select { flex-basis:140px !important; }
+  .igdc-inline-search input[type="search"], .igdc-inline-search input[type="text"] { min-width:70px !important; }
+}
+</style>
+<script id="igdc-mediahub-inline-search-init">
+(function(){
+  function applyInlineSearch(){
+    var candidates = document.querySelectorAll('form, .search, .search-bar, .filters, .toolbar, .controls');
+    for (var i=0; i<candidates.length; i++){
+      var f = candidates[i];
+      if (f.classList.contains('igdc-inline-search')) continue;
+      var txt = f.querySelector('input[type="search"], input[type="text"]');
+      var sel = f.querySelector('select');
+      var btn = f.querySelector('button, input[type="submit"]');
+      if (txt && sel && btn) { f.classList.add('igdc-inline-search'); break; }
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyInlineSearch);
+  else applyInlineSearch();
+  window.addEventListener('resize', applyInlineSearch);
+})();
+</script>
+<style id="igdc-card-and-hero-hard-constants">
+/* === IGDC: Card constants & mobile hero full-bleed (2025-10-02) === */
+
+/* Cards: lock to 260x160 everywhere. Prevent any grid/flex redefinitions from shrinking them. */
+.thumb-line .card, .section-row .card, .scroll-wrapper .card, .cards .card, .media-grid .card, .grid-cards .card, .card {
+  width:320px !important;
+  height:180px !important;
+  max-width:320px !important;
+  max-height:180px !important;
+  min-width:320px !important;
+  min-height:180px !important;
+  flex:0 0 260px !important;
+  overflow:hidden !important;
+  border-radius:10px !important;
+}
+.card .thumb, .thumb, .card img {
+  width:100% !important;
+  height:100% !important;
+  object-fit:cover !important;
+}
+
+/* Ensure rows behave as horizontal scrollers (no shrinking), and may "tuck" to the right as width decreases */
+.thumb-line, .section-row, .scroll-content {
+  display:flex !important;
+  flex-wrap:nowrap !important;
+  gap: var(--gap, 12px) !important;
+  overflow-x:auto !important;
+  overflow-y:hidden !important;
+  -ms-overflow-style:none; scrollbar-width:none;
+}
+.thumb-line::-webkit-scrollbar, .section-row::-webkit-scrollbar, .scroll-content::-webkit-scrollbar { display:none; }
+
+/* Root variable used by other patches: normalize to 260 to avoid side effects */
+:root{ --thumb-w:320px !important; }
+
+/* Mobile breakpoint: keep card size constant; no two-step shrinking. */
+@media (max-width: 768px){
+  .thumb-line .card, .section-row .card, .scroll-wrapper .card, .cards .card, .media-grid .card, .grid-cards .card, .card {
+    width:320px !important; height:180px !important; flex:0 0 320px !important;
+  }
+}
+
+/* Hero: full-bleed on mobile with slight radius */
+@media (max-width: 768px){
+  .content-area{ padding:0 !important; }
+  .hero{ 
+    margin:0 !important;
+    width:100% !important;
+    max-width:100vw !important;
+    border-radius:10px !important; /* subtle radius */
+  overflow:hidden !important; }
+  /* Make the media truly edge-to-edge */
+  .hero img, .hero video{
+    width:100% !important;
+    height:auto !important;
+    max-height:55vh !important;
+  }
+}
+
+/* enforce 16:9 aspect for cards */
+.card, .thumb { aspect-ratio: 16 / 9; }
+</style>
+<style id="igdc-hero-netflix-like">
+/* Netflix-like hero: maintain 16:9, cap to 1920x1080 on large screens */
+.hero{
+  aspect-ratio: 16 / 9;
+  width: min(100%, 1920px) !important;
+  max-width: 100%;
+  margin: 0 auto !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
+}
+.hero img, .hero video{
+  width:100% !important;
+  height:100% !important;
+  object-fit: cover !important;
+}
+@media (max-width: 768px){
+  .hero{ width:100% !important; border-radius:10px !important; }
+}
+</style>
+<style id="igtc-mobile-overhaul-FULL">
+  html, body { margin:0; padding:0; }
+  body { -webkit-tap-highlight-color: transparent; overflow-x:hidden; }
+
+  @media (max-width: 900px){
+    .sidebar, #sidebar, [data-role="sidebar"], [class*="sidebar"],
+    .right, .right-panel, .ad-panel{
+      display:none !important; visibility:hidden !important; width:0 !important; max-width:0 !important;
+    }
+    .layout, .container, .page, .page-wrap, .page-wrapper, .shell, .grid, .grid-wrap{
+      display:block !important; grid-template-columns:1fr !important;
+    }
+    main, .main, #main, .content, .content-area, .main-content, .page-main, .page__main{
+      width:100vw !important; max-width:100vw !important;
+      margin:0 !important; padding-left:0 !important; padding-right:0 !important;
+    }
+  }
+
+  .rail, .thumb-line, .section-row, .scroll-content, .media-rail{
+    display:flex !important; flex-wrap:nowrap !important; gap:12px !important;
+    overflow-x:auto !important; overflow-y:hidden !important;
+    -ms-overflow-style:none; scrollbar-width:none; scroll-snap-type:x proximity;
+    padding:6px 12px !important;
+  }
+  .rail::-webkit-scrollbar,
+  .thumb-line::-webkit-scrollbar,
+  .section-row::-webkit-scrollbar,
+  .scroll-content::-webkit-scrollbar,
+  .media-rail::-webkit-scrollbar{ display:none; }
+
+  :root{ --card-w:320px; --card-h:180px; }
+  .card, .thumbnail-card, .media-card, .thumb, .tile, .poster{
+    width:var(--card-w) !important; height:var(--card-h) !important;
+    min-width:var(--card-w) !important; min-height:var(--card-h) !important;
+    max-width:var(--card-w) !important; max-height:var(--card-h) !important;
+    aspect-ratio:16/9; flex:0 0 var(--card-w) !important;
+    border-radius:12px !important; overflow:hidden !important; background:#111; position:relative;
+    scroll-snap-align:start;
+  }
+  .card img, .thumbnail-card img, .media-card img, .thumb img, .tile img, .poster img{
+    width:100% !important; height:100% !important; object-fit:cover !important; display:block;
+  }
+
+  @media (max-width: 900px) and (orientation: landscape){
+    :root{ --card-w:300px; --card-h:168.75px; }
+    .rail, .thumb-line, .section-row, .scroll-content, .media-rail{ gap:10px !important; }
+  }
+
+  .fs-overlay{ position:fixed; inset:0; z-index:99999; background:#000; display:flex; align-items:center; justify-content:center; }
+  .fs-stage{ position:relative; width:100vw; height:100vh; }
+  .fs-inner{ position:absolute; inset:0; background:#000; }
+  .fs-close{
+    position:fixed; top:10px; right:12px; z-index:100000; border:0; background:rgba(0,0,0,.5);
+    color:#fff; font-size:22px; line-height:1; padding:8px 10px; border-radius:10px;
+  }
+</style>
+<style id="body-padding-10px-fix">
+body {
+  padding: 0 10px 10px 10px;
+}
+</style>
+<!-- Injected: exact blockchain styles cloned from socialnetwork.html -->
+<style id="bc-style-from-sn-20251013">
+.bc-tile{display:inline-block;padding:5px 8px;border-radius:999px;background:#a7f3d0;color:#064e3b;font-weight:500;text-decoration:none}
+  .bc-tile:hover{background:#86efac}
+  .bc-tile.orange{background:#f97316;color:#fff}
+  .bc-tile.orange:hover{background:#fb923c}
+  .section-blockchain{margin:12px 0 18px; text-align:left;}
+
+/* === BlockChain 버튼 테두리 (시각 약한 강조용) === */
+.bc-tile, .platform-tile, .button {
+  border: 1px solid rgba(0,0,0,0.15);
+  box-shadow: 0 0 2px rgba(0,0,0,0.05);
+}
+.bc-tile:hover, .platform-tile:hover, .button:hover {
+  border-color: rgba(0,0,0,0.25);
+}
+
+/* --- Blockchain pills: narrow glyphs + lighter weight, no underline --- */
+.section-blockchain{ display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; }
+.section-blockchain .bc-tile,
+.bc-tile{
+  text-decoration: none !important;
+  font-weight: 500 !important;                 /* lighter */
+  letter-spacing: 0 !important;                /* neutral tracking */
+  font-variation-settings: "wdth" 70 !important; /* narrow glyphs if supported */
+  font-stretch: 80% !important;                /* fallback for non-variable fonts */
+  padding: 5px 8px !important;                /* slightly tighter left/right */
+  line-height: 1.1 !important;
+  white-space: nowrap;
+}
+.bc-tile:hover{ text-decoration: none !important; }
+/* Mobile wrap (no overflow) */
+@media (max-width: 640px){
+  .section-blockchain{ gap:6px 8px; }
+  .section-blockchain .bc-tile{ max-width: 100%; }
+}
+</style>
+<!-- BC text-condense + tight-gap patch -->
+<style id="bc-tight-text-20251013">
+  /* 1) Buttons between-blockchain spacing: ~3px */
+  .section-blockchain{ gap: 3px 3px !important; }
+
+  /* 2) Keep height; reduce horizontal width via glyph width (condense) */
+  .section-blockchain .bc-tile{
+    /* Prefer variable-font width if available */
+    font-variation-settings: "wdth" 72, "wght" 600;
+    /* Fallbacks for non-variable fonts */
+    font-stretch: 75%;
+    letter-spacing: -0.2px;
+    /* Keep vertical size, don't alter line-height; avoid shrinking height */
+    line-height: inherit;
+    /* Do NOT change padding vertically; only a subtle horizontal trim if needed */
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  /* Hover unaffected except border/bg from the base design */
+</style>
+<!-- BC ultra-tight adjust: shrink button width slightly, gap=5px -->
+<!-- BC tight correction: text-only narrow, keep font size, exact 5px gaps -->
+<style id="bc-tight-correct-20251013">
+  /* Exact inter-button gap */
+  .section-blockchain{ gap:5px 5px !important; }
+
+  /* Button container: DO NOT scale; remove extra margins; tighten L/R padding only */
+  .section-blockchain .bc-tile{
+    transform:none !important;
+    margin:0 !important;
+    padding-left:4px !important; padding-right:4px !important;
+    line-height:inherit !important; font-size:inherit !important;
+    display:inline-flex !important; align-items:center; justify-content:center;
+  }
+
+  /* Text-only narrow wrapper */
+  .section-blockchain .bc-tile .bc-narrow{
+    display:inline-block;
+    transform:scaleX(0.82);
+    transform-origin:center center;
+    font-size:inherit; /* keep original size */
+    letter-spacing:normal;
+  }
+</style>
+<!-- Hero overflow hotfix (2025-10-13) -->
+<style id="mediahub-hero-overflow-hotfix">
+  @media (max-width: 1024px){
+    main, .main, #main,
+    .content, .content-area, .main-content {
+      width: 100% !important;
+      max-width: 100% !important;
+    }
+    .hero{
+      width: 100% !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+      overflow: hidden !important;
+    }
+    .hero img, .hero video{
+      width: 100% !important;
+      height: auto !important;
+      max-height: 55vh !important;
+      object-fit: cover !important;
+    }
+    body{ overflow-x: hidden !important; }
+  }
+</style>
+<script id="bc-narrow-js">
+(function(){
+  var tiles = document.querySelectorAll('.section-blockchain .bc-tile');
+  tiles.forEach(function(t){
+    if (t.querySelector('.bc-narrow')) return;
+    // Create wrapper span
+    var span = document.createElement('span');
+    span.className = 'bc-narrow';
+    // Move only text nodes into wrapper; keep icons/imgs as-is
+    var nodes = Array.prototype.slice.call(t.childNodes);
+    nodes.forEach(function(n){
+      if (n.nodeType === Node.TEXT_NODE || (n.nodeType===1 && n.tagName==='SPAN' && n.childNodes.length && Array.prototype.every.call(n.childNodes, function(c){return c.nodeType===Node.TEXT_NODE;}))) {
+        span.appendChild(n);
+      }
+    });
+    // Insert wrapper at the beginning if it has content
+    if (span.childNodes.length){
+      t.insertBefore(span, t.firstChild);
+    }
+  });
+})();</script>
+<style id="bc-mobile-80-lock-20251113">
+/* Mobile (<=900px): lock ~20% shrink for both text and button, with stable gaps */
+@media (max-width: 900px){
+  /* Neutralize any previous transforms or width constraints */
+  .section-blockchain .bc-tile,
+  .section-blockchain .platform-tile{
+    transform: none !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 0 0 auto !important;
+    box-sizing: border-box !important;
+    white-space: nowrap;
+  }
+  /* Box + text shrink targeting ~20% */
+  .section-blockchain .bc-tile,
+  .section-blockchain .platform-tile{
+    padding-top: 4px !important;     /* 5 → 4  (≈20%↓) */
+    padding-bottom: 4px !important;
+    padding-left: 6px !important;    /* 8 → 6  (≈25%↓, 가로폭에 더 집중) */
+    padding-right: 6px !important;
+    font-size: 0.85em !important;    /* ≈15% text shrink */
+    letter-spacing: -0.015em !important; /* 약간 더 가로 압축 */
+  }
+  /* Keep gaps visually proportional (대략 20%↓). */
+  .section-blockchain{
+    gap: 6px 6px !important;         /* 8~10px 기준이면 ≈20%↓ */
+  }
+}
+</style>
+<style id="mobile-footer-guard">
+  html, body { height: auto; min-height: 100% !important; }
+  @supports (height: 100dvh) {
+    .container, .layout, main, .main-content { min-height: 100dvh !important; }
+  }
+  @supports not (height: 100dvh) {
+    .container, .layout, main, .main-content { min-height: 100vh !important; }
+  }
+  @supports (-webkit-touch-callout: none) {
+    html, body { height: -webkit-fill-available; }
+    .container, .layout, main, .main-content { min-height: -webkit-fill-available !important; }
+  }
+  @media (max-width: 980px) {
+    main, .content-area, .main-content, .container, .layout {
+      overflow: visible !important;
+      max-height: none !important;
+    }
+  }
+  footer { padding-bottom: max(24px, env(safe-area-inset-bottom)) !important; }
+</style>
+<style id="mediahub-mobile-unlock">
+  @media (max-width: 980px){
+    main, .content-area { overflow: visible !important; }
+  }
+</style>
+<link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
+<style id="media-placeholder-style">
+.media-card{position:relative;width:320px;height:180px;flex:0 0 320px;border-radius:12px;overflow:hidden;background:#111;margin-right:12px}
+.media-card .thumb.ph{width:100%;height:100%;background:linear-gradient(135deg,#222,#333)}
+.media-card .meta{position:absolute;left:0;right:0;bottom:0;padding:10px;color:#eee;background:linear-gradient(to top,rgba(0,0,0,.6),transparent)}
+</style>
+<style id="mediahub-scroll-fix-2026-02">
+/* === MEDIA SCROLL BUTTON FINAL FIX === */
+
+.scroll-wrapper{
+  position:relative !important;
+  padding: 0 72px !important;
+  overflow: hidden !important;
+}
+
+.scroll-btn{
+  z-index:10000 !important;
+}
+
+.scroll-btn.left{
+  left:0px !important;
+}
+
+.scroll-btn.right{
+  right:0px !important;
+}
+
+/* content 영역은 버튼만큼 안쪽으로 */
+.scroll-content,
+.thumb-line{
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 10px !important;
+  padding-right: 5px !important;
+}
+</style>
+<style id="mediahub-mobile-drag-fix">
+@media (max-width:1024px){
+
+  /* 버튼은 숨김 유지 */
+  .scroll-btn{ display:none !important; }
+
+  /* 카드 행 드래그 활성화 */
+  .thumb-line,
+  .scroll-content{
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    touch-action: pan-x pan-y !important;
+    pointer-events:auto !important;
+  }
+
+  /* 카드 자체 클릭 가능 */
+  .thumb-line a.card{
+    pointer-events:auto !important;
+  }
+
+  /* 상위 래퍼가 막지 못하게 */
+  .scroll-wrapper{
+    overflow:visible !important;
+  }
+
+  /* 페이지 세로 스크롤 보장 */
+  html, body{
+    overflow-y:auto !important;
+  }
+}
+</style>
+<style>
+.scroll-content {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+}
+
+html, body {
+  overflow-y: auto;
+}
+</style>
+<style id="qa-label-contrast-fix">
+.igdc-qa-field label,
+.igdc-qa-body label{
+  color:#666666 !important;
+  opacity:1 !important;
+  font-weight:600 !important;
+}
+</style>
+</head>
+<body>
+<div data-psom-key="media-hero" id="hero"><div class="hero-title"></div></div>
+<script>(function(){document.addEventListener("DOMContentLoaded",function(){document.documentElement.classList.remove("prelayout");var s=document.getElementById("prelayout-guard");if(s&&s.parentNode){s.parentNode.removeChild(s);}});})();</script>
+<div class="layout">
+<aside class="sidebar">
+<a href="home.html">🏠 Hem</a>
+<a href="networkhub.html">🛒 Marknadshubb</a>
+<a href="distributionhub.html">🏭 Distributionshubb</a>
+<a href="socialnetwork.html">📢 Socialt nätverk</a>
+<a href="mediahub.html">🎬 Mediehubb</a>
+<a href="tour.html">🧳 Resor · Turism · Boende</a>
+<a href="literature_academic.html">📚 Litterärt och akademiskt utbyte</a>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A-förfrågningar</a></aside>
+<main>
+<section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
+<a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
+<a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
+<a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
+</section>
+<div class="content-area">
+<section class="hero">
+<img alt="main-ad" src="https://placehold.co/1600x900?text=Main%20Ad%20/Trailer"/>
+<!-- END: Video Search UI -->
+</section></div>
+<div class="hero-overlay">
+<!-- BEGIN: Video Search UI (replaces title/desc, non-intrusive) -->
+<form class="video-search" onsubmit="return handleVideoSearch(event)" style="display:flex; gap:10px; align-items:center; background:rgba(0,0,0,0.45); padding:10px 12px; border-radius:12px; flex-wrap:wrap;">
+<input name="q" placeholder="Sök videor (titel, artist, kanal osv.)" required="" style="flex:1 1 48%; min-width:260px; max-width:620px; padding:8px 10px; border-radius:10px; border:none; outline:none; background:#fff; color:#111; font-size:16px;" type="text"/>
+<select name="provider" style="padding:8px 10px; border-radius:10px; border:none; outline:none;"></select>
+<button style="padding:10px 16px; border-radius:10px; border:none; background:#2e6bff; color:#fff; font-weight:700; cursor:pointer;" type="submit">Sök</button>
+</form>
+<!-- 플랫폼 링크 라인 -->
+<div class="section-title">Innehållsleverantörer</div>
+<div class="platform-line"><a class="platform-tile" href="https://www.netflix.com" target="_blank">Netflix</a><a class="platform-tile" href="https://www.disneyplus.com" target="_blank">Disney+</a><a class="platform-tile" href="https://www.amazon.com/primevideo" target="_blank">Amazon Prime</a><a class="platform-tile" href="https://tv.apple.com" target="_blank">Apple TV+</a><a class="platform-tile" href="https://www.youtube.com" target="_blank">YouTube</a><a class="platform-tile" href="https://spotify.com" target="_blank">Spotify</a><a class="platform-tile" href="https://www.melon.com" target="_blank">Melon</a><a class="platform-tile" href="https://www.wavve.com" target="_blank">Wavve</a><a class="platform-tile" href="https://www.hulu.com" target="_blank">Hulu</a><a class="platform-tile" href="https://www.paramountplus.com" target="_blank">Paramount+</a><a class="platform-tile" href="https://www.peacocktv.com" target="_blank">Peacock</a><a class="platform-tile" href="https://www.tving.com" target="_blank">Tving</a><a class="platform-tile" href="https://www.coupangplay.com" target="_blank">Coupang Play</a><a class="platform-tile" href="https://music.youtube.com" target="_blank">YouTube Music</a><a class="platform-tile" href="https://tidal.com" target="_blank">Tidal</a><a class="platform-tile" href="https://www.deezer.com" target="_blank">Deezer</a><a class="platform-tile" href="https://music.amazon.com" target="_blank">Amazon Music</a><a class="platform-tile" href="https://www.bbc.co.uk/iplayer" target="_blank">BBC iPlayer</a><a class="platform-tile" href="https://www.viki.com" target="_blank">Rakuten Viki</a><a class="platform-tile" href="https://mubi.com" target="_blank">Mubi</a><a class="platform-tile" href="https://www.crunchyroll.com" target="_blank">Crunchyroll</a><a class="platform-tile" href="https://tv.kakao.com" target="_blank">Kakao TV</a><a class="platform-tile" href="https://video.unext.jp" target="_blank">U-NEXT</a></div>
+<!-- Trending Now -->
+<div class="section-title">🔥 Trendar nu</div>
+<div class="thumb-line" data-psom-key="media-trending">
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+</div>
+<!-- Latest Movies -->
+<div class="section-title">🎬 Senaste filmerna</div>
+<div class="thumb-line" data-psom-key="media-movie">
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+</div>
+<!-- Latest Dramas -->
+<div class="section-title">📺 Senaste serierna</div>
+<div class="thumb-line" data-psom-key="media-drama">
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+</div>
+<!-- Mystery / Thriller -->
+<div class="section-title">🕵️‍♂️ Mysterium / Thriller</div>
+<div class="thumb-line" data-psom-key="media-thriller">
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+</div>
+<!-- Romance -->
+<div class="section-title">💖 Romantik</div>
+<div class="thumb-line" data-psom-key="media-romance">
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+</div>
+<!-- Variety / Entertainment -->
+<div class="section-title">😂 Underhållning / Variety</div>
+<div class="thumb-line" data-psom-key="media-variety">
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+</div>
+<!-- Documentary / Culture -->
+<div class="section-title">🎥 Dokumentär / Kultur</div>
+<div class="thumb-line" data-psom-key="media-documentary">
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+</div>
+<!-- Animation -->
+<div class="section-title">🐱 Animation</div>
+<div class="thumb-line" data-psom-key="media-animation">
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+</div>
+<!-- Music Videos -->
+<div class="section-title">🎵 Musikvideor</div>
+<div class="thumb-line" data-psom-key="media-music">
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+</div>
+<!-- Hot Shorts & Video Movies -->
+<div class="section-title">🔥 Heta shorts och videofilmer</div>
+<div class="thumb-line" data-psom-key="media-shorts">
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+<a class="card media-card" data-placeholder="true" href="javascript:void(0)">
+<div class="thumb ph"></div>
+<div class="meta">Kommer snart</div>
+</a>
+</div>
+</div>
+</main>
+</div>
+<script>
+/**
+ * MediaHub Unified Scroll Script (SAFE FULL BLOCK)
+ * ✅ thumb-line + platform-line 모두 지원
+ * ✅ "원본 라인 요소(.thumb-line/.platform-line)는 절대 교체/삭제하지 않음" (replaceChild 금지)
+ * ✅ 내부만 .scroll-content로 래핑하여 렌더러/초기화 코드와 충돌 방지
+ * - 짧은 클릭: 1장
+ * - 꾹 누름: "화면에 완전히(80%↑) 보이는 카드 수"만큼 이동
+ */
+
+(function () {
+  const CARD_SELECTOR = '.card';
+  const SHORT_CLICK_MS = 180;
+  const HOLD_INTERVAL_MS = 140;
+  const VISIBLE_RATIO = 0.8;
+
+  function getGapPx(el) {
+    const s = getComputedStyle(el);
+    return parseFloat(s.gap || s.columnGap || 0) || 0;
+  }
+
+  function getStride(container) {
+    const card = container.querySelector(CARD_SELECTOR);
+    return card ? (card.offsetWidth + getGapPx(container)) : container.clientWidth;
+  }
+
+  function getFullyVisibleCount(container) {
+    const L = container.scrollLeft;
+    const R = L + container.clientWidth;
+    let count = 0;
+
+    container.querySelectorAll(CARD_SELECTOR).forEach(card => {
+      const l = card.offsetLeft;
+      const r = l + card.offsetWidth;
+      const visible = Math.min(r, R) - Math.max(l, L);
+      const ratio = visible / (card.offsetWidth || 1);
+      if (ratio >= VISIBLE_RATIO) count++;
+    });
+
+    return Math.max(1, count);
+  }
+
+  function scrollByCards(container, count) {
+    const stride = getStride(container);
+    container.scrollTo({
+      left: container.scrollLeft + stride * count,
+      behavior: 'smooth'
+    });
+  }
+
+  // ✅ 원본 line 요소를 교체하지 않고, 내부만 래핑 + 버튼을 line 안에 생성
+  function ensureLineWrapped(line) {
+    if (!line || line.dataset.scrollWrapped === '1') return;
+
+    // scroll-content 없으면 생성해서 기존 자식들을 이동
+    let content = line.querySelector(':scope > .scroll-content');
+    if (!content) {
+      content = document.createElement('div');
+      content.className = 'scroll-content';
+
+      // 기존 자식들을 content로 이동 (버튼이 이미 있을 수 있으니, 생성 전에는 통째 이동)
+      const children = Array.from(line.childNodes);
+      children.forEach(n => content.appendChild(n));
+
+      line.appendChild(content);
+    }
+
+    // 버튼이 없으면 생성
+    let leftBtn = line.querySelector(':scope > .scroll-btn.left');
+    let rightBtn = line.querySelector(':scope > .scroll-btn.right');
+
+    if (!leftBtn) {
+      leftBtn = document.createElement('button');
+      leftBtn.className = 'scroll-btn left';
+      leftBtn.type = 'button';
+      leftBtn.textContent = '‹';
+      line.insertBefore(leftBtn, content);
+    } else {
+      // 혹시 content 뒤에 있으면 앞으로
+      if (leftBtn.nextSibling !== content) line.insertBefore(leftBtn, content);
+    }
+
+    if (!rightBtn) {
+      rightBtn = document.createElement('button');
+      rightBtn.className = 'scroll-btn right';
+      rightBtn.type = 'button';
+      rightBtn.textContent = '›';
+      line.appendChild(rightBtn);
+    } else {
+      // 혹시 content 앞에 있으면 뒤로
+      if (rightBtn.previousSibling !== content) line.appendChild(rightBtn);
+    }
+
+    // line에 wrapper 역할 클래스 부여 (CSS가 scroll-wrapper를 기대하는 경우 대응)
+    line.classList.add('scroll-wrapper');
+
+    // 바인딩 (중복 방지)
+    bindScroll(line);
+
+    line.dataset.scrollWrapped = '1';
+  }
+
+  function bindScroll(line) {
+    if (!line || line.dataset.scrollBound === '1') return;
+
+    const container = line.querySelector(':scope > .scroll-content');
+    if (!container) return;
+
+    const leftBtn = line.querySelector(':scope > .scroll-btn.left');
+    const rightBtn = line.querySelector(':scope > .scroll-btn.right');
+
+    let timer = null;
+    let pressStart = 0;
+
+    function clearTimer() {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    }
+
+ function start(dir) {
+  pressStart = Date.now();
+  clearTimer();
+
+  const isPlatform = line.classList.contains('platform-line');
+
+  // ✅ 공급사 전용: "타일 100% 노출 기준"으로만 페이지 이동 + 항상 offsetLeft로 스냅
+  function providerStep(stepDir){
+    const items = Array.from(container.querySelectorAll('.platform-tile'));
+    if(!items.length) return;
+
+    const crect = container.getBoundingClientRect();
+    const EPS = 1;
+
+    // 1) 현재 화면에서 "완전 100% 보이는 타일"만
+    const fully = [];
+    for(let i=0;i<items.length;i++){
+      const r = items[i].getBoundingClientRect();
+      if(r.left >= crect.left - EPS && r.right <= crect.right + EPS) fully.push(i);
+    }
+
+    // 2) 기준 인덱스(완전노출이 없으면: 현재 L 기준으로 걸쳐진 다음 타일)
+    const L = container.scrollLeft;
+    let firstIdx = (fully.length ? fully[0] : (() => {
+      for(let i=0;i<items.length;i++){
+        const l = items[i].offsetLeft;
+        const rr = l + items[i].offsetWidth;
+        if(rr > L + EPS) return i;
+      }
+      return 0;
+    })());
+
+    const pageCount = Math.max(1, fully.length || 1);
+    const targetIdx = Math.max(0, Math.min(items.length - 1, firstIdx + stepDir * pageCount));
+
+    container.scrollTo({ left: items[targetIdx].offsetLeft, behavior:'smooth' });
+  }
+
+  timer = setInterval(() => {
+    if(isPlatform){
+      providerStep(dir);                 // ✅ 공급사: 반 잘리면 다음번에 "그 타일이 통으로" 시작되게 스냅
+    } else {
+      const visible = getFullyVisibleCount(container);  // ✅ 메인 10섹션(thumb-line): 기존 방식 유지
+      scrollByCards(container, dir * visible);
+    }
+  }, HOLD_INTERVAL_MS);
+}
+
+function end(dir) {
+  const elapsed = Date.now() - pressStart;
+  clearTimer();
+
+  if (elapsed < SHORT_CLICK_MS) {
+    const isPlatform = line.classList.contains('platform-line');
+
+    if(isPlatform){
+      // ✅ 공급사: 클릭도 "페이지 스냅"으로 (반 잘린 타일이 다음에 통으로 보이도록)
+      const items = Array.from(container.querySelectorAll('.platform-tile'));
+      if(!items.length) return;
+
+      const crect = container.getBoundingClientRect();
+      const EPS = 1;
+
+      const fully = [];
+      for(let i=0;i<items.length;i++){
+        const r = items[i].getBoundingClientRect();
+        if(r.left >= crect.left - EPS && r.right <= crect.right + EPS) fully.push(i);
+      }
+
+      const L = container.scrollLeft;
+      let firstIdx = (fully.length ? fully[0] : (() => {
+        for(let i=0;i<items.length;i++){
+          const l = items[i].offsetLeft;
+          const rr = l + items[i].offsetWidth;
+          if(rr > L + EPS) return i;
+        }
+        return 0;
+      })());
+
+      const pageCount = Math.max(1, fully.length || 1);
+      const targetIdx = Math.max(0, Math.min(items.length - 1, firstIdx + dir * pageCount));
+
+      container.scrollTo({ left: items[targetIdx].offsetLeft, behavior:'smooth' });
+    } else {
+      scrollByCards(container, dir * 1); // 기존: 짧은 클릭=1장
+    }
+  }
+}
+
+
+    function end(dir) {
+      const elapsed = Date.now() - pressStart;
+      clearTimer();
+      if (elapsed < SHORT_CLICK_MS) {
+        scrollByCards(container, dir * 1);
+      }
+    }
+
+    // ✅ 마우스 + 터치/펜 모두 대응 (pointer 이벤트)
+    function bindBtn(btn, dir) {
+      if (!btn) return;
+
+      btn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        try { btn.setPointerCapture(e.pointerId); } catch(_) {}
+        start(dir);
+      });
+
+      btn.addEventListener('pointerup', (e) => {
+        e.preventDefault();
+        end(dir);
+      });
+
+      btn.addEventListener('pointercancel', () => {
+        clearTimer();
+      });
+
+      btn.addEventListener('pointerleave', () => {
+        // 포인터가 밖으로 나가면 멈춤 (길게 누르다 이탈 시)
+        clearTimer();
+      });
+    }
+
+    bindBtn(rightBtn, 1);
+    bindBtn(leftBtn, -1);
+
+    line.dataset.scrollBound = '1';
+  }
+
+  function initAll() {
+    // ✅ 두 라인 모두 안전하게 처리 (원본 노드 유지)
+    document.querySelectorAll('.thumb-line, .platform-line').forEach(ensureLineWrapped);
+  }
+
+  document.addEventListener('DOMContentLoaded', initAll);
+
+  // ✅ 공급사 목록/카드가 "나중에 렌더"되는 경우 재적용 (원본 노드 유지라 충돌 없음)
+  const mo = new MutationObserver(() => initAll());
+  mo.observe(document.documentElement, { childList: true, subtree: true });
+
+})();
+</script>
+<script>
+// Open provider search in a new tab, no backend dependency
+function handleVideoSearch(e){
+  e.preventDefault();
+  const q = (e.target.q?.value || "").trim();
+  const p = e.target.provider?.value || "youtube";
+  if(!q) return false;
+  const maps = {
+    youtube: "https://www.youtube.com/results?search_query=",
+    naver: "https://search.naver.com/search.naver?where=video&query=",
+    vimeo: "https://vimeo.com/search?q=",
+    tving: "https://www.tving.com/search?kwd=",
+    wavve: "https://www.wavve.com/search?query=",
+    coupangplay: "https://www.coupangplay.com/search?q=",
+    spotify: "https://open.spotify.com/search/",
+    applemusic: "https://music.apple.com/kr/search?term="
+  };
+  const base = maps[p] || maps.youtube;
+  const url = base + encodeURIComponent(q);
+  window.open(url, "_blank", "noopener,noreferrer");
+  return false;
+}
+</script>
+<script>
+(function(){
+  let activeProvider = "youtube";
+  function setProvider(p){
+    activeProvider = p;
+    const sel = document.querySelector('form.video-search select[name="provider"]');
+    if(sel){ sel.value = ""; } // visual select isn't used now
+    document.querySelectorAll('.provider-bar .pv-btn').forEach(b=>{
+      b.style.background = b.dataset.provider===p ? '#2e6bff' : '#fff';
+      b.style.color = b.dataset.provider===p ? '#fff' : '#111';
+    });
+  }
+  window.__setProvider = setProvider;
+  const form = document.querySelector('form.video-search');
+  if(form){
+    const orig = window.handleVideoSearch;
+    window.handleVideoSearch = function(e){
+      e.preventDefault();
+      const q = (e.target.q?.value || "").trim();
+      const p = activeProvider || "youtube";
+      if(!q) return false;
+      const maps = {
+        youtube: "https://www.youtube.com/results?search_query=",
+        naver: "https://search.naver.com/search.naver?where=video&query=",
+        vimeo: "https://vimeo.com/search?q=",
+        tving: "https://www.tving.com/search?kwd=",
+        wavve: "https://www.wavve.com/search?query=",
+        coupangplay: "https://www.coupangplay.com/search?q=",
+        spotify: "https://open.spotify.com/search/",
+        applemusic: "https://music.apple.com/kr/search?term=",
+        netflix: "https://www.netflix.com/search?q=",
+        disneyplus: "https://www.disneyplus.com/search?q=",
+        primevideo: "https://www.primevideo.com/search/ref=atv_nb_sr?phrase=",
+        watcha: "https://watcha.com/ko-KR/search?query="
+      };
+      const base = maps[p] || maps.youtube;
+      window.open(base + encodeURIComponent(q), "_blank", "noopener,noreferrer");
+      return false;
+    }
+    // default active
+    setProvider(activeProvider);
+  }
+})();
+</script>
+<script>
+(function(){
+  // Single source of truth: providers in desired order
+  const PROVIDERS = [
+    {key:"netflix",     label:"Netflix",      url:"https://www.netflix.com/search?q="},
+    {key:"youtube",     label:"YouTube",      url:"https://www.youtube.com/results?search_query="},
+    {key:"naver",       label:"Naver",        url:"https://search.naver.com/search.naver?where=video&query="},
+    {key:"vimeo",       label:"Vimeo",        url:"https://vimeo.com/search?q="},
+    {key:"tving",       label:"TVING",        url:"https://www.tving.com/search?kwd="},
+    {key:"wavve",       label:"Wavve",        url:"https://www.wavve.com/search?query="},
+    {key:"coupangplay", label:"Coupang Play", url:"https://www.coupangplay.com/search?q="},
+    {key:"disneyplus",  label:"Disney+",      url:"https://www.disneyplus.com/search?q="},
+    {key:"primevideo",  label:"Prime Video",  url:"https://www.primevideo.com/search/ref=atv_nb_sr?phrase="},
+    {key:"watcha",      label:"WATCHA",       url:"https://watcha.com/ko-KR/search?query="},
+    // Major CN providers
+    {key:"youku",       label:"优酷 Youku",    url:"https://so.youku.com/search_video/q_"},
+    {key:"iqiyi",       label:"爱奇艺 iQIYI",  url:"https://www.iq.com/search?q="},
+    {key:"tencentvid",  label:"腾讯视频 Tencent",url:"https://v.qq.com/x/search/?q="},
+    {key:"bilibili",    label:"哔哩哔哩 bilibili", url:"https://search.bilibili.com/all?keyword="}
+  ];
+
+  let activeProvider = "youtube";
+
+  function renderProviders(){
+    const form = document.querySelector('form.video-search');
+    const sel  = form?.querySelector('select[name="provider"]');
+    const bar  = document.querySelector('.provider-bar');
+    if (!form || !sel || !bar) return;
+
+    // Render dropdown
+    sel.innerHTML = "";
+    PROVIDERS.forEach(p => {
+      const opt = document.createElement("option");
+      opt.value = p.key;
+      opt.textContent = p.label;
+      sel.appendChild(opt);
+    });
+    sel.value = activeProvider;
+
+    // Render horizontal buttons
+    bar.innerHTML = "";
+    PROVIDERS.forEach(p => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "pv-btn";
+      btn.dataset.provider = p.key;
+      btn.textContent = p.label;
+      btn.style.padding = "8px 10px";
+      btn.style.borderRadius = "10px";
+      btn.style.border = "none";
+      btn.style.cursor = "pointer";
+      btn.style.background = p.key===activeProvider ? "#2e6bff" : "#fff";
+      btn.style.color = p.key===activeProvider ? "#fff" : "#111";
+      bar.appendChild(btn);
+    });
+  }
+
+  function setProvider(p){
+    activeProvider = p;
+    renderProviders();
+  }
+
+  // Click on buttons -> set provider
+  // Change on dropdown -> set provider
+  document.addEventListener('change', (e)=>{
+    if(e.target && e.target.matches('select[name="provider"]')){
+      setProvider(e.target.value);
+    }
+  });
+
+  // Hook search handler to use the unified map
+  const urlMap = Object.fromEntries(PROVIDERS.map(p => [p.key, p.url]));
+  if (window.handleVideoSearch){
+    const orig = window.handleVideoSearch;
+    window.handleVideoSearch = function(e){
+      e.preventDefault();
+      const q = (e.target.q?.value || "").trim();
+      const p = activeProvider || "youtube";
+      if(!q) return false;
+      const base = urlMap[p] || urlMap["youtube"];
+      window.open(base + encodeURIComponent(q), "_blank", "noopener,noreferrer");
+      return false;
+    }
+  }
+
+  // initial render
+  renderProviders();
+})();
+</script>
+<script>
+(function(){
+  function detectLang(){
+    try {
+      if (window.__IGDC_LANG__ && window.__IGDC_LANG__.current) {
+        return (window.__IGDC_LANG__.current || 'en').split('-')[0].toLowerCase();
+      }
+    } catch(e){}
+    const nav = (navigator.language || 'en').toLowerCase();
+    return nav.split('-')[0];
+  }
+
+  const PROVIDERS = [
+    {key:"netflix",     tags:["global"], labels:{en:"Netflix", ko:"Netflix", zh:"Netflix", ja:"Netflix"}, url:"https://www.netflix.com/search?q="},
+    {key:"youtube",     tags:["global"], labels:{en:"YouTube", ko:"YouTube", zh:"YouTube", ja:"YouTube"}, url:"https://www.youtube.com/results?search_query="},
+    {key:"naver",       tags:["kr"],     labels:{en:"Naver", ko:"네이버", zh:"Naver", ja:"Naver"}, url:"https://search.naver.com/search.naver?where=video&query="},
+    {key:"vimeo",       tags:["global"], labels:{en:"Vimeo", ko:"Vimeo", zh:"Vimeo", ja:"Vimeo"}, url:"https://vimeo.com/search?q="},
+    {key:"tving",       tags:["kr"],     labels:{en:"TVING", ko:"티빙", zh:"TVING", ja:"TVING"}, url:"https://www.tving.com/search?kwd="},
+    {key:"wavve",       tags:["kr"],     labels:{en:"Wavve", ko:"웨이브", zh:"Wavve", ja:"Wavve"}, url:"https://www.wavve.com/search?query="},
+    {key:"coupangplay", tags:["kr"],     labels:{en:"Coupang Play", ko:"쿠팡플레이", zh:"Coupang Play", ja:"Coupang Play"}, url:"https://www.coupangplay.com/search?q="},
+    {key:"disneyplus",  tags:["global"], labels:{en:"Disney+", ko:"Disney+", zh:"Disney+", ja:"Disney+"}, url:"https://www.disneyplus.com/search?q="},
+    {key:"primevideo",  tags:["global"], labels:{en:"Prime Video", ko:"Prime Video", zh:"Prime Video", ja:"Prime Video"}, url:"https://www.primevideo.com/search/ref=atv_nb_sr?phrase="},
+    {key:"watcha",      tags:["kr"],     labels:{en:"WATCHA", ko:"왓챠", zh:"WATCHA", ja:"WATCHA"}, url:"https://watcha.com/ko-KR/search?query="},
+    {key:"youku",       tags:["cn"],     labels:{en:"Youku", ko:"Youku", zh:"优酷 Youku", ja:"Youku"}, url:"https://so.youku.com/search_video/q_"},
+    {key:"iqiyi",       tags:["cn"],     labels:{en:"iQIYI", ko:"iQIYI", zh:"爱奇艺 iQIYI", ja:"iQIYI"}, url:"https://www.iq.com/search?q="},
+    {key:"tencentvid",  tags:["cn"],     labels:{en:"Tencent Video", ko:"Tencent 영상", zh:"腾讯视频 Tencent", ja:"Tencent Video"}, url:"https://v.qq.com/x/search/?q="},
+    {key:"bilibili",    tags:["cn"],     labels:{en:"bilibili", ko:"bilibili", zh:"哔哩哔哩 bilibili", ja:"bilibili"}, url:"https://search.bilibili.com/all?keyword="}
+  ];
+
+  function labelOf(p, lang){ return (p.labels && p.labels[lang]) || p.labels?.en || p.key; }
+
+  function orderProviders(lang){
+    const pri = { global:50, kr:40, cn:40, jp:40 };
+    if (lang === "ko") { pri.kr = 10; pri.global = 30; pri.cn = 40; }
+    else if (lang === "zh") { pri.cn = 10; pri.global = 30; pri.kr = 40; }
+    else if (lang === "ja") { pri.jp = 10; pri.global = 30; pri.kr = 35; pri.cn = 35; }
+    else { pri.global = 10; pri.kr = 30; pri.cn = 30; }
+
+    const keyBoost = {
+      naver:(lang==="ko")?-6:0, tving:(lang==="ko")?-5:0, wavve:(lang==="ko")?-5:0, coupangplay:(lang==="ko")?-4:0,
+      youku:(lang==="zh")?-6:0, iqiyi:(lang==="zh")?-6:0, tencentvid:(lang==="zh")?-6:0, bilibili:(lang==="zh")?-5:0,
+      youtube:(lang!=="ko"&&lang!=="zh")?-6:0, netflix:(lang!=="ko"&&lang!=="zh")?-5:0, primevideo:(lang!=="ko"&&lang!=="zh")?-4:0, disneyplus:(lang!=="ko"&&lang!=="zh")?-4:0
+    };
+
+    return PROVIDERS.map((p, idx)=>{
+      const tagScore = Math.min(...(p.tags||[]).map(t => (pri[t]??50)));
+      const score = tagScore + (keyBoost[p.key]||0);
+      return {p, idx, score};
+    }).sort((a,b)=> (a.score - b.score) || (a.idx - b.idx)).map(x=>x.p);
+  }
+
+  let currentLang = (window.__IGDC_LANG__?.current || detectLang());
+
+  function renderDropdown(){
+    const form = document.querySelector('form.video-search');
+    const sel  = form?.querySelector('select[name="provider"]');
+    if (!form || !sel) return;
+    const ordered = orderProviders(currentLang);
+    sel.innerHTML = "";
+    ordered.forEach(p => {
+      const opt = document.createElement("option");
+      opt.value = p.key;
+      opt.textContent = labelOf(p, currentLang);
+      sel.appendChild(opt);
+    });
+    // Keep first item selected if none
+    if(!sel.value && sel.options.length) sel.value = sel.options[0].value;
+    // Save selected provider on change
+    sel.addEventListener('change', ()=>{ localStorage.setItem('mediahub_provider', sel.value); });
+    const saved = localStorage.getItem('mediahub_provider');
+    if (saved && [...sel.options].some(o => o.value === saved)) sel.value = saved;
+  }
+
+  // Intercept search submit to use selected provider
+  if (window.handleVideoSearch){
+    const orig = window.handleVideoSearch;
+    window.handleVideoSearch = function(e){
+      e.preventDefault();
+      const q = (e.target.q?.value || "").trim();
+      const sel = e.target.querySelector('select[name="provider"]');
+      const key = sel?.value || "youtube";
+      if(!q) return false;
+      const p = [...orderProviders(currentLang)].find(x=>x.key===key) || PROVIDERS.find(x=>x.key==="youtube");
+      window.open((p?.url || "https://www.youtube.com/results?search_query=") + encodeURIComponent(q), "_blank", "noopener,noreferrer");
+      return false;
+    }
+  }
+
+  // React to IGDC language change
+  if (window.__IGDC_LANG__ && typeof window.__IGDC_LANG__.onChange === "function"){
+    try{
+      window.__IGDC_LANG__.onChange(function(langCode){
+        currentLang = (langCode||'en').split('-')[0].toLowerCase();
+        renderDropdown();
+      });
+    }catch(e){}
+  }
+
+  renderDropdown();
+})();
+</script>
+<script>
+// === IGDC Media: Optional YouTube auto-fill for thumbnails (non-intrusive) ===
+// Usage (put this in a small inline <script> anywhere AFTER this block):
+//   window.YT_API_KEY = "YOUR_YOUTUBE_DATA_API_V3_KEY";
+//   window.IGDC_MEDIA_QUERIES = {
+//     // containerId: search query
+//     "trailer_row": "official movie trailers 2025",
+//     "ads_row": "global ads 2025 award",
+//     "music_row": "K-pop MV 2025"
+//   };
+//   window.IGDC_MEDIA_MAX = 12;   // optional
+//   window.IGDC_MEDIA_SAFE = true; // optional, safeSearch on
+(function(){
+  async function fillRow(container, query, max=12){
+    const key = window.YT_API_KEY;
+    if(!key || !query) return;
+    const safe = window.IGDC_MEDIA_SAFE ? "strict" : "none";
+    const url = new URL("https://www.googleapis.com/youtube/v3/search");
+    url.searchParams.set("part", "snippet");
+    url.searchParams.set("type", "video");
+    url.searchParams.set("maxResults", String(Math.min(Math.max(max,1),50)));
+    url.searchParams.set("q", query);
+    url.searchParams.set("key", key);
+    url.searchParams.set("safeSearch", safe);
+
+    let data;
+    try{
+      const res = await fetch(url.toString());
+      if(!res.ok) return;
+      data = await res.json();
+    }catch(e){ return; }
+
+    const items = (data && data.items) ? data.items : [];
+    if(!items.length) return;
+
+    // Find all thumbnails under container
+    const cards = container.querySelectorAll('a, .card, .thumb, .item, li');
+    let i = 0;
+    items.forEach(it=>{
+      const v = it.id && it.id.videoId;
+      const s = it.snippet || {};
+      if(!v) return;
+      const thumbUrl = (s.thumbnails && (s.thumbnails.medium?.url || s.thumbnails.high?.url)) || "";
+      const title = s.title || "";
+      const ch = s.channelTitle || "";
+      const href = "https://www.youtube.com/watch?v=" + v;
+
+      const card = cards[i++];
+      if(!card) return;
+      // If it's an <a>, set href; otherwise, try to find an <a> inside
+      const anchor = card.tagName === "A" ? card : (card.querySelector("a") || card);
+      try{ anchor.setAttribute("href", href); anchor.setAttribute("target","_blank"); anchor.setAttribute("rel","noopener"); }catch(e){}
+
+      // Replace image if present or create
+      let img = card.querySelector("img");
+      if(!img){
+        img = document.createElement("img");
+        img.style.width = "100%";
+        img.style.height = "auto";
+        if(card === anchor) { card.prepend(img); } else { anchor.prepend(img); }
+      }
+      if(thumbUrl) img.src = thumbUrl;
+
+      // Replace title text if a caption exists
+      const cap = card.querySelector(".title, .caption, .name, h3, h4");
+      if(cap) cap.textContent = title || cap.textContent;
+
+      // Optional channel label if a smaller text exists
+      const sub = card.querySelector(".sub, .meta, small");
+      if(sub) sub.textContent = ch || sub.textContent;
+    });
+  }
+
+  async function runAutoFill(){
+    if(!window.YT_API_KEY || !window.IGDC_MEDIA_QUERIES) return; // silent no-op
+    const max = window.IGDC_MEDIA_MAX || 12;
+    const entries = Object.entries(window.IGDC_MEDIA_QUERIES);
+    for (const [id, query] of entries){
+      const el = document.getElementById(id);
+      if(!el) continue;
+      await fillRow(el, query, max);
+    }
+  }
+
+  // Run after load
+  if(document.readyState === "complete") runAutoFill();
+  else window.addEventListener("load", runAutoFill);
+})();
+</script>
+<!-- Q&amp;A transplant (from distributionhub) START -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style id="igdc-qa-style">
+:root{
+  --igdc-z:2147483000; --igdc-radius:14px; --igdc-shadow:0 10px 30px rgba(0,0,0,.18);
+  --igdc-gap:10px; --igdc-font:system-ui,Segoe UI,Apple SD Gothic Neo,Malgun Gothic,Roboto,sans-serif;
+  --qa-left:260px;
+  --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
+  --blue:#2563eb; --muted:#9ca3af;
+}
+/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+#qnaOpenBtn{ background-color:#001f4d; color:#ffffff;  color:#001f4d;  display:block; text-decoration:none; }
+/* Modal near the left sidebar, with smooth transitions */
+.igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
+.igdc-qa-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;transition:opacity .18s ease}
+.igdc-qa-panel{
+  position:fixed; left:var(--qa-left); bottom:84px; width:min(560px,50vw);
+  max-height:min(82vh,900px); display:flex; flex-direction:column;
+  background:#fff; border-radius:var(--igdc-radius); box-shadow:var(--igdc-shadow);
+  overflow:hidden; opacity:0; transform:translateY(12px) scale(.98);
+  transition:opacity .18s ease, transform .18s ease;
+  border:1px solid var(--old-border);
+}
+.igdc-qa-modal.open{pointer-events:auto}
+.igdc-qa-modal.open .igdc-qa-backdrop{opacity:1}
+.igdc-qa-modal.open .igdc-qa-panel{opacity:1; transform:none}
+/* Old-style header tint */
+.igdc-qa-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 14px; border-bottom:1px solid var(--old-border);
+  background:var(--old-bg);
+}
+.igdc-qa-title{font:700 14px/1.2 var(--igdc-font); color:var(--old-text)}
+.igdc-qa-close{cursor:pointer; border:none; background:transparent; font-size:18px; color:#333}
+.igdc-qa-body{display:flex; flex-direction:column; gap:10px; padding:12px; overflow:auto}
+.igdc-qa-field label{display:block; font:700 12px/1.2 var(--igdc-font); margin-bottom:6px; color:#333}
+.igdc-qa-text{
+  width:100%; max-width:100%; box-sizing:border-box; resize:vertical;
+  border:1px solid var(--old-border); border-radius:10px; padding:10px 12px;
+  font:500 14px var(--igdc-font); min-height:44px; background:#fffdf8;
+}
+.igdc-qa-text.q{ min-height: 96px; }
+.igdc-qa-text.a{ min-height: 128px; }
+.igdc-qa-actions{display:flex; gap:8px; align-items:center}
+.igdc-qa-btn{border:none; border-radius:10px; padding:10px 14px; font:700 14px; cursor:pointer}
+.igdc-qa-btn.primary{background:var(--blue); color:#fff}
+.igdc-qa-btn.muted{background:var(--muted); color:#fff}
+.igdc-qa-threads{display:flex; flex-direction:column; gap:10px; overflow:auto; border-top:1px solid var(--old-border); padding-top:10px}
+.igdc-qa-thread{border:1px solid var(--old-border); border-radius:12px; padding:10px 12px; background:#fffdf8}
+.igdc-qa-thread-q{font:700 13px/1.5 var(--igdc-font); color:#222}
+.igdc-qa-thread-a{font:13px/1.5 var(--igdc-font); color:#333; margin-top:6px}
+.igdc-qa-thread-meta{display:flex; gap:8px; align-items:center; color:#775; font:12px/1.2 var(--igdc-font); margin-top:8px}
+.igdc-qa-thread-actions{margin-left:auto; display:flex; gap:6px}
+.igdc-qa-note{font:12px/1.4 var(--igdc-font); color:#666}
+@media (max-width:900px){
+  .igdc-qa-panel{ left:calc(12px + var(--qa-left,0px)); width:min(92vw,560px) }
+}
+
+.contact-email{font:700 14px/1.45 var(--igdc-font); color:#555 !important; opacity:1 !important;}
+.contact-email a{color:#1d4ed8 !important; font-weight:700; text-decoration:underline;}
+</style>
+<style id="qna-brand-only">
+/* === Q&A sidebar link color only (no other changes) === */
+:root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
+.sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
+  display:block;
+  background: var(--qa-brand);
+  color:#fff !important;
+  border:1px solid var(--qa-brand-border);
+  border-radius:10px;
+}
+.sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
+</style>
+<script id="igdc-qa-safety-bootstrap">
+// Ensures the Q&A popup opens when clicking the sidebar link,
+// even if Supabase URL/Key are not configured yet.
+(function(){
+  if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
+  function ensureButton(){
+    var btn = document.getElementById('qnaOpenBtn');
+    if(!btn) return;
+    // If the main script exposed IGDC_QA, use it
+    btn.addEventListener('click', function(){
+      if (window.IGDC_QA && typeof window.IGDC_QA.open === 'function'){
+        window.IGDC_QA.open();
+        return;
+      }
+      // Fallback: if modal not in DOM, create a very small stub so user sees something
+      var modal = document.querySelector('.igdc-qa-modal');
+      if(!modal){
+        // create minimal skeleton matching the CSS already present
+        var m = document.createElement('div'); m.className='igdc-qa-modal';
+        var b = document.createElement('div'); b.className='igdc-qa-backdrop';
+        var p = document.createElement('div'); p.className='igdc-qa-panel';
+        var h = document.createElement('div'); h.className='igdc-qa-header';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
+        h.appendChild(t); h.appendChild(x);
+        var body = document.createElement('div'); body.className='igdc-qa-body';
+        body.innerHTML = '<div class="igdc-qa-note">Alla funktioner aktiveras när lagringsinställningarna (Supabase url/key) är anslutna.</div>';
+        p.appendChild(h); p.appendChild(body);
+        m.appendChild(b); m.appendChild(p);
+        document.body.appendChild(m);
+        function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
+        function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
+        x.addEventListener('click', close);
+        b.addEventListener('click', close);
+        // expose temporary open so later main script can reuse
+        window.IGDC_QA = window.IGDC_QA || {};
+        window.IGDC_QA.open = open;
+      }
+      // open (either stub or full impl)
+      if (window.IGDC_QA && typeof window.IGDC_QA.open==='function'){ window.IGDC_QA.open(); }
+    }, { passive:false });
+  }
+  if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', ensureButton, { once:true }); }
+  else { ensureButton(); }
+})();
+</script>
+<script id="igdc-qa-config">
+  (function () {
+    // 1) 민감정보 없는 기본 설정
+    const baseConfig = {
+      url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "",
+      project: "IGDC",
+      pageId: null,
+      aiEndpoint: null
+    };
+
+    // Supabase 환경을 SUPER_VARSAR에 적용하는 함수
+    function applyConfig(env) {
+      const url =
+        (env && env.SUPABASE_URL) ||
+        baseConfig.url;
+
+      const anonKey =
+        (env && env.SUPABASE_ANON_KEY) ||
+        "";
+
+      if (!anonKey) {
+        console.warn("[IGDC] Supabase anonKey is not configured.");
+      }
+
+      window.SUPER_VARSAR = Object.assign(
+        window.SUPER_VARSAR || {},
+        baseConfig,
+        {
+          url: url,
+          anonKey: anonKey
+        }
+      );
+    }
+
+    // 2) 이미 window.IGDC_ENV가 있다면(로컬 테스트 등) 그걸 우선 사용
+    if (window.IGDC_ENV &&
+        (window.IGDC_ENV.SUPABASE_ANON_KEY || window.IGDC_ENV.SUPABASE_URL)) {
+      applyConfig(window.IGDC_ENV);
+      return;
+    }
+
+    // 3) 없으면 Netlify Functions에서 환경변수 읽어오기
+    var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
+
+    fetch(endpoint, { cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("http " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        var env = data && (data.env || data);
+        window.IGDC_ENV = Object.assign(window.IGDC_ENV || {}, env || {});
+        applyConfig(window.IGDC_ENV);
+        console.log("[IGDC] Supabase env loaded from secureEnvBridge.");
+      })
+      .catch(function (err) {
+        console.warn("[IGDC] Failed to load Supabase env:", err && err.message);
+        applyConfig(null);
+      });
+  })();
+</script>
+<script id="igdc-qa-script">
+(function(){
+  if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
+  const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
+  let isOpen=false, isAnimating=false;
+
+  function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
+  const fmtDate = (s)=> new Date(s).toLocaleString();
+  const nowISO = ()=> new Date().toISOString();
+  const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
+  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+
+  function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
+  function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
+
+  async function ensureSupabase(){
+    if(STATE.sb) return STATE.sb;
+    const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
+    const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
+    if(!url || !key || !window.supabase || !window.supabase.createClient){
+      console.warn("[Q&A] Supabase credentials/library not configured: the UI is visible, but saving is disabled.");
+      return null;
+    }
+    STATE.sb = window.supabase.createClient(url, key);
+    return STATE.sb;
+  }
+  async function ensureAuth(){
+    const sb = await ensureSupabase(); if(!sb) return;
+    let { data: { session } } = await sb.auth.getSession();
+    if(!session){
+      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      ({ data: { session } } = await sb.auth.getSession());
+    }
+    if(session){
+      const uid = session.user.id;
+      const { data } = await sb.from("igdc_admins").select("uid").eq("uid", uid).limit(1);
+      STATE.user = session.user;
+      STATE.isAdmin = Array.isArray(data) && data.length>0;
+    }
+  }
+
+  function mountUI(){
+    const modal = el("div","igdc-qa-modal");
+    const backdrop = el("div","igdc-qa-backdrop");
+    const panel = el("div","igdc-qa-panel");
+    const header = el("div","igdc-qa-header");
+    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
+    header.append(title, close);
+
+    const body = el("div","igdc-qa-body");
+    const lQ = el("label"); lQ.textContent="Fråga";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Ange din fråga...";
+    const lA = el("label"); lA.textContent="Svar";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Vänligen vänta en stund så svarar vi snart.";
+    const actions = el("div","igdc-qa-actions");
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Skicka";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Enkla frågor besvaras omedelbart av AI. Tekniska, felrelaterade eller driftsrelaterade frågor skickas automatiskt vidare till admin-Q&A.";
+    const list = el("div","igdc-qa-threads");
+
+    body.append(lQ,tQ,lA,tA,actions,note,list);
+	const ce = el("p","contact-email");
+    ce.innerHTML = 'Representativ e-post: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+    body.append(ce);
+    actions.append(btnSubmit, btnClear);
+    panel.append(header, body);
+    modal.append(backdrop, panel);
+    document.body.append(modal);
+
+    // position near sidebar
+    function positionNearSidebar(){
+      try{
+        const sb = document.querySelector('.sidebar');
+        if(sb){
+          const rect = sb.getBoundingClientRect();
+          const left = Math.round(rect.right + 12);
+          panel.style.left = left + "px";
+        }
+      }catch(e){}
+    }
+    positionNearSidebar();
+    window.addEventListener('resize', positionNearSidebar);
+    window.addEventListener('scroll', positionNearSidebar, { passive:true });
+
+    function openModal(){
+      if(isAnimating || isOpen) return;
+      isAnimating = true;
+      modal.style.display = "block";
+      requestAnimationFrame(()=>{
+        modal.classList.add('open');
+        isOpen = true;
+        setTimeout(()=>{ isAnimating = false; }, 220);
+      });
+    }
+    function closeModal(){
+      if(isAnimating || !isOpen) return;
+      isAnimating = true;
+      modal.classList.remove('open');
+      setTimeout(()=>{
+        modal.style.display = "none";
+        isOpen = false;
+        isAnimating = false;
+      }, 220);
+    }
+
+    // Sidebar trigger
+    const sideBtn = document.querySelector('#qnaOpenBtn');
+    if(sideBtn){ sideBtn.addEventListener('click', openModal); }
+    close.addEventListener("click", closeModal);
+    backdrop.addEventListener("click", closeModal);
+    document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
+
+    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
+    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+
+    async function fetchThreads(){
+      const sb = await ensureSupabase(); if(!sb) return;
+      const { data, error } = await sb.from("igdc_qna_threads")
+        .select("*")
+        .eq("project", STATE.project)
+        .eq("page_id", STATE.pageId)
+        .order("created_at", { ascending:false }).limit(100);
+      if(error){ console.error(error); return; }
+      renderList(data||[]);
+    }
+    function renderList(rows){
+      list.innerHTML="";
+      rows.forEach(row=>{
+        const box = el("div","igdc-qa-thread");
+        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"S. (Väntar)";
+        const meta = el("div","igdc-qa-thread-meta");
+        const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
+        const tag = el("span"); tag.textContent = row.is_admin? "Adminförfrågan":"Allmänt";
+        const actions = el("div","igdc-qa-thread-actions");
+        const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
+        if(canDelete){
+          const del = el("button","igdc-qa-btn muted"); del.textContent="Ta bort";
+          del.addEventListener("click", async ()=>{
+            const sb = await ensureSupabase(); if(!sb) return;
+            const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
+            if(error){ alert("Borttagning misslyckades (behörighet/policy)"); return; }
+            await fetchThreads();
+          });
+          actions.append(del);
+        }
+        meta.append(time, tag, actions);
+        box.append(q,a,meta);
+        list.append(box);
+      });
+    }
+
+    async function autoAnswerIfNeeded(text){
+      const technical = classifyTech(text);
+      let answer = null;
+      if(!technical){
+        const ep = getAIEndpoint();
+        if(ep){
+          try{
+            const res = await fetch(ep,{method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({question:text, pageId: STATE.pageId})});
+            const j = await res.json(); answer = j && (j.answer||j.text||null);
+          }catch(e){}
+        }
+        if(!answer){
+          if(/시간|운영시간|오픈|Contact/.test(text)) answer="Operation-related contacts will be reviewed by an administrator and answered later.";
+          else if(/가격|비용|요금/.test(text)) answer="For price/fee information, please refer to the guidance on this page and leave any additional inquiries.";
+          else answer="Thank you for your contact. We will check it promptly and assist you.";
+        }
+      }
+      return { technical, answer };
+    }
+
+    async function submit(){
+      const q = (tQ.value||"").trim();
+      let a = (tA.value||"").trim();
+      if(!q){ tQ.focus(); return; }
+      const { technical, answer } = await autoAnswerIfNeeded(q);
+      if(!a && answer) a = answer;
+      const sb = await ensureSupabase();
+      if(!sb){
+        alert("Lagringsinställningarna (Supabase url/key) är ännu inte anslutna, så serversidesparning är inaktiverad. När sidan distribueras på webben, ange SUPER_VARSAR.url/anonKey så ansluts den automatiskt.");
+        return;
+      }
+      const record = {
+        project: STATE.project, page_id: STATE.pageId,
+        user_id: (STATE.user && STATE.user.id) || null,
+        question: q, answer: a || null, is_admin: technical,
+        created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
+      };
+      const { error } = await sb.from("igdc_qna_threads").insert(record);
+      if(error){ alert("Registrering misslyckades"); return; }
+      tQ.value=""; tA.value = a || "";
+      await fetchThreads();
+    }
+    btnSubmit.addEventListener("click", submit);
+
+    // realtime refresh
+    (async()=>{ try{
+      const sb = await ensureSupabase(); if(!sb) return;
+      sb.channel('igdc_qna_changes').on('postgres_changes',{event:'*',schema:'public',table:'igdc_qna_threads'}, fetchThreads).subscribe();
+    }catch(e){} })();
+
+    window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
+    fetchThreads();
+  }
+
+  async function boot(){
+  window.SUPER_VARSAR = window.SUPER_VARSAR || {};
+  STATE.project = (window.SUPER_VARSAR.project || "IGDC");
+  STATE.pageId = (window.SUPER_VARSAR.pageId || (location.pathname + (location.hash||"")));
+  // 1) Always mount UI so the popup can open
+  mountUI();
+  // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth initialization failed:", e); }
+}
+if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
+})();
+</script>
+<!-- Q&amp;A transplant (from distributionhub) END -->
+<script src="/assets/js/igdc-core.min.js"></script>
+<!-- IGDC: Media events (click/like/recommend) delegation -->
+<script>
+(function(){
+  document.addEventListener('click', function(ev){
+    try{
+      var el = ev.target;
+      var card = el.closest && el.closest('.card, .product-card, [data-product-id]');
+      if(!card) return;
+      var id = card.getAttribute('data-product-id') || (card.querySelector('.meta') && card.querySelector('.meta').textContent.trim()) || '';
+      var type = 'media';
+      if (el.matches && (el.matches('[data-like], .btn-like, .like') || el.closest('[data-like], .btn-like, .like'))) {
+        if (window.IGDC && IGDC.log) IGDC.log({event:'like', itemId:id, type});
+        return;
+      }
+      if (el.matches && (el.matches('[data-recommend], .btn-recommend, .recommend') || el.closest('[data-recommend], .btn-recommend, .recommend'))) {
+        if (window.IGDC && IGDC.log) IGDC.log({event:'recommend', itemId:id, type});
+        return;
+      }
+      if (window.IGDC && IGDC.log) IGDC.log({event:'click', itemId:id, type});
+    }catch(e){}
+  }, true);
+})();
+</script>
+<!-- IGDC: AI media thumbnail auto-fill -->
+<script>
+(function(){
+  function detectContainers(){
+    var containers = [];
+    document.querySelectorAll('.thumb-line .scroll-content, .thumb-line').forEach(function(c){
+      containers.push(c);
+    });
+    return containers;
+  }
+  function cardThumbMissing(c){
+    var t = c.querySelector('.thumb');
+    if (!t) return true;
+    var bg = (t.getAttribute('style')||'').match(/background-image\s*:\s*url\(([^)]+)\)/i);
+    if (bg && bg[1]) return false;
+    var img = t.querySelector('img');
+    if (img && img.getAttribute('src')) return false;
+    return true;
+  }
+  function buildCard(item){
+    var a = document.createElement('a');
+    a.className = 'card';
+    a.href = item.url || '#';
+    a.setAttribute('data-product-id', item.id || '');
+    var th = document.createElement('div');
+    th.className = 'thumb';
+    var src = item.thumb || item.image || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
+    th.setAttribute('style', 'background-image:url(' + src.replace(/["']/g,'') + ');background-size:cover;background-position:center;');
+    var meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = item.title || item.name || 'Media';
+    a.appendChild(th); a.appendChild(meta);
+    return a;
+  }
+  function fillContainer(container){
+    try{
+      var cards = container.querySelectorAll('.card, .product-card, [data-product-id]');
+      var need = (cards.length < 3);
+      if (!need && cards.length){
+        var empty = 0;
+        cards.forEach(function(c){ if(cardThumbMissing(c)) empty++; });
+        if (empty >= 3) need = true;
+      }
+      if(!need) return;
+
+      fetch('/api/recommendations?limit=12', { credentials:'include' })
+        .then(function(r){ if(!r.ok) throw new Error('recos failed'); return r.json(); })
+        .then(function(list){
+          if(!Array.isArray(list) || !list.length) throw new Error('empty recos');
+          list.slice(0, 8).forEach(function(item){
+            container.appendChild(buildCard(item));
+          });
+          if (window.IGDC && IGDC.log) IGDC.log({ event:'ai_reco_fill', page:(window.IGDC_PAGE||{}), section:'media', source:'server', count: Math.min(8, list.length) });
+        })
+        .catch(function(){
+          try{
+            var fb = (window.IGDC_RECO_FALLBACK || []);
+            if(!fb.length) return;
+            fb.slice(0,8).forEach(function(item){
+              container.appendChild(buildCard(item));
+            });
+            if (window.IGDC && IGDC.log) IGDC.log({ event:'ai_reco_fill', page:(window.IGDC_PAGE||{}), section:'media', source:'fallback', count: Math.min(8, fb.length) });
+          }catch(err){}
+        });
+    }catch(e){}
+  }
+  document.addEventListener('DOMContentLoaded', function(){
+    detectContainers().forEach(fillContainer);
+  });
+})();
+</script>
+<script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.mediahub.json" data-interval="30000" src="/assets/js/hero.rotator.js"></script>
+<footer>
+    IGDC Global Hub © 2025 | International General Distribution Company<br/>
+    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea, <br/>
+</footer>
+<!-- patch: sync provider list & order with platform tiles -->
+<script id="patch-sync-providers">
+(function(){
+  const tiles = Array.from(document.querySelectorAll('.platform-line a.platform-tile'));
+  const PROVIDERS = tiles.map(a => ({ key: (a.textContent||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,''),
+                                       label: (a.textContent||'').trim(),
+                                       href: a.getAttribute('href')||'#' }));
+
+  const SEARCH = {
+    netflix: "https://www.netflix.com/search?q=",
+    disney: "https://www.disneyplus.com/search?q=",
+    disneyplus: "https://www.disneyplus.com/search?q=",
+    primevideo: "https://www.primevideo.com/search/ref=atv_nb_sr?phrase=",
+    youtube: "https://www.youtube.com/results?search_query=",
+    youtubemusic: "https://music.youtube.com/search?q=",
+    tving: "https://www.tving.com/search?kwd=",
+    wavve: "https://www.wavve.com/search?query=",
+    coupangplay: "https://www.coupangplay.com/search?q=",
+    spotify: "https://open.spotify.com/search/",
+    applemusic: "https://music.apple.com/kr/search?term=",
+    viki: "https://www.viki.com/search?q=",
+    crunchyroll: "https://www.crunchyroll.com/search?q="
+  };
+
+  let activeKey = (PROVIDERS[0] && PROVIDERS[0].key) || 'youtube';
+
+  function render(){
+    const form = document.querySelector('form.video-search');
+    const sel  = form && form.querySelector('select[name="provider"]');
+    const bar  = document.querySelector('.provider-bar');
+    if(!form || !sel || !bar) return;
+
+    sel.innerHTML = "";
+    PROVIDERS.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.key;
+      opt.textContent = p.label;
+      sel.appendChild(opt);
+    });
+    sel.value = activeKey;
+
+    bar.innerHTML = "";
+    PROVIDERS.forEach(p => {
+      const btn = document.createElement('button');
+      btn.type = "button";
+      btn.className = "pv-btn";
+      btn.dataset.provider = p.key;
+      btn.textContent = p.label;
+      btn.style.padding = "8px 10px";
+      btn.style.borderRadius = "10px";
+      btn.style.border = "none";
+      btn.style.cursor = "pointer";
+      btn.style.background = p.key===activeKey ? "#2e6bff" : "#fff";
+      btn.style.color = p.key===activeKey ? "#fff" : "#111";
+      btn.addEventListener('click', () => { activeKey = p.key; render(); });
+      btn.addEventListener('click', (ev) => {
+        if (ev.ctrlKey || ev.metaKey) window.open(PROVIDERS.find(x=>x.key===p.key)?.href || '#', '_blank', 'noopener');
+      });
+      bar.appendChild(btn);
+    });
+  }
+
+  document.addEventListener('change', (e)=>{
+    if(e.target && e.target.matches('select[name="provider"]')){ activeKey = e.target.value; render(); }
+  });
+
+  const orig = window.handleVideoSearch;
+  window.handleVideoSearch = function(e){
+    e.preventDefault();
+    const q = (e.target.q?.value || "").trim();
+    if(!q) return false;
+    const base = SEARCH[activeKey] || SEARCH.youtube;
+    window.open(base + encodeURIComponent(q), "_blank", "noopener,noreferrer");
+    return false;
+  };
+
+  render();
+})();
+</script>
+<!-- stray text suppressed: <! patch: sync dropdown to platform tiles; remove stamp buttons > -->
+<script id="patch-sync-dropdown-only">
+(function(){
+  function normKey(label){
+    return (label||"").toLowerCase().replace(/[^a-z0-9]+/g,"");
+  }
+  function readTiles(){
+    return Array.from(document.querySelectorAll('.platform-line a.platform-tile')).map(a => ({
+      key: normKey(a.textContent.trim()),
+      label: (a.textContent||'').trim(),
+      href: a.getAttribute('href')||'#'
+    }));
+  }
+  function ensureDropdown(){
+    const form = document.querySelector('form.video-search');
+    if(!form) return;
+    const sel = form.querySelector('select[name="provider"]');
+    if(!sel) return;
+    const tiles = readTiles();
+    sel.innerHTML = "";
+    tiles.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.key;
+      opt.textContent = p.label;
+      opt.dataset.href = p.href; // for fallback open
+      sel.appendChild(opt);
+    });
+  }
+  // Override search to use tile-derived mapping (names/order unaffected)
+  function enhanceSearch(){
+    const form = document.querySelector('form.video-search');
+    if(!form) return;
+    const sel = form.querySelector('select[name="provider"]');
+    const tiles = readTiles();
+    const urlByKey = Object.fromEntries(tiles.map(p=>[p.key, p.href]));
+    const known = {
+      netflix: "https://www.netflix.com/search?q=",
+      disneyplus: "https://www.disneyplus.com/search?q=",
+      primevideo: "https://www.primevideo.com/search/ref=atv_nb_sr?phrase=",
+      youtube: "https://www.youtube.com/results?search_query=",
+      youtubemusic: "https://music.youtube.com/search?q=",
+      tving: "https://www.tving.com/search?kwd=",
+      wavve: "https://www.wavve.com/search?query=",
+      coupangplay: "https://www.coupangplay.com/search?q=",
+      spotify: "https://open.spotify.com/search/",
+      applemusic: "https://music.apple.com/kr/search?term=",
+      viki: "https://www.viki.com/search?q=",
+      crunchyroll: "https://www.crunchyroll.com/search?q=",
+      naver: "https://search.naver.com/search.naver?where=video&query=",
+      vimeo: "https://vimeo.com/search?q=",
+      watcha: "https://watcha.com/ko-KR/search?query="
+    };
+    const orig = window.handleVideoSearch;
+    window.handleVideoSearch = function(e){
+      e.preventDefault();
+      const q = (e.target.q?.value || "").trim();
+      const key = sel?.value || "youtube";
+      if(!q) return false;
+      const base = known[key] || (urlByKey[key] ? (urlByKey[key].replace(/\/$/, '') + (urlByKey[key].includes('?')?'&':'?') + 'q=') : known.youtube);
+      window.open(base + encodeURIComponent(q), "_blank", "noopener,noreferrer");
+      return false;
+    };
+  }
+  function removeStampBarIfAny(){
+    document.querySelectorAll('.provider-bar').forEach(el=>el.remove());
+  }
+  document.addEventListener('DOMContentLoaded', function(){
+    removeStampBarIfAny();
+    ensureDropdown();
+    enhanceSearch();
+  });
+})();
+</script><script src="frontbus.child.js"></script><script>
+(function(){
+  try{
+    function notify(top){
+      parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*');
+    }
+    function atTop(){
+      var se=document.scrollingElement||document.documentElement||document.body;
+      return (window.scrollY||window.pageYOffset||0)<=0 && (se?(se.scrollTop||0)<=0:true);
+    }
+    function onAnyScroll(){ notify(atTop()); }
+    window.addEventListener('scroll', onAnyScroll, {passive:true});
+    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
+    document.addEventListener('wheel', e=>{ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
+    document.addEventListener('touchmove', ()=>notify(false), {passive:true,capture:true});
+    setTimeout(()=>notify(atTop()),50);
+  }catch(_){}
+})();
+</script>
+
+<script id="sidebar-active-script-ko">
+(function(){
+  function norm(n){
+    n = (n||"").trim().toLowerCase();
+    n = n.split("#")[0].split("?")[0];
+    n = n.split("/").pop();
+    if(n === "" || n === "index.html") n = "home.html";
+    n = n.replace(/_ko\.html$/,".html").replace(/_en\.html$/,".html").replace(/_zh\.html$/,".html");
+    return n;
+  }
+  function applyActive(){
+    var current = norm(location.pathname);
+    var links = document.querySelectorAll(".sidebar a[href], nav a[href]");
+    links.forEach(function(a){
+      var href = norm(a.getAttribute("href")||"");
+      var match = href && href === current;
+      a.classList.toggle("active", !!match);
+      if(match){
+        a.setAttribute("aria-current","page");
+        a.setAttribute("data-active","1");
+      }else{
+        a.removeAttribute("aria-current");
+        a.removeAttribute("data-active");
+      }
+    });
+  }
+  document.addEventListener("DOMContentLoaded", applyActive);
+  window.addEventListener("hashchange", applyActive);
+  window.addEventListener("popstate", applyActive);
+})();
+</script>
+<script id="edge-autohide-mobile-js">
+(function(){
+  "use strict";
+
+  // 모바일(터치)에서만 동작
+  if (!window.matchMedia('(pointer:coarse)').matches) return;
+
+  const q = s => document.querySelector(s);
+
+  const top   = q('nav') || q('.topbar');
+  const left  = q('.sidebar');
+  const right = q('.right-panel') || q('.ad-panel');
+
+  // 엣지 트리거 삽입 (중복 방지)
+  if(!q('.edge-top')){
+    document.body.insertAdjacentHTML('beforeend',
+      '<div class="edge-top"></div>' +
+      '<div class="edge-left"></div>' +
+      '<div class="edge-right"></div>'
+    );
+  }
+
+  if(top)   document.body.classList.add('hide-top');
+  if(left)  document.body.classList.add('hide-left');
+  if(right) document.body.classList.add('hide-right');
+
+  const S = 44; // reveal threshold
+  let drag = null, sx=0, sy=0, dx=0, dy=0;
+
+  function bindEdge(sel, dir, showCls){
+    const edge = q(sel);
+    if(!edge) return;
+
+    function down(e){
+      const t = e.touches ? e.touches[0] : e;
+      drag = dir;
+      sx = t.clientX; sy = t.clientY; dx = 0; dy = 0;
+      window.addEventListener('pointermove', move, { passive:true });
+      window.addEventListener('touchmove',   move, { passive:true });
+      window.addEventListener('pointerup',   up);
+      window.addEventListener('touchend',    up);
+    }
+
+    function move(e){
+      const t = e.touches ? e.touches[0] : e;
+      dx = t.clientX - sx;
+      dy = t.clientY - sy;
+
+      if(dir==='top'   && dy >  8) document.body.classList.add(showCls);
+      if(dir==='left'  && dx >  8) document.body.classList.add(showCls);
+      if(dir==='right' && dx < -8) document.body.classList.add(showCls);
+    }
+
+    function up(){
+      const pass =
+        (dir==='top'   && dy >  S) ||
+        (dir==='left'  && dx >  S) ||
+        (dir==='right' && dx < -S);
+
+      if(!pass) document.body.classList.remove(showCls);
+
+      drag = null;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('touchmove',   move);
+      window.removeEventListener('pointerup',   up);
+      window.removeEventListener('touchend',    up);
+    }
+
+    edge.addEventListener('pointerdown', down, { passive:true });
+    edge.addEventListener('touchstart',  down, { passive:true });
+  }
+
+  bindEdge('.edge-top',   'top',   'show-top');
+  bindEdge('.edge-left',  'left',  'show-left');
+  bindEdge('.edge-right', 'right', 'show-right');
+})();
+</script>
+<script id="thumbline-drag-script">
+/*
+  MediaHub row drag (safe version)
+  - 세로 스크롤 방해 안 함
+  - pointerCapture 사용 안 함
+  - 가로 의도 명확할 때만 hijack
+*/
+(function(){
+  "use strict";
+
+  const THRESHOLD = 10;
+
+  function enableDrag(scroller){
+    if(!scroller) return;
+
+    let isDown = false;
+    let isDraggingX = false;
+    let startX = 0, startY = 0, startScrollLeft = 0;
+
+    function onDown(e){
+      isDown = true;
+      isDraggingX = false;
+      startX = e.clientX;
+      startY = e.clientY;
+      startScrollLeft = scroller.scrollLeft;
+    }
+
+    function onMove(e){
+      if(!isDown) return;
+
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      if(!isDraggingX){
+        if(Math.abs(dx) > THRESHOLD && Math.abs(dx) > Math.abs(dy) + 4){
+          isDraggingX = true;
+        }else{
+          return; // 세로 스크롤 허용
+        }
+      }
+
+      // 가로 드래그일 때만 차단
+      e.preventDefault();
+      scroller.scrollLeft = startScrollLeft - dx;
+    }
+
+    function onUp(){
+      isDown = false;
+      isDraggingX = false;
+    }
+
+    scroller.addEventListener('pointerdown', onDown, { passive:true });
+    scroller.addEventListener('pointermove', onMove, { passive:false });
+    scroller.addEventListener('pointerup', onUp, { passive:true });
+    scroller.addEventListener('pointercancel', onUp, { passive:true });
+  }
+
+  function boot(){
+    document.querySelectorAll('.thumb-line').forEach(line=>{
+      const scroller =
+        line.querySelector(':scope > .scroll-content') || line;
+      enableDrag(scroller);
+    });
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot);
+  }else{
+    boot();
+  }
+})();
+</script>
+<script id="igdc-qa-modal-script">
+(function(){
+  "use strict";
+
+  function ensureModal(){
+
+    var existing = document.getElementById('igdc-qa-modal');
+    if(existing) return;
+
+    var overlay = document.createElement('div');
+    overlay.id = 'igdc-qa-modal';
+    overlay.className = 'igdc-qa-overlay';
+
+    var panel = document.createElement('div');
+    panel.className = 'igdc-qa-panel';
+
+    var header = document.createElement('div');
+    header.className = 'igdc-qa-header';
+
+    var title = document.createElement('div');
+    title.className = 'igdc-qa-title';
+    title.textContent = 'Q&A';
+
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'igdc-qa-close';
+    closeBtn.innerHTML = '&#10005;';
+
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+
+    var body = document.createElement('div');
+    body.className = 'igdc-qa-body';
+
+    body.innerHTML =
+      '<div class="igdc-qa-note">' +
+      'Alla funktioner aktiveras när lagringsinställningarna (Supabase url/key) är anslutna.' +
+      '</div>';
+
+    var email = document.createElement('p');
+    email.className = 'contact-email';
+    email.innerHTML =
+      'Representativ e-post: <a href="mailto:igdcplatform@gmail.com">' +
+      'igdcplatform@gmail.com</a>';
+
+    body.appendChild(email);
+
+    panel.appendChild(header);
+    panel.appendChild(body);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+
+    function close(){
+      overlay.classList.remove('open');
+      setTimeout(function(){
+        overlay.style.display = 'none';
+      }, 180);
+    }
+
+    function open(){
+      overlay.style.display = 'flex';
+      requestAnimationFrame(function(){
+        overlay.classList.add('open');
+      });
+    }
+
+    closeBtn.addEventListener('click', close);
+    overlay.addEventListener('click', function(e){
+      if(e.target === overlay) close();
+    });
+
+    window.IGDC_QA = window.IGDC_QA || {};
+    window.IGDC_QA.open = open;
+  }
+
+  function stripFooterEmail(){
+    try{
+      document.querySelectorAll('footer a[href^="mailto:"]').forEach(function(a){
+        var p = a.parentNode;
+        if(p) p.removeChild(a);
+      });
+    }catch(e){}
+  }
+
+  function run(){
+    stripFooterEmail();
+    ensureModal();
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', run, { once:true });
+  }else{
+    run();
+  }
+
+})();
+</script>
+<script id="igdc-qa-email-ensure">
+(function(){
+  if (window.__IGDC_QA_EMAIL_ENSURE__) return;
+  window.__IGDC_QA_EMAIL_ENSURE__ = true;
+
+  var CONTACT_HTML = 'Representativ e-post: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+
+  function stripFooterEmail(){
+    try{
+      var footers = document.querySelectorAll('footer');
+      footers.forEach(function(f){
+        // Remove any mailto links
+        f.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
+          var parent = a.parentNode;
+          if(parent){
+            parent.removeChild(a);
+            var html = parent.innerHTML;
+            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
+            html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
+            parent.innerHTML = html;
+          }
+        });
+        // Remove any plain-text "Representativ e-post: ..." remnants
+        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
+      });
+    }catch(e){}
+  }
+
+  function ensureModal(){
+    var modal = document.querySelector('.igdc-qa-modal');
+    if(!modal){
+      // Create minimal modal sk
+<script id="igtc-mobile-overhaul-FULL-js">
+(function(){
+  function qsa(sel){ return Array.prototype.slice.call(document.querySelectorAll(sel)); }
+
+  function initCardFullscreen(){
+    var cards = qsa('.rail .card, .thumb-line .card, .section-row .card, .scroll-content .card, .media-rail .card, .grid-cards .card, .media-grid .card, .thumbnail-card, .media-card, .thumb, .tile, .poster');
+    cards.forEach(function(card){
+      if(card.__fsReady) return;
+      card.__fsReady = true;
+      card.addEventListener('click', function(e){
+  var link = card.closest('a[href]') || (card.matches('a[href]') ? card : null);
+  var href = link ? (link.getAttribute('href') || '').trim() : '';
+
+  if (href && href !== '#' && !/^javascript:/i.test(href)) {
+    return; // 정상 링크가 있으면 페이지 이동 허용
+  }
+
+  e.preventDefault();
+  openFullscreenFromCard(card);
+}, false);
+    });
+  }
+
+  function getCardImageURL(card){
+    var img = card.querySelector('img');
+    if(img && img.src) return img.src;
+    var t = card.querySelector('.thumb');
+    if(t){
+      var bg = getComputedStyle(t).backgroundImage || '';
+      var m = bg.match(/url\(["']?(.*?)["']?\)/i);
+      if(m && m[1]) return m[1];
+    }
+    return null;
+  }
+
+  function buildPlayerElement(card){
+    var yt = card.getAttribute('data-yt');
+    var src = card.getAttribute('data-src');
+    var wrap = document.createElement('div');
+    wrap.className = 'fs-stage';
+    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="Mediavisare"></div><button class="fs-close" aria-label="Stäng">✕</button>';
+    var inner = wrap.querySelector('.fs-inner');
+
+    if(yt){
+      var ifr = document.createElement('iframe');
+      ifr.allow = 'autoplay; fullscreen; picture-in-picture';
+      ifr.src = 'https://www.youtube.com/embed/' + encodeURIComponent(yt) + '?autoplay=1&rel=0';
+      ifr.style.width = '100%'; ifr.style.height = '100%'; ifr.style.border = '0';
+      inner.appendChild(ifr);
+    }else if(src){
+      var vid = document.createElement('video');
+      vid.src = src; vid.controls = true; vid.autoplay = true; vid.playsInline = true;
+      vid.style.width = '100%'; vid.style.height = '100%'; vid.style.objectFit='cover';
+      inner.appendChild(vid);
+    }else{
+      var url = getCardImageURL(card) || 'about:blank';
+      var img = document.createElement('img');
+      img.src = url; img.alt = 'Preview';
+      img.style.width='100%'; img.style.height='100%'; img.style.objectFit='cover';
+      inner.appendChild(img);
+    }
+    return wrap;
+  }
+
+  async function requestFullscreenAndOrientation(el){
+    try{
+      if(el.requestFullscreen) await el.requestFullscreen();
+      else if(el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+    }catch(e){}
+    try{
+      if(screen.orientation && screen.orientation.lock){
+        var pref = (window.matchMedia("(orientation: landscape)").matches) ? 'landscape' : 'portrait';
+        await screen.orientation.lock(pref);
+      }
+    }catch(e){}
+  }
+
+  function exitFullscreen(){
+    try{
+      if(document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
+      else if(document.webkitFullscreenElement && document.webkitExitFullscreen) document.webkitExitFullscreen();
+    }catch(e){}
+    try{
+      if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
+    }catch(e){}
+  }
+
+  function openFullscreenFromCard(card){
+    var overlay = document.createElement('div');
+    overlay.className = 'fs-overlay';
+    var player = buildPlayerElement(card);
+    overlay.appendChild(player);
+    document.body.appendChild(overlay);
+
+    var stage = player;
+    var closeBtn = overlay.querySelector('.fs-close');
+
+    function close(){
+      overlay.remove();
+      exitFullscreen();
+      window.removeEventListener('keydown', onKey);
+      overlay.removeEventListener('click', onBackdrop);
+      overlay.removeEventListener('touchstart', onTouchStart, {passive:true});
+      overlay.removeEventListener('touchend', onTouchEnd);
+    }
+    function onKey(e){ if(e.key === 'Escape') close(); }
+    function onBackdrop(e){ if(e.target === overlay || e.target === closeBtn) close(); }
+
+    var tY = 0;
+    function onTouchStart(e){ tY = e.changedTouches[0].clientY; }
+    function onTouchEnd(e){
+      var dy = e.changedTouches[0].clientY - tY;
+      if(dy > 80) close();
+    }
+
+    window.addEventListener('keydown', onKey);
+    overlay.addEventListener('click', onBackdrop);
+    overlay.addEventListener('touchstart', onTouchStart, {passive:true});
+    overlay.addEventListener('touchend', onTouchEnd);
+
+    requestFullscreenAndOrientation(stage);
+  }
+
+  function ready(fn){ if(document.readyState !== 'loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+  ready(initCardFullscreen);
+  var mo = new MutationObserver(initCardFullscreen);
+  mo.observe(document.documentElement, {childList:true, subtree:true});
+})();
+</script>
+<!-- stray text suppressed: eleton matching the site's QnA structure
+      var m = document.createElement('div'); m.className='igdc-qa-modal';
+      var b = document.createElement('div');  -->
+<script>document.addEventListener("DOMContentLoaded",()=>{if(matchMedia("(max-width:768px)").matches){const p=document.querySelector(".platform-line");if(p)p.setAttribute("data-providers","");}});</script>
+<!-- thumbnail automapping -->
+<script>
+window.IGDC_QA=window.IGDC_QA||{};
+if(typeof window.IGDC_QA.open!=="function"){
+  window.IGDC_QA.open=function(){
+    if(window.QnaCore&&typeof QnaCore.open==="function"){QnaCore.open();}
+    else if(typeof openModal==="function"){openModal();}
+  };
+}
+window.addEventListener("message",function(ev){
+  try{if(ev&&ev.data&&ev.data.type==="IGTC_OPEN_QNA"&&typeof IGDC_QA.open==="function"){IGDC_QA.open();}}catch(e){}
+});
+</script>
+<script id="igtc-checkout-trigger-v1">
+(function(){
+  if (window.__IGTC_CHECKOUT_READY__) return;
+  window.IGTC = window.IGTC || {};
+  function safeJSON(s){ try{ return JSON.parse(s); }catch(_){ return null; } }
+  IGTC.checkout = function(opts){
+    try{
+      // Normalize
+      var payload = Object.assign({ method: 'card', amount: 0, currency: 'KRW', meta: {} }, opts||{});
+      // 1) CustomEvent for same-page listeners (optional)
+      try{ window.dispatchEvent(new CustomEvent('IGTC_CHECKOUT', { detail: payload })); }catch(_){}
+      // 2) postMessage for index.html dispatcher (if present)
+      try{ window.postMessage({ type: 'CHECKOUT', payload: payload }, '*'); }catch(_){}
+      // 3) Fallback: call serverless function directly (no-op if not configured)
+      try{
+        fetch('/.netlify/functions/checkout', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+          .then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); })
+          .then(function(res){
+            if(res && res.redirectUrl){ window.location.assign(res.redirectUrl); }
+            else if(res && res.qr && res.qr.html){
+              // Minimal inline QR modal (scoped)
+              var wrap = document.getElementById('igtc-qr-modal'); 
+              if(!wrap){
+                wrap = document.createElement('div');
+                wrap.id = 'igtc-qr-modal';
+                wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+                wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Stäng</button></div>'
+                  + '<div id="igtc-qr-area"></div></div>';
+                document.body.appendChild(wrap);
+                var btn = document.getElementById('igtc-qr-close');
+                if(btn) btn.addEventListener('click', function(){ wrap.remove(); }, { passive:true });
+              }
+              var area = document.getElementById('igtc-qr-area'); if(area){ area.innerHTML = res.qr.html; }
+            }
+          })
+          .catch(function(){ /* silent fallback */ });
+      }catch(_){}
+    }catch(_){}
+  };
+  // Data-API: any element with [data-checkout] will trigger checkout with attributes
+  document.addEventListener('click', function(e){
+    var el = e.target.closest('[data-checkout]'); if(!el) return;
+    var metaAttr = el.getAttribute('data-meta');
+    var meta = metaAttr ? (safeJSON(metaAttr) || { note: metaAttr }) : {};
+    var amount = parseFloat(el.getAttribute('data-amount')||'0') || 0;
+    var currency = el.getAttribute('data-currency') || 'KRW';
+    var method = el.getAttribute('data-method') || 'card';
+    IGTC.checkout({ method: method, amount: amount, currency: currency, meta: meta });
+    e.preventDefault();
+  }, { passive:true });
+  window.__IGTC_CHECKOUT_READY__ = true;
+})();
+</script>
+<script>
+(()=> {
+  const form=document.querySelector('#qnaForm,[data-qna-form]');
+  const ta=document.querySelector('#qnaText, textarea[name="question"]');
+  if(!ta) return; const pageId=location.pathname+(location.hash||'');
+  async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
+    await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
+    ta.value=''; alert('Skickat.');
+  }
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('Skickandet misslyckades'));});
+  const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('Skickandet misslyckades'));});
+})();
+</script>
+<style id="mobile-footer-guard-final">
+  html, body { height: auto; min-height: 100% !important; }
+  @supports (height: 100dvh) {
+    .container, .layout, main, .main-content { min-height: 100dvh !important; }
+  }
+  @supports not (height: 100dvh) {
+    .container, .layout, main, .main-content { min-height: 100vh !important; }
+  }
+  @supports (-webkit-touch-callout: none) {
+    html, body { height: -webkit-fill-available; }
+    .container, .layout, main, .main-content { min-height: -webkit-fill-available !important; }
+  }
+  @media (max-width: 980px) {
+    main, .content-area, .main-content, .container, .layout {
+      overflow: visible !important;
+      max-height: none !important;
+    }
+  }
+  footer { padding-bottom: max(28px, env(safe-area-inset-bottom)) !important; position: static !important; }
+  /* MOBILE-FOOTER-GUARD: final */
+</style>
+<script id="media-lazy-reveal-v2">
+(function(){
+  const INITIAL = 7;
+  const STEP = 6;
+  const MAX = 50;
+
+  function setupSection(line){
+    if(!line) return;
+
+    const scroller = line.querySelector(':scope > .scroll-content') || line;
+    const cards = Array.from(scroller.querySelectorAll(':scope > .card'));
+    if(cards.length <= INITIAL) return;
+
+    // 1️⃣ 초기 표시
+    cards.forEach((card, i)=>{
+      if(i >= INITIAL){
+        card.dataset.lazy = "true";
+        card.style.visibility = "hidden";
+        card.style.position = "absolute";
+      }
+    });
+
+    let revealed = INITIAL;
+
+    function revealBatch(){
+      const hidden = cards.filter(c => c.dataset.lazy === "true");
+      if(!hidden.length) return;
+
+      hidden.slice(0, STEP).forEach(card=>{
+        card.dataset.lazy = "loaded";
+        card.style.visibility = "";
+        card.style.position = "";
+      });
+
+      revealed += STEP;
+      if(revealed > MAX) revealed = MAX;
+    }
+
+    // 2️⃣ 버튼 클릭 시 확장
+    const wrapper = line.closest('.section-row') || line.parentElement;
+    if(wrapper){
+      wrapper.addEventListener('click', function(e){
+        if(e.target.closest('.scroll-btn')){
+          revealBatch();
+        }
+      });
+    }
+
+    // 3️⃣ 모바일 드래그 끝나면 확장
+    scroller.addEventListener('scroll', function(){
+      const maxScroll = scroller.scrollWidth - scroller.clientWidth;
+      if(scroller.scrollLeft > maxScroll - 60){
+        revealBatch();
+      }
+    }, {passive:true});
+  }
+
+  function boot(){
+    document.querySelectorAll('.thumb-line[data-psom-key]').forEach(setupSection);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
+})();
+</script>
+<script>
+// IGDC: report page height to parent index for iframe resizing
+(function(){
+  function sendHeight(){
+    try{
+      if(window.parent === window){ return; }
+      var docEl = document.documentElement;
+      var body = document.body;
+      var h = Math.max(
+        docEl ? docEl.scrollHeight : 0,
+        body ? body.scrollHeight : 0,
+        docEl ? docEl.offsetHeight : 0,
+        body ? body.offsetHeight : 0
+      );
+      if(!h || h < 100){ return; }
+      var payload = { type: "igdcFrameHeight", height: h, page: location.pathname };
+      if(window.parent && window.parent.postMessage){
+        window.parent.postMessage(payload, "*");
+      }
+    }catch(e){}
+  }
+  function schedule(){
+    sendHeight();
+    [200, 800, 1600].forEach(function(ms){
+      setTimeout(sendHeight, ms);
+    });
+  }
+  if(document.readyState === "complete" || document.readyState === "interactive"){
+    schedule();
+  }else{
+    document.addEventListener("DOMContentLoaded", schedule);
+  }
+  window.addEventListener("load", function(){ setTimeout(sendHeight, 400); });
+  window.addEventListener("resize", function(){ setTimeout(sendHeight, 250); });
+  window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
+})();
+</script>
+<script defer="" src="/assets/js/auto-embed.instagram.js"></script>
+<script defer="" src="/assets/js/media-hero-engine.js"></script>
+<script defer="" src="/assets/js/media-empty-handler.js"></script>
+<script id="igdc-media-access-script">
+
+/*
+ IGDC Media Access Script
+ ----------------------------------------
+ - MediaHub 전용 (Netflix / KT / Amazon 스타일)
+ - 썸네일 클릭 → 상세 오버레이
+ - 시청 / 대여 / 소장 / 찜하기
+ - 외부 PG 결제 트리거 연동
+ ----------------------------------------
+ 전제:
+  - 썸네일 카드에 data-media-id 존재
+  - IGTC.checkout() 존재
+  - window.__IGDC_ROLE, window.__IGDC_USER 존재
+*/
+
+(function (window, document) {
+  'use strict';
+
+  const MediaAccess = {
+    state: {
+      role: 'guest',
+      user: null,
+      activeMediaId: null
+    },
+
+    init() {
+      this.state.role = window.__IGDC_ROLE || 'guest';
+      this.state.user = window.__IGDC_USER || null;
+      this.bindThumbnailClick();
+    },
+
+    /* 1️⃣ 썸네일 클릭 */
+    bindThumbnailClick() {
+      document.addEventListener('click', (e) => {
+        const card = e.target.closest('[data-media-id]');
+        if (!card) return;
+
+        const mediaId = card.dataset.mediaId;
+        if (!mediaId) return;
+
+        this.openDetail(mediaId, card);
+      });
+    },
+
+    /* 2️⃣ 상세 오버레이 */
+    openDetail(mediaId, card) {
+      this.state.activeMediaId = mediaId;
+
+      this.closeDetail();
+
+      const overlay = document.createElement('div');
+      overlay.id = 'igdc-media-overlay';
+      overlay.innerHTML = `
+        <div class="media-modal">
+          <button class="media-close">✕</button>
+          <h2>${card.dataset.title || 'Media Content'}</h2>
+          <p>${card.dataset.description || ''}</p>
+
+          <div class="media-actions">
+            <button data-action="play">▶ Watch Now</button>
+            <button data-action="rent">💳 Rent</button>
+            <button data-action="own">💳 Purchase</button>
+            <button data-action="wish">⭐ Add to Wishlist</button>
+          </div>
+
+          <div class="media-review">
+            <textarea placeholder="Enradig recension (valfritt)" maxlength="200"></textarea>
+            <button data-action="review">Submit Review</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(overlay);
+
+      overlay.querySelector('.media-close').onclick = () => this.closeDetail();
+      overlay.onclick = (e) => { if (e.target === overlay) this.closeDetail(); };
+
+      overlay.querySelectorAll('[data-action]').forEach(btn => {
+        btn.onclick = () => this.handleAction(btn.dataset.action);
+      });
+    },
+
+    /* 3️⃣ 버튼 액션 */
+    handleAction(action) {
+      const mediaId = this.state.activeMediaId;
+
+      switch (action) {
+        case 'play':
+          alert('Uppspelningen börjar när visningsrättigheterna har bekräftats.');
+          break;
+
+        case 'rent':
+        case 'own':
+          IGTC.checkout({
+            type: 'media',
+            mediaId,
+            mode: action, // rent | own
+            user: this.state.user
+          });
+          break;
+
+        case 'wish':
+          alert('Lagt till i din önskelista.');
+          break;
+
+        case 'review':
+          alert('Your review has been submitted.');
+          break;
+      }
+    },
+
+    closeDetail() {
+      const el = document.getElementById('igdc-media-overlay');
+      if (el) el.remove();
+    }
+  };
+
+  /* 기본 스타일 */
+  const style = document.createElement('style');
+  style.textContent = `
+    #igdc-media-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.6);
+      z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .media-modal {
+      background: #fff; padding: 20px;
+      border-radius: 12px; width: 420px;
+    }
+    .media-actions button {
+      margin: 6px 4px;
+    }
+    .media-close {
+      float: right; border: none; background: none; font-size: 18px;
+    }
+    .media-review textarea {
+      width: 100%; margin-top: 10px;
+    }
+  `;
+  document.head.appendChild(style);
+
+  MediaAccess.init();
+  window.IGDCMediaAccess = MediaAccess;
+
+})(window, document);
+</script>
+<!-- Media Hub AutoMap (정본) -->
+<script defer="" src="/assets/js/mediahub-automap-v3.js"></script>
+<script id="igdc-media-10section-frame">
+(function(){
+  const LIMIT = 50;
+  function isMediaKey(key){
+    return key && key.indexOf('media-') === 0 && key !== 'media-hero';
+  }
+  function makePlaceholder(){
+    const a = document.createElement('a');
+    a.className = 'card media-card';
+    a.setAttribute('data-placeholder','true');
+    a.href = 'javascript:void(0)';
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb ph';
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = 'Coming Soon';
+    a.appendChild(thumb);
+    a.appendChild(meta);
+    return a;
+  }
+  function ensureLine(line){
+    if(!line) return;
+    const key = line.getAttribute('data-psom-key') || '';
+    if(!isMediaKey(key)) return;
+
+    // If wrapped, placeholders belong inside .scroll-content; else inside line
+    const container = line.querySelector(':scope > .scroll-content') || line;
+
+    // Count current cards (including placeholders)
+    const cards = container.querySelectorAll(':scope > a.card');
+    const need = LIMIT - cards.length;
+    if(need <= 0) return;
+
+    const frag = document.createDocumentFragment();
+    for(let i=0;i<need;i++) frag.appendChild(makePlaceholder());
+    container.appendChild(frag);
+  }
+  function run(){
+    document.querySelectorAll('.thumb-line[data-psom-key]').forEach(ensureLine);
+  }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', function(){
+      run();
+      // run again after wrappers/buttons may be injected
+      setTimeout(run, 200);
+      setTimeout(run, 600);
+    });
+  }else{
+    run();
+    setTimeout(run, 200);
+    setTimeout(run, 600);
+  }
+})();
+</script>
+</body>
+</html>
