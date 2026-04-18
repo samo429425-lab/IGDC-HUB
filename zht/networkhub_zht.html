@@ -3,12 +3,12 @@
 <!-- patched: removed duplicate bottom 인기 아이템 section and mobile-rail CSS -->
 <!DOCTYPE html>
 
-<html lang="zh">
+<html lang="en">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
 <meta charset="utf-8"/>
-<title>市场中心</title>
+<title>市場中心</title>
 <style>body {
       margin: 0;
       font-family: sans-serif;
@@ -267,7 +267,7 @@ html, body {
   background-color: #fff4e0;
   color: #804000;
   text-decoration: none;
-  padding: 10px 12px;
+  padding: 12px 12px;
   font-weight: bold;
   font-size: 1rem;
   border: 1px solid #f3d9b0;
@@ -577,25 +577,19 @@ html, body {
 </style>
 
 <link rel="stylesheet" href="/assets/css/thumbs.standard.css">
-
-  <style id="sidebar-spacing-unify-v2">
-    .sidebar{padding-top:30px !important;}
-    .sidebar a{padding:12px 12px !important;margin:10px 12px !important;}
-  </style>
-
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
 <div class="container">
 <div class="sidebar">
-<a href="home.html">🏠 首页</a>
-<a href="networkhub.html">🛒 市场中心</a>
-<a href="distributionhub.html">🏭 流通中心</a>
-<a href="socialnetwork.html">📢 社交网络</a>
-<a href="mediahub.html">🎬 媒体中心</a>
-<a href="tour.html">🧳 旅行 · 旅游 · 住宿</a>
-<a href="literature_academic">📚 文学与学术交流</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 问答咨询</a></div><main id="main">
+<a href="home.html">🏠 首頁</a>
+<a href="networkhub.html">🛒 市場中心</a>
+<a href="distributionhub.html">🏭 分銷中心</a>
+<a href="socialnetwork.html">📢 社交網絡</a>
+<a href="mediahub.html">🎬 媒體中心</a>
+<a href="tour.html">🧳 旅行 · 旅遊 · 住宿</a>
+<a href="literature_academic">📚 文學與學術交流</a>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 問答諮詢</a></div><main id="main">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
@@ -637,8 +631,8 @@ html, body {
 </style>
 <!-- HERO -->
 <section aria-label="network-hero" class="hero">
-<h1>市场中心</h1>
-<div class="hero-inline"><input aria-label="搜索平台/地区" id="platform-region-search" placeholder="搜索平台 / 地区" type="search"/><span class="subtext">自动识别您的访问地区 → 优先显示对应地区</span><span class="count"></span></div>
+<h1>市場中心</h1>
+<div class="hero-inline"><input aria-label="搜尋平台／地區" id="platform-region-search" placeholder="搜尋平台／地區" type="search"/><span class="subtext">自動偵測您的存取地區 → 先優先顯示該地區</span><span class="count"></span></div>
 <script>
 (function(){
   var root = document.getElementById('igdc-networkhub-main');
@@ -670,7 +664,7 @@ html, body {
       var anyVisible = Array.prototype.slice.call(card.querySelectorAll('a.link-btn')).some(function(a){ return a.style.display !== 'none'; });
       card.style.display = anyVisible ? '' : 'none';
     });
-    if(count){ count.textContent = q ? ('搜索结果：' + visibleCount) : ''; }
+    if(count){ count.textContent = q ? ('搜尋 results: ' + visibleCount) : ''; }
   }
   if(input){
     input.addEventListener('input', filter);
@@ -680,9 +674,9 @@ html, body {
 })();</script></section>
 <!-- ASIA -->
 <section class="region-card" id="asia">
-<h2 class="region-title">亚洲</h2>
+<h2 class="region-title">Asia</h2>
 <div class="subregion" id="east-asia">
-<h3>东亚</h3>
+<h3>東亞</h3>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.coupang.com" target="_blank">Coupang</a>
 <a class="link-btn" href="https://www.gmarket.co.kr" target="_blank">Gmarket</a>
@@ -697,7 +691,7 @@ html, body {
 </div>
 </div>
 <div class="subregion" id="southeast-asia">
-<h3>东南亚</h3>
+<h3>東南亞</h3>
 <div class="btn-grid"><a class="link-btn" href="https://www.amazon.com" target="_blank">Amazon Global</a>
 <a class="link-btn" href="https://shopee.com" target="_blank">Shopee</a>
 <a class="link-btn" href="https://www.lazada.com" target="_blank">Lazada</a>
@@ -710,7 +704,7 @@ html, body {
 </div>
 </div>
 <div class="subregion" id="south-asia-india">
-<h3>南亚 / 印度</h3>
+<h3>南亞／印度</h3>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.amazon.in" target="_blank"><div>Amazon भारत</div><div class="en">Amazon India</div></a>
 <a class="link-btn" href="https://www.flipkart.com" target="_blank">Flipkart</a>
@@ -722,7 +716,7 @@ html, body {
 </div>
 </div>
 <div class="subregion" id="central-asia">
-<h3>中亚</h3>
+<h3>中亞</h3>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.wildberries.ru" target="_blank"><div>Вайлдберриз</div><div class="en">Wildberries</div></a>
 <a class="link-btn" href="https://www.ozon.ru" target="_blank"><div>Озон</div><div class="en">Ozon</div></a>
@@ -735,9 +729,9 @@ html, body {
 </section>
 <!-- EUROPE -->
 <section class="region-card" id="europe">
-<h2 class="region-title">欧洲</h2>
+<h2 class="region-title">Europe</h2>
 <div class="subregion" id="western-europe">
-<h3>西欧</h3>
+<h3>西歐</h3>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.amazon.de" target="_blank"><div>Amazon</div><div class="en">(EU/UK)</div></a>
 <a class="link-btn" href="https://www.zalando.de" target="_blank">Zalando</a>
@@ -751,7 +745,7 @@ html, body {
 </div>
 </div>
 <div class="subregion" id="eastern-europe">
-<h3>东欧</h3>
+<h3>東歐</h3>
 <div class="btn-grid">
 <a class="link-btn" href="https://allegro.pl" target="_blank">Allegro</a>
 <a class="link-btn" href="https://www.emag.ro" target="_blank">eMAG</a>
@@ -791,7 +785,7 @@ html, body {
 </section>
 <!-- MIDDLE EAST -->
 <section class="region-card" id="middle-east">
-<h2 class="region-title">中东</h2>
+<h2 class="region-title">中東</h2>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.noon.com" target="_blank"><div>نون</div><div class="en">Noon</div></a>
 <a class="link-btn" href="https://www.amazon.sa" target="_blank"><div>أمازون السعودية</div><div class="en">Amazon.sa</div></a>
@@ -803,7 +797,7 @@ html, body {
 </section>
 <!-- OCEANIA -->
 <section class="region-card" id="oceania">
-<h2 class="region-title">大洋洲</h2>
+<h2 class="region-title">Oceania</h2>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.amazon.com.au" target="_blank"><div>Amazon Australia</div><div class="en">Amazon AU</div></a>
 <a class="link-btn" href="https://www.catch.com.au" target="_blank">Catch</a>
@@ -815,7 +809,7 @@ html, body {
 </section>
 <!-- AFRICA -->
 <section class="region-card" id="africa">
-<h2 class="region-title">非洲</h2>
+<h2 class="region-title">Africa</h2>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.jumia.com.ng" target="_blank">Jumia</a>
 <a class="link-btn" href="https://www.takealot.com" target="_blank">Takealot</a>
@@ -827,9 +821,9 @@ html, body {
 </section>
 </div>
 
-<section id="nh-mobile-rail" aria-label="Popular Recommended Products (Mobile)">
+<section id="nh-mobile-rail" aria-label="熱門推薦商品（手機版）">
   <div class="wrap">
-    <div class="title">💎 热门推荐商品 💎</div>
+    <div class="title">💎 熱門推薦商品 💎</div>
     <div class="list" id="nh-mobile-rail-list" role="list"></div>
   </div>
 </section>
@@ -837,7 +831,7 @@ html, body {
 </main>
 <div class="right-rail">
 <h4 class="ad-headline" style="margin:3 0 3px; text-align:center; line-height:1; height:1em; white-space:nowrap;">
-  💎 热门推荐商品 💎
+  💎 熱門推薦商品 💎
 </h4>
 <div class="ad-panel" id="rightAutoPanel"></div>
 <div class="thumb-grid"
@@ -853,7 +847,7 @@ html, body {
     50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea <br/>
 </footer>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<!-- @SAFE-PATCH: hide '문학 학술교류' in sidebar -->
+<!-- @SAFE-PATCH: hide '文學與學術交流' in sidebar -->
 <script>
 (function(){
   function hideLit(){
@@ -983,7 +977,7 @@ a[href^="mailto:"]:hover {
 }
 
 .igdc-qa-threads:empty::before{
-  content:"尚未发布任何问答条目";
+  content:"目前尚未發布任何問答內容";
   display:block; padding:10px 12px; color:#666;
   background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px;
   margin-top:4px; font-size:.95rem;
@@ -1114,24 +1108,24 @@ a[href^="mailto:"]:hover {
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","关闭");
+    const title = el("div","igdc-qa-title"); title.textContent = "問答諮詢";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","關閉");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
-    const lQ = el("label"); lQ.textContent="问题";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="请输入您的问题...";
+    const lQ = el("label"); lQ.textContent="問題";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="請輸入您的問題...";
     const lA = el("label"); lA.textContent="回答";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="请稍候，我们会尽快回复。";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="請稍候，我們將盡快回覆。";
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="提交";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="清除";
-    const note = el("div","igdc-qa-note"); note.textContent="※ 简单问题将由 AI 立即回答。技术、错误或运营相关问题会自动转交到管理员 Q&A。";
+    const note = el("div","igdc-qa-note"); note.textContent="※ 簡單問題將由 AI 立即回答。技術、錯誤或營運相關問題會自動轉交給管理員問答。";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
 	const ce = el("p","contact-email");
-    ce.innerHTML = '代表邮箱: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+    ce.innerHTML = '代表電子郵件: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
     body.append(ce);
     actions.append(btnSubmit, btnClear);
     panel.append(header, body);
@@ -1200,18 +1194,18 @@ a[href^="mailto:"]:hover {
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (待处理)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A.（待處理）";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "管理员请求":"一般";
+        const tag = el("span"); tag.textContent = row.is_admin? "管理員請求" : "一般";
         const actions = el("div","igdc-qa-thread-actions");
         const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
         if(canDelete){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="删除";
+          const del = el("button","igdc-qa-btn muted"); del.textContent="刪除";
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("删除失败（权限/策略）"); return; }
+            if(error){ alert("Delete failed (permission/policy)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -1234,9 +1228,9 @@ a[href^="mailto:"]:hover {
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="Operations-related inquiries will be reviewed by an administrator and answered afterward.";
-          else if(/가격|비용|요금/.test(text)) answer="Please refer to the information on this page for pricing/fees. Leave an additional inquiry if needed.";
-          else answer="Thank you for your inquiry. We will review it quickly and assist you.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="營運相關諮詢將在管理員審核後回覆。";
+          else if(/가격|비용|요금/.test(text)) answer="請參閱頁面上的價格/費用資訊。如有需要，請留下其他諮詢。";
+          else answer="感謝您的諮詢。我們會盡快審核並協助您。";
         }
       }
       return { technical, answer };
@@ -1260,7 +1254,7 @@ a[href^="mailto:"]:hover {
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("提交失败"); return; }
+      if(error){ alert("Submission failed"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -1351,16 +1345,16 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='問答諮詢';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
 
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">All features will be enabled after the save settings (Supabase url/key) are connected.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">※ 簡單問題將由 AI 立即回答。技術、錯誤或營運相關問題會自動轉交給管理員問答。</div>';
 
         var ce = document.createElement('p');
         ce.className = 'contact-email';
-        ce.innerHTML = '代表邮箱: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+        ce.innerHTML = '代表電子郵件: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
         body.appendChild(ce);
 
         p.appendChild(h); p.appendChild(body);
@@ -1534,8 +1528,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>支付二维码</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">关闭</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>付款 QR 碼</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">關閉</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -1600,11 +1594,11 @@ window.addEventListener("message",function(ev){
   async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
     await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
-    ta.value=''; alert('전송되었습니다.');
+    ta.value=''; alert('已成功送出。');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('전송 실패'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('送出失敗。'));});
   const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('전송 실패'));});
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('送出失敗。'));});
 })();
 </script>
 
@@ -1676,7 +1670,7 @@ window.addEventListener("message",function(ev){
   - 나머지 4개 사이트 (Donation 제외, Media 제외)
  목적:
   - 썸네일 클릭 자동 감지
-  - 상세 상품 자동 오픈 훅
+  - 상세 Product 자동 오픈 훅
   - 구매하기 / 결제 / 장바구니 기존 버튼 그대로 사용
   - 상세 하단에 리뷰 시스템 자동 장착 (쿠팡 방식)
  --------------------------------------------------
@@ -1719,7 +1713,7 @@ window.addEventListener("message",function(ev){
         const productId = card.dataset.productId;
         if (!productId) return;
 
-        // 기존 상세 상품 오픈 로직은 이미 각 페이지에 있음
+        // 기존 상세 Product 오픈 로직은 이미 각 페이지에 있음
         // 여기서는 리뷰만 자동 부착
         setTimeout(() => {
           this.mountReview(productId);
@@ -1756,8 +1750,8 @@ window.addEventListener("message",function(ev){
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">상품 리뷰</h3>
-          <div id="igdc-review-list" class="igdc-review-list">로딩 중...</div>
+          <h3 class="igdc-review-title">Product Reviews</h3>
+          <div id="igdc-review-list" class="igdc-review-list">Loading...</div>
           ${canWrite ? this.renderReviewForm() : this.renderLoginHint()}
         </section>
       `;
@@ -1767,12 +1761,12 @@ window.addEventListener("message",function(ev){
       return `
         <form id="igdc-review-form" class="igdc-review-form">
           <textarea
-            placeholder="상품 사용 경험을 공유해 주세요"
+            placeholder="分享您的產品使用體驗"
             minlength="${this.config.minReviewChars}"
             maxlength="${this.config.maxReviewChars}"
             required></textarea>
           <div class="igdc-review-actions">
-            <button type="submit">리뷰 등록</button>
+            <button type="submit">Submit Review</button>
           </div>
         </form>
       `;
@@ -1780,7 +1774,7 @@ window.addEventListener("message",function(ev){
 
     renderLoginHint() {
       return `<div class="igdc-review-login-hint">
-        리뷰 작성은 로그인 후 가능합니다.
+        Review posting is available after logging in.
       </div>`;
     },
 
@@ -1795,7 +1789,7 @@ window.addEventListener("message",function(ev){
         const content = textarea.value.trim();
 
         if (content.length < this.config.minReviewChars) {
-          alert(`리뷰는 최소 ${this.config.minReviewChars}자 이상 작성해 주세요.`);
+          alert(`Reviews must be at least ${this.config.minReviewChars} characters long.`);
           return;
         }
 
@@ -1804,7 +1798,7 @@ window.addEventListener("message",function(ev){
             textarea.value = '';
             this.loadReviews(productId);
           })
-          .catch(() => alert('리뷰 Submission failed'));
+          .catch(() => alert('評論提交失敗。'));
       });
     },
 
@@ -1813,7 +1807,7 @@ window.addEventListener("message",function(ev){
       const list = document.getElementById('igdc-review-list');
       if (!list) return;
 
-      list.textContent = '로딩 중...';
+      list.textContent = 'Loading...';
 
       try {
         const res = await fetch(
@@ -1822,13 +1816,13 @@ window.addEventListener("message",function(ev){
         const data = await res.json();
 
         if (!Array.isArray(data) || data.length === 0) {
-          list.innerHTML = '<div class="igdc-review-empty">아직 리뷰가 없습니다.</div>';
+          list.innerHTML = '<div class="igdc-review-empty">尚無評論。</div>';
           return;
         }
 
         list.innerHTML = data.map(this.renderReviewItem).join('');
       } catch {
-        list.textContent = '리뷰를 불러오지 못했습니다.';
+        list.textContent = '無法載入評論。';
       }
     },
 
@@ -1846,7 +1840,7 @@ window.addEventListener("message",function(ev){
       return `
         <div class="igdc-review-item">
           <div class="igdc-review-meta">
-            <span>${esc(item.user || '익명')}</span>
+            <span>${esc(item.user || 'Anonymous')}</span>
             <span>${esc(item.date || '')}</span>
           </div>
           <div class="igdc-review-content">${esc(item.content)}</div>

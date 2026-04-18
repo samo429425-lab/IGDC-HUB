@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>社交网络</title>
+  <title>社交網絡</title>
   <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
   <link rel="stylesheet" href="/assets/css/thumbs.standard.css?v=20250914" />
   <link rel="stylesheet" href="/assets/css/hero.css?v=20250914" />
@@ -48,7 +48,7 @@
       background:var(--panel-accent);
       color:var(--panel-accent-text);
       text-decoration:none;
-      padding:10px 12px;
+      padding: 12px 12px;
       font-weight:700;
       border:1px solid var(--panel-accent-border);
       border-radius:8px;
@@ -56,7 +56,7 @@
     }
     .sidebar a:hover{text-decoration:underline;background:#ffe5b4}
     .sidebar a.active{background:#ffdfcc}
-    #qna打开Btn{background:#0b2a6f;color:#fff;border-color:#004080}
+    #qnaOpenBtn{background:#0b2a6f;color:#fff;border-color:#004080}
 
     .main-content{
       flex:1 1 auto;
@@ -308,7 +308,7 @@
     .igdc-qa-btn.primary{background:#2563eb;color:#fff}
     .igdc-qa-btn.muted{background:#9ca3af;color:#fff}
     .igdc-qa-threads{display:flex;flex-direction:column;gap:10px;overflow:auto;border-top:1px solid #f3d9b0;padding-top:10px}
-    .igdc-qa-threads:empty::before{content:"尚未发布任何问答内容";display:block;padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;margin-top:8px;font-size:.95rem}
+    .igdc-qa-threads:empty::before{content:"目前尚未發布任何問答內容";display:block;padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;margin-top:8px;font-size:.95rem}
     .igdc-qa-thread{border:1px solid #f3d9b0;border-radius:12px;padding:10px 12px;background:#fffdf8}
     .igdc-qa-thread-q{font:700 13px/1.5 system-ui;color:#222}
     .igdc-qa-thread-a{font:13px/1.5 system-ui;color:#333;margin-top:6px}
@@ -336,37 +336,31 @@
     @media (max-width:768px) and (orientation:portrait){.snfv-meta{padding:10px 12px}.snfv-title{font-size:.96rem}.snfv-desc{font-size:.86rem}}
 </style>
   
-
-  <style id="sidebar-spacing-unify-v2">
-    .sidebar{padding-top:30px !important;}
-    .sidebar a{padding:12px 12px !important;margin:10px 12px !important;}
-  </style>
-
 </head>
 <body>
   <div id="hero"><div class="hero-title"></div></div>
 
   <div class="container">
     <div class="sidebar">
-<a href="home.html">🏠 首页</a>
-<a href="networkhub.html">🛒 市场中心</a>
-<a href="distributionhub.html">🏭 流通中心</a>
-<a href="socialnetwork.html">📢 社交网络</a>
-<a href="mediahub.html">🎬 媒体中心</a>
-<a href="tour.html">🧳 旅行 · 旅游 · 住宿</a>
-<a href="literature_academic">📚 文学与学术交流</a>
-<a href="javascript:void(0)" id="qna打开Btn">💬 问答咨询</a>
-</div>
+      <a href="home.html">🏠 首頁</a>
+      <a href="networkhub.html">🛒 市場中心</a>
+      <a href="distributionhub.html">🏭 分銷中心</a>
+      <a href="socialnetwork.html">📢 社交網絡</a>
+      <a href="mediahub.html">🎬 媒體中心</a>
+      <a href="tour.html">🧳 旅行 · 旅遊 · 住宿</a>
+      <a href="literature_academic">📚 文學與學術交流</a>
+      <a href="javascript:void(0)" id="qnaOpenBtn">💬 問答諮詢</a>
+    </div>
 
     <div class="main-content">
       <section class="section-blockchain">
         <a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
-        <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">打开Sea</a>
+        <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
         <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
         <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
       </section>
 
-      <h2 id="pageTitle">👥 社交网络 · 推荐频道</h2>
+      <h2 id="pageTitle">👥 社交網絡 · 推薦頻道</h2>
       <div class="status"></div>
 
     <section id="maruSocialBroadwareSlot" class="maru-broadware-slot" hidden></section>
@@ -383,7 +377,7 @@
         <div class="row-viewport" data-row="9"><div class="row-scroller" id="rowScroller9"><div class="row-grid" id="rowGrid9"><div class="thumb-grid thumb-scroller" data-psom-key="social-twitter"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft9">‹</button><button class="rscroll right" id="rsRight9">›</button></div>
 
         <section id="rpMobileBox">
-		<h3 class="ad-headline">💎 热门商品 💎</h3>
+		<h3 class="ad-headline">💎 熱門項目 💎</h3>
           <div id="rpMobileScroller">
             <div id="rpMobileGrid" data-psom-key="rightPanel"></div>
           </div>
@@ -392,7 +386,7 @@
     </div>
 
     <div class="right-rail" id="rightRail">
-      <h3 class="ad-headline">💎 热门商品 💎</h3>
+      <h3 class="ad-headline">💎 熱門項目 💎</h3>
       <div class="ad-panel" id="rightAutoPanel" data-psom-key="rightPanel"></div>
     </div>
   </div>
@@ -472,7 +466,7 @@
     (function(){
       if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
       function ensureButton(){
-        var btn = document.getElementById('qna打开Btn');
+        var btn = document.getElementById('qnaOpenBtn');
         if(!btn) return;
         btn.addEventListener('click', function(){
           if (window.IGDC_QA && typeof window.IGDC_QA.open === 'function'){ window.IGDC_QA.open(); return; }
@@ -482,11 +476,11 @@
             var b = document.createElement('div'); b.className='igdc-qa-backdrop';
             var p = document.createElement('div'); p.className='igdc-qa-panel';
             var h = document.createElement('div'); h.className='igdc-qa-header';
-            var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+            var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='問答諮詢';
             var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
             h.appendChild(t); h.appendChild(x);
             var body = document.createElement('div'); body.className='igdc-qa-body';
-            body.innerHTML = '代表邮箱: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
+            body.innerHTML = '<label>問題</label><textarea class="igdc-qa-text q" placeholder="請輸入您的問題..."></textarea><label>回答</label><textarea class="igdc-qa-text a" placeholder="請稍候，我們將盡快回覆。"></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">提交</button><button class="igdc-qa-btn muted">清除</button></div><div class="igdc-qa-note">※ 簡單問題將由 AI 立即回答。技術、錯誤或營運相關問題會自動轉交給管理員問答。</div><div class="igdc-qa-threads"></div><p class="contact-email">代表電子郵件: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
             p.appendChild(h); p.appendChild(body); m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
             function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
             function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
@@ -504,7 +498,7 @@
     (function(){
       if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
       const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
-      let is打开=false, isAnimating=false;
+      let isOpen=false, isAnimating=false;
       function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
       const nowISO = ()=> new Date().toISOString();
       const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
@@ -524,33 +518,33 @@
       function mountUI(){
         const existing = document.querySelector('.igdc-qa-modal'); if(existing){ return bindExisting(existing); }
         const modal = el('div','igdc-qa-modal'); const backdrop = el('div','igdc-qa-backdrop'); const panel = el('div','igdc-qa-panel');
-        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='Q&A'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','关闭');
+        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='Q&A'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','關閉');
         header.append(title, close);
         const body = el('div','igdc-qa-body');
-        const lQ = el('label'); lQ.textContent='问题'; const tQ = el('textarea','igdc-qa-text q'); tQ.placeholder='请输入您的问题...';
-        const lA = el('label'); lA.textContent='回答'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='请稍候，我们将尽快回复您。';
-        const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='Submit'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='Clear';
-        const note = el('div','igdc-qa-note'); note.textContent='※ 简单问题将由 AI 立即回答。技术、错误或运营相关问题将自动转交给管理员 Q&A。';
-        const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='代表邮箱: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+        const lQ = el('label'); lQ.textContent='問題'; const tQ = el('textarea','igdc-qa-text q'); tQ.placeholder='請輸入您的問題...';
+        const lA = el('label'); lA.textContent='回答'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='請稍候，我們將盡快回覆。';
+        const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='提交'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='清除';
+        const note = el('div','igdc-qa-note'); note.textContent='※ 簡單問題將由 AI 立即回答。技術、錯誤或營運相關問題會自動轉交給管理員問答。';
+        const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='代表電子郵件: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
         actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
         return bindExisting(modal);
       }
       function bindExisting(modal){
         const panel = modal.querySelector('.igdc-qa-panel'); const backdrop = modal.querySelector('.igdc-qa-backdrop'); const close = modal.querySelector('.igdc-qa-close');
-        const sideBtn = document.querySelector('#qna打开Btn');
+        const sideBtn = document.querySelector('#qnaOpenBtn');
         const tQ = modal.querySelector('.igdc-qa-text.q'); const tA = modal.querySelector('.igdc-qa-text.a'); const list = modal.querySelector('.igdc-qa-threads');
         const btnSubmit = modal.querySelector('.igdc-qa-btn.primary'); const btnClear = modal.querySelector('.igdc-qa-btn.muted');
         function positionNearSidebar(){ try{ const sb = document.querySelector('.sidebar'); if(sb){ const rect = sb.getBoundingClientRect(); panel.style.left = Math.round(rect.right + 12) + 'px'; } }catch(e){} }
-        function openModal(){ if(isAnimating || is打开) return; isAnimating = true; modal.style.display='block'; requestAnimationFrame(()=>{ modal.classList.add('open'); is打开 = true; setTimeout(()=>{ isAnimating=false; },220); }); }
-        function closeModal(){ if(isAnimating || !is打开) return; isAnimating=true; modal.classList.remove('open'); setTimeout(()=>{ modal.style.display='none'; is打开=false; isAnimating=false; },220); }
+        function openModal(){ if(isAnimating || isOpen) return; isAnimating = true; modal.style.display='block'; requestAnimationFrame(()=>{ modal.classList.add('open'); isOpen = true; setTimeout(()=>{ isAnimating=false; },220); }); }
+        function closeModal(){ if(isAnimating || !isOpen) return; isAnimating=true; modal.classList.remove('open'); setTimeout(()=>{ modal.style.display='none'; isOpen=false; isAnimating=false; },220); }
         positionNearSidebar(); window.addEventListener('resize', positionNearSidebar); window.addEventListener('scroll', positionNearSidebar, { passive:true });
         if(sideBtn && !sideBtn.dataset.qaBound){ sideBtn.addEventListener('click', openModal); sideBtn.dataset.qaBound='1'; }
         close && close.addEventListener('click', closeModal); backdrop && backdrop.addEventListener('click', closeModal); document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
         btnClear && btnClear.addEventListener('click', ()=>{ if(tQ) tQ.value=''; if(tA) tA.value=''; });
         async function fetchThreads(){ const sb = await ensureSupabase(); if(!sb || !list) return; const { data } = await sb.from('igdc_qna_threads').select('*').eq('project', STATE.project).eq('page_id', STATE.pageId).order('created_at', { ascending:false }).limit(100); renderList(data||[]); }
-        function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='Q. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('A. '+row.answer):'A. (대기중)'; box.append(q,a); list.append(box); }); }
-        async function auto回答IfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'Please refer to the information on this page for pricing and fees. Leave an additional inquiry if needed.':'Thank you for your inquiry. We will review it promptly and assist you.'; } } return { technical, answer }; }
-        async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await auto回答IfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'Your inquiry has been received.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
+        function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='Q. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('A. '+row.answer):'A.（待處理）'; box.append(q,a); list.append(box); }); }
+        async function autoAnswerIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'有關價格與費用資訊，請參考本頁說明；如有需要，請留下其他諮詢。':'感謝您的詢問。我們會盡快查看並協助您。'; } } return { technical, answer }; }
+        async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoAnswerIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'已收到您的諮詢。', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
         btnSubmit && btnSubmit.addEventListener('click', submit);
         window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
         fetchThreads(); return modal;
@@ -569,7 +563,7 @@
         var modal = document.querySelector('.igdc-qa-modal');
         if(!modal) return;
         var body = modal.querySelector('.igdc-qa-body') || modal;
-        if(body && !body.querySelector('.contact-email')){ var ce = document.createElement('p'); ce.className='contact-email'; ce.innerHTML='代表邮箱: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>'; body.appendChild(ce); }
+        if(body && !body.querySelector('.contact-email')){ var ce = document.createElement('p'); ce.className='contact-email'; ce.innerHTML='代表電子郵件: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>'; body.appendChild(ce); }
       }
       if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', function(){ stripFooterEmail(); ensureContactEmail(); }, { once:true }); } else { stripFooterEmail(); ensureContactEmail(); }
     })();
@@ -578,19 +572,19 @@
   <script>
     (function(){
       var DEMO = {
-        'social-youtube': { icon:'▶️', title:'YouTube', row:'Row 1 · 预览' },
-        'social-instagram': { icon:'📷', title:'Instagram', row:'Row 2 · 预览' },
-        'social-tiktok': { icon:'🎵', title:'TikTok', row:'Row 3 · 预览' },
-        'social-facebook': { icon:'📘', title:'Facebook', row:'Row 4 · 预览' },
-        'social-wechat': { icon:'💬', title:'WeChat', row:'Row 5 · 预览' },
-        'social-weibo': { icon:'🌐', title:'Weibo', row:'Row 6 · 预览' },
-        'social-pinterest': { icon:'📌', title:'Pinterest', row:'Row 7 · 预览' },
-        'social-reddit': { icon:'👽', title:'Reddit', row:'Row 8 · 预览' },
-        'social-twitter': { icon:'✖️', title:'X (Twitter)', row:'Row 9 · 预览' }
+        'social-youtube': { icon:'▶️', title:'YouTube', row:'Row 1 · 預覽' },
+        'social-instagram': { icon:'📷', title:'Instagram', row:'Row 2 · 預覽' },
+        'social-tiktok': { icon:'🎵', title:'TikTok', row:'Row 3 · 預覽' },
+        'social-facebook': { icon:'📘', title:'Facebook', row:'Row 4 · 預覽' },
+        'social-wechat': { icon:'💬', title:'WeChat', row:'Row 5 · 預覽' },
+        'social-weibo': { icon:'🌐', title:'Weibo', row:'Row 6 · 預覽' },
+        'social-pinterest': { icon:'📌', title:'Pinterest', row:'Row 7 · 預覽' },
+        'social-reddit': { icon:'👽', title:'Reddit', row:'Row 8 · 預覽' },
+        'social-twitter': { icon:'✖️', title:'X (Twitter)', row:'Row 9 · 預覽' }
       };
       function makeCard(meta){
         var a = document.createElement('a'); a.className='card'; a.href='#';
-        a.innerHTML = '<div class="pic"><span>'+meta.icon+'</span></div><div class="meta"><div class="title">'+meta.title+'</div><div class="desc">'+meta.row+'</div><div class="cta">打开</div></div>';
+        a.innerHTML = '<div class="pic"><span>'+meta.icon+'</span></div><div class="meta"><div class="title">'+meta.title+'</div><div class="desc">'+meta.row+'</div><div class="cta">開啟</div></div>';
         return a;
       }
       function seedMainPlaceholders(){
@@ -677,7 +671,7 @@
   if ((payload.href || '#') === '#'){
     e.preventDefault();
     try{
-      alert('Content or materials are being prepared.');
+      alert('內容或素材正在準備中。');
     }catch(_){}
   }
 }, { passive:false });
@@ -1075,9 +1069,9 @@ function boot(){
           var inner = document.createElement('div');
           inner.style.height = '280px';
           inner.style.display = 'flex';
-          inner.style.align项目s = 'center';
+          inner.style.alignItems = 'center';
           inner.style.justifyContent = 'center';
-          inner.textContent = '加载中...';
+          inner.textContent = 'Loading...';
           card.appendChild(inner);
           panel.appendChild(card);
         }
@@ -1136,7 +1130,7 @@ window.addEventListener('resize', function(){
     a.dataset.productTitle = productTitle;
     a.dataset.productLink = resolvedHref;
 
-    a.textContent = productTitle || '项目';
+    a.textContent = productTitle || 'Item';
     a.target = resolvedHref.indexOf('/pages/coming-soon.html') === 0 ? '_self' : '_blank';
     a.rel = 'noopener';
 
@@ -1305,11 +1299,11 @@ window.addEventListener('resize', function(){
     root.className = 'snfv';
     root.innerHTML =
       '<div class="snfv-panel">'
-      + '<button type="button" class="snfv-close" aria-label="Close">✕</button>'
+      + '<button type="button" class="snfv-close" aria-label="關閉">✕</button>'
       + '<div class="snfv-media" id="snfvMedia"></div>'
       + '<div class="snfv-meta">'
       +   '<div class="snfv-text"><div class="snfv-title" id="snfvTitle"></div><div class="snfv-desc" id="snfvDesc"></div></div>'
-      +   '<div class="snfv-actions"><a id="snfv打开Btn" class="snfv-btn" href="#" target="_blank" rel="noopener">打开</a></div>'
+      +   '<div class="snfv-actions"><a id="snfvOpenBtn" class="snfv-btn" href="#" target="_blank" rel="noopener">開啟</a></div>'
       + '</div>'
       + '</div>';
 
@@ -1359,10 +1353,10 @@ window.addEventListener('resize', function(){
     var media = document.getElementById('snfvMedia');
     var title = document.getElementById('snfvTitle');
     var desc = document.getElementById('snfvDesc');
-    var openBtn = document.getElementById('snfv打开Btn');
+    var openBtn = document.getElementById('snfvOpenBtn');
 
     media.innerHTML = '';
-    title.textContent = data.title || '预览';
+    title.textContent = data.title || '預覽';
     desc.textContent = data.desc || '';
 
     if(data.video){
@@ -1381,7 +1375,7 @@ window.addEventListener('resize', function(){
     }else{
       var fb = document.createElement('div');
       fb.className = 'snfv-fallback';
-      fb.textContent = data.title || '预览';
+      fb.textContent = data.title || '預覽';
       media.appendChild(fb);
     }
 
@@ -1472,8 +1466,8 @@ window.addEventListener('resize', function(){
 
               wrap.innerHTML =
                 '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
-                + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
+                + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>付款 QR 碼</b>'
+                + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">關閉</button></div>'
                 + '<div id="igtc-qr-area"></div></div>';
 
               document.body.appendChild(wrap);

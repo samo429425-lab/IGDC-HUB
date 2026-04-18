@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 
-<html lang="zh">
+<html lang="en">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
 <meta charset="utf-8"/>
-<title>Tour</title>
+<title>旅遊</title>
 
 <style>
 body {
@@ -515,7 +515,7 @@ html, body {
   background-color: #fff4e0;
   color: #804000;
   text-decoration: none;
-  padding: 10px 12px;
+  padding: 12px 12px;
   font-weight: bold;
   font-size: 1rem;
   border: 1px solid #f3d9b0;
@@ -621,7 +621,7 @@ html, body {
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "尚未发布任何问答条目";
+  content: "目前尚未發布任何問答內容";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -921,26 +921,115 @@ html, body {
 }
 </style>
 
+<style id="igdc-qa-style">
+:root{
+  --igdc-z:2147483000; --igdc-radius:14px; --igdc-shadow:0 10px 30px rgba(0,0,0,.18);
+  --igdc-gap:10px; --igdc-font:system-ui,Segoe UI,Apple SD Gothic Neo,Malgun Gothic,Roboto,sans-serif;
+  --qa-left:260px;
+  --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
+  --blue:#2563eb; --muted:#9ca3af;
+}
+/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+#qnaOpenBtn{ display:block; text-decoration:none; }
+/* Modal near the left sidebar, with smooth transitions */
+.igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
+.igdc-qa-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;transition:opacity .18s ease}
+.igdc-qa-panel{
+position:fixed; left:var(--qa-left); bottom:84px; width:min(560px,50vw);
+max-height:min(82vh,900px); display:flex; flex-direction:column;
+background:#fff; border-radius:var(--igdc-radius); box-shadow:var(--igdc-shadow);
+overflow:hidden; opacity:0; transform:translateY(12px) scale(.98);
+transition:opacity .18s ease, transform .18s ease;
+border:1px solid var(--old-border);
+}
+.igdc-qa-modal.open{pointer-events:auto}
+.igdc-qa-modal.open .igdc-qa-backdrop{opacity:1}
+.igdc-qa-modal.open .igdc-qa-panel{opacity:1; transform:none}
+/* Old-style header tint */
+.igdc-qa-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 14px; border-bottom:1px solid var(--old-border);
+  background:var(--old-bg);
+}
+.igdc-qa-title{font:700 14px/1.2 var(--igdc-font); color:var(--old-text)}
+.igdc-qa-close{cursor:pointer; border:none; background:transparent; font-size:18px; color:#333}
+.igdc-qa-body{
+display:flex; flex-direction:column; gap:10px; padding:12px; overflow:auto
+}
+.igdc-qa-field label{display:block; font:700 12px/1.2 var(--igdc-font); margin-bottom:6px; color:#333}
+.igdc-qa-text{
+  width:100%; max-width:100%; box-sizing:border-box; resize:vertical;
+  border:1px solid var(--old-border); border-radius:10px; padding:10px 12px;
+  font:500 14px var(--igdc-font); min-height:44px; background:#fffdf8;
+}
+.igdc-qa-text.q{ min-height: 96px; }
+.igdc-qa-text.a{ min-height: 128px; }
+.igdc-qa-actions{display:flex; gap:8px; align-items:center}
+.igdc-qa-btn{border:none; border-radius:10px; padding:10px 14px; font:700 14px; cursor:pointer}
+.igdc-qa-btn.primary{background:var(--blue); color:#fff}
+.igdc-qa-btn.muted{background:var(--muted); color:#fff}
+.igdc-qa-threads{
+display:flex; flex-direction:column; gap:10px; overflow:auto; border-top:1px solid var(--old-border); padding-top:10px
+}
+.igdc-qa-thread{border:1px solid var(--old-border); border-radius:12px; padding:10px 12px; background:#fffdf8}
+.igdc-qa-thread-q{font:700 13px/1.5 var(--igdc-font); color:#222}
+.igdc-qa-thread-a{font:13px/1.5 var(--igdc-font); color:#333; margin-top:6px}
+.igdc-qa-thread-meta{display:flex; gap:8px; align-items:center; color:#775; font:12px/1.2 var(--igdc-font); margin-top:8px}
+.igdc-qa-thread-actions{margin-left:auto; display:flex; gap:6px}
+.igdc-qa-note{font:12px/1.4 var(--igdc-font); color:#666}
+@media (max-width:900px){
+  .igdc-qa-panel{ left:calc(12px + var(--qa-left,0px)); width:min(92vw,560px) }
+}
+.igdc-qa-threads{
+  display:flex; flex-direction:column; gap:10px; overflow:auto;
+  border-top:1px solid var(--old-border);
+  padding-top:10px;
+  padding-bottom:4px; }
+a[href^="mailto:"] {
+  color: #007bff;           /* 밝은 파란색 (Bootstrap 기본 블루톤) */
+  text-decoration: underline;
+}
+a[href^="mailto:"]:hover {
+  color: #0056b3;           /* hover 시 조금 더 짙은 파랑 */
+  text-decoration: underline;
+}
 
-  <style id="sidebar-spacing-unify-v2">
-    .sidebar{padding-top:30px !important;}
-    .sidebar a{padding:12px 12px !important;margin:10px 12px !important;}
-  </style>
-
+.igdc-qa-threads:empty::before{
+  content:"目前尚未發布任何問答內容";
+  display:block; padding:10px 12px; color:#666;
+  background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px;
+  margin-top:4px; font-size:.95rem;
+}
+.contact-email{
+  margin-top: 6px;
+  margin-bottom: 0;}
+</style>
+<style id="qna-brand-only">
+/* === Q&A sidebar link color only (no other changes) === */
+:root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
+.sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
+  display:block;
+  background: var(--qa-brand);
+  color:#fff !important;
+  border:1px solid var(--qa-brand-border);
+  border-radius:10px;
+}
+.sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
+</style>
 </head>
 
 <body>
 <div id="hero"><div class="hero-title"></div></div>
 <div class="container">
 <div class="sidebar">
-<a href="home.html">🏠 首页</a>
-<a href="networkhub.html">🛒 市场中心</a>
-<a href="distributionhub.html">🏭 流通中心</a>
-<a href="socialnetwork.html">📢 社交网络</a>
-<a href="mediahub.html">🎬 媒体中心</a>
-<a href="tour.html">🧳 旅行 · 旅游 · 住宿</a>
-<a href="literature_academic">📚 文学与学术交流</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 问答咨询</a></div>
+<a href="home.html">🏠 首頁</a>
+<a href="networkhub.html">🛒 市場中心</a>
+<a href="distributionhub.html">🏭 分銷中心</a>
+<a href="socialnetwork.html">📢 社交網絡</a>
+<a href="mediahub.html">🎬 媒體中心</a>
+<a href="tour.html">🧳 旅遊 · 觀光 · 住宿</a>
+<a href="literature_academic">📚 文學與學術交流</a>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 問答諮詢</a></div>
 <div class="main-content">
 <section class="section-blockchain">
 <a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
@@ -949,8 +1038,8 @@ html, body {
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
 </section>
 <div style="background-color:#dfefff; padding:24px; border-radius:10px; box-shadow:1px 1px 8px rgba(0,0,0,0.05); margin-bottom:24px; max-width: 980px; margin-left:auto; margin-right:auto;">
-<h2 style="font-size:1.9em; margin:0 0 8px 0; color:#004080; text-align:center;">🌍 全球旅游平台 HUB</h2>
-<p style="margin:0; color:#335; font-size:0.95rem; text-align:center;">链接按钮按地区排列在内容框中。</p>
+<h2 style="font-size:1.9em; margin:0 0 8px 0; color:#004080; text-align:center;">🌍 全球旅遊平台 HUB</h2>
+<p style="margin:0; color:#335; font-size:0.95rem; text-align:center;">連結按鈕已依地區排列在內容方塊內。</p>
 </div>
 <style id="region-cards-grid">.region-card { border:1px solid #c8d6e5; background:linear-gradient(180deg, #f9fbff, #eef5ff); border-radius:14px; padding:18px 20px; margin:16px 0 22px 0; box-shadow:0 2px 6px rgba(0,0,0,0.08); }
     .region-title { font-size:1.1rem; font-weight:800; color:#003366; margin:4px 0 14px 0; text-align:center; }
@@ -958,30 +1047,30 @@ html, body {
     .btn-grid .link-btn { flex:0 0 150px; height:40px; line-height:40px; text-align:center; border:1px solid #e3a5c7; border-radius:8px; background:#ffe6f0; color:#7a004c; text-decoration:none; font-weight:600; letter-spacing:0.2px; box-shadow:0 1px 3px rgba(0,0,0,0.08); font-size:0.85rem; transition: all 0.25s ease; }
     .btn-grid .link-btn:hover { background:#e75480; color:#ffffff; border-color:#cc2d63; box-shadow:0 2px 6px rgba(0,0,0,0.18); }</style>
 <div class="region-card">
-<div class="region-title">亚洲</div>
-<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaTour <small>(하나투어)</small></a>
+<div class="region-title">Asia</div>
+<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">Hana旅遊 <small>(하나투어)</small></a>
 <a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour<small>(모두투어)</small></a>
-<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon Tour <small>(노랑풍선)</small></a>
+<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon 旅遊 <small>(노랑풍선)</small></a>
 <a class="link-btn" href="https://www.trip.com" target="_blank">Trip.com <small>(携程)</small></a>
 <a class="link-btn" href="https://www.ctrip.com" target="_blank">Ctrip <small>(携程)</small></a>
 <a class="link-btn" href="https://www.qunar.com" target="_blank">Qunar <small>(去哪儿网)</small></a>
 <a class="link-btn" href="https://www.fliggy.com" target="_blank">Fliggy <small>(飞猪)</small></a>
 <a class="link-btn" href="https://www.his.co.jp" target="_blank">HIS Japan <small>(エイチ・アイ・エス)</small></a>
 <a class="link-btn" href="https://www.jtb.co.jp" target="_blank">JTB <small>(ジェイティービー)</small></a>
-<a class="link-btn" href="https://www.knt.co.jp" target="_blank">Kinki Nippon Tourist <small>(近畿日本ツーリスト)</small></a>
+<a class="link-btn" href="https://www.knt.co.jp" target="_blank">Kinki Nippon 旅遊ist <small>(近畿日本ツーリスト)</small></a>
 <a class="link-btn" href="https://www.makemytrip.com" target="_blank">MakeMyTrip</a>
 <a class="link-btn" href="https://www.yatra.com" target="_blank">Yatra</a>
 <a class="link-btn" href="https://www.traveloka.com" target="_blank">Traveloka</a>
 <a class="link-btn" href="https://www.agoda.com" target="_blank">Agoda</a>
 <a class="link-btn" href="https://www.klook.com" target="_blank">Klook</a>
 <a class="link-btn" href="https://www.his-j.com" target="_blank">HIS Japan <small>(エイチ・アイ・エス)</small></a>
-<a class="link-btn" href="https://www.cleartrip.com" target="_blank">Cleartrip</a>
-<a class="link-btn" href="https://www.virtualtrips.io" target="_blank">Virtual Trips</a>
+<a class="link-btn" href="https://www.cleartrip.com" target="_blank">清除trip</a>
+<a class="link-btn" href="https://www.virtualtrips.io" target="_blank">虛擬旅行</a>
 <a class="link-btn" href="https://www.kkday.com" target="_blank">KKDay</a>
 <a class="link-btn" href="https://www.vietnamairlines.com" target="_blank">Vietnam Airlines</a></div>
 </div>
 <div class="region-card">
-<div class="region-title">欧洲</div>
+<div class="region-title">Europe</div>
 <div class="btn-grid"><a class="link-btn" href="https://www.booking.com" target="_blank">Booking.com</a>
 <a class="link-btn" href="https://www.lastminute.com" target="_blank">lastminute.com</a>
 <a class="link-btn" href="https://www.tui.com" target="_blank">TUI</a>
@@ -997,7 +1086,7 @@ html, body {
 <a class="link-btn" href="https://www.getyourguide.com" target="_blank">GetYourGuide</a></div>
 </div>
 <div class="region-card">
-<div class="region-title">美洲</div>
+<div class="region-title">Americas</div>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.expedia.com" target="_blank">Expedia</a>
 <a class="link-btn" href="https://www.tripadvisor.com" target="_blank">TripAdvisor</a>
@@ -1009,7 +1098,7 @@ html, body {
 </div>
 </div>
 <div class="region-card">
-<div class="region-title">中东·非洲</div>
+<div class="region-title">中東 · 非洲</div>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.almosafer.com" target="_blank">Almosafer <small>(المسافر)</small></a>
 <a class="link-btn" href="https://www.rehlat.com" target="_blank">Rehlat <small>(رحلات)</small></a>
@@ -1020,7 +1109,7 @@ html, body {
 </div>
 </div>
 <div class="region-card">
-<div class="region-title">大洋洲·其他欧洲</div>
+<div class="region-title">大洋洲 · 其他歐洲地區</div>
 <div class="btn-grid">
 <a class="link-btn" href="https://www.webjet.com.au" target="_blank">Webjet</a>
 <a class="link-btn" href="https://www.flightcentre.com.au" target="_blank">Flight Centre</a>
@@ -1033,7 +1122,7 @@ html, body {
 </div>
 <div class="right-rail">
 <h3 class="ad-headline" style="margin:0 0 6px; text-align:center; line-height:1; height:1em; white-space:nowrap;">
-  💎 热门品牌 💎
+  💎 熱門品牌 💎
 </h3>
 <div class="ad-panel" id="rightAutoPanel"></div>
 <div class="thumb-grid" data-psom-key="tour"></div>
@@ -1044,8 +1133,8 @@ html, body {
 <!-- Mobile rail for TOUR: directly above the footer (NOT inside) -->
 <section id="tour-mobile-rail" style="display:none; margin-top:14px;">
   <div class="wrap">
-    <h3 class="title" style="margin:8px 0 6px; text-align:left;">💎 热门品牌 💎</h3>
-    <div class="list" aria-label="移动端推荐缩略图"></div>
+    <h3 class="title" style="margin:8px 0 6px; text-align:left;">💎 熱門品牌 💎</h3>
+    <div class="list" aria-label="Mobile recommended thumbnails"></div>
   </div>
 </section>
 
@@ -1054,7 +1143,7 @@ html, body {
     50 Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea <br/>
 </footer>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<!-- @SAFE-PATCH: hide '문학 학술교류' in sidebar -->
+<!-- @SAFE-PATCH: hide '文學與學術交流' in sidebar -->
 <script>
 (function(){
   function hideLit(){
@@ -1110,450 +1199,6 @@ html, body {
 <style id="top-gap-6px-only">
   .container{ padding-top: 6px !important; }
 </style>
-<style id="igdc-qa-style">
-:root{
-  --igdc-z:2147483000; --igdc-radius:14px; --igdc-shadow:0 10px 30px rgba(0,0,0,.18);
-  --igdc-gap:10px; --igdc-font:system-ui,Segoe UI,Apple SD Gothic Neo,Malgun Gothic,Roboto,sans-serif;
-  --qa-left:260px;
-  --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
-  --blue:#2563eb; --muted:#9ca3af;
-}
-/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
-#qnaOpenBtn{ display:block; text-decoration:none; }
-/* Modal near the left sidebar, with smooth transitions */
-.igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
-.igdc-qa-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;transition:opacity .18s ease}
-.igdc-qa-panel{
-  position:fixed; left:var(--qa-left); bottom:84px; width:min(560px,50vw);
-  max-height:min(88vh,1100px); display:flex; flex-direction:column;
-  background:#fff; border-radius:var(--igdc-radius); box-shadow:var(--igdc-shadow);
-  overflow:hidden; opacity:0; transform:translateY(12px) scale(.98);
-  transition:opacity .18s ease, transform .18s ease;
-  border:1px solid var(--old-border);
-}
-.igdc-qa-modal.open{pointer-events:auto}
-.igdc-qa-modal.open .igdc-qa-backdrop{opacity:1}
-.igdc-qa-modal.open .igdc-qa-panel{opacity:1; transform:none}
-/* Old-style header tint */
-.igdc-qa-header{
-  display:flex; align-items:center; justify-content:space-between;
-  padding:12px 14px; border-bottom:1px solid var(--old-border);
-  background:var(--old-bg);
-}
-.igdc-qa-title{font:700 14px/1.2 var(--igdc-font); color:var(--old-text)}
-.igdc-qa-close{cursor:pointer; border:none; background:transparent; font-size:18px; color:#333}
-.igdc-qa-body{display:flex; flex-direction:column; gap:10px; padding: 14px; overflow:auto}
-.igdc-qa-field label{display:block; font:700 12px/1.2 var(--igdc-font); margin-bottom:6px; color:#333}
-.igdc-qa-text{
-  width:100%; max-width:100%; box-sizing:border-box; resize:vertical;
-  border:1px solid var(--old-border); border-radius:10px; padding:10px 12px;
-  font:500 14px var(--igdc-font); min-height:44px; background:#fffdf8;
-}
-.igdc-qa-text.q{ min-height: 96px; }
-.igdc-qa-text.a{ min-height: 128px; }
-.igdc-qa-actions{display:flex; gap:8px; align-items:center}
-.igdc-qa-btn{border:none; border-radius:10px; padding:10px 14px; font:700 14px; cursor:pointer}
-.igdc-qa-btn.primary{background:var(--blue); color:#fff}
-.igdc-qa-btn.muted{background:var(--muted); color:#fff}
-.igdc-qa-threads{display:flex; flex-direction:column; gap:10px; overflow:auto; border-top:1px solid var(--old-border); padding-top:10px}
-.igdc-qa-thread{border:1px solid var(--old-border); border-radius:12px; padding:10px 12px; background:#fffdf8}
-.igdc-qa-thread-q{font:700 13px/1.5 var(--igdc-font); color:#222}
-.igdc-qa-thread-a{font:13px/1.5 var(--igdc-font); color:#333; margin-top:6px}
-.igdc-qa-thread-meta{display:flex; gap:8px; align-items:center; color:#775; font:12px/1.2 var(--igdc-font); margin-top:8px}
-.igdc-qa-thread-actions{margin-left:auto; display:flex; gap:6px}
-.igdc-qa-note{font:12px/1.4 var(--igdc-font); color:#666}
-@media (max-width:900px){
-  .igdc-qa-panel{ left:calc(12px + var(--qa-left,0px)); width:min(92vw,560px) }
-}
-a[href^="mailto:"] {
-  color: #007bff;           /* 밝은 파란색 (Bootstrap 기본 블루톤) */
-  text-decoration: underline;
-}
-a[href^="mailto:"]:hover {
-  color: #0056b3;           /* hover 시 조금 더 짙은 파랑 */
-  text-decoration: underline;
-}
-</style>
-<style id="qna-brand-only">
-/* === Q&A sidebar link color only (no other changes) === */
-:root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
-.sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
-  display:block;
-  background: var(--qa-brand);
-  color:#fff !important;
-  border:1px solid var(--qa-brand-border);
-  border-radius:10px;
-}
-.sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
-</style>
-<script id="igdc-qa-safety-bootstrap">
-// Ensures the Q&A popup opens when clicking the sidebar link,
-// even if Supabase URL/Key are not configured yet.
-(function(){
-  if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
-  function ensureButton(){
-    var btn = document.getElementById('qnaOpenBtn');
-    if(!btn) return;
-    // If the main script exposed IGDC_QA, use it
-    btn.addEventListener('click', function(){
-      if (window.IGDC_QA && typeof window.IGDC_QA.open === 'function'){
-        window.IGDC_QA.open();
-        return;
-      }
-      // Fallback: if modal not in DOM, create a very small stub so user sees something
-      var modal = document.querySelector('.igdc-qa-modal');
-      if(!modal){
-        // create minimal skeleton matching the CSS already present
-        var m = document.createElement('div'); m.className='igdc-qa-modal';
-        var b = document.createElement('div'); b.className='igdc-qa-backdrop';
-        var p = document.createElement('div'); p.className='igdc-qa-panel';
-        var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
-        var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
-        h.appendChild(t); h.appendChild(x);
-        var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">连接存储设置（Supabase url/key）后将启用完整功能。</div>';
-        p.appendChild(h); p.appendChild(body);
-        m.appendChild(b); m.appendChild(p);
-        document.body.appendChild(m);
-        function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-        function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
-        x.addEventListener('click', close);
-        b.addEventListener('click', close);
-        // expose temporary open so later main script can reuse
-        window.IGDC_QA = window.IGDC_QA || {};
-        window.IGDC_QA.open = open;
-      }
-      // open (either stub or full impl)
-      if (window.IGDC_QA && typeof window.IGDC_QA.open==='function'){ window.IGDC_QA.open(); }
-    }, { passive:false });
-  }
-  if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', ensureButton, { once:true }); }
-  else { ensureButton(); }
-})();
-</script>
-<script id="igdc-qa-config">
-  (function () {
-    // 1) 민감정보 없는 기본 설정
-    const baseConfig = {
-      url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "",
-      project: "IGDC",
-      pageId: null,
-      aiEndpoint: null
-    };
-
-    // Supabase 환경을 SUPER_VARSAR에 적용하는 함수
-    function applyConfig(env) {
-      const url =
-        (env && env.SUPABASE_URL) ||
-        baseConfig.url;
-
-      const anonKey =
-        (env && env.SUPABASE_ANON_KEY) ||
-        "";
-
-      if (!anonKey) {
-        console.warn("[IGDC] Supabase anonKey is not configured.");
-      }
-
-      window.SUPER_VARSAR = Object.assign(
-        window.SUPER_VARSAR || {},
-        baseConfig,
-        {
-          url: url,
-          anonKey: anonKey
-        }
-      );
-    }
-
-    // 2) 이미 window.IGDC_ENV가 있다면(로컬 테스트 등) 그걸 우선 사용
-    if (window.IGDC_ENV &&
-        (window.IGDC_ENV.SUPABASE_ANON_KEY || window.IGDC_ENV.SUPABASE_URL)) {
-      applyConfig(window.IGDC_ENV);
-      return;
-    }
-
-    // 3) 없으면 Netlify Functions에서 환경변수 읽어오기
-    var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
-
-    fetch(endpoint, { cache: "no-store" })
-      .then(function (res) {
-        if (!res.ok) {
-          throw new Error("http " + res.status);
-        }
-        return res.json();
-      })
-      .then(function (data) {
-        var env = data && (data.env || data);
-        window.IGDC_ENV = Object.assign(window.IGDC_ENV || {}, env || {});
-        applyConfig(window.IGDC_ENV);
-        console.log("[IGDC] Supabase env loaded from secureEnvBridge.");
-      })
-      .catch(function (err) {
-        console.warn("[IGDC] Failed to load Supabase env:", err && err.message);
-        applyConfig(null);
-      });
-  })();
-</script>
-
-<script id="igdc-qa-script">
-(function(){
-  if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
-  const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
-  let isOpen=false, isAnimating=false;
-
-  function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
-  const fmtDate = (s)=> new Date(s).toLocaleString();
-  const nowISO = ()=> new Date().toISOString();
-  const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
-
-  function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
-  function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
-
-  async function ensureSupabase(){
-    if(STATE.sb) return STATE.sb;
-    const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
-    const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
-    if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
-      return null;
-    }
-    STATE.sb = window.supabase.createClient(url, key);
-    return STATE.sb;
-  }
-  async function ensureAuth(){
-    const sb = await ensureSupabase(); if(!sb) return;
-    let { data: { session } } = await sb.auth.getSession();
-    if(!session){
-      try{ await sb.auth.signInAnonymously(); }catch(e){}
-      ({ data: { session } } = await sb.auth.getSession());
-    }
-    if(session){
-      const uid = session.user.id;
-      const { data } = await sb.from("igdc_admins").select("uid").eq("uid", uid).limit(1);
-      STATE.user = session.user;
-      STATE.isAdmin = Array.isArray(data) && data.length>0;
-    }
-  }
-
-  function mountUI(){
-    const modal = el("div","igdc-qa-modal");
-    const backdrop = el("div","igdc-qa-backdrop");
-    const panel = el("div","igdc-qa-panel");
-    const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","닫기");
-    header.append(title, close);
-
-    const body = el("div","igdc-qa-body");
-    const lQ = el("label"); lQ.textContent="问题";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="请输入您的问题…";
-    const lA = el("label"); lA.textContent="回答";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="请稍候，我们会尽快回复。";
-    const actions = el("div","igdc-qa-actions");
-    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="提交";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="清除";
-    const note = el("div","igdc-qa-note"); note.textContent="※ 简单问题将由 AI 立即回答。技术/错误/运营相关问题会自动转交给管理员问答。";
-    const list = el("div","igdc-qa-threads");
-
-    body.append(lQ,tQ,lA,tA,actions,note,list);
-    actions.append(btnSubmit, btnClear);
-    panel.append(header, body);
-    modal.append(backdrop, panel);
-    document.body.append(modal);
-
-    // position near sidebar
-    function positionNearSidebar(){
-      try{
-        const sb = document.querySelector('.sidebar');
-        if(sb){
-          const rect = sb.getBoundingClientRect();
-          const left = Math.round(rect.right + 12);
-          panel.style.left = left + "px";
-        }
-      }catch(e){}
-    }
-    positionNearSidebar();
-    window.addEventListener('resize', positionNearSidebar);
-    window.addEventListener('scroll', positionNearSidebar, { passive:true });
-
-    function openModal(){
-      if(isAnimating || isOpen) return;
-      isAnimating = true;
-      modal.style.display = "block";
-      requestAnimationFrame(()=>{
-        modal.classList.add('open');
-        isOpen = true;
-        setTimeout(()=>{ isAnimating = false; }, 220);
-      });
-    }
-    function closeModal(){
-      if(isAnimating || !isOpen) return;
-      isAnimating = true;
-      modal.classList.remove('open');
-      setTimeout(()=>{
-        modal.style.display = "none";
-        isOpen = false;
-        isAnimating = false;
-      }, 220);
-    }
-
-    // Sidebar trigger
-    const sideBtn = document.querySelector('#qnaOpenBtn');
-    if(sideBtn){ sideBtn.addEventListener('click', openModal); }
-    close.addEventListener("click", closeModal);
-    backdrop.addEventListener("click", closeModal);
-    document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
-
-    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
-    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
-    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
-
-    async function fetchThreads(){
-      const sb = await ensureSupabase(); if(!sb) return;
-      const { data, error } = await sb.from("igdc_qna_threads")
-        .select("*")
-        .eq("project", STATE.project)
-        .eq("page_id", STATE.pageId)
-        .order("created_at", { ascending:false }).limit(100);
-      if(error){ console.error(error); return; }
-      renderList(data||[]);
-    }
-    function renderList(rows){
-      list.innerHTML="";
-      rows.forEach(row=>{
-        const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A.（待处理）";
-        const meta = el("div","igdc-qa-thread-meta");
-        const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "管理员请求":"一般";
-        const actions = el("div","igdc-qa-thread-actions");
-        const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
-        if(canDelete){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="删除";
-          del.addEventListener("click", async ()=>{
-            const sb = await ensureSupabase(); if(!sb) return;
-            const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("删除失败（权限/策略）"); return; }
-            await fetchThreads();
-          });
-          actions.append(del);
-        }
-        meta.append(time, tag, actions);
-        box.append(q,a,meta);
-        list.append(box);
-      });
-    }
-
-    async function autoAnswerIfNeeded(text){
-      const technical = classifyTech(text);
-      let answer = null;
-      if(!technical){
-        const ep = getAIEndpoint();
-        if(ep){
-          try{
-            const res = await fetch(ep,{method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({question:text, pageId: STATE.pageId})});
-            const j = await res.json(); answer = j && (j.answer||j.text||null);
-          }catch(e){}
-        }
-        if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="运营相关咨询将在管理员审核后回复。";
-          else if(/가격|비용|요금/.test(text)) answer="价格/费用详情请参考页面信息，如有需要可继续留言咨询。";
-          else answer="感谢您的咨询。我们会尽快查看并为您提供帮助。";
-        }
-      }
-      return { technical, answer };
-    }
-
-    async function submit(){
-      const q = (tQ.value||"").trim();
-      let a = (tA.value||"").trim();
-      if(!q){ tQ.focus(); return; }
-      const { technical, answer } = await autoAnswerIfNeeded(q);
-      if(!a && answer) a = answer;
-      const sb = await ensureSupabase();
-      if(!sb){
-        alert("存储设置（Supabase url/key）尚未连接，因此服务器端保存已禁用。部署到网页后，如配置 SUPER_VARSAR.url/anonKey，将自动连接。");
-        return;
-      }
-      const record = {
-        project: STATE.project, page_id: STATE.pageId,
-        user_id: (STATE.user && STATE.user.id) || null,
-        question: q, answer: a || null, is_admin: technical,
-        created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
-      };
-      const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("提交失败"); return; }
-      tQ.value=""; tA.value = a || "";
-      await fetchThreads();
-    }
-    btnSubmit.addEventListener("click", submit);
-
-    // realtime refresh
-    (async()=>{ try{
-      const sb = await ensureSupabase(); if(!sb) return;
-      sb.channel('igdc_qna_changes').on('postgres_changes',{event:'*',schema:'public',table:'igdc_qna_threads'}, fetchThreads).subscribe();
-    }catch(e){} })();
-
-    window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
-    fetchThreads();
-  }
-
-  async function boot(){
-  window.SUPER_VARSAR = window.SUPER_VARSAR || {};
-  STATE.project = (window.SUPER_VARSAR.project || "IGDC");
-  STATE.pageId = (window.SUPER_VARSAR.pageId || (location.pathname + (location.hash||"")));
-  // 1) Always mount UI so the popup can open
-  mountUI();
-  // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
-}
-if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
-})();
-</script>
-<script id="igdc-qa-final-fallback">
-(function(){
-  if (window.__IGDC_QA_FINAL__) return; window.__IGDC_QA_FINAL__ = true;
-  function ensure(){ 
-    var btn=document.getElementById('qnaOpenBtn'); if(!btn) return;
-    btn.addEventListener('click', function(){
-      try{
-        if(window.IGDC_QA && typeof window.IGDC_QA.open==='function'){ window.IGDC_QA.open(); return; }
-        // Create minimal modal if missing
-        var m=document.querySelector('.igdc-qa-modal'); if(!m){
-          var s=document.createElement('style');
-          s.textContent='.igdc-qa-modal{position:fixed;inset:0;z-index:2147483000;display:none}'
-           +'.igdc-qa-modal.open{display:block}'
-           +'.igdc-qa-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45)}'
-           +'.igdc-qa-panel{position:absolute;right:24px;top:64px;width:380px;max-width:92vw;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);overflow:hidden}'
-           +'.igdc-qa-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;font-weight:700;border-bottom:1px solid #eee}'
-           +'.igdc-qa-close{border:0;background:transparent;font-size:18px;cursor:pointer}'
-           +'.igdc-qa-body{padding:14px;}';
-          document.head.appendChild(s);
-          m=document.createElement('div'); m.className='igdc-qa-modal';
-          var b=document.createElement('div'); b.className='igdc-qa-backdrop';
-          var p=document.createElement('div'); p.className='igdc-qa-panel';
-          var h=document.createElement('div'); h.className='igdc-qa-header';
-          var t=document.createElement('div'); t.textContent='Q&A';
-          var x=document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
-          var body=document.createElement('div'); body.className='igdc-qa-body'; body.textContent='Q&A connection ready';
-          h.appendChild(t); h.appendChild(x); p.appendChild(h); p.appendChild(body);
-          m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
-          function close(){ m.classList.remove('open'); }
-          function open(){ m.classList.add('open'); }
-          x.addEventListener('click', close); b.addEventListener('click', close);
-          window.IGDC_QA = window.IGDC_QA || {}; window.IGDC_QA.open = open;
-        }
-        window.IGDC_QA.open();
-      }catch(e){ /* swallow */ }
-    }, { passive:false });
-  }
-  if (document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', ensure, { once:true }); }
-  else { ensure(); }
-})();
-</script>
 <script id="sidebar-active-script">
 (function(){
   function norm(u){
@@ -1593,181 +1238,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
   window.addEventListener("hashchange", run);
   window.addEventListener("popstate", run);
-})();
-</script>
-<script id="igdc-qa-ensure-modal">
-(function(){
-  if (window.__IGDC_QA_ENSURE__) return; window.__IGDC_QA_ENSURE__ = true;
-
-  function ensureModal(){
-    var modal = document.querySelector('.igdc-qa-modal');
-    if(!modal){
-      // minimal modal skeleton
-      var m = document.createElement('div'); m.className='igdc-qa-modal';
-      var b = document.createElement('div'); b.className='igdc-qa-backdrop';
-      var p = document.createElement('div'); p.className='igdc-qa-panel';
-      var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
-      var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
-      h.appendChild(t); h.appendChild(x);
-
-      var body = document.createElement('div'); body.className='igdc-qa-body';
-      body.innerHTML = '<div class="igdc-qa-note">连接存储设置（Supabase url/key）后将启用完整功能。</div>';
-
-      // ensure the "대표 이메일" is shown only inside the modal
-      var ce = document.createElement('p');
-      ce.className = 'contact-email';
-      ce.innerHTML = '代表邮箱: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-      body.appendChild(ce);
-
-      p.appendChild(h); p.appendChild(body);
-      m.appendChild(b); m.appendChild(p);
-      document.body.appendChild(m);
-
-      function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }
-      x.addEventListener('click', close);
-      b.addEventListener('click', close);
-
-      window.IGDC_QA = window.IGDC_QA || {};
-      if (!window.IGDC_QA.open) window.IGDC_QA.open = open;
-    }else{
-      // if exists, make sure contact email is present exactly once
-      var body = modal.querySelector('.igdc-qa-body') || modal;
-      if(body && !body.querySelector('.contact-email')){
-        var ce = document.createElement('p');
-        ce.className = 'contact-email';
-        ce.innerHTML = '代表邮箱: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        body.appendChild(ce);
-      }
-    }
-  }
-
-  function stripFooterEmail(){
-    try{
-      var footers = document.querySelectorAll('footer');
-      footers.forEach(function(f){
-        f.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
-          var parent = a.parentNode;
-          if(parent){
-            parent.removeChild(a);
-            var html = parent.innerHTML;
-            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
-            html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
-            parent.innerHTML = html;
-          }
-        });
-        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
-      });
-    }catch(e){}
-  }
-
-  function run(){
-    stripFooterEmail();
-    ensureModal();
-  }
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', run, {once:true});
-  } else {
-    run();
-  }
-})();
-</script>
-<script id="igdc-qa-email-ensure">
-(function(){
-  if (window.__IGDC_QA_EMAIL_ENSURE__) return;
-  window.__IGDC_QA_EMAIL_ENSURE__ = true;
-
-  var CONTACT_HTML = '代表邮箱: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-
-  function stripFooterEmail(){
-    try{
-      var footers = document.querySelectorAll('footer');
-      footers.forEach(function(f){
-        // Remove any mailto links
-        f.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
-          var parent = a.parentNode;
-          if(parent){
-            parent.removeChild(a);
-            var html = parent.innerHTML;
-            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
-            html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
-            parent.innerHTML = html;
-          }
-        });
-        // Remove any plain-text "联系邮箱： ..." remnants
-        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
-      });
-    }catch(e){}
-  }
-
-  function ensureModal(){
-    var modal = document.querySelector('.igdc-qa-modal');
-    if(!modal){
-      // Create minimal modal skeleton matching the site's QnA structure
-      var m = document.createElement('div'); m.className='igdc-qa-modal';
-      var b = document.createElement('div'); b.className='igdc-qa-backdrop';
-      var p = document.createElement('div'); p.className='igdc-qa-panel';
-      var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
-      var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
-      h.appendChild(t); h.appendChild(x);
-
-      var body = document.createElement('div'); body.className='igdc-qa-body';
-      var note = document.createElement('div'); note.className='igdc-qa-note';
-      note.textContent = '连接存储设置（Supabase url/key）后将启用完整功能。';
-      body.appendChild(note);
-
-      // (1) Inject the contact email in creation path
-      var ce = document.createElement('p');
-      ce.className = 'contact-email';
-      ce.innerHTML = CONTACT_HTML;
-      body.appendChild(ce);
-
-      
-      // (2) Q&A threads list container
-      var listWrap = document.createElement('div');
-      listWrap.className = 'igdc-qa-threads qna-list';
-      // Placeholder item container; IGDC_QA loader will populate. Empty-state CSS will show if nothing.
-      body.appendChild(listWrap);
-p.appendChild(h); p.appendChild(body);
-      m.appendChild(b); m.appendChild(p);
-      document.body.appendChild(m);
-
-      function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
-      x.addEventListener('click', close);
-      b.addEventListener('click', close);
-
-      window.IGDC_QA = window.IGDC_QA || {};
-      if (!window.IGDC_QA.open) window.IGDC_QA.open = open;
-    }else{
-      // (2) If modal exists already, ensure the contact email is present exactly once
-      var body = modal.querySelector('.igdc-qa-body') || modal;
-      if(body){
-        var exists = body.querySelector('.contact-email');
-        if(!exists){
-          var ce = document.createElement('p');
-          ce.className = 'contact-email';
-          ce.innerHTML = CONTACT_HTML;
-          body.appendChild(ce);
-        }
-      }
-    }
-  }
-
-
-  function run(){
-    stripFooterEmail();
-    ensureModal();
-    // keep FAB minimal; many files already include it
-  }
-
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', run, {once:true});
-  } else {
-    run();
-  }
 })();
 </script>
 <script src="/assets/js/igdc-core.min.js"></script>
@@ -1861,8 +1331,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>付款 QR 碼</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">關閉</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -1897,7 +1367,7 @@ window.addEventListener("message",function(ev){
   async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
     await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
-    ta.value=''; alert('Sent successfully.');
+    ta.value=''; alert('已成功送出。');
   }
   if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('Sending failed'));});
   const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
@@ -1952,7 +1422,7 @@ window.addEventListener("message",function(ev){
   - 나머지 4개 사이트 (Donation 제외, Media 제외)
  목적:
   - 썸네일 클릭 자동 감지
-  - 상세 상품 자동 오픈 훅
+  - 상세 Product 자동 오픈 훅
   - 구매하기 / 결제 / 장바구니 기존 버튼 그대로 사용
   - 상세 하단에 리뷰 시스템 자동 장착 (쿠팡 방식)
  --------------------------------------------------
@@ -1962,7 +1432,349 @@ window.addEventListener("message",function(ev){
   - window.__IGDC_ROLE 존재
  --------------------------------------------------
  삽입 위치:
-  - 각 페이지 </body> 바로 위
+  - 각 페이지 
+<script id="igdc-qa-config">
+  (function () {
+    // 1) 민감정보 없는 기본 설정
+    const baseConfig = {
+      url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "",
+      project: "IGDC",
+      pageId: null,
+      aiEndpoint: null
+    };
+
+    // Supabase 환경을 SUPER_VARSAR에 적용하는 함수
+    function applyConfig(env) {
+      const url =
+        (env && env.SUPABASE_URL) ||
+        baseConfig.url;
+
+      const anonKey =
+        (env && env.SUPABASE_ANON_KEY) ||
+        "";
+
+      if (!anonKey) {
+        console.warn("[IGDC] Supabase anonKey is not configured.");
+      }
+
+      window.SUPER_VARSAR = Object.assign(
+        window.SUPER_VARSAR || {},
+        baseConfig,
+        {
+          url: url,
+          anonKey: anonKey
+        }
+      );
+    }
+
+    // 2) 이미 window.IGDC_ENV가 있다면(로컬 테스트 등) 그걸 우선 사용
+    if (window.IGDC_ENV &&
+        (window.IGDC_ENV.SUPABASE_ANON_KEY || window.IGDC_ENV.SUPABASE_URL)) {
+      applyConfig(window.IGDC_ENV);
+      return;
+    }
+
+    // 3) 없으면 Netlify Functions에서 환경변수 읽어오기
+    var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
+
+    fetch(endpoint, { cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("http " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        var env = data && (data.env || data);
+        window.IGDC_ENV = Object.assign(window.IGDC_ENV || {}, env || {});
+        applyConfig(window.IGDC_ENV);
+        console.log("[IGDC] Supabase env loaded from secureEnvBridge.");
+      })
+      .catch(function (err) {
+        console.warn("[IGDC] Failed to load Supabase env:", err && err.message);
+        applyConfig(null);
+      });
+  })();
+</script>
+<script id="igdc-qa-script">
+(function(){
+  if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
+  const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
+  let isOpen=false, isAnimating=false;
+
+  function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
+  const fmtDate = (s)=> new Date(s).toLocaleString();
+  const nowISO = ()=> new Date().toISOString();
+  const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
+  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+
+  function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
+  function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
+
+  async function ensureSupabase(){
+    if(STATE.sb) return STATE.sb;
+    const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
+    const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
+    if(!url || !key || !window.supabase || !window.supabase.createClient){
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      return null;
+    }
+    STATE.sb = window.supabase.createClient(url, key);
+    return STATE.sb;
+  }
+  async function ensureAuth(){
+    const sb = await ensureSupabase(); if(!sb) return;
+    let { data: { session } } = await sb.auth.getSession();
+    if(!session){
+      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      ({ data: { session } } = await sb.auth.getSession());
+    }
+    if(session){
+      const uid = session.user.id;
+      const { data } = await sb.from("igdc_admins").select("uid").eq("uid", uid).limit(1);
+      STATE.user = session.user;
+      STATE.isAdmin = Array.isArray(data) && data.length>0;
+    }
+  }
+
+  function mountUI(){
+    const modal = el("div","igdc-qa-modal");
+    const backdrop = el("div","igdc-qa-backdrop");
+    const panel = el("div","igdc-qa-panel");
+    const header = el("div","igdc-qa-header");
+    const title = el("div","igdc-qa-title"); title.textContent = "問答諮詢";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","關閉");
+    header.append(title, close);
+
+    const body = el("div","igdc-qa-body");
+    const lQ = el("label"); lQ.textContent="問題";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="請輸入您的問題...";
+    const lA = el("label"); lA.textContent="回答";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="請稍候，我們將盡快回覆。";
+    const actions = el("div","igdc-qa-actions");
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="提交";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="清除";
+    const note = el("div","igdc-qa-note"); note.textContent="※ 簡單問題將由 AI 立即回答。技術、錯誤或營運相關問題會自動轉交給管理員問答。";
+    const list = el("div","igdc-qa-threads");
+
+    body.append(lQ,tQ,lA,tA,actions,note,list);
+	const ce = el("p","contact-email");
+    ce.innerHTML = '代表電子郵件: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+    body.append(ce);
+    actions.append(btnSubmit, btnClear);
+    panel.append(header, body);
+    modal.append(backdrop, panel);
+    document.body.append(modal);
+
+    // position near sidebar
+    function positionNearSidebar(){
+      try{
+        const sb = document.querySelector('.sidebar');
+        if(sb){
+          const rect = sb.getBoundingClientRect();
+          const left = Math.round(rect.right + 12);
+          panel.style.left = left + "px";
+        }
+      }catch(e){}
+    }
+    positionNearSidebar();
+    window.addEventListener('resize', positionNearSidebar);
+    window.addEventListener('scroll', positionNearSidebar, { passive:true });
+
+    function openModal(){
+      if(isAnimating || isOpen) return;
+      isAnimating = true;
+      modal.style.display = "block";
+      requestAnimationFrame(()=>{
+        modal.classList.add('open');
+        isOpen = true;
+        setTimeout(()=>{ isAnimating = false; }, 220);
+      });
+    }
+    function closeModal(){
+      if(isAnimating || !isOpen) return;
+      isAnimating = true;
+      modal.classList.remove('open');
+      setTimeout(()=>{
+        modal.style.display = "none";
+        isOpen = false;
+        isAnimating = false;
+      }, 220);
+    }
+
+    // Sidebar trigger
+    const sideBtn = document.querySelector('#qnaOpenBtn');
+    if(sideBtn){ sideBtn.addEventListener('click', openModal); }
+    close.addEventListener("click", closeModal);
+    backdrop.addEventListener("click", closeModal);
+    document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
+
+    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
+    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+
+    async function fetchThreads(){
+      const sb = await ensureSupabase(); if(!sb) return;
+      const { data, error } = await sb.from("igdc_qna_threads")
+        .select("*")
+        .eq("project", STATE.project)
+        .eq("page_id", STATE.pageId)
+        .order("created_at", { ascending:false }).limit(100);
+      if(error){ console.error(error); return; }
+      renderList(data||[]);
+    }
+    function renderList(rows){
+      list.innerHTML="";
+      rows.forEach(row=>{
+        const box = el("div","igdc-qa-thread");
+        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A.（待處理）";
+        const meta = el("div","igdc-qa-thread-meta");
+        const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
+        const tag = el("span"); tag.textContent = row.is_admin? "管理員請求" : "一般";
+        const actions = el("div","igdc-qa-thread-actions");
+        const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
+        if(canDelete){
+          const del = el("button","igdc-qa-btn muted"); del.textContent="刪除";
+          del.addEventListener("click", async ()=>{
+            const sb = await ensureSupabase(); if(!sb) return;
+            const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
+            if(error){ alert("Delete failed (permission/policy)"); return; }
+            await fetchThreads();
+          });
+          actions.append(del);
+        }
+        meta.append(time, tag, actions);
+        box.append(q,a,meta);
+        list.append(box);
+      });
+    }
+
+    async function autoAnswerIfNeeded(text){
+      const technical = classifyTech(text);
+      let answer = null;
+      if(!technical){
+        const ep = getAIEndpoint();
+        if(ep){
+          try{
+            const res = await fetch(ep,{method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({question:text, pageId: STATE.pageId})});
+            const j = await res.json(); answer = j && (j.answer||j.text||null);
+          }catch(e){}
+        }
+        if(!answer){
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="營運相關諮詢將在管理員審核後回覆。";
+          else if(/가격|비용|요금/.test(text)) answer="請參閱頁面上的價格/費用資訊。如有需要，請留下其他諮詢。";
+          else answer="感謝您的諮詢。我們會盡快審核並協助您。";
+        }
+      }
+      return { technical, answer };
+    }
+
+    async function submit(){
+      const q = (tQ.value||"").trim();
+      let a = (tA.value||"").trim();
+      if(!q){ tQ.focus(); return; }
+      const { technical, answer } = await autoAnswerIfNeeded(q);
+      if(!a && answer) a = answer;
+      const sb = await ensureSupabase();
+      if(!sb){
+        alert("Server-side saving is disabled because the save settings (Supabase url/key) are not connected yet. When deployed to the web, it will connect automatically if SUPER_VARSAR.url/anonKey is configured.");
+        return;
+      }
+      const record = {
+        project: STATE.project, page_id: STATE.pageId,
+        user_id: (STATE.user && STATE.user.id) || null,
+        question: q, answer: a || null, is_admin: technical,
+        created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
+      };
+      const { error } = await sb.from("igdc_qna_threads").insert(record);
+      if(error){ alert("Submission failed"); return; }
+      tQ.value=""; tA.value = a || "";
+      await fetchThreads();
+    }
+    btnSubmit.addEventListener("click", submit);
+
+    // realtime refresh
+    (async()=>{ try{
+      const sb = await ensureSupabase(); if(!sb) return;
+      sb.channel('igdc_qna_changes').on('postgres_changes',{event:'*',schema:'public',table:'igdc_qna_threads'}, fetchThreads).subscribe();
+    }catch(e){} })();
+
+    window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
+    fetchThreads();
+  }
+
+  async function boot(){
+  window.SUPER_VARSAR = window.SUPER_VARSAR || {};
+  STATE.project = (window.SUPER_VARSAR.project || "IGDC");
+  STATE.pageId = (window.SUPER_VARSAR.pageId || (location.pathname + (location.hash||"")));
+  // 1) Always mount UI so the popup can open
+  mountUI();
+  // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+}
+if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
+})();
+</script>
+<script id="igdc-qa-safety-bootstrap">
+// Ensures the Q&A popup opens when clicking the sidebar link,
+// even if Supabase URL/Key are not configured yet.
+(function(){
+  if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
+
+  function ensureButton(){
+    var btn = document.getElementById('qnaOpenBtn');
+    if(!btn) return;
+
+    btn.addEventListener('click', function(){
+      if (window.IGDC_QA && typeof window.IGDC_QA.open === 'function'){
+        window.IGDC_QA.open();
+        return;
+      }
+
+      var modal = document.querySelector('.igdc-qa-modal');
+      if(!modal){
+        var m = document.createElement('div'); m.className='igdc-qa-modal';
+        var b = document.createElement('div'); b.className='igdc-qa-backdrop';
+        var p = document.createElement('div'); p.className='igdc-qa-panel';
+        var h = document.createElement('div'); h.className='igdc-qa-header';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='問答諮詢';
+        var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
+        h.appendChild(t); h.appendChild(x);
+
+        var body = document.createElement('div'); body.className='igdc-qa-body';
+        body.innerHTML = '<div class="igdc-qa-note">※ 簡單問題將由 AI 立即回答。技術、錯誤或營運相關問題會自動轉交給管理員問答。</div>';
+
+        var ce = document.createElement('p');
+        ce.className = 'contact-email';
+        ce.innerHTML = '代表電子郵件: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+        body.appendChild(ce);
+
+        p.appendChild(h); p.appendChild(body);
+        m.appendChild(b); m.appendChild(p);
+        document.body.appendChild(m);
+
+        function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
+        function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
+        x.addEventListener('click', close);
+        b.addEventListener('click', close);
+
+        window.IGDC_QA = window.IGDC_QA || {};
+        window.IGDC_QA.open = open;
+      }
+
+      if (window.IGDC_QA && typeof window.IGDC_QA.open==='function'){ window.IGDC_QA.open(); }
+    }, { passive:false });
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', ensureButton, { once:true });
+  } else {
+    ensureButton();
+  }
+})();
+</script>
+</body> 바로 위
 */
 
 (function (window, document) {
@@ -1995,7 +1807,7 @@ window.addEventListener("message",function(ev){
         const productId = card.dataset.productId;
         if (!productId) return;
 
-        // 기존 상세 상품 오픈 로직은 이미 각 페이지에 있음
+        // 기존 상세 Product 오픈 로직은 이미 각 페이지에 있음
         // 여기서는 리뷰만 자동 부착
         setTimeout(() => {
           this.mountReview(productId);
@@ -2043,7 +1855,7 @@ window.addEventListener("message",function(ev){
       return `
         <form id="igdc-review-form" class="igdc-review-form">
           <textarea
-            placeholder="Please share your experience using the product."
+            placeholder="請分享您使用產品的體驗。"
             minlength="${this.config.minReviewChars}"
             maxlength="${this.config.maxReviewChars}"
             required></textarea>
@@ -2071,7 +1883,7 @@ window.addEventListener("message",function(ev){
         const content = textarea.value.trim();
 
         if (content.length < this.config.minReviewChars) {
-          alert(`리뷰는 최소 ${this.config.minReviewChars}자 이상 작성해 주세요.`);
+          alert(`Reviews must be at least ${this.config.minReviewChars} characters long.`);
           return;
         }
 
@@ -2080,7 +1892,7 @@ window.addEventListener("message",function(ev){
             textarea.value = '';
             this.loadReviews(productId);
           })
-          .catch(() => alert('리뷰 Submission failed'));
+          .catch(() => alert('評論提交失敗。'));
       });
     },
 
@@ -2098,13 +1910,13 @@ window.addEventListener("message",function(ev){
         const data = await res.json();
 
         if (!Array.isArray(data) || data.length === 0) {
-          list.innerHTML = '<div class="igdc-review-empty">No reviews yet.</div>';
+          list.innerHTML = '<div class="igdc-review-empty">尚無評論。</div>';
           return;
         }
 
         list.innerHTML = data.map(this.renderReviewItem).join('');
       } catch {
-        list.textContent = 'Failed to load reviews.';
+        list.textContent = '無法載入評論。';
       }
     },
 
@@ -2303,5 +2115,347 @@ window.addEventListener("message",function(ev){
 <script src="/assets/js/maru-search.js"></script>
 <script src="/assets/js/maru-searchbank-sync.js"></script>
 
+
+<script id="igdc-qa-config">
+  (function () {
+    // 1) 민감정보 없는 기본 설정
+    const baseConfig = {
+      url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "",
+      project: "IGDC",
+      pageId: null,
+      aiEndpoint: null
+    };
+
+    // Supabase 환경을 SUPER_VARSAR에 적용하는 함수
+    function applyConfig(env) {
+      const url =
+        (env && env.SUPABASE_URL) ||
+        baseConfig.url;
+
+      const anonKey =
+        (env && env.SUPABASE_ANON_KEY) ||
+        "";
+
+      if (!anonKey) {
+        console.warn("[IGDC] Supabase anonKey is not configured.");
+      }
+
+      window.SUPER_VARSAR = Object.assign(
+        window.SUPER_VARSAR || {},
+        baseConfig,
+        {
+          url: url,
+          anonKey: anonKey
+        }
+      );
+    }
+
+    // 2) 이미 window.IGDC_ENV가 있다면(로컬 테스트 등) 그걸 우선 사용
+    if (window.IGDC_ENV &&
+        (window.IGDC_ENV.SUPABASE_ANON_KEY || window.IGDC_ENV.SUPABASE_URL)) {
+      applyConfig(window.IGDC_ENV);
+      return;
+    }
+
+    // 3) 없으면 Netlify Functions에서 환경변수 읽어오기
+    var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
+
+    fetch(endpoint, { cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("http " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        var env = data && (data.env || data);
+        window.IGDC_ENV = Object.assign(window.IGDC_ENV || {}, env || {});
+        applyConfig(window.IGDC_ENV);
+        console.log("[IGDC] Supabase env loaded from secureEnvBridge.");
+      })
+      .catch(function (err) {
+        console.warn("[IGDC] Failed to load Supabase env:", err && err.message);
+        applyConfig(null);
+      });
+  })();
+</script>
+<script id="igdc-qa-script">
+(function(){
+  if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
+  const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
+  let isOpen=false, isAnimating=false;
+
+  function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
+  const fmtDate = (s)=> new Date(s).toLocaleString();
+  const nowISO = ()=> new Date().toISOString();
+  const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
+  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+
+  function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
+  function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
+
+  async function ensureSupabase(){
+    if(STATE.sb) return STATE.sb;
+    const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
+    const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
+    if(!url || !key || !window.supabase || !window.supabase.createClient){
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      return null;
+    }
+    STATE.sb = window.supabase.createClient(url, key);
+    return STATE.sb;
+  }
+  async function ensureAuth(){
+    const sb = await ensureSupabase(); if(!sb) return;
+    let { data: { session } } = await sb.auth.getSession();
+    if(!session){
+      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      ({ data: { session } } = await sb.auth.getSession());
+    }
+    if(session){
+      const uid = session.user.id;
+      const { data } = await sb.from("igdc_admins").select("uid").eq("uid", uid).limit(1);
+      STATE.user = session.user;
+      STATE.isAdmin = Array.isArray(data) && data.length>0;
+    }
+  }
+
+  function mountUI(){
+    const modal = el("div","igdc-qa-modal");
+    const backdrop = el("div","igdc-qa-backdrop");
+    const panel = el("div","igdc-qa-panel");
+    const header = el("div","igdc-qa-header");
+    const title = el("div","igdc-qa-title"); title.textContent = "問答諮詢";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","關閉");
+    header.append(title, close);
+
+    const body = el("div","igdc-qa-body");
+    const lQ = el("label"); lQ.textContent="問題";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="請輸入您的問題...";
+    const lA = el("label"); lA.textContent="回答";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="請稍候，我們將盡快回覆。";
+    const actions = el("div","igdc-qa-actions");
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="提交";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="清除";
+    const note = el("div","igdc-qa-note"); note.textContent="※ 簡單問題將由 AI 立即回答。技術、錯誤或營運相關問題會自動轉交給管理員問答。";
+    const list = el("div","igdc-qa-threads");
+
+    body.append(lQ,tQ,lA,tA,actions,note,list);
+	const ce = el("p","contact-email");
+    ce.innerHTML = '代表電子郵件: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+    body.append(ce);
+    actions.append(btnSubmit, btnClear);
+    panel.append(header, body);
+    modal.append(backdrop, panel);
+    document.body.append(modal);
+
+    // position near sidebar
+    function positionNearSidebar(){
+      try{
+        const sb = document.querySelector('.sidebar');
+        if(sb){
+          const rect = sb.getBoundingClientRect();
+          const left = Math.round(rect.right + 12);
+          panel.style.left = left + "px";
+        }
+      }catch(e){}
+    }
+    positionNearSidebar();
+    window.addEventListener('resize', positionNearSidebar);
+    window.addEventListener('scroll', positionNearSidebar, { passive:true });
+
+    function openModal(){
+      if(isAnimating || isOpen) return;
+      isAnimating = true;
+      modal.style.display = "block";
+      requestAnimationFrame(()=>{
+        modal.classList.add('open');
+        isOpen = true;
+        setTimeout(()=>{ isAnimating = false; }, 220);
+      });
+    }
+    function closeModal(){
+      if(isAnimating || !isOpen) return;
+      isAnimating = true;
+      modal.classList.remove('open');
+      setTimeout(()=>{
+        modal.style.display = "none";
+        isOpen = false;
+        isAnimating = false;
+      }, 220);
+    }
+
+    // Sidebar trigger
+    const sideBtn = document.querySelector('#qnaOpenBtn');
+    if(sideBtn){ sideBtn.addEventListener('click', openModal); }
+    close.addEventListener("click", closeModal);
+    backdrop.addEventListener("click", closeModal);
+    document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
+
+    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
+    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+
+    async function fetchThreads(){
+      const sb = await ensureSupabase(); if(!sb) return;
+      const { data, error } = await sb.from("igdc_qna_threads")
+        .select("*")
+        .eq("project", STATE.project)
+        .eq("page_id", STATE.pageId)
+        .order("created_at", { ascending:false }).limit(100);
+      if(error){ console.error(error); return; }
+      renderList(data||[]);
+    }
+    function renderList(rows){
+      list.innerHTML="";
+      rows.forEach(row=>{
+        const box = el("div","igdc-qa-thread");
+        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A.（待處理）";
+        const meta = el("div","igdc-qa-thread-meta");
+        const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
+        const tag = el("span"); tag.textContent = row.is_admin? "管理員請求" : "一般";
+        const actions = el("div","igdc-qa-thread-actions");
+        const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
+        if(canDelete){
+          const del = el("button","igdc-qa-btn muted"); del.textContent="刪除";
+          del.addEventListener("click", async ()=>{
+            const sb = await ensureSupabase(); if(!sb) return;
+            const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
+            if(error){ alert("Delete failed (permission/policy)"); return; }
+            await fetchThreads();
+          });
+          actions.append(del);
+        }
+        meta.append(time, tag, actions);
+        box.append(q,a,meta);
+        list.append(box);
+      });
+    }
+
+    async function autoAnswerIfNeeded(text){
+      const technical = classifyTech(text);
+      let answer = null;
+      if(!technical){
+        const ep = getAIEndpoint();
+        if(ep){
+          try{
+            const res = await fetch(ep,{method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({question:text, pageId: STATE.pageId})});
+            const j = await res.json(); answer = j && (j.answer||j.text||null);
+          }catch(e){}
+        }
+        if(!answer){
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="營運相關諮詢將在管理員審核後回覆。";
+          else if(/가격|비용|요금/.test(text)) answer="請參閱頁面上的價格/費用資訊。如有需要，請留下其他諮詢。";
+          else answer="感謝您的諮詢。我們會盡快審核並協助您。";
+        }
+      }
+      return { technical, answer };
+    }
+
+    async function submit(){
+      const q = (tQ.value||"").trim();
+      let a = (tA.value||"").trim();
+      if(!q){ tQ.focus(); return; }
+      const { technical, answer } = await autoAnswerIfNeeded(q);
+      if(!a && answer) a = answer;
+      const sb = await ensureSupabase();
+      if(!sb){
+        alert("Server-side saving is disabled because the save settings (Supabase url/key) are not connected yet. When deployed to the web, it will connect automatically if SUPER_VARSAR.url/anonKey is configured.");
+        return;
+      }
+      const record = {
+        project: STATE.project, page_id: STATE.pageId,
+        user_id: (STATE.user && STATE.user.id) || null,
+        question: q, answer: a || null, is_admin: technical,
+        created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
+      };
+      const { error } = await sb.from("igdc_qna_threads").insert(record);
+      if(error){ alert("Submission failed"); return; }
+      tQ.value=""; tA.value = a || "";
+      await fetchThreads();
+    }
+    btnSubmit.addEventListener("click", submit);
+
+    // realtime refresh
+    (async()=>{ try{
+      const sb = await ensureSupabase(); if(!sb) return;
+      sb.channel('igdc_qna_changes').on('postgres_changes',{event:'*',schema:'public',table:'igdc_qna_threads'}, fetchThreads).subscribe();
+    }catch(e){} })();
+
+    window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
+    fetchThreads();
+  }
+
+  async function boot(){
+  window.SUPER_VARSAR = window.SUPER_VARSAR || {};
+  STATE.project = (window.SUPER_VARSAR.project || "IGDC");
+  STATE.pageId = (window.SUPER_VARSAR.pageId || (location.pathname + (location.hash||"")));
+  // 1) Always mount UI so the popup can open
+  mountUI();
+  // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+}
+if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
+})();
+</script>
+<script id="igdc-qa-safety-bootstrap">
+// Ensures the Q&A popup opens when clicking the sidebar link,
+// even if Supabase URL/Key are not configured yet.
+(function(){
+  if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
+
+  function ensureButton(){
+    var btn = document.getElementById('qnaOpenBtn');
+    if(!btn) return;
+
+    btn.addEventListener('click', function(){
+      if (window.IGDC_QA && typeof window.IGDC_QA.open === 'function'){
+        window.IGDC_QA.open();
+        return;
+      }
+
+      var modal = document.querySelector('.igdc-qa-modal');
+      if(!modal){
+        var m = document.createElement('div'); m.className='igdc-qa-modal';
+        var b = document.createElement('div'); b.className='igdc-qa-backdrop';
+        var p = document.createElement('div'); p.className='igdc-qa-panel';
+        var h = document.createElement('div'); h.className='igdc-qa-header';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='問答諮詢';
+        var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
+        h.appendChild(t); h.appendChild(x);
+
+        var body = document.createElement('div'); body.className='igdc-qa-body';
+        body.innerHTML = '<div class="igdc-qa-note">※ 簡單問題將由 AI 立即回答。技術、錯誤或營運相關問題會自動轉交給管理員問答。</div>';
+
+        var ce = document.createElement('p');
+        ce.className = 'contact-email';
+        ce.innerHTML = '代表電子郵件: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+        body.appendChild(ce);
+
+        p.appendChild(h); p.appendChild(body);
+        m.appendChild(b); m.appendChild(p);
+        document.body.appendChild(m);
+
+        function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
+        function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
+        x.addEventListener('click', close);
+        b.addEventListener('click', close);
+
+        window.IGDC_QA = window.IGDC_QA || {};
+        window.IGDC_QA.open = open;
+      }
+
+      if (window.IGDC_QA && typeof window.IGDC_QA.open==='function'){ window.IGDC_QA.open(); }
+    }, { passive:false });
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', ensureButton, { once:true });
+  } else {
+    ensureButton();
+  }
+})();
+</script>
 </body>
 </html>
