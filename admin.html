@@ -2818,7 +2818,79 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
   });
 })();
 </script>
+<script id="admin-parent-header-bridge">
+(function(){
+  var lastY = 0;
+  var ticking = false;
 
+  function isMobile(){
+    return window.matchMedia('(max-width: 1024px)').matches;
+  }
+
+  function inIframe(){
+    try { return window.parent && window.parent !== window; }
+    catch(e){ return false; }
+  }
+
+  function setParentCollapsed(collapsed){
+    try{
+      if (!inIframe()) return;
+
+      var pdoc = window.parent.document;
+      var pbody = pdoc.body;
+      var pheader = pdoc.querySelector('header');
+
+      if (!pbody || !pheader) return;
+
+      if (collapsed) {
+        pbody.classList.add('igdc-fixed-collapsed');
+        pdoc.documentElement.style.setProperty('--igdc-head-h', '0px');
+      } else {
+        pbody.classList.remove('igdc-fixed-collapsed');
+        var h = Math.max(0, Math.round(pheader.getBoundingClientRect().height || 0));
+        pdoc.documentElement.style.setProperty('--igdc-head-h', h + 'px');
+      }
+    }catch(e){}
+  }
+
+  function onScroll(){
+    if (!isMobile()) return;
+    if (ticking) return;
+
+    ticking = true;
+    requestAnimationFrame(function(){
+      var y = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+
+      if (y > lastY + 8 && y > 24) {
+        setParentCollapsed(true);
+      } else if (y < lastY - 8 || y <= 10) {
+        setParentCollapsed(false);
+      }
+
+      lastY = y;
+      ticking = false;
+    });
+  }
+
+  function init(){
+    if (!inIframe()) return;
+    lastY = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+
+    window.addEventListener('scroll', onScroll, { passive:true });
+    window.addEventListener('resize', function(){
+      if (!isMobile()) setParentCollapsed(false);
+    }, { passive:true });
+
+    onScroll();
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init, { once:true });
+  } else {
+    init();
+  }
+})();
+</script>
 
 <!-- 1. libs -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
