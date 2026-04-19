@@ -481,6 +481,14 @@
     cursor: pointer !important;
   }
 </style>
+<style id="embedded-restore-scroll">
+html, body {
+  overflow-y: auto !important;
+  height: auto;
+  min-height: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+</style>
 
 <link rel="stylesheet" href="/assets/css/common.css">
 
@@ -2816,131 +2824,6 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
       btn.classList.remove('igdc-blink');
     }, 800);
   });
-})();
-</script>
-<script id="admin-parent-header-bridge">
-(function(){
-  'use strict';
-
-  if (window.top === window) return;
-
-  var lastY = 0;
-  var touchStartY = 0;
-  var maxPull = 0;
-  var pullTracking = false;
-
-  function isMobilePortrait(){
-    return window.matchMedia('(max-width: 1024px) and (orientation: portrait)').matches;
-  }
-
-  function getY(){
-    return window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
-  }
-
-  function getParentParts(){
-    try{
-      return {
-        doc: window.parent.document,
-        html: window.parent.document.documentElement,
-        body: window.parent.document.body,
-        header: window.parent.document.querySelector('header')
-      };
-    }catch(e){
-      return null;
-    }
-  }
-
-  function expandParent(){
-    var p = getParentParts();
-    if (!p || !p.html || !p.body || !p.header) return;
-
-    var h = Math.max(0, Math.round(p.header.getBoundingClientRect().height || 0));
-
-    p.body.classList.remove('igdc-fixed-collapsed');
-    p.body.classList.remove('igdc-collapsed');
-    p.html.style.setProperty('--igdc-head-h', h + 'px');
-    p.body.style.setProperty('--igdc-header-h', h + 'px');
-  }
-
-  function collapseParent(){
-    var p = getParentParts();
-    if (!p || !p.html || !p.body) return;
-
-    p.body.classList.add('igdc-fixed-collapsed');
-    p.html.style.setProperty('--igdc-head-h', '0px');
-    p.body.style.setProperty('--igdc-header-h', '0px');
-  }
-
-  function onScroll(){
-    if (!isMobilePortrait()){
-      expandParent();
-      return;
-    }
-
-    var y = getY();
-
-    if (y > lastY + 8 && y > 24){
-      collapseParent();
-    } else if (y < lastY - 8 && y <= 10){
-      expandParent();
-    }
-
-    lastY = y;
-  }
-
-  function onTouchStart(ev){
-    if (!isMobilePortrait()) return;
-    if (!ev.touches || !ev.touches[0]) return;
-
-    touchStartY = ev.touches[0].clientY;
-    maxPull = 0;
-    pullTracking = (getY() <= 4);
-  }
-
-  function onTouchMove(ev){
-    if (!pullTracking) return;
-    if (!ev.touches || !ev.touches[0]) return;
-
-    var dy = ev.touches[0].clientY - touchStartY;
-    if (dy > maxPull) maxPull = dy;
-  }
-
-  function onTouchEnd(){
-    if (!isMobilePortrait()) return;
-
-    if (pullTracking && maxPull >= 44){
-      expandParent();
-      lastY = 0;
-    }
-
-    pullTracking = false;
-    maxPull = 0;
-  }
-
-  function init(){
-    lastY = getY();
-
-    window.addEventListener('scroll', onScroll, { passive:true });
-    document.addEventListener('touchstart', onTouchStart, { passive:true });
-    document.addEventListener('touchmove', onTouchMove, { passive:true });
-    document.addEventListener('touchend', onTouchEnd, { passive:true });
-
-    window.addEventListener('resize', function(){
-      if (!isMobilePortrait()) expandParent();
-    }, { passive:true });
-
-    window.addEventListener('orientationchange', function(){
-      setTimeout(function(){
-        if (!isMobilePortrait()) expandParent();
-      }, 120);
-    }, { passive:true });
-  }
-
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', init, { once:true });
-  } else {
-    init();
-  }
 })();
 </script>
 
