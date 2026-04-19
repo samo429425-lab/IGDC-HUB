@@ -706,7 +706,7 @@ nav{transition:transform .1s ease;}
 <style id="mobileQnaLinkStyle">
 /* Mobile-only circular Q&A button (top-left) */
 #mobileQnaLink{
-  position:fixed; top:10px; left:10px; z-index:10050;
+  position:absolute; top:0; left:0; z-index:10050;
   display:none;
   width:46px; height:46px; border-radius:50%;
   background:#0a3d91; color:#ffffff; text-decoration:none;
@@ -750,11 +750,10 @@ nav{transition:transform .1s ease;}
 </style>
 </head>
 <body>
-<!-- Mobile-only circular Q&A button -->
-<a id="mobileQnaLink" href="#" aria-label="Q&A">Q&A</a>
 <button id="osLoginBtn" type="button">OS‑Login</button><script>(function(){document.addEventListener("DOMContentLoaded",function(){document.documentElement.classList.remove("prelayout");var s=document.getElementById("prelayout-guard"); if(s&&s.parentNode){s.parentNode.removeChild(s);}});})();</script>
 <!-- (removed local modal login blocks for Auth0) -->
 <header>
+<a id="mobileQnaLink" href="#" aria-label="Q&A">Q&A</a>
 <h1 id="mainTitle">IGDC 글로벌 허브</h1>
 <p id="subTitle">International General Distribution Company</p>
 <select class="language-select" onchange="changeLanguage(this.value)">

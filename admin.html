@@ -481,14 +481,6 @@
     cursor: pointer !important;
   }
 </style>
-<style id="embedded-restore-scroll">
-html, body {
-  overflow-y: auto !important;
-  height: auto;
-  min-height: 100%;
-  -webkit-overflow-scrolling: touch;
-}
-</style>
 
 <link rel="stylesheet" href="/assets/css/common.css">
 
@@ -2824,6 +2816,26 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
       btn.classList.remove('igdc-blink');
     }, 800);
   });
+})();
+</script>
+<script src="frontbus.child.js"></script>
+<script>
+(function(){
+  try{
+    function notify(top){
+      parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*');
+    }
+    function atTop(){
+      var se=document.scrollingElement||document.documentElement||document.body;
+      return (window.scrollY||window.pageYOffset||0)<=0 && (se?(se.scrollTop||0)<=0:true);
+    }
+    function onAnyScroll(){ notify(atTop()); }
+    window.addEventListener('scroll', onAnyScroll, {passive:true});
+    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
+    document.addEventListener('wheel', function(e){ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
+    document.addEventListener('touchmove', function(){ notify(false); }, {passive:true,capture:true});
+    setTimeout(function(){ notify(atTop()); }, 50);
+  }catch(_){ }
 })();
 </script>
 
