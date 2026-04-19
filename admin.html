@@ -2820,68 +2820,120 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
 </script>
 <script id="admin-parent-header-bridge">
 (function(){
+  'use strict';
+
+  if (window.top === window) return;
+
   var lastY = 0;
-  var ticking = false;
+  var touchStartY = 0;
+  var maxPull = 0;
+  var pullTracking = false;
 
-  function isMobile(){
-    return window.matchMedia('(max-width: 1024px)').matches;
+  function isMobilePortrait(){
+    return window.matchMedia('(max-width: 1024px) and (orientation: portrait)').matches;
   }
 
-  function inIframe(){
-    try { return window.parent && window.parent !== window; }
-    catch(e){ return false; }
+  function getY(){
+    return window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
   }
 
-  function setParentCollapsed(collapsed){
+  function getParentParts(){
     try{
-      if (!inIframe()) return;
+      return {
+        doc: window.parent.document,
+        html: window.parent.document.documentElement,
+        body: window.parent.document.body,
+        header: window.parent.document.querySelector('header')
+      };
+    }catch(e){
+      return null;
+    }
+  }
 
-      var pdoc = window.parent.document;
-      var pbody = pdoc.body;
-      var pheader = pdoc.querySelector('header');
+  function expandParent(){
+    var p = getParentParts();
+    if (!p || !p.html || !p.body || !p.header) return;
 
-      if (!pbody || !pheader) return;
+    var h = Math.max(0, Math.round(p.header.getBoundingClientRect().height || 0));
 
-      if (collapsed) {
-        pbody.classList.add('igdc-fixed-collapsed');
-        pdoc.documentElement.style.setProperty('--igdc-head-h', '0px');
-      } else {
-        pbody.classList.remove('igdc-fixed-collapsed');
-        var h = Math.max(0, Math.round(pheader.getBoundingClientRect().height || 0));
-        pdoc.documentElement.style.setProperty('--igdc-head-h', h + 'px');
-      }
-    }catch(e){}
+    p.body.classList.remove('igdc-fixed-collapsed');
+    p.body.classList.remove('igdc-collapsed');
+    p.html.style.setProperty('--igdc-head-h', h + 'px');
+    p.body.style.setProperty('--igdc-header-h', h + 'px');
+  }
+
+  function collapseParent(){
+    var p = getParentParts();
+    if (!p || !p.html || !p.body) return;
+
+    p.body.classList.add('igdc-fixed-collapsed');
+    p.html.style.setProperty('--igdc-head-h', '0px');
+    p.body.style.setProperty('--igdc-header-h', '0px');
   }
 
   function onScroll(){
-    if (!isMobile()) return;
-    if (ticking) return;
+    if (!isMobilePortrait()){
+      expandParent();
+      return;
+    }
 
-    ticking = true;
-    requestAnimationFrame(function(){
-      var y = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+    var y = getY();
 
-      if (y > lastY + 8 && y > 24) {
-        setParentCollapsed(true);
-      } else if (y < lastY - 8 || y <= 10) {
-        setParentCollapsed(false);
-      }
+    if (y > lastY + 8 && y > 24){
+      collapseParent();
+    } else if (y < lastY - 8 && y <= 10){
+      expandParent();
+    }
 
-      lastY = y;
-      ticking = false;
-    });
+    lastY = y;
+  }
+
+  function onTouchStart(ev){
+    if (!isMobilePortrait()) return;
+    if (!ev.touches || !ev.touches[0]) return;
+
+    touchStartY = ev.touches[0].clientY;
+    maxPull = 0;
+    pullTracking = (getY() <= 4);
+  }
+
+  function onTouchMove(ev){
+    if (!pullTracking) return;
+    if (!ev.touches || !ev.touches[0]) return;
+
+    var dy = ev.touches[0].clientY - touchStartY;
+    if (dy > maxPull) maxPull = dy;
+  }
+
+  function onTouchEnd(){
+    if (!isMobilePortrait()) return;
+
+    if (pullTracking && maxPull >= 44){
+      expandParent();
+      lastY = 0;
+    }
+
+    pullTracking = false;
+    maxPull = 0;
   }
 
   function init(){
-    if (!inIframe()) return;
-    lastY = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+    lastY = getY();
 
     window.addEventListener('scroll', onScroll, { passive:true });
+    document.addEventListener('touchstart', onTouchStart, { passive:true });
+    document.addEventListener('touchmove', onTouchMove, { passive:true });
+    document.addEventListener('touchend', onTouchEnd, { passive:true });
+
     window.addEventListener('resize', function(){
-      if (!isMobile()) setParentCollapsed(false);
+      if (!isMobilePortrait()) expandParent();
     }, { passive:true });
 
-    onScroll();
+    window.addEventListener('orientationchange', function(){
+      setTimeout(function(){
+        if (!isMobilePortrait()) expandParent();
+      }, 120);
+    }, { passive:true });
   }
 
   if (document.readyState === 'loading'){
