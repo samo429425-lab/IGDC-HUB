@@ -1174,12 +1174,12 @@ html, body {
 <script>(function(){document.addEventListener("DOMContentLoaded",function(){document.documentElement.classList.remove("prelayout");var s=document.getElementById("prelayout-guard");if(s&&s.parentNode){s.parentNode.removeChild(s);}});})();</script>
 <div class="layout">
 <aside class="sidebar">
-<a href="home.html">🏠 Startseite</a>
-<a href="networkhub.html">🛒 Marktplatz-Hub</a>
-<a href="distributionhub.html">🏭 Vertriebs-Hub</a>
-<a href="socialnetwork.html">📢 Soziales Netzwerk</a>
-<a href="mediahub.html">🎬 Medien-Hub</a>
-<a href="tour.html">🧳 Reisen · Tourismus · Unterkunft</a>
+<a href="home_de.html">🏠 Startseite</a>
+<a href="networkhub_de.html">🛒 Marktplatz-Hub</a>
+<a href="distributionhub_de.html">🏭 Vertriebs-Hub</a>
+<a href="socialnetwork_de.html">📢 Soziales Netzwerk</a>
+<a href="mediahub_de.html">🎬 Medien-Hub</a>
+<a href="tour_de.html">🧳 Reisen · Tourismus · Unterkunft</a>
 <a href="literature_academic.html">📚 Literatur- & Akademischer Austausch</a>
 <a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A Anfrage</a></aside>
 <main>
@@ -3705,7 +3705,7 @@ function handleVideoSearch(e){
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">Die vollständigen Funktionen werden aktiviert, sobald die Speichereinstellungen (Supabase url/key) verbunden sind.</div>';
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
         document.body.appendChild(m);
@@ -3799,7 +3799,7 @@ function handleVideoSearch(e){
   const fmtDate = (s)=> new Date(s).toLocaleString();
   const nowISO = ()=> new Date().toISOString();
   const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+  const classifyTech = (t)=> /admin|administrator|betrieb|operat|einstellung|konfig|bereitstellung|deploy|fehler|bug|laden|api|integration|server|datenbank|db|berechtigung|richtlinie|anmeldung|login|token|schl(?:u|ü)ssel|key|zahlung|sicherheit|cors|netzwerk|timeout|antwortcode|statuscode|build|kompil|kaputt|funktioniert\s*nicht|stopp|seite|link|fehlfunktion|관리자|운영|설정|배포|에러|오류|버그|로딩|연동|서버|데이터베이스|권한|정책|로그인|토큰|키|결제|보안|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|오작동/i.test(t||'');
 
   function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
   function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
@@ -3955,8 +3955,8 @@ function handleVideoSearch(e){
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="Betriebliche Anfragen werden nach Prüfung durch den Administrator beantwortet.";
-          else if(/가격|비용|요금/.test(text)) answer="Bitte beachten Sie die Informationen auf dieser Seite zu Preisen und Gebühren. Hinterlassen Sie bei Bedarf eine zusätzliche Frage.";
+          if(/zeit|öffnungszeit|oeffnungszeit|betriebszeit|stunden|kontakt|anfrage|문의|시간|운영시간|오픈/i.test(text)) answer="Betriebliche Anfragen werden nach Prüfung durch den Administrator beantwortet.";
+          else if(/preis|kosten|gebühr|gebuehr|price|cost|fee|가격|비용|요금/i.test(text)) answer="Bitte beachten Sie die Informationen auf dieser Seite zu Preisen und Gebühren. Hinterlassen Sie bei Bedarf eine zusätzliche Frage.";
           else answer="Vielen Dank für Ihre Anfrage. Wir werden sie prüfen und Ihnen zeitnah helfen.";
         }
       }
@@ -4500,7 +4500,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     body.innerHTML =
       '<div class="igdc-qa-note">' +
-      '저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.' +
+      'Die vollständigen Funktionen werden aktiviert, sobald die Speichereinstellungen (Supabase url/key) verbunden sind.' +
       '</div>';
 
     var email = document.createElement('p');
@@ -4566,13 +4566,11 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   if (window.__IGDC_QA_EMAIL_ENSURE__) return;
   window.__IGDC_QA_EMAIL_ENSURE__ = true;
 
-  var CONTACT_HTML = 'Kontakt-E-Mail: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+  var CONTACT_HTML = 'Primäre E-Mail: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
 
   function stripFooterEmail(){
     try{
-      var footers = document.querySelectorAll('footer');
-      footers.forEach(function(f){
-        // Remove any mailto links
+      document.querySelectorAll('footer').forEach(function(f){
         f.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
           var parent = a.parentNode;
           if(parent){
@@ -4583,16 +4581,49 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
             parent.innerHTML = html;
           }
         });
-        // Remove any plain-text "Kontakt-E-Mail: ..." remnants
         f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
       });
     }catch(e){}
   }
 
-  function ensureModal(){
-    var modal = document.querySelector('.igdc-qa-modal');
-    if(!modal){
-      // Create minimal modal sk
+  function ensureModalEmail(){
+    try{
+      var modal = document.querySelector('.igdc-qa-modal');
+      if(!modal) return;
+      var body = modal.querySelector('.igdc-qa-body') || modal;
+      if(body && !body.querySelector('.contact-email')){
+        var note = body.querySelector('.igdc-qa-note');
+        if(!note){
+          note = document.createElement('div');
+          note.className = 'igdc-qa-note';
+          note.textContent = 'Die vollständigen Funktionen werden aktiviert, sobald die Speichereinstellungen (Supabase url/key) verbunden sind.';
+          body.insertBefore(note, body.firstChild || null);
+        } else if(!note.textContent.trim()) {
+          note.textContent = 'Die vollständigen Funktionen werden aktiviert, sobald die Speichereinstellungen (Supabase url/key) verbunden sind.';
+        }
+        var p = document.createElement('p');
+        p.className = 'contact-email';
+        p.innerHTML = CONTACT_HTML;
+        body.appendChild(p);
+      }
+    }catch(e){}
+  }
+
+  function run(){
+    stripFooterEmail();
+    ensureModalEmail();
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', run, { once:true });
+  } else {
+    run();
+  }
+  setTimeout(run, 400);
+  setTimeout(run, 1200);
+})();
+</script>
+
 <script id="igtc-mobile-overhaul-FULL-js">
 (function(){
   function qsa(sel){ return Array.prototype.slice.call(document.querySelectorAll(sel)); }

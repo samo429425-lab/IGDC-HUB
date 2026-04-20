@@ -342,13 +342,13 @@
 
   <div class="container">
     <div class="sidebar">
-      <a href="home.html">🏠 Startseite</a>
-      <a href="networkhub.html">🛒 Marktplatz-Hub</a>
-      <a href="distributionhub.html">🏭 Vertriebs-Hub</a>
-      <a href="socialnetwork.html">📢 Soziales Netzwerk</a>
-      <a href="mediahub.html">🎬 Medien-Hub</a>
-      <a href="tour.html">🧳 Reisen · Tourismus · Unterkunft</a>
-      <a href="literature_academic">📚 문학 학술교류</a>
+      <a href="home_de.html">🏠 Startseite</a>
+      <a href="networkhub_de.html">🛒 Marktplatz-Hub</a>
+      <a href="distributionhub_de.html">🏭 Vertriebs-Hub</a>
+      <a href="socialnetwork_de.html">📢 Soziales Netzwerk</a>
+      <a href="mediahub_de.html">🎬 Medien-Hub</a>
+      <a href="tour_de.html">🧳 Reisen · Tourismus · Unterkunft</a>
+      <a href="literature_academic">📚 Literatur & Wissenschaftlicher Austausch</a>
       <a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A Anfrage</a>
     </div>
 
@@ -502,7 +502,7 @@
       function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
       const nowISO = ()=> new Date().toISOString();
       const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-      const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+      const classifyTech = (t)=> /admin|administrator|betrieb|operat|einstellung|konfig|bereitstellung|deploy|fehler|bug|laden|api|integration|server|datenbank|db|berechtigung|richtlinie|anmeldung|login|token|schl(?:u|ü)ssel|key|zahlung|sicherheit|cors|netzwerk|timeout|antwortcode|statuscode|build|kompil|kaputt|funktioniert\s*nicht|stopp|seite|link|fehlfunktion|관리자|운영|설정|배포|에러|오류|버그|로딩|연동|서버|데이터베이스|권한|정책|로그인|토큰|키|결제|보안|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|오작동/i.test(t||'');
       async function ensureSupabase(){
         if(STATE.sb) return STATE.sb;
         const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url; const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
@@ -518,7 +518,7 @@
       function mountUI(){
         const existing = document.querySelector('.igdc-qa-modal'); if(existing){ return bindExisting(existing); }
         const modal = el('div','igdc-qa-modal'); const backdrop = el('div','igdc-qa-backdrop'); const panel = el('div','igdc-qa-panel');
-        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='Q&A'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','닫기');
+        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='Q&A'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','Schließen');
         header.append(title, close);
         const body = el('div','igdc-qa-body');
         const lQ = el('label'); lQ.textContent='Frage'; const tQ = el('textarea','igdc-qa-text q'); tQ.placeholder='Bitte geben Sie Ihre Frage ein...';
@@ -543,7 +543,7 @@
         btnClear && btnClear.addEventListener('click', ()=>{ if(tQ) tQ.value=''; if(tA) tA.value=''; });
         async function fetchThreads(){ const sb = await ensureSupabase(); if(!sb || !list) return; const { data } = await sb.from('igdc_qna_threads').select('*').eq('project', STATE.project).eq('page_id', STATE.pageId).order('created_at', { ascending:false }).limit(100); renderList(data||[]); }
         function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='Q. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('A. '+row.answer):'A. (Ausstehend)'; box.append(q,a); list.append(box); }); }
-        async function autoAnswerIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'Bitte beachten Sie die Informationen auf dieser Seite zu Preisen und Gebühren. Hinterlassen Sie bei Bedarf eine zusätzliche Anfrage.':'Vielen Dank für Ihre Anfrage. Wir prüfen sie schnell und helfen Ihnen weiter.'; } } return { technical, answer }; }
+        async function autoAnswerIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/preis|kosten|gebühr|gebuehr|price|cost|fee|가격|비용|요금/i.test(text)?'Bitte beachten Sie die Informationen auf dieser Seite zu Preisen und Gebühren. Hinterlassen Sie bei Bedarf eine zusätzliche Anfrage.':'Vielen Dank für Ihre Anfrage. Wir prüfen sie schnell und helfen Ihnen weiter.'; } } return { technical, answer }; }
         async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoAnswerIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'Ihre Anfrage wurde erhalten.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
         btnSubmit && btnSubmit.addEventListener('click', submit);
         window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
@@ -1420,6 +1420,26 @@ window.addEventListener('resize', function(){
 
     openViewer(card);
   }, true);
+})();
+</script>
+<script src="frontbus.child.js"></script>
+<script>
+(function(){
+  try{
+    function notify(top){
+      parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*');
+    }
+    function atTop(){
+      var se=document.scrollingElement||document.documentElement||document.body;
+      return (window.scrollY||window.pageYOffset||0)<=0 && (se?(se.scrollTop||0)<=0:true);
+    }
+    function onAnyScroll(){ notify(atTop()); }
+    window.addEventListener('scroll', onAnyScroll, {passive:true});
+    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
+    document.addEventListener('wheel', function(e){ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
+    document.addEventListener('touchmove', function(){ notify(false); }, {passive:true,capture:true});
+    setTimeout(function(){ notify(atTop()); }, 50);
+  }catch(_){ }
 })();
 </script>
  

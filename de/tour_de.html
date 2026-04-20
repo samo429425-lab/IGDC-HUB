@@ -927,12 +927,12 @@ html, body {
 <div id="hero"><div class="hero-title"></div></div>
 <div class="container">
 <div class="sidebar">
-<a href="home.html">🏠 Startseite</a>
-<a href="networkhub.html">🛒 Marktplatz-Hub</a>
-<a href="distributionhub.html">🏭 Vertriebs-Hub</a>
-<a href="socialnetwork.html">📢 Soziales Netzwerk</a>
-<a href="mediahub.html">🎬 Medien-Hub</a>
-<a href="tour.html">🧳 Reisen · Tourismus · Unterkunft</a>
+<a href="home_de.html">🏠 Startseite</a>
+<a href="networkhub_de.html">🛒 Marktplatz-Hub</a>
+<a href="distributionhub_de.html">🏭 Vertriebs-Hub</a>
+<a href="socialnetwork_de.html">📢 Soziales Netzwerk</a>
+<a href="mediahub_de.html">🎬 Medien-Hub</a>
+<a href="tour_de.html">🧳 Reisen · Tourismus · Unterkunft</a>
 <a href="literature_academic">📚 Literatur- & Akademischer Austausch</a>
 <a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A Anfrage</a></div>
 <div class="main-content">
@@ -953,9 +953,9 @@ html, body {
     .btn-grid .link-btn:hover { background:#e75480; color:#ffffff; border-color:#cc2d63; box-shadow:0 2px 6px rgba(0,0,0,0.18); }</style>
 <div class="region-card">
 <div class="region-title">Asien</div>
-<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaTour <small>(하나투어)</small></a>
-<a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour<small>(모두투어)</small></a>
-<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon Tour <small>(노랑풍선)</small></a>
+<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaTour </a>
+<a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour</a>
+<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon Tour </a>
 <a class="link-btn" href="https://www.trip.com" target="_blank">Trip.com <small>(携程)</small></a>
 <a class="link-btn" href="https://www.ctrip.com" target="_blank">Ctrip <small>(携程)</small></a>
 <a class="link-btn" href="https://www.qunar.com" target="_blank">Qunar <small>(去哪儿网)</small></a>
@@ -1300,7 +1300,7 @@ a[href^="mailto:"]:hover {
   const fmtDate = (s)=> new Date(s).toLocaleString();
   const nowISO = ()=> new Date().toISOString();
   const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+  const classifyTech = (t)=> /admin|administrator|betrieb|operat|einstellung|konfig|bereitstellung|deploy|fehler|bug|laden|api|integration|server|datenbank|db|berechtigung|richtlinie|anmeldung|login|token|schl(?:u|ü)ssel|key|zahlung|sicherheit|cors|netzwerk|timeout|antwortcode|statuscode|build|kompil|kaputt|funktioniert\s*nicht|stopp|seite|link|fehlfunktion|관리자|운영|설정|배포|에러|오류|버그|로딩|연동|서버|데이터베이스|권한|정책|로그인|토큰|키|결제|보안|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|오작동/i.test(t||'');
 
   function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
   function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
@@ -1337,7 +1337,7 @@ a[href^="mailto:"]:hover {
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
     const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","닫기");
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Schließen");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
@@ -1454,7 +1454,7 @@ a[href^="mailto:"]:hover {
         }
         if(!answer){
           if(/시간|운영시간|오픈|문의/.test(text)) answer="Betriebsbezogene Anfragen werden nach Prüfung durch den Administrator beantwortet.";
-          else if(/가격|비용|요금/.test(text)) answer="Bitte beachten Sie die Hinweise auf der Seite zu Preis-/Gebühreninformationen. Hinterlassen Sie bei Bedarf eine zusätzliche Anfrage.";
+          else if(/preis|kosten|gebühr|gebuehr|price|cost|fee|가격|비용|요금/i.test(text)) answer="Bitte beachten Sie die Hinweise auf der Seite zu Preis-/Gebühreninformationen. Hinterlassen Sie bei Bedarf eine zusätzliche Anfrage.";
           else answer="Vielen Dank für Ihre Anfrage. Wir prüfen sie schnell und helfen Ihnen weiter.";
         }
       }
@@ -1619,7 +1619,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       document.body.appendChild(m);
 
       function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }
+      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
       x.addEventListener('click', close);
       b.addEventListener('click', close);
 

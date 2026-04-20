@@ -582,12 +582,12 @@ html, body {
 <div id="hero"><div class="hero-title"></div></div>
 <div class="container">
 <div class="sidebar">
-<a href="home.html">🏠 Startseite</a>
-<a href="networkhub.html">🛒 Marktplatz-Hub</a>
-<a href="distributionhub.html">🏭 Vertriebs-Hub</a>
-<a href="socialnetwork.html">📢 Soziales Netzwerk</a>
-<a href="mediahub.html">🎬 Medien-Hub</a>
-<a href="tour.html">🧳 Reisen · Tourismus · Unterkunft</a>
+<a href="home_de.html">🏠 Startseite</a>
+<a href="networkhub_de.html">🛒 Marktplatz-Hub</a>
+<a href="distributionhub_de.html">🏭 Vertriebs-Hub</a>
+<a href="socialnetwork_de.html">📢 Soziales Netzwerk</a>
+<a href="mediahub_de.html">🎬 Medien-Hub</a>
+<a href="tour_de.html">🧳 Reisen · Tourismus · Unterkunft</a>
 <a href="literature_academic">📚 Literatur- & Akademischer Austausch</a>
 <a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A Anfrage</a></div><main id="main">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
@@ -1072,7 +1072,7 @@ a[href^="mailto:"]:hover {
   const fmtDate = (s)=> new Date(s).toLocaleString();
   const nowISO = ()=> new Date().toISOString();
   const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+  const classifyTech = (t)=> /admin|administrator|betrieb|operat|einstellung|konfig|bereitstellung|deploy|fehler|bug|laden|api|integration|server|datenbank|db|berechtigung|richtlinie|anmeldung|login|token|schl(?:u|ü)ssel|key|zahlung|sicherheit|cors|netzwerk|timeout|antwortcode|statuscode|build|kompil|kaputt|funktioniert\s*nicht|stopp|seite|link|fehlfunktion|관리자|운영|설정|배포|에러|오류|버그|로딩|연동|서버|데이터베이스|권한|정책|로그인|토큰|키|결제|보안|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|오작동/i.test(t||'');
 
   function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
   function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
@@ -1228,8 +1228,8 @@ a[href^="mailto:"]:hover {
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="Betriebsbezogene Anfragen werden von einem Administrator geprüft und anschließend beantwortet.";
-          else if(/가격|비용|요금/.test(text)) answer="Bitte beachten Sie die Preis-/Gebührenhinweise auf dieser Seite. Hinterlassen Sie bei Bedarf eine zusätzliche Anfrage.";
+          if(/zeit|öffnungszeit|oeffnungszeit|betriebszeit|stunden|kontakt|anfrage|문의|시간|운영시간|오픈/i.test(text)) answer="Betriebsbezogene Anfragen werden von einem Administrator geprüft und anschließend beantwortet.";
+          else if(/preis|kosten|gebühr|gebuehr|price|cost|fee|가격|비용|요금/i.test(text)) answer="Bitte beachten Sie die Preis-/Gebührenhinweise auf dieser Seite. Hinterlassen Sie bei Bedarf eine zusätzliche Anfrage.";
           else answer="Vielen Dank für Ihre Anfrage. Wir prüfen sie schnell und helfen Ihnen weiter.";
         }
       }
@@ -1761,7 +1761,7 @@ window.addEventListener("message",function(ev){
       return `
         <form id="igdc-review-form" class="igdc-review-form">
           <textarea
-            placeholder="상품 사용 경험을 공유해 주세요"
+            placeholder="Teilen Sie Ihre Produkterfahrung mit uns"
             minlength="${this.config.minReviewChars}"
             maxlength="${this.config.maxReviewChars}"
             required></textarea>
