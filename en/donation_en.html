@@ -2372,12 +2372,12 @@ body > div.container,
 <div class="container">
 <!-- Left Sidebar (불변) -->
 <nav class="sidebar">
-<a href="home.html">🏠 Home</a>
-<a href="networkhub.html">🛒 Market Hub</a>
-<a href="distributionhub.html">🏭 Distribution Hub</a>
-<a href="socialnetwork.html">📢 Social Network</a>
-<a href="mediahub.html">🎬 Media Hub</a>
-<a href="tour.html">🧳 Travel · Tourism · Travel · Tourism · Travel · Tourism · Accommodation</a>
+<a href="home_en.html">🏠 Home</a>
+<a href="networkhub_en.html">🛒 Market Hub</a>
+<a href="distributionhub_en.html">🏭 Distribution Hub</a>
+<a href="socialnetwork_en.html">📢 Social Network</a>
+<a href="mediahub_en.html">🎬 Media Hub</a>
+<a href="tour_en.html">🧳 Travel · Tourism · Accommodation</a>
 <a href="literature/academic.html" style="display:none !important;">📚 Literature & Academic Exchange</a>
 <a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A Contact</a></nav>
 <!-- Main (불변 구조) -->
@@ -2407,11 +2407,11 @@ body > div.container,
 <option value="env">Environment</option>
 <option value="etc">Others</option>
 </select>
-</label><button class="button small" id="btnAttach" type="button">Attachment</button><div aria-label="Attachment 미리보기" class="attach-preview" id="attachPreview"></div>
-<button class="button small" id="btnOpenComposer">Write</button><div aria-label="Title 미리보기" class="title-preview" id="titlePreview"><span class="tp-text">No title</span></div>
+</label><button class="button small" id="btnAttach" type="button">Attachment</button><div aria-label="Attachment preview" class="attach-preview" id="attachPreview"></div>
+<button class="button small" id="btnOpenComposer">Write</button><div aria-label="Title preview" class="title-preview" id="titlePreview"><span class="tp-text">No title</span></div>
 <button class="button small accent" id="btnSubmitPost">Save</button>
 <span id="attachName"></span>
-<button aria-label="첨부 제거 " class="button tiny" id="btnAttachClear" style="display:none;" type="button">Clear</button>
+<button aria-label="Remove attachment" class="button tiny" id="btnAttachClear" style="display:none;" type="button">Clear</button>
 <input id="postAttach" style="display:none;" type="file"/>
 </div>
 <div class="row row-bottom">
@@ -2612,7 +2612,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">첨부 링크</a>` : `첨부: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Attachment link</a>` : `Attachment: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2623,7 +2623,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "첨부: " + fileAttach.files[0].name;
+        att.textContent = "Attachment: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2640,7 +2640,7 @@ body > div.container,
 
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
-    const link = prompt("이미지 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 Confirm을 누르세요)");
+    const link = prompt("Paste an external image URL if you have one. Otherwise, click Confirm.");
     if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
@@ -2657,7 +2657,7 @@ body > div.container,
 
   btnFileOk && btnFileOk.addEventListener('click', ()=>{
     const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
-    const link = prompt("파일 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 Confirm을 누르세요)");
+    const link = prompt("Paste an external file URL if you have one. Otherwise, click Confirm.");
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
@@ -2686,7 +2686,7 @@ body > div.container,
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '개 파일');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' files');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2757,7 +2757,7 @@ body > div.container,
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 제거'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remove attachment'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
@@ -2796,7 +2796,7 @@ body > div.container,
     const b = (bodyI && bodyI.value.trim()) || '(No Content)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
+    if(!holder){ alert('The news area could not be found.'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2813,7 +2813,7 @@ body > div.container,
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = '첨부: ' + f.name;
+        li.textContent = 'Attachment: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
@@ -2826,7 +2826,7 @@ body > div.container,
     const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
     if(canDelete) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      if(!confirm('Do you want to delete this post?')) return;
       item.remove();
     });
 
@@ -2893,13 +2893,13 @@ body > div.container,
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '개 파일');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' files');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 모두 제거'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remove all attachments'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attachPreview.appendChild(chip);
@@ -2951,7 +2951,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || ''No title';';
+    tpText.textContent = t || 'No title';
   }
 
   // live typing updates preview
@@ -3051,7 +3051,7 @@ body > div.container,
     btn.style.cssText='margin-top:6px; display:none;';
     if(canShowDeleteFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      if(!confirm('Do you want to delete this post?')) return;
       item.remove();
     });
     item.appendChild(btn);
@@ -3194,14 +3194,14 @@ body > div.container,
     npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml) : '';
 
     openModal();
   }, true);
 })();
 </script><div id="editNewsModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 680px); max-height:78vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 style="margin:0; font-size:1.05rem;">Write 편집</h3>
+<h3 style="margin:0; font-size:1.05rem;">Edit post</h3>
 <div id="enInfo" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
@@ -3416,7 +3416,7 @@ body > div.container,
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+        if(!confirm('Do you want to delete this post?')) return;
         item.remove();
       });
     }
@@ -3835,7 +3835,7 @@ body > div.container,
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","정액 기부 금액");
+  btnGroup.setAttribute("aria-label","Fixed donation amount");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -3865,12 +3865,12 @@ body > div.container,
 
   accountBox.innerHTML = `
     <div><b>IESF (International Exchange Service Foundation)</b></div>
-    <div>General: 농협 301-0078-3333-51</div>
+    <div>General: NongHyup 301-0078-3333-51</div>
     <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
     <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
-    <div>General: 신한 100-026-331592</div>
+    <div>General: Shinhan 100-026-331592</div>
     <div>Foreign Currency: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
@@ -3884,7 +3884,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      alert(`Selected amount: ₩${Number(amt).toLocaleString()}\n\nPlease transfer it to the account below.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -4254,7 +4254,7 @@ document.addEventListener('DOMContentLoaded', function(){
   const fmtDate = (s)=> new Date(s).toLocaleString();
   const nowISO = ()=> new Date().toISOString();
   const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+  const classifyTech = (t)=> /admin|administrator|operation|ops|settings?|config|deploy|deployment|error|bug|loading|api|integration|server|database|db|permission|policy|login|token|key|payment|security|cors|network|timeout|response\s*code|status\s*code|build|compile|broken|doesn'?t\s*work|not\s*work|stuck|page|link|malfunction|관리자|운영|설정|배포|에러|오류|버그|로딩|연동|서버|데이터베이스|권한|정책|로그인|토큰|키|결제|보안|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|오작동/i.test(t||'');
 
   function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
   function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
@@ -4411,8 +4411,8 @@ document.addEventListener('DOMContentLoaded', function(){
         }
         if(!answer){
           if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 Confirm 후 회신됩니다.";
-          else if(/price|cost|fee|가격|비용|요금/i.test(text)) answer="For price/fee information, please refer to the guidance on this page and leave any additional inquiries.";
-          else answer="문의 감사합니다. 빠르게 Confirm하여 도와드리겠습니다.";
+          else if(/price|cost|fee|pricing|가격|비용|요금/i.test(text)) answer="For price/fee information, please refer to the guidance on this page and leave any additional inquiries.";
+          else answer="Thank you for your inquiry. We will review it promptly and assist you.";
         }
       }
       return { technical, answer };
@@ -4426,7 +4426,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Save 설정(Supabase url/key)이 아직 연결되지 않아 서버 Save은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        alert("The storage settings (Supabase url/key) are not connected yet, so server-side saving is disabled. When deployed to the web, the connection will be enabled automatically once SUPER_VARSAR.url/anonKey is set.");
         return;
       }
       const record = {
@@ -4498,7 +4498,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         bk=document.createElement('div');
         bk.id='drawerBackdrop';
         bk.className='drawer-backdrop';
-        document.body/*__KILL__*/ appendChild_DISABLED(bk);
+        document.body.appendChild(bk);
         bk.addEventListener('click',close,{passive:true});
       }
     }
@@ -5062,12 +5062,12 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npTitle.textContent = title || 'Title 없음';
+    npTitle.textContent = title || 'No title';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(등록된 본문이 없습니다.)';
+    npBody.textContent = body || '(No content has been registered.)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml
         : '';
     }
 

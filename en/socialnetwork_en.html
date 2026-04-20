@@ -342,12 +342,12 @@
 
   <div class="container">
     <div class="sidebar">
-      <a href="home.html">🏠 Home</a>
-      <a href="networkhub.html">🛒 Market Hub</a>
-      <a href="distributionhub.html">🏭 Distribution Hub</a>
-      <a href="socialnetwork.html">📢 Social Network</a>
-      <a href="mediahub.html">🎬 Media Hub</a>
-      <a href="tour.html">🧳 Travel · Tourism · Travel · Tourism · Accommodation</a>
+      <a href="home_en.html">🏠 Home</a>
+      <a href="networkhub_en.html">🛒 Market Hub</a>
+      <a href="distributionhub_en.html">🏭 Distribution Hub</a>
+      <a href="socialnetwork_en.html">📢 Social Network</a>
+      <a href="mediahub_en.html">🎬 Media Hub</a>
+      <a href="tour_en.html">🧳 Travel · Tourism · Accommodation</a>
       <a href="literature_academic">📚 Literature & Academic Exchange</a>
       <a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A Inquiry</a>
     </div>
@@ -480,7 +480,7 @@
             var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
             h.appendChild(t); h.appendChild(x);
             var body = document.createElement('div'); body.className='igdc-qa-body';
-            body.innerHTML = '<label>Question</label><textarea class="igdc-qa-text q" placeholder="Please enter your question..."></textarea><label>Answer</label><textarea class="igdc-qa-text a" placeholder="Please wait a moment. We will respond shortly."></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">Submit</button><button class="igdc-qa-btn muted">Clear</button></div><div class="igdc-qa-note">※ Simple questions are answered immediately by AI. Technical, error, or operations-related issues are automatically forwarded to Admin Q&A.</div><div class="igdc-qa-threads"></div><p class="contact-email">Representative Email: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
+            body.innerHTML = '<label>Question</label><textarea class="igdc-qa-text q" placeholder="Please enter your question..."></textarea><label>Answer</label><textarea class="igdc-qa-text a" placeholder="Please wait a moment. We will respond shortly."></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">Submit</button><button class="igdc-qa-btn muted">Clear</button></div><div class="igdc-qa-note">Simple questions are answered immediately by AI. Technical, error, or operations-related issues are automatically forwarded to Admin Q&A.</div><div class="igdc-qa-threads"></div><p class="contact-email">Representative Email: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
             p.appendChild(h); p.appendChild(body); m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
             function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
             function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
@@ -502,7 +502,7 @@
       function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
       const nowISO = ()=> new Date().toISOString();
       const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-      const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+      const classifyTech = (t)=> /admin|administrator|operation|ops|settings?|config|deploy|deployment|error|bug|loading|api|integration|server|database|db|permission|policy|login|token|key|payment|security|cors|network|timeout|response\s*code|status\s*code|build|compile|broken|doesn'?t\s*work|not\s*work|stuck|page|link|malfunction|관리자|운영|설정|배포|에러|오류|버그|로딩|연동|서버|데이터베이스|권한|정책|로그인|토큰|키|결제|보안|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|오작동/i.test(t||'');
       async function ensureSupabase(){
         if(STATE.sb) return STATE.sb;
         const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url; const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
@@ -524,7 +524,7 @@
         const lQ = el('label'); lQ.textContent='Question'; const tQ = el('textarea','igdc-qa-text q'); tQ.placeholder='Please enter your question...';
         const lA = el('label'); lA.textContent='Answer'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='Please wait a moment. We will respond shortly.';
         const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='Submit'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='Clear';
-        const note = el('div','igdc-qa-note'); note.textContent='※ Simple questions are answered immediately by AI. Technical, error, or operations-related issues are automatically forwarded to Admin Q&A.';
+        const note = el('div','igdc-qa-note'); note.textContent='Simple questions are answered immediately by AI. Technical, error, or operations-related issues are automatically forwarded to Admin Q&A.';
         const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='Representative Email: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
         actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
         return bindExisting(modal);
@@ -543,7 +543,7 @@
         btnClear && btnClear.addEventListener('click', ()=>{ if(tQ) tQ.value=''; if(tA) tA.value=''; });
         async function fetchThreads(){ const sb = await ensureSupabase(); if(!sb || !list) return; const { data } = await sb.from('igdc_qna_threads').select('*').eq('project', STATE.project).eq('page_id', STATE.pageId).order('created_at', { ascending:false }).limit(100); renderList(data||[]); }
         function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='Q. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('A. '+row.answer):'A. (Pending)'; box.append(q,a); list.append(box); }); }
-        async function autoAnswerIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'Please refer to the information on this page for pricing and fees. Leave an additional inquiry if needed.':'Thank you for your inquiry. We will review it promptly and assist you.'; } } return { technical, answer }; }
+        async function autoAnswerIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/price|cost|fee|pricing|가격|비용|요금/i.test(text)?'Please refer to the information on this page for pricing and fees. Leave an additional inquiry if needed.':'Thank you for your inquiry. We will review it promptly and assist you.'; } } return { technical, answer }; }
         async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoAnswerIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'Your inquiry has been received.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
         btnSubmit && btnSubmit.addEventListener('click', submit);
         window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
@@ -676,7 +676,7 @@
   }
 }, { passive:false });
 
-  /* 2) 카드 노출(첫 진입 1회만) */
+  /* 2) 카드 노출(�?진입 1회만) */
   function bindImpressionObserver(){
     if (!('IntersectionObserver' in window)) return;
 
@@ -703,7 +703,7 @@
     });
   }
 
-  /* 3) 카드 체류/시청 시작 훅 */
+  /* 3) 카드 체류/시청 시작 �?*/
   function bindHoverWatchHooks(){
     var activeMap = new WeakMap();
 
@@ -813,7 +813,7 @@ function boot(){
     boot();
   }
 
-  /* automap이 나중에 카드 치환해도 다시 스캔 가능하게 공개 */
+  /* automap�?나중�?카드 치환해도 다시 스캔 가능하�?공개 */
   window.__IGDC_SOCIAL_REBIND_TRACKING__ = function(){
   bindImpressionObserver();
   bindHoverWatchHooks();
@@ -1156,7 +1156,7 @@ window.addEventListener('resize', function(){
     if(!scroller || scroller.dataset.dragWheelBound === '1') return;
     scroller.dataset.dragWheelBound = '1';
 
-    /* 마우스 휠을 가로 스크롤로 전환 */
+    /* 마우�?휠을 가�?스크롤로 전환 */
     scroller.addEventListener('wheel', function(e){
       if(!isMobileOrTablet()) return;
       if(Math.abs(e.deltaY) > Math.abs(e.deltaX)){
@@ -1165,7 +1165,7 @@ window.addEventListener('resize', function(){
       }
     }, { passive:false });
 
-    /* 마우스 드래그 */
+    /* 마우�?드래�?*/
     var isDown = false;
     var startX = 0;
     var startLeft = 0;
@@ -1192,7 +1192,7 @@ window.addEventListener('resize', function(){
       scroller.classList.remove('dragging');
     });
 
-    /* 터치 상태에서 부모 세로 스크롤 간섭 최소화 */
+    /* 터치 상태에서 부�?세로 스크�?간섭 최소�?*/
     scroller.addEventListener('touchmove', function(e){
       if(!isMobileOrTablet()) return;
       e.stopPropagation();
@@ -1299,7 +1299,7 @@ window.addEventListener('resize', function(){
     root.className = 'snfv';
     root.innerHTML =
       '<div class="snfv-panel">'
-      + '<button type="button" class="snfv-close" aria-label="Close">✕</button>'
+      + '<button type="button" class="snfv-close" aria-label="Close">×</button>'
       + '<div class="snfv-media" id="snfvMedia"></div>'
       + '<div class="snfv-meta">'
       +   '<div class="snfv-text"><div class="snfv-title" id="snfvTitle"></div><div class="snfv-desc" id="snfvDesc"></div></div>'
@@ -1422,7 +1422,27 @@ window.addEventListener('resize', function(){
   }, true);
 })();
 </script>
- 
+ <script src="frontbus.child.js"></script>
+<script>
+(function(){
+  try{
+    function notify(top){
+      parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*');
+    }
+    function atTop(){
+      var se=document.scrollingElement||document.documentElement||document.body;
+      return (window.scrollY||window.pageYOffset||0)<=0 && (se?(se.scrollTop||0)<=0:true);
+    }
+    function onAnyScroll(){ notify(atTop()); }
+    window.addEventListener('scroll', onAnyScroll, {passive:true});
+    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
+    document.addEventListener('wheel', function(e){ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
+    document.addEventListener('touchmove', function(){ notify(false); }, {passive:true,capture:true});
+    setTimeout(function(){ notify(atTop()); }, 50);
+  }catch(_){ }
+})();
+</script>
+
 <script defer src="/assets/js/socialnetwork-automap-v3.js?v=20260404psom"></script>
   
   <script id="igtc-checkout-trigger-v1">
