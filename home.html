@@ -4329,5 +4329,114 @@ window.addEventListener("message",function(ev){
 
 <script src="/assets/js/home-products-automap.v2.js?v=20260130a"></script>
 
+<script id="news-arrow-final-fix-20260420">
+(function(){
+  if (window.__NEWS_ARROW_FINAL_FIX_20260420__) return;
+  window.__NEWS_ARROW_FINAL_FIX_20260420__ = true;
+
+  function getTrack(row){
+    return row.querySelector('.scroll-track, .news-links, .links, .scroll-area, .items, .btns, .igtc-news-track') || row;
+  }
+
+  function getItems(track){
+    return Array.from(track.querySelectorAll('a.news-btn')).filter(function(el){
+      return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+    });
+  }
+
+  function getViewport(row, track){
+    var rowRect = row.getBoundingClientRect();
+    var trackRect = (track && track !== row) ? track.getBoundingClientRect() : rowRect;
+    var leftBtn = row.querySelector('.row-arrow.left');
+    var rightBtn = row.querySelector('.row-arrow.right');
+    var leftInset = leftBtn ? Math.ceil(leftBtn.getBoundingClientRect().width) + 12 : 0;
+    var rightInset = rightBtn ? Math.ceil(rightBtn.getBoundingClientRect().width) + 12 : 0;
+    return {
+      left: Math.max(trackRect.left, rowRect.left + leftInset),
+      right: Math.min(trackRect.right, rowRect.right - rightInset)
+    };
+  }
+
+  function getFullyVisible(row, track, items){
+    var vp = getViewport(row, track);
+    var eps = 0.5;
+    return items.map(function(el, idx){
+      return { idx: idx, el: el, rect: el.getBoundingClientRect() };
+    }).filter(function(it){
+      return it.rect.left >= vp.left - eps && it.rect.right <= vp.right + eps;
+    });
+  }
+
+  function getNearestStartIndex(track, items){
+    var sl = track.scrollLeft || 0;
+    var best = 0;
+    var bestDist = Infinity;
+    items.forEach(function(el, idx){
+      var d = Math.abs((el.offsetLeft || 0) - sl);
+      if (d < bestDist){
+        bestDist = d;
+        best = idx;
+      }
+    });
+    return best;
+  }
+
+  function scrollToItem(row, track, item){
+    var vp = getViewport(row, track);
+    var rect = item.getBoundingClientRect();
+    var current = track.scrollLeft || 0;
+    var target = Math.max(0, Math.round(current + (rect.left - vp.left)));
+    try { track.scrollTo({ left: target, behavior: 'smooth' }); }
+    catch(e){ track.scrollLeft = target; }
+  }
+
+  function handleArrowClick(btn){
+    var row = btn.closest('.news-section .news-row');
+    if (!row) return false;
+    var track = getTrack(row);
+    if (!track) return false;
+    var items = getItems(track);
+    if (!items.length) return false;
+
+    var fully = getFullyVisible(row, track, items);
+    var visibleCount = fully.length || 1;
+    var startIdx = fully.length ? fully[0].idx : getNearestStartIndex(track, items);
+    var targetIdx;
+
+    if (btn.classList.contains('right')){
+      targetIdx = fully.length ? (fully[fully.length - 1].idx + 1) : (startIdx + visibleCount);
+      if (targetIdx > items.length - 1) targetIdx = items.length - 1;
+    } else {
+      var vp = getViewport(row, track);
+      var viewportWidth = Math.max(0, vp.right - vp.left);
+      var endIdx = Math.max(0, startIdx - 1);
+      targetIdx = endIdx;
+      while (targetIdx > 0){
+        var candidate = targetIdx - 1;
+        var left = items[candidate].offsetLeft || 0;
+        var right = (items[endIdx].offsetLeft || 0) + items[endIdx].offsetWidth;
+        var span = right - left;
+        if (span <= viewportWidth + 1){
+          targetIdx = candidate;
+        } else {
+          break;
+        }
+      }
+    }
+
+    scrollToItem(row, track, items[targetIdx]);
+    return true;
+  }
+
+  document.addEventListener('click', function(e){
+    var btn = e.target && e.target.closest ? e.target.closest('.news-section .row-arrow') : null;
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+    handleArrowClick(btn);
+  }, true);
+})();
+</script>
 </body>
 </html>
