@@ -12,7 +12,7 @@
 
 "use strict";
 
-const VERSION = "v2.1-maru-search-mapped";
+const VERSION = "v2.1-safe-bridge";
 
 let Core = null;
 try { Core = require("./core"); } catch (_) {
@@ -59,13 +59,9 @@ function normalizeContext(params){
     section: params.section || params.bind_section || null,
     page: params.page || null,
     route: params.route || null,
-    category: params.category || null,
-    semantic_category: params.semantic_category || null,
-    external: params.external ?? null,
-    noExternal: params.noExternal ?? null,
-    disableExternal: params.disableExternal ?? null,
-    noAnalytics: params.noAnalytics ?? 1,
-    noRevenue: params.noRevenue ?? 1
+    external: params.external == null ? null : params.external,
+    noExternal: params.noExternal == null ? null : params.noExternal,
+    disableExternal: params.disableExternal == null ? null : params.disableExternal
   };
 }
 
@@ -185,40 +181,41 @@ async function callMaruSearch(query, mode, limit, context){
   }
 
   try{
+    context = context || {};
+    const runMode = mode || "global-insight";
     const res = await MaruSearch.runEngine({}, {
       q: query,
-      mode: mode || "global-insight",
+      query: query,
+      mode: runMode,
       limit,
-      scope: context ? context.scope : null,
-      target: context ? context.target : null,
-      intent: context ? context.intent : null,
-      uiLang: context ? context.uiLang : null,
-      targetLang: context ? context.targetLang : null,
-      region: context ? context.region : null,
-      country: context ? context.country : null,
-      state: context ? context.state : null,
-      city: context ? context.city : null,
-      channel: context ? context.channel : null,
-      section: context ? context.section : null,
-      page: context ? context.page : null,
-      route: context ? context.route : null,
-      category: context ? context.category : null,
-      semantic_category: context ? context.semantic_category : null,
-      external: context ? context.external : null,
-      noExternal: context ? context.noExternal : null,
-      disableExternal: context ? context.disableExternal : null,
+      scope: context.scope || null,
+      target: context.target || null,
+      intent: context.intent || null,
+      uiLang: context.uiLang || null,
+      targetLang: context.targetLang || null,
+      region: context.region || null,
+      country: context.country || null,
+      state: context.state || null,
+      city: context.city || null,
+      channel: context.channel || null,
+      section: context.section || null,
+      page: context.page || null,
+      route: context.route || null,
+      external: context.external,
+      noExternal: context.noExternal,
+      disableExternal: context.disableExternal,
       noAnalytics: true,
       noRevenue: true,
       from: "global-insight"
     });
 
     const items =
-      Array.isArray(res?.items) ? res.items :
-      Array.isArray(res?.results) ? res.results :
-      Array.isArray(res?.data?.items) ? res.data.items :
+      (res && Array.isArray(res.items)) ? res.items :
+      (res && Array.isArray(res.results)) ? res.results :
+      (res && res.data && Array.isArray(res.data.items)) ? res.data.items :
       [];
 
-    if(res && (items.length || res.source || res.region || res.route)){
+    if(res && (items.length || res.source || res.region || res.route || res.meta)){
       return {
         ok:true,
         data:{
@@ -228,6 +225,7 @@ async function callMaruSearch(query, mode, limit, context){
           source: res.source || "maru-search",
           region: res.region || null,
           route: res.route || null,
+          meta: res.meta || null,
           items,
           results: items
         }
@@ -245,26 +243,24 @@ async function callSearchBank(event, query, limit, context){
     return { ok:false, error:"BANK_ENGINE_UNAVAILABLE" };
   }
   try{
+    context = context || {};
     const params = {
       q: query,
-      query,
+      query: query,
       limit,
       from: 'global-insight',
-      // optional routing hints (future)
-      channel: (context && context.channel) || (context && context.intent === 'media' ? 'media' : undefined),
-      section: context && context.section || undefined,
-      page: context && context.page || undefined,
-      route: context && context.route || undefined,
-      category: context && context.category || undefined,
-      semantic_category: context && context.semantic_category || undefined,
-      type: context && context.intent === 'media' ? 'video' : undefined,
-      region: context && context.region || undefined,
-      country: context && context.country || undefined,
-      state: context && context.state || undefined,
-      city: context && context.city || undefined,
-      external: (context && context.external) ?? undefined,
-      noExternal: (context && context.noExternal) ?? undefined,
-      disableExternal: (context && context.disableExternal) ?? undefined,
+      channel: context.channel || (context.intent === 'media' ? 'media' : undefined),
+      section: context.section || undefined,
+      page: context.page || undefined,
+      route: context.route || undefined,
+      region: context.region || undefined,
+      country: context.country || undefined,
+      state: context.state || undefined,
+      city: context.city || undefined,
+      external: context.external,
+      noExternal: context.noExternal,
+      disableExternal: context.disableExternal,
+      type: context.intent === 'media' ? 'video' : undefined
     };
     const res = await BankEngine.runEngine(event || {}, params);
     if(res && res.status === 'ok') return { ok:true, data: res };
@@ -488,13 +484,9 @@ async function runEngine(event = {}, params = {}) {
       section: params.section || params.bind_section,
       page: params.page,
       route: params.route,
-      category: params.category,
-      semantic_category: params.semantic_category,
       external: params.external,
       noExternal: params.noExternal,
-      disableExternal: params.disableExternal,
-      noAnalytics: params.noAnalytics ?? 1,
-      noRevenue: params.noRevenue ?? 1
+      disableExternal: params.disableExternal
     });
 
   }
