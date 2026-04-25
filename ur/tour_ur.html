@@ -986,9 +986,9 @@ body{ direction: rtl !important; }
     .btn-grid .link-btn:hover { background:#e75480; color:#ffffff; border-color:#cc2d63; box-shadow:0 2px 6px rgba(0,0,0,0.18); }</style>
 <div class="region-card">
 <div class="region-title">ایشیا</div>
-<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaTour <small>(하나투어)</small></a>
-<a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour<small>(모두투어)</small></a>
-<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon Tour <small>(노랑풍선)</small></a>
+<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaTour</a>
+<a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour</a>
+<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon Tour</a>
 <a class="link-btn" href="https://www.trip.com" target="_blank">Trip.com <small>(携程)</small></a>
 <a class="link-btn" href="https://www.ctrip.com" target="_blank">Ctrip <small>(携程)</small></a>
 <a class="link-btn" href="https://www.qunar.com" target="_blank">Qunar <small>(去哪儿网)</small></a>
@@ -1235,7 +1235,7 @@ a[href^="mailto:"]:hover {
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='سوال و جواب';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
@@ -1369,8 +1369,8 @@ a[href^="mailto:"]:hover {
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","닫기");
+    const title = el("div","igdc-qa-title"); title.textContent = "سوال و جواب";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","بند کریں");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
@@ -1451,8 +1451,8 @@ a[href^="mailto:"]:hover {
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (زیر التوا)";
+        const q = el("div","igdc-qa-thread-q"); q.textContent="س. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("ج. "+row.answer):"ج. (زیر التوا)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "ایڈمن درخواست":"عمومی";
@@ -1563,9 +1563,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
           var b=document.createElement('div'); b.className='igdc-qa-backdrop';
           var p=document.createElement('div'); p.className='igdc-qa-panel';
           var h=document.createElement('div'); h.className='igdc-qa-header';
-          var t=document.createElement('div'); t.textContent='Q&A';
+          var t=document.createElement('div'); t.textContent='سوال و جواب';
           var x=document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
-          var body=document.createElement('div'); body.className='igdc-qa-body'; body.textContent='Q&A connection ready';
+          var body=document.createElement('div'); body.className='igdc-qa-body'; body.textContent='سوال و جواب کا رابطہ تیار ہے';
           h.appendChild(t); h.appendChild(x); p.appendChild(h); p.appendChild(body);
           m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
           function close(){ m.classList.remove('open'); }
@@ -1634,7 +1634,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='سوال و جواب';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
@@ -1736,7 +1736,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='سوال و جواب';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
@@ -1924,11 +1924,11 @@ window.addEventListener("message",function(ev){
   async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
     await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
-    ta.value=''; alert('Sent successfully.');
+    ta.value=''; alert('کامیابی سے بھیج دیا گیا۔');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('Sending failed'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('بھیجنے میں ناکامی ہوئی'));});
   const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('Sending failed'));});
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('بھیجنے میں ناکامی ہوئی'));});
 })();
 </script>
 
@@ -2059,8 +2059,8 @@ window.addEventListener("message",function(ev){
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">Product Reviews</h3>
-          <div id="igdc-review-list" class="igdc-review-list">Loading...</div>
+          <h3 class="igdc-review-title">مصنوعات کے جائزے</h3>
+          <div id="igdc-review-list" class="igdc-review-list">لوڈ ہو رہا ہے...</div>
           ${canWrite ? this.renderReviewForm() : this.renderLoginHint()}
         </section>
       `;
@@ -2070,12 +2070,12 @@ window.addEventListener("message",function(ev){
       return `
         <form id="igdc-review-form" class="igdc-review-form">
           <textarea
-            placeholder="Please share your experience using the product."
+            placeholder="مصنوعات کے استعمال کا اپنا تجربہ شیئر کریں۔"
             minlength="${this.config.minReviewChars}"
             maxlength="${this.config.maxReviewChars}"
             required></textarea>
           <div class="igdc-review-actions">
-            <button type="submit">Post Review</button>
+            <button type="submit">جائزہ جمع کریں</button>
           </div>
         </form>
       `;
@@ -2083,7 +2083,7 @@ window.addEventListener("message",function(ev){
 
     renderLoginHint() {
       return `<div class="igdc-review-login-hint">
-        Review posting is available after logging in.
+        لاگ اِن کے بعد جائزہ لکھا جا سکتا ہے۔
       </div>`;
     },
 
@@ -2098,7 +2098,7 @@ window.addEventListener("message",function(ev){
         const content = textarea.value.trim();
 
         if (content.length < this.config.minReviewChars) {
-          alert(`리뷰는 최소 ${this.config.minReviewChars}자 이상 작성해 주세요.`);
+          alert(`جائزہ کم از کم ${this.config.minReviewChars} حروف پر مشتمل ہونا چاہیے۔`);
           return;
         }
 
@@ -2107,7 +2107,7 @@ window.addEventListener("message",function(ev){
             textarea.value = '';
             this.loadReviews(productId);
           })
-          .catch(() => alert('리뷰 Submission failed'));
+          .catch(() => alert('جائزہ جمع کرانا ناکام ہو گیا'));
       });
     },
 
@@ -2116,7 +2116,7 @@ window.addEventListener("message",function(ev){
       const list = document.getElementById('igdc-review-list');
       if (!list) return;
 
-      list.textContent = 'Loading...';
+      list.textContent = 'لوڈ ہو رہا ہے...';
 
       try {
         const res = await fetch(
@@ -2125,13 +2125,13 @@ window.addEventListener("message",function(ev){
         const data = await res.json();
 
         if (!Array.isArray(data) || data.length === 0) {
-          list.innerHTML = '<div class="igdc-review-empty">No reviews yet.</div>';
+          list.innerHTML = '<div class="igdc-review-empty">ابھی تک کوئی جائزہ نہیں ہے۔</div>';
           return;
         }
 
         list.innerHTML = data.map(this.renderReviewItem).join('');
       } catch {
-        list.textContent = 'Failed to load reviews.';
+        list.textContent = 'جائزے لوڈ نہیں ہو سکے۔';
       }
     },
 
@@ -2248,9 +2248,7 @@ window.addEventListener("message",function(ev){
                font-size:11px;
                color:#7a8da8;
                letter-spacing:.5px;
-             ">
-            Loading
-          </div>
+             ">لوڈ ہو رہا ہے...</div>
 
         </div>
       `;

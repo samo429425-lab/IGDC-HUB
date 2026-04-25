@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html lang="ko">
+<html lang="tl">
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
@@ -348,7 +348,7 @@
 <a href="mediahub.html">🎬 Sentro ng Media</a>
 <a href="tour.html">🧳 Paglalakbay · Turismo · Akomodasyon</a>
 <a href="literature_academic">📚 Palitang Pampanitikan at Akademiko</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Mga Katanungan sa Q&amp;A</a>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Tanong at Sagot</a>
 </div>
 <div class="main-content">
 <section class="section-blockchain">
@@ -357,7 +357,7 @@
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
 </section>
-<h2 id="pageTitle">👥 Sosyal na Network · Inirerekomendang Mga Channel</h2>
+<h2 id="pageTitle">👥 Sosyal na Network · Mga Inirerekomendang Channel</h2>
 <div class="status"></div>
 <section class="maru-broadware-slot" hidden="" id="maruSocialBroadwareSlot"></section>
 <div class="rows">
@@ -371,7 +371,7 @@
 <div class="row-viewport" data-row="8"><div class="row-scroller" id="rowScroller8"><div class="row-grid" id="rowGrid8"><div class="thumb-grid thumb-scroller" data-psom-key="social-reddit"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft8">‹</button><button class="rscroll right" id="rsRight8">›</button></div>
 <div class="row-viewport" data-row="9"><div class="row-scroller" id="rowScroller9"><div class="row-grid" id="rowGrid9"><div class="thumb-grid thumb-scroller" data-psom-key="social-twitter"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft9">‹</button><button class="rscroll right" id="rsRight9">›</button></div>
 <section id="rpMobileBox">
-<h3 class="ad-headline">💎 Mga Sikat na Item 💎</h3>
+<h3 class="ad-headline">💎 Mga Sikat na Produkto 💎</h3>
 <div id="rpMobileScroller">
 <div data-psom-key="rightPanel" id="rpMobileGrid"></div>
 </div>
@@ -379,7 +379,7 @@
 </div>
 </div>
 <div class="right-rail" id="rightRail">
-<h3 class="ad-headline">💎 Mga Sikat na Item 💎</h3>
+<h3 class="ad-headline">💎 Mga Sikat na Produkto 💎</h3>
 <div class="ad-panel" data-psom-key="rightPanel" id="rightAutoPanel"></div>
 </div>
 </div>
@@ -464,7 +464,7 @@
             var b = document.createElement('div'); b.className='igdc-qa-backdrop';
             var p = document.createElement('div'); p.className='igdc-qa-panel';
             var h = document.createElement('div'); h.className='igdc-qa-header';
-            var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+            var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Tanong at Sagot';
             var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
             h.appendChild(t); h.appendChild(x);
             var body = document.createElement('div'); body.className='igdc-qa-body';
@@ -505,12 +505,12 @@
       function mountUI(){
         const existing = document.querySelector('.igdc-qa-modal'); if(existing){ return bindExisting(existing); }
         const modal = el('div','igdc-qa-modal'); const backdrop = el('div','igdc-qa-backdrop'); const panel = el('div','igdc-qa-panel');
-        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='Q&A'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','Close');
+        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='Tanong at Sagot'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','Isara');
         header.append(title, close);
         const body = el('div','igdc-qa-body');
         const lQ = el('label'); lQ.textContent='Tanong'; const tQ = el('textarea','igdc-qa-text q'); tQ.placeholder='Pakilagay ang iyong tanong...';
         const lA = el('label'); lA.textContent='Sagot'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='Mangyaring maghintay sandali. Tutugon kami sa lalong madaling panahon.';
-        const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='Isumite'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='Clear';
+        const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='Isumite'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='Burahin';
         const note = el('div','igdc-qa-note'); note.textContent='※ Ang mga simpleng tanong ay agad na sinasagot ng AI. Ang mga teknikal, error, o operasyong kaugnay na isyu ay awtomatikong ipinapasa sa admin Q&A.';
         const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='Email ng Kinatawan: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
         actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
@@ -529,9 +529,9 @@
         close && close.addEventListener('click', closeModal); backdrop && backdrop.addEventListener('click', closeModal); document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
         btnClear && btnClear.addEventListener('click', ()=>{ if(tQ) tQ.value=''; if(tA) tA.value=''; });
         async function fetchThreads(){ const sb = await ensureSupabase(); if(!sb || !list) return; const { data } = await sb.from('igdc_qna_threads').select('*').eq('project', STATE.project).eq('page_id', STATE.pageId).order('created_at', { ascending:false }).limit(100); renderList(data||[]); }
-        function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='Q. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('A. '+row.answer):'S. (Naghihintay)'; box.append(q,a); list.append(box); }); }
-        async function autoAnswerIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'Please refer to the information on this page for pricing and fees. Leave an additional inquiry if needed.':'Thank you for your inquiry. We will review it promptly and assist you.'; } } return { technical, answer }; }
-        async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoAnswerIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'Your inquiry has been received.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
+        function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='T. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('S. '+row.answer):'S. (Naghihintay)'; box.append(q,a); list.append(box); }); }
+        async function autoAnswerIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'Mangyaring tingnan ang impormasyon sa pahinang ito para sa presyo at bayarin. Maaari kang mag-iwan ng karagdagang tanong kung kailangan.':'Salamat sa iyong katanungan. Susuriin namin ito agad at tutulungan ka namin sa lalong madaling panahon.'; } } return { technical, answer }; }
+        async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoAnswerIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'Natanggap na ang iyong katanungan.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
         btnSubmit && btnSubmit.addEventListener('click', submit);
         window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
         fetchThreads(); return modal;
@@ -557,15 +557,15 @@
 <script>
     (function(){
       var DEMO = {
-        'social-youtube': { icon:'▶️', title:'YouTube', row:'Row 1 · Preview' },
-        'social-instagram': { icon:'📷', title:'Instagram', row:'Row 2 · Preview' },
-        'social-tiktok': { icon:'🎵', title:'TikTok', row:'Row 3 · Preview' },
-        'social-facebook': { icon:'📘', title:'Facebook', row:'Row 4 · Preview' },
-        'social-wechat': { icon:'💬', title:'WeChat', row:'Row 5 · Preview' },
-        'social-weibo': { icon:'🌐', title:'Weibo', row:'Row 6 · Preview' },
-        'social-pinterest': { icon:'📌', title:'Pinterest', row:'Row 7 · Preview' },
-        'social-reddit': { icon:'👽', title:'Reddit', row:'Row 8 · Preview' },
-        'social-twitter': { icon:'✖️', title:'X (Twitter)', row:'Row 9 · Preview' }
+        'social-youtube': { icon:'▶️', title:'YouTube', row:'Hanay 1 · Paunang tingin' },
+        'social-instagram': { icon:'📷', title:'Instagram', row:'Hanay 2 · Paunang tingin' },
+        'social-tiktok': { icon:'🎵', title:'TikTok', row:'Hanay 3 · Paunang tingin' },
+        'social-facebook': { icon:'📘', title:'Facebook', row:'Hanay 4 · Paunang tingin' },
+        'social-wechat': { icon:'💬', title:'WeChat', row:'Hanay 5 · Paunang tingin' },
+        'social-weibo': { icon:'🌐', title:'Weibo', row:'Hanay 6 · Paunang tingin' },
+        'social-pinterest': { icon:'📌', title:'Pinterest', row:'Hanay 7 · Paunang tingin' },
+        'social-reddit': { icon:'👽', title:'Reddit', row:'Hanay 8 · Paunang tingin' },
+        'social-twitter': { icon:'✖️', title:'X (Twitter)', row:'Hanay 9 · Paunang tingin' }
       };
       function makeCard(meta){
         var a = document.createElement('a'); a.className='card'; a.href='#';
@@ -1111,7 +1111,7 @@ window.addEventListener('resize', function(){
     a.dataset.productTitle = productTitle;
     a.dataset.productLink = resolvedHref;
 
-    a.textContent = productTitle || 'Item';
+    a.textContent = productTitle || 'Produkto';
     a.target = resolvedHref.indexOf('/pages/coming-soon.html') === 0 ? '_self' : '_blank';
     a.rel = 'noopener';
 
@@ -1335,7 +1335,7 @@ window.addEventListener('resize', function(){
     var openBtn = document.getElementById('snfvOpenBtn');
 
     media.innerHTML = '';
-    title.textContent = data.title || 'Preview';
+    title.textContent = data.title || 'Paunang tingin';
     desc.textContent = data.desc || '';
 
     if(data.video){
@@ -1354,7 +1354,7 @@ window.addEventListener('resize', function(){
     }else{
       var fb = document.createElement('div');
       fb.className = 'snfv-fallback';
-      fb.textContent = data.title || 'Preview';
+      fb.textContent = data.title || 'Paunang tingin';
       media.appendChild(fb);
     }
 
@@ -1401,7 +1401,27 @@ window.addEventListener('resize', function(){
   }, true);
 })();
 </script>
-<script defer="" src="/assets/js/socialnetwork-automap-v3.js?v=20260404psom"></script>
+<script src="frontbus.child.js"></script>
+<script>
+(function(){
+  try{
+    function notify(top){
+      parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*');
+    }
+    function atTop(){
+      var se=document.scrollingElement||document.documentElement||document.body;
+      return (window.scrollY||window.pageYOffset||0)<=0 && (se?(se.scrollTop||0)<=0:true);
+    }
+    function onAnyScroll(){ notify(atTop()); }
+    window.addEventListener('scroll', onAnyScroll, {passive:true});
+    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
+    document.addEventListener('wheel', function(e){ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
+    document.addEventListener('touchmove', function(){ notify(false); }, {passive:true,capture:true});
+    setTimeout(function(){ notify(atTop()); }, 50);
+  }catch(_){ }
+})();
+</script>
+<script defer=" src="/assets/js/socialnetwork-automap-v3.js?v=20260404psom"></script>
 <script id="igtc-checkout-trigger-v1">
 (function(){
   if (window.__IGTC_CHECKOUT_READY__) return;

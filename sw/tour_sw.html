@@ -534,7 +534,7 @@ html, body {
 
 .sidebar{ padding-top: 0 !important; position: sticky; top: var(--top-pad) !important;}
 
-/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+/* Sidebar Maswali na majibu link follows existing .sidebar a style; this extra ensures visibility if needed */
 #qnaOpenBtn{ display:block; text-decoration:none;}
 
 .sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
@@ -621,7 +621,7 @@ html, body {
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Bado hakuna machapisho ya Q&A yaliyowekwa";
+  content: "Bado hakuna machapisho ya Maswali na majibu yaliyowekwa";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -940,11 +940,11 @@ html, body {
 <a href="mediahub.html">🎬 Kitovu cha Vyombo vya Habari</a>
 <a href="tour.html">🧳 Safari · Utalii · Malazi</a>
 <a href="literature_academic">📚 Fasihi na Mabadilishano ya Kitaaluma</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Mawasiliano ya Q&amp;A</a></div>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Maswali na majibu</a></div>
 <div class="main-content">
 <section class="section-blockchain">
 <a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
-<a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
+<a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">FunguaSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
 </section>
@@ -959,9 +959,9 @@ html, body {
     .btn-grid .link-btn:hover { background:#e75480; color:#ffffff; border-color:#cc2d63; box-shadow:0 2px 6px rgba(0,0,0,0.18); }</style>
 <div class="region-card">
 <div class="region-title">Asia</div>
-<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaTour <small>(하나투어)</small></a>
-<a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour<small>(모두투어)</small></a>
-<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon Tour <small>(노랑풍선)</small></a>
+<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaTour <small>(HanaTour)</small></a>
+<a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour<small>(ModeTour)</small></a>
+<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon Tour <small>(Yellow Balloon Tour)</small></a>
 <a class="link-btn" href="https://www.trip.com" target="_blank">Trip.com <small>(携程)</small></a>
 <a class="link-btn" href="https://www.ctrip.com" target="_blank">Ctrip <small>(携程)</small></a>
 <a class="link-btn" href="https://www.qunar.com" target="_blank">Qunar <small>(去哪儿网)</small></a>
@@ -975,7 +975,7 @@ html, body {
 <a class="link-btn" href="https://www.agoda.com" target="_blank">Agoda</a>
 <a class="link-btn" href="https://www.klook.com" target="_blank">Klook</a>
 <a class="link-btn" href="https://www.his-j.com" target="_blank">HIS Japan <small>(エイチ・アイ・エス)</small></a>
-<a class="link-btn" href="https://www.cleartrip.com" target="_blank">Cleartrip</a>
+<a class="link-btn" href="https://www.cleartrip.com" target="_blank">Futatrip</a>
 <a class="link-btn" href="https://www.virtualtrips.io" target="_blank">Virtual Trips</a>
 <a class="link-btn" href="https://www.kkday.com" target="_blank">KKDay</a>
 <a class="link-btn" href="https://www.vietnamairlines.com" target="_blank">Vietnam Airlines</a></div>
@@ -1118,7 +1118,7 @@ html, body {
   --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
   --blue:#2563eb; --muted:#9ca3af;
 }
-/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+/* Sidebar Maswali na majibu link follows existing .sidebar a style; this extra ensures visibility if needed */
 #qnaOpenBtn{ display:block; text-decoration:none; }
 /* Modal near the left sidebar, with smooth transitions */
 .igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
@@ -1175,7 +1175,7 @@ a[href^="mailto:"]:hover {
 }
 </style>
 <style id="qna-brand-only">
-/* === Q&A sidebar link color only (no other changes) === */
+/* === Maswali na majibu sidebar link color only (no other changes) === */
 :root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
 .sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
   display:block;
@@ -1187,7 +1187,7 @@ a[href^="mailto:"]:hover {
 .sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
 </style>
 <script id="igdc-qa-safety-bootstrap">
-// Ensures the Q&A popup opens when clicking the sidebar link,
+// Ensures the Maswali na majibu popup opens when clicking the sidebar link,
 // even if Supabase URL/Key are not configured yet.
 (function(){
   if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
@@ -1208,7 +1208,7 @@ a[href^="mailto:"]:hover {
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Maswali na majibu';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
@@ -1316,7 +1316,7 @@ a[href^="mailto:"]:hover {
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      console.warn("[Maswali na majibu] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -1342,8 +1342,8 @@ a[href^="mailto:"]:hover {
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","닫기");
+    const title = el("div","igdc-qa-title"); title.textContent = "Maswali na majibu";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Funga");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
@@ -1354,7 +1354,7 @@ a[href^="mailto:"]:hover {
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Wasilisha";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Futa";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Maswali rahisi yanajibiwa mara moja na AI. Masuala ya kiufundi/makosa/uendeshaji yanapelekwa moja kwa moja kwa Q&A ya msimamizi.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Maswali rahisi yanajibiwa mara moja na AI. Masuala ya kiufundi/makosa/uendeshaji yanapelekwa moja kwa moja kwa Maswali na majibu ya msimamizi.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -1508,7 +1508,7 @@ a[href^="mailto:"]:hover {
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Maswali na majibu] auth 초기화 실패:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -1536,9 +1536,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
           var b=document.createElement('div'); b.className='igdc-qa-backdrop';
           var p=document.createElement('div'); p.className='igdc-qa-panel';
           var h=document.createElement('div'); h.className='igdc-qa-header';
-          var t=document.createElement('div'); t.textContent='Q&A';
+          var t=document.createElement('div'); t.textContent='Maswali na majibu';
           var x=document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
-          var body=document.createElement('div'); body.className='igdc-qa-body'; body.textContent='Q&A connection ready';
+          var body=document.createElement('div'); body.className='igdc-qa-body'; body.textContent='Maswali na majibu connection ready';
           h.appendChild(t); h.appendChild(x); p.appendChild(h); p.appendChild(body);
           m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
           function close(){ m.classList.remove('open'); }
@@ -1607,14 +1607,14 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Maswali na majibu';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
       body.innerHTML = '<div class="igdc-qa-note">Utendaji kamili utawezeshwa baada ya mipangilio ya hifadhi (Supabase url/key) kuunganishwa.</div>';
 
-      // ensure the "대표 이메일" is shown only inside the modal
+      // ensure the "Barua pepe ya mwakilishi" is shown only inside the modal
       var ce = document.createElement('p');
       ce.className = 'contact-email';
       ce.innerHTML = 'Barua pepe ya mwakilishi: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
@@ -1625,7 +1625,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       document.body.appendChild(m);
 
       function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }
+      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
       x.addEventListener('click', close);
       b.addEventListener('click', close);
 
@@ -1709,7 +1709,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Maswali na majibu';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
@@ -1725,7 +1725,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       body.appendChild(ce);
 
       
-      // (2) Q&A threads list container
+      // (2) Maswali na majibu threads list container
       var listWrap = document.createElement('div');
       listWrap.className = 'igdc-qa-threads qna-list';
       // Placeholder item container; IGDC_QA loader will populate. Empty-state CSS will show if nothing.
@@ -1862,7 +1862,7 @@ window.addEventListener("message",function(ev){
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
                   + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Funga</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -1944,213 +1944,7 @@ window.addEventListener("message",function(ev){
 </script>
 
 <script id="igdc-unified-commerce-script">
-/*
- IGDC Unified Commerce Script
- --------------------------------------------------
- 적용 대상:
-  - Distribution (이미 적용 가능)
-  - 나머지 4개 사이트 (Donation 제외, Media 제외)
- 목적:
-  - 썸네일 클릭 자동 감지
-  - 상세 상품 자동 오픈 훅
-  - 구매하기 / 결제 / 장바구니 기존 버튼 그대로 사용
-  - 상세 하단에 리뷰 시스템 자동 장착 (쿠팡 방식)
- --------------------------------------------------
- 전제:
-  - 썸네일 카드 또는 상세 컨테이너에 data-product-id 존재
-  - IGTC.checkout(...) 기존 결제 로직 존재
-  - window.__IGDC_ROLE 존재
- --------------------------------------------------
- 삽입 위치:
-  - 각 페이지 </body> 바로 위
-*/
-
-(function (window, document) {
-  'use strict';
-
-  const IGDCCommerce = {
-    config: {
-      reviewApi: '/.netlify/functions/reviews',
-      reviewRootId: 'igdc-review-root',
-      minReviewChars: 10,
-      maxReviewChars: 2000
-    },
-
-    state: {
-      role: 'guest',
-      activeProductId: null
-    },
-
-    init() {
-      this.state.role = window.__IGDC_ROLE || 'guest';
-      this.bindThumbnailAutoHook();
-    },
-
-    /* 1️⃣ 썸네일 카드 클릭 자동 감지 */
-    bindThumbnailAutoHook() {
-      document.addEventListener('click', (e) => {
-        const card = e.target.closest('[data-product-id]');
-        if (!card) return;
-
-        const productId = card.dataset.productId;
-        if (!productId) return;
-
-        // 기존 상세 상품 오픈 로직은 이미 각 페이지에 있음
-        // 여기서는 리뷰만 자동 부착
-        setTimeout(() => {
-          this.mountReview(productId);
-        }, 50);
-      });
-    },
-
-    /* 2️⃣ 리뷰 시스템 장착 */
-    mountReview(productId) {
-      if (this.state.activeProductId === productId) return;
-      this.state.activeProductId = productId;
-
-      let root = document.getElementById(this.config.reviewRootId);
-      if (!root) {
-        root = document.createElement('div');
-        root.id = this.config.reviewRootId;
-
-        const detailContainer =
-          document.querySelector('.product-detail') ||
-          document.querySelector('.product-modal') ||
-          document.querySelector('.detail-view') ||
-          document.body;
-
-        detailContainer.appendChild(root);
-      }
-
-      root.innerHTML = this.renderReviewShell();
-      this.bindReviewForm(root, productId);
-      this.loadReviews(productId);
-    },
-
-    /* 3️⃣ 리뷰 UI */
-    renderReviewShell() {
-      const canWrite = this.state.role !== 'guest';
-      return `
-        <section class="igdc-review">
-          <h3 class="igdc-review-title">Product Reviews</h3>
-          <div id="igdc-review-list" class="igdc-review-list">Loading...</div>
-          ${canWrite ? this.renderReviewForm() : this.renderLoginHint()}
-        </section>
-      `;
-    },
-
-    renderReviewForm() {
-      return `
-        <form id="igdc-review-form" class="igdc-review-form">
-          <textarea
-            placeholder="Please share your experience using the product."
-            minlength="${this.config.minReviewChars}"
-            maxlength="${this.config.maxReviewChars}"
-            required></textarea>
-          <div class="igdc-review-actions">
-            <button type="submit">Post Review</button>
-          </div>
-        </form>
-      `;
-    },
-
-    renderLoginHint() {
-      return `<div class="igdc-review-login-hint">
-        Review posting is available after logging in.
-      </div>`;
-    },
-
-    /* 4️⃣ 리뷰 이벤트 */
-    bindReviewForm(root, productId) {
-      const form = root.querySelector('#igdc-review-form');
-      if (!form) return;
-
-      form.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const textarea = form.querySelector('textarea');
-        const content = textarea.value.trim();
-
-        if (content.length < this.config.minReviewChars) {
-          alert(`리뷰는 최소 ${this.config.minReviewChars}자 이상 작성해 주세요.`);
-          return;
-        }
-
-        this.submitReview(productId, content)
-          .then(() => {
-            textarea.value = '';
-            this.loadReviews(productId);
-          })
-          .catch(() => alert('리뷰 Submission failed'));
-      });
-    },
-
-    /* 5️⃣ 리뷰 로딩 */
-    async loadReviews(productId) {
-      const list = document.getElementById('igdc-review-list');
-      if (!list) return;
-
-      list.textContent = 'Loading...';
-
-      try {
-        const res = await fetch(
-          `${this.config.reviewApi}?productId=${encodeURIComponent(productId)}`
-        );
-        const data = await res.json();
-
-        if (!Array.isArray(data) || data.length === 0) {
-          list.innerHTML = '<div class="igdc-review-empty">No reviews yet.</div>';
-          return;
-        }
-
-        list.innerHTML = data.map(this.renderReviewItem).join('');
-      } catch {
-        list.textContent = 'Failed to load reviews.';
-      }
-    },
-
-    async submitReview(productId, content) {
-      const res = await fetch(this.config.reviewApi, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId, content })
-      });
-      if (!res.ok) throw new Error('submit failed');
-    },
-
-    renderReviewItem(item) {
-      const esc = (v) => String(v || '').replace(/[<>]/g, '');
-      return `
-        <div class="igdc-review-item">
-          <div class="igdc-review-meta">
-            <span>${esc(item.user || 'Anonymous')}</span>
-            <span>${esc(item.date || '')}</span>
-          </div>
-          <div class="igdc-review-content">${esc(item.content)}</div>
-        </div>
-      `;
-    }
-  };
-
-  /* 6️⃣ 기본 스타일 */
-  const style = document.createElement('style');
-  style.textContent = `
-    .igdc-review { margin-top:24px; border-top:1px solid #eee; padding-top:16px; }
-    .igdc-review-title { margin:0 0 12px; font-size:1.05rem; }
-    .igdc-review-list { display:flex; flex-direction:column; gap:10px; }
-    .igdc-review-item { border:1px solid #eee; border-radius:10px; padding:10px; background:#fafafa; }
-    .igdc-review-meta { font-size:.8rem; color:#666; display:flex; gap:8px; }
-    .igdc-review-content { margin-top:6px; line-height:1.5; }
-    .igdc-review-form textarea { width:100%; min-height:90px; padding:10px; border-radius:10px; border:1px solid #ddd; }
-    .igdc-review-actions { margin-top:8px; text-align:right; }
-    .igdc-review-actions button { padding:8px 14px; border-radius:10px; border:none; background:#2563eb; color:#fff; }
-    .igdc-review-empty, .igdc-review-login-hint { color:#666; }
-  `;
-  document.head.appendChild(style);
-
-  IGDCCommerce.init();
-  window.IGDCCommerce = IGDCCommerce;
-
-})(window, document);
+(function(){ /* disabled stale unified commerce helper */ })();
 </script>
 
 <script id="rightpanel-dummy-engine-v2">
@@ -2222,7 +2016,7 @@ window.addEventListener("message",function(ev){
                color:#7a8da8;
                letter-spacing:.5px;
              ">
-            Loading
+            Inapakia...
           </div>
 
         </div>

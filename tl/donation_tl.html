@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="tl">
 <head>
 <!-- Supabase inline injection (vars + init) -->
 <script>
@@ -19,9 +19,9 @@
         url: envData.env.SUPABASE_URL,
         anonKey: envData.env.SUPABASE_ANON_KEY
       });
-      console.log("✅ Supabase 키 정상 로드됨.");
+      console.log("✅ Na-load ang Supabase key.");
     } else {
-      console.warn("⚠️ Supabase 키 누락 — secureEnvBridge.js 또는 Netlify environment variables Confirm 필요.");
+      console.warn("⚠️ Nawawala ang Supabase key — tingnan ang secureEnvBridge.js o Netlify environment variables.");
       window.SUPER_VARSAR = Object.freeze({
         url: null,
         anonKey: null
@@ -318,7 +318,7 @@
 /* The right panel keeps its own inner padding; outer gap is handled by grid gap */
 .right{ margin:0 !important; }
 
-/* Soft pastel background for 글로벌 나눔허브 title box */
+/* Soft pastel background for Pandaigdig 나눔허브 title box */
 .global-title-box{
   background-color: #f0faff !important;
 }
@@ -667,7 +667,7 @@
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
 .compose-wrap .row-top #btnOpenComposer{ order:5; }   /* Write */
 .compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
-.compose-wrap .row-top #attachPreview{                /* 미리보기 막대창(상시 존재) */
+.compose-wrap .row-top #attachPreview{                /* preview 막대창(상시 존재) */
   order:4;
   display:flex; align-items:center; gap:6px; flex-wrap:nowrap;
   min-height:34px; padding:6px 8px;
@@ -692,11 +692,11 @@
 /* 유령 중복 표시 방지: legacy 파일명 표시는 숨김(칩이 대체) */
 .compose-wrap #attachName{ display:none !important; }
 </style><style>
-/* === Compose row order override (requested): Category -> Write -> Attachment -> 미리보기막대 -> Save === */
+/* === Compose row order override (requested): Category -> Write -> Attachment -> preview막대 -> Save === */
 .compose-wrap .row-top .field.field-category{ order:1; }
 .compose-wrap .row-top #btnOpenComposer{ order:2; }   /* Write */
 .compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
-.compose-wrap .row-top #attachPreview{ order:4; }     /* 미리보기 막대 */
+.compose-wrap .row-top #attachPreview{ order:4; }     /* preview 막대 */
 .compose-wrap .row-top #btnSubmitPost{ order:5; }     /* Save */
 </style><style>
 /* === Title Preview Bar (between Write and Attachment) === */
@@ -717,7 +717,7 @@
 /* Keep row single-line as much as possible */
 .compose-wrap .row-top{ flex-wrap:nowrap; gap:8px; }
 </style><style>
-/* === Compose row: place 'Clear' right after 최종 'Save' === */
+/* === Compose row: place 'I-clear' right after 최종 'Save' === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; overflow:hidden; }
 .compose-wrap .row-top #btnSubmitPost{ order:6; }
 .compose-wrap .row-top #btnAttachClear{ order:7; margin-left:6px; }
@@ -743,7 +743,7 @@
 /* Write */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
 /* Title 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
 /* Attachment 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
-/* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
+/* 첨부 preview 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
 /* Save */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
 /* Clear */             .compose-wrap .row-top #btnAttachClear{ order:7 !important; }
 </style><style>
@@ -1037,7 +1037,7 @@
 /* Keep the track flush against the label */
 .feed-row .row-track{ padding-left: 0 !important; margin-left: 0 !important; }
 </style><style>
-/* === Vertical labels: bigger than 'Feed' and start at 2nd-char position === */
+/* === Vertical labels: bigger than 'Mga post' and start at 2nd-char position === */
 .feed-row{
   grid-template-columns: minmax(26px, 34px) 1fr !important; /* widen a touch for larger font */
   column-gap: 8px !important;
@@ -1045,7 +1045,7 @@
 .feed-row .row-label{
   color: var(--brand);
   font-weight: 700;
-  font-size: 1.22rem;     /* a bit larger than 'Feed' */
+  font-size: 1.22rem;     /* a bit larger than 'Mga post' */
   writing-mode: vertical-rl;
   text-orientation: upright;
   line-height: 1;
@@ -1081,7 +1081,7 @@
   margin-bottom:6px;  /* small gap before the first card row */
   color: var(--brand);
   font-weight: 800;
-  font-size: 1.22rem; /* slightly larger than 'Feed' */
+  font-size: 1.22rem; /* slightly larger than 'Mga post' */
   line-height: 1.1;
   pointer-events:none;
   user-select:none;
@@ -1856,7 +1856,7 @@ body .right{ display:none !important; }
 
 /* NOTE:
  - This block is intentionally minimal and non-destructive. It complements existing @media (min-width:1025px) rules in the file.
- - Next steps: hook a mobile "drawer" for .right if you want ads/tools accessible on phones without occupying layout.
+ - Susunod steps: hook a mobile "drawer" for .right if you want ads/tools accessible on phones without occupying layout.
 */
 </style>
 <style id="donation-landscape-assert-v2">
@@ -2339,7 +2339,7 @@ body > div.container,
 <a href="mediahub.html">🎬 Sentro ng Media</a>
 <a href="tour.html">🧳 Paglalakbay · Turismo · Akomodasyon</a>
 <a href="literature/academic.html" style="display:none !important;">📚 Palitang Pampanitikan at Akademiko</a>
-<a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Mga Katanungan sa Q&amp;A</a></nav>
+<a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Tanong at Sagot</a></nav>
 <!-- Main (불변 구조) -->
 <main class="main">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
@@ -2367,11 +2367,11 @@ body > div.container,
 <option value="env">Kapaligiran</option>
 <option value="etc">Iba pa</option>
 </select>
-</label><button class="button small" id="btnAttach" type="button">Kalakip</button><div aria-label="Attachment 미리보기" class="attach-preview" id="attachPreview"></div>
-<button class="button small" id="btnOpenComposer">Sumulat</button><div aria-label="Title 미리보기" class="title-preview" id="titlePreview"><span class="tp-text">Walang pamagat</span></div>
+</label><button class="button small" id="btnAttach" type="button">Kalakip</button><div aria-label="Paunang tingin ng kalakip" class="attach-preview" id="attachPreview"></div>
+<button class="button small" id="btnOpenComposer">Sumulat</button><div aria-label="Paunang tingin ng pamagat" class="title-preview" id="titlePreview"><span class="tp-text">Walang pamagat</span></div>
 <button class="button small accent" id="btnSubmitPost">I-save</button>
 <span id="attachName"></span>
-<button aria-label="첨부 제거 " class="button tiny" id="btnAttachClear" style="display:none;" type="button">I-clear</button>
+<button aria-label="Alisin ang attachment " class="button tiny" id="btnAttachClear" style="display:none;" type="button">I-clear</button>
 <input id="postAttach" style="display:none;" type="file"/>
 </div>
 <div class="row row-bottom">
@@ -2529,8 +2529,8 @@ body > div.container,
   btnSubmit && btnSubmit.addEventListener("click", ()=>{ if(btnSave){ btnSave.click(); } });
 
   btnSave && btnSave.addEventListener("click", ()=>{
-    const t = titleI?.value?.trim() || "(No Title)";
-    const b = bodyI?.value?.trim() || "(No Content)";
+    const t = titleI?.value?.trim() || "(Walang pamagat)";
+    const b = bodyI?.value?.trim() || "(Walang nilalaman)";
     const cat = catSel?.value || "etc";
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(holder){
@@ -2548,7 +2548,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">첨부 링크</a>` : `첨부: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Link ng attachment</a>` : `Attachment: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2559,7 +2559,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "첨부: " + fileAttach.files[0].name;
+        att.textContent = "Attachment: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2576,14 +2576,14 @@ body > div.container,
 
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
-    const link = prompt("이미지 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 Confirm을 누르세요)");
+    const link = prompt("Kung may external link (URL) ng larawan, i-paste ito. Kung wala, pindutin ang Confirm.");
     if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
         alert("Mga larawang hanggang 2MB lamang ang maaaring direktang i-preview. Para sa malalaking file, i-upload ang mga ito sa external storage at ilagay ang link.");
         imageLink = ""; imagePreviewObjectUrl = "";
       }else{
-        imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
+        imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 preview만
         imageLink = ""; // 실제 Save은 링크만 사용
       }
     }else{
@@ -2593,7 +2593,7 @@ body > div.container,
 
   btnFileOk && btnFileOk.addEventListener('click', ()=>{
     const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
-    const link = prompt("파일 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 Confirm을 누르세요)");
+    const link = prompt("Kung may external link (URL) ng file, i-paste ito. Kung wala, pindutin ang Confirm.");
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
@@ -2622,7 +2622,7 @@ body > div.container,
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '개 파일');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' file');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2693,7 +2693,7 @@ body > div.container,
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 제거'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Alisin ang attachment'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
@@ -2728,11 +2728,11 @@ body > div.container,
   function closeModal(){ modal && modal.classList.add('hidden'); }
 
   function handleUnifiedSave(){
-    const t = (titleI && titleI.value.trim()) || '(No Title)';
-    const b = (bodyI && bodyI.value.trim()) || '(No Content)';
+    const t = (titleI && titleI.value.trim()) || '(Walang pamagat)';
+    const b = (bodyI && bodyI.value.trim()) || '(Walang nilalaman)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
+    if(!holder){ alert('Hindi makita ang seksyon ng balita.'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2749,7 +2749,7 @@ body > div.container,
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = '첨부: ' + f.name;
+        li.textContent = 'Attachment: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
@@ -2762,7 +2762,7 @@ body > div.container,
     const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
     if(canDelete) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      if(!confirm('Tanggalin ang balitang ito?')) return;
       item.remove();
     });
 
@@ -2829,13 +2829,13 @@ body > div.container,
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '개 파일');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' file');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 모두 제거'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Alisin ang lahat ng attachment'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attachPreview.appendChild(chip);
@@ -2853,7 +2853,7 @@ body > div.container,
     });
   }
 
-  // "Clear" 버튼도 전체 초기화
+  // "I-clear" 버튼도 전체 초기화
   if(clearBtn){
     clearBtn.addEventListener('click', (e)=>{
       e.preventDefault();
@@ -2887,7 +2887,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || ''No title';';
+    tpText.textContent = t || ''Walang pamagat';';
   }
 
   // live typing updates preview
@@ -2950,7 +2950,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'Title Not entered';
+    tpText.textContent = t || 'Hindi pa nailalagay ang pamagat';
   }
 
   if(btnDraft){
@@ -2987,7 +2987,7 @@ body > div.container,
     btn.style.cssText='margin-top:6px; display:none;';
     if(canShowDeleteFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      if(!confirm('Tanggalin ang balitang ito?')) return;
       item.remove();
     });
     item.appendChild(btn);
@@ -3130,14 +3130,14 @@ body > div.container,
     npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml) : '';
 
     openModal();
   }, true);
 })();
 </script><div id="editNewsModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 680px); max-height:78vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 style="margin:0; font-size:1.05rem;">Write 편집</h3>
+<h3 style="margin:0; font-size:1.05rem;">Magsulat / Mag-edit</h3>
 <div id="enInfo" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
@@ -3188,7 +3188,7 @@ body > div.container,
       badge.setAttribute('translate','no');
       header.appendChild(badge);
     }
-    badge.textContent = `Edited · ${tsStr}`;
+    badge.textContent = `Na-edit · ${tsStr}`;
   }
 
   // On load, restore edited badge for admin/author only
@@ -3331,7 +3331,7 @@ body > div.container,
     let btnDel  = footer.querySelector('.delete-post');
     if(!btnEdit){
       btnEdit = document.createElement('button');
-      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
+      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='I-edit';
       footer.appendChild(btnEdit);
       btnEdit.addEventListener('click', (e)=>{
         e.stopPropagation();
@@ -3352,7 +3352,7 @@ body > div.container,
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+        if(!confirm('Tanggalin ang balitang ito?')) return;
         item.remove();
       });
     }
@@ -3526,13 +3526,13 @@ body > div.container,
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
 
     const t = tpl.querySelector('.card-title');
-    if(t) t.textContent = 'Title';
+    if(t) t.textContent = 'Pamagat';
 
     const m = tpl.querySelector('.card-meta');
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'Content';
+    if(p) p.textContent = 'Nilalaman';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -3629,7 +3629,7 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Nakumpleto ang kahilingan sa pagproseso ng blockchain: " + (j.txHash||"Pending")); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Nakumpleto ang kahilingan sa pagproseso ng blockchain: " + (j.txHash||"Nakabinbin")); }
       else { alert("Nabigo ang pagproseso ng blockchain"); }
     }catch(e){ console.warn(e); alert("Error sa network"); }
   };
@@ -3768,7 +3768,7 @@ body > div.container,
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","정액 기부 금액");
+  btnGroup.setAttribute("aria-label","Nakapirming halaga ng donasyon");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -3817,7 +3817,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      alert(`Napiling halaga: ₩${Number(amt).toLocaleString()}\n\nMangyaring ilipat sa Account sa ibaba.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -4032,7 +4032,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if ((!hasAny || (!hasReal && !hasExternalInfo)) && !hasOurPlaceholder) {
         const item = document.createElement('div');
         item.className = 'item placeholder';
-        item.innerHTML = '<div class="title">No posts yet</div>';
+        item.innerHTML = '<div class="title">Wala pang post</div>';
         list.appendChild(item);
       }
 
@@ -4192,7 +4192,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Save은 비활성화됩니다.");
+      console.warn("[Q&A] Hindi naka-set ang Supabase credentials/library: makikita ang UI pero naka-disable ang pag-save.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -4219,7 +4219,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
     const title = el("div","igdc-qa-title"); title.textContent = "Mga Tanong at Sagot";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Isara");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
@@ -4229,7 +4229,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Mangyaring maghintay sandali. Isang sagot ang ibibigay sa lalong madaling panahon.";
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Isumite";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="I-clear";
     const note = el("div","igdc-qa-note"); note.textContent="※ Ang mga simpleng tanong ay agad na sinasagot ng AI. Ang mga teknikal, error, o operasyong kaugnay na isyu ay awtomatikong ipinapasa sa admin Q&A.";
     const list = el("div","igdc-qa-threads");
 
@@ -4303,8 +4303,8 @@ document.addEventListener('DOMContentLoaded', function(){
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"S. (Naghihintay)";
+        const q = el("div","igdc-qa-thread-q"); q.textContent="T. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("S. "+row.answer):"S. (Naghihintay)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "Kahilingan sa Admin":"Pangkalahatan";
@@ -4338,9 +4338,9 @@ document.addEventListener('DOMContentLoaded', function(){
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 Confirm 후 회신됩니다.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="Sasagutin ang mga tanong sa operasyon pagkatapos masuri ng administrator.";
           else if(/price|cost|fee|가격|비용|요금/i.test(text)) answer="For price/fee information, please refer to the guidance on this page and leave any additional inquiries.";
-          else answer="문의 감사합니다. 빠르게 Confirm하여 도와드리겠습니다.";
+          else answer="Salamat sa tanong. Susuriin namin ito at tutulong agad.";
         }
       }
       return { technical, answer };
@@ -4354,7 +4354,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Save 설정(Supabase url/key)이 아직 연결되지 않아 서버 Save은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        alert("Hindi pa nakakonekta ang storage settings (Supabase url/key), kaya naka-disable ang server saving. Kapag na-deploy sa web, itakda ang SUPER_VARSAR.url/anonKey at awtomatiko itong kokonekta.");
         return;
       }
       const record = {
@@ -4426,7 +4426,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         bk=document.createElement('div');
         bk.id='drawerBackdrop';
         bk.className='drawer-backdrop';
-        document.body/*__KILL__*/ appendChild_DISABLED(bk);
+        document.body.appendChild(bk);
         bk.addEventListener('click',close,{passive:true});
       }
     }
@@ -4514,7 +4514,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
   /* Optional close affordance */
   .card.expanded::after, .thumb.expanded::after{
-    content: "Close";
+    content: "Isara";
     position: absolute; top: 8px; right: 12px;
     padding: 6px 10px; border-radius: 14px;
     background: rgba(0,0,0,.5); color:#fff; font-size: 12px;
@@ -4699,13 +4699,13 @@ window.addEventListener("message",function(ev){
     var t = normalize(text);
     if(!t) return null;
 
-    if(t.includes("global") || t.includes("글로벌") || t.includes("wam") || t.includes("iesf")) return "iesf";
+    if(t.includes("global") || t.includes("Pandaigdig") || t.includes("wam") || t.includes("iesf")) return "iesf";
     if(t.includes("ngo")) return "ngo";
     if(t.includes("Mission") || t.includes("mission")) return "mission";
     if(t.includes("Service") || t.includes("volunteer") || t.includes("service")) return "service";
-    if(t.includes("Relief") || t.includes("구제") || t.includes("재난") || t.includes("relief")) return "relief";
+    if(t.includes("Relief") || t.includes("Tulong") || t.includes("Sakuna") || t.includes("relief")) return "relief";
     if(t.includes("Education") || t.includes("education") || t.includes("edu")) return "edu";
-    if(t.includes("Environment") || t.includes("기후") || t.includes("environment") || t.includes("env")) return "env";
+    if(t.includes("Environment") || t.includes("Klima") || t.includes("environment") || t.includes("env")) return "env";
     if(t.includes("Others") || t.includes("others") || t.includes("etc") || t.includes("misc")) return "etc";
 
     return null;
@@ -4985,12 +4985,12 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npTitle.textContent = title || 'Title 없음';
+    npTitle.textContent = title || 'Walang pamagat';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(등록된 본문이 없습니다.)';
+    npBody.textContent = body || '(Walang nakarehistrong nilalaman.)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml
         : '';
     }
 
@@ -5042,10 +5042,10 @@ window.addEventListener("message",function(ev){
 
       const { error } = await sb.from('igdc_donation_posts').insert(payload);
       if(error){
-        console.warn('[donation] Supabase Save 실패:', error.message);
+        console.warn('[donation] Nabigo ang pag-save sa Supabase:', error.message);
       }
     }catch(err){
-      console.warn('[donation] Supabase sync 예외:', err);
+      console.warn('[donation] Exception sa Supabase sync:', err);
     }
   }
 
@@ -5107,7 +5107,7 @@ window.addEventListener("message",function(ev){
 </style>
 <script id="hero-linebreak-fix">
 (function(){
-  function nobreak(s){ return s.replace(/NGO와\s*공유하며/g, "NGO와\u00A0공유하며"); }
+  function nobreak(s){ return s.replace(/NGO\uC640\s*\uACF5\uC720\uD558\uBA70/g, "Ibinabahagi sa NGO"); }
   var el = document.getElementById("topPostBody");
   if(el){
     if(el.value !== undefined){ el.value = nobreak(el.value); }
@@ -5182,7 +5182,7 @@ window.addEventListener("message",function(ev){
 })();
 </script>
 <script>
-// 모바일: WAM NAVER Cafe + Donations 패널 이동 (복사 아님, 이동)
+// 모바일: WAM NAVER Cafe + Mga donasyon 패널 이동 (복사 아님, 이동)
 (function(){
   var mq = window.matchMedia("(max-width:1023px)");
   var main = document.querySelector("main.main");
@@ -5317,7 +5317,7 @@ window.addEventListener("message",function(ev){
     card.innerHTML = `
       <div class="thumb"></div>
       <div class="card-body">
-        <div class="card-title">Loading...</div>
+        <div class="card-title">Naglo-load...</div>
         <div class="card-meta">-</div>
         <div class="card-preview">Preparing</div>
       </div>

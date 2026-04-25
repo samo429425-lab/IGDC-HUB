@@ -740,9 +740,9 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
       if (txt && sel && btn) { f.classList.add('igdc-inline-search'); break; }
     }
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyInlineSearch;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyInlineSearch);
   else applyInlineSearch();
-  window.addEventListener('resize', applyInlineSearch;
+  window.addEventListener('resize', applyInlineSearch);
 })();
 </script>
 <style id="igdc-card-and-hero-hard-constants">
@@ -1188,10 +1188,10 @@ html, body {
 <a href="mediahub.html">🎬 Kitovu cha Vyombo vya Habari</a>
 <a href="tour.html">🧳 Safari · Utalii · Malazi</a>
 <a href="literature_academic.html">📚 Fasihi na Mabadilishano ya Kitaaluma</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Mawasiliano ya Q&amp;A</a></aside>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Maswali na majibu</a></aside>
 <main>
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
-<a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
+<a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">FunguaSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
 </section>
@@ -3357,7 +3357,7 @@ function handleVideoSearch(e){
 
   let activeProvider = "youtube";
 
-  function renderWatoa huduma(){
+  function renderProviders(){
     const form = document.querySelector('form.video-search');
     const sel  = form?.querySelector('select[name="provider"]');
     const bar  = document.querySelector('.provider-bar');
@@ -3393,7 +3393,7 @@ function handleVideoSearch(e){
 
   function setProvider(p){
     activeProvider = p;
-    renderWatoa huduma();
+    renderProviders();
   }
 
   // Click on buttons -> set provider
@@ -3420,7 +3420,7 @@ function handleVideoSearch(e){
   }
 
   // initial render
-  renderWatoa huduma();
+  renderProviders();
 })();
 </script>
 <script>
@@ -3454,7 +3454,7 @@ function handleVideoSearch(e){
 
   function labelOf(p, lang){ return (p.labels && p.labels[lang]) || p.labels?.en || p.key; }
 
-  function orderWatoa huduma(lang){
+  function orderProviders(lang){
     const pri = { global:50, kr:40, cn:40, jp:40 };
     if (lang === "ko") { pri.kr = 10; pri.global = 30; pri.cn = 40; }
     else if (lang === "zh") { pri.cn = 10; pri.global = 30; pri.kr = 40; }
@@ -3480,9 +3480,9 @@ function handleVideoSearch(e){
     const form = document.querySelector('form.video-search');
     const sel  = form?.querySelector('select[name="provider"]');
     if (!form || !sel) return;
-    const ordered = orderWatoa huduma(currentLang);
+    const ordered = orderProviders(currentLang);
     sel.innerHTML = "";
-    orderProviders(p => {
+    ordered.forEach(p => {
       const opt = document.createElement("option");
       opt.value = p.key;
       opt.textContent = labelOf(p, currentLang);
@@ -3505,7 +3505,7 @@ function handleVideoSearch(e){
       const sel = e.target.querySelector('select[name="provider"]');
       const key = sel?.value || "youtube";
       if(!q) return false;
-      const p = [...orderWatoa huduma(currentLang)].find(x=>x.key===key) || PROVIDERS.find(x=>x.key==="youtube");
+      const p = [...orderProviders(currentLang)].find(x=>x.key===key) || PROVIDERS.find(x=>x.key==="youtube");
       window.open((p?.url || "https://www.youtube.com/results?search_query=") + encodeURIComponent(q), "_blank", "noopener,noreferrer");
       return false;
     }
@@ -3525,95 +3525,9 @@ function handleVideoSearch(e){
 })();
 </script>
 <script>
-// === IGDC Media: Optional YouTube auto-fill for thumbnails (non-intrusive) ===
-// Usage (put this in a small inline <script> anywhere AFTER this block):
-//   window.YT_API_KEY = "YOUR_YOUTUBE_DATA_API_V3_KEY";
-//   window.IGDC_MEDIA_QUERIES = {
-//     // containerId: search query
-//     "trailer_row": "official movie trailers 2025",
-//     "ads_row": "global ads 2025 award",
-//     "music_row": "K-pop MV 2025"
-//   };
-//   window.IGDC_MEDIA_MAX = 12;   // optional
-//   window.IGDC_MEDIA_SAFE = true; // optional, safeSearch on
-(function(){
-  async function fillRow(container, query, max=12){
-    const key = window.YT_API_KEY;
-    if(!key || !query) return;
-    const safe = window.IGDC_MEDIA_SAFE ? "strict" : "none";
-    const url = new URL("https://www.googleapis.com/youtube/v3/search");
-    url.searchParams.set("part", "snippet");
-    url.searchParams.set("type", "video");
-    url.searchParams.set("maxResults", String(Math.min(Math.max(max,1),50)));
-    url.searchParams.set("q", query);
-    url.searchParams.set("key", key);
-    url.searchParams.set("safeSearch", safe);
-
-    let data;
-    try{
-      const res = await fetch(url.toString());
-      if(!res.ok) return;
-      data = await res.json();
-    }catch(e){ return; }
-
-    const items = (data && data.items) ? data.items : [];
-    if(!items.length) return;
-
-    // Find all thumbnails under container
-    const cards = container.querySelectorAll('a, .card, .thumb, .item, li');
-    let i = 0;
-    items.forEach(it=>{
-      const v = it.id && it.id.videoId;
-      const s = it.snippet || {};
-      if(!v) return;
-      const thumbUrl = (s.thumbnails && (s.thumbnails.medium?.url || s.thumbnails.high?.url)) || "";
-      const title = s.title || "";
-      const ch = s.channelTitle || "";
-      const href = "https://www.youtube.com/watch?v=" + v;
-
-      const card = cards[i++];
-      if(!card) return;
-      // If it's an <a>, set href; otherwise, try to find an <a> inside
-      const anchor = card.tagName === "A" ? card : (card.querySelector("a") || card);
-      try{ anchor.setAttribute("href", href); anchor.setAttribute("target","_blank"); anchor.setAttribute("rel","noopener"); }catch(e){}
-
-      // Replace image if present or create
-      let img = card.querySelector("img");
-      if(!img){
-        img = document.createElement("img");
-        img.style.width = "100%";
-        img.style.height = "auto";
-        if(card === anchor) { card.prepend(img); } else { anchor.prepend(img); }
-      }
-      if(thumbUrl) img.src = thumbUrl;
-
-      // Replace title text if a caption exists
-      const cap = card.querySelector(".title, .caption, .name, h3, h4");
-      if(cap) cap.textContent = title || cap.textContent;
-
-      // Optional channel label if a smaller text exists
-      const sub = card.querySelector(".sub, .meta, small");
-      if(sub) sub.textContent = ch || sub.textContent;
-    });
-  }
-
-  async function runAutoFill(){
-    if(!window.YT_API_KEY || !window.IGDC_MEDIA_QUERIES) return; // silent no-op
-    const max = window.IGDC_MEDIA_MAX || 12;
-    const entries = Object.entries(window.IGDC_MEDIA_QUERIES);
-    for (const [id, query] of entries){
-      const el = document.getElementById(id);
-      if(!el) continue;
-      await fillRow(el, query, max);
-    }
-  }
-
-  // Run after load
-  if(document.readyState === "complete") runAutoFill();
-  else window.addEventListener("load", runAutoFill);
-})();
+(function(){ /* disabled malformed nested script block */ })();
 </script>
-<!-- Q&amp;A transplant (from distributionhub) START -->
+<!-- Maswali na majibu transplant (from distributionhub) START -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style id="igdc-qa-style">
 :root{
@@ -3675,7 +3589,7 @@ function handleVideoSearch(e){
 .contact-email a{color:#1d4ed8 !important; font-weight:700; text-decoration:underline;}
 </style>
 <style id="qna-brand-only">
-/* === Q&A sidebar link color only (no other changes) === */
+/* === Maswali na majibu sidebar link color only (no other changes) === */
 :root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
 .sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
   display:block;
@@ -3687,7 +3601,7 @@ function handleVideoSearch(e){
 .sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
 </style>
 <script id="igdc-qa-safety-bootstrap">
-// Ensures the Q&A popup opens when clicking the sidebar link,
+// Ensures the Maswali na majibu popup opens when clicking the sidebar link,
 // even if Supabase URL/Key are not configured yet.
 (function(){
   if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
@@ -3708,7 +3622,7 @@ function handleVideoSearch(e){
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Maswali na majibu';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
@@ -3978,7 +3892,7 @@ function handleVideoSearch(e){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Save settings (Supabase url/key) are not connected yet, so server-side saving is disabled. When deploying to the web, set SUPER_VARSAR.url/anonKey and it will be connected automatically.");
+        alert("Mipangilio ya kuhifadhi (Supabase url/key) bado haijaunganishwa, kwa hivyo uhifadhi wa upande wa seva umezimwa. Unapoweka kwenye wavuti, weka SUPER_VARSAR.url/anonKey na itaunganishwa kiotomatiki.");
         return;
       }
       const record = {
@@ -4016,7 +3930,7 @@ function handleVideoSearch(e){
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
 </script>
-<!-- Q&amp;A transplant (from distributionhub) END -->
+<!-- Maswali na majibu transplant (from distributionhub) END -->
 <script src="/assets/js/igdc-core.min.js"></script>
 <!-- IGDC: Media events (click/like/recommend) delegation -->
 <script>
@@ -4287,8 +4201,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }catch(_){}
 })();
 </script>
-
-</script>
 <script id="sidebar-active-script-ko">
 (function(){
   function norm(n){
@@ -4493,7 +4405,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     var title = document.createElement('div');
     title.className = 'igdc-qa-title';
-    title.textContent = 'Q&A';
+    title.textContent = 'Maswali na majibu';
 
     var closeBtn = document.createElement('button');
     closeBtn.className = 'igdc-qa-close';
@@ -4569,37 +4481,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 })();
 </script>
 <script id="igdc-qa-email-ensure">
-(function(){
-  if (window.__IGDC_QA_EMAIL_ENSURE__) return;
-  window.__IGDC_QA_EMAIL_ENSURE__ = true;
-
-  var CONTACT_HTML = 'Barua pepe ya mwakilishi: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-
-  function stripFooterEmail(){
-    try{
-      var footers = document.querySelectorAll('footer');
-      footers.forEach(function(f){
-        // Remove any mailto links
-        f.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
-          var parent = a.parentNode;
-          if(parent){
-            parent.removeChild(a);
-            var html = parent.innerHTML;
-            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
-            html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
-            parent.innerHTML = html;
-          }
-        });
-        // Remove any plain-text "Barua pepe ya mawasiliano: ..." remnants
-        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
-      });
-    }catch(e){}
-  }
-
-  function ensureModal(){
-    var modal = document.querySelector('.igdc-qa-modal');
-    if(!modal){
-      // Create minimal modal sk
+(function(){ window.__IGDC_QA_EMAIL_ENSURE__ = true; })();
+</script>
 <script id="igtc-mobile-overhaul-FULL-js">
 (function(){
   function qsa(sel){ return Array.prototype.slice.call(document.querySelectorAll(sel)); }
@@ -4640,7 +4523,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     var src = card.getAttribute('data-src');
     var wrap = document.createElement('div');
     wrap.className = 'fs-stage';
-    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="Media Viewer"></div><button class="fs-close" aria-label="Funga">✕</button>';
+    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="Kitazamaji cha midia"></div><button class="fs-close" aria-label="Funga">✕</button>';
     var inner = wrap.querySelector('.fs-inner');
 
     if(yt){
@@ -4657,7 +4540,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     }else{
       var url = getCardImageURL(card) || 'about:blank';
       var img = document.createElement('img');
-      img.src = url; img.alt = 'Preview';
+      img.src = url; img.alt = 'Hakiki';
       img.style.width='100%'; img.style.height='100%'; img.style.objectFit='cover';
       inner.appendChild(img);
     }
@@ -5021,8 +4904,8 @@ window.addEventListener("message",function(ev){
           </div>
 
           <div class="media-review">
-            <textarea placeholder="Mapitio ya mstari mmoja (hiari)" maxlength="200"></textarea>
-            <button data-action="review">Wasilisha mapitio</button>
+            <textarea placeholder="Maoni ya mstari mmoja (hiari)" maxlength="200"></textarea>
+            <button data-action="review">Wasilisha maoni</button>
           </div>
         </div>
       `;
@@ -5057,11 +4940,11 @@ window.addEventListener("message",function(ev){
           break;
 
         case 'wish':
-          alert('Added to your wishlist.');
+          alert('Imeongezwa kwenye orodha yako ya matamanio.');
           break;
 
         case 'review':
-          alert('Your review has been submitted.');
+          alert('Maoni yako yamewasilishwa.');
           break;
       }
     },

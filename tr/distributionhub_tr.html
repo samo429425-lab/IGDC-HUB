@@ -1288,7 +1288,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">Depolama ayarları (Supabase url/key) bağlandıktan sonra tüm işlevler etkinleşir.</div>';
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
         document.body.appendChild(m);
@@ -1369,17 +1369,17 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   const modal = document.createElement('div'); modal.className='igtc-modal igtc-hidden'; modal.setAttribute('role','dialog'); modal.setAttribute('aria-modal','true'); modal.setAttribute('aria-labelledby','igtc-modal-title');
   modal.innerHTML = `
     <header>
-      <h3 id="igtc-modal-title">Loading…</h3>
-      <button class="igtc-close" aria-label="Close">✕</button>
+      <h3 id="igtc-modal-title">Yükleniyor…</h3>
+      <button class="igtc-close" aria-label="Kapat">✕</button>
     </header>
     <div class="igtc-content" tabindex="0">
       <div class="igtc-media"><img alt=""></div>
       <div class="igtc-body">
         <p class="igtc-desc" style="opacity:.9"></p>
         <div class="igtc-actions">
-          <button class="igtc-btn" data-act="cta">바로가기</button>
-          <button class="igtc-btn secondary" data-act="like">좋아요</button>
-          <button class="igtc-btn ghost" data-act="recommend">추천</button>
+          <button class="igtc-btn" data-act="cta">Şimdi git</button>
+          <button class="igtc-btn secondary" data-act="like">Beğen</button>
+          <button class="igtc-btn ghost" data-act="recommend">Tavsiye et</button>
         </div>
       </div>
     </div>`;
@@ -1427,9 +1427,9 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
 
   async function showDetail(node, placement){
     const info = resolveInfo(node);
-    el.title.textContent = info.title || '상세 보기';
+    el.title.textContent = info.title || 'Ayrıntıları görüntüle';
     if (info.img) el.img.src = info.img;
-    el.desc.textContent = '불러오는 중…';
+    el.desc.textContent = 'Yükleniyor…';
     el.btnCta.disabled = true;
 
     // stash
@@ -1443,19 +1443,19 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     try{
       if (info.id){
         const detail = await fetchJSON(`/api/items/${encodeURIComponent(info.id)}`);
-        el.title.textContent = detail.title || info.title || '상세 보기';
+        el.title.textContent = detail.title || info.title || 'Ayrıntıları görüntüle';
         if (detail.image) el.img.src = detail.image;
         el.desc.textContent = detail.description || '';
         if (detail.ctaLabel) el.btnCta.textContent = detail.ctaLabel;
         if (detail.href) href = detail.href;
       } else {
-        el.desc.textContent = el.desc.textContent==='불러오는 중…' ? '' : el.desc.textContent;
+        el.desc.textContent = el.desc.textContent==='Yükleniyor…' ? '' : el.desc.textContent;
       }
     }catch(_){ el.desc.textContent = ''; }
 
     // Enable CTA only if we have a destination
     if (href){ el.btnCta.disabled = false; }
-    else { el.btnCta.disabled = true; el.btnCta.title = '이 항목에 연결된 이동 링크가 없습니다.'; }
+    else { el.btnCta.disabled = true; el.btnCta.title = 'Bu öğeye bağlı bir bağlantı yok.'; }
 
     // CTA handler
     el.btnCta.onclick = async function(){
@@ -1475,11 +1475,11 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     // Feedback handlers (optional)
     el.btnLike.onclick = async function(){
       const id = this.dataset.itemId || info.id; if(!id) return;
-      try{ await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); this.textContent='좋아요 완료'; this.disabled=true; }catch(_){}
+      try{ await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); this.textContent='Tamamlandı'; this.disabled=true; }catch(_){}
     };
     el.btnRec.onclick = async function(){
       const id = this.dataset.itemId || info.id; if(!id) return;
-      try{ await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); this.textContent='추천 완료'; this.disabled=true; }catch(_){}
+      try{ await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); this.textContent='Tamamlandı'; this.disabled=true; }catch(_){}
     };
   }
 
@@ -1611,7 +1611,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Soru & Cevap] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      console.warn("[Q&A] Supabase kimlik bilgileri/kütüphanesi ayarlanmamış: UI gösterilir ancak kaydetme devre dışıdır.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -1719,8 +1719,8 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Beklemede)";
+        const q = el("div","igdc-qa-thread-q"); q.textContent="S. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("C. "+row.answer):"C. (Beklemede)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "Yönetici talebi":"Genel";
@@ -1731,7 +1731,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("Sil 실패(권한/정책)"); return; }
+            if(error){ alert("Silme başarısız (izin/politika)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -1754,9 +1754,9 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 확인 후 회신됩니다.";
-          else if(/가격|비용|요금/.test(text)) answer="가격/요금 정보는 페이지 내 안내를 참고해주세요. 추가 문의는 남겨주세요.";
-          else answer="문의 감사 빠르게 확인하여 도와드리겠습니다.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="Operasyonla ilgili sorular yönetici kontrolünden sonra yanıtlanır.";
+          else if(/가격|비용|요금/.test(text)) answer="Fiyat/ücret bilgileri için sayfadaki açıklamaya bakın. Ek sorunuz varsa bırakın.";
+          else answer="Sorunuz için teşekkürler. Hızla kontrol edip yardımcı olacağız.";
         }
       }
       return { technical, answer };
@@ -1803,7 +1803,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Soru & Cevap] auth 초기화 실패:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth başlatma başarısız:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -1829,22 +1829,22 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("구매 요청이 접수되었습니다."); }
-      else { alert("구매 요청 실패"); }
-    }catch(e){ console.warn(e); alert("네트워크 오류"); }
+      if (res.ok){ alert("Satın alma isteği alındı."); }
+      else { alert("Satın alma isteği başarısız oldu."); }
+    }catch(e){ console.warn(e); alert("Ağ hatası"); }
   };
 
   window.requestSettlement = async function(amount, currency){
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("정산 요청이 접수되었습니다."); }
-      else { alert("정산 요청 실패"); }
-    }catch(e){ console.warn(e); alert("네트워크 오류"); }
+      if (res.ok){ alert("Mutabakat isteği alındı."); }
+      else { alert("Mutabakat isteği başarısız oldu."); }
+    }catch(e){ console.warn(e); alert("Ağ hatası"); }
   };
 
-  // ===== 2) AI 추천·회전(로테이션) 보강 =====
-  // 조건: 상품 카드가 거의 없거나(3개 미만) 썸네일이 비어 있으면 → 서버 추천을 요청해 채움.
+  // ===== 2) AI Tavsiye et·회전(로테이션) 보강 =====
+  // 조건: 상품 카드가 거의 없거나(3개 미만) 썸네일이 비어 있으면 → 서버 Tavsiye et을 요청해 채움.
   document.addEventListener('DOMContentLoaded', function(){
     try{
       // 컨테이너 후보 탐색
@@ -1867,7 +1867,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
       if(!needFill) return;
 
-      // 서버 추천 시도 (동일 도메인)
+      // 서버 Tavsiye et 시도 (동일 도메인)
       fetch('/api/recommendations?limit=12', { credentials:'include' })
         .then(function(r){ if(!r.ok) throw new Error('recommendations failed'); return r.json(); })
         .then(function(list){
@@ -1889,7 +1889,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || item.name || '상품';
+              t.textContent = item.title || item.name || 'Ürün';
 
               a.appendChild(img);
               a.appendChild(t);
@@ -1915,7 +1915,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || '상품';
+              t.textContent = item.title || 'Ürün';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -2397,9 +2397,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       h.appendChild(t); h.appendChild(x);
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
-      body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
+      body.innerHTML = '<div class="igdc-qa-note">Depolama ayarları (Supabase url/key) bağlandıktan sonra tüm işlevler etkinleşir.</div>';
 
-      // ensure the "대표 이메일" is shown only inside the modal
+      // ensure the "Temsilci e-posta" is shown only inside the modal
       var ce = document.createElement('p');
       ce.className = 'contact-email';
       ce.innerHTML = 'Temsilci e-postası: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
@@ -2480,7 +2480,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
             parent.innerHTML = html;
           }
         });
-        // Remove any plain-text "대표 이메일: ..." remnants
+        // Remove any plain-text "Temsilci e-posta: ..." remnants
         f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
       });
     }catch(e){}
@@ -2500,7 +2500,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
       var note = document.createElement('div'); note.className='igdc-qa-note';
-      note.textContent = '저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.';
+      note.textContent = 'Depolama ayarları (Supabase url/key) bağlandıktan sonra tüm işlevler etkinleşir.';
       body.appendChild(note);
 
       // (1) Inject the contact email in creation path
@@ -2882,7 +2882,7 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>결제 QR</b>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Ödeme QR</b>'
                   + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Kapat</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
@@ -2920,9 +2920,9 @@ window.addEventListener("message",function(ev){
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
     ta.value=''; alert('전송되었습니다.');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('전송 실패'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('Gönderme başarısız'));});
   const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('전송 실패'));});
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('Gönderme başarısız'));});
 })();
 </script>
 <script>
@@ -3046,8 +3046,8 @@ window.addEventListener("message",function(ev){
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">상품 리뷰</h3>
-          <div id="igdc-review-list" class="igdc-review-list">로딩 중...</div>
+          <h3 class="igdc-review-title">Ürün değerlendirmeleri</h3>
+          <div id="igdc-review-list" class="igdc-review-list">Yükleniyor...</div>
           ${canWrite ? this.renderForm() : this.renderLoginHint()}
         </section>
       `;
@@ -3057,12 +3057,12 @@ window.addEventListener("message",function(ev){
       return `
         <form id="igdc-review-form" class="igdc-review-form">
           <textarea
-            placeholder="상품 사용 경험을 공유해 주세요"
+            placeholder="Ürün kullanım deneyiminizi paylaşın"
             minlength="${this.config.minChars}"
             maxlength="${this.config.maxChars}"
             required></textarea>
           <div class="igdc-review-actions">
-            <button type="submit">리뷰 등록</button>
+            <button type="submit">Değerlendirme gönder</button>
           </div>
         </form>
       `;
@@ -3070,7 +3070,7 @@ window.addEventListener("message",function(ev){
 
     renderLoginHint() {
       return `<div class="igdc-review-login-hint">
-        리뷰 작성은 로그인 후 가능
+        Değerlendirme göndermek için giriş yapmalısınız.
       </div>`;
     },
 
@@ -3084,7 +3084,7 @@ window.addEventListener("message",function(ev){
         const content = textarea.value.trim();
 
         if (content.length < this.config.minChars) {
-          alert(`리뷰는 최소 ${this.config.minChars}자 이상 작성해 주세요.`);
+          alert(`Değerlendirme en az ${this.config.minChars} karakter uzunluğunda olmalıdır.`);
           return;
         }
 
@@ -3093,7 +3093,7 @@ window.addEventListener("message",function(ev){
             textarea.value = '';
             this.loadReviews();
           })
-          .catch(() => alert('리뷰 Kayıt başarısız'));
+          .catch(() => alert('Değerlendirme gönderilemedi'));
       });
     },
 
@@ -3101,7 +3101,7 @@ window.addEventListener("message",function(ev){
       const list = document.getElementById('igdc-review-list');
       if (!list) return;
 
-      list.textContent = '로딩 중...';
+      list.textContent = 'Yükleniyor...';
 
       try {
         const res = await fetch(
@@ -3110,13 +3110,13 @@ window.addEventListener("message",function(ev){
         const data = await res.json();
 
         if (!Array.isArray(data) || data.length === 0) {
-          list.innerHTML = '<div class="igdc-review-empty">아직 리뷰가 없습니다.</div>';
+          list.innerHTML = '<div class="igdc-review-empty">Henüz değerlendirme yok.</div>';
           return;
         }
 
         list.innerHTML = data.map(this.renderItem).join('');
       } catch {
-        list.textContent = '리뷰를 불러오지 못했습니다.';
+        list.textContent = 'Değerlendirmeler yüklenemedi.';
       }
     },
 
@@ -3138,7 +3138,7 @@ window.addEventListener("message",function(ev){
       return `
         <div class="igdc-review-item">
           <div class="igdc-review-meta">
-            <span>${esc(item.user || '익명')}</span>
+            <span>${esc(item.user || 'Anonim kullanıcı')}</span>
             <span>${esc(item.date || '')}</span>
           </div>
           <div class="igdc-review-content">${esc(item.content)}</div>

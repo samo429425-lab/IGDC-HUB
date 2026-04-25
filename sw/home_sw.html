@@ -641,192 +641,8 @@
 
 </style>
 <script>
-// Robust removal of '문학학술교류' from LEFT SIDEBAR only (no other layout changes)
-
-(function(){
-  function getWraps(){
-    var wraps = Array.from(document.querySelectorAll('.news-row-wrap'));
-    return wraps.map(function(wrap){
-      var track = wrap.querySelector('.news-row') || wrap;
-      var anchors = Array.from(track.querySelectorAll('a.news-btn'));
-      var rowId = parseInt(wrap.getAttribute('data-row')||'0',10) || 0;
-      return {wrap: wrap, track: track, anchors: anchors, rowId: rowId};
-    });
-  }
-
-  var preferred = {
-    'KR': [/news\.kbs\.co\.kr/i, /news\.sbs\.co\.kr/i, /ytn\.co\.kr/i, /tvchosun\.com/i, /yna\.co\.kr/i, /news\.jtbc\.co\.kr/i, /imbc\.com/i],
-    'CN': [/xinhuanet\.com/i, /people\.com\.cn/i, /cctv\.com/i, /huanqiu\.com/i, /thepaper\.cn/i, /caixin\.com/i, /chinadaily\.com\.cn/i],
-    'US': [/apnews\.com/i, /reuters\.com/i, /nytimes\.com/i, /washingtonpost\.com/i],
-    'JP': [/nhk\.or\.jp/i, /asahi\.com/i, /yomiuri\.co\.jp/i, /mainichi\.jp/i],
-    'EU': [/bbc\.com/i, /theguardian\.com/i, /ft\.com/i, /spiegel\.de|faz\.net|lemonde\.fr|lefigaro\.fr|elpais\.com|elmundo\.es/i],
-    'ME': [/aljazeera\.com/i, /alarabiya\.net/i, /aa\.com\.tr/i, /thenationalnews\.com|gulfnews\.com/i]
-  };
-
-  // Neighbor priorities for small-media countries
-  var neighborMap = {
-    // Northeast Asia
-    'KR': ['JP','CN','TW','HK'],
-    'JP': ['KR','CN','TW','HK'],
-    'CN': ['HK','TW','KR','JP','MN','KZ'],
-    'TW': ['CN','HK','JP','KR'],
-    'HK': ['CN','TW','KR','JP'],
-    'MN': ['CN','KZ'],
-    // Southeast Asia
-    'SG': ['MY','ID','TH','PH','VN'],
-    'MY': ['SG','ID','TH','VN'],
-    'TH': ['VN','MY','SG','ID'],
-    'VN': ['TH','MY','SG','PH'],
-    'ID': ['MY','SG','PH','TH'],
-    'PH': ['ID','MY','SG','VN'],
-    // South Asia
-    'IN': ['PK','BD','NP','LK'],
-    'PK': ['IN','BD'],
-    'BD': ['IN','PK'],
-    'NP': ['IN','BD'],
-    'LK': ['IN'],
-    // Central Asia
-    'KZ': ['UZ','KG','TJ','RU','CN'],
-    'UZ': ['KZ','KG','TJ'],
-    'KG': ['KZ','UZ','TJ'],
-    'TJ': ['UZ','KZ','KG'],
-    // Americas (examples)
-    'MX': ['US','CO','BR','AR'],
-    'CA': ['US'],
-    // Europe (examples)
-    'IE': ['UK'],
-    'UK': ['IE','FR','DE','ES','IT'],
-    'RU': ['UA','KZ','EU'],
-  };
-
-  function sortByPreferred(list, cc){
-    var prefs = preferred[cc] || [];
-    var arr = list.map(function(a){
-      var href = (a.getAttribute('href')||'').toLowerCase();
-      var idx = prefs.findIndex(function(rx){ return rx.test(href); });
-      return {a:a, i: idx < 0 ? 9999 : idx};
-    });
-    arr.sort(function(x,y){ return x.i - y.i; });
-    return arr.map(function(x){ return x.a; });
-  }
-
-  function indexRow(row){
-    var map = {}; var order = [];
-    row.anchors = Array.from(row.track.querySelectorAll('a.news-btn'));
-    row.anchors.forEach(function(a){
-      var cc = (a.getAttribute('data-cc')||'INTL').toUpperCase();
-      (map[cc] = map[cc] || []).push(a);
-      order.push(a);
-    });
-    return {countryMap: map, order: order};
-  }
-
-  // Build neighbor list: explicit neighbors first; if missing, fall back to same region
-  function buildNeighborAnchors(idx, cc){
-    var out = [];
-    var seen = new Set();
-    var neighbors = neighborMap[cc] || [];
-    neighbors.forEach(function(nc){
-      var list = (idx.countryMap[nc] || []);
-      list.forEach(function(a){ if(!seen.has(a)) { out.push(a); seen.add(a);} });
-    });
-    if (!out.length){
-      // fallback by region
-      var region = null;
-      // find region of first same-cc anchor
-      var sample = (idx.countryMap[cc]||[])[0];
-      if (sample) region = (sample.getAttribute('data-region')||'').toUpperCase();
-      if (region){
-        Object.keys(idx.countryMap).forEach(function(k){
-          if (k === cc) return;
-          var list = idx.countryMap[k]||[];
-          list.forEach(function(a){
-            if (((a.getAttribute('data-region')||'').toUpperCase() === region) && !seen.has(a)){
-              out.push(a); seen.add(a);
-            }
-          });
-        });
-      }
-    }
-    return out;
-  }
-
-
-function reorderRowByCountry(row, cc){
-    var idx = indexRow(row);
-    var same = (idx.countryMap[cc] || []).slice();
-    if (!same.length) return;
-
-    // 1) Same-country first (preferred order), not limited to 4 inside the row
-    same = sortByPreferred(same, cc);
-
-    // 2) If a country has <=3 outlets total, append neighbor-country anchors right after same-country
-    var neighbors = [];
-    if (same.length <= 3){
-      neighbors = buildNeighborAnchors(idx, cc);
-    }
-
-    // 3) Others (exclude same + neighbors) in original order
-    var exclude = new Set(same.concat(neighbors));
-    var others = idx.order.filter(function(a){ return !exclude.has(a); });
-
-    // 4) New order for the row: ALL same-country → neighbors (if used) → others
-    var merged = same.concat(neighbors).concat(others);
-
-    // 5) Rebuild DOM (keep 4-per-line source formatting for readability only)
-    row.anchors.forEach(function(a){ a.remove(); });
-    merged.forEach(function(a, i){
-      if ((i % 4) === 0) row.track.appendChild(document.createTextNode("\n"));
-      row.track.appendChild(a);
-    });
-    row.track.appendChild(document.createTextNode("\n"));
-
-    // Sticky selection
-    row.wrap.setAttribute('data-current-cc', cc);
-}
-
-    // Others (exclude same + neighbors)
-    var exclude = new Set(top4.concat(restSame).concat(neighbors));
-    var others = idx.order.filter(function(a){ return !exclude.has(a); });
-
-    var merged = top4.concat(restSame).concat(neighbors).concat(others);
-
-    // rebuild DOM
-    row.anchors.forEach(function(a){ a.remove(); });
-    merged.forEach(function(a, i){
-      if ((i % 4) === 0) row.track.appendChild(document.createTextNode("
-"));
-      row.track.appendChild(a);
-    });
-    row.track.appendChild(document.createTextNode("
-"));
-
-    row.wrap.setAttribute('data-current-cc', cc);
-  }
-
-  window.updateMainJuu = function(){ /* no-op */ };
-
-  window.setRowCountry = function(rowId, cc){
-    var wraps = getWraps();
-    var row = wraps.find(function(r){ return r.rowId === rowId; });
-    if (!row) return;
-    reorderRowByCountry(row, (cc||'').toUpperCase());
-    if (rowId === 1) updateMainJuu((cc||'').toUpperCase());
-  };
-
-  window.setMainNewsCountry = function(cc){
-    window.setRowCountry(1, cc);
-  };
-
-  var defaultMap = {1:'KR', 2:'US', 3:'EU', 4:'ME'};
-  getWraps().forEach(function(r){
-    var cc = (r.wrap.getAttribute('data-current-cc')||'').toUpperCase()
-          || (r.wrap.getAttribute('data-default-cc')||'').toUpperCase()
-          || defaultMap[r.rowId] || '';
-    if (cc) reorderRowByCountry(r, cc);
-    if (r.rowId === 1) updateMainJuu(cc || 'KR');
-  });
-})();</script>
+(function(){ /* disabled stale optional news-order script */ })();
+</script>
 <style>
 /* === IGTC News Row: fixed stamp & under-scrolling track === */
 .igtc-news-row{ position:relative; }
@@ -2082,7 +1898,7 @@ a[href=""], a:not([href]).center-donation-disabled, button.center-donation-disab
 <a href="mediahub.html">🎬 Kitovu cha Vyombo vya Habari</a>
 <a href="tour.html">🧳 Safari · Utalii · Malazi</a>
 <a href="literature_academic">📚 Fasihi na Mabadilishano ya Kitaaluma</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Mawasiliano ya Q&amp;A</a>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Maswali na majibu</a>
 </div>
 <!-- Main content (inner changes only) -->
 <div class="main-content">
@@ -2141,9 +1957,9 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 
 <!-- ========== NEWS (Kati) ========== -->
-<section aria-label="News by Region" class="news-section">
+<section aria-label="Habari kwa eneo" class="news-section">
 <div class="news-row-wrap" data-row="1">
-<div class="news-row" id="newsRow1"><button aria-expanded="false" aria-label="Toggle Region Stamps" class="stamp-handle" title="Region Stamps" type="button">◀</button><button aria-label="scroll left" class="row-arrow left" id="rowLeft1">‹</button>
+<div class="news-row" id="newsRow1"><button aria-expanded="false" aria-label="Washa/zima lebo za maeneo" class="stamp-handle" title="Lebo za maeneo" type="button">◀</button><button aria-label="Sogeza kushoto" class="row-arrow left" id="rowLeft1">‹</button>
 <span class="continent-tag">🌏 Asia Pana </span>
 <!-- KR majors -->
 <!-- Central Asia -->
@@ -2193,10 +2009,10 @@ document.addEventListener('DOMContentLoaded', () => {
 <a class="news-btn" data-cc="KZ" data-region="AS" href="https://www.inform.kz/en" rel="noopener noreferrer" target="_blank">Kazinform</a>
 <a class="news-btn" data-cc="KZ" data-region="AS" href="https://www.kazpravda.kz/en" rel="noopener noreferrer" target="_blank">Kazakhstan Pravda</a>
 <a class="news-btn" data-cc="TJ" data-region="AS" href="https://asiaplustj.info/en" rel="noopener noreferrer" target="_blank">Asia-Plus</a>
-<a class="news-btn" data-cc="MN" data-region="AS" href="https://montsame.mn/en" rel="noopener noreferrer" target="_blank">Montsame</a><button aria-label="scroll right" class="row-arrow right" id="rowRight1">›</button></div>
+<a class="news-btn" data-cc="MN" data-region="AS" href="https://montsame.mn/en" rel="noopener noreferrer" target="_blank">Montsame</a><button aria-label="Sogeza kulia" class="row-arrow right" id="rowRight1">›</button></div>
 </div>
 <div class="news-row-wrap" data-row="2">
-<div class="news-row" id="newsRow2"><button aria-expanded="false" aria-label="Toggle Region Stamps" class="stamp-handle" title="Region Stamps" type="button">◀</button><button aria-label="scroll left" class="row-arrow left" id="rowLeft2">‹</button>
+<div class="news-row" id="newsRow2"><button aria-expanded="false" aria-label="Washa/zima lebo za maeneo" class="stamp-handle" title="Lebo za maeneo" type="button">◀</button><button aria-label="Sogeza kushoto" class="row-arrow left" id="rowLeft2">‹</button>
 <span class="continent-tag">🌎 Amerika / Oceania</span>
 <!-- North America (existing assumed) -->
 <!-- South America -->
@@ -2222,10 +2038,10 @@ document.addEventListener('DOMContentLoaded', () => {
 <a class="news-btn" data-cc="MX" data-region="NA" href="https://www.reforma.com/" rel="noopener noreferrer" target="_blank">Reforma (MX)</a>
 <a class="news-btn" data-cc="AU" data-region="OC" href="https://www.abc.net.au/news/" rel="noopener noreferrer" target="_blank">ABC Australia</a>
 <a class="news-btn" data-cc="AU" data-region="OC" href="https://www.theaustralian.com.au/" rel="noopener noreferrer" target="_blank">The Australian</a>
-<a class="news-btn" data-cc="AU" data-region="OC" href="https://www.smh.com.au/" rel="noopener noreferrer" target="_blank">Sydney Morning Herald</a><button aria-label="scroll right" class="row-arrow right" id="rowRight2">›</button></div>
+<a class="news-btn" data-cc="AU" data-region="OC" href="https://www.smh.com.au/" rel="noopener noreferrer" target="_blank">Sydney Morning Herald</a><button aria-label="Sogeza kulia" class="row-arrow right" id="rowRight2">›</button></div>
 </div>
 <div class="news-row-wrap" data-row="3">
-<div class="news-row" id="newsRow3"><button aria-expanded="false" aria-label="Toggle Region Stamps" class="stamp-handle" title="Region Stamps" type="button">◀</button><button aria-label="scroll left" class="row-arrow left" id="rowLeft3">‹</button>
+<div class="news-row" id="newsRow3"><button aria-expanded="false" aria-label="Washa/zima lebo za maeneo" class="stamp-handle" title="Lebo za maeneo" type="button">◀</button><button aria-label="Sogeza kushoto" class="row-arrow left" id="rowLeft3">‹</button>
 <span class="continent-tag">🌍 Ulaya ya Mashariki / Magharibi</span>
 <a class="news-btn" data-cc="UK" data-region="EU" href="https://www.bbc.com/news" rel="noopener noreferrer" target="_blank">BBC</a>
 <a class="news-btn" data-cc="UK" data-region="EU" href="https://www.theguardian.com/international" rel="noopener noreferrer" target="_blank">The Guardian</a>
@@ -2243,10 +2059,10 @@ document.addEventListener('DOMContentLoaded', () => {
 <a class="news-btn" data-cc="DE" data-region="EU" href="https://www.dw.com/en/top-stories/s-9097" rel="noopener noreferrer" target="_blank">DW</a>
 <a class="news-btn" data-cc="IE" data-region="EU" href="https://www.rte.ie/news/" rel="noopener noreferrer" target="_blank">RTÉ News</a>
 <a class="news-btn" data-cc="RU" data-region="EU" href="https://tass.com/" rel="noopener noreferrer" target="_blank">TASS</a>
-<a class="news-btn" data-cc="RU" data-region="EU" href="https://www.kommersant.ru/" rel="noopener noreferrer" target="_blank">Kommersant</a><button aria-label="scroll right" class="row-arrow right" id="rowRight3">›</button></div>
+<a class="news-btn" data-cc="RU" data-region="EU" href="https://www.kommersant.ru/" rel="noopener noreferrer" target="_blank">Kommersant</a><button aria-label="Sogeza kulia" class="row-arrow right" id="rowRight3">›</button></div>
 </div>
 <div class="news-row-wrap" data-row="4">
-<div class="news-row" id="newsRow4"><button aria-expanded="false" aria-label="Toggle Region Stamps" class="stamp-handle" title="Region Stamps" type="button">◀</button><button aria-label="scroll left" class="row-arrow left" id="rowLeft4">‹</button>
+<div class="news-row" id="newsRow4"><button aria-expanded="false" aria-label="Washa/zima lebo za maeneo" class="stamp-handle" title="Lebo za maeneo" type="button">◀</button><button aria-label="Sogeza kushoto" class="row-arrow left" id="rowLeft4">‹</button>
 <span class="continent-tag">🌏 Mashariki ya Kati / Afrika</span>
 <a class="news-btn" data-cc="QA" data-region="ME" href="https://www.aljazeera.com/" rel="noopener noreferrer" target="_blank">Al Jazeera</a>
 <a class="news-btn" data-cc="SA" data-region="ME" href="https://english.alarabiya.net/" rel="noopener noreferrer" target="_blank">Al Arabiya</a>
@@ -2261,12 +2077,12 @@ document.addEventListener('DOMContentLoaded', () => {
 <a class="news-btn" data-cc="KE" data-region="AF" href="https://nation.africa/" rel="noopener noreferrer" target="_blank">Daily Nation</a>
 <a class="news-btn" data-cc="ZA" data-region="AF" href="https://mg.co.za/" rel="noopener noreferrer" target="_blank">Mail &amp; Guardian</a>
 <a class="news-btn" data-cc="ZA" data-region="AF" href="https://www.timeslive.co.za/" rel="noopener noreferrer" target="_blank">TimesLIVE</a>
-<a class="news-btn" data-cc="ZA" data-region="AF" href="https://www.news24.com/" rel="noopener noreferrer" target="_blank">News24</a><button aria-label="scroll right" class="row-arrow right" id="rowRight4">›</button></div>
+<a class="news-btn" data-cc="ZA" data-region="AF" href="https://www.news24.com/" rel="noopener noreferrer" target="_blank">News24</a><button aria-label="Sogeza kulia" class="row-arrow right" id="rowRight4">›</button></div>
 </div>
 </section>
 <!-- ========== SHOPPING (Chini) ========== -->
 <section aria-label="Our Site Links" class="our-sites-wrap">
-<div class="section-title-row ph-row"><h2 class="our-sites-title ph-title">Nenda kwenye Kitovu cha Jukwaa</h2><div class="bc-row"><a class="bc-btn" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a><a class="bc-btn" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a><a class="bc-btn" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a><a class="bc-btn" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a></div></div>
+<div class="section-title-row ph-row"><h2 class="our-sites-title ph-title">Nenda kwenye Kitovu cha Jukwaa</h2><div class="bc-row"><a class="bc-btn" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a><a class="bc-btn" href="https://opensea.io" rel="noopener" target="_blank">FunguaSea</a><a class="bc-btn" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a><a class="bc-btn" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a></div></div>
 <div class="our-sites-grid">
 <a class="our-site-btn" href="networkhub.html">Kitovu cha Soko</a>
 <a class="our-site-btn" href="distributionhub.html">Kitovu cha Usambazaji</a>
@@ -2283,36 +2099,36 @@ document.addEventListener('DOMContentLoaded', () => {
 <div class="shop-scroller" id="shopScroller1">
 <div class="shop-row" id="shopRow1"></div>
 <div class="thumb-grid thumb-scroller" data-psom-key="home_1"></div></div>
-<button aria-label="scroll left" class="srow-arrow left" id="srowLeft1">‹</button>
-<button aria-label="scroll right" class="srow-arrow right" id="srowRight1">›</button>
+<button aria-label="Sogeza kushoto" class="srow-arrow left" id="srowLeft1">‹</button>
+<button aria-label="Sogeza kulia" class="srow-arrow right" id="srowRight1">›</button>
 </div>
 <div class="shop-row-wrap" data-srow="2">
 <div class="shop-scroller" id="shopScroller2">
 <div class="shop-row" id="shopRow2"></div>
 <div class="thumb-grid thumb-scroller" data-psom-key="home_2"></div></div>
-<button aria-label="scroll left" class="srow-arrow left" id="srowLeft2">‹</button>
-<button aria-label="scroll right" class="srow-arrow right" id="srowRight2">›</button>
+<button aria-label="Sogeza kushoto" class="srow-arrow left" id="srowLeft2">‹</button>
+<button aria-label="Sogeza kulia" class="srow-arrow right" id="srowRight2">›</button>
 </div>
 <div class="shop-row-wrap" data-srow="3">
 <div class="shop-scroller" id="shopScroller3">
 <div class="shop-row" id="shopRow3"></div>
 <div class="thumb-grid thumb-scroller" data-psom-key="home_3"></div></div>
-<button aria-label="scroll left" class="srow-arrow left" id="srowLeft3">‹</button>
-<button aria-label="scroll right" class="srow-arrow right" id="srowRight3">›</button>
+<button aria-label="Sogeza kushoto" class="srow-arrow left" id="srowLeft3">‹</button>
+<button aria-label="Sogeza kulia" class="srow-arrow right" id="srowRight3">›</button>
 </div>
 <div class="shop-row-wrap" data-srow="4">
 <div class="shop-scroller" id="shopScroller4">
 <div class="shop-row" id="shopRow4"></div>
 <div class="thumb-grid thumb-scroller" data-psom-key="home_4"></div></div>
-<button aria-label="scroll left" class="srow-arrow left" id="srowLeft4">‹</button>
-<button aria-label="scroll right" class="srow-arrow right" id="srowRight4">›</button>
+<button aria-label="Sogeza kushoto" class="srow-arrow left" id="srowLeft4">‹</button>
+<button aria-label="Sogeza kulia" class="srow-arrow right" id="srowRight4">›</button>
 </div>
 <div class="shop-row-wrap" data-srow="5">
 <div class="shop-scroller" id="shopScroller5">
 <div class="shop-row" id="shopRow5"></div>
 <div class="thumb-grid thumb-scroller" data-psom-key="home_5"></div></div>
-<button aria-label="scroll left" class="srow-arrow left" id="srowLeft5">‹</button>
-<button aria-label="scroll right" class="srow-arrow right" id="srowRight5">›</button>
+<button aria-label="Sogeza kushoto" class="srow-arrow left" id="srowLeft5">‹</button>
+<button aria-label="Sogeza kulia" class="srow-arrow right" id="srowRight5">›</button>
 </div>
 </div>
 </section>
@@ -2379,121 +2195,11 @@ window.addEventListener("DOMContentLoaded", () => { try { initAds(); } catch(e) 
 </script>
 <!-- removed stray text:  -->
 <script>
-// === News rows overlay scroll buttons (no scrollbar) ===
-function initNewsRows(){
-  for(let i=1;i<=4;i++){
-    const wrap = document.querySelector('.news-row-wrap[data-row="'+i+'"]');
-    const row  = document.getElementById('newsRow'+i);
-    const L    = document.getElementById('rowLeft'+i);
-    const R    = document.getElementById('rowRight'+i);
-    if(!wrap || !row || !L || !R) continue;
-
-    const step = ()=> Math.max(180, Math.floor(row.clientWidth * 0.9));
-
-    function update(){
-      const canScroll = row.scrollWidth > row.clientWidth + 2;
-      const atStart = row.scrollLeft <= 1;
-      const atEnd   = row.scrollLeft + row.clientWidth >= row.scrollWidth - 1;
-      // show buttons only when overflow exists
-      L.style.display = R.style.display = canScroll ? 'block' : 'none';
-      L.classList.toggle('disabled', !canScroll || atStart);
-      R.classList.toggle('disabled', !canScroll || atEnd);
-    }
-
-    L.addEventListener('click', ()=> row.scrollBy({ left: -step(), behavior: 'smooth' }));
-    R.addEventListener('click', ()=> row.scrollBy({ left:  step(), behavior: 'smooth' }));
-    row.addEventListener('scroll', update);
-    window.addEventListener('resize', update);
-    update();
-  }
-}
-window.addEventListener('DOMContentLoaded', initNewsRows);
+(function(){ /* disabled stale optional news-order script */ })();
 </script>
 <!-- removed stray text:  -->
 <script>
-(function(){
-  function getParamCC(){
-    const u = new URL(window.location.href);
-    return (u.searchParams.get('cc')||'').toUpperCase() || null;
-  }
-  function guessCC(){
-    // basic heuristics
-    const lang = (navigator.languages && navigator.languages[0]) || navigator.language || '';
-    if(/^ko/i.test(lang)) return 'KR';
-    if(/^ja/i.test(lang)) return 'JP';
-    if(/^zh/i.test(lang)) return 'CN';
-    if(/^en-US/i.test(lang)) return 'US';
-    // timezone hint
-    try {
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
-      if(/Seoul/i.test(tz)) return 'KR';
-      if(/Tokyo/i.test(tz)) return 'JP';
-      if(/Shanghai|Hong_Kong|Taipei/i.test(tz)) return 'CN';
-      if(/Sydney|Melbourne/i.test(tz)) return 'AU';
-      if(/Sao_Paulo|Buenos_Aires|Lima|Bogota|Santiago/i.test(tz)) return 'BR'; // coarse
-      if(/New_York|Los_Angeles|Chicago|Toronto|Vancouver/i.test(tz)) return 'US';
-      if(/London|Paris|Berlin|Madrid|Rome|Warsaw|Budapest|Bucharest|Prague/i.test(tz)) return 'GB';
-    } catch(e){}
-    return null;
-  }
-  function regionOf(cc){
-    const AM = ['US','CA','MX','BR','AR','CL','CO','PE','PY','UY','VE'];
-    const AS = ['KR','JP','CN','IN','SG','MY','TH','VN','PH','ID','KZ','UZ','KG','AZ','TR','AU','NZ'];
-    const EU = ['GB','FR','DE','ES','IT','PL','HU','RO','CZ','UA','RU'];
-    if(AM.includes(cc)) return 'AM';
-    if(EU.includes(cc)) return 'EU';
-    if(AS.includes(cc)) return 'AS';
-    return null;
-  }
-
-function reorderRow(rowId){
-  const row = document.getElementById(rowId);
-  if(!row) return;
-  const cc = (getParamCC && (getParamCC() || (typeof guessCC==='function' && guessCC()) ) || 'KR').toUpperCase();
-  const region = (typeof regionOf==='function' ? regionOf(cc) : (typeof ccToRegion==='function' ? ccToRegion(cc) : 'AS')) || 'AS';
-
-  const anchors = Array.from(row.querySelectorAll('a.news-btn'));
-  if (anchors.length === 0) return;
-
-  const exact = [], sameReg = [], rest = [];
-  anchors.forEach(n=>{
-    const ncc = (n.dataset.cc||'').toUpperCase();
-    const nrg = (n.dataset.region||'').toUpperCase();
-    if(ncc === cc) exact.push(n);
-    else if(nrg === region) sameReg.push(n);
-    else rest.push(n);
-  });
-
-  const left  = row.querySelector('.row-arrow.left');
-  const right = row.querySelector('.row-arrow.right');
-  const tag   = row.querySelector('.continent-tag');
-
-  anchors.forEach(a=>{ if (a.parentElement===row) a.remove(); });
-
-  if (left && row.firstElementChild !== left) row.insertBefore(left, row.firstChild);
-  if (tag) {
-    if (left && left.nextSibling !== tag) row.insertBefore(tag, left.nextSibling);
-    else if (!left && row.firstElementChild !== tag) row.insertBefore(tag, row.firstChild);
-  }
-  if (right) row.appendChild(right);
-
-  [...exact, ...sameReg, ...rest].forEach(n=> row.appendChild(n));
-}
-
-    const head = row.firstElementChild && row.firstElementChild.classList.contains('continent-tag')
-      ? [row.firstElementChild] : [];
-
-    for(const el of head) row.appendChild(el);
-    [...exact, ...sameReg, ...rest].forEach(n=> row.appendChild(n));
-  }
-  function run(){
-    reorderRow('newsRow1');
-    reorderRow('newsRow2');
-    reorderRow('newsRow3');
-    reorderRow('newsRow4');
-  }
-  window.addEventListener('DOMContentLoaded', run);
-})();
+(function(){ /* disabled stale optional news reorder block */ })();
 </script>
 <!-- removed stray text:  -->
 <script>
@@ -2901,137 +2607,7 @@ function reorderRow(rowId){
 </script>
 <!-- removed stray text: <! IGDC auto-order + geo + label helpers (invisible) > -->
 <script id="igdc-news-autoorder">
-(function(){
-  function getParamCC(){
-    try{
-      const u=new URL(location.href); const v=(u.searchParams.get('cc')||'').trim().toUpperCase();
-      return v||null;
-    }catch(e){return null;}
-  }
-  async function tryGeoIP(){
-    try{
-      const r = await fetch('/api/geo', {credentials:'include'});
-      if(!r.ok) return null;
-      const j = await r.json();
-      return (j && (j.cc||j.country||'')).toString().trim().toUpperCase() || null;
-    }catch(e){return null;}
-  }
-  function guessCCLocal(){
-    try{
-      const lang = (navigator.language||'').toLowerCase();
-      if(/^ko/.test(lang)) return 'KR';
-      if(/^ja/.test(lang)) return 'JP';
-      if(/^zh/.test(lang)) return 'CN';
-    }catch(e){}
-    try{
-      const tz=(Intl.DateTimeFormat().resolvedOptions().timeZone||'').toLowerCase();
-      if(/seoul/.test(tz)) return 'KR';
-      if(/tokyo/.test(tz)) return 'JP';
-      if(/shanghai|hong_kong|taipei|urumqi|harbin|beijing/.test(tz)) return 'CN';
-    }catch(e){}
-    return null;
-  }
-  function ccToRegion(cc){
-    const MAP = { KR:'AS', JP:'AS', CN:'AS', US:'AM', CA:'AM', BR:'AM', MX:'AM', DE:'EU', FR:'EU', GB:'EU', IT:'EU', ES:'EU', RU:'EU' };
-    return MAP[cc] || null;
-  }
-  function ensureCNDataAttrs(){
-    // In Asia row only, add data-cc/region for typical CN outlets if missing
-    document.querySelectorAll('.continent-tag').forEach(tag=>{
-      if(!/아시아|ASIA/i.test(tag.textContent)) return;
-      const row = tag.parentElement;
-      row.querySelectorAll('a.news-btn').forEach(a=>{
-        const t=(a.textContent||'').trim();
-        if(/신화|차이나데일리|CCTV|인민일보|환구시보|중국|China Daily|Xinhua|People/.test(t)){
-          if(!a.dataset.cc) a.dataset.cc='CN';
-          if(!a.dataset.region) a.dataset.region='AS';
-        }
-      });
-    });
-  }
-  function labelBilingualize(){
-    // if elements have data-native/data-en, render "native (English)"
-    document.querySelectorAll('a.news-btn').forEach(a=>{
-      const n=a.dataset.native, e=a.dataset.en;
-      if(n && e){
-        a.textContent = n + ' (' + e + ')';
-      }
-    });
-  }
-
-function reorderRow(row, cc, region){
-  if (!row) return;
-
-  const btns = Array.from(row.querySelectorAll('a.news-btn'));
-  if (btns.length===0) return;
-
-  const head = row.querySelector('.continent-tag');
-  const left  = row.querySelector('.row-arrow.left');
-  const right = row.querySelector('.row-arrow.right');
-
-  const isAsia = /아시아|ASIA/i.test(head ? head.textContent : '');
-  const own = [], sameReg = [], others = [];
-  btns.forEach(a=>{
-    const _cc=(a.dataset.cc||'').toUpperCase();
-    const _rg=(a.dataset.region||'').toUpperCase();
-    if(cc && _cc===cc) own.push(a);
-    else if(region && _rg===region) sameReg.push(a);
-    else others.push(a);
-  });
-
-  if(isAsia){
-    const PRI=['KR','CN','JP'];
-    sameReg.sort((a,b)=>{
-      const pa=PRI.indexOf((a.dataset.cc||'').toUpperCase());
-      const pb=PRI.indexOf((b.dataset.cc||'').toUpperCase());
-      return ((pa===-1)-(pb===-1)) || (pa-pb);
-    });
-  }
-
-  btns.forEach(el=>{ if(el.parentElement===row) el.remove(); });
-
-  if (left && row.firstElementChild !== left) row.insertBefore(left, row.firstChild);
-  if (head) {
-    if (left && left.nextSibling !== head) row.insertBefore(head, left.nextSibling);
-    else if (!left && row.firstElementChild !== head) row.insertBefore(head, row.firstChild);
-  }
-  if (right) row.appendChild(right);
-
-  own.slice(0, 999).forEach(el=>row.appendChild(el));
-  sameReg.forEach(el=>row.appendChild(el));
-  others.forEach(el=>row.appendChild(el));
-}
-);
-    // Asia micro-priority: KR -> CN -> JP inside sameReg
-    if(isAsia){
-      const PRI=['KR','CN','JP'];
-      sameReg.sort((a,b)=>{
-        const pa=PRI.indexOf((a.dataset.cc||'').toUpperCase());
-        const pb=PRI.indexOf((b.dataset.cc||'').toUpperCase());
-        return ((pa===-1)-(pb===-1)) || (pa-pb);
-      });
-    }
-    // Build order: head, up to 3 own, then remaining sameReg, then others, keeping original relative order otherwise
-    const docFrag = document.createDocumentFragment();
-    if(head) docFrag.appendChild(head);
-    own.slice(0, 999).forEach(el=>docFrag.appendChild(el));
-    sameReg.forEach(el=>docFrag.appendChild(el));
-    // append rest (own beyond 3 then others)
-    others.forEach(el=>docFrag.appendChild(el));
-    // apply
-
-    row.appendChild(docFrag);
-  }
-  async function applyAutoOrder(){
-    ensureCNDataAttrs();
-    labelBilingualize();
-    const cc = (await tryGeoIP()) || getParamCC() || guessCCLocal();
-    const region = ccToRegion(cc||'');
-    document.querySelectorAll('.news-row').forEach(row=> reorderRow(row, cc, region));
-  }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', applyAutoOrder);
-  else applyAutoOrder();
-})();
+(function(){ /* disabled stale optional news-order script */ })();
 </script>
 <!-- removed stray text:  -->
 <script id="igdc-aff-bootstrap">
@@ -3403,7 +2979,7 @@ function reorderRow(row, cc, region){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Save settings (Supabase url/key) are not connected yet, so server-side saving is disabled. When deploying to the web, set SUPER_VARSAR.url/anonKey and it will be connected automatically.");
+        alert("Mipangilio ya kuhifadhi (Supabase url/key) bado haijaunganishwa, kwa hivyo uhifadhi wa upande wa seva umezimwa. Unapoweka kwenye wavuti, weka SUPER_VARSAR.url/anonKey na itaunganishwa kiotomatiki.");
         return;
       }
       const record = {
@@ -3877,7 +3453,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     document.querySelectorAll('.news-section .continent-tag').forEach(function(stamp){
       var key = normalize(stamp.textContent||'');
       if(key.includes('panasia')){
-        setStampLabel(stamp, 'Wide-아시아');
+        setStampLabel(stamp, 'Asia Pana');
         var row = stamp.closest('.news-row');
         if(row){
           requestAnimationFrame(function(){ row.style.setProperty('--stampW', stamp.offsetWidth); });

@@ -322,7 +322,7 @@ button svg, .btn svg, .button svg, .cta-button svg{ width:1em; height:1em; }
 .section-blockchain 
 .section-blockchain .bc-tile:hover{
   background:#DDF2E6;
-  borderProviders(20,80,40,.28);
+  borderவழங்குநர்கள்(20,80,40,.28);
 }
 
 /* Responsive: keep gutters modest on small screens */
@@ -3357,7 +3357,7 @@ function handleVideoSearch(e){
 
   let activeProvider = "youtube";
 
-  function renderProviders(){
+  function renderவழங்குநர்கள்(){
     const form = document.querySelector('form.video-search');
     const sel  = form?.querySelector('select[name="provider"]');
     const bar  = document.querySelector('.provider-bar');
@@ -3393,7 +3393,7 @@ function handleVideoSearch(e){
 
   function setProvider(p){
     activeProvider = p;
-    renderProviders();
+    renderவழங்குநர்கள்();
   }
 
   // Click on buttons -> set provider
@@ -3420,7 +3420,7 @@ function handleVideoSearch(e){
   }
 
   // initial render
-  renderProviders();
+  renderவழங்குநர்கள்();
 })();
 </script>
 <script>
@@ -3454,7 +3454,7 @@ function handleVideoSearch(e){
 
   function labelOf(p, lang){ return (p.labels && p.labels[lang]) || p.labels?.en || p.key; }
 
-  function orderProviders(lang){
+  function orderவழங்குநர்கள்(lang){
     const pri = { global:50, kr:40, cn:40, jp:40 };
     if (lang === "ko") { pri.kr = 10; pri.global = 30; pri.cn = 40; }
     else if (lang === "zh") { pri.cn = 10; pri.global = 30; pri.kr = 40; }
@@ -3476,13 +3476,13 @@ function handleVideoSearch(e){
 
   let currentLang = (window.__IGDC_LANG__?.current || detectLang());
 
-  function renderProviders(){
+  function renderவழங்குநர்கள்(){
     const form = document.querySelector('form.video-search');
     const sel  = form?.querySelector('select[name="provider"]');
     if (!form || !sel) return;
-    const ordered = orderProviders(currentLang);
+    const ordered = orderவழங்குநர்கள்(currentLang);
     sel.innerHTML = "";
-    orderProviders(p => {
+    orderவழங்குநர்கள்(p => {
       const opt = document.createElement("option");
       opt.value = p.key;
       opt.textContent = labelOf(p, currentLang);
@@ -3505,7 +3505,7 @@ function handleVideoSearch(e){
       const sel = e.target.querySelector('select[name="provider"]');
       const key = sel?.value || "youtube";
       if(!q) return false;
-      const p = [...orderProviders(currentLang)].find(x=>x.key===key) || PROVIDERS.find(x=>x.key==="youtube");
+      const p = [...orderவழங்குநர்கள்(currentLang)].find(x=>x.key===key) || PROVIDERS.find(x=>x.key==="youtube");
       window.open((p?.url || "https://www.youtube.com/results?search_query=") + encodeURIComponent(q), "_blank", "noopener,noreferrer");
       return false;
     }
@@ -3516,12 +3516,12 @@ function handleVideoSearch(e){
     try{
       window.__IGDC_LANG__.onChange(function(langCode){
         currentLang = (langCode||'en').split('-')[0].toLowerCase();
-        renderProviders();
+        renderவழங்குநர்கள்();
       });
     }catch(e){}
   }
 
-  renderProviders();
+  renderவழங்குநர்கள்();
 })();
 </script>
 <script>
@@ -3708,7 +3708,7 @@ function handleVideoSearch(e){
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='கேள்வி-பதில்';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
@@ -3927,7 +3927,7 @@ function handleVideoSearch(e){
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
+        const q = el("div","igdc-qa-thread-q"); q.textContent="கே. "+(row.question||"");
         const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("ப. "+row.answer):"ப. (நிலுவையில்)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
@@ -3978,7 +3978,7 @@ function handleVideoSearch(e){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Save settings (Supabase url/key) are not connected yet, so server-side saving is disabled. When deploying to the web, set SUPER_VARSAR.url/anonKey and it will be connected automatically.");
+        alert("சேமிப்பு அமைப்புகள் (Supabase url/key) இன்னும் இணைக்கப்படவில்லை; சர்வர் சேமிப்பு முடக்கப்பட்டுள்ளது. வலைக்கு வெளியிடும்போது SUPER_VARSAR.url/anonKey அமைத்தால் தானாக இணைக்கும்.");
         return;
       }
       const record = {
@@ -4143,7 +4143,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
   let activeKey = (PROVIDERS[0] && PROVIDERS[0].key) || 'youtube';
 
-  function renderProviders(){
+  function renderவழங்குநர்கள்(){
     const form = document.querySelector('form.video-search');
     const sel  = form && form.querySelector('select[name="provider"]');
     const bar  = document.querySelector('.provider-bar');
@@ -4171,7 +4171,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       btn.style.cursor = "pointer";
       btn.style.background = p.key===activeKey ? "#2e6bff" : "#fff";
       btn.style.color = p.key===activeKey ? "#fff" : "#111";
-      btn.addEventListener('click', () => { activeKey = p.key; renderProviders(); });
+      btn.addEventListener('click', () => { activeKey = p.key; renderவழங்குநர்கள்(); });
       btn.addEventListener('click', (ev) => {
         if (ev.ctrlKey || ev.metaKey) window.open(PROVIDERS.find(x=>x.key===p.key)?.href || '#', '_blank', 'noopener');
       });
@@ -4180,7 +4180,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
 
   document.addEventListener('change', (e)=>{
-    if(e.target && e.target.matches('select[name="provider"]')){ activeKey = e.target.value; renderProviders(); }
+    if(e.target && e.target.matches('select[name="provider"]')){ activeKey = e.target.value; renderவழங்குநர்கள்(); }
   });
 
   const orig = window.handleVideoSearch;
@@ -4193,7 +4193,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     return false;
   };
 
-  renderProviders();
+  renderவழங்குநர்கள்();
 })();
 </script>
 <!-- stray text suppressed: <! patch: sync dropdown to platform tiles; remove stamp buttons > -->
@@ -4493,7 +4493,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     var title = document.createElement('div');
     title.className = 'igdc-qa-title';
-    title.textContent = 'Q&A';
+    title.textContent = 'கேள்வி-பதில்';
 
     var closeBtn = document.createElement('button');
     closeBtn.className = 'igdc-qa-close';
@@ -4640,7 +4640,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     var src = card.getAttribute('data-src');
     var wrap = document.createElement('div');
     wrap.className = 'fs-stage';
-    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="Media Viewer"></div><button class="fs-close" aria-label="மூடு">✕</button>';
+    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="ஊடகக் காட்சி"></div><button class="fs-close" aria-label="மூடு">✕</button>';
     var inner = wrap.querySelector('.fs-inner');
 
     if(yt){
@@ -4657,7 +4657,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     }else{
       var url = getCardImageURL(card) || 'about:blank';
       var img = document.createElement('img');
-      img.src = url; img.alt = 'Preview';
+      img.src = url; img.alt = 'முன்னோட்டம்';
       img.style.width='100%'; img.style.height='100%'; img.style.objectFit='cover';
       inner.appendChild(img);
     }
@@ -5061,7 +5061,7 @@ window.addEventListener("message",function(ev){
           break;
 
         case 'review':
-          alert('Your review has been submitted.');
+          alert('உங்கள் மதிப்புரை சமர்ப்பிக்கப்பட்டது.');
           break;
       }
     },

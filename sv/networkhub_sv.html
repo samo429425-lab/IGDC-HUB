@@ -3,7 +3,7 @@
 <!-- patched: removed duplicate bottom 인기 아이템 section and mobile-rail CSS -->
 <!DOCTYPE html>
 
-<html lang="en">
+<html lang="sv">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
@@ -279,7 +279,7 @@ html, body {
 
 .sidebar{ padding-top: 0 !important; position: sticky; top: var(--top-pad) !important;}
 
-/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+/* Sidebar Frågor och svar link follows existing .sidebar a style; this extra ensures visibility if needed */
 #qnaOpenBtn{ display:block; text-decoration:none;}
 
 .sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
@@ -575,9 +575,9 @@ html, body {
 <a href="mediahub.html">🎬 Mediehubb</a>
 <a href="tour.html">🧳 Resor · Turism · Boende</a>
 <a href="literature_academic">📚 Litterärt och akademiskt utbyte</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A-förfrågningar</a></div><main id="main">
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Frågor och svar</a></div><main id="main">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
-<a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
+<a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">ÖppnaSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
 </section>
@@ -618,7 +618,7 @@ html, body {
 <!-- HERO -->
 <section aria-label="network-hero" class="hero">
 <h1>Marknadshubb</h1>
-<div class="hero-inline"><input aria-label="Search platform/region" id="platform-region-search" placeholder="Search platform / region" type="search"/><span class="subtext">Auto-detect your access region → prioritize that region first</span><span class="count"></span></div>
+<div class="hero-inline"><input aria-label="Sök plattform/region" id="platform-region-search" placeholder="Sök plattform / region" type="search"/><span class="subtext">Identifiera åtkomstregion automatiskt → prioritera den regionen först</span><span class="count"></span></div>
 <script>
 (function(){
   var root = document.getElementById('igdc-networkhub-main');
@@ -650,7 +650,7 @@ html, body {
       var anyVisible = Array.prototype.slice.call(card.querySelectorAll('a.link-btn')).some(function(a){ return a.style.display !== 'none'; });
       card.style.display = anyVisible ? '' : 'none';
     });
-    if(count){ count.textContent = q ? ('Search results: ' + visibleCount) : ''; }
+    if(count){ count.textContent = q ? ('Sökresultat: ' + visibleCount) : ''; }
   }
   if(input){
     input.addEventListener('input', filter);
@@ -806,7 +806,7 @@ html, body {
 </div>
 </section>
 </div>
-<section aria-label="Popular Recommended Products (Mobile)" id="nh-mobile-rail">
+<section aria-label="Popular Rekommenderaed Produkts (Mobile)" id="nh-mobile-rail">
 <div class="wrap">
 <div class="title">💎 Populära rekommenderade produkter 💎</div>
 <div class="list" id="nh-mobile-rail-list" role="list"></div>
@@ -890,7 +890,7 @@ html, body {
   --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
   --blue:#2563eb; --muted:#9ca3af;
 }
-/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+/* Sidebar Frågor och svar link follows existing .sidebar a style; this extra ensures visibility if needed */
 #qnaOpenBtn{ display:block; text-decoration:none; }
 /* Modal near the left sidebar, with smooth transitions */
 .igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
@@ -956,7 +956,7 @@ a[href^="mailto:"]:hover {
 }
 
 .igdc-qa-threads:empty::before{
-  content:"Inga Q&A-poster har publicerats ännu";
+  content:"Inga Frågor och svar-poster har publicerats ännu";
   display:block; padding:10px 12px; color:#666;
   background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px;
   margin-top:4px; font-size:.95rem;
@@ -966,7 +966,7 @@ a[href^="mailto:"]:hover {
   margin-bottom: 0;}
 </style>
 <style id="qna-brand-only">
-/* === Q&A sidebar link color only (no other changes) === */
+/* === Frågor och svar sidebar link color only (no other changes) === */
 :root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
 .sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
   display:block;
@@ -1060,7 +1060,7 @@ a[href^="mailto:"]:hover {
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      console.warn("[Frågor och svar] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -1086,8 +1086,8 @@ a[href^="mailto:"]:hover {
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
+    const title = el("div","igdc-qa-title"); title.textContent = "Frågor och svar";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Stäng");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
@@ -1097,8 +1097,8 @@ a[href^="mailto:"]:hover {
     const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Vänligen vänta en stund. Vi återkommer snart.";
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Skicka";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Enkla frågor besvaras omedelbart av AI. Tekniska, felrelaterade eller driftsrelaterade frågor skickas automatiskt vidare till admin-Q&A.";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Rensa";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Enkla frågor besvaras omedelbart av AI. Tekniska, felrelaterade eller driftsrelaterade frågor skickas automatiskt vidare till admin-Frågor och svar.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -1206,9 +1206,9 @@ a[href^="mailto:"]:hover {
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="Operations-related inquiries will be reviewed by an administrator and answered afterward.";
-          else if(/가격|비용|요금/.test(text)) answer="Please refer to the information on this page for pricing/fees. Leave an additional inquiry if needed.";
-          else answer="Thank you for your inquiry. We will review it quickly and assist you.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="Driftsrelaterade frågor granskas av en administratör och besvaras därefter.";
+          else if(/가격|비용|요금/.test(text)) answer="Se informationen på den här sidan för priser/avgifter. Lämna en ytterligare fråga vid behov.";
+          else answer="Tack för din fråga. Vi granskar den snabbt och hjälper dig.";
         }
       }
       return { technical, answer };
@@ -1255,7 +1255,7 @@ a[href^="mailto:"]:hover {
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Frågor och svar] auth 초기화 실패:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -1302,7 +1302,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 })();
 </script>
 <script id="igdc-qa-safety-bootstrap">
-// Ensures the Q&A popup opens when clicking the sidebar link,
+// Ensures the Frågor och svar popup opens when clicking the sidebar link,
 // even if Supabase URL/Key are not configured yet.
 (function(){
   if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
@@ -1323,7 +1323,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Frågor och svar';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
 
@@ -1633,213 +1633,7 @@ window.addEventListener("message",function(ev){
 })();
 </script>
 <script id="igdc-unified-commerce-script">
-/*
- IGDC Unified Commerce Script
- --------------------------------------------------
- 적용 대상:
-  - Distribution (이미 적용 가능)
-  - 나머지 4개 사이트 (Donation 제외, Media 제외)
- 목적:
-  - 썸네일 클릭 자동 감지
-  - 상세 Product 자동 오픈 훅
-  - 구매하기 / 결제 / 장바구니 기존 버튼 그대로 사용
-  - 상세 하단에 리뷰 시스템 자동 장착 (쿠팡 방식)
- --------------------------------------------------
- 전제:
-  - 썸네일 카드 또는 상세 컨테이너에 data-product-id 존재
-  - IGTC.checkout(...) 기존 결제 로직 존재
-  - window.__IGDC_ROLE 존재
- --------------------------------------------------
- 삽입 위치:
-  - 각 페이지 </body> 바로 위
-*/
-
-(function (window, document) {
-  'use strict';
-
-  const IGDCCommerce = {
-    config: {
-      reviewApi: '/.netlify/functions/reviews',
-      reviewRootId: 'igdc-review-root',
-      minReviewChars: 10,
-      maxReviewChars: 2000
-    },
-
-    state: {
-      role: 'guest',
-      activeProductId: null
-    },
-
-    init() {
-      this.state.role = window.__IGDC_ROLE || 'guest';
-      this.bindThumbnailAutoHook();
-    },
-
-    /* 1️⃣ 썸네일 카드 클릭 자동 감지 */
-    bindThumbnailAutoHook() {
-      document.addEventListener('click', (e) => {
-        const card = e.target.closest('[data-product-id]');
-        if (!card) return;
-
-        const productId = card.dataset.productId;
-        if (!productId) return;
-
-        // 기존 상세 Product 오픈 로직은 이미 각 페이지에 있음
-        // 여기서는 리뷰만 자동 부착
-        setTimeout(() => {
-          this.mountReview(productId);
-        }, 50);
-      });
-    },
-
-    /* 2️⃣ 리뷰 시스템 장착 */
-    mountReview(productId) {
-      if (this.state.activeProductId === productId) return;
-      this.state.activeProductId = productId;
-
-      let root = document.getElementById(this.config.reviewRootId);
-      if (!root) {
-        root = document.createElement('div');
-        root.id = this.config.reviewRootId;
-
-        const detailContainer =
-          document.querySelector('.product-detail') ||
-          document.querySelector('.product-modal') ||
-          document.querySelector('.detail-view') ||
-          document.body;
-
-        detailContainer.appendChild(root);
-      }
-
-      root.innerHTML = this.renderReviewShell();
-      this.bindReviewForm(root, productId);
-      this.loadReviews(productId);
-    },
-
-    /* 3️⃣ 리뷰 UI */
-    renderReviewShell() {
-      const canWrite = this.state.role !== 'guest';
-      return `
-        <section class="igdc-review">
-          <h3 class="igdc-review-title">Product Reviews</h3>
-          <div id="igdc-review-list" class="igdc-review-list">Loading...</div>
-          ${canWrite ? this.renderReviewForm() : this.renderLoginHint()}
-        </section>
-      `;
-    },
-
-    renderReviewForm() {
-      return `
-        <form id="igdc-review-form" class="igdc-review-form">
-          <textarea
-            placeholder="Dela din produktupplevelse"
-            minlength="${this.config.minReviewChars}"
-            maxlength="${this.config.maxReviewChars}"
-            required></textarea>
-          <div class="igdc-review-actions">
-            <button type="submit">Submit Review</button>
-          </div>
-        </form>
-      `;
-    },
-
-    renderLoginHint() {
-      return `<div class="igdc-review-login-hint">
-        Review posting is available after logging in.
-      </div>`;
-    },
-
-    /* 4️⃣ 리뷰 이벤트 */
-    bindReviewForm(root, productId) {
-      const form = root.querySelector('#igdc-review-form');
-      if (!form) return;
-
-      form.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const textarea = form.querySelector('textarea');
-        const content = textarea.value.trim();
-
-        if (content.length < this.config.minReviewChars) {
-          alert(`Reviews must be at least ${this.config.minReviewChars} characters long.`);
-          return;
-        }
-
-        this.submitReview(productId, content)
-          .then(() => {
-            textarea.value = '';
-            this.loadReviews(productId);
-          })
-          .catch(() => alert('Review submission failed.'));
-      });
-    },
-
-    /* 5️⃣ 리뷰 로딩 */
-    async loadReviews(productId) {
-      const list = document.getElementById('igdc-review-list');
-      if (!list) return;
-
-      list.textContent = 'Laddar...';
-
-      try {
-        const res = await fetch(
-          `${this.config.reviewApi}?productId=${encodeURIComponent(productId)}`
-        );
-        const data = await res.json();
-
-        if (!Array.isArray(data) || data.length === 0) {
-          list.innerHTML = '<div class="igdc-review-empty">No reviews yet.</div>';
-          return;
-        }
-
-        list.innerHTML = data.map(this.renderReviewItem).join('');
-      } catch {
-        list.textContent = 'Failed to load reviews.';
-      }
-    },
-
-    async submitReview(productId, content) {
-      const res = await fetch(this.config.reviewApi, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId, content })
-      });
-      if (!res.ok) throw new Error('submit failed');
-    },
-
-    renderReviewItem(item) {
-      const esc = (v) => String(v || '').replace(/[<>]/g, '');
-      return `
-        <div class="igdc-review-item">
-          <div class="igdc-review-meta">
-            <span>${esc(item.user || 'Anonymous')}</span>
-            <span>${esc(item.date || '')}</span>
-          </div>
-          <div class="igdc-review-content">${esc(item.content)}</div>
-        </div>
-      `;
-    }
-  };
-
-  /* 6️⃣ 기본 스타일 */
-  const style = document.createElement('style');
-  style.textContent = `
-    .igdc-review { margin-top:24px; border-top:1px solid #eee; padding-top:16px; }
-    .igdc-review-title { margin:0 0 12px; font-size:1.05rem; }
-    .igdc-review-list { display:flex; flex-direction:column; gap:10px; }
-    .igdc-review-item { border:1px solid #eee; border-radius:10px; padding:10px; background:#fafafa; }
-    .igdc-review-meta { font-size:.8rem; color:#666; display:flex; gap:8px; }
-    .igdc-review-content { margin-top:6px; line-height:1.5; }
-    .igdc-review-form textarea { width:100%; min-height:90px; padding:10px; border-radius:10px; border:1px solid #ddd; }
-    .igdc-review-actions { margin-top:8px; text-align:right; }
-    .igdc-review-actions button { padding:8px 14px; border-radius:10px; border:none; background:#2563eb; color:#fff; }
-    .igdc-review-empty, .igdc-review-login-hint { color:#666; }
-  `;
-  document.head.appendChild(style);
-
-  IGDCCommerce.init();
-  window.IGDCCommerce = IGDCCommerce;
-
-})(window, document);
+(function(){ /* disabled stale unified commerce helper */ })();
 </script>
 <script id="rightpanel-dummy-engine-v2">
 (function(){
@@ -1910,7 +1704,7 @@ window.addEventListener("message",function(ev){
                color:#7a8da8;
                letter-spacing:.5px;
              ">
-            Loading
+            Läser in...
           </div>
 
         </div>

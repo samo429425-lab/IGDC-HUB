@@ -1,14 +1,13 @@
 <!DOCTYPE html>
-
-<html lang="ko">
+<html lang="ms">
 <head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1" name="viewport"/>
-<title>Rangkaian Sosial</title>
-<script src="/assets/js/igtc-language-role-bridge.min.js"></script>
-<link href="/assets/css/thumbs.standard.css?v=20250914" rel="stylesheet"/>
-<link href="/assets/css/hero.css?v=20250914" rel="stylesheet"/>
-<style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rangkaian Sosial</title>
+  <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
+  <link rel="stylesheet" href="/assets/css/thumbs.standard.css?v=20250914" />
+  <link rel="stylesheet" href="/assets/css/hero.css?v=20250914" />
+  <style>
     :root{
       --card-min:200px;
       --card-max:260px;
@@ -309,7 +308,7 @@
     .igdc-qa-btn.primary{background:#2563eb;color:#fff}
     .igdc-qa-btn.muted{background:#9ca3af;color:#fff}
     .igdc-qa-threads{display:flex;flex-direction:column;gap:10px;overflow:auto;border-top:1px solid #f3d9b0;padding-top:10px}
-    .igdc-qa-threads:empty::before{content:"Belum ada entri Q&A yang dipos";display:block;padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;margin-top:8px;font-size:.95rem}
+    .igdc-qa-threads:empty::before{content: "Belum ada entri soal jawab yang disiarkan";display:block;padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;margin-top:8px;font-size:.95rem}
     .igdc-qa-thread{border:1px solid #f3d9b0;border-radius:12px;padding:10px 12px;background:#fffdf8}
     .igdc-qa-thread-q{font:700 13px/1.5 system-ui;color:#222}
     .igdc-qa-thread-a{font:13px/1.5 system-ui;color:#333;margin-top:6px}
@@ -320,7 +319,7 @@
     .contact-email a{color:#2563eb;text-decoration:underline}
     @media (max-width:900px){ .igdc-qa-panel{left:12px;width:min(92vw,560px)} }
   </style>
-<style id="social-fullscreen-viewer-v1">
+  <style id="social-fullscreen-viewer-v1">
     .snfv{position:fixed;inset:0;z-index:2147483600;background:#000;display:none;align-items:center;justify-content:center}
     .snfv.open{display:flex}
     .snfv-panel{position:relative;width:100vw;height:100dvh;background:#000;display:flex;flex-direction:column}
@@ -336,59 +335,69 @@
     .snfv-btn{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:0 14px;border-radius:10px;background:#0b4a8b;color:#fff;text-decoration:none;font-weight:700;border:1px solid rgba(255,255,255,.18)}
     @media (max-width:768px) and (orientation:portrait){.snfv-meta{padding:10px 12px}.snfv-title{font-size:.96rem}.snfv-desc{font-size:.86rem}}
 </style>
+  
 </head>
 <body>
-<div id="hero"><div class="hero-title"></div></div>
-<div class="container">
-<div class="sidebar">
-<a href="home.html">🏠 Laman Utama</a>
-<a href="networkhub.html">🛒 Hab Pasaran</a>
-<a href="distributionhub.html">🏭 Hab Pengedaran</a>
-<a href="socialnetwork.html">📢 Rangkaian Sosial</a>
-<a href="mediahub.html">🎬 Hab Media</a>
-<a href="tour.html">🧳 Perjalanan · Pelancongan · Penginapan</a>
-<a href="literature_academic">📚 Pertukaran Sastera &amp; Akademik</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Pertanyaan Q&amp;A</a>
-</div>
-<div class="main-content">
-<section class="section-blockchain">
-<a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
-<a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
-<a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
-<a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
-</section>
-<h2 id="pageTitle">👥 Rangkaian Sosial · Saluran Disyorkan</h2>
-<div class="status"></div>
-<section class="maru-broadware-slot" hidden="" id="maruSocialBroadwareSlot"></section>
-<div class="rows">
-<div class="row-viewport" data-row="1"><div class="row-scroller" id="rowScroller1"><div class="row-grid" id="rowGrid1"><div class="thumb-grid thumb-scroller" data-psom-key="social-youtube"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft1">‹</button><button class="rscroll right" id="rsRight1">›</button></div>
-<div class="row-viewport" data-row="2"><div class="row-scroller" id="rowScroller2"><div class="row-grid" id="rowGrid2"><div class="thumb-grid thumb-scroller" data-psom-key="social-instagram"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft2">‹</button><button class="rscroll right" id="rsRight2">›</button></div>
-<div class="row-viewport" data-row="3"><div class="row-scroller" id="rowScroller3"><div class="row-grid" id="rowGrid3"><div class="thumb-grid thumb-scroller" data-psom-key="social-tiktok"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft3">‹</button><button class="rscroll right" id="rsRight3">›</button></div>
-<div class="row-viewport" data-row="4"><div class="row-scroller" id="rowScroller4"><div class="row-grid" id="rowGrid4"><div class="thumb-grid thumb-scroller" data-psom-key="social-facebook"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft4">‹</button><button class="rscroll right" id="rsRight4">›</button></div>
-<div class="row-viewport" data-row="5"><div class="row-scroller" id="rowScroller5"><div class="row-grid" id="rowGrid5"><div class="thumb-grid thumb-scroller" data-psom-key="social-wechat"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft5">‹</button><button class="rscroll right" id="rsRight5">›</button></div>
-<div class="row-viewport" data-row="6"><div class="row-scroller" id="rowScroller6"><div class="row-grid" id="rowGrid6"><div class="thumb-grid thumb-scroller" data-psom-key="social-weibo"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft6">‹</button><button class="rscroll right" id="rsRight6">›</button></div>
-<div class="row-viewport" data-row="7"><div class="row-scroller" id="rowScroller7"><div class="row-grid" id="rowGrid7"><div class="thumb-grid thumb-scroller" data-psom-key="social-pinterest"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft7">‹</button><button class="rscroll right" id="rsRight7">›</button></div>
-<div class="row-viewport" data-row="8"><div class="row-scroller" id="rowScroller8"><div class="row-grid" id="rowGrid8"><div class="thumb-grid thumb-scroller" data-psom-key="social-reddit"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft8">‹</button><button class="rscroll right" id="rsRight8">›</button></div>
-<div class="row-viewport" data-row="9"><div class="row-scroller" id="rowScroller9"><div class="row-grid" id="rowGrid9"><div class="thumb-grid thumb-scroller" data-psom-key="social-twitter"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft9">‹</button><button class="rscroll right" id="rsRight9">›</button></div>
-<section id="rpMobileBox">
-<h3 class="ad-headline">💎 Item Popular 💎</h3>
-<div id="rpMobileScroller">
-<div data-psom-key="rightPanel" id="rpMobileGrid"></div>
-</div>
-</section>
-</div>
-</div>
-<div class="right-rail" id="rightRail">
-<h3 class="ad-headline">💎 Item Popular 💎</h3>
-<div class="ad-panel" data-psom-key="rightPanel" id="rightAutoPanel"></div>
-</div>
-</div>
-<div class="product-detail-root" hidden="" id="igdcProductDetailRoot"></div>
-<footer>
+  <div id="hero"><div class="hero-title"></div></div>
+
+  <div class="container">
+    <div class="sidebar">
+      <a href="home.html">🏠 Laman Utama</a>
+      <a href="networkhub.html">🛒 Hab Pasaran</a>
+      <a href="distributionhub.html">🏭 Hab Pengedaran</a>
+      <a href="socialnetwork.html">📢 Rangkaian Sosial</a>
+      <a href="mediahub.html">🎬 Hab Media</a>
+      <a href="tour.html">🧳 Perjalanan · Pelancongan · Penginapan</a>
+      <a href="literature_academic">📚 Pertukaran Sastera & Akademik</a>
+      <a href="javascript:void(0)" id="qnaOpenBtn">💬 Soal Jawab</a>
+    </div>
+
+    <div class="main-content">
+      <section class="section-blockchain">
+        <a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
+        <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
+        <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
+        <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
+      </section>
+
+      <h2 id="pageTitle">👥 Rangkaian Sosial · Saluran Disyorkan</h2>
+      <div class="status"></div>
+
+    <section id="maruSocialBroadwareSlot" class="maru-broadware-slot" hidden></section>
+
+      <div class="rows">
+        <div class="row-viewport" data-row="1"><div class="row-scroller" id="rowScroller1"><div class="row-grid" id="rowGrid1"><div class="thumb-grid thumb-scroller" data-psom-key="social-youtube"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft1">‹</button><button class="rscroll right" id="rsRight1">›</button></div>
+        <div class="row-viewport" data-row="2"><div class="row-scroller" id="rowScroller2"><div class="row-grid" id="rowGrid2"><div class="thumb-grid thumb-scroller" data-psom-key="social-instagram"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft2">‹</button><button class="rscroll right" id="rsRight2">›</button></div>
+        <div class="row-viewport" data-row="3"><div class="row-scroller" id="rowScroller3"><div class="row-grid" id="rowGrid3"><div class="thumb-grid thumb-scroller" data-psom-key="social-tiktok"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft3">‹</button><button class="rscroll right" id="rsRight3">›</button></div>
+        <div class="row-viewport" data-row="4"><div class="row-scroller" id="rowScroller4"><div class="row-grid" id="rowGrid4"><div class="thumb-grid thumb-scroller" data-psom-key="social-facebook"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft4">‹</button><button class="rscroll right" id="rsRight4">›</button></div>
+        <div class="row-viewport" data-row="5"><div class="row-scroller" id="rowScroller5"><div class="row-grid" id="rowGrid5"><div class="thumb-grid thumb-scroller" data-psom-key="social-wechat"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft5">‹</button><button class="rscroll right" id="rsRight5">›</button></div>
+        <div class="row-viewport" data-row="6"><div class="row-scroller" id="rowScroller6"><div class="row-grid" id="rowGrid6"><div class="thumb-grid thumb-scroller" data-psom-key="social-weibo"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft6">‹</button><button class="rscroll right" id="rsRight6">›</button></div>
+        <div class="row-viewport" data-row="7"><div class="row-scroller" id="rowScroller7"><div class="row-grid" id="rowGrid7"><div class="thumb-grid thumb-scroller" data-psom-key="social-pinterest"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft7">‹</button><button class="rscroll right" id="rsRight7">›</button></div>
+        <div class="row-viewport" data-row="8"><div class="row-scroller" id="rowScroller8"><div class="row-grid" id="rowGrid8"><div class="thumb-grid thumb-scroller" data-psom-key="social-reddit"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft8">‹</button><button class="rscroll right" id="rsRight8">›</button></div>
+        <div class="row-viewport" data-row="9"><div class="row-scroller" id="rowScroller9"><div class="row-grid" id="rowGrid9"><div class="thumb-grid thumb-scroller" data-psom-key="social-twitter"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft9">‹</button><button class="rscroll right" id="rsRight9">›</button></div>
+
+        <section id="rpMobileBox">
+		<h3 class="ad-headline">💎 Item Popular 💎</h3>
+          <div id="rpMobileScroller">
+            <div id="rpMobileGrid" data-psom-key="rightPanel"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div class="right-rail" id="rightRail">
+      <h3 class="ad-headline">💎 Item Popular 💎</h3>
+      <div class="ad-panel" id="rightAutoPanel" data-psom-key="rightPanel"></div>
+    </div>
+  </div>
+<div id="igdcProductDetailRoot" class="product-detail-root" hidden></div>
+
+  <footer>
     IGDC Global Hub © 2025 | International General Distribution Company<br/>
     50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea<br/>
-</footer>
-<script>
+  </footer>
+
+  <script>
     (function(){
       function norm(u){
         u = (u||"").toString().trim().toLowerCase().split('#')[0].split('?')[0];
@@ -407,6 +416,7 @@
       });
     })();
   </script>
+
 <script id="hide-lit-links-script">
 (function(){
   function hideLitLinks(){
@@ -434,8 +444,9 @@
   }
 })();
 </script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script id="igdc-qa-config">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script id="igdc-qa-config">
     (function () {
       const baseConfig = { url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "", project: "IGDC", pageId: null, aiEndpoint: null };
       function applyConfig(env) {
@@ -450,7 +461,8 @@
         .catch(function () { applyConfig(null); });
     })();
   </script>
-<script>
+
+  <script>
     (function(){
       if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
       function ensureButton(){
@@ -464,11 +476,11 @@
             var b = document.createElement('div'); b.className='igdc-qa-backdrop';
             var p = document.createElement('div'); p.className='igdc-qa-panel';
             var h = document.createElement('div'); h.className='igdc-qa-header';
-            var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+            var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent="Soal Jawab";
             var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
             h.appendChild(t); h.appendChild(x);
             var body = document.createElement('div'); body.className='igdc-qa-body';
-            body.innerHTML = '<label>Soalan</label><textarea class="igdc-qa-text q" placeholder="Sila masukkan soalan anda..."></textarea><label>Jawapan</label><textarea class="igdc-qa-text a" placeholder="Sila tunggu sebentar. Kami akan memberi respons sebentar lagi."></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">Hantar</button><button class="igdc-qa-btn muted">Kosongkan</button></div><div class="igdc-qa-note">※ Soalan mudah dijawab serta-merta oleh AI. Isu teknikal, ralat atau operasi akan dihantar secara automatik ke admin Q&A.</div><div class="igdc-qa-threads"></div><p class="contact-email">E-mel Wakil: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
+            body.innerHTML = '<label>Soalan</label><textarea class="igdc-qa-text q" placeholder="Sila masukkan soalan anda..."></textarea><label>Jawapan</label><textarea class="igdc-qa-text a" placeholder="Sila tunggu sebentar. Kami akan memberi respons sebentar lagi."></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">Hantar</button><button class="igdc-qa-btn muted">Kosongkan</button></div><div class="igdc-qa-note">※ Soalan mudah dijawab serta-merta oleh AI. Isu teknikal, ralat atau operasi akan dihantar secara automatik ke admin Soal Jawab.</div><div class="igdc-qa-threads"></div><p class="contact-email">E-mel Wakil: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
             p.appendChild(h); p.appendChild(body); m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
             function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
             function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
@@ -481,7 +493,8 @@
       if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', ensureButton, { once:true }); } else { ensureButton(); }
     })();
   </script>
-<script>
+
+  <script>
     (function(){
       if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
       const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
@@ -505,13 +518,13 @@
       function mountUI(){
         const existing = document.querySelector('.igdc-qa-modal'); if(existing){ return bindExisting(existing); }
         const modal = el('div','igdc-qa-modal'); const backdrop = el('div','igdc-qa-backdrop'); const panel = el('div','igdc-qa-panel');
-        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='Q&A'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','Close');
+        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent="Soal Jawab"; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','Tutup');
         header.append(title, close);
         const body = el('div','igdc-qa-body');
-        const lQ = el('label'); lQ.textContent='Soalan'; const tQ = el('textarea','igdc-qa-text q'); tQ.placeholder='Sila masukkan soalan anda...';
+        const lQ = el('label'); lQ.textContent='Question'; const tQ = el('textarea','igdc-qa-text q'); tQ.placeholder='Sila masukkan soalan anda...';
         const lA = el('label'); lA.textContent='Jawapan'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='Sila tunggu sebentar. Kami akan memberi respons sebentar lagi.';
-        const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='Hantar'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='Clear';
-        const note = el('div','igdc-qa-note'); note.textContent='※ Soalan mudah dijawab serta-merta oleh AI. Isu teknikal, ralat atau operasi akan dihantar secara automatik ke admin Q&A.';
+        const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='Hantar'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='Kosongkan';
+        const note = el('div','igdc-qa-note'); note.textContent='※ Soalan mudah dijawab serta-merta oleh AI. Isu teknikal, ralat atau operasi akan dihantar secara automatik ke admin Soal Jawab.';
         const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='E-mel Wakil: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
         actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
         return bindExisting(modal);
@@ -529,9 +542,9 @@
         close && close.addEventListener('click', closeModal); backdrop && backdrop.addEventListener('click', closeModal); document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
         btnClear && btnClear.addEventListener('click', ()=>{ if(tQ) tQ.value=''; if(tA) tA.value=''; });
         async function fetchThreads(){ const sb = await ensureSupabase(); if(!sb || !list) return; const { data } = await sb.from('igdc_qna_threads').select('*').eq('project', STATE.project).eq('page_id', STATE.pageId).order('created_at', { ascending:false }).limit(100); renderList(data||[]); }
-        function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='Q. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('A. '+row.answer):'J. (Menunggu)'; box.append(q,a); list.append(box); }); }
-        async function autoAnswerIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'Please refer to the information on this page for pricing and fees. Leave an additional inquiry if needed.':'Thank you for your inquiry. We will review it promptly and assist you.'; } } return { technical, answer }; }
-        async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoAnswerIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'Your inquiry has been received.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
+        function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='S. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('J. '+row.answer):'J. (Menunggu)'; box.append(q,a); list.append(box); }); }
+        async function autoAnswerIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'Sila rujuk maklumat pada halaman ini untuk harga dan yuran. Tinggalkan pertanyaan tambahan jika perlu.':'Terima kasih atas pertanyaan anda. Kami akan menyemaknya dengan segera dan membantu anda.'; } } return { technical, answer }; }
+        async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoAnswerIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'Pertanyaan anda telah diterima.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
         btnSubmit && btnSubmit.addEventListener('click', submit);
         window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
         fetchThreads(); return modal;
@@ -540,7 +553,8 @@
       if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', boot, { once:true }); } else { boot(); }
     })();
   </script>
-<script>
+
+  <script>
     (function(){
       function stripFooterEmail(){
         document.querySelectorAll('footer a[href^="mailto:"]').forEach(function(a){ a.closest('footer').innerHTML = a.closest('footer').innerHTML.replace(/대표\s*이메일\s*:[^<]*(<br\s*\/?>)?/gi,''); });
@@ -554,18 +568,19 @@
       if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', function(){ stripFooterEmail(); ensureContactEmail(); }, { once:true }); } else { stripFooterEmail(); ensureContactEmail(); }
     })();
   </script>
-<script>
+
+  <script>
     (function(){
       var DEMO = {
-        'social-youtube': { icon:'▶️', title:'YouTube', row:'Row 1 · Pratonton' },
-        'social-instagram': { icon:'📷', title:'Instagram', row:'Row 2 · Pratonton' },
-        'social-tiktok': { icon:'🎵', title:'TikTok', row:'Row 3 · Pratonton' },
-        'social-facebook': { icon:'📘', title:'Facebook', row:'Row 4 · Pratonton' },
-        'social-wechat': { icon:'💬', title:'WeChat', row:'Row 5 · Pratonton' },
-        'social-weibo': { icon:'🌐', title:'Weibo', row:'Row 6 · Pratonton' },
-        'social-pinterest': { icon:'📌', title:'Pinterest', row:'Row 7 · Pratonton' },
-        'social-reddit': { icon:'👽', title:'Reddit', row:'Row 8 · Pratonton' },
-        'social-twitter': { icon:'✖️', title:'X (Twitter)', row:'Row 9 · Pratonton' }
+        'social-youtube': { icon:'▶️', title:'YouTube', row:'Baris 1 · Pratonton' },
+        'social-instagram': { icon:'📷', title:'Instagram', row:'Baris 2 · Pratonton' },
+        'social-tiktok': { icon:'🎵', title:'TikTok', row:'Baris 3 · Pratonton' },
+        'social-facebook': { icon:'📘', title:'Facebook', row:'Baris 4 · Pratonton' },
+        'social-wechat': { icon:'💬', title:'WeChat', row:'Baris 5 · Pratonton' },
+        'social-weibo': { icon:'🌐', title:'Weibo', row:'Baris 6 · Pratonton' },
+        'social-pinterest': { icon:'📌', title:'Pinterest', row:'Baris 7 · Pratonton' },
+        'social-reddit': { icon:'👽', title:'Reddit', row:'Baris 8 · Pratonton' },
+        'social-twitter': { icon:'✖️', title:'X (Twitter)', row:'Baris 9 · Pratonton' }
       };
       function makeCard(meta){
         var a = document.createElement('a'); a.className='card'; a.href='#';
@@ -586,6 +601,7 @@
       window.__SOCIAL_PLACEHOLDER_SEED__ = seedMainPlaceholders;
     })();
   </script>
+
 <script id="social-main-tracking-hooks-v1">
 (function(){
   if (window.__SOCIAL_MAIN_TRACKING_READY__) return;
@@ -660,7 +676,7 @@
   }
 }, { passive:false });
 
-  /* 2) 카드 노출(첫 진입 1회만) */
+  /* 2) 카드 노출(?진입 1회만) */
   function bindImpressionObserver(){
     if (!('IntersectionObserver' in window)) return;
 
@@ -687,7 +703,7 @@
     });
   }
 
-  /* 3) 카드 체류/시청 시작 훅 */
+  /* 3) 카드 체류/시청 시작 ?*/
   function bindHoverWatchHooks(){
     var activeMap = new WeakMap();
 
@@ -797,7 +813,7 @@ function boot(){
     boot();
   }
 
-  /* automap이 나중에 카드 치환해도 다시 스캔 가능하게 공개 */
+  /* automap?나중?카드 치환해도 다시 스캔 가능하?공개 */
   window.__IGDC_SOCIAL_REBIND_TRACKING__ = function(){
   bindImpressionObserver();
   bindHoverWatchHooks();
@@ -806,6 +822,7 @@ function boot(){
 };
 })();
 </script>
+
 <script id="social-track-sink-bridge-v1">
 (function(){
   if (window.__IGDC_SOCIAL_TRACK_SINK_READY__) return;
@@ -961,7 +978,8 @@ function boot(){
   window.__IGDC_SOCIAL_TRACK_ENQUEUE__ = enqueue;
 })();
 </script>
-<script>
+
+  <script>
     (function(){
       function bindRow(viewport, scroller, leftBtn, rightBtn){
         if(!viewport || !scroller || !leftBtn || !rightBtn) return;
@@ -1032,7 +1050,8 @@ function boot(){
       }
     })();
   </script>
-<script>
+
+  <script>
     (function(){
       function isMobile(){ return window.matchMedia('(max-width:1023px)').matches; }
       function getPanel(){ return isMobile() ? document.getElementById('rpMobileGrid') : document.getElementById('rightAutoPanel'); }
@@ -1137,7 +1156,7 @@ window.addEventListener('resize', function(){
     if(!scroller || scroller.dataset.dragWheelBound === '1') return;
     scroller.dataset.dragWheelBound = '1';
 
-    /* 마우스 휠을 가로 스크롤로 전환 */
+    /* 마우?휠을 가?스크롤로 전환 */
     scroller.addEventListener('wheel', function(e){
       if(!isMobileOrTablet()) return;
       if(Math.abs(e.deltaY) > Math.abs(e.deltaX)){
@@ -1146,7 +1165,7 @@ window.addEventListener('resize', function(){
       }
     }, { passive:false });
 
-    /* 마우스 드래그 */
+    /* 마우?드래?*/
     var isDown = false;
     var startX = 0;
     var startLeft = 0;
@@ -1173,7 +1192,7 @@ window.addEventListener('resize', function(){
       scroller.classList.remove('dragging');
     });
 
-    /* 터치 상태에서 부모 세로 스크롤 간섭 최소화 */
+    /* 터치 상태에서 부?세로 스크?간섭 최소?*/
     scroller.addEventListener('touchmove', function(e){
       if(!isMobileOrTablet()) return;
       e.stopPropagation();
@@ -1189,11 +1208,13 @@ window.addEventListener('resize', function(){
   window.addEventListener('resize', bindMobileScroller, { passive:true });
 })();
 </script>
-<script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.socialnetwork.json" data-interval="20000" src="/assets/js/hero.rotator.js"></script>
-<script defer="" src="/assets/js/auto-embed.instagram.js"></script>
-<script defer="" src="/assets/js/placeholder-sweeper.js"></script>
-<script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
-<style id="sn-desktop-antisquish-v2">
+
+  <script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.socialnetwork.json" data-interval="20000" src="/assets/js/hero.rotator.js"></script>
+  <script defer src="/assets/js/auto-embed.instagram.js"></script>
+  <script defer src="/assets/js/placeholder-sweeper.js"></script>
+  <script defer src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
+  
+  <style id="sn-desktop-antisquish-v2">
 @media (min-width: 1024px) {
   .thumb-card img, .thumb-card video, .card img, .card video {
     width: 100% !important;
@@ -1262,7 +1283,7 @@ window.addEventListener('resize', function(){
   }, { passive:true });
 })();
 </script>
-<script id="social-main-fullscreen-viewer-v1">
+ <script id="social-main-fullscreen-viewer-v1">
 (function(){
   if(window.__SOCIAL_MAIN_FULLSCREEN_READY__) return;
   window.__SOCIAL_MAIN_FULLSCREEN_READY__ = true;
@@ -1278,7 +1299,7 @@ window.addEventListener('resize', function(){
     root.className = 'snfv';
     root.innerHTML =
       '<div class="snfv-panel">'
-      + '<button type="button" class="snfv-close" aria-label="Tutup">✕</button>'
+      + '<button type="button" class="snfv-close" aria-label="Tutup">×</button>'
       + '<div class="snfv-media" id="snfvMedia"></div>'
       + '<div class="snfv-meta">'
       +   '<div class="snfv-text"><div class="snfv-title" id="snfvTitle"></div><div class="snfv-desc" id="snfvDesc"></div></div>'
@@ -1335,7 +1356,7 @@ window.addEventListener('resize', function(){
     var openBtn = document.getElementById('snfvOpenBtn');
 
     media.innerHTML = '';
-    title.textContent = data.title || 'Preview';
+    title.textContent = data.title || 'Pratonton';
     desc.textContent = data.desc || '';
 
     if(data.video){
@@ -1354,7 +1375,7 @@ window.addEventListener('resize', function(){
     }else{
       var fb = document.createElement('div');
       fb.className = 'snfv-fallback';
-      fb.textContent = data.title || 'Preview';
+      fb.textContent = data.title || 'Pratonton';
       media.appendChild(fb);
     }
 
@@ -1401,8 +1422,30 @@ window.addEventListener('resize', function(){
   }, true);
 })();
 </script>
-<script defer="" src="/assets/js/socialnetwork-automap-v3.js?v=20260404psom"></script>
-<script id="igtc-checkout-trigger-v1">
+ <script src="frontbus.child.js"></script>
+<script>
+(function(){
+  try{
+    function notify(top){
+      parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*');
+    }
+    function atTop(){
+      var se=document.scrollingElement||document.documentElement||document.body;
+      return (window.scrollY||window.pageYOffset||0)<=0 && (se?(se.scrollTop||0)<=0:true);
+    }
+    function onAnyScroll(){ notify(atTop()); }
+    window.addEventListener('scroll', onAnyScroll, {passive:true});
+    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
+    document.addEventListener('wheel', function(e){ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
+    document.addEventListener('touchmove', function(){ notify(false); }, {passive:true,capture:true});
+    setTimeout(function(){ notify(atTop()); }, 50);
+  }catch(_){ }
+})();
+</script>
+
+<script defer src="/assets/js/socialnetwork-automap-v3.js?v=20260404psom"></script>
+  
+  <script id="igtc-checkout-trigger-v1">
 (function(){
   if (window.__IGTC_CHECKOUT_READY__) return;
   window.IGTC = window.IGTC || {};
@@ -1443,7 +1486,7 @@ window.addEventListener('resize', function(){
 
               wrap.innerHTML =
                 '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
+                + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>QR Pembayaran</b>'
                 + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Tutup</button></div>'
                 + '<div id="igtc-qr-area"></div></div>';
 
@@ -1487,6 +1530,7 @@ window.addEventListener('resize', function(){
   window.__IGTC_CHECKOUT_READY__ = true;
 })();
 </script>
-<script id="socialnetwork-stable-note">window.__SOCIALNETWORK_STABLE_BUILD__ = '2026-04-04-psom-twin';</script>
+
+  <script id="socialnetwork-stable-note">window.__SOCIALNETWORK_STABLE_BUILD__ = '2026-04-04-psom-twin';</script>
 </body>
 </html>

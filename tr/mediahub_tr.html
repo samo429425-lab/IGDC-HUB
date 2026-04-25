@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="tr">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
@@ -507,7 +507,7 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   .language-select { top:10px !important; right:12px !important; transform:none !important; }
 }
 </style>
-<!-- Mobile Providers Drawer v2 (MediaHub: LEFT-side push drawer + top banner) -->
+<!-- Mobile Sağlayıcılar Drawer v2 (MediaHub: LEFT-side push drawer + top banner) -->
 <style id="igdc-mobile-providers-drawer-left">
 @media (max-width:768px){
   :root{ --pvw: min(86vw, 320px); }
@@ -578,7 +578,7 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   var drawer = document.createElement("aside"); drawer.id="providers-drawer-left";
   drawer.innerHTML = [
     '<div id="providers-header-left">',
-      '<div id="providers-title-left" >Providers</div>',
+      '<div id="providers-title-left" >Sağlayıcılar</div>',
       '<input id="providers-search-left" type="search" placeholder="Ara..." aria-label="Ara providers" />',
       '<button id="providers-close-left" aria-label="Kapat">✕</button>',
     '</div>',
@@ -590,8 +590,8 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   }
 
   var backdrop = document.createElement("div"); backdrop.id="providers-backdrop-left";
-  var tab = document.createElement("button"); tab.id="providers-tab-left"; tab.type="button"; tab.textContent="Providers";
-  var banner = document.createElement("button"); banner.id="providers-banner"; banner.type="button"; banner.textContent="Providers";
+  var tab = document.createElement("button"); tab.id="providers-tab-left"; tab.type="button"; tab.textContent="Sağlayıcılar";
+  var banner = document.createElement("button"); banner.id="providers-banner"; banner.type="button"; banner.textContent="Sağlayıcılar";
 
   function open(){ drawer.classList.add("open"); backdrop.classList.add("show"); document.documentElement.classList.add("pv-open-left"); }
   function close(){ drawer.classList.remove("open"); backdrop.classList.remove("show"); document.documentElement.classList.remove("pv-open-left"); }
@@ -3356,7 +3356,7 @@ function handleVideoAra(e){
 
   let activeProvider = "youtube";
 
-  function renderProviders(){
+  function renderSağlayıcılar(){
     const form = document.querySelector('form.video-search');
     const sel  = form?.querySelector('select[name="provider"]');
     const bar  = document.querySelector('.provider-bar');
@@ -3392,7 +3392,7 @@ function handleVideoAra(e){
 
   function setProvider(p){
     activeProvider = p;
-    renderProviders();
+    renderSağlayıcılar();
   }
 
   // Click on buttons -> set provider
@@ -3419,7 +3419,7 @@ function handleVideoAra(e){
   }
 
   // initial render
-  renderProviders();
+  renderSağlayıcılar();
 })();
 </script>
 <script>
@@ -3453,7 +3453,7 @@ function handleVideoAra(e){
 
   function labelOf(p, lang){ return (p.labels && p.labels[lang]) || p.labels?.en || p.key; }
 
-  function orderProviders(lang){
+  function orderSağlayıcılar(lang){
     const pri = { global:50, kr:40, cn:40, jp:40 };
     if (lang === "ko") { pri.kr = 10; pri.global = 30; pri.cn = 40; }
     else if (lang === "zh") { pri.cn = 10; pri.global = 30; pri.kr = 40; }
@@ -3479,7 +3479,7 @@ function handleVideoAra(e){
     const form = document.querySelector('form.video-search');
     const sel  = form?.querySelector('select[name="provider"]');
     if (!form || !sel) return;
-    const ordered = orderProviders(currentLang);
+    const ordered = orderSağlayıcılar(currentLang);
     sel.innerHTML = "";
     ordered.forEach(p => {
       const opt = document.createElement("option");
@@ -3504,7 +3504,7 @@ function handleVideoAra(e){
       const sel = e.target.querySelector('select[name="provider"]');
       const key = sel?.value || "youtube";
       if(!q) return false;
-      const p = [...orderProviders(currentLang)].find(x=>x.key===key) || PROVIDERS.find(x=>x.key==="youtube");
+      const p = [...orderSağlayıcılar(currentLang)].find(x=>x.key===key) || PROVIDERS.find(x=>x.key==="youtube");
       window.open((p?.url || "https://www.youtube.com/results?search_query=") + encodeURIComponent(q), "_blank", "noopener,noreferrer");
       return false;
     }
@@ -3707,11 +3707,11 @@ function handleVideoAra(e){
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Soru-Cevap';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">Depolama ayarları (Supabase url/key) bağlandıktan sonra tüm işlevler etkinleşir.</div>';
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
         document.body.appendChild(m);
@@ -4492,7 +4492,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     var title = document.createElement('div');
     title.className = 'igdc-qa-title';
-    title.textContent = 'Q&A';
+    title.textContent = 'Soru-Cevap';
 
     var closeBtn = document.createElement('button');
     closeBtn.className = 'igdc-qa-close';
@@ -4506,7 +4506,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     body.innerHTML =
       '<div class="igdc-qa-note">' +
-      '저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.' +
+      'Depolama ayarları (Supabase url/key) bağlandıktan sonra tüm işlevler etkinleşir.' +
       '</div>';
 
     var email = document.createElement('p');
@@ -4639,7 +4639,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     var src = card.getAttribute('data-src');
     var wrap = document.createElement('div');
     wrap.className = 'fs-stage';
-    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="Media Viewer"></div><button class="fs-close" aria-label="Kapat">✕</button>';
+    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="Medya görüntüleyici"></div><button class="fs-close" aria-label="Kapat">✕</button>';
     var inner = wrap.querySelector('.fs-inner');
 
     if(yt){
@@ -4656,7 +4656,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     }else{
       var url = getCardImageURL(card) || 'about:blank';
       var img = document.createElement('img');
-      img.src = url; img.alt = 'Preview';
+      img.src = url; img.alt = 'Önizleme';
       img.style.width='100%'; img.style.height='100%'; img.style.objectFit='cover';
       inner.appendChild(img);
     }
@@ -5009,7 +5009,7 @@ window.addEventListener("message",function(ev){
       overlay.innerHTML = `
         <div class="media-modal">
           <button class="media-close">✕</button>
-          <h2>${card.dataset.title || 'Media Content'}</h2>
+          <h2>${card.dataset.title || 'Medya içeriği'}</h2>
           <p>${card.dataset.description || ''}</p>
 
           <div class="media-actions">
@@ -5060,7 +5060,7 @@ window.addEventListener("message",function(ev){
           break;
 
         case 'review':
-          alert('Your review has been submitted.');
+          alert('Yorumunuz gönderildi.');
           break;
       }
     },

@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="uk">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
@@ -507,7 +507,7 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   .language-select { top:10px !important; right:12px !important; transform:none !important; }
 }
 </style>
-<!-- Mobile Providers Drawer v2 (MediaHub: LEFT-side push drawer + top banner) -->
+<!-- Mobile Постачальники Drawer v2 (MediaHub: LEFT-side push drawer + top banner) -->
 <style id="igdc-mobile-providers-drawer-left">
 @media (max-width:768px){
   :root{ --pvw: min(86vw, 320px); }
@@ -578,7 +578,7 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   var drawer = document.createElement("aside"); drawer.id="providers-drawer-left";
   drawer.innerHTML = [
     '<div id="providers-header-left">',
-      '<div id="providers-title-left" >Providers</div>',
+      '<div id="providers-title-left" >Постачальники</div>',
       '<input id="providers-search-left" type="search" placeholder="Пошук..." aria-label="Пошук providers" />',
       '<button id="providers-close-left" aria-label="Закрити">✕</button>',
     '</div>',
@@ -590,8 +590,8 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   }
 
   var backdrop = document.createElement("div"); backdrop.id="providers-backdrop-left";
-  var tab = document.createElement("button"); tab.id="providers-tab-left"; tab.type="button"; tab.textContent="Providers";
-  var banner = document.createElement("button"); banner.id="providers-banner"; banner.type="button"; banner.textContent="Providers";
+  var tab = document.createElement("button"); tab.id="providers-tab-left"; tab.type="button"; tab.textContent="Постачальники";
+  var banner = document.createElement("button"); banner.id="providers-banner"; banner.type="button"; banner.textContent="Постачальники";
 
   function open(){ drawer.classList.add("open"); backdrop.classList.add("show"); document.documentElement.classList.add("pv-open-left"); }
   function close(){ drawer.classList.remove("open"); backdrop.classList.remove("show"); document.documentElement.classList.remove("pv-open-left"); }
@@ -3452,7 +3452,7 @@ function handleVideoSearch(e){
 
   let activeProvider = "youtube";
 
-  function renderProviders(){
+  function renderПостачальники(){
     const form = document.querySelector('form.video-search');
     const sel  = form?.querySelector('select[name="provider"]');
     const bar  = document.querySelector('.provider-bar');
@@ -3488,7 +3488,7 @@ function handleVideoSearch(e){
 
   function setProvider(p){
     activeProvider = p;
-    renderProviders();
+    renderПостачальники();
   }
 
   // Click on buttons -> set provider
@@ -3515,7 +3515,7 @@ function handleVideoSearch(e){
   }
 
   // initial render
-  renderProviders();
+  renderПостачальники();
 })();
 </script>
 <script>
@@ -3549,7 +3549,7 @@ function handleVideoSearch(e){
 
   function labelOf(p, lang){ return (p.labels && p.labels[lang]) || p.labels?.en || p.key; }
 
-  function orderProviders(lang){
+  function orderПостачальники(lang){
     const pri = { global:50, kr:40, cn:40, jp:40 };
     if (lang === "ko") { pri.kr = 10; pri.global = 30; pri.cn = 40; }
     else if (lang === "zh") { pri.cn = 10; pri.global = 30; pri.kr = 40; }
@@ -3575,7 +3575,7 @@ function handleVideoSearch(e){
     const form = document.querySelector('form.video-search');
     const sel  = form?.querySelector('select[name="provider"]');
     if (!form || !sel) return;
-    const ordered = orderProviders(currentLang);
+    const ordered = orderПостачальники(currentLang);
     sel.innerHTML = "";
     ordered.forEach(p => {
       const opt = document.createElement("option");
@@ -3600,7 +3600,7 @@ function handleVideoSearch(e){
       const sel = e.target.querySelector('select[name="provider"]');
       const key = sel?.value || "youtube";
       if(!q) return false;
-      const p = [...orderProviders(currentLang)].find(x=>x.key===key) || PROVIDERS.find(x=>x.key==="youtube");
+      const p = [...orderПостачальники(currentLang)].find(x=>x.key===key) || PROVIDERS.find(x=>x.key==="youtube");
       window.open((p?.url || "https://www.youtube.com/results?search_query=") + encodeURIComponent(q), "_blank", "noopener,noreferrer");
       return false;
     }
@@ -4206,7 +4206,7 @@ function handleVideoSearch(e){
     var src = card.getAttribute('data-src');
     var wrap = document.createElement('div');
     wrap.className = 'fs-stage';
-    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="Media Viewer"></div><button class="fs-close" aria-label="Закрити">✕</button>';
+    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="Переглядач медіа"></div><button class="fs-close" aria-label="Закрити">✕</button>';
     var inner = wrap.querySelector('.fs-inner');
 
     if(yt){
@@ -4576,7 +4576,7 @@ window.addEventListener("message",function(ev){
       overlay.innerHTML = `
         <div class="media-modal">
           <button class="media-close">✕</button>
-          <h2>${card.dataset.title || 'Media Content'}</h2>
+          <h2>${card.dataset.title || 'Медіавміст'}</h2>
           <p>${card.dataset.description || ''}</p>
 
           <div class="media-actions">
@@ -4588,7 +4588,7 @@ window.addEventListener("message",function(ev){
 
           <div class="media-review">
             <textarea placeholder="Однорядковий відгук (необов’язково)" maxlength="200"></textarea>
-            <button data-action="review">Submit Review</button>
+            <button data-action="review">Надіслати відгук</button>
           </div>
         </div>
       `;
@@ -4811,7 +4811,7 @@ window.addEventListener("message",function(ev){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      console.warn("[Q&A] Облікові дані/бібліотека Supabase не налаштовані: UI показується, але збереження вимкнено.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -4934,7 +4934,7 @@ window.addEventListener("message",function(ev){
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("Delete failed (permission/policy)"); return; }
+            if(error){ alert("Не вдалося видалити (дозвіл/політика)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -4983,7 +4983,7 @@ window.addEventListener("message",function(ev){
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("Submission failed"); return; }
+      if(error){ alert("Не вдалося надіслати"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -5006,7 +5006,7 @@ window.addEventListener("message",function(ev){
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] Не вдалося ініціалізувати auth:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();

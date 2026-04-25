@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="uk">
 <head>
 <!-- Supabase inline injection (vars + init) -->
 <script>
@@ -19,9 +19,9 @@
         url: envData.env.SUPABASE_URL,
         anonKey: envData.env.SUPABASE_ANON_KEY
       });
-      console.log("✅ Supabase 키 정상 로드됨.");
+      console.log("✅ Ключ Supabase завантажено.");
     } else {
-      console.warn("⚠️ Supabase 키 누락 — secureEnvBridge.js 또는 Netlify environment variables Confirm 필요.");
+      console.warn("⚠️ Ключ Supabase відсутній — перевірте secureEnvBridge.js або змінні середовища Netlify.");
       window.SUPER_VARSAR = Object.freeze({
         url: null,
         anonKey: null
@@ -321,7 +321,7 @@
 /* The right panel keeps its own inner padding; outer gap is handled by grid gap */
 .right{ margin:0 !important; }
 
-/* Soft pastel background for 글로벌 나눔허브 title box */
+/* Soft pastel background for Глобальні 나눔허브 title box */
 .global-title-box{
   background-color: #f0faff !important;
 }
@@ -670,7 +670,7 @@
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
 .compose-wrap .row-top #btnOpenComposer{ order:5; }   /* Написати */
 .compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
-.compose-wrap .row-top #attachPreview{                /* 미리보기 막대창(상시 존재) */
+.compose-wrap .row-top #attachPreview{                /* попередній перегляд 막대창(상시 존재) */
   order:4;
   display:flex; align-items:center; gap:6px; flex-wrap:nowrap;
   min-height:34px; padding:6px 8px;
@@ -695,11 +695,11 @@
 /* 유령 중복 표시 방지: legacy 파일명 표시는 숨김(칩이 대체) */
 .compose-wrap #attachName{ display:none !important; }
 </style><style>
-/* === Compose row order override (requested): Category -> Написати -> Attachment -> 미리보기막대 -> Зберегти === */
+/* === Compose row order override (requested): Category -> Написати -> Attachment -> попередній перегляд막대 -> Зберегти === */
 .compose-wrap .row-top .field.field-category{ order:1; }
 .compose-wrap .row-top #btnOpenComposer{ order:2; }   /* Написати */
 .compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
-.compose-wrap .row-top #attachPreview{ order:4; }     /* 미리보기 막대 */
+.compose-wrap .row-top #attachPreview{ order:4; }     /* попередній перегляд 막대 */
 .compose-wrap .row-top #btnSubmitPost{ order:5; }     /* Зберегти */
 </style><style>
 /* === Заголовок Попередній перегляд Bar (between Написати and Attachment) === */
@@ -746,7 +746,7 @@
 /* Написати */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
 /* Заголовок 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
 /* Attachment 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
-/* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
+/* 첨부 попередній перегляд 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
 /* Зберегти */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
 /* Очистити */             .compose-wrap .row-top #btnAttachClear{ order:7 !important; }
 </style><style>
@@ -1040,7 +1040,7 @@
 /* Keep the track flush against the label */
 .feed-row .row-track{ padding-left: 0 !important; margin-left: 0 !important; }
 </style><style>
-/* === Vertical labels: bigger than 'Feed' and start at 2nd-char position === */
+/* === Vertical labels: bigger than 'Стрічка' and start at 2nd-char position === */
 .feed-row{
   grid-template-columns: minmax(26px, 34px) 1fr !important; /* widen a touch for larger font */
   column-gap: 8px !important;
@@ -1048,7 +1048,7 @@
 .feed-row .row-label{
   color: var(--brand);
   font-weight: 700;
-  font-size: 1.22rem;     /* a bit larger than 'Feed' */
+  font-size: 1.22rem;     /* a bit larger than 'Стрічка' */
   writing-mode: vertical-rl;
   text-orientation: upright;
   line-height: 1;
@@ -1084,7 +1084,7 @@
   margin-bottom:6px;  /* small gap before the first card row */
   color: var(--brand);
   font-weight: 800;
-  font-size: 1.22rem; /* slightly larger than 'Feed' */
+  font-size: 1.22rem; /* slightly larger than 'Стрічка' */
   line-height: 1.1;
   pointer-events:none;
   user-select:none;
@@ -1875,7 +1875,7 @@ body .right{ display:none !important; }
 
 /* NOTE:
  - This block is intentionally minimal and non-destructive. It complements existing @media (min-width:1025px) rules in the file.
- - Next steps: hook a mobile "drawer" for .right if you want ads/tools accessible on phones without occupying layout.
+ - Наступний steps: hook a mobile "drawer" for .right if you want ads/tools accessible on phones without occupying layout.
 */
 </style>
 
@@ -2407,11 +2407,11 @@ body > div.container,
 <option value="env">Довкілля</option>
 <option value="etc">Інше</option>
 </select>
-</label><button class="button small" id="btnAttach" type="button">Вкладення</button><div aria-label="Attachment 미리보기" class="attach-preview" id="attachPreview"></div>
-<button class="button small" id="btnOpenComposer">Написати</button><div aria-label="Заголовок 미리보기" class="title-preview" id="titlePreview"><span class="tp-text">Без назви</span></div>
+</label><button class="button small" id="btnAttach" type="button">Вкладення</button><div aria-label="Попередній перегляд вкладення" class="attach-preview" id="attachPreview"></div>
+<button class="button small" id="btnOpenComposer">Написати</button><div aria-label="Попередній перегляд заголовка" class="title-preview" id="titlePreview"><span class="tp-text">Без назви</span></div>
 <button class="button small accent" id="btnSubmitPost">Зберегти</button>
 <span id="attachName"></span>
-<button aria-label="첨부 제거 " class="button tiny" id="btnAttachClear" style="display:none;" type="button">Очистити</button>
+<button aria-label="Видалити вкладення " class="button tiny" id="btnAttachClear" style="display:none;" type="button">Очистити</button>
 <input id="postAttach" style="display:none;" type="file"/>
 </div>
 <div class="row row-bottom">
@@ -2497,7 +2497,7 @@ body > div.container,
 <aside class="right">
 <div class="panel cafe-link"><a aria-label="Перейти до WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
-<button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">Пожертви</button>
+<button class="button" onclick="alert('Систему пожертв буде підключено найближчим часом.')" style="margin-bottom:8px; padding:5px 14px;">Пожертви</button>
 <p><b>IESF (International Exchange Service Foundation)</b><br/>
         - General: NongHyup 301-0078-3333-51<br/>
         - Foreign Currency: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
@@ -2594,7 +2594,7 @@ body > div.container,
 
   btnSave && btnSave.addEventListener("click", ()=>{
     const t = titleI?.value?.trim() || "(No Заголовок)";
-    const b = bodyI?.value?.trim() || "(No Content)";
+    const b = bodyI?.value?.trim() || "(Без вмісту)";
     const cat = catSel?.value || "etc";
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(holder){
@@ -2612,7 +2612,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">첨부 링크</a>` : `첨부: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Посилання на вкладення</a>` : `Вкладення: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2623,7 +2623,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "첨부: " + fileAttach.files[0].name;
+        att.textContent = "Вкладення: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2640,14 +2640,14 @@ body > div.container,
 
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
-    const link = prompt("이미지 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 Confirm을 누르세요)");
+    const link = prompt("Якщо є зовнішнє посилання (URL) на зображення, вставте його. Якщо ні, натисніть Confirm.");
     if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
         alert("Only images up to 2MB can be previewed directly. For large files, upload them to external storage and enter the link.");
         imageLink = ""; imagePreviewObjectUrl = "";
       }else{
-        imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
+        imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 попередній перегляд만
         imageLink = ""; // 실제 Зберегти은 링크만 사용
       }
     }else{
@@ -2657,7 +2657,7 @@ body > div.container,
 
   btnFileOk && btnFileOk.addEventListener('click', ()=>{
     const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
-    const link = prompt("파일 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 Confirm을 누르세요)");
+    const link = prompt("Якщо є зовнішнє посилання (URL) на файл, вставте його. Якщо ні, натисніть Confirm.");
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
@@ -2686,7 +2686,7 @@ body > div.container,
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '개 파일');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' файлів');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2757,7 +2757,7 @@ body > div.container,
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 제거'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Видалити вкладення'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
@@ -2793,10 +2793,10 @@ body > div.container,
 
   function handleUnifiedSave(){
     const t = (titleI && titleI.value.trim()) || '(No Заголовок)';
-    const b = (bodyI && bodyI.value.trim()) || '(No Content)';
+    const b = (bodyI && bodyI.value.trim()) || '(Без вмісту)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
+    if(!holder){ alert('Не знайдено область новин.'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2813,7 +2813,7 @@ body > div.container,
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = '첨부: ' + f.name;
+        li.textContent = 'Вкладення: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
@@ -2826,7 +2826,7 @@ body > div.container,
     const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
     if(canDelete) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      if(!confirm('Видалити цю новину?')) return;
       item.remove();
     });
 
@@ -2893,13 +2893,13 @@ body > div.container,
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '개 파일');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' файлів');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 모두 제거'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Видалити всі вкладення'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attachPreview.appendChild(chip);
@@ -3051,7 +3051,7 @@ body > div.container,
     btn.style.cssText='margin-top:6px; display:none;';
     if(canShowDeleteFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      if(!confirm('Видалити цю новину?')) return;
       item.remove();
     });
     item.appendChild(btn);
@@ -3194,20 +3194,20 @@ body > div.container,
     npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Вкладення</div>' + attachHtml) : '';
 
     openModal();
   }, true);
 })();
 </script><div id="editNewsModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 680px); max-height:78vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 style="margin:0; font-size:1.05rem;">Написати 편집</h3>
+<h3 style="margin:0; font-size:1.05rem;">Написати / Редагувати</h3>
 <div id="enInfo" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
 <label style="font-size:.85rem;">Заголовок</label>
 <input id="enTitle" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;" type="text"/>
-<label style="font-size:.85rem;">Content</label>
+<label style="font-size:.85rem;">Вміст</label>
 <textarea id="enBody" rows="8" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;"></textarea>
 </div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
@@ -3252,7 +3252,7 @@ body > div.container,
       badge.setAttribute('translate','no');
       header.appendChild(badge);
     }
-    badge.textContent = `Edited · ${tsStr}`;
+    badge.textContent = `Відредаговано · ${tsStr}`;
   }
 
   // On load, restore edited badge for admin/author only
@@ -3395,7 +3395,7 @@ body > div.container,
     let btnDel  = footer.querySelector('.delete-post');
     if(!btnEdit){
       btnEdit = document.createElement('button');
-      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
+      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Редагувати';
       footer.appendChild(btnEdit);
       btnEdit.addEventListener('click', (e)=>{
         e.stopPropagation();
@@ -3416,7 +3416,7 @@ body > div.container,
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+        if(!confirm('Видалити цю новину?')) return;
         item.remove();
       });
     }
@@ -3596,7 +3596,7 @@ body > div.container,
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'Content';
+    if(p) p.textContent = 'Вміст';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -3694,7 +3694,7 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Запит на обробку блокчейну виконано: " + (j.txHash||"Pending")); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Запит на обробку блокчейну виконано: " + (j.txHash||"Очікує")); }
       else { alert("Не вдалося виконати обробку блокчейну"); }
     }catch(e){ console.warn(e); alert("Network error"); }
   };
@@ -3835,7 +3835,7 @@ body > div.container,
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","정액 기부 금액");
+  btnGroup.setAttribute("aria-label","Фіксована сума пожертви");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -3884,7 +3884,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      alert(`Вибрана сума: ₩${Number(amt).toLocaleString()}\n\nПереказуйте на Account нижче.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -4264,7 +4264,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Зберегти은 비활성화됩니다.");
+      console.warn("[Q&A] Облікові дані/бібліотека Supabase не налаштовані: UI показується, але збереження вимкнено.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -4387,7 +4387,7 @@ document.addEventListener('DOMContentLoaded', function(){
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("Delete failed (permission/policy)"); return; }
+            if(error){ alert("Не вдалося видалити (дозвіл/політика)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -4426,7 +4426,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Зберегти 설정(Supabase url/key)이 아직 연결되지 않아 서버 Зберегти은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        alert("Налаштування збереження (Supabase url/key) ще не підключено, тому серверне збереження вимкнено. Під час публікації в інтернеті задайте SUPER_VARSAR.url/anonKey, і підключення відбудеться автоматично.");
         return;
       }
       const record = {
@@ -4498,7 +4498,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         bk=document.createElement('div');
         bk.id='drawerBackdrop';
         bk.className='drawer-backdrop';
-        document.body/*__KILL__*/ appendChild_DISABLED(bk);
+        document.body.appendChild(bk);
         bk.addEventListener('click',close,{passive:true});
       }
     }
@@ -4774,13 +4774,13 @@ window.addEventListener("message",function(ev){
     var t = normalize(text);
     if(!t) return null;
 
-    if(t.includes("global") || t.includes("글로벌") || t.includes("wam") || t.includes("iesf")) return "iesf";
+    if(t.includes("global") || t.includes("Глобальні") || t.includes("wam") || t.includes("iesf")) return "iesf";
     if(t.includes("ngo")) return "ngo";
     if(t.includes("Mission") || t.includes("mission")) return "mission";
     if(t.includes("Service") || t.includes("volunteer") || t.includes("service")) return "service";
-    if(t.includes("Relief") || t.includes("구제") || t.includes("재난") || t.includes("relief")) return "relief";
+    if(t.includes("Relief") || t.includes("Допомога") || t.includes("Лихо") || t.includes("relief")) return "relief";
     if(t.includes("Education") || t.includes("education") || t.includes("edu")) return "edu";
-    if(t.includes("Environment") || t.includes("기후") || t.includes("environment") || t.includes("env")) return "env";
+    if(t.includes("Environment") || t.includes("Клімат") || t.includes("environment") || t.includes("env")) return "env";
     if(t.includes("Others") || t.includes("others") || t.includes("etc") || t.includes("misc")) return "etc";
 
     return null;
@@ -5062,12 +5062,12 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npTitle.textContent = title || 'Заголовок 없음';
+    npTitle.textContent = title || 'Без заголовка';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(등록된 본문이 없습니다.)';
+    npBody.textContent = body || '(Зареєстрований вміст відсутній.)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">Вкладення</div>' + attachHtml
         : '';
     }
 
@@ -5119,10 +5119,10 @@ window.addEventListener("message",function(ev){
 
       const { error } = await sb.from('igdc_donation_posts').insert(payload);
       if(error){
-        console.warn('[donation] Supabase Зберегти 실패:', error.message);
+        console.warn('[donation] Не вдалося зберегти в Supabase:', error.message);
       }
     }catch(err){
-      console.warn('[donation] Supabase sync 예외:', err);
+      console.warn('[donation] Виняток синхронізації Supabase:', err);
     }
   }
 
@@ -5188,7 +5188,7 @@ window.addEventListener("message",function(ev){
 
 <script id="hero-linebreak-fix">
 (function(){
-  function nobreak(s){ return s.replace(/NGO와\s*공유하며/g, "NGO와\u00A0공유하며"); }
+  function nobreak(s){ return s.replace(/NGO\uC640\s*\uACF5\uC720\uD558\uBA70/g, "Поширюється з NGO"); }
   var el = document.getElementById("topPostBody");
   if(el){
     if(el.value !== undefined){ el.value = nobreak(el.value); }
@@ -5405,7 +5405,7 @@ window.addEventListener("message",function(ev){
     card.innerHTML = `
       <div class="thumb"></div>
       <div class="card-body">
-        <div class="card-title">Loading...</div>
+        <div class="card-title">Завантаження...</div>
         <div class="card-meta">-</div>
         <div class="card-preview">Preparing</div>
       </div>

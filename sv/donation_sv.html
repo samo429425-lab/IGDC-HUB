@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="sv">
 <head>
 <!-- Supabase inline injection (vars + init) -->
 <script>
@@ -743,7 +743,7 @@
 /* Write */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
 /* Title 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
 /* Attachment 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
-/* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
+/* Bilaga 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
 /* Save */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
 /* Clear */             .compose-wrap .row-top #btnAttachClear{ order:7 !important; }
 </style><style>
@@ -1239,7 +1239,7 @@ body > .container > .main > *{
 /* Narrower: trim preferred vw a bit more while keeping floor */
 </style>
 <style id="qna-brand-only">
-/* === Q&A sidebar link color only (no other changes) === */
+/* === Frågor och svar sidebar link color only (no other changes) === */
 :root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
 .sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
   display:block;
@@ -1348,7 +1348,7 @@ body > .container > .main > *{
   --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
   --blue:#2563eb; --muted:#9ca3af;
 }
-/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+/* Sidebar Frågor och svar link follows existing .sidebar a style; this extra ensures visibility if needed */
 #qnaOpenBtn{ background-color:#001f4d; color:#ffffff;  color:#001f4d;  display:block; text-decoration:none; }
 /* Modal near the left sidebar, with smooth transitions */
 .igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
@@ -1446,7 +1446,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Inga Q&A-poster har registrerats ännu";
+  content: "Inga Frågor och svar-poster har registrerats ännu";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1464,7 +1464,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Inga Q&A-poster har registrerats ännu";
+  content: "Inga Frågor och svar-poster har registrerats ännu";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -2002,7 +2002,7 @@ body .right{ display:none !important; }
     }
   }
 </style>
-<!-- Supabase Environment 설정 (Write/도네이션/Q&A 공용) -->
+<!-- Supabase Environment 설정 (Write/도네이션/Frågor och svar 공용) -->
 <script>
     window.SUPER_VARSAR = window.SUPER_VARSAR || {
       url: window.SUPABASE_URL || "",
@@ -2339,11 +2339,11 @@ body > div.container,
 <a href="mediahub.html">🎬 Mediehubb</a>
 <a href="tour.html">🧳 Resor · Turism · Boende</a>
 <a href="literature/academic.html" style="display:none !important;">📚 Litterärt och akademiskt utbyte</a>
-<a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A-förfrågningar</a></nav>
+<a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Frågor och svar</a></nav>
 <!-- Main (불변 구조) -->
 <main class="main">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
-<a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
+<a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">ÖppnaSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
 <button class="bc-tile orange" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">Donera</button>
@@ -2367,11 +2367,11 @@ body > div.container,
 <option value="env">Miljö</option>
 <option value="etc">Övrigt</option>
 </select>
-</label><button class="button small" id="btnAttach" type="button">Bilaga</button><div aria-label="Attachment 미리보기" class="attach-preview" id="attachPreview"></div>
-<button class="button small" id="btnOpenComposer">Skriv</button><div aria-label="Title 미리보기" class="title-preview" id="titlePreview"><span class="tp-text">Ingen titel</span></div>
+</label><button class="button small" id="btnAttach" type="button">Bilaga</button><div aria-label="Förhandsgranskning av bilaga" class="attach-preview" id="attachPreview"></div>
+<button class="button small" id="btnOpenComposer">Skriv</button><div aria-label="Förhandsgranskning av titel" class="title-preview" id="titlePreview"><span class="tp-text">Ingen titel</span></div>
 <button class="button small accent" id="btnSubmitPost">Spara</button>
 <span id="attachName"></span>
-<button aria-label="첨부 제거 " class="button tiny" id="btnAttachClear" style="display:none;" type="button">Rensa</button>
+<button aria-label="Ta bort bilaga" class="button tiny" id="btnAttachClear" style="display:none;" type="button">Rensa</button>
 <input id="postAttach" style="display:none;" type="file"/>
 </div>
 <div class="row row-bottom">
@@ -2529,8 +2529,8 @@ body > div.container,
   btnSubmit && btnSubmit.addEventListener("click", ()=>{ if(btnSave){ btnSave.click(); } });
 
   btnSave && btnSave.addEventListener("click", ()=>{
-    const t = titleI?.value?.trim() || "(No Title)";
-    const b = bodyI?.value?.trim() || "(No Content)";
+    const t = titleI?.value?.trim() || "(Ingen titel)";
+    const b = bodyI?.value?.trim() || "(Inget innehåll)";
     const cat = catSel?.value || "etc";
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(holder){
@@ -2548,7 +2548,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">첨부 링크</a>` : `첨부: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Bilagelänk</a>` : `Bilaga: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2559,7 +2559,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "첨부: " + fileAttach.files[0].name;
+        att.textContent = "Bilaga: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2576,7 +2576,7 @@ body > div.container,
 
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
-    const link = prompt("이미지 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 Confirm을 누르세요)");
+    const link = prompt("Klistra in en extern bildlänk (URL) om det finns en. Om inte, tryck på OK.");
     if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
@@ -2593,7 +2593,7 @@ body > div.container,
 
   btnFileOk && btnFileOk.addEventListener('click', ()=>{
     const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
-    const link = prompt("파일 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 Confirm을 누르세요)");
+    const link = prompt("Klistra in en extern fillänk (URL) om det finns en. Om inte, tryck på OK.");
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
@@ -2622,7 +2622,7 @@ body > div.container,
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '개 파일');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' filer');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2693,7 +2693,7 @@ body > div.container,
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 제거'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Ta bort bilaga'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
@@ -2728,11 +2728,11 @@ body > div.container,
   function closeModal(){ modal && modal.classList.add('hidden'); }
 
   function handleUnifiedSave(){
-    const t = (titleI && titleI.value.trim()) || '(No Title)';
-    const b = (bodyI && bodyI.value.trim()) || '(No Content)';
+    const t = (titleI && titleI.value.trim()) || '(Ingen titel)';
+    const b = (bodyI && bodyI.value.trim()) || '(Inget innehåll)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
+    if(!holder){ alert('Nyhetsområdet hittades inte.'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2749,7 +2749,7 @@ body > div.container,
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = '첨부: ' + f.name;
+        li.textContent = 'Bilaga: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
@@ -2762,7 +2762,7 @@ body > div.container,
     const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
     if(canDelete) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      if(!confirm('Vill du ta bort den här nyheten?')) return;
       item.remove();
     });
 
@@ -2829,13 +2829,13 @@ body > div.container,
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '개 파일');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' filer');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 모두 제거'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Ta bort alla bilagor'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attachPreview.appendChild(chip);
@@ -2853,7 +2853,7 @@ body > div.container,
     });
   }
 
-  // "Clear" 버튼도 전체 초기화
+  // "Rensa" 버튼도 전체 초기화
   if(clearBtn){
     clearBtn.addEventListener('click', (e)=>{
       e.preventDefault();
@@ -2887,7 +2887,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || ''No title';';
+    tpText.textContent = t || 'Ingen titel';
   }
 
   // live typing updates preview
@@ -2950,7 +2950,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'Title Not entered';
+    tpText.textContent = t || 'Ingen titel';
   }
 
   if(btnDraft){
@@ -2987,7 +2987,7 @@ body > div.container,
     btn.style.cssText='margin-top:6px; display:none;';
     if(canShowDeleteFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      if(!confirm('Vill du ta bort den här nyheten?')) return;
       item.remove();
     });
     item.appendChild(btn);
@@ -3130,14 +3130,14 @@ body > div.container,
     npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Bilaga</div>' + attachHtml) : '';
 
     openModal();
   }, true);
 })();
 </script><div id="editNewsModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 680px); max-height:78vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 style="margin:0; font-size:1.05rem;">Write 편집</h3>
+<h3 style="margin:0; font-size:1.05rem;">Skriv / Redigera</h3>
 <div id="enInfo" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
@@ -3352,7 +3352,7 @@ body > div.container,
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+        if(!confirm('Vill du ta bort den här nyheten?')) return;
         item.remove();
       });
     }
@@ -3526,13 +3526,13 @@ body > div.container,
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
 
     const t = tpl.querySelector('.card-title');
-    if(t) t.textContent = 'Title';
+    if(t) t.textContent = 'Titel';
 
     const m = tpl.querySelector('.card-meta');
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'Content';
+    if(p) p.textContent = 'Innehåll';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -3629,7 +3629,7 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Begäran om blockchain-behandling slutförd: " + (j.txHash||"Pending")); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Begäran om blockchain-behandling slutförd: " + (j.txHash||"Väntar")); }
       else { alert("Blockchain-behandling misslyckades"); }
     }catch(e){ console.warn(e); alert("Nätverksfel"); }
   };
@@ -3676,7 +3676,7 @@ body > div.container,
 
             var t = document.createElement('div');
             t.className = 'title';
-            t.textContent = item.title || item.name || 'Product';
+            t.textContent = item.title || item.name || 'Produkt';
 
             a.appendChild(img);
             a.appendChild(t);
@@ -3699,7 +3699,7 @@ body > div.container,
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || 'Product';
+              t.textContent = item.title || 'Produkt';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -3768,7 +3768,7 @@ body > div.container,
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","정액 기부 금액");
+  btnGroup.setAttribute("aria-label","Donationsbelopp (USD)");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -3817,7 +3817,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      alert(`Valt belopp: ₩${Number(amt).toLocaleString()}\n\nÖverför till kontot nedan.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -4192,7 +4192,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Save은 비활성화됩니다.");
+      console.warn("[Frågor och svar] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Save은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -4219,7 +4219,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
     const title = el("div","igdc-qa-title"); title.textContent = "Frågor och svar";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Stäng");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
@@ -4229,8 +4229,8 @@ document.addEventListener('DOMContentLoaded', function(){
     const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Vänligen vänta en stund. Ett svar kommer snart.";
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Skicka";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Enkla frågor besvaras omedelbart av AI. Tekniska, felrelaterade eller driftsrelaterade frågor skickas automatiskt vidare till admin-Q&A.";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Rensa";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Enkla frågor besvaras omedelbart av AI. Tekniska, felrelaterade eller driftsrelaterade frågor skickas automatiskt vidare till admin-Frågor och svar.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -4338,9 +4338,9 @@ document.addEventListener('DOMContentLoaded', function(){
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 Confirm 후 회신됩니다.";
-          else if(/price|cost|fee|가격|비용|요금/i.test(text)) answer="For price/fee information, please refer to the guidance on this page and leave any additional inquiries.";
-          else answer="문의 감사합니다. 빠르게 Confirm하여 도와드리겠습니다.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="Driftsrelaterade frågor granskas av administratören och besvaras.";
+          else if(/price|cost|fee|가격|비용|요금/i.test(text)) answer="För pris-/avgiftsinformation, se vägledningen på den här sidan och lämna eventuella ytterligare frågor.";
+          else answer="Tack för din fråga. Vi kontrollerar den snabbt och hjälper dig.";
         }
       }
       return { technical, answer };
@@ -4354,7 +4354,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Save 설정(Supabase url/key)이 아직 연결되지 않아 서버 Save은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        alert("Sparinställningarna (Supabase url/key) är inte anslutna ännu, så serversparning är inaktiverad. Vid webbpublicering, ange SUPER_VARSAR.url/anonKey så ansluts det automatiskt.");
         return;
       }
       const record = {
@@ -4387,7 +4387,7 @@ document.addEventListener('DOMContentLoaded', function(){
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth initialization failed:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Frågor och svar] auth initialization failed:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -4426,7 +4426,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         bk=document.createElement('div');
         bk.id='drawerBackdrop';
         bk.className='drawer-backdrop';
-        document.body/*__KILL__*/ appendChild_DISABLED(bk);
+        document.body.appendChild(bk);
         bk.addEventListener('click',close,{passive:true});
       }
     }
@@ -4514,7 +4514,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
   /* Optional close affordance */
   .card.expanded::after, .thumb.expanded::after{
-    content: "Close";
+    content: "Stäng";
     position: absolute; top: 8px; right: 12px;
     padding: 6px 10px; border-radius: 14px;
     background: rgba(0,0,0,.5); color:#fff; font-size: 12px;
@@ -4985,19 +4985,19 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npTitle.textContent = title || 'Title 없음';
+    npTitle.textContent = title || 'Ingen titel';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(등록된 본문이 없습니다.)';
+    npBody.textContent = body || '(Inget registrerat innehåll.)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">Bilaga</div>' + attachHtml
         : '';
     }
 
     openModal();
   }, true);
 
-  // Supabase sync (uses same anonKey/url as Q&A: SUPER_VARSAR + ensureSupabase)
+  // Supabase sync (uses same anonKey/url as Frågor och svar: SUPER_VARSAR + ensureSupabase)
   async function syncLatestToSupabase(cat){
     try{
       if(typeof window.ensureSupabase !== 'function') return;
@@ -5072,7 +5072,7 @@ window.addEventListener("message",function(ev){
   display: none !important;
 }
 
-/* 첨부 여부 아이콘 */
+/* Bilaga 여부 아이콘 */
 .right .topic-panel .list .item.has-attach .title::after,
 .mobile-news-clone .topic-panel .list .item.has-attach .title::after {
   content: "📎";
@@ -5107,7 +5107,7 @@ window.addEventListener("message",function(ev){
 </style>
 <script id="hero-linebreak-fix">
 (function(){
-  function nobreak(s){ return s.replace(/NGO와\s*공유하며/g, "NGO와\u00A0공유하며"); }
+  function nobreak(s){ return s.replace(/NGO:er\s+och volontärorganisationer/g, "NGO:er\u00A0och volontärorganisationer"); }
   var el = document.getElementById("topPostBody");
   if(el){
     if(el.value !== undefined){ el.value = nobreak(el.value); }
@@ -5317,9 +5317,9 @@ window.addEventListener("message",function(ev){
     card.innerHTML = `
       <div class="thumb"></div>
       <div class="card-body">
-        <div class="card-title">Loading...</div>
+        <div class="card-title">Läser in...</div>
         <div class="card-meta">-</div>
-        <div class="card-preview">Preparing</div>
+        <div class="card-preview">Förbereder</div>
       </div>
     `;
 

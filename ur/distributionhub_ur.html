@@ -1117,14 +1117,14 @@
 <div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-new"></div><button aria-label="بائیں اسکرول کریں" class="rscroll left" type="button">‹</button><button aria-label="دائیں اسکرول کریں" class="rscroll right" type="button">›</button></div>
 </section>
 <section class="content-box" id="sec-special">
-<h3>🌟 منتجات خاصة</h3>
+<h3>🌟 خاص مصنوعات</h3>
 <div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-special"></div>
 <button aria-label="بائیں اسکرول کریں" class="rscroll left" type="button">‹</button>
 <button aria-label="دائیں اسکرول کریں" class="rscroll right" type="button">›</button>
 </div>
 </section>
 <section class="content-box" id="sec-others">
-<h3>🧺 منتجات أخرى</h3>
+<h3>🧺 دیگر مصنوعات</h3>
 <div class="scroller-wrap">
 <div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-others"></div>
 <button aria-label="بائیں اسکرول کریں" class="rscroll left" type="button">‹</button>
@@ -1154,7 +1154,7 @@
     d.className = 'thumb-card placeholder';
     d.innerHTML = `
       <div class="thumb-img"></div>
-      <div class="thumb-title">Auto-filled</div>
+      <div class="thumb-title">خودکار طور پر پُر شدہ</div>
     `;
     return d;
   }
@@ -1194,8 +1194,8 @@
 </script>
 
 <footer>
-    IGDC Global Hub © 2025 | الشركة الدولية العامة للتوزيع<br/>
-    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, كوريا<br/>
+    IGDC Global Hub © 2025 | انٹرنیشنل جنرل ڈسٹری بیوشن کمپنی<br/>
+    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, کوریا<br/>
 </footer>
 <!-- 내부 로직은 숨김 처리(코드 최소 노출) -->
 <script>
@@ -1344,7 +1344,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">سيتم تفعيل جميع الوظائف بعد توصيل إعدادات الحفظ (Supabase url/key).</div>';
+        body.innerHTML = '<div class="igdc-qa-note">محفوظ کرنے کی ترتیبات (Supabase url/key) منسلک ہونے کے بعد تمام افعال فعال ہوں گے۔</div>';
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
         document.body.appendChild(m);
@@ -1424,7 +1424,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   const modal = document.createElement('div'); modal.className='igtc-modal igtc-hidden'; modal.setAttribute('role','dialog'); modal.setAttribute('aria-modal','true'); modal.setAttribute('aria-labelledby','igtc-modal-title');
   modal.innerHTML = `
     <header>
-      <h3 id="igtc-modal-title">جارٍ التحميل…</h3>
+      <h3 id="igtc-modal-title">لوڈ ہو رہا ہے…</h3>
       <button class="igtc-close" aria-label="بند کریں">✕</button>
     </header>
     <div class="igtc-content" tabindex="0">
@@ -1432,9 +1432,9 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
       <div class="igtc-body">
         <p class="igtc-desc" style="opacity:.9"></p>
         <div class="igtc-actions">
-          <button class="igtc-btn" data-act="cta">انتقال مباشر</button>
-          <button class="igtc-btn secondary" data-act="like">إعجاب</button>
-          <button class="igtc-btn ghost" data-act="recommend">توصية</button>
+          <button class="igtc-btn" data-act="cta">براہ راست جائیں</button>
+          <button class="igtc-btn secondary" data-act="like">پسند کریں</button>
+          <button class="igtc-btn ghost" data-act="recommend">تجویز کریں</button>
         </div>
       </div>
     </div>`;
@@ -1482,9 +1482,9 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
 
   async function showDetail(node, placement){
     const info = resolveInfo(node);
-    el.title.textContent = info.title || '상세 보기';
+    el.title.textContent = info.title || 'تفصیل دیکھیں';
     if (info.img) el.img.src = info.img;
-    el.desc.textContent = 'جارٍ التحميل…';
+    el.desc.textContent = 'لوڈ ہو رہا ہے…';
     el.btnCta.disabled = true;
 
     // stash
@@ -1498,19 +1498,19 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     try{
       if (info.id){
         const detail = await fetchJSON(`/api/items/${encodeURIComponent(info.id)}`);
-        el.title.textContent = detail.title || info.title || '상세 보기';
+        el.title.textContent = detail.title || info.title || 'تفصیل دیکھیں';
         if (detail.image) el.img.src = detail.image;
         el.desc.textContent = detail.description || '';
         if (detail.ctaLabel) el.btnCta.textContent = detail.ctaLabel;
         if (detail.href) href = detail.href;
       } else {
-        el.desc.textContent = el.desc.textContent==='جارٍ التحميل…' ? '' : el.desc.textContent;
+        el.desc.textContent = el.desc.textContent==='لوڈ ہو رہا ہے…' ? '' : el.desc.textContent;
       }
     }catch(_){ el.desc.textContent = ''; }
 
     // Enable CTA only if we have a destination
     if (href){ el.btnCta.disabled = false; }
-    else { el.btnCta.disabled = true; el.btnCta.title = '이 항목에 연결된 이동 링크가 없습니다.'; }
+    else { el.btnCta.disabled = true; el.btnCta.title = 'اس آئٹم سے منسلک کوئی لنک نہیں ہے۔'; }
 
     // CTA handler
     el.btnCta.onclick = async function(){
@@ -1530,11 +1530,11 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     // Feedback handlers (optional)
     el.btnLike.onclick = async function(){
       const id = this.dataset.itemId || info.id; if(!id) return;
-      try{ await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); this.textContent='تم الإعجاب'; this.disabled=true; }catch(_){}
+      try{ await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); this.textContent='پسند کیا گیا'; this.disabled=true; }catch(_){}
     };
     el.btnRec.onclick = async function(){
       const id = this.dataset.itemId || info.id; if(!id) return;
-      try{ await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); this.textContent='موصى به'; this.disabled=true; }catch(_){}
+      try{ await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); this.textContent='تجویز کیا گیا'; this.disabled=true; }catch(_){}
     };
   }
 
@@ -1700,11 +1700,11 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     const lQ = el("label"); lQ.textContent="سوال";
     const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="براہ کرم اپنا سوال درج کریں...";
     const lA = el("label"); lA.textContent="جواب";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="يرجى الانتظار لحظة وسنجيب قريبًا.";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="براہ کرم ایک لمحہ انتظار کریں۔ ہم جلد جواب دیں گے۔";
     const actions = el("div","igdc-qa-actions");
     const btnجمع کریں = el("button","igdc-qa-btn primary"); btnجمع کریں.textContent="جمع کریں";
     const btnصاف کریں = el("button","igdc-qa-btn muted"); btnصاف کریں.textContent="صاف کریں";
-    const note = el("div","igdc-qa-note"); note.textContent="※ تتم جواب عن الأسئلة البسيطة فورًا بواسطة الذكاء الاصطناعي. أما المشكلات التقنية أو الأخطاء أو الأمور التشغيلية فسيتم تحويلها تلقائيًا إلى أسئلة وأجوبة الإدارة.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ سادہ سوالات کا جواب AI فوراً دیتا ہے۔ فنی مسائل، خرابیاں یا آپریشن سے متعلق امور خودکار طور پر ایڈمن سوال و جواب کو بھیجے جاتے ہیں۔";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -1775,10 +1775,10 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="س. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("ج. "+row.answer):"ج. (زیر التوا)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "طلب إداري":"عام";
+        const tag = el("span"); tag.textContent = row.is_admin? "انتظامی درخواست":"عام";
         const actions = el("div","igdc-qa-thread-actions");
         const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
         if(canDelete){
@@ -1786,7 +1786,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("فشل الحذف (الأذونات/السياسة)"); return; }
+            if(error){ alert("حذف کرنے میں ناکامی (اجازت/پالیسی)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -1809,9 +1809,9 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 확인 후 회신됩니다.";
-          else if(/가격|비용|요금/.test(text)) answer="가격/요금 정보는 페이지 내 안내를 참고해주세요. 추가 문의는 남겨주세요.";
-          else answer="문의 감사합니다. 빠르게 확인하여 도와드리겠습니다.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="آپریشن سے متعلق سوال کا جواب ایڈمن کی تصدیق کے بعد دیا جائے گا۔";
+          else if(/가격|비용|요금/.test(text)) answer="قیمت/فیس کی معلومات کے لیے اس صفحے کی رہنمائی دیکھیں۔ ضرورت ہو تو اضافی سوال چھوڑ دیں۔";
+          else answer="آپ کے سوال کا شکریہ۔ ہم جلدی سے چیک کر کے مدد کریں گے۔";
         }
       }
       return { technical, answer };
@@ -1825,7 +1825,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("إعدادات الحفظ (Supabase url/key) غير متصلة بعد، لذلك تم تعطيل الحفظ على الخادم. عند النشر على الويب، سيتم الاتصال تلقائيًا إذا تم إعداد SUPER_VARSAR.url/anonKey.");
+        alert("محفوظ کرنے کی ترتیبات (Supabase url/key) ابھی منسلک نہیں ہیں، اس لیے سرور پر محفوظ کرنا غیر فعال ہے۔ ویب پر شائع ہونے کے بعد SUPER_VARSAR.url/anonKey سیٹ ہو تو خودکار طور پر منسلک ہو جائے گا۔");
         return;
       }
       const record = {
@@ -1835,7 +1835,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("فشل التسجيل"); return; }
+      if(error){ alert("اندراج ناکام ہو گیا"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -1884,18 +1884,18 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("تم استلام طلب الشراء الخاص بك."); }
-      else { alert("فشل طلب الشراء."); }
-    }catch(e){ console.warn(e); alert("خطأ في الشبكة."); }
+      if (res.ok){ alert("آپ کی خریداری کی درخواست موصول ہو گئی ہے۔"); }
+      else { alert("خریداری کی درخواست ناکام ہو گئی۔"); }
+    }catch(e){ console.warn(e); alert("نیٹ ورک کی خرابی۔"); }
   };
 
   window.requestSettlement = async function(amount, currency){
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("تم استلام طلب التسوية الخاص بك."); }
-      else { alert("فشل طلب التسوية."); }
-    }catch(e){ console.warn(e); alert("خطأ في الشبكة."); }
+      if (res.ok){ alert("آپ کی تصفیہ درخواست موصول ہو گئی ہے۔"); }
+      else { alert("تصفیہ درخواست ناکام ہو گئی۔"); }
+    }catch(e){ console.warn(e); alert("نیٹ ورک کی خرابی۔"); }
   };
 
   // ===== 2) AI Recommend·회전(로테이션) 보강 =====
@@ -1937,14 +1937,14 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
               a.setAttribute('data-product-id', item.id || '');
 
               var img = document.createElement('img');
-              img.alt = item.title || 'item';
+              img.alt = item.title || 'آئٹم';
               img.loading = 'lazy';
               img.referrerPolicy = 'no-referrer';
               img.src = item.thumb || item.image || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
 
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || item.name || 'Product';
+              t.textContent = item.title || item.name || 'مصنوعہ';
 
               a.appendChild(img);
               a.appendChild(t);
@@ -1965,12 +1965,12 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
               a.href = item.url || '#';
               a.setAttribute('data-product-id', item.id || '');
               var img = document.createElement('img');
-              img.alt = item.title || 'item';
+              img.alt = item.title || 'آئٹم';
               img.loading = 'lazy';
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || 'Product';
+              t.textContent = item.title || 'مصنوعہ';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -2159,10 +2159,10 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       }
       var title = document.createElement("div");
       title.className = "thumb-title";
-      title.textContent = (item && item.title) ? item.title : "موصى به";
+      title.textContent = (item && item.title) ? item.title : "تجویز کردہ";
       var meta = document.createElement("div");
       meta.className = "thumb-meta";
-      meta.textContent = (item && item.meta) ? item.meta : "تمت التعبئة تلقائيًا";
+      meta.textContent = (item && item.meta) ? item.meta : "خودکار طور پر پُر شدہ";
       card.appendChild(img);
       card.appendChild(title);
       card.appendChild(meta);
@@ -2328,7 +2328,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
   function placeAll(){ document.querySelectorAll('.scroller-wrap').forEach(placeOne); }
 
-  var raf=0; function schedule(){ cancelرسوم متحركةFrame(raf); raf=requestAnimationFrame(function(){ setTimeout(placeAll,20); }); }
+  var raf=0; function schedule(){ cancelAnimationFrame(raf); raf=requestAnimationFrame(function(){ setTimeout(placeAll,20); }); }
 
   if (document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', schedule, { once:true }); } else { schedule(); }
   window.addEventListener('resize', schedule, { passive:true });
@@ -2452,7 +2452,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       h.appendChild(t); h.appendChild(x);
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
-      body.innerHTML = '<div class="igdc-qa-note">سيتم تفعيل جميع الوظائف بعد توصيل إعدادات الحفظ (Supabase url/key).</div>';
+      body.innerHTML = '<div class="igdc-qa-note">محفوظ کرنے کی ترتیبات (Supabase url/key) منسلک ہونے کے بعد تمام افعال فعال ہوں گے۔</div>';
 
       // ensure the "대표 이메일" is shown only inside the modal
       var ce = document.createElement('p');
@@ -2793,7 +2793,7 @@ window.addEventListener("message",function(ev){
       var title = document.querySelector('#mobile-ad-rail-wrap .rail-title, #mobile-ad-rail-wrap h3, #mobile-ad-rail-wrap header h3');
       if (title){
         var t=(title.textContent||'').trim();
-        if (t.length>8) title.textContent='💎 علامات تجارية موصى بها 💎';
+        if (t.length>8) title.textContent='💎 تجویز کردہ برانڈز 💎';
       }
       // Capture-phase guard to preserve native vertical scroll
       var zone = list || wrap;
@@ -2848,7 +2848,7 @@ window.addEventListener("message",function(ev){
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
                   + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">بند کریں</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -2885,7 +2885,7 @@ window.addEventListener("message",function(ev){
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
     ta.value=''; alert('جمع کر دیا گیا۔');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('فشل الجمع کریں.'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('جمع کرنے میں ناکامی۔'));});
   const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
   if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('جمع کرنے میں ناکامی'));});
 })();
@@ -3011,8 +3011,8 @@ window.addEventListener("message",function(ev){
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">مراجعات المنتجات</h3>
-          <div id="igdc-review-list" class="igdc-review-list">جارٍ التحميل...</div>
+          <h3 class="igdc-review-title">مصنوعات کے جائزے</h3>
+          <div id="igdc-review-list" class="igdc-review-list">لوڈ ہو رہا ہے...</div>
           ${canWrite ? this.renderForm() : this.renderLoginHint()}
         </section>
       `;
@@ -3022,12 +3022,12 @@ window.addEventListener("message",function(ev){
       return `
         <form id="igdc-review-form" class="igdc-review-form">
           <textarea
-            placeholder="شارك تجربتك مع المنتج"
+            placeholder="مصنوعات کے بارے میں اپنا تجربہ شیئر کریں"
             minlength="${this.config.minChars}"
             maxlength="${this.config.maxChars}"
             required></textarea>
           <div class="igdc-review-actions">
-            <button type="submit">جمع کریں المراجعة</button>
+            <button type="submit">جائزہ جمع کریں</button>
           </div>
         </form>
       `;
@@ -3035,7 +3035,7 @@ window.addEventListener("message",function(ev){
 
     renderLoginHint() {
       return `<div class="igdc-review-login-hint">
-        كتابة المراجعة متاحة بعد تسجيل الدخول.
+        لاگ اِن کے بعد جائزہ لکھا جا سکتا ہے۔
       </div>`;
     },
 
@@ -3049,7 +3049,7 @@ window.addEventListener("message",function(ev){
         const content = textarea.value.trim();
 
         if (content.length < this.config.minChars) {
-          alert(`يجب أن تتكون المراجعة من ${this.config.minChars} أحرف على الأقل.`);
+          alert(`جائزہ کم از کم ${this.config.minChars} حروف پر مشتمل ہونا چاہیے۔`);
           return;
         }
 
@@ -3058,7 +3058,7 @@ window.addEventListener("message",function(ev){
             textarea.value = '';
             this.loadReviews();
           })
-          .catch(() => alert('فشل جمع کریں المراجعة'));
+          .catch(() => alert('جائزہ جمع کرنے میں ناکامی'));
       });
     },
 
@@ -3066,7 +3066,7 @@ window.addEventListener("message",function(ev){
       const list = document.getElementById('igdc-review-list');
       if (!list) return;
 
-      list.textContent = 'جارٍ التحميل...';
+      list.textContent = 'لوڈ ہو رہا ہے...';
 
       try {
         const res = await fetch(
@@ -3075,13 +3075,13 @@ window.addEventListener("message",function(ev){
         const data = await res.json();
 
         if (!Array.isArray(data) || data.length === 0) {
-          list.innerHTML = '<div class="igdc-review-empty">لا توجد مراجعات بعد.</div>';
+          list.innerHTML = '<div class="igdc-review-empty">ابھی تک کوئی جائزہ نہیں ہے۔</div>';
           return;
         }
 
         list.innerHTML = data.map(this.renderItem).join('');
       } catch {
-        list.textContent = 'تعذر تحميل المراجعات.';
+        list.textContent = 'جائزے لوڈ نہیں ہو سکے۔';
       }
     },
 
@@ -3103,7 +3103,7 @@ window.addEventListener("message",function(ev){
       return `
         <div class="igdc-review-item">
           <div class="igdc-review-meta">
-            <span>${esc(item.user || 'مجهول')}</span>
+            <span>${esc(item.user || 'نامعلوم')}</span>
             <span>${esc(item.date || '')}</span>
           </div>
           <div class="igdc-review-content">${esc(item.content)}</div>
@@ -3168,7 +3168,7 @@ window.addEventListener("message",function(ev){
           '</div>' +
           '<div class="igdc-qa-note">※ سادہ سوالات کا جواب AI فوراً دیتا ہے۔ فنی مسائل، خرابیاں یا آپریشن سے متعلق امور خودکار طور پر ایڈمن Q&A کو بھیجے جاتے ہیں۔</div>' +
           '<div class="igdc-qa-threads"></div>' +
-          '<p class="contact-email">بنیادی ای میل: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' +
+          '<p class="contact-email">نمائندہ ای میل: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' +
         '</div>' +
       '</div>';
     document.body.appendChild(modal);

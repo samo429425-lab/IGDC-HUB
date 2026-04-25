@@ -361,6 +361,27 @@ body{ direction: rtl !important; }
   margin: 10px 12px !important;
 }
 </style>
+
+<style id="ur-social-scroll-axis-fix">
+/* UR socialnetwork: keep horizontal carousel mechanics LTR while preserving Urdu text RTL. */
+html[lang="ur"] .row-scroller,
+html[lang="ur"] .row-grid,
+html[lang="ur"] .thumb-grid,
+html[lang="ur"] #rpMobileScroller,
+html[lang="ur"] #rpMobileGrid{
+  direction:ltr !important;
+  text-align:left !important;
+}
+html[lang="ur"] .thumb-grid .meta,
+html[lang="ur"] .thumb-grid .title,
+html[lang="ur"] .thumb-grid .desc,
+html[lang="ur"] .thumb-grid .cta,
+html[lang="ur"] .ad-box,
+html[lang="ur"] .ad-box a{
+  direction:rtl !important;
+  text-align:right !important;
+}
+</style>
 </head>
 <body>
   <div id="hero"><div class="hero-title"></div></div>
@@ -380,7 +401,7 @@ body{ direction: rtl !important; }
     <div class="main-content">
       <section class="section-blockchain">
         <a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
-        <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">کھولیںSea</a>
+        <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
         <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
         <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
       </section>
@@ -501,7 +522,7 @@ body{ direction: rtl !important; }
             var b = document.createElement('div'); b.className='igdc-qa-backdrop';
             var p = document.createElement('div'); p.className='igdc-qa-panel';
             var h = document.createElement('div'); h.className='igdc-qa-header';
-            var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+            var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='سوال و جواب';
             var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
             h.appendChild(t); h.appendChild(x);
             var body = document.createElement('div'); body.className='igdc-qa-body';
@@ -523,7 +544,7 @@ body{ direction: rtl !important; }
     (function(){
       if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
       const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
-      let isکھولیں=false, isAnimating=false;
+      let isOpen=false, isAnimating=false;
       function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
       const nowISO = ()=> new Date().toISOString();
       const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
@@ -543,12 +564,12 @@ body{ direction: rtl !important; }
       function mountUI(){
         const existing = document.querySelector('.igdc-qa-modal'); if(existing){ return bindExisting(existing); }
         const modal = el('div','igdc-qa-modal'); const backdrop = el('div','igdc-qa-backdrop'); const panel = el('div','igdc-qa-panel');
-        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='Q&A'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','بند کریں');
+        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='سوال و جواب'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','بند کریں');
         header.append(title, close);
         const body = el('div','igdc-qa-body');
         const lQ = el('label'); lQ.textContent='سوال'; const tQ = el('textarea','igdc-qa-text q'); tQ.placeholder='براہ کرم اپنا سوال درج کریں...';
         const lA = el('label'); lA.textContent='جواب'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='براہ کرم ایک لمحہ انتظار کریں۔ ہم جلد جواب دیں گے۔';
-        const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='Submit'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='Clear';
+        const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='جمع کریں'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='صاف کریں';
         const note = el('div','igdc-qa-note'); note.textContent='※ سادہ سوالات کا جواب AI فوری طور پر دیتا ہے۔ تکنیکی، خرابی یا آپریشن سے متعلق مسائل خودکار طور پر Admin Q&A کو بھیج دیے جاتے ہیں۔';
         const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='نمائندہ ای میل: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
         actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
@@ -560,16 +581,16 @@ body{ direction: rtl !important; }
         const tQ = modal.querySelector('.igdc-qa-text.q'); const tA = modal.querySelector('.igdc-qa-text.a'); const list = modal.querySelector('.igdc-qa-threads');
         const btnSubmit = modal.querySelector('.igdc-qa-btn.primary'); const btnClear = modal.querySelector('.igdc-qa-btn.muted');
         function positionNearSidebar(){ try{ const sb = document.querySelector('.sidebar'); if(sb){ const rect = sb.getBoundingClientRect(); panel.style.left = Math.round(rect.right + 12) + 'px'; } }catch(e){} }
-        function openModal(){ if(isAnimating || isکھولیں) return; isAnimating = true; modal.style.display='block'; requestAnimationFrame(()=>{ modal.classList.add('open'); isکھولیں = true; setTimeout(()=>{ isAnimating=false; },220); }); }
-        function closeModal(){ if(isAnimating || !isکھولیں) return; isAnimating=true; modal.classList.remove('open'); setTimeout(()=>{ modal.style.display='none'; isکھولیں=false; isAnimating=false; },220); }
+        function openModal(){ if(isAnimating || isOpen) return; isAnimating = true; modal.style.display='block'; requestAnimationFrame(()=>{ modal.classList.add('open'); isOpen = true; setTimeout(()=>{ isAnimating=false; },220); }); }
+        function closeModal(){ if(isAnimating || !isOpen) return; isAnimating=true; modal.classList.remove('open'); setTimeout(()=>{ modal.style.display='none'; isOpen=false; isAnimating=false; },220); }
         positionNearSidebar(); window.addEventListener('resize', positionNearSidebar); window.addEventListener('scroll', positionNearSidebar, { passive:true });
         if(sideBtn && !sideBtn.dataset.qaBound){ sideBtn.addEventListener('click', openModal); sideBtn.dataset.qaBound='1'; }
         close && close.addEventListener('click', closeModal); backdrop && backdrop.addEventListener('click', closeModal); document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
         btnClear && btnClear.addEventListener('click', ()=>{ if(tQ) tQ.value=''; if(tA) tA.value=''; });
         async function fetchThreads(){ const sb = await ensureSupabase(); if(!sb || !list) return; const { data } = await sb.from('igdc_qna_threads').select('*').eq('project', STATE.project).eq('page_id', STATE.pageId).order('created_at', { ascending:false }).limit(100); renderList(data||[]); }
-        function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='Q. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('A. '+row.answer):'A. (대기중)'; box.append(q,a); list.append(box); }); }
-        async function autoجوابIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'Please refer to the information on this page for pricing and fees. Leave an additional inquiry if needed.':'Thank you for your inquiry. We will review it promptly and assist you.'; } } return { technical, answer }; }
-        async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoجوابIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'Your inquiry has been received.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
+        function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='سوال: '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('جواب: '+row.answer):'جواب: زیرِ التوا'; box.append(q,a); list.append(box); }); }
+        async function autoAnswerIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'قیمتوں اور فیسوں کے لیے براہ کرم اس صفحے کی معلومات دیکھیں۔ ضرورت ہو تو اضافی سوال چھوڑ دیں۔':'آپ کے سوال کا شکریہ۔ ہم اسے جلد دیکھ کر مدد کریں گے۔'; } } return { technical, answer }; }
+        async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoAnswerIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'آپ کا سوال موصول ہو گیا ہے۔', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
         btnSubmit && btnSubmit.addEventListener('click', submit);
         window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
         fetchThreads(); return modal;
@@ -597,15 +618,15 @@ body{ direction: rtl !important; }
   <script>
     (function(){
       var DEMO = {
-        'social-youtube': { icon:'▶️', title:'YouTube', row:'Row 1 · پیش منظر' },
-        'social-instagram': { icon:'📷', title:'Instagram', row:'Row 2 · پیش منظر' },
-        'social-tiktok': { icon:'🎵', title:'TikTok', row:'Row 3 · پیش منظر' },
-        'social-facebook': { icon:'📘', title:'Facebook', row:'Row 4 · پیش منظر' },
-        'social-wechat': { icon:'💬', title:'WeChat', row:'Row 5 · پیش منظر' },
-        'social-weibo': { icon:'🌐', title:'Weibo', row:'Row 6 · پیش منظر' },
-        'social-pinterest': { icon:'📌', title:'Pinterest', row:'Row 7 · پیش منظر' },
-        'social-reddit': { icon:'👽', title:'Reddit', row:'Row 8 · پیش منظر' },
-        'social-twitter': { icon:'✖️', title:'X (Twitter)', row:'Row 9 · پیش منظر' }
+        'social-youtube': { icon:'▶️', title:'YouTube', row:'قطار 1 · پیش منظر' },
+        'social-instagram': { icon:'📷', title:'Instagram', row:'قطار 2 · پیش منظر' },
+        'social-tiktok': { icon:'🎵', title:'TikTok', row:'قطار 3 · پیش منظر' },
+        'social-facebook': { icon:'📘', title:'Facebook', row:'قطار 4 · پیش منظر' },
+        'social-wechat': { icon:'💬', title:'WeChat', row:'قطار 5 · پیش منظر' },
+        'social-weibo': { icon:'🌐', title:'Weibo', row:'قطار 6 · پیش منظر' },
+        'social-pinterest': { icon:'📌', title:'Pinterest', row:'قطار 7 · پیش منظر' },
+        'social-reddit': { icon:'👽', title:'Reddit', row:'قطار 8 · پیش منظر' },
+        'social-twitter': { icon:'✖️', title:'X (Twitter)', row:'قطار 9 · پیش منظر' }
       };
       function makeCard(meta){
         var a = document.createElement('a'); a.className='card'; a.href='#';
@@ -696,7 +717,7 @@ body{ direction: rtl !important; }
   if ((payload.href || '#') === '#'){
     e.preventDefault();
     try{
-      alert('Content or materials are being prepared.');
+      alert('مواد یا معلومات تیار کی جا رہی ہیں۔');
     }catch(_){}
   }
 }, { passive:false });
@@ -1094,7 +1115,7 @@ function boot(){
           var inner = document.createElement('div');
           inner.style.height = '280px';
           inner.style.display = 'flex';
-          inner.style.alignآئٹمs = 'center';
+          inner.style.alignItems = 'center';
           inner.style.justifyContent = 'center';
           inner.textContent = 'لوڈ ہو رہا ہے...';
           card.appendChild(inner);
@@ -1395,7 +1416,7 @@ window.addEventListener('resize', function(){
     }else if(data.img || data.bg){
       var im = document.createElement('img');
       im.src = data.img || data.bg;
-      im.alt = data.title || 'preview';
+      im.alt = data.title || 'پیش منظر';
       media.appendChild(im);
     }else{
       var fb = document.createElement('div');
@@ -1447,7 +1468,27 @@ window.addEventListener('resize', function(){
   }, true);
 })();
 </script>
- 
+  <script src="frontbus.child.js"></script>
+<script>
+(function(){
+  try{
+    function notify(top){
+      parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*');
+    }
+    function atTop(){
+      var se=document.scrollingElement||document.documentElement||document.body;
+      return (window.scrollY||window.pageYOffset||0)<=0 && (se?(se.scrollTop||0)<=0:true);
+    }
+    function onAnyScroll(){ notify(atTop()); }
+    window.addEventListener('scroll', onAnyScroll, {passive:true});
+    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
+    document.addEventListener('wheel', function(e){ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
+    document.addEventListener('touchmove', function(){ notify(false); }, {passive:true,capture:true});
+    setTimeout(function(){ notify(atTop()); }, 50);
+  }catch(_){ }
+})();
+</script>
+
 <script defer src="/assets/js/socialnetwork-automap-v3.js?v=20260404psom"></script>
   
   <script id="igtc-checkout-trigger-v1">

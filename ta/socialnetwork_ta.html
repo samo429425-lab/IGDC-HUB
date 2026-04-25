@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ta">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -482,7 +482,7 @@
             var b = document.createElement('div'); b.className='igdc-qa-backdrop';
             var p = document.createElement('div'); p.className='igdc-qa-panel';
             var h = document.createElement('div'); h.className='igdc-qa-header';
-            var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+            var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='கேள்வி-பதில்';
             var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
             h.appendChild(t); h.appendChild(x);
             var body = document.createElement('div'); body.className='igdc-qa-body';
@@ -524,12 +524,12 @@
       function mountUI(){
         const existing = document.querySelector('.igdc-qa-modal'); if(existing){ return bindExisting(existing); }
         const modal = el('div','igdc-qa-modal'); const backdrop = el('div','igdc-qa-backdrop'); const panel = el('div','igdc-qa-panel');
-        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='Q&A'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','மூடு');
+        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='கேள்வி-பதில்'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','மூடு');
         header.append(title, close);
         const body = el('div','igdc-qa-body');
         const lQ = el('label'); lQ.textContent='கேள்வி'; const tQ = el('textarea','igdc-qa-text q'); tQ.placeholder='தயவுசெய்து உங்கள் கேள்வியை உள்ளிடுங்கள்...';
         const lA = el('label'); lA.textContent='பதில்'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='தயவுசெய்து சிறிது காத்திருக்கவும். விரைவில் பதிலளிக்கிறோம்.';
-        const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='Submit'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='Clear';
+        const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='சமர்ப்பி'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='அழி';
         const note = el('div','igdc-qa-note'); note.textContent='※ எளிய கேள்விகளுக்கு AI உடனடியாக பதிலளிக்கும். தொழில்நுட்ப, பிழை அல்லது செயல்பாட்டு பிரச்சினைகள் தானாகவே Admin Q&A-க்கு அனுப்பப்படும்.';
         const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='பிரதிநிதி மின்னஞ்சல்: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
         actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
@@ -548,7 +548,7 @@
         close && close.addEventListener('click', closeModal); backdrop && backdrop.addEventListener('click', closeModal); document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
         btnClear && btnClear.addEventListener('click', ()=>{ if(tQ) tQ.value=''; if(tA) tA.value=''; });
         async function fetchThreads(){ const sb = await ensureSupabase(); if(!sb || !list) return; const { data } = await sb.from('igdc_qna_threads').select('*').eq('project', STATE.project).eq('page_id', STATE.pageId).order('created_at', { ascending:false }).limit(100); renderList(data||[]); }
-        function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='Q. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('A. '+row.answer):'A. (대기중)'; box.append(q,a); list.append(box); }); }
+        function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='கே. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('ப. '+row.answer):'ப. (நிலுவையில்)'; box.append(q,a); list.append(box); }); }
         async function autoபதில்IfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'Please refer to the information on this page for pricing and fees. Leave an additional inquiry if needed.':'Thank you for your inquiry. We will review it promptly and assist you.'; } } return { technical, answer }; }
         async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoபதில்IfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'Your inquiry has been received.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
         btnSubmit && btnSubmit.addEventListener('click', submit);
@@ -677,7 +677,7 @@
   if ((payload.href || '#') === '#'){
     e.preventDefault();
     try{
-      alert('Content or materials are being prepared.');
+      alert('உள்ளடக்கம் அல்லது பொருட்கள் தயாராகின்றன.');
     }catch(_){}
   }
 }, { passive:false });
@@ -1305,7 +1305,7 @@ window.addEventListener('resize', function(){
     root.className = 'snfv';
     root.innerHTML =
       '<div class="snfv-panel">'
-      + '<button type="button" class="snfv-close" aria-label="Close">✕</button>'
+      + '<button type="button" class="snfv-close" aria-label="மூடு">✕</button>'
       + '<div class="snfv-media" id="snfvMedia"></div>'
       + '<div class="snfv-meta">'
       +   '<div class="snfv-text"><div class="snfv-title" id="snfvTitle"></div><div class="snfv-desc" id="snfvDesc"></div></div>'
@@ -1428,6 +1428,26 @@ window.addEventListener('resize', function(){
   }, true);
 })();
 </script>
+ <script src="frontbus.child.js"></script>
+<script>
+(function(){
+  try{
+    function notify(top){
+      parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*');
+    }
+    function atTop(){
+      var se=document.scrollingElement||document.documentElement||document.body;
+      return (window.scrollY||window.pageYOffset||0)<=0 && (se?(se.scrollTop||0)<=0:true);
+    }
+    function onAnyScroll(){ notify(atTop()); }
+    window.addEventListener('scroll', onAnyScroll, {passive:true});
+    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
+    document.addEventListener('wheel', function(e){ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
+    document.addEventListener('touchmove', function(){ notify(false); }, {passive:true,capture:true});
+    setTimeout(function(){ notify(atTop()); }, 50);
+  }catch(_){ }
+})();
+</script>
  
 <script defer src="/assets/js/socialnetwork-automap-v3.js?v=20260404psom"></script>
   
@@ -1473,7 +1493,7 @@ window.addEventListener('resize', function(){
               wrap.innerHTML =
                 '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
                 + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
-                + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
+                + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">மூடு</button></div>'
                 + '<div id="igtc-qr-area"></div></div>';
 
               document.body.appendChild(wrap);

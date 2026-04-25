@@ -746,7 +746,7 @@
 /* Escrever */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
 /* Title 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
 /* Anexo 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
-/* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
+/* Anexo 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
 /* Salvar */               .compose-wrap .row-top #btnEnviarPost{ order:6 !important; }
 /* Limpar */             .compose-wrap .row-top #btnAttachLimpar{ order:7 !important; }
 </style><style>
@@ -1243,7 +1243,7 @@ body > .container > .main > *{
 /* Narrower: trim preferred vw a bit more while keeping floor */
 </style>
 <style id="qna-brand-only">
-/* === Q&A sidebar link color only (no other changes) === */
+/* === Perguntas e respostas sidebar link color only (no other changes) === */
 :root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
 .sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
   display:block;
@@ -1353,7 +1353,7 @@ body > .container > .main > *{
   --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
   --blue:#2563eb; --muted:#9ca3af;
 }
-/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+/* Sidebar Perguntas e respostas link follows existing .sidebar a style; this extra ensures visibility if needed */
 #qnaOpenBtn{ background-color:#001f4d; color:#ffffff;  color:#001f4d;  display:block; text-decoration:none; }
 /* Modal near the left sidebar, with smooth transitions */
 .igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
@@ -1452,7 +1452,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Ainda não há entradas de Q&A registradas";
+  content: "Ainda não há entradas de Perguntas e respostas registradas";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1470,7 +1470,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Ainda não há entradas de Q&A registradas";
+  content: "Ainda não há entradas de Perguntas e respostas registradas";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -2023,7 +2023,7 @@ body .right{ display:none !important; }
     }
   }
 </style>
-  <!-- Supabase Meio Ambiente 설정 (Escrever/도네이션/Q&A 공용) -->
+  <!-- Supabase Meio Ambiente 설정 (Escrever/도네이션/Perguntas e respostas 공용) -->
   <script>
     window.SUPER_VARSAR = window.SUPER_VARSAR || {
       url: window.SUPABASE_URL || "",
@@ -2384,18 +2384,18 @@ body > div.container,
 <a href="mediahub.html">🎬 Hub de Mídia</a>
 <a href="tour.html">🧳 Viagem · Turismo · Hospedagem</a>
 <a href="literature/academic.html" style="display:none !important;">📚 Intercâmbio Literário e Acadêmico</a>
-<a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A Contact</a></nav>
+<a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Perguntas e respostas</a></nav>
 <!-- Main (불변 구조) -->
 <main class="main">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
-<a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
+<a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">AbrirSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
-<button class="bc-tile orange" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">Donate</button>
+<button class="bc-tile orange" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">Doar</button>
 </section>
 <section class="hero">
 <h2>💝 Centro Global de Doações 💝</h2>
-<p>The support system for IESF and the WAM Foundation begins here.</p>
+<p>O sistema de apoio para a IESF e a WAM Foundation começa aqui.</p>
 </section>
 <section class="panel" id="topEscreverPanel" style="margin-bottom:20px;">
 <textarea id="topPostBody" placeholder="Digite o texto principal..." rows="4" style="padding-top:22px; padding-bottom:12px; font-weight:600;">Este é um espaço patrocinado pelo grupo IGDC Global Platform para compartilhar o ministério e as notícias da preciosa WAM Foundation (World Aviation Mission Foundation), anunciar e compartilhar as notícias da IESF, bem como compartilhar as notícias de várias ONGs e organizações voluntárias.</textarea>
@@ -2412,11 +2412,11 @@ body > div.container,
 <option value="env">Meio Ambiente</option>
 <option value="etc">Outros</option>
 </select>
-</label><button class="button small" id="btnAttach" type="button">Anexo</button><div aria-label="Anexo 미리보기" class="attach-preview" id="attachPreview"></div>
-<button class="button small" id="btnOpenComposer">Escrever</button><div aria-label="Title 미리보기" class="title-preview" id="titlePreview"><span class="tp-text">Sem título</span></div>
+</label><button class="button small" id="btnAttach" type="button">Anexo</button><div aria-label="Prévia do anexo" class="attach-preview" id="attachPreview"></div>
+<button class="button small" id="btnOpenComposer">Escrever</button><div aria-label="Prévia do título" class="title-preview" id="titlePreview"><span class="tp-text">Sem título</span></div>
 <button class="button small accent" id="btnEnviarPost">Salvar</button>
 <span id="attachName"></span>
-<button aria-label="첨부 제거 " class="button tiny" id="btnAttachLimpar" style="display:none;" type="button">Limpar</button>
+<button aria-label="Remover anexo" class="button tiny" id="btnAttachLimpar" style="display:none;" type="button">Limpar</button>
 <input id="postAttach" style="display:none;" type="file"/>
 </div>
 <div class="row row-bottom">
@@ -2439,7 +2439,7 @@ body > div.container,
 </section>
 <!-- (요청) 5줄 Feed -->
 <section class="feed-wrapper">
-<div class="feed-header"><h3 style="margin:0;">📺 Feed</h3></div>
+<div class="feed-header"><h3 style="margin:0;">📺 Publicações</h3></div>
 <div id="feedRows">
 
 <!-- ===== Donation Feed Rows (Final Clean Version) ===== -->
@@ -2598,8 +2598,8 @@ body > div.container,
   btnEnviar && btnEnviar.addEventListener("click", ()=>{ if(btnSalvar){ btnSalvar.click(); } });
 
   btnSalvar && btnSalvar.addEventListener("click", ()=>{
-    const t = titleI?.value?.trim() || "(No Title)";
-    const b = bodyI?.value?.trim() || "(No Content)";
+    const t = titleI?.value?.trim() || "(Sem título)";
+    const b = bodyI?.value?.trim() || "(Sem conteúdo)";
     const cat = catSel?.value || "etc";
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(holder){
@@ -2617,7 +2617,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">첨부 링크</a>` : `첨부: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Link do anexo</a>` : `Anexo: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2628,7 +2628,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "첨부: " + fileAttach.files[0].name;
+        att.textContent = "Anexo: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2645,7 +2645,7 @@ body > div.container,
 
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
-    const link = prompt("이미지 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 Confirmar을 누르세요)");
+    const link = prompt("Cole o link externo da imagem (URL), se houver. Se não houver, pressione OK.");
     if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
@@ -2662,7 +2662,7 @@ body > div.container,
 
   btnFileOk && btnFileOk.addEventListener('click', ()=>{
     const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
-    const link = prompt("파일 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 Confirmar을 누르세요)");
+    const link = prompt("Cole o link externo do arquivo (URL), se houver. Se não houver, pressione OK.");
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
@@ -2691,7 +2691,7 @@ body > div.container,
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '개 파일');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' arquivos');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2762,7 +2762,7 @@ body > div.container,
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 제거'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remover anexo'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
@@ -2797,11 +2797,11 @@ body > div.container,
   function closeModal(){ modal && modal.classList.add('hidden'); }
 
   function handleUnifiedSalvar(){
-    const t = (titleI && titleI.value.trim()) || '(No Title)';
-    const b = (bodyI && bodyI.value.trim()) || '(No Content)';
+    const t = (titleI && titleI.value.trim()) || '(Sem título)';
+    const b = (bodyI && bodyI.value.trim()) || '(Sem conteúdo)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
+    if(!holder){ alert('Área de publicações não encontrada.'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2818,7 +2818,7 @@ body > div.container,
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = '첨부: ' + f.name;
+        li.textContent = 'Anexo: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
@@ -2831,7 +2831,7 @@ body > div.container,
     const canExcluir = (USER_ROLE==='admin' || USER_ROLE==='writer');
     if(canExcluir) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Excluir하시겠습니까?')) return;
+      if(!confirm('Excluir esta publicação?')) return;
       item.remove();
     });
 
@@ -2898,13 +2898,13 @@ body > div.container,
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '개 파일');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' arquivos');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 모두 제거'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remover todos os anexos'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attachPreview.appendChild(chip);
@@ -2956,7 +2956,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || ''Sem título';';
+    tpText.textContent = t || 'Sem título';
   }
 
   // live typing updates preview
@@ -3019,7 +3019,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'Title Not entered';
+    tpText.textContent = t || 'Sem título';
   }
 
   if(btnDraft){
@@ -3056,7 +3056,7 @@ body > div.container,
     btn.style.cssText='margin-top:6px; display:none;';
     if(canShowExcluirFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Excluir하시겠습니까?')) return;
+      if(!confirm('Excluir esta publicação?')) return;
       item.remove();
     });
     item.appendChild(btn);
@@ -3129,7 +3129,7 @@ body > div.container,
 <div id="npBody" style="margin-top:8px; font-size:.95rem; color:#222; white-space:pre-wrap;"></div>
 <div id="npAttach" style="margin-top:8px; font-size:.9rem; color:#374151;"></div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
-<button class="button outline" id="npClose" type="button">Close</button>
+<button class="button outline" id="npClose" type="button">Fechar</button>
 </div>
 </div></div><script>
 (function(){
@@ -3199,20 +3199,20 @@ body > div.container,
     npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Anexo</div>' + attachHtml) : '';
 
     openModal();
   }, true);
 })();
 </script><div id="editNewsModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 680px); max-height:78vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 style="margin:0; font-size:1.05rem;">Escrever 편집</h3>
+<h3 style="margin:0; font-size:1.05rem;">Escrever / Editar</h3>
 <div id="enInfo" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
-<label style="font-size:.85rem;">Title</label>
+<label style="font-size:.85rem;">Título</label>
 <input id="enTitle" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;" type="text"/>
-<label style="font-size:.85rem;">Content</label>
+<label style="font-size:.85rem;">Conteúdo</label>
 <textarea id="enBody" rows="8" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;"></textarea>
 </div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
@@ -3421,7 +3421,7 @@ body > div.container,
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('이 소식을 Excluir하시겠습니까?')) return;
+        if(!confirm('Excluir esta publicação?')) return;
         item.remove();
       });
     }
@@ -3595,13 +3595,13 @@ body > div.container,
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
 
     const t = tpl.querySelector('.card-title');
-    if(t) t.textContent = 'Title';
+    if(t) t.textContent = 'Título';
 
     const m = tpl.querySelector('.card-meta');
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'Content';
+    if(p) p.textContent = 'Conteúdo';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -3680,8 +3680,8 @@ body > div.container,
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("The purchase request has been received."); } else { alert("Purchase request failed"); }
-    }catch(e){ console.warn(e); alert("Network error"); }
+      if (res.ok){ alert("Solicitação de compra recebida."); } else { alert("Falha na solicitação de compra"); }
+    }catch(e){ console.warn(e); alert("Erro de rede"); }
   };
 
   // 정산
@@ -3689,8 +3689,8 @@ body > div.container,
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("The settlement request has been received."); } else { alert("Settlement request failed"); }
-    }catch(e){ console.warn(e); alert("Network error"); }
+      if (res.ok){ alert("Solicitação de liquidação recebida."); } else { alert("Falha na solicitação de liquidação"); }
+    }catch(e){ console.warn(e); alert("Erro de rede"); }
   };
 
   // (옵션) Web3/블록체인 액션 – 서버 프록시 전용
@@ -3699,9 +3699,9 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Blockchain processing request completed: " + (j.txHash||"대기")); }
-      else { alert("Blockchain processing failed"); }
-    }catch(e){ console.warn(e); alert("Network error"); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Solicitação de processamento blockchain concluída: " + (j.txHash||"Pendente")); }
+      else { alert("Falha no processamento blockchain"); }
+    }catch(e){ console.warn(e); alert("Erro de rede"); }
   };
 })();
 </script>
@@ -3824,8 +3824,8 @@ body > div.container,
 <!-- IGDC minimal Donate UI (non-invasive) -->
 
 <div class="donation-inline">
-<input aria-label="Donation amount (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
-<button class="bc-tile orange" id="btnDonate">Donate</button>
+<input aria-label="Valor da doação (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
+<button class="bc-tile orange" id="btnDonate">Doar</button>
 </div>
 <script>
 (function(){
@@ -3840,7 +3840,7 @@ body > div.container,
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","정액 기부 금액");
+  btnGroup.setAttribute("aria-label","Valor da doação (USD)");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -3855,7 +3855,7 @@ body > div.container,
   // === 안내 문구 ===
   const note = document.createElement("div");
   note.className = "donation-note";
-  note.textContent = "※ Perguntas simples são respondidas imediatamente pela IA. Questões técnicas, erros ou assuntos operacionais são encaminhados automaticamente para o Q&A do administrador.";
+  note.textContent = "※ Perguntas simples são respondidas imediatamente pela IA. Questões técnicas, erros ou assuntos operacionais são encaminhados automaticamente para o Perguntas e respostas do administrador.";
   donationDiv.appendChild(note);
 
   // === 구분선 ===
@@ -3889,7 +3889,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      alert(`Valor selecionado: ₩${Number(amt).toLocaleString()}\n\nTransfira para a conta abaixo.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -3918,12 +3918,12 @@ body > div.container,
 <script>(function(){try{document.querySelectorAll(".donation-inline,.donation-buttons").forEach(function(n){n.remove();});}catch(e){}})();</script>
 <div aria-hidden="true" class="donate-modal-backdrop" id="donateModalBackdrop">
 <div aria-labelledby="donateModalTitle" aria-modal="true" class="donate-modal" role="dialog">
-<h3 id="donateModalTitle">Select a Donation Organization</h3>
+<h3 id="donateModalTitle">Selecionar organização de doação</h3>
 <div class="donate-actions">
-<button data-org="IESF" type="button">Donate to IESF</button>
-<button data-org="WAM" type="button">Donate to WAM</button>
+<button data-org="IESF" type="button">Doar to IESF</button>
+<button data-org="WAM" type="button">Doar to WAM</button>
 </div>
-<button class="donate-close" type="button">Close</button>
+<button class="donate-close" type="button">Fechar</button>
 </div>
 </div>
 <script id="donate-modal-js">
@@ -3950,11 +3950,11 @@ body > div.container,
           // Fallback: scroll to right panel account options
           const anchor = document.querySelector('#rightDonationOptions') || document.querySelector('.account-section');
           if(anchor){ anchor.scrollIntoView({behavior:'smooth'}); }
-          else { alert('The payment API is not connected. Please select an account from the right panel.'); }
+          else { alert('A API de pagamento não está conectada. Selecione uma conta no painel direito.'); }
         }
       }catch(err){
         console.error(err);
-        alert('A problem occurred while requesting payment.');
+        alert('Ocorreu um problema ao solicitar o pagamento.');
       } finally {
         closeDonateModal();
       }
@@ -4269,7 +4269,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Salvar은 비활성화됩니다.");
+      console.warn("[Perguntas e respostas] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Salvar은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -4296,7 +4296,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
     const title = el("div","igdc-qa-title"); title.textContent = "Perguntas & Respostas";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Fechar");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
@@ -4307,7 +4307,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const actions = el("div","igdc-qa-actions");
     const btnEnviar = el("button","igdc-qa-btn primary"); btnEnviar.textContent="Enviar";
     const btnLimpar = el("button","igdc-qa-btn muted"); btnLimpar.textContent="Limpar";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Perguntas simples são respondidas imediatamente pela IA. Questões técnicas, erros ou assuntos operacionais são encaminhados automaticamente para o Q&A do administrador.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Perguntas simples são respondidas imediatamente pela IA. Questões técnicas, erros ou assuntos operacionais são encaminhados automaticamente para o Perguntas e respostas do administrador.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -4381,7 +4381,7 @@ document.addEventListener('DOMContentLoaded', function(){
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pendente)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "Admin Request":"General";
@@ -4415,9 +4415,9 @@ document.addEventListener('DOMContentLoaded', function(){
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 Confirmar 후 회신됩니다.";
-          else if(/price|cost|fee|가격|비용|요금/i.test(text)) answer="For price/fee information, please refer to the guidance on this page and leave any additional inquiries.";
-          else answer="문의 감사합니다. 빠르게 Confirmar하여 도와드리겠습니다.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="As consultas operacionais serão verificadas pelo administrador e respondidas.";
+          else if(/price|cost|fee|가격|비용|요금/i.test(text)) answer="Para informações de preço/taxa, consulte as orientações nesta página e deixe perguntas adicionais.";
+          else answer="Obrigado pela sua pergunta. Vamos verificar rapidamente e ajudar.";
         }
       }
       return { technical, answer };
@@ -4431,7 +4431,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Salvar 설정(Supabase url/key)이 아직 연결되지 않아 서버 Salvar은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        alert("As configurações de salvamento (Supabase url/key) ainda não estão conectadas, portanto o salvamento no servidor está desativado. Ao publicar na web, configure SUPER_VARSAR.url/anonKey para conectar automaticamente.");
         return;
       }
       const record = {
@@ -4464,7 +4464,7 @@ document.addEventListener('DOMContentLoaded', function(){
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth initialization failed:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Perguntas e respostas] auth initialization failed:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -4503,7 +4503,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         bk=document.createElement('div');
         bk.id='drawerBackdrop';
         bk.className='drawer-backdrop';
-        document.body/*__KILL__*/ appendChild_DISABLED(bk);
+        document.body.appendChild(bk);
         bk.addEventListener('click',close,{passive:true});
       }
     }
@@ -4592,7 +4592,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
   /* Optional close affordance */
   .card.expanded::after, .thumb.expanded::after{
-    content: "Close";
+    content: "Fechar";
     position: absolute; top: 8px; right: 12px;
     padding: 6px 10px; border-radius: 14px;
     background: rgba(0,0,0,.5); color:#fff; font-size: 12px;
@@ -4734,7 +4734,7 @@ window.addEventListener("message",function(ev){
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
                   + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>QR de Pagamento</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Fechar</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -5067,19 +5067,19 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npTitle.textContent = title || 'Title 없음';
+    npTitle.textContent = title || 'Sem título';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(등록된 본문이 없습니다.)';
+    npBody.textContent = body || '(Não há conteúdo registrado.)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">Anexo</div>' + attachHtml
         : '';
     }
 
     openModal();
   }, true);
 
-  // Supabase sync (uses same anonKey/url as Q&A: SUPER_VARSAR + ensureSupabase)
+  // Supabase sync (uses same anonKey/url as Perguntas e respostas: SUPER_VARSAR + ensureSupabase)
   async function syncLatestToSupabase(cat){
     try{
       if(typeof window.ensureSupabase !== 'function') return;
@@ -5157,7 +5157,7 @@ window.addEventListener("message",function(ev){
   display: none !important;
 }
 
-/* 첨부 여부 아이콘 */
+/* Anexo 여부 아이콘 */
 .right .topic-panel .list .item.has-attach .title::after,
 .mobile-news-clone .topic-panel .list .item.has-attach .title::after {
   content: "📎";
@@ -5193,7 +5193,7 @@ window.addEventListener("message",function(ev){
 
 <script id="hero-linebreak-fix">
 (function(){
-  function nobreak(s){ return s.replace(/ONG와\s*공유하며/g, "ONG와\u00A0공유하며"); }
+  function nobreak(s){ return s.replace(/ONGs\s+e organizações voluntárias/g, "ONGs\u00A0e organizações voluntárias"); }
   var el = document.getElementById("topPostBody");
   if(el){
     if(el.value !== undefined){ el.value = nobreak(el.value); }

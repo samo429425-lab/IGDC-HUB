@@ -846,7 +846,7 @@ body{ direction: rtl !important; }
 </section>
 </div>
 
-<section id="nh-mobile-rail" aria-label="Popular Recommended Products (Mobile)">
+<section id="nh-mobile-rail" aria-label="موبائل کے لیے مقبول تجویز کردہ مصنوعات">
   <div class="wrap">
     <div class="title">💎 مقبول تجویز کردہ مصنوعات 💎</div>
     <div class="list" id="nh-mobile-rail-list" role="list"></div>
@@ -1133,7 +1133,7 @@ a[href^="mailto:"]:hover {
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
+    const title = el("div","igdc-qa-title"); title.textContent = "سوال و جواب";
     const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","بند کریں");
     header.append(title, close);
 
@@ -1218,8 +1218,8 @@ a[href^="mailto:"]:hover {
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (زیر التوا)";
+        const q = el("div","igdc-qa-thread-q"); q.textContent="س. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("ج. "+row.answer):"ج. (زیر التوا)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "انتظامی درخواست":"عمومی";
@@ -1253,9 +1253,9 @@ a[href^="mailto:"]:hover {
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="Operations-related inquiries will be reviewed by an administrator and answered afterward.";
-          else if(/가격|비용|요금/.test(text)) answer="Please refer to the information on this page for pricing/fees. Leave an additional inquiry if needed.";
-          else answer="Thank you for your inquiry. We will review it quickly and assist you.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="آپریشن سے متعلق سوالات کا جائزہ منتظم لے گا اور بعد میں جواب دیا جائے گا۔";
+          else if(/가격|비용|요금/.test(text)) answer="قیمت/فیس کی معلومات کے لیے اس صفحے کی رہنمائی دیکھیں۔ ضرورت ہو تو اضافی سوال چھوڑ دیں۔";
+          else answer="آپ کے سوال کا شکریہ۔ ہم اسے جلد جائزہ لے کر آپ کی مدد کریں گے۔";
         }
       }
       return { technical, answer };
@@ -1269,7 +1269,7 @@ a[href^="mailto:"]:hover {
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Server-side saving is disabled because the save settings (Supabase url/key) are not connected yet. When deployed to the web, it will connect automatically if SUPER_VARSAR.url/anonKey is configured.");
+        alert("محفوظ کرنے کی ترتیبات (Supabase url/key) ابھی منسلک نہیں ہیں، اس لیے سرور پر محفوظ کرنا غیر فعال ہے۔ ویب پر تعیناتی کے وقت SUPER_VARSAR.url/anonKey ترتیب دیں تو خودکار طور پر منسلک ہو جائے گا۔");
         return;
       }
       const record = {
@@ -1370,7 +1370,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='سوال و جواب';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
 
@@ -1619,11 +1619,11 @@ window.addEventListener("message",function(ev){
   async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
     await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
-    ta.value=''; alert('전송되었습니다.');
+    ta.value=''; alert('بھیج دیا گیا۔');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('전송 실패'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('بھیجنے میں ناکامی ہوئی۔'));});
   const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('전송 실패'));});
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('بھیجنے میں ناکامی ہوئی۔'));});
 })();
 </script>
 
@@ -1775,8 +1775,8 @@ window.addEventListener("message",function(ev){
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">상품 리뷰</h3>
-          <div id="igdc-review-list" class="igdc-review-list">로딩 중...</div>
+          <h3 class="igdc-review-title">مصنوعات کے جائزے</h3>
+          <div id="igdc-review-list" class="igdc-review-list">لوڈ ہو رہا ہے...</div>
           ${canWrite ? this.renderReviewForm() : this.renderLoginHint()}
         </section>
       `;
@@ -1786,12 +1786,12 @@ window.addEventListener("message",function(ev){
       return `
         <form id="igdc-review-form" class="igdc-review-form">
           <textarea
-            placeholder="상품 사용 경험을 공유해 주세요"
+            placeholder="مصنوعات کے استعمال کا اپنا تجربہ شیئر کریں"
             minlength="${this.config.minReviewChars}"
             maxlength="${this.config.maxReviewChars}"
             required></textarea>
           <div class="igdc-review-actions">
-            <button type="submit">리뷰 등록</button>
+            <button type="submit">جائزہ جمع کریں</button>
           </div>
         </form>
       `;
@@ -1799,7 +1799,7 @@ window.addEventListener("message",function(ev){
 
     renderLoginHint() {
       return `<div class="igdc-review-login-hint">
-        리뷰 작성은 로그인 후 가능합니다.
+        لاگ اِن کے بعد جائزہ لکھا جا سکتا ہے۔
       </div>`;
     },
 
@@ -1814,7 +1814,7 @@ window.addEventListener("message",function(ev){
         const content = textarea.value.trim();
 
         if (content.length < this.config.minReviewChars) {
-          alert(`리뷰는 최소 ${this.config.minReviewChars}자 이상 작성해 주세요.`);
+          alert(`جائزہ کم از کم ${this.config.minReviewChars} حروف پر مشتمل ہونا چاہیے۔`);
           return;
         }
 
@@ -1823,7 +1823,7 @@ window.addEventListener("message",function(ev){
             textarea.value = '';
             this.loadReviews(productId);
           })
-          .catch(() => alert('리뷰 Submission failed'));
+          .catch(() => alert('جائزہ جمع کرانا ناکام ہو گیا'));
       });
     },
 
@@ -1832,7 +1832,7 @@ window.addEventListener("message",function(ev){
       const list = document.getElementById('igdc-review-list');
       if (!list) return;
 
-      list.textContent = '로딩 중...';
+      list.textContent = 'لوڈ ہو رہا ہے...';
 
       try {
         const res = await fetch(
@@ -1841,13 +1841,13 @@ window.addEventListener("message",function(ev){
         const data = await res.json();
 
         if (!Array.isArray(data) || data.length === 0) {
-          list.innerHTML = '<div class="igdc-review-empty">아직 리뷰가 없습니다.</div>';
+          list.innerHTML = '<div class="igdc-review-empty">ابھی تک کوئی جائزہ نہیں ہے۔</div>';
           return;
         }
 
         list.innerHTML = data.map(this.renderReviewItem).join('');
       } catch {
-        list.textContent = '리뷰를 불러오지 못했습니다.';
+        list.textContent = 'جائزے لوڈ نہیں ہو سکے۔';
       }
     },
 
@@ -1964,9 +1964,7 @@ window.addEventListener("message",function(ev){
                font-size:11px;
                color:#7a8da8;
                letter-spacing:.5px;
-             ">
-            Loading
-          </div>
+             ">لوڈ ہو رہا ہے...</div>
 
         </div>
       `;

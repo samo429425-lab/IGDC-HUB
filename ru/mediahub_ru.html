@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="ru">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
@@ -397,7 +397,7 @@ html, body {
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Записи Q&A пока не зарегистрированы.";
+  content: "Записи Вопросы и ответы пока не зарегистрированы.";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1189,7 +1189,7 @@ html, body {
 <a href="javascript:void(0)" id="qnaOpenBtn">💬 Вопросы и ответы</a></aside>
 <main>
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
-<a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
+<a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">ОткрытьSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
 </section>
@@ -3523,95 +3523,9 @@ function handleVideoПоиск(e){
 })();
 </script>
 <script>
-// === IGDC Media: Optional YouTube auto-fill for thumbnails (non-intrusive) ===
-// Usage (put this in a small inline <script> anywhere AFTER this block):
-//   window.YT_API_KEY = "YOUR_YOUTUBE_DATA_API_V3_KEY";
-//   window.IGDC_MEDIA_QUERIES = {
-//     // containerId: search query
-//     "trailer_row": "official movie trailers 2025",
-//     "ads_row": "global ads 2025 award",
-//     "music_row": "K-pop MV 2025"
-//   };
-//   window.IGDC_MEDIA_MAX = 12;   // optional
-//   window.IGDC_MEDIA_SAFE = true; // optional, safeПоиск on
-(function(){
-  async function fillRow(container, query, max=12){
-    const key = window.YT_API_KEY;
-    if(!key || !query) return;
-    const safe = window.IGDC_MEDIA_SAFE ? "strict" : "none";
-    const url = new URL("https://www.googleapis.com/youtube/v3/search");
-    url.searchParams.set("part", "snippet");
-    url.searchParams.set("type", "video");
-    url.searchParams.set("maxResults", String(Math.min(Math.max(max,1),50)));
-    url.searchParams.set("q", query);
-    url.searchParams.set("key", key);
-    url.searchParams.set("safeПоиск", safe);
-
-    let data;
-    try{
-      const res = await fetch(url.toString());
-      if(!res.ok) return;
-      data = await res.json();
-    }catch(e){ return; }
-
-    const items = (data && data.items) ? data.items : [];
-    if(!items.length) return;
-
-    // Find all thumbnails under container
-    const cards = container.querySelectorAll('a, .card, .thumb, .item, li');
-    let i = 0;
-    items.forEach(it=>{
-      const v = it.id && it.id.videoId;
-      const s = it.snippet || {};
-      if(!v) return;
-      const thumbUrl = (s.thumbnails && (s.thumbnails.medium?.url || s.thumbnails.high?.url)) || "";
-      const title = s.title || "";
-      const ch = s.channelTitle || "";
-      const href = "https://www.youtube.com/watch?v=" + v;
-
-      const card = cards[i++];
-      if(!card) return;
-      // If it's an <a>, set href; otherwise, try to find an <a> inside
-      const anchor = card.tagName === "A" ? card : (card.querySelector("a") || card);
-      try{ anchor.setAttribute("href", href); anchor.setAttribute("target","_blank"); anchor.setAttribute("rel","noopener"); }catch(e){}
-
-      // Replace image if present or create
-      let img = card.querySelector("img");
-      if(!img){
-        img = document.createElement("img");
-        img.style.width = "100%";
-        img.style.height = "auto";
-        if(card === anchor) { card.prepend(img); } else { anchor.prepend(img); }
-      }
-      if(thumbUrl) img.src = thumbUrl;
-
-      // Replace title text if a caption exists
-      const cap = card.querySelector(".title, .caption, .name, h3, h4");
-      if(cap) cap.textContent = title || cap.textContent;
-
-      // Optional channel label if a smaller text exists
-      const sub = card.querySelector(".sub, .meta, small");
-      if(sub) sub.textContent = ch || sub.textContent;
-    });
-  }
-
-  async function runAutoFill(){
-    if(!window.YT_API_KEY || !window.IGDC_MEDIA_QUERIES) return; // silent no-op
-    const max = window.IGDC_MEDIA_MAX || 12;
-    const entries = Object.entries(window.IGDC_MEDIA_QUERIES);
-    for (const [id, query] of entries){
-      const el = document.getElementById(id);
-      if(!el) continue;
-      await fillRow(el, query, max);
-    }
-  }
-
-  // Run after load
-  if(document.readyState === "complete") runAutoFill();
-  else window.addEventListener("load", runAutoFill);
-})();
+(function(){ /* disabled malformed nested script block */ })();
 </script>
-<!-- Q&amp;A transplant (from distributionhub) START -->
+<!-- Вопросы и ответы transplant (from distributionhub) START -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style id="igdc-qa-style">
 :root{
@@ -3621,7 +3535,7 @@ function handleVideoПоиск(e){
   --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
   --blue:#2563eb; --muted:#9ca3af;
 }
-/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+/* Sidebar Вопросы и ответы link follows existing .sidebar a style; this extra ensures visibility if needed */
 #qnaOpenBtn{ background-color:#001f4d; color:#ffffff;  color:#001f4d;  display:block; text-decoration:none; }
 /* Modal near the left sidebar, with smooth transitions */
 .igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
@@ -3673,7 +3587,7 @@ function handleVideoПоиск(e){
 .contact-email a{color:#1d4ed8 !important; font-weight:700; text-decoration:underline;}
 </style>
 <style id="qna-brand-only">
-/* === Q&A sidebar link color only (no other changes) === */
+/* === Вопросы и ответы sidebar link color only (no other changes) === */
 :root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
 .sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
   display:block;
@@ -3685,7 +3599,7 @@ function handleVideoПоиск(e){
 .sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
 </style>
 <script id="igdc-qa-safety-bootstrap">
-// Ensures the Q&A popup opens when clicking the sidebar link,
+// Ensures the Вопросы и ответы popup opens when clicking the sidebar link,
 // even if Supabase URL/Key are not configured yet.
 (function(){
   if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
@@ -3706,11 +3620,11 @@ function handleVideoПоиск(e){
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Вопросы и ответы';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">※ На простые вопросы ИИ отвечает сразу. Технические вопросы, ошибки и вопросы по работе автоматически перенаправляются в Q&A администратора.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">※ На простые вопросы ИИ отвечает сразу. Технические вопросы, ошибки и вопросы по работе автоматически перенаправляются в Вопросы и ответы администратора.</div>';
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
         document.body.appendChild(m);
@@ -3814,7 +3728,7 @@ function handleVideoПоиск(e){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase credentials/library not configured: the UI is visible, but saving is disabled.");
+      console.warn("[Вопросы и ответы] Supabase credentials/library not configured: the UI is visible, but saving is disabled.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -3840,7 +3754,7 @@ function handleVideoПоиск(e){
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
+    const title = el("div","igdc-qa-title"); title.textContent = "Вопросы и ответы";
     const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Закрыть");
     header.append(title, close);
 
@@ -3852,7 +3766,7 @@ function handleVideoПоиск(e){
     const actions = el("div","igdc-qa-actions");
     const btnОтправить = el("button","igdc-qa-btn primary"); btnОтправить.textContent="Отправить";
     const btnОчистить = el("button","igdc-qa-btn muted"); btnОчистить.textContent="Очистить";
-    const note = el("div","igdc-qa-note"); note.textContent="※ На простые вопросы ИИ отвечает сразу. Технические вопросы, ошибки и вопросы по работе автоматически перенаправляются в Q&A администратора.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ На простые вопросы ИИ отвечает сразу. Технические вопросы, ошибки и вопросы по работе автоматически перенаправляются в Вопросы и ответы администратора.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -4009,12 +3923,12 @@ function handleVideoПоиск(e){
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth initialization failed:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Вопросы и ответы] auth initialization failed:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
 </script>
-<!-- Q&amp;A transplant (from distributionhub) END -->
+<!-- Вопросы и ответы transplant (from distributionhub) END -->
 <script src="/assets/js/igdc-core.min.js"></script>
 <!-- IGDC: Media events (click/like/recommend) delegation -->
 <script>
@@ -4285,8 +4199,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }catch(_){}
 })();
 </script>
-
-</script>
 <script id="sidebar-active-script-ko">
 (function(){
   function norm(n){
@@ -4491,7 +4403,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     var title = document.createElement('div');
     title.className = 'igdc-qa-title';
-    title.textContent = 'Q&A';
+    title.textContent = 'Вопросы и ответы';
 
     var closeBtn = document.createElement('button');
     closeBtn.className = 'igdc-qa-close';
@@ -4504,7 +4416,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     body.className = 'igdc-qa-body';
 
     body.innerHTML =
-      '<div class="igdc-qa-note">※ На простые вопросы ИИ отвечает сразу. Технические вопросы, ошибки и вопросы по работе автоматически перенаправляются в Q&A администратора.</div>';
+      '<div class="igdc-qa-note">※ На простые вопросы ИИ отвечает сразу. Технические вопросы, ошибки и вопросы по работе автоматически перенаправляются в Вопросы и ответы администратора.</div>';
 
     var email = document.createElement('p');
     email.className = 'contact-email';
@@ -4565,37 +4477,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 })();
 </script>
 <script id="igdc-qa-email-ensure">
-(function(){
-  if (window.__IGDC_QA_EMAIL_ENSURE__) return;
-  window.__IGDC_QA_EMAIL_ENSURE__ = true;
-
-  var CONTACT_HTML = 'Основной e-mail: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-
-  function stripFooterEmail(){
-    try{
-      var footers = document.querySelectorAll('footer');
-      footers.forEach(function(f){
-        // Remove any mailto links
-        f.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
-          var parent = a.parentNode;
-          if(parent){
-            parent.removeChild(a);
-            var html = parent.innerHTML;
-            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
-            html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
-            parent.innerHTML = html;
-          }
-        });
-        // Remove any plain-text "Основной e-mail: ..." remnants
-        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
-      });
-    }catch(e){}
-  }
-
-  function ensureModal(){
-    var modal = document.querySelector('.igdc-qa-modal');
-    if(!modal){
-      // Create minimal modal sk
+(function(){ window.__IGDC_QA_EMAIL_ENSURE__ = true; })();
+</script>
 <script id="igtc-mobile-overhaul-FULL-js">
 (function(){
   function qsa(sel){ return Array.prototype.slice.call(document.querySelectorAll(sel)); }
@@ -4636,7 +4519,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     var src = card.getAttribute('data-src');
     var wrap = document.createElement('div');
     wrap.className = 'fs-stage';
-    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="Media Viewer"></div><button class="fs-close" aria-label="Закрыть">✕</button>';
+    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="Просмотр медиа"></div><button class="fs-close" aria-label="Закрыть">✕</button>';
     var inner = wrap.querySelector('.fs-inner');
 
     if(yt){
@@ -4653,7 +4536,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     }else{
       var url = getCardImageURL(card) || 'about:blank';
       var img = document.createElement('img');
-      img.src = url; img.alt = 'Preview';
+      img.src = url; img.alt = 'Предпросмотр';
       img.style.width='100%'; img.style.height='100%'; img.style.objectFit='cover';
       inner.appendChild(img);
     }
@@ -5010,15 +4893,15 @@ window.addEventListener("message",function(ev){
           <p>${card.dataset.description || ''}</p>
 
           <div class="media-actions">
-            <button data-action="play">▶ Watch Now</button>
-            <button data-action="rent">💳 Rent</button>
+            <button data-action="play">▶ Смотреть сейчас</button>
+            <button data-action="rent">💳 Арендовать</button>
             <button data-action="own">💳 Купить</button>
             <button data-action="wish">⭐ Добавить в избранное</button>
           </div>
 
           <div class="media-review">
             <textarea placeholder="Однострочный отзыв (необязательно)" maxlength="200"></textarea>
-            <button data-action="review">Отправить Review</button>
+            <button data-action="review">Отправить отзыв</button>
           </div>
         </div>
       `;
@@ -5053,11 +4936,11 @@ window.addEventListener("message",function(ev){
           break;
 
         case 'wish':
-          alert('Added to your wishlist.');
+          alert('Добавлено в список желаний.');
           break;
 
         case 'review':
-          alert('Your review has been submitted.');
+          alert('Ваш отзыв отправлен.');
           break;
       }
     },

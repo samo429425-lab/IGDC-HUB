@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="ms">
 <head>
 <!-- Supabase inline injection (vars + init) -->
 <script>
@@ -743,7 +743,7 @@
 /* Write */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
 /* Title 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
 /* Attachment 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
-/* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
+/* Lampiran 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
 /* Save */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
 /* Clear */             .compose-wrap .row-top #btnAttachClear{ order:7 !important; }
 </style><style>
@@ -1446,7 +1446,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Belum ada entri Q&A yang didaftarkan";
+  content: "Belum ada entri soal jawab yang disiarkan";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1464,7 +1464,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Belum ada entri Q&A yang didaftarkan";
+  content: "Belum ada entri soal jawab yang disiarkan";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -2339,7 +2339,7 @@ body > div.container,
 <a href="mediahub.html">🎬 Hab Media</a>
 <a href="tour.html">🧳 Perjalanan · Pelancongan · Penginapan</a>
 <a href="literature/academic.html" style="display:none !important;">📚 Pertukaran Sastera &amp; Akademik</a>
-<a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Pertanyaan Q&amp;A</a></nav>
+<a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Soal Jawab</a></nav>
 <!-- Main (불변 구조) -->
 <main class="main">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
@@ -2367,11 +2367,11 @@ body > div.container,
 <option value="env">Alam Sekitar</option>
 <option value="etc">Lain-lain</option>
 </select>
-</label><button class="button small" id="btnAttach" type="button">Lampiran</button><div aria-label="Attachment 미리보기" class="attach-preview" id="attachPreview"></div>
-<button class="button small" id="btnOpenComposer">Tulis</button><div aria-label="Title 미리보기" class="title-preview" id="titlePreview"><span class="tp-text">Tiada tajuk</span></div>
+</label><button class="button small" id="btnAttach" type="button">Lampiran</button><div aria-label="Pratonton lampiran" class="attach-preview" id="attachPreview"></div>
+<button class="button small" id="btnOpenComposer">Tulis</button><div aria-label="Pratonton tajuk" class="title-preview" id="titlePreview"><span class="tp-text">Tiada tajuk</span></div>
 <button class="button small accent" id="btnSubmitPost">Simpan</button>
 <span id="attachName"></span>
-<button aria-label="첨부 제거 " class="button tiny" id="btnAttachClear" style="display:none;" type="button">Kosongkan</button>
+<button aria-label="Buang lampiran" class="button tiny" id="btnAttachClear" style="display:none;" type="button">Kosongkan</button>
 <input id="postAttach" style="display:none;" type="file"/>
 </div>
 <div class="row row-bottom">
@@ -2529,8 +2529,8 @@ body > div.container,
   btnSubmit && btnSubmit.addEventListener("click", ()=>{ if(btnSave){ btnSave.click(); } });
 
   btnSave && btnSave.addEventListener("click", ()=>{
-    const t = titleI?.value?.trim() || "(No Title)";
-    const b = bodyI?.value?.trim() || "(No Content)";
+    const t = titleI?.value?.trim() || "(Tiada tajuk)";
+    const b = bodyI?.value?.trim() || "(Tiada kandungan)";
     const cat = catSel?.value || "etc";
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(holder){
@@ -2548,7 +2548,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">첨부 링크</a>` : `첨부: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Pautan lampiran</a>` : `Lampiran: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2559,7 +2559,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "첨부: " + fileAttach.files[0].name;
+        att.textContent = "Lampiran: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2622,7 +2622,7 @@ body > div.container,
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '개 파일');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' fail');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2693,7 +2693,7 @@ body > div.container,
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 제거'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Buang lampiran'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
@@ -2728,8 +2728,8 @@ body > div.container,
   function closeModal(){ modal && modal.classList.add('hidden'); }
 
   function handleUnifiedSave(){
-    const t = (titleI && titleI.value.trim()) || '(No Title)';
-    const b = (bodyI && bodyI.value.trim()) || '(No Content)';
+    const t = (titleI && titleI.value.trim()) || '(Tiada tajuk)';
+    const b = (bodyI && bodyI.value.trim()) || '(Tiada kandungan)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
@@ -2749,7 +2749,7 @@ body > div.container,
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = '첨부: ' + f.name;
+        li.textContent = 'Lampiran: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
@@ -2829,13 +2829,13 @@ body > div.container,
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '개 파일');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' fail');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 모두 제거'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Buang semua lampiran'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attachPreview.appendChild(chip);
@@ -2887,7 +2887,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || ''No title';';
+    tpText.textContent = t || "Tiada tajuk";
   }
 
   // live typing updates preview
@@ -2950,7 +2950,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'Title Not entered';
+    tpText.textContent = t || 'Tiada tajuk';
   }
 
   if(btnDraft){
@@ -3130,14 +3130,14 @@ body > div.container,
     npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Lampiran</div>' + attachHtml) : '';
 
     openModal();
   }, true);
 })();
 </script><div id="editNewsModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 680px); max-height:78vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 style="margin:0; font-size:1.05rem;">Write 편집</h3>
+<h3 style="margin:0; font-size:1.05rem;">Tulis / Sunting</h3>
 <div id="enInfo" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
@@ -3188,7 +3188,7 @@ body > div.container,
       badge.setAttribute('translate','no');
       header.appendChild(badge);
     }
-    badge.textContent = `Edited · ${tsStr}`;
+    badge.textContent = `Disunting · ${tsStr}`;
   }
 
   // On load, restore edited badge for admin/author only
@@ -3331,7 +3331,7 @@ body > div.container,
     let btnDel  = footer.querySelector('.delete-post');
     if(!btnEdit){
       btnEdit = document.createElement('button');
-      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
+      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Sunting';
       footer.appendChild(btnEdit);
       btnEdit.addEventListener('click', (e)=>{
         e.stopPropagation();
@@ -3526,13 +3526,13 @@ body > div.container,
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
 
     const t = tpl.querySelector('.card-title');
-    if(t) t.textContent = 'Title';
+    if(t) t.textContent = 'Tajuk';
 
     const m = tpl.querySelector('.card-meta');
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'Content';
+    if(p) p.textContent = 'Kandungan';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -3629,7 +3629,7 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Permintaan pemprosesan blockchain selesai: " + (j.txHash||"Pending")); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Permintaan pemprosesan blockchain selesai: " + (j.txHash||"Menunggu")); }
       else { alert("Pemprosesan blockchain gagal"); }
     }catch(e){ console.warn(e); alert("Ralat rangkaian"); }
   };
@@ -3676,7 +3676,7 @@ body > div.container,
 
             var t = document.createElement('div');
             t.className = 'title';
-            t.textContent = item.title || item.name || 'Product';
+            t.textContent = item.title || item.name || 'Produk';
 
             a.appendChild(img);
             a.appendChild(t);
@@ -3699,7 +3699,7 @@ body > div.container,
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || 'Product';
+              t.textContent = item.title || 'Produk';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -3817,7 +3817,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      alert(`Jumlah dipilih: ₩${Number(amt).toLocaleString()}\n\nSila pindahkan ke akaun di bawah.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -4192,7 +4192,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Save은 비활성화됩니다.");
+      console.warn("[Soal Jawab] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Save은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -4229,8 +4229,8 @@ document.addEventListener('DOMContentLoaded', function(){
     const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Sila tunggu sebentar. Jawapan akan diberikan sebentar lagi.";
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Hantar";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Soalan mudah dijawab serta-merta oleh AI. Isu teknikal, ralat atau operasi akan dihantar secara automatik ke admin Q&A.";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent='Kosongkan';
+    const note = el("div","igdc-qa-note"); note.textContent="※ Soalan mudah dijawab serta-merta oleh AI. Isu teknikal, ralat atau operasi akan dihantar secara automatik ke admin Soal Jawab.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -4303,8 +4303,8 @@ document.addEventListener('DOMContentLoaded', function(){
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"J. (Menunggu)";
+        const q = el("div","igdc-qa-thread-q"); q.textContent='S. '+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?('J. '+row.answer):"J. (Menunggu)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "Permintaan Admin":"Umum";
@@ -4387,7 +4387,7 @@ document.addEventListener('DOMContentLoaded', function(){
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth initialization failed:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Soal Jawab] auth initialization failed:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -4426,7 +4426,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         bk=document.createElement('div');
         bk.id='drawerBackdrop';
         bk.className='drawer-backdrop';
-        document.body/*__KILL__*/ appendChild_DISABLED(bk);
+        document.body.appendChild(bk);
         bk.addEventListener('click',close,{passive:true});
       }
     }
@@ -4985,12 +4985,12 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npTitle.textContent = title || 'Title 없음';
+    npTitle.textContent = title || 'Tiada tajuk';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(등록된 본문이 없습니다.)';
+    npBody.textContent = body || '(' + 'Tiada kandungan yang didaftarkan.' + ')';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">Lampiran</div>' + attachHtml
         : '';
     }
 
@@ -5072,7 +5072,7 @@ window.addEventListener("message",function(ev){
   display: none !important;
 }
 
-/* 첨부 여부 아이콘 */
+/* Lampiran 여부 아이콘 */
 .right .topic-panel .list .item.has-attach .title::after,
 .mobile-news-clone .topic-panel .list .item.has-attach .title::after {
   content: "📎";
@@ -5317,7 +5317,7 @@ window.addEventListener("message",function(ev){
     card.innerHTML = `
       <div class="thumb"></div>
       <div class="card-body">
-        <div class="card-title">Loading...</div>
+        <div class="card-title">Memuatkan...</div>
         <div class="card-meta">-</div>
         <div class="card-preview">Preparing</div>
       </div>

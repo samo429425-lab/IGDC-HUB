@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html lang="en">
+<html lang="tl">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
@@ -905,7 +905,7 @@ html, body {
 <a href="mediahub.html">🎬 Sentro ng Media</a>
 <a href="tour.html">🧳 Paglalakbay · Turismo · Akomodasyon</a>
 <a href="literature_academic">📚 Palitang Pampanitikan at Akademiko</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Mga Katanungan sa Q&amp;A</a></div>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Tanong at Sagot</a></div>
 <div class="main-content">
 <section class="section-blockchain">
 <a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
@@ -924,9 +924,9 @@ html, body {
     .btn-grid .link-btn:hover { background:#e75480; color:#ffffff; border-color:#cc2d63; box-shadow:0 2px 6px rgba(0,0,0,0.18); }</style>
 <div class="region-card">
 <div class="region-title">Asya</div>
-<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaTour <small>(하나투어)</small></a>
-<a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour<small>(모두투어)</small></a>
-<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon Tour <small>(노랑풍선)</small></a>
+<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaTour <small></small></a>
+<a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour<small></small></a>
+<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon Tour <small></small></a>
 <a class="link-btn" href="https://www.trip.com" target="_blank">Trip.com <small>(携程)</small></a>
 <a class="link-btn" href="https://www.ctrip.com" target="_blank">Ctrip <small>(携程)</small></a>
 <a class="link-btn" href="https://www.qunar.com" target="_blank">Qunar <small>(去哪儿网)</small></a>
@@ -1171,7 +1171,7 @@ a[href^="mailto:"]:hover {
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Tanong at Sagot';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
@@ -1278,7 +1278,7 @@ a[href^="mailto:"]:hover {
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      console.warn("[Q&A] Hindi naka-set ang Supabase credentials/library: makikita ang UI pero naka-disable ang pag-save.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -1304,8 +1304,8 @@ a[href^="mailto:"]:hover {
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
+    const title = el("div","igdc-qa-title"); title.textContent = "Tanong at Sagot";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Isara");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
@@ -1315,7 +1315,7 @@ a[href^="mailto:"]:hover {
     const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Mangyaring maghintay sandali. Sasagot kami sa lalong madaling panahon.";
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Isumite";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="I-clear";
     const note = el("div","igdc-qa-note"); note.textContent="※ Ang mga simpleng tanong ay agad na sinasagot ng AI. Ang mga teknikal, error, o operasyong kaugnay na isyu ay awtomatikong ipinapasa sa admin Q&A.";
     const list = el("div","igdc-qa-threads");
 
@@ -1386,8 +1386,8 @@ a[href^="mailto:"]:hover {
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"S. (Naghihintay)";
+        const q = el("div","igdc-qa-thread-q"); q.textContent="T. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("S. "+row.answer):"S. (Naghihintay)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "Kahilingan sa Admin":"Pangkalahatan";
@@ -1470,7 +1470,7 @@ a[href^="mailto:"]:hover {
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] Nabigo ang pagsisimula ng auth:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -1498,7 +1498,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
           var b=document.createElement('div'); b.className='igdc-qa-backdrop';
           var p=document.createElement('div'); p.className='igdc-qa-panel';
           var h=document.createElement('div'); h.className='igdc-qa-header';
-          var t=document.createElement('div'); t.textContent='Q&A';
+          var t=document.createElement('div'); t.textContent='Tanong at Sagot';
           var x=document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
           var body=document.createElement('div'); body.className='igdc-qa-body'; body.textContent='Handa na ang koneksyon ng Q&A';
           h.appendChild(t); h.appendChild(x); p.appendChild(h); p.appendChild(body);
@@ -1569,14 +1569,14 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Tanong at Sagot';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
       body.innerHTML = '<div class="igdc-qa-note">Maa-activate ang buong functionality kapag nakakonekta na ang storage settings (Supabase url/key).</div>';
 
-      // ensure the "대표 이메일" is shown only inside the modal
+      // ensure the "Pangunahing email" is shown only inside the modal
       var ce = document.createElement('p');
       ce.className = 'contact-email';
       ce.innerHTML = 'Email ng Kinatawan: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
@@ -1671,7 +1671,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Tanong at Sagot';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
@@ -1921,7 +1921,7 @@ window.addEventListener("message",function(ev){
   - window.__IGDC_ROLE 존재
  --------------------------------------------------
  삽입 위치:
-  - 각 페이지 </body> 바로 위
+  - 각 페이지 before </body>
 */
 
 (function (window, document) {
@@ -1991,8 +1991,8 @@ window.addEventListener("message",function(ev){
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">Product Reviews</h3>
-          <div id="igdc-review-list" class="igdc-review-list">Loading...</div>
+          <h3 class="igdc-review-title">Mga review ng produkto</h3>
+          <div id="igdc-review-list" class="igdc-review-list">Naglo-load...</div>
           ${canWrite ? this.renderReviewForm() : this.renderLoginHint()}
         </section>
       `;
@@ -2007,7 +2007,7 @@ window.addEventListener("message",function(ev){
             maxlength="${this.config.maxReviewChars}"
             required></textarea>
           <div class="igdc-review-actions">
-            <button type="submit">Post Review</button>
+            <button type="submit">Mag-post ng review</button>
           </div>
         </form>
       `;
@@ -2015,7 +2015,7 @@ window.addEventListener("message",function(ev){
 
     renderLoginHint() {
       return `<div class="igdc-review-login-hint">
-        Review posting is available after logging in.
+        Maaaring mag-post ng review pagkatapos mag-log in.
       </div>`;
     },
 
@@ -2030,7 +2030,7 @@ window.addEventListener("message",function(ev){
         const content = textarea.value.trim();
 
         if (content.length < this.config.minReviewChars) {
-          alert(`Reviews must be at least ${this.config.minReviewChars} characters long.`);
+          alert(`Ang review ay dapat hindi bababa sa ${this.config.minReviewChars} character ang haba.`);
           return;
         }
 
@@ -2039,7 +2039,7 @@ window.addEventListener("message",function(ev){
             textarea.value = '';
             this.loadReviews(productId);
           })
-          .catch(() => alert('Review submission failed.'));
+          .catch(() => alert('Nabigo ang pagsusumite ng review.'));
       });
     },
 
@@ -2057,13 +2057,13 @@ window.addEventListener("message",function(ev){
         const data = await res.json();
 
         if (!Array.isArray(data) || data.length === 0) {
-          list.innerHTML = '<div class="igdc-review-empty">No reviews yet.</div>';
+          list.innerHTML = '<div class="igdc-review-empty">Wala pang review.</div>';
           return;
         }
 
         list.innerHTML = data.map(this.renderReviewItem).join('');
       } catch {
-        list.textContent = 'Failed to load reviews.';
+        list.textContent = 'Hindi na-load ang mga review.';
       }
     },
 
@@ -2180,7 +2180,7 @@ window.addEventListener("message",function(ev){
                color:#7a8da8;
                letter-spacing:.5px;
              ">
-            Loading
+            Naglo-load...
           </div>
 
         </div>

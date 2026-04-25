@@ -379,7 +379,7 @@
 /* Reinforce: 'تأكيد' 버튼은 가로(수평) 표기 유지 */
 .compose-wrap .row-bottom .button.tiny{ writing-mode:horizontal-tb; }
 
-/* === Scoped UI polish for 'الفئة + منظمة غير حكومية', 파일/اختر صورة 라인 === */
+/* === Scoped UI polish for 'الفئة + NGO', 파일/اختر صورة 라인 === */
 .field-category{
   display:flex; align-items:center; gap:10px;
   border:1px solid #d0d7de; border-radius:10px;
@@ -426,7 +426,7 @@
 .field-file .button.tiny, .field-image .button.tiny{ white-space:nowrap; }
 
 /* === Tweaks per latest instructions === */
-/* منظمة غير حكومية dropdown: about 1/3 of previous long width; keep compact */
+/* NGO dropdown: about 1/3 of previous long width; keep compact */
 .field-category select#postالفئة{
   width: 90px; min-width: 80px; max-width: 110px;
 }
@@ -451,7 +451,7 @@
   white-space: nowrap;
 }
 
-/* منظمة غير حكومية dropdown: cut to about half of prior setting */
+/* NGO dropdown: cut to about half of prior setting */
 .field-category select#postالفئة{
   width: 56px; min-width: 50px; max-width: 70px;
 }
@@ -1452,7 +1452,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "ابھی تک کوئی Q&A اندراج درج نہیں ہوا";
+  content: "ابھی تک کوئی سوال و جواب اندراج درج نہیں ہوا";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1470,7 +1470,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "ابھی تک کوئی Q&A اندراج درج نہیں ہوا";
+  content: "ابھی تک کوئی سوال و جواب اندراج درج نہیں ہوا";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -2427,7 +2427,7 @@ body{ direction: rtl !important; }
 .igdc-qa-btn.primary{background:#2563eb;color:#fff}
 .igdc-qa-btn.muted{background:#9ca3af;color:#fff}
 .igdc-qa-threads{display:flex;flex-direction:column;gap:10px;overflow:auto;border-top:1px solid #f3d9b0;padding-top:10px}
-.igdc-qa-threads:empty::before{content:"ابھی تک کوئی Q&A اندراج درج نہیں ہوا";display:block;padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;margin-top:8px;font-size:.95rem}
+.igdc-qa-threads:empty::before{content:"ابھی تک کوئی سوال و جواب اندراج درج نہیں ہوا";display:block;padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;margin-top:8px;font-size:.95rem}
 .igdc-qa-note,.contact-email{font:12px/1.4 system-ui;color:#666;direction:rtl;text-align:right}
 .contact-email a{color:#2563eb;text-decoration:underline}
 @media (max-width:900px){ .igdc-qa-panel{left:12px;width:min(92vw,560px)} }
@@ -2520,13 +2520,13 @@ body{ direction: rtl !important; }
 <div id="donationRows">
 
   <div class="feed-row" data-count="100">
-    <div class="row-label">أخبار عالمی خبریں</div>
+    <div class="row-label">عالمی خبریں</div>
     <div class="row-track thumb-grid thumb-scroller"
          data-psom-key="donation-global"></div>
   </div>
 
   <div class="feed-row" data-count="80">
-    <div class="row-label">منظمة غير حكومية</div>
+    <div class="row-label">NGO</div>
     <div class="row-track thumb-grid thumb-scroller"
          data-psom-key="donation-ngo"></div>
   </div>
@@ -2573,9 +2573,9 @@ body{ direction: rtl !important; }
 </main>
 <!-- Right (불변) -->
 <aside class="right">
-<div class="panel cafe-link"><a aria-label="الانتقال إلى WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
+<div class="panel cafe-link"><a aria-label="WAM NAVER Cafe پر جائیں" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
-<button class="button" onclick="alert('سيتم ربط نظام العطیہات قريبًا!')" style="margin-bottom:8px; padding:5px 14px;">العطیہات</button>
+<button class="button" onclick="alert('عطیہ کا نظام جلد منسلک کیا جائے گا!')" style="margin-bottom:8px; padding:5px 14px;">عطیہات</button>
 <p><b>IESF (International Exchange Service Foundation)</b><br/>
         - عمومی: NongHyup 301-0078-3333-51<br/>
         - Foreign Currency: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
@@ -2585,12 +2585,12 @@ body{ direction: rtl !important; }
 </div>
 <div class="feed-wrapper" id="iesfFeed" style="flex:1; overflow-y:auto;">
 </div>
-<div class="panel topic-panel"><h3>أخبار WAM و IESF</h3><div class="list" data-cat="iesf"></div></div><div class="panel topic-panel" id="topic_ngo">
-<h3>أخبار الNGO</h3>
+<div class="panel topic-panel"><h3>WAM اور IESF خبریں</h3><div class="list" data-cat="iesf"></div></div><div class="panel topic-panel" id="topic_ngo">
+<h3>NGO خبریں</h3>
 <div class="list" data-cat="ngo"></div>
 </div>
 <div class="panel topic-panel" id="topic_mission">
-<h3>أخبار المشن</h3>
+<h3>مشن خبریں</h3>
 <div class="list" data-cat="mission"></div>
 </div>
 <div class="panel topic-panel" id="topic_service">
@@ -2598,19 +2598,19 @@ body{ direction: rtl !important; }
 <div class="list" data-cat="service"></div>
 </div>
 <div class="panel topic-panel" id="topic_relief">
-<h3>نشاط الامداد</h3>
+<h3>امدادی سرگرمیاں</h3>
 <div class="list" data-cat="relief"></div>
 </div>
 <div class="panel topic-panel" id="topic_edu">
-<h3>أخبار التعلیم</h3>
+<h3>تعلیم کی خبریں</h3>
 <div class="list" data-cat="edu"></div>
 </div>
 <div class="panel topic-panel" id="topic_env">
-<h3>أخبار الماحول</h3>
+<h3>ماحولیات کی خبریں</h3>
 <div class="list" data-cat="env"></div>
 </div>
 <div class="panel topic-panel" id="topic_etc">
-<h3>أخبار دیگر</h3>
+<h3>دیگر خبریں</h3>
 <div class="list" data-cat="etc"></div>
 </div></aside>
 </div>
@@ -2677,7 +2677,7 @@ body{ direction: rtl !important; }
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(holder){
       const item = document.createElement('div');
-      item.className = 'item';
+      item.className = 'آئٹم';
       const imgSrc = imageLink || imagePreviewObjectUrl || null;
       item.innerHTML = `
         ${imgSrc ? `<div class="thumb" style="aspect-ratio:16/9; overflow:hidden; border-radius:6px; margin-bottom:6px;"><img src="${imgSrc}" style="width:100%; height:100%; object-fit:cover;"/></div>` : ""}
@@ -2690,7 +2690,7 @@ body{ direction: rtl !important; }
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">첨부 링크</a>` : `첨부: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">منسلکہ لنک</a>` : `منسلکہ: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2701,7 +2701,7 @@ body{ direction: rtl !important; }
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "첨부: " + fileAttach.files[0].name;
+        att.textContent = "منسلکہ: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2718,11 +2718,11 @@ body{ direction: rtl !important; }
 
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
-    const link = prompt("이미지 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 تأكيد을 누르세요)");
+    const link = prompt("اگر تصویر کا بیرونی لنک (URL) ہے تو اسے چسپاں کریں۔ اگر نہیں ہے تو تصدیق دبائیں۔");
     if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
-        alert("يمكن معاينة الصور حتى 2 ميغابايت مباشرة فقط. بالنسبة للملفات الكبيرة، يُرجى رفعها إلى تخزين خارجي وإدخال الرابط.");
+        alert("تصاویر کا پیش منظر صرف 2MB تک براہ راست دکھایا جا سکتا ہے۔ بڑی فائلوں کے لیے براہ کرم انہیں بیرونی اسٹوریج پر اپ لوڈ کر کے لنک درج کریں۔");
         imageLink = ""; imagePreviewObjectUrl = "";
       }else{
         imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
@@ -2735,11 +2735,11 @@ body{ direction: rtl !important; }
 
   btnFileOk && btnFileOk.addEventListener('click', ()=>{
     const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
-    const link = prompt("파일 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 تأكيد을 누르세요)");
+    const link = prompt("اگر فائل کا بیرونی لنک (URL) ہے تو اسے چسپاں کریں۔ اگر نہیں ہے تو تصدیق دبائیں۔");
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
-        alert("لا يمكن عرض اسم الملف مباشرة إلا للملفات حتى 5 ميغابايت. بالنسبة للملفات الكبيرة، يُرجى استخدام رابط تخزين خارجي فقط.");
+        alert("فائل کا نام براہ راست صرف 5MB تک کی فائلوں کے لیے دکھایا جا سکتا ہے۔ بڑی فائلوں کے لیے صرف بیرونی اسٹوریج لنک استعمال کریں۔");
         attachLink = "";
       }else{
         attachLink = f.name; // 파일명만 기록
@@ -2764,7 +2764,7 @@ body{ direction: rtl !important; }
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '개 파일');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + 'فائلیں');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2874,10 +2874,10 @@ body{ direction: rtl !important; }
     const b = (bodyI && bodyI.value.trim()) || '(بغیر مواد)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('تعذر العثور على قسم الأخبار.'); return; }
+    if(!holder){ alert('خبروں کا سیکشن نہیں مل سکا۔'); return; }
 
     const item = document.createElement('div');
-    item.className = 'item';
+    item.className = 'آئٹم';
     item.dataset.author = USER_ID;
     item.innerHTML = `
       <div class="title">${t}</div>
@@ -2891,7 +2891,7 @@ body{ direction: rtl !important; }
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = '첨부: ' + f.name;
+        li.textContent = 'منسلکہ: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
@@ -2904,7 +2904,7 @@ body{ direction: rtl !important; }
     const canحذف = (USER_ROLE==='admin' || USER_ROLE==='writer');
     if(canحذف) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 حذف하시겠습니까?')) return;
+      if(!confirm('کیا آپ یہ خبر حذف کرنا چاہتے ہیں؟')) return;
       item.remove();
     });
 
@@ -2971,13 +2971,13 @@ body{ direction: rtl !important; }
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '개 파일');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + 'فائلیں');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 모두 제거'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','تمام منسلکات ہٹائیں'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attachPreview.appendChild(chip);
@@ -3092,7 +3092,7 @@ body{ direction: rtl !important; }
   function updateالعنوانPreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'العنوان Not entered';
+    tpText.textContent = t || 'عنوان درج نہیں کیا گیا';
   }
 
   if(btnDraft){
@@ -3129,7 +3129,7 @@ body{ direction: rtl !important; }
     btn.style.cssText='margin-top:6px; display:none;';
     if(canShowحذفFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 حذف하시겠습니까?')) return;
+      if(!confirm('کیا آپ یہ خبر حذف کرنا چاہتے ہیں؟')) return;
       item.remove();
     });
     item.appendChild(btn);
@@ -3144,7 +3144,7 @@ body{ direction: rtl !important; }
       muts.forEach(m=>{
         m.addedNodes && Array.from(m.addedNodes).forEach(node=>{
           if(node && node.nodeType===1){
-            if(node.classList.contains('item')) ensureحذف(node);
+            if(node.classList.contains('آئٹم')) ensureحذف(node);
             // Nested case: if a wrapper was added, scan inside
             node.querySelectorAll && node.querySelectorAll('.item').forEach(ensureحذف);
           }
@@ -3232,7 +3232,7 @@ body{ direction: rtl !important; }
     const mo = new MutationObserver(muts=>{
       muts.forEach(m=>{
         m.addedNodes && Array.from(m.addedNodes).forEach(n=>{
-          if(n.nodeType===1 && n.classList.contains('item')) normalizeItem(n);
+          if(n.nodeType===1 && n.classList.contains('آئٹم')) normalizeItem(n);
         });
       });
     });
@@ -3272,7 +3272,7 @@ body{ direction: rtl !important; }
     npالعنوان.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">منسلکہ</div>' + attachHtml) : '';
 
     openModal();
   }, true);
@@ -3283,9 +3283,9 @@ body{ direction: rtl !important; }
 <div id="enInfo" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
-<label style="font-size:.85rem;">العنوان</label>
+<label style="font-size:.85rem;">عنوان</label>
 <input id="enالعنوان" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;" type="text"/>
-<label style="font-size:.85rem;">Content</label>
+<label style="font-size:.85rem;">مواد</label>
 <textarea id="enBody" rows="8" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;"></textarea>
 </div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
@@ -3473,7 +3473,7 @@ body{ direction: rtl !important; }
     let btnDel  = footer.querySelector('.delete-post');
     if(!btnEdit){
       btnEdit = document.createElement('button');
-      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
+      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='ترمیم';
       footer.appendChild(btnEdit);
       btnEdit.addEventListener('click', (e)=>{
         e.stopPropagation();
@@ -3494,7 +3494,7 @@ body{ direction: rtl !important; }
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('이 소식을 حذف하시겠습니까?')) return;
+        if(!confirm('کیا آپ یہ خبر حذف کرنا چاہتے ہیں؟')) return;
         item.remove();
       });
     }
@@ -3551,7 +3551,7 @@ body{ direction: rtl !important; }
       muts.forEach(m=>{
         if(m.addedNodes && m.addedNodes.length){
           m.addedNodes.forEach(n=>{
-            if(n.nodeType===1 && n.classList && n.classList.contains('item')){
+            if(n.nodeType===1 && n.classList && n.classList.contains('آئٹم')){
               ensureFooterWithIcons(n);
             }
           });
@@ -3625,7 +3625,7 @@ body{ direction: rtl !important; }
     const mo = new MutationObserver(muts=>{
       muts.forEach(m=>{
         m.addedNodes && Array.from(m.addedNodes).forEach(n=>{
-          if(n.nodeType===1 && n.classList.contains('item')) normalizeحذف(n);
+          if(n.nodeType===1 && n.classList.contains('آئٹم')) normalizeحذف(n);
         });
       });
     });
@@ -3668,7 +3668,7 @@ body{ direction: rtl !important; }
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
 
     const t = tpl.querySelector('.card-title');
-    if(t) t.textContent = 'العنوان';
+    if(t) t.textContent = 'عنوان';
 
     const m = tpl.querySelector('.card-meta');
     if(m) m.textContent = '-';
@@ -3753,8 +3753,8 @@ body{ direction: rtl !important; }
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("تم استلام طلب الشراء."); } else { alert("فشل طلب الشراء"); }
-    }catch(e){ console.warn(e); alert("خطأ في الشبكة"); }
+      if (res.ok){ alert("آپ کی خریداری کی درخواست موصول ہو گئی ہے۔"); } else { alert("خریداری کی درخواست ناکام ہو گئی۔"); }
+    }catch(e){ console.warn(e); alert("نیٹ ورک کی خرابی۔"); }
   };
 
   // 정산
@@ -3762,8 +3762,8 @@ body{ direction: rtl !important; }
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("تم استلام طلب التسوية."); } else { alert("فشل طلب التسوية"); }
-    }catch(e){ console.warn(e); alert("خطأ في الشبكة"); }
+      if (res.ok){ alert("آپ کی تصفیہ درخواست موصول ہو گئی ہے۔"); } else { alert("تصفیہ درخواست ناکام ہو گئی۔"); }
+    }catch(e){ console.warn(e); alert("نیٹ ورک کی خرابی۔"); }
   };
 
   // (옵션) Web3/블록체인 액션 – 서버 프록시 전용
@@ -3772,9 +3772,9 @@ body{ direction: rtl !important; }
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("اكتمل طلب معالجة البلوكشين: " + (j.txHash||"대기")); }
-      else { alert("فشلت معالجة البلوكشين"); }
-    }catch(e){ console.warn(e); alert("خطأ في الشبكة"); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("بلاک چین پروسیسنگ کی درخواست مکمل ہو گئی: " + (j.txHash||"زیر التوا")); }
+      else { alert("بلاک چین پروسیسنگ ناکام ہو گئی"); }
+    }catch(e){ console.warn(e); alert("نیٹ ورک کی خرابی۔"); }
   };
 })();
 </script>
@@ -3812,7 +3812,7 @@ body{ direction: rtl !important; }
             a.setAttribute('data-product-id', item.id || '');
 
             var img = document.createElement('img');
-            img.alt = item.title || 'item';
+            img.alt = item.title || 'آئٹم';
             img.loading = 'lazy';
             img.referrerPolicy = 'no-referrer';
             img.src = item.thumb || item.image || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
@@ -3837,7 +3837,7 @@ body{ direction: rtl !important; }
               a.href = item.url || '#';
               a.setAttribute('data-product-id', item.id || '');
               var img = document.createElement('img');
-              img.alt = item.title || 'item';
+              img.alt = item.title || 'آئٹم';
               img.loading = 'lazy';
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
@@ -3913,7 +3913,7 @@ body{ direction: rtl !important; }
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","정액 기부 금액");
+  btnGroup.setAttribute("aria-label","مقررہ عطیہ رقم");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -3928,7 +3928,7 @@ body{ direction: rtl !important; }
   // === 안내 문구 ===
   const note = document.createElement("div");
   note.className = "donation-note";
-  note.textContent = "عطیہات الضيوف متاحة فقط ضمن نطاق 5–50 دولارًا. للمبالغ الأكبر، يرجى استخدام معلومات التحويل البنكي أدناه.";
+  note.textContent = "مہمان عطیات صرف 5–50 ڈالر کی حد میں دستیاب ہیں۔ بڑی رقم کے لیے نیچے دی گئی بینک ٹرانسفر معلومات استعمال کریں۔";
   donationDiv.appendChild(note);
 
   // === 구분선 ===
@@ -3939,16 +3939,16 @@ body{ direction: rtl !important; }
   // === Account 안내 박스 ===
   const accountBox = document.createElement("div");
   accountBox.className = "account-box";
-  accountBox.setAttribute("aria-label","معلومات التحويل البنكي");
+  accountBox.setAttribute("aria-label","بینک ٹرانسفر معلومات");
 
   accountBox.innerHTML = `
     <div><b>IESF (International Exchange Service Foundation)</b></div>
-    <div>عمومی: 농협 301-0078-3333-51</div>
+    <div>عمومی: NongHyup 301-0078-3333-51</div>
     <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
     <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
-    <div>عمومی: 신한 100-026-331592</div>
+    <div>عمومی: Shinhan 100-026-331592</div>
     <div>Foreign Currency: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
@@ -3962,7 +3962,7 @@ body{ direction: rtl !important; }
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      alert(`منتخب رقم: ₩${Number(amt).toLocaleString()}\n\nبراہ کرم نیچے دیے گئے Account میں ٹرانسفر کریں۔`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -3991,10 +3991,10 @@ body{ direction: rtl !important; }
 <script>(function(){try{document.querySelectorAll(".donation-inline,.donation-buttons").forEach(function(n){n.remove();});}catch(e){}})();</script>
 <div aria-hidden="true" class="donate-modal-backdrop" id="donateModalBackdrop">
 <div aria-labelledby="donateModalالعنوان" aria-modal="true" class="donate-modal" role="dialog">
-<h3 id="donateModalالعنوان">اختر مؤسسة العطیہ</h3>
+<h3 id="donateModalالعنوان">عطیہ تنظیم منتخب کریں</h3>
 <div class="donate-actions">
-<button data-org="IESF" type="button">العطیہ إلى IESF</button>
-<button data-org="WAM" type="button">العطیہ إلى WAM</button>
+<button data-org="IESF" type="button">IESF کو عطیہ کریں</button>
+<button data-org="WAM" type="button">WAM کو عطیہ کریں</button>
 </div>
 <button class="donate-close" type="button">بند کریں</button>
 </div>
@@ -4023,11 +4023,11 @@ body{ direction: rtl !important; }
           // Fallback: scroll to right panel account options
           const anchor = document.querySelector('#rightDonationOptions') || document.querySelector('.account-section');
           if(anchor){ anchor.scrollIntoView({behavior:'smooth'}); }
-          else { alert('واجهة برمجة تطبيقات الدفع غير متصلة. دائیں پینل سے اکاؤنٹ منتخب کریں.'); }
+          else { alert('ادائیگی API منسلک نہیں ہے۔ دائیں پینل سے اکاؤنٹ منتخب کریں۔'); }
         }
       }catch(err){
         console.error(err);
-        alert('حدثت مشكلة أثناء طلب الدفع.');
+        alert('ادائیگی کی درخواست کے دوران مسئلہ پیش آیا۔');
       } finally {
         closeعطیہModal();
       }
@@ -4159,7 +4159,7 @@ document.addEventListener('DOMContentLoaded', function(){
       const hasReal = children.some(function(node){
         return node.nodeType === 1 &&
                node.classList &&
-               node.classList.contains('item') &&
+               node.classList.contains('آئٹم') &&
                !node.classList.contains('placeholder');
       });
 
@@ -4376,11 +4376,11 @@ document.addEventListener('DOMContentLoaded', function(){
     const lQ = el("label"); lQ.textContent="سؤال";
     const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="الرجاء إدخال سؤالك...";
     const lA = el("label"); lA.textContent="جواب";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="براہ کرم کچھ دیر انتظار کریںً. سيتم تقديم جواب قريبًا.";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="براہ کرم تھوڑی دیر انتظار کریں۔ ہم جلد جواب دیں گے۔";
     const actions = el("div","igdc-qa-actions");
     const btnSave = el("button","igdc-qa-btn primary"); btnSave.textContent="جمع کریں";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="صاف کریں";
-    const note = el("div","igdc-qa-note"); note.textContent="※ تتم جواب على الأسئلة البسيطة فورًا بواسطة الذكاء الاصطناعي. أما المشكلات التقنية أو الأخطاء أو الأمور التشغيلية فسيتم تحويلها تلقائيًا إلى قسم أسئلة وأجوبة الإدارة.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ سادہ سوالات کا جواب AI فوری طور پر دیتا ہے۔ تکنیکی، خرابی یا آپریشن سے متعلق مسائل خودکار طور پر Admin Q&A کو بھیج دیے جاتے ہیں۔";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -4454,10 +4454,10 @@ document.addEventListener('DOMContentLoaded', function(){
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="س. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("ج. "+row.answer):"ج. (زیر التوا)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "طلب الإدارة":"عام";
+        const tag = el("span"); tag.textContent = row.is_admin? "انتظامی درخواست":"عام";
         const actions = el("div","igdc-qa-thread-actions");
         const canحذف = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
         if(canحذف){
@@ -4465,7 +4465,7 @@ document.addEventListener('DOMContentLoaded', function(){
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("فشل الحذف (إذن/سياسة)"); return; }
+            if(error){ alert("حذف ناکام ہوا (اجازت/پالیسی)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -4488,9 +4488,9 @@ document.addEventListener('DOMContentLoaded', function(){
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 تأكيد 후 회신됩니다.";
-          else if(/price|cost|fee|가격|비용|요금/i.test(text)) answer="للحصول على معلومات الأسعار/الرسوم، يرجى الرجوع إلى الإرشادات في هذه الصفحة وترك أي استفسارات إضافية.";
-          else answer="문의 감사합니다. 빠르게 تأكيد하여 도와드리겠습니다.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="آپریشن سے متعلق سوال کا جواب منتظم کی تصدیق کے بعد دیا جائے گا۔";
+          else if(/price|cost|fee|가격|비용|요금/i.test(text)) answer="قیمت/فیس کی معلومات کے لیے اس صفحے کی رہنمائی دیکھیں اور مزید سوالات درج کریں۔";
+          else answer="آپ کے سوال کا شکریہ۔ ہم جلد تصدیق کر کے مدد کریں گے۔";
         }
       }
       return { technical, answer };
@@ -4504,7 +4504,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("حفظ 설정(Supabase url/key)이 아직 연결되지 않아 서버 حفظ은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        alert("محفوظ کرنے کی ترتیبات (Supabase url/key) ابھی منسلک نہیں ہیں، اس لیے سرور پر محفوظ کرنا غیر فعال ہے۔ ویب پر تعیناتی کے وقت SUPER_VARSAR.url/anonKey ترتیب دیں تو خودکار طور پر منسلک ہو جائے گا۔");
         return;
       }
       const record = {
@@ -4514,7 +4514,7 @@ document.addEventListener('DOMContentLoaded', function(){
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("فشل التسجيل"); return; }
+      if(error){ alert("اندراج ناکام ہو گیا۔"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -4576,7 +4576,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         bk=document.createElement('div');
         bk.id='drawerBackdrop';
         bk.className='drawer-backdrop';
-        document.body/*__KILL__*/ appendChild_DISABLED(bk);
+        document.body.appendChild(bk);
         bk.addEventListener('click',close,{passive:true});
       }
     }
@@ -5098,7 +5098,7 @@ window.addEventListener("message",function(ev){
       muts.forEach(function(m){
         (m.addedNodes || []).forEach(function(n){
           if(n.nodeType !== 1) return;
-          if(n.classList.contains('item')){
+          if(n.classList.contains('آئٹم')){
             markHasAttach(n);
             normalizeItemFooter(n);
           }else if(n.querySelectorAll){
@@ -5140,12 +5140,12 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npالعنوان.textContent = title || 'العنوان 없음';
+    npالعنوان.textContent = title || 'بلا عنوان';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(등록된 본문이 없습니다.)';
+    npBody.textContent = body || '(کوئی متن درج نہیں ہے۔)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">منسلکہ</div>' + attachHtml
         : '';
     }
 
@@ -5266,7 +5266,7 @@ window.addEventListener("message",function(ev){
 
 <script id="hero-linebreak-fix">
 (function(){
-  function nobreak(s){ return s.replace(/منظمة غير حكومية와\s*공유하며/g, "منظمة غير حكومية와\u00A0공유하며"); }
+  function nobreak(s){ return s.replace(/NGO와\s*공유하며/g, "NGO와\u00A0공유하며"); }
   var el = document.getElementById("topPostBody");
   if(el){
     if(el.value !== undefined){ el.value = nobreak(el.value); }
@@ -5483,9 +5483,9 @@ window.addEventListener("message",function(ev){
     card.innerHTML = `
       <div class="thumb"></div>
       <div class="card-body">
-        <div class="card-title">جارٍ التحميل...</div>
+        <div class="card-title">لوڈ ہو رہا ہے...</div>
         <div class="card-meta">-</div>
-        <div class="card-preview">جارٍ الإعداد</div>
+        <div class="card-preview">تیاری جاری ہے</div>
       </div>
     `;
 

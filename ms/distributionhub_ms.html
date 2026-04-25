@@ -1,7 +1,7 @@
 <!-- patched: ad-* classes renamed to brand-* to avoid adblock; media query hiding adjusted only via class rename. -->
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="ms">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
@@ -314,7 +314,7 @@
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Belum ada entri Q&A yang didaftarkan";
+  content: "Belum ada entri soal jawab yang disiarkan";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -332,7 +332,7 @@
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Belum ada entri Q&A yang didaftarkan";
+  content: "Belum ada entri soal jawab yang disiarkan";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1011,7 +1011,7 @@
 <a href="mediahub.html">🎬 Hab Media</a>
 <a href="tour.html">🧳 Perjalanan · Pelancongan · Penginapan</a>
 <a href="literature_academic.html">📚 Pertukaran Sastera &amp; Akademik</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Pertanyaan Q&amp;A</a>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Soal Jawab</a>
 </div>
 <main class="main-content" style="margin:0">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
@@ -1077,7 +1077,7 @@
     d.className = 'thumb-card placeholder';
     d.innerHTML = `
       <div class="thumb-img"></div>
-      <div class="thumb-title">Auto-filled</div>
+      <div class="thumb-title">Diisi automatik</div>
     `;
     return d;
   }
@@ -1263,7 +1263,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent="Soal Jawab";
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
@@ -1405,9 +1405,9 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
 
   async function showDetail(node, placement){
     const info = resolveInfo(node);
-    el.title.textContent = info.title || '상세 보기';
+    el.title.textContent = info.title || 'Lihat butiran';
     if (info.img) el.img.src = info.img;
-    el.desc.textContent = '불러오는 중…';
+    el.desc.textContent = 'Memuatkan…';
     el.btnCta.disabled = true;
 
     // stash
@@ -1421,13 +1421,13 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     try{
       if (info.id){
         const detail = await fetchJSON(`/api/items/${encodeURIComponent(info.id)}`);
-        el.title.textContent = detail.title || info.title || '상세 보기';
+        el.title.textContent = detail.title || info.title || 'Lihat butiran';
         if (detail.image) el.img.src = detail.image;
         el.desc.textContent = detail.description || '';
         if (detail.ctaLabel) el.btnCta.textContent = detail.ctaLabel;
         if (detail.href) href = detail.href;
       } else {
-        el.desc.textContent = el.desc.textContent==='불러오는 중…' ? '' : el.desc.textContent;
+        el.desc.textContent = el.desc.textContent==='Memuatkan…' ? '' : el.desc.textContent;
       }
     }catch(_){ el.desc.textContent = ''; }
 
@@ -1453,11 +1453,11 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     // Feedback handlers (optional)
     el.btnLike.onclick = async function(){
       const id = this.dataset.itemId || info.id; if(!id) return;
-      try{ await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); this.textContent='Liked'; this.disabled=true; }catch(_){}
+      try{ await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); this.textContent='Disukai'; this.disabled=true; }catch(_){}
     };
     el.btnRec.onclick = async function(){
       const id = this.dataset.itemId || info.id; if(!id) return;
-      try{ await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); this.textContent='Recommended'; this.disabled=true; }catch(_){}
+      try{ await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); this.textContent='Disyorkan'; this.disabled=true; }catch(_){}
     };
   }
 
@@ -1589,7 +1589,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase credentials/library not configured: UI is visible but saving is disabled.");
+      console.warn("[Soal Jawab] Supabase credentials/library not configured: UI is visible but saving is disabled.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -1626,8 +1626,8 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Sila tunggu sebentar dan kami akan menjawab sebentar lagi.";
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Hantar";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Soalan mudah dijawab serta-merta oleh AI. Isu teknikal, ralat atau operasi akan dihantar secara automatik ke admin Q&A.";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent='Kosongkan';
+    const note = el("div","igdc-qa-note"); note.textContent="※ Soalan mudah dijawab serta-merta oleh AI. Isu teknikal, ralat atau operasi akan dihantar secara automatik ke admin Soal Jawab.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -1697,8 +1697,8 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"J. (Menunggu)";
+        const q = el("div","igdc-qa-thread-q"); q.textContent='S. '+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?('J. '+row.answer):"J. (Menunggu)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "Permintaan Admin":"Umum";
@@ -1781,7 +1781,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth initialization failed:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Soal Jawab] auth initialization failed:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -1822,7 +1822,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   };
 
   // ===== 2) AI Recommend·회전(로테이션) 보강 =====
-  // 조건: Product 카드가 거의 없거나(3개 미만) 썸네일이 비어 있으면 → 서버 Recommend을 요청해 채움.
+  // 조건: Produk 카드가 거의 없거나(3개 미만) 썸네일이 비어 있으면 → 서버 Recommend을 요청해 채움.
   document.addEventListener('DOMContentLoaded', function(){
     try{
       // 컨테이너 후보 탐색
@@ -1867,7 +1867,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || item.name || 'Product';
+              t.textContent = item.title || item.name || 'Produk';
 
               a.appendChild(img);
               a.appendChild(t);
@@ -1893,7 +1893,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || 'Product';
+              t.textContent = item.title || 'Produk';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -1932,7 +1932,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   } else {
     hideLiteratureAcademic();
   }
-})(
+})();
+</script>
 <!-- Minimal runtime to toggle off-canvas; no bindings to existing logic -->
 <script id="ml-offcanvas-js">
 (function(){
@@ -2082,10 +2083,10 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       }
       var title = document.createElement("div");
       title.className = "thumb-title";
-      title.textContent = (item && item.title) ? item.title : "Recommended";
+      title.textContent = (item && item.title) ? item.title : "Disyorkan";
       var meta = document.createElement("div");
       meta.className = "thumb-meta";
-      meta.textContent = (item && item.meta) ? item.meta : "Auto-filled";
+      meta.textContent = (item && item.meta) ? item.meta : "Diisi automatik";
       card.appendChild(img);
       card.appendChild(title);
       card.appendChild(meta);
@@ -2361,79 +2362,27 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <script id="igdc-qa-ensure-modal">
 (function(){
   if (window.__IGDC_QA_ENSURE__) return; window.__IGDC_QA_ENSURE__ = true;
-
   function ensureModal(){
     var modal = document.querySelector('.igdc-qa-modal');
     if(!modal){
-      // minimal modal skeleton
-      var m = document.createElement('div'); m.className='igdc-qa-modal';
-      var b = document.createElement('div'); b.className='igdc-qa-backdrop';
-      var p = document.createElement('div'); p.className='igdc-qa-panel';
-      var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
-      var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
-      h.appendChild(t); h.appendChild(x);
-
-      var body = document.createElement('div'); body.className='igdc-qa-body';
-      body.innerHTML = '<div class="igdc-qa-note">Semua ciri akan diaktifkan selepas tetapan simpanan (Supabase url/key) disambungkan.</div>';
-
-      // ensure the "대표 이메일" is shown only inside the modal
-      var ce = document.createElement('p');
-      ce.className = 'contact-email';
-      ce.innerHTML = 'E-mel Wakil: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-      body.appendChild(ce);
-
-      p.appendChild(h); p.appendChild(body);
-      m.appendChild(b); m.appendChild(p);
-      document.body.appendChild(m);
-
-      function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }
-      x.addEventListener('click', close);
-      b.addEventListener('click', close);
-
-      window.IGDC_QA = window.IGDC_QA || {};
-      if (!window.IGDC_QA.open) window.IGDC_QA.open = open;
-    }else{
-      // if exists, make sure contact email is present exactly once
-      var body = modal.querySelector('.igdc-qa-body') || modal;
-      if(body && !body.querySelector('.contact-email')){
-        var ce = document.createElement('p');
-        ce.className = 'contact-email';
-        ce.innerHTML = 'E-mel Wakil: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        body.appendChild(ce);
-      }
+      modal = document.createElement('div'); modal.className='igdc-qa-modal';
+      var b=document.createElement('div'); b.className='igdc-qa-backdrop';
+      var p=document.createElement('div'); p.className='igdc-qa-panel';
+      var h=document.createElement('div'); h.className='igdc-qa-header';
+      var t=document.createElement('div'); t.className='igdc-qa-title'; t.textContent="Soal Jawab";
+      var x=document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;'; x.setAttribute('aria-label','close');
+      var body=document.createElement('div'); body.className='igdc-qa-body';
+      var note=document.createElement('div'); note.className='igdc-qa-note'; note.textContent="Belum ada entri soal jawab yang disiarkan";
+      body.appendChild(note); h.appendChild(t); h.appendChild(x); p.appendChild(h); p.appendChild(body); modal.appendChild(b); modal.appendChild(p); document.body.appendChild(modal);
+      function close(){ modal.classList.remove('open'); setTimeout(function(){ modal.style.display='none'; },180); }
+      function open(){ modal.style.display='block'; requestAnimationFrame(function(){ modal.classList.add('open'); }); }
+      x.addEventListener('click', close); b.addEventListener('click', close);
+      window.IGDC_QA = window.IGDC_QA || {}; if(!window.IGDC_QA.open) window.IGDC_QA.open=open;
     }
+    var btn=document.getElementById('qnaOpenBtn');
+    if(btn && !btn.__qnaEnsureBound){ btn.__qnaEnsureBound=true; btn.addEventListener('click', function(e){ e.preventDefault(); if(window.IGDC_QA && typeof window.IGDC_QA.open==='function') window.IGDC_QA.open(); }); }
   }
-
-  function stripFooterEmail(){
-    try{
-      var footers = document.querySelectorAll('footer');
-      footers.forEach(function(f){
-        f.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
-          var parent = a.parentNode;
-          if(parent){
-            parent.removeChild(a);
-            var html = parent.innerHTML;
-            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
-            html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
-            parent.innerHTML = html;
-          }
-        });
-        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
-      });
-    }catch(e){}
-  }
-
-  function run(){
-    stripFooterEmail();
-    ensureModal();
-  }
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', run, {once:true});
-  } else {
-    run();
-  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', ensureModal, {once:true}); else ensureModal();
 })();
 </script>
 <script id="igdc-qa-email-ensure">
@@ -2472,7 +2421,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent="Soal Jawab";
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
@@ -2806,7 +2755,7 @@ window.addEventListener("message",function(ev){
       var title = document.querySelector('#mobile-ad-rail-wrap .rail-title, #mobile-ad-rail-wrap h3, #mobile-ad-rail-wrap header h3');
       if (title){
         var t=(title.textContent||'').trim();
-        if (t.length>8) title.textContent='💎 Recommend 브랜드 💎';
+        if (t.length>8) title.textContent='💎 Jenama Disyorkan 💎';
       }
       // Capture-phase guard to preserve native vertical scroll
       var zone = list || wrap;
@@ -2942,12 +2891,12 @@ window.addEventListener("message",function(ev){
 </script>
 <script id="igdc-product-review-script">
 /*
- IGDC Product Review – Auto Hook Version
+ IGDC Produk Review – Auto Hook Version
  - Distribution page thumbnail click auto-detect
- - Product detail review auto-mount (Coupang-style)
+ - Produk detail review auto-mount (Coupang-style)
  *
  * Requirement:
- *  - Product thumbnail or detail container must have: data-product-id="..."
+ *  - Produk thumbnail or detail container must have: data-product-id="..."
  *  - window.__IGDC_ROLE (guest | member | admin ...)
  */
 
@@ -2982,7 +2931,7 @@ window.addEventListener("message",function(ev){
         const productId = card.dataset.productId;
         if (!productId) return;
 
-        // 상세 Product이 열릴 시간을 약간 준 뒤 마운트
+        // 상세 Produk이 열릴 시간을 약간 준 뒤 마운트
         setTimeout(() => {
           this.mount(productId);
         }, 50);
@@ -3009,7 +2958,7 @@ window.addEventListener("message",function(ev){
         root = document.createElement('div');
         root.id = this.config.rootId;
 
-        // 상세 Product 영역 하단에 삽입
+        // 상세 Produk 영역 하단에 삽입
         const detail =
           document.querySelector('.product-detail') ||
           document.querySelector('.product-modal') ||
@@ -3024,8 +2973,8 @@ window.addEventListener("message",function(ev){
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">Product Reviews</h3>
-          <div id="igdc-review-list" class="igdc-review-list">Loading...</div>
+          <h3 class="igdc-review-title">Ulasan Produk</h3>
+          <div id="igdc-review-list" class="igdc-review-list">Memuatkan...</div>
           ${canWrite ? this.renderForm() : this.renderLoginHint()}
         </section>
       `;

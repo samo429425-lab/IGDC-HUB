@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html lang="ko">
+<html lang="sv">
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
@@ -309,7 +309,7 @@
     .igdc-qa-btn.primary{background:#2563eb;color:#fff}
     .igdc-qa-btn.muted{background:#9ca3af;color:#fff}
     .igdc-qa-threads{display:flex;flex-direction:column;gap:10px;overflow:auto;border-top:1px solid #f3d9b0;padding-top:10px}
-    .igdc-qa-threads:empty::before{content:"Inga Q&A-poster har publicerats ännu";display:block;padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;margin-top:8px;font-size:.95rem}
+    .igdc-qa-threads:empty::before{content:"Inga Frågor och svar-poster har publicerats ännu";display:block;padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;margin-top:8px;font-size:.95rem}
     .igdc-qa-thread{border:1px solid #f3d9b0;border-radius:12px;padding:10px 12px;background:#fffdf8}
     .igdc-qa-thread-q{font:700 13px/1.5 system-ui;color:#222}
     .igdc-qa-thread-a{font:13px/1.5 system-ui;color:#333;margin-top:6px}
@@ -348,12 +348,12 @@
 <a href="mediahub.html">🎬 Mediehubb</a>
 <a href="tour.html">🧳 Resor · Turism · Boende</a>
 <a href="literature_academic">📚 Litterärt och akademiskt utbyte</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A-förfrågningar</a>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Frågor och svar</a>
 </div>
 <div class="main-content">
 <section class="section-blockchain">
 <a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
-<a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
+<a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">ÖppnaSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
 </section>
@@ -464,11 +464,11 @@
             var b = document.createElement('div'); b.className='igdc-qa-backdrop';
             var p = document.createElement('div'); p.className='igdc-qa-panel';
             var h = document.createElement('div'); h.className='igdc-qa-header';
-            var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+            var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Frågor och svar';
             var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
             h.appendChild(t); h.appendChild(x);
             var body = document.createElement('div'); body.className='igdc-qa-body';
-            body.innerHTML = '<label>Fråga</label><textarea class="igdc-qa-text q" placeholder="Ange din fråga..."></textarea><label>Svar</label><textarea class="igdc-qa-text a" placeholder="Vänligen vänta en stund. Vi återkommer snart."></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">Skicka</button><button class="igdc-qa-btn muted">Rensa</button></div><div class="igdc-qa-note">※ Enkla frågor besvaras omedelbart av AI. Tekniska, felrelaterade eller driftsrelaterade frågor skickas automatiskt vidare till admin-Q&A.</div><div class="igdc-qa-threads"></div><p class="contact-email">Representativ e-post: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
+            body.innerHTML = '<label>Fråga</label><textarea class="igdc-qa-text q" placeholder="Ange din fråga..."></textarea><label>Svar</label><textarea class="igdc-qa-text a" placeholder="Vänligen vänta en stund. Vi återkommer snart."></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">Skicka</button><button class="igdc-qa-btn muted">Rensa</button></div><div class="igdc-qa-note">※ Enkla frågor besvaras omedelbart av AI. Tekniska, felrelaterade eller driftsrelaterade frågor skickas automatiskt vidare till admin-Frågor och svar.</div><div class="igdc-qa-threads"></div><p class="contact-email">Representativ e-post: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
             p.appendChild(h); p.appendChild(body); m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
             function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
             function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
@@ -505,13 +505,13 @@
       function mountUI(){
         const existing = document.querySelector('.igdc-qa-modal'); if(existing){ return bindExisting(existing); }
         const modal = el('div','igdc-qa-modal'); const backdrop = el('div','igdc-qa-backdrop'); const panel = el('div','igdc-qa-panel');
-        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='Q&A'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','Close');
+        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='Frågor och svar'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','Stäng');
         header.append(title, close);
         const body = el('div','igdc-qa-body');
         const lQ = el('label'); lQ.textContent='Fråga'; const tQ = el('textarea','igdc-qa-text q'); tQ.placeholder='Ange din fråga...';
         const lA = el('label'); lA.textContent='Svar'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='Vänligen vänta en stund. Vi återkommer snart.';
-        const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='Skicka'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='Clear';
-        const note = el('div','igdc-qa-note'); note.textContent='※ Enkla frågor besvaras omedelbart av AI. Tekniska, felrelaterade eller driftsrelaterade frågor skickas automatiskt vidare till admin-Q&A.';
+        const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='Skicka'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='Rensa';
+        const note = el('div','igdc-qa-note'); note.textContent='※ Enkla frågor besvaras omedelbart av AI. Tekniska, felrelaterade eller driftsrelaterade frågor skickas automatiskt vidare till admin-Frågor och svar.';
         const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='Representativ e-post: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
         actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
         return bindExisting(modal);
@@ -530,8 +530,8 @@
         btnClear && btnClear.addEventListener('click', ()=>{ if(tQ) tQ.value=''; if(tA) tA.value=''; });
         async function fetchThreads(){ const sb = await ensureSupabase(); if(!sb || !list) return; const { data } = await sb.from('igdc_qna_threads').select('*').eq('project', STATE.project).eq('page_id', STATE.pageId).order('created_at', { ascending:false }).limit(100); renderList(data||[]); }
         function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='Q. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('A. '+row.answer):'S. (Väntar)'; box.append(q,a); list.append(box); }); }
-        async function autoAnswerIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'Please refer to the information on this page for pricing and fees. Leave an additional inquiry if needed.':'Thank you for your inquiry. We will review it promptly and assist you.'; } } return { technical, answer }; }
-        async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoAnswerIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'Your inquiry has been received.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
+        async function autoAnswerIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'Se informationen på denna sida för priser och avgifter. Lämna gärna en extra fråga vid behov.':'Tack för din fråga. Vi granskar den så snart som möjligt och hjälper dig vidare.'; } } return { technical, answer }; }
+        async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoAnswerIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'Din förfrågan har mottagits.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
         btnSubmit && btnSubmit.addEventListener('click', submit);
         window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
         fetchThreads(); return modal;
@@ -557,15 +557,15 @@
 <script>
     (function(){
       var DEMO = {
-        'social-youtube': { icon:'▶️', title:'YouTube', row:'Row 1 · Förhandsvisning' },
-        'social-instagram': { icon:'📷', title:'Instagram', row:'Row 2 · Förhandsvisning' },
-        'social-tiktok': { icon:'🎵', title:'TikTok', row:'Row 3 · Förhandsvisning' },
-        'social-facebook': { icon:'📘', title:'Facebook', row:'Row 4 · Förhandsvisning' },
-        'social-wechat': { icon:'💬', title:'WeChat', row:'Row 5 · Förhandsvisning' },
-        'social-weibo': { icon:'🌐', title:'Weibo', row:'Row 6 · Förhandsvisning' },
-        'social-pinterest': { icon:'📌', title:'Pinterest', row:'Row 7 · Förhandsvisning' },
-        'social-reddit': { icon:'👽', title:'Reddit', row:'Row 8 · Förhandsvisning' },
-        'social-twitter': { icon:'✖️', title:'X (Twitter)', row:'Row 9 · Förhandsvisning' }
+        'social-youtube': { icon:'▶️', title:'YouTube', row:'Rad 1 · Förhandsvisning' },
+        'social-instagram': { icon:'📷', title:'Instagram', row:'Rad 2 · Förhandsvisning' },
+        'social-tiktok': { icon:'🎵', title:'TikTok', row:'Rad 3 · Förhandsvisning' },
+        'social-facebook': { icon:'📘', title:'Facebook', row:'Rad 4 · Förhandsvisning' },
+        'social-wechat': { icon:'💬', title:'WeChat', row:'Rad 5 · Förhandsvisning' },
+        'social-weibo': { icon:'🌐', title:'Weibo', row:'Rad 6 · Förhandsvisning' },
+        'social-pinterest': { icon:'📌', title:'Pinterest', row:'Rad 7 · Förhandsvisning' },
+        'social-reddit': { icon:'👽', title:'Reddit', row:'Rad 8 · Förhandsvisning' },
+        'social-twitter': { icon:'✖️', title:'X (Twitter)', row:'Rad 9 · Förhandsvisning' }
       };
       function makeCard(meta){
         var a = document.createElement('a'); a.className='card'; a.href='#';
@@ -1111,7 +1111,7 @@ window.addEventListener('resize', function(){
     a.dataset.productTitle = productTitle;
     a.dataset.productLink = resolvedHref;
 
-    a.textContent = productTitle || 'Item';
+    a.textContent = productTitle || 'Artikel';
     a.target = resolvedHref.indexOf('/pages/coming-soon.html') === 0 ? '_self' : '_blank';
     a.rel = 'noopener';
 
@@ -1335,7 +1335,7 @@ window.addEventListener('resize', function(){
     var openBtn = document.getElementById('snfvOpenBtn');
 
     media.innerHTML = '';
-    title.textContent = data.title || 'Preview';
+    title.textContent = data.title || 'Förhandsvisning';
     desc.textContent = data.desc || '';
 
     if(data.video){
@@ -1354,7 +1354,7 @@ window.addEventListener('resize', function(){
     }else{
       var fb = document.createElement('div');
       fb.className = 'snfv-fallback';
-      fb.textContent = data.title || 'Preview';
+      fb.textContent = data.title || 'Förhandsvisning';
       media.appendChild(fb);
     }
 
@@ -1401,7 +1401,27 @@ window.addEventListener('resize', function(){
   }, true);
 })();
 </script>
-<script defer="" src="/assets/js/socialnetwork-automap-v3.js?v=20260404psom"></script>
+<script src="frontbus.child.js"></script>
+<script>
+(function(){
+  try{
+    function notify(top){
+      parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*');
+    }
+    function atTop(){
+      var se=document.scrollingElement||document.documentElement||document.body;
+      return (window.scrollY||window.pageYOffset||0)<=0 && (se?(se.scrollTop||0)<=0:true);
+    }
+    function onAnyScroll(){ notify(atTop()); }
+    window.addEventListener('scroll', onAnyScroll, {passive:true});
+    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
+    document.addEventListener('wheel', function(e){ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
+    document.addEventListener('touchmove', function(){ notify(false); }, {passive:true,capture:true});
+    setTimeout(function(){ notify(atTop()); }, 50);
+  }catch(_){ }
+})();
+</script>
+<script defer=" src="/assets/js/socialnetwork-automap-v3.js?v=20260404psom"></script>
 <script id="igtc-checkout-trigger-v1">
 (function(){
   if (window.__IGTC_CHECKOUT_READY__) return;

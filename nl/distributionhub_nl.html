@@ -1,7 +1,7 @@
 <!-- patched: ad-* classes renamed to brand-* to avoid adblock; media query hiding adjusted only via class rename. -->
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="nl">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
@@ -314,7 +314,7 @@
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Er zijn nog geen Q&A-items geregistreerd";
+  content: "Er zijn nog geen berichten met vragen en antwoorden geplaatst";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -332,7 +332,7 @@
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Er zijn nog geen Q&A-items geregistreerd";
+  content: "Er zijn nog geen berichten met vragen en antwoorden geplaatst";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1011,7 +1011,7 @@
 <a href="mediahub.html">🎬 Mediahub</a>
 <a href="tour.html">🧳 Reizen · Toerisme · Accommodatie</a>
 <a href="literature_academic.html">📚 Literaire en academische uitwisseling</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A-aanvragen</a>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Vragen en antwoorden</a>
 </div>
 <main class="main-content" style="margin:0">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
@@ -1263,7 +1263,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent="Vragen en antwoorden";
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
@@ -1405,9 +1405,9 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
 
   async function showDetail(node, placement){
     const info = resolveInfo(node);
-    el.title.textContent = info.title || '상세 보기';
+    el.title.textContent = info.title || 'Details bekijken';
     if (info.img) el.img.src = info.img;
-    el.desc.textContent = '불러오는 중…';
+    el.desc.textContent = 'Laden…';
     el.btnCta.disabled = true;
 
     // stash
@@ -1421,13 +1421,13 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     try{
       if (info.id){
         const detail = await fetchJSON(`/api/items/${encodeURIComponent(info.id)}`);
-        el.title.textContent = detail.title || info.title || '상세 보기';
+        el.title.textContent = detail.title || info.title || 'Details bekijken';
         if (detail.image) el.img.src = detail.image;
         el.desc.textContent = detail.description || '';
         if (detail.ctaLabel) el.btnCta.textContent = detail.ctaLabel;
         if (detail.href) href = detail.href;
       } else {
-        el.desc.textContent = el.desc.textContent==='불러오는 중…' ? '' : el.desc.textContent;
+        el.desc.textContent = el.desc.textContent==='Laden…' ? '' : el.desc.textContent;
       }
     }catch(_){ el.desc.textContent = ''; }
 
@@ -1589,7 +1589,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase credentials/library not configured: UI is visible but saving is disabled.");
+      console.warn("[Vragen en antwoorden] Supabase credentials/library not configured: UI is visible but saving is disabled.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -1616,7 +1616,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
     const title = el("div","igdc-qa-title"); title.textContent = "Vragen en antwoorden";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Sluiten");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
@@ -1626,8 +1626,8 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Moment geduld, wij antwoorden zo spoedig mogelijk.";
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Verzenden";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Eenvoudige vragen worden direct door AI beantwoord. Technische, fout- of operationele kwesties worden automatisch doorgestuurd naar de admin-Q&A.";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Wissen";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Eenvoudige vragen worden direct door AI beantwoord. Technische, fout- of operationele kwesties worden automatisch doorgestuurd naar de beheerder-vraag-en-antwoord.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -1697,7 +1697,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
+        const q = el("div","igdc-qa-thread-q"); q.textContent="V. "+(row.question||"");
         const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (In afwachting)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
@@ -1781,7 +1781,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth initialization failed:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Vragen en antwoorden] auth initialization failed:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -1932,7 +1932,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   } else {
     hideLiteratureAcademic();
   }
-})(
+})();
+</script>
 <!-- Minimal runtime to toggle off-canvas; no bindings to existing logic -->
 <script id="ml-offcanvas-js">
 (function(){
@@ -2361,79 +2362,27 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <script id="igdc-qa-ensure-modal">
 (function(){
   if (window.__IGDC_QA_ENSURE__) return; window.__IGDC_QA_ENSURE__ = true;
-
   function ensureModal(){
     var modal = document.querySelector('.igdc-qa-modal');
     if(!modal){
-      // minimal modal skeleton
-      var m = document.createElement('div'); m.className='igdc-qa-modal';
-      var b = document.createElement('div'); b.className='igdc-qa-backdrop';
-      var p = document.createElement('div'); p.className='igdc-qa-panel';
-      var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
-      var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
-      h.appendChild(t); h.appendChild(x);
-
-      var body = document.createElement('div'); body.className='igdc-qa-body';
-      body.innerHTML = '<div class="igdc-qa-note">Alle functies worden ingeschakeld nadat de opslaginstellingen (Supabase url/key) zijn verbonden.</div>';
-
-      // ensure the "대표 이메일" is shown only inside the modal
-      var ce = document.createElement('p');
-      ce.className = 'contact-email';
-      ce.innerHTML = 'E-mail van vertegenwoordiger: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-      body.appendChild(ce);
-
-      p.appendChild(h); p.appendChild(body);
-      m.appendChild(b); m.appendChild(p);
-      document.body.appendChild(m);
-
-      function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }
-      x.addEventListener('click', close);
-      b.addEventListener('click', close);
-
-      window.IGDC_QA = window.IGDC_QA || {};
-      if (!window.IGDC_QA.open) window.IGDC_QA.open = open;
-    }else{
-      // if exists, make sure contact email is present exactly once
-      var body = modal.querySelector('.igdc-qa-body') || modal;
-      if(body && !body.querySelector('.contact-email')){
-        var ce = document.createElement('p');
-        ce.className = 'contact-email';
-        ce.innerHTML = 'E-mail van vertegenwoordiger: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        body.appendChild(ce);
-      }
+      modal = document.createElement('div'); modal.className='igdc-qa-modal';
+      var b=document.createElement('div'); b.className='igdc-qa-backdrop';
+      var p=document.createElement('div'); p.className='igdc-qa-panel';
+      var h=document.createElement('div'); h.className='igdc-qa-header';
+      var t=document.createElement('div'); t.className='igdc-qa-title'; t.textContent="Vragen en antwoorden";
+      var x=document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;'; x.setAttribute('aria-label','close');
+      var body=document.createElement('div'); body.className='igdc-qa-body';
+      var note=document.createElement('div'); note.className='igdc-qa-note'; note.textContent="Er zijn nog geen berichten met vragen en antwoorden geplaatst";
+      body.appendChild(note); h.appendChild(t); h.appendChild(x); p.appendChild(h); p.appendChild(body); modal.appendChild(b); modal.appendChild(p); document.body.appendChild(modal);
+      function close(){ modal.classList.remove('open'); setTimeout(function(){ modal.style.display='none'; },180); }
+      function open(){ modal.style.display='block'; requestAnimationFrame(function(){ modal.classList.add('open'); }); }
+      x.addEventListener('click', close); b.addEventListener('click', close);
+      window.IGDC_QA = window.IGDC_QA || {}; if(!window.IGDC_QA.open) window.IGDC_QA.open=open;
     }
+    var btn=document.getElementById('qnaOpenBtn');
+    if(btn && !btn.__qnaEnsureBound){ btn.__qnaEnsureBound=true; btn.addEventListener('click', function(e){ e.preventDefault(); if(window.IGDC_QA && typeof window.IGDC_QA.open==='function') window.IGDC_QA.open(); }); }
   }
-
-  function stripFooterEmail(){
-    try{
-      var footers = document.querySelectorAll('footer');
-      footers.forEach(function(f){
-        f.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
-          var parent = a.parentNode;
-          if(parent){
-            parent.removeChild(a);
-            var html = parent.innerHTML;
-            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
-            html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
-            parent.innerHTML = html;
-          }
-        });
-        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
-      });
-    }catch(e){}
-  }
-
-  function run(){
-    stripFooterEmail();
-    ensureModal();
-  }
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', run, {once:true});
-  } else {
-    run();
-  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', ensureModal, {once:true}); else ensureModal();
 })();
 </script>
 <script id="igdc-qa-email-ensure">
@@ -2472,7 +2421,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent="Vragen en antwoorden";
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
@@ -2806,7 +2755,7 @@ window.addEventListener("message",function(ev){
       var title = document.querySelector('#mobile-ad-rail-wrap .rail-title, #mobile-ad-rail-wrap h3, #mobile-ad-rail-wrap header h3');
       if (title){
         var t=(title.textContent||'').trim();
-        if (t.length>8) title.textContent='💎 Recommend 브랜드 💎';
+        if (t.length>8) title.textContent='💎 Aanbevolen merk 💎';
       }
       // Capture-phase guard to preserve native vertical scroll
       var zone = list || wrap;
@@ -3024,8 +2973,8 @@ window.addEventListener("message",function(ev){
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">Product Reviews</h3>
-          <div id="igdc-review-list" class="igdc-review-list">Loading...</div>
+          <h3 class="igdc-review-title">Productbeoordelingen</h3>
+          <div id="igdc-review-list" class="igdc-review-list">Laden...</div>
           ${canWrite ? this.renderForm() : this.renderLoginHint()}
         </section>
       `;
@@ -3040,7 +2989,7 @@ window.addEventListener("message",function(ev){
             maxlength="${this.config.maxChars}"
             required></textarea>
           <div class="igdc-review-actions">
-            <button type="submit">Submit Review</button>
+            <button type="submit">Beoordeling verzenden</button>
           </div>
         </form>
       `;
@@ -3048,7 +2997,7 @@ window.addEventListener("message",function(ev){
 
     renderLoginHint() {
       return `<div class="igdc-review-login-hint">
-        Review posting is available after logging in.
+        Een beoordeling plaatsen is mogelijk na inloggen.
       </div>`;
     },
 
@@ -3071,7 +3020,7 @@ window.addEventListener("message",function(ev){
             textarea.value = '';
             this.loadReviews();
           })
-          .catch(() => alert('Submit Review 실패'));
+          .catch(() => alert('Beoordeling verzenden 실패'));
       });
     },
 

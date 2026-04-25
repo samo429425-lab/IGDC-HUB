@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html lang="en">
+<html lang="uk">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
@@ -2495,7 +2495,7 @@ function reorderRow(rowId){
     const a = document.createElement('a');
     a.className = 'shop-card';
     a// href left unset by default; set only when URL exists;
-    a.textContent = `Item ${i+1}`;
+    a.textContent = `Елемент ${i+1}`;
     return a;
   }
 
@@ -3354,7 +3354,7 @@ function reorderRow(row, cc, region){
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("Delete failed (permissions/policy)."); return; }
+            if(error){ alert("Не вдалося видалити (дозвіл/політика)."); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -3752,7 +3752,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       left = document.createElement('button');
       left.type = 'button';
       left.className = 'row-arrow left';
-      left.setAttribute('aria-label', 'Previous');
+      left.setAttribute('aria-label', 'Попередній');
       left.textContent = '‹';
       row.appendChild(left);
     }
@@ -3760,7 +3760,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       right = document.createElement('button');
       right.type = 'button';
       right.className = 'row-arrow right';
-      right.setAttribute('aria-label', 'Next');
+      right.setAttribute('aria-label', 'Наступний');
       right.textContent = '›';
       row.appendChild(right);
     }
@@ -3867,7 +3867,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     document.querySelectorAll('.news-section .continent-tag').forEach(function(stamp){
       var key = normalize(stamp.textContent||'');
       if(key.includes('panasia')){
-        setStampLabel(stamp, 'Wide-아시아');
+        setStampLabel(stamp, 'Широка Азія');
         var row = stamp.closest('.news-row');
         if(row){
           requestAnimationFrame(function(){ row.style.setProperty('--stampW', stamp.offsetWidth); });

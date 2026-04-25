@@ -19,16 +19,16 @@
         url: envData.env.SUPABASE_URL,
         anonKey: envData.env.SUPABASE_ANON_KEY
       });
-      console.log("✅ Supabase 키 정상 로드됨.");
+      console.log("✅ Supabase anahtarı yüklendi.");
     } else {
-      console.warn("⚠️ Supabase 키 누락 — secureEnvBridge.js 또는 Netlify Çevre변수 Onayla 필요.");
+      console.warn("⚠️ Supabase anahtarı eksik — secureEnvBridge.js veya Netlify environment variables kontrol edin.");
       window.SUPER_VARSAR = Object.freeze({
         url: null,
         anonKey: null
       });
     }
   } catch (err) {
-    console.error("❌ Supabase Çevre변수 로드 실패:", err);
+    console.error("❌ Supabase environment variables yüklenemedi:", err);
     window.SUPER_VARSAR = Object.freeze({
       url: null,
       anonKey: null
@@ -321,7 +321,7 @@
 /* The right panel keeps its own inner padding; outer gap is handled by grid gap */
 .right{ margin:0 !important; }
 
-/* Soft pastel background for 글로벌 나눔허브 title box */
+/* Soft pastel background for Küresel 나눔허브 title box */
 .global-title-box{
   background-color: #f0faff !important;
 }
@@ -670,7 +670,7 @@
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
 .compose-wrap .row-top #btnOpenComposer{ order:5; }   /* Yaz */
 .compose-wrap .row-top #btnAttach{ order:3; }         /* Ek */
-.compose-wrap .row-top #attachPreview{                /* 미리보기 막대창(상시 존재) */
+.compose-wrap .row-top #attachPreview{                /* önizleme 막대창(상시 존재) */
   order:4;
   display:flex; align-items:center; gap:6px; flex-wrap:nowrap;
   min-height:34px; padding:6px 8px;
@@ -695,11 +695,11 @@
 /* 유령 중복 표시 방지: legacy 파일명 표시는 숨김(칩이 대체) */
 .compose-wrap #attachName{ display:none !important; }
 </style><style>
-/* === Compose row order override (requested): Kategori -> Yaz -> Ek -> 미리보기막대 -> Kaydet === */
+/* === Compose row order override (requested): Kategori -> Yaz -> Ek -> önizleme막대 -> Kaydet === */
 .compose-wrap .row-top .field.field-category{ order:1; }
 .compose-wrap .row-top #btnOpenComposer{ order:2; }   /* Yaz */
 .compose-wrap .row-top #btnAttach{ order:3; }         /* Ek */
-.compose-wrap .row-top #attachPreview{ order:4; }     /* 미리보기 막대 */
+.compose-wrap .row-top #attachPreview{ order:4; }     /* önizleme 막대 */
 .compose-wrap .row-top #btnGönderPost{ order:5; }     /* Kaydet */
 </style><style>
 /* === Title Preview Bar (between Yaz and Ek) === */
@@ -746,7 +746,7 @@
 /* Yaz */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
 /* Title 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
 /* Ek 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
-/* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
+/* 첨부 önizleme 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
 /* Kaydet */               .compose-wrap .row-top #btnGönderPost{ order:6 !important; }
 /* Temizle */             .compose-wrap .row-top #btnAttachTemizle{ order:7 !important; }
 </style><style>
@@ -845,7 +845,7 @@
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like,
 
-/* 색상: Edit=파랑, 추천=초록, Like=핑크, Sil=빨강 */
+/* 색상: Edit=파랑, Tavsiye et=초록, Like=핑크, Sil=빨강 */
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 .right .topic-panel .item .btn-reco{ background:#e6f7ec; color:#059669; border-color:#bbf7d0; }
 .right .topic-panel .item .btn-like{ background:#ffe6ef; color:#db2777; border-color:#fecdd3; }
@@ -921,7 +921,7 @@
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 @media (orientation: portrait){
 </style><style>
-/* Hard-hide any legacy text buttons labeled 추천/Like */
+/* Hard-hide any legacy text buttons labeled Tavsiye et/Like */
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like{ display:none !important; }
 }
@@ -1040,7 +1040,7 @@
 /* Keep the track flush against the label */
 .feed-row .row-track{ padding-left: 0 !important; margin-left: 0 !important; }
 </style><style>
-/* === Vertical labels: bigger than 'Feed' and start at 2nd-char position === */
+/* === Vertical labels: bigger than 'Akış' and start at 2nd-char position === */
 .feed-row{
   grid-template-columns: minmax(26px, 34px) 1fr !important; /* widen a touch for larger font */
   column-gap: 8px !important;
@@ -1048,7 +1048,7 @@
 .feed-row .row-label{
   color: var(--brand);
   font-weight: 700;
-  font-size: 1.22rem;     /* a bit larger than 'Feed' */
+  font-size: 1.22rem;     /* a bit larger than 'Akış' */
   writing-mode: vertical-rl;
   text-orientation: upright;
   line-height: 1;
@@ -1084,7 +1084,7 @@
   margin-bottom:6px;  /* small gap before the first card row */
   color: var(--brand);
   font-weight: 800;
-  font-size: 1.22rem; /* slightly larger than 'Feed' */
+  font-size: 1.22rem; /* slightly larger than 'Akış' */
   line-height: 1.1;
   pointer-events:none;
   user-select:none;
@@ -1875,7 +1875,7 @@ body .right{ display:none !important; }
 
 /* NOTE:
  - This block is intentionally minimal and non-destructive. It complements existing @media (min-width:1025px) rules in the file.
- - Next steps: hook a mobile "drawer" for .right if you want ads/tools accessible on phones without occupying layout.
+ - Sonraki steps: hook a mobile "drawer" for .right if you want ads/tools accessible on phones without occupying layout.
 */
 </style>
 
@@ -1974,7 +1974,7 @@ body .right{ display:none !important; }
     line-height:1.5;
   }
 
-  /* 하단 Footer: 읽음/추천/좋아요/아이콘 + Edit/Sil 전부 우측 정렬 */
+  /* 하단 Footer: 읽음/Tavsiye et/Beğen/아이콘 + Edit/Sil 전부 우측 정렬 */
  .mobile-news-clone .topic-panel .item .item-footer {
     margin-top: auto;              /* 위 Content 밀어 올리고, footer를 맨 아래로 */
     display: flex;
@@ -2392,7 +2392,7 @@ body > div.container,
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
-<button class="bc-tile orange" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">Donate</button>
+<button class="bc-tile orange" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">Bağış yap</button>
 </section>
 <section class="hero">
 <h2>💝 Küresel Bağış Merkezi 💝</h2>
@@ -2413,11 +2413,11 @@ body > div.container,
 <option value="env">Çevre</option>
 <option value="etc">Diğerleri</option>
 </select>
-</label><button class="button small" id="btnAttach" type="button">Ek</button><div aria-label="Ek 미리보기" class="attach-preview" id="attachPreview"></div>
-<button class="button small" id="btnOpenComposer">Yaz</button><div aria-label="Title 미리보기" class="title-preview" id="titlePreview"><span class="tp-text">Başlıksız</span></div>
+</label><button class="button small" id="btnAttach" type="button">Ek</button><div aria-label="Ek önizlemesi" class="attach-preview" id="attachPreview"></div>
+<button class="button small" id="btnOpenComposer">Yaz</button><div aria-label="Başlık önizlemesi" class="title-preview" id="titlePreview"><span class="tp-text">Başlıksız</span></div>
 <button class="button small accent" id="btnGönderPost">Kaydet</button>
 <span id="attachName"></span>
-<button aria-label="첨부 제거 " class="button tiny" id="btnAttachTemizle" style="display:none;" type="button">Temizle</button>
+<button aria-label="Eki kaldır " class="button tiny" id="btnAttachTemizle" style="display:none;" type="button">Temizle</button>
 <input id="postAttach" style="display:none;" type="file"/>
 </div>
 <div class="row row-bottom">
@@ -2440,7 +2440,7 @@ body > div.container,
 </section>
 <!-- (요청) 5줄 Feed -->
 <section class="feed-wrapper">
-<div class="feed-header"><h3 style="margin:0;">📺 Feed</h3></div>
+<div class="feed-header"><h3 style="margin:0;">📺 Akış</h3></div>
 <div id="feedRows">
 
 <!-- ===== Donation Feed Rows (Final Clean Version) ===== -->
@@ -2503,7 +2503,7 @@ body > div.container,
 <aside class="right">
 <div class="panel cafe-link"><a aria-label="Go to WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
-<button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">Donations</button>
+<button class="button" onclick="alert('Bağış sistemi yakında bağlanacak.')" style="margin-bottom:8px; padding:5px 14px;">Bağışlar</button>
 <p><b>IESF (International Exchange Service Foundation)</b><br/>
         - General: NongHyup 301-0078-3333-51<br/>
         - Foreign Currency: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
@@ -2599,8 +2599,8 @@ body > div.container,
   btnGönder && btnGönder.addEventListener("click", ()=>{ if(btnKaydet){ btnKaydet.click(); } });
 
   btnKaydet && btnKaydet.addEventListener("click", ()=>{
-    const t = titleI?.value?.trim() || "(No Title)";
-    const b = bodyI?.value?.trim() || "(No Content)";
+    const t = titleI?.value?.trim() || "(Başlık yok)";
+    const b = bodyI?.value?.trim() || "(İçerik yok)";
     const cat = catSel?.value || "etc";
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(holder){
@@ -2618,7 +2618,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">첨부 링크</a>` : `첨부: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Ek bağlantısı</a>` : `Ek: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2629,7 +2629,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "첨부: " + fileAttach.files[0].name;
+        att.textContent = "Ek: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2646,14 +2646,14 @@ body > div.container,
 
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
-    const link = prompt("이미지 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 Onayla을 누르세요)");
+    const link = prompt("Görselin harici bağlantısı (URL) varsa yapıştırın. Yoksa Onayla düğmesine basın.");
     if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
         alert("Only images up to 2MB can be previewed directly. For large files, upload them to external storage and enter the link.");
         imageLink = ""; imagePreviewObjectUrl = "";
       }else{
-        imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
+        imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 önizleme만
         imageLink = ""; // 실제 Kaydet은 링크만 사용
       }
     }else{
@@ -2663,7 +2663,7 @@ body > div.container,
 
   btnFileOk && btnFileOk.addEventListener('click', ()=>{
     const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
-    const link = prompt("파일 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 Onayla을 누르세요)");
+    const link = prompt("Dosyanın harici bağlantısı (URL) varsa yapıştırın. Yoksa Onayla düğmesine basın.");
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
@@ -2692,7 +2692,7 @@ body > div.container,
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '개 파일');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' dosya');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2763,7 +2763,7 @@ body > div.container,
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 제거'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Eki kaldır'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
@@ -2798,11 +2798,11 @@ body > div.container,
   function closeModal(){ modal && modal.classList.add('hidden'); }
 
   function handleUnifiedKaydet(){
-    const t = (titleI && titleI.value.trim()) || '(No Title)';
-    const b = (bodyI && bodyI.value.trim()) || '(No Content)';
+    const t = (titleI && titleI.value.trim()) || '(Başlık yok)';
+    const b = (bodyI && bodyI.value.trim()) || '(İçerik yok)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
+    if(!holder){ alert('Haber alanı bulunamadı.'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2819,7 +2819,7 @@ body > div.container,
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = '첨부: ' + f.name;
+        li.textContent = 'Ek: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
@@ -2832,7 +2832,7 @@ body > div.container,
     const canSil = (USER_ROLE==='admin' || USER_ROLE==='writer');
     if(canSil) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Sil하시겠습니까?')) return;
+      if(!confirm('Bu haberi silmek istiyor musunuz?')) return;
       item.remove();
     });
 
@@ -2899,13 +2899,13 @@ body > div.container,
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '개 파일');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' dosya');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 모두 제거'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Tüm ekleri kaldır'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attachPreview.appendChild(chip);
@@ -3020,7 +3020,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'Title Not entered';
+    tpText.textContent = t || 'Başlık girilmedi';
   }
 
   if(btnDraft){
@@ -3057,7 +3057,7 @@ body > div.container,
     btn.style.cssText='margin-top:6px; display:none;';
     if(canShowSilFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Sil하시겠습니까?')) return;
+      if(!confirm('Bu haberi silmek istiyor musunuz?')) return;
       item.remove();
     });
     item.appendChild(btn);
@@ -3130,7 +3130,7 @@ body > div.container,
 <div id="npBody" style="margin-top:8px; font-size:.95rem; color:#222; white-space:pre-wrap;"></div>
 <div id="npAttach" style="margin-top:8px; font-size:.9rem; color:#374151;"></div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
-<button class="button outline" id="npClose" type="button">Close</button>
+<button class="button outline" id="npClose" type="button">Kapat</button>
 </div>
 </div></div><script>
 (function(){
@@ -3200,20 +3200,20 @@ body > div.container,
     npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Ek</div>' + attachHtml) : '';
 
     openModal();
   }, true);
 })();
 </script><div id="editNewsModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 680px); max-height:78vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 style="margin:0; font-size:1.05rem;">Yaz 편집</h3>
+<h3 style="margin:0; font-size:1.05rem;">Yaz / Düzenle</h3>
 <div id="enInfo" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
-<label style="font-size:.85rem;">Title</label>
+<label style="font-size:.85rem;">Başlık</label>
 <input id="enTitle" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;" type="text"/>
-<label style="font-size:.85rem;">Content</label>
+<label style="font-size:.85rem;">İçerik</label>
 <textarea id="enBody" rows="8" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;"></textarea>
 </div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
@@ -3258,7 +3258,7 @@ body > div.container,
       badge.setAttribute('translate','no');
       header.appendChild(badge);
     }
-    badge.textContent = `Edited · ${tsStr}`;
+    badge.textContent = `Düzenlendi · ${tsStr}`;
   }
 
   // On load, restore edited badge for admin/author only
@@ -3401,7 +3401,7 @@ body > div.container,
     let btnDel  = footer.querySelector('.delete-post');
     if(!btnEdit){
       btnEdit = document.createElement('button');
-      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
+      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Düzenle';
       footer.appendChild(btnEdit);
       btnEdit.addEventListener('click', (e)=>{
         e.stopPropagation();
@@ -3422,7 +3422,7 @@ body > div.container,
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('이 소식을 Sil하시겠습니까?')) return;
+        if(!confirm('Bu haberi silmek istiyor musunuz?')) return;
         item.remove();
       });
     }
@@ -3596,13 +3596,13 @@ body > div.container,
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
 
     const t = tpl.querySelector('.card-title');
-    if(t) t.textContent = 'Title';
+    if(t) t.textContent = 'Başlık';
 
     const m = tpl.querySelector('.card-meta');
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'Content';
+    if(p) p.textContent = 'İçerik';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -3700,7 +3700,7 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Blockchain processing request completed: " + (j.txHash||"대기")); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Blockchain processing request completed: " + (j.txHash||"Beklemede")); }
       else { alert("Blockchain processing failed"); }
     }catch(e){ console.warn(e); alert("Network error"); }
   };
@@ -3825,8 +3825,8 @@ body > div.container,
 <!-- IGDC minimal Donate UI (non-invasive) -->
 
 <div class="donation-inline">
-<input aria-label="Donation amount (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
-<button class="bc-tile orange" id="btnDonate">Donate</button>
+<input aria-label="Bağış tutarı (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
+<button class="bc-tile orange" id="btnDonate">Bağış yap</button>
 </div>
 <script>
 (function(){
@@ -3841,7 +3841,7 @@ body > div.container,
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","정액 기부 금액");
+  btnGroup.setAttribute("aria-label","Sabit bağış tutarı");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -3890,7 +3890,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      alert(`Seçilen tutar: ₩${Number(amt).toLocaleString()}\n\nLütfen aşağıdaki Account’a havale edin.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -3919,12 +3919,12 @@ body > div.container,
 <script>(function(){try{document.querySelectorAll(".donation-inline,.donation-buttons").forEach(function(n){n.remove();});}catch(e){}})();</script>
 <div aria-hidden="true" class="donate-modal-backdrop" id="donateModalBackdrop">
 <div aria-labelledby="donateModalTitle" aria-modal="true" class="donate-modal" role="dialog">
-<h3 id="donateModalTitle">Select a Donation Organization</h3>
+<h3 id="donateModalTitle">Bağış yapılacak kuruluşu seçin</h3>
 <div class="donate-actions">
-<button data-org="IESF" type="button">Donate to IESF</button>
-<button data-org="WAM" type="button">Donate to WAM</button>
+<button data-org="IESF" type="button">Bağış yap IESF</button>
+<button data-org="WAM" type="button">Bağış yap WAM</button>
 </div>
-<button class="donate-close" type="button">Close</button>
+<button class="donate-close" type="button">Kapat</button>
 </div>
 </div>
 <script id="donate-modal-js">
@@ -4106,7 +4106,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if ((!hasAny || (!hasReal && !hasExternalInfo)) && !hasOurPlaceholder) {
         const item = document.createElement('div');
         item.className = 'item placeholder';
-        item.innerHTML = '<div class="title">No posts yet</div>';
+        item.innerHTML = '<div class="title">Henüz gönderi yok</div>';
         list.appendChild(item);
       }
 
@@ -4270,7 +4270,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Kaydet은 비활성화됩니다.");
+      console.warn("[Q&A] Supabase kimlik bilgileri/kütüphanesi ayarlanmamış: UI gösterilir ancak kaydetme devre dışıdır.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -4297,7 +4297,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
     const title = el("div","igdc-qa-title"); title.textContent = "Soru & Cevap";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Kapat");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
@@ -4381,8 +4381,8 @@ document.addEventListener('DOMContentLoaded', function(){
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
+        const q = el("div","igdc-qa-thread-q"); q.textContent="S. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("C. "+row.answer):"C. (Beklemede)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "Admin Request":"General";
@@ -4416,9 +4416,9 @@ document.addEventListener('DOMContentLoaded', function(){
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 Onayla 후 회신됩니다.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="Operasyonla ilgili sorular yönetici kontrolünden sonra yanıtlanır.";
           else if(/price|cost|fee|가격|비용|요금/i.test(text)) answer="For price/fee information, please refer to the guidance on this page and leave any additional inquiries.";
-          else answer="문의 감사합니다. 빠르게 Onayla하여 도와드리겠습니다.";
+          else answer="Sorunuz için teşekkürler. Hızla kontrol edip yardımcı olacağız.";
         }
       }
       return { technical, answer };
@@ -4432,7 +4432,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Kaydet 설정(Supabase url/key)이 아직 연결되지 않아 서버 Kaydet은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        alert("Depolama ayarları (Supabase url/key) henüz bağlı değil; sunucu kaydı devre dışı. Web’e dağıtırken SUPER_VARSAR.url/anonKey ayarlanırsa otomatik bağlanır.");
         return;
       }
       const record = {
@@ -4504,7 +4504,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         bk=document.createElement('div');
         bk.id='drawerBackdrop';
         bk.className='drawer-backdrop';
-        document.body/*__KILL__*/ appendChild_DISABLED(bk);
+        document.body.appendChild(bk);
         bk.addEventListener('click',close,{passive:true});
       }
     }
@@ -4593,7 +4593,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
   /* Optional close affordance */
   .card.expanded::after, .thumb.expanded::after{
-    content: "Close";
+    content: "Kapat";
     position: absolute; top: 8px; right: 12px;
     padding: 6px 10px; border-radius: 14px;
     background: rgba(0,0,0,.5); color:#fff; font-size: 12px;
@@ -4735,7 +4735,7 @@ window.addEventListener("message",function(ev){
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
                   + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Ödeme QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Kapat</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -4780,13 +4780,13 @@ window.addEventListener("message",function(ev){
     var t = normalize(text);
     if(!t) return null;
 
-    if(t.includes("global") || t.includes("글로벌") || t.includes("wam") || t.includes("iesf")) return "iesf";
+    if(t.includes("global") || t.includes("Küresel") || t.includes("wam") || t.includes("iesf")) return "iesf";
     if(t.includes("ngo")) return "ngo";
     if(t.includes("Misyon") || t.includes("mission")) return "mission";
     if(t.includes("Hizmet") || t.includes("volunteer") || t.includes("service")) return "service";
-    if(t.includes("Yardım") || t.includes("구제") || t.includes("재난") || t.includes("relief")) return "relief";
+    if(t.includes("Yardım") || t.includes("Yardım") || t.includes("Afet") || t.includes("relief")) return "relief";
     if(t.includes("Eğitim") || t.includes("education") || t.includes("edu")) return "edu";
-    if(t.includes("Çevre") || t.includes("기후") || t.includes("environment") || t.includes("env")) return "env";
+    if(t.includes("Çevre") || t.includes("İklim") || t.includes("environment") || t.includes("env")) return "env";
     if(t.includes("Diğerleri") || t.includes("others") || t.includes("etc") || t.includes("misc")) return "etc";
 
     return null;
@@ -5068,12 +5068,12 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npTitle.textContent = title || 'Title 없음';
+    npTitle.textContent = title || 'Başlık yok';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(등록된 본문이 없습니다.)';
+    npBody.textContent = body || '(Kayıtlı içerik yok.)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">Ek</div>' + attachHtml
         : '';
     }
 
@@ -5125,10 +5125,10 @@ window.addEventListener("message",function(ev){
 
       const { error } = await sb.from('igdc_donation_posts').insert(payload);
       if(error){
-        console.warn('[donation] Supabase Kaydet 실패:', error.message);
+        console.warn('[donation] Supabase kaydı başarısız:', error.message);
       }
     }catch(err){
-      console.warn('[donation] Supabase sync 예외:', err);
+      console.warn('[donation] Supabase sync istisnası:', err);
     }
   }
 
@@ -5194,7 +5194,7 @@ window.addEventListener("message",function(ev){
 
 <script id="hero-linebreak-fix">
 (function(){
-  function nobreak(s){ return s.replace(/STK와\s*공유하며/g, "STK와\u00A0공유하며"); }
+  function nobreak(s){ return s.replace(/STK\uC640\s*\uACF5\uC720\uD558\uBA70/g, "STK ile paylaşılır"); }
   var el = document.getElementById("topPostBody");
   if(el){
     if(el.value !== undefined){ el.value = nobreak(el.value); }
@@ -5273,7 +5273,7 @@ window.addEventListener("message",function(ev){
 
 
 <script>
-// 모바일: WAM NAVER Cafe + Donations 패널 이동 (복사 아님, 이동)
+// 모바일: WAM NAVER Cafe + Bağışlar 패널 이동 (복사 아님, 이동)
 (function(){
   var mq = window.matchMedia("(max-width:1023px)");
   var main = document.querySelector("main.main");

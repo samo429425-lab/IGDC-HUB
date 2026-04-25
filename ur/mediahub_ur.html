@@ -579,7 +579,7 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   drawer.innerHTML = [
     '<div id="providers-header-left">',
       '<div id="providers-title-left" >فراہم کنندگان</div>',
-      '<input id="providers-search-left" type="search" placeholder="تلاش..." aria-label="فراہم کنندگان تلاش کریں" />',
+      '<input id="providers-search-left" type="search" dir="rtl" placeholder="تلاش..." aria-label="فراہم کنندگان تلاش کریں" />',
       '<button id="providers-close-left" aria-label="بند کریں">✕</button>',
     '</div>',
     '<div id="providers-body-left"></div>'
@@ -1209,7 +1209,7 @@ html, body {
 <a href="mediahub.html">🎬 میڈیا ہب</a>
 <a href="tour.html">🧳 سفر · سیاحت · رہائش</a>
 <a href="literature_academic.html">📚 ادبی و علمی تبادلہ</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&A پوچھ گچھ</a></aside>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 سوال و جواب</a></aside>
 <main>
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
@@ -1224,7 +1224,7 @@ html, body {
 <div class="hero-overlay">
 <!-- BEGIN: Video Search UI (replaces title/desc, non-intrusive) -->
 <form class="video-search" onsubmit="return handleVideoSearch(event)" style="display:flex; gap:10px; align-items:center; background:rgba(0,0,0,0.45); padding:10px 12px; border-radius:12px; flex-wrap:wrap;">
-<input name="q" placeholder="ویڈیو تلاش کریں (عنوان، فنکار، چینل وغیرہ)" required="" style="flex:1 1 48%; min-width:260px; max-width:620px; padding:8px 10px; border-radius:10px; border:none; outline:none; background:#fff; color:#111; font-size:16px;" type="text"/>
+<input name="q" dir="rtl" placeholder="ویڈیو تلاش کریں (عنوان، فنکار، چینل وغیرہ)" required="" style="flex:1 1 48%; min-width:260px; max-width:620px; padding:8px 10px; border-radius:10px; border:none; outline:none; background:#fff; color:#111; font-size:16px; direction:rtl; text-align:right;" type="text"/>
 <select name="provider" style="padding:8px 10px; border-radius:10px; border:none; outline:none;"></select>
 <button style="padding:10px 16px; border-radius:10px; border:none; background:#2e6bff; color:#fff; font-weight:700; cursor:pointer;" type="submit">تلاش</button>
 </form>
@@ -3729,7 +3729,7 @@ function handleVideoSearch(e){
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='سوال و جواب';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
@@ -3863,7 +3863,7 @@ function handleVideoSearch(e){
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
+    const title = el("div","igdc-qa-title"); title.textContent = "سوال و جواب";
     const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","بند کریں");
     header.append(title, close);
 
@@ -4514,7 +4514,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     var title = document.createElement('div');
     title.className = 'igdc-qa-title';
-    title.textContent = 'Q&A';
+    title.textContent = 'سوال و جواب';
 
     var closeBtn = document.createElement('button');
     closeBtn.className = 'igdc-qa-close';
@@ -4661,7 +4661,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     var src = card.getAttribute('data-src');
     var wrap = document.createElement('div');
     wrap.className = 'fs-stage';
-    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="Media Viewer"></div><button class="fs-close" aria-label="بند کریں">✕</button>';
+    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="میڈیا ویور"></div><button class="fs-close" aria-label="بند کریں">✕</button>';
     var inner = wrap.querySelector('.fs-inner');
 
     if(yt){
@@ -4678,7 +4678,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     }else{
       var url = getCardImageURL(card) || 'about:blank';
       var img = document.createElement('img');
-      img.src = url; img.alt = 'Preview';
+      img.src = url; img.alt = 'پیش منظر';
       img.style.width='100%'; img.style.height='100%'; img.style.objectFit='cover';
       inner.appendChild(img);
     }
@@ -5064,7 +5064,7 @@ window.addEventListener("message",function(ev){
 
       switch (action) {
         case 'play':
-          alert('Playback will begin after viewing rights are confirmed.');
+          alert('دیکھنے کی اجازت کی تصدیق کے بعد پلے بیک شروع ہو گا۔');
           break;
 
         case 'rent':
@@ -5078,11 +5078,11 @@ window.addEventListener("message",function(ev){
           break;
 
         case 'wish':
-          alert('Added to your wishlist.');
+          alert('آپ کی خواہش فہرست میں شامل کر دیا گیا۔');
           break;
 
         case 'review':
-          alert('Your review has been submitted.');
+          alert('آپ کا جائزہ جمع کر دیا گیا ہے۔');
           break;
       }
     },

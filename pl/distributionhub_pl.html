@@ -1,7 +1,7 @@
 <!-- patched: ad-* classes renamed to brand-* to avoid adblock; media query hiding adjusted only via class rename. -->
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="pl">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
@@ -139,7 +139,7 @@
   --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
   --blue:#2563eb; --muted:#9ca3af;
 }
-/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+/* Sidebar Pytania i odpowiedzi link follows existing .sidebar a style; this extra ensures visibility if needed */
 #qnaOpenBtn{ display:block; text-decoration:none; }
 /* Modal near the left sidebar, with smooth transitions */
 .igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
@@ -188,7 +188,7 @@
 }
 </style>
 <style id="qna-brand-only">
-/* === Q&A sidebar link color only (no other changes) === */
+/* === Pytania i odpowiedzi sidebar link color only (no other changes) === */
 :root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
 .sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
   display:block;
@@ -314,7 +314,7 @@
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Nie zarejestrowano jeszcze żadnych wpisów Q&A";
+  content: "Nie zarejestrowano jeszcze żadnych wpisów Pytania i odpowiedzi";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -332,7 +332,7 @@
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Nie zarejestrowano jeszcze żadnych wpisów Q&A";
+  content: "Nie zarejestrowano jeszcze żadnych wpisów Pytania i odpowiedzi";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1011,11 +1011,11 @@
 <a href="mediahub.html">🎬 Centrum mediów</a>
 <a href="tour.html">🧳 Podróże · Turystyka · Zakwaterowanie</a>
 <a href="literature_academic.html">📚 Wymiana literacka i akademicka</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Zapytania Q&amp;A</a>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Pytania i odpowiedzi</a>
 </div>
 <main class="main-content" style="margin:0">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
-<a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
+<a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OtwórzSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
 </section>
@@ -1023,35 +1023,35 @@
 <!-- ================= DISTRIBUTION LAYOUT ================= -->
 <section class="content-box" id="sec-reco">
 <h3>🔥 Dzisiejsze wybory</h3>
-<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-recommend"></div><button aria-label="Scroll left" class="rscroll left" type="button">‹</button><button aria-label="Scroll right" class="rscroll right" type="button">›</button></div>
+<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-recommend"></div><button aria-label="Przewiń w lewo" class="rscroll left" type="button">‹</button><button aria-label="Przewiń w prawo" class="rscroll right" type="button">›</button></div>
 <a class="more-link" href="#">Zobacz więcej</a>
 </section>
 <section class="content-box" id="sec-ads">
 <h3>📣 Sponsorzy</h3>
-<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-sponsor"></div><button aria-label="Scroll left" class="rscroll left" type="button">‹</button><button aria-label="Scroll right" class="rscroll right" type="button">›</button></div>
+<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-sponsor"></div><button aria-label="Przewiń w lewo" class="rscroll left" type="button">‹</button><button aria-label="Przewiń w prawo" class="rscroll right" type="button">›</button></div>
 </section>
 <section class="content-box" id="sec-trend">
 <h3>📈 Popularność w czasie rzeczywistym</h3>
-<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-trending"></div><button aria-label="Scroll left" class="rscroll left" type="button">‹</button><button aria-label="Scroll right" class="rscroll right" type="button">›</button></div>
+<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-trending"></div><button aria-label="Przewiń w lewo" class="rscroll left" type="button">‹</button><button aria-label="Przewiń w prawo" class="rscroll right" type="button">›</button></div>
 <a class="more-link" href="#">Pełny ranking</a>
 </section>
 <section class="content-box" id="sec-new">
 <h3>🆕 Nowo dodane produkty</h3>
-<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-new"></div><button aria-label="Scroll left" class="rscroll left" type="button">‹</button><button aria-label="Scroll right" class="rscroll right" type="button">›</button></div>
+<div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-new"></div><button aria-label="Przewiń w lewo" class="rscroll left" type="button">‹</button><button aria-label="Przewiń w prawo" class="rscroll right" type="button">›</button></div>
 </section>
 <section class="content-box" id="sec-special">
 <h3>🌟 Produkty specjalne</h3>
 <div class="scroller-wrap"><div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-special"></div>
-<button aria-label="Scroll left" class="rscroll left" type="button">‹</button>
-<button aria-label="Scroll right" class="rscroll right" type="button">›</button>
+<button aria-label="Przewiń w lewo" class="rscroll left" type="button">‹</button>
+<button aria-label="Przewiń w prawo" class="rscroll right" type="button">›</button>
 </div>
 </section>
 <section class="content-box" id="sec-others">
 <h3>🧺 Inne produkty</h3>
 <div class="scroller-wrap">
 <div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-others"></div>
-<button aria-label="Scroll left" class="rscroll left" type="button">‹</button>
-<button aria-label="Scroll right" class="rscroll right" type="button">›</button>
+<button aria-label="Przewiń w lewo" class="rscroll left" type="button">‹</button>
+<button aria-label="Przewiń w prawo" class="rscroll right" type="button">›</button>
 </div>
 </section>
 <div class="scroller-wrap" id="mobile-ad-rail-wrap"><div class="rail-title">💎 Polecane marki 💎</div><div class="thumb-list thumb-scroller" id="mobile-ad-rail-list"></div></div>
@@ -1077,7 +1077,7 @@
     d.className = 'thumb-card placeholder';
     d.innerHTML = `
       <div class="thumb-img"></div>
-      <div class="thumb-title">Auto-filled</div>
+      <div class="thumb-title">Uzupełniono automatycznie</div>
     `;
     return d;
   }
@@ -1242,7 +1242,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
 })();
 </script>
 <script id="igdc-qa-safety-bootstrap">
-// Ensures the Q&A popup opens when clicking the sidebar link,
+// Ensures the Pytania i odpowiedzi popup opens when clicking the sidebar link,
 // even if Supabase URL/Key are not configured yet.
 (function(){
   if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
@@ -1263,7 +1263,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Pytania i odpowiedzi';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
@@ -1347,7 +1347,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   const modal = document.createElement('div'); modal.className='igtc-modal igtc-hidden'; modal.setAttribute('role','dialog'); modal.setAttribute('aria-modal','true'); modal.setAttribute('aria-labelledby','igtc-modal-title');
   modal.innerHTML = `
     <header>
-      <h3 id="igtc-modal-title">Loading…</h3>
+      <h3 id="igtc-modal-title">Ładowanie…</h3>
       <button class="igtc-close" aria-label="Zamknij">✕</button>
     </header>
     <div class="igtc-content" tabindex="0">
@@ -1356,8 +1356,8 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
         <p class="igtc-desc" style="opacity:.9"></p>
         <div class="igtc-actions">
           <button class="igtc-btn" data-act="cta">Otwórz</button>
-          <button class="igtc-btn secondary" data-act="like">Like</button>
-          <button class="igtc-btn ghost" data-act="recommend">Recommend</button>
+          <button class="igtc-btn secondary" data-act="like">Lubię to</button>
+          <button class="igtc-btn ghost" data-act="recommend">Poleć</button>
         </div>
       </div>
     </div>`;
@@ -1405,9 +1405,9 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
 
   async function showDetail(node, placement){
     const info = resolveInfo(node);
-    el.title.textContent = info.title || '상세 보기';
+    el.title.textContent = info.title || 'Zobacz szczegóły';
     if (info.img) el.img.src = info.img;
-    el.desc.textContent = '불러오는 중…';
+    el.desc.textContent = 'Ładowanie...';
     el.btnCta.disabled = true;
 
     // stash
@@ -1421,19 +1421,19 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     try{
       if (info.id){
         const detail = await fetchJSON(`/api/items/${encodeURIComponent(info.id)}`);
-        el.title.textContent = detail.title || info.title || '상세 보기';
+        el.title.textContent = detail.title || info.title || 'Zobacz szczegóły';
         if (detail.image) el.img.src = detail.image;
         el.desc.textContent = detail.description || '';
         if (detail.ctaLabel) el.btnCta.textContent = detail.ctaLabel;
         if (detail.href) href = detail.href;
       } else {
-        el.desc.textContent = el.desc.textContent==='불러오는 중…' ? '' : el.desc.textContent;
+        el.desc.textContent = el.desc.textContent==='Ładowanie...' ? '' : el.desc.textContent;
       }
     }catch(_){ el.desc.textContent = ''; }
 
     // Enable CTA only if we have a destination
     if (href){ el.btnCta.disabled = false; }
-    else { el.btnCta.disabled = true; el.btnCta.title = '이 항목에 연결된 이동 링크가 없습니다.'; }
+    else { el.btnCta.disabled = true; el.btnCta.title = 'Ten element nie ma przypisanego linku.'; }
 
     // CTA handler
     el.btnCta.onclick = async function(){
@@ -1453,11 +1453,11 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     // Feedback handlers (optional)
     el.btnLike.onclick = async function(){
       const id = this.dataset.itemId || info.id; if(!id) return;
-      try{ await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); this.textContent='Liked'; this.disabled=true; }catch(_){}
+      try{ await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); this.textContent='Polubiono'; this.disabled=true; }catch(_){}
     };
     el.btnRec.onclick = async function(){
       const id = this.dataset.itemId || info.id; if(!id) return;
-      try{ await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); this.textContent='Recommended'; this.disabled=true; }catch(_){}
+      try{ await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); this.textContent='Polecane'; this.disabled=true; }catch(_){}
     };
   }
 
@@ -1589,7 +1589,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase credentials/library not configured: UI is visible but saving is disabled.");
+      console.warn("[Pytania i odpowiedzi] Supabase credentials/library not configured: UI is visible but saving is disabled.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -1616,7 +1616,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
     const title = el("div","igdc-qa-title"); title.textContent = "Pytania i odpowiedzi";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Zamknij");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
@@ -1626,8 +1626,8 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Proszę chwilę poczekać, wkrótce odpowiemy.";
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Wyślij";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Na proste pytania AI odpowiada natychmiast. Kwestie techniczne, błędy i sprawy operacyjne są automatycznie przekazywane do Q&A administratora.";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Wyczyść";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Na proste pytania AI odpowiada natychmiast. Kwestie techniczne, błędy i sprawy operacyjne są automatycznie przekazywane do Pytania i odpowiedzi administratora.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -1732,9 +1732,9 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 확인 후 회신됩니다.";
-          else if(/가격|비용|요금/.test(text)) answer="가격/요금 정보는 페이지 내 안내를 참고해주세요. 추가 문의는 남겨주세요.";
-          else answer="문의 감사합니다. 빠르게 확인하여 도와드리겠습니다.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="Zapytania dotyczące obsługi zostaną sprawdzone przez administratora i otrzymają odpowiedź.";
+          else if(/가격|비용|요금/.test(text)) answer="Informacje o cenach i opłatach znajdziesz na stronie. W razie dodatkowych pytań zostaw wiadomość.";
+          else answer="Dziękujemy za pytanie. Szybko je sprawdzimy i pomożemy.";
         }
       }
       return { technical, answer };
@@ -1781,7 +1781,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth initialization failed:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Pytania i odpowiedzi] auth initialization failed:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -1867,7 +1867,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || item.name || 'Product';
+              t.textContent = item.title || item.name || 'Produkt';
 
               a.appendChild(img);
               a.appendChild(t);
@@ -1893,7 +1893,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || 'Product';
+              t.textContent = item.title || 'Produkt';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -1932,7 +1932,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   } else {
     hideLiteratureAcademic();
   }
-})(
+})();
+</script>
 <!-- Minimal runtime to toggle off-canvas; no bindings to existing logic -->
 <script id="ml-offcanvas-js">
 (function(){
@@ -2082,10 +2083,10 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       }
       var title = document.createElement("div");
       title.className = "thumb-title";
-      title.textContent = (item && item.title) ? item.title : "Recommended";
+      title.textContent = (item && item.title) ? item.title : "Polecane";
       var meta = document.createElement("div");
       meta.className = "thumb-meta";
-      meta.textContent = (item && item.meta) ? item.meta : "Auto-filled";
+      meta.textContent = (item && item.meta) ? item.meta : "Uzupełniono automatycznie";
       card.appendChild(img);
       card.appendChild(title);
       card.appendChild(meta);
@@ -2370,14 +2371,14 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Pytania i odpowiedzi';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
       body.innerHTML = '<div class="igdc-qa-note">Wszystkie funkcje zostaną włączone po podłączeniu ustawień zapisu (Supabase url/key).</div>';
 
-      // ensure the "대표 이메일" is shown only inside the modal
+      // ensure the "E-mail przedstawiciela" is shown only inside the modal
       var ce = document.createElement('p');
       ce.className = 'contact-email';
       ce.innerHTML = 'E-mail przedstawiciela: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
@@ -2388,7 +2389,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       document.body.appendChild(m);
 
       function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }
+      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
       x.addEventListener('click', close);
       b.addEventListener('click', close);
 
@@ -2472,7 +2473,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Pytania i odpowiedzi';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
@@ -2806,7 +2807,7 @@ window.addEventListener("message",function(ev){
       var title = document.querySelector('#mobile-ad-rail-wrap .rail-title, #mobile-ad-rail-wrap h3, #mobile-ad-rail-wrap header h3');
       if (title){
         var t=(title.textContent||'').trim();
-        if (t.length>8) title.textContent='💎 Recommend 브랜드 💎';
+        if (t.length>8) title.textContent='💎 Polecane marki 💎';
       }
       // Capture-phase guard to preserve native vertical scroll
       var zone = list || wrap;
@@ -3024,8 +3025,8 @@ window.addEventListener("message",function(ev){
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">Product Reviews</h3>
-          <div id="igdc-review-list" class="igdc-review-list">Loading...</div>
+          <h3 class="igdc-review-title">Opinie o produkcie</h3>
+          <div id="igdc-review-list" class="igdc-review-list">Ładowanie...</div>
           ${canWrite ? this.renderForm() : this.renderLoginHint()}
         </section>
       `;
@@ -3040,7 +3041,7 @@ window.addEventListener("message",function(ev){
             maxlength="${this.config.maxChars}"
             required></textarea>
           <div class="igdc-review-actions">
-            <button type="submit">Submit Review</button>
+            <button type="submit">Dodaj opinię</button>
           </div>
         </form>
       `;
@@ -3048,7 +3049,7 @@ window.addEventListener("message",function(ev){
 
     renderLoginHint() {
       return `<div class="igdc-review-login-hint">
-        Review posting is available after logging in.
+        Dodawanie opinii jest dostępne po zalogowaniu.
       </div>`;
     },
 
@@ -3062,7 +3063,7 @@ window.addEventListener("message",function(ev){
         const content = textarea.value.trim();
 
         if (content.length < this.config.minChars) {
-          alert(`Reviews must be at least ${this.config.minChars} characters long.`);
+          alert(`Opinia musi mieć co najmniej ${this.config.minChars} znaków.`);
           return;
         }
 
@@ -3071,7 +3072,7 @@ window.addEventListener("message",function(ev){
             textarea.value = '';
             this.loadReviews();
           })
-          .catch(() => alert('Submit Review 실패'));
+          .catch(() => alert('Nie udało się dodać opinii'));
       });
     },
 

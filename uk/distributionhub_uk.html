@@ -1,7 +1,7 @@
 <!-- patched: ad-* classes renamed to brand-* to avoid adblock; media query hiding adjusted only via class rename. -->
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="uk">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
@@ -1117,7 +1117,7 @@ a[href^="mailto:"]:hover {
     d.className = 'thumb-card placeholder';
     d.innerHTML = `
       <div class="thumb-img"></div>
-      <div class="thumb-title">Auto-filled</div>
+      <div class="thumb-title">Автоматично заповнено</div>
     `;
     return d;
   }
@@ -1580,10 +1580,10 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
       }
       var title = document.createElement("div");
       title.className = "thumb-title";
-      title.textContent = (item && item.title) ? item.title : "Recommended";
+      title.textContent = (item && item.title) ? item.title : "Рекомендовано";
       var meta = document.createElement("div");
       meta.className = "thumb-meta";
-      meta.textContent = (item && item.meta) ? item.meta : "Auto-filled";
+      meta.textContent = (item && item.meta) ? item.meta : "Автоматично заповнено";
       card.appendChild(img);
       card.appendChild(title);
       card.appendChild(meta);
@@ -2353,8 +2353,8 @@ window.addEventListener("message",function(ev){
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">Product Reviews</h3>
-          <div id="igdc-review-list" class="igdc-review-list">Loading...</div>
+          <h3 class="igdc-review-title">Відгуки про товар</h3>
+          <div id="igdc-review-list" class="igdc-review-list">Завантаження...</div>
           ${canWrite ? this.renderForm() : this.renderLoginHint()}
         </section>
       `;
@@ -2369,7 +2369,7 @@ window.addEventListener("message",function(ev){
             maxlength="${this.config.maxChars}"
             required></textarea>
           <div class="igdc-review-actions">
-            <button type="submit">Submit Review</button>
+            <button type="submit">Надіслати відгук</button>
           </div>
         </form>
       `;
@@ -2377,7 +2377,7 @@ window.addEventListener("message",function(ev){
 
     renderLoginHint() {
       return `<div class="igdc-review-login-hint">
-        Review posting is available after logging in.
+        Відгук можна опублікувати після входу.
       </div>`;
     },
 
@@ -2391,7 +2391,7 @@ window.addEventListener("message",function(ev){
         const content = textarea.value.trim();
 
         if (content.length < this.config.minChars) {
-          alert(`Reviews must be at least ${this.config.minChars} characters long.`);
+          alert(`Відгук має містити щонайменше ${this.config.minChars} символів.`);
           return;
         }
 
@@ -2400,7 +2400,7 @@ window.addEventListener("message",function(ev){
             textarea.value = '';
             this.loadReviews();
           })
-          .catch(() => alert('Submit Review 실패'));
+          .catch(() => alert('Не вдалося надіслати відгук'));
       });
     },
 
@@ -2408,7 +2408,7 @@ window.addEventListener("message",function(ev){
       const list = document.getElementById('igdc-review-list');
       if (!list) return;
 
-      list.textContent = 'Loading...';
+      list.textContent = 'Завантаження...';
 
       try {
         const res = await fetch(
@@ -2566,7 +2566,7 @@ window.addEventListener("message",function(ev){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      console.warn("[Q&A] Облікові дані/бібліотека Supabase не налаштовані: UI показується, але збереження вимкнено.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -2689,7 +2689,7 @@ window.addEventListener("message",function(ev){
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("Delete failed (permission/policy)"); return; }
+            if(error){ alert("Не вдалося видалити (дозвіл/політика)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -2738,7 +2738,7 @@ window.addEventListener("message",function(ev){
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("Submission failed"); return; }
+      if(error){ alert("Не вдалося надіслати"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -2761,7 +2761,7 @@ window.addEventListener("message",function(ev){
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] Не вдалося ініціалізувати auth:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();

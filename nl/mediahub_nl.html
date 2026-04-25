@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="nl">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
@@ -397,7 +397,7 @@ html, body {
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Er zijn nog geen Q&A-items geregistreerd.";
+  content: "Er zijn nog geen berichten met vragen en antwoorden geplaatst";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1164,7 +1164,7 @@ html, body {
 <a href="mediahub.html">🎬 Mediahub</a>
 <a href="tour.html">🧳 Reizen · Toerisme · Accommodatie</a>
 <a href="literature_academic.html">📚 Literaire en academische uitwisseling</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A-aanvragen</a></aside>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Vragen en antwoorden</a></aside>
 <main>
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
@@ -1184,7 +1184,7 @@ html, body {
 <button style="padding:10px 16px; border-radius:10px; border:none; background:#2e6bff; color:#fff; font-weight:700; cursor:pointer;" type="submit">Zoeken</button>
 </form>
 <!-- 플랫폼 링크 라인 -->
-<div class="section-title">Contentproviders</div>
+<div class="section-title">Aanbieders van inhoud</div>
 <div class="platform-line"><a class="platform-tile" href="https://www.netflix.com" target="_blank">Netflix</a><a class="platform-tile" href="https://www.disneyplus.com" target="_blank">Disney+</a><a class="platform-tile" href="https://www.amazon.com/primevideo" target="_blank">Amazon Prime</a><a class="platform-tile" href="https://tv.apple.com" target="_blank">Apple TV+</a><a class="platform-tile" href="https://www.youtube.com" target="_blank">YouTube</a><a class="platform-tile" href="https://spotify.com" target="_blank">Spotify</a><a class="platform-tile" href="https://www.melon.com" target="_blank">Melon</a><a class="platform-tile" href="https://www.wavve.com" target="_blank">Wavve</a><a class="platform-tile" href="https://www.hulu.com" target="_blank">Hulu</a><a class="platform-tile" href="https://www.paramountplus.com" target="_blank">Paramount+</a><a class="platform-tile" href="https://www.peacocktv.com" target="_blank">Peacock</a><a class="platform-tile" href="https://www.tving.com" target="_blank">Tving</a><a class="platform-tile" href="https://www.coupangplay.com" target="_blank">Coupang Play</a><a class="platform-tile" href="https://music.youtube.com" target="_blank">YouTube Music</a><a class="platform-tile" href="https://tidal.com" target="_blank">Tidal</a><a class="platform-tile" href="https://www.deezer.com" target="_blank">Deezer</a><a class="platform-tile" href="https://music.amazon.com" target="_blank">Amazon Music</a><a class="platform-tile" href="https://www.bbc.co.uk/iplayer" target="_blank">BBC iPlayer</a><a class="platform-tile" href="https://www.viki.com" target="_blank">Rakuten Viki</a><a class="platform-tile" href="https://mubi.com" target="_blank">Mubi</a><a class="platform-tile" href="https://www.crunchyroll.com" target="_blank">Crunchyroll</a><a class="platform-tile" href="https://tv.kakao.com" target="_blank">Kakao TV</a><a class="platform-tile" href="https://video.unext.jp" target="_blank">U-NEXT</a></div>
 <!-- Trending Now -->
 <div class="section-title">🔥 Nu trending</div>
@@ -3313,7 +3313,7 @@ function handleVideoSearch(e){
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent="Vragen en antwoorden";
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
@@ -3420,7 +3420,7 @@ function handleVideoSearch(e){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase credentials/library not configured: the UI is visible, but saving is disabled.");
+      console.warn("[Vragen en antwoorden] Supabase credentials/library not configured: the UI is visible, but saving is disabled.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -3446,8 +3446,8 @@ function handleVideoSearch(e){
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
+    const title = el("div","igdc-qa-title"); title.textContent = "Vragen en antwoorden";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Sluiten");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
@@ -3457,8 +3457,8 @@ function handleVideoSearch(e){
     const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Moment geduld, wij antwoorden zo spoedig mogelijk.";
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Verzenden";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Eenvoudige vragen worden direct door AI beantwoord. Technische, fout- of operationele kwesties worden automatisch doorgestuurd naar de admin-Q&A.";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Wissen";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Eenvoudige vragen worden direct door AI beantwoord. Technische, fout- of operationele kwesties worden automatisch doorgestuurd naar de beheerder-vraag-en-antwoord.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -3531,7 +3531,7 @@ function handleVideoSearch(e){
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
+        const q = el("div","igdc-qa-thread-q"); q.textContent="V. "+(row.question||"");
         const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (In afwachting)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
@@ -3615,7 +3615,7 @@ function handleVideoSearch(e){
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth initialization failed:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Vragen en antwoorden] auth initialization failed:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -4093,7 +4093,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     var title = document.createElement('div');
     title.className = 'igdc-qa-title';
-    title.textContent = 'Q&A';
+    title.textContent = "Vragen en antwoorden";
 
     var closeBtn = document.createElement('button');
     closeBtn.className = 'igdc-qa-close';
@@ -4170,36 +4170,20 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </script>
 <script id="igdc-qa-email-ensure">
 (function(){
-  if (window.__IGDC_QA_EMAIL_ENSURE__) return;
-  window.__IGDC_QA_EMAIL_ENSURE__ = true;
-
-  var CONTACT_HTML = 'E-mail van vertegenwoordiger: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-
-  function stripFooterEmail(){
+  if (window.__IGDC_QA_EMAIL_ENSURE__) return; window.__IGDC_QA_EMAIL_ENSURE__ = true;
+  var CONTACT_HTML = "Contact-e-mail: <a href=\"mailto:igdcplatform@gmail.com\">igdcplatform@gmail.com</a>";
+  function ensureContact(){
     try{
-      var footers = document.querySelectorAll('footer');
-      footers.forEach(function(f){
-        // Remove any mailto links
-        f.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
-          var parent = a.parentNode;
-          if(parent){
-            parent.removeChild(a);
-            var html = parent.innerHTML;
-            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
-            html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
-            parent.innerHTML = html;
-          }
-        });
-        // Remove any plain-text "E-mail van vertegenwoordiger: ..." remnants
-        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
+      var bodies=document.querySelectorAll('.igdc-qa-body');
+      bodies.forEach(function(body){
+        if(body.querySelector('.contact-email')) return;
+        var p=document.createElement('p'); p.className='contact-email'; p.innerHTML=CONTACT_HTML; body.appendChild(p);
       });
     }catch(e){}
   }
-
-  function ensureModal(){
-    var modal = document.querySelector('.igdc-qa-modal');
-    if(!modal){
-      // Create minimal modal sk
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', ensureContact, {once:true}); else ensureContact();
+})();
+</script>
 <script id="igtc-mobile-overhaul-FULL-js">
 (function(){
   function qsa(sel){ return Array.prototype.slice.call(document.querySelectorAll(sel)); }
@@ -4257,7 +4241,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     }else{
       var url = getCardImageURL(card) || 'about:blank';
       var img = document.createElement('img');
-      img.src = url; img.alt = 'Preview';
+      img.src = url; img.alt = 'Voorbeeld';
       img.style.width='100%'; img.style.height='100%'; img.style.objectFit='cover';
       inner.appendChild(img);
     }
@@ -4613,7 +4597,7 @@ window.addEventListener("message",function(ev){
 
           <div class="media-review">
             <textarea placeholder="Eénregelige review (optioneel)" maxlength="200"></textarea>
-            <button data-action="review">Submit Review</button>
+            <button data-action="review">Beoordeling verzenden</button>
           </div>
         </div>
       `;
@@ -4710,7 +4694,7 @@ window.addEventListener("message",function(ev){
     thumb.className = 'thumb ph';
     const meta = document.createElement('div');
     meta.className = 'meta';
-    meta.textContent = 'Coming Soon';
+    meta.textContent = 'Binnenkort';
     a.appendChild(thumb);
     a.appendChild(meta);
     return a;

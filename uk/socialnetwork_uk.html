@@ -518,7 +518,7 @@
       function mountUI(){
         const existing = document.querySelector('.igdc-qa-modal'); if(existing){ return bindExisting(existing); }
         const modal = el('div','igdc-qa-modal'); const backdrop = el('div','igdc-qa-backdrop'); const panel = el('div','igdc-qa-panel');
-        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='Q&A'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','Закрити');
+        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='Питання та відповіді'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','Закрити');
         header.append(title, close);
         const body = el('div','igdc-qa-body');
         const lQ = el('label'); lQ.textContent='Запитання'; const tQ = el('textarea','igdc-qa-text q'); tQ.placeholder='Будь ласка, введіть своє запитання...';
@@ -1071,7 +1071,7 @@ function boot(){
           inner.style.display = 'flex';
           inner.style.alignItems = 'center';
           inner.style.justifyContent = 'center';
-          inner.textContent = 'Loading...';
+          inner.textContent = 'Завантаження...';
           card.appendChild(inner);
           panel.appendChild(card);
         }
@@ -1130,7 +1130,7 @@ window.addEventListener('resize', function(){
     a.dataset.productTitle = productTitle;
     a.dataset.productLink = resolvedHref;
 
-    a.textContent = productTitle || 'Item';
+    a.textContent = productTitle || 'Елемент';
     a.target = resolvedHref.indexOf('/pages/coming-soon.html') === 0 ? '_self' : '_blank';
     a.rel = 'noopener';
 
@@ -1422,7 +1422,27 @@ window.addEventListener('resize', function(){
   }, true);
 })();
 </script>
- 
+  <script src="frontbus.child.js"></script>
+<script>
+(function(){
+  try{
+    function notify(top){
+      parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*');
+    }
+    function atTop(){
+      var se=document.scrollingElement||document.documentElement||document.body;
+      return (window.scrollY||window.pageYOffset||0)<=0 && (se?(se.scrollTop||0)<=0:true);
+    }
+    function onAnyScroll(){ notify(atTop()); }
+    window.addEventListener('scroll', onAnyScroll, {passive:true});
+    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
+    document.addEventListener('wheel', function(e){ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
+    document.addEventListener('touchmove', function(){ notify(false); }, {passive:true,capture:true});
+    setTimeout(function(){ notify(atTop()); }, 50);
+  }catch(_){ }
+})();
+</script>
+
 <script defer src="/assets/js/socialnetwork-automap-v3.js?v=20260404psom"></script>
   
   <script id="igtc-checkout-trigger-v1">
