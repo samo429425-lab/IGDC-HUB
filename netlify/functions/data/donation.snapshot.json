@@ -65,19 +65,89 @@
     }
   },
   "sections": {
-    "donation-global": []
+    "donation-global": {
+      "psom_key": "donation-global",
+      "slot_limit": 100,
+      "replaceable": true,
+      "source": "seed",
+      "bank_channel": "donation",
+      "rank_policy": "auto",
+      "priority": 0
+    },
+    "donation-ngo": {
+      "psom_key": "donation-ngo",
+      "slot_limit": 100,
+      "replaceable": true,
+      "source": "seed",
+      "bank_channel": "donation",
+      "rank_policy": "auto",
+      "priority": 0
+    },
+    "donation-mission": {
+      "psom_key": "donation-mission",
+      "slot_limit": 100,
+      "replaceable": true,
+      "source": "seed",
+      "bank_channel": "donation",
+      "rank_policy": "auto",
+      "priority": 0
+    },
+    "donation-service": {
+      "psom_key": "donation-service",
+      "slot_limit": 100,
+      "replaceable": true,
+      "source": "seed",
+      "bank_channel": "donation",
+      "rank_policy": "auto",
+      "priority": 0
+    },
+    "donation-relief": {
+      "psom_key": "donation-relief",
+      "slot_limit": 100,
+      "replaceable": true,
+      "source": "seed",
+      "bank_channel": "donation",
+      "rank_policy": "auto",
+      "priority": 0
+    },
+    "donation-education": {
+      "psom_key": "donation-education",
+      "slot_limit": 100,
+      "replaceable": true,
+      "source": "seed",
+      "bank_channel": "donation",
+      "rank_policy": "auto",
+      "priority": 0
+    },
+    "donation-environment": {
+      "psom_key": "donation-environment",
+      "slot_limit": 100,
+      "replaceable": true,
+      "source": "seed",
+      "bank_channel": "donation",
+      "rank_policy": "auto",
+      "priority": 0
+    },
+    "donation-others": {
+      "psom_key": "donation-others",
+      "slot_limit": 100,
+      "replaceable": true,
+      "source": "seed",
+      "bank_channel": "donation",
+      "rank_policy": "auto",
+      "priority": 0
+    }
   },
-  
   "layers": {
-  "donation_feed": {
-    "source": "search-bank",
-    "type": "donation",
-    "route": "donation",
-    "binding": "items",
-    "mode": "append",
-    "psom": true
-  }
-},
+    "donation_feed": {
+      "source": "search-bank",
+      "type": "donation",
+      "route": "donation",
+      "binding": "items",
+      "mode": "append",
+      "psom": true
+    }
+  },
   "items": [
     {
       "uid": "donation:donation-global:000001",
