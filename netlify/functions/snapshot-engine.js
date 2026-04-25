@@ -72,6 +72,91 @@ function normalizeLimitCard(raw) {
   };
 }
 
+function resolveLimitSectionKey(pageName, raw, sections) {
+  const sectionKeys = Object.keys(sections || {});
+  if (!sectionKeys.length) return null;
+
+  const rawKey =
+    raw?.psom_key ||
+    raw?.bind?.psom_key ||
+    raw?.bind?.section ||
+    raw?.section ||
+    raw?.category ||
+    null;
+
+  if (!rawKey) return null;
+
+  const key = String(rawKey).trim();
+
+  if (pageName === "home") {
+    const HOME_SECTION_ALIAS = {
+      "main1": "home_1",
+      "main2": "home_2",
+      "main3": "home_3",
+      "main4": "home_4",
+      "main5": "home_5",
+      "right_top": "home_right_top",
+      "right_mid": "home_right_middle",
+      "right_bottom": "home_right_bottom",
+      "dist_1": "home_1",
+      "distribution_1": "home_1",
+      "distribution-recommend": "home_1",
+      "distribution-sponsor": "home_2",
+      "distribution-trending": "home_3",
+      "distribution-new": "home_4",
+      "distribution-special": "home_5",
+      "social-instagram": "home_right_top",
+      "social-youtube": "home_right_middle"
+    };
+    const mapped = HOME_SECTION_ALIAS[key] || key;
+    return sections[mapped] ? mapped : null;
+  }
+
+  if (pageName === "distribution") {
+    const MAP = {
+      "dist_1": "distribution-recommend",
+      "dist1": "distribution-recommend",
+      "distribution_1": "distribution-recommend",
+      "distribution1": "distribution-recommend",
+      "distribution-recommend": "distribution-recommend",
+      "dist_2": "distribution-new",
+      "dist2": "distribution-new",
+      "distribution_2": "distribution-new",
+      "distribution2": "distribution-new",
+      "distribution-new": "distribution-new",
+      "dist_3": "distribution-trending",
+      "dist3": "distribution-trending",
+      "distribution_3": "distribution-trending",
+      "distribution3": "distribution-trending",
+      "distribution-trending": "distribution-trending",
+      "dist_4": "distribution-special",
+      "dist4": "distribution-special",
+      "distribution_4": "distribution-special",
+      "distribution4": "distribution-special",
+      "distribution-special": "distribution-special",
+      "dist_5": "distribution-sponsor",
+      "dist5": "distribution-sponsor",
+      "distribution_5": "distribution-sponsor",
+      "distribution5": "distribution-sponsor",
+      "distribution-sponsor": "distribution-sponsor",
+      "dist_6": "distribution-others",
+      "dist6": "distribution-others",
+      "distribution_6": "distribution-others",
+      "distribution6": "distribution-others",
+      "distribution-others": "distribution-others",
+      "dist_7": "distribution-right",
+      "dist7": "distribution-right",
+      "distribution_7": "distribution-right",
+      "distribution7": "distribution-right",
+      "distribution-right": "distribution-right"
+    };
+    const mapped = MAP[key] || key;
+    return sections[mapped] ? mapped : null;
+  }
+
+  return sections[key] ? key : null;
+}
+
 function enforceSnapshotFileLimit(pageName, bankItems) {
   const fileName = SNAPSHOT_FILES[pageName];
   if (!fileName) return;
@@ -112,15 +197,8 @@ function enforceSnapshotFileLimit(pageName, bankItems) {
     const id = raw?.id || stableId(JSON.stringify(raw));
     if (usedIds.has(id)) continue;
 
-    let sectionKey =
-      raw?.psom_key ||
-      raw?.bind?.section ||
-      raw?.category ||
-      preferredSections[0];
-
-    if (!sections[sectionKey]) {
-      sectionKey = preferredSections[0];
-    }
+    const sectionKey = resolveLimitSectionKey(pageName, raw, sections);
+    if (!sectionKey || !sections[sectionKey]) continue;
 
     sections[sectionKey].push(normalizeLimitCard(raw));
     usedIds.add(id);
@@ -272,7 +350,6 @@ const HOME_SECTION_ALIAS = {
   "social-instagram": "home_right_top",
   "social-youtube": "home_right_middle",
 
-  "donation-global": "home_right_bottom"
 };
 
 const sectionKey = HOME_SECTION_ALIAS[rawSectionKey] || rawSectionKey;

@@ -149,10 +149,113 @@ function loadPSOM(){
 
   for(const p of paths){
     const j = readJSON(p);
-    if(j && Array.isArray(j)) return j;
+    if(!j) continue;
+    if(Array.isArray(j)) return j;
+    if(j && typeof j === "object") return j;
   }
 
-  return [];
+  return null;
+}
+
+function getPsomDonationInfo(psomData){
+  if(!psomData) return { page:"donation", sections: SECTION_KEYS.slice(), labels:{} };
+
+  if(Array.isArray(psomData)){
+    const found = psomData.find(p => p && String(p.page||"").toLowerCase() === "donation");
+    return found || { page:"donation", sections: SECTION_KEYS.slice(), labels:{} };
+  }
+
+  if(psomData && typeof psomData === "object"){
+    const pageObj = psomData.pages?.donation || {};
+    const sections = Array.isArray(pageObj.sections) && pageObj.sections.length
+      ? pageObj.sections.filter(isValidSectionKey)
+      : (Array.isArray(psomData.sectionOrder?.donation)
+          ? psomData.sectionOrder.donation.filter(isValidSectionKey)
+          : SECTION_KEYS.slice());
+
+    return {
+      page: "donation",
+      sections: sections.length ? sections : SECTION_KEYS.slice(),
+      labels: (psomData.sectionLabels && psomData.sectionLabels.donation) || {}
+    };
+  }
+
+  return { page:"donation", sections: SECTION_KEYS.slice(), labels:{} };
+}
+
+function normalizeSeedSectionDefs(seed){
+  const defs = [];
+  const capacityDefault = Number(seed?.capacity?.sections_default || 0) || 0;
+
+  const pushDef = (psomKey, meta) => {
+    const key = toStr(psomKey).trim();
+    if(!isValidSectionKey(key)) return;
+
+    const slot = Number(
+      meta?.slot_limit ||
+      meta?.slotLimit ||
+      meta?.limit ||
+      meta?.count ||
+      capacityDefault ||
+      (key === DEFAULT_GLOBAL_SECTION_KEY ? 100 : 100)
+    );
+
+    defs.push({
+      psom_key: key,
+      slot_limit: Number.isFinite(slot) && slot > 0 ? slot : (key === DEFAULT_GLOBAL_SECTION_KEY ? 100 : 100),
+      replaceable: meta?.replaceable !== false,
+      source: meta?.source || "seed",
+      bank_channel: meta?.bank_channel || "donation",
+      rank_policy: meta?.rank_policy || "auto",
+      priority: Number(meta?.priority || 0)
+    });
+  };
+
+  const arrSections = Array.isArray(seed?.sections) ? seed.sections : [];
+  arrSections.forEach(s => {
+    if(s && typeof s === "object") pushDef(s.psom_key || s.key || s.section_key || s.id, s);
+  });
+
+  if(Array.isArray(seed?.sections_legacy)){
+    seed.sections_legacy.forEach(s => {
+      if(s && typeof s === "object") pushDef(s.psom_key || s.key || s.section_key || s.id, s);
+    });
+  }
+
+  if(seed?.sections && !Array.isArray(seed.sections) && typeof seed.sections === "object"){
+    Object.keys(seed.sections).forEach(key => {
+      const sec = seed.sections[key];
+      if(Array.isArray(sec)){
+        pushDef(key, { slot_limit: sec.length || capacityDefault || (key === DEFAULT_GLOBAL_SECTION_KEY ? 100 : 100) });
+      }else if(sec && typeof sec === "object"){
+        pushDef(key, sec);
+      }else{
+        pushDef(key, { slot_limit: capacityDefault || (key === DEFAULT_GLOBAL_SECTION_KEY ? 100 : 100) });
+      }
+    });
+  }
+
+  const byKey = new Map();
+  defs.forEach(d => {
+    if(!d || !d.psom_key) return;
+    if(!byKey.has(d.psom_key)) byKey.set(d.psom_key, d);
+  });
+
+  SECTION_KEYS.forEach(k => {
+    if(!byKey.has(k)){
+      byKey.set(k, {
+        psom_key: k,
+        slot_limit: k === DEFAULT_GLOBAL_SECTION_KEY ? 100 : (capacityDefault || 100),
+        replaceable: true,
+        source: "seed",
+        bank_channel: "donation",
+        rank_policy: "auto",
+        priority: 0
+      });
+    }
+  });
+
+  return Array.from(byKey.values());
 }
 
 /* =========================
@@ -619,33 +722,36 @@ function dedupe(items){
 function buildSnapshot({ seed, psomList, bank, optional }){
   const generatedAt = nowIso();
 
+  const seedSectionDefs = normalizeSeedSectionDefs(seed || {});
   const limits = {};
-  const seedSections = Array.isArray(seed.sections) ? seed.sections : [];
-  seedSections.forEach(s=>{
+  seedSectionDefs.forEach(s=>{
     if(s && s.psom_key && SECTION_KEYS.includes(s.psom_key)){
-      limits[s.psom_key] = Number(s.slot_limit || s.slotLimit || 40);
+      limits[s.psom_key] = Number(s.slot_limit || s.slotLimit || 100);
     }
   });
 
   SECTION_KEYS.forEach(k=>{
-    if(!limits[k]) limits[k] = (k === DEFAULT_GLOBAL_SECTION_KEY ? 100 : 80);
+    if(!limits[k]) limits[k] = (k === DEFAULT_GLOBAL_SECTION_KEY ? 100 : 100);
   });
 
-  const psomInfoMap = {};
-  (Array.isArray(psomList) ? psomList : []).forEach(p=>{
-    if(!p || typeof p !== "object") return;
-    if(String(p.page||"").toLowerCase() !== "donation") return;
-    psomInfoMap["donation"] = p;
-  });
+  const psomDonation = getPsomDonationInfo(psomList);
 
   const candidates = [];
   const src = bank && Array.isArray(bank.items) ? bank.items : [];
-  const donationList = src.filter(x => String(x.channel||"").toLowerCase() === "donation");
+  const donationList = src.filter(x => {
+    const channel = String(x?.channel || x?.bank_ref?.channel || "").toLowerCase();
+    if(channel === "donation") return true;
+
+    const sec = pickFirst(x?.psom_key, x?.bind?.section, x?.section);
+    if(isValidSectionKey(sec)) return true;
+
+    return false;
+  });
 
   donationList.forEach((rec, i)=>{
     const semanticCategory = classifyCategory(rec);
     const sectionKey = resolveSection(rec, semanticCategory);
-    candidates.push(normalizeRecord(rec, sectionKey, semanticCategory, i, psomInfoMap["donation"]));
+    candidates.push(normalizeRecord(rec, sectionKey, semanticCategory, i, psomDonation));
   });
 
   const optItems = [];
@@ -661,7 +767,7 @@ function buildSnapshot({ seed, psomList, bank, optional }){
   optItems.forEach((rec, i)=>{
     const semanticCategory = classifyCategory(rec);
     const sectionKey = resolveSection(rec, semanticCategory);
-    candidates.push(normalizeRecord(rec, sectionKey, semanticCategory, i, psomInfoMap["donation"]));
+    candidates.push(normalizeRecord(rec, sectionKey, semanticCategory, i, psomDonation));
   });
 
   const unique = dedupe(candidates);
@@ -694,7 +800,12 @@ function buildSnapshot({ seed, psomList, bank, optional }){
   const seedByKey = {};
   SECTION_KEYS.forEach(k=>seedByKey[k]=[]);
   seedItems.forEach(it=>{
-    const k = pickFirst(it.psom_key, it.section_category, isValidSectionKey(it.category) ? it.category : "");
+    const k = pickFirst(
+      it.psom_key,
+      it.section_category,
+      isValidSectionKey(it.category) ? it.category : "",
+      isValidSectionKey(it.section) ? it.section : ""
+    );
     if(SECTION_KEYS.includes(k)){
       seedByKey[k].push(it);
     }
@@ -706,12 +817,11 @@ function buildSnapshot({ seed, psomList, bank, optional }){
     const list = sortSection(grouped[k] || []);
     const chosen = list.slice(0, limit);
 
-if(chosen.length < limit){
-  const need = limit - chosen.length;
-  let source = (seedByKey[k] || []);
+    if(chosen.length < limit){
+      const need = limit - chosen.length;
+      const source = (seedByKey[k] || []);
 
-
-  const filler = source.slice(0, need).map((s)=>{
+      const filler = source.slice(0, need).map((s)=>{
         const copy = JSON.parse(JSON.stringify(s));
         copy.psom_key = k;
         copy.section_category = k;
@@ -726,6 +836,7 @@ if(chosen.length < limit){
         if(!copy.org) copy.org = { id:null, name: copy.title || null, legal_name:null, homepage: copy.link?.url || null, country:null, verified:false };
         if(!copy.replace_policy) copy.replace_policy = { mode:"bank-first", fallback:"seed", locked:false };
         if(!copy.psom_mapping) copy.psom_mapping = { page:"donation", section:k, category:copy.category, type:null, keywords:[] };
+        if(!copy.link) copy.link = { url: copy.org?.homepage || null, label:"visit" };
         return copy;
       });
       outItems.push(...chosen, ...filler);
@@ -734,16 +845,29 @@ if(chosen.length < limit){
     }
   });
 
-  const outSections = SECTION_KEYS.map(k=>{
-    const seedS = seedSections.find(s=>s && s.psom_key===k) || {};
+  const outSectionsArray = SECTION_KEYS.map(k=>{
+    const seedS = seedSectionDefs.find(s=>s && s.psom_key===k) || {};
     return {
       psom_key: k,
       slot_limit: limits[k],
-      replaceable: true,
+      replaceable: seedS.replaceable !== false,
       source: seedS.source || "seed",
-      bank_channel: "donation",
+      bank_channel: seedS.bank_channel || "donation",
       rank_policy: seedS.rank_policy || "auto",
       priority: Number(seedS.priority || 0)
+    };
+  });
+
+  const outSectionsObject = {};
+  outSectionsArray.forEach(sec => {
+    outSectionsObject[sec.psom_key] = {
+      psom_key: sec.psom_key,
+      slot_limit: sec.slot_limit,
+      replaceable: sec.replaceable,
+      source: sec.source,
+      bank_channel: sec.bank_channel,
+      rank_policy: sec.rank_policy,
+      priority: sec.priority
     };
   });
 
@@ -751,10 +875,10 @@ if(chosen.length < limit){
     meta:{
       schema:"donation.snapshot.enterprise.v7",
       generated_at: generatedAt,
-      producer:"donation-snapshot-builder.enterprise.v8.fixed",
+      producer:"donation-snapshot-builder.enterprise.v8.upgraded",
       mode:"bank-first-seed-fallback",
       version: 7,
-      builder_version: 8,
+      builder_version: 8.5,
       input_sources:{
         search_bank: Boolean(bank),
         optional: Object.keys(optional||{})
@@ -762,8 +886,12 @@ if(chosen.length < limit){
     },
     policy: seed.policy || {},
     taxonomy: seed.taxonomy || {},
-    sections: outSections,
-    items: outItems
+    sections: outSectionsObject,
+    sections_legacy: outSectionsArray,
+    items: outItems,
+    capacity: seed.capacity || { sections_default: 100 },
+    layers: seed.layers || undefined,
+    engine_layer: seed.engine_layer || undefined
   };
 
   out.policy = out.policy && typeof out.policy === "object" ? out.policy : {};
@@ -779,6 +907,11 @@ if(chosen.length < limit){
       supported_languages:["en","ko","ja","zh","es","fr","de","pt","ru","ar","hi","id","vi","th","tr"]
     };
   }
+
+  out.meta.psom = {
+    page: psomDonation.page || "donation",
+    sections: Array.isArray(psomDonation.sections) ? psomDonation.sections : SECTION_KEYS.slice()
+  };
 
   return out;
 }

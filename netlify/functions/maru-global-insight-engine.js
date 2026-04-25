@@ -12,10 +12,12 @@
 
 "use strict";
 
-const VERSION = "v2-aggregator";
+const VERSION = "v2.1-maru-search-mapped";
 
 let Core = null;
-try { Core = require("../maru/core"); } catch (_) { Core = null; }
+try { Core = require("./core"); } catch (_) {
+  try { Core = require("../maru/core"); } catch (_) { Core = null; }
+}
 
 let MaruSearch = null;
 try { MaruSearch = require("./maru-search"); } catch (_) { MaruSearch = null; }
@@ -39,10 +41,32 @@ function normalizeQuery(q){
 }
 
 function normalizeContext(params){
+  params = params || {};
   const scope = s(params.scope || params.level || "global").trim() || "global";
   const target = (params.target == null) ? null : s(params.target).trim();
   const intent = s(params.intent || "summary").trim() || "summary";
-  return { scope, target, intent };
+  return {
+    scope,
+    target,
+    intent,
+    uiLang: params.uiLang || params.locale || params.lang || null,
+    targetLang: params.targetLang || params.contentLang || params.filterLang || params.searchLang || null,
+    region: params.region || params.geo_region || null,
+    country: params.country || params.geo_country || null,
+    state: params.state || params.geo_state || null,
+    city: params.city || params.geo_city || null,
+    channel: params.channel || null,
+    section: params.section || params.bind_section || null,
+    page: params.page || null,
+    route: params.route || null,
+    category: params.category || null,
+    semantic_category: params.semantic_category || null,
+    external: params.external ?? null,
+    noExternal: params.noExternal ?? null,
+    disableExternal: params.disableExternal ?? null,
+    noAnalytics: params.noAnalytics ?? 1,
+    noRevenue: params.noRevenue ?? 1
+  };
 }
 
 function safeUrl(u){
@@ -163,11 +187,29 @@ async function callMaruSearch(query, mode, limit, context){
   try{
     const res = await MaruSearch.runEngine({}, {
       q: query,
-      mode: mode || "search",
+      mode: mode || "global-insight",
       limit,
       scope: context ? context.scope : null,
       target: context ? context.target : null,
-      intent: context ? context.intent : null
+      intent: context ? context.intent : null,
+      uiLang: context ? context.uiLang : null,
+      targetLang: context ? context.targetLang : null,
+      region: context ? context.region : null,
+      country: context ? context.country : null,
+      state: context ? context.state : null,
+      city: context ? context.city : null,
+      channel: context ? context.channel : null,
+      section: context ? context.section : null,
+      page: context ? context.page : null,
+      route: context ? context.route : null,
+      category: context ? context.category : null,
+      semantic_category: context ? context.semantic_category : null,
+      external: context ? context.external : null,
+      noExternal: context ? context.noExternal : null,
+      disableExternal: context ? context.disableExternal : null,
+      noAnalytics: true,
+      noRevenue: true,
+      from: "global-insight"
     });
 
     const items =
@@ -205,10 +247,24 @@ async function callSearchBank(event, query, limit, context){
   try{
     const params = {
       q: query,
+      query,
       limit,
+      from: 'global-insight',
       // optional routing hints (future)
-      channel: context && context.intent === 'media' ? 'media' : undefined,
+      channel: (context && context.channel) || (context && context.intent === 'media' ? 'media' : undefined),
+      section: context && context.section || undefined,
+      page: context && context.page || undefined,
+      route: context && context.route || undefined,
+      category: context && context.category || undefined,
+      semantic_category: context && context.semantic_category || undefined,
       type: context && context.intent === 'media' ? 'video' : undefined,
+      region: context && context.region || undefined,
+      country: context && context.country || undefined,
+      state: context && context.state || undefined,
+      city: context && context.city || undefined,
+      external: (context && context.external) ?? undefined,
+      noExternal: (context && context.noExternal) ?? undefined,
+      disableExternal: (context && context.disableExternal) ?? undefined,
     };
     const res = await BankEngine.runEngine(event || {}, params);
     if(res && res.status === 'ok') return { ok:true, data: res };
@@ -221,7 +277,7 @@ async function callSearchBank(event, query, limit, context){
 // ---------- AGGREGATOR CORE ----------
 async function runGlobalInsightV2(event, params){
   const query = normalizeQuery(params.q || params.query);
-  const mode = s(params.mode || 'search').trim() || 'search';
+  const mode = s(params.mode || 'global-insight').trim() || 'global-insight';
   const limit = clampInt(params.limit, 20, 1, 1000);
   const context = normalizeContext(params);
 
@@ -417,11 +473,28 @@ async function runEngine(event = {}, params = {}) {
 
     return await runGlobalInsightV2(event, {
       q: params.q || params.query || "",
-      mode: params.mode || "search",
+      mode: params.mode || "global-insight",
       limit: params.limit || 20,
       scope: params.scope,
       target: params.target,
-      intent: params.intent
+      intent: params.intent,
+      uiLang: params.uiLang || params.locale || params.lang,
+      targetLang: params.targetLang || params.contentLang || params.filterLang || params.searchLang,
+      region: params.region || params.geo_region,
+      country: params.country || params.geo_country,
+      state: params.state || params.geo_state,
+      city: params.city || params.geo_city,
+      channel: params.channel,
+      section: params.section || params.bind_section,
+      page: params.page,
+      route: params.route,
+      category: params.category,
+      semantic_category: params.semantic_category,
+      external: params.external,
+      noExternal: params.noExternal,
+      disableExternal: params.disableExternal,
+      noAnalytics: params.noAnalytics ?? 1,
+      noRevenue: params.noRevenue ?? 1
     });
 
   }
