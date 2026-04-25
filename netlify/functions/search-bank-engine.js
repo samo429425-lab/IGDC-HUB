@@ -169,7 +169,7 @@ async function liveProvider(event, q, limit){
   if(!truthy(process.env.MARU_BANK_LIVE)) return null;
   const base = eventBaseUrl(event);
   if(!base) return null;
-  const j = await fetchJson(`${base}/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(limit)}&from=search-bank&skipSearchBank=1`);
+  const j = await fetchJson(`${base}/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(limit)}`);
   if(!j) return null;
   if(Array.isArray(j.items)) return { meta:{ source:"maru-search" }, items:j.items };
   if(j.data && Array.isArray(j.data.items)) return { meta:{ source:"maru-search" }, items:j.data.items };
@@ -293,14 +293,6 @@ function externalCollectionEnabled(ctx, adapterName){
   const p = ctx?.params || {};
   const manual = truthy(p.useExternalSources || p.external || p.useLive || p.live || p[adapterName] || p[`use_${adapterName}`]) || truthy(process.env.MARU_BANK_EXTERNAL);
   return manual || slotExternalEnabled(ctx, adapterName);
-}
-function maruSearchReentrySuppressed(ctx){
-  const p = ctx?.params || {};
-  return low(p.from) === "maru-search"
-    || truthy(p.skipSearchBank)
-    || truthy(p.noSearchBank)
-    || truthy(p.skipMaruSearch)
-    || truthy(p.noMaruSearch);
 }
 
 function compactTokens(parts){
@@ -1226,7 +1218,6 @@ class LiveSearchAdapter extends BaseSourceAdapter {
   constructor(){ super("live"); }
   async collect(ctx){
     if(externalSuppressed(ctx)) return [];
-    if(maruSearchReentrySuppressed(ctx)) return [];
     if(!(truthy(process.env.MARU_BANK_LIVE) || externalCollectionEnabled(ctx, "live"))) return [];
 
     if(MaruSearch && typeof MaruSearch.runEngine === "function"){
@@ -1235,9 +1226,7 @@ class LiveSearchAdapter extends BaseSourceAdapter {
         query: ctx.queryIntent.raw || ctx.q || "",
         limit: Math.min(ctx.limit || 100, 300),
         lang: ctx.params.lang || ctx.queryIntent?.languageHint || undefined,
-        mode: ctx.params.mode || "search",
-        from: "search-bank",
-        skipSearchBank: true
+        mode: ctx.params.mode || "search"
       });
       if(Array.isArray(res?.items)) return res.items;
       if(Array.isArray(res?.results)) return res.results;
@@ -1263,7 +1252,6 @@ class MaruSearchSourceAdapter extends BaseSourceAdapter {
     ]));
   }
   async collect(ctx){
-    if(maruSearchReentrySuppressed(ctx)) return [];
     if(!MaruSearch || typeof MaruSearch.runEngine !== "function") return [];
     if(!externalCollectionEnabled(ctx, this.name)) return [];
     const q = this.buildQuery(ctx) || ctx.queryIntent?.raw || ctx.q || "";
@@ -1273,9 +1261,7 @@ class MaruSearchSourceAdapter extends BaseSourceAdapter {
       query: q,
       limit: Math.min(ctx.limit || 50, 200),
       lang: ctx.params.lang || ctx.queryIntent?.languageHint || undefined,
-      mode: ctx.params.mode || "search",
-      from: "search-bank",
-      skipSearchBank: true
+      mode: ctx.params.mode || "search"
     });
     if(Array.isArray(res?.items)) return res.items;
     if(Array.isArray(res?.results)) return res.results;
@@ -1313,10 +1299,7 @@ class PlanetarySourceAdapter extends BaseSourceAdapter {
       sector: ctx.queryIntent?.sectorHint?.major || ctx.params.sector || undefined,
       type: ctx.params.type || ctx.queryIntent?.entityHint?.type || undefined,
       usePlanetary: true,
-      federation: ctx.params.federation,
-      from: "search-bank",
-      useMaruSearchFallback: false,
-      skipMaruSearch: true
+      federation: ctx.params.federation
     });
     if(Array.isArray(res?.items)) return res.items;
     if(Array.isArray(res?.results)) return res.results.flatMap(r => Array.isArray(r?.items) ? r.items : []);
@@ -1336,9 +1319,7 @@ class CollectorSourceAdapter extends BaseSourceAdapter {
       region: ctx.geoContext.region,
       country: ctx.geoContext.country,
       sector: ctx.queryIntent?.sectorHint?.major || ctx.params.sector || undefined,
-      engine: ctx.params.engine || "search",
-      from: "search-bank",
-      skipMaruSearch: true
+      engine: ctx.params.engine || "search"
     });
     if(Array.isArray(res?.items)) return res.items;
     if(Array.isArray(res?.results)) return res.results;
@@ -1863,7 +1844,6 @@ exports.selectAdapters = selectAdapters;
 exports.canonicalRegionName = canonicalRegionName;
 exports.externalCollectionEnabled = externalCollectionEnabled;
 exports.externalSuppressed = externalSuppressed;
-exports.maruSearchReentrySuppressed = maruSearchReentrySuppressed;
 exports.resolveSlotPolicy = resolveSlotPolicy;
 exports.applySlotContract = applySlotContract;
 exports.slotAcceptsItem = slotAcceptsItem;
