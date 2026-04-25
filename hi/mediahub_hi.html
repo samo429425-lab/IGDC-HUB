@@ -1187,7 +1187,7 @@ html, body {
 <a href="mediahub.html">🎬 मीडिया हब</a>
 <a href="tour.html">🧳 यात्रा · पर्यटन · आवास</a>
 <a href="literature_academic.html">📚 साहित्य एवं शैक्षणिक आदान-प्रदान</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&A पूछताछ</a></aside>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 प्रश्नोत्तर संपर्क</a></aside>
 <main>
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
@@ -3707,11 +3707,11 @@ function handleVideoSearch(e){
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='प्रश्नोत्तर';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से Admin Q&A को भेजे जाते हैं।</div>';
+        body.innerHTML = '<div class="igdc-qa-note">※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से प्रशासक प्रश्नोत्तर को भेजे जाते हैं।</div>';
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
         document.body.appendChild(m);
@@ -3825,7 +3825,7 @@ function handleVideoSearch(e){
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      try{ await sb.auth.signInअनामly(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -3853,7 +3853,7 @@ function handleVideoSearch(e){
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="सबमिट";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="साफ़ करें";
-    const note = el("div","igdc-qa-note"); note.textContent="※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से Admin Q&A को भेजे जाते हैं।";
+    const note = el("div","igdc-qa-note"); note.textContent="※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से प्रशासक प्रश्नोत्तर को भेजे जाते हैं।";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -3977,7 +3977,7 @@ function handleVideoSearch(e){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Save settings (Supabase url/key) are not connected yet, so server-side saving is disabled. When deploying to the web, set SUPER_VARSAR.url/anonKey and it will be connected automatically.");
+        alert("सेव सेटिंग्स (Supabase url/key) अभी जुड़ी नहीं हैं, इसलिए सर्वर-साइड सहेजना अक्षम है। वेब पर डिप्लॉय करते समय SUPER_VARSAR.url/anonKey सेट करें, यह स्वतः कनेक्ट हो जाएगा।");
         return;
       }
       const record = {
@@ -4492,7 +4492,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     var title = document.createElement('div');
     title.className = 'igdc-qa-title';
-    title.textContent = 'Q&A';
+    title.textContent = "प्रश्नोत्तर";
 
     var closeBtn = document.createElement('button');
     closeBtn.className = 'igdc-qa-close';
@@ -4505,7 +4505,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     body.className = 'igdc-qa-body';
 
     body.innerHTML =
-      '<div class="igdc-qa-note">※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से Admin Q&A को भेजे जाते हैं।</div>';
+      '<div class="igdc-qa-note">※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से प्रशासक प्रश्नोत्तर को भेजे जाते हैं।</div>';
 
     var email = document.createElement('p');
     email.className = 'contact-email';
@@ -4570,13 +4570,11 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   if (window.__IGDC_QA_EMAIL_ENSURE__) return;
   window.__IGDC_QA_EMAIL_ENSURE__ = true;
 
-  var CONTACT_HTML = 'संपर्क ईमेल: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+  var CONTACT_HTML = "संपर्क ईमेल: <a href=\"mailto:igdcplatform@gmail.com\">igdcplatform@gmail.com</a>";
 
   function stripFooterEmail(){
     try{
-      var footers = document.querySelectorAll('footer');
-      footers.forEach(function(f){
-        // Remove any mailto links
+      document.querySelectorAll('footer').forEach(function(f){
         f.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
           var parent = a.parentNode;
           if(parent){
@@ -4587,16 +4585,48 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
             parent.innerHTML = html;
           }
         });
-        // Remove any plain-text "संपर्क ईमेल: ..." remnants
         f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
       });
     }catch(e){}
   }
 
-  function ensureModal(){
-    var modal = document.querySelector('.igdc-qa-modal');
-    if(!modal){
-      // Create minimal modal sk
+  function ensureModalEmail(){
+    try{
+      var modal = document.querySelector('.igdc-qa-modal');
+      if(!modal) return;
+      var body = modal.querySelector('.igdc-qa-body') || modal;
+      if(body && !body.querySelector('.contact-email')){
+        var note = body.querySelector('.igdc-qa-note');
+        if(!note){
+          note = document.createElement('div');
+          note.className = 'igdc-qa-note';
+          note.textContent = "स्टोरेज सेटिंग्स (Supabase url/key) जुड़ने के बाद पूरी कार्यक्षमता सक्रिय होगी.";
+          body.insertBefore(note, body.firstChild || null);
+        } else if(!note.textContent.trim()) {
+          note.textContent = "स्टोरेज सेटिंग्स (Supabase url/key) जुड़ने के बाद पूरी कार्यक्षमता सक्रिय होगी.";
+        }
+        var p = document.createElement('p');
+        p.className = 'contact-email';
+        p.innerHTML = CONTACT_HTML;
+        body.appendChild(p);
+      }
+    }catch(e){}
+  }
+
+  function run(){
+    stripFooterEmail();
+    ensureModalEmail();
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', run, { once:true });
+  } else {
+    run();
+  }
+  setTimeout(run, 400);
+  setTimeout(run, 1200);
+})();
+</script>
 <script id="igtc-mobile-overhaul-FULL-js">
 (function(){
   function qsa(sel){ return Array.prototype.slice.call(document.querySelectorAll(sel)); }
@@ -5040,7 +5070,7 @@ window.addEventListener("message",function(ev){
 
       switch (action) {
         case 'play':
-          alert('Playback will begin after viewing rights are confirmed.');
+          alert('देखने के अधिकार की पुष्टि होने के बाद प्लेबैक शुरू होगा।');
           break;
 
         case 'rent':
@@ -5054,11 +5084,11 @@ window.addEventListener("message",function(ev){
           break;
 
         case 'wish':
-          alert('Added to your wishlist.');
+          alert('आपकी इच्छा-सूची में जोड़ दिया गया है।');
           break;
 
         case 'review':
-          alert('Your review has been submitted.');
+          alert('आपकी समीक्षा जमा कर दी गई है।');
           break;
       }
     },

@@ -233,22 +233,22 @@
 
 /* === Local gutter for better left spacing (without altering global layout) === */
 .hero{ margin-left:16px !important; margin-right:16px !important; }
-#topলিখুনPanel{ margin-left:16px !important; margin-right:16px !important; }
+#topWritePanel{ margin-left:16px !important; margin-right:16px !important; }
 .people-news{ margin-left:16px !important; margin-right:16px !important; }
 
 /* === Balanced right gutter to match left (16px) === */
 .main{ padding-right:16px !important; }
 .hero{ margin-right:16px !important; }
-#topলিখুনPanel{ margin-right:16px !important; }
+#topWritePanel{ margin-right:16px !important; }
 .people-news{ margin-right:16px !important; }
 .feed-wrapper{ margin-right:16px !important; }
 
 /* === Ensure right gutter spacing matches left (16px) for main content boxes === */
 .main{ padding-right:16px !important; }
-.hero, #topলিখুনPanel, .people-news, .feed-wrapper{ margin-right:16px !important; }
+.hero, #topWritePanel, .people-news, .feed-wrapper{ margin-right:16px !important; }
 
 /* === Uniform content widths for top 3 boxes === */
-.hero, #topলিখুনPanel, .people-news{
+.hero, #topWritePanel, .people-news{
   width:100% !important;
   max-width:none !important;
   margin-left:auto !important;
@@ -257,13 +257,13 @@
 
 /* === Restore left gutter and center content === */
 .main{ padding-left:16px !important; padding-right:16px !important; }
-.hero, #topলিখুনPanel, .people-news{ margin-left:auto !important; margin-right:auto !important; }
+.hero, #topWritePanel, .people-news{ margin-left:auto !important; margin-right:auto !important; }
 /* Feed wrapper also centered with same gutter */
 .feed-wrapper{ margin-left:auto !important; margin-right:auto !important; }
 
 
 /* === Slightly increase main content box width to reduce right gap === */
-.hero, #topলিখুনPanel, .people-news{
+.hero, #topWritePanel, .people-news{
   max-width:1210px !important;
 }
 
@@ -272,7 +272,7 @@
 /* Keep container gap as the sole inter-column spacing */
 .container{ gap:16px !important; }
 /* Center the three top boxes so leftover space splits evenly */
-.hero, #topলিখুনPanel, .people-news{ margin-left:auto !important; margin-right:auto !important; max-width:1210px !important; }
+.hero, #topWritePanel, .people-news{ margin-left:auto !important; margin-right:auto !important; max-width:1210px !important; }
 @media (orientation: portrait){
 .main{
   width:100% !important;
@@ -282,7 +282,7 @@
 }
 }
 
-.hero, #topলিখুনPanel, .people-news{
+.hero, #topWritePanel, .people-news{
   max-width:100% !important;
   margin-left:0 !important;
   margin-right:0 !important;
@@ -311,7 +311,7 @@
 
 
 /* The three top boxes + feed wrapper all use the same centered width */
-.hero, #topলিখুনPanel, .people-news, .feed-wrapper{
+.hero, #topWritePanel, .people-news, .feed-wrapper{
   width:min(100%, var(--content-width)) !important;
   margin:0 !important;               /* no side margins; centering handled by .main */
 }
@@ -373,7 +373,7 @@
 }
 .compose-wrap .row-top .button{ margin:0; }
 .compose-wrap .row-top #btnOpenComposer{ order:1; }
-.compose-wrap .row-top #btnজমা দিনPost{ order:2; }
+.compose-wrap .row-top #btnSubmitPost{ order:2; }
 /* Keep 'নিশ্চিত করুন' labels strictly horizontal (already set for .button.tiny) */
 
 /* Reinforce: 'নিশ্চিত করুন' 버튼은 가로(수평) 표기 유지 */
@@ -385,7 +385,7 @@
   border:1px solid #d0d7de; border-radius:10px;
   padding:8px 10px; background:#f8fafc;
 }
-.field-category select#postবিভাগ{ min-width:180px; }
+.field-category select#postCategory{ min-width:180px; }
 
 .label-strong{ font-weight:700; }
 .label-accent{ color:#1c7c54; } /* 차분한 녹색 톤 */
@@ -404,7 +404,7 @@
 .row-bottom .button.tiny{ line-height:1.1; font-weight:600; }
 
 /* === User-specified refinements (scoped) === */
-.field-category select#postবিভাগ{
+.field-category select#postCategory{
   width:auto; max-width:140px; min-width:110px;
 }
 .field-category{ flex-wrap:nowrap; }
@@ -416,23 +416,23 @@
 .field-file, .field-image{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
 .field-file #btnPickFile{ order:1; color:#111; }   /* 'ফাইল নির্বাচন' in black */
 .field-file .filename{ order:2; width:50%; min-width:0; }
-.field-file #btnFileনিশ্চিত করুন{ order:3; }
+.field-file #btnFileConfirm{ order:3; }
 
 .field-image #btnPickImage{ order:1; color:#111; } /* 'ছবি নির্বাচন' in black (for consistency) */
 .field-image .filename{ order:2; width:50%; min-width:0; }
-.field-image #btnImageনিশ্চিত করুন{ order:3; }
+.field-image #btnImageConfirm{ order:3; }
 
 /* Ensure buttons remain compact and don't force wrap */
 .field-file .button.tiny, .field-image .button.tiny{ white-space:nowrap; }
 
 /* === Tweaks per latest instructions === */
 /* NGO dropdown: about 1/3 of previous long width; keep compact */
-.field-category select#postবিভাগ{
+.field-category select#postCategory{
   width: 90px; min-width: 80px; max-width: 110px;
 }
 
 /* বিভাগ label as a button, horizontal text ensured */
-#labelবিভাগ{ font-weight:600; }
+#labelCategory{ font-weight:600; }
 
 /* File/Image bars: reduce to 25% width */
 .field-file .filename, .field-image .filename{ width:25%; min-width:0; }
@@ -443,7 +443,7 @@
 /* === Final polish per screenshot feedback === */
 
 /* 'বিভাগ' must be horizontal like a button */
-#labelবিভাগ{
+#labelCategory{
   writing-mode: horizontal-tb !important;
   transform: none !important;
   display: inline-flex;
@@ -452,7 +452,7 @@
 }
 
 /* NGO dropdown: cut to about half of prior setting */
-.field-category select#postবিভাগ{
+.field-category select#postCategory{
   width: 56px; min-width: 50px; max-width: 70px;
 }
 
@@ -513,7 +513,7 @@
 .compose-wrap .row-bottom .field-file{ display:inline-flex; align-items:center; gap:4px !important; }
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; position:relative; z-index:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; margin-left:4px; }
-.compose-wrap .row-bottom .field-file #btnFileনিশ্চিত করুন{ order:3; position:relative; z-index:1; }
+.compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; position:relative; z-index:1; }
 
 /* Image group: [ছবি নির্বাচন] [막대] [নিশ্চিত করুন] */
 .compose-wrap .row-bottom .field-image{ display:inline-flex; align-items:center; gap:4px !important; }
@@ -521,7 +521,7 @@
 .compose-wrap .row-bottom .field-image{ margin-left:72px !important; }
 .compose-wrap .row-bottom .field-image #btnPickImage{ order:1; position:relative; z-index:1; }
 .compose-wrap .row-bottom .field-image #imgChosen{ order:2; margin-left:4px; }
-.compose-wrap .row-bottom .field-image #btnImageনিশ্চিত করুন{ order:3; position:relative; z-index:1; }
+.compose-wrap .row-bottom .field-image #btnImageConfirm{ order:3; position:relative; z-index:1; }
 
 /* Keep bars at half width and non-overlapping */
 .compose-wrap .row-bottom #fileChosen,
@@ -558,7 +558,7 @@
 .compose-wrap .row-bottom .field-file{ display:inline-flex; align-items:center; gap:6px; }
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; margin-left:6px; }
-.compose-wrap .row-bottom .field-file #btnFileনিশ্চিত করুন{ order:3; margin-left:8px; }
+.compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; margin-left:8px; }
 
 /* IMAGE group -> [ছবি নির্বাচন][막대][নিশ্চিত করুন] 붙어서 배치 */
 .compose-wrap .row-bottom .field-image{ display:inline-flex; align-items:center; gap:6px; }
@@ -595,11 +595,11 @@
 /* Inside each group: [Pick][Bar][নিশ্চিত করুন] */
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; }
-.compose-wrap .row-bottom .field-file #btnFileনিশ্চিত করুন{ order:3; }
+.compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; }
 
 .compose-wrap .row-bottom .field-image #btnPickImage{ order:1; }
 .compose-wrap .row-bottom .field-image #imgChosen{ order:2; }
-.compose-wrap .row-bottom .field-image #btnImageনিশ্চিত করুন{ order:3; }
+.compose-wrap .row-bottom .field-image #btnImageConfirm{ order:3; }
 
 /* Bars expand within their half; cancel any global min-width */
 .compose-wrap .row-bottom #fileChosen,
@@ -610,8 +610,8 @@
 }
 
 /* Keep confirm buttons compact and visible */
-.compose-wrap .row-bottom #btnFileনিশ্চিত করুন,
-.compose-wrap .row-bottom #btnImageনিশ্চিত করুন{
+.compose-wrap .row-bottom #btnFileConfirm,
+.compose-wrap .row-bottom #btnImageConfirm{
   flex:0 0 auto; position:relative; z-index:1;
 }
 
@@ -632,8 +632,8 @@
   margin-left:0 !important;    /* 버튼과 막대가 딱 붙도록 */
 }
 
-.compose-wrap .row-bottom #btnFileনিশ্চিত করুন,
-.compose-wrap .row-bottom #btnImageনিশ্চিত করুন{
+.compose-wrap .row-bottom #btnFileConfirm,
+.compose-wrap .row-bottom #btnImageConfirm{
   margin-left:4px !important;  /* 막대 바로 뒤에 가깝게 */
 }
 
@@ -644,20 +644,20 @@
 .compose-wrap .row-top .field-category{ order:1; }     /* বিভাগ(드롭다운) */
 .compose-wrap .row-top #btnOpenComposer{ order:2; }    /* লিখুন */
 .compose-wrap .row-top #btnAttach{ order:3; }          /* সংযুক্তি(신규 버튼) */
-.compose-wrap .row-top #btnজমা দিনPost{ order:4; }      /* 글올리기 */
+.compose-wrap .row-top #btnSubmitPost{ order:4; }      /* 글올리기 */
 
 /* Hide legacy file/image pickers (compose only) */
 .compose-wrap .row-bottom .field-file,
 .compose-wrap .row-bottom .field-image,
-.compose-wrap .row-bottom #btnFileনিশ্চিত করুন,
-.compose-wrap .row-bottom #btnImageনিশ্চিত করুন { display:none !important; }
+.compose-wrap .row-bottom #btnFileConfirm,
+.compose-wrap .row-bottom #btnImageConfirm { display:none !important; }
 
 /* Attach filename (display only), uses existing button styles */
 .compose-wrap #attachName{
   display:inline-block; margin-left:6px;
   max-width:42vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
-.compose-wrap #btnAttachমুছুন{ margin-left:4px; }
+.compose-wrap #btnAttachClear{ margin-left:4px; }
 </style>
 <style>
 .attach-preview{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; max-width:44vw; padding:4px 0; margin-left:6px; }
@@ -678,7 +678,7 @@
   min-width:260px; max-width:50vw; flex:0 0 auto;     /* 막대 형태, 한 줄 유지 */
   overflow:hidden;
 }
-.compose-wrap .row-top #btnজমা দিনPost{ order:6; }     /* সংরক্ষণ(최종) */
+.compose-wrap .row-top #btnSubmitPost{ order:6; }     /* সংরক্ষণ(최종) */
 
 /* 칩 스타일(막대 내부) */
 .attach-preview .attach-chip{
@@ -700,7 +700,7 @@
 .compose-wrap .row-top #btnOpenComposer{ order:2; }   /* লিখুন */
 .compose-wrap .row-top #btnAttach{ order:3; }         /* সংযুক্তি */
 .compose-wrap .row-top #attachPreview{ order:4; }     /* 미리보기 막대 */
-.compose-wrap .row-top #btnজমা দিনPost{ order:5; }     /* সংরক্ষণ */
+.compose-wrap .row-top #btnSubmitPost{ order:5; }     /* সংরক্ষণ */
 </style><style>
 /* === শিরোনাম Preview Bar (between লিখুন and সংযুক্তি) === */
 .compose-wrap .row-top #titlePreview{
@@ -713,7 +713,7 @@
 }
 .compose-wrap .row-top #btnAttach{ order:4; }
 .compose-wrap .row-top #attachPreview{ order:5; }
-.compose-wrap .row-top #btnজমা দিনPost{ order:6; }
+.compose-wrap .row-top #btnSubmitPost{ order:6; }
 
 .title-preview .tp-text{ font-size:.92rem; color:#111; }
 
@@ -722,8 +722,8 @@
 </style><style>
 /* === Compose row: place 'মুছুন' right after 최종 'সংরক্ষণ' === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; overflow:hidden; }
-.compose-wrap .row-top #btnজমা দিনPost{ order:6; }
-.compose-wrap .row-top #btnAttachমুছুন{ order:7; margin-left:6px; }
+.compose-wrap .row-top #btnSubmitPost{ order:6; }
+.compose-wrap .row-top #btnAttachClear{ order:7; margin-left:6px; }
 .compose-wrap .row-top #attachName{ display:none !important; } /* 칩 UI 사용 */
 
 /* Shrink bars to avoid line overflow (title < attach) */
@@ -747,8 +747,8 @@
 /* শিরোনাম 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
 /* সংযুক্তি 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
 /* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
-/* সংরক্ষণ */               .compose-wrap .row-top #btnজমা দিনPost{ order:6 !important; }
-/* মুছুন */             .compose-wrap .row-top #btnAttachমুছুন{ order:7 !important; }
+/* সংরক্ষণ */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
+/* মুছুন */             .compose-wrap .row-top #btnAttachClear{ order:7 !important; }
 </style><style>
 /* Smooth scroll in right-side topic lists */
 .right .topic-panel .list{ scroll-behavior: smooth; }
@@ -1003,7 +1003,7 @@
 
 /* Ensure the three top boxes and feed align to the reduced gutter */
 .main{ padding-left: 0 !important; padding-right: 0 !important; }
-.hero, #topলিখুনPanel, .people-news, .feed-wrapper{ margin-left: 0 !important; margin-right: 0 !important; }
+.hero, #topWritePanel, .people-news, .feed-wrapper{ margin-left: 0 !important; margin-right: 0 !important; }
 
 /* Keep main content centered within its column without extra left padding */
 .main{ align-items: stretch !important; }  /* allow full-width of the main column */
@@ -1103,7 +1103,7 @@ body > .container > .main{
 
 /* 내부 요소들이 별도 좌/우 마진·패딩을 추가하지 않도록 정리 */
 body > .container > .main .hero,
-body > .container > .main #topলিখুনPanel,
+body > .container > .main #topWritePanel,
 body > .container > .main .people-news,
 body > .container > .main .feed-wrapper{
   width:100% !important; max-width:none !important;
@@ -1188,7 +1188,7 @@ body > .container > .main{
 @media (orientation: portrait){
 }
 body > .container > .main .hero,
-body > .container > .main #topলিখুনPanel,
+body > .container > .main #topWritePanel,
 body > .container > .main .people-news,
 body > .container > .main .feed-wrapper{
   width: 100% !important;
@@ -1452,7 +1452,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "এখনও কোনো Q&A এন্ট্রি নিবন্ধিত হয়নি";
+  content: "এখনও কোনো প্রশ্নোত্তর এন্ট্রি নিবন্ধিত হয়নি";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1470,7 +1470,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "এখনও কোনো Q&A এন্ট্রি নিবন্ধিত হয়নি";
+  content: "এখনও কোনো প্রশ্নোত্তর এন্ট্রি নিবন্ধিত হয়নি";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1683,7 +1683,7 @@ main, .main, #main, .main-content, .content, .content-area{
     }
 }
 
-    .hero, #topলিখুনPanel, .people-news, .feed-wrapper{
+    .hero, #topWritePanel, .people-news, .feed-wrapper{
       width:100% !important; max-width:100% !important;
       margin-left:0 !important; margin-right:0 !important;
       padding-left:0 !important; padding-right:0 !important;
@@ -1834,7 +1834,7 @@ body .right{ display:none !important; }
 
 
   /* Hero / top sections: full width with gentle gutters */
-  body .hero, body #topলিখুনPanel, body .people-news, body .feed-wrapper{
+  body .hero, body #topWritePanel, body .people-news, body .feed-wrapper{
     width:100% !important; max-width:none !important; margin:0 !important;
   }
 
@@ -2106,18 +2106,18 @@ body .right{ display:none !important; }
 </script>
 
 <style>
-  /* IGTC DONATION - hero & topলিখুনPanel spacing normalize */
+  /* IGTC DONATION - hero & topWritePanel spacing normalize */
   .hero {
     margin-bottom: 16px;
   }
-  #topলিখুনPanel {
+  #topWritePanel {
     margin-top: 0;
   }
   @media (max-width:1024px) {
     .hero {
       margin-bottom: 8px !important;
     }
-    #topলিখুনPanel {
+    #topWritePanel {
       margin-top: 4px !important;
       margin-bottom: 14px !important;
     }
@@ -2343,7 +2343,7 @@ body > div.container,
 
   /* main 안쪽 박스가 max-width로 메인 폭을 "착시"로 좁혀 보이게 하지 않도록: 메인 칸을 가득 채움 */
   body > .container > .main .hero,
-  body > .container > .main #topলিখুনPanel,
+  body > .container > .main #topWritePanel,
   body > .container > .main .people-news,
   body > .container > .main .feed-wrapper{
     width:100% !important;
@@ -2379,7 +2379,7 @@ body > div.container,
 <a href="mediahub.html">🎬 মিডিয়া হাব</a>
 <a href="tour.html">🧳 ভ্রমণ · পর্যটন · আবাসন</a>
 <a href="literature/academic.html" style="display:none !important;">📚 সাহিত্য ও একাডেমিক বিনিময়</a>
-<a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A জিজ্ঞাসা</a></nav>
+<a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 প্রশ্নোত্তর</a></nav>
 <!-- Main (불변 구조) -->
 <main class="main">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
@@ -2392,13 +2392,13 @@ body > div.container,
 <h2>💝 গ্লোবাল ডোনেশন হাব 💝</h2>
 <p>IESF এবং WAM Foundation-এর সহায়তা ব্যবস্থা এখান থেকেই শুরু হয়।</p>
 </section>
-<section class="panel" id="topলিখুনPanel" style="margin-bottom:20px;">
+<section class="panel" id="topWritePanel" style="margin-bottom:20px;">
 <textarea id="topPostBody" placeholder="মূল লেখা লিখুন।.." rows="4" style="padding-top:22px; padding-bottom:12px; font-weight:600;">এটি IGDC Global Platform Group-এর সহায়তায় পরিচালিত একটি স্থান, যেখানে মূল্যবান WAM World Aviation Mission Foundation-এর সেবা ও সংবাদ, IESF-এর খবর এবং বিভিন্ন NGO ও স্বেচ্ছাসেবী সংস্থার সংবাদ ভাগ করা হয়।</textarea>
 <!-- Inline controls row replacing box UI -->
 <!-- Inline controls, two-row layout -->
 <div class="compose-wrap" id="composeControls">
-<div class="row row-top"><label class="field field-category"><span class="button tiny" id="labelবিভাগ" style="writing-mode:horizontal-tb;">বিভাগ</span>
-<select id="postবিভাগ"><option value="iesf">IESF</option>
+<div class="row row-top"><label class="field field-category"><span class="button tiny" id="labelCategory" style="writing-mode:horizontal-tb;">বিভাগ</span>
+<select id="postCategory"><option value="iesf">IESF</option>
 <option value="ngo">NGO</option>
 <option value="mission">মিশন</option>
 <option value="service">সেবা</option>
@@ -2407,11 +2407,11 @@ body > div.container,
 <option value="env">পরিবেশ</option>
 <option value="etc">অন্যান্য</option>
 </select>
-</label><button class="button small" id="btnAttach" type="button">সংযুক্তি</button><div aria-label="সংযুক্তি 미리보기" class="attach-preview" id="attachPreview"></div>
-<button class="button small" id="btnOpenComposer">লিখুন</button><div aria-label="শিরোনাম 미리보기" class="title-preview" id="titlePreview"><span class="tp-text">শিরোনাম নেই</span></div>
-<button class="button small accent" id="btnজমা দিনPost">সংরক্ষণ</button>
+</label><button class="button small" id="btnAttach" type="button">সংযুক্তি</button><div aria-label="সংযুক্তির পূর্বরূপ" class="attach-preview" id="attachPreview"></div>
+<button class="button small" id="btnOpenComposer">লিখুন</button><div aria-label="শিরোনামের পূর্বরূপ" class="title-preview" id="titlePreview"><span class="tp-text">শিরোনাম নেই</span></div>
+<button class="button small accent" id="btnSubmitPost">সংরক্ষণ</button>
 <span id="attachName"></span>
-<button aria-label="첨부 제거 " class="button tiny" id="btnAttachমুছুন" style="display:none;" type="button">মুছুন</button>
+<button aria-label="সংযুক্তি মুছুন" class="button tiny" id="btnAttachClear" style="display:none;" type="button">মুছুন</button>
 <input id="postAttach" style="display:none;" type="file"/>
 </div>
 <div class="row row-bottom">
@@ -2419,14 +2419,14 @@ body > div.container,
 <label class="field field-file">
 <input accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip" id="postFile" style="display:none;" type="file"/>
 <button class="button tiny file-btn" id="btnPickFile" type="button">ফাইল নির্বাচন</button>
-<button class="button tiny" id="btnFileনিশ্চিত করুন" type="button">নিশ্চিত করুন</button>
+<button class="button tiny" id="btnFileConfirm" type="button">নিশ্চিত করুন</button>
 <span class="filename" id="fileChosen"></span>
 </label>
 <!-- Image second -->
 <label class="field field-image">
 <input accept="image/*" id="postImage" style="display:none;" type="file"/>
 <button class="button tiny file-btn" id="btnPickImage" type="button">ছবি নির্বাচন</button>
-<button class="button tiny" id="btnImageনিশ্চিত করুন" type="button">নিশ্চিত করুন</button>
+<button class="button tiny" id="btnImageConfirm" type="button">নিশ্চিত করুন</button>
 <span class="filename" id="imgChosen"></span>
 </label>
 </div>
@@ -2434,7 +2434,7 @@ body > div.container,
 </section>
 <!-- (요청) 5줄 Feed -->
 <section class="feed-wrapper">
-<div class="feed-header"><h3 style="margin:0;">📺 Feed</h3></div>
+<div class="feed-header"><h3 style="margin:0;">📺 ফিড</h3></div>
 <div id="feedRows">
 
 <!-- ===== Donation Feed Rows (Final Clean Version) ===== -->
@@ -2497,13 +2497,13 @@ body > div.container,
 <aside class="right">
 <div class="panel cafe-link"><a aria-label="WAM NAVER Cafe-এ যান" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
-<button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">Donations</button>
+<button class="button" onclick="alert('অনুদান ব্যবস্থা শীঘ্রই সংযুক্ত হবে!')" style="margin-bottom:8px; padding:5px 14px;">অনুদান</button>
 <p><b>IESF (International Exchange Service Foundation)</b><br/>
         - সাধারণ: NongHyup 301-0078-3333-51<br/>
-        - Foreign Currency: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
+        - বৈদেশিক মুদ্রা: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
 <p><b>WAM Foundation (World Aviation Mission Foundation)</b><br/>
         - সাধারণ: Shinhan 100-026-331592<br/>
-        - Foreign Currency: Shinhan 180-005-931110<br/><span>   SWIFT: SHBKKRSE</span></p>
+        - বৈদেশিক মুদ্রা: Shinhan 180-005-931110<br/><span>   SWIFT: SHBKKRSE</span></p>
 </div>
 <div class="feed-wrapper" id="iesfFeed" style="flex:1; overflow-y:auto;">
 </div>
@@ -2538,7 +2538,7 @@ body > div.container,
 </div>
 
 <footer>
-  IGTC Global Hub © 2025 | International সাধারণ Distribution Company<br/>
+  IGTC Global Hub © 2025 | International General Distribution Company<br/>
   50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Korea <br/>
 </footer>
 
@@ -2547,11 +2547,11 @@ body > div.container,
 <div class="hidden" id="composerModal" style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:9999;">
 <div class="panel" style="width:min(92vw, 720px); max-height:80vh; overflow:auto;">
 <h3 style="margin-top:0;">লিখুন</h3>
-<input id="composeশিরোনাম" placeholder="শিরোনাম" style="width:100%;"/>
+<input id="composeTitle" placeholder="শিরোনাম" style="width:100%;"/>
 <textarea id="composeBody" placeholder="বিষয়বস্তু লিখুন..." rows="8" style="width:100%; resize:vertical;"></textarea>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px;">
-<button class="button outline" id="btnDraftসংরক্ষণ" type="button">খসড়া সংরক্ষণ</button><button class="button outline" id="btnবাতিল">বাতিল</button>
-<button class="button" disabled="disabled" id="btnসংরক্ষণ" style=";display:none !important;">সংরক্ষণ</button>
+<button class="button outline" id="btnDraftSave" type="button">খসড়া সংরক্ষণ</button><button class="button outline" id="btnCancel">বাতিল</button>
+<button class="button" disabled="disabled" id="btnSave" style=";display:none !important;">সংরক্ষণ</button>
 </div>
 </div>
 </div>
@@ -2564,16 +2564,16 @@ body > div.container,
 
   const modal = $("#composerModal");
   const btnOpen = $("#btnOpenComposer");
-  const btnজমা দিন = $("#btnজমা দিনPost");
-  const btnসংরক্ষণ = $("#btnসংরক্ষণ");
-  const btnবাতিল = $("#btnবাতিল");
-  const titleI = $("#composeশিরোনাম");
+  const btnSubmit = $("#btnSubmitPost");
+  const btnSave = $("#btnSave");
+  const btnCancel = $("#btnCancel");
+  const titleI = $("#composeTitle");
   const bodyI = $("#composeBody");
-  const catSel = $("#postবিভাগ");
+  const catSel = $("#postCategory");
   const fileI = $("#postImage");
   const fileAttach = $("#postFile");
-  const btnImgOk = $("#btnImageনিশ্চিত করুন");
-  const btnFileOk = $("#btnFileনিশ্চিত করুন");
+  const btnImgOk = $("#btnImageConfirm");
+  const btnFileOk = $("#btnFileConfirm");
   const btnPickImg = $("#btnPickImage");
   const btnPickFile = $("#btnPickFile");
   const fileChosen = $("#fileChosen");
@@ -2584,15 +2584,15 @@ body > div.container,
   function closeModal(){ modal.classList.add("hidden"); }
 
   btnOpen && btnOpen.addEventListener("click", openModal);
-  btnবাতিল && btnবাতিল.addEventListener("click", closeModal);
+  btnCancel && btnCancel.addEventListener("click", closeModal);
   // trigger hidden inputs and show names
   btnPickFile && btnPickFile.addEventListener("click", ()=> fileAttach && fileAttach.click());
   btnPickImage && btnPickImage.addEventListener("click", ()=> fileI && fileI.click());
   fileAttach && fileAttach.addEventListener("change", ()=>{ if(fileChosen){ fileChosen.textContent = fileAttach.files[0]?.name || ""; } });
   fileI && fileI.addEventListener("change", ()=>{ if(imgChosen){ imgChosen.textContent = fileI.files[0]?.name || ""; } });
-  btnজমা দিন && btnজমা দিন.addEventListener("click", ()=>{ if(btnসংরক্ষণ){ btnসংরক্ষণ.click(); } });
+  btnSubmit && btnSubmit.addEventListener("click", ()=>{ if(btnSave){ btnSave.click(); } });
 
-  btnসংরক্ষণ && btnসংরক্ষণ.addEventListener("click", ()=>{
+  btnSave && btnSave.addEventListener("click", ()=>{
     const t = titleI?.value?.trim() || "(কোনো শিরোনাম নেই)";
     const b = bodyI?.value?.trim() || "(কোনো বিষয়বস্তু নেই)";
     const cat = catSel?.value || "etc";
@@ -2612,7 +2612,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">첨부 링크</a>` : `첨부: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">সংযুক্তির লিংক</a>` : `সংযুক্তি: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2623,7 +2623,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "첨부: " + fileAttach.files[0].name;
+        att.textContent = "সংযুক্তি: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2661,7 +2661,7 @@ body > div.container,
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
-        alert("Only files up to 5MB can display their file name directly. For large files, please use only an external storage link.");
+        alert("শুধুমাত্র ৫ এমবি পর্যন্ত ফাইলের নাম সরাসরি দেখানো যাবে। বড় ফাইলের ক্ষেত্রে অনুগ্রহ করে কেবল বাইরের স্টোরেজের লিংক ব্যবহার করুন।");
         attachLink = "";
       }else{
         attachLink = f.name; // 파일명만 기록
@@ -2681,12 +2681,12 @@ body > div.container,
   var btnAttach = document.getElementById('btnAttach');
   var input = document.getElementById('postAttach');
   var nameEl = document.getElementById('attachName');
-  var clearBtn = document.getElementById('btnAttachমুছুন');
+  var clearBtn = document.getElementById('btnAttachClear');
 
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '개 파일');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + 'টি ফাইল');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2731,9 +2731,9 @@ body > div.container,
   const rowTop = $('.compose-wrap .row-top');
   const attachInput = $('#postAttach');
   const attachPreview = $('#attachPreview');
-  const clearBtn = $('#btnAttachমুছুন');
+  const clearBtn = $('#btnAttachClear');
   const legacyFile = $('#postFile');
-  const btnজমা দিন = $('#btnজমা দিনPost');
+  const btnSubmit = $('#btnSubmitPost');
 
   let selectedFiles = [];
   function syncInputs(){
@@ -2785,18 +2785,18 @@ body > div.container,
     });
   }
 
-  const catSel = $('#postবিভাগ');
-  const titleI = $('#composeশিরোনাম');
+  const catSel = $('#postCategory');
+  const titleI = $('#composeTitle');
   const bodyI  = $('#composeBody');
   const modal  = $('#composerModal');
   function closeModal(){ modal && modal.classList.add('hidden'); }
 
-  function handleUnifiedসংরক্ষণ(){
+  function handleUnifiedSave(){
     const t = (titleI && titleI.value.trim()) || '(কোনো শিরোনাম নেই)';
     const b = (bodyI && bodyI.value.trim()) || '(কোনো বিষয়বস্তু নেই)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
+    if(!holder){ alert('সংবাদের অংশটি খুঁজে পাওয়া যায়নি।'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2813,7 +2813,7 @@ body > div.container,
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = '첨부: ' + f.name;
+        li.textContent = 'সংযুক্তি: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
@@ -2823,10 +2823,10 @@ body > div.container,
     del.type='button'; del.className='button tiny danger delete-post'; del.textContent='মুছুন';
     del.style.cssText='margin-top:6px; display:none;';
     item.appendChild(del);
-    const canমুছুন = (USER_ROLE==='admin' || USER_ROLE==='writer');
-    if(canমুছুন) del.style.display='inline-block';
+    const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
+    if(canDelete) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 মুছুন하시겠습니까?')) return;
+      if(!confirm('আপনি কি এই পোস্টটি মুছে ফেলতে চান?')) return;
       item.remove();
     });
 
@@ -2842,10 +2842,10 @@ body > div.container,
     closeModal();
   }
 
-  if(btnজমা দিন){
-    btnজমা দিন.addEventListener('click', (e)=>{
+  if(btnSubmit){
+    btnSubmit.addEventListener('click', (e)=>{
       e.preventDefault();
-      handleUnifiedসংরক্ষণ();
+      handleUnifiedSave();
     });
   }
 
@@ -2856,7 +2856,7 @@ body > div.container,
   const $ = (s,r=document)=>r.querySelector(s);
   const attachInput = $('#postAttach');
   const attachPreview = $('#attachPreview');
-  const clearBtn = $('#btnAttachমুছুন');
+  const clearBtn = $('#btnAttachClear');
   const legacyFile = $('#postFile');
   const nameEl = $('#attachName');
 
@@ -2893,7 +2893,7 @@ body > div.container,
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '개 파일');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + 'টি ফাইল');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
@@ -2937,26 +2937,26 @@ body > div.container,
 </script><script>
 (function(){
   const $ = (s,r=document)=>r.querySelector(s);
-  const titleI = $('#composeশিরোনাম');
+  const titleI = $('#composeTitle');
   const bodyI  = $('#composeBody');
   const modal  = $('#composerModal');
-  const btnDraft = $('#btnDraftসংরক্ষণ');
-  const btnবাতিল = $('#btnবাতিল');
-  const btnজমা দিন = $('#btnজমা দিনPost');
+  const btnDraft = $('#btnDraftSave');
+  const btnCancel = $('#btnCancel');
+  const btnSubmit = $('#btnSubmitPost');
   const titlePreview = $('#titlePreview');
   const tpText = titlePreview ? titlePreview.querySelector('.tp-text') : null;
 
   let draft = { title:'', body:'' };
 
-  function updateশিরোনামPreview(src){
+  function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || ''শিরোনাম নেই';';
+    tpText.textContent = t || 'শিরোনাম নেই';
   }
 
   // live typing updates preview
   if(titleI){
-    titleI.addEventListener('input', ()=> updateশিরোনামPreview());
+    titleI.addEventListener('input', ()=> updateTitlePreview());
   }
 
   // খসড়া সংরক্ষণ: keep in-memory draft; do NOT post to right panel
@@ -2965,26 +2965,26 @@ body > div.container,
       e.preventDefault();
       draft.title = (titleI && titleI.value)||'';
       draft.body  = (bodyI && bodyI.value)||'';
-      updateশিরোনামPreview(draft.title);
+      updateTitlePreview(draft.title);
       // keep modal open; optional small feedback
       // console.log('Draft saved');
     });
   }
 
   // বাতিল: clear draft and input fields, and clear preview
-  if(btnবাতিল){
-    btnবাতিল.addEventListener('click', ()=>{
+  if(btnCancel){
+    btnCancel.addEventListener('click', ()=>{
       draft.title=''; draft.body='';
       if(titleI) titleI.value='';
       if(bodyI) bodyI.value='';
-      updateশিরোনামPreview('');
+      updateTitlePreview('');
     });
   }
 
   // Before final save, if a draft exists (and modal may be closed/empty),
   // write draft back into inputs so existing save handler picks it up.
-  if(btnজমা দিন){
-    btnজমা দিন.addEventListener('click', ()=>{
+  if(btnSubmit){
+    btnSubmit.addEventListener('click', ()=>{
       if((draft.title && draft.title.trim()) || (draft.body && draft.body.trim())){
         if(titleI) titleI.value = draft.title || '';
         if(bodyI)  bodyI.value  = draft.body  || '';
@@ -2992,29 +2992,29 @@ body > div.container,
       // clear draft & preview shortly after click so the original handler can read values
       setTimeout(()=>{
         draft.title=''; draft.body='';
-        updateশিরোনামPreview('');
+        updateTitlePreview('');
       }, 0);
     }, true); // capture phase to run before other handlers
   }
 
   // initialize preview on load
-  updateশিরোনামPreview('');
+  updateTitlePreview('');
 })();
 </script><script>
 (function(){
   const $ = (s,r=document)=>r.querySelector(s);
-  const titleI = $('#composeশিরোনাম');
+  const titleI = $('#composeTitle');
   const modal = $('#composerModal');
-  const btnDraft = $('#btnDraftসংরক্ষণ');
+  const btnDraft = $('#btnDraftSave');
   const titlePreview = $('#titlePreview');
   const tpText = titlePreview ? titlePreview.querySelector('.tp-text') : null;
 
   let draft = { title:'', body:'' };
 
-  function updateশিরোনামPreview(src){
+  function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'শিরোনাম Not entered';
+    tpText.textContent = t || 'শিরোনাম দেওয়া হয়নি';
   }
 
   if(btnDraft){
@@ -3022,7 +3022,7 @@ body > div.container,
       e.preventDefault();
       draft.title = (titleI && titleI.value)||'';
       draft.body  = ($('#composeBody') && $('#composeBody').value)||'';
-      updateশিরোনামPreview(draft.title);
+      updateTitlePreview(draft.title);
       if(modal) modal.classList.add('hidden'); // auto-close
     });
   }
@@ -3033,7 +3033,7 @@ body > div.container,
   const USER_ID = (window.USER_ID || 'local-user');
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  function canShowমুছুনFor(item){
+  function canShowDeleteFor(item){
     if(USER_ROLE==='admin') return true;
     if(USER_ROLE==='writer'){
       const author = item && item.dataset ? item.dataset.author : null;
@@ -3042,23 +3042,23 @@ body > div.container,
     return false;
   }
 
-  function ensureমুছুন(item){
+  function ensureDelete(item){
     if(!item || item.querySelector('.delete-post')) return;
     const btn = document.createElement('button');
     btn.type='button';
     btn.className='button tiny danger delete-post';
     btn.textContent='মুছুন';
     btn.style.cssText='margin-top:6px; display:none;';
-    if(canShowমুছুনFor(item)) btn.style.display='inline-block';
+    if(canShowDeleteFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 মুছুন하시겠습니까?')) return;
+      if(!confirm('আপনি কি এই পোস্টটি মুছে ফেলতে চান?')) return;
       item.remove();
     });
     item.appendChild(btn);
   }
 
   // Initial pass
-  $$('.right .topic-panel .list .item').forEach(ensureমুছুন);
+  $$('.right .topic-panel .list .item').forEach(ensureDelete);
 
   // Observe future additions for all lists
   $$('.right .topic-panel .list').forEach(list=>{
@@ -3066,9 +3066,9 @@ body > div.container,
       muts.forEach(m=>{
         m.addedNodes && Array.from(m.addedNodes).forEach(node=>{
           if(node && node.nodeType===1){
-            if(node.classList.contains('item')) ensureমুছুন(node);
+            if(node.classList.contains('item')) ensureDelete(node);
             // Nested case: if a wrapper was added, scan inside
-            node.querySelectorAll && node.querySelectorAll('.item').forEach(ensureমুছুন);
+            node.querySelectorAll && node.querySelectorAll('.item').forEach(ensureDelete);
           }
         });
       });
@@ -3118,13 +3118,13 @@ body > div.container,
 })();
 </script><div id="newsPreviewModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 800px); max-height:80vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 id="npশিরোনাম" style="margin:0; font-size:1.05rem;"></h3>
+<h3 id="npTitle" style="margin:0; font-size:1.05rem;"></h3>
 <div id="npTime" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div id="npBody" style="margin-top:8px; font-size:.95rem; color:#222; white-space:pre-wrap;"></div>
 <div id="npAttach" style="margin-top:8px; font-size:1rem; color:#374151;"></div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
-<button class="button outline" id="npবন্ধ করুন" type="button">বন্ধ করুন</button>
+<button class="button outline" id="npClose" type="button">বন্ধ করুন</button>
 </div>
 </div></div><script>
 (function(){
@@ -3162,14 +3162,14 @@ body > div.container,
   });
 
   const modal = document.getElementById('newsPreviewModal');
-  const npশিরোনাম = document.getElementById('npশিরোনাম');
+  const npTitle = document.getElementById('npTitle');
   const npTime = document.getElementById('npTime');
   const npBody = document.getElementById('npBody');
   const npAttach = document.getElementById('npAttach');
-  const npবন্ধ করুন = document.getElementById('npবন্ধ করুন');
+  const npClose = document.getElementById('npClose');
   function openModal(){ modal.style.display='flex'; }
   function closeModal(){ modal.style.display='none'; }
-  npবন্ধ করুন && npবন্ধ করুন.addEventListener('click', closeModal);
+  npClose && npClose.addEventListener('click', closeModal);
   document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
   modal && modal.addEventListener('click', e=>{ if(e.target===modal) closeModal(); });
 
@@ -3191,7 +3191,7 @@ body > div.container,
       attachHtml = Array.from(attachList).map(li=>li.textContent).join('<br/>');
     }
 
-    npশিরোনাম.textContent = t;
+    npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
     npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml) : '';
@@ -3201,18 +3201,18 @@ body > div.container,
 })();
 </script><div id="editNewsModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 680px); max-height:78vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 style="margin:0; font-size:1.05rem;">লিখুন 편집</h3>
+<h3 style="margin:0; font-size:1.05rem;">লিখুন / সম্পাদনা</h3>
 <div id="enInfo" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
 <label style="font-size:.85rem;">শিরোনাম</label>
-<input id="enশিরোনাম" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;" type="text"/>
-<label style="font-size:.85rem;">Content</label>
+<input id="enTitle" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;" type="text"/>
+<label style="font-size:.85rem;">বিষয়বস্তু</label>
 <textarea id="enBody" rows="8" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;"></textarea>
 </div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
-<button class="button outline" id="enবাতিল" type="button">বাতিল</button>
-<button class="button" id="enসংরক্ষণ" type="button">সংরক্ষণ</button>
+<button class="button outline" id="enCancel" type="button">বাতিল</button>
+<button class="button" id="enSave" type="button">সংরক্ষণ</button>
 </div>
 </div></div><script>
 (function(){
@@ -3220,7 +3220,7 @@ body > div.container,
   const USER_ID   = (window.USER_ID   || 'local-user');
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  function canEditমুছুন(item){
+  function canEditDelete(item){
     if(USER_ROLE==='admin') return true;
     if(USER_ROLE==='writer'){
       const author = item && item.dataset ? item.dataset.author : null;
@@ -3252,14 +3252,14 @@ body > div.container,
       badge.setAttribute('translate','no');
       header.appendChild(badge);
     }
-    badge.textContent = `Edited · ${tsStr}`;
+    badge.textContent = `সম্পাদিত · ${tsStr}`;
   }
 
   // On load, restore edited badge for admin/author only
   $$('.right .topic-panel .list .item').forEach(item=>{
     const id = itemId(item);
     const meta = loadEdit(id);
-    if(meta && canEditমুছুন(item)){
+    if(meta && canEditDelete(item)){
       showEditedBadge(item, meta.editedAt);
     }
   });
@@ -3270,16 +3270,16 @@ body > div.container,
     const btn = e.target.closest('.btn-edit');
     if(!btn) return;
     const item = e.target.closest('.right .topic-panel .list .item');
-    if(item && canEditমুছুন(item)) window.__currentEditingItem = item;
+    if(item && canEditDelete(item)) window.__currentEditingItem = item;
   }, true);
 
   // When edit modal "সংরক্ষণ" is pressed, persist edited meta and show badge
-  (function attachসংরক্ষণHook(){
-    const saveBtn = document.getElementById('enসংরক্ষণ');
+  (function attachSaveHook(){
+    const saveBtn = document.getElementById('enSave');
     if(!saveBtn) return;
     saveBtn.addEventListener('click', ()=>{
       const item = window.__currentEditingItem;
-      if(!item || !canEditমুছুন(item)) return;
+      if(!item || !canEditDelete(item)) return;
       const ts = new Date().toLocaleString();
       const id = itemId(item);
       saveEdit(id, ts);
@@ -3340,7 +3340,7 @@ body > div.container,
   const USER_ID   = (window.USER_ID   || 'local-user');
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  function canEditমুছুন(item){
+  function canEditDelete(item){
     if(USER_ROLE==='admin') return true;
     if(USER_ROLE==='writer'){
       const author = item && item.dataset ? item.dataset.author : null;
@@ -3395,16 +3395,16 @@ body > div.container,
     let btnDel  = footer.querySelector('.delete-post');
     if(!btnEdit){
       btnEdit = document.createElement('button');
-      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
+      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='সম্পাদনা';
       footer.appendChild(btnEdit);
       btnEdit.addEventListener('click', (e)=>{
         e.stopPropagation();
         const emodal = document.getElementById('editNewsModal');
-        const enশিরোনাম = document.getElementById('enশিরোনাম');
+        const enTitle = document.getElementById('enTitle');
         const enBody  = document.getElementById('enBody');
         const enInfo  = document.getElementById('enInfo');
-        if(!emodal || !enশিরোনাম || !enBody) return;
-        enশিরোনাম.value = (item.querySelector('.h-title')?.textContent || item.querySelector('.title')?.textContent || '').trim();
+        if(!emodal || !enTitle || !enBody) return;
+        enTitle.value = (item.querySelector('.h-title')?.textContent || item.querySelector('.title')?.textContent || '').trim();
         enBody.value  = (item.querySelector('.preview')?.textContent || '').trim();
         enInfo.textContent = (item.querySelector('.h-time')?.textContent || item.querySelector('.meta')?.textContent || '').trim();
         emodal.style.display='flex';
@@ -3416,12 +3416,12 @@ body > div.container,
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('이 소식을 মুছুন하시겠습니까?')) return;
+        if(!confirm('আপনি কি এই পোস্টটি মুছে ফেলতে চান?')) return;
         item.remove();
       });
     }
     // Apply visibility
-    if(canEditমুছুন(item)){
+    if(canEditDelete(item)){
       btnEdit.style.display='inline-block';
       btnDel.style.display='inline-block';
     }else{
@@ -3500,7 +3500,7 @@ body > div.container,
 </script><script>
 (function(){
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
-  function normalizeমুছুন(item){
+  function normalizeDelete(item){
     if(!item) return;
     // Ensure footer exists
     let footer = item.querySelector('.item-footer');
@@ -3540,14 +3540,14 @@ body > div.container,
   }
 
   // Run on existing items
-  $$('.right .topic-panel .list .item').forEach(normalizeমুছুন);
+  $$('.right .topic-panel .list .item').forEach(normalizeDelete);
 
   // Observe for new items
   $$('.right .topic-panel .list').forEach(list=>{
     const mo = new MutationObserver(muts=>{
       muts.forEach(m=>{
         m.addedNodes && Array.from(m.addedNodes).forEach(n=>{
-          if(n.nodeType===1 && n.classList.contains('item')) normalizeমুছুন(n);
+          if(n.nodeType===1 && n.classList.contains('item')) normalizeDelete(n);
         });
       });
     });
@@ -3596,7 +3596,7 @@ body > div.container,
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'Content';
+    if(p) p.textContent = 'বিষয়বস্তু';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -3819,7 +3819,7 @@ body > div.container,
 <!-- IGDC minimal Donate UI (non-invasive) -->
 
 <div class="donation-inline">
-<input aria-label="Donation amount (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
+<input aria-label="দানের পরিমাণ (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
 <button class="bc-tile orange" id="btnDonate">দান করুন</button>
 </div>
 <script>
@@ -3866,12 +3866,12 @@ body > div.container,
   accountBox.innerHTML = `
     <div><b>IESF (International Exchange Service Foundation)</b></div>
     <div>সাধারণ: 농협 301-0078-3333-51</div>
-    <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
+    <div>বৈদেশিক মুদ্রা: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
     <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
     <div>সাধারণ: 신한 100-026-331592</div>
-    <div>Foreign Currency: Shinhan 180-005-931110</div>
+    <div>বৈদেশিক মুদ্রা: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
   donationDiv.appendChild(accountBox);
@@ -3884,7 +3884,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      alert(`নির্বাচিত পরিমাণ: ₩${Number(amt).toLocaleString()}\n\nনিচের অ্যাকাউন্টে স্থানান্তর করুন।`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -3912,8 +3912,8 @@ body > div.container,
 </script>
 <script>(function(){try{document.querySelectorAll(".donation-inline,.donation-buttons").forEach(function(n){n.remove();});}catch(e){}})();</script>
 <div aria-hidden="true" class="donate-modal-backdrop" id="donateModalBackdrop">
-<div aria-labelledby="donateModalশিরোনাম" aria-modal="true" class="donate-modal" role="dialog">
-<h3 id="donateModalশিরোনাম">ডোনেশন সংস্থা নির্বাচন করুন</h3>
+<div aria-labelledby="donateModalTitle" aria-modal="true" class="donate-modal" role="dialog">
+<h3 id="donateModalTitle">ডোনেশন সংস্থা নির্বাচন করুন</h3>
 <div class="donate-actions">
 <button data-org="IESF" type="button">IESF-এ দান করুন</button>
 <button data-org="WAM" type="button">WAM-এ দান করুন</button>
@@ -4300,8 +4300,8 @@ document.addEventListener('DOMContentLoaded', function(){
     const lA = el("label"); lA.textContent="উত্তর";
     const tA = el("textarea","igdc-qa-text a"); tA.placeholder="অনুগ্রহ করে একটু অপেক্ষা করুন। শীঘ্রই উত্তর দেওয়া হবে।";
     const actions = el("div","igdc-qa-actions");
-    const btnজমা দিন = el("button","igdc-qa-btn primary"); btnজমা দিন.textContent="জমা দিন";
-    const btnমুছুন = el("button","igdc-qa-btn muted"); btnমুছুন.textContent="মুছুন";
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="জমা দিন";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="মুছুন";
     const note = el("div","igdc-qa-note"); note.textContent="※ সহজ প্রশ্নের উত্তর AI সঙ্গে সঙ্গে দেয়। প্রযুক্তিগত, ত্রুটি বা পরিচালনাসংক্রান্ত বিষয়গুলো স্বয়ংক্রিয়ভাবে অ্যাডমিন Q&A-তে পাঠানো হয়।";
     const list = el("div","igdc-qa-threads");
 
@@ -4309,7 +4309,7 @@ document.addEventListener('DOMContentLoaded', function(){
 	const ce = el("p","contact-email");
     ce.innerHTML = 'প্রধান ইমেইল: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
     body.append(ce);
-    actions.append(btnজমা দিন, btnমুছুন);
+    actions.append(btnSubmit, btnClear);
     panel.append(header, body);
     modal.append(backdrop, panel);
     document.body.append(modal);
@@ -4357,9 +4357,9 @@ document.addEventListener('DOMContentLoaded', function(){
     backdrop.addEventListener("click", closeModal);
     document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
 
-    btnমুছুন.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
-    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnজমা দিন.click(); }});
-    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnজমা দিন.click(); }});
+    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
+    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
 
     async function fetchThreads(){
       const sb = await ensureSupabase(); if(!sb) return;
@@ -4376,13 +4376,13 @@ document.addEventListener('DOMContentLoaded', function(){
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (অপেক্ষমাণ)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("উ. "+row.answer):"উ. (অপেক্ষমাণ)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "অ্যাডমিন অনুরোধ":"সাধারণ";
         const actions = el("div","igdc-qa-thread-actions");
-        const canমুছুন = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
-        if(canমুছুন){
+        const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
+        if(canDelete){
           const del = el("button","igdc-qa-btn muted"); del.textContent="মুছুন";
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
@@ -4398,7 +4398,7 @@ document.addEventListener('DOMContentLoaded', function(){
       });
     }
 
-    async function autoউত্তরIfNeeded(text){
+    async function autoAnswerIfNeeded(text){
       const technical = classifyTech(text);
       let answer = null;
       if(!technical){
@@ -4422,7 +4422,7 @@ document.addEventListener('DOMContentLoaded', function(){
       const q = (tQ.value||"").trim();
       let a = (tA.value||"").trim();
       if(!q){ tQ.focus(); return; }
-      const { technical, answer } = await autoউত্তরIfNeeded(q);
+      const { technical, answer } = await autoAnswerIfNeeded(q);
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
@@ -4440,7 +4440,7 @@ document.addEventListener('DOMContentLoaded', function(){
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
-    btnজমা দিন.addEventListener("click", submit);
+    btnSubmit.addEventListener("click", submit);
 
     // realtime refresh
     (async()=>{ try{
@@ -4498,7 +4498,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         bk=document.createElement('div');
         bk.id='drawerBackdrop';
         bk.className='drawer-backdrop';
-        document.body/*__KILL__*/ appendChild_DISABLED(bk);
+        document.body.appendChild(bk);
         bk.addEventListener('click',close,{passive:true});
       }
     }
@@ -4672,7 +4672,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 })();
 </script>
 
-<!-- 사이드바 '문학학술' 계열 링크 감추기 -->
+<!-- 사이드바 'সাহিত্যএকাডেমিক' 계열 링크 감추기 -->
 <script>
 (function () {
   var side = document.querySelector('.sidebar');
@@ -4680,8 +4680,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
   side.querySelectorAll('a').forEach(function(a){
     var t = (a.textContent || '').replace(/\s+/g, '');
-    // '문학학술', '문학/학술', '문학 학술', '문학학술교류' 등 변형 대응
-    if (/(문학.?학술|문학학술교류)/.test(t)) {
+    // 'সাহিত্যএকাডেমিক', 'সাহিত্য/একাডেমিক', 'সাহিত্য-একাডেমিক', 'সাহিত্য-একাডেমিক বিনিময়' 등 변형 대응
+    if (/(সাহিত্য.?একাডেমিক|সাহিত্য-একাডেমিক বিনিময়)/.test(t)) {
       a.classList.add('hidden');        // 페이지에 이미 정의된 .hidden 활용
       a.setAttribute('aria-hidden','true');
       a.setAttribute('tabindex','-1');  // 키보드 포커스에서도 제외(접근성)
@@ -4979,7 +4979,7 @@ window.addEventListener("message",function(ev){
 
   // Preview targets (reuse existing modal if present)
   const modal   = $('#newsPreviewModal') || $('#previewModal');
-  const npশিরোনাম = $('#npশিরোনাম') || $('#newsPreviewশিরোনাম');
+  const npTitle = $('#npTitle') || $('#newsPreviewTitle');
   const npTime  = $('#npTime') || $('#newsPreviewTime');
   const npBody  = $('#npBody') || $('#newsPreviewBody');
   const npAttach= $('#npAttach') || $('#newsPreviewAttach');
@@ -4993,7 +4993,7 @@ window.addEventListener("message",function(ev){
     modal.style.display = 'none';
   }
 
-  const closeBtn = modal ? (modal.querySelector('.close') || modal.querySelector('#npবন্ধ করুন')) : null;
+  const closeBtn = modal ? (modal.querySelector('.close') || modal.querySelector('#npClose')) : null;
   if(closeBtn){
     closeBtn.addEventListener('click', closeModal);
   }
@@ -5041,7 +5041,7 @@ window.addEventListener("message",function(ev){
 
     const item = e.target.closest('.right .topic-panel .list .item, .mobile-news-clone .topic-panel .list .item');
     if(!item) return;
-    if(!npশিরোনাম || !npBody){ return; }
+    if(!npTitle || !npBody){ return; }
 
     const title = (item.querySelector('.h-title')?.textContent
                 || item.querySelector('.title')?.textContent || '').trim();
@@ -5062,7 +5062,7 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npশিরোনাম.textContent = title || 'শিরোনাম 없음';
+    npTitle.textContent = title || 'শিরোনাম নেই';
     if(npTime)  npTime.textContent  = meta || '';
     npBody.textContent = body || '(등록된 본문이 없습니다.)';
     if(npAttach){
@@ -5128,10 +5128,10 @@ window.addEventListener("message",function(ev){
 
   // 완전 সংরক্ষণ 버튼 클릭 후 Supabase 동기화 시도
   document.addEventListener('click', function(e){
-    const btn = e.target.closest('#btnজমা দিনPost');
+    const btn = e.target.closest('#btnSubmitPost');
     if(!btn) return;
     setTimeout(function(){
-      const catSel = document.getElementById('postবিভাগ');
+      const catSel = document.getElementById('postCategory');
       const cat = catSel ? (catSel.value || 'etc') : 'etc';
       syncLatestToSupabase(cat);
     }, 250);
@@ -5271,7 +5271,7 @@ window.addEventListener("message",function(ev){
 (function(){
   var mq = window.matchMedia("(max-width:1023px)");
   var main = document.querySelector("main.main");
-  var topলিখুন = document.getElementById("topলিখুনPanel");
+  var topWrite = document.getElementById("topWritePanel");
   var feedSection = main ? main.querySelector("section.feed-wrapper") : null;
   var right = document.querySelector("aside.right");
   if (!main || !topলিখুন || !feedSection || !right) return;
@@ -5511,7 +5511,7 @@ document.addEventListener("DOMContentLoaded",function(){
             </div>
             <div style="font-size:12px;color:#666;">※ সহজ প্রশ্নের উত্তর AI সঙ্গে সঙ্গে দেয়। প্রযুক্তিগত, ত্রুটি বা পরিচালনাসংক্রান্ত বিষয়গুলো স্বয়ংক্রিয়ভাবে অ্যাডমিন Q&A-তে পাঠানো হয়।</div>
             <p style="font-size:12px;color:#666;">প্রধান ইমেইল: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>
-            <div style="padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;">এখনও কোনো Q&A এন্ট্রি নিবন্ধিত হয়নি</div>
+            <div style="padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;">এখনও কোনো প্রশ্নোত্তর এন্ট্রি নিবন্ধিত হয়নি</div>
           </div>
         </div>`;
       document.body.appendChild(modal);

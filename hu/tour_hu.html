@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html lang="en">
+<html lang="hu">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
@@ -1369,9 +1369,9 @@ window.addEventListener("message",function(ev){
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
     ta.value=''; alert('Sikeresen elküldve.');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('Sending failed'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('A küldés sikertelen'));});
   const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('Sending failed'));});
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('A küldés sikertelen'));});
 })();
 </script>
 
@@ -1422,7 +1422,7 @@ window.addEventListener("message",function(ev){
   - 나머지 4개 사이트 (Donation 제외, Media 제외)
  목적:
   - 썸네일 클릭 자동 감지
-  - 상세 Product 자동 오픈 훅
+  - 상세 Termék 자동 오픈 훅
   - 구매하기 / 결제 / 장바구니 기존 버튼 그대로 사용
   - 상세 하단에 리뷰 시스템 자동 장착 (쿠팡 방식)
  --------------------------------------------------
@@ -1432,7 +1432,9 @@ window.addEventListener("message",function(ev){
   - window.__IGDC_ROLE 존재
  --------------------------------------------------
  삽입 위치:
-  - 각 페이지 
+  - 각 페이지
+*/
+</script>
 <script id="igdc-qa-config">
   (function () {
     // 1) 민감정보 없는 기본 설정
@@ -1526,7 +1528,7 @@ window.addEventListener("message",function(ev){
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      try{ await sb.auth.signInNévtelenly(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -1554,7 +1556,7 @@ window.addEventListener("message",function(ev){
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Beküldés";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Törlés";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az admin Q&A-hoz kerülnek továbbításra.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az adminisztrátori kérdések-válaszokhoz kerülnek továbbításra.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -1639,7 +1641,7 @@ window.addEventListener("message",function(ev){
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("Delete failed (permission/policy)"); return; }
+            if(error){ alert("A törlés sikertelen (engedély/szabályzat)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -1678,7 +1680,7 @@ window.addEventListener("message",function(ev){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Server-side saving is disabled because the save settings (Supabase url/key) are not connected yet. When deployed to the web, it will connect automatically if SUPER_VARSAR.url/anonKey is configured.");
+        alert("A szerveroldali mentés le van tiltva, mert a mentési beállítások (Supabase url/key) még nincsenek csatlakoztatva. Webes közzétételkor automatikusan csatlakozik, ha a SUPER_VARSAR.url/anonKey be van állítva.");
         return;
       }
       const record = {
@@ -1743,7 +1745,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         h.appendChild(t); h.appendChild(x);
 
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az admin Q&A-hoz kerülnek továbbításra.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az adminisztrátori kérdések-válaszokhoz kerülnek továbbításra.</div>';
 
         var ce = document.createElement('p');
         ce.className = 'contact-email';
@@ -1774,6 +1776,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
 })();
 </script>
+<script id="igdc-unified-commerce-runtime">
+/*
 </body> 바로 위
 */
 
@@ -1790,7 +1794,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     state: {
       role: 'guest',
-      activeProductId: null
+      activeTermékId: null
     },
 
     init() {
@@ -1807,7 +1811,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         const productId = card.dataset.productId;
         if (!productId) return;
 
-        // 기존 상세 Product 오픈 로직은 이미 각 페이지에 있음
+        // 기존 상세 Termék 오픈 로직은 이미 각 페이지에 있음
         // 여기서는 리뷰만 자동 부착
         setTimeout(() => {
           this.mountReview(productId);
@@ -1817,8 +1821,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     /* 2️⃣ 리뷰 시스템 장착 */
     mountReview(productId) {
-      if (this.state.activeProductId === productId) return;
-      this.state.activeProductId = productId;
+      if (this.state.activeTermékId === productId) return;
+      this.state.activeTermékId = productId;
 
       let root = document.getElementById(this.config.reviewRootId);
       if (!root) {
@@ -1844,8 +1848,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">Product Reviews</h3>
-          <div id="igdc-review-list" class="igdc-review-list">Loading...</div>
+          <h3 class="igdc-review-title">Termékvélemények</h3>
+          <div id="igdc-review-list" class="igdc-review-list">Betöltés...</div>
           ${canWrite ? this.renderReviewForm() : this.renderLoginHint()}
         </section>
       `;
@@ -1860,7 +1864,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
             maxlength="${this.config.maxReviewChars}"
             required></textarea>
           <div class="igdc-review-actions">
-            <button type="submit">Post Review</button>
+            <button type="submit">Vélemény közzététele</button>
           </div>
         </form>
       `;
@@ -1868,7 +1872,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     renderLoginHint() {
       return `<div class="igdc-review-login-hint">
-        Review posting is available after logging in.
+        Bejelentkezés után lehet értékelést közzétenni.
       </div>`;
     },
 
@@ -1883,7 +1887,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         const content = textarea.value.trim();
 
         if (content.length < this.config.minReviewChars) {
-          alert(`Reviews must be at least ${this.config.minReviewChars} characters long.`);
+          alert(`Az értékelésnek legalább ${this.config.minReviewChars} karakter hosszúnak kell lennie.`);
           return;
         }
 
@@ -1901,7 +1905,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       const list = document.getElementById('igdc-review-list');
       if (!list) return;
 
-      list.textContent = 'Loading...';
+      list.textContent = 'Betöltés...';
 
       try {
         const res = await fetch(
@@ -1934,7 +1938,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       return `
         <div class="igdc-review-item">
           <div class="igdc-review-meta">
-            <span>${esc(item.user || 'Anonymous')}</span>
+            <span>${esc(item.user || 'Névtelen')}</span>
             <span>${esc(item.date || '')}</span>
           </div>
           <div class="igdc-review-content">${esc(item.content)}</div>
@@ -2034,7 +2038,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
                color:#7a8da8;
                letter-spacing:.5px;
              ">
-            Loading
+            Betöltés
           </div>
 
         </div>
@@ -2209,7 +2213,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      try{ await sb.auth.signInNévtelenly(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -2237,7 +2241,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Beküldés";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Törlés";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az admin Q&A-hoz kerülnek továbbításra.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az adminisztrátori kérdések-válaszokhoz kerülnek továbbításra.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -2322,7 +2326,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("Delete failed (permission/policy)"); return; }
+            if(error){ alert("A törlés sikertelen (engedély/szabályzat)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -2361,7 +2365,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Server-side saving is disabled because the save settings (Supabase url/key) are not connected yet. When deployed to the web, it will connect automatically if SUPER_VARSAR.url/anonKey is configured.");
+        alert("A szerveroldali mentés le van tiltva, mert a mentési beállítások (Supabase url/key) még nincsenek csatlakoztatva. Webes közzétételkor automatikusan csatlakozik, ha a SUPER_VARSAR.url/anonKey be van állítva.");
         return;
       }
       const record = {
@@ -2426,7 +2430,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         h.appendChild(t); h.appendChild(x);
 
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az admin Q&A-hoz kerülnek továbbításra.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az adminisztrátori kérdések-válaszokhoz kerülnek továbbításra.</div>';
 
         var ce = document.createElement('p');
         ce.className = 'contact-email';

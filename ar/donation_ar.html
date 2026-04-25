@@ -2578,10 +2578,10 @@ body{ direction: rtl !important; }
 <button class="button" onclick="alert('سيتم ربط نظام التبرعات قريبًا!')" style="margin-bottom:8px; padding:5px 14px;">التبرعات</button>
 <p><b>IESF (International Exchange Service Foundation)</b><br/>
         - عام: NongHyup 301-0078-3333-51<br/>
-        - Foreign Currency: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
+        - العملة الأجنبية: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
 <p><b>WAM Foundation (World Aviation Mission Foundation)</b><br/>
         - عام: Shinhan 100-026-331592<br/>
-        - Foreign Currency: Shinhan 180-005-931110<br/><span>   SWIFT: SHBKKRSE</span></p>
+        - العملة الأجنبية: Shinhan 180-005-931110<br/><span>   SWIFT: SHBKKRSE</span></p>
 </div>
 <div class="feed-wrapper" id="iesfFeed" style="flex:1; overflow-y:auto;">
 </div>
@@ -2616,8 +2616,8 @@ body{ direction: rtl !important; }
 </div>
 
 <footer>
-  IGTC Global Hub © 2025 | الشركة الدولية العامة للتوزيع<br/>
-  50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, كوريا <br/>
+  IGTC Global Hub © 2025 | International General Distribution Company<br/>
+  50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Korea <br/>
 </footer>
 
 
@@ -2690,7 +2690,7 @@ body{ direction: rtl !important; }
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">첨부 링크</a>` : `첨부: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">رابط المرفق</a>` : `مرفق: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2701,7 +2701,7 @@ body{ direction: rtl !important; }
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "첨부: " + fileAttach.files[0].name;
+        att.textContent = "مرفق: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2764,7 +2764,7 @@ body{ direction: rtl !important; }
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '개 파일');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' ملفات');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2891,7 +2891,7 @@ body{ direction: rtl !important; }
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = '첨부: ' + f.name;
+        li.textContent = 'مرفق: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
@@ -2904,7 +2904,7 @@ body{ direction: rtl !important; }
     const canحذف = (USER_ROLE==='admin' || USER_ROLE==='writer');
     if(canحذف) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 حذف하시겠습니까?')) return;
+      if(!confirm('هل تريد حذف هذا المنشور؟')) return;
       item.remove();
     });
 
@@ -2971,13 +2971,13 @@ body{ direction: rtl !important; }
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '개 파일');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' ملفات');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 모두 제거'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','إزالة جميع المرفقات'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attachPreview.appendChild(chip);
@@ -3029,7 +3029,7 @@ body{ direction: rtl !important; }
   function updateالعنوانPreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || ''بلا عنوان';';
+    tpText.textContent = t || 'بلا عنوان';
   }
 
   // live typing updates preview
@@ -3092,7 +3092,7 @@ body{ direction: rtl !important; }
   function updateالعنوانPreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'العنوان Not entered';
+    tpText.textContent = t || 'العنوان غير مُدخل';
   }
 
   if(btnDraft){
@@ -3129,7 +3129,7 @@ body{ direction: rtl !important; }
     btn.style.cssText='margin-top:6px; display:none;';
     if(canShowحذفFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 حذف하시겠습니까?')) return;
+      if(!confirm('هل تريد حذف هذا المنشور؟')) return;
       item.remove();
     });
     item.appendChild(btn);
@@ -3285,7 +3285,7 @@ body{ direction: rtl !important; }
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
 <label style="font-size:.85rem;">العنوان</label>
 <input id="enالعنوان" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;" type="text"/>
-<label style="font-size:.85rem;">Content</label>
+<label style="font-size:.85rem;">المحتوى</label>
 <textarea id="enBody" rows="8" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;"></textarea>
 </div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
@@ -3330,7 +3330,7 @@ body{ direction: rtl !important; }
       badge.setAttribute('translate','no');
       header.appendChild(badge);
     }
-    badge.textContent = `Edited · ${tsStr}`;
+    badge.textContent = `تم التعديل · ${tsStr}`;
   }
 
   // On load, restore edited badge for admin/author only
@@ -3473,7 +3473,7 @@ body{ direction: rtl !important; }
     let btnDel  = footer.querySelector('.delete-post');
     if(!btnEdit){
       btnEdit = document.createElement('button');
-      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
+      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='تعديل';
       footer.appendChild(btnEdit);
       btnEdit.addEventListener('click', (e)=>{
         e.stopPropagation();
@@ -3494,7 +3494,7 @@ body{ direction: rtl !important; }
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('이 소식을 حذف하시겠습니까?')) return;
+        if(!confirm('هل تريد حذف هذا المنشور؟')) return;
         item.remove();
       });
     }
@@ -3674,7 +3674,7 @@ body{ direction: rtl !important; }
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'Content';
+    if(p) p.textContent = 'المحتوى';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -3772,7 +3772,7 @@ body{ direction: rtl !important; }
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("اكتمل طلب معالجة البلوكشين: " + (j.txHash||"대기")); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("اكتمل طلب معالجة البلوكشين: " + (j.txHash||"قيد الانتظار")); }
       else { alert("فشلت معالجة البلوكشين"); }
     }catch(e){ console.warn(e); alert("خطأ في الشبكة"); }
   };
@@ -3944,12 +3944,12 @@ body{ direction: rtl !important; }
   accountBox.innerHTML = `
     <div><b>IESF (International Exchange Service Foundation)</b></div>
     <div>عام: 농협 301-0078-3333-51</div>
-    <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
+    <div>العملة الأجنبية: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
     <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
     <div>عام: 신한 100-026-331592</div>
-    <div>Foreign Currency: Shinhan 180-005-931110</div>
+    <div>العملة الأجنبية: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
   donationDiv.appendChild(accountBox);
@@ -3962,7 +3962,7 @@ body{ direction: rtl !important; }
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      alert(`المبلغ المحدد: ₩${Number(amt).toLocaleString()}\n\nيرجى التحويل إلى الحساب أدناه.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -4352,7 +4352,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      try{ await sb.auth.signInمجهولly(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -4454,7 +4454,7 @@ document.addEventListener('DOMContentLoaded', function(){
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="س. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("ج. "+row.answer):"ج. (قيد الانتظار)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "طلب الإدارة":"عام";
@@ -4504,7 +4504,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("حفظ 설정(Supabase url/key)이 아직 연결되지 않아 서버 حفظ은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        alert("تم تعطيل الحفظ على الخادم لأن إعدادات الحفظ (Supabase url/key) غير متصلة بعد. عند النشر على الويب، سيتم الاتصال تلقائيًا إذا تم إعداد SUPER_VARSAR.url/anonKey.");
         return;
       }
       const record = {
@@ -4576,7 +4576,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         bk=document.createElement('div');
         bk.id='drawerBackdrop';
         bk.className='drawer-backdrop';
-        document.body/*__KILL__*/ appendChild_DISABLED(bk);
+        document.body.appendChild(bk);
         bk.addEventListener('click',close,{passive:true});
       }
     }
@@ -4750,7 +4750,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 })();
 </script>
 
-<!-- 사이드바 '문학학술' 계열 링크 감추기 -->
+<!-- 사이드바 'أدبيأكاديمي' 계열 링크 감추기 -->
 <script>
 (function () {
   var side = document.querySelector('.sidebar');
@@ -4758,8 +4758,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
   side.querySelectorAll('a').forEach(function(a){
     var t = (a.textContent || '').replace(/\s+/g, '');
-    // '문학학술', '문학/학술', '문학 학술', '문학학술교류' 등 변형 대응
-    if (/(문학.?학술|문학학술교류)/.test(t)) {
+    // 'أدبيأكاديمي', 'أدبي/أكاديمي', 'أدبي أكاديمي', 'التبادل الأدبي والأكاديمي' 등 변형 대응
+    if (/(أدبي.?أكاديمي|التبادل الأدبي والأكاديمي)/.test(t)) {
       a.classList.add('hidden');        // 페이지에 이미 정의된 .hidden 활용
       a.setAttribute('aria-hidden','true');
       a.setAttribute('tabindex','-1');  // 키보드 포커스에서도 제외(접근성)
@@ -5140,7 +5140,7 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npالعنوان.textContent = title || 'العنوان 없음';
+    npالعنوان.textContent = title || 'بلا عنوان';
     if(npTime)  npTime.textContent  = meta || '';
     npBody.textContent = body || '(등록된 본문이 없습니다.)';
     if(npAttach){

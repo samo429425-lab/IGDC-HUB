@@ -594,7 +594,7 @@ html, body {
 <a href="mediahub.html">🎬 Hub Média</a>
 <a href="tour.html">🧳 Voyage · Tourisme · Hébergement</a>
 <a href="literature_academic">📚 Échange Littéraire et Académique</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Demande Q&A</a></div><main id="main">
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Questions-réponses</a></div><main id="main">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
@@ -770,7 +770,7 @@ html, body {
 <a class="link-btn" href="https://www.walmart.com" target="_blank">Walmart</a>
 <a class="link-btn" href="https://www.ebay.com" target="_blank">eBay</a>
 <a class="link-btn" href="https://www.etsy.com" target="_blank">Etsy</a>
-<a class="link-btn" href="https://www.bestbuy.com" target="_blank"><div>BestBuy</div><div class="en">Marketplace</div></a>
+<a class="link-btn" href="https://www.bestbuy.com" target="_blank"><div>BestBuy</div><div class="en">Place de marché</div></a>
 <a class="link-btn" href="https://www.newegg.com" target="_blank">Newegg</a>
 <a class="link-btn" href="https://shop.app" target="_blank"><div>Shopify</div><div class="en">(Shop App)</div></a>
 </div>
@@ -826,7 +826,7 @@ html, body {
 </section>
 </div>
 
-<section id="nh-mobile-rail" aria-label="Popular Recommended Products (Mobile)">
+<section id="nh-mobile-rail" aria-label="Popular Recommandé Produits (Mobile)">
   <div class="wrap">
     <div class="title">💎 Produits recommandés populaires 💎</div>
     <div class="list" id="nh-mobile-rail-list" role="list"></div>
@@ -982,7 +982,7 @@ a[href^="mailto:"]:hover {
 }
 
 .igdc-qa-threads:empty::before{
-  content:"Aucune entrée Q&A n'a encore été publiée";
+  content:"Aucune entrée questions-réponses n'a encore été publiée";
   display:block; padding:10px 12px; color:#666;
   background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px;
   margin-top:4px; font-size:.95rem;
@@ -1097,7 +1097,7 @@ a[href^="mailto:"]:hover {
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      try{ await sb.auth.signInAnonymely(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -1113,7 +1113,7 @@ a[href^="mailto:"]:hover {
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
+    const title = el("div","igdc-qa-title"); title.textContent = "Questions-réponses";
     const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Fermer");
     header.append(title, close);
 
@@ -1125,7 +1125,7 @@ a[href^="mailto:"]:hover {
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Envoyer";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Effacer";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Les questions simples reçoivent une réponse immédiate de l’IA. Les questions techniques, les erreurs ou les sujets liés à l’exploitation sont automatiquement transmis au Q&A administrateur.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Les questions simples reçoivent une réponse immédiate de l’IA. Les questions techniques, les erreurs ou les sujets liés à l’exploitation sont automatiquement transmis au module administrateur de questions-réponses.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -1199,7 +1199,7 @@ a[href^="mailto:"]:hover {
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (En attente)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "Demande administrateur":"Général";
@@ -1233,9 +1233,9 @@ a[href^="mailto:"]:hover {
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="Operations-related inquiries will be reviewed by an administrator and answered afterward.";
-          else if(/가격|비용|요금/.test(text)) answer="Please refer to the information on this page for pricing/fees. Leave an additional inquiry if needed.";
-          else answer="Thank you for your inquiry. We will review it quickly and assist you.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="Les demandes liées au fonctionnement seront examinées par un administrateur puis recevront une réponse.";
+          else if(/가격|비용|요금/.test(text)) answer="Veuillez consulter les informations de cette page pour les prix/frais. Laissez une demande complémentaire si nécessaire.";
+          else answer="Merci pour votre demande. Nous l’examinerons rapidement et vous aiderons.";
         }
       }
       return { technical, answer };
@@ -1249,7 +1249,7 @@ a[href^="mailto:"]:hover {
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Server-side saving is disabled because the save settings (Supabase url/key) are not connected yet. When deployed to the web, it will connect automatically if SUPER_VARSAR.url/anonKey is configured.");
+        alert("L’enregistrement côté serveur est désactivé car les paramètres d’enregistrement (Supabase url/key) ne sont pas encore connectés. Lors du déploiement sur le web, il se connectera automatiquement si SUPER_VARSAR.url/anonKey est configuré.");
         return;
       }
       const record = {
@@ -1350,12 +1350,12 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Questions-réponses';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
 
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">※ Les questions simples reçoivent une réponse immédiate de l’IA. Les questions techniques, les erreurs ou les sujets liés à l’exploitation sont automatiquement transmis au Q&A administrateur.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">※ Les questions simples reçoivent une réponse immédiate de l’IA. Les questions techniques, les erreurs ou les sujets liés à l’exploitation sont automatiquement transmis au module administrateur de questions-réponses.</div>';
 
         var ce = document.createElement('p');
         ce.className = 'contact-email';
@@ -1599,11 +1599,11 @@ window.addEventListener("message",function(ev){
   async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
     await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
-    ta.value=''; alert('전송되었습니다.');
+    ta.value=''; alert('Envoyé avec succès.');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('전송 실패'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('Échec de l’envoi'));});
   const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('전송 실패'));});
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('Échec de l’envoi'));});
 })();
 </script>
 
@@ -1701,7 +1701,7 @@ window.addEventListener("message",function(ev){
 
     state: {
       role: 'guest',
-      activeProductId: null
+      activeProduitId: null
     },
 
     init() {
@@ -1728,8 +1728,8 @@ window.addEventListener("message",function(ev){
 
     /* 2️⃣ 리뷰 시스템 장착 */
     mountReview(productId) {
-      if (this.state.activeProductId === productId) return;
-      this.state.activeProductId = productId;
+      if (this.state.activeProduitId === productId) return;
+      this.state.activeProduitId = productId;
 
       let root = document.getElementById(this.config.reviewRootId);
       if (!root) {
@@ -1794,7 +1794,7 @@ window.addEventListener("message",function(ev){
         const content = textarea.value.trim();
 
         if (content.length < this.config.minReviewChars) {
-          alert(`리뷰는 최소 ${this.config.minReviewChars}자 이상 작성해 주세요.`);
+          alert(`L’avis doit contenir au moins ${this.config.minReviewChars} caractères.`);
           return;
         }
 
@@ -1945,7 +1945,7 @@ window.addEventListener("message",function(ev){
                color:#7a8da8;
                letter-spacing:.5px;
              ">
-            Loading
+            Chargement
           </div>
 
         </div>

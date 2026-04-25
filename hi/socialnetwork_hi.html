@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="hi">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -308,7 +308,7 @@
     .igdc-qa-btn.primary{background:#2563eb;color:#fff}
     .igdc-qa-btn.muted{background:#9ca3af;color:#fff}
     .igdc-qa-threads{display:flex;flex-direction:column;gap:10px;overflow:auto;border-top:1px solid #f3d9b0;padding-top:10px}
-    .igdc-qa-threads:empty::before{content:"अभी तक कोई Q&A प्रविष्टि पोस्ट नहीं की गई है";display:block;padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;margin-top:8px;font-size:.95rem}
+    .igdc-qa-threads:empty::before{content:"अभी तक कोई प्रश्नोत्तर प्रविष्टि पोस्ट नहीं की गई है";display:block;padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;margin-top:8px;font-size:.95rem}
     .igdc-qa-thread{border:1px solid #f3d9b0;border-radius:12px;padding:10px 12px;background:#fffdf8}
     .igdc-qa-thread-q{font:700 13px/1.5 system-ui;color:#222}
     .igdc-qa-thread-a{font:13px/1.5 system-ui;color:#333;margin-top:6px}
@@ -354,12 +354,12 @@
 <a href="mediahub.html">🎬 मीडिया हब</a>
 <a href="tour.html">🧳 यात्रा · पर्यटन · आवास</a>
 <a href="literature_academic">📚 साहित्य एवं शैक्षणिक आदान-प्रदान</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&A पूछताछ</a></div>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 प्रश्नोत्तर संपर्क</a></div>
 
     <div class="main-content">
       <section class="section-blockchain">
         <a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
-        <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">खोलेंSea</a>
+        <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
         <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
         <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
       </section>
@@ -394,7 +394,7 @@
       <div class="ad-panel" id="rightAutoPanel" data-psom-key="rightPanel"></div>
     </div>
   </div>
-<div id="igdcProductDetailRoot" class="product-detail-root" hidden></div>
+<div id="igdcउत्पादDetailRoot" class="product-detail-root" hidden></div>
 
   <footer>
     IGDC Global Hub © 2025 | International General Distribution Company<br/>
@@ -480,11 +480,11 @@
             var b = document.createElement('div'); b.className='igdc-qa-backdrop';
             var p = document.createElement('div'); p.className='igdc-qa-panel';
             var h = document.createElement('div'); h.className='igdc-qa-header';
-            var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+            var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='प्रश्नोत्तर';
             var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
             h.appendChild(t); h.appendChild(x);
             var body = document.createElement('div'); body.className='igdc-qa-body';
-            body.innerHTML = '<label>प्रश्न</label><textarea class="igdc-qa-text q" placeholder="कृपया अपना प्रश्न दर्ज करें..."></textarea><label>उत्तर</label><textarea class="igdc-qa-text a" placeholder="कृपया एक क्षण प्रतीक्षा करें। हम शीघ्र उत्तर देंगे।"></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">जमा करें</button><button class="igdc-qa-btn muted">साफ़ करें</button></div><div class="igdc-qa-note">※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से Admin Q&A को भेजे जाते हैं।</div><div class="igdc-qa-threads"></div><p class="contact-email">प्रतिनिधि ईमेल: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
+            body.innerHTML = '<label>प्रश्न</label><textarea class="igdc-qa-text q" placeholder="कृपया अपना प्रश्न दर्ज करें..."></textarea><label>उत्तर</label><textarea class="igdc-qa-text a" placeholder="कृपया एक क्षण प्रतीक्षा करें। हम शीघ्र उत्तर देंगे।"></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">जमा करें</button><button class="igdc-qa-btn muted">साफ़ करें</button></div><div class="igdc-qa-note">※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से प्रशासक प्रश्नोत्तर को भेजे जाते हैं।</div><div class="igdc-qa-threads"></div><p class="contact-email">प्रतिनिधि ईमेल: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
             p.appendChild(h); p.appendChild(body); m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
             function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
             function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
@@ -516,19 +516,19 @@
       async function ensureAuth(){
         const sb = await ensureSupabase(); if(!sb) return;
         let { data: { session } } = await sb.auth.getSession();
-        if(!session){ try{ await sb.auth.signInAnonymously(); }catch(e){} ({ data: { session } } = await sb.auth.getSession()); }
+        if(!session){ try{ await sb.auth.signInअनामly(); }catch(e){} ({ data: { session } } = await sb.auth.getSession()); }
         if(session){ const uid = session.user.id; const { data } = await sb.from('igdc_admins').select('uid').eq('uid', uid).limit(1); STATE.user = session.user; STATE.isAdmin = Array.isArray(data) && data.length>0; }
       }
       function mountUI(){
         const existing = document.querySelector('.igdc-qa-modal'); if(existing){ return bindExisting(existing); }
         const modal = el('div','igdc-qa-modal'); const backdrop = el('div','igdc-qa-backdrop'); const panel = el('div','igdc-qa-panel');
-        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='Q&A'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','बंद करें');
+        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='प्रश्नोत्तर'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','बंद करें');
         header.append(title, close);
         const body = el('div','igdc-qa-body');
         const lQ = el('label'); lQ.textContent='प्रश्न'; const tQ = el('textarea','igdc-qa-text q'); tQ.placeholder='कृपया अपना प्रश्न दर्ज करें...';
         const lA = el('label'); lA.textContent='उत्तर'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='कृपया एक क्षण प्रतीक्षा करें। हम शीघ्र उत्तर देंगे।';
         const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='Submit'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='Clear';
-        const note = el('div','igdc-qa-note'); note.textContent='※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से Admin Q&A को भेजे जाते हैं।';
+        const note = el('div','igdc-qa-note'); note.textContent='※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से प्रशासक प्रश्नोत्तर को भेजे जाते हैं।';
         const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='प्रतिनिधि ईमेल: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
         actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
         return bindExisting(modal);
@@ -546,9 +546,9 @@
         close && close.addEventListener('click', closeModal); backdrop && backdrop.addEventListener('click', closeModal); document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
         btnClear && btnClear.addEventListener('click', ()=>{ if(tQ) tQ.value=''; if(tA) tA.value=''; });
         async function fetchThreads(){ const sb = await ensureSupabase(); if(!sb || !list) return; const { data } = await sb.from('igdc_qna_threads').select('*').eq('project', STATE.project).eq('page_id', STATE.pageId).order('created_at', { ascending:false }).limit(100); renderList(data||[]); }
-        function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='Q. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('A. '+row.answer):'A. (대기중)'; box.append(q,a); list.append(box); }); }
-        async function autoउत्तरIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'Please refer to the information on this page for pricing and fees. Leave an additional inquiry if needed.':'Thank you for your inquiry. We will review it promptly and assist you.'; } } return { technical, answer }; }
-        async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoउत्तरIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'Your inquiry has been received.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
+        function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='Q. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('A. '+row.answer):'A. (प्रतीक्षारत)'; box.append(q,a); list.append(box); }); }
+        async function autoउत्तरIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'कृपया मूल्य और शुल्क के लिए इस पृष्ठ की जानकारी देखें। आवश्यकता होने पर अतिरिक्त पूछताछ छोड़ें।':'आपकी पूछताछ के लिए धन्यवाद। हम इसे तुरंत समीक्षा कर आपकी सहायता करेंगे।'; } } return { technical, answer }; }
+        async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoउत्तरIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'आपकी पूछताछ प्राप्त हो गई है।', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
         btnSubmit && btnSubmit.addEventListener('click', submit);
         window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
         fetchThreads(); return modal;
@@ -675,7 +675,7 @@
   if ((payload.href || '#') === '#'){
     e.preventDefault();
     try{
-      alert('Content or materials are being prepared.');
+      alert('सामग्री तैयार की जा रही है।');
     }catch(_){}
   }
 }, { passive:false });
@@ -1303,7 +1303,7 @@ window.addEventListener('resize', function(){
     root.className = 'snfv';
     root.innerHTML =
       '<div class="snfv-panel">'
-      + '<button type="button" class="snfv-close" aria-label="Close">✕</button>'
+      + '<button type="button" class="snfv-close" aria-label="बंद करें">✕</button>'
       + '<div class="snfv-media" id="snfvMedia"></div>'
       + '<div class="snfv-meta">'
       +   '<div class="snfv-text"><div class="snfv-title" id="snfvTitle"></div><div class="snfv-desc" id="snfvDesc"></div></div>'
@@ -1374,7 +1374,7 @@ window.addEventListener('resize', function(){
     }else if(data.img || data.bg){
       var im = document.createElement('img');
       im.src = data.img || data.bg;
-      im.alt = data.title || 'preview';
+      im.alt = data.title || 'पूर्वावलोकन';
       media.appendChild(im);
     }else{
       var fb = document.createElement('div');
@@ -1426,7 +1426,27 @@ window.addEventListener('resize', function(){
   }, true);
 })();
 </script>
- 
+  <script src="frontbus.child.js"></script>
+<script>
+(function(){
+  try{
+    function notify(top){
+      parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*');
+    }
+    function atTop(){
+      var se=document.scrollingElement||document.documentElement||document.body;
+      return (window.scrollY||window.pageYOffset||0)<=0 && (se?(se.scrollTop||0)<=0:true);
+    }
+    function onAnyScroll(){ notify(atTop()); }
+    window.addEventListener('scroll', onAnyScroll, {passive:true});
+    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
+    document.addEventListener('wheel', function(e){ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
+    document.addEventListener('touchmove', function(){ notify(false); }, {passive:true,capture:true});
+    setTimeout(function(){ notify(atTop()); }, 50);
+  }catch(_){ }
+})();
+</script>
+
 <script defer src="/assets/js/socialnetwork-automap-v3.js?v=20260404psom"></script>
   
   <script id="igtc-checkout-trigger-v1">
@@ -1470,8 +1490,8 @@ window.addEventListener('resize', function(){
 
               wrap.innerHTML =
                 '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
-                + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
+                + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>भुगतान QR</b>'
+                + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">बंद करें</button></div>'
                 + '<div id="igtc-qr-area"></div></div>';
 
               document.body.appendChild(wrap);

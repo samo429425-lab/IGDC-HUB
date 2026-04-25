@@ -140,7 +140,7 @@
   --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
   --blue:#2563eb; --muted:#9ca3af;
 }
-/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+/* Sidebar Fragen und Antworten link follows existing .sidebar a style; this extra ensures visibility if needed */
 #qnaOpenBtn{ display:block; text-decoration:none; }
 /* Modal near the left sidebar, with smooth transitions */
 .igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
@@ -189,7 +189,7 @@
 }
 </style>
 <style id="qna-brand-only">
-/* === Q&A sidebar link color only (no other changes) === */
+/* === Fragen und Antworten sidebar link color only (no other changes) === */
 :root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
 .sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
   display:block;
@@ -316,7 +316,7 @@
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Es wurden noch keine Q&A-Einträge registriert";
+  content: "Es wurden noch keine Fragen und Antworten-Einträge registriert";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -334,7 +334,7 @@
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Es wurden noch keine Q&A-Einträge registriert";
+  content: "Es wurden noch keine Fragen und Antworten-Einträge registriert";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1013,14 +1013,14 @@
 <script>(function(){document.addEventListener("DOMContentLoaded",function(){document.documentElement.classList.remove("prelayout");var s=document.getElementById("prelayout-guard");if(s&&s.parentNode){s.parentNode.removeChild(s);}});})();</script>
 <div class="container">
 <div class="sidebar">
-<a href="home.html">🏠 Startseite</a>
-<a href="networkhub.html">🛒 Marktplatz-Hub</a>
-<a href="distributionhub.html">🏭 Vertriebs-Hub</a>
-<a href="socialnetwork.html">📢 Soziales Netzwerk</a>
-<a href="mediahub.html">🎬 Medien-Hub</a>
-<a href="tour.html">🧳 Reise · Tourismus · Unterkunft</a>
+<a href="home_de.html">🏠 Startseite</a>
+<a href="networkhub_de.html">🛒 Marktplatz-Hub</a>
+<a href="distributionhub_de.html">🏭 Vertriebs-Hub</a>
+<a href="socialnetwork_de.html">📢 Soziales Netzwerk</a>
+<a href="mediahub_de.html">🎬 Medien-Hub</a>
+<a href="tour_de.html">🧳 Reise · Tourismus · Unterkunft</a>
 <a href="literature_academic.html">📚 Literatur- &amp; Wissenschaftsaustausch</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A Kontakt</a>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Fragen und Antworten</a>
 </div>
 <main class="main-content" style="margin:0">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
@@ -1257,7 +1257,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
 })();
 </script>
 <script id="igdc-qa-safety-bootstrap">
-// Ensures the Q&A popup opens when clicking the sidebar link,
+// Ensures the Fragen und Antworten popup opens when clicking the sidebar link,
 // even if Supabase URL/Key are not configured yet.
 (function(){
   if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
@@ -1278,11 +1278,11 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Fragen und Antworten';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">Die vollständigen Funktionen werden aktiviert, sobald die Speichereinstellungen (Supabase url/key) verbunden sind.</div>';
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
         document.body.appendChild(m);
@@ -1421,9 +1421,9 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
 
   async function showDetail(node, placement){
     const info = resolveInfo(node);
-    el.title.textContent = info.title || '상세 보기';
+    el.title.textContent = info.title || 'Details anzeigen';
     if (info.img) el.img.src = info.img;
-    el.desc.textContent = '불러오는 중…';
+    el.desc.textContent = 'Wird geladen…';
     el.btnCta.disabled = true;
 
     // stash
@@ -1437,19 +1437,19 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     try{
       if (info.id){
         const detail = await fetchJSON(`/api/items/${encodeURIComponent(info.id)}`);
-        el.title.textContent = detail.title || info.title || '상세 보기';
+        el.title.textContent = detail.title || info.title || 'Details anzeigen';
         if (detail.image) el.img.src = detail.image;
         el.desc.textContent = detail.description || '';
         if (detail.ctaLabel) el.btnCta.textContent = detail.ctaLabel;
         if (detail.href) href = detail.href;
       } else {
-        el.desc.textContent = el.desc.textContent==='불러오는 중…' ? '' : el.desc.textContent;
+        el.desc.textContent = el.desc.textContent==='Wird geladen…' ? '' : el.desc.textContent;
       }
     }catch(_){ el.desc.textContent = ''; }
 
     // Enable CTA only if we have a destination
     if (href){ el.btnCta.disabled = false; }
-    else { el.btnCta.disabled = true; el.btnCta.title = '이 항목에 연결된 이동 링크가 없습니다.'; }
+    else { el.btnCta.disabled = true; el.btnCta.title = 'Für diesen Eintrag ist kein Ziel-Link verbunden.'; }
 
     // CTA handler
     el.btnCta.onclick = async function(){
@@ -1469,11 +1469,11 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     // Feedback handlers (optional)
     el.btnLike.onclick = async function(){
       const id = this.dataset.itemId || info.id; if(!id) return;
-      try{ await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); this.textContent='Gefällt mir 완료'; this.disabled=true; }catch(_){}
+      try{ await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); this.textContent='Gefällt mir gesendet'; this.disabled=true; }catch(_){}
     };
     el.btnRec.onclick = async function(){
       const id = this.dataset.itemId || info.id; if(!id) return;
-      try{ await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); this.textContent='Empfehlen 완료'; this.disabled=true; }catch(_){}
+      try{ await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); this.textContent='Empfohlen'; this.disabled=true; }catch(_){}
     };
   }
 
@@ -1595,7 +1595,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   const fmtDate = (s)=> new Date(s).toLocaleString();
   const nowISO = ()=> new Date().toISOString();
   const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+  const classifyTech = (t)=> /admin|administrator|betrieb|operat|einstellung|konfig|bereitstellung|deploy|fehler|bug|laden|api|integration|server|datenbank|db|berechtigung|richtlinie|anmeldung|login|token|schl(?:u|ü)ssel|key|zahlung|sicherheit|cors|netzwerk|timeout|antwortcode|statuscode|build|kompil|kaputt|funktioniert\s*nicht|stopp|seite|link|fehlfunktion|관리자|운영|설정|배포|에러|오류|버그|로딩|연동|서버|데이터베이스|권한|정책|로그인|토큰|키|결제|보안|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|오작동/i.test(t||'');
 
   function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
   function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
@@ -1605,7 +1605,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase-Zugangsdaten/Bibliothek nicht konfiguriert: Die UI ist sichtbar, aber das Speichern ist deaktiviert.");
+      console.warn("[Fragen und Antworten] Supabase-Zugangsdaten/Bibliothek nicht konfiguriert: Die UI ist sichtbar, aber das Speichern ist deaktiviert.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -1643,7 +1643,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Einreichen";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Löschen";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Einfache Fragen werden sofort von der KI beantwortet. Technische, fehlerbezogene oder betriebliche Themen werden automatisch an das Admin-Q&A weitergeleitet.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Einfache Fragen werden sofort von der KI beantwortet. Technische, fehlerbezogene oder betriebliche Themen werden automatisch an das Adminbereich für Fragen und Antworten weitergeleitet.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -1748,9 +1748,9 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 확인 후 회신됩니다.";
-          else if(/가격|비용|요금/.test(text)) answer="가격/요금 정보는 페이지 내 안내를 참고해주세요. 추가 문의는 남겨주세요.";
-          else answer="문의 감사합니다. 빠르게 확인하여 도와드리겠습니다.";
+          if(/zeit|öffnungszeit|oeffnungszeit|betriebszeit|stunden|kontakt|anfrage|문의|시간|운영시간|오픈/i.test(text)) answer="Betriebsbezogene Anfragen werden nach Prüfung durch den Administrator beantwortet.";
+          else if(/preis|kosten|gebühr|gebuehr|price|cost|fee|가격|비용|요금/i.test(text)) answer="Bitte beachten Sie die Hinweise auf dieser Seite zu Preisen und Gebühren. Hinterlassen Sie bei Bedarf eine zusätzliche Anfrage.";
+          else answer="Vielen Dank für Ihre Anfrage. Wir prüfen sie schnell und helfen Ihnen weiter.";
         }
       }
       return { technical, answer };
@@ -1797,7 +1797,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] Auth-Initialisierung fehlgeschlagen:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Fragen und Antworten] Auth-Initialisierung fehlgeschlagen:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -1876,14 +1876,14 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
               a.setAttribute('data-product-id', item.id || '');
 
               var img = document.createElement('img');
-              img.alt = item.title || 'item';
+              img.alt = item.title || 'Artikel';
               img.loading = 'lazy';
               img.referrerPolicy = 'no-referrer';
               img.src = item.thumb || item.image || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
 
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || item.name || '상품';
+              t.textContent = item.title || item.name || 'Produkt';
 
               a.appendChild(img);
               a.appendChild(t);
@@ -1904,12 +1904,12 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
               a.href = item.url || '#';
               a.setAttribute('data-product-id', item.id || '');
               var img = document.createElement('img');
-              img.alt = item.title || 'item';
+              img.alt = item.title || 'Artikel';
               img.loading = 'lazy';
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || '상품';
+              t.textContent = item.title || 'Produkt';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -1948,7 +1948,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   } else {
     hideLiteratureAcademic();
   }
-})(
+})();
+</script>
 <!-- Minimal runtime to toggle off-canvas; no bindings to existing logic -->
 <script id="ml-offcanvas-js">
 (function(){
@@ -2386,12 +2387,12 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Fragen und Antworten';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
-      body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
+      body.innerHTML = '<div class="igdc-qa-note">Die vollständigen Funktionen werden aktiviert, sobald die Speichereinstellungen (Supabase url/key) verbunden sind.</div>';
 
       // ensure the "대표 이메일" is shown only inside the modal
       var ce = document.createElement('p');
@@ -2404,7 +2405,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       document.body.appendChild(m);
 
       function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }
+      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
       x.addEventListener('click', close);
       b.addEventListener('click', close);
 
@@ -2488,13 +2489,13 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Fragen und Antworten';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
       var note = document.createElement('div'); note.className='igdc-qa-note';
-      note.textContent = '저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.';
+      note.textContent = 'Die vollständigen Funktionen werden aktiviert, sobald die Speichereinstellungen (Supabase url/key) verbunden sind.';
       body.appendChild(note);
 
       // (1) Inject the contact email in creation path
@@ -2822,7 +2823,7 @@ window.addEventListener("message",function(ev){
       var title = document.querySelector('#mobile-ad-rail-wrap .rail-title, #mobile-ad-rail-wrap h3, #mobile-ad-rail-wrap header h3');
       if (title){
         var t=(title.textContent||'').trim();
-        if (t.length>8) title.textContent='💎 Empfehlen 브랜드 💎';
+        if (t.length>8) title.textContent='💎 Empfohlene Marken 💎';
       }
       // Capture-phase guard to preserve native vertical scroll
       var zone = list || wrap;
@@ -2876,8 +2877,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>결제 QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">닫기</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Zahlungs-QR</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Schließen</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -3051,7 +3052,7 @@ window.addEventListener("message",function(ev){
       return `
         <form id="igdc-review-form" class="igdc-review-form">
           <textarea
-            placeholder="상품 사용 경험을 공유해 주세요"
+            placeholder="Teilen Sie Ihre Produkterfahrung mit uns"
             minlength="${this.config.minChars}"
             maxlength="${this.config.maxChars}"
             required></textarea>
@@ -3087,7 +3088,7 @@ window.addEventListener("message",function(ev){
             textarea.value = '';
             this.loadReviews();
           })
-          .catch(() => alert('Bewertung absenden 실패'));
+          .catch(() => alert('Bewertung konnte nicht gesendet werden'));
       });
     },
 

@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="hu">
 <head>
 <!-- Supabase inline injection (vars + init) -->
 <script>
@@ -2407,8 +2407,8 @@ body > div.container,
 <option value="env">Környezet</option>
 <option value="etc">Egyéb</option>
 </select>
-</label><button class="button small" id="btnAttach" type="button">Csatolmány</button><div aria-label="Attachment 미리보기" class="attach-preview" id="attachPreview"></div>
-<button class="button small" id="btnOpenComposer">Írás</button><div aria-label="Cím 미리보기" class="title-preview" id="titlePreview"><span class="tp-text">Nincs cím</span></div>
+</label><button class="button small" id="btnAttach" type="button">Csatolmány</button><div aria-label="Csatolmány előnézete" class="attach-preview" id="attachPreview"></div>
+<button class="button small" id="btnOpenComposer">Írás</button><div aria-label="Cím előnézete" class="title-preview" id="titlePreview"><span class="tp-text">Nincs cím</span></div>
 <button class="button small accent" id="btnSubmitPost">Mentés</button>
 <span id="attachName"></span>
 <button aria-label="첨부 제거 " class="button tiny" id="btnAttachClear" style="display:none;" type="button">Törlés</button>
@@ -2497,13 +2497,13 @@ body > div.container,
 <aside class="right">
 <div class="panel cafe-link"><a aria-label="Ugrás a WAM NAVER Cafe oldalára" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
-<button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">Adományok</button>
+<button class="button" onclick="alert('Az adományozási rendszer hamarosan csatlakozik!')" style="margin-bottom:8px; padding:5px 14px;">Adományok</button>
 <p><b>IESF (International Exchange Service Foundation)</b><br/>
         - General: NongHyup 301-0078-3333-51<br/>
-        - Foreign Currency: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
+        - Deviza: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
 <p><b>WAM Foundation (World Aviation Mission Foundation)</b><br/>
         - General: Shinhan 100-026-331592<br/>
-        - Foreign Currency: Shinhan 180-005-931110<br/><span>   SWIFT: SHBKKRSE</span></p>
+        - Deviza: Shinhan 180-005-931110<br/><span>   SWIFT: SHBKKRSE</span></p>
 </div>
 <div class="feed-wrapper" id="iesfFeed" style="flex:1; overflow-y:auto;">
 </div>
@@ -2605,7 +2605,7 @@ body > div.container,
         ${imgSrc ? `<div class="thumb" style="aspect-ratio:16/9; overflow:hidden; border-radius:6px; margin-bottom:6px;"><img src="${imgSrc}" style="width:100%; height:100%; object-fit:cover;"/></div>` : ""}
         <div class="title">${t}</div>
         <div class="meta">${new Date().toLocaleString()}</div>
-        <div class="preview" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
+        <div class="előnézet" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
       `;
       holder.prepend(item);
       if(attachLink){
@@ -2644,7 +2644,7 @@ body > div.container,
     if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
-        alert("Only images up to 2MB can be previewed directly. For large files, upload them to external storage and enter the link.");
+        alert("Csak a legfeljebb 2 MB-os képek jeleníthetők meg közvetlen előnézetben. Nagy fájlok esetén töltse fel őket külső tárhelyre, és adja meg a linket.");
         imageLink = ""; imagePreviewObjectUrl = "";
       }else{
         imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
@@ -2661,7 +2661,7 @@ body > div.container,
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
-        alert("Only files up to 5MB can display their file name directly. For large files, please use only an external storage link.");
+        alert("Csak az 5 MB alatti fájlok nevét lehet közvetlenül megjeleníteni. Nagy fájlok esetén kérjük, csak külső tárhely linkjét használja.");
         attachLink = "";
       }else{
         attachLink = f.name; // 파일명만 기록
@@ -2796,7 +2796,7 @@ body > div.container,
     const b = (bodyI && bodyI.value.trim()) || '(No Content)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
+    if(!holder){ alert('A hírek területe nem található.'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2804,7 +2804,7 @@ body > div.container,
     item.innerHTML = `
       <div class="title">${t}</div>
       <div class="meta">${new Date().toLocaleString()}</div>
-      <div class="preview" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
+      <div class="előnézet" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
     `;
 
     if(selectedFiles.length){
@@ -2820,13 +2820,13 @@ body > div.container,
     }
 
     const del = document.createElement('button');
-    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='Delete';
+    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='Törlés';
     del.style.cssText='margin-top:6px; display:none;';
     item.appendChild(del);
     const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
     if(canDelete) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      if(!confirm('Biztosan törli ezt a hírt?')) return;
       item.remove();
     });
 
@@ -2951,7 +2951,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || ''Nincs cím';';
+    tpText.textContent = t || 'Nincs cím';
   }
 
   // live typing updates preview
@@ -3047,11 +3047,11 @@ body > div.container,
     const btn = document.createElement('button');
     btn.type='button';
     btn.className='button tiny danger delete-post';
-    btn.textContent='Delete';
+    btn.textContent='Törlés';
     btn.style.cssText='margin-top:6px; display:none;';
     if(canShowDeleteFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      if(!confirm('Biztosan törli ezt a hírt?')) return;
       item.remove();
     });
     item.appendChild(btn);
@@ -3201,13 +3201,13 @@ body > div.container,
 })();
 </script><div id="editNewsModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 680px); max-height:78vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 style="margin:0; font-size:1.05rem;">Írás 편집</h3>
+<h3 style="margin:0; font-size:1.05rem;">Bejegyzés szerkesztése</h3>
 <div id="enInfo" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
 <label style="font-size:.85rem;">Cím</label>
 <input id="enTitle" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;" type="text"/>
-<label style="font-size:.85rem;">Content</label>
+<label style="font-size:.85rem;">Tartalom</label>
 <textarea id="enBody" rows="8" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;"></textarea>
 </div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
@@ -3252,7 +3252,7 @@ body > div.container,
       badge.setAttribute('translate','no');
       header.appendChild(badge);
     }
-    badge.textContent = `Edited · ${tsStr}`;
+    badge.textContent = `Szerkesztve · ${tsStr}`;
   }
 
   // On load, restore edited badge for admin/author only
@@ -3395,7 +3395,7 @@ body > div.container,
     let btnDel  = footer.querySelector('.delete-post');
     if(!btnEdit){
       btnEdit = document.createElement('button');
-      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
+      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Szerkesztés';
       footer.appendChild(btnEdit);
       btnEdit.addEventListener('click', (e)=>{
         e.stopPropagation();
@@ -3412,11 +3412,11 @@ body > div.container,
     }
     if(!btnDel){
       btnDel = document.createElement('button');
-      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='Delete';
+      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='Törlés';
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+        if(!confirm('Biztosan törli ezt a hírt?')) return;
         item.remove();
       });
     }
@@ -3596,7 +3596,7 @@ body > div.container,
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'Content';
+    if(p) p.textContent = 'Tartalom';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -3675,7 +3675,7 @@ body > div.container,
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("A vásárlási kérelmet megkaptuk."); } else { alert("Purchase request failed"); }
+      if (res.ok){ alert("A vásárlási kérelmet megkaptuk."); } else { alert("A vásárlási kérelem sikertelen."); }
     }catch(e){ console.warn(e); alert("Network error"); }
   };
 
@@ -3684,7 +3684,7 @@ body > div.container,
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("Az elszámolási kérelmet megkaptuk."); } else { alert("Settlement request failed"); }
+      if (res.ok){ alert("Az elszámolási kérelmet megkaptuk."); } else { alert("Az elszámolási kérelem sikertelen."); }
     }catch(e){ console.warn(e); alert("Network error"); }
   };
 
@@ -3694,7 +3694,7 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("A blokklánc-feldolgozási kérelem befejeződött: " + (j.txHash||"Pending")); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("A blokklánc-feldolgozási kérelem befejeződött: " + (j.txHash||"Függőben")); }
       else { alert("A blokklánc-feldolgozás sikertelen"); }
     }catch(e){ console.warn(e); alert("Network error"); }
   };
@@ -3741,7 +3741,7 @@ body > div.container,
 
             var t = document.createElement('div');
             t.className = 'title';
-            t.textContent = item.title || item.name || 'Product';
+            t.textContent = item.title || item.name || 'Termék';
 
             a.appendChild(img);
             a.appendChild(t);
@@ -3764,7 +3764,7 @@ body > div.container,
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || 'Product';
+              t.textContent = item.title || 'Termék';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -3850,7 +3850,7 @@ body > div.container,
   // === 안내 문구 ===
   const note = document.createElement("div");
   note.className = "donation-note";
-  note.textContent = "※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az admin Q&A-hoz kerülnek továbbításra.";
+  note.textContent = "※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az adminisztrátori kérdések-válaszokhoz kerülnek továbbításra.";
   donationDiv.appendChild(note);
 
   // === 구분선 ===
@@ -3866,12 +3866,12 @@ body > div.container,
   accountBox.innerHTML = `
     <div><b>IESF (International Exchange Service Foundation)</b></div>
     <div>General: 농협 301-0078-3333-51</div>
-    <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
+    <div>Deviza: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
     <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
     <div>General: 신한 100-026-331592</div>
-    <div>Foreign Currency: Shinhan 180-005-931110</div>
+    <div>Deviza: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
   donationDiv.appendChild(accountBox);
@@ -3884,7 +3884,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      alert(`Kiválasztott összeg: ₩${Number(amt).toLocaleString()}\n\nKérjük, utalja át az alábbi számlára.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -4274,7 +4274,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      try{ await sb.auth.signInNévtelenly(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -4302,7 +4302,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Beküldés";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Törlés";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az admin Q&A-hoz kerülnek továbbításra.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az adminisztrátori kérdések-válaszokhoz kerülnek továbbításra.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -4387,7 +4387,7 @@ document.addEventListener('DOMContentLoaded', function(){
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("Delete failed (permission/policy)"); return; }
+            if(error){ alert("A törlés sikertelen (engedély/szabályzat)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -4436,7 +4436,7 @@ document.addEventListener('DOMContentLoaded', function(){
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("Registration failed"); return; }
+      if(error){ alert("A regisztráció sikertelen"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -4498,7 +4498,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         bk=document.createElement('div');
         bk.id='drawerBackdrop';
         bk.className='drawer-backdrop';
-        document.body/*__KILL__*/ appendChild_DISABLED(bk);
+        document.body.appendChild(bk);
         bk.addEventListener('click',close,{passive:true});
       }
     }
@@ -5405,9 +5405,9 @@ window.addEventListener("message",function(ev){
     card.innerHTML = `
       <div class="thumb"></div>
       <div class="card-body">
-        <div class="card-title">Loading...</div>
+        <div class="card-title">Betöltés...</div>
         <div class="card-meta">-</div>
-        <div class="card-preview">Preparing</div>
+        <div class="card-preview">Előkészítés</div>
       </div>
     `;
 

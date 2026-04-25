@@ -322,7 +322,7 @@ button svg, .btn svg, .button svg, .cta-button svg{ width:1em; height:1em; }
 .section-blockchain 
 .section-blockchain .bc-tile:hover{
   background:#DDF2E6;
-  borderProviders(20,80,40,.28);
+  border:1px solid rgba(20,80,40,.28);
 }
 
 /* Responsive: keep gutters modest on small screens */
@@ -1182,7 +1182,7 @@ html, body {
 <a href="mediahub.html">🎬 মিডিয়া হাব</a>
 <a href="tour.html">🧳 ভ্রমণ · পর্যটন · আবাসন</a>
 <a href="literature_academic.html">📚 সাহিত্য ও একাডেমিক বিনিময়</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&A জিজ্ঞাসা</a></aside>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 প্রশ্নোত্তর</a></aside>
 <main>
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
@@ -1197,7 +1197,7 @@ html, body {
 <div class="hero-overlay">
 <!-- BEGIN: Video Search UI (replaces title/desc, non-intrusive) -->
 <form class="video-search" onsubmit="return handleVideoSearch(event)" style="display:flex; gap:10px; align-items:center; background:rgba(0,0,0,0.45); padding:10px 12px; border-radius:12px; flex-wrap:wrap;">
-<input name="q" placeholder="ভিডিও অনুসন্ধান করুন (শিরোনাম, শিল্পী, 채널 ইত্যাদি)" required="" style="flex:1 1 48%; min-width:260px; max-width:620px; padding:8px 10px; border-radius:10px; border:none; outline:none; background:#fff; color:#111; font-size:16px;" type="text"/>
+<input name="q" placeholder="ভিডিও অনুসন্ধান করুন (শিরোনাম, শিল্পী, চ্যানেল ইত্যাদি)" required="" style="flex:1 1 48%; min-width:260px; max-width:620px; padding:8px 10px; border-radius:10px; border:none; outline:none; background:#fff; color:#111; font-size:16px;" type="text"/>
 <select name="provider" style="padding:8px 10px; border-radius:10px; border:none; outline:none;"></select>
 <button style="padding:10px 16px; border-radius:10px; border:none; background:#2e6bff; color:#fff; font-weight:700; cursor:pointer;" type="submit">খুঁজুন</button>
 </form>
@@ -3432,17 +3432,17 @@ function handleVideoSearch(e){
   const PROVIDERS = [
     {key:"netflix",     tags:["global"], labels:{en:"Netflix", ko:"Netflix", zh:"Netflix", ja:"Netflix"}, url:"https://www.netflix.com/search?q="},
     {key:"youtube",     tags:["global"], labels:{en:"YouTube", ko:"YouTube", zh:"YouTube", ja:"YouTube"}, url:"https://www.youtube.com/results?search_query="},
-    {key:"naver",       tags:["kr"],     labels:{en:"Naver", ko:"네이버", zh:"Naver", ja:"Naver"}, url:"https://search.naver.com/search.naver?where=video&query="},
+    {key:"naver",       tags:["kr"],     labels:{en:"Naver", ko:"Naver", zh:"Naver", ja:"Naver"}, url:"https://search.naver.com/search.naver?where=video&query="},
     {key:"vimeo",       tags:["global"], labels:{en:"Vimeo", ko:"Vimeo", zh:"Vimeo", ja:"Vimeo"}, url:"https://vimeo.com/search?q="},
-    {key:"tving",       tags:["kr"],     labels:{en:"TVING", ko:"티빙", zh:"TVING", ja:"TVING"}, url:"https://www.tving.com/search?kwd="},
-    {key:"wavve",       tags:["kr"],     labels:{en:"Wavve", ko:"웨이브", zh:"Wavve", ja:"Wavve"}, url:"https://www.wavve.com/search?query="},
-    {key:"coupangplay", tags:["kr"],     labels:{en:"Coupang Play", ko:"쿠팡플레이", zh:"Coupang Play", ja:"Coupang Play"}, url:"https://www.coupangplay.com/search?q="},
+    {key:"tving",       tags:["kr"],     labels:{en:"TVING", ko:"TVING", zh:"TVING", ja:"TVING"}, url:"https://www.tving.com/search?kwd="},
+    {key:"wavve",       tags:["kr"],     labels:{en:"Wavve", ko:"Wavve", zh:"Wavve", ja:"Wavve"}, url:"https://www.wavve.com/search?query="},
+    {key:"coupangplay", tags:["kr"],     labels:{en:"Coupang Play", ko:"Coupang Play", zh:"Coupang Play", ja:"Coupang Play"}, url:"https://www.coupangplay.com/search?q="},
     {key:"disneyplus",  tags:["global"], labels:{en:"Disney+", ko:"Disney+", zh:"Disney+", ja:"Disney+"}, url:"https://www.disneyplus.com/search?q="},
     {key:"primevideo",  tags:["global"], labels:{en:"Prime Video", ko:"Prime Video", zh:"Prime Video", ja:"Prime Video"}, url:"https://www.primevideo.com/search/ref=atv_nb_sr?phrase="},
-    {key:"watcha",      tags:["kr"],     labels:{en:"WATCHA", ko:"왓챠", zh:"WATCHA", ja:"WATCHA"}, url:"https://watcha.com/ko-KR/search?query="},
+    {key:"watcha",      tags:["kr"],     labels:{en:"WATCHA", ko:"WATCHA", zh:"WATCHA", ja:"WATCHA"}, url:"https://watcha.com/ko-KR/search?query="},
     {key:"youku",       tags:["cn"],     labels:{en:"Youku", ko:"Youku", zh:"优酷 Youku", ja:"Youku"}, url:"https://so.youku.com/search_video/q_"},
     {key:"iqiyi",       tags:["cn"],     labels:{en:"iQIYI", ko:"iQIYI", zh:"爱奇艺 iQIYI", ja:"iQIYI"}, url:"https://www.iq.com/search?q="},
-    {key:"tencentvid",  tags:["cn"],     labels:{en:"Tencent Video", ko:"Tencent 영상", zh:"腾讯视频 Tencent", ja:"Tencent Video"}, url:"https://v.qq.com/x/search/?q="},
+    {key:"tencentvid",  tags:["cn"],     labels:{en:"Tencent Video", ko:"Tencent Video", zh:"腾讯视频 Tencent", ja:"Tencent Video"}, url:"https://v.qq.com/x/search/?q="},
     {key:"bilibili",    tags:["cn"],     labels:{en:"bilibili", ko:"bilibili", zh:"哔哩哔哩 bilibili", ja:"bilibili"}, url:"https://search.bilibili.com/all?keyword="}
   ];
 
@@ -3702,7 +3702,7 @@ function handleVideoSearch(e){
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='প্রশ্নোত্তর';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
@@ -3847,7 +3847,7 @@ function handleVideoSearch(e){
     const tA = el("textarea","igdc-qa-text a"); tA.placeholder="একটু অপেক্ষা করুন, আমরা শীঘ্রই উত্তর দেব।";
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="জমা দিন";
-    const btnমুছুন = el("button","igdc-qa-btn muted"); btnমুছুন.textContent="মুছুন";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="মুছুন";
     const note = el("div","igdc-qa-note"); note.textContent="※ সহজ প্রশ্নের উত্তর AI সঙ্গে সঙ্গে দেয়। প্রযুক্তিগত, ত্রুটি বা পরিচালনাসংক্রান্ত বিষয়গুলো স্বয়ংক্রিয়ভাবে অ্যাডমিন প্রশ্নোত্তর-তে পাঠানো হয়।";
     const list = el("div","igdc-qa-threads");
 
@@ -3855,7 +3855,7 @@ function handleVideoSearch(e){
 	const ce = el("p","contact-email");
     ce.innerHTML = 'প্রধান ইমেইল: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
     body.append(ce);
-    actions.append(btnSubmit, btnমুছুন);
+    actions.append(btnSubmit, btnClear);
     panel.append(header, body);
     modal.append(backdrop, panel);
     document.body.append(modal);
@@ -3944,7 +3944,7 @@ function handleVideoSearch(e){
       });
     }
 
-    async function autoউত্তরIfNeeded(text){
+    async function autoAnswerIfNeeded(text){
       const technical = classifyTech(text);
       let answer = null;
       if(!technical){
@@ -3968,7 +3968,7 @@ function handleVideoSearch(e){
       const q = (tQ.value||"").trim();
       let a = (tA.value||"").trim();
       if(!q){ tQ.focus(); return; }
-      const { technical, answer } = await autoউত্তরIfNeeded(q);
+      const { technical, answer } = await autoAnswerIfNeeded(q);
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
@@ -4065,7 +4065,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     th.setAttribute('style', 'background-image:url(' + src.replace(/["']/g,'') + ');background-size:cover;background-position:center;');
     var meta = document.createElement('div');
     meta.className = 'meta';
-    meta.textContent = item.title || item.name || 'Media';
+    meta.textContent = item.title || item.name || 'মিডিয়া';
     a.appendChild(th); a.appendChild(meta);
     return a;
   }
@@ -4487,7 +4487,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     var title = document.createElement('div');
     title.className = 'igdc-qa-title';
-    title.textContent = 'Q&A';
+    title.textContent = 'প্রশ্নোত্তর';
 
     var closeBtn = document.createElement('button');
     closeBtn.className = 'igdc-qa-close';
@@ -4571,9 +4571,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
   function stripFooterEmail(){
     try{
-      var footers = document.querySelectorAll('footer');
-      footers.forEach(function(f){
-        // Remove any mailto links
+      document.querySelectorAll('footer').forEach(function(f){
         f.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
           var parent = a.parentNode;
           if(parent){
@@ -4584,16 +4582,49 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
             parent.innerHTML = html;
           }
         });
-        // Remove any plain-text "যোগাযোগের ইমেল: ..." remnants
         f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
       });
     }catch(e){}
   }
 
-  function ensureModal(){
-    var modal = document.querySelector('.igdc-qa-modal');
-    if(!modal){
-      // Create minimal modal sk
+  function ensureModalEmail(){
+    try{
+      var modal = document.querySelector('.igdc-qa-modal');
+      if(!modal) return;
+      var body = modal.querySelector('.igdc-qa-body') || modal;
+      if(body && !body.querySelector('.contact-email')){
+        var note = body.querySelector('.igdc-qa-note');
+        if(!note){
+          note = document.createElement('div');
+          note.className = 'igdc-qa-note';
+          note.textContent = 'সংরক্ষিত সেটিংস (Supabase url/key) সংযোগ করার পর সব ফাংশন সক্রিয় হবে।';
+          body.insertBefore(note, body.firstChild || null);
+        } else if(!note.textContent.trim()) {
+          note.textContent = 'সংরক্ষিত সেটিংস (Supabase url/key) সংযোগ করার পর সব ফাংশন সক্রিয় হবে।';
+        }
+        var p = document.createElement('p');
+        p.className = 'contact-email';
+        p.innerHTML = CONTACT_HTML;
+        body.appendChild(p);
+      }
+    }catch(e){}
+  }
+
+  function run(){
+    stripFooterEmail();
+    ensureModalEmail();
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', run, { once:true });
+  } else {
+    run();
+  }
+  setTimeout(run, 400);
+  setTimeout(run, 1200);
+})();
+</script>
+
 <script id="igtc-mobile-overhaul-FULL-js">
 (function(){
   function qsa(sel){ return Array.prototype.slice.call(document.querySelectorAll(sel)); }

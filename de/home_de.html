@@ -641,192 +641,11 @@
 
 </style>
 <script>
-// Robust removal of '문학학술교류' from LEFT SIDEBAR only (no other layout changes)
-
-(function(){
-  function getWraps(){
-    var wraps = Array.from(document.querySelectorAll('.news-row-wrap'));
-    return wraps.map(function(wrap){
-      var track = wrap.querySelector('.news-row') || wrap;
-      var anchors = Array.from(track.querySelectorAll('a.news-btn'));
-      var rowId = parseInt(wrap.getAttribute('data-row')||'0',10) || 0;
-      return {wrap: wrap, track: track, anchors: anchors, rowId: rowId};
-    });
-  }
-
-  var preferred = {
-    'KR': [/news\.kbs\.co\.kr/i, /news\.sbs\.co\.kr/i, /ytn\.co\.kr/i, /tvchosun\.com/i, /yna\.co\.kr/i, /news\.jtbc\.co\.kr/i, /imbc\.com/i],
-    'CN': [/xinhuanet\.com/i, /people\.com\.cn/i, /cctv\.com/i, /huanqiu\.com/i, /thepaper\.cn/i, /caixin\.com/i, /chinadaily\.com\.cn/i],
-    'US': [/apnews\.com/i, /reuters\.com/i, /nytimes\.com/i, /washingtonpost\.com/i],
-    'JP': [/nhk\.or\.jp/i, /asahi\.com/i, /yomiuri\.co\.jp/i, /mainichi\.jp/i],
-    'EU': [/bbc\.com/i, /theguardian\.com/i, /ft\.com/i, /spiegel\.de|faz\.net|lemonde\.fr|lefigaro\.fr|elpais\.com|elmundo\.es/i],
-    'ME': [/aljazeera\.com/i, /alarabiya\.net/i, /aa\.com\.tr/i, /thenationalnews\.com|gulfnews\.com/i]
-  };
-
-  // Neighbor priorities for small-media countries
-  var neighborMap = {
-    // Northeast Asia
-    'KR': ['JP','CN','TW','HK'],
-    'JP': ['KR','CN','TW','HK'],
-    'CN': ['HK','TW','KR','JP','MN','KZ'],
-    'TW': ['CN','HK','JP','KR'],
-    'HK': ['CN','TW','KR','JP'],
-    'MN': ['CN','KZ'],
-    // Southeast Asia
-    'SG': ['MY','ID','TH','PH','VN'],
-    'MY': ['SG','ID','TH','VN'],
-    'TH': ['VN','MY','SG','ID'],
-    'VN': ['TH','MY','SG','PH'],
-    'ID': ['MY','SG','PH','TH'],
-    'PH': ['ID','MY','SG','VN'],
-    // South Asia
-    'IN': ['PK','BD','NP','LK'],
-    'PK': ['IN','BD'],
-    'BD': ['IN','PK'],
-    'NP': ['IN','BD'],
-    'LK': ['IN'],
-    // Central Asia
-    'KZ': ['UZ','KG','TJ','RU','CN'],
-    'UZ': ['KZ','KG','TJ'],
-    'KG': ['KZ','UZ','TJ'],
-    'TJ': ['UZ','KZ','KG'],
-    // Americas (examples)
-    'MX': ['US','CO','BR','AR'],
-    'CA': ['US'],
-    // Europe (examples)
-    'IE': ['UK'],
-    'UK': ['IE','FR','DE','ES','IT'],
-    'RU': ['UA','KZ','EU'],
-  };
-
-  function sortByPreferred(list, cc){
-    var prefs = preferred[cc] || [];
-    var arr = list.map(function(a){
-      var href = (a.getAttribute('href')||'').toLowerCase();
-      var idx = prefs.findIndex(function(rx){ return rx.test(href); });
-      return {a:a, i: idx < 0 ? 9999 : idx};
-    });
-    arr.sort(function(x,y){ return x.i - y.i; });
-    return arr.map(function(x){ return x.a; });
-  }
-
-  function indexRow(row){
-    var map = {}; var order = [];
-    row.anchors = Array.from(row.track.querySelectorAll('a.news-btn'));
-    row.anchors.forEach(function(a){
-      var cc = (a.getAttribute('data-cc')||'INTL').toUpperCase();
-      (map[cc] = map[cc] || []).push(a);
-      order.push(a);
-    });
-    return {countryMap: map, order: order};
-  }
-
-  // Build neighbor list: explicit neighbors first; if missing, fall back to same region
-  function buildNeighborAnchors(idx, cc){
-    var out = [];
-    var seen = new Set();
-    var neighbors = neighborMap[cc] || [];
-    neighbors.forEach(function(nc){
-      var list = (idx.countryMap[nc] || []);
-      list.forEach(function(a){ if(!seen.has(a)) { out.push(a); seen.add(a);} });
-    });
-    if (!out.length){
-      // fallback by region
-      var region = null;
-      // find region of first same-cc anchor
-      var sample = (idx.countryMap[cc]||[])[0];
-      if (sample) region = (sample.getAttribute('data-region')||'').toUpperCase();
-      if (region){
-        Object.keys(idx.countryMap).forEach(function(k){
-          if (k === cc) return;
-          var list = idx.countryMap[k]||[];
-          list.forEach(function(a){
-            if (((a.getAttribute('data-region')||'').toUpperCase() === region) && !seen.has(a)){
-              out.push(a); seen.add(a);
-            }
-          });
-        });
-      }
-    }
-    return out;
-  }
-
-
-function reorderRowByCountry(row, cc){
-    var idx = indexRow(row);
-    var same = (idx.countryMap[cc] || []).slice();
-    if (!same.length) return;
-
-    // 1) Same-country first (preferred order), not limited to 4 inside the row
-    same = sortByPreferred(same, cc);
-
-    // 2) If a country has <=3 outlets total, append neighbor-country anchors right after same-country
-    var neighbors = [];
-    if (same.length <= 3){
-      neighbors = buildNeighborAnchors(idx, cc);
-    }
-
-    // 3) Others (exclude same + neighbors) in original order
-    var exclude = new Set(same.concat(neighbors));
-    var others = idx.order.filter(function(a){ return !exclude.has(a); });
-
-    // 4) New order for the row: ALL same-country → neighbors (if used) → others
-    var merged = same.concat(neighbors).concat(others);
-
-    // 5) Rebuild DOM (keep 4-per-line source formatting for readability only)
-    row.anchors.forEach(function(a){ a.remove(); });
-    merged.forEach(function(a, i){
-      if ((i % 4) === 0) row.track.appendChild(document.createTextNode("\n"));
-      row.track.appendChild(a);
-    });
-    row.track.appendChild(document.createTextNode("\n"));
-
-    // Sticky selection
-    row.wrap.setAttribute('data-current-cc', cc);
-}
-
-    // Others (exclude same + neighbors)
-    var exclude = new Set(top4.concat(restSame).concat(neighbors));
-    var others = idx.order.filter(function(a){ return !exclude.has(a); });
-
-    var merged = top4.concat(restSame).concat(neighbors).concat(others);
-
-    // rebuild DOM
-    row.anchors.forEach(function(a){ a.remove(); });
-    merged.forEach(function(a, i){
-      if ((i % 4) === 0) row.track.appendChild(document.createTextNode("
-"));
-      row.track.appendChild(a);
-    });
-    row.track.appendChild(document.createTextNode("
-"));
-
-    row.wrap.setAttribute('data-current-cc', cc);
-  }
-
-  window.updateMainOben = function(){ /* no-op */ };
-
-  window.setRowCountry = function(rowId, cc){
-    var wraps = getWraps();
-    var row = wraps.find(function(r){ return r.rowId === rowId; });
-    if (!row) return;
-    reorderRowByCountry(row, (cc||'').toUpperCase());
-    if (rowId === 1) updateMainOben((cc||'').toUpperCase());
-  };
-
-  window.setMainNewsCountry = function(cc){
-    window.setRowCountry(1, cc);
-  };
-
-  var defaultMap = {1:'KR', 2:'US', 3:'EU', 4:'ME'};
-  getWraps().forEach(function(r){
-    var cc = (r.wrap.getAttribute('data-current-cc')||'').toUpperCase()
-          || (r.wrap.getAttribute('data-default-cc')||'').toUpperCase()
-          || defaultMap[r.rowId] || '';
-    if (cc) reorderRowByCountry(r, cc);
-    if (r.rowId === 1) updateMainOben(cc || 'KR');
-  });
-})();</script>
+/* IGDC safe cleanup: retired legacy news/sidebar helper.
+   The previous block had a syntax error and was not executed by browsers.
+   This valid no-op removes the parser error without changing layout, news rows,
+   scroll behavior, sidebar DOM, or button lists. */
+</script>
 <style>
 /* === IGTC News Row: fixed stamp & under-scrolling track === */
 .igtc-news-row{ position:relative; }
@@ -868,7 +687,7 @@ function reorderRowByCountry(row, cc){
 
 
 </style>
-<!-- patch: inject Q&A CSS -->
+<!-- patch: inject Fragen und Antworten CSS -->
 <style id="igdc-qa-style">
 :root{
   --igdc-z:2147483000; --igdc-radius:14px; --igdc-shadow:0 10px 30px rgba(0,0,0,.18);
@@ -877,7 +696,7 @@ function reorderRowByCountry(row, cc){
   --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
   --blue:#2563eb; --muted:#9ca3af;
 }
-/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+/* Sidebar Fragen und Antworten link follows existing .sidebar a style; this extra ensures visibility if needed */
 #qnaOpenBtn{ background-color:#001f4d; color:#ffffff;  color:#001f4d;  display:block; text-decoration:none; }
 /* Modal near the left sidebar, with smooth transitions */
 .igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
@@ -965,7 +784,7 @@ html, body {
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Es sind noch keine Q&A-Inhalte vorhanden.";
+  content: "Es sind noch keine Fragen und Antworten-Inhalte vorhanden.";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -983,7 +802,7 @@ html, body {
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Es sind noch keine Q&A-Inhalte vorhanden.";
+  content: "Es sind noch keine Fragen und Antworten-Inhalte vorhanden.";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1049,13 +868,13 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   var btn = document.createElement("button");
   btn.id = "qna-fab";
   btn.type = "button";
-  btn.setAttribute("aria-label","Q&A");
+  btn.setAttribute("aria-label","Fragen und Antworten");
   btn.style.cssText = [
     "position:fixed","z-index:99999","top:10px","right:10px",
     "padding:10px 14px","border-radius:999px","border:1px solid rgba(0,0,0,.1)",
     "background:#004080","color:#fff","font-weight:700","box-shadow:0 2px 8px rgba(0,0,0,.2)"
   ].join(";");
-  btn.textContent = "Q&A";
+  btn.textContent = "Fragen und Antworten";
   btn.addEventListener("click", openQnA, {passive:true});
 
   var hdr = document.querySelector("header") || document.body;
@@ -1988,7 +1807,7 @@ section.shopping-section, section.shopping-section .shopping-rows {
 <a href="mediahub.html">🎬 Medien-Hub</a>
 <a href="tour.html">🧳 Reisen · Tourismus · Unterkunft</a>
 <a href="literature_academic">📚 Literatur & Akademischer Austausch</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Fragen & Antworten</a>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Fragen und Antworten</a>
 </div>
 <!-- Main content (inner only changes) -->
 <div class="main-content">
@@ -2318,89 +2137,9 @@ window.addEventListener('DOMContentLoaded', initNewsRows);
 </script>
 <!-- removed stray text:  -->
 <script>
-(function(){
-  function getParamCC(){
-    const u = new URL(window.location.href);
-    return (u.searchParams.get('cc')||'').toUpperCase() || null;
-  }
-  function guessCC(){
-    // basic heuristics
-    const lang = (navigator.languages && navigator.languages[0]) || navigator.language || '';
-    if(/^ko/i.test(lang)) return 'KR';
-    if(/^ja/i.test(lang)) return 'JP';
-    if(/^zh/i.test(lang)) return 'CN';
-    if(/^en-US/i.test(lang)) return 'US';
-    // timezone hint
-    try {
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
-      if(/Seoul/i.test(tz)) return 'KR';
-      if(/Tokyo/i.test(tz)) return 'JP';
-      if(/Shanghai|Hong_Kong|Taipei/i.test(tz)) return 'CN';
-      if(/Sydney|Melbourne/i.test(tz)) return 'AU';
-      if(/Sao_Paulo|Buenos_Aires|Lima|Bogota|Santiago/i.test(tz)) return 'BR'; // coarse
-      if(/New_York|Los_Angeles|Chicago|Toronto|Vancouver/i.test(tz)) return 'US';
-      if(/London|Paris|Berlin|Madrid|Rome|Warsaw|Budapest|Bucharest|Prague/i.test(tz)) return 'GB';
-    } catch(e){}
-    return null;
-  }
-  function regionOf(cc){
-    const AM = ['US','CA','MX','BR','AR','CL','CO','PE','PY','UY','VE'];
-    const AS = ['KR','JP','CN','IN','SG','MY','TH','VN','PH','ID','KZ','UZ','KG','AZ','TR','AU','NZ'];
-    const EU = ['GB','FR','DE','ES','IT','PL','HU','RO','CZ','UA','RU'];
-    if(AM.includes(cc)) return 'AM';
-    if(EU.includes(cc)) return 'EU';
-    if(AS.includes(cc)) return 'AS';
-    return null;
-  }
-
-function reorderRow(rowId){
-  const row = document.getElementById(rowId);
-  if(!row) return;
-  const cc = (getParamCC && (getParamCC() || (typeof guessCC==='function' && guessCC()) ) || 'KR').toUpperCase();
-  const region = (typeof regionOf==='function' ? regionOf(cc) : (typeof ccToRegion==='function' ? ccToRegion(cc) : 'AS')) || 'AS';
-
-  const anchors = Array.from(row.querySelectorAll('a.news-btn'));
-  if (anchors.length === 0) return;
-
-  const exact = [], sameReg = [], rest = [];
-  anchors.forEach(n=>{
-    const ncc = (n.dataset.cc||'').toUpperCase();
-    const nrg = (n.dataset.region||'').toUpperCase();
-    if(ncc === cc) exact.push(n);
-    else if(nrg === region) sameReg.push(n);
-    else rest.push(n);
-  });
-
-  const left  = row.querySelector('.row-arrow.left');
-  const right = row.querySelector('.row-arrow.right');
-  const tag   = row.querySelector('.continent-tag');
-
-  anchors.forEach(a=>{ if (a.parentElement===row) a.remove(); });
-
-  if (left && row.firstElementChild !== left) row.insertBefore(left, row.firstChild);
-  if (tag) {
-    if (left && left.nextSibling !== tag) row.insertBefore(tag, left.nextSibling);
-    else if (!left && row.firstElementChild !== tag) row.insertBefore(tag, row.firstChild);
-  }
-  if (right) row.appendChild(right);
-
-  [...exact, ...sameReg, ...rest].forEach(n=> row.appendChild(n));
-}
-
-    const head = row.firstElementChild && row.firstElementChild.classList.contains('continent-tag')
-      ? [row.firstElementChild] : [];
-
-    for(const el of head) row.appendChild(el);
-    [...exact, ...sameReg, ...rest].forEach(n=> row.appendChild(n));
-  }
-  function run(){
-    reorderRow('newsRow1');
-    reorderRow('newsRow2');
-    reorderRow('newsRow3');
-    reorderRow('newsRow4');
-  }
-  window.addEventListener('DOMContentLoaded', run);
-})();
+/* IGDC safe cleanup: retired duplicate country-based news reorder helper.
+   The previous block was syntactically invalid and did not run.
+   This valid no-op preserves the current page behavior. */
 </script>
 <!-- removed stray text:  -->
 <script>
@@ -2821,137 +2560,9 @@ if (window.matchMedia('(max-width:1024px)').matches) {
 </script>
 <!-- removed stray text: <! IGDC auto-order + geo + label helpers (invisible) > -->
 <script id="igdc-news-autoorder">
-(function(){
-  function getParamCC(){
-    try{
-      const u=new URL(location.href); const v=(u.searchParams.get('cc')||'').trim().toUpperCase();
-      return v||null;
-    }catch(e){return null;}
-  }
-  async function tryGeoIP(){
-    try{
-      const r = await fetch('/api/geo', {credentials:'include'});
-      if(!r.ok) return null;
-      const j = await r.json();
-      return (j && (j.cc||j.country||'')).toString().trim().toUpperCase() || null;
-    }catch(e){return null;}
-  }
-  function guessCCLocal(){
-    try{
-      const lang = (navigator.language||'').toLowerCase();
-      if(/^ko/.test(lang)) return 'KR';
-      if(/^ja/.test(lang)) return 'JP';
-      if(/^zh/.test(lang)) return 'CN';
-    }catch(e){}
-    try{
-      const tz=(Intl.DateTimeFormat().resolvedOptions().timeZone||'').toLowerCase();
-      if(/seoul/.test(tz)) return 'KR';
-      if(/tokyo/.test(tz)) return 'JP';
-      if(/shanghai|hong_kong|taipei|urumqi|harbin|beijing/.test(tz)) return 'CN';
-    }catch(e){}
-    return null;
-  }
-  function ccToRegion(cc){
-    const MAP = { KR:'AS', JP:'AS', CN:'AS', US:'AM', CA:'AM', BR:'AM', MX:'AM', DE:'EU', FR:'EU', GB:'EU', IT:'EU', ES:'EU', RU:'EU' };
-    return MAP[cc] || null;
-  }
-  function ensureCNDataAttrs(){
-    // In Asia row only, add data-cc/region for typical CN outlets if missing
-    document.querySelectorAll('.continent-tag').forEach(tag=>{
-      if(!/아시아|ASIA/i.test(tag.textContent)) return;
-      const row = tag.parentElement;
-      row.querySelectorAll('a.news-btn').forEach(a=>{
-        const t=(a.textContent||'').trim();
-        if(/신화|차이나데일리|CCTV|인민일보|환구시보|중국|China Daily|Xinhua|People/.test(t)){
-          if(!a.dataset.cc) a.dataset.cc='CN';
-          if(!a.dataset.region) a.dataset.region='AS';
-        }
-      });
-    });
-  }
-  function labelBilingualize(){
-    // if elements have data-native/data-en, render "native (English)"
-    document.querySelectorAll('a.news-btn').forEach(a=>{
-      const n=a.dataset.native, e=a.dataset.en;
-      if(n && e){
-        a.textContent = n + ' (' + e + ')';
-      }
-    });
-  }
-
-function reorderRow(row, cc, region){
-  if (!row) return;
-
-  const btns = Array.from(row.querySelectorAll('a.news-btn'));
-  if (btns.length===0) return;
-
-  const head = row.querySelector('.continent-tag');
-  const left  = row.querySelector('.row-arrow.left');
-  const right = row.querySelector('.row-arrow.right');
-
-  const isAsia = /아시아|ASIA/i.test(head ? head.textContent : '');
-  const own = [], sameReg = [], others = [];
-  btns.forEach(a=>{
-    const _cc=(a.dataset.cc||'').toUpperCase();
-    const _rg=(a.dataset.region||'').toUpperCase();
-    if(cc && _cc===cc) own.push(a);
-    else if(region && _rg===region) sameReg.push(a);
-    else others.push(a);
-  });
-
-  if(isAsia){
-    const PRI=['KR','CN','JP'];
-    sameReg.sort((a,b)=>{
-      const pa=PRI.indexOf((a.dataset.cc||'').toUpperCase());
-      const pb=PRI.indexOf((b.dataset.cc||'').toUpperCase());
-      return ((pa===-1)-(pb===-1)) || (pa-pb);
-    });
-  }
-
-  btns.forEach(el=>{ if(el.parentElement===row) el.remove(); });
-
-  if (left && row.firstElementChild !== left) row.insertBefore(left, row.firstChild);
-  if (head) {
-    if (left && left.nextSibling !== head) row.insertBefore(head, left.nextSibling);
-    else if (!left && row.firstElementChild !== head) row.insertBefore(head, row.firstChild);
-  }
-  if (right) row.appendChild(right);
-
-  own.slice(0, 999).forEach(el=>row.appendChild(el));
-  sameReg.forEach(el=>row.appendChild(el));
-  others.forEach(el=>row.appendChild(el));
-}
-);
-    // Asia micro-priority: KR -> CN -> JP inside sameReg
-    if(isAsia){
-      const PRI=['KR','CN','JP'];
-      sameReg.sort((a,b)=>{
-        const pa=PRI.indexOf((a.dataset.cc||'').toUpperCase());
-        const pb=PRI.indexOf((b.dataset.cc||'').toUpperCase());
-        return ((pa===-1)-(pb===-1)) || (pa-pb);
-      });
-    }
-    // Build order: head, up to 3 own, then remaining sameReg, then others, keeping original relative order otherwise
-    const docFrag = document.createDocumentFragment();
-    if(head) docFrag.appendChild(head);
-    own.slice(0, 999).forEach(el=>docFrag.appendChild(el));
-    sameReg.forEach(el=>docFrag.appendChild(el));
-    // append rest (own beyond 3 then others)
-    others.forEach(el=>docFrag.appendChild(el));
-    // apply
-
-    row.appendChild(docFrag);
-  }
-  async function applyAutoOrder(){
-    ensureCNDataAttrs();
-    labelBilingualize();
-    const cc = (await tryGeoIP()) || getParamCC() || guessCCLocal();
-    const region = ccToRegion(cc||'');
-    document.querySelectorAll('.news-row').forEach(row=> reorderRow(row, cc, region));
-  }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', applyAutoOrder);
-  else applyAutoOrder();
-})();
+/* IGDC safe cleanup: retired duplicate news auto-order helper.
+   The previous block was syntactically invalid and did not run.
+   This valid no-op preserves the current page behavior. */
 </script>
 <!-- removed stray text:  -->
 <script id="igdc-aff-bootstrap">
@@ -3076,7 +2687,7 @@ function reorderRow(row, cc, region){
 .shopping-rows .shop-row .shop-card { display: block !important; }
 
 </style>
-<!-- begin: IGDC Q&A + RECO migrated from v1 -->
+<!-- begin: IGDC Fragen und Antworten + RECO migrated from v1 -->
 <script id="igdc-qa-config">
   (function () {
     // 1) 민감정보 없는 기본 설정
@@ -3161,7 +2772,7 @@ function reorderRow(row, cc, region){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase credentials/library not configured: the UI is visible, but saving is disabled.");
+      console.warn("[Fragen und Antworten] Supabase credentials/library not configured: the UI is visible, but saving is disabled.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -3323,7 +2934,7 @@ function reorderRow(row, cc, region){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Storage settings (Supabase url/key) are not connected yet, so server-side saving is disabled. When deployed on the web, it will connect automatically once SUPER_VARSAR.url/anonKey are set.");
+        alert("Die Speichereinstellungen (Supabase URL/Key) sind noch nicht verbunden, daher ist serverseitiges Speichern deaktiviert. Nach der Web-Bereitstellung wird die Verbindung automatisch aktiviert, sobald SUPER_VARSAR.url/anonKey gesetzt sind.");
         return;
       }
       const record = {
@@ -3356,7 +2967,7 @@ function reorderRow(row, cc, region){
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] Auth initialization failed:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Fragen und Antworten] Auth initialization failed:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -4497,6 +4108,119 @@ window.addEventListener("message",function(ev){
     e.preventDefault();
     e.stopImmediatePropagation();
     goPrevPage();
+  }, true);
+})();
+</script>
+
+<script id="news-row2-left-scroll-balance-fix-20260424">
+(function(){
+  if (window.__NEWS_ROW2_LEFT_SCROLL_BALANCE_FIX_20260424__) return;
+  window.__NEWS_ROW2_LEFT_SCROLL_BALANCE_FIX_20260424__ = true;
+
+  function findScroller(row){
+    var candidates = Array.from(row.querySelectorAll('.scroll-track, .igtc-news-track, .news-links, .links, .scroll-area, .items, .btns'));
+    candidates.push(row);
+    for (var i = 0; i < candidates.length; i++) {
+      var el = candidates[i];
+      if (el && el.scrollWidth > el.clientWidth + 4) return el;
+    }
+    return row;
+  }
+
+  function getButtons(row, scroller){
+    var btns = Array.from((scroller || row).querySelectorAll('a.news-btn'));
+    if (!btns.length) btns = Array.from(row.querySelectorAll('a.news-btn'));
+    return btns.filter(function(el){
+      return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+    });
+  }
+
+  function getViewport(row, scroller){
+    var rowRect = row.getBoundingClientRect();
+    var scrollerRect = (scroller && scroller !== row) ? scroller.getBoundingClientRect() : rowRect;
+    var leftArrow = row.querySelector('.row-arrow.left');
+    var rightArrow = row.querySelector('.row-arrow.right');
+    var leftInset = leftArrow ? Math.ceil(leftArrow.getBoundingClientRect().width) + 12 : 0;
+    var rightInset = rightArrow ? Math.ceil(rightArrow.getBoundingClientRect().width) + 12 : 0;
+    return {
+      left: Math.max(scrollerRect.left, rowRect.left + leftInset),
+      right: Math.min(scrollerRect.right, rowRect.right - rightInset)
+    };
+  }
+
+  function firstFullyVisibleIndex(btns, viewport){
+    var eps = 0.5;
+    for (var i = 0; i < btns.length; i++) {
+      var r = btns[i].getBoundingClientRect();
+      if (r.left >= viewport.left - eps && r.right <= viewport.right + eps) return i;
+    }
+    return -1;
+  }
+
+  function firstIntersectingIndex(btns, viewport){
+    for (var i = 0; i < btns.length; i++) {
+      var r = btns[i].getBoundingClientRect();
+      if (r.right > viewport.left + 1) return i;
+    }
+    return 0;
+  }
+
+  function gapBetween(a, b){
+    return Math.max(0, b.offsetLeft - (a.offsetLeft + a.offsetWidth));
+  }
+
+  function previousPageStart(btns, currentStart, viewportWidth){
+    if (currentStart <= 0) return 0;
+    var end = currentStart - 1;
+    var target = end;
+    var total = btns[end].offsetWidth;
+
+    for (var i = end - 1; i >= 0; i--) {
+      var nextTotal = total + gapBetween(btns[i], btns[i + 1]) + btns[i].offsetWidth;
+      if (nextTotal <= viewportWidth + 1) {
+        total = nextTotal;
+        target = i;
+      } else {
+        break;
+      }
+    }
+    return target;
+  }
+
+  function alignToViewport(scroller, viewport, item){
+    var rect = item.getBoundingClientRect();
+    var current = scroller.scrollLeft || 0;
+    var target = Math.max(0, Math.round(current + (rect.left - viewport.left)));
+    try { scroller.scrollTo({ left: target, behavior: 'smooth' }); }
+    catch(e){ scroller.scrollLeft = target; }
+  }
+
+  function handleRow2Left(){
+    var row = document.getElementById('newsRow2');
+    if (!row) return;
+    var scroller = findScroller(row);
+    var btns = getButtons(row, scroller);
+    if (!btns.length) return;
+
+    var viewport = getViewport(row, scroller);
+    var viewportWidth = Math.max(1, viewport.right - viewport.left);
+    var currentStart = firstFullyVisibleIndex(btns, viewport);
+    if (currentStart < 0) currentStart = firstIntersectingIndex(btns, viewport);
+
+    var targetIndex = previousPageStart(btns, currentStart, viewportWidth);
+    alignToViewport(scroller, viewport, btns[targetIndex]);
+  }
+
+  /* Use window capture so this runs before older document-level arrow handlers. */
+  window.addEventListener('click', function(e){
+    var target = e.target;
+    var btn = target && target.closest ? target.closest('#newsRow2 .row-arrow.left') : null;
+    if (!btn) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+    handleRow2Left();
   }, true);
 })();
 </script>

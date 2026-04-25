@@ -5,7 +5,7 @@
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
 <meta charset="utf-8"/>
-<title>Tour</title>
+<title>ট্যুর</title>
 
 <style>
 body {
@@ -621,7 +621,7 @@ html, body {
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "এখনও কোনো Q&A এন্ট্রি পোস্ট করা হয়নি";
+  content: "এখনও কোনো প্রশ্নোত্তর এন্ট্রি পোস্ট করা হয়নি";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -953,9 +953,9 @@ html, body {
     .btn-grid .link-btn:hover { background:#e75480; color:#ffffff; border-color:#cc2d63; box-shadow:0 2px 6px rgba(0,0,0,0.18); }</style>
 <div class="region-card">
 <div class="region-title">এশিয়া</div>
-<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaTour <small>(하나투어)</small></a>
-<a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour<small>(모두투어)</small></a>
-<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon Tour <small>(노랑풍선)</small></a>
+<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaTour <small>(HanaTour)</small></a>
+<a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour<small>(ModeTour)</small></a>
+<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon Tour <small>(Yellow Balloon)</small></a>
 <a class="link-btn" href="https://www.trip.com" target="_blank">Trip.com <small>(携程)</small></a>
 <a class="link-btn" href="https://www.ctrip.com" target="_blank">Ctrip <small>(携程)</small></a>
 <a class="link-btn" href="https://www.qunar.com" target="_blank">Qunar <small>(去哪儿网)</small></a>
@@ -1048,7 +1048,7 @@ html, body {
     50 Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea <br/>
 </footer>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<!-- @SAFE-PATCH: hide '문학 학술교류' in sidebar -->
+<!-- @SAFE-PATCH: hide 'সাহিত্য-একাডেমিক বিনিময়' in sidebar -->
 <script>
 (function(){
   function hideLit(){
@@ -1058,7 +1058,7 @@ html, body {
         var a=links[i];
         var txt=(a.textContent||'').trim();
         var href=(a.getAttribute('href')||'').trim();
-        if(href.includes('literature_academic') || (txt.includes('문학') && txt.includes('학술'))){
+        if(href.includes('literature_academic') || (txt.includes('সাহিত্য') && txt.includes('একাডেমিক'))){
           a.setAttribute('aria-hidden','true');
           a.setAttribute('tabindex','-1');
           a.classList.add('is-hidden-lit');
@@ -1202,7 +1202,7 @@ a[href^="mailto:"]:hover {
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='প্রশ্নোত্তর';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
@@ -1336,7 +1336,7 @@ a[href^="mailto:"]:hover {
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
+    const title = el("div","igdc-qa-title"); title.textContent = "প্রশ্নোত্তর";
     const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","বন্ধ করুন");
     header.append(title, close);
 
@@ -1419,7 +1419,7 @@ a[href^="mailto:"]:hover {
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (অপেক্ষমাণ)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("উ. "+row.answer):"উ. (অপেক্ষমাণ)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "অ্যাডমিন অনুরোধ":"সাধারণ";
@@ -1530,9 +1530,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
           var b=document.createElement('div'); b.className='igdc-qa-backdrop';
           var p=document.createElement('div'); p.className='igdc-qa-panel';
           var h=document.createElement('div'); h.className='igdc-qa-header';
-          var t=document.createElement('div'); t.textContent='Q&A';
+          var t=document.createElement('div'); t.textContent='প্রশ্নোত্তর';
           var x=document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
-          var body=document.createElement('div'); body.className='igdc-qa-body'; body.textContent='Q&A connection ready';
+          var body=document.createElement('div'); body.className='igdc-qa-body'; body.textContent='প্রশ্নোত্তর সংযোগ প্রস্তুত';
           h.appendChild(t); h.appendChild(x); p.appendChild(h); p.appendChild(body);
           m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
           function close(){ m.classList.remove('open'); }
@@ -1601,14 +1601,14 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='প্রশ্নোত্তর';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
       body.innerHTML = '<div class="igdc-qa-note">স্টোরেজ সেটিংস (Supabase url/key) সংযুক্ত হলে পূর্ণ কার্যকারিতা চালু হবে।</div>';
 
-      // ensure the "대표 이메일" is shown only inside the modal
+      // ensure the "প্রতিনিধি ইমেইল" is shown only inside the modal
       var ce = document.createElement('p');
       ce.className = 'contact-email';
       ce.innerHTML = 'যোগাযোগ ইমেইল: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
@@ -1619,7 +1619,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       document.body.appendChild(m);
 
       function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }
+      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
       x.addEventListener('click', close);
       b.addEventListener('click', close);
 
@@ -1703,7 +1703,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='প্রশ্নোত্তর';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
@@ -1946,7 +1946,7 @@ window.addEventListener("message",function(ev){
   - 나머지 4개 사이트 (Donation 제외, Media 제외)
  목적:
   - 썸네일 클릭 자동 감지
-  - 상세 상품 자동 오픈 훅
+  - 상세 পণ্য 자동 오픈 훅
   - 구매하기 / 결제 / 장바구니 기존 버튼 그대로 사용
   - 상세 하단에 리뷰 시스템 자동 장착 (쿠팡 방식)
  --------------------------------------------------
@@ -1989,7 +1989,7 @@ window.addEventListener("message",function(ev){
         const productId = card.dataset.productId;
         if (!productId) return;
 
-        // 기존 상세 상품 오픈 로직은 이미 각 페이지에 있음
+        // 기존 상세 পণ্য 오픈 로직은 이미 각 페이지에 있음
         // 여기서는 리뷰만 자동 부착
         setTimeout(() => {
           this.mountReview(productId);
@@ -2037,7 +2037,7 @@ window.addEventListener("message",function(ev){
       return `
         <form id="igdc-review-form" class="igdc-review-form">
           <textarea
-            placeholder="Please share your experience using the product."
+            placeholder="পণ্যটি ব্যবহার করার অভিজ্ঞতা শেয়ার করুন।"
             minlength="${this.config.minReviewChars}"
             maxlength="${this.config.maxReviewChars}"
             required></textarea>
@@ -2116,7 +2116,7 @@ window.addEventListener("message",function(ev){
       return `
         <div class="igdc-review-item">
           <div class="igdc-review-meta">
-            <span>${esc(item.user || 'Anonymous')}</span>
+            <span>${esc(item.user || 'অজ্ঞাত')}</span>
             <span>${esc(item.date || '')}</span>
           </div>
           <div class="igdc-review-content">${esc(item.content)}</div>

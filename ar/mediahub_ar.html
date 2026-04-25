@@ -740,9 +740,9 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
       if (txt && sel && btn) { f.classList.add('igdc-inline-search'); break; }
     }
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyInlineSearch;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyInlineSearch);
   else applyInlineSearch();
-  window.addEventListener('resize', applyInlineSearch;
+  window.addEventListener('resize', applyInlineSearch);
 })();
 </script>
 <style id="igdc-card-and-hero-hard-constants">
@@ -1254,7 +1254,7 @@ html, body {
 <div class="hero-overlay">
 <!-- BEGIN: Video Search UI (replaces title/desc, non-intrusive) -->
 <form class="video-search" onsubmit="return handleVideoSearch(event)" style="display:flex; gap:10px; align-items:center; background:rgba(0,0,0,0.45); padding:10px 12px; border-radius:12px; flex-wrap:wrap;">
-<input name="q" placeholder="ابحث عن فيديو (العنوان، الفنان، القناة، إلخ)" required="" style="flex:1 1 48%; min-width:260px; max-width:620px; padding:8px 10px; border-radius:10px; border:none; outline:none; background:#fff; color:#111; font-size:16px;" type="text"/>
+<input dir="rtl" name="q" placeholder="ابحث عن فيديو (العنوان، الفنان، القناة، إلخ)" required="" style="flex:1 1 48%; min-width:260px; max-width:620px; padding:8px 10px; border-radius:10px; border:none; outline:none; background:#fff; color:#111; font-size:16px; direction:rtl; text-align:right; unicode-bidi:plaintext;" type="text"/>
 <select name="provider" style="padding:8px 10px; border-radius:10px; border:none; outline:none;"></select>
 <button style="padding:10px 16px; border-radius:10px; border:none; background:#2e6bff; color:#fff; font-weight:700; cursor:pointer;" type="submit">بحث</button>
 </form>
@@ -3489,17 +3489,17 @@ function handleVideoSearch(e){
   const PROVIDERS = [
     {key:"netflix",     tags:["global"], labels:{en:"Netflix", ko:"Netflix", zh:"Netflix", ja:"Netflix"}, url:"https://www.netflix.com/search?q="},
     {key:"youtube",     tags:["global"], labels:{en:"YouTube", ko:"YouTube", zh:"YouTube", ja:"YouTube"}, url:"https://www.youtube.com/results?search_query="},
-    {key:"naver",       tags:["kr"],     labels:{en:"Naver", ko:"네이버", zh:"Naver", ja:"Naver"}, url:"https://search.naver.com/search.naver?where=video&query="},
+    {key:"naver",       tags:["kr"],     labels:{en:"Naver", ko:"Naver", zh:"Naver", ja:"Naver"}, url:"https://search.naver.com/search.naver?where=video&query="},
     {key:"vimeo",       tags:["global"], labels:{en:"Vimeo", ko:"Vimeo", zh:"Vimeo", ja:"Vimeo"}, url:"https://vimeo.com/search?q="},
-    {key:"tving",       tags:["kr"],     labels:{en:"TVING", ko:"티빙", zh:"TVING", ja:"TVING"}, url:"https://www.tving.com/search?kwd="},
-    {key:"wavve",       tags:["kr"],     labels:{en:"Wavve", ko:"웨이브", zh:"Wavve", ja:"Wavve"}, url:"https://www.wavve.com/search?query="},
-    {key:"coupangplay", tags:["kr"],     labels:{en:"Coupang Play", ko:"쿠팡플레이", zh:"Coupang Play", ja:"Coupang Play"}, url:"https://www.coupangplay.com/search?q="},
+    {key:"tving",       tags:["kr"],     labels:{en:"TVING", ko:"TVING", zh:"TVING", ja:"TVING"}, url:"https://www.tving.com/search?kwd="},
+    {key:"wavve",       tags:["kr"],     labels:{en:"Wavve", ko:"Wavve", zh:"Wavve", ja:"Wavve"}, url:"https://www.wavve.com/search?query="},
+    {key:"coupangplay", tags:["kr"],     labels:{en:"Coupang Play", ko:"Coupang Play", zh:"Coupang Play", ja:"Coupang Play"}, url:"https://www.coupangplay.com/search?q="},
     {key:"disneyplus",  tags:["global"], labels:{en:"Disney+", ko:"Disney+", zh:"Disney+", ja:"Disney+"}, url:"https://www.disneyplus.com/search?q="},
     {key:"primevideo",  tags:["global"], labels:{en:"Prime Video", ko:"Prime Video", zh:"Prime Video", ja:"Prime Video"}, url:"https://www.primevideo.com/search/ref=atv_nb_sr?phrase="},
-    {key:"watcha",      tags:["kr"],     labels:{en:"WATCHA", ko:"왓챠", zh:"WATCHA", ja:"WATCHA"}, url:"https://watcha.com/ko-KR/search?query="},
+    {key:"watcha",      tags:["kr"],     labels:{en:"WATCHA", ko:"WATCHA", zh:"WATCHA", ja:"WATCHA"}, url:"https://watcha.com/ko-KR/search?query="},
     {key:"youku",       tags:["cn"],     labels:{en:"Youku", ko:"Youku", zh:"优酷 Youku", ja:"Youku"}, url:"https://so.youku.com/search_video/q_"},
     {key:"iqiyi",       tags:["cn"],     labels:{en:"iQIYI", ko:"iQIYI", zh:"爱奇艺 iQIYI", ja:"iQIYI"}, url:"https://www.iq.com/search?q="},
-    {key:"tencentvid",  tags:["cn"],     labels:{en:"Tencent Video", ko:"Tencent 영상", zh:"腾讯视频 Tencent", ja:"Tencent Video"}, url:"https://v.qq.com/x/search/?q="},
+    {key:"tencentvid",  tags:["cn"],     labels:{en:"Tencent Video", ko:"Tencent Video", zh:"腾讯视频 Tencent", ja:"Tencent Video"}, url:"https://v.qq.com/x/search/?q="},
     {key:"bilibili",    tags:["cn"],     labels:{en:"bilibili", ko:"bilibili", zh:"哔哩哔哩 bilibili", ja:"bilibili"}, url:"https://search.bilibili.com/all?keyword="}
   ];
 
@@ -3877,7 +3877,7 @@ function handleVideoSearch(e){
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      try{ await sb.auth.signInمجهولly(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -4122,7 +4122,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     th.setAttribute('style', 'background-image:url(' + src.replace(/["']/g,'') + ');background-size:cover;background-position:center;');
     var meta = document.createElement('div');
     meta.className = 'meta';
-    meta.textContent = item.title || item.name || 'Media';
+    meta.textContent = item.title || item.name || 'وسائط';
     a.appendChild(th); a.appendChild(meta);
     return a;
   }
@@ -4165,8 +4165,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </script>
 <script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.mediahub.json" data-interval="30000" src="/assets/js/hero.rotator.js"></script>
 <footer>
-    IGDC Global Hub © 2025 | الشركة الدولية العامة للتوزيع<br/>
-    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, جمهورية كوريا, <br/>
+    IGDC Global Hub © 2025 | International General Distribution Company<br/>
+    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea, <br/>
 </footer>
 <!-- patch: sync provider list & order with platform tiles -->
 <script id="patch-sync-providers">
@@ -4621,36 +4621,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </script>
 <script id="igdc-qa-email-ensure">
 (function(){
-  if (window.__IGDC_QA_EMAIL_ENSURE__) return;
-  window.__IGDC_QA_EMAIL_ENSURE__ = true;
-
-  var CONTACT_HTML = 'البريد الإلكتروني الرئيسي: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-
-  function stripFooterEmail(){
-    try{
-      var footers = document.querySelectorAll('footer');
-      footers.forEach(function(f){
-        // Remove any mailto links
-        f.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
-          var parent = a.parentNode;
-          if(parent){
-            parent.removeChild(a);
-            var html = parent.innerHTML;
-            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
-            html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
-            parent.innerHTML = html;
-          }
-        });
-        // Remove any plain-text "البريد الإلكتروني الرئيسي: ..." remnants
-        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
-      });
-    }catch(e){}
-  }
-
-  function ensureModal(){
-    var modal = document.querySelector('.igdc-qa-modal');
-    if(!modal){
-      // Create minimal modal sk
+  /* disabled corrupted duplicate Q&A email ensure block; later Q&A/mobile scripts remain intact */
+})();
+</script>
 <script id="igtc-mobile-overhaul-FULL-js">
 (function(){
   function qsa(sel){ return Array.prototype.slice.call(document.querySelectorAll(sel)); }

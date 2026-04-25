@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="fa" dir="rtl">
+<html class="prelayout" lang="fa">
 <head>
 <!-- Supabase inline injection (vars + init) -->
 <script>
@@ -21,7 +21,7 @@
       });
       console.log("✅ Supabase 키 정상 로드됨.");
     } else {
-      console.warn("⚠️ Supabase 키 누락 — secureEnvBridge.js 또는 Netlify محیط زیست변수 تأیید 필요.");
+      console.warn("⚠️ Supabase 키 누락 — secureEnvBridge.js 또는 Netlify محیط زیست변수 تایید 필요.");
       window.SUPER_VARSAR = Object.freeze({
         url: null,
         anonKey: null
@@ -233,22 +233,22 @@
 
 /* === Local gutter for better left spacing (without altering global layout) === */
 .hero{ margin-left:16px !important; margin-right:16px !important; }
-#topنوشتنPanel{ margin-left:16px !important; margin-right:16px !important; }
+#topWritePanel{ margin-left:16px !important; margin-right:16px !important; }
 .people-news{ margin-left:16px !important; margin-right:16px !important; }
 
 /* === Balanced right gutter to match left (16px) === */
 .main{ padding-right:16px !important; }
 .hero{ margin-right:16px !important; }
-#topنوشتنPanel{ margin-right:16px !important; }
+#topWritePanel{ margin-right:16px !important; }
 .people-news{ margin-right:16px !important; }
 .feed-wrapper{ margin-right:16px !important; }
 
 /* === Ensure right gutter spacing matches left (16px) for main content boxes === */
 .main{ padding-right:16px !important; }
-.hero, #topنوشتنPanel, .people-news, .feed-wrapper{ margin-right:16px !important; }
+.hero, #topWritePanel, .people-news, .feed-wrapper{ margin-right:16px !important; }
 
 /* === Uniform content widths for top 3 boxes === */
-.hero, #topنوشتنPanel, .people-news{
+.hero, #topWritePanel, .people-news{
   width:100% !important;
   max-width:none !important;
   margin-left:auto !important;
@@ -257,13 +257,13 @@
 
 /* === Restore left gutter and center content === */
 .main{ padding-left:16px !important; padding-right:16px !important; }
-.hero, #topنوشتنPanel, .people-news{ margin-left:auto !important; margin-right:auto !important; }
+.hero, #topWritePanel, .people-news{ margin-left:auto !important; margin-right:auto !important; }
 /* Feed wrapper also centered with same gutter */
 .feed-wrapper{ margin-left:auto !important; margin-right:auto !important; }
 
 
 /* === Slightly increase main content box width to reduce right gap === */
-.hero, #topنوشتنPanel, .people-news{
+.hero, #topWritePanel, .people-news{
   max-width:1210px !important;
 }
 
@@ -272,7 +272,7 @@
 /* Keep container gap as the sole inter-column spacing */
 .container{ gap:16px !important; }
 /* Center the three top boxes so leftover space splits evenly */
-.hero, #topنوشتنPanel, .people-news{ margin-left:auto !important; margin-right:auto !important; max-width:1210px !important; }
+.hero, #topWritePanel, .people-news{ margin-left:auto !important; margin-right:auto !important; max-width:1210px !important; }
 @media (orientation: portrait){
 .main{
   width:100% !important;
@@ -282,7 +282,7 @@
 }
 }
 
-.hero, #topنوشتنPanel, .people-news{
+.hero, #topWritePanel, .people-news{
   max-width:100% !important;
   margin-left:0 !important;
   margin-right:0 !important;
@@ -311,7 +311,7 @@
 
 
 /* The three top boxes + feed wrapper all use the same centered width */
-.hero, #topنوشتنPanel, .people-news, .feed-wrapper{
+.hero, #topWritePanel, .people-news, .feed-wrapper{
   width:min(100%, var(--content-width)) !important;
   margin:0 !important;               /* no side margins; centering handled by .main */
 }
@@ -363,7 +363,7 @@
 /* Custom file pick buttons */
 .file-btn{ background:#f6f3ff; border-color:#cfc6ff; }
 .filename{ margin-left:6px; font-size:.85rem; color:#555; }
-/* Ensure تأیید is horizontal */
+/* Ensure تایید is horizontal */
 .button.tiny{ writing-mode:horizontal-tb; }
 
 /* --- Compose top-row button alignment (scoped, minimal) --- */
@@ -373,10 +373,10 @@
 }
 .compose-wrap .row-top .button{ margin:0; }
 .compose-wrap .row-top #btnOpenComposer{ order:1; }
-.compose-wrap .row-top #btnارسالPost{ order:2; }
-/* Keep 'تأیید' labels strictly horizontal (already set for .button.tiny) */
+.compose-wrap .row-top #btnSubmitPost{ order:2; }
+/* Keep 'تایید' labels strictly horizontal (already set for .button.tiny) */
 
-/* Reinforce: 'تأیید' 버튼은 가로(수평) 표기 유지 */
+/* Reinforce: 'تایید' 버튼은 가로(수평) 표기 유지 */
 .compose-wrap .row-bottom .button.tiny{ writing-mode:horizontal-tb; }
 
 /* === Scoped UI polish for 'بخش + سازمان غیردولتی', 파일/انتخاب تصویر 라인 === */
@@ -385,7 +385,7 @@
   border:1px solid #d0d7de; border-radius:10px;
   padding:8px 10px; background:#f8fafc;
 }
-.field-category select#postبخش{ min-width:180px; }
+.field-category select#postCategory{ min-width:180px; }
 
 .label-strong{ font-weight:700; }
 .label-accent{ color:#1c7c54; } /* 차분한 녹색 톤 */
@@ -404,7 +404,7 @@
 .row-bottom .button.tiny{ line-height:1.1; font-weight:600; }
 
 /* === User-specified refinements (scoped) === */
-.field-category select#postبخش{
+.field-category select#postCategory{
   width:auto; max-width:140px; min-width:110px;
 }
 .field-category{ flex-wrap:nowrap; }
@@ -416,23 +416,23 @@
 .field-file, .field-image{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
 .field-file #btnPickFile{ order:1; color:#111; }   /* 'انتخاب فایل' in black */
 .field-file .filename{ order:2; width:50%; min-width:0; }
-.field-file #btnFileتأیید{ order:3; }
+.field-file #btnFileConfirm{ order:3; }
 
 .field-image #btnPickImage{ order:1; color:#111; } /* 'انتخاب تصویر' in black (for consistency) */
 .field-image .filename{ order:2; width:50%; min-width:0; }
-.field-image #btnImageتأیید{ order:3; }
+.field-image #btnImageConfirm{ order:3; }
 
 /* Ensure buttons remain compact and don't force wrap */
 .field-file .button.tiny, .field-image .button.tiny{ white-space:nowrap; }
 
 /* === Tweaks per latest instructions === */
 /* سازمان غیردولتی dropdown: about 1/3 of previous long width; keep compact */
-.field-category select#postبخش{
+.field-category select#postCategory{
   width: 90px; min-width: 80px; max-width: 110px;
 }
 
 /* بخش label as a button, horizontal text ensured */
-#labelبخش{ font-weight:600; }
+#labelCategory{ font-weight:600; }
 
 /* File/Image bars: reduce to 25% width */
 .field-file .filename, .field-image .filename{ width:25%; min-width:0; }
@@ -443,7 +443,7 @@
 /* === Final polish per screenshot feedback === */
 
 /* 'بخش' must be horizontal like a button */
-#labelبخش{
+#labelCategory{
   writing-mode: horizontal-tb !important;
   transform: none !important;
   display: inline-flex;
@@ -452,7 +452,7 @@
 }
 
 /* سازمان غیردولتی dropdown: cut to about half of prior setting */
-.field-category select#postبخش{
+.field-category select#postCategory{
   width: 56px; min-width: 50px; max-width: 70px;
 }
 
@@ -509,19 +509,19 @@
 /* === Group spacing & ordering fix (compose area only) === */
 .compose-wrap .row-bottom{ display:flex; align-items:center; flex-wrap:nowrap; }
 
-/* File group: [انتخاب فایل] [막대] [تأیید] */
+/* File group: [انتخاب فایل] [막대] [تایید] */
 .compose-wrap .row-bottom .field-file{ display:inline-flex; align-items:center; gap:4px !important; }
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; position:relative; z-index:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; margin-left:4px; }
-.compose-wrap .row-bottom .field-file #btnFileتأیید{ order:3; position:relative; z-index:1; }
+.compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; position:relative; z-index:1; }
 
-/* Image group: [انتخاب تصویر] [막대] [تأیید] */
+/* Image group: [انتخاب تصویر] [막대] [تایید] */
 .compose-wrap .row-bottom .field-image{ display:inline-flex; align-items:center; gap:4px !important; }
 /* Ensure a sufficiently large gap from file-confirm (>= 'بخش' 버튼 폭 가늠치) */
 .compose-wrap .row-bottom .field-image{ margin-left:72px !important; }
 .compose-wrap .row-bottom .field-image #btnPickImage{ order:1; position:relative; z-index:1; }
 .compose-wrap .row-bottom .field-image #imgChosen{ order:2; margin-left:4px; }
-.compose-wrap .row-bottom .field-image #btnImageتأیید{ order:3; position:relative; z-index:1; }
+.compose-wrap .row-bottom .field-image #btnImageConfirm{ order:3; position:relative; z-index:1; }
 
 /* Keep bars at half width and non-overlapping */
 .compose-wrap .row-bottom #fileChosen,
@@ -554,15 +554,15 @@
 /* === Compose row: strict grouping & anti-overlay (scoped) === */
 .compose-wrap .row-bottom{ display:flex; align-items:center; flex-wrap:nowrap; }
 
-/* FILE group -> [انتخاب فایل][막대][تأیید] 붙어서 배치 */
+/* FILE group -> [انتخاب فایل][막대][تایید] 붙어서 배치 */
 .compose-wrap .row-bottom .field-file{ display:inline-flex; align-items:center; gap:6px; }
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; margin-left:6px; }
-.compose-wrap .row-bottom .field-file #btnFileتأیید{ order:3; margin-left:8px; }
+.compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; margin-left:8px; }
 
-/* IMAGE group -> [انتخاب تصویر][막대][تأیید] 붙어서 배치 */
+/* IMAGE group -> [انتخاب تصویر][막대][تایید] 붙어서 배치 */
 .compose-wrap .row-bottom .field-image{ display:inline-flex; align-items:center; gap:6px; }
-/* 파일 그룹의 تأیید 버튼 뒤로 충분히 띄우기(겹침 방지) */
+/* 파일 그룹의 تایید 버튼 뒤로 충분히 띄우기(겹침 방지) */
 .compose-wrap .row-bottom .field-image{ margin-left:96px; } /* 필요 시 수치 조정 */
 
 .compose-wrap .row-bottom #fileChosen,
@@ -592,14 +592,14 @@
   margin-left:0 !important;   /* remove previous manual offsets */
 }
 
-/* Inside each group: [Pick][Bar][تأیید] */
+/* Inside each group: [Pick][Bar][تایید] */
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; }
-.compose-wrap .row-bottom .field-file #btnFileتأیید{ order:3; }
+.compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; }
 
 .compose-wrap .row-bottom .field-image #btnPickImage{ order:1; }
 .compose-wrap .row-bottom .field-image #imgChosen{ order:2; }
-.compose-wrap .row-bottom .field-image #btnImageتأیید{ order:3; }
+.compose-wrap .row-bottom .field-image #btnImageConfirm{ order:3; }
 
 /* Bars expand within their half; cancel any global min-width */
 .compose-wrap .row-bottom #fileChosen,
@@ -610,8 +610,8 @@
 }
 
 /* Keep confirm buttons compact and visible */
-.compose-wrap .row-bottom #btnFileتأیید,
-.compose-wrap .row-bottom #btnImageتأیید{
+.compose-wrap .row-bottom #btnFileConfirm,
+.compose-wrap .row-bottom #btnImageConfirm{
   flex:0 0 auto; position:relative; z-index:1;
 }
 
@@ -632,8 +632,8 @@
   margin-left:0 !important;    /* 버튼과 막대가 딱 붙도록 */
 }
 
-.compose-wrap .row-bottom #btnFileتأیید,
-.compose-wrap .row-bottom #btnImageتأیید{
+.compose-wrap .row-bottom #btnFileConfirm,
+.compose-wrap .row-bottom #btnImageConfirm{
   margin-left:4px !important;  /* 막대 바로 뒤에 가깝게 */
 }
 
@@ -644,20 +644,20 @@
 .compose-wrap .row-top .field-category{ order:1; }     /* بخش(드롭다운) */
 .compose-wrap .row-top #btnOpenComposer{ order:2; }    /* نوشتن */
 .compose-wrap .row-top #btnAttach{ order:3; }          /* پیوست(신규 버튼) */
-.compose-wrap .row-top #btnارسالPost{ order:4; }      /* 글올리기 */
+.compose-wrap .row-top #btnSubmitPost{ order:4; }      /* 글올리기 */
 
 /* Hide legacy file/image pickers (compose only) */
 .compose-wrap .row-bottom .field-file,
 .compose-wrap .row-bottom .field-image,
-.compose-wrap .row-bottom #btnFileتأیید,
-.compose-wrap .row-bottom #btnImageتأیید { display:none !important; }
+.compose-wrap .row-bottom #btnFileConfirm,
+.compose-wrap .row-bottom #btnImageConfirm { display:none !important; }
 
 /* Attach filename (display only), uses existing button styles */
 .compose-wrap #attachName{
   display:inline-block; margin-left:6px;
   max-width:42vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
-.compose-wrap #btnAttachپاک کردن{ margin-left:4px; }
+.compose-wrap #btnAttachClear{ margin-left:4px; }
 </style>
 <style>
 .attach-preview{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; max-width:44vw; padding:4px 0; margin-left:6px; }
@@ -678,7 +678,7 @@
   min-width:260px; max-width:50vw; flex:0 0 auto;     /* 막대 형태, 한 줄 유지 */
   overflow:hidden;
 }
-.compose-wrap .row-top #btnارسالPost{ order:6; }     /* ذخیره(최종) */
+.compose-wrap .row-top #btnSubmitPost{ order:6; }     /* ذخیره(최종) */
 
 /* 칩 스타일(막대 내부) */
 .attach-preview .attach-chip{
@@ -700,9 +700,9 @@
 .compose-wrap .row-top #btnOpenComposer{ order:2; }   /* نوشتن */
 .compose-wrap .row-top #btnAttach{ order:3; }         /* پیوست */
 .compose-wrap .row-top #attachPreview{ order:4; }     /* 미리보기 막대 */
-.compose-wrap .row-top #btnارسالPost{ order:5; }     /* ذخیره */
+.compose-wrap .row-top #btnSubmitPost{ order:5; }     /* ذخیره */
 </style><style>
-/* === العنوان Preview Bar (between نوشتن and پیوست) === */
+/* === Title Preview Bar (between نوشتن and پیوست) === */
 .compose-wrap .row-top #titlePreview{
   order:3;
   display:flex; align-items:center; gap:6px;
@@ -713,7 +713,7 @@
 }
 .compose-wrap .row-top #btnAttach{ order:4; }
 .compose-wrap .row-top #attachPreview{ order:5; }
-.compose-wrap .row-top #btnارسالPost{ order:6; }
+.compose-wrap .row-top #btnSubmitPost{ order:6; }
 
 .title-preview .tp-text{ font-size:.92rem; color:#111; }
 
@@ -722,8 +722,8 @@
 </style><style>
 /* === Compose row: place 'پاک کردن' right after 최종 'ذخیره' === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; overflow:hidden; }
-.compose-wrap .row-top #btnارسالPost{ order:6; }
-.compose-wrap .row-top #btnAttachپاک کردن{ order:7; margin-left:6px; }
+.compose-wrap .row-top #btnSubmitPost{ order:6; }
+.compose-wrap .row-top #btnAttachClear{ order:7; margin-left:6px; }
 .compose-wrap .row-top #attachName{ display:none !important; } /* 칩 UI 사용 */
 
 /* Shrink bars to avoid line overflow (title < attach) */
@@ -744,11 +744,11 @@
 /* === ORDER HOTFIX (override) === */
 /* بخش */               .compose-wrap .row-top .field.field-category{ order:1 !important; }
 /* نوشتن */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
-/* العنوان 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
+/* عنوان 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
 /* پیوست 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
 /* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
-/* ذخیره */               .compose-wrap .row-top #btnارسالPost{ order:6 !important; }
-/* پاک کردن */             .compose-wrap .row-top #btnAttachپاک کردن{ order:7 !important; }
+/* ذخیره */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
+/* پاک کردن */             .compose-wrap .row-top #btnAttachClear{ order:7 !important; }
 </style><style>
 /* Smooth scroll in right-side topic lists */
 .right .topic-panel .list{ scroll-behavior: smooth; }
@@ -1003,7 +1003,7 @@
 
 /* Ensure the three top boxes and feed align to the reduced gutter */
 .main{ padding-left: 0 !important; padding-right: 0 !important; }
-.hero, #topنوشتنPanel, .people-news, .feed-wrapper{ margin-left: 0 !important; margin-right: 0 !important; }
+.hero, #topWritePanel, .people-news, .feed-wrapper{ margin-left: 0 !important; margin-right: 0 !important; }
 
 /* Keep main content centered within its column without extra left padding */
 .main{ align-items: stretch !important; }  /* allow full-width of the main column */
@@ -1103,7 +1103,7 @@ body > .container > .main{
 
 /* 내부 요소들이 별도 좌/우 마진·패딩을 추가하지 않도록 정리 */
 body > .container > .main .hero,
-body > .container > .main #topنوشتنPanel,
+body > .container > .main #topWritePanel,
 body > .container > .main .people-news,
 body > .container > .main .feed-wrapper{
   width:100% !important; max-width:none !important;
@@ -1188,7 +1188,7 @@ body > .container > .main{
 @media (orientation: portrait){
 }
 body > .container > .main .hero,
-body > .container > .main #topنوشتنPanel,
+body > .container > .main #topWritePanel,
 body > .container > .main .people-news,
 body > .container > .main .feed-wrapper{
   width: 100% !important;
@@ -1620,7 +1620,7 @@ main, .main, #main, .main-content, .content, .content-area{
     }
 }
 
-    .hero, #topنوشتنPanel, .people-news, .feed-wrapper{
+    .hero, #topWritePanel, .people-news, .feed-wrapper{
       width:100% !important; max-width:100% !important;
       margin-left:0 !important; margin-right:0 !important;
       padding-left:0 !important; padding-right:0 !important;
@@ -1771,7 +1771,7 @@ body .right{ display:none !important; }
 
 
   /* Hero / top sections: full width with gentle gutters */
-  body .hero, body #topنوشتنPanel, body .people-news, body .feed-wrapper{
+  body .hero, body #topWritePanel, body .people-news, body .feed-wrapper{
     width:100% !important; max-width:none !important; margin:0 !important;
   }
 
@@ -2043,18 +2043,18 @@ body .right{ display:none !important; }
 </script>
 
 <style>
-  /* IGTC DONATION - hero & topنوشتنPanel spacing normalize */
+  /* IGTC DONATION - hero & topWritePanel spacing normalize */
   .hero {
     margin-bottom: 16px;
   }
-  #topنوشتنPanel {
+  #topWritePanel {
     margin-top: 0;
   }
   @media (max-width:1024px) {
     .hero {
       margin-bottom: 8px !important;
     }
-    #topنوشتنPanel {
+    #topWritePanel {
       margin-top: 4px !important;
       margin-bottom: 14px !important;
     }
@@ -2280,7 +2280,7 @@ body > div.container,
 
   /* main 안쪽 박스가 max-width로 메인 폭을 "착시"로 좁혀 보이게 하지 않도록: 메인 칸을 가득 채움 */
   body > .container > .main .hero,
-  body > .container > .main #topنوشتنPanel,
+  body > .container > .main #topWritePanel,
   body > .container > .main .people-news,
   body > .container > .main .feed-wrapper{
     width:100% !important;
@@ -2303,7 +2303,7 @@ body > div.container,
 </style>
 
 <style id="ar-text-rtl-only-standard-safe">
-html[lang="ar"]{ direction: rtl !important; }
+html[lang="fa"]{ direction: rtl !important; }
 body{ direction: rtl !important; }
 .sidebar, .main-content, main, .main, .content-area, .hero, .intro,
 .region-card, .panel, .card-body, .meta, footer,
@@ -2526,7 +2526,7 @@ a[href^="mailto:"]:hover {
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      try{ await sb.auth.signInناشناسly(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -2542,7 +2542,7 @@ a[href^="mailto:"]:hover {
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
+    const title = el("div","igdc-qa-title"); title.textContent = "پرسش و پاسخ";
     const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","بستن");
     header.append(title, close);
 
@@ -2554,7 +2554,7 @@ a[href^="mailto:"]:hover {
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="ارسال";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="پاک کردن";
-    const note = el("div","igdc-qa-note"); note.textContent="※ تتم پاسخ عن الأسئلة البسيطة فورًا بواسطة الذكاء الاصطناعي. ويتم تحويل المشكلات التقنية أو الأخطاء أو المسائل التشغيلية تلقائيًا إلى قسم Q&A الخاص بالمشرف.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ به پرسش‌های ساده، هوش مصنوعی فوراً پاسخ می‌دهد. موضوعات فنی، خطاها یا مسائل عملیاتی به‌صورت خودکار به بخش پرسش و پاسخ مدیر ارسال می‌شوند.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -2688,7 +2688,7 @@ a[href^="mailto:"]:hover {
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("فشل الارسال"); return; }
+      if(error){ alert("ارسال ناموفق بود"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -2738,7 +2738,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='پرسش‌وپاسخ';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
 
@@ -2809,19 +2809,19 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
-<button class="bc-tile orange" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">تبرع</button>
+<button class="bc-tile orange" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">کمک مالی</button>
 </section>
 <section class="hero">
 <h2>💝 مرکز جهانی کمک‌های مالی 💝</h2>
 <p>سامانه پشتیبانی برای IESF و بنیاد WAM از اینجا آغاز می‌شود.</p>
 </section>
-<section class="panel" id="topنوشتنPanel" style="margin-bottom:20px;">
+<section class="panel" id="topWritePanel" style="margin-bottom:20px;">
 <textarea id="topPostBody" placeholder="متن اصلی را وارد کنید..." rows="4" style="padding-top:22px; padding-bottom:12px; font-weight:600;">این فضا با حمایت گروه IGDC Global Platform Group برای اشتراک‌گذاری خدمات و اخبار بنیاد گرانقدر WAM World Aviation Mission Foundation، اعلام و به‌اشتراک‌گذاری اخبار IESF، و همچنین انتشار اخبار سازمان‌های غیردولتی و نهادهای داوطلبانه فراهم شده است.</textarea>
 <!-- Inline controls row replacing box UI -->
 <!-- Inline controls, two-row layout -->
 <div class="compose-wrap" id="composeControls">
-<div class="row row-top"><label class="field field-category"><span class="button tiny" id="labelبخش" style="writing-mode:horizontal-tb;">بخش</span>
-<select id="postبخش"><option value="iesf">IESF</option>
+<div class="row row-top"><label class="field field-category"><span class="button tiny" id="labelCategory" style="writing-mode:horizontal-tb;">بخش</span>
+<select id="postCategory"><option value="iesf">IESF</option>
 <option value="ngo">سازمان غیردولتی</option>
 <option value="mission">ماموریت</option>
 <option value="service">خدمت</option>
@@ -2830,11 +2830,11 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <option value="env">محیط زیست</option>
 <option value="etc">سایر</option>
 </select>
-</label><button class="button small" id="btnAttach" type="button">پیوست</button><div aria-label="پیوست 미리보기" class="attach-preview" id="attachPreview"></div>
-<button class="button small" id="btnOpenComposer">نوشتن</button><div aria-label="العنوان 미리보기" class="title-preview" id="titlePreview"><span class="tp-text">بدون عنوان</span></div>
-<button class="button small accent" id="btnارسالPost">ذخیره</button>
+</label><button class="button small" id="btnAttach" type="button">پیوست</button><div aria-label="پیش‌نمایش پیوست" class="attach-preview" id="attachPreview"></div>
+<button class="button small" id="btnOpenComposer">نوشتن</button><div aria-label="پیش‌نمایش عنوان" class="title-preview" id="titlePreview"><span class="tp-text">بدون عنوان</span></div>
+<button class="button small accent" id="btnSubmitPost">ذخیره</button>
 <span id="attachName"></span>
-<button aria-label="첨부 제거 " class="button tiny" id="btnAttachپاک کردن" style="display:none;" type="button">پاک کردن</button>
+<button aria-label="첨부 제거 " class="button tiny" id="btnAttachClear" style="display:none;" type="button">پاک کردن</button>
 <input id="postAttach" style="display:none;" type="file"/>
 </div>
 <div class="row row-bottom">
@@ -2842,14 +2842,14 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <label class="field field-file">
 <input accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip" id="postFile" style="display:none;" type="file"/>
 <button class="button tiny file-btn" id="btnPickFile" type="button">انتخاب فایل</button>
-<button class="button tiny" id="btnFileتأیید" type="button">تأیید</button>
+<button class="button tiny" id="btnFileConfirm" type="button">تایید</button>
 <span class="filename" id="fileChosen"></span>
 </label>
 <!-- Image second -->
 <label class="field field-image">
 <input accept="image/*" id="postImage" style="display:none;" type="file"/>
 <button class="button tiny file-btn" id="btnPickImage" type="button">انتخاب تصویر</button>
-<button class="button tiny" id="btnImageتأیید" type="button">تأیید</button>
+<button class="button tiny" id="btnImageConfirm" type="button">تایید</button>
 <span class="filename" id="imgChosen"></span>
 </label>
 </div>
@@ -2857,7 +2857,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </section>
 <!-- (요청) 5줄 Feed -->
 <section class="feed-wrapper">
-<div class="feed-header"><h3 style="margin:0;">📺 Feed</h3></div>
+<div class="feed-header"><h3 style="margin:0;">📺 فید</h3></div>
 <div id="feedRows">
 
 <!-- ===== Donation Feed Rows (Final Clean Version) ===== -->
@@ -2920,13 +2920,13 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <aside class="right">
 <div class="panel cafe-link"><a aria-label="اذهب إلى WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
-<button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">Donations</button>
+<button class="button" onclick="alert('سامانه کمک‌های مالی به‌زودی متصل می‌شود!')" style="margin-bottom:8px; padding:5px 14px;">کمک‌های مالی</button>
 <p><b>IESF (International Exchange Service Foundation)</b><br/>
         - عمومی: NongHyup 301-0078-3333-51<br/>
-        - Foreign Currency: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
+        - ارز خارجی: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
 <p><b>WAM Foundation (World Aviation Mission Foundation)</b><br/>
         - عمومی: Shinhan 100-026-331592<br/>
-        - Foreign Currency: Shinhan 180-005-931110<br/><span>   SWIFT: SHBKKRSE</span></p>
+        - ارز خارجی: Shinhan 180-005-931110<br/><span>   SWIFT: SHBKKRSE</span></p>
 </div>
 <div class="feed-wrapper" id="iesfFeed" style="flex:1; overflow-y:auto;">
 </div>
@@ -2935,7 +2935,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <div class="list" data-cat="ngo"></div>
 </div>
 <div class="panel topic-panel" id="topic_mission">
-<h3>أخبار الماموریت</h3>
+<h3>اخبار ماموریت</h3>
 <div class="list" data-cat="mission"></div>
 </div>
 <div class="panel topic-panel" id="topic_service">
@@ -2943,15 +2943,15 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <div class="list" data-cat="service"></div>
 </div>
 <div class="panel topic-panel" id="topic_relief">
-<h3>نشاط الامداد</h3>
+<h3>اخبار امدادرسانی</h3>
 <div class="list" data-cat="relief"></div>
 </div>
 <div class="panel topic-panel" id="topic_edu">
-<h3>أخبار الآموزش</h3>
+<h3>اخبار آموزش</h3>
 <div class="list" data-cat="edu"></div>
 </div>
 <div class="panel topic-panel" id="topic_env">
-<h3>أخبار المحیط زیست</h3>
+<h3>اخبار محیط زیست</h3>
 <div class="list" data-cat="env"></div>
 </div>
 <div class="panel topic-panel" id="topic_etc">
@@ -2961,7 +2961,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </div>
 
 <footer>
-  IGTC Global Hub © 2025 | الشركة الدولية العمومیة للتوزيع<br/>
+  IGTC Global Hub © 2025 | شرکت بین‌المللی توزیع عمومی<br/>
   50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Korea <br/>
 </footer>
 
@@ -2970,11 +2970,11 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <div class="hidden" id="composerModal" style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:9999;">
 <div class="panel" style="width:min(92vw, 720px); max-height:80vh; overflow:auto;">
 <h3 style="margin-top:0;">نوشتن</h3>
-<input id="composeالعنوان" placeholder="العنوان" style="width:100%;"/>
+<input id="composeTitle" placeholder="عنوان" style="width:100%;"/>
 <textarea id="composeBody" placeholder="محتوا را وارد کنید..." rows="8" style="width:100%; resize:vertical;"></textarea>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px;">
-<button class="button outline" id="btnDraftذخیره" type="button">ذخیره المسودة</button><button class="button outline" id="btnإلغاء">إلغاء</button>
-<button class="button" disabled="disabled" id="btnذخیره" style=";display:none !important;">ذخیره</button>
+<button class="button outline" id="btnDraftSave" type="button">ذخیره پیش‌نویس</button><button class="button outline" id="btnCancel">لغو</button>
+<button class="button" disabled="disabled" id="btnSave" style=";display:none !important;">ذخیره</button>
 </div>
 </div>
 </div>
@@ -2987,16 +2987,16 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
   const modal = $("#composerModal");
   const btnOpen = $("#btnOpenComposer");
-  const btnارسال = $("#btnارسالPost");
-  const btnذخیره = $("#btnذخیره");
-  const btnإلغاء = $("#btnإلغاء");
-  const titleI = $("#composeالعنوان");
+  const btnSubmit = $("#btnSubmitPost");
+  const btnSave = $("#btnSave");
+  const btnCancel = $("#btnCancel");
+  const titleI = $("#composeTitle");
   const bodyI = $("#composeBody");
-  const catSel = $("#postبخش");
+  const catSel = $("#postCategory");
   const fileI = $("#postImage");
   const fileAttach = $("#postFile");
-  const btnImgOk = $("#btnImageتأیید");
-  const btnFileOk = $("#btnFileتأیید");
+  const btnImgOk = $("#btnImageConfirm");
+  const btnFileOk = $("#btnFileConfirm");
   const btnPickImg = $("#btnPickImage");
   const btnPickFile = $("#btnPickFile");
   const fileChosen = $("#fileChosen");
@@ -3007,15 +3007,15 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   function closeModal(){ modal.classList.add("hidden"); }
 
   btnOpen && btnOpen.addEventListener("click", openModal);
-  btnإلغاء && btnإلغاء.addEventListener("click", closeModal);
+  btnCancel && btnCancel.addEventListener("click", closeModal);
   // trigger hidden inputs and show names
   btnPickFile && btnPickFile.addEventListener("click", ()=> fileAttach && fileAttach.click());
   btnPickImage && btnPickImage.addEventListener("click", ()=> fileI && fileI.click());
   fileAttach && fileAttach.addEventListener("change", ()=>{ if(fileChosen){ fileChosen.textContent = fileAttach.files[0]?.name || ""; } });
   fileI && fileI.addEventListener("change", ()=>{ if(imgChosen){ imgChosen.textContent = fileI.files[0]?.name || ""; } });
-  btnارسال && btnارسال.addEventListener("click", ()=>{ if(btnذخیره){ btnذخیره.click(); } });
+  btnSubmit && btnSubmit.addEventListener("click", ()=>{ if(btnSave){ btnSave.click(); } });
 
-  btnذخیره && btnذخیره.addEventListener("click", ()=>{
+  btnSave && btnSave.addEventListener("click", ()=>{
     const t = titleI?.value?.trim() || "(بدون عنوان)";
     const b = bodyI?.value?.trim() || "(بدون محتوا)";
     const cat = catSel?.value || "etc";
@@ -3028,7 +3028,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         ${imgSrc ? `<div class="thumb" style="aspect-ratio:16/9; overflow:hidden; border-radius:6px; margin-bottom:6px;"><img src="${imgSrc}" style="width:100%; height:100%; object-fit:cover;"/></div>` : ""}
         <div class="title">${t}</div>
         <div class="meta">${new Date().toLocaleString()}</div>
-        <div class="preview" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
+        <div class="پیش‌نمایش" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
       `;
       holder.prepend(item);
       if(attachLink){
@@ -3063,11 +3063,11 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
-    const link = prompt("이미지 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 تأیید을 누르세요)");
+    const link = prompt("이미지 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 تایید을 누르세요)");
     if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
-        alert("Only images up to 2MB can be previewed directly. For large files, upload them to external storage and enter the link.");
+        alert("فقط تصاویر تا ۲ مگابایت می‌توانند مستقیماً در پیش‌نمایش نمایش داده شوند. برای فایل‌های بزرگ، آن‌ها را در فضای ذخیره‌سازی خارجی بارگذاری کرده و پیوند را وارد کنید.");
         imageLink = ""; imagePreviewObjectUrl = "";
       }else{
         imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
@@ -3080,11 +3080,11 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
   btnFileOk && btnFileOk.addEventListener('click', ()=>{
     const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
-    const link = prompt("파일 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 تأیید을 누르세요)");
+    const link = prompt("파일 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 تایید을 누르세요)");
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
-        alert("Only files up to 5MB can display their file name directly. For large files, please use only an external storage link.");
+        alert("فقط فایل‌های تا ۵ مگابایت می‌توانند نام فایل خود را مستقیماً نمایش دهند. برای فایل‌های بزرگ، لطفاً فقط از پیوند فضای ذخیره‌سازی خارجی استفاده کنید.");
         attachLink = "";
       }else{
         attachLink = f.name; // 파일명만 기록
@@ -3104,7 +3104,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   var btnAttach = document.getElementById('btnAttach');
   var input = document.getElementById('postAttach');
   var nameEl = document.getElementById('attachName');
-  var clearBtn = document.getElementById('btnAttachپاک کردن');
+  var clearBtn = document.getElementById('btnAttachClear');
 
   function updateName(files){
     if(!nameEl) return;
@@ -3154,9 +3154,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   const rowTop = $('.compose-wrap .row-top');
   const attachInput = $('#postAttach');
   const attachPreview = $('#attachPreview');
-  const clearBtn = $('#btnAttachپاک کردن');
+  const clearBtn = $('#btnAttachClear');
   const legacyFile = $('#postFile');
-  const btnارسال = $('#btnارسالPost');
+  const btnSubmit = $('#btnSubmitPost');
 
   let selectedFiles = [];
   function syncInputs(){
@@ -3208,18 +3208,18 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     });
   }
 
-  const catSel = $('#postبخش');
-  const titleI = $('#composeالعنوان');
+  const catSel = $('#postCategory');
+  const titleI = $('#composeTitle');
   const bodyI  = $('#composeBody');
   const modal  = $('#composerModal');
   function closeModal(){ modal && modal.classList.add('hidden'); }
 
-  function handleUnifiedذخیره(){
+  function handleUnifiedSave(){
     const t = (titleI && titleI.value.trim()) || '(بدون عنوان)';
     const b = (bodyI && bodyI.value.trim()) || '(بدون محتوا)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
+    if(!holder){ alert('بخش اخبار پیدا نشد.'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -3227,7 +3227,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     item.innerHTML = `
       <div class="title">${t}</div>
       <div class="meta">${new Date().toLocaleString()}</div>
-      <div class="preview" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
+      <div class="پیش‌نمایش" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
     `;
 
     if(selectedFiles.length){
@@ -3246,10 +3246,10 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     del.type='button'; del.className='button tiny danger delete-post'; del.textContent='حذف';
     del.style.cssText='margin-top:6px; display:none;';
     item.appendChild(del);
-    const canحذف = (USER_ROLE==='admin' || USER_ROLE==='writer');
-    if(canحذف) del.style.display='inline-block';
+    const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
+    if(canDelete) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 حذف하시겠습니까?')) return;
+      if(!confirm('آیا می‌خواهید این خبر را حذف کنید؟')) return;
       item.remove();
     });
 
@@ -3265,10 +3265,10 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     closeModal();
   }
 
-  if(btnارسال){
-    btnارسال.addEventListener('click', (e)=>{
+  if(btnSubmit){
+    btnSubmit.addEventListener('click', (e)=>{
       e.preventDefault();
-      handleUnifiedذخیره();
+      handleUnifiedSave();
     });
   }
 
@@ -3279,7 +3279,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   const $ = (s,r=document)=>r.querySelector(s);
   const attachInput = $('#postAttach');
   const attachPreview = $('#attachPreview');
-  const clearBtn = $('#btnAttachپاک کردن');
+  const clearBtn = $('#btnAttachClear');
   const legacyFile = $('#postFile');
   const nameEl = $('#attachName');
 
@@ -3360,54 +3360,54 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </script><script>
 (function(){
   const $ = (s,r=document)=>r.querySelector(s);
-  const titleI = $('#composeالعنوان');
+  const titleI = $('#composeTitle');
   const bodyI  = $('#composeBody');
   const modal  = $('#composerModal');
-  const btnDraft = $('#btnDraftذخیره');
-  const btnإلغاء = $('#btnإلغاء');
-  const btnارسال = $('#btnارسالPost');
+  const btnDraft = $('#btnDraftSave');
+  const btnCancel = $('#btnCancel');
+  const btnSubmit = $('#btnSubmitPost');
   const titlePreview = $('#titlePreview');
   const tpText = titlePreview ? titlePreview.querySelector('.tp-text') : null;
 
   let draft = { title:'', body:'' };
 
-  function updateالعنوانPreview(src){
+  function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || ''بدون عنوان';';
+    tpText.textContent = t || 'بدون عنوان';
   }
 
   // live typing updates preview
   if(titleI){
-    titleI.addEventListener('input', ()=> updateالعنوانPreview());
+    titleI.addEventListener('input', ()=> updateTitlePreview());
   }
 
-  // ذخیره المسودة: keep in-memory draft; do NOT post to right panel
+  // ذخیره پیش‌نویس: keep in-memory draft; do NOT post to right panel
   if(btnDraft){
     btnDraft.addEventListener('click', (e)=>{
       e.preventDefault();
       draft.title = (titleI && titleI.value)||'';
       draft.body  = (bodyI && bodyI.value)||'';
-      updateالعنوانPreview(draft.title);
+      updateTitlePreview(draft.title);
       // keep modal open; optional small feedback
       // console.log('Draft saved');
     });
   }
 
-  // إلغاء: clear draft and input fields, and clear preview
-  if(btnإلغاء){
-    btnإلغاء.addEventListener('click', ()=>{
+  // لغو: clear draft and input fields, and clear preview
+  if(btnCancel){
+    btnCancel.addEventListener('click', ()=>{
       draft.title=''; draft.body='';
       if(titleI) titleI.value='';
       if(bodyI) bodyI.value='';
-      updateالعنوانPreview('');
+      updateTitlePreview('');
     });
   }
 
   // Before final save, if a draft exists (and modal may be closed/empty),
   // write draft back into inputs so existing save handler picks it up.
-  if(btnارسال){
-    btnارسال.addEventListener('click', ()=>{
+  if(btnSubmit){
+    btnSubmit.addEventListener('click', ()=>{
       if((draft.title && draft.title.trim()) || (draft.body && draft.body.trim())){
         if(titleI) titleI.value = draft.title || '';
         if(bodyI)  bodyI.value  = draft.body  || '';
@@ -3415,29 +3415,29 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       // clear draft & preview shortly after click so the original handler can read values
       setTimeout(()=>{
         draft.title=''; draft.body='';
-        updateالعنوانPreview('');
+        updateTitlePreview('');
       }, 0);
     }, true); // capture phase to run before other handlers
   }
 
   // initialize preview on load
-  updateالعنوانPreview('');
+  updateTitlePreview('');
 })();
 </script><script>
 (function(){
   const $ = (s,r=document)=>r.querySelector(s);
-  const titleI = $('#composeالعنوان');
+  const titleI = $('#composeTitle');
   const modal = $('#composerModal');
-  const btnDraft = $('#btnDraftذخیره');
+  const btnDraft = $('#btnDraftSave');
   const titlePreview = $('#titlePreview');
   const tpText = titlePreview ? titlePreview.querySelector('.tp-text') : null;
 
   let draft = { title:'', body:'' };
 
-  function updateالعنوانPreview(src){
+  function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'العنوان Not entered';
+    tpText.textContent = t || 'عنوان وارد نشده';
   }
 
   if(btnDraft){
@@ -3445,7 +3445,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       e.preventDefault();
       draft.title = (titleI && titleI.value)||'';
       draft.body  = ($('#composeBody') && $('#composeBody').value)||'';
-      updateالعنوانPreview(draft.title);
+      updateTitlePreview(draft.title);
       if(modal) modal.classList.add('hidden'); // auto-close
     });
   }
@@ -3456,7 +3456,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   const USER_ID = (window.USER_ID || 'local-user');
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  function canShowحذفFor(item){
+  function canShowDeleteFor(item){
     if(USER_ROLE==='admin') return true;
     if(USER_ROLE==='writer'){
       const author = item && item.dataset ? item.dataset.author : null;
@@ -3465,23 +3465,23 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     return false;
   }
 
-  function ensureحذف(item){
+  function ensureDelete(item){
     if(!item || item.querySelector('.delete-post')) return;
     const btn = document.createElement('button');
     btn.type='button';
     btn.className='button tiny danger delete-post';
     btn.textContent='حذف';
     btn.style.cssText='margin-top:6px; display:none;';
-    if(canShowحذفFor(item)) btn.style.display='inline-block';
+    if(canShowDeleteFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 حذف하시겠습니까?')) return;
+      if(!confirm('آیا می‌خواهید این خبر را حذف کنید؟')) return;
       item.remove();
     });
     item.appendChild(btn);
   }
 
   // Initial pass
-  $$('.right .topic-panel .list .item').forEach(ensureحذف);
+  $$('.right .topic-panel .list .item').forEach(ensureDelete);
 
   // Observe future additions for all lists
   $$('.right .topic-panel .list').forEach(list=>{
@@ -3489,9 +3489,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       muts.forEach(m=>{
         m.addedNodes && Array.from(m.addedNodes).forEach(node=>{
           if(node && node.nodeType===1){
-            if(node.classList.contains('item')) ensureحذف(node);
+            if(node.classList.contains('item')) ensureDelete(node);
             // Nested case: if a wrapper was added, scan inside
-            node.querySelectorAll && node.querySelectorAll('.item').forEach(ensureحذف);
+            node.querySelectorAll && node.querySelectorAll('.item').forEach(ensureDelete);
           }
         });
       });
@@ -3541,13 +3541,13 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 })();
 </script><div id="newsPreviewModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 800px); max-height:80vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 id="npالعنوان" style="margin:0; font-size:1.05rem;"></h3>
+<h3 id="npTitle" style="margin:0; font-size:1.05rem;"></h3>
 <div id="npTime" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div id="npBody" style="margin-top:8px; font-size:.95rem; color:#222; white-space:pre-wrap;"></div>
 <div id="npAttach" style="margin-top:8px; font-size:.9rem; color:#374151;"></div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
-<button class="button outline" id="npبستن" type="button">بستن</button>
+<button class="button outline" id="npClose" type="button">بستن</button>
 </div>
 </div></div><script>
 (function(){
@@ -3585,14 +3585,14 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   });
 
   const modal = document.getElementById('newsPreviewModal');
-  const npالعنوان = document.getElementById('npالعنوان');
+  const npTitle = document.getElementById('npTitle');
   const npTime = document.getElementById('npTime');
   const npBody = document.getElementById('npBody');
   const npAttach = document.getElementById('npAttach');
-  const npبستن = document.getElementById('npبستن');
+  const npClose = document.getElementById('npClose');
   function openModal(){ modal.style.display='flex'; }
   function closeModal(){ modal.style.display='none'; }
-  npبستن && npبستن.addEventListener('click', closeModal);
+  npClose && npClose.addEventListener('click', closeModal);
   document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
   modal && modal.addEventListener('click', e=>{ if(e.target===modal) closeModal(); });
 
@@ -3614,7 +3614,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       attachHtml = Array.from(attachList).map(li=>li.textContent).join('<br/>');
     }
 
-    npالعنوان.textContent = t;
+    npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
     npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml) : '';
@@ -3624,18 +3624,18 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 })();
 </script><div id="editNewsModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 680px); max-height:78vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 style="margin:0; font-size:1.05rem;">نوشتن 편집</h3>
+<h3 style="margin:0; font-size:1.05rem;">ویرایش نوشته</h3>
 <div id="enInfo" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
-<label style="font-size:.85rem;">العنوان</label>
-<input id="enالعنوان" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;" type="text"/>
-<label style="font-size:.85rem;">Content</label>
+<label style="font-size:.85rem;">عنوان</label>
+<input id="enTitle" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;" type="text"/>
+<label style="font-size:.85rem;">محتوا</label>
 <textarea id="enBody" rows="8" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;"></textarea>
 </div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
-<button class="button outline" id="enإلغاء" type="button">إلغاء</button>
-<button class="button" id="enذخیره" type="button">ذخیره</button>
+<button class="button outline" id="enCancel" type="button">لغو</button>
+<button class="button" id="enSave" type="button">ذخیره</button>
 </div>
 </div></div><script>
 (function(){
@@ -3643,7 +3643,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   const USER_ID   = (window.USER_ID   || 'local-user');
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  function canEditحذف(item){
+  function canEditDelete(item){
     if(USER_ROLE==='admin') return true;
     if(USER_ROLE==='writer'){
       const author = item && item.dataset ? item.dataset.author : null;
@@ -3675,14 +3675,14 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       badge.setAttribute('translate','no');
       header.appendChild(badge);
     }
-    badge.textContent = `Edited · ${tsStr}`;
+    badge.textContent = `ویرایش‌شده · ${tsStr}`;
   }
 
   // On load, restore edited badge for admin/author only
   $$('.right .topic-panel .list .item').forEach(item=>{
     const id = itemId(item);
     const meta = loadEdit(id);
-    if(meta && canEditحذف(item)){
+    if(meta && canEditDelete(item)){
       showEditedBadge(item, meta.editedAt);
     }
   });
@@ -3693,16 +3693,16 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     const btn = e.target.closest('.btn-edit');
     if(!btn) return;
     const item = e.target.closest('.right .topic-panel .list .item');
-    if(item && canEditحذف(item)) window.__currentEditingItem = item;
+    if(item && canEditDelete(item)) window.__currentEditingItem = item;
   }, true);
 
   // When edit modal "ذخیره" is pressed, persist edited meta and show badge
-  (function attachذخیرهHook(){
-    const saveBtn = document.getElementById('enذخیره');
+  (function attachSaveHook(){
+    const saveBtn = document.getElementById('enSave');
     if(!saveBtn) return;
     saveBtn.addEventListener('click', ()=>{
       const item = window.__currentEditingItem;
-      if(!item || !canEditحذف(item)) return;
+      if(!item || !canEditDelete(item)) return;
       const ts = new Date().toLocaleString();
       const id = itemId(item);
       saveEdit(id, ts);
@@ -3763,7 +3763,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   const USER_ID   = (window.USER_ID   || 'local-user');
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  function canEditحذف(item){
+  function canEditDelete(item){
     if(USER_ROLE==='admin') return true;
     if(USER_ROLE==='writer'){
       const author = item && item.dataset ? item.dataset.author : null;
@@ -3818,16 +3818,16 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     let btnDel  = footer.querySelector('.delete-post');
     if(!btnEdit){
       btnEdit = document.createElement('button');
-      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
+      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='ویرایش';
       footer.appendChild(btnEdit);
       btnEdit.addEventListener('click', (e)=>{
         e.stopPropagation();
         const emodal = document.getElementById('editNewsModal');
-        const enالعنوان = document.getElementById('enالعنوان');
+        const enTitle = document.getElementById('enTitle');
         const enBody  = document.getElementById('enBody');
         const enInfo  = document.getElementById('enInfo');
-        if(!emodal || !enالعنوان || !enBody) return;
-        enالعنوان.value = (item.querySelector('.h-title')?.textContent || item.querySelector('.title')?.textContent || '').trim();
+        if(!emodal || !enTitle || !enBody) return;
+        enTitle.value = (item.querySelector('.h-title')?.textContent || item.querySelector('.title')?.textContent || '').trim();
         enBody.value  = (item.querySelector('.preview')?.textContent || '').trim();
         enInfo.textContent = (item.querySelector('.h-time')?.textContent || item.querySelector('.meta')?.textContent || '').trim();
         emodal.style.display='flex';
@@ -3839,12 +3839,12 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('이 소식을 حذف하시겠습니까?')) return;
+        if(!confirm('آیا می‌خواهید این خبر را حذف کنید؟')) return;
         item.remove();
       });
     }
     // Apply visibility
-    if(canEditحذف(item)){
+    if(canEditDelete(item)){
       btnEdit.style.display='inline-block';
       btnDel.style.display='inline-block';
     }else{
@@ -3923,7 +3923,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </script><script>
 (function(){
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
-  function normalizeحذف(item){
+  function normalizeDelete(item){
     if(!item) return;
     // Ensure footer exists
     let footer = item.querySelector('.item-footer');
@@ -3963,14 +3963,14 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
 
   // Run on existing items
-  $$('.right .topic-panel .list .item').forEach(normalizeحذف);
+  $$('.right .topic-panel .list .item').forEach(normalizeDelete);
 
   // Observe for new items
   $$('.right .topic-panel .list').forEach(list=>{
     const mo = new MutationObserver(muts=>{
       muts.forEach(m=>{
         m.addedNodes && Array.from(m.addedNodes).forEach(n=>{
-          if(n.nodeType===1 && n.classList.contains('item')) normalizeحذف(n);
+          if(n.nodeType===1 && n.classList.contains('item')) normalizeDelete(n);
         });
       });
     });
@@ -4013,13 +4013,13 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
 
     const t = tpl.querySelector('.card-title');
-    if(t) t.textContent = 'العنوان';
+    if(t) t.textContent = 'عنوان';
 
     const m = tpl.querySelector('.card-meta');
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'Content';
+    if(p) p.textContent = 'محتوا';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -4098,8 +4098,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("تم استلام طلب الشراء."); } else { alert("فشل طلب الشراء"); }
-    }catch(e){ console.warn(e); alert("خطأ في الشبكة"); }
+      if (res.ok){ alert("تم استلام طلب الشراء."); } else { alert("درخواست خرید ناموفق بود"); }
+    }catch(e){ console.warn(e); alert("خطای شبکه"); }
   };
 
   // 정산
@@ -4107,8 +4107,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("تم استلام طلب التسوية."); } else { alert("فشل طلب التسوية"); }
-    }catch(e){ console.warn(e); alert("خطأ في الشبكة"); }
+      if (res.ok){ alert("تم استلام طلب التسوية."); } else { alert("درخواست تسویه ناموفق بود"); }
+    }catch(e){ console.warn(e); alert("خطای شبکه"); }
   };
 
   // (옵션) Web3/블록체인 액션 – 서버 프록시 전용
@@ -4117,9 +4117,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("اكتمل طلب معالجة البلوكشين: " + (j.txHash||"대기")); }
-      else { alert("فشلت معالجة البلوكشين"); }
-    }catch(e){ console.warn(e); alert("خطأ في الشبكة"); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("درخواست پردازش بلاک‌چین تکمیل شد: " + (j.txHash||"در انتظار")); }
+      else { alert("پردازش بلاک‌چین ناموفق بود"); }
+    }catch(e){ console.warn(e); alert("خطای شبکه"); }
   };
 })();
 </script>
@@ -4242,8 +4242,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <!-- IGDC minimal تبرع UI (non-invasive) -->
 
 <div class="donation-inline">
-<input aria-label="Donation amount (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
-<button class="bc-tile orange" id="btnتبرع">تبرع</button>
+<input aria-label="مبلغ کمک مالی (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
+<button class="bc-tile orange" id="btnDonate">کمک مالی</button>
 </div>
 <script>
 (function(){
@@ -4273,7 +4273,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   // === 안내 문구 ===
   const note = document.createElement("div");
   note.className = "donation-note";
-  note.textContent = "تبرعات الضيوف متاحة فقط ضمن نطاق 5–50 دولارًا. للمبالغ الأكبر، يرجى استخدام معلومات التحويل البنكي أدناه.";
+  note.textContent = "کمک‌های مهمان فقط در بازه ۵ تا ۵۰ دلار امکان‌پذیر است. برای مبالغ بزرگ‌تر، لطفاً از اطلاعات انتقال بانکی زیر استفاده کنید.";
   donationDiv.appendChild(note);
 
   // === 구분선 ===
@@ -4289,12 +4289,12 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   accountBox.innerHTML = `
     <div><b>IESF (International Exchange Service Foundation)</b></div>
     <div>عمومی: 농협 301-0078-3333-51</div>
-    <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
+    <div>ارز خارجی: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
     <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
     <div>عمومی: 신한 100-026-331592</div>
-    <div>Foreign Currency: Shinhan 180-005-931110</div>
+    <div>ارز خارجی: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
   donationDiv.appendChild(accountBox);
@@ -4307,7 +4307,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      alert(`مبلغ انتخاب‌شده: ₩${Number(amt).toLocaleString()}\n\nلطفاً به حساب زیر واریز کنید.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -4335,8 +4335,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </script>
 <script>(function(){try{document.querySelectorAll(".donation-inline,.donation-buttons").forEach(function(n){n.remove();});}catch(e){}})();</script>
 <div aria-hidden="true" class="donate-modal-backdrop" id="donateModalBackdrop">
-<div aria-labelledby="donateModalالعنوان" aria-modal="true" class="donate-modal" role="dialog">
-<h3 id="donateModalالعنوان">اختر مؤسسة التبرع</h3>
+<div aria-labelledby="donateModalTitle" aria-modal="true" class="donate-modal" role="dialog">
+<h3 id="donateModalTitle">سازمان دریافت‌کننده کمک مالی را انتخاب کنید</h3>
 <div class="donate-actions">
 <button data-org="IESF" type="button">کمک مالی به IESF</button>
 <button data-org="WAM" type="button">کمک مالی به WAM</button>
@@ -4347,15 +4347,15 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <script id="donate-modal-js">
 (function(){
   const backdrop = document.getElementById('donateModalBackdrop');
-  function openتبرعModal(){ if(backdrop){ backdrop.style.display='flex'; } }
-  function closeتبرعModal(){ if(backdrop){ backdrop.style.display='none'; } }
-  window.openتبرعModal = openتبرعModal;
+  function openDonateModal(){ if(backdrop){ backdrop.style.display='flex'; } }
+  function closeDonateModal(){ if(backdrop){ backdrop.style.display='none'; } }
+  window.openDonateModal = openDonateModal;
 
   // Wire modal buttons
   document.addEventListener('click', function(e){
     const t = e.target;
     if (!t) return;
-    if (t.matches('#donateModalBackdrop, .donate-close')) { closeتبرعModal(); }
+    if (t.matches('#donateModalBackdrop, .donate-close')) { closeDonateModal(); }
     if (t.matches('.donate-actions button[data-org]')){
       const org = t.getAttribute('data-org');
       try{
@@ -4368,33 +4368,33 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
           // Fallback: scroll to right panel account options
           const anchor = document.querySelector('#rightDonationOptions') || document.querySelector('.account-section');
           if(anchor){ anchor.scrollIntoView({behavior:'smooth'}); }
-          else { alert('واجهة برمجة تطبيقات الدفع غير متصلة. يرجى اختيار حساب من اللوحة اليمنى.'); }
+          else { alert('رابط برنامه‌نویسی پرداخت متصل نیست. لطفاً از پنل سمت راست یک حساب انتخاب کنید.'); }
         }
       }catch(err){
         console.error(err);
-        alert('حدثت مشكلة أثناء طلب الدفع.');
+        alert('هنگام درخواست پرداخت مشکلی رخ داد.');
       } finally {
-        closeتبرعModal();
+        closeDonateModal();
       }
     }
   }, {passive:true});
 
   // Optional: Esc to close
-  document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeتبرعModal(); });
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeDonateModal(); });
 
   // Expose a safe helper to rebind existing تبرع button(s)
-  window.__bindتبرعButtons = function(){
+  window.__bindDonateButtons = function(){
     document.querySelectorAll('.donate-btn, .btn-donate, [data-action="donate"]')
       .forEach(function(btn){
         // remove inline payment calls if any
-        btn.setAttribute('onclick', 'openتبرعModal()');
-        btn.addEventListener('click', function(ev){ ev.preventDefault(); openتبرعModal(); });
+        btn.setAttribute('onclick', 'openDonateModal()');
+        btn.addEventListener('click', function(ev){ ev.preventDefault(); openDonateModal(); });
       });
   };
   // Bind on load
   if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', window.__bindتبرعButtons);
-  } else { window.__bindتبرعButtons(); }
+    document.addEventListener('DOMContentLoaded', window.__bindDonateButtons);
+  } else { window.__bindDonateButtons(); }
 })();
 </script>
 <!-- PATCH_ID: CLEAN-2025-09-05 -->
@@ -4635,7 +4635,7 @@ document.addEventListener('DOMContentLoaded', function(){
         bk=document.createElement('div');
         bk.id='drawerBackdrop';
         bk.className='drawer-backdrop';
-        document.body/*__KILL__*/ appendChild_DISABLED(bk);
+        document.body.appendChild(bk);
         bk.addEventListener('click',close,{passive:true});
       }
     }
@@ -5116,7 +5116,7 @@ window.addEventListener("message",function(ev){
 
   // Preview targets (reuse existing modal if present)
   const modal   = $('#newsPreviewModal') || $('#previewModal');
-  const npالعنوان = $('#npالعنوان') || $('#newsPreviewالعنوان');
+  const npTitle = $('#npTitle') || $('#newsPreviewTitle');
   const npTime  = $('#npTime') || $('#newsPreviewTime');
   const npBody  = $('#npBody') || $('#newsPreviewBody');
   const npAttach= $('#npAttach') || $('#newsPreviewAttach');
@@ -5130,7 +5130,7 @@ window.addEventListener("message",function(ev){
     modal.style.display = 'none';
   }
 
-  const closeBtn = modal ? (modal.querySelector('.close') || modal.querySelector('#npبستن')) : null;
+  const closeBtn = modal ? (modal.querySelector('.close') || modal.querySelector('#npClose')) : null;
   if(closeBtn){
     closeBtn.addEventListener('click', closeModal);
   }
@@ -5178,7 +5178,7 @@ window.addEventListener("message",function(ev){
 
     const item = e.target.closest('.right .topic-panel .list .item, .mobile-news-clone .topic-panel .list .item');
     if(!item) return;
-    if(!npالعنوان || !npBody){ return; }
+    if(!npTitle || !npBody){ return; }
 
     const title = (item.querySelector('.h-title')?.textContent
                 || item.querySelector('.title')?.textContent || '').trim();
@@ -5199,7 +5199,7 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npالعنوان.textContent = title || 'العنوان 없음';
+    npTitle.textContent = title || 'عنوانی ثبت نشده است';
     if(npTime)  npTime.textContent  = meta || '';
     npBody.textContent = body || '(등록된 본문이 없습니다.)';
     if(npAttach){
@@ -5265,10 +5265,10 @@ window.addEventListener("message",function(ev){
 
   // 완전 ذخیره 버튼 클릭 후 Supabase 동기화 시도
   document.addEventListener('click', function(e){
-    const btn = e.target.closest('#btnارسالPost');
+    const btn = e.target.closest('#btnSubmitPost');
     if(!btn) return;
     setTimeout(function(){
-      const catSel = document.getElementById('postبخش');
+      const catSel = document.getElementById('postCategory');
       const cat = catSel ? (catSel.value || 'etc') : 'etc';
       syncLatestToSupabase(cat);
     }, 250);
@@ -5298,7 +5298,7 @@ window.addEventListener("message",function(ev){
   vertical-align: middle;
 }
 
-/* العنوان/메타 스타일 유지 */
+/* عنوان/메타 스타일 유지 */
 .right .topic-panel .list .item .title,
 .mobile-news-clone .topic-panel .list .item .title {
   font-weight: 700;
@@ -5408,10 +5408,10 @@ window.addEventListener("message",function(ev){
 (function(){
   var mq = window.matchMedia("(max-width:1023px)");
   var main = document.querySelector("main.main");
-  var topنوشتن = document.getElementById("topنوشتنPanel");
+  var topWrite = document.getElementById("topWritePanel");
   var feedSection = main ? main.querySelector("section.feed-wrapper") : null;
   var right = document.querySelector("aside.right");
-  if (!main || !topنوشتن || !feedSection || !right) return;
+  if (!main || !topWrite || !feedSection || !right) return;
 
   var cafePanel = right.querySelector(".panel.cafe-link");
   var accountPanel = right.querySelector(".panel.account-section");

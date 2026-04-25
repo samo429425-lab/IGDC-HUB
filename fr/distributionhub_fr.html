@@ -6,7 +6,7 @@
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hub Distribution - IGDC Global (Localized Ads)</title>
+<title>Hub Distribution - IGDC Global (annonces localisées)</title>
 
 <style>
 
@@ -316,7 +316,7 @@
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Aucune entrée Q&A n’a encore été enregistrée";
+  content: "Aucune entrée questions-réponses n’a encore été enregistrée";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -334,7 +334,7 @@
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Aucune entrée Q&A n’a encore été enregistrée";
+  content: "Aucune entrée questions-réponses n’a encore été enregistrée";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1042,7 +1042,7 @@
 <a href="mediahub.html">🎬 Hub Média</a>
 <a href="tour.html">🧳 Voyage · Tourisme · Hébergement</a>
 <a href="literature_academic">📚 Échange Littéraire et Académique</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Demande Q&A</a></div>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Questions-réponses</a></div>
 <main class="main-content" style="margin:0">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
@@ -1303,7 +1303,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">※ Les questions simples reçoivent une réponse immédiate de l’IA. Les questions techniques, les erreurs ou les sujets liés à l’exploitation sont automatiquement transmis au Q&A administrateur.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">※ Les questions simples reçoivent une réponse immédiate de l’IA. Les questions techniques, les erreurs ou les sujets liés à l’exploitation sont automatiquement transmis au module administrateur de questions-réponses.</div>';
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
         document.body.appendChild(m);
@@ -1384,17 +1384,17 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   const modal = document.createElement('div'); modal.className='igtc-modal igtc-hidden'; modal.setAttribute('role','dialog'); modal.setAttribute('aria-modal','true'); modal.setAttribute('aria-labelledby','igtc-modal-title');
   modal.innerHTML = `
     <header>
-      <h3 id="igtc-modal-title">Loading…</h3>
-      <button class="igtc-close" aria-label="Close">✕</button>
+      <h3 id="igtc-modal-title">Chargement…</h3>
+      <button class="igtc-close" aria-label="Fermer">✕</button>
     </header>
     <div class="igtc-content" tabindex="0">
       <div class="igtc-media"><img alt=""></div>
       <div class="igtc-body">
         <p class="igtc-desc" style="opacity:.9"></p>
         <div class="igtc-actions">
-          <button class="igtc-btn" data-act="cta">바로가기</button>
-          <button class="igtc-btn secondary" data-act="like">좋아요</button>
-          <button class="igtc-btn ghost" data-act="recommend">추천</button>
+          <button class="igtc-btn" data-act="cta">Accéder</button>
+          <button class="igtc-btn secondary" data-act="like">J’aime</button>
+          <button class="igtc-btn ghost" data-act="recommend">Recommander</button>
         </div>
       </div>
     </div>`;
@@ -1490,11 +1490,11 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     // Feedback handlers (optional)
     el.btnLike.onclick = async function(){
       const id = this.dataset.itemId || info.id; if(!id) return;
-      try{ await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); this.textContent='좋아요 완료'; this.disabled=true; }catch(_){}
+      try{ await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); this.textContent='J’aime enregistré'; this.disabled=true; }catch(_){}
     };
     el.btnRec.onclick = async function(){
       const id = this.dataset.itemId || info.id; if(!id) return;
-      try{ await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); this.textContent='추천 완료'; this.disabled=true; }catch(_){}
+      try{ await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); this.textContent='Recommandation enregistrée'; this.disabled=true; }catch(_){}
     };
   }
 
@@ -1636,7 +1636,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      try{ await sb.auth.signInAnonymely(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -1664,7 +1664,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Envoyer";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Effacer";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Les questions simples reçoivent une réponse immédiate de l’IA. Les questions techniques, les erreurs ou les sujets liés à l’exploitation sont automatiquement transmis au Q&A administrateur.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Les questions simples reçoivent une réponse immédiate de l’IA. Les questions techniques, les erreurs ou les sujets liés à l’exploitation sont automatiquement transmis au module administrateur de questions-réponses.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -1844,18 +1844,18 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("구매 요청이 접수되었습니다."); }
-      else { alert("구매 요청 실패"); }
-    }catch(e){ console.warn(e); alert("네트워크 오류"); }
+      if (res.ok){ alert("La demande d’achat a bien été reçue."); }
+      else { alert("Échec de la demande d’achat"); }
+    }catch(e){ console.warn(e); alert("Erreur réseau"); }
   };
 
   window.requestSettlement = async function(amount, currency){
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("정산 요청이 접수되었습니다."); }
-      else { alert("정산 요청 실패"); }
-    }catch(e){ console.warn(e); alert("네트워크 오류"); }
+      if (res.ok){ alert("La demande de règlement a bien été reçue."); }
+      else { alert("Échec de la demande de règlement"); }
+    }catch(e){ console.warn(e); alert("Erreur réseau"); }
   };
 
   // ===== 2) AI 추천·회전(로테이션) 보강 =====
@@ -1969,7 +1969,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   } else {
     hideLiteratureAcademic();
   }
-})(
+})();
+</script>
 <!-- Minimal runtime to toggle off-canvas; no bindings to existing logic -->
 <script id="ml-offcanvas-js">
 (function(){
@@ -2412,7 +2413,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       h.appendChild(t); h.appendChild(x);
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
-      body.innerHTML = '<div class="igdc-qa-note">※ Les questions simples reçoivent une réponse immédiate de l’IA. Les questions techniques, les erreurs ou les sujets liés à l’exploitation sont automatiquement transmis au Q&A administrateur.</div>';
+      body.innerHTML = '<div class="igdc-qa-note">※ Les questions simples reçoivent une réponse immédiate de l’IA. Les questions techniques, les erreurs ou les sujets liés à l’exploitation sont automatiquement transmis au module administrateur de questions-réponses.</div>';
 
       // ensure the "대표 이메일" is shown only inside the modal
       var ce = document.createElement('p');
@@ -2425,7 +2426,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       document.body.appendChild(m);
 
       function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }
+      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
       x.addEventListener('click', close);
       b.addEventListener('click', close);
 
@@ -2515,7 +2516,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
       var note = document.createElement('div'); note.className='igdc-qa-note';
-      note.textContent = '※ Les questions simples reçoivent une réponse immédiate de l’IA. Les questions techniques, les erreurs ou les sujets liés à l’exploitation sont automatiquement transmis au Q&A administrateur.';
+      note.textContent = '※ Les questions simples reçoivent une réponse immédiate de l’IA. Les questions techniques, les erreurs ou les sujets liés à l’exploitation sont automatiquement transmis au module administrateur de questions-réponses.';
       body.appendChild(note);
 
       // (1) Inject the contact email in creation path
@@ -2897,7 +2898,7 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>결제 QR</b>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>QR de paiement</b>'
                   + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Fermer</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
@@ -2933,11 +2934,11 @@ window.addEventListener("message",function(ev){
   async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
     await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
-    ta.value=''; alert('전송되었습니다.');
+    ta.value=''; alert('Envoyé avec succès.');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('전송 실패'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('Échec de l’envoi'));});
   const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('전송 실패'));});
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('Échec de l’envoi'));});
 })();
 </script>
 <script>
@@ -2979,12 +2980,12 @@ window.addEventListener("message",function(ev){
 </script>
 <script id="igdc-product-review-script">
 /*
- IGDC Product Review – Auto Hook Version
+ IGDC Produit Review – Auto Hook Version
  - Distribution page thumbnail click auto-detect
- - Product detail review auto-mount (Coupang-style)
+ - Produit detail review auto-mount (Coupang-style)
  *
  * Requirement:
- *  - Product thumbnail or detail container must have: data-product-id="..."
+ *  - Produit thumbnail or detail container must have: data-product-id="..."
  *  - window.__IGDC_ROLE (guest | member | admin ...)
  */
 
@@ -3061,8 +3062,8 @@ window.addEventListener("message",function(ev){
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">상품 리뷰</h3>
-          <div id="igdc-review-list" class="igdc-review-list">로딩 중...</div>
+          <h3 class="igdc-review-title">Avis produit</h3>
+          <div id="igdc-review-list" class="igdc-review-list">Chargement...</div>
           ${canWrite ? this.renderForm() : this.renderLoginHint()}
         </section>
       `;
@@ -3072,12 +3073,12 @@ window.addEventListener("message",function(ev){
       return `
         <form id="igdc-review-form" class="igdc-review-form">
           <textarea
-            placeholder="상품 사용 경험을 공유해 주세요"
+            placeholder="Veuillez partager votre expérience d’utilisation du produit"
             minlength="${this.config.minChars}"
             maxlength="${this.config.maxChars}"
             required></textarea>
           <div class="igdc-review-actions">
-            <button type="submit">리뷰 등록</button>
+            <button type="submit">Publier un avis</button>
           </div>
         </form>
       `;
@@ -3099,7 +3100,7 @@ window.addEventListener("message",function(ev){
         const content = textarea.value.trim();
 
         if (content.length < this.config.minChars) {
-          alert(`리뷰는 최소 ${this.config.minChars}자 이상 작성해 주세요.`);
+          alert(`L’avis doit contenir au moins ${this.config.minChars} caractères.`);
           return;
         }
 
@@ -3116,7 +3117,7 @@ window.addEventListener("message",function(ev){
       const list = document.getElementById('igdc-review-list');
       if (!list) return;
 
-      list.textContent = '로딩 중...';
+      list.textContent = 'Chargement...';
 
       try {
         const res = await fetch(
@@ -3125,13 +3126,13 @@ window.addEventListener("message",function(ev){
         const data = await res.json();
 
         if (!Array.isArray(data) || data.length === 0) {
-          list.innerHTML = '<div class="igdc-review-empty">아직 리뷰가 없습니다.</div>';
+          list.innerHTML = '<div class="igdc-review-empty">Il n’y a pas encore d’avis.</div>';
           return;
         }
 
         list.innerHTML = data.map(this.renderItem).join('');
       } catch {
-        list.textContent = '리뷰를 불러오지 못했습니다.';
+        list.textContent = 'Impossible de charger les avis.';
       }
     },
 
@@ -3153,7 +3154,7 @@ window.addEventListener("message",function(ev){
       return `
         <div class="igdc-review-item">
           <div class="igdc-review-meta">
-            <span>${esc(item.user || '익명')}</span>
+            <span>${esc(item.user || 'Anonyme')}</span>
             <span>${esc(item.date || '')}</span>
           </div>
           <div class="igdc-review-content">${esc(item.content)}</div>
@@ -3179,7 +3180,7 @@ window.addEventListener("message",function(ev){
   document.head.appendChild(style);
 
   Review.init();
-  window.IGDCProductReview = Review;
+  window.IGDCProduitReview = Review;
 
 })(window, document);
 </script>

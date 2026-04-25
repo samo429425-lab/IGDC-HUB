@@ -462,8 +462,8 @@ body{ direction: rtl !important; }
 <div id="igdcProductDetailRoot" class="product-detail-root" hidden></div>
 
   <footer>
-    IGDC Global Hub © 2025 | الشركة الدولية العامة للتوزيع<br/>
-    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, جمهورية كوريا<br/>
+    IGDC Global Hub © 2025 | International General Distribution Company<br/>
+    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea<br/>
   </footer>
 
   <script>
@@ -496,7 +496,7 @@ body{ direction: rtl !important; }
         var txt = (a.textContent || '').trim();
         var href = (a.getAttribute('href') || '').trim();
 
-        if (href.includes('literature_academic') || (txt.includes('문학') && txt.includes('학술'))) {
+        if (href.includes('literature_academic') || (txt.includes('أدبي') && txt.includes('أكاديمي'))) {
           a.setAttribute('aria-hidden','true');
           a.setAttribute('tabindex','-1');
           a.classList.add('is-hidden-lit');
@@ -581,7 +581,7 @@ body{ direction: rtl !important; }
       async function ensureAuth(){
         const sb = await ensureSupabase(); if(!sb) return;
         let { data: { session } } = await sb.auth.getSession();
-        if(!session){ try{ await sb.auth.signInAnonymously(); }catch(e){} ({ data: { session } } = await sb.auth.getSession()); }
+        if(!session){ try{ await sb.auth.signInمجهولly(); }catch(e){} ({ data: { session } } = await sb.auth.getSession()); }
         if(session){ const uid = session.user.id; const { data } = await sb.from('igdc_admins').select('uid').eq('uid', uid).limit(1); STATE.user = session.user; STATE.isAdmin = Array.isArray(data) && data.length>0; }
       }
       function mountUI(){
@@ -611,9 +611,9 @@ body{ direction: rtl !important; }
         close && close.addEventListener('click', closeModal); backdrop && backdrop.addEventListener('click', closeModal); document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
         btnClear && btnClear.addEventListener('click', ()=>{ if(tQ) tQ.value=''; if(tA) tA.value=''; });
         async function fetchThreads(){ const sb = await ensureSupabase(); if(!sb || !list) return; const { data } = await sb.from('igdc_qna_threads').select('*').eq('project', STATE.project).eq('page_id', STATE.pageId).order('created_at', { ascending:false }).limit(100); renderList(data||[]); }
-        function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='س. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('A. '+row.answer):'إ. (قيد الانتظار)'; box.append(q,a); list.append(box); }); }
-        async function autoالإجابةIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'Please refer to the information on this page for pricing and fees. Leave an additional inquiry if needed.':'Thank you for your inquiry. We will review it promptly and assist you.'; } } return { technical, answer }; }
-        async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoالإجابةIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'Your inquiry has been received.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
+        function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='س. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('ج. '+row.answer):'إ. (قيد الانتظار)'; box.append(q,a); list.append(box); }); }
+        async function autoالإجابةIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'يرجى الرجوع إلى المعلومات الواردة في هذه الصفحة بشأن الأسعار والرسوم. وإذا لزم الأمر، اترك استفسارًا إضافيًا.':'شكرًا لاستفسارك. سنراجعه سريعًا ونقدّم لك المساعدة.'; } } return { technical, answer }; }
+        async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoالإجابةIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'تم استلام استفسارك.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
         btnSubmit && btnSubmit.addEventListener('click', submit);
         window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
         fetchThreads(); return modal;
@@ -641,15 +641,15 @@ body{ direction: rtl !important; }
   <script>
     (function(){
       var DEMO = {
-        'social-youtube': { icon:'▶️', title:'YouTube', row:'Row 1 · معاينة' },
-        'social-instagram': { icon:'📷', title:'Instagram', row:'Row 2 · معاينة' },
-        'social-tiktok': { icon:'🎵', title:'TikTok', row:'Row 3 · معاينة' },
-        'social-facebook': { icon:'📘', title:'Facebook', row:'Row 4 · معاينة' },
-        'social-wechat': { icon:'💬', title:'WeChat', row:'Row 5 · معاينة' },
-        'social-weibo': { icon:'🌐', title:'Weibo', row:'Row 6 · معاينة' },
-        'social-pinterest': { icon:'📌', title:'Pinterest', row:'Row 7 · معاينة' },
-        'social-reddit': { icon:'👽', title:'Reddit', row:'Row 8 · معاينة' },
-        'social-twitter': { icon:'✖️', title:'X (Twitter)', row:'Row 9 · معاينة' }
+        'social-youtube': { icon:'▶️', title:'YouTube', row:'الصف 1 · معاينة' },
+        'social-instagram': { icon:'📷', title:'Instagram', row:'الصف 2 · معاينة' },
+        'social-tiktok': { icon:'🎵', title:'TikTok', row:'الصف 3 · معاينة' },
+        'social-facebook': { icon:'📘', title:'Facebook', row:'الصف 4 · معاينة' },
+        'social-wechat': { icon:'💬', title:'WeChat', row:'الصف 5 · معاينة' },
+        'social-weibo': { icon:'🌐', title:'Weibo', row:'الصف 6 · معاينة' },
+        'social-pinterest': { icon:'📌', title:'Pinterest', row:'الصف 7 · معاينة' },
+        'social-reddit': { icon:'👽', title:'Reddit', row:'الصف 8 · معاينة' },
+        'social-twitter': { icon:'✖️', title:'X (Twitter)', row:'الصف 9 · معاينة' }
       };
       function makeCard(meta){
         var a = document.createElement('a'); a.className='card'; a.href='#';
@@ -1577,6 +1577,26 @@ window.addEventListener('resize', function(){
   }, { passive:true });
 
   window.__IGTC_CHECKOUT_READY__ = true;
+})();
+</script>
+<script src="frontbus.child.js"></script>
+<script>
+(function(){
+  try{
+    function notify(top){
+      parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*');
+    }
+    function atTop(){
+      var se=document.scrollingElement||document.documentElement||document.body;
+      return (window.scrollY||window.pageYOffset||0)<=0 && (se?(se.scrollTop||0)<=0:true);
+    }
+    function onAnyScroll(){ notify(atTop()); }
+    window.addEventListener('scroll', onAnyScroll, {passive:true});
+    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
+    document.addEventListener('wheel', function(e){ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
+    document.addEventListener('touchmove', function(){ notify(false); }, {passive:true,capture:true});
+    setTimeout(function(){ notify(atTop()); }, 50);
+  }catch(_){ }
 })();
 </script>
 

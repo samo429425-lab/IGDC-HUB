@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="bn">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -57,7 +57,7 @@
     }
     .sidebar a:hover{text-decoration:underline;background:#ffe5b4}
     .sidebar a.active{background:#ffdfcc}
-    #qnaখুলুনBtn{background:#0b2a6f;color:#fff;border-color:#004080}
+    #qnaOpenBtn{background:#0b2a6f;color:#fff;border-color:#004080}
 
     .main-content{
       flex:1 1 auto;
@@ -309,7 +309,7 @@
     .igdc-qa-btn.primary{background:#2563eb;color:#fff}
     .igdc-qa-btn.muted{background:#9ca3af;color:#fff}
     .igdc-qa-threads{display:flex;flex-direction:column;gap:10px;overflow:auto;border-top:1px solid #f3d9b0;padding-top:10px}
-    .igdc-qa-threads:empty::before{content:"এখনও কোনো Q&A এন্ট্রি পোস্ট করা হয়নি";display:block;padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;margin-top:8px;font-size:.95rem}
+    .igdc-qa-threads:empty::before{content:"এখনও কোনো প্রশ্নোত্তর এন্ট্রি পোস্ট করা হয়নি";display:block;padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;margin-top:8px;font-size:.95rem}
     .igdc-qa-thread{border:1px solid #f3d9b0;border-radius:12px;padding:10px 12px;background:#fffdf8}
     .igdc-qa-thread-q{font:700 13px/1.5 system-ui;color:#222}
     .igdc-qa-thread-a{font:13px/1.5 system-ui;color:#333;margin-top:6px}
@@ -350,13 +350,13 @@
       <a href="mediahub.html">🎬 মিডিয়া হাব</a>
       <a href="tour.html">🧳 ভ্রমণ · পর্যটন · আবাসন</a>
       <a href="literature_academic">📚 সাহিত্য ও একাডেমিক বিনিময়</a>
-      <a href="javascript:void(0)" id="qnaখুলুনBtn">💬 প্রশ্ন ও উত্তর</a>
+      <a href="javascript:void(0)" id="qnaOpenBtn">💬 প্রশ্ন ও উত্তর</a>
     </div>
 
     <div class="main-content">
       <section class="section-blockchain">
         <a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
-        <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">খুলুনSea</a>
+        <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
         <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
         <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
       </section>
@@ -367,15 +367,15 @@
     <section id="maruSocialBroadwareSlot" class="maru-broadware-slot" hidden></section>
 
       <div class="rows">
-        <div class="row-viewport" data-row="1"><div class="row-scroller" id="rowScroller1"><div class="row-grid" id="rowGrid1"><div class="thumb-grid thumb-scroller" data-psom-key="social-youtube"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft1">‹</button><button class="rscroll right" id="rsRight1">›</button></div>
-        <div class="row-viewport" data-row="2"><div class="row-scroller" id="rowScroller2"><div class="row-grid" id="rowGrid2"><div class="thumb-grid thumb-scroller" data-psom-key="social-instagram"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft2">‹</button><button class="rscroll right" id="rsRight2">›</button></div>
-        <div class="row-viewport" data-row="3"><div class="row-scroller" id="rowScroller3"><div class="row-grid" id="rowGrid3"><div class="thumb-grid thumb-scroller" data-psom-key="social-tiktok"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft3">‹</button><button class="rscroll right" id="rsRight3">›</button></div>
-        <div class="row-viewport" data-row="4"><div class="row-scroller" id="rowScroller4"><div class="row-grid" id="rowGrid4"><div class="thumb-grid thumb-scroller" data-psom-key="social-facebook"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft4">‹</button><button class="rscroll right" id="rsRight4">›</button></div>
-        <div class="row-viewport" data-row="5"><div class="row-scroller" id="rowScroller5"><div class="row-grid" id="rowGrid5"><div class="thumb-grid thumb-scroller" data-psom-key="social-wechat"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft5">‹</button><button class="rscroll right" id="rsRight5">›</button></div>
-        <div class="row-viewport" data-row="6"><div class="row-scroller" id="rowScroller6"><div class="row-grid" id="rowGrid6"><div class="thumb-grid thumb-scroller" data-psom-key="social-weibo"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft6">‹</button><button class="rscroll right" id="rsRight6">›</button></div>
-        <div class="row-viewport" data-row="7"><div class="row-scroller" id="rowScroller7"><div class="row-grid" id="rowGrid7"><div class="thumb-grid thumb-scroller" data-psom-key="social-pinterest"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft7">‹</button><button class="rscroll right" id="rsRight7">›</button></div>
-        <div class="row-viewport" data-row="8"><div class="row-scroller" id="rowScroller8"><div class="row-grid" id="rowGrid8"><div class="thumb-grid thumb-scroller" data-psom-key="social-reddit"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft8">‹</button><button class="rscroll right" id="rsRight8">›</button></div>
-        <div class="row-viewport" data-row="9"><div class="row-scroller" id="rowScroller9"><div class="row-grid" id="rowGrid9"><div class="thumb-grid thumb-scroller" data-psom-key="social-twitter"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft9">‹</button><button class="rscroll right" id="rsRight9">›</button></div>
+        <div class="row-viewport" data-row="1"><div class="row-scroller" id="rowScroller1"><div class="row-grid" id="rowGrid1"><div class="thumb-grid thumb-scroller" data-psom-key="social-youtube"><div class="thumb-inner"></div></div></div></div><button aria-label="বামে স্ক্রোল করুন" class="rscroll left" id="rsLeft1">‹</button><button aria-label="ডানে স্ক্রোল করুন" class="rscroll right" id="rsRight1">›</button></div>
+        <div class="row-viewport" data-row="2"><div class="row-scroller" id="rowScroller2"><div class="row-grid" id="rowGrid2"><div class="thumb-grid thumb-scroller" data-psom-key="social-instagram"><div class="thumb-inner"></div></div></div></div><button aria-label="বামে স্ক্রোল করুন" class="rscroll left" id="rsLeft2">‹</button><button aria-label="ডানে স্ক্রোল করুন" class="rscroll right" id="rsRight2">›</button></div>
+        <div class="row-viewport" data-row="3"><div class="row-scroller" id="rowScroller3"><div class="row-grid" id="rowGrid3"><div class="thumb-grid thumb-scroller" data-psom-key="social-tiktok"><div class="thumb-inner"></div></div></div></div><button aria-label="বামে স্ক্রোল করুন" class="rscroll left" id="rsLeft3">‹</button><button aria-label="ডানে স্ক্রোল করুন" class="rscroll right" id="rsRight3">›</button></div>
+        <div class="row-viewport" data-row="4"><div class="row-scroller" id="rowScroller4"><div class="row-grid" id="rowGrid4"><div class="thumb-grid thumb-scroller" data-psom-key="social-facebook"><div class="thumb-inner"></div></div></div></div><button aria-label="বামে স্ক্রোল করুন" class="rscroll left" id="rsLeft4">‹</button><button aria-label="ডানে স্ক্রোল করুন" class="rscroll right" id="rsRight4">›</button></div>
+        <div class="row-viewport" data-row="5"><div class="row-scroller" id="rowScroller5"><div class="row-grid" id="rowGrid5"><div class="thumb-grid thumb-scroller" data-psom-key="social-wechat"><div class="thumb-inner"></div></div></div></div><button aria-label="বামে স্ক্রোল করুন" class="rscroll left" id="rsLeft5">‹</button><button aria-label="ডানে স্ক্রোল করুন" class="rscroll right" id="rsRight5">›</button></div>
+        <div class="row-viewport" data-row="6"><div class="row-scroller" id="rowScroller6"><div class="row-grid" id="rowGrid6"><div class="thumb-grid thumb-scroller" data-psom-key="social-weibo"><div class="thumb-inner"></div></div></div></div><button aria-label="বামে স্ক্রোল করুন" class="rscroll left" id="rsLeft6">‹</button><button aria-label="ডানে স্ক্রোল করুন" class="rscroll right" id="rsRight6">›</button></div>
+        <div class="row-viewport" data-row="7"><div class="row-scroller" id="rowScroller7"><div class="row-grid" id="rowGrid7"><div class="thumb-grid thumb-scroller" data-psom-key="social-pinterest"><div class="thumb-inner"></div></div></div></div><button aria-label="বামে স্ক্রোল করুন" class="rscroll left" id="rsLeft7">‹</button><button aria-label="ডানে স্ক্রোল করুন" class="rscroll right" id="rsRight7">›</button></div>
+        <div class="row-viewport" data-row="8"><div class="row-scroller" id="rowScroller8"><div class="row-grid" id="rowGrid8"><div class="thumb-grid thumb-scroller" data-psom-key="social-reddit"><div class="thumb-inner"></div></div></div></div><button aria-label="বামে স্ক্রোল করুন" class="rscroll left" id="rsLeft8">‹</button><button aria-label="ডানে স্ক্রোল করুন" class="rscroll right" id="rsRight8">›</button></div>
+        <div class="row-viewport" data-row="9"><div class="row-scroller" id="rowScroller9"><div class="row-grid" id="rowGrid9"><div class="thumb-grid thumb-scroller" data-psom-key="social-twitter"><div class="thumb-inner"></div></div></div></div><button aria-label="বামে স্ক্রোল করুন" class="rscroll left" id="rsLeft9">‹</button><button aria-label="ডানে স্ক্রোল করুন" class="rscroll right" id="rsRight9">›</button></div>
 
         <section id="rpMobileBox">
 		<h3 class="ad-headline">💎 জনপ্রিয় আইটেম 💎</h3>
@@ -428,7 +428,7 @@
         var txt = (a.textContent || '').trim();
         var href = (a.getAttribute('href') || '').trim();
 
-        if (href.includes('literature_academic') || (txt.includes('문학') && txt.includes('학술'))) {
+        if (href.includes('literature_academic') || (txt.includes('সাহিত্য') && txt.includes('একাডেমিক'))) {
           a.setAttribute('aria-hidden','true');
           a.setAttribute('tabindex','-1');
           a.classList.add('is-hidden-lit');
@@ -467,7 +467,7 @@
     (function(){
       if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
       function ensureButton(){
-        var btn = document.getElementById('qnaখুলুনBtn');
+        var btn = document.getElementById('qnaOpenBtn');
         if(!btn) return;
         btn.addEventListener('click', function(){
           if (window.IGDC_QA && typeof window.IGDC_QA.open === 'function'){ window.IGDC_QA.open(); return; }
@@ -477,7 +477,7 @@
             var b = document.createElement('div'); b.className='igdc-qa-backdrop';
             var p = document.createElement('div'); p.className='igdc-qa-panel';
             var h = document.createElement('div'); h.className='igdc-qa-header';
-            var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+            var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='প্রশ্নোত্তর';
             var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
             h.appendChild(t); h.appendChild(x);
             var body = document.createElement('div'); body.className='igdc-qa-body';
@@ -499,7 +499,7 @@
     (function(){
       if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
       const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
-      let isখুলুন=false, isAnimating=false;
+      let isOpen=false, isAnimating=false;
       function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
       const nowISO = ()=> new Date().toISOString();
       const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
@@ -519,12 +519,12 @@
       function mountUI(){
         const existing = document.querySelector('.igdc-qa-modal'); if(existing){ return bindExisting(existing); }
         const modal = el('div','igdc-qa-modal'); const backdrop = el('div','igdc-qa-backdrop'); const panel = el('div','igdc-qa-panel');
-        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='Q&A'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','বন্ধ করুন');
+        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='প্রশ্নোত্তর'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','বন্ধ করুন');
         header.append(title, close);
         const body = el('div','igdc-qa-body');
         const lQ = el('label'); lQ.textContent='প্রশ্ন'; const tQ = el('textarea','igdc-qa-text q'); tQ.placeholder='আপনার প্রশ্ন লিখুন...';
         const lA = el('label'); lA.textContent='উত্তর'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='একটু অপেক্ষা করুন। আমরা শিগগিরই উত্তর দেব।';
-        const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='Submit'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='Clear';
+        const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='জমা দিন'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='মুছুন';
         const note = el('div','igdc-qa-note'); note.textContent='※ সহজ প্রশ্নের উত্তর AI সঙ্গে সঙ্গে দেয়। প্রযুক্তিগত, ত্রুটি বা পরিচালনাসংক্রান্ত বিষয় স্বয়ংক্রিয়ভাবে অ্যাডমিন Q&A-তে পাঠানো হয়।';
         const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='প্রতিনিধি ইমেইল: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
         actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
@@ -532,20 +532,20 @@
       }
       function bindExisting(modal){
         const panel = modal.querySelector('.igdc-qa-panel'); const backdrop = modal.querySelector('.igdc-qa-backdrop'); const close = modal.querySelector('.igdc-qa-close');
-        const sideBtn = document.querySelector('#qnaখুলুনBtn');
+        const sideBtn = document.querySelector('#qnaOpenBtn');
         const tQ = modal.querySelector('.igdc-qa-text.q'); const tA = modal.querySelector('.igdc-qa-text.a'); const list = modal.querySelector('.igdc-qa-threads');
         const btnSubmit = modal.querySelector('.igdc-qa-btn.primary'); const btnClear = modal.querySelector('.igdc-qa-btn.muted');
         function positionNearSidebar(){ try{ const sb = document.querySelector('.sidebar'); if(sb){ const rect = sb.getBoundingClientRect(); panel.style.left = Math.round(rect.right + 12) + 'px'; } }catch(e){} }
-        function openModal(){ if(isAnimating || isখুলুন) return; isAnimating = true; modal.style.display='block'; requestAnimationFrame(()=>{ modal.classList.add('open'); isখুলুন = true; setTimeout(()=>{ isAnimating=false; },220); }); }
-        function closeModal(){ if(isAnimating || !isখুলুন) return; isAnimating=true; modal.classList.remove('open'); setTimeout(()=>{ modal.style.display='none'; isখুলুন=false; isAnimating=false; },220); }
+        function openModal(){ if(isAnimating || isOpen) return; isAnimating = true; modal.style.display='block'; requestAnimationFrame(()=>{ modal.classList.add('open'); isOpen = true; setTimeout(()=>{ isAnimating=false; },220); }); }
+        function closeModal(){ if(isAnimating || !isOpen) return; isAnimating=true; modal.classList.remove('open'); setTimeout(()=>{ modal.style.display='none'; isOpen=false; isAnimating=false; },220); }
         positionNearSidebar(); window.addEventListener('resize', positionNearSidebar); window.addEventListener('scroll', positionNearSidebar, { passive:true });
         if(sideBtn && !sideBtn.dataset.qaBound){ sideBtn.addEventListener('click', openModal); sideBtn.dataset.qaBound='1'; }
         close && close.addEventListener('click', closeModal); backdrop && backdrop.addEventListener('click', closeModal); document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
         btnClear && btnClear.addEventListener('click', ()=>{ if(tQ) tQ.value=''; if(tA) tA.value=''; });
         async function fetchThreads(){ const sb = await ensureSupabase(); if(!sb || !list) return; const { data } = await sb.from('igdc_qna_threads').select('*').eq('project', STATE.project).eq('page_id', STATE.pageId).order('created_at', { ascending:false }).limit(100); renderList(data||[]); }
-        function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='Q. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('A. '+row.answer):'A. (অপেক্ষমাণ)'; box.append(q,a); list.append(box); }); }
-        async function autoউত্তরIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'দাম ও ফি সম্পর্কে এই পৃষ্ঠার তথ্য দেখুন। প্রয়োজন হলে অতিরিক্ত প্রশ্ন রেখে যান।':'আপনার জিজ্ঞাসার জন্য ধন্যবাদ। আমরা দ্রুত পর্যালোচনা করে সহায়তা করব।'; } } return { technical, answer }; }
-        async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoউত্তরIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'Your inquiry has been received.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
+        function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='Q. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('উ. '+row.answer):'উ. (অপেক্ষমাণ)'; box.append(q,a); list.append(box); }); }
+        async function autoAnswerIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'দাম ও ফি সম্পর্কে এই পৃষ্ঠার তথ্য দেখুন। প্রয়োজন হলে অতিরিক্ত প্রশ্ন রেখে যান।':'আপনার জিজ্ঞাসার জন্য ধন্যবাদ। আমরা দ্রুত পর্যালোচনা করে সহায়তা করব।'; } } return { technical, answer }; }
+        async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoAnswerIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'আপনার জিজ্ঞাসা গ্রহণ করা হয়েছে.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
         btnSubmit && btnSubmit.addEventListener('click', submit);
         window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
         fetchThreads(); return modal;
@@ -672,7 +672,7 @@
   if ((payload.href || '#') === '#'){
     e.preventDefault();
     try{
-      alert('Content or materials are being prepared.');
+      alert('বিষয়বস্তু বা উপকরণ প্রস্তুত করা হচ্ছে।');
     }catch(_){}
   }
 }, { passive:false });
@@ -1304,7 +1304,7 @@ window.addEventListener('resize', function(){
       + '<div class="snfv-media" id="snfvMedia"></div>'
       + '<div class="snfv-meta">'
       +   '<div class="snfv-text"><div class="snfv-title" id="snfvTitle"></div><div class="snfv-desc" id="snfvDesc"></div></div>'
-      +   '<div class="snfv-actions"><a id="snfvখুলুনBtn" class="snfv-btn" href="#" target="_blank" rel="noopener">খুলুন</a></div>'
+      +   '<div class="snfv-actions"><a id="snfvOpenBtn" class="snfv-btn" href="#" target="_blank" rel="noopener">খুলুন</a></div>'
       + '</div>'
       + '</div>';
 
@@ -1354,7 +1354,7 @@ window.addEventListener('resize', function(){
     var media = document.getElementById('snfvMedia');
     var title = document.getElementById('snfvTitle');
     var desc = document.getElementById('snfvDesc');
-    var openBtn = document.getElementById('snfvখুলুনBtn');
+    var openBtn = document.getElementById('snfvOpenBtn');
 
     media.innerHTML = '';
     title.textContent = data.title || 'পূর্বরূপ';
@@ -1371,7 +1371,7 @@ window.addEventListener('resize', function(){
     }else if(data.img || data.bg){
       var im = document.createElement('img');
       im.src = data.img || data.bg;
-      im.alt = data.title || 'preview';
+      im.alt = data.title || 'পূর্বরূপ';
       media.appendChild(im);
     }else{
       var fb = document.createElement('div');
@@ -1423,7 +1423,26 @@ window.addEventListener('resize', function(){
   }, true);
 })();
 </script>
- 
+ <script>
+(function(){
+  try{
+    function notify(top){
+      parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*');
+    }
+    function atTop(){
+      var se=document.scrollingElement||document.documentElement||document.body;
+      return (window.scrollY||window.pageYOffset||0)<=0 && (se?(se.scrollTop||0)<=0:true);
+    }
+    function onAnyScroll(){ notify(atTop()); }
+    window.addEventListener('scroll', onAnyScroll, {passive:true});
+    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
+    document.addEventListener('wheel', function(e){ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
+    document.addEventListener('touchmove', function(){ notify(false); }, {passive:true,capture:true});
+    setTimeout(function(){ notify(atTop()); }, 50);
+  }catch(_){ }
+})();
+</script>
+
 <script defer src="/assets/js/socialnetwork-automap-v3.js?v=20260404psom"></script>
   
   <script id="igtc-checkout-trigger-v1">

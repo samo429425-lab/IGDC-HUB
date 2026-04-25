@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="es">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
@@ -578,8 +578,8 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   var drawer = document.createElement("aside"); drawer.id="providers-drawer-left";
   drawer.innerHTML = [
     '<div id="providers-header-left">',
-      '<div id="providers-title-left" >Providers</div>',
-      '<input id="providers-search-left" type="search" placeholder="Buscar..." aria-label="Buscar providers" />',
+      '<div id="providers-title-left" >Proveedores</div>',
+      '<input id="providers-search-left" type="search" placeholder="Buscar..." aria-label="Buscar proveedores" />',
       '<button id="providers-close-left" aria-label="Cerrar">✕</button>',
     '</div>',
     '<div id="providers-body-left"></div>'
@@ -590,8 +590,8 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   }
 
   var backdrop = document.createElement("div"); backdrop.id="providers-backdrop-left";
-  var tab = document.createElement("button"); tab.id="providers-tab-left"; tab.type="button"; tab.textContent="Providers";
-  var banner = document.createElement("button"); banner.id="providers-banner"; banner.type="button"; banner.textContent="Providers";
+  var tab = document.createElement("button"); tab.id="providers-tab-left"; tab.type="button"; tab.textContent="Proveedores";
+  var banner = document.createElement("button"); banner.id="providers-banner"; banner.type="button"; banner.textContent="Proveedores";
 
   function open(){ drawer.classList.add("open"); backdrop.classList.add("show"); document.documentElement.classList.add("pv-open-left"); }
   function close(){ drawer.classList.remove("open"); backdrop.classList.remove("show"); document.documentElement.classList.remove("pv-open-left"); }
@@ -1197,7 +1197,7 @@ html, body {
 <a href="mediahub.html">🎬 Centro de Medios</a>
 <a href="tour.html">🧳 Viajes · Turismo · Alojamiento</a>
 <a href="literature_academic.html">📚 Intercambio Literario y Académico</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Consulta Q&amp;A</a></aside>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Preguntas y respuestas</a></aside>
 <main>
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
@@ -3717,11 +3717,11 @@ function handleVideoBuscar(e){
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Preguntas y respuestas';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">La funcionalidad completa se habilitará después de conectar la configuración de almacenamiento (Supabase url/key).</div>';
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
         document.body.appendChild(m);
@@ -3937,7 +3937,7 @@ function handleVideoBuscar(e){
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="P. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pendiente)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("R. "+row.answer):"R. (Pendiente)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "Solicitud al administrador":"General";
@@ -3987,7 +3987,7 @@ function handleVideoBuscar(e){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Storage settings (Supabase url/key) are not connected yet, so server-side saving is disabled. When deployed on the web, it will connect automatically once SUPER_VARSAR.url/anonKey are set.");
+        alert("La configuración de almacenamiento (URL/clave de Supabase) aún no está conectada, por lo que el guardado en el servidor está deshabilitado. Al desplegarse en la web, se conectará automáticamente una vez que SUPER_VARSAR.url/anonKey esté configurado.");
         return;
       }
       const record = {
@@ -4123,8 +4123,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </script>
 <script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.mediahub.json" data-interval="30000" src="/assets/js/hero.rotator.js"></script>
 <footer>
-    IGDC Global Hub © 2025 | International General Distribution Company<br/>
-    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea, <br/>
+    IGDC Global Hub © 2025 | International General Trading Company<br/>
+    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea<br/>
 </footer>
 <!-- patch: sync provider list & order with platform tiles -->
 <script id="patch-sync-providers">
@@ -4502,7 +4502,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     var title = document.createElement('div');
     title.className = 'igdc-qa-title';
-    title.textContent = 'Q&A';
+    title.textContent = 'Preguntas y respuestas';
 
     var closeBtn = document.createElement('button');
     closeBtn.className = 'igdc-qa-close';
@@ -4608,7 +4608,22 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   function ensureModal(){
     var modal = document.querySelector('.igdc-qa-modal');
     if(!modal){
-      // Create minimal modal sk
+      return;
+    }
+  }
+
+  function run(){
+    stripFooterEmail();
+    ensureModal();
+  }
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', run, {once:true});
+  } else {
+    run();
+  }
+})();
+</script>
+
 <script id="igtc-mobile-overhaul-FULL-js">
 (function(){
   function qsa(sel){ return Array.prototype.slice.call(document.querySelectorAll(sel)); }
@@ -4649,7 +4664,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     var src = card.getAttribute('data-src');
     var wrap = document.createElement('div');
     wrap.className = 'fs-stage';
-    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="Media Viewer"></div><button class="fs-close" aria-label="Cerrar">✕</button>';
+    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="Visor multimedia"></div><button class="fs-close" aria-label="Cerrar">✕</button>';
     var inner = wrap.querySelector('.fs-inner');
 
     if(yt){
@@ -4666,7 +4681,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     }else{
       var url = getCardImageURL(card) || 'about:blank';
       var img = document.createElement('img');
-      img.src = url; img.alt = 'Preview';
+      img.src = url; img.alt = 'Vista previa';
       img.style.width='100%'; img.style.height='100%'; img.style.objectFit='cover';
       inner.appendChild(img);
     }
@@ -5019,12 +5034,12 @@ window.addEventListener("message",function(ev){
       overlay.innerHTML = `
         <div class="media-modal">
           <button class="media-close">✕</button>
-          <h2>${card.dataset.title || 'Media Content'}</h2>
+          <h2>${card.dataset.title || 'Contenido multimedia'}</h2>
           <p>${card.dataset.description || ''}</p>
 
           <div class="media-actions">
-            <button data-action="play">▶ Watch Now</button>
-            <button data-action="rent">💳 Rent</button>
+            <button data-action="play">▶ Ver ahora</button>
+            <button data-action="rent">💳 Alquilar</button>
             <button data-action="own">💳 Comprar</button>
             <button data-action="wish">⭐ Añadir a favoritos</button>
           </div>
@@ -5052,7 +5067,7 @@ window.addEventListener("message",function(ev){
 
       switch (action) {
         case 'play':
-          alert('Playback will begin after viewing rights are confirmed.');
+          alert('La reproducción comenzará después de que se confirmen los derechos de visualización.');
           break;
 
         case 'rent':
@@ -5066,11 +5081,11 @@ window.addEventListener("message",function(ev){
           break;
 
         case 'wish':
-          alert('Added to your wishlist.');
+          alert('Se añadió a tu lista de deseos.');
           break;
 
         case 'review':
-          alert('Your review has been submitted.');
+          alert('Tu reseña ha sido enviada.');
           break;
       }
     },

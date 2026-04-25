@@ -1446,7 +1446,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Aucune entrée Q&A n’a encore été enregistrée";
+  content: "Aucune entrée questions-réponses n’a encore été enregistrée";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1464,7 +1464,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Aucune entrée Q&A n’a encore été enregistrée";
+  content: "Aucune entrée questions-réponses n’a encore été enregistrée";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -2344,7 +2344,7 @@ body > div.container,
 <a href="mediahub.html">🎬 Centre média</a>
 <a href="tour.html">🧳 Voyage · Tourisme · Séjour</a>
 <a href="literature/academic.html" style="display:none !important;">📚 Littérature et échange académique</a>
-<a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Contact Q&amp;R</a></nav>
+<a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Questions-réponses</a></nav>
 <!-- Main (불변 구조) -->
 <main class="main">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
@@ -2399,7 +2399,7 @@ body > div.container,
 </section>
 <!-- (요청) 5줄 Feed -->
 <section class="feed-wrapper">
-<div class="feed-header"><h3 style="margin:0;">📺 Feed</h3></div>
+<div class="feed-header"><h3 style="margin:0;">📺 Flux</h3></div>
 <div id="feedRows">
 <!-- ===== Donation Feed Rows (Final Clean Version) ===== -->
 <div id="donationRows">
@@ -2442,7 +2442,7 @@ body > div.container,
 <aside class="right">
 <div class="panel cafe-link"><a aria-label="Go to WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">Café NAVER de WAM</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
-<button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">Dons</button>
+<button class="button" onclick="alert('Le système de don sera bientôt connecté !')" style="margin-bottom:8px; padding:5px 14px;">Dons</button>
 <p><b>IESF (International Exchange Service Foundation)</b><br/>
         - Général : NongHyup 301-0078-3333-51<br/>
         - Devise étrangère : NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
@@ -2489,8 +2489,8 @@ body > div.container,
 <div class="hidden" id="composerModal" style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:9999;">
 <div class="panel" style="width:min(92vw, 720px); max-height:80vh; overflow:auto;">
 <h3 style="margin-top:0;">Écrire</h3>
-<input id="composeTitle" placeholder="Title" style="width:100%;"/>
-<textarea id="composeBody" placeholder="Enter content..." rows="8" style="width:100%; resize:vertical;"></textarea>
+<input id="composeTitle" placeholder="Titre" style="width:100%;"/>
+<textarea id="composeBody" placeholder="Saisissez le contenu..." rows="8" style="width:100%; resize:vertical;"></textarea>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px;">
 <button class="button outline" id="btnDraftSave" type="button">Enregistrer le brouillon</button><button class="button outline" id="btnAnnuler">Annuler</button>
 <button class="button" disabled="disabled" id="btnSave" style=";display:none !important;">Enregistrer</button>
@@ -2546,7 +2546,7 @@ body > div.container,
         ${imgSrc ? `<div class="thumb" style="aspect-ratio:16/9; overflow:hidden; border-radius:6px; margin-bottom:6px;"><img src="${imgSrc}" style="width:100%; height:100%; object-fit:cover;"/></div>` : ""}
         <div class="title">${t}</div>
         <div class="meta">${new Date().toLocaleString()}</div>
-        <div class="preview" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
+        <div class="aperçu" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
       `;
       holder.prepend(item);
       if(attachLink){
@@ -2585,7 +2585,7 @@ body > div.container,
     if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
-        alert("Only images up to 2MB can be previewed directly. For large files, upload them to external storage and enter the link.");
+        alert("Seules les images jusqu’à 2 Mo peuvent être prévisualisées directement. Pour les fichiers volumineux, téléversez-les vers un stockage externe et saisissez le lien.");
         imageLink = ""; imagePreviewObjectUrl = "";
       }else{
         imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
@@ -2602,7 +2602,7 @@ body > div.container,
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
-        alert("Only files up to 5MB can display their file name directly. For large files, please use only an external storage link.");
+        alert("Seuls les fichiers jusqu’à 5 Mo peuvent afficher directement leur nom de fichier. Pour les fichiers volumineux, veuillez utiliser uniquement un lien de stockage externe.");
         attachLink = "";
       }else{
         attachLink = f.name; // 파일명만 기록
@@ -2737,7 +2737,7 @@ body > div.container,
     const b = (bodyI && bodyI.value.trim()) || '(No Content)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
+    if(!holder){ alert('La section des actualités est introuvable.'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2745,7 +2745,7 @@ body > div.container,
     item.innerHTML = `
       <div class="title">${t}</div>
       <div class="meta">${new Date().toLocaleString()}</div>
-      <div class="preview" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
+      <div class="aperçu" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
     `;
 
     if(selectedFiles.length){
@@ -2761,13 +2761,13 @@ body > div.container,
     }
 
     const del = document.createElement('button');
-    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='Delete';
+    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='Supprimer';
     del.style.cssText='margin-top:6px; display:none;';
     item.appendChild(del);
     const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
     if(canDelete) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      if(!confirm('Voulez-vous vraiment supprimer cette actualité ?')) return;
       item.remove();
     });
 
@@ -2988,11 +2988,11 @@ body > div.container,
     const btn = document.createElement('button');
     btn.type='button';
     btn.className='button tiny danger delete-post';
-    btn.textContent='Delete';
+    btn.textContent='Supprimer';
     btn.style.cssText='margin-top:6px; display:none;';
     if(canShowDeleteFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      if(!confirm('Voulez-vous vraiment supprimer cette actualité ?')) return;
       item.remove();
     });
     item.appendChild(btn);
@@ -3142,7 +3142,7 @@ body > div.container,
 })();
 </script><div id="editNewsModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 680px); max-height:78vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 style="margin:0; font-size:1.05rem;">Write 편집</h3>
+<h3 style="margin:0; font-size:1.05rem;">Modifier la publication</h3>
 <div id="enInfo" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
@@ -3193,7 +3193,7 @@ body > div.container,
       badge.setAttribute('translate','no');
       header.appendChild(badge);
     }
-    badge.textContent = `Edited · ${tsStr}`;
+    badge.textContent = `Modifié · ${tsStr}`;
   }
 
   // On load, restore edited badge for admin/author only
@@ -3336,7 +3336,7 @@ body > div.container,
     let btnDel  = footer.querySelector('.delete-post');
     if(!btnEdit){
       btnEdit = document.createElement('button');
-      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
+      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Modifier';
       footer.appendChild(btnEdit);
       btnEdit.addEventListener('click', (e)=>{
         e.stopPropagation();
@@ -3353,11 +3353,11 @@ body > div.container,
     }
     if(!btnDel){
       btnDel = document.createElement('button');
-      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='Delete';
+      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='Supprimer';
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+        if(!confirm('Voulez-vous vraiment supprimer cette actualité ?')) return;
         item.remove();
       });
     }
@@ -3531,13 +3531,13 @@ body > div.container,
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
 
     const t = tpl.querySelector('.card-title');
-    if(t) t.textContent = 'Title';
+    if(t) t.textContent = 'Titre';
 
     const m = tpl.querySelector('.card-meta');
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'Content';
+    if(p) p.textContent = 'Contenu';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -3615,7 +3615,7 @@ body > div.container,
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("The purchase request has been received."); } else { alert("Purchase request failed"); }
+      if (res.ok){ alert("La demande d’achat a bien été reçue."); } else { alert("Échec de la demande d’achat"); }
     }catch(e){ console.warn(e); alert("Network error"); }
   };
 
@@ -3624,7 +3624,7 @@ body > div.container,
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("The settlement request has been received."); } else { alert("Settlement request failed"); }
+      if (res.ok){ alert("La demande de règlement a bien été reçue."); } else { alert("Échec de la demande de règlement"); }
     }catch(e){ console.warn(e); alert("Network error"); }
   };
 
@@ -3634,7 +3634,7 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Blockchain processing request completed: " + (j.txHash||"대기")); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Demande de traitement blockchain terminée : " + (j.txHash||"En attente")); }
       else { alert("Blockchain processing failed"); }
     }catch(e){ console.warn(e); alert("Network error"); }
   };
@@ -3681,7 +3681,7 @@ body > div.container,
 
             var t = document.createElement('div');
             t.className = 'title';
-            t.textContent = item.title || item.name || 'Product';
+            t.textContent = item.title || item.name || 'Produit';
 
             a.appendChild(img);
             a.appendChild(t);
@@ -3704,7 +3704,7 @@ body > div.container,
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || 'Product';
+              t.textContent = item.title || 'Produit';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -3757,7 +3757,7 @@ body > div.container,
 </script>
 <!-- IGDC minimal Donate UI (non-invasive) -->
 <div class="donation-inline">
-<input aria-label="Donation amount (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
+<input aria-label="Montant du don (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
 <button class="bc-tile orange" id="btnDonate">Faire un don</button>
 </div>
 <script>
@@ -3788,7 +3788,7 @@ body > div.container,
   // === 안내 문구 ===
   const note = document.createElement("div");
   note.className = "donation-note";
-  note.textContent = "※ Les questions simples reçoivent une réponse immédiate de l’IA. Les questions techniques, les erreurs ou les sujets liés à l’exploitation sont automatiquement transmis au Q&A administrateur.";
+  note.textContent = "※ Les questions simples reçoivent une réponse immédiate de l’IA. Les questions techniques, les erreurs ou les sujets liés à l’exploitation sont automatiquement transmis au module administrateur de questions-réponses.";
   donationDiv.appendChild(note);
 
   // === 구분선 ===
@@ -3804,12 +3804,12 @@ body > div.container,
   accountBox.innerHTML = `
     <div><b>IESF (International Exchange Service Foundation)</b></div>
     <div>General: 농협 301-0078-3333-51</div>
-    <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
+    <div>Devise étrangère: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
     <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
     <div>General: 신한 100-026-331592</div>
-    <div>Foreign Currency: Shinhan 180-005-931110</div>
+    <div>Devise étrangère: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
   donationDiv.appendChild(accountBox);
@@ -3822,7 +3822,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      alert(`Montant sélectionné : ₩${Number(amt).toLocaleString()}\n\nVeuillez effectuer le virement vers le compte ci-dessous.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -3883,7 +3883,7 @@ body > div.container,
           // Fallback: scroll to right panel account options
           const anchor = document.querySelector('#rightDonationOptions') || document.querySelector('.account-section');
           if(anchor){ anchor.scrollIntoView({behavior:'smooth'}); }
-          else { alert('The payment API is not connected. Please select an account from the right panel.'); }
+          else { alert('L’API de paiement n’est pas connectée. Veuillez sélectionner un compte dans le panneau de droite.'); }
         }
       }catch(err){
         console.error(err);
@@ -4207,7 +4207,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      try{ await sb.auth.signInAnonymely(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -4224,7 +4224,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
     const title = el("div","igdc-qa-title"); title.textContent = "Questions & Réponses";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Fermer");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
@@ -4235,7 +4235,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Envoyer";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Effacer";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Les questions simples reçoivent une réponse immédiate de l’IA. Les questions techniques, les erreurs ou les sujets liés à l’exploitation sont automatiquement transmis au Q&A administrateur.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Les questions simples reçoivent une réponse immédiate de l’IA. Les questions techniques, les erreurs ou les sujets liés à l’exploitation sont automatiquement transmis au module administrateur de questions-réponses.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -4431,7 +4431,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         bk=document.createElement('div');
         bk.id='drawerBackdrop';
         bk.className='drawer-backdrop';
-        document.body/*__KILL__*/ appendChild_DISABLED(bk);
+        document.body.appendChild(bk);
         bk.addEventListener('click',close,{passive:true});
       }
     }
@@ -4519,7 +4519,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
   /* Optional close affordance */
   .card.expanded::after, .thumb.expanded::after{
-    content: "Close";
+    content: "Fermer";
     position: absolute; top: 8px; right: 12px;
     padding: 6px 10px; border-radius: 14px;
     background: rgba(0,0,0,.5); color:#fff; font-size: 12px;
@@ -4659,7 +4659,7 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>QR de paiement</b>'
                   + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Fermer</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);

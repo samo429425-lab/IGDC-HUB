@@ -1,7 +1,7 @@
 <!-- patched: ad-* classes renamed to brand-* to avoid adblock; media query hiding adjusted only via class rename. -->
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="hu">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
@@ -1117,7 +1117,7 @@ a[href^="mailto:"]:hover {
     d.className = 'thumb-card placeholder';
     d.innerHTML = `
       <div class="thumb-img"></div>
-      <div class="thumb-title">Auto-filled</div>
+      <div class="thumb-title">Automatikusan kitöltve</div>
     `;
     return d;
   }
@@ -1304,7 +1304,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("Your purchase request has been received."); }
+      if (res.ok){ alert("A vásárlási kérelmét megkaptuk."); }
       else { alert("A vásárlási kérelem sikertelen."); }
     }catch(e){ console.warn(e); alert("Hálózati hiba."); }
   };
@@ -1313,13 +1313,13 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("Your settlement request has been received."); }
+      if (res.ok){ alert("Az elszámolási kérelmét megkaptuk."); }
       else { alert("Az elszámolási kérelem sikertelen."); }
     }catch(e){ console.warn(e); alert("Hálózati hiba."); }
   };
 
   // ===== 2) AI Recommend·회전(로테이션) 보강 =====
-  // 조건: Product 카드가 거의 없거나(3개 미만) 썸네일이 비어 있으면 → 서버 Recommend을 요청해 채움.
+  // 조건: Termék 카드가 거의 없거나(3개 미만) 썸네일이 비어 있으면 → 서버 Recommend을 요청해 채움.
   document.addEventListener('DOMContentLoaded', function(){
     try{
       // 컨테이너 후보 탐색
@@ -1364,7 +1364,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
 
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || item.name || 'Product';
+              t.textContent = item.title || item.name || 'Termék';
 
               a.appendChild(img);
               a.appendChild(t);
@@ -1390,7 +1390,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || 'Product';
+              t.textContent = item.title || 'Termék';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -1580,10 +1580,10 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
       }
       var title = document.createElement("div");
       title.className = "thumb-title";
-      title.textContent = (item && item.title) ? item.title : "Recommended";
+      title.textContent = (item && item.title) ? item.title : "Ajánlott";
       var meta = document.createElement("div");
       meta.className = "thumb-meta";
-      meta.textContent = (item && item.meta) ? item.meta : "Auto-filled";
+      meta.textContent = (item && item.meta) ? item.meta : "Automatikusan kitöltve";
       card.appendChild(img);
       card.appendChild(title);
       card.appendChild(meta);
@@ -2135,7 +2135,7 @@ window.addEventListener("message",function(ev){
       var title = document.querySelector('#mobile-ad-rail-wrap .rail-title, #mobile-ad-rail-wrap h3, #mobile-ad-rail-wrap header h3');
       if (title){
         var t=(title.textContent||'').trim();
-        if (t.length>8) title.textContent='💎 Recommend 브랜드 💎';
+        if (t.length>8) title.textContent='💎 Ajánlott márkák 💎';
       }
       // Capture-phase guard to preserve native vertical scroll
       var zone = list || wrap;
@@ -2271,12 +2271,12 @@ window.addEventListener("message",function(ev){
 </script>
 <script id="igdc-product-review-script">
 /*
- IGDC Product Review – Auto Hook Version
+ IGDC Termék Review – Auto Hook Version
  - Distribution page thumbnail click auto-detect
- - Product detail review auto-mount (Coupang-style)
+ - Termék detail review auto-mount (Coupang-style)
  *
  * Requirement:
- *  - Product thumbnail or detail container must have: data-product-id="..."
+ *  - Termék thumbnail or detail container must have: data-product-id="..."
  *  - window.__IGDC_ROLE (guest | member | admin ...)
  */
 
@@ -2311,7 +2311,7 @@ window.addEventListener("message",function(ev){
         const productId = card.dataset.productId;
         if (!productId) return;
 
-        // 상세 Product이 열릴 시간을 약간 준 뒤 마운트
+        // 상세 Termék이 열릴 시간을 약간 준 뒤 마운트
         setTimeout(() => {
           this.mount(productId);
         }, 50);
@@ -2338,7 +2338,7 @@ window.addEventListener("message",function(ev){
         root = document.createElement('div');
         root.id = this.config.rootId;
 
-        // 상세 Product 영역 하단에 삽입
+        // 상세 Termék 영역 하단에 삽입
         const detail =
           document.querySelector('.product-detail') ||
           document.querySelector('.product-modal') ||
@@ -2353,8 +2353,8 @@ window.addEventListener("message",function(ev){
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">Product Reviews</h3>
-          <div id="igdc-review-list" class="igdc-review-list">Loading...</div>
+          <h3 class="igdc-review-title">Termékvélemények</h3>
+          <div id="igdc-review-list" class="igdc-review-list">Betöltés...</div>
           ${canWrite ? this.renderForm() : this.renderLoginHint()}
         </section>
       `;
@@ -2369,7 +2369,7 @@ window.addEventListener("message",function(ev){
             maxlength="${this.config.maxChars}"
             required></textarea>
           <div class="igdc-review-actions">
-            <button type="submit">Submit Review</button>
+            <button type="submit">Vélemény beküldése</button>
           </div>
         </form>
       `;
@@ -2377,7 +2377,7 @@ window.addEventListener("message",function(ev){
 
     renderLoginHint() {
       return `<div class="igdc-review-login-hint">
-        Review posting is available after logging in.
+        Bejelentkezés után lehet értékelést közzétenni.
       </div>`;
     },
 
@@ -2391,7 +2391,7 @@ window.addEventListener("message",function(ev){
         const content = textarea.value.trim();
 
         if (content.length < this.config.minChars) {
-          alert(`Reviews must be at least ${this.config.minChars} characters long.`);
+          alert(`Az értékelésnek legalább ${this.config.minChars} karakter hosszúnak kell lennie.`);
           return;
         }
 
@@ -2400,7 +2400,7 @@ window.addEventListener("message",function(ev){
             textarea.value = '';
             this.loadReviews();
           })
-          .catch(() => alert('Submit Review 실패'));
+          .catch(() => alert('Az értékelés beküldése sikertelen'));
       });
     },
 
@@ -2408,7 +2408,7 @@ window.addEventListener("message",function(ev){
       const list = document.getElementById('igdc-review-list');
       if (!list) return;
 
-      list.textContent = 'Loading...';
+      list.textContent = 'Betöltés...';
 
       try {
         const res = await fetch(
@@ -2445,7 +2445,7 @@ window.addEventListener("message",function(ev){
       return `
         <div class="igdc-review-item">
           <div class="igdc-review-meta">
-            <span>${esc(item.user || 'Anonymous')}</span>
+            <span>${esc(item.user || 'Névtelen')}</span>
             <span>${esc(item.date || '')}</span>
           </div>
           <div class="igdc-review-content">${esc(item.content)}</div>
@@ -2471,7 +2471,7 @@ window.addEventListener("message",function(ev){
   document.head.appendChild(style);
 
   Review.init();
-  window.IGDCProductReview = Review;
+  window.IGDCTermékReview = Review;
 
 })(window, document);
 </script>
@@ -2576,7 +2576,7 @@ window.addEventListener("message",function(ev){
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      try{ await sb.auth.signInNévtelenly(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -2604,7 +2604,7 @@ window.addEventListener("message",function(ev){
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Beküldés";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Törlés";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az admin Q&A-hoz kerülnek továbbításra.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az adminisztrátori kérdések-válaszokhoz kerülnek továbbításra.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -2689,7 +2689,7 @@ window.addEventListener("message",function(ev){
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("Delete failed (permission/policy)"); return; }
+            if(error){ alert("A törlés sikertelen (engedély/szabályzat)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -2728,7 +2728,7 @@ window.addEventListener("message",function(ev){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Server-side saving is disabled because the save settings (Supabase url/key) are not connected yet. When deployed to the web, it will connect automatically if SUPER_VARSAR.url/anonKey is configured.");
+        alert("A szerveroldali mentés le van tiltva, mert a mentési beállítások (Supabase url/key) még nincsenek csatlakoztatva. Webes közzétételkor automatikusan csatlakozik, ha a SUPER_VARSAR.url/anonKey be van állítva.");
         return;
       }
       const record = {
@@ -2793,7 +2793,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         h.appendChild(t); h.appendChild(x);
 
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az admin Q&A-hoz kerülnek továbbításra.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az adminisztrátori kérdések-válaszokhoz kerülnek továbbításra.</div>';
 
         var ce = document.createElement('p');
         ce.className = 'contact-email';

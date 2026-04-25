@@ -699,7 +699,7 @@
 .compose-wrap .row-top #attachPreview{ order:4; }     /* 미리보기 막대 */
 .compose-wrap .row-top #btnSubmitPost{ order:5; }     /* Save */
 </style><style>
-/* === Title Preview Bar (between Write and Attachment) === */
+/* === Título Preview Bar (between Write and Attachment) === */
 .compose-wrap .row-top #titlePreview{
   order:3;
   display:flex; align-items:center; gap:6px;
@@ -741,7 +741,7 @@
 /* === ORDER HOTFIX (override) === */
 /* Category */               .compose-wrap .row-top .field.field-category{ order:1 !important; }
 /* Write */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
-/* Title 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
+/* Título 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
 /* Attachment 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
 /* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
 /* Save */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
@@ -767,7 +767,7 @@
 .right .topic-panel .item .attach-list{ margin:4px 0 0 0; padding-left:18px; }
 .right .topic-panel .item .attach-list li{ font-size:.82rem; color:#374151; }
 
-/* Delete button aligned to the right */
+/* Eliminar button aligned to the right */
 
 /* Smooth scroll + auto-grow already added in last build; keep consistent here if missing */
 .right .topic-panel .list{ scroll-behavior:smooth; }
@@ -818,7 +818,7 @@
 }
 .right .topic-panel .item .attach-list{ padding-left:16px; }
 
-/* Delete button stays aligned right, compact */
+/* Eliminar button stays aligned right, compact */
 
 /* Make the whole card clickable for popup */
 .right .topic-panel .item{ cursor:pointer; }
@@ -842,7 +842,7 @@
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like,
 
-/* 색상: Edit=파랑, 추천=초록, Like=핑크, Delete=빨강 */
+/* 색상: Editar=파랑, 추천=초록, Like=핑크, Eliminar=빨강 */
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 .right .topic-panel .item .btn-reco{ background:#e6f7ec; color:#059669; border-color:#bbf7d0; }
 .right .topic-panel .item .btn-like{ background:#ffe6ef; color:#db2777; border-color:#fecdd3; }
@@ -879,7 +879,7 @@
 }
 .right .topic-panel .item .item-footer .icon-btn.active{ transform:scale(1.2); }
 </style><style>
-/* Edited badge next to time (only shown for admin/author via JS insertion) */
+/* Editared badge next to time (only shown for admin/author via JS insertion) */
 .right .topic-panel .item .item-header .h-edited{
   margin-left:6px; font-size:.72rem; color:#2563eb; opacity:.9;
 }
@@ -912,7 +912,7 @@
 .right .topic-panel .item .item-footer .action-reco.active .icon{ color:#065f46; }
 .right .topic-panel .item .item-footer .action-like.active .icon{ color:#9d174d; }
 
-/* Keep only Edit/Delete text buttons horizontally */
+/* Keep only Editar/Eliminar text buttons horizontally */
 .right .topic-panel .item .btn-edit,
 
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
@@ -930,7 +930,7 @@
 }
 
 </style><style>
-/* --- Footer row normalization for Edit/Delete buttons --- */
+/* --- Footer row normalization for Editar/Eliminar buttons --- */
 .right .topic-panel .item .item-footer{
   display:flex; align-items:center; gap:10px; justify-content:flex-end;
   min-height:34px; /* consistent row height */
@@ -1446,7 +1446,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Aún no se ha registrado ninguna entrada de Q&A";
+  content: "Aún no se ha registrado ninguna entrada de preguntas y respuestas";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1464,7 +1464,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Aún no se ha registrado ninguna entrada de Q&A";
+  content: "Aún no se ha registrado ninguna entrada de preguntas y respuestas";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1953,7 +1953,7 @@ body .right{ display:none !important; }
     line-height:1.5;
   }
 
-  /* 하단 Footer: 읽음/추천/좋아요/아이콘 + Edit/Delete 전부 우측 정렬 */
+  /* 하단 Footer: 읽음/추천/좋아요/아이콘 + Editar/Eliminar 전부 우측 정렬 */
  .mobile-news-clone .topic-panel .item .item-footer {
     margin-top: auto;              /* 위 Content 밀어 올리고, footer를 맨 아래로 */
     display: flex;
@@ -2355,7 +2355,7 @@ body > div.container,
 <a href="mediahub.html">🎬 Centro de Medios</a>
 <a href="tour.html">🧳 Viajes · Turismo · Alojamiento</a>
 <a href="literature/academic.html" style="display:none !important;">📚 Intercambio Literario y Académico</a>
-<a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Consulta Q&amp;A</a></nav>
+<a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Preguntas y respuestas</a></nav>
 <!-- Main (불변 구조) -->
 <main class="main">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
@@ -2387,7 +2387,7 @@ body > div.container,
 <button class="button small" id="btnOpenComposer">Escribir</button><div aria-label="Vista previa del título" class="title-preview" id="titlePreview"><span class="tp-text">Sin título</span></div>
 <button class="button small accent" id="btnSubmitPost">Guardar</button>
 <span id="attachName"></span>
-<button aria-label="첨부 제거 " class="button tiny" id="btnAttachClear" style="display:none;" type="button">Borrar</button>
+<button aria-label="Quitar adjunto" class="button tiny" id="btnAttachClear" style="display:none;" type="button">Borrar</button>
 <input id="postAttach" style="display:none;" type="file"/>
 </div>
 <div class="row row-bottom">
@@ -2410,7 +2410,7 @@ body > div.container,
 </section>
 <!-- (요청) 5줄 Feed -->
 <section class="feed-wrapper">
-<div class="feed-header"><h3 style="margin:0;">📺 Feed</h3></div>
+<div class="feed-header"><h3 style="margin:0;">📺 Publicaciones</h3></div>
 <div id="feedRows">
 <!-- ===== Donation Feed Rows (Final Clean Version) ===== -->
 <div id="donationRows">
@@ -2451,9 +2451,9 @@ body > div.container,
 </section></main>
 <!-- Right (불변) -->
 <aside class="right">
-<div class="panel cafe-link"><a aria-label="Go to WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">Café NAVER de WAM</span></a></div>
+<div class="panel cafe-link"><a aria-label="Ir al Café NAVER de WAM" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">Café NAVER de WAM</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
-<button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">Donaciones</button>
+<button class="button" onclick="alert('¡El sistema de donaciones estará disponible pronto!')" style="margin-bottom:8px; padding:5px 14px;">Donaciones</button>
 <p><b>IESF (International Exchange Service Foundation)</b><br/>
         - General: NongHyup 301-0078-3333-51<br/>
         - Moneda extranjera: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
@@ -2493,17 +2493,17 @@ body > div.container,
 </div></aside>
 </div>
 <footer>
-  IGTC Global Hub © 2025 | Compañía Internacional General de Distribución<br/>
-  50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Corea <br/>
+  IGDC Global Hub © 2025 | International General Trading Company<br/>
+    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea<br/>
 </footer>
 <!-- Restored composer modal (from donation-Q) -->
 <div class="hidden" id="composerModal" style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:9999;">
 <div class="panel" style="width:min(92vw, 720px); max-height:80vh; overflow:auto;">
 <h3 style="margin-top:0;">Escribir</h3>
-<input id="composeTitle" placeholder="Title" style="width:100%;"/>
-<textarea id="composeBody" placeholder="Enter content..." rows="8" style="width:100%; resize:vertical;"></textarea>
+<input id="composeTítulo" placeholder="Título" style="width:100%;"/>
+<textarea id="composeBody" placeholder="Introduzca el contenido..." rows="8" style="width:100%; resize:vertical;"></textarea>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px;">
-<button class="button outline" id="btnDraftSave" type="button">Guardar borrador</button><button class="button outline" id="btnCancelar">Cancelarar</button>
+<button class="button outline" id="btnDraftSave" type="button">Guardar borrador</button><button class="button outline" id="btnCancelar">Cancelar</button>
 <button class="button" disabled="disabled" id="btnSave" style=";display:none !important;">Guardar</button>
 </div>
 </div>
@@ -2519,7 +2519,7 @@ body > div.container,
   const btnSubmit = $("#btnSubmitPost");
   const btnSave = $("#btnSave");
   const btnCancelar = $("#btnCancelar");
-  const titleI = $("#composeTitle");
+  const titleI = $("#composeTítulo");
   const bodyI = $("#composeBody");
   const catSel = $("#postCategory");
   const fileI = $("#postImage");
@@ -2545,7 +2545,7 @@ body > div.container,
   btnSubmit && btnSubmit.addEventListener("click", ()=>{ if(btnSave){ btnSave.click(); } });
 
   btnSave && btnSave.addEventListener("click", ()=>{
-    const t = titleI?.value?.trim() || "(No Title)";
+    const t = titleI?.value?.trim() || "(No Título)";
     const b = bodyI?.value?.trim() || "(No Content)";
     const cat = catSel?.value || "etc";
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
@@ -2564,7 +2564,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">첨부 링크</a>` : `첨부: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Enlace adjunto</a>` : `Adjunto: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2575,7 +2575,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "첨부: " + fileAttach.files[0].name;
+        att.textContent = "Adjunto: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2592,11 +2592,11 @@ body > div.container,
 
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
-    const link = prompt("이미지 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 Confirm을 누르세요)");
+    const link = prompt("Si tiene un enlace externo (URL) para la imagen, péguelo aquí. Si no, pulse Confirmar.");
     if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
-        alert("Only images up to 2MB can be previewed directly. For large files, upload them to external storage and enter the link.");
+        alert("Solo se pueden previsualizar directamente imágenes de hasta 2 MB. Para archivos grandes, súbalos a un almacenamiento externo e introduzca el enlace.");
         imageLink = ""; imagePreviewObjectUrl = "";
       }else{
         imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
@@ -2609,11 +2609,11 @@ body > div.container,
 
   btnFileOk && btnFileOk.addEventListener('click', ()=>{
     const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
-    const link = prompt("파일 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 Confirm을 누르세요)");
+    const link = prompt("Si tiene un enlace externo (URL) para el archivo, péguelo aquí. Si no, pulse Confirmar.");
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
-        alert("Only files up to 5MB can display their file name directly. For large files, please use only an external storage link.");
+        alert("Solo los archivos de hasta 5 MB pueden mostrar directamente su nombre. Para archivos grandes, utilice únicamente un enlace de almacenamiento externo.");
         attachLink = "";
       }else{
         attachLink = f.name; // 파일명만 기록
@@ -2638,7 +2638,7 @@ body > div.container,
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '개 파일');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' archivos');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2709,7 +2709,7 @@ body > div.container,
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 제거'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Quitar adjunto'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
@@ -2738,17 +2738,17 @@ body > div.container,
   }
 
   const catSel = $('#postCategory');
-  const titleI = $('#composeTitle');
+  const titleI = $('#composeTítulo');
   const bodyI  = $('#composeBody');
   const modal  = $('#composerModal');
   function closeModal(){ modal && modal.classList.add('hidden'); }
 
   function handleUnifiedSave(){
-    const t = (titleI && titleI.value.trim()) || '(No Title)';
-    const b = (bodyI && bodyI.value.trim()) || '(No Content)';
+    const t = (titleI && titleI.value.trim()) || '(Sin título)';
+    const b = (bodyI && bodyI.value.trim()) || '(Sin contenido)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
+    if(!holder){ alert('No se pudo encontrar la sección de noticias.'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2765,20 +2765,20 @@ body > div.container,
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = '첨부: ' + f.name;
+        li.textContent = 'Adjunto: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
     }
 
     const del = document.createElement('button');
-    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='Delete';
+    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='Eliminar';
     del.style.cssText='margin-top:6px; display:none;';
     item.appendChild(del);
-    const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
-    if(canDelete) del.style.display='inline-block';
+    const canEliminar = (USER_ROLE==='admin' || USER_ROLE==='writer');
+    if(canEliminar) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      if(!confirm('¿Desea eliminar esta publicación?')) return;
       item.remove();
     });
 
@@ -2851,7 +2851,7 @@ body > div.container,
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 모두 제거'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Quitar todos los adjuntos'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attachPreview.appendChild(chip);
@@ -2889,7 +2889,7 @@ body > div.container,
 </script><script>
 (function(){
   const $ = (s,r=document)=>r.querySelector(s);
-  const titleI = $('#composeTitle');
+  const titleI = $('#composeTítulo');
   const bodyI  = $('#composeBody');
   const modal  = $('#composerModal');
   const btnDraft = $('#btnDraftSave');
@@ -2900,7 +2900,7 @@ body > div.container,
 
   let draft = { title:'', body:'' };
 
-  function updateTitlePreview(src){
+  function updateTítuloPreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
     tpText.textContent = t || 'Sin título';
@@ -2908,7 +2908,7 @@ body > div.container,
 
   // live typing updates preview
   if(titleI){
-    titleI.addEventListener('input', ()=> updateTitlePreview());
+    titleI.addEventListener('input', ()=> updateTítuloPreview());
   }
 
   // Guardar borrador: keep in-memory draft; do NOT post to right panel
@@ -2917,7 +2917,7 @@ body > div.container,
       e.preventDefault();
       draft.title = (titleI && titleI.value)||'';
       draft.body  = (bodyI && bodyI.value)||'';
-      updateTitlePreview(draft.title);
+      updateTítuloPreview(draft.title);
       // keep modal open; optional small feedback
       // console.log('Draft saved');
     });
@@ -2929,7 +2929,7 @@ body > div.container,
       draft.title=''; draft.body='';
       if(titleI) titleI.value='';
       if(bodyI) bodyI.value='';
-      updateTitlePreview('');
+      updateTítuloPreview('');
     });
   }
 
@@ -2944,18 +2944,18 @@ body > div.container,
       // clear draft & preview shortly after click so the original handler can read values
       setTimeout(()=>{
         draft.title=''; draft.body='';
-        updateTitlePreview('');
+        updateTítuloPreview('');
       }, 0);
     }, true); // capture phase to run before other handlers
   }
 
   // initialize preview on load
-  updateTitlePreview('');
+  updateTítuloPreview('');
 })();
 </script><script>
 (function(){
   const $ = (s,r=document)=>r.querySelector(s);
-  const titleI = $('#composeTitle');
+  const titleI = $('#composeTítulo');
   const modal = $('#composerModal');
   const btnDraft = $('#btnDraftSave');
   const titlePreview = $('#titlePreview');
@@ -2963,7 +2963,7 @@ body > div.container,
 
   let draft = { title:'', body:'' };
 
-  function updateTitlePreview(src){
+  function updateTítuloPreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
     tpText.textContent = t || 'Título no ingresado';
@@ -2974,7 +2974,7 @@ body > div.container,
       e.preventDefault();
       draft.title = (titleI && titleI.value)||'';
       draft.body  = ($('#composeBody') && $('#composeBody').value)||'';
-      updateTitlePreview(draft.title);
+      updateTítuloPreview(draft.title);
       if(modal) modal.classList.add('hidden'); // auto-close
     });
   }
@@ -2985,7 +2985,7 @@ body > div.container,
   const USER_ID = (window.USER_ID || 'local-user');
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  function canShowDeleteFor(item){
+  function canShowEliminarFor(item){
     if(USER_ROLE==='admin') return true;
     if(USER_ROLE==='writer'){
       const author = item && item.dataset ? item.dataset.author : null;
@@ -2994,23 +2994,23 @@ body > div.container,
     return false;
   }
 
-  function ensureDelete(item){
+  function ensureEliminar(item){
     if(!item || item.querySelector('.delete-post')) return;
     const btn = document.createElement('button');
     btn.type='button';
     btn.className='button tiny danger delete-post';
-    btn.textContent='Delete';
+    btn.textContent='Eliminar';
     btn.style.cssText='margin-top:6px; display:none;';
-    if(canShowDeleteFor(item)) btn.style.display='inline-block';
+    if(canShowEliminarFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      if(!confirm('¿Desea eliminar esta publicación?')) return;
       item.remove();
     });
     item.appendChild(btn);
   }
 
   // Initial pass
-  $$('.right .topic-panel .list .item').forEach(ensureDelete);
+  $$('.right .topic-panel .list .item').forEach(ensureEliminar);
 
   // Observe future additions for all lists
   $$('.right .topic-panel .list').forEach(list=>{
@@ -3018,9 +3018,9 @@ body > div.container,
       muts.forEach(m=>{
         m.addedNodes && Array.from(m.addedNodes).forEach(node=>{
           if(node && node.nodeType===1){
-            if(node.classList.contains('item')) ensureDelete(node);
+            if(node.classList.contains('item')) ensureEliminar(node);
             // Nested case: if a wrapper was added, scan inside
-            node.querySelectorAll && node.querySelectorAll('.item').forEach(ensureDelete);
+            node.querySelectorAll && node.querySelectorAll('.item').forEach(ensureEliminar);
           }
         });
       });
@@ -3070,13 +3070,13 @@ body > div.container,
 })();
 </script><div id="newsPreviewModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 800px); max-height:80vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 id="npTitle" style="margin:0; font-size:1.05rem;"></h3>
+<h3 id="npTítulo" style="margin:0; font-size:1.05rem;"></h3>
 <div id="npTime" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div id="npBody" style="margin-top:8px; font-size:.95rem; color:#222; white-space:pre-wrap;"></div>
 <div id="npAttach" style="margin-top:8px; font-size:.9rem; color:#374151;"></div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
-<button class="button outline" id="npClose" type="button">Cerrar</button>
+<button class="button outline" id="npCerrar" type="button">Cerrar</button>
 </div>
 </div></div><script>
 (function(){
@@ -3114,14 +3114,14 @@ body > div.container,
   });
 
   const modal = document.getElementById('newsPreviewModal');
-  const npTitle = document.getElementById('npTitle');
+  const npTítulo = document.getElementById('npTítulo');
   const npTime = document.getElementById('npTime');
   const npBody = document.getElementById('npBody');
   const npAttach = document.getElementById('npAttach');
-  const npClose = document.getElementById('npClose');
+  const npCerrar = document.getElementById('npCerrar');
   function openModal(){ modal.style.display='flex'; }
   function closeModal(){ modal.style.display='none'; }
-  npClose && npClose.addEventListener('click', closeModal);
+  npCerrar && npCerrar.addEventListener('click', closeModal);
   document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
   modal && modal.addEventListener('click', e=>{ if(e.target===modal) closeModal(); });
 
@@ -3143,27 +3143,27 @@ body > div.container,
       attachHtml = Array.from(attachList).map(li=>li.textContent).join('<br/>');
     }
 
-    npTitle.textContent = t;
+    npTítulo.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Adjunto</div>' + attachHtml) : '';
 
     openModal();
   }, true);
 })();
 </script><div id="editNewsModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 680px); max-height:78vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 style="margin:0; font-size:1.05rem;">Write 편집</h3>
+<h3 style="margin:0; font-size:1.05rem;">Escribir / Editar</h3>
 <div id="enInfo" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
 <label style="font-size:.85rem;">Título</label>
-<input id="enTitle" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;" type="text"/>
+<input id="enTítulo" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;" type="text"/>
 <label style="font-size:.85rem;">Contenido</label>
 <textarea id="enBody" rows="8" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;"></textarea>
 </div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
-<button class="button outline" id="enCancelar" type="button">Cancelarar</button>
+<button class="button outline" id="enCancelar" type="button">Cancelar</button>
 <button class="button" id="enSave" type="button">Guardar</button>
 </div>
 </div></div><script>
@@ -3172,7 +3172,7 @@ body > div.container,
   const USER_ID   = (window.USER_ID   || 'local-user');
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  function canEditDelete(item){
+  function canEditarEliminar(item){
     if(USER_ROLE==='admin') return true;
     if(USER_ROLE==='writer'){
       const author = item && item.dataset ? item.dataset.author : null;
@@ -3185,13 +3185,13 @@ body > div.container,
     const tm = (item.querySelector('.h-time')?.textContent || item.querySelector('.meta')?.textContent || '').trim();
     const key = (t+'|'+tm).toLowerCase(); let h=0; for(let i=0;i<key.length;i++){ h=((h<<5)-h)+key.charCodeAt(i); h|=0; } return 'news:'+h;
   }
-  function loadEdit(id){
-    try{ return JSON.parse(localStorage.getItem('newsEdit:'+id) || 'null'); }catch(e){ return null; }
+  function loadEditar(id){
+    try{ return JSON.parse(localStorage.getItem('newsEditar:'+id) || 'null'); }catch(e){ return null; }
   }
-  function saveEdit(id, tsStr){
-    localStorage.setItem('newsEdit:'+id, JSON.stringify({editedAt: tsStr}));
+  function saveEditar(id, tsStr){
+    localStorage.setItem('newsEditar:'+id, JSON.stringify({editedAt: tsStr}));
   }
-  function showEditedBadge(item, tsStr){
+  function showEditaredBadge(item, tsStr){
     if(!item) return;
     const header = item.querySelector('.item-header');
     const timeEl = item.querySelector('.h-time');
@@ -3204,25 +3204,25 @@ body > div.container,
       badge.setAttribute('translate','no');
       header.appendChild(badge);
     }
-    badge.textContent = `Edited · ${tsStr}`;
+    badge.textContent = `Editado · ${tsStr}`;
   }
 
   // On load, restore edited badge for admin/author only
   $$('.right .topic-panel .list .item').forEach(item=>{
     const id = itemId(item);
-    const meta = loadEdit(id);
-    if(meta && canEditDelete(item)){
-      showEditedBadge(item, meta.editedAt);
+    const meta = loadEditar(id);
+    if(meta && canEditarEliminar(item)){
+      showEditaredBadge(item, meta.editedAt);
     }
   });
 
   // Capture which item is being edited via delegated click
-  window.__currentEditingItem = null;
+  window.__currentEditaringItem = null;
   document.addEventListener('click', (e)=>{
     const btn = e.target.closest('.btn-edit');
     if(!btn) return;
     const item = e.target.closest('.right .topic-panel .list .item');
-    if(item && canEditDelete(item)) window.__currentEditingItem = item;
+    if(item && canEditarEliminar(item)) window.__currentEditaringItem = item;
   }, true);
 
   // When edit modal "Save" is pressed, persist edited meta and show badge
@@ -3230,13 +3230,13 @@ body > div.container,
     const saveBtn = document.getElementById('enSave');
     if(!saveBtn) return;
     saveBtn.addEventListener('click', ()=>{
-      const item = window.__currentEditingItem;
-      if(!item || !canEditDelete(item)) return;
+      const item = window.__currentEditaringItem;
+      if(!item || !canEditarEliminar(item)) return;
       const ts = new Date().toLocaleString();
       const id = itemId(item);
-      saveEdit(id, ts);
-      showEditedBadge(item, ts);
-      window.__currentEditingItem = null;
+      saveEditar(id, ts);
+      showEditaredBadge(item, ts);
+      window.__currentEditaringItem = null;
     });
   })();
 
@@ -3292,7 +3292,7 @@ body > div.container,
   const USER_ID   = (window.USER_ID   || 'local-user');
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  function canEditDelete(item){
+  function canEditarEliminar(item){
     if(USER_ROLE==='admin') return true;
     if(USER_ROLE==='writer'){
       const author = item && item.dataset ? item.dataset.author : null;
@@ -3341,22 +3341,22 @@ body > div.container,
       <span class="stat action-like ${t.like?'active':''}"><i class="icon">❤️</i><span class="n">${m.like}</span></span>
     `;
 
-    // Role-based Edit/Delete remain as-is (buttons may already exist from prior code)
+    // Role-based Editar/Eliminar remain as-is (buttons may already exist from prior code)
     // If no edit button present, create and apply permissions
-    let btnEdit = footer.querySelector('.btn-edit');
+    let btnEditar = footer.querySelector('.btn-edit');
     let btnDel  = footer.querySelector('.delete-post');
-    if(!btnEdit){
-      btnEdit = document.createElement('button');
-      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
-      footer.appendChild(btnEdit);
-      btnEdit.addEventListener('click', (e)=>{
+    if(!btnEditar){
+      btnEditar = document.createElement('button');
+      btnEditar.type='button'; btnEditar.className='btn-edit notranslate'; btnEditar.setAttribute('translate','no'); btnEditar.textContent='Editar';
+      footer.appendChild(btnEditar);
+      btnEditar.addEventListener('click', (e)=>{
         e.stopPropagation();
         const emodal = document.getElementById('editNewsModal');
-        const enTitle = document.getElementById('enTitle');
+        const enTítulo = document.getElementById('enTítulo');
         const enBody  = document.getElementById('enBody');
         const enInfo  = document.getElementById('enInfo');
-        if(!emodal || !enTitle || !enBody) return;
-        enTitle.value = (item.querySelector('.h-title')?.textContent || item.querySelector('.title')?.textContent || '').trim();
+        if(!emodal || !enTítulo || !enBody) return;
+        enTítulo.value = (item.querySelector('.h-title')?.textContent || item.querySelector('.title')?.textContent || '').trim();
         enBody.value  = (item.querySelector('.preview')?.textContent || '').trim();
         enInfo.textContent = (item.querySelector('.h-time')?.textContent || item.querySelector('.meta')?.textContent || '').trim();
         emodal.style.display='flex';
@@ -3364,20 +3364,20 @@ body > div.container,
     }
     if(!btnDel){
       btnDel = document.createElement('button');
-      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='Delete';
+      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='Eliminar';
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+        if(!confirm('¿Desea eliminar esta publicación?')) return;
         item.remove();
       });
     }
     // Apply visibility
-    if(canEditDelete(item)){
-      btnEdit.style.display='inline-block';
+    if(canEditarEliminar(item)){
+      btnEditar.style.display='inline-block';
       btnDel.style.display='inline-block';
     }else{
-      btnEdit.style.display='none';
+      btnEditar.style.display='none';
       btnDel.style.display='none';
     }
 
@@ -3452,7 +3452,7 @@ body > div.container,
 </script><script>
 (function(){
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
-  function normalizeDelete(item){
+  function normalizeEliminar(item){
     if(!item) return;
     // Ensure footer exists
     let footer = item.querySelector('.item-footer');
@@ -3492,14 +3492,14 @@ body > div.container,
   }
 
   // Run on existing items
-  $$('.right .topic-panel .list .item').forEach(normalizeDelete);
+  $$('.right .topic-panel .list .item').forEach(normalizeEliminar);
 
   // Observe for new items
   $$('.right .topic-panel .list').forEach(list=>{
     const mo = new MutationObserver(muts=>{
       muts.forEach(m=>{
         m.addedNodes && Array.from(m.addedNodes).forEach(n=>{
-          if(n.nodeType===1 && n.classList.contains('item')) normalizeDelete(n);
+          if(n.nodeType===1 && n.classList.contains('item')) normalizeEliminar(n);
         });
       });
     });
@@ -3542,13 +3542,13 @@ body > div.container,
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
 
     const t = tpl.querySelector('.card-title');
-    if(t) t.textContent = 'Title';
+    if(t) t.textContent = 'Título';
 
     const m = tpl.querySelector('.card-meta');
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'Content';
+    if(p) p.textContent = 'Contenido';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -3626,8 +3626,8 @@ body > div.container,
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("The purchase request has been received."); } else { alert("Purchase request failed"); }
-    }catch(e){ console.warn(e); alert("Network error"); }
+      if (res.ok){ alert("La solicitud de compra ha sido recibida."); } else { alert("No se pudo enviar la solicitud de compra."); }
+    }catch(e){ console.warn(e); alert("Error de red."); }
   };
 
   // 정산
@@ -3635,8 +3635,8 @@ body > div.container,
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("The settlement request has been received."); } else { alert("Settlement request failed"); }
-    }catch(e){ console.warn(e); alert("Network error"); }
+      if (res.ok){ alert("La solicitud de liquidación ha sido recibida."); } else { alert("No se pudo enviar la solicitud de liquidación."); }
+    }catch(e){ console.warn(e); alert("Error de red."); }
   };
 
   // (옵션) Web3/블록체인 액션 – 서버 프록시 전용
@@ -3645,9 +3645,9 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Blockchain processing request completed: " + (j.txHash||"대기")); }
-      else { alert("Blockchain processing failed"); }
-    }catch(e){ console.warn(e); alert("Network error"); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("La solicitud de procesamiento en blockchain se ha completado: " + (j.txHash||"pendiente")); }
+      else { alert("No se pudo procesar la solicitud en blockchain."); }
+    }catch(e){ console.warn(e); alert("Error de red."); }
   };
 })();
 </script>
@@ -3692,7 +3692,7 @@ body > div.container,
 
             var t = document.createElement('div');
             t.className = 'title';
-            t.textContent = item.title || item.name || 'Product';
+            t.textContent = item.title || item.name || 'Producto';
 
             a.appendChild(img);
             a.appendChild(t);
@@ -3715,7 +3715,7 @@ body > div.container,
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || 'Product';
+              t.textContent = item.title || 'Producto';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -3768,7 +3768,7 @@ body > div.container,
 </script>
 <!-- IGDC minimal Donate UI (non-invasive) -->
 <div class="donation-inline">
-<input aria-label="Donation amount (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
+<input aria-label="Importe de la donación (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
 <button class="bc-tile orange" id="btnDonate">Donar</button>
 </div>
 <script>
@@ -3784,7 +3784,7 @@ body > div.container,
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","정액 기부 금액");
+  btnGroup.setAttribute("aria-label","Importes de donación predefinidos");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -3799,7 +3799,7 @@ body > div.container,
   // === 안내 문구 ===
   const note = document.createElement("div");
   note.className = "donation-note";
-  note.textContent = "Guest donations are available only in the $5–$50 range. For larger amounts, please use the account transfer information below.";
+  note.textContent = "Las donaciones de invitados solo están disponibles en el rango de 5 a 50 USD. Para importes mayores, utilice la información de transferencia bancaria que aparece a continuación.";
   donationDiv.appendChild(note);
 
   // === 구분선 ===
@@ -3814,13 +3814,13 @@ body > div.container,
 
   accountBox.innerHTML = `
     <div><b>IESF (International Exchange Service Foundation)</b></div>
-    <div>General: 농협 301-0078-3333-51</div>
-    <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
+    <div>General: NongHyup 301-0078-3333-51</div>
+    <div>Moneda extranjera: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
     <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
     <div>General: 신한 100-026-331592</div>
-    <div>Foreign Currency: Shinhan 180-005-931110</div>
+    <div>Moneda extranjera: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
   donationDiv.appendChild(accountBox);
@@ -3833,7 +3833,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      alert(`Monto seleccionado: ₩${Number(amt).toLocaleString()}\n\nPor favor transfiera al Account siguiente.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -3861,8 +3861,8 @@ body > div.container,
 </script>
 <script>(function(){try{document.querySelectorAll(".donation-inline,.donation-buttons").forEach(function(n){n.remove();});}catch(e){}})();</script>
 <div aria-hidden="true" class="donate-modal-backdrop" id="donateModalBackdrop">
-<div aria-labelledby="donateModalTitle" aria-modal="true" class="donate-modal" role="dialog">
-<h3 id="donateModalTitle">Seleccione una organización para donar</h3>
+<div aria-labelledby="donateModalTítulo" aria-modal="true" class="donate-modal" role="dialog">
+<h3 id="donateModalTítulo">Seleccione una organización para donar</h3>
 <div class="donate-actions">
 <button data-org="IESF" type="button">Donar a IESF</button>
 <button data-org="WAM" type="button">Donar a WAM</button>
@@ -3894,11 +3894,11 @@ body > div.container,
           // Fallback: scroll to right panel account options
           const anchor = document.querySelector('#rightDonationOptions') || document.querySelector('.account-section');
           if(anchor){ anchor.scrollIntoView({behavior:'smooth'}); }
-          else { alert('The payment API is not connected. Please select an account from the right panel.'); }
+          else { alert('La API de pago no está conectada. Seleccione una cuenta en el panel derecho.'); }
         }
       }catch(err){
         console.error(err);
-        alert('A problem occurred while requesting payment.');
+        alert('Se produjo un problema al solicitar el pago.');
       } finally {
         closeDonateModal();
       }
@@ -4048,7 +4048,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if ((!hasAny || (!hasReal && !hasExternalInfo)) && !hasOurPlaceholder) {
         const item = document.createElement('div');
         item.className = 'item placeholder';
-        item.innerHTML = '<div class="title">No posts yet</div>';
+        item.innerHTML = '<div class="title">Aún no hay publicaciones</div>';
         list.appendChild(item);
       }
 
@@ -4235,7 +4235,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
     const title = el("div","igdc-qa-title"); title.textContent = "Preguntas y Respuestas";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Cerrar");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
@@ -4246,7 +4246,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Enviar";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Borrar";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Las preguntas simples son respondidas de inmediato por la IA. Los asuntos técnicos, errores u operación se envían automáticamente al Q&A del administrador.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Las preguntas simples son respondidas de inmediato por la IA. Los asuntos técnicos, errores u operación se envían automáticamente al módulo de preguntas y respuestas del administrador.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -4319,14 +4319,14 @@ document.addEventListener('DOMContentLoaded', function(){
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pendiente)";
+        const q = el("div","igdc-qa-thread-q"); q.textContent="P. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("R. "+row.answer):"R. (Pendiente)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "Solicitud de administrador":"General";
         const actions = el("div","igdc-qa-thread-actions");
-        const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
-        if(canDelete){
+        const canEliminar = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
+        if(canEliminar){
           const del = el("button","igdc-qa-btn muted"); del.textContent="Eliminar";
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
@@ -4354,9 +4354,9 @@ document.addEventListener('DOMContentLoaded', function(){
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 Confirm 후 회신됩니다.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="Las consultas operativas serán respondidas después de la revisión del administrador.";
           else if(/price|cost|fee|가격|비용|요금/i.test(text)) answer="Para información sobre precios/tarifas, consulte la guía de esta página y deje cualquier consulta adicional.";
-          else answer="문의 감사합니다. 빠르게 Confirm하여 도와드리겠습니다.";
+          else answer="Gracias por su consulta. La revisaremos rápidamente para ayudarle.";
         }
       }
       return { technical, answer };
@@ -4370,7 +4370,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Save 설정(Supabase url/key)이 아직 연결되지 않아 서버 Save은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        alert("El guardado en el servidor está desactivado porque la configuración de almacenamiento (Supabase url/key) aún no está conectada. Cuando se publique en la web, se conectará automáticamente si SUPER_VARSAR.url/anonKey está configurado.");
         return;
       }
       const record = {
@@ -4380,7 +4380,7 @@ document.addEventListener('DOMContentLoaded', function(){
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("Registro fallido"); return; }
+      if(error){ alert("No se pudo guardar."); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -4442,7 +4442,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         bk=document.createElement('div');
         bk.id='drawerBackdrop';
         bk.className='drawer-backdrop';
-        document.body/*__KILL__*/ appendChild_DISABLED(bk);
+        document.body.appendChild(bk);
         bk.addEventListener('click',close,{passive:true});
       }
     }
@@ -4530,7 +4530,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
   /* Optional close affordance */
   .card.expanded::after, .thumb.expanded::after{
-    content: "Close";
+    content: "Cerrar";
     position: absolute; top: 8px; right: 12px;
     padding: 6px 10px; border-radius: 14px;
     background: rgba(0,0,0,.5); color:#fff; font-size: 12px;
@@ -4670,7 +4670,7 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>QR de pago</b>'
                   + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Cerrar</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
@@ -4918,7 +4918,7 @@ window.addEventListener("message",function(ev){
 
   // Preview targets (reuse existing modal if present)
   const modal   = $('#newsPreviewModal') || $('#previewModal');
-  const npTitle = $('#npTitle') || $('#newsPreviewTitle');
+  const npTítulo = $('#npTítulo') || $('#newsPreviewTítulo');
   const npTime  = $('#npTime') || $('#newsPreviewTime');
   const npBody  = $('#npBody') || $('#newsPreviewBody');
   const npAttach= $('#npAttach') || $('#newsPreviewAttach');
@@ -4932,7 +4932,7 @@ window.addEventListener("message",function(ev){
     modal.style.display = 'none';
   }
 
-  const closeBtn = modal ? (modal.querySelector('.close') || modal.querySelector('#npClose')) : null;
+  const closeBtn = modal ? (modal.querySelector('.close') || modal.querySelector('#npCerrar')) : null;
   if(closeBtn){
     closeBtn.addEventListener('click', closeModal);
   }
@@ -4980,7 +4980,7 @@ window.addEventListener("message",function(ev){
 
     const item = e.target.closest('.right .topic-panel .list .item, .mobile-news-clone .topic-panel .list .item');
     if(!item) return;
-    if(!npTitle || !npBody){ return; }
+    if(!npTítulo || !npBody){ return; }
 
     const title = (item.querySelector('.h-title')?.textContent
                 || item.querySelector('.title')?.textContent || '').trim();
@@ -5001,12 +5001,12 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npTitle.textContent = title || 'Title 없음';
+    npTítulo.textContent = title || 'Título 없음';
     if(npTime)  npTime.textContent  = meta || '';
     npBody.textContent = body || '(등록된 본문이 없습니다.)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">Adjunto</div>' + attachHtml
         : '';
     }
 
@@ -5097,7 +5097,7 @@ window.addEventListener("message",function(ev){
   vertical-align: middle;
 }
 
-/* Title/메타 스타일 유지 */
+/* Título/메타 스타일 유지 */
 .right .topic-panel .list .item .title,
 .mobile-news-clone .topic-panel .list .item .title {
   font-weight: 700;

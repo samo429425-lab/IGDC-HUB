@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="hu">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
@@ -578,7 +578,7 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   var drawer = document.createElement("aside"); drawer.id="providers-drawer-left";
   drawer.innerHTML = [
     '<div id="providers-header-left">',
-      '<div id="providers-title-left" >Providers</div>',
+      '<div id="providers-title-left" >Szolgáltatók</div>',
       '<input id="providers-search-left" type="search" placeholder="Keresés..." aria-label="Keresés providers" />',
       '<button id="providers-close-left" aria-label="Bezárás">✕</button>',
     '</div>',
@@ -590,8 +590,8 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   }
 
   var backdrop = document.createElement("div"); backdrop.id="providers-backdrop-left";
-  var tab = document.createElement("button"); tab.id="providers-tab-left"; tab.type="button"; tab.textContent="Providers";
-  var banner = document.createElement("button"); banner.id="providers-banner"; banner.type="button"; banner.textContent="Providers";
+  var tab = document.createElement("button"); tab.id="providers-tab-left"; tab.type="button"; tab.textContent="Szolgáltatók";
+  var banner = document.createElement("button"); banner.id="providers-banner"; banner.type="button"; banner.textContent="Szolgáltatók";
 
   function open(){ drawer.classList.add("open"); backdrop.classList.add("show"); document.documentElement.classList.add("pv-open-left"); }
   function close(){ drawer.classList.remove("open"); backdrop.classList.remove("show"); document.documentElement.classList.remove("pv-open-left"); }
@@ -4576,19 +4576,19 @@ window.addEventListener("message",function(ev){
       overlay.innerHTML = `
         <div class="media-modal">
           <button class="media-close">✕</button>
-          <h2>${card.dataset.title || 'Media Content'}</h2>
+          <h2>${card.dataset.title || 'Médiatartalom'}</h2>
           <p>${card.dataset.description || ''}</p>
 
           <div class="media-actions">
-            <button data-action="play">▶ Watch Now</button>
-            <button data-action="rent">💳 Rent</button>
-            <button data-action="own">💳 Purchase</button>
-            <button data-action="wish">⭐ Add to Wishlist</button>
+            <button data-action="play">▶ Megnézem most</button>
+            <button data-action="rent">💳 Bérlés</button>
+            <button data-action="own">💳 Vásárlás</button>
+            <button data-action="wish">⭐ Hozzáadás a kívánságlistához</button>
           </div>
 
           <div class="media-review">
             <textarea placeholder="Egysoros értékelés (opcionális)" maxlength="200"></textarea>
-            <button data-action="review">Submit Review</button>
+            <button data-action="review">Vélemény beküldése</button>
           </div>
         </div>
       `;
@@ -4821,7 +4821,7 @@ window.addEventListener("message",function(ev){
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      try{ await sb.auth.signInNévtelenly(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -4849,7 +4849,7 @@ window.addEventListener("message",function(ev){
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Beküldés";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Törlés";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az admin Q&A-hoz kerülnek továbbításra.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az adminisztrátori kérdések-válaszokhoz kerülnek továbbításra.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -4934,7 +4934,7 @@ window.addEventListener("message",function(ev){
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("Delete failed (permission/policy)"); return; }
+            if(error){ alert("A törlés sikertelen (engedély/szabályzat)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -4973,7 +4973,7 @@ window.addEventListener("message",function(ev){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Server-side saving is disabled because the save settings (Supabase url/key) are not connected yet. When deployed to the web, it will connect automatically if SUPER_VARSAR.url/anonKey is configured.");
+        alert("A szerveroldali mentés le van tiltva, mert a mentési beállítások (Supabase url/key) még nincsenek csatlakoztatva. Webes közzétételkor automatikusan csatlakozik, ha a SUPER_VARSAR.url/anonKey be van állítva.");
         return;
       }
       const record = {
@@ -5038,7 +5038,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         h.appendChild(t); h.appendChild(x);
 
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az admin Q&A-hoz kerülnek továbbításra.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az adminisztrátori kérdések-válaszokhoz kerülnek továbbításra.</div>';
 
         var ce = document.createElement('p');
         ce.className = 'contact-email';

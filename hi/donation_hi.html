@@ -373,7 +373,7 @@
 }
 .compose-wrap .row-top .button{ margin:0; }
 .compose-wrap .row-top #btnOpenComposer{ order:1; }
-.compose-wrap .row-top #btnजमा करेंPost{ order:2; }
+.compose-wrap .row-top #btnSubmitPost{ order:2; }
 /* Keep 'पुष्टि' labels strictly horizontal (already set for .button.tiny) */
 
 /* Reinforce: 'पुष्टि' 버튼은 가로(수평) 표기 유지 */
@@ -644,7 +644,7 @@
 .compose-wrap .row-top .field-category{ order:1; }     /* श्रेणी(드롭다운) */
 .compose-wrap .row-top #btnOpenComposer{ order:2; }    /* लिखें */
 .compose-wrap .row-top #btnAttach{ order:3; }          /* संलग्नक(신규 버튼) */
-.compose-wrap .row-top #btnजमा करेंPost{ order:4; }      /* 글올리기 */
+.compose-wrap .row-top #btnSubmitPost{ order:4; }      /* 글올리기 */
 
 /* Hide legacy file/image pickers (compose only) */
 .compose-wrap .row-bottom .field-file,
@@ -678,7 +678,7 @@
   min-width:260px; max-width:50vw; flex:0 0 auto;     /* 막대 형태, 한 줄 유지 */
   overflow:hidden;
 }
-.compose-wrap .row-top #btnजमा करेंPost{ order:6; }     /* सहेजें(최종) */
+.compose-wrap .row-top #btnSubmitPost{ order:6; }     /* सहेजें(최종) */
 
 /* 칩 스타일(막대 내부) */
 .attach-preview .attach-chip{
@@ -700,7 +700,7 @@
 .compose-wrap .row-top #btnOpenComposer{ order:2; }   /* लिखें */
 .compose-wrap .row-top #btnAttach{ order:3; }         /* संलग्नक */
 .compose-wrap .row-top #attachPreview{ order:4; }     /* 미리보기 막대 */
-.compose-wrap .row-top #btnजमा करेंPost{ order:5; }     /* सहेजें */
+.compose-wrap .row-top #btnSubmitPost{ order:5; }     /* सहेजें */
 </style><style>
 /* === शीर्षक Preview Bar (between लिखें and संलग्नक) === */
 .compose-wrap .row-top #titlePreview{
@@ -713,7 +713,7 @@
 }
 .compose-wrap .row-top #btnAttach{ order:4; }
 .compose-wrap .row-top #attachPreview{ order:5; }
-.compose-wrap .row-top #btnजमा करेंPost{ order:6; }
+.compose-wrap .row-top #btnSubmitPost{ order:6; }
 
 .title-preview .tp-text{ font-size:.92rem; color:#111; }
 
@@ -722,7 +722,7 @@
 </style><style>
 /* === Compose row: place 'साफ़ करें' right after 최종 'सहेजें' === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; overflow:hidden; }
-.compose-wrap .row-top #btnजमा करेंPost{ order:6; }
+.compose-wrap .row-top #btnSubmitPost{ order:6; }
 .compose-wrap .row-top #btnAttachसाफ़ करें{ order:7; margin-left:6px; }
 .compose-wrap .row-top #attachName{ display:none !important; } /* 칩 UI 사용 */
 
@@ -747,7 +747,7 @@
 /* शीर्षक 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
 /* संलग्नक 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
 /* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
-/* सहेजें */               .compose-wrap .row-top #btnजमा करेंPost{ order:6 !important; }
+/* सहेजें */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
 /* साफ़ करें */             .compose-wrap .row-top #btnAttachसाफ़ करें{ order:7 !important; }
 </style><style>
 /* Smooth scroll in right-side topic lists */
@@ -1452,7 +1452,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "अभी तक कोई Q&A प्रविष्टि दर्ज नहीं हुई है";
+  content: "अभी तक कोई प्रश्नोत्तर प्रविष्टि दर्ज नहीं हुई है";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1470,7 +1470,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "अभी तक कोई Q&A प्रविष्टि दर्ज नहीं हुई है";
+  content: "अभी तक कोई प्रश्नोत्तर प्रविष्टि दर्ज नहीं हुई है";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -2384,14 +2384,14 @@ body > div.container,
 <a href="mediahub.html">🎬 मीडिया हब</a>
 <a href="tour.html">🧳 यात्रा · पर्यटन · ठहराव</a>
 <a href="literature/academic.html" style="display:none !important;">📚 साहित्य एवं अकादमिक आदान-प्रदान</a>
-<a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A Contact</a></nav>
+<a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn" aria-label="प्रश्नोत्तर संपर्क">💬 प्रश्नोत्तर संपर्क</a></nav>
 <!-- Main (불변 구조) -->
 <main class="main">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
-<button class="bc-tile orange" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">Donate</button>
+<button class="bc-tile orange" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">दान करें</button>
 </section>
 <section class="hero">
 <h2>💝 वैश्विक दान केंद्र 💝</h2>
@@ -2412,9 +2412,9 @@ body > div.container,
 <option value="env">पर्यावरण</option>
 <option value="etc">अन्य</option>
 </select>
-</label><button class="button small" id="btnAttach" type="button">संलग्नक</button><div aria-label="संलग्नक 미리보기" class="attach-preview" id="attachPreview"></div>
-<button class="button small" id="btnOpenComposer">लिखें</button><div aria-label="शीर्षक 미리보기" class="title-preview" id="titlePreview"><span class="tp-text">No title</span></div>
-<button class="button small accent" id="btnजमा करेंPost">सहेजें</button>
+</label><button class="button small" id="btnAttach" type="button">संलग्नक</button><div aria-label="संलग्नक पूर्वावलोकन" class="attach-preview" id="attachPreview"></div>
+<button class="button small" id="btnOpenComposer">लिखें</button><div aria-label="शीर्षक पूर्वावलोकन" class="title-preview" id="titlePreview"><span class="tp-text">कोई शीर्षक नहीं</span></div>
+<button class="button small accent" id="btnSubmitPost">सहेजें</button>
 <span id="attachName"></span>
 <button aria-label="첨부 제거 " class="button tiny" id="btnAttachसाफ़ करें" style="display:none;" type="button">साफ़ करें</button>
 <input id="postAttach" style="display:none;" type="file"/>
@@ -2439,7 +2439,7 @@ body > div.container,
 </section>
 <!-- (요청) 5줄 Feed -->
 <section class="feed-wrapper">
-<div class="feed-header"><h3 style="margin:0;">📺 Feed</h3></div>
+<div class="feed-header"><h3 style="margin:0;">📺 फ़ीड</h3></div>
 <div id="feedRows">
 
 <!-- ===== Donation Feed Rows (Final Clean Version) ===== -->
@@ -2502,13 +2502,13 @@ body > div.container,
 <aside class="right">
 <div class="panel cafe-link"><a aria-label="WAM NAVER Cafe पर जाएँ" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
-<button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">Donations</button>
+<button class="button" onclick="alert('दान प्रणाली शीघ्र जुड़ जाएगी!')" style="margin-bottom:8px; padding:5px 14px;">दान</button>
 <p><b>IESF (International Exchange Service Foundation)</b><br/>
         - सामान्य: NongHyup 301-0078-3333-51<br/>
-        - Foreign Currency: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
+        - विदेशी मुद्रा: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
 <p><b>WAM Foundation (World Aviation Mission Foundation)</b><br/>
         - सामान्य: Shinhan 100-026-331592<br/>
-        - Foreign Currency: Shinhan 180-005-931110<br/><span>   SWIFT: SHBKKRSE</span></p>
+        - विदेशी मुद्रा: Shinhan 180-005-931110<br/><span>   SWIFT: SHBKKRSE</span></p>
 </div>
 <div class="feed-wrapper" id="iesfFeed" style="flex:1; overflow-y:auto;">
 </div>
@@ -2543,7 +2543,7 @@ body > div.container,
 </div>
 
 <footer>
-  IGTC Global Hub © 2025 | International सामान्य Distribution Company<br/>
+  IGTC Global Hub © 2025 | International General Distribution Company<br/>
   50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Korea <br/>
 </footer>
 
@@ -2555,7 +2555,7 @@ body > div.container,
 <input id="composeशीर्षक" placeholder="शीर्षक" style="width:100%;"/>
 <textarea id="composeBody" placeholder="सामग्री दर्ज करें..." rows="8" style="width:100%; resize:vertical;"></textarea>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px;">
-<button class="button outline" id="btnDraftसहेजें" type="button">ड्राफ्ट सहेजें</button><button class="button outline" id="btnरद्द करें">रद्द करें</button>
+<button class="button outline" id="btnDraftसहेजें" type="button">ड्राफ्ट सहेजें</button><button class="button outline" id="btnCancel">रद्द करें</button>
 <button class="button" disabled="disabled" id="btnसहेजें" style=";display:none !important;">सहेजें</button>
 </div>
 </div>
@@ -2569,9 +2569,9 @@ body > div.container,
 
   const modal = $("#composerModal");
   const btnOpen = $("#btnOpenComposer");
-  const btnजमा करें = $("#btnजमा करेंPost");
+  const btnSubmitPost = $("#btnSubmitPost");
   const btnसहेजें = $("#btnसहेजें");
-  const btnरद्द करें = $("#btnरद्द करें");
+  const btnCancel = $("#btnCancel");
   const titleI = $("#composeशीर्षक");
   const bodyI = $("#composeBody");
   const catSel = $("#postश्रेणी");
@@ -2589,13 +2589,13 @@ body > div.container,
   function closeModal(){ modal.classList.add("hidden"); }
 
   btnOpen && btnOpen.addEventListener("click", openModal);
-  btnरद्द करें && btnरद्द करें.addEventListener("click", closeModal);
+  btnCancel && btnCancel.addEventListener("click", closeModal);
   // trigger hidden inputs and show names
   btnPickFile && btnPickFile.addEventListener("click", ()=> fileAttach && fileAttach.click());
   btnPickImage && btnPickImage.addEventListener("click", ()=> fileI && fileI.click());
   fileAttach && fileAttach.addEventListener("change", ()=>{ if(fileChosen){ fileChosen.textContent = fileAttach.files[0]?.name || ""; } });
   fileI && fileI.addEventListener("change", ()=>{ if(imgChosen){ imgChosen.textContent = fileI.files[0]?.name || ""; } });
-  btnजमा करें && btnजमा करें.addEventListener("click", ()=>{ if(btnसहेजें){ btnसहेजें.click(); } });
+  btnSubmitPost && btnSubmitPost.addEventListener("click", ()=>{ if(btnसहेजें){ btnसहेजें.click(); } });
 
   btnसहेजें && btnसहेजें.addEventListener("click", ()=>{
     const t = titleI?.value?.trim() || "(कोई शीर्षक नहीं)";
@@ -2610,7 +2610,7 @@ body > div.container,
         ${imgSrc ? `<div class="thumb" style="aspect-ratio:16/9; overflow:hidden; border-radius:6px; margin-bottom:6px;"><img src="${imgSrc}" style="width:100%; height:100%; object-fit:cover;"/></div>` : ""}
         <div class="title">${t}</div>
         <div class="meta">${new Date().toLocaleString()}</div>
-        <div class="preview" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
+        <div class="पूर्वावलोकन" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
       `;
       holder.prepend(item);
       if(attachLink){
@@ -2649,7 +2649,7 @@ body > div.container,
     if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
-        alert("Only images up to 2MB can be previewed directly. For large files, upload them to external storage and enter the link.");
+        alert("केवल 2MB तक की छवियाँ सीधे पूर्वावलोकन में दिखाई जा सकती हैं। बड़े फ़ाइलों के लिए उन्हें बाहरी स्टोरेज पर अपलोड करें और लिंक दर्ज करें।");
         imageLink = ""; imagePreviewObjectUrl = "";
       }else{
         imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
@@ -2666,7 +2666,7 @@ body > div.container,
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
-        alert("Only files up to 5MB can display their file name directly. For large files, please use only an external storage link.");
+        alert("केवल 5MB तक की फ़ाइलों का नाम सीधे दिखाया जा सकता है। बड़ी फ़ाइलों के लिए कृपया केवल बाहरी स्टोरेज लिंक का उपयोग करें।");
         attachLink = "";
       }else{
         attachLink = f.name; // 파일명만 기록
@@ -2738,7 +2738,7 @@ body > div.container,
   const attachPreview = $('#attachPreview');
   const clearBtn = $('#btnAttachसाफ़ करें');
   const legacyFile = $('#postFile');
-  const btnजमा करें = $('#btnजमा करेंPost');
+  const btnSubmitPost = $('#btnSubmitPost');
 
   let selectedFiles = [];
   function syncInputs(){
@@ -2801,7 +2801,7 @@ body > div.container,
     const b = (bodyI && bodyI.value.trim()) || '(कोई सामग्री नहीं)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
+    if(!holder){ alert('समाचार अनुभाग नहीं मिला।'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2809,7 +2809,7 @@ body > div.container,
     item.innerHTML = `
       <div class="title">${t}</div>
       <div class="meta">${new Date().toLocaleString()}</div>
-      <div class="preview" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
+      <div class="पूर्वावलोकन" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
     `;
 
     if(selectedFiles.length){
@@ -2831,7 +2831,7 @@ body > div.container,
     const canहटाएँ = (USER_ROLE==='admin' || USER_ROLE==='writer');
     if(canहटाएँ) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 हटाएँ하시겠습니까?')) return;
+      if(!confirm('क्या आप इस समाचार को हटाना चाहते हैं?')) return;
       item.remove();
     });
 
@@ -2847,8 +2847,8 @@ body > div.container,
     closeModal();
   }
 
-  if(btnजमा करें){
-    btnजमा करें.addEventListener('click', (e)=>{
+  if(btnSubmitPost){
+    btnSubmitPost.addEventListener('click', (e)=>{
       e.preventDefault();
       handleUnifiedसहेजें();
     });
@@ -2946,8 +2946,8 @@ body > div.container,
   const bodyI  = $('#composeBody');
   const modal  = $('#composerModal');
   const btnDraft = $('#btnDraftसहेजें');
-  const btnरद्द करें = $('#btnरद्द करें');
-  const btnजमा करें = $('#btnजमा करेंPost');
+  const btnCancel = $('#btnCancel');
+  const btnSubmitPost = $('#btnSubmitPost');
   const titlePreview = $('#titlePreview');
   const tpText = titlePreview ? titlePreview.querySelector('.tp-text') : null;
 
@@ -2956,7 +2956,7 @@ body > div.container,
   function updateशीर्षकPreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || ''No title';';
+    tpText.textContent = t || 'कोई शीर्षक नहीं';
   }
 
   // live typing updates preview
@@ -2977,8 +2977,8 @@ body > div.container,
   }
 
   // रद्द करें: clear draft and input fields, and clear preview
-  if(btnरद्द करें){
-    btnरद्द करें.addEventListener('click', ()=>{
+  if(btnCancel){
+    btnCancel.addEventListener('click', ()=>{
       draft.title=''; draft.body='';
       if(titleI) titleI.value='';
       if(bodyI) bodyI.value='';
@@ -2988,8 +2988,8 @@ body > div.container,
 
   // Before final save, if a draft exists (and modal may be closed/empty),
   // write draft back into inputs so existing save handler picks it up.
-  if(btnजमा करें){
-    btnजमा करें.addEventListener('click', ()=>{
+  if(btnSubmitPost){
+    btnSubmitPost.addEventListener('click', ()=>{
       if((draft.title && draft.title.trim()) || (draft.body && draft.body.trim())){
         if(titleI) titleI.value = draft.title || '';
         if(bodyI)  bodyI.value  = draft.body  || '';
@@ -3056,7 +3056,7 @@ body > div.container,
     btn.style.cssText='margin-top:6px; display:none;';
     if(canShowहटाएँFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 हटाएँ하시겠습니까?')) return;
+      if(!confirm('क्या आप इस समाचार को हटाना चाहते हैं?')) return;
       item.remove();
     });
     item.appendChild(btn);
@@ -3129,7 +3129,7 @@ body > div.container,
 <div id="npBody" style="margin-top:8px; font-size:.95rem; color:#222; white-space:pre-wrap;"></div>
 <div id="npAttach" style="margin-top:8px; font-size:.9rem; color:#374151;"></div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
-<button class="button outline" id="npबंद करें" type="button">बंद करें</button>
+<button class="button outline" id="npClose" type="button">बंद करें</button>
 </div>
 </div></div><script>
 (function(){
@@ -3171,10 +3171,10 @@ body > div.container,
   const npTime = document.getElementById('npTime');
   const npBody = document.getElementById('npBody');
   const npAttach = document.getElementById('npAttach');
-  const npबंद करें = document.getElementById('npबंद करें');
+  const npClose = document.getElementById('npClose');
   function openModal(){ modal.style.display='flex'; }
   function closeModal(){ modal.style.display='none'; }
-  npबंद करें && npबंद करें.addEventListener('click', closeModal);
+  npClose && npClose.addEventListener('click', closeModal);
   document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
   modal && modal.addEventListener('click', e=>{ if(e.target===modal) closeModal(); });
 
@@ -3206,13 +3206,13 @@ body > div.container,
 })();
 </script><div id="editNewsModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 680px); max-height:78vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 style="margin:0; font-size:1.05rem;">लिखें 편집</h3>
+<h3 style="margin:0; font-size:1.05rem;">लेखन संपादित करें</h3>
 <div id="enInfo" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
 <label style="font-size:.85rem;">शीर्षक</label>
 <input id="enशीर्षक" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;" type="text"/>
-<label style="font-size:.85rem;">Content</label>
+<label style="font-size:.85rem;">सामग्री</label>
 <textarea id="enBody" rows="8" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;"></textarea>
 </div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
@@ -3257,7 +3257,7 @@ body > div.container,
       badge.setAttribute('translate','no');
       header.appendChild(badge);
     }
-    badge.textContent = `Edited · ${tsStr}`;
+    badge.textContent = `संपादित · ${tsStr}`;
   }
 
   // On load, restore edited badge for admin/author only
@@ -3400,7 +3400,7 @@ body > div.container,
     let btnDel  = footer.querySelector('.delete-post');
     if(!btnEdit){
       btnEdit = document.createElement('button');
-      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
+      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='संपादित करें';
       footer.appendChild(btnEdit);
       btnEdit.addEventListener('click', (e)=>{
         e.stopPropagation();
@@ -3421,7 +3421,7 @@ body > div.container,
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('이 소식을 हटाएँ하시겠습니까?')) return;
+        if(!confirm('क्या आप इस समाचार को हटाना चाहते हैं?')) return;
         item.remove();
       });
     }
@@ -3601,7 +3601,7 @@ body > div.container,
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'Content';
+    if(p) p.textContent = 'सामग्री';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -3699,7 +3699,7 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("ब्लॉकचेन प्रोसेसिंग अनुरोध पूरा हुआ: " + (j.txHash||"대기")); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("ब्लॉकचेन प्रोसेसिंग अनुरोध पूरा हुआ: " + (j.txHash||"प्रतीक्षारत")); }
       else { alert("ब्लॉकचेन प्रोसेसिंग विफल"); }
     }catch(e){ console.warn(e); alert("नेटवर्क त्रुटि"); }
   };
@@ -3824,8 +3824,8 @@ body > div.container,
 <!-- IGDC minimal Donate UI (non-invasive) -->
 
 <div class="donation-inline">
-<input aria-label="Donation amount (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
-<button class="bc-tile orange" id="btnDonate">Donate</button>
+<input aria-label="दान राशि (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
+<button class="bc-tile orange" id="btnDonate">दान करें</button>
 </div>
 <script>
 (function(){
@@ -3855,7 +3855,7 @@ body > div.container,
   // === 안내 문구 ===
   const note = document.createElement("div");
   note.className = "donation-note";
-  note.textContent = "※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से Admin Q&A को भेजे जाते हैं।";
+  note.textContent = "※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से प्रशासक प्रश्नोत्तर को भेजे जाते हैं।";
   donationDiv.appendChild(note);
 
   // === 구분선 ===
@@ -3871,12 +3871,12 @@ body > div.container,
   accountBox.innerHTML = `
     <div><b>IESF (International Exchange Service Foundation)</b></div>
     <div>सामान्य: 농협 301-0078-3333-51</div>
-    <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
+    <div>विदेशी मुद्रा: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
     <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
     <div>सामान्य: 신한 100-026-331592</div>
-    <div>Foreign Currency: Shinhan 180-005-931110</div>
+    <div>विदेशी मुद्रा: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
   donationDiv.appendChild(accountBox);
@@ -3889,7 +3889,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      alert(`चयनित राशि: ₩${Number(amt).toLocaleString()}\n\nकृपया नीचे दिए गए खाते में स्थानांतरित करें।`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -4279,7 +4279,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      try{ await sb.auth.signInअनामly(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -4305,16 +4305,16 @@ document.addEventListener('DOMContentLoaded', function(){
     const lA = el("label"); lA.textContent="उत्तर";
     const tA = el("textarea","igdc-qa-text a"); tA.placeholder="कृपया थोड़ी प्रतीक्षा करें। उत्तर शीघ्र प्रदान किया जाएगा।";
     const actions = el("div","igdc-qa-actions");
-    const btnजमा करें = el("button","igdc-qa-btn primary"); btnजमा करें.textContent="जमा करें";
-    const btnसाफ़ करें = el("button","igdc-qa-btn muted"); btnसाफ़ करें.textContent="साफ़ करें";
-    const note = el("div","igdc-qa-note"); note.textContent="※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से Admin Q&A को भेजे जाते हैं।";
+    const btnSubmitPost = el("button","igdc-qa-btn primary"); btnSubmitPost.textContent="जमा करें";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="साफ़ करें";
+    const note = el("div","igdc-qa-note"); note.textContent="※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से प्रशासक प्रश्नोत्तर को भेजे जाते हैं।";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
 	const ce = el("p","contact-email");
     ce.innerHTML = 'मुख्य ईमेल: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
     body.append(ce);
-    actions.append(btnजमा करें, btnसाफ़ करें);
+    actions.append(btnSubmitPost, btnClear);
     panel.append(header, body);
     modal.append(backdrop, panel);
     document.body.append(modal);
@@ -4362,9 +4362,9 @@ document.addEventListener('DOMContentLoaded', function(){
     backdrop.addEventListener("click", closeModal);
     document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
 
-    btnसाफ़ करें.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
-    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnजमा करें.click(); }});
-    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnजमा करें.click(); }});
+    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
+    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmitPost.click(); }});
+    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmitPost.click(); }});
 
     async function fetchThreads(){
       const sb = await ensureSupabase(); if(!sb) return;
@@ -4381,7 +4381,7 @@ document.addEventListener('DOMContentLoaded', function(){
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (प्रतीक्षारत)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "एडमिन अनुरोध":"सामान्य";
@@ -4445,7 +4445,7 @@ document.addEventListener('DOMContentLoaded', function(){
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
-    btnजमा करें.addEventListener("click", submit);
+    btnSubmitPost.addEventListener("click", submit);
 
     // realtime refresh
     (async()=>{ try{
@@ -4503,7 +4503,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         bk=document.createElement('div');
         bk.id='drawerBackdrop';
         bk.className='drawer-backdrop';
-        document.body/*__KILL__*/ appendChild_DISABLED(bk);
+        document.body.appendChild(bk);
         bk.addEventListener('click',close,{passive:true});
       }
     }
@@ -4998,7 +4998,7 @@ window.addEventListener("message",function(ev){
     modal.style.display = 'none';
   }
 
-  const closeBtn = modal ? (modal.querySelector('.close') || modal.querySelector('#npबंद करें')) : null;
+  const closeBtn = modal ? (modal.querySelector('.close') || modal.querySelector('#npClose')) : null;
   if(closeBtn){
     closeBtn.addEventListener('click', closeModal);
   }
@@ -5133,7 +5133,7 @@ window.addEventListener("message",function(ev){
 
   // 완전 सहेजें 버튼 클릭 후 Supabase 동기화 시도
   document.addEventListener('click', function(e){
-    const btn = e.target.closest('#btnजमा करेंPost');
+    const btn = e.target.closest('#btnSubmitPost');
     if(!btn) return;
     setTimeout(function(){
       const catSel = document.getElementById('postश्रेणी');
@@ -5514,9 +5514,9 @@ document.addEventListener("DOMContentLoaded",function(){
               <button type="button" style="background:#2563eb;color:#fff;border:none;border-radius:10px;padding:10px 14px;cursor:pointer;">जमा करें</button>
               <button type="button" data-close style="background:#9ca3af;color:#fff;border:none;border-radius:10px;padding:10px 14px;cursor:pointer;">साफ़ करें</button>
             </div>
-            <div style="font-size:12px;color:#666;">※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से एडमिन Q&A को भेजे जाते हैं।</div>
+            <div style="font-size:12px;color:#666;">※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से एडमिन प्रश्नोत्तर को भेजे जाते हैं।</div>
             <p style="font-size:12px;color:#666;">मुख्य ईमेल: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>
-            <div style="padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;">अभी तक कोई Q&A प्रविष्टि दर्ज नहीं हुई है</div>
+            <div style="padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;">अभी तक कोई प्रश्नोत्तर प्रविष्टि दर्ज नहीं हुई है</div>
           </div>
         </div>`;
       document.body.appendChild(modal);

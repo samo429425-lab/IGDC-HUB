@@ -534,7 +534,7 @@ html, body {
 
 .sidebar{ padding-top: 0 !important; position: sticky; top: var(--top-pad) !important;}
 
-/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+/* Sidebar Fragen und Antworten link follows existing .sidebar a style; this extra ensures visibility if needed */
 #qnaOpenBtn{ display:block; text-decoration:none;}
 
 .sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
@@ -621,7 +621,7 @@ html, body {
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Es sind noch keine Q&A-Einträge vorhanden";
+  content: "Es sind noch keine Fragen und Antworten-Einträge vorhanden";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -934,7 +934,7 @@ html, body {
 <a href="mediahub_de.html">🎬 Medien-Hub</a>
 <a href="tour_de.html">🧳 Reisen · Tourismus · Unterkunft</a>
 <a href="literature_academic">📚 Literatur- & Akademischer Austausch</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A Anfrage</a></div>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Fragen und Antworten</a></div>
 <div class="main-content">
 <section class="section-blockchain">
 <a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
@@ -1112,7 +1112,7 @@ html, body {
   --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
   --blue:#2563eb; --muted:#9ca3af;
 }
-/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+/* Sidebar Fragen und Antworten link follows existing .sidebar a style; this extra ensures visibility if needed */
 #qnaOpenBtn{ display:block; text-decoration:none; }
 /* Modal near the left sidebar, with smooth transitions */
 .igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
@@ -1169,7 +1169,7 @@ a[href^="mailto:"]:hover {
 }
 </style>
 <style id="qna-brand-only">
-/* === Q&A sidebar link color only (no other changes) === */
+/* === Fragen und Antworten sidebar link color only (no other changes) === */
 :root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
 .sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
   display:block;
@@ -1181,7 +1181,7 @@ a[href^="mailto:"]:hover {
 .sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
 </style>
 <script id="igdc-qa-safety-bootstrap">
-// Ensures the Q&A popup opens when clicking the sidebar link,
+// Ensures the Fragen und Antworten popup opens when clicking the sidebar link,
 // even if Supabase URL/Key are not configured yet.
 (function(){
   if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
@@ -1202,7 +1202,7 @@ a[href^="mailto:"]:hover {
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Fragen und Antworten';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
@@ -1310,7 +1310,7 @@ a[href^="mailto:"]:hover {
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      console.warn("[Fragen und Antworten] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -1336,7 +1336,7 @@ a[href^="mailto:"]:hover {
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
+    const title = el("div","igdc-qa-title"); title.textContent = "Fragen und Antworten";
     const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Schließen");
     header.append(title, close);
 
@@ -1348,7 +1348,7 @@ a[href^="mailto:"]:hover {
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Einreichen";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Löschen";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Einfache Fragen werden sofort von der KI beantwortet. Technische/Fehler-/Betriebsbezogene Anfragen werden automatisch an die Admin-Q&A weitergeleitet.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Einfache Fragen werden sofort von der KI beantwortet. Technische/Fehler-/Betriebsbezogene Anfragen werden automatisch an die Adminbereich für Fragen und Antworten weitergeleitet.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -1502,7 +1502,7 @@ a[href^="mailto:"]:hover {
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Fragen und Antworten] auth 초기화 실패:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -1530,9 +1530,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
           var b=document.createElement('div'); b.className='igdc-qa-backdrop';
           var p=document.createElement('div'); p.className='igdc-qa-panel';
           var h=document.createElement('div'); h.className='igdc-qa-header';
-          var t=document.createElement('div'); t.textContent='Q&A';
+          var t=document.createElement('div'); t.textContent='Fragen und Antworten';
           var x=document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
-          var body=document.createElement('div'); body.className='igdc-qa-body'; body.textContent='Q&A-Verbindung bereit';
+          var body=document.createElement('div'); body.className='igdc-qa-body'; body.textContent='Fragen und Antworten-Verbindung bereit';
           h.appendChild(t); h.appendChild(x); p.appendChild(h); p.appendChild(body);
           m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
           function close(){ m.classList.remove('open'); }
@@ -1601,7 +1601,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Fragen und Antworten';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
@@ -1703,7 +1703,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Fragen und Antworten';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
@@ -1719,7 +1719,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       body.appendChild(ce);
 
       
-      // (2) Q&A threads list container
+      // (2) Fragen und Antworten threads list container
       var listWrap = document.createElement('div');
       listWrap.className = 'igdc-qa-threads qna-list';
       // Placeholder item container; IGDC_QA loader will populate. Empty-state CSS will show if nothing.

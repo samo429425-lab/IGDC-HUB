@@ -5,7 +5,7 @@
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
-<title>Media Hub | Interfaccia completa</title>
+<title>Hub media | Interfaccia completa</title>
 <style>
   :root {
     --bg:#0f1116;
@@ -397,7 +397,7 @@ html, body {
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Non è stata ancora registrata alcuna voce Q&A.";
+  content: "Non sono ancora stati pubblicati elementi di domande e risposte";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -740,9 +740,9 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
       if (txt && sel && btn) { f.classList.add('igdc-inline-search'); break; }
     }
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyInlineSearch;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyInlineSearch);
   else applyInlineSearch();
-  window.addEventListener('resize', applyInlineSearch;
+  window.addEventListener('resize', applyInlineSearch);
 })();
 </script>
 <style id="igdc-card-and-hero-hard-constants">
@@ -1184,10 +1184,10 @@ html, body {
 <a href="networkhub.html">🛒 Hub del mercato</a>
 <a href="distributionhub.html">🏭 Hub di distribuzione</a>
 <a href="socialnetwork.html">📢 Rete sociale</a>
-<a href="mediahub.html">🎬 Media Hub</a>
+<a href="mediahub.html">🎬 Hub media</a>
 <a href="tour.html">🧳 Viaggi · Turismo · Alloggio</a>
 <a href="literature_academic.html">📚 Scambio letterario e accademico</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Richiesta Q&A</a></aside>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Domande e risposte</a></aside>
 <main>
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
@@ -3707,11 +3707,11 @@ function handleVideoSearch(e){
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent="Domande e risposte";
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">※ Le domande semplici ricevono una risposta immediata dall’IA. I problemi tecnici, gli errori o le questioni operative vengono inoltrati automaticamente al Q&A Admin.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">※ Le domande semplici ricevono una risposta immediata dall’IA. I problemi tecnici, gli errori o le questioni operative vengono inoltrati automaticamente al Domande e risposte Admin.</div>';
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
         document.body.appendChild(m);
@@ -3815,7 +3815,7 @@ function handleVideoSearch(e){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase credentials/library not configured: the UI is visible, but saving is disabled.");
+      console.warn("[Domande e risposte] Supabase credentials/library not configured: the UI is visible, but saving is disabled.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -3841,7 +3841,7 @@ function handleVideoSearch(e){
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
+    const title = el("div","igdc-qa-title"); title.textContent = "Domande e risposte";
     const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Chiudi");
     header.append(title, close);
 
@@ -3853,7 +3853,7 @@ function handleVideoSearch(e){
     const actions = el("div","igdc-qa-actions");
     const btnInvia = el("button","igdc-qa-btn primary"); btnInvia.textContent="Invia";
     const btnCancella = el("button","igdc-qa-btn muted"); btnCancella.textContent="Cancella";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Le domande semplici ricevono una risposta immediata dall’IA. I problemi tecnici, gli errori o le questioni operative vengono inoltrati automaticamente al Q&A Admin.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Le domande semplici ricevono una risposta immediata dall’IA. I problemi tecnici, gli errori o le questioni operative vengono inoltrati automaticamente al Domande e risposte Admin.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -3926,7 +3926,7 @@ function handleVideoSearch(e){
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
+        const q = el("div","igdc-qa-thread-q"); q.textContent="D. "+(row.question||"");
         const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("R. "+row.answer):"R. (In attesa)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
@@ -4010,7 +4010,7 @@ function handleVideoSearch(e){
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth initialization failed:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Domande e risposte] auth initialization failed:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -4492,7 +4492,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     var title = document.createElement('div');
     title.className = 'igdc-qa-title';
-    title.textContent = 'Q&A';
+    title.textContent = "Domande e risposte";
 
     var closeBtn = document.createElement('button');
     closeBtn.className = 'igdc-qa-close';
@@ -4505,7 +4505,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     body.className = 'igdc-qa-body';
 
     body.innerHTML =
-      '<div class="igdc-qa-note">※ Le domande semplici ricevono una risposta immediata dall’IA. I problemi tecnici, gli errori o le questioni operative vengono inoltrati automaticamente al Q&A Admin.</div>';
+      '<div class="igdc-qa-note">※ Le domande semplici ricevono una risposta immediata dall’IA. I problemi tecnici, gli errori o le questioni operative vengono inoltrati automaticamente al Domande e risposte Admin.</div>';
 
     var email = document.createElement('p');
     email.className = 'contact-email';
@@ -4567,36 +4567,20 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </script>
 <script id="igdc-qa-email-ensure">
 (function(){
-  if (window.__IGDC_QA_EMAIL_ENSURE__) return;
-  window.__IGDC_QA_EMAIL_ENSURE__ = true;
-
-  var CONTACT_HTML = 'Email di contatto: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-
-  function stripFooterEmail(){
+  if (window.__IGDC_QA_EMAIL_ENSURE__) return; window.__IGDC_QA_EMAIL_ENSURE__ = true;
+  var CONTACT_HTML = "Email di contatto: <a href=\"mailto:igdcplatform@gmail.com\">igdcplatform@gmail.com</a>";
+  function ensureContact(){
     try{
-      var footers = document.querySelectorAll('footer');
-      footers.forEach(function(f){
-        // Remove any mailto links
-        f.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
-          var parent = a.parentNode;
-          if(parent){
-            parent.removeChild(a);
-            var html = parent.innerHTML;
-            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
-            html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
-            parent.innerHTML = html;
-          }
-        });
-        // Remove any plain-text "Email di contatto: ..." remnants
-        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
+      var bodies=document.querySelectorAll('.igdc-qa-body');
+      bodies.forEach(function(body){
+        if(body.querySelector('.contact-email')) return;
+        var p=document.createElement('p'); p.className='contact-email'; p.innerHTML=CONTACT_HTML; body.appendChild(p);
       });
     }catch(e){}
   }
-
-  function ensureModal(){
-    var modal = document.querySelector('.igdc-qa-modal');
-    if(!modal){
-      // Create minimal modal sk
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', ensureContact, {once:true}); else ensureContact();
+})();
+</script>
 <script id="igtc-mobile-overhaul-FULL-js">
 (function(){
   function qsa(sel){ return Array.prototype.slice.call(document.querySelectorAll(sel)); }
@@ -4654,7 +4638,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     }else{
       var url = getCardImageURL(card) || 'about:blank';
       var img = document.createElement('img');
-      img.src = url; img.alt = 'Preview';
+      img.src = url; img.alt = 'Anteprima';
       img.style.width='100%'; img.style.height='100%'; img.style.objectFit='cover';
       inner.appendChild(img);
     }

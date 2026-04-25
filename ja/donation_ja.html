@@ -746,7 +746,7 @@
 /* 書く */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
 /* Title 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
 /* 添付ファイル 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
-/* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
+/* 添付 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
 /* 保存 */               .compose-wrap .row-top #btn登録Post{ order:6 !important; }
 /* 削除 */             .compose-wrap .row-top #btnAttach削除{ order:7 !important; }
 </style><style>
@@ -1452,7 +1452,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "まだQ&Aの登録内容はありません";
+  content: "質問と回答の投稿はまだありません";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1470,7 +1470,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "まだQ&Aの登録内容はありません";
+  content: "質問と回答の投稿はまだありません";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -2384,18 +2384,18 @@ body > div.container,
 <a href="mediahub.html">🎬 メディアハブ</a>
 <a href="tour.html">🧳 旅行・観光・宿泊</a>
 <a href="literature/academic.html" style="display:none !important;">📚 文学・学術交流</a>
-<a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A Contact</a></nav>
+<a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 質問と回答</a></nav>
 <!-- Main (불변 구조) -->
 <main class="main">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
-<button class="bc-tile orange" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">Donate</button>
+<button class="bc-tile orange" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">寄付</button>
 </section>
 <section class="hero">
 <h2>💝 グローバル寄付ハブ 💝</h2>
-<p>The support system for IESF and the WAM Foundation begins here.</p>
+<p>IESFおよびWAM Foundationの支援システムはここから始まります。</p>
 </section>
 <section class="panel" id="top書くPanel" style="margin-bottom:20px;">
 <textarea id="topPostBody" placeholder="本文を入力してください..." rows="4" style="padding-top:22px; padding-bottom:12px; font-weight:600;">ここは、IGDCグローバルプラットフォームグループが支援する空間であり、WAM Foundation（World Aviation Mission Foundation）の尊い働きとニュースを分かち合い、IESFのニュースを知らせ共有し、さらにさまざまなNGOやボランティア団体のニュースを共に分かち合うための場です。</textarea>
@@ -2413,10 +2413,10 @@ body > div.container,
 <option value="etc">その他</option>
 </select>
 </label><button class="button small" id="btnAttach" type="button">添付ファイル</button><div aria-label="添付ファイル 미리보기" class="attach-preview" id="attachPreview"></div>
-<button class="button small" id="btnOpenComposer">書く</button><div aria-label="Title 미리보기" class="title-preview" id="titlePreview"><span class="tp-text">タイトルなし</span></div>
+<button class="button small" id="btnOpenComposer">書く</button><div aria-label="タイトル preview" class="title-preview" id="titlePreview"><span class="tp-text">タイトルなし</span></div>
 <button class="button small accent" id="btn登録Post">保存</button>
 <span id="attachName"></span>
-<button aria-label="첨부 제거 " class="button tiny" id="btnAttach削除" style="display:none;" type="button">削除</button>
+<button aria-label="添付を削除" class="button tiny" id="btnAttach削除" style="display:none;" type="button">削除</button>
 <input id="postAttach" style="display:none;" type="file"/>
 </div>
 <div class="row row-bottom">
@@ -2439,7 +2439,7 @@ body > div.container,
 </section>
 <!-- (요청) 5줄 Feed -->
 <section class="feed-wrapper">
-<div class="feed-header"><h3 style="margin:0;">📺 Feed</h3></div>
+<div class="feed-header"><h3 style="margin:0;">📺 フィード</h3></div>
 <div id="feedRows">
 
 <!-- ===== Donation Feed Rows (Final Clean Version) ===== -->
@@ -2598,8 +2598,8 @@ body > div.container,
   btn登録 && btn登録.addEventListener("click", ()=>{ if(btn保存){ btn保存.click(); } });
 
   btn保存 && btn保存.addEventListener("click", ()=>{
-    const t = titleI?.value?.trim() || "(No Title)";
-    const b = bodyI?.value?.trim() || "(No Content)";
+    const t = titleI?.value?.trim() || "(タイトルなし)";
+    const b = bodyI?.value?.trim() || "(内容なし)";
     const cat = catSel?.value || "etc";
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(holder){
@@ -2617,7 +2617,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">첨부 링크</a>` : `첨부: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">添付リンク</a>` : `添付: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2628,7 +2628,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "첨부: " + fileAttach.files[0].name;
+        att.textContent = "添付: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2691,7 +2691,7 @@ body > div.container,
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '개 파일');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '個のファイル');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2762,7 +2762,7 @@ body > div.container,
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 제거'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','添付を削除'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
@@ -2797,8 +2797,8 @@ body > div.container,
   function closeModal(){ modal && modal.classList.add('hidden'); }
 
   function handleUnified保存(){
-    const t = (titleI && titleI.value.trim()) || '(No Title)';
-    const b = (bodyI && bodyI.value.trim()) || '(No Content)';
+    const t = (titleI && titleI.value.trim()) || '(タイトルなし)';
+    const b = (bodyI && bodyI.value.trim()) || '(内容なし)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
@@ -2818,7 +2818,7 @@ body > div.container,
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = '첨부: ' + f.name;
+        li.textContent = '添付: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
@@ -2898,13 +2898,13 @@ body > div.container,
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '개 파일');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '個のファイル');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 모두 제거'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','すべての添付を削除'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attachPreview.appendChild(chip);
@@ -2956,7 +2956,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || ''タイトルなし';';
+    tpText.textContent = t || "タイトルなし";
   }
 
   // live typing updates preview
@@ -3019,7 +3019,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'Title Not entered';
+    tpText.textContent = t || 'タイトルなし';
   }
 
   if(btnDraft){
@@ -3129,7 +3129,7 @@ body > div.container,
 <div id="npBody" style="margin-top:8px; font-size:.95rem; color:#222; white-space:pre-wrap;"></div>
 <div id="npAttach" style="margin-top:8px; font-size:.9rem; color:#374151;"></div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
-<button class="button outline" id="npClose" type="button">Close</button>
+<button class="button outline" id="npClose" type="button">閉じる</button>
 </div>
 </div></div><script>
 (function(){
@@ -3199,20 +3199,20 @@ body > div.container,
     npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">添付</div>' + attachHtml) : '';
 
     openModal();
   }, true);
 })();
 </script><div id="editNewsModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 680px); max-height:78vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 style="margin:0; font-size:1.05rem;">書く 편집</h3>
+<h3 style="margin:0; font-size:1.05rem;">作成 / 編集</h3>
 <div id="enInfo" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
-<label style="font-size:.85rem;">Title</label>
+<label style="font-size:.85rem;">タイトル</label>
 <input id="enTitle" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;" type="text"/>
-<label style="font-size:.85rem;">Content</label>
+<label style="font-size:.85rem;">内容</label>
 <textarea id="enBody" rows="8" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;"></textarea>
 </div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
@@ -3595,13 +3595,13 @@ body > div.container,
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
 
     const t = tpl.querySelector('.card-title');
-    if(t) t.textContent = 'Title';
+    if(t) t.textContent = 'タイトル';
 
     const m = tpl.querySelector('.card-meta');
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'Content';
+    if(p) p.textContent = '内容';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -3681,7 +3681,7 @@ body > div.container,
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
       if (res.ok){ alert("The purchase request has been received."); } else { alert("Purchase request failed"); }
-    }catch(e){ console.warn(e); alert("Network error"); }
+    }catch(e){ console.warn(e); alert("ネットワークエラー"); }
   };
 
   // 정산
@@ -3690,7 +3690,7 @@ body > div.container,
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
       if (res.ok){ alert("The settlement request has been received."); } else { alert("Settlement request failed"); }
-    }catch(e){ console.warn(e); alert("Network error"); }
+    }catch(e){ console.warn(e); alert("ネットワークエラー"); }
   };
 
   // (옵션) Web3/블록체인 액션 – 서버 프록시 전용
@@ -3699,9 +3699,9 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Blockchain processing request completed: " + (j.txHash||"대기")); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("ブロックチェーン処理リクエストが完了しました: " + (j.txHash||"대기")); }
       else { alert("Blockchain processing failed"); }
-    }catch(e){ console.warn(e); alert("Network error"); }
+    }catch(e){ console.warn(e); alert("ネットワークエラー"); }
   };
 })();
 </script>
@@ -3825,7 +3825,7 @@ body > div.container,
 
 <div class="donation-inline">
 <input aria-label="Donation amount (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
-<button class="bc-tile orange" id="btnDonate">Donate</button>
+<button class="bc-tile orange" id="btnDonate">寄付</button>
 </div>
 <script>
 (function(){
@@ -3855,7 +3855,7 @@ body > div.container,
   // === 안내 문구 ===
   const note = document.createElement("div");
   note.className = "donation-note";
-  note.textContent = "※ 簡単な質問にはAIがすぐに回答します。技術・エラー・運営関連の内容は管理者Q&Aへ自動転送されます。";
+  note.textContent = "※ 簡単な質問にはAIがすぐに回答します。技術・エラー・運営関連の内容は管理者質問と回答へ自動転送されます。";
   donationDiv.appendChild(note);
 
   // === 구분선 ===
@@ -3889,7 +3889,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      alert(`選択した金額: ₩${Number(amt).toLocaleString()}\n\n下記口座にお振り込みください。`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -3918,12 +3918,12 @@ body > div.container,
 <script>(function(){try{document.querySelectorAll(".donation-inline,.donation-buttons").forEach(function(n){n.remove();});}catch(e){}})();</script>
 <div aria-hidden="true" class="donate-modal-backdrop" id="donateModalBackdrop">
 <div aria-labelledby="donateModalTitle" aria-modal="true" class="donate-modal" role="dialog">
-<h3 id="donateModalTitle">Select a Donation Organization</h3>
+<h3 id="donateModalTitle">寄付先団体を選択</h3>
 <div class="donate-actions">
-<button data-org="IESF" type="button">Donate to IESF</button>
-<button data-org="WAM" type="button">Donate to WAM</button>
+<button data-org="IESF" type="button">IESFに寄付</button>
+<button data-org="WAM" type="button">WAMに寄付</button>
 </div>
-<button class="donate-close" type="button">Close</button>
+<button class="donate-close" type="button">閉じる</button>
 </div>
 </div>
 <script id="donate-modal-js">
@@ -4269,7 +4269,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 保存은 비활성화됩니다.");
+      console.warn("[質問と回答] Supabase 자격/라이브러리 미설정: UI는 표시되지만 保存은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -4295,7 +4295,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
+    const title = el("div","igdc-qa-title"); title.textContent = "質問と回答";
     const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
     header.append(title, close);
 
@@ -4307,7 +4307,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const actions = el("div","igdc-qa-actions");
     const btn登録 = el("button","igdc-qa-btn primary"); btn登録.textContent="登録";
     const btn削除 = el("button","igdc-qa-btn muted"); btn削除.textContent="削除";
-    const note = el("div","igdc-qa-note"); note.textContent="※ 簡単な質問にはAIがすぐに回答します。技術・エラー・運営関連の内容は管理者Q&Aへ自動転送されます。";
+    const note = el("div","igdc-qa-note"); note.textContent="※ 簡単な質問にはAIがすぐに回答します。技術・エラー・運営関連の内容は管理者質問と回答へ自動転送されます。";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -4380,8 +4380,8 @@ document.addEventListener('DOMContentLoaded', function(){
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
+        const q = el("div","igdc-qa-thread-q"); q.textContent="質問: "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("回答: "+row.answer):"回答: (保留中)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "Admin Request":"General";
@@ -4464,7 +4464,7 @@ document.addEventListener('DOMContentLoaded', function(){
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth initialization failed:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[質問と回答] auth initialization failed:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -4503,7 +4503,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         bk=document.createElement('div');
         bk.id='drawerBackdrop';
         bk.className='drawer-backdrop';
-        document.body/*__KILL__*/ appendChild_DISABLED(bk);
+        document.body.appendChild(bk);
         bk.addEventListener('click',close,{passive:true});
       }
     }
@@ -4592,7 +4592,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
   /* Optional close affordance */
   .card.expanded::after, .thumb.expanded::after{
-    content: "Close";
+    content: "閉じる";
     position: absolute; top: 8px; right: 12px;
     padding: 6px 10px; border-radius: 14px;
     background: rgba(0,0,0,.5); color:#fff; font-size: 12px;
@@ -4734,7 +4734,7 @@ window.addEventListener("message",function(ev){
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
                   + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>決済QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">閉じる</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -5067,12 +5067,12 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npTitle.textContent = title || 'Title 없음';
+    npTitle.textContent = title || 'タイトルなし';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(등록된 본문이 없습니다.)';
+    npBody.textContent = body || '(' + '登録された本文がありません。' + ')';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">添付</div>' + attachHtml
         : '';
     }
 
@@ -5157,7 +5157,7 @@ window.addEventListener("message",function(ev){
   display: none !important;
 }
 
-/* 첨부 여부 아이콘 */
+/* 添付 여부 아이콘 */
 .right .topic-panel .list .item.has-attach .title::after,
 .mobile-news-clone .topic-panel .list .item.has-attach .title::after {
   content: "📎";

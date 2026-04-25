@@ -5,7 +5,7 @@
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
 <meta charset="utf-8"/>
-<title>Tour</title>
+<title>यात्रा</title>
 
 <style>
 body {
@@ -621,7 +621,7 @@ html, body {
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "अभी तक कोई Q&A प्रविष्टि पोस्ट नहीं की गई है";
+  content: "अभी तक कोई प्रश्नोत्तर प्रविष्टि पोस्ट नहीं की गई है";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -939,7 +939,7 @@ html, body {
 <a href="mediahub.html">🎬 मीडिया हब</a>
 <a href="tour.html">🧳 यात्रा · पर्यटन · आवास</a>
 <a href="literature_academic">📚 साहित्य एवं शैक्षणिक आदान-प्रदान</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&A पूछताछ</a></div>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 प्रश्नोत्तर संपर्क</a></div>
 <div class="main-content">
 <section class="section-blockchain">
 <a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
@@ -1207,11 +1207,11 @@ a[href^="mailto:"]:hover {
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='प्रश्नोत्तर';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से Admin Q&A को भेजे जाते हैं।</div>';
+        body.innerHTML = '<div class="igdc-qa-note">※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से प्रशासक प्रश्नोत्तर को भेजे जाते हैं।</div>';
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
         document.body.appendChild(m);
@@ -1325,7 +1325,7 @@ a[href^="mailto:"]:hover {
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      try{ await sb.auth.signInअनामly(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -1341,8 +1341,8 @@ a[href^="mailto:"]:hover {
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","닫기");
+    const title = el("div","igdc-qa-title"); title.textContent = "प्रश्नोत्तर";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","बंद करें");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
@@ -1353,7 +1353,7 @@ a[href^="mailto:"]:hover {
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="जमा करें";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="साफ़ करें";
-    const note = el("div","igdc-qa-note"); note.textContent="※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से Admin Q&A को भेजे जाते हैं।";
+    const note = el("div","igdc-qa-note"); note.textContent="※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से प्रशासक प्रश्नोत्तर को भेजे जाते हैं।";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -1535,9 +1535,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
           var b=document.createElement('div'); b.className='igdc-qa-backdrop';
           var p=document.createElement('div'); p.className='igdc-qa-panel';
           var h=document.createElement('div'); h.className='igdc-qa-header';
-          var t=document.createElement('div'); t.textContent='Q&A';
+          var t=document.createElement('div'); t.textContent='प्रश्नोत्तर';
           var x=document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
-          var body=document.createElement('div'); body.className='igdc-qa-body'; body.textContent='Q&A connection ready';
+          var body=document.createElement('div'); body.className='igdc-qa-body'; body.textContent='प्रश्नोत्तर संपर्क तैयार है';
           h.appendChild(t); h.appendChild(x); p.appendChild(h); p.appendChild(body);
           m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
           function close(){ m.classList.remove('open'); }
@@ -1606,12 +1606,12 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='प्रश्नोत्तर';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
-      body.innerHTML = '<div class="igdc-qa-note">※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से Admin Q&A को भेजे जाते हैं।</div>';
+      body.innerHTML = '<div class="igdc-qa-note">※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से प्रशासक प्रश्नोत्तर को भेजे जाते हैं।</div>';
 
       // ensure the "대표 이메일" is shown only inside the modal
       var ce = document.createElement('p');
@@ -1624,7 +1624,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       document.body.appendChild(m);
 
       function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }
+      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
       x.addEventListener('click', close);
       b.addEventListener('click', close);
 
@@ -1708,13 +1708,13 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='प्रश्नोत्तर';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
       var note = document.createElement('div'); note.className='igdc-qa-note';
-      note.textContent = '※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से Admin Q&A को भेजे जाते हैं।';
+      note.textContent = '※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से प्रशासक प्रश्नोत्तर को भेजे जाते हैं।';
       body.appendChild(note);
 
       // (1) Inject the contact email in creation path
@@ -1860,8 +1860,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>भुगतान QR</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">बंद करें</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -1896,11 +1896,11 @@ window.addEventListener("message",function(ev){
   async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
     await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
-    ta.value=''; alert('Sent successfully.');
+    ta.value=''; alert('सफलतापूर्वक भेज दिया गया।');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('Sending failed'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('भेजना विफल'));});
   const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('Sending failed'));});
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('भेजना विफल'));});
 })();
 </script>
 
@@ -1977,7 +1977,7 @@ window.addEventListener("message",function(ev){
 
     state: {
       role: 'guest',
-      activeProductId: null
+      activeउत्पादId: null
     },
 
     init() {
@@ -2004,8 +2004,8 @@ window.addEventListener("message",function(ev){
 
     /* 2️⃣ 리뷰 시스템 장착 */
     mountReview(productId) {
-      if (this.state.activeProductId === productId) return;
-      this.state.activeProductId = productId;
+      if (this.state.activeउत्पादId === productId) return;
+      this.state.activeउत्पादId = productId;
 
       let root = document.getElementById(this.config.reviewRootId);
       if (!root) {
@@ -2031,8 +2031,8 @@ window.addEventListener("message",function(ev){
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">Product Reviews</h3>
-          <div id="igdc-review-list" class="igdc-review-list">Loading...</div>
+          <h3 class="igdc-review-title">उत्पाद समीक्षाएँ</h3>
+          <div id="igdc-review-list" class="igdc-review-list">लोड हो रहा है...</div>
           ${canWrite ? this.renderReviewForm() : this.renderLoginHint()}
         </section>
       `;
@@ -2047,7 +2047,7 @@ window.addEventListener("message",function(ev){
             maxlength="${this.config.maxReviewChars}"
             required></textarea>
           <div class="igdc-review-actions">
-            <button type="submit">Post Review</button>
+            <button type="submit">समीक्षा पोस्ट करें</button>
           </div>
         </form>
       `;
@@ -2055,7 +2055,7 @@ window.addEventListener("message",function(ev){
 
     renderLoginHint() {
       return `<div class="igdc-review-login-hint">
-        Review posting is available after logging in.
+        लॉगिन करने के बाद समीक्षा पोस्ट की जा सकती है।
       </div>`;
     },
 
@@ -2070,7 +2070,7 @@ window.addEventListener("message",function(ev){
         const content = textarea.value.trim();
 
         if (content.length < this.config.minReviewChars) {
-          alert(`리뷰는 최소 ${this.config.minReviewChars}자 이상 작성해 주세요.`);
+          alert(`समीक्षा कम से कम ${this.config.minReviewChars} अक्षरों की होनी चाहिए।`);
           return;
         }
 
@@ -2079,7 +2079,7 @@ window.addEventListener("message",function(ev){
             textarea.value = '';
             this.loadReviews(productId);
           })
-          .catch(() => alert('리뷰 Submission failed'));
+          .catch(() => alert('समीक्षा जमा करना विफल रहा'));
       });
     },
 
@@ -2088,7 +2088,7 @@ window.addEventListener("message",function(ev){
       const list = document.getElementById('igdc-review-list');
       if (!list) return;
 
-      list.textContent = 'Loading...';
+      list.textContent = 'लोड हो रहा है...';
 
       try {
         const res = await fetch(
@@ -2097,13 +2097,13 @@ window.addEventListener("message",function(ev){
         const data = await res.json();
 
         if (!Array.isArray(data) || data.length === 0) {
-          list.innerHTML = '<div class="igdc-review-empty">No reviews yet.</div>';
+          list.innerHTML = '<div class="igdc-review-empty">अभी तक कोई समीक्षा नहीं है।</div>';
           return;
         }
 
         list.innerHTML = data.map(this.renderReviewItem).join('');
       } catch {
-        list.textContent = 'Failed to load reviews.';
+        list.textContent = 'समीक्षाएँ लोड नहीं हो सकीं।';
       }
     },
 
@@ -2121,7 +2121,7 @@ window.addEventListener("message",function(ev){
       return `
         <div class="igdc-review-item">
           <div class="igdc-review-meta">
-            <span>${esc(item.user || 'Anonymous')}</span>
+            <span>${esc(item.user || 'अनाम')}</span>
             <span>${esc(item.date || '')}</span>
           </div>
           <div class="igdc-review-content">${esc(item.content)}</div>
@@ -2221,7 +2221,7 @@ window.addEventListener("message",function(ev){
                color:#7a8da8;
                letter-spacing:.5px;
              ">
-            Loading
+            लोड हो रहा है
           </div>
 
         </div>

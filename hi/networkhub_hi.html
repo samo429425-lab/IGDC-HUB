@@ -594,7 +594,7 @@ html, body {
 <a href="mediahub.html">🎬 मीडिया हब</a>
 <a href="tour.html">🧳 यात्रा · पर्यटन · आवास</a>
 <a href="literature_academic">📚 साहित्य एवं शैक्षणिक आदान-प्रदान</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&A पूछताछ</a></div><main id="main">
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 प्रश्नोत्तर संपर्क</a></div><main id="main">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
@@ -770,7 +770,7 @@ html, body {
 <a class="link-btn" href="https://www.walmart.com" target="_blank">Walmart</a>
 <a class="link-btn" href="https://www.ebay.com" target="_blank">eBay</a>
 <a class="link-btn" href="https://www.etsy.com" target="_blank">Etsy</a>
-<a class="link-btn" href="https://www.bestbuy.com" target="_blank"><div>BestBuy</div><div class="en">Marketplace</div></a>
+<a class="link-btn" href="https://www.bestbuy.com" target="_blank"><div>BestBuy</div><div class="en">मार्केटप्लेस</div></a>
 <a class="link-btn" href="https://www.newegg.com" target="_blank">Newegg</a>
 <a class="link-btn" href="https://shop.app" target="_blank"><div>Shopify</div><div class="en">(Shop App)</div></a>
 </div>
@@ -826,7 +826,7 @@ html, body {
 </section>
 </div>
 
-<section id="nh-mobile-rail" aria-label="Popular Recommended Products (Mobile)">
+<section id="nh-mobile-rail" aria-label="Popular अनुशंसित उत्पादs (Mobile)">
   <div class="wrap">
     <div class="title">💎 लोकप्रिय अनुशंसित उत्पाद 💎</div>
     <div class="list" id="nh-mobile-rail-list" role="list"></div>
@@ -1097,7 +1097,7 @@ a[href^="mailto:"]:hover {
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      try{ await sb.auth.signInअनामly(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -1113,7 +1113,7 @@ a[href^="mailto:"]:hover {
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
+    const title = el("div","igdc-qa-title"); title.textContent = "प्रश्नोत्तर";
     const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","बंद करें");
     header.append(title, close);
 
@@ -1125,7 +1125,7 @@ a[href^="mailto:"]:hover {
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="जमा करें";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="साफ़ करें";
-    const note = el("div","igdc-qa-note"); note.textContent="※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से Admin Q&A को भेजे जाते हैं।";
+    const note = el("div","igdc-qa-note"); note.textContent="※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से प्रशासक प्रश्नोत्तर को भेजे जाते हैं।";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -1233,9 +1233,9 @@ a[href^="mailto:"]:hover {
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="Operations-related inquiries will be reviewed by an administrator and answered afterward.";
-          else if(/가격|비용|요금/.test(text)) answer="Please refer to the information on this page for pricing/fees. Leave an additional inquiry if needed.";
-          else answer="Thank you for your inquiry. We will review it quickly and assist you.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="संचालन संबंधी पूछताछ की प्रशासक द्वारा समीक्षा की जाएगी और बाद में उत्तर दिया जाएगा।";
+          else if(/가격|비용|요금/.test(text)) answer="कृपया मूल्य और शुल्क के लिए इस पृष्ठ की जानकारी देखें। आवश्यकता होने पर अतिरिक्त पूछताछ छोड़ें।";
+          else answer="आपकी पूछताछ के लिए धन्यवाद। हम इसे शीघ्र समीक्षा कर आपकी सहायता करेंगे।";
         }
       }
       return { technical, answer };
@@ -1249,7 +1249,7 @@ a[href^="mailto:"]:hover {
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Server-side saving is disabled because the save settings (Supabase url/key) are not connected yet. When deployed to the web, it will connect automatically if SUPER_VARSAR.url/anonKey is configured.");
+        alert("सेव सेटिंग्स (Supabase url/key) अभी जुड़ी नहीं हैं, इसलिए सर्वर-साइड सहेजना अक्षम है। वेब पर तैनाती के समय SUPER_VARSAR.url/anonKey कॉन्फ़िगर होने पर यह अपने आप जुड़ जाएगा।");
         return;
       }
       const record = {
@@ -1350,12 +1350,12 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='प्रश्नोत्तर';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
 
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से Admin Q&A को भेजे जाते हैं।</div>';
+        body.innerHTML = '<div class="igdc-qa-note">※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से प्रशासक प्रश्नोत्तर को भेजे जाते हैं।</div>';
 
         var ce = document.createElement('p');
         ce.className = 'contact-email';
@@ -1599,11 +1599,11 @@ window.addEventListener("message",function(ev){
   async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
     await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
-    ta.value=''; alert('전송되었습니다.');
+    ta.value=''; alert('भेज दिया गया।');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('전송 실패'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('भेजना विफल'));});
   const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('전송 실패'));});
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('भेजना विफल'));});
 })();
 </script>
 
@@ -1701,7 +1701,7 @@ window.addEventListener("message",function(ev){
 
     state: {
       role: 'guest',
-      activeProductId: null
+      activeउत्पादId: null
     },
 
     init() {
@@ -1728,8 +1728,8 @@ window.addEventListener("message",function(ev){
 
     /* 2️⃣ 리뷰 시스템 장착 */
     mountReview(productId) {
-      if (this.state.activeProductId === productId) return;
-      this.state.activeProductId = productId;
+      if (this.state.activeउत्पादId === productId) return;
+      this.state.activeउत्पादId = productId;
 
       let root = document.getElementById(this.config.reviewRootId);
       if (!root) {
@@ -1755,8 +1755,8 @@ window.addEventListener("message",function(ev){
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">상품 리뷰</h3>
-          <div id="igdc-review-list" class="igdc-review-list">로딩 중...</div>
+          <h3 class="igdc-review-title">उत्पाद समीक्षा</h3>
+          <div id="igdc-review-list" class="igdc-review-list">लोड हो रहा है...</div>
           ${canWrite ? this.renderReviewForm() : this.renderLoginHint()}
         </section>
       `;
@@ -1766,12 +1766,12 @@ window.addEventListener("message",function(ev){
       return `
         <form id="igdc-review-form" class="igdc-review-form">
           <textarea
-            placeholder="상품 사용 경험을 공유해 주세요"
+            placeholder="कृपया उत्पाद उपयोग का अपना अनुभव साझा करें"
             minlength="${this.config.minReviewChars}"
             maxlength="${this.config.maxReviewChars}"
             required></textarea>
           <div class="igdc-review-actions">
-            <button type="submit">리뷰 등록</button>
+            <button type="submit">समीक्षा जमा करें</button>
           </div>
         </form>
       `;
@@ -1779,7 +1779,7 @@ window.addEventListener("message",function(ev){
 
     renderLoginHint() {
       return `<div class="igdc-review-login-hint">
-        리뷰 작성은 로그인 후 가능합니다.
+        समीक्षा लिखने के लिए लॉगिन आवश्यक है।
       </div>`;
     },
 
@@ -1794,7 +1794,7 @@ window.addEventListener("message",function(ev){
         const content = textarea.value.trim();
 
         if (content.length < this.config.minReviewChars) {
-          alert(`리뷰는 최소 ${this.config.minReviewChars}자 이상 작성해 주세요.`);
+          alert(`समीक्षा कम से कम ${this.config.minReviewChars} अक्षरों की होनी चाहिए।`);
           return;
         }
 
@@ -1803,7 +1803,7 @@ window.addEventListener("message",function(ev){
             textarea.value = '';
             this.loadReviews(productId);
           })
-          .catch(() => alert('리뷰 Submission failed'));
+          .catch(() => alert('समीक्षा जमा करना विफल रहा'));
       });
     },
 
@@ -1812,7 +1812,7 @@ window.addEventListener("message",function(ev){
       const list = document.getElementById('igdc-review-list');
       if (!list) return;
 
-      list.textContent = '로딩 중...';
+      list.textContent = 'लोड हो रहा है...';
 
       try {
         const res = await fetch(
@@ -1821,13 +1821,13 @@ window.addEventListener("message",function(ev){
         const data = await res.json();
 
         if (!Array.isArray(data) || data.length === 0) {
-          list.innerHTML = '<div class="igdc-review-empty">아직 리뷰가 없습니다.</div>';
+          list.innerHTML = '<div class="igdc-review-empty">अभी तक कोई समीक्षा नहीं है।</div>';
           return;
         }
 
         list.innerHTML = data.map(this.renderReviewItem).join('');
       } catch {
-        list.textContent = '리뷰를 불러오지 못했습니다.';
+        list.textContent = 'समीक्षाएँ लोड नहीं की जा सकीं।';
       }
     },
 
@@ -1845,7 +1845,7 @@ window.addEventListener("message",function(ev){
       return `
         <div class="igdc-review-item">
           <div class="igdc-review-meta">
-            <span>${esc(item.user || '익명')}</span>
+            <span>${esc(item.user || 'अनाम')}</span>
             <span>${esc(item.date || '')}</span>
           </div>
           <div class="igdc-review-content">${esc(item.content)}</div>
@@ -1945,7 +1945,7 @@ window.addEventListener("message",function(ev){
                color:#7a8da8;
                letter-spacing:.5px;
              ">
-            Loading
+            लोड हो रहा है
           </div>
 
         </div>

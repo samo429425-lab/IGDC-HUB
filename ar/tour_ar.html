@@ -1018,9 +1018,9 @@ body{ direction: rtl !important; }
     .btn-grid .link-btn:hover { background:#e75480; color:#ffffff; border-color:#cc2d63; box-shadow:0 2px 6px rgba(0,0,0,0.18); }</style>
 <div class="region-card">
 <div class="region-title">آسيا</div>
-<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaTour <small>(하나투어)</small></a>
-<a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour<small>(모두투어)</small></a>
-<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon Tour <small>(노랑풍선)</small></a>
+<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaTour <small>(هاناتور)</small></a>
+<a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour <small>(موديتور)</small></a>
+<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon Tour <small>(يلو بالون تور)</small></a>
 <a class="link-btn" href="https://www.trip.com" target="_blank">Trip.com <small>(携程)</small></a>
 <a class="link-btn" href="https://www.ctrip.com" target="_blank">Ctrip <small>(携程)</small></a>
 <a class="link-btn" href="https://www.qunar.com" target="_blank">Qunar <small>(去哪儿网)</small></a>
@@ -1109,11 +1109,11 @@ body{ direction: rtl !important; }
 </section>
 
 <footer>
-    IGDC Global Hub © 2025 | الشركة الدولية العامة للتوزيع<br/>
-    50 Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, جمهورية كوريا <br/>
+    IGDC Global Hub © 2025 | International General Distribution Company<br/>
+    50 Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea <br/>
 </footer>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<!-- @SAFE-PATCH: hide '문학 학술교류' in sidebar -->
+<!-- @SAFE-PATCH: hide 'التبادل الأدبي والأكاديمي' in sidebar -->
 <script>
 (function(){
   function hideLit(){
@@ -1123,7 +1123,7 @@ body{ direction: rtl !important; }
         var a=links[i];
         var txt=(a.textContent||'').trim();
         var href=(a.getAttribute('href')||'').trim();
-        if(href.includes('literature_academic') || (txt.includes('문학') && txt.includes('학술'))){
+        if(href.includes('literature_academic') || (txt.includes('أدبي') && txt.includes('أكاديمي'))){
           a.setAttribute('aria-hidden','true');
           a.setAttribute('tabindex','-1');
           a.classList.add('is-hidden-lit');
@@ -1385,7 +1385,7 @@ a[href^="mailto:"]:hover {
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      try{ await sb.auth.signInمجهولly(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -1673,7 +1673,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var body = document.createElement('div'); body.className='igdc-qa-body';
       body.innerHTML = '<div class="igdc-qa-note">سيتم تفعيل الوظائف الكاملة بعد توصيل إعدادات التخزين (Supabase url/key).</div>';
 
-      // ensure the "대표 이메일" is shown only inside the modal
+      // ensure the "البريد الإلكتروني الرئيسي" is shown only inside the modal
       var ce = document.createElement('p');
       ce.className = 'contact-email';
       ce.innerHTML = 'البريد الإلكتروني الرئيسي: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
@@ -1684,7 +1684,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       document.body.appendChild(m);
 
       function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }
+      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
       x.addEventListener('click', close);
       b.addEventListener('click', close);
 
@@ -2003,314 +2003,14 @@ window.addEventListener("message",function(ev){
 </script>
 
 <script id="igdc-unified-commerce-script">
-/*
- IGDC Unified Commerce Script
- --------------------------------------------------
- 적용 대상:
-  - Distribution (이미 적용 가능)
-  - 나머지 4개 사이트 (Donation 제외, Media 제외)
- 목적:
-  - 썸네일 클릭 자동 감지
-  - 상세 상품 자동 오픈 훅
-  - 구매하기 / 결제 / 장바구니 기존 버튼 그대로 사용
-  - 상세 하단에 مراجعة 시스템 자동 장착 (쿠팡 방식)
- --------------------------------------------------
- 전제:
-  - 썸네일 카드 또는 상세 컨테이너에 data-product-id 존재
-  - IGTC.checkout(...) 기존 결제 로직 존재
-  - window.__IGDC_ROLE 존재
- --------------------------------------------------
- 삽입 위치:
-  - 각 페이지 
-<script id="igdc-qna-repair-script">
+/* IGDC unified commerce legacy block disabled: replaced with safe no-op to prevent malformed nested script parsing. */
 (function(){
-  if(window.__IGDC_QNA_REPAIR_APPLIED__) return;
-  window.__IGDC_QNA_REPAIR_APPLIED__ = true;
-
-  function ensureModal(){
-    var modal = document.querySelector('.igdc-qa-modal');
-    if(modal) return modal;
-
-    modal = document.createElement('div');
-    modal.className = 'igdc-qa-modal';
-    modal.innerHTML =
-      '<div class="igdc-qa-backdrop"></div>' +
-      '<div class="igdc-qa-panel">' +
-        '<div class="igdc-qa-header">' +
-          '<div class="igdc-qa-title">الأسئلة والأجوبة</div>' +
-          '<button class="igdc-qa-close" type="button" aria-label="إغلاق">✕</button>' +
-        '</div>' +
-        '<div class="igdc-qa-body">' +
-          '<label>السؤال</label>' +
-          '<textarea class="igdc-qa-text q" placeholder="يرجى إدخال سؤالك..."></textarea>' +
-          '<label>الإجابة</label>' +
-          '<textarea class="igdc-qa-text a" placeholder="يرجى الانتظار لحظة. سنرد عليك قريبًا."></textarea>' +
-          '<div class="igdc-qa-actions">' +
-            '<button class="igdc-qa-btn primary" type="button">إرسال</button>' +
-            '<button class="igdc-qa-btn muted" type="button">مسح</button>' +
-          '</div>' +
-          '<div class="igdc-qa-note">※ الأسئلة البسيطة يجيب عنها الذكاء الاصطناعي فورًا. أما المشكلات التقنية والأخطاء والموضوعات التشغيلية فتُحال تلقائيًا إلى قسم أسئلة وأجوبة المدير.</div>' +
-          '<div class="igdc-qa-threads"></div>' +
-          '<p class="contact-email">البريد الإلكتروني الرئيسي: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' +
-        '</div>' +
-      '</div>';
-    document.body.appendChild(modal);
-    bindModal(modal);
-    return modal;
-  }
-
-  function bindModal(modal){
-    if(!modal || modal.dataset.repairBound === '1') return;
-    modal.dataset.repairBound = '1';
-
-    var backdrop = modal.querySelector('.igdc-qa-backdrop');
-    var closeBtn = modal.querySelector('.igdc-qa-close');
-    var clearBtn = modal.querySelector('.igdc-qa-btn.muted');
-    var q = modal.querySelector('.igdc-qa-text.q');
-    var a = modal.querySelector('.igdc-qa-text.a');
-
-    function closeModal(){
-      modal.classList.remove('open');
-      setTimeout(function(){ modal.style.display = 'none'; }, 180);
-    }
-    function openModal(){
-      modal.style.display = 'block';
-      requestAnimationFrame(function(){ modal.classList.add('open'); });
-    }
-
-    if(backdrop) backdrop.addEventListener('click', closeModal);
-    if(closeBtn) closeBtn.addEventListener('click', closeModal);
-    if(clearBtn) clearBtn.addEventListener('click', function(){
-      if(q) q.value = '';
-      if(a) a.value = '';
-    });
-
-    window.IGDC_QA = window.IGDC_QA || {};
-    window.IGDC_QA.open = openModal;
-    window.IGDC_QA.close = closeModal;
-  }
-
-  function wireButton(){
-    var btn = document.getElementById('qnaOpenBtn');
-    if(!btn || btn.dataset.repairBound === '1') return;
-    btn.dataset.repairBound = '1';
-    btn.addEventListener('click', function(e){
-      e.preventDefault();
-      e.stopPropagation();
-      var modal = document.querySelector('.igdc-qa-modal') || ensureModal();
-      bindModal(modal);
-      if(window.IGDC_QA && typeof window.IGDC_QA.open === 'function'){
-        window.IGDC_QA.open();
-      }else{
-        modal.style.display = 'block';
-        requestAnimationFrame(function(){ modal.classList.add('open'); });
-      }
-    }, false);
-  }
-
-  function init(){
-    var existing = document.querySelector('.igdc-qa-modal');
-    if(existing) bindModal(existing);
-    wireButton();
-  }
-
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', init, {once:true});
-  }else{
-    init();
-  }
-})();
-</script>
-
-</body> 바로 위
-*/
-
-(function (window, document) {
-  'use strict';
-
-  const IGDCCommerce = {
-    config: {
-      reviewApi: '/.netlify/functions/reviews',
-      reviewRootId: 'igdc-review-root',
-      minمراجعةChars: 10,
-      maxمراجعةChars: 2000
-    },
-
-    state: {
-      role: 'guest',
-      activeProductId: null
-    },
-
-    init() {
-      this.state.role = window.__IGDC_ROLE || 'guest';
-      this.bindThumbnailAutoHook();
-    },
-
-    /* 1️⃣ 썸네일 카드 클릭 자동 감지 */
-    bindThumbnailAutoHook() {
-      document.addEventListener('click', (e) => {
-        const card = e.target.closest('[data-product-id]');
-        if (!card) return;
-
-        const productId = card.dataset.productId;
-        if (!productId) return;
-
-        // 기존 상세 상품 오픈 로직은 이미 각 페이지에 있음
-        // 여기서는 مراجعة만 자동 부착
-        setTimeout(() => {
-          this.mountمراجعة(productId);
-        }, 50);
-      });
-    },
-
-    /* 2️⃣ مراجعة 시스템 장착 */
-    mountمراجعة(productId) {
-      if (this.state.activeProductId === productId) return;
-      this.state.activeProductId = productId;
-
-      let root = document.getElementById(this.config.reviewRootId);
-      if (!root) {
-        root = document.createElement('div');
-        root.id = this.config.reviewRootId;
-
-        const detailContainer =
-          document.querySelector('.product-detail') ||
-          document.querySelector('.product-modal') ||
-          document.querySelector('.detail-view') ||
-          document.body;
-
-        detailContainer.appendChild(root);
-      }
-
-      root.innerHTML = this.renderمراجعةShell();
-      this.bindمراجعةForm(root, productId);
-      this.loadمراجعةs(productId);
-    },
-
-    /* 3️⃣ مراجعة UI */
-    renderمراجعةShell() {
-      const canWrite = this.state.role !== 'guest';
-      return `
-        <section class="igdc-review">
-          <h3 class="igdc-review-title">مراجعات المنتج</h3>
-          <div id="igdc-review-list" class="igdc-review-list">جارٍ التحميل...</div>
-          ${canWrite ? this.renderمراجعةForm() : this.renderLoginHint()}
-        </section>
-      `;
-    },
-
-    renderمراجعةForm() {
-      return `
-        <form id="igdc-review-form" class="igdc-review-form">
-          <textarea
-            placeholder="يرجى مشاركة تجربتك في استخدام المنتج."
-            minlength="${this.config.minمراجعةChars}"
-            maxlength="${this.config.maxمراجعةChars}"
-            required></textarea>
-          <div class="igdc-review-actions">
-            <button type="submit">نشر المراجعة</button>
-          </div>
-        </form>
-      `;
-    },
-
-    renderLoginHint() {
-      return `<div class="igdc-review-login-hint">
-        مراجعة posting is available after logging in.
-      </div>`;
-    },
-
-    /* 4️⃣ مراجعة 이벤트 */
-    bindمراجعةForm(root, productId) {
-      const form = root.querySelector('#igdc-review-form');
-      if (!form) return;
-
-      form.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const textarea = form.querySelector('textarea');
-        const content = textarea.value.trim();
-
-        if (content.length < this.config.minمراجعةChars) {
-          alert(`مراجعة는 최소 ${this.config.minمراجعةChars}자 이상 작성해 주세요.`);
-          return;
-        }
-
-        this.submitمراجعة(productId, content)
-          .then(() => {
-            textarea.value = '';
-            this.loadمراجعةs(productId);
-          })
-          .catch(() => alert('فشل إرسال المراجعة'));
-      });
-    },
-
-    /* 5️⃣ مراجعة 로딩 */
-    async loadمراجعةs(productId) {
-      const list = document.getElementById('igdc-review-list');
-      if (!list) return;
-
-      list.textContent = 'جارٍ التحميل...';
-
-      try {
-        const res = await fetch(
-          `${this.config.reviewApi}?productId=${encodeURIComponent(productId)}`
-        );
-        const data = await res.json();
-
-        if (!Array.isArray(data) || data.length === 0) {
-          list.innerHTML = '<div class="igdc-review-empty">لا توجد مراجعات بعد.</div>';
-          return;
-        }
-
-        list.innerHTML = data.map(this.renderمراجعةItem).join('');
-      } catch {
-        list.textContent = 'تعذر تحميل المراجعات.';
-      }
-    },
-
-    async submitمراجعة(productId, content) {
-      const res = await fetch(this.config.reviewApi, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId, content })
-      });
-      if (!res.ok) throw new Error('submit failed');
-    },
-
-    renderمراجعةItem(item) {
-      const esc = (v) => String(v || '').replace(/[<>]/g, '');
-      return `
-        <div class="igdc-review-item">
-          <div class="igdc-review-meta">
-            <span>${esc(item.user || 'Anonymous')}</span>
-            <span>${esc(item.date || '')}</span>
-          </div>
-          <div class="igdc-review-content">${esc(item.content)}</div>
-        </div>
-      `;
-    }
+  window.IGDCCommerce = window.IGDCCommerce || {
+    init: function(){},
+    attachReviewSystem: function(){},
+    loadReviews: function(){}
   };
-
-  /* 6️⃣ 기본 스타일 */
-  const style = document.createElement('style');
-  style.textContent = `
-    .igdc-review { margin-top:24px; border-top:1px solid #eee; padding-top:16px; }
-    .igdc-review-title { margin:0 0 12px; font-size:1.05rem; }
-    .igdc-review-list { display:flex; flex-direction:column; gap:10px; }
-    .igdc-review-item { border:1px solid #eee; border-radius:10px; padding:10px; background:#fafafa; }
-    .igdc-review-meta { font-size:.8rem; color:#666; display:flex; gap:8px; }
-    .igdc-review-content { margin-top:6px; line-height:1.5; }
-    .igdc-review-form textarea { width:100%; min-height:90px; padding:10px; border-radius:10px; border:1px solid #ddd; }
-    .igdc-review-actions { margin-top:8px; text-align:right; }
-    .igdc-review-actions button { padding:8px 14px; border-radius:10px; border:none; background:#2563eb; color:#fff; }
-    .igdc-review-empty, .igdc-review-login-hint { color:#666; }
-  `;
-  document.head.appendChild(style);
-
-  IGDCCommerce.init();
-  window.IGDCCommerce = IGDCCommerce;
-
-})(window, document);
+})();
 </script>
 
 <script id="rightpanel-dummy-engine-v2">

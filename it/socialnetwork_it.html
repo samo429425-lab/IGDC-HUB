@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="it">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -308,7 +308,7 @@
     .igdc-qa-btn.primary{background:#2563eb;color:#fff}
     .igdc-qa-btn.muted{background:#9ca3af;color:#fff}
     .igdc-qa-threads{display:flex;flex-direction:column;gap:10px;overflow:auto;border-top:1px solid #f3d9b0;padding-top:10px}
-    .igdc-qa-threads:empty::before{content:"Nessuna voce Q&A è stata ancora pubblicata";display:block;padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;margin-top:8px;font-size:.95rem}
+    .igdc-qa-threads:empty::before{content: "Non sono ancora stati pubblicati elementi di domande e risposte";display:block;padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;margin-top:8px;font-size:.95rem}
     .igdc-qa-thread{border:1px solid #f3d9b0;border-radius:12px;padding:10px 12px;background:#fffdf8}
     .igdc-qa-thread-q{font:700 13px/1.5 system-ui;color:#222}
     .igdc-qa-thread-a{font:13px/1.5 system-ui;color:#333;margin-top:6px}
@@ -354,7 +354,7 @@
 <a href="mediahub.html">🎬 Hub dei Media</a>
 <a href="tour.html">🧳 Viaggi · Turismo · Alloggio</a>
 <a href="literature_academic">📚 Scambio Letterario e Accademico</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Richiesta Q&A</a></div>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 Domande e risposte</a></div>
 
     <div class="main-content">
       <section class="section-blockchain">
@@ -480,11 +480,11 @@
             var b = document.createElement('div'); b.className='igdc-qa-backdrop';
             var p = document.createElement('div'); p.className='igdc-qa-panel';
             var h = document.createElement('div'); h.className='igdc-qa-header';
-            var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+            var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent="Domande e risposte";
             var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
             h.appendChild(t); h.appendChild(x);
             var body = document.createElement('div'); body.className='igdc-qa-body';
-            body.innerHTML = '<label>Domanda</label><textarea class="igdc-qa-text q" placeholder="Inserisci la tua domanda..."></textarea><label>Risposta</label><textarea class="igdc-qa-text a" placeholder="Attendi un momento. Ti risponderemo a breve."></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">Invia</button><button class="igdc-qa-btn muted">Cancella</button></div><div class="igdc-qa-note">※ Le domande semplici ricevono una risposta immediata dall’IA. I problemi tecnici, gli errori o le questioni operative vengono inoltrati automaticamente al Q&A Admin.</div><div class="igdc-qa-threads"></div><p class="contact-email">Email principale: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
+            body.innerHTML = '<label>Domanda</label><textarea class="igdc-qa-text q" placeholder="Inserisci la tua domanda..."></textarea><label>Risposta</label><textarea class="igdc-qa-text a" placeholder="Attendi un momento. Ti risponderemo a breve."></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">Invia</button><button class="igdc-qa-btn muted">Cancella</button></div><div class="igdc-qa-note">※ Le domande semplici ricevono una risposta immediata dall’IA. I problemi tecnici, gli errori o le questioni operative vengono inoltrati automaticamente al Domande e risposte Admin.</div><div class="igdc-qa-threads"></div><p class="contact-email">Email principale: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
             p.appendChild(h); p.appendChild(body); m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
             function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
             function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
@@ -522,13 +522,13 @@
       function mountUI(){
         const existing = document.querySelector('.igdc-qa-modal'); if(existing){ return bindExisting(existing); }
         const modal = el('div','igdc-qa-modal'); const backdrop = el('div','igdc-qa-backdrop'); const panel = el('div','igdc-qa-panel');
-        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='Q&A'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','Chiudi');
+        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent="Domande e risposte"; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','Chiudi');
         header.append(title, close);
         const body = el('div','igdc-qa-body');
         const lQ = el('label'); lQ.textContent='Domanda'; const tQ = el('textarea','igdc-qa-text q'); tQ.placeholder='Inserisci la tua domanda...';
         const lA = el('label'); lA.textContent='Risposta'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='Attendi un momento. Ti risponderemo a breve.';
-        const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='Submit'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='Clear';
-        const note = el('div','igdc-qa-note'); note.textContent='※ Le domande semplici ricevono una risposta immediata dall’IA. I problemi tecnici, gli errori o le questioni operative vengono inoltrati automaticamente al Q&A Admin.';
+        const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='Invia'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='Cancella';
+        const note = el('div','igdc-qa-note'); note.textContent='※ Le domande semplici ricevono una risposta immediata dall’IA. I problemi tecnici, gli errori o le questioni operative vengono inoltrati automaticamente al Domande e risposte Admin.';
         const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='Email principale: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
         actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
         return bindExisting(modal);
@@ -546,7 +546,7 @@
         close && close.addEventListener('click', closeModal); backdrop && backdrop.addEventListener('click', closeModal); document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
         btnClear && btnClear.addEventListener('click', ()=>{ if(tQ) tQ.value=''; if(tA) tA.value=''; });
         async function fetchThreads(){ const sb = await ensureSupabase(); if(!sb || !list) return; const { data } = await sb.from('igdc_qna_threads').select('*').eq('project', STATE.project).eq('page_id', STATE.pageId).order('created_at', { ascending:false }).limit(100); renderList(data||[]); }
-        function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='Q. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('A. '+row.answer):'A. (대기중)'; box.append(q,a); list.append(box); }); }
+        function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='D. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('R. '+row.answer):'A. (In attesa)'; box.append(q,a); list.append(box); }); }
         async function autoRispostaIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'Please refer to the information on this page for pricing and fees. Leave an additional inquiry if needed.':'Thank you for your inquiry. We will review it promptly and assist you.'; } } return { technical, answer }; }
         async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoRispostaIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'Your inquiry has been received.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
         btnSubmit && btnSubmit.addEventListener('click', submit);
@@ -1303,7 +1303,7 @@ window.addEventListener('resize', function(){
     root.className = 'snfv';
     root.innerHTML =
       '<div class="snfv-panel">'
-      + '<button type="button" class="snfv-close" aria-label="Close">✕</button>'
+      + '<button type="button" class="snfv-close" aria-label="Chiudi">✕</button>'
       + '<div class="snfv-media" id="snfvMedia"></div>'
       + '<div class="snfv-meta">'
       +   '<div class="snfv-text"><div class="snfv-title" id="snfvTitle"></div><div class="snfv-desc" id="snfvDesc"></div></div>'
@@ -1426,7 +1426,27 @@ window.addEventListener('resize', function(){
   }, true);
 })();
 </script>
- 
+  <script src="frontbus.child.js"></script>
+<script>
+(function(){
+  try{
+    function notify(top){
+      parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*');
+    }
+    function atTop(){
+      var se=document.scrollingElement||document.documentElement||document.body;
+      return (window.scrollY||window.pageYOffset||0)<=0 && (se?(se.scrollTop||0)<=0:true);
+    }
+    function onAnyScroll(){ notify(atTop()); }
+    window.addEventListener('scroll', onAnyScroll, {passive:true});
+    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
+    document.addEventListener('wheel', function(e){ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
+    document.addEventListener('touchmove', function(){ notify(false); }, {passive:true,capture:true});
+    setTimeout(function(){ notify(atTop()); }, 50);
+  }catch(_){ }
+})();
+</script>
+
 <script defer src="/assets/js/socialnetwork-automap-v3.js?v=20260404psom"></script>
   
   <script id="igtc-checkout-trigger-v1">
@@ -1471,7 +1491,7 @@ window.addEventListener('resize', function(){
               wrap.innerHTML =
                 '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
                 + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
-                + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
+                + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Chiudi</button></div>'
                 + '<div id="igtc-qr-area"></div></div>';
 
               document.body.appendChild(wrap);

@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="ja">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
@@ -397,7 +397,7 @@ html, body {
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "まだQ&A内容はありません。";
+  content: "質問と回答の投稿はまだありません";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1186,7 +1186,7 @@ html, body {
 <a href="mediahub.html">🎬 メディアハブ</a>
 <a href="tour.html">🧳 旅行・観光・宿泊</a>
 <a href="literature_academic.html">📚 文学・学術交流</a>
-<a href="javascript:void(0)" id="qnaOpenBtn">💬 Q&A お問い合わせ</a></aside>
+<a href="javascript:void(0)" id="qnaOpenBtn">💬 質問と回答</a></aside>
 <main>
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
@@ -3706,11 +3706,11 @@ function handleVideo検索(e){
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent="質問と回答";
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">※ 簡単な質問にはAIがすぐに回答します。技術・エラー・運営関連の内容は管理者Q&Aへ自動転送されます。</div>';
+        body.innerHTML = '<div class="igdc-qa-note">※ 簡単な質問にはAIがすぐに回答します。技術・エラー・運営関連の内容は管理者質問と回答へ自動転送されます。</div>';
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
         document.body.appendChild(m);
@@ -3814,7 +3814,7 @@ function handleVideo検索(e){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase credentials/library not configured: the UI is visible, but saving is disabled.");
+      console.warn("[質問と回答] Supabase credentials/library not configured: the UI is visible, but saving is disabled.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -3840,7 +3840,7 @@ function handleVideo検索(e){
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A お問い合わせ";
+    const title = el("div","igdc-qa-title"); title.textContent = "質問・回答";
     const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","閉じる");
     header.append(title, close);
 
@@ -3852,7 +3852,7 @@ function handleVideo検索(e){
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="送信";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="クリア";
-    const note = el("div","igdc-qa-note"); note.textContent="※ 簡単な質問にはAIがすぐに回答します。技術・エラー・運営関連の内容は管理者Q&Aへ自動転送されます。";
+    const note = el("div","igdc-qa-note"); note.textContent="※ 簡単な質問にはAIがすぐに回答します。技術・エラー・運営関連の内容は管理者質問と回答へ自動転送されます。";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -3925,8 +3925,8 @@ function handleVideo検索(e){
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A.（保留中）";
+        const q = el("div","igdc-qa-thread-q"); q.textContent="質問: "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("回答: "+row.answer):"A.（保留中）";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "管理者への問い合わせ":"一般";
@@ -4009,7 +4009,7 @@ function handleVideo検索(e){
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] Auth initialization failed:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[質問と回答] Auth initialization failed:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -4491,7 +4491,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     var title = document.createElement('div');
     title.className = 'igdc-qa-title';
-    title.textContent = 'Q&A';
+    title.textContent = "質問と回答";
 
     var closeBtn = document.createElement('button');
     closeBtn.className = 'igdc-qa-close';
@@ -4504,7 +4504,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     body.className = 'igdc-qa-body';
 
     body.innerHTML =
-      '<div class="igdc-qa-note">※ 簡単な質問にはAIがすぐに回答します。技術・エラー・運営関連の内容は管理者Q&Aへ自動転送されます。</div>';
+      '<div class="igdc-qa-note">※ 簡単な質問にはAIがすぐに回答します。技術・エラー・運営関連の内容は管理者質問と回答へ自動転送されます。</div>';
 
     var email = document.createElement('p');
     email.className = 'contact-email';
@@ -4566,36 +4566,20 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </script>
 <script id="igdc-qa-email-ensure">
 (function(){
-  if (window.__IGDC_QA_EMAIL_ENSURE__) return;
-  window.__IGDC_QA_EMAIL_ENSURE__ = true;
-
-  var CONTACT_HTML = '代表メール: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-
-  function stripFooterEmail(){
+  if (window.__IGDC_QA_EMAIL_ENSURE__) return; window.__IGDC_QA_EMAIL_ENSURE__ = true;
+  var CONTACT_HTML = "代表メール: <a href=\"mailto:igdcplatform@gmail.com\">igdcplatform@gmail.com</a>";
+  function ensureContact(){
     try{
-      var footers = document.querySelectorAll('footer');
-      footers.forEach(function(f){
-        // Remove any mailto links
-        f.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
-          var parent = a.parentNode;
-          if(parent){
-            parent.removeChild(a);
-            var html = parent.innerHTML;
-            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
-            html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
-            parent.innerHTML = html;
-          }
-        });
-        // Remove any plain-text "代表メール: ..." remnants
-        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
+      var bodies=document.querySelectorAll('.igdc-qa-body');
+      bodies.forEach(function(body){
+        if(body.querySelector('.contact-email')) return;
+        var p=document.createElement('p'); p.className='contact-email'; p.innerHTML=CONTACT_HTML; body.appendChild(p);
       });
     }catch(e){}
   }
-
-  function ensureModal(){
-    var modal = document.querySelector('.igdc-qa-modal');
-    if(!modal){
-      // Create minimal modal sk
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', ensureContact, {once:true}); else ensureContact();
+})();
+</script>
 <script id="igtc-mobile-overhaul-FULL-js">
 (function(){
   function qsa(sel){ return Array.prototype.slice.call(document.querySelectorAll(sel)); }
@@ -4653,7 +4637,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     }else{
       var url = getCardImageURL(card) || 'about:blank';
       var img = document.createElement('img');
-      img.src = url; img.alt = 'Preview';
+      img.src = url; img.alt = 'プレビュー';
       img.style.width='100%'; img.style.height='100%'; img.style.objectFit='cover';
       inner.appendChild(img);
     }

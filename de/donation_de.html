@@ -1243,7 +1243,7 @@ body > .container > .main > *{
 /* Narrower: trim preferred vw a bit more while keeping floor */
 </style>
 <style id="qna-brand-only">
-/* === Q&A sidebar link color only (no other changes) === */
+/* === Fragen und Antworten sidebar link color only (no other changes) === */
 :root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
 .sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
   display:block;
@@ -1353,7 +1353,7 @@ body > .container > .main > *{
   --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
   --blue:#2563eb; --muted:#9ca3af;
 }
-/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+/* Sidebar Fragen und Antworten link follows existing .sidebar a style; this extra ensures visibility if needed */
 #qnaOpenBtn{ background-color:#001f4d; color:#ffffff;  color:#001f4d;  display:block; text-decoration:none; }
 /* Modal near the left sidebar, with smooth transitions */
 .igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
@@ -1452,7 +1452,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Es wurden noch keine Q&A-Einträge registriert";
+  content: "Es wurden noch keine Fragen und Antworten-Einträge registriert";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1470,7 +1470,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Es wurden noch keine Q&A-Einträge registriert";
+  content: "Es wurden noch keine Fragen und Antworten-Einträge registriert";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -2023,7 +2023,7 @@ body .right{ display:none !important; }
     }
   }
 </style>
-  <!-- Supabase Umwelt 설정 (Schreiben/도네이션/Q&A 공용) -->
+  <!-- Supabase Umwelt 설정 (Schreiben/도네이션/Fragen und Antworten 공용) -->
   <script>
     window.SUPER_VARSAR = window.SUPER_VARSAR || {
       url: window.SUPABASE_URL || "",
@@ -2379,7 +2379,7 @@ body > div.container,
 <a href="mediahub_de.html">🎬 Medien-Hub</a>
 <a href="tour_de.html">🧳 Reisen · Tourismus · Unterkunft</a>
 <a href="literature/academic.html" style="display:none !important;">📚 Literatur- und Wissenschaftsaustausch</a>
-<a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A Kontakt</a></nav>
+<a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Fragen und Antworten</a></nav>
 <!-- Main (불변 구조) -->
 <main class="main">
 <section class="section-blockchain"><a class="bc-tile" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a>
@@ -2434,7 +2434,7 @@ body > div.container,
 </section>
 <!-- (요청) 5줄 Feed -->
 <section class="feed-wrapper">
-<div class="feed-header"><h3 style="margin:0;">📺 Feed</h3></div>
+<div class="feed-header"><h3 style="margin:0;">📺 Beiträge</h3></div>
 <div id="feedRows">
 
 <!-- ===== Donation Feed Rows (Final Clean Version) ===== -->
@@ -2547,8 +2547,8 @@ body > div.container,
 <div class="hidden" id="composerModal" style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:9999;">
 <div class="panel" style="width:min(92vw, 720px); max-height:80vh; overflow:auto;">
 <h3 style="margin-top:0;">Schreiben</h3>
-<input id="composeTitle" placeholder="Title" style="width:100%;"/>
-<textarea id="composeBody" placeholder="Enter content..." rows="8" style="width:100%; resize:vertical;"></textarea>
+<input id="composeTitle" placeholder="Titel" style="width:100%;"/>
+<textarea id="composeBody" placeholder="Inhalt eingeben..." rows="8" style="width:100%; resize:vertical;"></textarea>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px;">
 <button class="button outline" id="btnDraftSave" type="button">Entwurf speichern</button><button class="button outline" id="btnCancel">Abbrechen</button>
 <button class="button" disabled="disabled" id="btnSave" style=";display:none !important;">Speichern</button>
@@ -2820,7 +2820,7 @@ body > div.container,
     }
 
     const del = document.createElement('button');
-    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='Delete';
+    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='Löschen';
     del.style.cssText='margin-top:6px; display:none;';
     item.appendChild(del);
     const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
@@ -3014,7 +3014,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'Title Not entered';
+    tpText.textContent = t || 'Kein Titel eingegeben';
   }
 
   if(btnDraft){
@@ -3047,7 +3047,7 @@ body > div.container,
     const btn = document.createElement('button');
     btn.type='button';
     btn.className='button tiny danger delete-post';
-    btn.textContent='Delete';
+    btn.textContent='Löschen';
     btn.style.cssText='margin-top:6px; display:none;';
     if(canShowDeleteFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
@@ -3252,7 +3252,7 @@ body > div.container,
       badge.setAttribute('translate','no');
       header.appendChild(badge);
     }
-    badge.textContent = `Edited · ${tsStr}`;
+    badge.textContent = `Bearbeitet · ${tsStr}`;
   }
 
   // On load, restore edited badge for admin/author only
@@ -3590,7 +3590,7 @@ body > div.container,
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
 
     const t = tpl.querySelector('.card-title');
-    if(t) t.textContent = 'Title';
+    if(t) t.textContent = 'Titel';
 
     const m = tpl.querySelector('.card-meta');
     if(m) m.textContent = '-';
@@ -3734,7 +3734,7 @@ body > div.container,
             a.setAttribute('data-product-id', item.id || '');
 
             var img = document.createElement('img');
-            img.alt = item.title || 'item';
+            img.alt = item.title || 'Artikel';
             img.loading = 'lazy';
             img.referrerPolicy = 'no-referrer';
             img.src = item.thumb || item.image || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
@@ -3759,7 +3759,7 @@ body > div.container,
               a.href = item.url || '#';
               a.setAttribute('data-product-id', item.id || '');
               var img = document.createElement('img');
-              img.alt = item.title || 'item';
+              img.alt = item.title || 'Artikel';
               img.loading = 'lazy';
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
@@ -3819,7 +3819,7 @@ body > div.container,
 <!-- IGDC minimal Spenden UI (non-invasive) -->
 
 <div class="donation-inline">
-<input aria-label="Donation amount (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
+<input aria-label="Spendenbetrag (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
 <button class="bc-tile orange" id="btnSpenden">Spenden</button>
 </div>
 <script>
@@ -4264,7 +4264,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Speichern은 비활성화됩니다.");
+      console.warn("[Fragen und Antworten] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Speichern은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -4302,7 +4302,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Einreichen";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Löschen";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Einfache Fragen werden sofort von der KI beantwortet. Technische, fehlerbezogene oder betriebliche Themen werden automatisch an das Admin-Q&A weitergeleitet.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Einfache Fragen werden sofort von der KI beantwortet. Technische, fehlerbezogene oder betriebliche Themen werden automatisch an das Adminbereich für Fragen und Antworten weitergeleitet.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -4459,7 +4459,7 @@ document.addEventListener('DOMContentLoaded', function(){
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] Auth-Initialisierung fehlgeschlagen:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Fragen und Antworten] Auth-Initialisierung fehlgeschlagen:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -5074,7 +5074,7 @@ window.addEventListener("message",function(ev){
     openModal();
   }, true);
 
-  // Supabase sync (uses same anonKey/url as Q&A: SUPER_VARSAR + ensureSupabase)
+  // Supabase sync (uses same anonKey/url as Fragen und Antworten: SUPER_VARSAR + ensureSupabase)
   async function syncLatestToSupabase(cat){
     try{
       if(typeof window.ensureSupabase !== 'function') return;

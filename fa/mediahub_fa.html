@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="ar">
+<html class="prelayout" lang="fa">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
@@ -507,7 +507,7 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   .language-select { top:10px !important; right:12px !important; transform:none !important; }
 }
 </style>
-<!-- Mobile المزوّدون Drawer v2 (MediaHub: LEFT-side push drawer + top banner) -->
+<!-- Mobile ارائه‌دهندگان Drawer v2 (MediaHub: LEFT-side push drawer + top banner) -->
 <style id="igdc-mobile-providers-drawer-left">
 @media (max-width:768px){
   :root{ --pvw: min(86vw, 320px); }
@@ -578,7 +578,7 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   var drawer = document.createElement("aside"); drawer.id="providers-drawer-left";
   drawer.innerHTML = [
     '<div id="providers-header-left">',
-      '<div id="providers-title-left" >المزوّدون</div>',
+      '<div id="providers-title-left" >ارائه‌دهندگان</div>',
       '<input id="providers-search-left" type="search" placeholder="جست‌وجو..." aria-label="اجست‌وجو عن المزوّدين" />',
       '<button id="providers-close-left" aria-label="بستن">✕</button>',
     '</div>',
@@ -590,8 +590,8 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   }
 
   var backdrop = document.createElement("div"); backdrop.id="providers-backdrop-left";
-  var tab = document.createElement("button"); tab.id="providers-tab-left"; tab.type="button"; tab.textContent="المزوّدون";
-  var banner = document.createElement("button"); banner.id="providers-banner"; banner.type="button"; banner.textContent="المزوّدون";
+  var tab = document.createElement("button"); tab.id="providers-tab-left"; tab.type="button"; tab.textContent="ارائه‌دهندگان";
+  var banner = document.createElement("button"); banner.id="providers-banner"; banner.type="button"; banner.textContent="ارائه‌دهندگان";
 
   function open(){ drawer.classList.add("open"); backdrop.classList.add("show"); document.documentElement.classList.add("pv-open-left"); }
   function close(){ drawer.classList.remove("open"); backdrop.classList.remove("show"); document.documentElement.classList.remove("pv-open-left"); }
@@ -740,9 +740,9 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
       if (txt && sel && btn) { f.classList.add('igdc-inline-search'); break; }
     }
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyInlineSearch;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyInlineSearch);
   else applyInlineSearch();
-  window.addEventListener('resize', applyInlineSearch;
+  window.addEventListener('resize', applyInlineSearch);
 })();
 </script>
 <style id="igdc-card-and-hero-hard-constants">
@@ -1381,7 +1381,7 @@ a[href^="mailto:"]:hover {
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      try{ await sb.auth.signInناشناسly(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -1397,7 +1397,7 @@ a[href^="mailto:"]:hover {
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
+    const title = el("div","igdc-qa-title"); title.textContent = "پرسش و پاسخ";
     const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","بستن");
     header.append(title, close);
 
@@ -1409,7 +1409,7 @@ a[href^="mailto:"]:hover {
     const actions = el("div","igdc-qa-actions");
     const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="ارسال";
     const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="پاک کردن";
-    const note = el("div","igdc-qa-note"); note.textContent="※ تتم پاسخ عن الأسئلة البسيطة فورًا بواسطة الذكاء الاصطناعي. ويتم تحويل المشكلات التقنية أو الأخطاء أو المسائل التشغيلية تلقائيًا إلى قسم Q&A الخاص بالمشرف.";
+    const note = el("div","igdc-qa-note"); note.textContent="※ به پرسش‌های ساده، هوش مصنوعی فوراً پاسخ می‌دهد. موضوعات فنی، خطاها یا مسائل عملیاتی به‌صورت خودکار به بخش پرسش و پاسخ مدیر ارسال می‌شوند.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -1517,9 +1517,9 @@ a[href^="mailto:"]:hover {
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="Operations-related inquiries will be reviewed by an administrator and answered afterward.";
-          else if(/가격|비용|요금/.test(text)) answer="Please refer to the information on this page for pricing/fees. Leave an additional inquiry if needed.";
-          else answer="Thank you for your inquiry. We will review it quickly and assist you.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="پرسش‌های مربوط به عملیات توسط مدیر بررسی می‌شود و سپس پاسخ داده خواهد شد.";
+          else if(/가격|비용|요금/.test(text)) answer="برای قیمت‌ها و کارمزدها به اطلاعات این صفحه مراجعه کنید. در صورت نیاز پرسش دیگری ثبت کنید.";
+          else answer="از پرسش شما سپاسگزاریم. آن را سریع بررسی کرده و به شما کمک خواهیم کرد.";
         }
       }
       return { technical, answer };
@@ -1533,7 +1533,7 @@ a[href^="mailto:"]:hover {
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Server-side saving is disabled because the save settings (Supabase url/key) are not connected yet. When deployed to the web, it will connect automatically if SUPER_VARSAR.url/anonKey is configured.");
+        alert("ذخیره‌سازی سمت سرور غیرفعال است زیرا تنظیمات ذخیره‌سازی (Supabase url/key) هنوز متصل نیستند. در زمان استقرار روی وب، اگر SUPER_VARSAR.url/anonKey پیکربندی شود، به‌طور خودکار متصل خواهد شد.");
         return;
       }
       const record = {
@@ -1543,7 +1543,7 @@ a[href^="mailto:"]:hover {
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("فشل الارسال"); return; }
+      if(error){ alert("ارسال ناموفق بود"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -1593,7 +1593,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='پرسش‌وپاسخ';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
 
@@ -1658,16 +1658,16 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <div class="hero-overlay">
 <!-- BEGIN: Video Search UI (replaces title/desc, non-intrusive) -->
 <form class="video-search" onsubmit="return handleVideoSearch(event)" style="display:flex; gap:10px; align-items:center; background:rgba(0,0,0,0.45); padding:10px 12px; border-radius:12px; flex-wrap:wrap;">
-<input name="q" placeholder="اجست‌وجو عن فيديو (العنوان، الفنان، القناة، إلخ)" required="" style="flex:1 1 48%; min-width:260px; max-width:620px; padding:8px 10px; border-radius:10px; border:none; outline:none; background:#fff; color:#111; font-size:16px;" type="text"/>
+<input dir="rtl" name="q" placeholder="جست‌وجوی ویدئو (عنوان، هنرمند، کانال و غیره)" required="" style="flex:1 1 48%; min-width:260px; max-width:620px; padding:8px 10px; border-radius:10px; border:none; outline:none; background:#fff; color:#111; font-size:16px; direction:rtl; text-align:right; unicode-bidi:plaintext;" type="text"/>
 <select name="provider" style="padding:8px 10px; border-radius:10px; border:none; outline:none;"></select>
 <button style="padding:10px 16px; border-radius:10px; border:none; background:#2e6bff; color:#fff; font-weight:700; cursor:pointer;" type="submit">جست‌وجو</button>
 </form>
 <!-- provider link line -->
-<div class="section-title">مزوّدو المحتوى</div>
+<div class="section-title">ارائه‌دهندگان محتوا</div>
 <div class="platform-line"><a class="platform-tile" href="https://www.netflix.com" target="_blank">Netflix</a><a class="platform-tile" href="https://www.disneyplus.com" target="_blank">Disney+</a><a class="platform-tile" href="https://www.amazon.com/primevideo" target="_blank">Amazon Prime</a><a class="platform-tile" href="https://tv.apple.com" target="_blank">Apple TV+</a><a class="platform-tile" href="https://www.youtube.com" target="_blank">YouTube</a><a class="platform-tile" href="https://spotify.com" target="_blank">Spotify</a><a class="platform-tile" href="https://www.melon.com" target="_blank">Melon</a><a class="platform-tile" href="https://www.wavve.com" target="_blank">Wavve</a><a class="platform-tile" href="https://www.hulu.com" target="_blank">Hulu</a><a class="platform-tile" href="https://www.paramountplus.com" target="_blank">Paramount+</a><a class="platform-tile" href="https://www.peacocktv.com" target="_blank">Peacock</a><a class="platform-tile" href="https://www.tving.com" target="_blank">Tving</a><a class="platform-tile" href="https://www.coupangplay.com" target="_blank">Coupang Play</a><a class="platform-tile" href="https://music.youtube.com" target="_blank">YouTube Music</a><a class="platform-tile" href="https://tidal.com" target="_blank">Tidal</a><a class="platform-tile" href="https://www.deezer.com" target="_blank">Deezer</a><a class="platform-tile" href="https://music.amazon.com" target="_blank">Amazon Music</a><a class="platform-tile" href="https://www.bbc.co.uk/iplayer" target="_blank">BBC iPlayer</a><a class="platform-tile" href="https://www.viki.com" target="_blank">Rakuten Viki</a><a class="platform-tile" href="https://mubi.com" target="_blank">Mubi</a><a class="platform-tile" href="https://www.crunchyroll.com" target="_blank">Crunchyroll</a><a class="platform-tile" href="https://tv.kakao.com" target="_blank">Kakao TV</a><a class="platform-tile" href="https://video.unext.jp" target="_blank">U-NEXT</a></div>
 
 <!-- Trending Now -->
-<div class="section-title">🔥 المحتوى الرائج</div>
+<div class="section-title">🔥 محتوای پرطرفدار</div>
 <div class="thumb-line" data-psom-key="media-trending">
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
@@ -1925,7 +1925,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </div>
 
 <!-- Latest Movies -->
-<div class="section-title">🎬 أحدث الأفلام</div>
+<div class="section-title">🎬 تازه‌ترین فیلم‌ها</div>
 <div class="thumb-line" data-psom-key="media-movie">
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
@@ -2131,7 +2131,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </div>
 
 <!-- Latest Dramas -->
-<div class="section-title">📺 أحدث الدراما</div>
+<div class="section-title">📺 تازه‌ترین سریال‌ها</div>
 <div class="thumb-line" data-psom-key="media-drama">
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
@@ -2362,7 +2362,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </div>
 
 <!-- Mystery / Thriller -->
-<div class="section-title">🕵️‍♂️ غموض / إثارة</div>
+<div class="section-title">🕵️‍♂️ رازآلود / هیجان‌انگیز</div>
 <div class="thumb-line" data-psom-key="media-thriller">
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
@@ -2831,7 +2831,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </div>
 
 <!-- Documentary / Culture -->
-<div class="section-title">🎥 وثائقي / ثقافة</div>
+<div class="section-title">🎥 مستند / فرهنگ</div>
 <div class="thumb-line" data-psom-key="media-documentary">
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
@@ -2987,7 +2987,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </div>
 
 <!-- Animation -->
-<div class="section-title">🐱 رسوم متحركة</div>
+<div class="section-title">🐱 انیمیشن</div>
 <div class="thumb-line" data-psom-key="media-animation">
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
@@ -3143,7 +3143,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </div>
 
 <!-- Music Videos -->
-<div class="section-title">🎵 فيديوهات موسيقية</div>
+<div class="section-title">🎵 ویدئوهای موسیقی</div>
 <div class="thumb-line" data-psom-key="media-music">
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
@@ -3299,7 +3299,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </div>
 
 <!-- Hot Shorts & Video Movies -->
-<div class="section-title">🔥 المقاطع القصيرة والأفلام المصورة الرائجة</div>
+<div class="section-title">🔥 کلیپ‌های کوتاه و ویدئوهای پرطرفدار</div>
 <div class="thumb-line" data-psom-key="media-shorts">
 
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
@@ -4553,7 +4553,7 @@ function handleVideoSearch(e){
 
     var title = document.createElement('div');
     title.className = 'igdc-qa-title';
-    title.textContent = 'Q&A';
+    title.textContent = "پرسش و پاسخ";
 
     var closeBtn = document.createElement('button');
     closeBtn.className = 'igdc-qa-close';
@@ -4633,13 +4633,11 @@ function handleVideoSearch(e){
   if (window.__IGDC_QA_EMAIL_ENSURE__) return;
   window.__IGDC_QA_EMAIL_ENSURE__ = true;
 
-  var CONTACT_HTML = 'ایمیل اصلی: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+  var CONTACT_HTML = "ایمیل تماس: <a href=\"mailto:igdcplatform@gmail.com\">igdcplatform@gmail.com</a>";
 
   function stripFooterEmail(){
     try{
-      var footers = document.querySelectorAll('footer');
-      footers.forEach(function(f){
-        // Remove any mailto links
+      document.querySelectorAll('footer').forEach(function(f){
         f.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
           var parent = a.parentNode;
           if(parent){
@@ -4650,16 +4648,48 @@ function handleVideoSearch(e){
             parent.innerHTML = html;
           }
         });
-        // Remove any plain-text "ایمیل اصلی: ..." remnants
         f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
       });
     }catch(e){}
   }
 
-  function ensureModal(){
-    var modal = document.querySelector('.igdc-qa-modal');
-    if(!modal){
-      // Create minimal modal sk
+  function ensureModalEmail(){
+    try{
+      var modal = document.querySelector('.igdc-qa-modal');
+      if(!modal) return;
+      var body = modal.querySelector('.igdc-qa-body') || modal;
+      if(body && !body.querySelector('.contact-email')){
+        var note = body.querySelector('.igdc-qa-note');
+        if(!note){
+          note = document.createElement('div');
+          note.className = 'igdc-qa-note';
+          note.textContent = "پس از اتصال تنظیمات ذخیره‌سازی (Supabase url/key)، همه قابلیت‌ها فعال می‌شوند.";
+          body.insertBefore(note, body.firstChild || null);
+        } else if(!note.textContent.trim()) {
+          note.textContent = "پس از اتصال تنظیمات ذخیره‌سازی (Supabase url/key)، همه قابلیت‌ها فعال می‌شوند.";
+        }
+        var p = document.createElement('p');
+        p.className = 'contact-email';
+        p.innerHTML = CONTACT_HTML;
+        body.appendChild(p);
+      }
+    }catch(e){}
+  }
+
+  function run(){
+    stripFooterEmail();
+    ensureModalEmail();
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', run, { once:true });
+  } else {
+    run();
+  }
+  setTimeout(run, 400);
+  setTimeout(run, 1200);
+})();
+</script>
 <script id="igtc-mobile-overhaul-FULL-js">
 (function(){
   function qsa(sel){ return Array.prototype.slice.call(document.querySelectorAll(sel)); }
@@ -4717,7 +4747,7 @@ function handleVideoSearch(e){
     }else{
       var url = getCardImageURL(card) || 'about:blank';
       var img = document.createElement('img');
-      img.src = url; img.alt = 'Preview';
+      img.src = url; img.alt = 'پیش‌نمایش';
       img.style.width='100%'; img.style.height='100%'; img.style.objectFit='cover';
       inner.appendChild(img);
     }
@@ -4873,11 +4903,11 @@ window.addEventListener("message",function(ev){
   async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
     await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
-    ta.value=''; alert('تم الارسال بنجاح.');
+    ta.value=''; alert('با موفقیت ارسال شد.');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('فشل الارسال'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('ارسال ناموفق بود'));});
   const btn=document.querySelector('#qnaOpenBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('فشل الارسال'));});
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('ارسال ناموفق بود'));});
 })();
 </script>
 
@@ -5082,7 +5112,7 @@ window.addEventListener("message",function(ev){
 
           <div class="media-review">
             <textarea placeholder="مراجعة من سطر واحد (اختياري)" maxlength="200"></textarea>
-            <button data-action="review">ارسال المراجعة</button>
+            <button data-action="review">ارسال بررسی</button>
           </div>
         </div>
       `;
@@ -5103,7 +5133,7 @@ window.addEventListener("message",function(ev){
 
       switch (action) {
         case 'play':
-          alert('Playback will begin after viewing rights are confirmed.');
+          alert('پخش پس از تأیید حق مشاهده آغاز خواهد شد.');
           break;
 
         case 'rent':
@@ -5117,11 +5147,11 @@ window.addEventListener("message",function(ev){
           break;
 
         case 'wish':
-          alert('Added to your wishlist.');
+          alert('به فهرست علاقه‌مندی‌های شما اضافه شد.');
           break;
 
         case 'review':
-          alert('Your review has been submitted.');
+          alert('بررسی شما ثبت شد.');
           break;
       }
     },
