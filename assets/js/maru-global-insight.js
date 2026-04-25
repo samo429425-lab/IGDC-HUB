@@ -24,7 +24,9 @@
   ===================================================== */
 
   Insight.config = {
-    version: "2.1.0-orchestrated",
+    version: "2.1.1-orchestrated-mapped",
+    endpoint: "/.netlify/functions/maru-global-insight-engine",
+    legacyEndpoint: "/.netlify/functions/maru-global-insight",
     enableSnapshot: true,
     enableMediaAttach: true,
     enableConversationHook: true
@@ -45,20 +47,51 @@
      CORE ENGINE CALL (Single Orchestrator Entry)
   ===================================================== */
 
-  async function callInsightEngine(params){
-
-  const query = new URLSearchParams(params).toString();
-
-  const response = await fetch(
-    "/.netlify/functions/maru-global-insight?" + query,
-    { method: "GET" }
-  );
-
-  if(!response.ok){
-    throw new Error("Insight Engine Call Failed");
+  function getUiLang(){
+    return safe(() =>
+      document.documentElement.getAttribute("lang") ||
+      localStorage.getItem("igdc_lang") ||
+      global.IGTC_CURRENT_LANG ||
+      (global.IGDC && typeof global.IGDC.getLang === "function" ? global.IGDC.getLang() : "") ||
+      ""
+    ) || "";
   }
 
-  return await response.json();
+  function withInsightDefaults(params){
+    const out = Object.assign({}, params || {});
+    if(!out.mode) out.mode = "global-insight";
+    if(!out.uiLang) out.uiLang = getUiLang();
+    if(out.noAnalytics == null) out.noAnalytics = "1";
+    if(out.noRevenue == null) out.noRevenue = "1";
+    return out;
+  }
+
+  async function callInsightEngine(params){
+
+  const finalParams = withInsightDefaults(params);
+  const query = new URLSearchParams(finalParams).toString();
+  const endpoints = [Insight.config.endpoint, Insight.config.legacyEndpoint].filter(Boolean);
+  let lastError = null;
+
+  for(const endpoint of endpoints){
+    try{
+      const response = await fetch(
+        endpoint + "?" + query,
+        { method: "GET", cache: "no-store" }
+      );
+
+      if(response.ok){
+        return await response.json();
+      }
+
+      lastError = new Error("Insight Engine Call Failed: " + response.status + " @ " + endpoint);
+      if(response.status !== 404) break;
+    }catch(e){
+      lastError = e;
+    }
+  }
+
+  throw lastError || new Error("Insight Engine Call Failed");
 }
 
   /* =====================================================
