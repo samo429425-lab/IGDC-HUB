@@ -344,33 +344,8 @@ function normalizeItems(payload){
   return out;
 }
 
-function resolveUiLang(){
-  try {
-    return (
-      document.documentElement.getAttribute('lang') ||
-      window.IGTC_CURRENT_LANG ||
-      window.IGDC?.getLang?.() ||
-      localStorage.getItem('igdc_lang') ||
-      ''
-    ).trim();
-  } catch (e) {
-    return '';
-  }
-}
-
-function buildMaruSearchEndpoint(q){
-  const params = new URLSearchParams();
-  params.set('q', q);
-  params.set('limit', String(FETCH_LIMIT));
-
-  const uiLang = resolveUiLang();
-  if (uiLang) params.set('uiLang', uiLang);
-
-  return `/.netlify/functions/maru-search?${params.toString()}`;
-}
-
 async function fetchSearch(q){
-  const url = buildMaruSearchEndpoint(q);
+  const url = `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`;
 
   try {
     const r = await fetch(url, { cache: 'no-store' });
@@ -529,19 +504,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         it.thumbnail = it.imageSet[0];
       }
 
-      const thumbUrl = String(
-        it.thumbnail ||
-        it.thumb ||
-        it.image ||
-        it.image_url ||
-        it.payload?.thumbnail ||
-        it.payload?.thumb ||
-        it.payload?.image ||
-        it.payload?.image_url ||
-        it.payload?.og_image ||
-        it.media?.preview?.poster ||
-        ''
-      ).trim();
+      const thumbUrl = (it.thumbnail || '').trim();
       const isFaviconLike =
         thumbUrl.includes('google.com/s2/favicons') ||
         thumbUrl.includes('favicon') ||

@@ -24,9 +24,9 @@
   ===================================================== */
 
   Insight.config = {
-    version: "2.1.1-orchestrated-mapped",
-    endpoint: "/.netlify/functions/maru-global-insight-engine",
-    legacyEndpoint: "/.netlify/functions/maru-global-insight",
+    version: "2.1.2-orchestrated-safe-bridge",
+    endpoint: "/.netlify/functions/maru-global-insight",
+    fallbackEndpoint: "/.netlify/functions/maru-global-insight-engine",
     enableSnapshot: true,
     enableMediaAttach: true,
     enableConversationHook: true
@@ -48,17 +48,22 @@
   ===================================================== */
 
   function getUiLang(){
-    return safe(() =>
-      document.documentElement.getAttribute("lang") ||
-      localStorage.getItem("igdc_lang") ||
-      global.IGTC_CURRENT_LANG ||
-      (global.IGDC && typeof global.IGDC.getLang === "function" ? global.IGDC.getLang() : "") ||
-      ""
-    ) || "";
+    return safe(function(){
+      var docLang = (global.document && global.document.documentElement)
+        ? global.document.documentElement.getAttribute("lang")
+        : "";
+      var stored = "";
+      try { stored = global.localStorage ? (global.localStorage.getItem("igdc_lang") || "") : ""; } catch(e) { stored = ""; }
+      var igdcLang = "";
+      try {
+        if(global.IGDC && typeof global.IGDC.getLang === "function") igdcLang = global.IGDC.getLang() || "";
+      } catch(e) { igdcLang = ""; }
+      return docLang || global.IGTC_CURRENT_LANG || igdcLang || stored || "";
+    }) || "";
   }
 
   function withInsightDefaults(params){
-    const out = Object.assign({}, params || {});
+    var out = Object.assign({}, params || {});
     if(!out.mode) out.mode = "global-insight";
     if(!out.uiLang) out.uiLang = getUiLang();
     if(out.noAnalytics == null) out.noAnalytics = "1";
@@ -70,24 +75,30 @@
 
   const finalParams = withInsightDefaults(params);
   const query = new URLSearchParams(finalParams).toString();
-  const endpoints = [Insight.config.endpoint, Insight.config.legacyEndpoint].filter(Boolean);
+  const endpoints = [
+    Insight.config.endpoint || "/.netlify/functions/maru-global-insight",
+    Insight.config.fallbackEndpoint || "/.netlify/functions/maru-global-insight-engine"
+  ].filter(function(v, i, arr){ return v && arr.indexOf(v) === i; });
+
   let lastError = null;
 
-  for(const endpoint of endpoints){
+  for(let i = 0; i < endpoints.length; i++){
+    const endpoint = endpoints[i];
     try{
       const response = await fetch(
         endpoint + "?" + query,
         { method: "GET", cache: "no-store" }
       );
 
-      if(response.ok){
+      if(response && response.ok){
         return await response.json();
       }
 
-      lastError = new Error("Insight Engine Call Failed: " + response.status + " @ " + endpoint);
-      if(response.status !== 404) break;
+      lastError = new Error("Insight Engine Call Failed: " + (response ? response.status : "NO_RESPONSE") + " @ " + endpoint);
+      continue;
     }catch(e){
       lastError = e;
+      continue;
     }
   }
 
