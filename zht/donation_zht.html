@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="zh-Hant">
 <head>
 <!-- Supabase inline injection (vars + init) -->
 <script>
@@ -666,11 +666,11 @@
 .attach-chip .remove:hover{ color:#c0392b; }
 .compose-wrap .row-top{ flex-wrap:wrap; }
 </style><style></style><style>
-/* === Compose row: place 'attachPreview' BETWEEN [Attachment] and [儲存] === */
+/* === Compose row: place 'attach預覽' BETWEEN [Attachment] and [儲存] === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
 .compose-wrap .row-top #btnOpenComposer{ order:5; }   /* 發文 */
 .compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
-.compose-wrap .row-top #attachPreview{                /* 미리보기 막대창(상시 존재) */
+.compose-wrap .row-top #attach預覽{                /* 미리보기 막대창(상시 존재) */
   order:4;
   display:flex; align-items:center; gap:6px; flex-wrap:nowrap;
   min-height:34px; padding:6px 8px;
@@ -699,11 +699,11 @@
 .compose-wrap .row-top .field.field-category{ order:1; }
 .compose-wrap .row-top #btnOpenComposer{ order:2; }   /* 發文 */
 .compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
-.compose-wrap .row-top #attachPreview{ order:4; }     /* 미리보기 막대 */
+.compose-wrap .row-top #attach預覽{ order:4; }     /* 미리보기 막대 */
 .compose-wrap .row-top #btnSubmitPost{ order:5; }     /* 儲存 */
 </style><style>
 /* === 標題 預覽 Bar (between 發文 and Attachment) === */
-.compose-wrap .row-top #titlePreview{
+.compose-wrap .row-top #title預覽{
   order:3;
   display:flex; align-items:center; gap:6px;
   min-height:34px; padding:6px 10px;
@@ -712,7 +712,7 @@
   overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
 }
 .compose-wrap .row-top #btnAttach{ order:4; }
-.compose-wrap .row-top #attachPreview{ order:5; }
+.compose-wrap .row-top #attach預覽{ order:5; }
 .compose-wrap .row-top #btnSubmitPost{ order:6; }
 
 .title-preview .tp-text{ font-size:.92rem; color:#111; }
@@ -727,10 +727,10 @@
 .compose-wrap .row-top #attachName{ display:none !important; } /* 칩 UI 사용 */
 
 /* Shrink bars to avoid line overflow (title < attach) */
-.compose-wrap .row-top #titlePreview{
+.compose-wrap .row-top #title預覽{
   flex:0 1 14vw; max-width:14vw; min-width:120px;
 }
-.compose-wrap .row-top #attachPreview{
+.compose-wrap .row-top #attach預覽{
   flex:0 1 20vw; max-width:20vw; min-width:140px;
 }
 
@@ -738,15 +738,15 @@
 .compose-wrap .row-top .field.field-category{ order:1; }
 .compose-wrap .row-top #btnOpenComposer{ order:2; }
 .compose-wrap .row-top #btnAttach{ order:3; }
-.compose-wrap .row-top #titlePreview{ order:4; }
-.compose-wrap .row-top #attachPreview{ order:5; }
+.compose-wrap .row-top #title預覽{ order:4; }
+.compose-wrap .row-top #attach預覽{ order:5; }
 </style><style>
 /* === ORDER HOTFIX (override) === */
 /* Category */               .compose-wrap .row-top .field.field-category{ order:1 !important; }
 /* 發文 */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
-/* 標題 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
+/* 標題 막대 */          .compose-wrap .row-top #title預覽{ order:3 !important; }
 /* Attachment 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
-/* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
+/* 첨부 미리보기 막대 */ .compose-wrap .row-top #attach預覽{ order:5 !important; }
 /* 儲存 */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
 /* 清除 */             .compose-wrap .row-top #btnAttachClear{ order:7 !important; }
 </style><style>
@@ -2407,8 +2407,8 @@ body > div.container,
 <option value="env">環境</option>
 <option value="etc">其他</option>
 </select>
-</label><button class="button small" id="btnAttach" type="button">附件</button><div aria-label="Attachment 미리보기" class="attach-preview" id="attachPreview"></div>
-<button class="button small" id="btnOpenComposer">發文</button><div aria-label="標題 미리보기" class="title-preview" id="titlePreview"><span class="tp-text">無標題</span></div>
+</label><button class="button small" id="btnAttach" type="button">附件</button><div aria-label="Attachment 미리보기" class="attach-preview" id="attach預覽"></div>
+<button class="button small" id="btnOpenComposer">發文</button><div aria-label="標題 미리보기" class="title-preview" id="title預覽"><span class="tp-text">無標題</span></div>
 <button class="button small accent" id="btnSubmitPost">儲存</button>
 <span id="attachName"></span>
 <button aria-label="첨부 제거 " class="button tiny" id="btnAttachClear" style="display:none;" type="button">清除</button>
@@ -2578,7 +2578,7 @@ body > div.container,
   const btnPickFile = $("#btnPickFile");
   const fileChosen = $("#fileChosen");
   const imgChosen = $("#imgChosen");
-  let imageLink = ""; let attachLink = ""; let imagePreviewObjectUrl = "";
+  let imageLink = ""; let attachLink = ""; let image預覽ObjectUrl = "";
 
   function openModal(){ modal.classList.remove("hidden"); titleI && titleI.focus(); }
   function closeModal(){ modal.classList.add("hidden"); }
@@ -2600,7 +2600,7 @@ body > div.container,
     if(holder){
       const item = document.createElement('div');
       item.className = 'item';
-      const imgSrc = imageLink || imagePreviewObjectUrl || null;
+      const imgSrc = imageLink || image預覽ObjectUrl || null;
       item.innerHTML = `
         ${imgSrc ? `<div class="thumb" style="aspect-ratio:16/9; overflow:hidden; border-radius:6px; margin-bottom:6px;"><img src="${imgSrc}" style="width:100%; height:100%; object-fit:cover;"/></div>` : ""}
         <div class="title">${t}</div>
@@ -2641,17 +2641,17 @@ body > div.container,
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
     const link = prompt("이미지 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 Confirm을 누르세요)");
-    if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
+    if(link){ imageLink = link; image預覽ObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
         alert("Only images up to 2MB can be previewed directly. For large files, upload them to external storage and enter the link.");
-        imageLink = ""; imagePreviewObjectUrl = "";
+        imageLink = ""; image預覽ObjectUrl = "";
       }else{
-        imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
+        image預覽ObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
         imageLink = ""; // 실제 儲存은 링크만 사용
       }
     }else{
-      imageLink = ""; imagePreviewObjectUrl = "";
+      imageLink = ""; image預覽ObjectUrl = "";
     }
   });
 
@@ -2730,7 +2730,7 @@ body > div.container,
 
   const rowTop = $('.compose-wrap .row-top');
   const attachInput = $('#postAttach');
-  const attachPreview = $('#attachPreview');
+  const attach預覽 = $('#attach預覽');
   const clearBtn = $('#btnAttachClear');
   const legacyFile = $('#postFile');
   const btnSubmit = $('#btnSubmitPost');
@@ -2745,8 +2745,8 @@ body > div.container,
     }catch(e){}
   }
   function renderChips(){
-    if(!attachPreview) return;
-    attachPreview.innerHTML = '';
+    if(!attach預覽) return;
+    attach預覽.innerHTML = '';
     if(!selectedFiles.length){
       if(clearBtn) clearBtn.style.display = 'none';
       return;
@@ -2764,7 +2764,7 @@ body > div.container,
         renderChips();
       });
       chip.appendChild(x);
-      attachPreview.appendChild(chip);
+      attach預覽.appendChild(chip);
     });
   }
   if(attachInput){
@@ -2855,7 +2855,7 @@ body > div.container,
 (function(){
   const $ = (s,r=document)=>r.querySelector(s);
   const attachInput = $('#postAttach');
-  const attachPreview = $('#attachPreview');
+  const attach預覽 = $('#attach預覽');
   const clearBtn = $('#btnAttachClear');
   const legacyFile = $('#postFile');
   const nameEl = $('#attachName');
@@ -2877,14 +2877,14 @@ body > div.container,
     if(attachInput) try{ attachInput.value=''; }catch(e){}
     if(legacyFile) try{ legacyFile.value=''; }catch(e){}
     syncInputs();
-    if(attachPreview) attachPreview.innerHTML = '';
+    if(attach預覽) attach預覽.innerHTML = '';
     if(clearBtn) clearBtn.style.display = 'none';
     if(nameEl){ nameEl.textContent=''; } // 강제 초기화 (유령 표시 방지)
   }
 
   function renderChips(){
-    if(!attachPreview) return;
-    attachPreview.innerHTML = '';
+    if(!attach預覽) return;
+    attach預覽.innerHTML = '';
     if(!selectedFiles.length){
       if(clearBtn) clearBtn.style.display = 'none';
       if(nameEl){ nameEl.textContent=''; }
@@ -2902,7 +2902,7 @@ body > div.container,
     x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 모두 제거'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
-    attachPreview.appendChild(chip);
+    attach預覽.appendChild(chip);
 
     // 레거시 이름 표시 동기화 차단 (항상 칩이 우선)
     if(nameEl){ nameEl.textContent=''; }
@@ -2943,12 +2943,12 @@ body > div.container,
   const btnDraft = $('#btnDraftSave');
   const btnCancel = $('#btnCancel');
   const btnSubmit = $('#btnSubmitPost');
-  const titlePreview = $('#titlePreview');
-  const tpText = titlePreview ? titlePreview.querySelector('.tp-text') : null;
+  const title預覽 = $('#title預覽');
+  const tpText = title預覽 ? title預覽.querySelector('.tp-text') : null;
 
   let draft = { title:'', body:'' };
 
-  function updateTitlePreview(src){
+  function updateTitle預覽(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
     tpText.textContent = t || ''無標題';';
@@ -2956,7 +2956,7 @@ body > div.container,
 
   // live typing updates preview
   if(titleI){
-    titleI.addEventListener('input', ()=> updateTitlePreview());
+    titleI.addEventListener('input', ()=> updateTitle預覽());
   }
 
   // 儲存草稿: keep in-memory draft; do NOT post to right panel
@@ -2965,7 +2965,7 @@ body > div.container,
       e.preventDefault();
       draft.title = (titleI && titleI.value)||'';
       draft.body  = (bodyI && bodyI.value)||'';
-      updateTitlePreview(draft.title);
+      updateTitle預覽(draft.title);
       // keep modal open; optional small feedback
       // console.log('Draft saved');
     });
@@ -2977,7 +2977,7 @@ body > div.container,
       draft.title=''; draft.body='';
       if(titleI) titleI.value='';
       if(bodyI) bodyI.value='';
-      updateTitlePreview('');
+      updateTitle預覽('');
     });
   }
 
@@ -2992,13 +2992,13 @@ body > div.container,
       // clear draft & preview shortly after click so the original handler can read values
       setTimeout(()=>{
         draft.title=''; draft.body='';
-        updateTitlePreview('');
+        updateTitle預覽('');
       }, 0);
     }, true); // capture phase to run before other handlers
   }
 
   // initialize preview on load
-  updateTitlePreview('');
+  updateTitle預覽('');
 })();
 </script><script>
 (function(){
@@ -3006,12 +3006,12 @@ body > div.container,
   const titleI = $('#composeTitle');
   const modal = $('#composerModal');
   const btnDraft = $('#btnDraftSave');
-  const titlePreview = $('#titlePreview');
-  const tpText = titlePreview ? titlePreview.querySelector('.tp-text') : null;
+  const title預覽 = $('#title預覽');
+  const tpText = title預覽 ? title預覽.querySelector('.tp-text') : null;
 
   let draft = { title:'', body:'' };
 
-  function updateTitlePreview(src){
+  function updateTitle預覽(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
     tpText.textContent = t || '標題 Not entered';
@@ -3022,7 +3022,7 @@ body > div.container,
       e.preventDefault();
       draft.title = (titleI && titleI.value)||'';
       draft.body  = ($('#composeBody') && $('#composeBody').value)||'';
-      updateTitlePreview(draft.title);
+      updateTitle預覽(draft.title);
       if(modal) modal.classList.add('hidden'); // auto-close
     });
   }
@@ -3116,7 +3116,7 @@ body > div.container,
     mo.observe(list, {childList:true});
   });
 })();
-</script><div id="newsPreviewModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 800px); max-height:80vh; overflow:auto;">
+</script><div id="news預覽Modal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 800px); max-height:80vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
 <h3 id="npTitle" style="margin:0; font-size:1.05rem;"></h3>
 <div id="npTime" style="font-size:.85rem; color:#6b7280;"></div>
@@ -3131,7 +3131,7 @@ body > div.container,
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
   const $ = (s,r=document)=>r.querySelector(s);
 
-  function normalizeItem(item){
+  function normalize項目(item){
     if(!item || item.querySelector('.item-header')) return;
     const tEl = item.querySelector('.title');
     const mEl = item.querySelector('.meta');
@@ -3145,7 +3145,7 @@ body > div.container,
   }
 
   function normalizeList(list){
-    list && list.querySelectorAll('.item').forEach(normalizeItem);
+    list && list.querySelectorAll('.item').forEach(normalize項目);
   }
 
   $$('.right .topic-panel .list').forEach(normalizeList);
@@ -3154,14 +3154,14 @@ body > div.container,
     const mo = new MutationObserver(muts=>{
       muts.forEach(m=>{
         m.addedNodes && Array.from(m.addedNodes).forEach(n=>{
-          if(n.nodeType===1 && n.classList.contains('item')) normalizeItem(n);
+          if(n.nodeType===1 && n.classList.contains('item')) normalize項目(n);
         });
       });
     });
     mo.observe(list, {childList:true});
   });
 
-  const modal = document.getElementById('newsPreviewModal');
+  const modal = document.getElementById('news預覽Modal');
   const npTitle = document.getElementById('npTitle');
   const npTime = document.getElementById('npTime');
   const npBody = document.getElementById('npBody');
@@ -3234,10 +3234,10 @@ body > div.container,
     const key = (t+'|'+tm).toLowerCase(); let h=0; for(let i=0;i<key.length;i++){ h=((h<<5)-h)+key.charCodeAt(i); h|=0; } return 'news:'+h;
   }
   function loadEdit(id){
-    try{ return JSON.parse(localStorage.getItem('newsEdit:'+id) || 'null'); }catch(e){ return null; }
+    try{ return JSON.parse(localStorage.get項目('newsEdit:'+id) || 'null'); }catch(e){ return null; }
   }
   function saveEdit(id, tsStr){
-    localStorage.setItem('newsEdit:'+id, JSON.stringify({editedAt: tsStr}));
+    localStorage.set項目('newsEdit:'+id, JSON.stringify({editedAt: tsStr}));
   }
   function showEditedBadge(item, tsStr){
     if(!item) return;
@@ -3265,12 +3265,12 @@ body > div.container,
   });
 
   // Capture which item is being edited via delegated click
-  window.__currentEditingItem = null;
+  window.__currentEditing項目 = null;
   document.addEventListener('click', (e)=>{
     const btn = e.target.closest('.btn-edit');
     if(!btn) return;
     const item = e.target.closest('.right .topic-panel .list .item');
-    if(item && canEditDelete(item)) window.__currentEditingItem = item;
+    if(item && canEditDelete(item)) window.__currentEditing項目 = item;
   }, true);
 
   // When edit modal "儲存" is pressed, persist edited meta and show badge
@@ -3278,13 +3278,13 @@ body > div.container,
     const saveBtn = document.getElementById('enSave');
     if(!saveBtn) return;
     saveBtn.addEventListener('click', ()=>{
-      const item = window.__currentEditingItem;
+      const item = window.__currentEditing項目;
       if(!item || !canEditDelete(item)) return;
       const ts = new Date().toLocaleString();
       const id = itemId(item);
       saveEdit(id, ts);
       showEditedBadge(item, ts);
-      window.__currentEditingItem = null;
+      window.__currentEditing項目 = null;
     });
   })();
 
@@ -3354,15 +3354,15 @@ body > div.container,
     const key = (t+'|'+tm).toLowerCase(); let h=0; for(let i=0;i<key.length;i++){ h=((h<<5)-h)+key.charCodeAt(i); h|=0; } return 'news:'+h;
   }
   function loadMetrics(id){
-    try{ return JSON.parse(localStorage.getItem('newsMetrics:'+id) || '{"views":0,"reco":0,"like":0}'); }
+    try{ return JSON.parse(localStorage.get項目('newsMetrics:'+id) || '{"views":0,"reco":0,"like":0}'); }
     catch(e){ return {views:0,reco:0,like:0}; }
   }
-  function saveMetrics(id, obj){ localStorage.setItem('newsMetrics:'+id, JSON.stringify(obj)); }
+  function saveMetrics(id, obj){ localStorage.set項目('newsMetrics:'+id, JSON.stringify(obj)); }
   function loadToggles(id){
-    try{ return JSON.parse(localStorage.getItem('newsToggles:'+id) || '{"reco":false,"like":false}'); }
+    try{ return JSON.parse(localStorage.get項目('newsToggles:'+id) || '{"reco":false,"like":false}'); }
     catch(e){ return {reco:false,like:false}; }
   }
-  function saveToggles(id, obj){ localStorage.setItem('newsToggles:'+id, JSON.stringify(obj)); }
+  function saveToggles(id, obj){ localStorage.set項目('newsToggles:'+id, JSON.stringify(obj)); }
 
   function ensureFooterWithIcons(item){
     let footer = item.querySelector('.item-footer');
@@ -3531,7 +3531,7 @@ body > div.container,
     keep.classList.add('migrated');
     // Ensure compact shape
     keep.style.display = 'inline-flex';
-    keep.style.alignItems = 'center';
+    keep.style.align項目s = 'center';
     keep.style.justifyContent = 'center';
     keep.style.height = '28px';
     keep.style.lineHeight = '28px';
@@ -3671,7 +3671,7 @@ body > div.container,
   }
 
   // 구매
-  window.orderItem = async function(itemId, qty){
+  window.order項目 = async function(itemId, qty){
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
@@ -3694,7 +3694,7 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("區塊鏈處理請求已完成： " + (j.txHash||"Pending")); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("區塊鏈處理請求已完成： " + (j.txHash||"待處理")); }
       else { alert("區塊鏈處理失敗"); }
     }catch(e){ console.warn(e); alert("Network error"); }
   };
@@ -3835,7 +3835,7 @@ body > div.container,
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","정액 기부 금액");
+  btnGroup.setAttribute("aria-label","固定捐款金額");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -4498,7 +4498,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         bk=document.createElement('div');
         bk.id='drawerBackdrop';
         bk.className='drawer-backdrop';
-        document.body/*__KILL__*/ appendChild_DISABLED(bk);
+        document.body.appendChild(bk);
         bk.addEventListener('click',close,{passive:true});
       }
     }
@@ -4862,7 +4862,7 @@ window.addEventListener("message",function(ev){
     return keyFromLabel(labelText);
   }
 
-  function normalizeItemFooter(root){
+  function normalize項目Footer(root){
     if(!root) root = document;
     if(!root.querySelectorAll) return;
 
@@ -4953,7 +4953,7 @@ window.addEventListener("message",function(ev){
       wrap.className = "mobile-news-clone";
       wrap.innerHTML = src.outerHTML;
 
-      normalizeItemFooter(wrap);
+      normalize項目Footer(wrap);
 
       row.parentNode.insertBefore(wrap, row.nextSibling);
     });
@@ -4978,11 +4978,11 @@ window.addEventListener("message",function(ev){
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
   // 預覽 targets (reuse existing modal if present)
-  const modal   = $('#newsPreviewModal') || $('#previewModal');
-  const npTitle = $('#npTitle') || $('#newsPreviewTitle');
-  const npTime  = $('#npTime') || $('#newsPreviewTime');
-  const npBody  = $('#npBody') || $('#newsPreviewBody');
-  const npAttach= $('#npAttach') || $('#newsPreviewAttach');
+  const modal   = $('#news預覽Modal') || $('#previewModal');
+  const npTitle = $('#npTitle') || $('#news預覽Title');
+  const npTime  = $('#npTime') || $('#news預覽Time');
+  const npBody  = $('#npBody') || $('#news預覽Body');
+  const npAttach= $('#npAttach') || $('#news預覽Attach');
 
   function openModal(){
     if(!modal) return;
@@ -5012,7 +5012,7 @@ window.addEventListener("message",function(ev){
       });
   }
   markHasAttach(document);
-  normalizeItemFooter(document);
+  normalize項目Footer(document);
 
   // Watch dynamic additions
   $$('.right .topic-panel .list, .mobile-news-clone .topic-panel .list').forEach(function(list){
@@ -5022,12 +5022,12 @@ window.addEventListener("message",function(ev){
           if(n.nodeType !== 1) return;
           if(n.classList.contains('item')){
             markHasAttach(n);
-            normalizeItemFooter(n);
+            normalize項目Footer(n);
           }else if(n.querySelectorAll){
             n.querySelectorAll('.item').forEach(function(it){
               markHasAttach(it);
             });
-            normalizeItemFooter(n);
+            normalize項目Footer(n);
           }});
       });
     });
@@ -5064,7 +5064,7 @@ window.addEventListener("message",function(ev){
 
     npTitle.textContent = title || '標題 없음';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(등록된 본문이 없습니다.)';
+    npBody.textContent = body || '(尚無已發布的正文。)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
         ? '<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml
@@ -5405,7 +5405,7 @@ window.addEventListener("message",function(ev){
     card.innerHTML = `
       <div class="thumb"></div>
       <div class="card-body">
-        <div class="card-title">Loading...</div>
+        <div class="card-title">載入中...</div>
         <div class="card-meta">-</div>
         <div class="card-preview">Preparing</div>
       </div>

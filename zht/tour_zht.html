@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html lang="en">
+<html lang="zh-Hant">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
@@ -1048,9 +1048,9 @@ a[href^="mailto:"]:hover {
     .btn-grid .link-btn:hover { background:#e75480; color:#ffffff; border-color:#cc2d63; box-shadow:0 2px 6px rgba(0,0,0,0.18); }</style>
 <div class="region-card">
 <div class="region-title">Asia</div>
-<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">Hana旅遊 <small>(하나투어)</small></a>
-<a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour<small>(모두투어)</small></a>
-<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon 旅遊 <small>(노랑풍선)</small></a>
+<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaTour</a>
+<a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour</a>
+<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon</a>
 <a class="link-btn" href="https://www.trip.com" target="_blank">Trip.com <small>(携程)</small></a>
 <a class="link-btn" href="https://www.ctrip.com" target="_blank">Ctrip <small>(携程)</small></a>
 <a class="link-btn" href="https://www.qunar.com" target="_blank">Qunar <small>(去哪儿网)</small></a>
@@ -1064,7 +1064,7 @@ a[href^="mailto:"]:hover {
 <a class="link-btn" href="https://www.agoda.com" target="_blank">Agoda</a>
 <a class="link-btn" href="https://www.klook.com" target="_blank">Klook</a>
 <a class="link-btn" href="https://www.his-j.com" target="_blank">HIS Japan <small>(エイチ・アイ・エス)</small></a>
-<a class="link-btn" href="https://www.cleartrip.com" target="_blank">清除trip</a>
+<a class="link-btn" href="https://www.cleartrip.com" target="_blank">Cleartrip</a>
 <a class="link-btn" href="https://www.virtualtrips.io" target="_blank">虛擬旅行</a>
 <a class="link-btn" href="https://www.kkday.com" target="_blank">KKDay</a>
 <a class="link-btn" href="https://www.vietnamairlines.com" target="_blank">Vietnam Airlines</a></div>
@@ -1369,9 +1369,9 @@ window.addEventListener("message",function(ev){
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
     ta.value=''; alert('已成功送出。');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('Sending failed'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('傳送失敗'));});
   const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('Sending failed'));});
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('傳送失敗'));});
 })();
 </script>
 
@@ -1678,7 +1678,7 @@ window.addEventListener("message",function(ev){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Server-side saving is disabled because the save settings (Supabase url/key) are not connected yet. When deployed to the web, it will connect automatically if SUPER_VARSAR.url/anonKey is configured.");
+        alert("伺服器端儲存暫時停用，因為儲存設定尚未連接。部署到網頁後，如果已完成設定，系統會自動連接。");
         return;
       }
       const record = {
@@ -1688,7 +1688,7 @@ window.addEventListener("message",function(ev){
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("Submission failed"); return; }
+      if(error){ alert("提交失敗"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -1844,8 +1844,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">Product Reviews</h3>
-          <div id="igdc-review-list" class="igdc-review-list">Loading...</div>
+          <h3 class="igdc-review-title">商品評論</h3>
+          <div id="igdc-review-list" class="igdc-review-list">載入中...</div>
           ${canWrite ? this.renderReviewForm() : this.renderLoginHint()}
         </section>
       `;
@@ -1901,7 +1901,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       const list = document.getElementById('igdc-review-list');
       if (!list) return;
 
-      list.textContent = 'Loading...';
+      list.textContent = '載入中...';
 
       try {
         const res = await fetch(
@@ -1914,7 +1914,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
           return;
         }
 
-        list.innerHTML = data.map(this.renderReviewItem).join('');
+        list.innerHTML = data.map(this.renderReview項目).join('');
       } catch {
         list.textContent = '無法載入評論。';
       }
@@ -1929,7 +1929,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       if (!res.ok) throw new Error('submit failed');
     },
 
-    renderReviewItem(item) {
+    renderReview項目(item) {
       const esc = (v) => String(v || '').replace(/[<>]/g, '');
       return `
         <div class="igdc-review-item">
@@ -2034,7 +2034,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
                color:#7a8da8;
                letter-spacing:.5px;
              ">
-            Loading
+            載入中...
           </div>
 
         </div>
@@ -2361,7 +2361,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Server-side saving is disabled because the save settings (Supabase url/key) are not connected yet. When deployed to the web, it will connect automatically if SUPER_VARSAR.url/anonKey is configured.");
+        alert("伺服器端儲存暫時停用，因為儲存設定尚未連接。部署到網頁後，如果已完成設定，系統會自動連接。");
         return;
       }
       const record = {
@@ -2371,7 +2371,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("Submission failed"); return; }
+      if(error){ alert("提交失敗"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }

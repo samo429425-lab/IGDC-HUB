@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html lang="en">
+<html lang="uz">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
@@ -1048,9 +1048,9 @@ a[href^="mailto:"]:hover {
     .btn-grid .link-btn:hover { background:#e75480; color:#ffffff; border-color:#cc2d63; box-shadow:0 2px 6px rgba(0,0,0,0.18); }</style>
 <div class="region-card">
 <div class="region-title">Asia</div>
-<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaSayohat <small>(하나투어)</small></a>
-<a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour<small>(모두투어)</small></a>
-<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon Sayohat <small>(노랑풍선)</small></a>
+<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaTour</a>
+<a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour</a>
+<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon</a>
 <a class="link-btn" href="https://www.trip.com" target="_blank">Trip.com <small>(携程)</small></a>
 <a class="link-btn" href="https://www.ctrip.com" target="_blank">Ctrip <small>(携程)</small></a>
 <a class="link-btn" href="https://www.qunar.com" target="_blank">Qunar <small>(去哪儿网)</small></a>
@@ -1369,9 +1369,9 @@ window.addEventListener("message",function(ev){
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
     ta.value=''; alert('Muvaffaqiyatli yuborildi.');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('Sending failed'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('Yuborish amalga oshmadi'));});
   const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('Sending failed'));});
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('Yuborish amalga oshmadi'));});
 })();
 </script>
 
@@ -1678,7 +1678,7 @@ window.addEventListener("message",function(ev){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Server-side saving is disabled because the save settings (Supabase url/key) are not connected yet. When deployed to the web, it will connect automatically if SUPER_VARSAR.url/anonKey is configured.");
+        alert("Serverda saqlash vaqtincha o‘chirilgan, chunki saqlash sozlamalari hali ulanmagan. Vebga joylashtirilganda sozlamalar mavjud bo‘lsa, avtomatik ulanadi.");
         return;
       }
       const record = {
@@ -1688,7 +1688,7 @@ window.addEventListener("message",function(ev){
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("Submission failed"); return; }
+      if(error){ alert("Yuborish amalga oshmadi"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -1844,8 +1844,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">Product Reviews</h3>
-          <div id="igdc-review-list" class="igdc-review-list">Loading...</div>
+          <h3 class="igdc-review-title">Mahsulot sharhlari</h3>
+          <div id="igdc-review-list" class="igdc-review-list">Yuklanmoqda...</div>
           ${canWrite ? this.renderReviewForm() : this.renderLoginHint()}
         </section>
       `;
@@ -1901,7 +1901,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       const list = document.getElementById('igdc-review-list');
       if (!list) return;
 
-      list.textContent = 'Loading...';
+      list.textContent = 'Yuklanmoqda...';
 
       try {
         const res = await fetch(
@@ -1914,7 +1914,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
           return;
         }
 
-        list.innerHTML = data.map(this.renderReviewItem).join('');
+        list.innerHTML = data.map(this.renderReviewElement).join('');
       } catch {
         list.textContent = 'Sharhlarni yuklab bo‘lmadi.';
       }
@@ -1929,7 +1929,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       if (!res.ok) throw new Error('submit failed');
     },
 
-    renderReviewItem(item) {
+    renderReviewElement(item) {
       const esc = (v) => String(v || '').replace(/[<>]/g, '');
       return `
         <div class="igdc-review-item">
@@ -2034,7 +2034,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
                color:#7a8da8;
                letter-spacing:.5px;
              ">
-            Loading
+            Yuklanmoqda...
           </div>
 
         </div>
@@ -2361,7 +2361,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Server-side saving is disabled because the save settings (Supabase url/key) are not connected yet. When deployed to the web, it will connect automatically if SUPER_VARSAR.url/anonKey is configured.");
+        alert("Serverda saqlash vaqtincha o‘chirilgan, chunki saqlash sozlamalari hali ulanmagan. Vebga joylashtirilganda sozlamalar mavjud bo‘lsa, avtomatik ulanadi.");
         return;
       }
       const record = {
@@ -2371,7 +2371,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("Submission failed"); return; }
+      if(error){ alert("Yuborish amalga oshmadi"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }

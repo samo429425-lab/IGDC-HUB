@@ -666,11 +666,11 @@
 .attach-chip .remove:hover{ color:#c0392b; }
 .compose-wrap .row-top{ flex-wrap:wrap; }
 </style><style></style><style>
-/* === Compose row: place 'attachPreview' BETWEEN [附件] and [保存] === */
+/* === Compose row: place 'attach预览' BETWEEN [附件] and [保存] === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
 .compose-wrap .row-top #btnOpenComposer{ order:5; }   /* 撰写 */
 .compose-wrap .row-top #btnAttach{ order:3; }         /* 附件 */
-.compose-wrap .row-top #attachPreview{                /* 미리보기 막대창(상시 존재) */
+.compose-wrap .row-top #attach预览{                /* 미리보기 막대창(상시 존재) */
   order:4;
   display:flex; align-items:center; gap:6px; flex-wrap:nowrap;
   min-height:34px; padding:6px 8px;
@@ -699,11 +699,11 @@
 .compose-wrap .row-top .field.field-category{ order:1; }
 .compose-wrap .row-top #btnOpenComposer{ order:2; }   /* 撰写 */
 .compose-wrap .row-top #btnAttach{ order:3; }         /* 附件 */
-.compose-wrap .row-top #attachPreview{ order:4; }     /* 미리보기 막대 */
+.compose-wrap .row-top #attach预览{ order:4; }     /* 미리보기 막대 */
 .compose-wrap .row-top #btn提交Post{ order:5; }     /* 保存 */
 </style><style>
-/* === 标题 Preview Bar (between 撰写 and 附件) === */
-.compose-wrap .row-top #titlePreview{
+/* === 标题 预览 Bar (between 撰写 and 附件) === */
+.compose-wrap .row-top #title预览{
   order:3;
   display:flex; align-items:center; gap:6px;
   min-height:34px; padding:6px 10px;
@@ -712,7 +712,7 @@
   overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
 }
 .compose-wrap .row-top #btnAttach{ order:4; }
-.compose-wrap .row-top #attachPreview{ order:5; }
+.compose-wrap .row-top #attach预览{ order:5; }
 .compose-wrap .row-top #btn提交Post{ order:6; }
 
 .title-preview .tp-text{ font-size:.92rem; color:#111; }
@@ -727,10 +727,10 @@
 .compose-wrap .row-top #attachName{ display:none !important; } /* 칩 UI 사용 */
 
 /* Shrink bars to avoid line overflow (title < attach) */
-.compose-wrap .row-top #titlePreview{
+.compose-wrap .row-top #title预览{
   flex:0 1 14vw; max-width:14vw; min-width:120px;
 }
-.compose-wrap .row-top #attachPreview{
+.compose-wrap .row-top #attach预览{
   flex:0 1 20vw; max-width:20vw; min-width:140px;
 }
 
@@ -738,15 +738,15 @@
 .compose-wrap .row-top .field.field-category{ order:1; }
 .compose-wrap .row-top #btnOpenComposer{ order:2; }
 .compose-wrap .row-top #btnAttach{ order:3; }
-.compose-wrap .row-top #titlePreview{ order:4; }
-.compose-wrap .row-top #attachPreview{ order:5; }
+.compose-wrap .row-top #title预览{ order:4; }
+.compose-wrap .row-top #attach预览{ order:5; }
 </style><style>
 /* === ORDER HOTFIX (override) === */
 /* 分类 */               .compose-wrap .row-top .field.field-category{ order:1 !important; }
 /* 撰写 */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
-/* 标题 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
+/* 标题 막대 */          .compose-wrap .row-top #title预览{ order:3 !important; }
 /* 附件 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
-/* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
+/* 첨부 미리보기 막대 */ .compose-wrap .row-top #attach预览{ order:5 !important; }
 /* 保存 */               .compose-wrap .row-top #btn提交Post{ order:6 !important; }
 /* 清除 */             .compose-wrap .row-top #btnAttach清除{ order:7 !important; }
 </style><style>
@@ -806,7 +806,7 @@
 .right .topic-panel .item .title,
 .right .topic-panel .item .meta{ display:none !important; }
 
-/* Preview text: show ~3 lines and then flow away */
+/* 预览 text: show ~3 lines and then flow away */
 .right .topic-panel .item .preview{
   font-size:.84rem; color:#374151; margin-top:0;
   display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical;
@@ -845,7 +845,7 @@
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like,
 
-/* 색상: Edit=파랑, 추천=초록, Like=핑크, 删除=빨강 */
+/* 색상: Edit=파랑, 推荐=초록, Like=핑크, 删除=빨강 */
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 .right .topic-panel .item .btn-reco{ background:#e6f7ec; color:#059669; border-color:#bbf7d0; }
 .right .topic-panel .item .btn-like{ background:#ffe6ef; color:#db2777; border-color:#fecdd3; }
@@ -921,7 +921,7 @@
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 @media (orientation: portrait){
 </style><style>
-/* Hard-hide any legacy text buttons labeled 추천/Like */
+/* Hard-hide any legacy text buttons labeled 推荐/Like */
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like{ display:none !important; }
 }
@@ -1974,7 +1974,7 @@ body .right{ display:none !important; }
     line-height:1.5;
   }
 
-  /* 하단 Footer: 읽음/추천/좋아요/아이콘 + Edit/删除 전부 우측 정렬 */
+  /* 하단 Footer: 읽음/推荐/喜欢/아이콘 + Edit/删除 전부 우측 정렬 */
  .mobile-news-clone .topic-panel .item .item-footer {
     margin-top: auto;              /* 위 Content 밀어 올리고, footer를 맨 아래로 */
     display: flex;
@@ -2413,8 +2413,8 @@ body > div.container,
 <option value="env">环境</option>
 <option value="etc">其他</option>
 </select>
-</label><button class="button small" id="btnAttach" type="button">附件</button><div aria-label="附件 미리보기" class="attach-preview" id="attachPreview"></div>
-<button class="button small" id="btnOpenComposer">撰写</button><div aria-label="标题 미리보기" class="title-preview" id="titlePreview"><span class="tp-text">No title</span></div>
+</label><button class="button small" id="btnAttach" type="button">附件</button><div aria-label="附件 미리보기" class="attach-preview" id="attach预览"></div>
+<button class="button small" id="btnOpenComposer">撰写</button><div aria-label="标题 미리보기" class="title-preview" id="title预览"><span class="tp-text">无标题</span></div>
 <button class="button small accent" id="btn提交Post">保存</button>
 <span id="attachName"></span>
 <button aria-label="첨부 제거 " class="button tiny" id="btnAttach清除" style="display:none;" type="button">清除</button>
@@ -2584,7 +2584,7 @@ body > div.container,
   const btnPickFile = $("#btnPickFile");
   const fileChosen = $("#fileChosen");
   const imgChosen = $("#imgChosen");
-  let imageLink = ""; let attachLink = ""; let imagePreviewObjectUrl = "";
+  let imageLink = ""; let attachLink = ""; let image预览ObjectUrl = "";
 
   function openModal(){ modal.classList.remove("hidden"); titleI && titleI.focus(); }
   function closeModal(){ modal.classList.add("hidden"); }
@@ -2606,7 +2606,7 @@ body > div.container,
     if(holder){
       const item = document.createElement('div');
       item.className = 'item';
-      const imgSrc = imageLink || imagePreviewObjectUrl || null;
+      const imgSrc = imageLink || image预览ObjectUrl || null;
       item.innerHTML = `
         ${imgSrc ? `<div class="thumb" style="aspect-ratio:16/9; overflow:hidden; border-radius:6px; margin-bottom:6px;"><img src="${imgSrc}" style="width:100%; height:100%; object-fit:cover;"/></div>` : ""}
         <div class="title">${t}</div>
@@ -2647,17 +2647,17 @@ body > div.container,
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
     const link = prompt("이미지 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 确认을 누르세요)");
-    if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
+    if(link){ imageLink = link; image预览ObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
         alert("Only images up to 2MB can be previewed directly. For large files, upload them to external storage and enter the link.");
-        imageLink = ""; imagePreviewObjectUrl = "";
+        imageLink = ""; image预览ObjectUrl = "";
       }else{
-        imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
+        image预览ObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
         imageLink = ""; // 실제 保存은 링크만 사용
       }
     }else{
-      imageLink = ""; imagePreviewObjectUrl = "";
+      imageLink = ""; image预览ObjectUrl = "";
     }
   });
 
@@ -2736,7 +2736,7 @@ body > div.container,
 
   const rowTop = $('.compose-wrap .row-top');
   const attachInput = $('#postAttach');
-  const attachPreview = $('#attachPreview');
+  const attach预览 = $('#attach预览');
   const clearBtn = $('#btnAttach清除');
   const legacyFile = $('#postFile');
   const btn提交 = $('#btn提交Post');
@@ -2751,8 +2751,8 @@ body > div.container,
     }catch(e){}
   }
   function renderChips(){
-    if(!attachPreview) return;
-    attachPreview.innerHTML = '';
+    if(!attach预览) return;
+    attach预览.innerHTML = '';
     if(!selectedFiles.length){
       if(clearBtn) clearBtn.style.display = 'none';
       return;
@@ -2770,7 +2770,7 @@ body > div.container,
         renderChips();
       });
       chip.appendChild(x);
-      attachPreview.appendChild(chip);
+      attach预览.appendChild(chip);
     });
   }
   if(attachInput){
@@ -2861,7 +2861,7 @@ body > div.container,
 (function(){
   const $ = (s,r=document)=>r.querySelector(s);
   const attachInput = $('#postAttach');
-  const attachPreview = $('#attachPreview');
+  const attach预览 = $('#attach预览');
   const clearBtn = $('#btnAttach清除');
   const legacyFile = $('#postFile');
   const nameEl = $('#attachName');
@@ -2883,14 +2883,14 @@ body > div.container,
     if(attachInput) try{ attachInput.value=''; }catch(e){}
     if(legacyFile) try{ legacyFile.value=''; }catch(e){}
     syncInputs();
-    if(attachPreview) attachPreview.innerHTML = '';
+    if(attach预览) attach预览.innerHTML = '';
     if(clearBtn) clearBtn.style.display = 'none';
     if(nameEl){ nameEl.textContent=''; } // 강제 초기화 (유령 표시 방지)
   }
 
   function renderChips(){
-    if(!attachPreview) return;
-    attachPreview.innerHTML = '';
+    if(!attach预览) return;
+    attach预览.innerHTML = '';
     if(!selectedFiles.length){
       if(clearBtn) clearBtn.style.display = 'none';
       if(nameEl){ nameEl.textContent=''; }
@@ -2908,7 +2908,7 @@ body > div.container,
     x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 모두 제거'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
-    attachPreview.appendChild(chip);
+    attach预览.appendChild(chip);
 
     // 레거시 이름 표시 동기화 차단 (항상 칩이 우선)
     if(nameEl){ nameEl.textContent=''; }
@@ -2949,20 +2949,20 @@ body > div.container,
   const btnDraft = $('#btnDraft保存');
   const btn取消 = $('#btn取消');
   const btn提交 = $('#btn提交Post');
-  const titlePreview = $('#titlePreview');
-  const tpText = titlePreview ? titlePreview.querySelector('.tp-text') : null;
+  const title预览 = $('#title预览');
+  const tpText = title预览 ? title预览.querySelector('.tp-text') : null;
 
   let draft = { title:'', body:'' };
 
-  function update标题Preview(src){
+  function update标题预览(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || ''No title';';
+    tpText.textContent = t || ''无标题';';
   }
 
   // live typing updates preview
   if(titleI){
-    titleI.addEventListener('input', ()=> update标题Preview());
+    titleI.addEventListener('input', ()=> update标题预览());
   }
 
   // 保存草稿: keep in-memory draft; do NOT post to right panel
@@ -2971,7 +2971,7 @@ body > div.container,
       e.preventDefault();
       draft.title = (titleI && titleI.value)||'';
       draft.body  = (bodyI && bodyI.value)||'';
-      update标题Preview(draft.title);
+      update标题预览(draft.title);
       // keep modal open; optional small feedback
       // console.log('Draft saved');
     });
@@ -2983,7 +2983,7 @@ body > div.container,
       draft.title=''; draft.body='';
       if(titleI) titleI.value='';
       if(bodyI) bodyI.value='';
-      update标题Preview('');
+      update标题预览('');
     });
   }
 
@@ -2998,13 +2998,13 @@ body > div.container,
       // clear draft & preview shortly after click so the original handler can read values
       setTimeout(()=>{
         draft.title=''; draft.body='';
-        update标题Preview('');
+        update标题预览('');
       }, 0);
     }, true); // capture phase to run before other handlers
   }
 
   // initialize preview on load
-  update标题Preview('');
+  update标题预览('');
 })();
 </script><script>
 (function(){
@@ -3012,12 +3012,12 @@ body > div.container,
   const titleI = $('#compose标题');
   const modal = $('#composerModal');
   const btnDraft = $('#btnDraft保存');
-  const titlePreview = $('#titlePreview');
-  const tpText = titlePreview ? titlePreview.querySelector('.tp-text') : null;
+  const title预览 = $('#title预览');
+  const tpText = title预览 ? title预览.querySelector('.tp-text') : null;
 
   let draft = { title:'', body:'' };
 
-  function update标题Preview(src){
+  function update标题预览(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
     tpText.textContent = t || '标题 Not entered';
@@ -3028,7 +3028,7 @@ body > div.container,
       e.preventDefault();
       draft.title = (titleI && titleI.value)||'';
       draft.body  = ($('#composeBody') && $('#composeBody').value)||'';
-      update标题Preview(draft.title);
+      update标题预览(draft.title);
       if(modal) modal.classList.add('hidden'); // auto-close
     });
   }
@@ -3122,7 +3122,7 @@ body > div.container,
     mo.observe(list, {childList:true});
   });
 })();
-</script><div id="newsPreviewModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 800px); max-height:80vh; overflow:auto;">
+</script><div id="news预览Modal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 800px); max-height:80vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
 <h3 id="np标题" style="margin:0; font-size:1.05rem;"></h3>
 <div id="npTime" style="font-size:.85rem; color:#6b7280;"></div>
@@ -3137,7 +3137,7 @@ body > div.container,
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
   const $ = (s,r=document)=>r.querySelector(s);
 
-  function normalizeItem(item){
+  function normalize项目(item){
     if(!item || item.querySelector('.item-header')) return;
     const tEl = item.querySelector('.title');
     const mEl = item.querySelector('.meta');
@@ -3151,7 +3151,7 @@ body > div.container,
   }
 
   function normalizeList(list){
-    list && list.querySelectorAll('.item').forEach(normalizeItem);
+    list && list.querySelectorAll('.item').forEach(normalize项目);
   }
 
   $$('.right .topic-panel .list').forEach(normalizeList);
@@ -3160,14 +3160,14 @@ body > div.container,
     const mo = new MutationObserver(muts=>{
       muts.forEach(m=>{
         m.addedNodes && Array.from(m.addedNodes).forEach(n=>{
-          if(n.nodeType===1 && n.classList.contains('item')) normalizeItem(n);
+          if(n.nodeType===1 && n.classList.contains('item')) normalize项目(n);
         });
       });
     });
     mo.observe(list, {childList:true});
   });
 
-  const modal = document.getElementById('newsPreviewModal');
+  const modal = document.getElementById('news预览Modal');
   const np标题 = document.getElementById('np标题');
   const npTime = document.getElementById('npTime');
   const npBody = document.getElementById('npBody');
@@ -3240,10 +3240,10 @@ body > div.container,
     const key = (t+'|'+tm).toLowerCase(); let h=0; for(let i=0;i<key.length;i++){ h=((h<<5)-h)+key.charCodeAt(i); h|=0; } return 'news:'+h;
   }
   function loadEdit(id){
-    try{ return JSON.parse(localStorage.getItem('newsEdit:'+id) || 'null'); }catch(e){ return null; }
+    try{ return JSON.parse(localStorage.get项目('newsEdit:'+id) || 'null'); }catch(e){ return null; }
   }
   function saveEdit(id, tsStr){
-    localStorage.setItem('newsEdit:'+id, JSON.stringify({editedAt: tsStr}));
+    localStorage.set项目('newsEdit:'+id, JSON.stringify({editedAt: tsStr}));
   }
   function showEditedBadge(item, tsStr){
     if(!item) return;
@@ -3271,12 +3271,12 @@ body > div.container,
   });
 
   // Capture which item is being edited via delegated click
-  window.__currentEditingItem = null;
+  window.__currentEditing项目 = null;
   document.addEventListener('click', (e)=>{
     const btn = e.target.closest('.btn-edit');
     if(!btn) return;
     const item = e.target.closest('.right .topic-panel .list .item');
-    if(item && canEdit删除(item)) window.__currentEditingItem = item;
+    if(item && canEdit删除(item)) window.__currentEditing项目 = item;
   }, true);
 
   // When edit modal "保存" is pressed, persist edited meta and show badge
@@ -3284,13 +3284,13 @@ body > div.container,
     const saveBtn = document.getElementById('en保存');
     if(!saveBtn) return;
     saveBtn.addEventListener('click', ()=>{
-      const item = window.__currentEditingItem;
+      const item = window.__currentEditing项目;
       if(!item || !canEdit删除(item)) return;
       const ts = new Date().toLocaleString();
       const id = itemId(item);
       saveEdit(id, ts);
       showEditedBadge(item, ts);
-      window.__currentEditingItem = null;
+      window.__currentEditing项目 = null;
     });
   })();
 
@@ -3360,15 +3360,15 @@ body > div.container,
     const key = (t+'|'+tm).toLowerCase(); let h=0; for(let i=0;i<key.length;i++){ h=((h<<5)-h)+key.charCodeAt(i); h|=0; } return 'news:'+h;
   }
   function loadMetrics(id){
-    try{ return JSON.parse(localStorage.getItem('newsMetrics:'+id) || '{"views":0,"reco":0,"like":0}'); }
+    try{ return JSON.parse(localStorage.get项目('newsMetrics:'+id) || '{"views":0,"reco":0,"like":0}'); }
     catch(e){ return {views:0,reco:0,like:0}; }
   }
-  function saveMetrics(id, obj){ localStorage.setItem('newsMetrics:'+id, JSON.stringify(obj)); }
+  function saveMetrics(id, obj){ localStorage.set项目('newsMetrics:'+id, JSON.stringify(obj)); }
   function loadToggles(id){
-    try{ return JSON.parse(localStorage.getItem('newsToggles:'+id) || '{"reco":false,"like":false}'); }
+    try{ return JSON.parse(localStorage.get项目('newsToggles:'+id) || '{"reco":false,"like":false}'); }
     catch(e){ return {reco:false,like:false}; }
   }
-  function saveToggles(id, obj){ localStorage.setItem('newsToggles:'+id, JSON.stringify(obj)); }
+  function saveToggles(id, obj){ localStorage.set项目('newsToggles:'+id, JSON.stringify(obj)); }
 
   function ensureFooterWithIcons(item){
     let footer = item.querySelector('.item-footer');
@@ -3537,7 +3537,7 @@ body > div.container,
     keep.classList.add('migrated');
     // Ensure compact shape
     keep.style.display = 'inline-flex';
-    keep.style.alignItems = 'center';
+    keep.style.align项目s = 'center';
     keep.style.justifyContent = 'center';
     keep.style.height = '28px';
     keep.style.lineHeight = '28px';
@@ -3677,7 +3677,7 @@ body > div.container,
   }
 
   // 구매
-  window.orderItem = async function(itemId, qty){
+  window.order项目 = async function(itemId, qty){
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
@@ -3841,7 +3841,7 @@ body > div.container,
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","정액 기부 금액");
+  btnGroup.setAttribute("aria-label","固定捐赠金额");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -4382,7 +4382,7 @@ document.addEventListener('DOMContentLoaded', function(){
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A.（待处理）";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "管理员请求":"一般";
@@ -4504,7 +4504,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         bk=document.createElement('div');
         bk.id='drawerBackdrop';
         bk.className='drawer-backdrop';
-        document.body/*__KILL__*/ appendChild_DISABLED(bk);
+        document.body.appendChild(bk);
         bk.addEventListener('click',close,{passive:true});
       }
     }
@@ -4868,7 +4868,7 @@ window.addEventListener("message",function(ev){
     return keyFromLabel(labelText);
   }
 
-  function normalizeItemFooter(root){
+  function normalize项目Footer(root){
     if(!root) root = document;
     if(!root.querySelectorAll) return;
 
@@ -4959,7 +4959,7 @@ window.addEventListener("message",function(ev){
       wrap.className = "mobile-news-clone";
       wrap.innerHTML = src.outerHTML;
 
-      normalizeItemFooter(wrap);
+      normalize项目Footer(wrap);
 
       row.parentNode.insertBefore(wrap, row.nextSibling);
     });
@@ -4983,12 +4983,12 @@ window.addEventListener("message",function(ev){
   const $  = (s,r=document)=>r.querySelector(s);
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  // Preview targets (reuse existing modal if present)
-  const modal   = $('#newsPreviewModal') || $('#previewModal');
-  const np标题 = $('#np标题') || $('#newsPreview标题');
-  const npTime  = $('#npTime') || $('#newsPreviewTime');
-  const npBody  = $('#npBody') || $('#newsPreviewBody');
-  const npAttach= $('#npAttach') || $('#newsPreviewAttach');
+  // 预览 targets (reuse existing modal if present)
+  const modal   = $('#news预览Modal') || $('#previewModal');
+  const np标题 = $('#np标题') || $('#news预览标题');
+  const npTime  = $('#npTime') || $('#news预览Time');
+  const npBody  = $('#npBody') || $('#news预览Body');
+  const npAttach= $('#npAttach') || $('#news预览Attach');
 
   function openModal(){
     if(!modal) return;
@@ -5018,7 +5018,7 @@ window.addEventListener("message",function(ev){
       });
   }
   markHasAttach(document);
-  normalizeItemFooter(document);
+  normalize项目Footer(document);
 
   // Watch dynamic additions
   $$('.right .topic-panel .list, .mobile-news-clone .topic-panel .list').forEach(function(list){
@@ -5028,12 +5028,12 @@ window.addEventListener("message",function(ev){
           if(n.nodeType !== 1) return;
           if(n.classList.contains('item')){
             markHasAttach(n);
-            normalizeItemFooter(n);
+            normalize项目Footer(n);
           }else if(n.querySelectorAll){
             n.querySelectorAll('.item').forEach(function(it){
               markHasAttach(it);
             });
-            normalizeItemFooter(n);
+            normalize项目Footer(n);
           }});
       });
     });
@@ -5070,7 +5070,7 @@ window.addEventListener("message",function(ev){
 
     np标题.textContent = title || '标题 없음';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(등록된 본문이 없습니다.)';
+    npBody.textContent = body || '(暂无已发布的正文。)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
         ? '<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml

@@ -3,7 +3,7 @@
 <!-- patched: removed duplicate bottom 인기 아이템 section and mobile-rail CSS -->
 <!DOCTYPE html>
 
-<html lang="en">
+<html lang="zh-Hant">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
@@ -1244,7 +1244,7 @@ a[href^="mailto:"]:hover {
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Server-side saving is disabled because the save settings (Supabase url/key) are not connected yet. When deployed to the web, it will connect automatically if SUPER_VARSAR.url/anonKey is configured.");
+        alert("伺服器端儲存暫時停用，因為儲存設定尚未連接。部署到網頁後，如果已完成設定，系統會自動連接。");
         return;
       }
       const record = {
@@ -1254,7 +1254,7 @@ a[href^="mailto:"]:hover {
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("Submission failed"); return; }
+      if(error){ alert("提交失敗"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -1750,8 +1750,8 @@ window.addEventListener("message",function(ev){
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">Product Reviews</h3>
-          <div id="igdc-review-list" class="igdc-review-list">Loading...</div>
+          <h3 class="igdc-review-title">商品評論</h3>
+          <div id="igdc-review-list" class="igdc-review-list">載入中...</div>
           ${canWrite ? this.renderReviewForm() : this.renderLoginHint()}
         </section>
       `;
@@ -1766,7 +1766,7 @@ window.addEventListener("message",function(ev){
             maxlength="${this.config.maxReviewChars}"
             required></textarea>
           <div class="igdc-review-actions">
-            <button type="submit">Submit Review</button>
+            <button type="submit">提交評論</button>
           </div>
         </form>
       `;
@@ -1807,7 +1807,7 @@ window.addEventListener("message",function(ev){
       const list = document.getElementById('igdc-review-list');
       if (!list) return;
 
-      list.textContent = 'Loading...';
+      list.textContent = '載入中...';
 
       try {
         const res = await fetch(
@@ -1820,7 +1820,7 @@ window.addEventListener("message",function(ev){
           return;
         }
 
-        list.innerHTML = data.map(this.renderReviewItem).join('');
+        list.innerHTML = data.map(this.renderReview項目).join('');
       } catch {
         list.textContent = '無法載入評論。';
       }
@@ -1835,7 +1835,7 @@ window.addEventListener("message",function(ev){
       if (!res.ok) throw new Error('submit failed');
     },
 
-    renderReviewItem(item) {
+    renderReview項目(item) {
       const esc = (v) => String(v || '').replace(/[<>]/g, '');
       return `
         <div class="igdc-review-item">
@@ -1940,7 +1940,7 @@ window.addEventListener("message",function(ev){
                color:#7a8da8;
                letter-spacing:.5px;
              ">
-            Loading
+            載入中...
           </div>
 
         </div>

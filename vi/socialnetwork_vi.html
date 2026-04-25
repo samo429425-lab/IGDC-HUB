@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="vi">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -342,6 +342,101 @@
     .sidebar a{padding:12px 12px !important;margin:10px 12px !important;}
   </style>
 
+<style id="igdc-qa-style">
+:root{
+  --igdc-z:2147483000; --igdc-radius:14px; --igdc-shadow:0 10px 30px rgba(0,0,0,.18);
+  --igdc-gap:10px; --igdc-font:system-ui,Segoe UI,Apple SD Gothic Neo,Malgun Gothic,Roboto,sans-serif;
+  --qa-left:260px;
+  --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
+  --blue:#2563eb; --muted:#9ca3af;
+}
+/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+#qnaOpenBtn{ display:block; text-decoration:none; }
+/* Modal near the left sidebar, with smooth transitions */
+.igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
+.igdc-qa-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;transition:opacity .18s ease}
+.igdc-qa-panel{
+position:fixed; left:var(--qa-left); bottom:84px; width:min(560px,50vw);
+max-height:min(82vh,900px); display:flex; flex-direction:column;
+background:#fff; border-radius:var(--igdc-radius); box-shadow:var(--igdc-shadow);
+overflow:hidden; opacity:0; transform:translateY(12px) scale(.98);
+transition:opacity .18s ease, transform .18s ease;
+border:1px solid var(--old-border);
+}
+.igdc-qa-modal.open{pointer-events:auto}
+.igdc-qa-modal.open .igdc-qa-backdrop{opacity:1}
+.igdc-qa-modal.open .igdc-qa-panel{opacity:1; transform:none}
+/* Old-style header tint */
+.igdc-qa-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 14px; border-bottom:1px solid var(--old-border);
+  background:var(--old-bg);
+}
+.igdc-qa-title{font:700 14px/1.2 var(--igdc-font); color:var(--old-text)}
+.igdc-qa-close{cursor:pointer; border:none; background:transparent; font-size:18px; color:#333}
+.igdc-qa-body{
+display:flex; flex-direction:column; gap:10px; padding:12px; overflow:auto
+}
+.igdc-qa-field label{display:block; font:700 12px/1.2 var(--igdc-font); margin-bottom:6px; color:#333}
+.igdc-qa-text{
+  width:100%; max-width:100%; box-sizing:border-box; resize:vertical;
+  border:1px solid var(--old-border); border-radius:10px; padding:10px 12px;
+  font:500 14px var(--igdc-font); min-height:44px; background:#fffdf8;
+}
+.igdc-qa-text.q{ min-height: 96px; }
+.igdc-qa-text.a{ min-height: 128px; }
+.igdc-qa-actions{display:flex; gap:8px; align-items:center}
+.igdc-qa-btn{border:none; border-radius:10px; padding:10px 14px; font:700 14px; cursor:pointer}
+.igdc-qa-btn.primary{background:var(--blue); color:#fff}
+.igdc-qa-btn.muted{background:var(--muted); color:#fff}
+.igdc-qa-threads{
+display:flex; flex-direction:column; gap:10px; overflow:auto; border-top:1px solid var(--old-border); padding-top:10px
+}
+.igdc-qa-thread{border:1px solid var(--old-border); border-radius:12px; padding:10px 12px; background:#fffdf8}
+.igdc-qa-thread-q{font:700 13px/1.5 var(--igdc-font); color:#222}
+.igdc-qa-thread-a{font:13px/1.5 var(--igdc-font); color:#333; margin-top:6px}
+.igdc-qa-thread-meta{display:flex; gap:8px; align-items:center; color:#775; font:12px/1.2 var(--igdc-font); margin-top:8px}
+.igdc-qa-thread-actions{margin-left:auto; display:flex; gap:6px}
+.igdc-qa-note{font:12px/1.4 var(--igdc-font); color:#666}
+@media (max-width:900px){
+  .igdc-qa-panel{ left:calc(12px + var(--qa-left,0px)); width:min(92vw,560px) }
+}
+.igdc-qa-threads{
+  display:flex; flex-direction:column; gap:10px; overflow:auto;
+  border-top:1px solid var(--old-border);
+  padding-top:10px;
+  padding-bottom:4px; }
+a[href^="mailto:"] {
+  color: #007bff;           /* 밝은 파란색 (Bootstrap 기본 블루톤) */
+  text-decoration: underline;
+}
+a[href^="mailto:"]:hover {
+  color: #0056b3;           /* hover 시 조금 더 짙은 파랑 */
+  text-decoration: underline;
+}
+
+.igdc-qa-threads:empty::before{
+  content:"Chưa có mục Hỏi & Đáp nào được đăng";
+  display:block; padding:10px 12px; color:#666;
+  background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px;
+  margin-top:4px; font-size:.95rem;
+}
+.contact-email{
+  margin-top: 6px;
+  margin-bottom: 0;}
+</style>
+<style id="qna-brand-only">
+/* === Q&A sidebar link color only (no other changes) === */
+:root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
+.sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
+  display:block;
+  background: var(--qa-brand);
+  color:#fff !important;
+  border:1px solid var(--qa-brand-border);
+  border-radius:10px;
+}
+.sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
+</style>
 </head>
 <body>
   <div id="hero"><div class="hero-title"></div></div>
@@ -453,129 +548,350 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script id="igdc-qa-config">
-    (function () {
-      const baseConfig = { url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "", project: "IGDC", pageId: null, aiEndpoint: null };
-      function applyConfig(env) {
-        const url = (env && env.SUPABASE_URL) || baseConfig.url;
-        const anonKey = (env && env.SUPABASE_ANON_KEY) || "";
-        window.SUPER_VARSAR = Object.assign(window.SUPER_VARSAR || {}, baseConfig, { url, anonKey });
-      }
-      if (window.IGDC_ENV && (window.IGDC_ENV.SUPABASE_ANON_KEY || window.IGDC_ENV.SUPABASE_URL)) { applyConfig(window.IGDC_ENV); return; }
-      fetch('/.netlify/functions/secureEnvBridge?public=supabase', { cache: 'no-store' })
-        .then(function (res) { if (!res.ok) throw new Error('http ' + res.status); return res.json(); })
-        .then(function (data) { var env = data && (data.env || data) || {}; window.IGDC_ENV = Object.assign(window.IGDC_ENV || {}, env); applyConfig(window.IGDC_ENV); })
-        .catch(function () { applyConfig(null); });
-    })();
-  </script>
+  (function () {
+    // 1) 민감정보 없는 기본 설정
+    const baseConfig = {
+      url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "",
+      project: "IGDC",
+      pageId: null,
+      aiEndpoint: null
+    };
 
-  <script>
-    (function(){
-      if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
-      function ensureButton(){
-        var btn = document.getElementById('qnaOpenBtn');
-        if(!btn) return;
-        btn.addEventListener('click', function(){
-          if (window.IGDC_QA && typeof window.IGDC_QA.open === 'function'){ window.IGDC_QA.open(); return; }
-          var modal = document.querySelector('.igdc-qa-modal');
-          if(!modal){
-            var m = document.createElement('div'); m.className='igdc-qa-modal';
-            var b = document.createElement('div'); b.className='igdc-qa-backdrop';
-            var p = document.createElement('div'); p.className='igdc-qa-panel';
-            var h = document.createElement('div'); h.className='igdc-qa-header';
-            var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
-            var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
-            h.appendChild(t); h.appendChild(x);
-            var body = document.createElement('div'); body.className='igdc-qa-body';
-            body.innerHTML = 'Email đại diện: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
-            p.appendChild(h); p.appendChild(body); m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
-            function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-            function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
-            x.addEventListener('click', close); b.addEventListener('click', close);
-            window.IGDC_QA = window.IGDC_QA || {}; window.IGDC_QA.open = open;
-          }
-          if (window.IGDC_QA && typeof window.IGDC_QA.open==='function'){ window.IGDC_QA.open(); }
-        }, { passive:false });
-      }
-      if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', ensureButton, { once:true }); } else { ensureButton(); }
-    })();
-  </script>
+    // Supabase 환경을 SUPER_VARSAR에 적용하는 함수
+    function applyConfig(env) {
+      const url =
+        (env && env.SUPABASE_URL) ||
+        baseConfig.url;
 
-  <script>
-    (function(){
-      if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
-      const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
-      let isOpen=false, isAnimating=false;
-      function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
-      const nowISO = ()=> new Date().toISOString();
-      const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-      const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
-      async function ensureSupabase(){
-        if(STATE.sb) return STATE.sb;
-        const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url; const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
-        if(!url || !key || !window.supabase || !window.supabase.createClient) return null;
-        STATE.sb = window.supabase.createClient(url, key); return STATE.sb;
-      }
-      async function ensureAuth(){
-        const sb = await ensureSupabase(); if(!sb) return;
-        let { data: { session } } = await sb.auth.getSession();
-        if(!session){ try{ await sb.auth.signInAnonymously(); }catch(e){} ({ data: { session } } = await sb.auth.getSession()); }
-        if(session){ const uid = session.user.id; const { data } = await sb.from('igdc_admins').select('uid').eq('uid', uid).limit(1); STATE.user = session.user; STATE.isAdmin = Array.isArray(data) && data.length>0; }
-      }
-      function mountUI(){
-        const existing = document.querySelector('.igdc-qa-modal'); if(existing){ return bindExisting(existing); }
-        const modal = el('div','igdc-qa-modal'); const backdrop = el('div','igdc-qa-backdrop'); const panel = el('div','igdc-qa-panel');
-        const header = el('div','igdc-qa-header'); const title = el('div','igdc-qa-title'); title.textContent='Q&A'; const close = el('button','igdc-qa-close'); close.innerHTML='&#10005;'; close.setAttribute('aria-label','닫기');
-        header.append(title, close);
-        const body = el('div','igdc-qa-body');
-        const lQ = el('label'); lQ.textContent='Câu hỏi'; const tQ = el('textarea','igdc-qa-text q'); tQ.placeholder='Vui lòng nhập câu hỏi của bạn...';
-        const lA = el('label'); lA.textContent='Trả lời'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='Vui lòng chờ một chút. Chúng tôi sẽ phản hồi sớm.';
-        const actions = el('div','igdc-qa-actions'); const btnGửi = el('button','igdc-qa-btn primary'); btnGửi.textContent='Gửi'; const btnXóa = el('button','igdc-qa-btn muted'); btnXóa.textContent='Xóa';
-        const note = el('div','igdc-qa-note'); note.textContent='※ Các câu hỏi đơn giản sẽ được AI trả lời ngay. Các vấn đề kỹ thuật, lỗi hoặc vận hành sẽ tự động được chuyển đến Hỏi & Đáp quản trị viên.';
-        const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='Email đại diện: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        actions.append(btnGửi, btnXóa); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
-        return bindExisting(modal);
-      }
-      function bindExisting(modal){
-        const panel = modal.querySelector('.igdc-qa-panel'); const backdrop = modal.querySelector('.igdc-qa-backdrop'); const close = modal.querySelector('.igdc-qa-close');
-        const sideBtn = document.querySelector('#qnaOpenBtn');
-        const tQ = modal.querySelector('.igdc-qa-text.q'); const tA = modal.querySelector('.igdc-qa-text.a'); const list = modal.querySelector('.igdc-qa-threads');
-        const btnGửi = modal.querySelector('.igdc-qa-btn.primary'); const btnXóa = modal.querySelector('.igdc-qa-btn.muted');
-        function positionNearSidebar(){ try{ const sb = document.querySelector('.sidebar'); if(sb){ const rect = sb.getBoundingClientRect(); panel.style.left = Math.round(rect.right + 12) + 'px'; } }catch(e){} }
-        function openModal(){ if(isAnimating || isOpen) return; isAnimating = true; modal.style.display='block'; requestAnimationFrame(()=>{ modal.classList.add('open'); isOpen = true; setTimeout(()=>{ isAnimating=false; },220); }); }
-        function closeModal(){ if(isAnimating || !isOpen) return; isAnimating=true; modal.classList.remove('open'); setTimeout(()=>{ modal.style.display='none'; isOpen=false; isAnimating=false; },220); }
-        positionNearSidebar(); window.addEventListener('resize', positionNearSidebar); window.addEventListener('scroll', positionNearSidebar, { passive:true });
-        if(sideBtn && !sideBtn.dataset.qaBound){ sideBtn.addEventListener('click', openModal); sideBtn.dataset.qaBound='1'; }
-        close && close.addEventListener('click', closeModal); backdrop && backdrop.addEventListener('click', closeModal); document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
-        btnXóa && btnXóa.addEventListener('click', ()=>{ if(tQ) tQ.value=''; if(tA) tA.value=''; });
-        async function fetchThreads(){ const sb = await ensureSupabase(); if(!sb || !list) return; const { data } = await sb.from('igdc_qna_threads').select('*').eq('project', STATE.project).eq('page_id', STATE.pageId).order('created_at', { ascending:false }).limit(100); renderList(data||[]); }
-        function renderList(rows){ if(!list) return; list.innerHTML=''; rows.forEach(row=>{ const box=el('div','igdc-qa-thread'); const q=el('div','igdc-qa-thread-q'); q.textContent='Q. '+(row.question||''); const a=el('div','igdc-qa-thread-a'); a.textContent=row.answer?('A. '+row.answer):'A. (대기중)'; box.append(q,a); list.append(box); }); }
-        async function autoTrả lờiIfNeeded(text){ const technical=classifyTech(text); let answer=null; if(!technical){ const ep=getAIEndpoint(); if(ep){ try{ const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,pageId:STATE.pageId})}); const j=await res.json(); answer = j && (j.answer||j.text||null); }catch(e){} } if(!answer){ answer=/가격|비용|요금/.test(text)?'Vui lòng tham khảo thông tin trên trang này về giá và phí. Hãy để lại câu hỏi bổ sung nếu cần.':'Cảm ơn câu hỏi của bạn. Chúng tôi sẽ xem xét nhanh chóng và hỗ trợ bạn.'; } } return { technical, answer }; }
-        async function submit(){ const q=(tQ && tQ.value || '').trim(); let a=(tA && tA.value || '').trim(); if(!q){ tQ && tQ.focus(); return; } const { technical, answer } = await autoTrả lờiIfNeeded(q); if(!a && answer) a=answer; const sb=await ensureSupabase(); if(!sb){ renderList([{question:q, answer:a||'Your inquiry has been received.', created_at:nowISO()}]); return; } const record={project:STATE.project,page_id:STATE.pageId,user_id:(STATE.user && STATE.user.id)||null,question:q,answer:a||null,is_admin:technical,created_at:nowISO()}; const { error } = await sb.from('igdc_qna_threads').insert(record); if(!error){ if(tQ) tQ.value=''; if(tA) tA.value=a||''; await fetchThreads(); } }
-        btnGửi && btnGửi.addEventListener('click', submit);
-        window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
-        fetchThreads(); return modal;
-      }
-      async function boot(){ window.SUPER_VARSAR = window.SUPER_VARSAR || {}; STATE.project = (window.SUPER_VARSAR.project || 'IGDC'); STATE.pageId = (window.SUPER_VARSAR.pageId || (location.pathname + (location.hash||''))); mountUI(); try{ await ensureAuth(); }catch(e){} }
-      if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', boot, { once:true }); } else { boot(); }
-    })();
-  </script>
+      const anonKey =
+        (env && env.SUPABASE_ANON_KEY) ||
+        "";
 
-  <script>
-    (function(){
-      function stripFooterEmail(){
-        document.querySelectorAll('footer a[href^="mailto:"]').forEach(function(a){ a.closest('footer').innerHTML = a.closest('footer').innerHTML.replace(/대표\s*이메일\s*:[^<]*(<br\s*\/?>)?/gi,''); });
+      if (!anonKey) {
+        console.warn("[IGDC] Supabase anonKey is not configured.");
       }
-      function ensureContactEmail(){
-        var modal = document.querySelector('.igdc-qa-modal');
-        if(!modal) return;
-        var body = modal.querySelector('.igdc-qa-body') || modal;
-        if(body && !body.querySelector('.contact-email')){ var ce = document.createElement('p'); ce.className='contact-email'; ce.innerHTML='Email đại diện: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>'; body.appendChild(ce); }
-      }
-      if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', function(){ stripFooterEmail(); ensureContactEmail(); }, { once:true }); } else { stripFooterEmail(); ensureContactEmail(); }
-    })();
-  </script>
 
-  <script>
+      window.SUPER_VARSAR = Object.assign(
+        window.SUPER_VARSAR || {},
+        baseConfig,
+        {
+          url: url,
+          anonKey: anonKey
+        }
+      );
+    }
+
+    // 2) 이미 window.IGDC_ENV가 있다면(로컬 테스트 등) 그걸 우선 사용
+    if (window.IGDC_ENV &&
+        (window.IGDC_ENV.SUPABASE_ANON_KEY || window.IGDC_ENV.SUPABASE_URL)) {
+      applyConfig(window.IGDC_ENV);
+      return;
+    }
+
+    // 3) 없으면 Netlify Functions에서 환경변수 읽어오기
+    var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
+
+    fetch(endpoint, { cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("http " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        var env = data && (data.env || data);
+        window.IGDC_ENV = Object.assign(window.IGDC_ENV || {}, env || {});
+        applyConfig(window.IGDC_ENV);
+        console.log("[IGDC] Supabase env loaded from secureEnvBridge.");
+      })
+      .catch(function (err) {
+        console.warn("[IGDC] Failed to load Supabase env:", err && err.message);
+        applyConfig(null);
+      });
+  })();
+</script>
+
+<script id="igdc-qa-script">
+(function(){
+  if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
+  const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
+  let isOpen=false, isAnimating=false;
+
+  function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
+  const fmtDate = (s)=> new Date(s).toLocaleString();
+  const nowISO = ()=> new Date().toISOString();
+  const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
+  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+
+  function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
+  function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
+
+  async function ensureSupabase(){
+    if(STATE.sb) return STATE.sb;
+    const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
+    const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
+    if(!url || !key || !window.supabase || !window.supabase.createClient){
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      return null;
+    }
+    STATE.sb = window.supabase.createClient(url, key);
+    return STATE.sb;
+  }
+  async function ensureAuth(){
+    const sb = await ensureSupabase(); if(!sb) return;
+    let { data: { session } } = await sb.auth.getSession();
+    if(!session){
+      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      ({ data: { session } } = await sb.auth.getSession());
+    }
+    if(session){
+      const uid = session.user.id;
+      const { data } = await sb.from("igdc_admins").select("uid").eq("uid", uid).limit(1);
+      STATE.user = session.user;
+      STATE.isAdmin = Array.isArray(data) && data.length>0;
+    }
+  }
+
+  function mountUI(){
+    const modal = el("div","igdc-qa-modal");
+    const backdrop = el("div","igdc-qa-backdrop");
+    const panel = el("div","igdc-qa-panel");
+    const header = el("div","igdc-qa-header");
+    const title = el("div","igdc-qa-title"); title.textContent = "Hỏi & Đáp";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Đóng");
+    header.append(title, close);
+
+    const body = el("div","igdc-qa-body");
+    const lQ = el("label"); lQ.textContent="Câu hỏi";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Vui lòng nhập câu hỏi của bạn...";
+    const lA = el("label"); lA.textContent="Trả lời";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Vui lòng chờ một chút. Chúng tôi sẽ phản hồi sớm.";
+    const actions = el("div","igdc-qa-actions");
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Gửi";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Xóa";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Câu hỏi đơn giản sẽ được AI trả lời ngay lập tức. Các vấn đề kỹ thuật, lỗi hoặc vận hành sẽ tự động được chuyển đến Hỏi & Đáp quản trị viên.";
+    const list = el("div","igdc-qa-threads");
+
+    body.append(lQ,tQ,lA,tA,actions,note,list);
+	const ce = el("p","contact-email");
+    ce.innerHTML = 'Email đại diện: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+    body.append(ce);
+    actions.append(btnSubmit, btnClear);
+    panel.append(header, body);
+    modal.append(backdrop, panel);
+    document.body.append(modal);
+
+    // position near sidebar
+    function positionNearSidebar(){
+      try{
+        const sb = document.querySelector('.sidebar');
+        if(sb){
+          const rect = sb.getBoundingClientRect();
+          const left = Math.round(rect.right + 12);
+          panel.style.left = left + "px";
+        }
+      }catch(e){}
+    }
+    positionNearSidebar();
+    window.addEventListener('resize', positionNearSidebar);
+    window.addEventListener('scroll', positionNearSidebar, { passive:true });
+
+    function openModal(){
+      if(isAnimating || isOpen) return;
+      isAnimating = true;
+      modal.style.display = "block";
+      requestAnimationFrame(()=>{
+        modal.classList.add('open');
+        isOpen = true;
+        setTimeout(()=>{ isAnimating = false; }, 220);
+      });
+    }
+    function closeModal(){
+      if(isAnimating || !isOpen) return;
+      isAnimating = true;
+      modal.classList.remove('open');
+      setTimeout(()=>{
+        modal.style.display = "none";
+        isOpen = false;
+        isAnimating = false;
+      }, 220);
+    }
+
+    // Sidebar trigger
+    const sideBtn = document.querySelector('#qnaOpenBtn');
+    if(sideBtn){ sideBtn.addEventListener('click', openModal); }
+    close.addEventListener("click", closeModal);
+    backdrop.addEventListener("click", closeModal);
+    document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
+
+    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
+    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+
+    async function fetchThreads(){
+      const sb = await ensureSupabase(); if(!sb) return;
+      const { data, error } = await sb.from("igdc_qna_threads")
+        .select("*")
+        .eq("project", STATE.project)
+        .eq("page_id", STATE.pageId)
+        .order("created_at", { ascending:false }).limit(100);
+      if(error){ console.error(error); return; }
+      renderList(data||[]);
+    }
+    function renderList(rows){
+      list.innerHTML="";
+      rows.forEach(row=>{
+        const box = el("div","igdc-qa-thread");
+        const q = el("div","igdc-qa-thread-q"); q.textContent="Hỏi. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("Đáp. "+row.answer):"Đáp. (Đang chờ)";
+        const meta = el("div","igdc-qa-thread-meta");
+        const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
+        const tag = el("span"); tag.textContent = row.is_admin? "Yêu cầu quản trị viên":"Chung";
+        const actions = el("div","igdc-qa-thread-actions");
+        const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
+        if(canDelete){
+          const del = el("button","igdc-qa-btn muted"); del.textContent="Xóa";
+          del.addEventListener("click", async ()=>{
+            const sb = await ensureSupabase(); if(!sb) return;
+            const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
+            if(error){ alert("Xóa thất bại (quyền/chính sách)"); return; }
+            await fetchThreads();
+          });
+          actions.append(del);
+        }
+        meta.append(time, tag, actions);
+        box.append(q,a,meta);
+        list.append(box);
+      });
+    }
+
+    async function autoAnswerIfNeeded(text){
+      const technical = classifyTech(text);
+      let answer = null;
+      if(!technical){
+        const ep = getAIEndpoint();
+        if(ep){
+          try{
+            const res = await fetch(ep,{method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({question:text, pageId: STATE.pageId})});
+            const j = await res.json(); answer = j && (j.answer||j.text||null);
+          }catch(e){}
+        }
+        if(!answer){
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="Operations-related inquiries will be reviewed by an administrator and answered afterward.";
+          else if(/가격|비용|요금/.test(text)) answer="Vui lòng tham khảo thông tin trên trang này về giá/chi phí. Hãy để lại câu hỏi bổ sung nếu cần.";
+          else answer="Cảm ơn bạn đã gửi câu hỏi. Chúng tôi sẽ xem xét nhanh chóng và hỗ trợ bạn.";
+        }
+      }
+      return { technical, answer };
+    }
+
+    async function submit(){
+      const q = (tQ.value||"").trim();
+      let a = (tA.value||"").trim();
+      if(!q){ tQ.focus(); return; }
+      const { technical, answer } = await autoAnswerIfNeeded(q);
+      if(!a && answer) a = answer;
+      const sb = await ensureSupabase();
+      if(!sb){
+        alert("Tính năng lưu phía máy chủ hiện chưa hoạt động vì cài đặt lưu trữ (Supabase URL/key) chưa được kết nối. Khi triển khai lên web, hệ thống sẽ tự động kết nối nếu SUPER_VARSAR.url/anonKey đã được cấu hình.");
+        return;
+      }
+      const record = {
+        project: STATE.project, page_id: STATE.pageId,
+        user_id: (STATE.user && STATE.user.id) || null,
+        question: q, answer: a || null, is_admin: technical,
+        created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
+      };
+      const { error } = await sb.from("igdc_qna_threads").insert(record);
+      if(error){ alert("Gửi thất bại"); return; }
+      tQ.value=""; tA.value = a || "";
+      await fetchThreads();
+    }
+    btnSubmit.addEventListener("click", submit);
+
+    // realtime refresh
+    (async()=>{ try{
+      const sb = await ensureSupabase(); if(!sb) return;
+      sb.channel('igdc_qna_changes').on('postgres_changes',{event:'*',schema:'public',table:'igdc_qna_threads'}, fetchThreads).subscribe();
+    }catch(e){} })();
+
+    window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
+    fetchThreads();
+  }
+
+  async function boot(){
+  window.SUPER_VARSAR = window.SUPER_VARSAR || {};
+  STATE.project = (window.SUPER_VARSAR.project || "IGDC");
+  STATE.pageId = (window.SUPER_VARSAR.pageId || (location.pathname + (location.hash||"")));
+  // 1) Always mount UI so the popup can open
+  mountUI();
+  // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+}
+if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
+})();
+</script>
+
+<script id="igdc-qa-safety-bootstrap">
+// Ensures the Q&A popup opens when clicking the sidebar link,
+// even if Supabase URL/Key are not configured yet.
+(function(){
+  if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
+
+  function ensureButton(){
+    var btn = document.getElementById('qnaOpenBtn');
+    if(!btn) return;
+
+    btn.addEventListener('click', function(){
+      if (window.IGDC_QA && typeof window.IGDC_QA.open === 'function'){
+        window.IGDC_QA.open();
+        return;
+      }
+
+      var modal = document.querySelector('.igdc-qa-modal');
+      if(!modal){
+        var m = document.createElement('div'); m.className='igdc-qa-modal';
+        var b = document.createElement('div'); b.className='igdc-qa-backdrop';
+        var p = document.createElement('div'); p.className='igdc-qa-panel';
+        var h = document.createElement('div'); h.className='igdc-qa-header';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Hỏi & Đáp';
+        var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
+        h.appendChild(t); h.appendChild(x);
+
+        var body = document.createElement('div'); body.className='igdc-qa-body';
+        body.innerHTML = '<div class="igdc-qa-note">Tất cả tính năng sẽ được bật sau khi cài đặt lưu trữ (Supabase URL/key) được kết nối.</div>';
+
+        var ce = document.createElement('p');
+        ce.className = 'contact-email';
+        ce.innerHTML = 'Email đại diện: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+        body.appendChild(ce);
+
+        p.appendChild(h); p.appendChild(body);
+        m.appendChild(b); m.appendChild(p);
+        document.body.appendChild(m);
+
+        function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
+        function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
+        x.addEventListener('click', close);
+        b.addEventListener('click', close);
+
+        window.IGDC_QA = window.IGDC_QA || {};
+        window.IGDC_QA.open = open;
+      }
+
+      if (window.IGDC_QA && typeof window.IGDC_QA.open==='function'){ window.IGDC_QA.open(); }
+    }, { passive:false });
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', ensureButton, { once:true });
+  } else {
+    ensureButton();
+  }
+})();
+</script>
+
+<script>
     (function(){
       var DEMO = {
         'social-youtube': { icon:'▶️', title:'YouTube', row:'Hàng 1 · Xem trước' },
@@ -1428,7 +1744,27 @@ window.addEventListener('resize', function(){
   }, true);
 })();
 </script>
- 
+  <script src="frontbus.child.js"></script>
+<script>
+(function(){
+  try{
+    function notify(top){
+      parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*');
+    }
+    function atTop(){
+      var se=document.scrollingElement||document.documentElement||document.body;
+      return (window.scrollY||window.pageYOffset||0)<=0 && (se?(se.scrollTop||0)<=0:true);
+    }
+    function onAnyScroll(){ notify(atTop()); }
+    window.addEventListener('scroll', onAnyScroll, {passive:true});
+    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
+    document.addEventListener('wheel', function(e){ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
+    document.addEventListener('touchmove', function(){ notify(false); }, {passive:true,capture:true});
+    setTimeout(function(){ notify(atTop()); }, 50);
+  }catch(_){ }
+})();
+</script>
+
 <script defer src="/assets/js/socialnetwork-automap-v3.js?v=20260404psom"></script>
   
   <script id="igtc-checkout-trigger-v1">

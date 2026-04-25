@@ -1288,7 +1288,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">Sau khi kết nối cài đặt lưu trữ (URL/khóa Supabase), toàn bộ chức năng sẽ được kích hoạt.</div>';
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
         document.body.appendChild(m);
@@ -1369,8 +1369,8 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   const modal = document.createElement('div'); modal.className='igtc-modal igtc-hidden'; modal.setAttribute('role','dialog'); modal.setAttribute('aria-modal','true'); modal.setAttribute('aria-labelledby','igtc-modal-title');
   modal.innerHTML = `
     <header>
-      <h3 id="igtc-modal-title">Loading…</h3>
-      <button class="igtc-close" aria-label="Close">✕</button>
+      <h3 id="igtc-modal-title">Đang tải...…</h3>
+      <button class="igtc-close" aria-label="Đóng">✕</button>
     </header>
     <div class="igtc-content" tabindex="0">
       <div class="igtc-media"><img alt=""></div>
@@ -1378,8 +1378,8 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
         <p class="igtc-desc" style="opacity:.9"></p>
         <div class="igtc-actions">
           <button class="igtc-btn" data-act="cta">바로가기</button>
-          <button class="igtc-btn secondary" data-act="like">좋아요</button>
-          <button class="igtc-btn ghost" data-act="recommend">추천</button>
+          <button class="igtc-btn secondary" data-act="like">Thích</button>
+          <button class="igtc-btn ghost" data-act="recommend">Đề xuất</button>
         </div>
       </div>
     </div>`;
@@ -1427,9 +1427,9 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
 
   async function showDetail(node, placement){
     const info = resolveInfo(node);
-    el.title.textContent = info.title || '상세 보기';
+    el.title.textContent = info.title || 'Xem chi tiết';
     if (info.img) el.img.src = info.img;
-    el.desc.textContent = '불러오는 중…';
+    el.desc.textContent = 'Đang tải...';
     el.btnCta.disabled = true;
 
     // stash
@@ -1443,13 +1443,13 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     try{
       if (info.id){
         const detail = await fetchJSON(`/api/items/${encodeURIComponent(info.id)}`);
-        el.title.textContent = detail.title || info.title || '상세 보기';
+        el.title.textContent = detail.title || info.title || 'Xem chi tiết';
         if (detail.image) el.img.src = detail.image;
         el.desc.textContent = detail.description || '';
         if (detail.ctaLabel) el.btnCta.textContent = detail.ctaLabel;
         if (detail.href) href = detail.href;
       } else {
-        el.desc.textContent = el.desc.textContent==='불러오는 중…' ? '' : el.desc.textContent;
+        el.desc.textContent = el.desc.textContent==='Đang tải...' ? '' : el.desc.textContent;
       }
     }catch(_){ el.desc.textContent = ''; }
 
@@ -1475,11 +1475,11 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     // Feedback handlers (optional)
     el.btnLike.onclick = async function(){
       const id = this.dataset.itemId || info.id; if(!id) return;
-      try{ await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); this.textContent='좋아요 완료'; this.disabled=true; }catch(_){}
+      try{ await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); this.textContent='Đã thích'; this.disabled=true; }catch(_){}
     };
     el.btnRec.onclick = async function(){
       const id = this.dataset.itemId || info.id; if(!id) return;
-      try{ await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); this.textContent='추천 완료'; this.disabled=true; }catch(_){}
+      try{ await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); this.textContent='Đã đề xuất'; this.disabled=true; }catch(_){}
     };
   }
 
@@ -1825,13 +1825,13 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     return res;
   }
 
-  window.orderItem = async function(itemId, qty){
+  window.orderMục = async function(itemId, qty){
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
       if (res.ok){ alert("구매 요청이 접수되었습니다."); }
       else { alert("구매 요청 실패"); }
-    }catch(e){ console.warn(e); alert("네트워크 오류"); }
+    }catch(e){ console.warn(e); alert("Lỗi mạng"); }
   };
 
   window.requestSettlement = async function(amount, currency){
@@ -1840,11 +1840,11 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
       if (res.ok){ alert("정산 요청이 접수되었습니다."); }
       else { alert("정산 요청 실패"); }
-    }catch(e){ console.warn(e); alert("네트워크 오류"); }
+    }catch(e){ console.warn(e); alert("Lỗi mạng"); }
   };
 
-  // ===== 2) AI 추천·회전(로테이션) 보강 =====
-  // 조건: 상품 카드가 거의 없거나(3개 미만) 썸네일이 비어 있으면 → 서버 추천을 요청해 채움.
+  // ===== 2) AI Đề xuất·회전(로테이션) 보강 =====
+  // 조건: 상품 카드가 거의 없거나(3개 미만) 썸네일이 비어 있으면 → 서버 Đề xuất을 요청해 채움.
   document.addEventListener('DOMContentLoaded', function(){
     try{
       // 컨테이너 후보 탐색
@@ -1867,7 +1867,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
       if(!needFill) return;
 
-      // 서버 추천 시도 (동일 도메인)
+      // 서버 Đề xuất 시도 (동일 도메인)
       fetch('/api/recommendations?limit=12', { credentials:'include' })
         .then(function(r){ if(!r.ok) throw new Error('recommendations failed'); return r.json(); })
         .then(function(list){
@@ -2397,9 +2397,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       h.appendChild(t); h.appendChild(x);
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
-      body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
+      body.innerHTML = '<div class="igdc-qa-note">Sau khi kết nối cài đặt lưu trữ (URL/khóa Supabase), toàn bộ chức năng sẽ được kích hoạt.</div>';
 
-      // ensure the "대표 이메일" is shown only inside the modal
+      // ensure the "Email đại diện" is shown only inside the modal
       var ce = document.createElement('p');
       ce.className = 'contact-email';
       ce.innerHTML = 'Email đại diện: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
@@ -2480,7 +2480,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
             parent.innerHTML = html;
           }
         });
-        // Remove any plain-text "대표 이메일: ..." remnants
+        // Remove any plain-text "Email đại diện: ..." remnants
         f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
       });
     }catch(e){}
@@ -2500,7 +2500,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
       var note = document.createElement('div'); note.className='igdc-qa-note';
-      note.textContent = '저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.';
+      note.textContent = 'Sau khi kết nối cài đặt lưu trữ (URL/khóa Supabase), toàn bộ chức năng sẽ được kích hoạt.';
       body.appendChild(note);
 
       // (1) Inject the contact email in creation path
@@ -3046,7 +3046,7 @@ window.addEventListener("message",function(ev){
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">상품 리뷰</h3>
+          <h3 class="igdc-review-title">Đánh giá sản phẩm</h3>
           <div id="igdc-review-list" class="igdc-review-list">로딩 중...</div>
           ${canWrite ? this.renderForm() : this.renderLoginHint()}
         </section>
@@ -3062,7 +3062,7 @@ window.addEventListener("message",function(ev){
             maxlength="${this.config.maxChars}"
             required></textarea>
           <div class="igdc-review-actions">
-            <button type="submit">리뷰 등록</button>
+            <button type="submit">Gửi đánh giá</button>
           </div>
         </form>
       `;
@@ -3070,7 +3070,7 @@ window.addEventListener("message",function(ev){
 
     renderLoginHint() {
       return `<div class="igdc-review-login-hint">
-        리뷰 작성은 로그인 후 가능
+        Bạn cần đăng nhập để viết đánh giá.
       </div>`;
     },
 
@@ -3114,9 +3114,9 @@ window.addEventListener("message",function(ev){
           return;
         }
 
-        list.innerHTML = data.map(this.renderItem).join('');
+        list.innerHTML = data.map(this.renderMục).join('');
       } catch {
-        list.textContent = '리뷰를 불러오지 못했습니다.';
+        list.textContent = 'Không thể tải đánh giá.';
       }
     },
 
@@ -3133,7 +3133,7 @@ window.addEventListener("message",function(ev){
       if (!res.ok) throw new Error('submit failed');
     },
 
-    renderItem(item) {
+    renderMục(item) {
       const esc = (v) => String(v || '').replace(/[<>]/g, '');
       return `
         <div class="igdc-review-item">

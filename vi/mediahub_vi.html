@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="vi">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
@@ -3490,8 +3490,8 @@ function handleVideoSearch(e){
     // Keep first item selected if none
     if(!sel.value && sel.options.length) sel.value = sel.options[0].value;
     // Save selected provider on change
-    sel.addEventListener('change', ()=>{ localStorage.setItem('mediahub_provider', sel.value); });
-    const saved = localStorage.getItem('mediahub_provider');
+    sel.addEventListener('change', ()=>{ localStorage.setMục('mediahub_provider', sel.value); });
+    const saved = localStorage.getMục('mediahub_provider');
     if (saved && [...sel.options].some(o => o.value === saved)) sel.value = saved;
   }
 
@@ -3711,7 +3711,7 @@ function handleVideoSearch(e){
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">Sau khi kết nối cài đặt lưu trữ (URL/khóa Supabase), toàn bộ chức năng sẽ được kích hoạt.</div>';
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
         document.body.appendChild(m);
@@ -4506,7 +4506,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     body.innerHTML =
       '<div class="igdc-qa-note">' +
-      '저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.' +
+      'Sau khi kết nối cài đặt lưu trữ (URL/khóa Supabase), toàn bộ chức năng sẽ được kích hoạt.' +
       '</div>';
 
     var email = document.createElement('p');
@@ -4639,7 +4639,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     var src = card.getAttribute('data-src');
     var wrap = document.createElement('div');
     wrap.className = 'fs-stage';
-    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="Media Viewer"></div><button class="fs-close" aria-label="Đóng">✕</button>';
+    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="Trình xem phương tiện"></div><button class="fs-close" aria-label="Đóng">✕</button>';
     var inner = wrap.querySelector('.fs-inner');
 
     if(yt){
@@ -4656,7 +4656,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     }else{
       var url = getCardImageURL(card) || 'about:blank';
       var img = document.createElement('img');
-      img.src = url; img.alt = 'Preview';
+      img.src = url; img.alt = 'Xem trước';
       img.style.width='100%'; img.style.height='100%'; img.style.objectFit='cover';
       inner.appendChild(img);
     }
@@ -5009,7 +5009,7 @@ window.addEventListener("message",function(ev){
       overlay.innerHTML = `
         <div class="media-modal">
           <button class="media-close">✕</button>
-          <h2>${card.dataset.title || 'Media Content'}</h2>
+          <h2>${card.dataset.title || 'Nội dung truyền thông'}</h2>
           <p>${card.dataset.description || ''}</p>
 
           <div class="media-actions">
@@ -5060,7 +5060,7 @@ window.addEventListener("message",function(ev){
           break;
 
         case 'review':
-          alert('Your review has been submitted.');
+          alert('Đánh giá của bạn đã được gửi.');
           break;
       }
     },

@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="uz">
 <head>
 <!-- Supabase inline injection (vars + init) -->
 <script>
@@ -2407,11 +2407,11 @@ body > div.container,
 <option value="env">Atrof-muhit</option>
 <option value="etc">Boshqalar</option>
 </select>
-</label><button class="button small" id="btnAttach" type="button">Ilova</button><div aria-label="Attachment 미리보기" class="attach-preview" id="attachPreview"></div>
-<button class="button small" id="btnOpenComposer">Yozish</button><div aria-label="Sarlavha 미리보기" class="title-preview" id="titlePreview"><span class="tp-text">Sarlavhasiz</span></div>
+</label><button class="button small" id="btnAttach" type="button">Ilova</button><div aria-label="Ilovani oldindan ko‘rish" class="attach-preview" id="attachPreview"></div>
+<button class="button small" id="btnOpenComposer">Yozish</button><div aria-label="Sarlavhani oldindan ko‘rish" class="title-preview" id="titlePreview"><span class="tp-text">Sarlavhasiz</span></div>
 <button class="button small accent" id="btnSubmitPost">Saqlash</button>
 <span id="attachName"></span>
-<button aria-label="첨부 제거 " class="button tiny" id="btnAttachClear" style="display:none;" type="button">Tozalash</button>
+<button aria-label="Ilovani olib tashlash" class="button tiny" id="btnAttachClear" style="display:none;" type="button">Tozalash</button>
 <input id="postAttach" style="display:none;" type="file"/>
 </div>
 <div class="row row-bottom">
@@ -2497,13 +2497,13 @@ body > div.container,
 <aside class="right">
 <div class="panel cafe-link"><a aria-label="WAM NAVER Cafe ga o‘tish" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
-<button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">Xayriyalar</button>
+<button class="button" onclick="alert('Xayriya tizimi tez orada ulanadi!')" style="margin-bottom:8px; padding:5px 14px;">Xayriyalar</button>
 <p><b>IESF (International Exchange Service Foundation)</b><br/>
-        - General: NongHyup 301-0078-3333-51<br/>
-        - Foreign Currency: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
+        - Umumiy: NongHyup 301-0078-3333-51<br/>
+        - Chet el valyutasi: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
 <p><b>WAM Foundation (World Aviation Mission Foundation)</b><br/>
-        - General: Shinhan 100-026-331592<br/>
-        - Foreign Currency: Shinhan 180-005-931110<br/><span>   SWIFT: SHBKKRSE</span></p>
+        - Umumiy: Shinhan 100-026-331592<br/>
+        - Chet el valyutasi: Shinhan 180-005-931110<br/><span>   SWIFT: SHBKKRSE</span></p>
 </div>
 <div class="feed-wrapper" id="iesfFeed" style="flex:1; overflow-y:auto;">
 </div>
@@ -2593,8 +2593,8 @@ body > div.container,
   btnSubmit && btnSubmit.addEventListener("click", ()=>{ if(btnSave){ btnSave.click(); } });
 
   btnSave && btnSave.addEventListener("click", ()=>{
-    const t = titleI?.value?.trim() || "(No Sarlavha)";
-    const b = bodyI?.value?.trim() || "(No Content)";
+    const t = titleI?.value?.trim() || "(Sarlavha yo‘q)";
+    const b = bodyI?.value?.trim() || "(Kontent yo‘q)";
     const cat = catSel?.value || "etc";
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(holder){
@@ -2612,7 +2612,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">첨부 링크</a>` : `첨부: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Ilova havolasi</a>` : `Ilova: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2623,7 +2623,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "첨부: " + fileAttach.files[0].name;
+        att.textContent = "Ilova: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2640,7 +2640,7 @@ body > div.container,
 
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
-    const link = prompt("이미지 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 Confirm을 누르세요)");
+    const link = prompt("Agar rasm uchun tashqi havola (URL) bo‘lsa, joylashtiring. (Bo‘lmasa, Tasdiqlash tugmasini bosing)");
     if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
@@ -2657,7 +2657,7 @@ body > div.container,
 
   btnFileOk && btnFileOk.addEventListener('click', ()=>{
     const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
-    const link = prompt("파일 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 Confirm을 누르세요)");
+    const link = prompt("Agar fayl uchun tashqi havola (URL) bo‘lsa, joylashtiring. (Bo‘lmasa, Tasdiqlash tugmasini bosing)");
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
@@ -2686,7 +2686,7 @@ body > div.container,
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '개 파일');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' ta fayl');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2757,7 +2757,7 @@ body > div.container,
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 제거'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Ilovani olib tashlash'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
@@ -2792,11 +2792,11 @@ body > div.container,
   function closeModal(){ modal && modal.classList.add('hidden'); }
 
   function handleUnifiedSave(){
-    const t = (titleI && titleI.value.trim()) || '(No Sarlavha)';
-    const b = (bodyI && bodyI.value.trim()) || '(No Content)';
+    const t = (titleI && titleI.value.trim()) || '(Sarlavha yo‘q)';
+    const b = (bodyI && bodyI.value.trim()) || '(Kontent yo‘q)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
+    if(!holder){ alert('Yangiliklar bo‘limi topilmadi.'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2813,20 +2813,20 @@ body > div.container,
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = '첨부: ' + f.name;
+        li.textContent = 'Ilova: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
     }
 
     const del = document.createElement('button');
-    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='Delete';
+    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='O‘chirish';
     del.style.cssText='margin-top:6px; display:none;';
     item.appendChild(del);
     const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
     if(canDelete) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      if(!confirm('Bu yangilikni o‘chirmoqchimisiz?')) return;
       item.remove();
     });
 
@@ -2893,13 +2893,13 @@ body > div.container,
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '개 파일');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' ta fayl');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 모두 제거'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Barcha ilovalarni olib tashlash'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attachPreview.appendChild(chip);
@@ -2951,7 +2951,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || ''Sarlavhasiz';';
+    tpText.textContent = t || 'Sarlavhasiz';
   }
 
   // live typing updates preview
@@ -3014,7 +3014,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'Sarlavha Not entered';
+    tpText.textContent = t || 'Sarlavha kiritilmagan';
   }
 
   if(btnDraft){
@@ -3047,11 +3047,11 @@ body > div.container,
     const btn = document.createElement('button');
     btn.type='button';
     btn.className='button tiny danger delete-post';
-    btn.textContent='Delete';
+    btn.textContent='O‘chirish';
     btn.style.cssText='margin-top:6px; display:none;';
     if(canShowDeleteFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      if(!confirm('Bu yangilikni o‘chirmoqchimisiz?')) return;
       item.remove();
     });
     item.appendChild(btn);
@@ -3194,20 +3194,20 @@ body > div.container,
     npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Ilova</div>' + attachHtml) : '';
 
     openModal();
   }, true);
 })();
 </script><div id="editNewsModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 680px); max-height:78vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 style="margin:0; font-size:1.05rem;">Yozish 편집</h3>
+<h3 style="margin:0; font-size:1.05rem;">Yozuvni tahrirlash</h3>
 <div id="enInfo" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
 <label style="font-size:.85rem;">Sarlavha</label>
 <input id="enTitle" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;" type="text"/>
-<label style="font-size:.85rem;">Content</label>
+<label style="font-size:.85rem;">Kontent</label>
 <textarea id="enBody" rows="8" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;"></textarea>
 </div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
@@ -3252,7 +3252,7 @@ body > div.container,
       badge.setAttribute('translate','no');
       header.appendChild(badge);
     }
-    badge.textContent = `Edited · ${tsStr}`;
+    badge.textContent = `Tahrirlangan · ${tsStr}`;
   }
 
   // On load, restore edited badge for admin/author only
@@ -3395,7 +3395,7 @@ body > div.container,
     let btnDel  = footer.querySelector('.delete-post');
     if(!btnEdit){
       btnEdit = document.createElement('button');
-      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
+      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Tahrirlash';
       footer.appendChild(btnEdit);
       btnEdit.addEventListener('click', (e)=>{
         e.stopPropagation();
@@ -3412,11 +3412,11 @@ body > div.container,
     }
     if(!btnDel){
       btnDel = document.createElement('button');
-      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='Delete';
+      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='O‘chirish';
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+        if(!confirm('Bu yangilikni o‘chirmoqchimisiz?')) return;
         item.remove();
       });
     }
@@ -3596,7 +3596,7 @@ body > div.container,
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'Content';
+    if(p) p.textContent = 'Kontent';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -3675,7 +3675,7 @@ body > div.container,
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("Xarid so‘rovi qabul qilindi."); } else { alert("Purchase request failed"); }
+      if (res.ok){ alert("Xarid so‘rovi qabul qilindi."); } else { alert("Xarid so‘rovi bajarilmadi"); }
     }catch(e){ console.warn(e); alert("Network error"); }
   };
 
@@ -3684,7 +3684,7 @@ body > div.container,
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("Hisob-kitob so‘rovi qabul qilindi."); } else { alert("Settlement request failed"); }
+      if (res.ok){ alert("Hisob-kitob so‘rovi qabul qilindi."); } else { alert("Hisob-kitob so‘rovi bajarilmadi"); }
     }catch(e){ console.warn(e); alert("Network error"); }
   };
 
@@ -3694,7 +3694,7 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Blokcheyn qayta ishlash so‘rovi bajarildi: " + (j.txHash||"Pending")); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Blokcheyn qayta ishlash so‘rovi bajarildi: " + (j.txHash||"Kutilmoqda")); }
       else { alert("Blokcheyn qayta ishlash bajarilmadi"); }
     }catch(e){ console.warn(e); alert("Network error"); }
   };
@@ -3741,7 +3741,7 @@ body > div.container,
 
             var t = document.createElement('div');
             t.className = 'title';
-            t.textContent = item.title || item.name || 'Product';
+            t.textContent = item.title || item.name || 'Mahsulot';
 
             a.appendChild(img);
             a.appendChild(t);
@@ -3764,7 +3764,7 @@ body > div.container,
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || 'Product';
+              t.textContent = item.title || 'Mahsulot';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -3835,7 +3835,7 @@ body > div.container,
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","정액 기부 금액");
+  btnGroup.setAttribute("aria-label","Belgilangan xayriya summasi");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -3861,17 +3861,17 @@ body > div.container,
   // === Account 안내 박스 ===
   const accountBox = document.createElement("div");
   accountBox.className = "account-box";
-  accountBox.setAttribute("aria-label","Account Transfer Information");
+  accountBox.setAttribute("aria-label","Hisobga o‘tkazma ma’lumotlari");
 
   accountBox.innerHTML = `
     <div><b>IESF (International Exchange Service Foundation)</b></div>
-    <div>General: 농협 301-0078-3333-51</div>
-    <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
+    <div>Umumiy: NongHyup 301-0078-3333-51</div>
+    <div>Chet el valyutasi: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
     <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
-    <div>General: 신한 100-026-331592</div>
-    <div>Foreign Currency: Shinhan 180-005-931110</div>
+    <div>Umumiy: Shinhan 100-026-331592</div>
+    <div>Chet el valyutasi: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
   donationDiv.appendChild(accountBox);
@@ -3884,7 +3884,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      alert(`Tanlangan summa: ₩${Number(amt).toLocaleString()}\n\nIltimos, quyidagi hisobga o‘tkazing.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -3949,7 +3949,7 @@ body > div.container,
         }
       }catch(err){
         console.error(err);
-        alert('A problem occurred while requesting payment.');
+        alert('To‘lov so‘rovini yuborishda muammo yuz berdi.');
       } finally {
         closeDonateModal();
       }
@@ -4387,7 +4387,7 @@ document.addEventListener('DOMContentLoaded', function(){
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("Delete failed (permission/policy)"); return; }
+            if(error){ alert("O‘chirish bajarilmadi (ruxsat/siyosat)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -4411,7 +4411,7 @@ document.addEventListener('DOMContentLoaded', function(){
         }
         if(!answer){
           if(/시간|운영시간|오픈|문의/.test(text)) answer="Operatsion so‘rovlarga administrator ko‘rib chiqqandan keyin javob beriladi.";
-          else if(/price|cost|fee|가격|비용|요금/i.test(text)) answer="For price/fee information, please refer to the guidance on this page and leave any additional inquiries.";
+          else if(/price|cost|fee|가격|비용|요금/i.test(text)) answer="Narx/to‘lov ma’lumotlari uchun ushbu sahifadagi ko‘rsatmalarga qarang va qo‘shimcha savollaringiz bo‘lsa qoldiring.";
           else answer="So‘rovingiz uchun rahmat. Uni tezda ko‘rib chiqib, yordam beramiz.";
         }
       }
@@ -4426,7 +4426,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Saqlash 설정(Supabase url/key)이 아직 연결되지 않아 서버 Saqlash은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        alert("Saqlash sozlamalari (Supabase url/key) hali ulanmagan, shuning uchun serverga saqlash vaqtincha o‘chiq. Vebga joylashtirganda SUPER_VARSAR.url/anonKey ni sozlasangiz, avtomatik ulanadi.");
         return;
       }
       const record = {
@@ -5062,12 +5062,12 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npTitle.textContent = title || 'Sarlavha 없음';
+    npTitle.textContent = title || 'Sarlavha yo‘q';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(등록된 본문이 없습니다.)';
+    npBody.textContent = body || '(Ro‘yxatdan o‘tgan matn yo‘q.)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">Ilova</div>' + attachHtml
         : '';
     }
 
@@ -5405,7 +5405,7 @@ window.addEventListener("message",function(ev){
     card.innerHTML = `
       <div class="thumb"></div>
       <div class="card-body">
-        <div class="card-title">Loading...</div>
+        <div class="card-title">Yuklanmoqda...</div>
         <div class="card-meta">-</div>
         <div class="card-preview">Preparing</div>
       </div>

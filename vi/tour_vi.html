@@ -959,9 +959,9 @@ html, body {
     .btn-grid .link-btn:hover { background:#e75480; color:#ffffff; border-color:#cc2d63; box-shadow:0 2px 6px rgba(0,0,0,0.18); }</style>
 <div class="region-card">
 <div class="region-title">Châu Á</div>
-<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaTour <small>(하나투어)</small></a>
-<a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour<small>(모두투어)</small></a>
-<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon Tour <small>(노랑풍선)</small></a>
+<div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaTour</a>
+<a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour</a>
+<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon</a>
 <a class="link-btn" href="https://www.trip.com" target="_blank">Trip.com <small>(携程)</small></a>
 <a class="link-btn" href="https://www.ctrip.com" target="_blank">Ctrip <small>(携程)</small></a>
 <a class="link-btn" href="https://www.qunar.com" target="_blank">Qunar <small>(去哪儿网)</small></a>
@@ -1343,7 +1343,7 @@ a[href^="mailto:"]:hover {
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
     const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","닫기");
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Đóng");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
@@ -1425,7 +1425,7 @@ a[href^="mailto:"]:hover {
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Đang chờ)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "Admin request":"General";
@@ -1460,8 +1460,8 @@ a[href^="mailto:"]:hover {
         }
         if(!answer){
           if(/시간|운영시간|오픈|문의/.test(text)) answer="Operational inquiries will be answered after review by the administrator.";
-          else if(/가격|비용|요금/.test(text)) answer="Please refer to the information on the page for price/fee details. Leave an additional inquiry if needed.";
-          else answer="Thank you for your inquiry. We will review it quickly and assist you.";
+          else if(/가격|비용|요금/.test(text)) answer="Vui lòng tham khảo thông tin trên trang này về giá và phí. Hãy để lại câu hỏi bổ sung nếu cần.";
+          else answer="Cảm ơn câu hỏi của bạn. Chúng tôi sẽ kiểm tra nhanh và hỗ trợ bạn.";
         }
       }
       return { technical, answer };
@@ -1485,7 +1485,7 @@ a[href^="mailto:"]:hover {
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("Submission failed"); return; }
+      if(error){ alert("Gửi thất bại"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -1614,7 +1614,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var body = document.createElement('div'); body.className='igdc-qa-body';
       body.innerHTML = '<div class="igdc-qa-note">Full functionality will be enabled after the storage settings (Supabase url/key) are connected.</div>';
 
-      // ensure the "대표 이메일" is shown only inside the modal
+      // ensure the "Email đại diện" is shown only inside the modal
       var ce = document.createElement('p');
       ce.className = 'contact-email';
       ce.innerHTML = 'Email đại diện: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
@@ -1899,9 +1899,9 @@ window.addEventListener("message",function(ev){
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
     ta.value=''; alert('Sent successfully.');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('Sending failed'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('Gửi thất bại'));});
   const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('Sending failed'));});
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('Gửi thất bại'));});
 })();
 </script>
 
@@ -2032,8 +2032,8 @@ window.addEventListener("message",function(ev){
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">Product Reviews</h3>
-          <div id="igdc-review-list" class="igdc-review-list">Loading...</div>
+          <h3 class="igdc-review-title">Đánh giá sản phẩm</h3>
+          <div id="igdc-review-list" class="igdc-review-list">Đang tải...</div>
           ${canWrite ? this.renderReviewForm() : this.renderLoginHint()}
         </section>
       `;
@@ -2080,7 +2080,7 @@ window.addEventListener("message",function(ev){
             textarea.value = '';
             this.loadReviews(productId);
           })
-          .catch(() => alert('리뷰 Submission failed'));
+          .catch(() => alert('Gửi đánh giá thất bại'));
       });
     },
 
@@ -2089,7 +2089,7 @@ window.addEventListener("message",function(ev){
       const list = document.getElementById('igdc-review-list');
       if (!list) return;
 
-      list.textContent = 'Loading...';
+      list.textContent = 'Đang tải...';
 
       try {
         const res = await fetch(
@@ -2102,9 +2102,9 @@ window.addEventListener("message",function(ev){
           return;
         }
 
-        list.innerHTML = data.map(this.renderReviewItem).join('');
+        list.innerHTML = data.map(this.renderReviewMục).join('');
       } catch {
-        list.textContent = 'Failed to load reviews.';
+        list.textContent = 'Không thể tải đánh giá.';
       }
     },
 
@@ -2117,7 +2117,7 @@ window.addEventListener("message",function(ev){
       if (!res.ok) throw new Error('submit failed');
     },
 
-    renderReviewItem(item) {
+    renderReviewMục(item) {
       const esc = (v) => String(v || '').replace(/[<>]/g, '');
       return `
         <div class="igdc-review-item">
@@ -2222,7 +2222,7 @@ window.addEventListener("message",function(ev){
                color:#7a8da8;
                letter-spacing:.5px;
              ">
-            Loading
+            Đang tải...
           </div>
 
         </div>

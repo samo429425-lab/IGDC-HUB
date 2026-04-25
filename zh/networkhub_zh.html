@@ -1235,8 +1235,8 @@ a[href^="mailto:"]:hover {
         }
         if(!answer){
           if(/시간|운영시간|오픈|문의/.test(text)) answer="Operations-related inquiries will be reviewed by an administrator and answered afterward.";
-          else if(/가격|비용|요금/.test(text)) answer="Please refer to the information on this page for pricing/fees. Leave an additional inquiry if needed.";
-          else answer="Thank you for your inquiry. We will review it quickly and assist you.";
+          else if(/가격|비용|요금/.test(text)) answer="价格和费用请参考本页信息。如有需要，请留下补充咨询。";
+          else answer="感谢您的咨询。我们会尽快确认并协助您。";
         }
       }
       return { technical, answer };
@@ -1250,7 +1250,7 @@ a[href^="mailto:"]:hover {
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Server-side saving is disabled because the save settings (Supabase url/key) are not connected yet. When deployed to the web, it will connect automatically if SUPER_VARSAR.url/anonKey is configured.");
+        alert("服务器端保存暂时停用，因为保存设置尚未连接。部署到网页后，如果已配置相关设置，将自动连接。");
         return;
       }
       const record = {
@@ -1756,7 +1756,7 @@ window.addEventListener("message",function(ev){
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">상품 리뷰</h3>
+          <h3 class="igdc-review-title">商品评价</h3>
           <div id="igdc-review-list" class="igdc-review-list">로딩 중...</div>
           ${canWrite ? this.renderReviewForm() : this.renderLoginHint()}
         </section>
@@ -1772,7 +1772,7 @@ window.addEventListener("message",function(ev){
             maxlength="${this.config.maxReviewChars}"
             required></textarea>
           <div class="igdc-review-actions">
-            <button type="submit">리뷰 등록</button>
+            <button type="submit">提交评价</button>
           </div>
         </form>
       `;
@@ -1780,7 +1780,7 @@ window.addEventListener("message",function(ev){
 
     renderLoginHint() {
       return `<div class="igdc-review-login-hint">
-        리뷰 작성은 로그인 후 가능합니다.
+        登录后可以撰写评价。합니다.
       </div>`;
     },
 
@@ -1804,7 +1804,7 @@ window.addEventListener("message",function(ev){
             textarea.value = '';
             this.loadReviews(productId);
           })
-          .catch(() => alert('리뷰 Submission failed'));
+          .catch(() => alert('评价提交失败'));
       });
     },
 
@@ -1826,9 +1826,9 @@ window.addEventListener("message",function(ev){
           return;
         }
 
-        list.innerHTML = data.map(this.renderReviewItem).join('');
+        list.innerHTML = data.map(this.renderReview项目).join('');
       } catch {
-        list.textContent = '리뷰를 불러오지 못했습니다.';
+        list.textContent = '无法加载评价。';
       }
     },
 
@@ -1841,7 +1841,7 @@ window.addEventListener("message",function(ev){
       if (!res.ok) throw new Error('submit failed');
     },
 
-    renderReviewItem(item) {
+    renderReview项目(item) {
       const esc = (v) => String(v || '').replace(/[<>]/g, '');
       return `
         <div class="igdc-review-item">
@@ -1946,7 +1946,7 @@ window.addEventListener("message",function(ev){
                color:#7a8da8;
                letter-spacing:.5px;
              ">
-            Loading
+            加载中...
           </div>
 
         </div>

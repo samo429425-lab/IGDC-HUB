@@ -3491,8 +3491,8 @@ function handleVideoSearch(e){
     // Keep first item selected if none
     if(!sel.value && sel.options.length) sel.value = sel.options[0].value;
     // Save selected provider on change
-    sel.addEventListener('change', ()=>{ localStorage.setItem('mediahub_provider', sel.value); });
-    const saved = localStorage.getItem('mediahub_provider');
+    sel.addEventListener('change', ()=>{ localStorage.set项目('mediahub_provider', sel.value); });
+    const saved = localStorage.get项目('mediahub_provider');
     if (saved && [...sel.options].some(o => o.value === saved)) sel.value = saved;
   }
 
@@ -4640,7 +4640,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     var src = card.getAttribute('data-src');
     var wrap = document.createElement('div');
     wrap.className = 'fs-stage';
-    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="Media Viewer"></div><button class="fs-close" aria-label="关闭">✕</button>';
+    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="媒体查看器"></div><button class="fs-close" aria-label="关闭">✕</button>';
     var inner = wrap.querySelector('.fs-inner');
 
     if(yt){
@@ -4657,7 +4657,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     }else{
       var url = getCardImageURL(card) || 'about:blank';
       var img = document.createElement('img');
-      img.src = url; img.alt = 'Preview';
+      img.src = url; img.alt = '预览';
       img.style.width='100%'; img.style.height='100%'; img.style.objectFit='cover';
       inner.appendChild(img);
     }
@@ -5061,7 +5061,7 @@ window.addEventListener("message",function(ev){
           break;
 
         case 'review':
-          alert('Your review has been submitted.');
+          alert('您的评价已提交。');
           break;
       }
     },

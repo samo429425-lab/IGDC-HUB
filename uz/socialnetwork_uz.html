@@ -1069,9 +1069,9 @@ function boot(){
           var inner = document.createElement('div');
           inner.style.height = '280px';
           inner.style.display = 'flex';
-          inner.style.alignItems = 'center';
+          inner.style.alignElements = 'center';
           inner.style.justifyContent = 'center';
-          inner.textContent = 'Loading...';
+          inner.textContent = 'Yuklanmoqda...';
           card.appendChild(inner);
           panel.appendChild(card);
         }
@@ -1130,7 +1130,7 @@ window.addEventListener('resize', function(){
     a.dataset.productTitle = productTitle;
     a.dataset.productLink = resolvedHref;
 
-    a.textContent = productTitle || 'Item';
+    a.textContent = productTitle || 'Element';
     a.target = resolvedHref.indexOf('/pages/coming-soon.html') === 0 ? '_self' : '_blank';
     a.rel = 'noopener';
 
@@ -1422,7 +1422,27 @@ window.addEventListener('resize', function(){
   }, true);
 })();
 </script>
- 
+  <script src="frontbus.child.js"></script>
+<script>
+(function(){
+  try{
+    function notify(top){
+      parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*');
+    }
+    function atTop(){
+      var se=document.scrollingElement||document.documentElement||document.body;
+      return (window.scrollY||window.pageYOffset||0)<=0 && (se?(se.scrollTop||0)<=0:true);
+    }
+    function onAnyScroll(){ notify(atTop()); }
+    window.addEventListener('scroll', onAnyScroll, {passive:true});
+    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
+    document.addEventListener('wheel', function(e){ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
+    document.addEventListener('touchmove', function(){ notify(false); }, {passive:true,capture:true});
+    setTimeout(function(){ notify(atTop()); }, 50);
+  }catch(_){ }
+})();
+</script>
+
 <script defer src="/assets/js/socialnetwork-automap-v3.js?v=20260404psom"></script>
   
   <script id="igtc-checkout-trigger-v1">

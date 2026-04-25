@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="en">
+<html class="prelayout" lang="uz">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
@@ -3586,8 +3586,8 @@ function handleVideoSearch(e){
     // Keep first item selected if none
     if(!sel.value && sel.options.length) sel.value = sel.options[0].value;
     // Saqlash selected provider on change
-    sel.addEventListener('change', ()=>{ localStorage.setItem('mediahub_provider', sel.value); });
-    const saved = localStorage.getItem('mediahub_provider');
+    sel.addEventListener('change', ()=>{ localStorage.setElement('mediahub_provider', sel.value); });
+    const saved = localStorage.getElement('mediahub_provider');
     if (saved && [...sel.options].some(o => o.value === saved)) sel.value = saved;
   }
 
@@ -4206,7 +4206,7 @@ function handleVideoSearch(e){
     var src = card.getAttribute('data-src');
     var wrap = document.createElement('div');
     wrap.className = 'fs-stage';
-    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="Media Viewer"></div><button class="fs-close" aria-label="Yopish">✕</button>';
+    wrap.innerHTML = '<div class="fs-inner" role="dialog" aria-label="Media ko‘ruvchi"></div><button class="fs-close" aria-label="Yopish">✕</button>';
     var inner = wrap.querySelector('.fs-inner');
 
     if(yt){
@@ -4576,7 +4576,7 @@ window.addEventListener("message",function(ev){
       overlay.innerHTML = `
         <div class="media-modal">
           <button class="media-close">✕</button>
-          <h2>${card.dataset.title || 'Media Content'}</h2>
+          <h2>${card.dataset.title || 'Media kontent'}</h2>
           <p>${card.dataset.description || ''}</p>
 
           <div class="media-actions">
@@ -4588,7 +4588,7 @@ window.addEventListener("message",function(ev){
 
           <div class="media-review">
             <textarea placeholder="Bir qatorli sharh (ixtiyoriy)" maxlength="200"></textarea>
-            <button data-action="review">Submit Review</button>
+            <button data-action="review">Sharh yuborish</button>
           </div>
         </div>
       `;
@@ -4973,7 +4973,7 @@ window.addEventListener("message",function(ev){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Server-side saving is disabled because the save settings (Supabase url/key) are not connected yet. When deployed to the web, it will connect automatically if SUPER_VARSAR.url/anonKey is configured.");
+        alert("Serverda saqlash vaqtincha o‘chirilgan, chunki saqlash sozlamalari hali ulanmagan. Vebga joylashtirilganda sozlamalar mavjud bo‘lsa, avtomatik ulanadi.");
         return;
       }
       const record = {
@@ -4983,7 +4983,7 @@ window.addEventListener("message",function(ev){
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("Submission failed"); return; }
+      if(error){ alert("Yuborish amalga oshmadi"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }

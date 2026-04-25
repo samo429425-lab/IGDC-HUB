@@ -845,7 +845,7 @@
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like,
 
-/* 색상: Edit=파랑, 추천=초록, Like=핑크, Xóa=빨강 */
+/* 색상: Edit=파랑, Đề xuất=초록, Like=핑크, Xóa=빨강 */
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 .right .topic-panel .item .btn-reco{ background:#e6f7ec; color:#059669; border-color:#bbf7d0; }
 .right .topic-panel .item .btn-like{ background:#ffe6ef; color:#db2777; border-color:#fecdd3; }
@@ -921,7 +921,7 @@
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 @media (orientation: portrait){
 </style><style>
-/* Hard-hide any legacy text buttons labeled 추천/Like */
+/* Hard-hide any legacy text buttons labeled Đề xuất/Like */
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like{ display:none !important; }
 }
@@ -1974,7 +1974,7 @@ body .right{ display:none !important; }
     line-height:1.5;
   }
 
-  /* 하단 Footer: 읽음/추천/좋아요/아이콘 + Edit/Xóa 전부 우측 정렬 */
+  /* 하단 Footer: 읽음/Đề xuất/Thích/아이콘 + Edit/Xóa 전부 우측 정렬 */
  .mobile-news-clone .topic-panel .item .item-footer {
     margin-top: auto;              /* 위 Content 밀어 올리고, footer를 맨 아래로 */
     display: flex;
@@ -2392,11 +2392,11 @@ body > div.container,
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
-<button class="bc-tile orange" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">Donate</button>
+<button class="bc-tile orange" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">Quyên góp</button>
 </section>
 <section class="hero">
 <h2>💝 Trung tâm Quyên góp Toàn cầu 💝</h2>
-<p>The support system for IESF and the WAM Foundation begins here.</p>
+<p>Hệ thống hỗ trợ cho IESF và WAM Foundation bắt đầu từ đây.</p>
 </section>
 <section class="panel" id="topViếtPanel" style="margin-bottom:20px;">
 <textarea id="topPostBody" placeholder="Nhập nội dung chính..." rows="4" style="padding-top:22px; padding-bottom:12px; font-weight:600;">Đây là không gian được tài trợ bởi nhóm IGDC Global Platform để chia sẻ sứ mệnh và tin tức của WAM Foundation (World Aviation Mission Foundation), công bố và chia sẻ tin tức của IESF, đồng thời cùng chia sẻ tin tức của nhiều NGO và tổ chức tình nguyện khác nhau.</textarea>
@@ -2413,11 +2413,11 @@ body > div.container,
 <option value="env">Môi trường</option>
 <option value="etc">Khác</option>
 </select>
-</label><button class="button small" id="btnAttach" type="button">Tệp đính kèm</button><div aria-label="Tệp đính kèm 미리보기" class="attach-preview" id="attachPreview"></div>
-<button class="button small" id="btnOpenComposer">Viết</button><div aria-label="Title 미리보기" class="title-preview" id="titlePreview"><span class="tp-text">Không có tiêu đề</span></div>
+</label><button class="button small" id="btnAttach" type="button">Tệp đính kèm</button><div aria-label="Xem trước tệp đính kèm" class="attach-preview" id="attachPreview"></div>
+<button class="button small" id="btnOpenComposer">Viết</button><div aria-label="Xem trước tiêu đề" class="title-preview" id="titlePreview"><span class="tp-text">Không có tiêu đề</span></div>
 <button class="button small accent" id="btnGửiPost">Lưu</button>
 <span id="attachName"></span>
-<button aria-label="첨부 제거 " class="button tiny" id="btnAttachXóa" style="display:none;" type="button">Xóa</button>
+<button aria-label="Xóa tệp đính kèm" class="button tiny" id="btnAttachXóa" style="display:none;" type="button">Xóa</button>
 <input id="postAttach" style="display:none;" type="file"/>
 </div>
 <div class="row row-bottom">
@@ -2440,7 +2440,7 @@ body > div.container,
 </section>
 <!-- (요청) 5줄 Feed -->
 <section class="feed-wrapper">
-<div class="feed-header"><h3 style="margin:0;">📺 Feed</h3></div>
+<div class="feed-header"><h3 style="margin:0;">📺 Bảng tin</h3></div>
 <div id="feedRows">
 
 <!-- ===== Donation Feed Rows (Final Clean Version) ===== -->
@@ -2503,13 +2503,13 @@ body > div.container,
 <aside class="right">
 <div class="panel cafe-link"><a aria-label="Go to WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
-<button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">Donations</button>
+<button class="button" onclick="alert('Hệ thống quyên góp sẽ sớm được kết nối!')" style="margin-bottom:8px; padding:5px 14px;">Quyên góp</button>
 <p><b>IESF (International Exchange Service Foundation)</b><br/>
         - General: NongHyup 301-0078-3333-51<br/>
-        - Foreign Currency: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
+        - Ngoại tệ: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
 <p><b>WAM Foundation (World Aviation Mission Foundation)</b><br/>
         - General: Shinhan 100-026-331592<br/>
-        - Foreign Currency: Shinhan 180-005-931110<br/><span>   SWIFT: SHBKKRSE</span></p>
+        - Ngoại tệ: Shinhan 180-005-931110<br/><span>   SWIFT: SHBKKRSE</span></p>
 </div>
 <div class="feed-wrapper" id="iesfFeed" style="flex:1; overflow-y:auto;">
 </div>
@@ -2518,7 +2518,7 @@ body > div.container,
 <div class="list" data-cat="ngo"></div>
 </div>
 <div class="panel topic-panel" id="topic_mission">
-<h3>Sứ mệnh News</h3>
+<h3>Tin Sứ mệnh</h3>
 <div class="list" data-cat="mission"></div>
 </div>
 <div class="panel topic-panel" id="topic_service">
@@ -2526,7 +2526,7 @@ body > div.container,
 <div class="list" data-cat="service"></div>
 </div>
 <div class="panel topic-panel" id="topic_relief">
-<h3>Cứu trợ Activity</h3>
+<h3>Hoạt động Cứu trợ</h3>
 <div class="list" data-cat="relief"></div>
 </div>
 <div class="panel topic-panel" id="topic_edu">
@@ -2599,8 +2599,8 @@ body > div.container,
   btnGửi && btnGửi.addEventListener("click", ()=>{ if(btnLưu){ btnLưu.click(); } });
 
   btnLưu && btnLưu.addEventListener("click", ()=>{
-    const t = titleI?.value?.trim() || "(No Title)";
-    const b = bodyI?.value?.trim() || "(No Content)";
+    const t = titleI?.value?.trim() || "(Không có tiêu đề)";
+    const b = bodyI?.value?.trim() || "(Không có nội dung)";
     const cat = catSel?.value || "etc";
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(holder){
@@ -2618,7 +2618,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">첨부 링크</a>` : `첨부: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Liên kết tệp đính kèm</a>` : `Tệp đính kèm: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2629,7 +2629,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "첨부: " + fileAttach.files[0].name;
+        att.textContent = "Tệp đính kèm: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2692,7 +2692,7 @@ body > div.container,
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '개 파일');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length  + ' tệp');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2763,7 +2763,7 @@ body > div.container,
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 제거'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label', 'Xóa tệp đính kèm'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
@@ -2798,8 +2798,8 @@ body > div.container,
   function closeModal(){ modal && modal.classList.add('hidden'); }
 
   function handleUnifiedLưu(){
-    const t = (titleI && titleI.value.trim()) || '(No Title)';
-    const b = (bodyI && bodyI.value.trim()) || '(No Content)';
+    const t = (titleI && titleI.value.trim()) || '(Không có tiêu đề)';
+    const b = (bodyI && bodyI.value.trim()) || '(Không có nội dung)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
@@ -2819,7 +2819,7 @@ body > div.container,
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = '첨부: ' + f.name;
+        li.textContent = 'Tệp đính kèm: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
@@ -2899,13 +2899,13 @@ body > div.container,
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '개 파일');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length  + ' tệp');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 모두 제거'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label', 'Xóa tất cả tệp đính kèm'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attachPreview.appendChild(chip);
@@ -2957,7 +2957,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || ''Không có tiêu đề';';
+    tpText.textContent = t || 'Không có tiêu đề';
   }
 
   // live typing updates preview
@@ -3020,7 +3020,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'Title Not entered';
+    tpText.textContent = t || 'Chưa nhập tiêu đề';
   }
 
   if(btnDraft){
@@ -3130,14 +3130,14 @@ body > div.container,
 <div id="npBody" style="margin-top:8px; font-size:.95rem; color:#222; white-space:pre-wrap;"></div>
 <div id="npAttach" style="margin-top:8px; font-size:.9rem; color:#374151;"></div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
-<button class="button outline" id="npClose" type="button">Close</button>
+<button class="button outline" id="npClose" type="button">Đóng</button>
 </div>
 </div></div><script>
 (function(){
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
   const $ = (s,r=document)=>r.querySelector(s);
 
-  function normalizeItem(item){
+  function normalizeMục(item){
     if(!item || item.querySelector('.item-header')) return;
     const tEl = item.querySelector('.title');
     const mEl = item.querySelector('.meta');
@@ -3151,7 +3151,7 @@ body > div.container,
   }
 
   function normalizeList(list){
-    list && list.querySelectorAll('.item').forEach(normalizeItem);
+    list && list.querySelectorAll('.item').forEach(normalizeMục);
   }
 
   $$('.right .topic-panel .list').forEach(normalizeList);
@@ -3160,7 +3160,7 @@ body > div.container,
     const mo = new MutationObserver(muts=>{
       muts.forEach(m=>{
         m.addedNodes && Array.from(m.addedNodes).forEach(n=>{
-          if(n.nodeType===1 && n.classList.contains('item')) normalizeItem(n);
+          if(n.nodeType===1 && n.classList.contains('item')) normalizeMục(n);
         });
       });
     });
@@ -3200,20 +3200,20 @@ body > div.container,
     npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Tệp đính kèm</div>' + attachHtml) : '';
 
     openModal();
   }, true);
 })();
 </script><div id="editNewsModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 680px); max-height:78vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 style="margin:0; font-size:1.05rem;">Viết 편집</h3>
+<h3 style="margin:0; font-size:1.05rem;">Chỉnh sửa bài viết</h3>
 <div id="enInfo" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
-<label style="font-size:.85rem;">Title</label>
+<label style="font-size:.85rem;">Tiêu đề</label>
 <input id="enTitle" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;" type="text"/>
-<label style="font-size:.85rem;">Content</label>
+<label style="font-size:.85rem;">Nội dung</label>
 <textarea id="enBody" rows="8" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;"></textarea>
 </div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
@@ -3240,10 +3240,10 @@ body > div.container,
     const key = (t+'|'+tm).toLowerCase(); let h=0; for(let i=0;i<key.length;i++){ h=((h<<5)-h)+key.charCodeAt(i); h|=0; } return 'news:'+h;
   }
   function loadEdit(id){
-    try{ return JSON.parse(localStorage.getItem('newsEdit:'+id) || 'null'); }catch(e){ return null; }
+    try{ return JSON.parse(localStorage.getMục('newsEdit:'+id) || 'null'); }catch(e){ return null; }
   }
   function saveEdit(id, tsStr){
-    localStorage.setItem('newsEdit:'+id, JSON.stringify({editedAt: tsStr}));
+    localStorage.setMục('newsEdit:'+id, JSON.stringify({editedAt: tsStr}));
   }
   function showEditedBadge(item, tsStr){
     if(!item) return;
@@ -3258,7 +3258,7 @@ body > div.container,
       badge.setAttribute('translate','no');
       header.appendChild(badge);
     }
-    badge.textContent = `Edited · ${tsStr}`;
+    badge.textContent = `Đã chỉnh sửa · ${tsStr}`;
   }
 
   // On load, restore edited badge for admin/author only
@@ -3271,12 +3271,12 @@ body > div.container,
   });
 
   // Capture which item is being edited via delegated click
-  window.__currentEditingItem = null;
+  window.__currentEditingMục = null;
   document.addEventListener('click', (e)=>{
     const btn = e.target.closest('.btn-edit');
     if(!btn) return;
     const item = e.target.closest('.right .topic-panel .list .item');
-    if(item && canEditXóa(item)) window.__currentEditingItem = item;
+    if(item && canEditXóa(item)) window.__currentEditingMục = item;
   }, true);
 
   // When edit modal "Lưu" is pressed, persist edited meta and show badge
@@ -3284,13 +3284,13 @@ body > div.container,
     const saveBtn = document.getElementById('enLưu');
     if(!saveBtn) return;
     saveBtn.addEventListener('click', ()=>{
-      const item = window.__currentEditingItem;
+      const item = window.__currentEditingMục;
       if(!item || !canEditXóa(item)) return;
       const ts = new Date().toLocaleString();
       const id = itemId(item);
       saveEdit(id, ts);
       showEditedBadge(item, ts);
-      window.__currentEditingItem = null;
+      window.__currentEditingMục = null;
     });
   })();
 
@@ -3360,15 +3360,15 @@ body > div.container,
     const key = (t+'|'+tm).toLowerCase(); let h=0; for(let i=0;i<key.length;i++){ h=((h<<5)-h)+key.charCodeAt(i); h|=0; } return 'news:'+h;
   }
   function loadMetrics(id){
-    try{ return JSON.parse(localStorage.getItem('newsMetrics:'+id) || '{"views":0,"reco":0,"like":0}'); }
+    try{ return JSON.parse(localStorage.getMục('newsMetrics:'+id) || '{"views":0,"reco":0,"like":0}'); }
     catch(e){ return {views:0,reco:0,like:0}; }
   }
-  function saveMetrics(id, obj){ localStorage.setItem('newsMetrics:'+id, JSON.stringify(obj)); }
+  function saveMetrics(id, obj){ localStorage.setMục('newsMetrics:'+id, JSON.stringify(obj)); }
   function loadToggles(id){
-    try{ return JSON.parse(localStorage.getItem('newsToggles:'+id) || '{"reco":false,"like":false}'); }
+    try{ return JSON.parse(localStorage.getMục('newsToggles:'+id) || '{"reco":false,"like":false}'); }
     catch(e){ return {reco:false,like:false}; }
   }
-  function saveToggles(id, obj){ localStorage.setItem('newsToggles:'+id, JSON.stringify(obj)); }
+  function saveToggles(id, obj){ localStorage.setMục('newsToggles:'+id, JSON.stringify(obj)); }
 
   function ensureFooterWithIcons(item){
     let footer = item.querySelector('.item-footer');
@@ -3401,7 +3401,7 @@ body > div.container,
     let btnDel  = footer.querySelector('.delete-post');
     if(!btnEdit){
       btnEdit = document.createElement('button');
-      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
+      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Sửa';
       footer.appendChild(btnEdit);
       btnEdit.addEventListener('click', (e)=>{
         e.stopPropagation();
@@ -3537,7 +3537,7 @@ body > div.container,
     keep.classList.add('migrated');
     // Ensure compact shape
     keep.style.display = 'inline-flex';
-    keep.style.alignItems = 'center';
+    keep.style.alignMụcs = 'center';
     keep.style.justifyContent = 'center';
     keep.style.height = '28px';
     keep.style.lineHeight = '28px';
@@ -3596,13 +3596,13 @@ body > div.container,
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
 
     const t = tpl.querySelector('.card-title');
-    if(t) t.textContent = 'Title';
+    if(t) t.textContent = 'Tiêu đề';
 
     const m = tpl.querySelector('.card-meta');
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'Content';
+    if(p) p.textContent = 'Nội dung';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -3677,7 +3677,7 @@ body > div.container,
   }
 
   // 구매
-  window.orderItem = async function(itemId, qty){
+  window.orderMục = async function(itemId, qty){
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
@@ -3825,8 +3825,8 @@ body > div.container,
 <!-- IGDC minimal Donate UI (non-invasive) -->
 
 <div class="donation-inline">
-<input aria-label="Donation amount (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
-<button class="bc-tile orange" id="btnDonate">Donate</button>
+<input aria-label="Số tiền quyên góp (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
+<button class="bc-tile orange" id="btnDonate">Quyên góp</button>
 </div>
 <script>
 (function(){
@@ -3841,7 +3841,7 @@ body > div.container,
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","정액 기부 금액");
+  btnGroup.setAttribute("aria-label","Số tiền quyên góp cố định");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -3856,7 +3856,7 @@ body > div.container,
   // === 안내 문구 ===
   const note = document.createElement("div");
   note.className = "donation-note";
-  note.textContent = "Guest donations are available only in the $5–$50 range. For larger amounts, please use the account transfer information below.";
+  note.textContent = "Khách có thể quyên góp trong phạm vi từ 5–50 USD. Với số tiền lớn hơn, vui lòng sử dụng thông tin chuyển khoản bên dưới.";
   donationDiv.appendChild(note);
 
   // === 구분선 ===
@@ -3867,17 +3867,17 @@ body > div.container,
   // === Account 안내 박스 ===
   const accountBox = document.createElement("div");
   accountBox.className = "account-box";
-  accountBox.setAttribute("aria-label","Account Transfer Information");
+  accountBox.setAttribute("aria-label","Thông tin chuyển khoản");
 
   accountBox.innerHTML = `
     <div><b>IESF (International Exchange Service Foundation)</b></div>
-    <div>General: 농협 301-0078-3333-51</div>
-    <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
+    <div>Tài khoản thường: NongHyup 301-0078-3333-51</div>
+    <div>Ngoại tệ: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
     <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
-    <div>General: 신한 100-026-331592</div>
-    <div>Foreign Currency: Shinhan 180-005-931110</div>
+    <div>Tài khoản thường: Shinhan 100-026-331592</div>
+    <div>Ngoại tệ: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
   donationDiv.appendChild(accountBox);
@@ -3919,12 +3919,12 @@ body > div.container,
 <script>(function(){try{document.querySelectorAll(".donation-inline,.donation-buttons").forEach(function(n){n.remove();});}catch(e){}})();</script>
 <div aria-hidden="true" class="donate-modal-backdrop" id="donateModalBackdrop">
 <div aria-labelledby="donateModalTitle" aria-modal="true" class="donate-modal" role="dialog">
-<h3 id="donateModalTitle">Select a Donation Organization</h3>
+<h3 id="donateModalTitle">Chọn tổ chức nhận quyên góp</h3>
 <div class="donate-actions">
-<button data-org="IESF" type="button">Donate to IESF</button>
-<button data-org="WAM" type="button">Donate to WAM</button>
+<button data-org="IESF" type="button">Quyên góp cho IESF</button>
+<button data-org="WAM" type="button">Quyên góp cho WAM</button>
 </div>
-<button class="donate-close" type="button">Close</button>
+<button class="donate-close" type="button">Đóng</button>
 </div>
 </div>
 <script id="donate-modal-js">
@@ -4297,7 +4297,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
     const title = el("div","igdc-qa-title"); title.textContent = "Hỏi & Đáp";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Đóng");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
@@ -4381,11 +4381,11 @@ document.addEventListener('DOMContentLoaded', function(){
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
+        const q = el("div","igdc-qa-thread-q"); q.textContent="Hỏi: "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("Đáp: "+row.answer):"Đáp: (Đang chờ)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "Admin Request":"General";
+        const tag = el("span"); tag.textContent = row.is_admin? "Yêu cầu quản trị":"Chung";
         const actions = el("div","igdc-qa-thread-actions");
         const canXóa = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
         if(canXóa){
@@ -4504,7 +4504,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         bk=document.createElement('div');
         bk.id='drawerBackdrop';
         bk.className='drawer-backdrop';
-        document.body/*__KILL__*/ appendChild_DISABLED(bk);
+        document.body.appendChild(bk);
         bk.addEventListener('click',close,{passive:true});
       }
     }
@@ -4593,7 +4593,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
   /* Optional close affordance */
   .card.expanded::after, .thumb.expanded::after{
-    content: "Close";
+    content: "Đóng";
     position: absolute; top: 8px; right: 12px;
     padding: 6px 10px; border-radius: 14px;
     background: rgba(0,0,0,.5); color:#fff; font-size: 12px;
@@ -4734,8 +4734,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>QR Thanh toán</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>QR thanh toán</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Đóng</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -4868,7 +4868,7 @@ window.addEventListener("message",function(ev){
     return keyFromLabel(labelText);
   }
 
-  function normalizeItemFooter(root){
+  function normalizeMụcFooter(root){
     if(!root) root = document;
     if(!root.querySelectorAll) return;
 
@@ -4959,7 +4959,7 @@ window.addEventListener("message",function(ev){
       wrap.className = "mobile-news-clone";
       wrap.innerHTML = src.outerHTML;
 
-      normalizeItemFooter(wrap);
+      normalizeMụcFooter(wrap);
 
       row.parentNode.insertBefore(wrap, row.nextSibling);
     });
@@ -5018,7 +5018,7 @@ window.addEventListener("message",function(ev){
       });
   }
   markHasAttach(document);
-  normalizeItemFooter(document);
+  normalizeMụcFooter(document);
 
   // Watch dynamic additions
   $$('.right .topic-panel .list, .mobile-news-clone .topic-panel .list').forEach(function(list){
@@ -5028,12 +5028,12 @@ window.addEventListener("message",function(ev){
           if(n.nodeType !== 1) return;
           if(n.classList.contains('item')){
             markHasAttach(n);
-            normalizeItemFooter(n);
+            normalizeMụcFooter(n);
           }else if(n.querySelectorAll){
             n.querySelectorAll('.item').forEach(function(it){
               markHasAttach(it);
             });
-            normalizeItemFooter(n);
+            normalizeMụcFooter(n);
           }});
       });
     });
@@ -5068,12 +5068,12 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npTitle.textContent = title || 'Title 없음';
+    npTitle.textContent = title || 'Không có tiêu đề';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(등록된 본문이 없습니다.)';
+    npBody.textContent = body || '(Không có nội dung đã đăng.)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">Tệp đính kèm</div>' + attachHtml
         : '';
     }
 

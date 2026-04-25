@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html lang="en">
+<html lang="zh-Hant">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
@@ -2495,7 +2495,7 @@ function reorderRow(rowId){
     const a = document.createElement('a');
     a.className = 'shop-card';
     a// href left unset by default; set only when URL exists;
-    a.textContent = `Item ${i+1}`;
+    a.textContent = `項目 ${i+1}`;
     return a;
   }
 
@@ -3043,7 +3043,7 @@ function reorderRow(row, cc, region){
 <script id="igdc-aff-tagging">
 (function () {
   var KEY='igdc_token', tok=null;
-  try{ tok=localStorage.getItem(KEY); if(!tok){ tok='AUTO-'+Math.random().toString(36).slice(2)+'-'+Date.now(); localStorage.setItem(KEY,tok);} }catch(e){}
+  try{ tok=localStorage.get項目(KEY); if(!tok){ tok='AUTO-'+Math.random().toString(36).slice(2)+'-'+Date.now(); localStorage.set項目(KEY,tok);} }catch(e){}
   var aff=''; try{ aff=(window.IGDC_AFFILIATE || (document.querySelector('meta[name="igdc:aff"]')||{}).content || '').trim(); }catch(e){}
   function tagUrl(url, where){
     try{
@@ -3893,7 +3893,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         && !el.classList.contains('arrow-layer');
     });
   }
-  function avgItemWidth(track){
+  function avg項目Width(track){
     var items = candidates(track);
     if(!items.length) return track.clientWidth;
     var w = items.reduce(function(a,el){ return a + (el.getBoundingClientRect().width||0); }, 0);
@@ -3924,7 +3924,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     var STEP_FACTOR = 0.80; // 보이는 개수의 약 80%
     function stepCount(){
-      var avg = avgItemWidth(track);
+      var avg = avg項目Width(track);
       var n = Math.floor((track.clientWidth * STEP_FACTOR) / Math.max(1, avg));
       return Math.max(1, n);
     }
