@@ -1433,6 +1433,8 @@ window.addEventListener("message",function(ev){
  --------------------------------------------------
  삽입 위치:
   - 각 페이지 
+*/
+</script>
 <script id="igdc-qa-config">
   (function () {
     // 1) 민감정보 없는 기본 설정
@@ -1526,7 +1528,7 @@ window.addEventListener("message",function(ev){
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      try{ await sb.auth.signIn匿名ly(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -1774,9 +1776,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
 })();
 </script>
-</body> 바로 위
-*/
-
+<script id="igdc-commerce-review-script">
 (function (window, document) {
   'use strict';
 
@@ -1860,7 +1860,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
             maxlength="${this.config.maxReviewChars}"
             required></textarea>
           <div class="igdc-review-actions">
-            <button type="submit">Post Review</button>
+            <button type="submit">發表評論</button>
           </div>
         </form>
       `;
@@ -1868,7 +1868,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     renderLoginHint() {
       return `<div class="igdc-review-login-hint">
-        Review posting is available after logging in.
+        登入後即可發表評論。
       </div>`;
     },
 
@@ -1883,7 +1883,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         const content = textarea.value.trim();
 
         if (content.length < this.config.minReviewChars) {
-          alert(`Reviews must be at least ${this.config.minReviewChars} characters long.`);
+          alert(`評論至少需要 ${this.config.minReviewChars} 個字元。`);
           return;
         }
 
@@ -1914,7 +1914,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
           return;
         }
 
-        list.innerHTML = data.map(this.renderReview項目).join('');
+        list.innerHTML = data.map(this.renderReviewItem).join('');
       } catch {
         list.textContent = '無法載入評論。';
       }
@@ -1929,12 +1929,12 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       if (!res.ok) throw new Error('submit failed');
     },
 
-    renderReview項目(item) {
+    renderReviewItem(item) {
       const esc = (v) => String(v || '').replace(/[<>]/g, '');
       return `
         <div class="igdc-review-item">
           <div class="igdc-review-meta">
-            <span>${esc(item.user || 'Anonymous')}</span>
+            <span>${esc(item.user || '匿名')}</span>
             <span>${esc(item.date || '')}</span>
           </div>
           <div class="igdc-review-content">${esc(item.content)}</div>
@@ -2209,7 +2209,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      try{ await sb.auth.signIn匿名ly(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
