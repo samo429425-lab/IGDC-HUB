@@ -1064,7 +1064,7 @@ a[href^="mailto:"]:hover {
 <a class="link-btn" href="https://www.agoda.com" target="_blank">Agoda</a>
 <a class="link-btn" href="https://www.klook.com" target="_blank">Klook</a>
 <a class="link-btn" href="https://www.his-j.com" target="_blank">HIS Japan <small>(エイチ・アイ・エス)</small></a>
-<a class="link-btn" href="https://www.cleartrip.com" target="_blank">Törléstrip</a>
+<a class="link-btn" href="https://www.cleartrip.com" target="_blank">Cleartrip</a>
 <a class="link-btn" href="https://www.virtualtrips.io" target="_blank">Virtuális utazások</a>
 <a class="link-btn" href="https://www.kkday.com" target="_blank">KKDay</a>
 <a class="link-btn" href="https://www.vietnamairlines.com" target="_blank">Vietnam Airlines</a></div>
@@ -1518,7 +1518,7 @@ window.addEventListener("message",function(ev){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      console.warn("[Q&A] A Supabase hitelesítő adatai vagy könyvtára nincs beállítva: a felület megjelenik, de a mentés le van tiltva.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -1528,7 +1528,7 @@ window.addEventListener("message",function(ev){
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInNévtelenly(); }catch(e){}
+      try{ await sb.auth.signInAnonymously(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -1690,7 +1690,7 @@ window.addEventListener("message",function(ev){
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("Submission failed"); return; }
+      if(error){ alert("A beküldés sikertelen"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -1713,7 +1713,7 @@ window.addEventListener("message",function(ev){
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] A hitelesítés inicializálása sikertelen:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -1794,7 +1794,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     state: {
       role: 'guest',
-      activeTermékId: null
+      activeProductId: null
     },
 
     init() {
@@ -1821,8 +1821,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     /* 2️⃣ 리뷰 시스템 장착 */
     mountReview(productId) {
-      if (this.state.activeTermékId === productId) return;
-      this.state.activeTermékId = productId;
+      if (this.state.activeProductId === productId) return;
+      this.state.activeProductId = productId;
 
       let root = document.getElementById(this.config.reviewRootId);
       if (!root) {
@@ -2203,7 +2203,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      console.warn("[Q&A] A Supabase hitelesítő adatai vagy könyvtára nincs beállítva: a felület megjelenik, de a mentés le van tiltva.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -2213,7 +2213,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInNévtelenly(); }catch(e){}
+      try{ await sb.auth.signInAnonymously(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -2375,7 +2375,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("Submission failed"); return; }
+      if(error){ alert("A beküldés sikertelen"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -2398,7 +2398,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] A hitelesítés inicializálása sikertelen:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
