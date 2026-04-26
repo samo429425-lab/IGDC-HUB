@@ -746,7 +746,7 @@
 /* 撰写 */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
 /* 标题 막대 */          .compose-wrap .row-top #title预览{ order:3 !important; }
 /* 附件 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
-/* 첨부 미리보기 막대 */ .compose-wrap .row-top #attach预览{ order:5 !important; }
+/* 附件 미리보기 막대 */ .compose-wrap .row-top #attach预览{ order:5 !important; }
 /* 保存 */               .compose-wrap .row-top #btn提交Post{ order:6 !important; }
 /* 清除 */             .compose-wrap .row-top #btnAttach清除{ order:7 !important; }
 </style><style>
@@ -2392,7 +2392,7 @@ body > div.container,
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
-<button class="bc-tile orange" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">Donate</button>
+<button class="bc-tile orange" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">捐助</button>
 </section>
 <section class="hero">
 <h2>💝 全球捐助中心 💝</h2>
@@ -2413,11 +2413,11 @@ body > div.container,
 <option value="env">环境</option>
 <option value="etc">其他</option>
 </select>
-</label><button class="button small" id="btnAttach" type="button">附件</button><div aria-label="附件 미리보기" class="attach-preview" id="attach预览"></div>
-<button class="button small" id="btnOpenComposer">撰写</button><div aria-label="标题 미리보기" class="title-preview" id="title预览"><span class="tp-text">无标题</span></div>
+</label><button class="button small" id="btnAttach" type="button">附件</button><div aria-label="附件预览" class="attach-preview" id="attach预览"></div>
+<button class="button small" id="btnOpenComposer">撰写</button><div aria-label="标题预览" class="title-preview" id="title预览"><span class="tp-text">无标题</span></div>
 <button class="button small accent" id="btn提交Post">保存</button>
 <span id="attachName"></span>
-<button aria-label="첨부 제거 " class="button tiny" id="btnAttach清除" style="display:none;" type="button">清除</button>
+<button aria-label="移除附件" class="button tiny" id="btnAttach清除" style="display:none;" type="button">清除</button>
 <input id="postAttach" style="display:none;" type="file"/>
 </div>
 <div class="row row-bottom">
@@ -2618,7 +2618,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">첨부 링크</a>` : `첨부: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">附件链接</a>` : `附件：${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2629,7 +2629,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "첨부: " + fileAttach.files[0].name;
+        att.textContent = "附件：" + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2646,11 +2646,11 @@ body > div.container,
 
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
-    const link = prompt("이미지 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 确认을 누르세요)");
+    const link = prompt("如果有图片外部链接（URL），请粘贴在这里。（没有的话请按确认）");
     if(link){ imageLink = link; image预览ObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
-        alert("Only images up to 2MB can be previewed directly. For large files, upload them to external storage and enter the link.");
+        alert("最多 2MB 的图片可直接预览。较大的文件请上传到外部存储后输入链接。");
         imageLink = ""; image预览ObjectUrl = "";
       }else{
         image预览ObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
@@ -2663,11 +2663,11 @@ body > div.container,
 
   btnFileOk && btnFileOk.addEventListener('click', ()=>{
     const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
-    const link = prompt("파일 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 确认을 누르세요)");
+    const link = prompt("如果有文件外部链接（URL），请粘贴在这里。（没有的话请按确认）");
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
-        alert("Only files up to 5MB can display their file name directly. For large files, please use only an external storage link.");
+        alert("最多 5MB 的文件可直接显示文件名。较大的文件请仅使用外部存储链接。");
         attachLink = "";
       }else{
         attachLink = f.name; // 파일명만 기록
@@ -2692,7 +2692,7 @@ body > div.container,
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '개 파일');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '个文件');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2763,7 +2763,7 @@ body > div.container,
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 제거'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','移除附件'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
@@ -2802,7 +2802,7 @@ body > div.container,
     const b = (bodyI && bodyI.value.trim()) || '（无内容）';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
+    if(!holder){ alert('找不到消息区域。'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2819,7 +2819,7 @@ body > div.container,
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = '첨부: ' + f.name;
+        li.textContent = '附件：' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
@@ -2832,7 +2832,7 @@ body > div.container,
     const can删除 = (USER_ROLE==='admin' || USER_ROLE==='writer');
     if(can删除) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 删除하시겠습니까?')) return;
+      if(!confirm('确定要删除这条消息吗？')) return;
       item.remove();
     });
 
@@ -2899,13 +2899,13 @@ body > div.container,
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '개 파일');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '个文件');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 모두 제거'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','移除所有附件'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attach预览.appendChild(chip);
@@ -3057,7 +3057,7 @@ body > div.container,
     btn.style.cssText='margin-top:6px; display:none;';
     if(canShow删除For(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 删除하시겠습니까?')) return;
+      if(!confirm('确定要删除这条消息吗？')) return;
       item.remove();
     });
     item.appendChild(btn);
@@ -3200,20 +3200,20 @@ body > div.container,
     np标题.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">附件</div>' + attachHtml) : '';
 
     openModal();
   }, true);
 })();
 </script><div id="editNewsModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 680px); max-height:78vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 style="margin:0; font-size:1.05rem;">撰写 편집</h3>
+<h3 style="margin:0; font-size:1.05rem;">撰写/编辑</h3>
 <div id="enInfo" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
 <label style="font-size:.85rem;">标题</label>
 <input id="en标题" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;" type="text"/>
-<label style="font-size:.85rem;">Content</label>
+<label style="font-size:.85rem;">内容</label>
 <textarea id="enBody" rows="8" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;"></textarea>
 </div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
@@ -3240,10 +3240,10 @@ body > div.container,
     const key = (t+'|'+tm).toLowerCase(); let h=0; for(let i=0;i<key.length;i++){ h=((h<<5)-h)+key.charCodeAt(i); h|=0; } return 'news:'+h;
   }
   function loadEdit(id){
-    try{ return JSON.parse(localStorage.get项目('newsEdit:'+id) || 'null'); }catch(e){ return null; }
+    try{ return JSON.parse(localStorage.getItem('newsEdit:'+id) || 'null'); }catch(e){ return null; }
   }
   function saveEdit(id, tsStr){
-    localStorage.set项目('newsEdit:'+id, JSON.stringify({editedAt: tsStr}));
+    localStorage.setItem('newsEdit:'+id, JSON.stringify({editedAt: tsStr}));
   }
   function showEditedBadge(item, tsStr){
     if(!item) return;
@@ -3360,15 +3360,15 @@ body > div.container,
     const key = (t+'|'+tm).toLowerCase(); let h=0; for(let i=0;i<key.length;i++){ h=((h<<5)-h)+key.charCodeAt(i); h|=0; } return 'news:'+h;
   }
   function loadMetrics(id){
-    try{ return JSON.parse(localStorage.get项目('newsMetrics:'+id) || '{"views":0,"reco":0,"like":0}'); }
+    try{ return JSON.parse(localStorage.getItem('newsMetrics:'+id) || '{"views":0,"reco":0,"like":0}'); }
     catch(e){ return {views:0,reco:0,like:0}; }
   }
-  function saveMetrics(id, obj){ localStorage.set项目('newsMetrics:'+id, JSON.stringify(obj)); }
+  function saveMetrics(id, obj){ localStorage.setItem('newsMetrics:'+id, JSON.stringify(obj)); }
   function loadToggles(id){
-    try{ return JSON.parse(localStorage.get项目('newsToggles:'+id) || '{"reco":false,"like":false}'); }
+    try{ return JSON.parse(localStorage.getItem('newsToggles:'+id) || '{"reco":false,"like":false}'); }
     catch(e){ return {reco:false,like:false}; }
   }
-  function saveToggles(id, obj){ localStorage.set项目('newsToggles:'+id, JSON.stringify(obj)); }
+  function saveToggles(id, obj){ localStorage.setItem('newsToggles:'+id, JSON.stringify(obj)); }
 
   function ensureFooterWithIcons(item){
     let footer = item.querySelector('.item-footer');
@@ -3422,7 +3422,7 @@ body > div.container,
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('이 소식을 删除하시겠습니까?')) return;
+        if(!confirm('确定要删除这条消息吗？')) return;
         item.remove();
       });
     }
@@ -3700,7 +3700,7 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("区块链处理请求已完成： " + (j.txHash||"대기")); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("区块链处理请求已完成： " + (j.txHash||"待处理")); }
       else { alert("区块链处理失败"); }
     }catch(e){ console.warn(e); alert("网络错误"); }
   };
@@ -3826,7 +3826,7 @@ body > div.container,
 
 <div class="donation-inline">
 <input aria-label="Donation amount (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
-<button class="bc-tile orange" id="btnDonate">Donate</button>
+<button class="bc-tile orange" id="btnDonate">捐助</button>
 </div>
 <script>
 (function(){
@@ -3871,13 +3871,13 @@ body > div.container,
 
   accountBox.innerHTML = `
     <div><b>IESF (International Exchange Service Foundation)</b></div>
-    <div>一般: 농협 301-0078-3333-51</div>
-    <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
+    <div>一般账户: NongHyup 301-0078-3333-51</div>
+    <div>外币账户: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
     <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
-    <div>一般: 신한 100-026-331592</div>
-    <div>Foreign Currency: Shinhan 180-005-931110</div>
+    <div>一般账户: Shinhan 100-026-331592</div>
+    <div>外币账户: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
   donationDiv.appendChild(accountBox);
@@ -3890,7 +3890,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      alert(`所选金额：₩${Number(amt).toLocaleString()}\n\n请转入以下账户。`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -4416,9 +4416,9 @@ document.addEventListener('DOMContentLoaded', function(){
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 确认 후 회신됩니다.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="运营相关咨询将在管理员确认后回复。";
           else if(/price|cost|fee|가격|비용|요금/i.test(text)) answer="有关价格/费用信息，请参考本页面说明并留下其他咨询。";
-          else answer="문의 감사합니다. 빠르게 确认하여 도와드리겠습니다.";
+          else answer="感谢您的咨询。我们会尽快确认并协助您。";
         }
       }
       return { technical, answer };
@@ -4432,7 +4432,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("保存 설정(Supabase url/key)이 아직 연결되지 않아 서버 保存은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        alert("保存设置（Supabase url/key）尚未连接，因此服务器保存目前处于停用状态。部署到网页时设置 SUPER_VARSAR.url/anonKey 后会自动连接。");
         return;
       }
       const record = {
@@ -5068,12 +5068,12 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    np标题.textContent = title || '标题 없음';
+    np标题.textContent = title || '无标题';
     if(npTime)  npTime.textContent  = meta || '';
     npBody.textContent = body || '(暂无已发布的正文。)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">附件</div>' + attachHtml
         : '';
     }
 
@@ -5158,7 +5158,7 @@ window.addEventListener("message",function(ev){
   display: none !important;
 }
 
-/* 첨부 여부 아이콘 */
+/* 附件 여부 아이콘 */
 .right .topic-panel .list .item.has-attach .title::after,
 .mobile-news-clone .topic-panel .list .item.has-attach .title::after {
   content: "📎";
