@@ -3047,49 +3047,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   });
 })();
 </script>
-<!-- removed stray text: <! end: migration > -->
-<script>
-(function(){
-  var mount = document.getElementById('cards');
-  if(!mount) return;
-  var name = document.body.dataset.page || (location.pathname.split('/').pop().split('.')[0] || 'news');
-  fetch('/api/feed?page=' + name, { cache: 'no-store' })
-    .then(function(r){ return r.json(); })
-    .then(function(data){
-      var items = (data && data.items) ? data.items : [];
-      mount.innerHTML = items.map(function(i){
-        return '<article class="card">'
-             + '<img src="' + (i.image||'') + '" alt="' + (i.title||'') + '" loading="lazy">'
-             + '<h3>' + (i.title||'') + '</h3>'
-             + '<p>' + (i.subtitle||'') + '</p>'
-             + '</article>';
-      }).join('');
-    })
-    .catch(function(e){ console && console.warn && console.warn('feed error', e); });
-})();
-</script>
-<!-- removed stray text:  -->
-<script>
-(function(){
-  var mount = document.getElementById('cards');
-  if(!mount) return; // 안전모드: 카드 영역 없으면 아무것도 안 함
-  var name = document.body.dataset.page || (location.pathname.split('/').pop().split('.')[0] || 'news');
-  fetch('/api/feed?page=' + name, { cache: 'no-store' })
-    .then(function(r){ return r.json(); })
-    .then(function(data){
-      var items = (data && data.items) ? data.items : [];
-      mount.innerHTML = items.map(function(i){
-        return '<article class="card">'
-             + '<img src="' + (i.image||'') + '" alt="' + (i.title||'') + '" loading="lazy">'
-             + '<h3>' + (i.title||'') + '</h3>'
-             + '<p>' + (i.subtitle||'') + '</p>'
-             + '</article>';
-      }).join('');
-    })
-    .catch(function(e){ console && console.warn && console.warn('feed error', e); });
-})();
-</script>
-<!-- removed stray text:  -->
+<!-- removed stray text: <! end: migration > --><!-- removed stray text:  --><!-- removed stray text:  -->
 <script>
 (function(){
   try{
