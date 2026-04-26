@@ -1315,7 +1315,7 @@ a[href^="mailto:"]:hover {
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      console.warn("[Q&A] Supabase क्रेडेंशियल या लाइब्रेरी सेट नहीं है: UI दिखाई देगा, लेकिन सेविंग अक्षम रहेगी.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -1325,7 +1325,7 @@ a[href^="mailto:"]:hover {
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInअनामly(); }catch(e){}
+      try{ await sb.auth.signInAnonymously(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -1507,7 +1507,7 @@ a[href^="mailto:"]:hover {
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] प्रमाणीकरण आरंभ करने में विफल:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -1977,7 +1977,7 @@ window.addEventListener("message",function(ev){
 
     state: {
       role: 'guest',
-      activeउत्पादId: null
+      activeProductId: null
     },
 
     init() {
@@ -2004,8 +2004,8 @@ window.addEventListener("message",function(ev){
 
     /* 2️⃣ 리뷰 시스템 장착 */
     mountReview(productId) {
-      if (this.state.activeउत्पादId === productId) return;
-      this.state.activeउत्पादId = productId;
+      if (this.state.activeProductId === productId) return;
+      this.state.activeProductId = productId;
 
       let root = document.getElementById(this.config.reviewRootId);
       if (!root) {
@@ -2042,7 +2042,7 @@ window.addEventListener("message",function(ev){
       return `
         <form id="igdc-review-form" class="igdc-review-form">
           <textarea
-            placeholder="Please share your experience using the product."
+            placeholder="कृपया उत्पाद के उपयोग का अपना अनुभव साझा करें."
             minlength="${this.config.minReviewChars}"
             maxlength="${this.config.maxReviewChars}"
             required></textarea>
