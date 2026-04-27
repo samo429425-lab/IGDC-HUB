@@ -2047,19 +2047,24 @@ document.addEventListener('DOMContentLoaded', () => {
   const openSearch = () => {
     const q = input.value.trim();
     if (!q) return;
-	
-	history.pushState({}, '', location.href);
 
-    // ✅ 새 탭 / 독립 웹페이지 / 팝업 아님
+    const u = new URL('/search.html', location.origin);
+    u.searchParams.set('q', q);
+    u.searchParams.set('from', location.pathname + location.search + location.hash);
+
+    // 새 검색창/탭으로 열되, search.js가 브라우저 뒤로가기 bridge를 만들 수 있게 from을 넘긴다.
     window.open(
-      `/search.html?q=${encodeURIComponent(q)}`,
+      u.pathname + u.search + u.hash,
       '_blank'
     );
   };
 
   btn.addEventListener('click', openSearch);
   input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') openSearch();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      openSearch();
+    }
   });
 });
 </script>
