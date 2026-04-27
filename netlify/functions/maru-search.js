@@ -19,7 +19,7 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.4-stabilized-internal-first-weekly-settlement';
+const VERSION = 'A1.5.5-382-base-internal-stable-compact';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -518,15 +518,15 @@ async function callSearchBankEngineInternal(event, params){
     let res = null;
 
     if(typeof engine.runEngine === 'function'){
-      res = await engine.runEngine(event || safeEvent, safeParams);
+      res = await engine.runEngine(safeEvent, safeParams);
     } else if(typeof engine.maruSearchDispatcher === 'function'){
       res = await engine.maruSearchDispatcher(safeParams);
     } else if(typeof engine.search === 'function'){
-      res = await engine.search(safeParams, event || {});
+      res = await engine.search(safeParams, safeEvent);
     } else if(typeof engine.handler === 'function'){
       res = await engine.handler(safeEvent);
     } else if(typeof engine === 'function'){
-      res = await engine(event || safeEvent, safeParams);
+      res = await engine(safeEvent, safeParams);
     }
 
     return unwrapSearchPayload(res);
@@ -596,6 +596,53 @@ function addBundle(bundle, fallbackSource, collected, sourceState){
   collected.push.apply(collected, items);
   return items.length;
 }
+
+function compactResultItem(it){
+  it = (it && typeof it === 'object') ? it : {};
+  const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+  const url = safeString(firstNonEmpty(it.url, it.link, p.url, p.link)).trim();
+  const title = safeString(firstNonEmpty(it.title, it.name, p.title, p.name, url)).trim();
+  const summary = safeString(firstNonEmpty(it.summary, it.snippet, it.description, p.summary, p.snippet, p.description)).trim();
+  const thumbnail = safeString(firstNonEmpty(it.thumbnail, it.thumb, it.image, p.thumbnail, p.thumb, p.image, mediaPoster(it, p), faviconOf(url))).trim();
+  const source = firstNonEmpty(it.source, p.source, domainOf(url));
+  const out = {
+    id: safeString(firstNonEmpty(it.id, url, title)).trim(),
+    type: safeString(firstNonEmpty(it.type, p.type, 'web')).trim() || 'web',
+    mediaType: safeString(firstNonEmpty(it.mediaType, p.mediaType, it.type === 'image' ? 'image' : (it.type === 'video' ? 'video' : 'article'))).trim() || 'article',
+    title,
+    summary,
+    description: summary,
+    url,
+    link: safeString(firstNonEmpty(it.link, url)).trim(),
+    source,
+    lang: it.lang || p.lang || detectLangFromTextFallback(title + ' ' + summary),
+    thumbnail,
+    thumb: safeString(firstNonEmpty(it.thumb, thumbnail)).trim(),
+    image: safeString(firstNonEmpty(it.image, isRealImageUrl(thumbnail) ? thumbnail : '')).trim(),
+    imageSet: compactImages([thumbnail].concat(Array.isArray(it.imageSet) ? it.imageSet : []).concat(Array.isArray(p.imageSet) ? p.imageSet : [])),
+    media: it.media || p.media || undefined,
+    channel: it.channel || p.channel || undefined,
+    section: it.section || p.section || undefined,
+    page: it.page || p.page || undefined,
+    psom_key: it.psom_key || p.psom_key || undefined,
+    route: it.route || p.route || undefined,
+    bind: (it.bind && typeof it.bind === 'object') ? it.bind : (p.bind && typeof p.bind === 'object' ? p.bind : undefined),
+    tags: Array.isArray(it.tags) ? it.tags.slice(0, 12) : (Array.isArray(p.tags) ? p.tags.slice(0, 12) : []),
+    score: typeof it.score === 'number' ? it.score : (typeof p.score === 'number' ? p.score : 0.9),
+    _finalScore: typeof it._finalScore === 'number' ? it._finalScore : undefined,
+    riskLabel: it.riskLabel || undefined
+  };
+  if(out.media && out.media.preview){
+    out.media = { type: out.media.type || out.media.kind || out.mediaType, preview: {
+      poster: out.media.preview.poster || '',
+      mp4: out.media.preview.mp4 || '',
+      webm: out.media.preview.webm || ''
+    }};
+  }
+  Object.keys(out).forEach(k => { if(out[k] === undefined || out[k] === null || out[k] === '') delete out[k]; });
+  return out;
+}
+
 
 async function orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, noMedia }){
   limit = clampInt(limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
@@ -720,7 +767,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
   unique = applyServerSideBoosts(unique, { q, lang });
 
   const finalTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
-  const finalItems = unique.slice(0, finalTarget);
+  const finalItems = unique.slice(0, finalTarget).map(compactResultItem);
 
   const result = {
     source: sourceState.used || (finalItems.length ? 'multi' : null),
