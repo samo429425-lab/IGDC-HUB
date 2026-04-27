@@ -36,11 +36,15 @@ ready(function () {
 
     const PAGE_SIZE = 15;
     const BLOCK_SIZE = 10;
-    const FETCH_LIMIT = 1000;
+    const FETCH_LIMIT = PAGE_SIZE * BLOCK_SIZE; // progressive batch: 10 pages at a time
 
     let allItems = [];
     let currentPage = 1;
     let currentBlock = 0;
+    let activeQuery = '';
+    let hasMoreResults = false;
+    let nextOffset = 0;
+    let loadingMore = false;
 
 const params = new URLSearchParams(location.search);
 const q0 = (params.get('q') || '').trim();
@@ -120,6 +124,9 @@ function syncSearchFromUrl(run = true) {
     });
   } else if (run && !qp) {
     allItems = [];
+    activeQuery = '';
+    hasMoreResults = false;
+    nextOffset = 0;
     results.innerHTML = '';
     clearPager();
     status.textContent = '';
@@ -344,23 +351,90 @@ function normalizeItems(payload){
   return out;
 }
 
-async function fetchSearch(q){
-  const url = `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}`;
+function extractMeta(payload){
+  if (!payload || typeof payload !== 'object') return {};
+  if (payload.meta && typeof payload.meta === 'object') return payload.meta;
+  if (payload.data && payload.data.meta && typeof payload.data.meta === 'object') return payload.data.meta;
+  if (payload.baseResult && payload.baseResult.meta && typeof payload.baseResult.meta === 'object') return payload.baseResult.meta;
+  return {};
+}
+
+async function fetchSearch(q, offset = 0, limit = FETCH_LIMIT){
+  const url =
+    `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}` +
+    `&limit=${encodeURIComponent(limit)}` +
+    `&offset=${encodeURIComponent(offset)}`;
 
   try {
     const r = await fetch(url, { cache: 'no-store' });
-    if (!r.ok) return [];
+    if (!r.ok) return { items: [], meta: { hasMore: false } };
 
     const json = await r.json();
-    if (!json) return [];
-    if (json.status === 'error') return [];
-    if (json.status === 'blocked') return [];
+    if (!json) return { items: [], meta: { hasMore: false } };
+    if (json.status === 'error') return { items: [], meta: { hasMore: false } };
+    if (json.status === 'blocked') return { items: [], meta: { hasMore: false } };
 
-    return normalizeItems(json);
+    return {
+      items: normalizeItems(json),
+      meta: extractMeta(json)
+    };
   } catch (e) {
     console.error('fetchSearch failed:', e);
-    return [];
+    return { items: [], meta: { hasMore: false } };
   }
+}
+
+function updateProgressMeta(meta, receivedCount){
+  const m = meta || {};
+  hasMoreResults = m.hasMore === true;
+  const candidateNext = parseInt(m.nextOffset || '', 10);
+  if (Number.isFinite(candidateNext) && candidateNext >= 0) {
+    nextOffset = candidateNext;
+  } else {
+    nextOffset = allItems.length;
+  }
+  if (!receivedCount) {
+    hasMoreResults = false;
+  }
+}
+
+function mergeItems(existing, incoming){
+  return dedupeItems([...(existing || []), ...(incoming || [])]);
+}
+
+async function loadMoreIfNeeded(targetCount){
+  if (!activeQuery) return;
+  if (loadingMore) return;
+  let safety = 0;
+
+  while (hasMoreResults && allItems.length < targetCount && safety < 3) {
+    safety++;
+    loadingMore = true;
+    status.textContent = `Loading more results for "${activeQuery}"...`;
+
+    const before = allItems.length;
+    const payload = await fetchSearch(activeQuery, nextOffset || allItems.length, FETCH_LIMIT);
+    const incoming = payload.items || [];
+    allItems = mergeItems(allItems, incoming);
+    updateProgressMeta(payload.meta, incoming.length);
+
+    if (allItems.length <= before && !incoming.length) {
+      hasMoreResults = false;
+      break;
+    }
+  }
+
+  loadingMore = false;
+}
+
+async function ensureResultsForPage(page){
+  const need = Math.max(1, page) * PAGE_SIZE;
+  await loadMoreIfNeeded(need);
+}
+
+async function ensureResultsForBlock(block){
+  const need = (Math.max(0, block) + 1) * BLOCK_SIZE * PAGE_SIZE;
+  await loadMoreIfNeeded(need);
 }
 
     function renderSkeleton(count = 6){
@@ -407,28 +481,6 @@ async function fetchSearch(q){
     function faviconOf(url){
       const d = domainOf(url);
       return d ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64` : '';
-    }
-
-    function pickResultImage(it){
-      it = it || {};
-      const payload = (it.payload && typeof it.payload === 'object') ? it.payload : {};
-      const media = (it.media && typeof it.media === 'object') ? it.media : {};
-      const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
-      const candidates = [
-        it.thumbnail, it.thumb, it.image, it.image_url, it.og_image,
-        payload.thumbnail, payload.thumb, payload.image, payload.image_url, payload.og_image,
-        preview.poster
-      ];
-      if (Array.isArray(it.imageSet)) { for (let i = 0; i < it.imageSet.length; i++) candidates.push(it.imageSet[i]); }
-      if (Array.isArray(payload.imageSet)) { for (let i = 0; i < payload.imageSet.length; i++) candidates.push(payload.imageSet[i]); }
-      for (let i = 0; i < candidates.length; i++) {
-        const v = String(candidates[i] || '').trim();
-        if (!v) continue;
-        const low = v.toLowerCase();
-        if (low.includes('google.com/s2/favicons') || low.includes('favicon') || low.endsWith('.ico')) continue;
-        return v;
-      }
-      return '';
     }
 
     function renderItem(it){
@@ -526,7 +578,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         it.thumbnail = it.imageSet[0];
       }
 
-      const thumbUrl = pickResultImage(it);
+      const thumbUrl = (it.thumbnail || '').trim();
       const isFaviconLike =
         thumbUrl.includes('google.com/s2/favicons') ||
         thumbUrl.includes('favicon') ||
@@ -628,12 +680,25 @@ if (it.riskLabel === '⚠️ high-risk') {
       results.appendChild(card);
     }
 
-    function renderPage(page){
+    async function renderPage(page){
+      page = Math.max(1, parseInt(page || '1', 10) || 1);
+      await ensureResultsForPage(page);
+
+      const maxPage = Math.max(1, Math.ceil(allItems.length / PAGE_SIZE));
+      if (!hasMoreResults && page > maxPage) page = maxPage;
+
+      currentPage = page;
+      currentBlock = Math.floor((currentPage - 1) / BLOCK_SIZE);
+
       results.innerHTML = '';
       const start = (page - 1) * PAGE_SIZE;
       const slice = allItems.slice(start, start + PAGE_SIZE);
       slice.forEach(renderItem);
       drawPager();
+
+      if (allItems.length) {
+        status.textContent = `${allItems.length}${hasMoreResults ? '+' : ''} results for "${activeQuery || input.value.trim()}"`;
+      }
     }
 
 function updateSearchPageHistory(page, block) {
@@ -667,14 +732,17 @@ function updateSearchPageHistory(page, block) {
 }
 
 function drawPager(){
-  const pages = Math.max(1, Math.ceil(allItems.length / PAGE_SIZE));
-  if (pages <= 1) { clearPager(); return; }
-
+  const loadedPages = Math.max(1, Math.ceil(allItems.length / PAGE_SIZE));
   const bar = ensurePager();
   bar.innerHTML = '';
 
   const blockStart = currentBlock * BLOCK_SIZE + 1;
-  const blockEnd = Math.min(blockStart + BLOCK_SIZE - 1, pages);
+  const virtualPages = hasMoreResults
+    ? Math.max(loadedPages, blockStart + BLOCK_SIZE - 1)
+    : loadedPages;
+  const blockEnd = Math.min(blockStart + BLOCK_SIZE - 1, virtualPages);
+
+  if (loadedPages <= 1 && !hasMoreResults) { clearPager(); return; }
 
   if (blockStart > 1){
     const left = document.createElement('button');
@@ -692,22 +760,31 @@ function drawPager(){
     const b = document.createElement('button');
     b.textContent = String(p);
     b.style.opacity = (p === currentPage) ? '0.6' : '1';
-    b.onclick = () => {
+    b.onclick = async () => {
       currentPage = p;
       currentBlock = Math.floor((p - 1) / BLOCK_SIZE);
+      await ensureResultsForPage(p);
       updateSearchPageHistory(currentPage, currentBlock);
       renderPage(currentPage);
     };
     bar.appendChild(b);
   }
 
-  if (blockEnd < pages){
+  if (hasMoreResults || blockEnd < loadedPages){
     const right = document.createElement('button');
     right.textContent = '▶';
-    right.onclick = () => {
-      const maxBlock = Math.floor((pages - 1) / BLOCK_SIZE);
-      currentBlock = Math.min(maxBlock, currentBlock + 1);
+    right.onclick = async () => {
+      const nextBlock = currentBlock + 1;
+      await ensureResultsForBlock(nextBlock);
+      currentBlock = nextBlock;
       currentPage = currentBlock * BLOCK_SIZE + 1;
+
+      const loadedAfter = Math.max(1, Math.ceil(allItems.length / PAGE_SIZE));
+      if (!hasMoreResults && currentPage > loadedAfter) {
+        currentPage = loadedAfter;
+        currentBlock = Math.floor((currentPage - 1) / BLOCK_SIZE);
+      }
+
       updateSearchPageHistory(currentPage, currentBlock);
       renderPage(currentPage);
     };
@@ -719,6 +796,9 @@ async function runSearch(q){
   const qq = (q || '').trim();
   if (!qq){
     allItems = [];
+    activeQuery = '';
+    hasMoreResults = false;
+    nextOffset = 0;
     results.innerHTML = '';
     clearPager();
     status.textContent = '';
@@ -730,26 +810,34 @@ async function runSearch(q){
   clearPager();
 
   try {
-    const items = await fetchSearch(qq);
+    activeQuery = qq;
+    allItems = [];
+    hasMoreResults = false;
+    nextOffset = 0;
+    loadingMore = false;
+
+    const payload = await fetchSearch(qq, 0, FETCH_LIMIT);
+    const items = payload.items || [];
     allItems = dedupeItems([...(items || [])]);
+    updateProgressMeta(payload.meta, items.length);
 
     currentBlock = 0;
     currentPage = 1;
 
     if (!allItems.length) {
       results.innerHTML = '';
+      clearPager();
       status.textContent = `No results for "${qq}"`;
       return;
     }
 
-    results.innerHTML = '';
-    allItems.slice(0, PAGE_SIZE).forEach(renderItem);
-    drawPager();
-    status.textContent = `${allItems.length} results for "${qq}"`;
+    await renderPage(currentPage);
 
   } catch(e){
     console.error(e);
     allItems = [];
+    hasMoreResults = false;
+    nextOffset = 0;
     results.innerHTML = '';
     clearPager();
     status.textContent = `No results for "${qq}"`;
