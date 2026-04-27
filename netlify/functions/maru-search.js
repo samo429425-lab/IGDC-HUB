@@ -19,7 +19,7 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.24-intent-wording-expansion';
+const VERSION = 'A1.5.25-media-quality-priority';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -434,19 +434,84 @@ function isMeaningfulImageForItem(imageUrl, it){
   return true;
 }
 
-function naturalImagesForItem(it, maxCount){
-  const images = compactImages([
-    it && it.thumbnail,
-    it && it.thumb,
-    it && it.image
-  ].concat(Array.isArray(it && it.imageSet) ? it.imageSet : []));
 
+function imageQualityScore(imageUrl, it){
+  const u = safeString(imageUrl).trim();
+  const low = u.toLowerCase();
+  if(!isRealImageUrl(u)) return -999;
+
+  let score = 0;
+
+  // Prefer actual image files / original media URLs.
+  if(/\.(jpg|jpeg|png|webp|avif)(\?|#|$)/i.test(low)) score += 8;
+  if(low.includes('original') || low.includes('origin') || low.includes('og:image')) score += 5;
+  if(low.includes('large') || low.includes('xlarge') || low.includes('high') || low.includes('maxres') || low.includes('hqdefault')) score += 4;
+  if(low.includes('thumb') || low.includes('thumbnail') || low.includes('small') || low.includes('150x') || low.includes('100x')) score -= 5;
+  if(low.includes('favicon') || low.endsWith('.ico') || low.includes('logo') || low.includes('sprite')) score -= 20;
+
+  // Width/height hints in URL.
+  const nums = low.match(/(?:^|[^\d])([1-9]\d{2,4})[x_-]([1-9]\d{2,4})(?:[^\d]|$)/);
+  if(nums){
+    const w = parseInt(nums[1], 10);
+    const h = parseInt(nums[2], 10);
+    const px = w * h;
+    if(px >= 900000) score += 8;
+    else if(px >= 480000) score += 5;
+    else if(px >= 180000) score += 2;
+    else score -= 4;
+  }
+
+  const source = safeString(it && it.source).toLowerCase();
+  const mediaType = safeString(it && it.mediaType).toLowerCase();
+  const type = safeString(it && it.type).toLowerCase();
+
+  if(source.includes('image') || mediaType === 'image' || type === 'image') score += 3;
+  if(source.includes('youtube') || mediaType === 'video' || type === 'video') score += 2;
+
+  return score;
+}
+
+function qualitySortImagesForItem(images, it){
+  return compactImages(images)
+    .filter(img => isMeaningfulImageForItem(img, it))
+    .map((img, idx) => ({ img, idx, score: imageQualityScore(img, it) }))
+    .sort((a, b) => (b.score - a.score) || (a.idx - b.idx))
+    .map(x => x.img);
+}
+
+function mediaQualityProfileForItem(it, images){
+  const first = Array.isArray(images) && images.length ? images[0] : '';
+  const score = imageQualityScore(first, it);
+  return {
+    enabled: true,
+    selectedScore: score,
+    preference: 'prefer-original-large-image-over-thumbnail',
+    enhanceHint: {
+      color: 'balanced-saturation',
+      contrast: 'soft-contrast',
+      sharpness: 'light-sharpen',
+      upscale: score < 4 ? 'recommended' : 'not-needed'
+    }
+  };
+}
+
+
+function naturalImagesForItem(it, maxCount){
+  const candidates = [
+    it && it.image,
+    it && it.og_image,
+    it && it.originalImage,
+    it && it.originallink,
+    it && it.link,
+    it && it.thumbnail,
+    it && it.thumb
+  ].concat(Array.isArray(it && it.imageSet) ? it.imageSet : []);
+
+  const images = qualitySortImagesForItem(candidates, it);
   const out = [];
   const seen = new Set();
 
   for(const img of images){
-    if(!isMeaningfulImageForItem(img, it)) continue;
-
     let key = safeString(img).split('#')[0].toLowerCase();
     try{
       const u = new URL(img, safeString(firstNonEmpty(it && it.url, it && it.link)) || undefined);
@@ -472,9 +537,10 @@ function compactResultItem(it){
 
   let ownImages = naturalImagesForItem(it, 3);
 
-  // Naver image API item is usually one image result; thumbnail/original often look duplicated.
+  // Naver image API item can expose both thumbnail and original image.
+  // Keep original first, but avoid duplicate-looking repeated image cards.
   if(sourceText.includes('naver_image') && ownImages.length > 1){
-    ownImages = ownImages.slice(0, 1);
+    ownImages = ownImages.slice(0, 2);
   }
 
   const ownThumb = ownImages[0] || '';
@@ -494,6 +560,7 @@ function compactResultItem(it){
     thumb: ownThumb,
     image: ownThumb,
     imageSet: ownImages,
+    mediaQuality: mediaQualityProfileForItem(it, ownImages),
     media: it.media || undefined,
     channel: it.channel || undefined,
     section: it.section || undefined,
@@ -1465,6 +1532,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         totalCandidates: collected.length,
         deduped: Math.max(0, collected.length - unique.length),
         richMedia: finalItems.filter(x => x && isRealImageUrl(x.thumbnail)).length,
+        mediaQualityPriority: true,
         imagePolicy: 'fast-first-render-page-own-og-image-meaningful-filter',
         trace,
         externalSuppressed: !!externalOff,
@@ -1674,8 +1742,8 @@ async function enrichOwnImages(items, opts){
 function backfillVisuals(items){
   // Natural media only:
   // - do not borrow images from other results
+  // - prefer original / large image over low-res thumbnail
   // - keep only this result's own meaningful distinct images
-  // - allow 1~3 images when naturally present
   // - none means none
   return (Array.isArray(items) ? items : []).map(it => {
     if(!it) return it;
@@ -1684,7 +1752,7 @@ function backfillVisuals(items){
     let ownImages = naturalImagesForItem(it, 3);
 
     if(sourceText.includes('naver_image') && ownImages.length > 1){
-      ownImages = ownImages.slice(0, 1);
+      ownImages = ownImages.slice(0, 2);
     }
 
     const ownThumb = ownImages[0] || '';
@@ -1693,7 +1761,8 @@ function backfillVisuals(items){
       thumbnail: ownThumb,
       thumb: ownThumb,
       image: ownThumb,
-      imageSet: ownImages
+      imageSet: ownImages,
+      mediaQuality: mediaQualityProfileForItem(it, ownImages)
     });
   });
 }
@@ -1737,7 +1806,7 @@ async function naverImageSearch(q, limit, start){
   return {
     source: 'naver_image',
     results: (Array.isArray(data.items) ? data.items : []).map(it => {
-      const thumb = it.thumbnail || it.link || '';
+      const thumb = it.thumbnail || '';
       const imageUrl = it.link || thumb || '';
       const context = it.originallink || imageUrl;
       return {
@@ -1748,15 +1817,16 @@ async function naverImageSearch(q, limit, start){
         type: 'image',
         mediaType: 'image',
         source: 'naver_image',
-        thumbnail: thumb,
-        thumb,
-        image: imageUrl,
-        imageSet: [],
+        thumbnail: imageUrl || thumb,
+        thumb: imageUrl || thumb,
+        image: imageUrl || thumb,
+        imageSet: compactImages([imageUrl, thumb]),
         payload: {
           source: 'naver_image',
           thumb,
-          image: thumb,
-          contextLink: context
+          image: imageUrl || thumb,
+          contextLink: context,
+          qualityMode: 'prefer-original'
         }
       };
     })
@@ -1848,7 +1918,7 @@ async function googleSearch(q, limit, start){
       const pagemap = it.pagemap || {};
       const cseThumb = Array.isArray(pagemap.cse_thumbnail) ? pagemap.cse_thumbnail[0] : null;
       const cseImg = Array.isArray(pagemap.cse_image) ? pagemap.cse_image[0] : null;
-      const img = (cseThumb && cseThumb.src) || (cseImg && cseImg.src) || '';
+      const img = (cseImg && cseImg.src) || (cseThumb && cseThumb.src) || '';
       return { title: it.title || '', link: it.link || '', url: it.link || '', snippet: it.snippet || '', type, source, thumbnail: img, thumb: img, image: img, payload: { source, thumb: img, image: img } };
     });
   };
