@@ -2052,7 +2052,8 @@ document.addEventListener('DOMContentLoaded', () => {
     u.searchParams.set('q', q);
     u.searchParams.set('from', location.pathname + location.search + location.hash);
 
-    // 새 검색창/탭으로 열되, search.js가 브라우저 뒤로가기 bridge를 만들 수 있게 from을 넘긴다.
+    // 새 탭 / 독립 검색 페이지 유지.
+    // search.js가 ?from= 값을 읽어서 화면 안에 '이전 페이지로 돌아가기' 링크를 만든다.
     window.open(
       u.pathname + u.search + u.hash,
       '_blank'
