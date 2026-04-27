@@ -1,5 +1,5 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
-// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards
+// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards + stable display groups
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -47,6 +47,7 @@ ready(function () {
     let lastType = 'all';
     const pageImageEnrichCache = new Set();
     const itemImageEnrichCache = new Map();
+    const expandedDisplayGroups = new Set();
 
 const params = new URLSearchParams(location.search);
 const q0 = (params.get('q') || '').trim();
@@ -167,6 +168,59 @@ function ensureSearchCardMediaStyle(){
       flex-basis: 330px;
       width: 330px;
     }
+
+    .maru-display-section {
+      margin: 0 0 12px 0;
+      padding: 0;
+      border: 1px solid #eef2f7;
+      border-radius: 14px;
+      background: #ffffff;
+      overflow: hidden;
+    }
+    .maru-display-section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border-bottom: 1px solid #f1f5f9;
+      background: linear-gradient(180deg, #ffffff, #f8fafc);
+    }
+    .maru-display-section-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #111827;
+      letter-spacing: -0.01em;
+    }
+    .maru-display-section-meta {
+      font-size: 12px;
+      font-weight: 700;
+      color: #64748b;
+      white-space: nowrap;
+    }
+    .maru-display-section-body {
+      padding: 8px 10px 10px;
+    }
+    .maru-display-section-body > .card {
+      margin: 8px 0;
+    }
+    .maru-display-more {
+      width: 100%;
+      margin: 8px 0 2px;
+      padding: 9px 12px;
+      border-radius: 10px;
+      border: 1px solid #e5e7eb;
+      background: #f8fafc;
+      color: #334155;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .maru-display-more:hover {
+      background: #eef2ff;
+      border-color: #c7d2fe;
+    }
+
     @media (max-width: 720px) {
       .maru-search-card-body {
         display: block;
@@ -644,70 +698,58 @@ async function fetchSearch(q, type = activeType){
     }
 
 
-    function isLikelyMeaninglessImageUrlClient(imageUrl){
+    function isHardRejectImageUrlClient(imageUrl){
       const s = String(imageUrl || '').toLowerCase();
       if(!s) return true;
 
-      const bad = [
-        'favicon', 'logo', 'symbol', 'emblem', 'slogan', 'brand',
-        '/ci', '_ci', '-ci', '/bi', '_bi', '-bi',
-        'placeholder', 'noimage', 'no_image', 'default-image', 'default_img',
-        'sprite', 'button', 'btn_', '/btn', 'sns_logo', 'kakao', 'facebook',
-        'header_logo', 'footer_logo'
+      const hardBad = [
+        'google.com/s2/favicons',
+        'favicon',
+        'apple-touch-icon',
+        '.ico',
+        'placeholder',
+        'noimage',
+        'no_image',
+        'no-img',
+        'default-image',
+        'default_img',
+        'sprite',
+        'spacer',
+        'blank.gif',
+        'blank.png',
+        'transparent',
+        '1x1',
+        'pixel',
+        'tracking',
+        'analytics',
+        'captcha'
       ];
 
-      if(bad.some(k => s.includes(k))) return true;
-      if(/\.(svg|ico)(\?|#|$)/i.test(s)) return true;
+      if(hardBad.some(k => s.includes(k))) return true;
+      if(/\.(ico)(\?|#|$)/i.test(s)) return true;
+      if(/\.(svg)(\?|#|$)/i.test(s) && /(logo|symbol|icon|emblem|brand|ci|bi)/i.test(s)) return true;
 
       return false;
     }
 
+    function isLikelyMeaninglessImageUrlClient(imageUrl){
+      // Conservative filter: reject only clear non-content images.
+      // Do not reject provider thumbnails just because their URL contains
+      // brand/banner/thumb/small, since many real news/tour/company images do.
+      return isHardRejectImageUrlClient(imageUrl);
+    }
+
     function isGenericGovOfficialItemClient(it){
-      const url = String((it && (it.url || it.link)) || '').toLowerCase();
-      const host = domainOf(url).toLowerCase();
-      const title = String((it && it.title) || '').toLowerCase();
-      const summary = String((it && (it.summary || it.description)) || '').toLowerCase();
-      const text = `${title} ${summary} ${url}`;
-
-      const isGov =
-        host.includes('.go.kr') ||
-        host.endsWith('.gov') ||
-        host.includes('.gov.') ||
-        host.includes('gov.uk') ||
-        host.includes('go.jp') ||
-        host.includes('gov.cn');
-
-      if(!isGov) return false;
-
-      const meaningfulTerms = [
-        '관광', '여행', '명소', '야경', '축제', '행사', '문화', '공연',
-        '갤러리', '사진', '포토', '한컷', '리포트', '스토리', '영상',
-        'tour', 'travel', 'visit', 'photo', 'gallery', 'festival', 'culture',
-        'landmark', 'attraction', 'story', 'video'
-      ];
-
-      return !meaningfulTerms.some(k => text.includes(k));
+      // Official/government pages often have valid representative images.
+      // Do not block them on the client; maru-search already filters hard rejects.
+      return false;
     }
 
     function isMeaningfulImageForItemClient(imageUrl, it){
       const s = String(imageUrl || '').trim();
       if(!s) return false;
-
-      const source = String((it && it.source) || '').toLowerCase();
-      const type = String((it && it.type) || '').toLowerCase();
-      const mediaType = String((it && it.mediaType) || '').toLowerCase();
-
-      const isMediaResult =
-        source.includes('image') ||
-        source.includes('youtube') ||
-        type === 'image' ||
-        type === 'video' ||
-        mediaType === 'image' ||
-        mediaType === 'video';
-
-      if(isLikelyMeaninglessImageUrlClient(s) && !isMediaResult) return false;
-      if(isGenericGovOfficialItemClient(it) && !isMediaResult) return false;
-
+      if(!/^https?:\/\//i.test(s) && !s.startsWith('/')) return false;
+      if(isHardRejectImageUrlClient(s)) return false;
       return true;
     }
 
@@ -791,7 +833,168 @@ async function fetchSearch(q, type = activeType){
     }
 
 
-    function renderItem(it){
+    function displayGroupOfItem(it){
+      return String((it && it.displayGroup) || '').trim() || inferDisplayGroupClient(it);
+    }
+
+    function inferDisplayGroupClient(it){
+      const source = String((it && it.source) || '').toLowerCase();
+      const type = String((it && it.type) || '').toLowerCase();
+      const mediaType = String((it && it.mediaType) || '').toLowerCase();
+      const title = String((it && it.title) || '').toLowerCase();
+      const summary = String((it && (it.summary || it.description)) || '').toLowerCase();
+      const url = String((it && (it.url || it.link)) || '').toLowerCase();
+      const host = domainOf(url).toLowerCase();
+      const text = `${source} ${type} ${mediaType} ${title} ${summary} ${host}`;
+
+      if (source.includes('news') || type === 'news' || text.includes('뉴스') || text.includes('속보') || text.includes('latest') || text.includes('breaking')) return 'news';
+      if (mediaType === 'image' || type === 'image' || mediaType === 'video' || type === 'video' || source.includes('image') || source.includes('youtube')) return 'media';
+      if (source.includes('local') || source.includes('map') || text.includes('관광') || text.includes('여행') || text.includes('지도') || text.includes('맛집') || text.includes('공원') || text.includes('landmark') || text.includes('tour')) return 'local_tour';
+      if (source.includes('blog') || source.includes('cafe') || text.includes('블로그') || text.includes('카페')) return 'community';
+      if (host.includes('instagram.') || host.includes('facebook.') || host.includes('tiktok.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social')) return 'social';
+      if (source.includes('encyc') || source.includes('kin') || source.includes('book') || text.includes('지식') || text.includes('도서') || text.includes('책 ')) return 'knowledge';
+      if (host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr')) return 'authority';
+      return 'web';
+    }
+
+    function displayGroupLabel(group, sample){
+      const fallback = sample && sample.displayGroupLabel;
+      const labels = {
+        authority: '공식/권위',
+        news: '뉴스',
+        local_tour: '지도/관광/지역',
+        media: '이미지/영상',
+        social: '소셜',
+        community: '블로그/카페/커뮤니티',
+        knowledge: '지식/도서',
+        shopping: '쇼핑',
+        sports: '스포츠',
+        finance: '금융',
+        webtoon: '웹툰',
+        web: '웹'
+      };
+      return fallback || labels[group] || '웹';
+    }
+
+    function displayGroupPreviewLimit(group, sample){
+      const n = parseInt(sample && sample.displayGroupPreviewLimit, 10);
+      if (n > 0) return n;
+
+      const limits = {
+        authority: 3,
+        news: 4,
+        local_tour: 4,
+        media: 4,
+        social: 3,
+        community: 3,
+        knowledge: 3,
+        shopping: 3,
+        sports: 3,
+        finance: 3,
+        webtoon: 3,
+        web: 15
+      };
+      return limits[group] || 3;
+    }
+
+    function shouldUseDisplayGroups(slice){
+      if (!Array.isArray(slice) || !slice.length) return false;
+      if (normalizeSearchType(activeType) !== 'all') return false;
+      return slice.some(it => it && (it.displayGroup || it.displayGroupLabel));
+    }
+
+    function groupSliceForDisplay(slice){
+      const order = ['authority','news','local_tour','media','social','community','knowledge','shopping','sports','finance','webtoon','web'];
+      const orderIndex = new Map(order.map((g, i) => [g, i]));
+      const groups = new Map();
+
+      (Array.isArray(slice) ? slice : []).forEach((it, idx) => {
+        const group = displayGroupOfItem(it);
+        if (!groups.has(group)) {
+          groups.set(group, {
+            group,
+            label: displayGroupLabel(group, it),
+            previewLimit: displayGroupPreviewLimit(group, it),
+            items: [],
+            firstIndex: idx
+          });
+        }
+        groups.get(group).items.push(it);
+      });
+
+      return Array.from(groups.values()).sort((a, b) => {
+        const ao = orderIndex.has(a.group) ? orderIndex.get(a.group) : 999;
+        const bo = orderIndex.has(b.group) ? orderIndex.get(b.group) : 999;
+        return (ao - bo) || (a.firstIndex - b.firstIndex);
+      });
+    }
+
+    function renderGroupedSlice(slice, page){
+      const groups = groupSliceForDisplay(slice);
+      groups.forEach(groupInfo => {
+        const section = document.createElement('section');
+        section.className = 'maru-display-section';
+        section.dataset.group = groupInfo.group;
+
+        const head = document.createElement('div');
+        head.className = 'maru-display-section-head';
+
+        const title = document.createElement('div');
+        title.className = 'maru-display-section-title';
+        title.textContent = groupInfo.label;
+
+        const meta = document.createElement('div');
+        meta.className = 'maru-display-section-meta';
+        meta.textContent = `${groupInfo.items.length}개`;
+
+        head.appendChild(title);
+        head.appendChild(meta);
+
+        const body = document.createElement('div');
+        body.className = 'maru-display-section-body';
+
+        const stateKey = `${lastQuery || input.value || ''}::${activeType || 'all'}::${page}::${groupInfo.group}`;
+        const expanded = expandedDisplayGroups.has(stateKey);
+        const limit = Math.max(1, groupInfo.previewLimit || 3);
+
+        groupInfo.items.forEach((it, idx) => {
+          const card = renderItem(it, body);
+          if (!expanded && idx >= limit) {
+            card.style.display = 'none';
+            card.dataset.maruCollapsed = '1';
+          }
+        });
+
+        const hiddenCount = Math.max(0, groupInfo.items.length - limit);
+        if (hiddenCount > 0) {
+          const more = document.createElement('button');
+          more.type = 'button';
+          more.className = 'maru-display-more';
+          more.textContent = expanded ? '접기' : `${groupInfo.label} ${hiddenCount}개 더보기`;
+          more.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const willExpand = !expandedDisplayGroups.has(stateKey);
+            if (willExpand) expandedDisplayGroups.add(stateKey);
+            else expandedDisplayGroups.delete(stateKey);
+
+            Array.from(body.querySelectorAll('[data-maru-collapsed="1"]')).forEach(card => {
+              card.style.display = willExpand ? '' : 'none';
+            });
+            more.textContent = willExpand ? '접기' : `${groupInfo.label} ${hiddenCount}개 더보기`;
+          });
+          body.appendChild(more);
+        }
+
+        section.appendChild(head);
+        section.appendChild(body);
+        results.appendChild(section);
+      });
+    }
+
+
+    function renderItem(it, mountTarget){
       const url = it.url || it.link || '';
       const domain = domainOf(url);
 
@@ -979,7 +1182,8 @@ if (it.riskLabel === '⚠️ high-risk') {
       // This prevents duplicate images and keeps card height natural.
 
       card.appendChild(body);
-      results.appendChild(card);
+      (mountTarget || results).appendChild(card);
+      return card;
     }
 
 
@@ -1084,7 +1288,13 @@ if (it.riskLabel === '⚠️ high-risk') {
       results.innerHTML = '';
       const start = (page - 1) * PAGE_SIZE;
       const slice = allItems.slice(start, start + PAGE_SIZE);
-      slice.forEach(renderItem);
+
+      if (shouldUseDisplayGroups(slice)) {
+        renderGroupedSlice(slice, page);
+      } else {
+        slice.forEach(it => renderItem(it));
+      }
+
       drawPager();
 
       if(!skipEnrich){
@@ -1196,6 +1406,7 @@ async function runSearch(q, type = activeType){
 
     pageImageEnrichCache.clear();
     itemImageEnrichCache.clear();
+    expandedDisplayGroups.clear();
 
     currentBlock = 0;
     currentPage = 1;
