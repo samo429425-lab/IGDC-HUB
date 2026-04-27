@@ -1,5 +1,5 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
-// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards + stable display groups + back bridge
+// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards + stable display groups + hard back bridge
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -285,26 +285,28 @@ function ensureSearchHistoryBridge() {
 
   const searchUrl = location.pathname + location.search + location.hash;
 
-  // If search.html was opened in a fresh tab/window, the browser Back button can be disabled.
-  // Build a tiny same-tab bridge:
-  //   entry 0 = current search URL with __searchEntry marker
-  //   entry 1 = current search URL with __searchBridgeMarker
-  // When the user presses browser Back, popstate lands on entry 0 and redirects to returnUrl.
+  /*
+    Hard back bridge:
+    - 새 탭/_blank 검색창은 브라우저 이전 history가 없어서 back 버튼은 켜져도
+      같은 URL state 이동만 하고 체감상 홈으로 안 넘어갈 수 있다.
+    - 그래서 history entry 0의 URL 자체를 from URL로 바꾼 뒤,
+      현재 search URL을 entry 1로 다시 push한다.
+    - 사용자가 브라우저 뒤로가기를 누르면 entry 0으로 이동하고,
+      popstate에서 즉시 from으로 location.replace 한다.
+  */
   history.replaceState(
     {
-      ...(state || {}),
       __searchBridgeInstalled: true,
-      __searchEntry: true,
-      q: q0 || '',
-      type: activeType || 'all',
+      __searchBridgeReturn: true,
       from: returnUrl
     },
     '',
-    searchUrl
+    returnUrl
   );
 
   history.pushState(
     {
+      ...(state || {}),
       __searchBridgeInstalled: true,
       __searchBridgeMarker: true,
       q: q0 || '',
@@ -346,8 +348,8 @@ window.addEventListener('popstate', (e) => {
   const state = e.state || {};
 
   // 1️⃣ 검색 진입 이전 페이지로 복귀
-  if ((state.__searchEntry || state.__searchBridgeReturn) && state.from) {
-    location.href = state.from;
+  if ((state.__searchBridgeReturn || state.__searchEntry) && state.from) {
+    location.replace(state.from);
     return;
   }
 
