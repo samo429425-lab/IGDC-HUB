@@ -1,5 +1,5 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
-// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards + stable display groups + marker-url back bridge
+// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards + stable display groups + direct-home browser-back
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -246,51 +246,58 @@ activeType = type0;
 
 function getSafeReturnUrl() {
   try {
-    const from = (new URLSearchParams(location.search).get('from') || '').trim();
-    if (!from) return '';
-    const u = new URL(from, location.origin);
-    if (u.origin !== location.origin) return '';
-    return u.pathname + u.search + u.hash;
+    const sp = new URLSearchParams(location.search);
+    const from = (sp.get('from') || '').trim();
+
+    if (from) {
+      const u = new URL(from, location.origin);
+      if (u.origin === location.origin && !/\/search(?:\.html)?\/?$/i.test(u.pathname)) {
+        return u.pathname + u.search + u.hash;
+      }
+    }
+
+    if (document.referrer) {
+      const r = new URL(document.referrer, location.origin);
+      if (r.origin === location.origin && !/\/search(?:\.html)?\/?$/i.test(r.pathname)) {
+        return r.pathname + r.search + r.hash;
+      }
+    }
+
+    try {
+      if (window.opener && !window.opener.closed && window.opener.location) {
+        const op = new URL(window.opener.location.href, location.origin);
+        if (op.origin === location.origin && !/\/search(?:\.html)?\/?$/i.test(op.pathname)) {
+          return op.pathname + op.search + op.hash;
+        }
+      }
+    } catch (e) {}
+
+    return '/home.html';
   } catch (e) {
-    return '';
+    return '/home.html';
   }
 }
 
-function isSearchBackMarkerUrl() {
-  try {
-    return (new URLSearchParams(location.search).get('__igdc_back') || '') === '1';
-  } catch (e) {
-    return false;
-  }
-}
-
-function cleanSearchBackMarkerUrl() {
+function getCurrentSearchUrlClean() {
   const u = new URL(location.href);
   u.searchParams.delete('__igdc_back');
   return u.pathname + u.search + u.hash;
 }
 
-function makeSearchBackMarkerUrl() {
-  const u = new URL(location.href);
-  u.searchParams.set('__igdc_back', '1');
-  return u.pathname + u.search + u.hash;
-}
-
 function resolveSearchReturnUrl(state) {
-  const s = state || history.state || {};
-  const fromState = (s && s.from) ? String(s.from) : '';
-  if (fromState) {
+  const s = state || {};
+  if (s.from) {
     try {
-      const u = new URL(fromState, location.origin);
+      const u = new URL(String(s.from), location.origin);
       if (u.origin === location.origin) return u.pathname + u.search + u.hash;
     } catch (e) {}
   }
   return getSafeReturnUrl() || '/home.html';
 }
 
-function goSearchReturnUrl(state) {
-  const returnUrl = resolveSearchReturnUrl(state);
-  location.replace(returnUrl);
+function goSearchReturnHome(state) {
+  const target = resolveSearchReturnUrl(state);
+  location.replace(target);
 }
 
 function buildSearchUrl(q) {
@@ -311,54 +318,98 @@ function buildSearchUrl(q) {
   return u.pathname + u.search + u.hash;
 }
 
-function ensureSearchHistoryBridge() {
+function ensureSearchHistoryBridge(force) {
   if (!isSearchPage) return;
 
-  const returnUrl = getSafeReturnUrl();
-  if (!returnUrl) return;
-
-  // If the browser has restored the synthetic back marker entry directly,
-  // immediately resolve it to the real return page.
-  if (isSearchBackMarkerUrl()) {
-    goSearchReturnUrl({ from: returnUrl });
-    return;
-  }
-
+  const returnUrl = getSafeReturnUrl() || '/home.html';
+  const currentUrl = getCurrentSearchUrlClean();
   const state = history.state || {};
-  const cleanUrl = cleanSearchBackMarkerUrl();
-  const markerUrl = makeSearchBackMarkerUrl();
 
-  // Avoid stacking the bridge repeatedly. Rebuild only if the current entry
-  // is not the active bridge entry for the same return target.
-  if (state && state.__searchBridgeCurrent && state.from === returnUrl) return;
+  if (!force && state.__igdcSearchBridgeActive && state.from === returnUrl) return;
 
-  // Important:
-  // entry 0 is NOT the same URL. It has __igdc_back=1.
-  // This makes Chrome's top-left Back arrow traverse to a distinct URL entry,
-  // so popstate is reliable without needing a hard reload.
-  history.replaceState(
-    {
-      __searchBridgeInstalled: true,
-      __searchBridgeReturn: true,
-      q: q0 || '',
-      type: activeType || 'all',
-      from: returnUrl
-    },
-    '',
-    markerUrl
-  );
+  try {
+    /*
+      Browser top-left Back must be real/active even when search.html opened as a separate tab/window.
 
-  history.pushState(
-    {
-      __searchBridgeInstalled: true,
-      __searchBridgeCurrent: true,
-      q: q0 || '',
-      type: activeType || 'all',
-      from: returnUrl
-    },
-    '',
-    cleanUrl
-  );
+      History after this runs:
+        entry 0: /home.html                 state.__igdcSearchBridgeReturn
+        entry 1: /search.html?q=...&from=... state.__igdcSearchBridgeActive
+
+      User presses browser Back on entry 1:
+        popstate lands on entry 0
+        search.js immediately location.replace('/home.html')
+    */
+    history.replaceState(
+      {
+        __igdcSearchBridgeReturn: true,
+        from: returnUrl,
+        q: q0 || '',
+        type: activeType || 'all'
+      },
+      '',
+      returnUrl
+    );
+
+    history.pushState(
+      {
+        __igdcSearchBridgeActive: true,
+        from: returnUrl,
+        q: q0 || '',
+        type: activeType || 'all'
+      },
+      '',
+      currentUrl
+    );
+  } catch (e) {
+    // Fallback: at least activate a same-URL bridge.
+    try {
+      history.replaceState(
+        {
+          __igdcSearchBridgeReturn: true,
+          from: returnUrl,
+          q: q0 || '',
+          type: activeType || 'all'
+        },
+        '',
+        currentUrl
+      );
+
+      history.pushState(
+        {
+          __igdcSearchBridgeActive: true,
+          from: returnUrl,
+          q: q0 || '',
+          type: activeType || 'all'
+        },
+        '',
+        currentUrl
+      );
+    } catch (err) {}
+  }
+}
+
+function installSearchHistoryBridge() {
+  if (!isSearchPage) return;
+
+  ensureSearchHistoryBridge(true);
+
+  // Some browsers update the chrome Back arrow only after load/pageshow.
+  // These retries do not stack history because the active-state guard stops duplicates.
+  setTimeout(() => ensureSearchHistoryBridge(false), 0);
+  setTimeout(() => ensureSearchHistoryBridge(false), 120);
+
+  window.addEventListener('load', () => {
+    setTimeout(() => ensureSearchHistoryBridge(false), 0);
+  }, { once: true });
+
+  window.addEventListener('pageshow', () => {
+    const st = history.state || {};
+    if (st.__igdcSearchBridgeReturn) {
+      goSearchReturnHome(st);
+      return;
+    }
+    setTimeout(() => ensureSearchHistoryBridge(false), 0);
+  }, { once: true });
 }
 
 function syncSearchFromUrl(run = true) {
@@ -391,8 +442,8 @@ window.addEventListener('popstate', (e) => {
   const state = e.state || {};
 
   // 1️⃣ 검색 진입 이전 페이지로 복귀
-  if (isSearchBackMarkerUrl() || state.__searchBridgeReturn || state.__searchEntry) {
-    goSearchReturnUrl(state);
+  if (state.__igdcSearchBridgeReturn || state.__searchBridgeReturn || state.__searchEntry || !/\/search(?:\.html)?\/?$/i.test(location.pathname)) {
+    goSearchReturnHome(state);
     return;
   }
 
@@ -435,21 +486,13 @@ window.addEventListener('popstate', (e) => {
   renderPage(currentPage);
 });
 
-
-window.addEventListener('pageshow', () => {
-  if (!isSearchPage) return;
-  if (isSearchBackMarkerUrl()) {
-    goSearchReturnUrl(history.state || {});
-  }
-});
-
 if (q0) {
   input.value = q0;
 }
 
 ensureSearchTabs();
 updateSearchTabsActive();
-ensureSearchHistoryBridge();
+installSearchHistoryBridge();
 
 if (q0) {
   syncSearchFromUrl(true);
@@ -474,7 +517,6 @@ btn.addEventListener('click', (e) => {
 
     const u = new URL(location.href);
     u.searchParams.set('q', q);
-    u.searchParams.delete('__igdc_back');
     u.searchParams.set('page', '1');
     u.searchParams.set('block', '0');
     if (activeType && activeType !== 'all') u.searchParams.set('type', activeType);
@@ -512,7 +554,6 @@ input.addEventListener('keydown', (e) => {
 
     const u = new URL(location.href);
     u.searchParams.set('q', q);
-    u.searchParams.delete('__igdc_back');
     u.searchParams.set('page', '1');
     u.searchParams.set('block', '0');
     if (activeType && activeType !== 'all') u.searchParams.set('type', activeType);
@@ -1378,7 +1419,6 @@ function updateSearchPageHistory(page, block) {
   if (!isSearchPage) return;
 
   const u = new URL(location.href);
-  u.searchParams.delete('__igdc_back');
   u.searchParams.set('page', String(page));
   u.searchParams.set('block', String(block));
   if (activeType && activeType !== 'all') u.searchParams.set('type', activeType);
