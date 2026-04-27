@@ -1,5 +1,5 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
-// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards + stable display groups + direct-home browser-back
+// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards + stable display groups + close-tab browser-back
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -295,8 +295,64 @@ function resolveSearchReturnUrl(state) {
   return getSafeReturnUrl() || '/home.html';
 }
 
+function samePathUrl(a, b) {
+  try {
+    const ua = new URL(a, location.origin);
+    const ub = new URL(b, location.origin);
+    return ua.origin === ub.origin &&
+      ua.pathname === ub.pathname &&
+      ua.search === ub.search &&
+      ua.hash === ub.hash;
+  } catch (e) {
+    return false;
+  }
+}
+
 function goSearchReturnHome(state) {
   const target = resolveSearchReturnUrl(state);
+
+  /*
+    Desired behavior:
+    - search.html is opened as a separate tab/window from home.
+    - Browser chrome Back button should make this search tab/window disappear.
+    - Then the user naturally sees the original home tab/window again.
+
+    window.close() only works reliably for script-opened windows/tabs.
+    If the browser blocks close(), fallback to loading the home target.
+  */
+  try {
+    if (window.opener && !window.opener.closed) {
+      try {
+        window.opener.focus();
+      } catch (focusErr) {}
+
+      window.close();
+
+      // If close is blocked, this code continues after a short delay.
+      setTimeout(() => {
+        try {
+          if (!window.closed) {
+            if (samePathUrl(location.href, target)) {
+              location.reload();
+            } else {
+              location.replace(target);
+            }
+          }
+        } catch (e) {
+          location.href = target;
+        }
+      }, 180);
+
+      return;
+    }
+  } catch (e) {}
+
+  // Fallback for non-script-opened tab/window or blocked opener access.
+  if (samePathUrl(location.href, target)) {
+    location.reload();
+    return;
+  }
+
   location.replace(target);
 }
 
