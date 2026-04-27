@@ -19,11 +19,11 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.5-gateway-controlled-external';
+const VERSION = 'A1.5.7-safe4-authority-media-gateway';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
-const DEFAULT_SOFT_TIMEOUT_MS = 8500;
+const DEFAULT_SOFT_TIMEOUT_MS = 10500;
 
 // MARU gateway policy:
 // - Internal search-bank first.
@@ -513,6 +513,7 @@ const Containers = {
     }
   },
   web_naver: { async fetch(q, limit, start){ return naverSearch(q, limit, start); } },
+  web_naver_image: { async fetch(q, limit, start){ return naverImageSearch(q, limit, start); } },
   web_google: { async fetch(q, limit, start){ return googleSearch(q, limit, start); } },
   web_bing: { async fetch(q, limit, start){ return bingSearch(q, limit, start); } },
   web_youtube: { async fetch(q, limit){ return youtubeSearch(q, limit); } },
@@ -524,13 +525,16 @@ function sourceCaps(opts){
   const deep = !!opts.deep;
   return {
     searchBankPages: deep ? MAX_SEARCH_BANK_PAGES_DEEP : MAX_SEARCH_BANK_PAGES_NORMAL,
-    // External APIs are controlled by maru-search gateway only; no unbounded loops.
-    naverPages: deep ? 3 : 2,
+    // External APIs are controlled by maru-search gateway only; no recursive / unbounded loops.
+    // Normal mode target: enough for 30~50 front pages when the provider has data.
+    // Naver supports 100 per page; 8 pages = up to 800 results in one controlled gateway pass.
+    naverPages: deep ? 10 : 8,
     googlePages: deep ? 3 : 2,
     bingPages: deep ? 3 : 2,
     imagePages: deep ? 2 : 1,
+    naverImagePages: deep ? 2 : 1,
     youtubeLimit: deep ? 40 : 20,
-    timeoutMs: deep ? 11000 : DEFAULT_SOFT_TIMEOUT_MS
+    timeoutMs: deep ? 12000 : DEFAULT_SOFT_TIMEOUT_MS
   };
 }
 
@@ -566,7 +570,10 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     const trace = [];
     const region = detectRuntimeRegion(event, lang, q);
     const sourceRoute = sourceOrderForRegion(region);
-    const externalTriggerMin = gatewayExternalTriggerCount();
+    const externalTriggerMin = Math.min(
+      MAX_LIMIT,
+      Math.max(gatewayExternalTriggerCount(), Math.min(limit, MIN_RESULT_TARGET))
+    );
 
     function record(name, status, count, extra){ trace.push(Object.assign({ name, status, count: count || 0 }, extra || {})); }
 
@@ -601,15 +608,32 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 
     async function pullFromNaver(){
       let count = 0;
-      let pageStart = start || 1;
-      for(let i=0; i<caps.naverPages && pageStart <= 1000 && timeLeft() > 1200; i++){
-        const naver = await Containers.web_naver.fetch(q, 100, pageStart).catch(() => null);
+      const firstStart = start || 1;
+      const starts = [];
+      for(let i=0; i<caps.naverPages; i++){
+        const pageStart = firstStart + (i * 100);
+        if(pageStart > 1000) break;
+        starts.push(pageStart);
+      }
+
+      // Controlled batch inside the single maru-search gateway pass.
+      // This avoids the old 2-page/~200 result ceiling without opening recursive loops.
+      const settled = await Promise.allSettled(
+        starts.map(pageStart =>
+          Containers.web_naver.fetch(q, 100, pageStart)
+            .then(bundle => ({ pageStart, bundle }))
+            .catch(() => ({ pageStart, bundle: null }))
+        )
+      );
+
+      for(const s of settled){
+        const pack = s && s.status === 'fulfilled' ? s.value : null;
+        const naver = pack && pack.bundle;
         const n = addBundle(naver, 'naver', collected, sourceState);
         count += n;
-        if(!naver || !naver.results || naver.results.length < 100) break;
-        pageStart += 100;
       }
-      record('naver', count ? 'ok' : 'empty', count);
+
+      record('naver', count ? 'ok' : 'empty', count, { pagesTried: starts.length, mode: 'controlled-batch' });
       return count;
     }
 
@@ -650,18 +674,41 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     }
 
     async function pullFromImage(){
-      if(noMedia) { record('google_image', 'media-disabled', 0); return 0; }
-      let count = 0;
+      if(noMedia) {
+        record('naver_image', 'media-disabled', 0);
+        record('google_image', 'media-disabled', 0);
+        return 0;
+      }
+
+      let total = 0;
+
+      // Naver image: Korean/local thumbnail pool. Controlled inside maru-search gateway.
+      let naverCount = 0;
+      let naverStart = 1;
+      for(let i=0; i<(caps.naverImagePages || 1) && naverStart <= 1000 && timeLeft() > 1200; i++){
+        const img = await Containers.web_naver_image.fetch(q, 30, naverStart).catch(() => null);
+        const n = addBundle(img, 'naver_image', collected, sourceState);
+        naverCount += n;
+        total += n;
+        if(!img || !img.results || img.results.length < 30) break;
+        naverStart += 30;
+      }
+      record('naver_image', naverCount ? 'ok' : 'empty', naverCount);
+
+      // Google image: global thumbnail pool. Small probe in normal mode.
+      let googleCount = 0;
       let pageStart = 1;
       for(let i=0; i<caps.imagePages && pageStart <= 91 && timeLeft() > 1200; i++){
         const img = await Containers.web_image.fetch(q, 10, pageStart).catch(() => null);
         const n = addBundle(img, 'google_image', collected, sourceState);
-        count += n;
+        googleCount += n;
+        total += n;
         if(!img || !img.results || img.results.length < 10) break;
         pageStart += 10;
       }
-      record('google_image', count ? 'ok' : 'empty', count);
-      return count;
+      record('google_image', googleCount ? 'ok' : 'empty', googleCount);
+
+      return total;
     }
 
     const internalCount = await pullFromSearchBank();
@@ -674,7 +721,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         pullFromGoogle(),
         pullFromBing(),
         (deep || /영상|비디오|video|youtube|유튜브/i.test(q)) ? pullFromYouTube() : Promise.resolve(0),
-        (deep || /이미지|사진|image|photo|지도|map/i.test(q)) ? pullFromImage() : Promise.resolve(0)
+        pullFromImage()
       ]);
       collected.push.apply(collected, mapCards(q, region));
       collected.push.apply(collected, googleLikeSearchLinks(q));
@@ -757,6 +804,56 @@ async function naverSearch(q, limit, start){
     title: stripHtml(it.title), link: it.link || '', url: it.link || '', snippet: stripHtml(it.description), type: 'web', source: 'naver', payload: { source: 'naver' }
   }));
   return { source: 'naver', results };
+}
+
+
+async function naverImageSearch(q, limit, start){
+  const id = process.env.NAVER_API_KEY;
+  const secret = process.env.NAVER_CLIENT_SECRET;
+  if(!id || !secret) return null;
+
+  const url = 'https://openapi.naver.com/v1/search/image?query=' +
+    encodeURIComponent(q) +
+    '&display=' + Math.min(limit, 100) +
+    '&start=' + (start || 1) +
+    '&sort=sim';
+
+  const res = await fetchWithTimeout(url, {
+    headers: {
+      'X-Naver-Client-Id': id,
+      'X-Naver-Client-Secret': secret
+    }
+  }, 3000);
+
+  if(!res.ok) return null;
+  const data = await res.json();
+
+  return {
+    source: 'naver_image',
+    results: (Array.isArray(data.items) ? data.items : []).map(it => {
+      const thumb = it.thumbnail || it.link || '';
+      const context = it.link || it.originallink || '';
+      return {
+        title: stripHtml(it.title || q),
+        link: context,
+        url: context,
+        snippet: '',
+        type: 'image',
+        mediaType: 'image',
+        source: 'naver_image',
+        thumbnail: thumb,
+        thumb,
+        image: thumb,
+        imageSet: [thumb, context].filter(Boolean),
+        payload: {
+          source: 'naver_image',
+          thumb,
+          image: thumb,
+          contextLink: context
+        }
+      };
+    })
+  };
 }
 
 async function googleSearch(q, limit, start){
@@ -859,24 +956,85 @@ function applyIntentBoost(items, q){
   }).sort((a,b) => (b._finalScore || 0) - (a._finalScore || 0));
 }
 
+function authorityBonusForItem(it, q){
+  const url = safeString(firstNonEmpty(it && it.url, it && it.link)).toLowerCase();
+  const host = domainOf(url).toLowerCase();
+  const source = safeString(it && it.source).toLowerCase();
+  const title = safeString(it && it.title).toLowerCase();
+  const summary = safeString(firstNonEmpty(it && it.summary, it && it.description)).toLowerCase();
+  const query = safeString(q).toLowerCase();
+
+  let bonus = 0;
+
+  // Query-exact relevance still matters.
+  if(query && title === query) bonus += 6;
+  if(query && title.includes(query)) bonus += 4;
+  if(query && summary.includes(query)) bonus += 1.5;
+
+  // Korean/local official domains.
+  if(host.endsWith('.go.kr') || host.includes('.go.kr')) bonus += 12;
+  if(host.endsWith('.or.kr') || host.includes('.or.kr')) bonus += 2;
+  if(host.endsWith('.ac.kr') || host.includes('.ac.kr')) bonus += 4;
+
+  // Global official / academic domains.
+  if(host.endsWith('.gov') || host.includes('.gov.') || host.endsWith('.gov.uk') || host.includes('gov.uk')) bonus += 10;
+  if(host.includes('go.jp') || host.includes('gov.cn') || host.includes('gouv.fr') || host.includes('bund.de')) bonus += 8;
+  if(host.endsWith('.edu') || host.includes('.edu.') || host.includes('ac.uk') || host.includes('edu.cn')) bonus += 5;
+
+  // City/tourism official examples and query-specific authority.
+  if(host.includes('busan.go.kr')) bonus += 15;
+  if(host.includes('seoul.go.kr')) bonus += 15;
+  if(host.includes('korea.kr')) bonus += 10;
+  if(host.includes('visitbusan.net') || host.includes('visitseoul.net') || host.includes('visitkorea.or.kr')) bonus += 9;
+
+  if(query && (query.includes('부산') || query.includes('busan')) && (host.includes('busan') || title.includes('부산광역시'))) bonus += 8;
+  if(query && (query.includes('서울') || query.includes('seoul')) && (host.includes('seoul') || title.includes('서울특별시'))) bonus += 8;
+
+  // Encyclopedia / reference layer.
+  if(host.includes('wikipedia.org') || host.includes('wikidata.org')) bonus += 6;
+  if(host.includes('namu.wiki')) bonus += 4;
+  if(host.includes('britannica.com') || host.includes('doopedia.co.kr')) bonus += 4;
+
+  // Search-bank items are useful but should not outrank official authority by default.
+  if(source.includes('search-bank')) bonus += 0.8;
+
+  // Media/thumbnail support. Enough to surface rich cards, not enough to bury official pages.
+  if(it && (it.mediaType === 'image' || it.mediaType === 'video')) bonus += 0.9;
+  if(it && isRealImageUrl(it.thumbnail)) bonus += 0.7;
+  if(it && (it.type === 'map' || it.mediaType === 'map')) bonus += 0.5;
+
+  // Avoid putting pure search-link cards above real results.
+  if(host.includes('google.com') && url.includes('/search?')) bonus -= 2;
+  if(host.includes('youtube.com') && url.includes('/results?')) bonus -= 1;
+
+  return bonus;
+}
+
 function applyServerSideBoosts(items, opts){
   const q = safeString(opts && opts.q).toLowerCase();
   const lang = safeString(opts && opts.lang).toLowerCase();
+
   const ranked = (Array.isArray(items) ? items : []).map((it, idx) => {
-    let bonus = 0;
-    const title = safeString(it.title).toLowerCase();
-    const summary = safeString(it.summary).toLowerCase();
-    const source = safeString(it.source).toLowerCase();
-    if(q && title.includes(q)) bonus += 3;
-    if(q && summary.includes(q)) bonus += 1.5;
+    let bonus = authorityBonusForItem(it, q);
+
     if(lang && safeString(it.lang).toLowerCase() === lang) bonus += 1;
-    if(source.includes('search-bank')) bonus += 0.6;
-    if(it.mediaType === 'image' || it.mediaType === 'video') bonus += 0.8;
-    if(isRealImageUrl(it.thumbnail)) bonus += 0.5;
-    if(it.type === 'map' || it.mediaType === 'map') bonus += 0.3;
-    return Object.assign({}, it, { _bonus: bonus, _finalScore: Number(it._coreScore || it.score || 0) + bonus, _seq: idx });
+
+    const finalScore = Number(it._coreScore || it.score || 0) + bonus;
+
+    return Object.assign({}, it, {
+      _bonus: bonus,
+      _authorityScore: bonus,
+      _finalScore: finalScore,
+      _seq: idx
+    });
   });
-  ranked.sort((a,b) => ((b._finalScore || 0) - (a._finalScore || 0)) || ((a._seq || 0) - (b._seq || 0)));
+
+  ranked.sort((a,b) =>
+    ((b._finalScore || 0) - (a._finalScore || 0)) ||
+    ((b._authorityScore || 0) - (a._authorityScore || 0)) ||
+    ((a._seq || 0) - (b._seq || 0))
+  );
+
   return applyIntentBoost(ranked, q);
 }
 
