@@ -19,7 +19,7 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.25-media-quality-priority';
+const VERSION = 'A1.5.28-permissive-thumbnail-filter';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -361,30 +361,102 @@ function dedupeCanonicalItems(items){
 }
 
 
-function isLikelyMeaninglessImageUrl(imageUrl){
+
+function isHardRejectImageUrl(imageUrl){
   const s = safeString(imageUrl).toLowerCase();
   if(!s) return true;
 
-  const bad = [
-    'favicon', 'logo', 'symbol', 'emblem', 'slogan', 'brand',
-    '/ci', '_ci', '-ci', '/bi', '_bi', '-bi',
-    'placeholder', 'noimage', 'no_image', 'default-image', 'default_img',
-    'sprite', 'button', 'btn_', '/btn', 'sns_logo', 'kakao', 'facebook',
-    'header_logo', 'footer_logo'
+  const hardBad = [
+    'favicon',
+    'apple-touch-icon',
+    '/icon-',
+    '/icons/',
+    'sprite',
+    'spacer',
+    'blank.gif',
+    'blank.png',
+    'transparent',
+    '1x1',
+    'pixel',
+    'tracking',
+    'analytics',
+    'captcha',
+    'placeholder',
+    'noimage',
+    'no_image',
+    'no-img',
+    'default-image',
+    'default_img'
   ];
 
-  if(bad.some(k => s.includes(k))) return true;
-  if(/\.(svg|ico)(\?|#|$)/i.test(s)) return true;
+  if(hardBad.some(k => s.includes(k))) return true;
+  if(/\.(ico)(\?|#|$)/i.test(s)) return true;
+
+  // SVG is often a logo/icon. Do not globally reject it if it is a real provider thumbnail,
+  // but reject obvious logo/icon SVG paths.
+  if(/\.(svg)(\?|#|$)/i.test(s) && /(logo|symbol|icon|emblem|brand|ci|bi)/i.test(s)) return true;
 
   return false;
+}
+
+function isSoftBrandImageUrl(imageUrl){
+  const s = safeString(imageUrl).toLowerCase();
+  if(!s) return false;
+
+  const softBad = [
+    'logo',
+    'symbol',
+    'emblem',
+    'slogan',
+    'brand',
+    '/ci',
+    '_ci',
+    '-ci',
+    '/bi',
+    '_bi',
+    '-bi',
+    'header_logo',
+    'footer_logo',
+    'sns_logo'
+  ];
+
+  return softBad.some(k => s.includes(k));
+}
+
+function providerSuppliedThisImage(it, imageUrl){
+  const target = safeString(imageUrl).trim();
+  if(!target) return false;
+
+  let targetKey = target.split('#')[0].toLowerCase();
+  try{
+    const u = new URL(target);
+    targetKey = (u.origin + u.pathname).toLowerCase();
+  }catch(e){}
+
+  return providedMediaCandidatesForItem(it).some(v => {
+    const s = safeString(v).trim();
+    if(!s) return false;
+    let key = s.split('#')[0].toLowerCase();
+    try{
+      const u = new URL(s);
+      key = (u.origin + u.pathname).toLowerCase();
+    }catch(e){}
+    return key === targetKey || s === target;
+  });
+}
+
+
+function isLikelyMeaninglessImageUrl(imageUrl){
+  // This function must be conservative.
+  // We only reject images that are almost certainly unusable in search cards.
+  // Provider-supplied thumbnails should not be dropped just because the URL contains
+  // words like logo/brand/banner; many real news/company/tourism thumbnails use such paths.
+  return isHardRejectImageUrl(imageUrl);
 }
 
 function isGenericGovOfficialItem(it){
   const url = safeString(firstNonEmpty(it && it.url, it && it.link)).toLowerCase();
   const host = domainOf(url).toLowerCase();
-  const title = safeString(it && it.title).toLowerCase();
-  const summary = safeString(firstNonEmpty(it && it.summary, it && it.description)).toLowerCase();
-  const text = title + ' ' + summary + ' ' + url;
 
   const isGov =
     host.includes('.go.kr') ||
@@ -394,42 +466,37 @@ function isGenericGovOfficialItem(it){
     host.includes('go.jp') ||
     host.includes('gov.cn');
 
-  if(!isGov) return false;
-
-  const meaningfulTerms = [
-    '관광', '여행', '명소', '야경', '축제', '행사', '문화', '공연',
-    '갤러리', '사진', '포토', '한컷', '리포트', '스토리', '영상',
-    'tour', 'travel', 'visit', 'photo', 'gallery', 'festival', 'culture',
-    'landmark', 'attraction', 'story', 'video'
-  ];
-
-  if(meaningfulTerms.some(k => text.includes(k))) return false;
-
-  return true;
+  return !!isGov;
 }
 
 function isMeaningfulImageForItem(imageUrl, it){
   const img = safeString(imageUrl).trim();
   if(!isRealImageUrl(img)) return false;
 
+  if(isHardRejectImageUrl(img)) return false;
+
   const source = safeString(it && it.source).toLowerCase();
   const type = safeString(it && it.type).toLowerCase();
   const mediaType = safeString(it && it.mediaType).toLowerCase();
 
-  // Pure image/video providers already return image objects. Keep them unless clearly icon/logo.
   const isMediaResult =
     source.includes('image') ||
     source.includes('youtube') ||
+    source.includes('video') ||
+    source.includes('news') ||
     type === 'image' ||
     type === 'video' ||
     mediaType === 'image' ||
     mediaType === 'video';
 
-  if(isLikelyMeaninglessImageUrl(img) && !isMediaResult) return false;
+  const providerSupplied = providerSuppliedThisImage(it, img);
 
-  // Generic government/portal pages often expose slogan/logo/text banners as og:image.
-  // Do not display those unless the result itself is clearly tourism/news/photo/culture/media.
-  if(isGenericGovOfficialItem(it) && !isMediaResult) return false;
+  // Provider/API supplied media should be preserved unless it is a hard reject.
+  if(providerSupplied || isMediaResult) return true;
+
+  // For page-scanned fallback images, still avoid obvious brand/logo-only assets.
+  // But do not block an entire government/official page just because it is official.
+  if(isSoftBrandImageUrl(img)) return false;
 
   return true;
 }
@@ -446,7 +513,7 @@ function imageQualityScore(imageUrl, it){
   if(/\.(jpg|jpeg|png|webp|avif)(\?|#|$)/i.test(low)) score += 8;
   if(low.includes('original') || low.includes('origin') || low.includes('og:image')) score += 5;
   if(low.includes('large') || low.includes('xlarge') || low.includes('high') || low.includes('maxres') || low.includes('hqdefault')) score += 4;
-  if(low.includes('thumb') || low.includes('thumbnail') || low.includes('small') || low.includes('150x') || low.includes('100x')) score -= 5;
+  if(low.includes('thumb') || low.includes('thumbnail') || low.includes('small') || low.includes('150x') || low.includes('100x')) score -= 2;
   if(low.includes('favicon') || low.endsWith('.ico') || low.includes('logo') || low.includes('sprite')) score -= 20;
 
   // Width/height hints in URL.
@@ -496,17 +563,65 @@ function mediaQualityProfileForItem(it, images){
 }
 
 
-function naturalImagesForItem(it, maxCount){
-  const candidates = [
-    it && it.image,
-    it && it.og_image,
-    it && it.originalImage,
-    it && it.originallink,
-    it && it.link,
-    it && it.thumbnail,
-    it && it.thumb
-  ].concat(Array.isArray(it && it.imageSet) ? it.imageSet : []);
 
+function providedMediaCandidatesForItem(it){
+  it = (it && typeof it === 'object') ? it : {};
+  const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+  const media = (it.media && typeof it.media === 'object') ? it.media : {};
+  const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
+  const pMedia = (p.media && typeof p.media === 'object') ? p.media : {};
+  const pPreview = (pMedia.preview && typeof pMedia.preview === 'object') ? pMedia.preview : {};
+
+  const source = safeString(it.source || p.source).toLowerCase();
+  const type = safeString(it.type || p.type).toLowerCase();
+  const mediaType = safeString(it.mediaType || p.mediaType).toLowerCase();
+  const isImageLike = source.includes('image') || type === 'image' || mediaType === 'image';
+
+  const direct = [
+    it.image,
+    it.thumbnail,
+    it.thumb,
+    it.og_image,
+    it.image_url,
+    it.imageUrl,
+    it.originalImage,
+    it.poster,
+    preview.poster,
+    preview.thumbnail,
+    preview.thumb,
+    preview.image,
+
+    p.image,
+    p.thumbnail,
+    p.thumb,
+    p.og_image,
+    p.image_url,
+    p.imageUrl,
+    p.originalImage,
+    p.poster,
+    pPreview.poster,
+    pPreview.thumbnail,
+    pPreview.thumb,
+    pPreview.image
+  ];
+
+  // Some image APIs use link as the actual image URL and originallink/contextLink as the page URL.
+  if(isImageLike){
+    direct.unshift(it.link, it.url, p.link, p.url, p.contextLink);
+  }
+
+  return direct
+    .concat(Array.isArray(it.imageSet) ? it.imageSet : [])
+    .concat(Array.isArray(p.imageSet) ? p.imageSet : []);
+}
+
+function hasProviderSuppliedMedia(it){
+  return providedMediaCandidatesForItem(it).some(x => isRealImageUrl(x));
+}
+
+
+function naturalImagesForItem(it, maxCount){
+  const candidates = providedMediaCandidatesForItem(it);
   const images = qualitySortImagesForItem(candidates, it);
   const out = [];
   const seen = new Set();
@@ -1533,7 +1648,10 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         deduped: Math.max(0, collected.length - unique.length),
         richMedia: finalItems.filter(x => x && isRealImageUrl(x.thumbnail)).length,
         mediaQualityPriority: true,
-        imagePolicy: 'fast-first-render-page-own-og-image-meaningful-filter',
+        ownPageMediaOnly: true,
+        providedThumbnailPreserve: true,
+        permissiveThumbnailFilter: true,
+        imagePolicy: 'fast-first-own-page-representative-media-only',
         trace,
         externalSuppressed: !!externalOff,
         externalMode: mode,
@@ -1590,28 +1708,188 @@ function absolutizeUrl(baseUrl, imageUrl){
   }catch(e){ return ''; }
 }
 
+
+function decodeHtmlEntitiesLite(v){
+  return safeString(v)
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+function attrValue(tag, name){
+  const re = new RegExp(name + "\\s*=\\s*([\\\"'])(.*?)\\1", "i");
+  const m = safeString(tag).match(re);
+  return m && m[2] ? decodeHtmlEntitiesLite(m[2]) : '';
+}
+
+function bestFromSrcset(srcset){
+  const parts = safeString(srcset).split(',').map(x => x.trim()).filter(Boolean);
+  if(!parts.length) return '';
+  let best = '';
+  let bestScore = -1;
+  for(const part of parts){
+    const bits = part.split(/\s+/).filter(Boolean);
+    const url = bits[0] || '';
+    let score = 1;
+    const desc = bits.slice(1).join(' ');
+    const wm = desc.match(/(\d+)w/i);
+    const xm = desc.match(/([\d.]+)x/i);
+    if(wm) score = parseInt(wm[1], 10) || score;
+    if(xm) score = Math.round((parseFloat(xm[1]) || 1) * 1000);
+    if(score > bestScore){
+      bestScore = score;
+      best = url;
+    }
+  }
+  return best;
+}
+
+function isLikelyContentImageUrl(imageUrl){
+  const s = safeString(imageUrl).toLowerCase();
+  if(!s) return false;
+  if(isHardRejectImageUrl(s)) return false;
+
+  const bad = [
+    'spacer',
+    'blank',
+    'transparent',
+    'pixel',
+    'tracking',
+    'analytics',
+    'captcha',
+    'qr'
+  ];
+
+  if(bad.some(k => s.includes(k))) return false;
+  return isRealImageUrl(imageUrl);
+}
+
+function pushOwnImageCandidate(out, url, baseUrl, source, weight){
+  const u = absolutizeUrl(baseUrl, decodeHtmlEntitiesLite(url));
+  if(!isLikelyContentImageUrl(u)) return;
+  out.push({
+    url: u,
+    source,
+    weight: weight || 0
+  });
+}
+
+
 function extractOgImageFromHtml(html, baseUrl){
   const text = safeString(html);
   if(!text) return '';
 
-  const patterns = [
-    /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["'][^>]*>/i,
-    /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["'][^>]*>/i,
-    /<meta[^>]+property=["']og:image:secure_url["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image:secure_url["'][^>]*>/i
+  const candidates = [];
+
+  // 1) Explicit representative images selected by the page owner.
+  const metaPatterns = [
+    /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["'][^>]*>/ig,
+    /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["'][^>]*>/ig,
+    /<meta[^>]+property=["']og:image:secure_url["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image:secure_url["'][^>]*>/ig,
+    /<meta[^>]+itemprop=["']image["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+itemprop=["']image["'][^>]*>/ig
   ];
 
-  for(const re of patterns){
-    const m = text.match(re);
-    if(m && m[1]){
-      const u = absolutizeUrl(baseUrl, m[1]);
-      if(isRealImageUrl(u)) return u;
+  for(const re of metaPatterns){
+    let m;
+    while((m = re.exec(text)) && candidates.length < 24){
+      if(m && m[1]) pushOwnImageCandidate(candidates, m[1], baseUrl, 'meta', 100);
     }
   }
 
-  return '';
+  // 2) link rel=image_src / preload image.
+  const linkRe = /<link[^>]+(?:rel=["'][^"']*(?:image_src|preload)[^"']*["'][^>]*href=["']([^"']+)["']|href=["']([^"']+)["'][^>]*rel=["'][^"']*(?:image_src|preload)[^"']*["'])[^>]*>/ig;
+  let lm;
+  while((lm = linkRe.exec(text)) && candidates.length < 30){
+    const u = lm[1] || lm[2];
+    if(u) pushOwnImageCandidate(candidates, u, baseUrl, 'link', 80);
+  }
+
+  // 3) JSON-LD/schema.org image fields. Keep this regex light and bounded.
+  const jsonImageRe = /"image"\s*:\s*(?:"([^"]+)"|\{\s*"url"\s*:\s*"([^"]+)"|\[\s*"([^"]+)")/ig;
+  let jm;
+  while((jm = jsonImageRe.exec(text)) && candidates.length < 36){
+    const u = jm[1] || jm[2] || jm[3];
+    if(u) pushOwnImageCandidate(candidates, u, baseUrl, 'schema', 70);
+  }
+
+  const thumbnailUrlRe = /"thumbnailUrl"\s*:\s*"([^"]+)"/ig;
+  let tm;
+  while((tm = thumbnailUrlRe.exec(text)) && candidates.length < 40){
+    if(tm && tm[1]) pushOwnImageCandidate(candidates, tm[1], baseUrl, 'schema-thumbnail', 65);
+  }
+
+  // 4) Video poster owned by the result page.
+  const posterRe = /<video[^>]+poster=["']([^"']+)["'][^>]*>/ig;
+  let pm;
+  while((pm = posterRe.exec(text)) && candidates.length < 44){
+    if(pm && pm[1]) pushOwnImageCandidate(candidates, pm[1], baseUrl, 'video-poster', 75);
+  }
+
+  // 5) First meaningful page images.
+  // This is still own-page media, not generated media and not borrowed media.
+  const headAndTop = text.slice(0, 180000);
+  const imgRe = /<img\b[^>]*>/ig;
+  let im;
+  let inspected = 0;
+  while((im = imgRe.exec(headAndTop)) && inspected < 80 && candidates.length < 60){
+    inspected += 1;
+    const tag = im[0];
+    const srcset = attrValue(tag, 'srcset') || attrValue(tag, 'data-srcset');
+    const src =
+      bestFromSrcset(srcset) ||
+      attrValue(tag, 'src') ||
+      attrValue(tag, 'data-src') ||
+      attrValue(tag, 'data-original') ||
+      attrValue(tag, 'data-lazy-src') ||
+      attrValue(tag, 'data-url');
+
+    if(!src) continue;
+
+    const width = parseInt(attrValue(tag, 'width') || '0', 10) || 0;
+    const height = parseInt(attrValue(tag, 'height') || '0', 10) || 0;
+    const alt = low(attrValue(tag, 'alt'));
+    const cls = low(attrValue(tag, 'class'));
+    const tagText = low(tag);
+
+    if(width && height && width * height < 30000) continue;
+    if(hasAnyLooseTerm(cls + ' ' + alt + ' ' + tagText, ['logo','icon','sprite','captcha','banner-text','text-banner','sns','share','qr'])) continue;
+
+    let weight = 45;
+    if(width * height >= 480000) weight += 20;
+    else if(width * height >= 180000) weight += 10;
+    if(hasAnyLooseTerm(cls + ' ' + alt, ['thumb','thumbnail'])) weight -= 8;
+    if(hasAnyLooseTerm(cls + ' ' + alt, ['main','visual','hero','photo','image','대표','사진','갤러리'])) weight += 16;
+
+    pushOwnImageCandidate(candidates, src, baseUrl, 'page-img', weight);
+  }
+
+  if(!candidates.length) return '';
+
+  const seen = new Set();
+  const unique = [];
+  for(const c of candidates){
+    let key = c.url.split('#')[0].toLowerCase();
+    try{
+      const u = new URL(c.url);
+      key = (u.origin + u.pathname).toLowerCase();
+    }catch(e){}
+    if(seen.has(key)) continue;
+    seen.add(key);
+    unique.push(c);
+  }
+
+  unique.sort((a, b) =>
+    ((b.weight || 0) + imageQualityScore(b.url, { source: b.source, type: 'image', mediaType: 'image' })) -
+    ((a.weight || 0) + imageQualityScore(a.url, { source: a.source, type: 'image', mediaType: 'image' }))
+  );
+
+  return unique[0] ? unique[0].url : '';
 }
 
 function shouldSkipOgImageFetch(it){
@@ -1681,13 +1959,24 @@ async function enrichOwnImages(items, opts){
       const it = list[idx];
       if(!it) { skipped += 1; continue; }
 
-      const ownImages = compactImages([
-        it.thumbnail,
-        it.thumb,
-        it.image
-      ].concat(Array.isArray(it.imageSet) ? it.imageSet : []));
+      const ownImages = naturalImagesForItem(it, 3);
 
-      if(ownImages.length) { skipped += 1; continue; }
+      // If the provider already supplied a usable thumbnail/media URL, keep it.
+      // Do not skip with compactImages only, because that can preserve a raw URL
+      // that later gets filtered out by the meaningful-image layer.
+      if(ownImages.length) {
+        list[idx] = Object.assign({}, it, {
+          thumbnail: ownImages[0],
+          thumb: ownImages[0],
+          image: ownImages[0],
+          imageSet: ownImages,
+          mediaQuality: mediaQualityProfileForItem(it, ownImages),
+          _providedImagePreserved: hasProviderSuppliedMedia(it)
+        });
+        skipped += 1;
+        continue;
+      }
+
       if(shouldSkipOgImageFetch(it)) { skipped += 1; continue; }
 
       const url = safeString(firstNonEmpty(it.url, it.link)).trim();
@@ -1731,7 +2020,7 @@ async function enrichOwnImages(items, opts){
       count: enriched,
       checked: max,
       skipped,
-      mode: 'natural-own-page'
+      mode: 'own-page-representative-media-only'
     });
   }
 
