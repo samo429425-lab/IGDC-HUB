@@ -19,7 +19,7 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.17-hybrid-render-image-enrich';
+const VERSION = 'A1.5.18-hybrid-meaningful-image-filter';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -359,6 +359,109 @@ function dedupeCanonicalItems(items){
   return out;
 }
 
+
+function isLikelyMeaninglessImageUrl(imageUrl){
+  const s = safeString(imageUrl).toLowerCase();
+  if(!s) return true;
+
+  const bad = [
+    'favicon', 'logo', 'symbol', 'emblem', 'slogan', 'brand',
+    '/ci', '_ci', '-ci', '/bi', '_bi', '-bi',
+    'placeholder', 'noimage', 'no_image', 'default-image', 'default_img',
+    'sprite', 'button', 'btn_', '/btn', 'sns_logo', 'kakao', 'facebook',
+    'header_logo', 'footer_logo'
+  ];
+
+  if(bad.some(k => s.includes(k))) return true;
+  if(/\.(svg|ico)(\?|#|$)/i.test(s)) return true;
+
+  return false;
+}
+
+function isGenericGovOfficialItem(it){
+  const url = safeString(firstNonEmpty(it && it.url, it && it.link)).toLowerCase();
+  const host = domainOf(url).toLowerCase();
+  const title = safeString(it && it.title).toLowerCase();
+  const summary = safeString(firstNonEmpty(it && it.summary, it && it.description)).toLowerCase();
+  const text = title + ' ' + summary + ' ' + url;
+
+  const isGov =
+    host.includes('.go.kr') ||
+    host.endsWith('.gov') ||
+    host.includes('.gov.') ||
+    host.includes('gov.uk') ||
+    host.includes('go.jp') ||
+    host.includes('gov.cn');
+
+  if(!isGov) return false;
+
+  const meaningfulTerms = [
+    '관광', '여행', '명소', '야경', '축제', '행사', '문화', '공연',
+    '갤러리', '사진', '포토', '한컷', '리포트', '스토리', '영상',
+    'tour', 'travel', 'visit', 'photo', 'gallery', 'festival', 'culture',
+    'landmark', 'attraction', 'story', 'video'
+  ];
+
+  if(meaningfulTerms.some(k => text.includes(k))) return false;
+
+  return true;
+}
+
+function isMeaningfulImageForItem(imageUrl, it){
+  const img = safeString(imageUrl).trim();
+  if(!isRealImageUrl(img)) return false;
+
+  const source = safeString(it && it.source).toLowerCase();
+  const type = safeString(it && it.type).toLowerCase();
+  const mediaType = safeString(it && it.mediaType).toLowerCase();
+
+  // Pure image/video providers already return image objects. Keep them unless clearly icon/logo.
+  const isMediaResult =
+    source.includes('image') ||
+    source.includes('youtube') ||
+    type === 'image' ||
+    type === 'video' ||
+    mediaType === 'image' ||
+    mediaType === 'video';
+
+  if(isLikelyMeaninglessImageUrl(img) && !isMediaResult) return false;
+
+  // Generic government/portal pages often expose slogan/logo/text banners as og:image.
+  // Do not display those unless the result itself is clearly tourism/news/photo/culture/media.
+  if(isGenericGovOfficialItem(it) && !isMediaResult) return false;
+
+  return true;
+}
+
+function naturalImagesForItem(it, maxCount){
+  const images = compactImages([
+    it && it.thumbnail,
+    it && it.thumb,
+    it && it.image
+  ].concat(Array.isArray(it && it.imageSet) ? it.imageSet : []));
+
+  const out = [];
+  const seen = new Set();
+
+  for(const img of images){
+    if(!isMeaningfulImageForItem(img, it)) continue;
+
+    let key = safeString(img).split('#')[0].toLowerCase();
+    try{
+      const u = new URL(img, safeString(firstNonEmpty(it && it.url, it && it.link)) || undefined);
+      key = (u.origin + u.pathname).toLowerCase();
+    }catch(e){}
+
+    if(seen.has(key)) continue;
+    seen.add(key);
+    out.push(img);
+    if(out.length >= (maxCount || 3)) break;
+  }
+
+  return out;
+}
+
+
 function compactResultItem(it){
   it = (it && typeof it === 'object') ? it : {};
 
@@ -366,18 +469,9 @@ function compactResultItem(it){
   const mediaType = it.mediaType || (type === 'image' ? 'image' : 'article');
   const sourceText = safeString(it.source).toLowerCase();
 
-  // Natural media:
-  // - only images already owned by this result
-  // - no borrowed/random images
-  // - remove duplicates
-  // - allow 1~3 distinct images when naturally present
-  // - naver_image API result is one image item, so avoid thumb+original duplicate display
-  let ownImages = compactImages([
-    it.thumbnail,
-    it.thumb,
-    it.image
-  ].concat(Array.isArray(it.imageSet) ? it.imageSet : [])).slice(0, 3);
+  let ownImages = naturalImagesForItem(it, 3);
 
+  // Naver image API item is usually one image result; thumbnail/original often look duplicated.
   if(sourceText.includes('naver_image') && ownImages.length > 1){
     ownImages = ownImages.slice(0, 1);
   }
@@ -860,7 +954,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         totalCandidates: collected.length,
         deduped: Math.max(0, collected.length - unique.length),
         richMedia: finalItems.filter(x => x && isRealImageUrl(x.thumbnail)).length,
-        imagePolicy: 'hybrid-initial-30-plus-render-page-own-og-image',
+        imagePolicy: 'hybrid-render-page-own-og-image-meaningful-filter',
         trace,
         externalSuppressed: !!externalOff,
         externalMode: mode,
@@ -1016,16 +1110,26 @@ async function enrichOwnImages(items, opts){
       const url = safeString(firstNonEmpty(it.url, it.link)).trim();
       const img = await fetchOwnOgImage(url);
 
-      if(img){
-        const nextImages = compactImages([img]);
-        list[idx] = Object.assign({}, it, {
-          thumbnail: nextImages[0],
-          thumb: nextImages[0],
-          image: nextImages[0],
-          imageSet: nextImages,
-          _ogImageEnriched: true
-        });
-        enriched += 1;
+      if(img && isMeaningfulImageForItem(img, it)){
+        const nextImages = naturalImagesForItem(Object.assign({}, it, {
+          thumbnail: img,
+          thumb: img,
+          image: img,
+          imageSet: [img]
+        }), 3);
+
+        if(nextImages.length){
+          list[idx] = Object.assign({}, it, {
+            thumbnail: nextImages[0],
+            thumb: nextImages[0],
+            image: nextImages[0],
+            imageSet: nextImages,
+            _ogImageEnriched: true
+          });
+          enriched += 1;
+        } else {
+          skipped += 1;
+        }
       } else {
         skipped += 1;
       }
@@ -1055,19 +1159,14 @@ async function enrichOwnImages(items, opts){
 function backfillVisuals(items){
   // Natural media only:
   // - do not borrow images from other results
-  // - keep only this result's own distinct images
+  // - keep only this result's own meaningful distinct images
   // - allow 1~3 images when naturally present
   // - none means none
   return (Array.isArray(items) ? items : []).map(it => {
     if(!it) return it;
 
     const sourceText = safeString(it.source).toLowerCase();
-
-    let ownImages = compactImages([
-      it.thumbnail,
-      it.thumb,
-      it.image
-    ].concat(Array.isArray(it.imageSet) ? it.imageSet : [])).slice(0, 3);
+    let ownImages = naturalImagesForItem(it, 3);
 
     if(sourceText.includes('naver_image') && ownImages.length > 1){
       ownImages = ownImages.slice(0, 1);
