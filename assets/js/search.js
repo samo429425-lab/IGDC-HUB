@@ -1,5 +1,5 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
-// PATCH: fast balanced vertical tabs v1 + right-side media cards
+// PATCH: fast balanced vertical tabs v1
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -81,83 +81,6 @@ function getTypeLabel(type){
   const hit = SEARCH_TABS.find(x => x[0] === normalizeSearchType(type));
   return hit ? hit[1] : '전체';
 }
-
-
-function ensureSearchCardMediaStyle(){
-  if (document.getElementById('maru-search-media-style')) return;
-
-  const style = document.createElement('style');
-  style.id = 'maru-search-media-style';
-  style.textContent = `
-    .maru-search-card-body {
-      display: flex;
-      gap: 14px;
-      align-items: flex-start;
-      width: 100%;
-    }
-    .maru-search-card-text {
-      min-width: 0;
-      flex: 1 1 auto;
-    }
-    .maru-card-media {
-      flex: 0 0 190px;
-      width: 190px;
-      max-width: 32%;
-      margin-top: 0 !important;
-      display: grid;
-      gap: 5px;
-      overflow: hidden;
-      align-self: flex-start;
-    }
-    .maru-card-media img {
-      display: block;
-      width: 100%;
-      height: 118px;
-      object-fit: cover;
-      border-radius: 8px;
-      background: #f8fafc;
-      border: 1px solid #eef2f7;
-    }
-    .maru-card-media[data-count="2"] {
-      grid-template-columns: 1fr 1fr;
-      flex-basis: 230px;
-      width: 230px;
-    }
-    .maru-card-media[data-count="2"] img {
-      height: 106px;
-    }
-    .maru-card-media[data-count="3"] {
-      grid-template-columns: 1.25fr 1fr;
-      grid-template-rows: 1fr 1fr;
-      flex-basis: 245px;
-      width: 245px;
-    }
-    .maru-card-media[data-count="3"] img:first-child {
-      grid-row: 1 / span 2;
-      height: 136px;
-    }
-    .maru-card-media[data-count="3"] img:not(:first-child) {
-      height: 65px;
-    }
-    @media (max-width: 720px) {
-      .maru-search-card-body {
-        display: block;
-      }
-      .maru-card-media {
-        width: 100%;
-        max-width: 100%;
-        margin-top: 10px !important;
-      }
-      .maru-card-media img {
-        height: 150px;
-      }
-    }
-  `;
-  document.head.appendChild(style);
-}
-
-ensureSearchCardMediaStyle();
-
 
 const type0 = normalizeSearchType(params.get('type') || 'all');
 activeType = type0;
@@ -742,11 +665,7 @@ async function fetchSearch(q, type = activeType){
       }
 
       const body = document.createElement('div');
-      body.className = 'maru-search-card-body';
       body.style.overflow = 'visible';
-
-      const textCol = document.createElement('div');
-      textCol.className = 'maru-search-card-text';
 
       const t = document.createElement('div');
       t.className = 'title';
@@ -790,7 +709,7 @@ async function fetchSearch(q, type = activeType){
       d.className = 'desc';
       d.textContent = (it.summary || it.description || '').trim();
 
-  textCol.appendChild(t);
+  body.appendChild(t);
 
 const risk = document.createElement('div');
 risk.style.fontSize = '11px';
@@ -800,19 +719,19 @@ risk.style.marginTop = '6px';
 if (it.riskLabel === '⚠️ high-risk') {
   risk.textContent = it.riskLabel;
   risk.style.color = 'red';
-  textCol.appendChild(risk);
+  body.appendChild(risk);
 
 } else if (it.riskLabel === '⚠️ medium-risk') {
   risk.textContent = it.riskLabel;
   risk.style.color = 'orange';
-  textCol.appendChild(risk);
+  body.appendChild(risk);
 
 }
 // 그 외는 아예 표시 안 함 (safe 제거)
 
-      textCol.appendChild(risk);
-      textCol.appendChild(l);
-      if (d.textContent) textCol.appendChild(d);
+      body.appendChild(risk);
+      body.appendChild(l);
+      if (d.textContent) body.appendChild(d);
 
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
@@ -833,18 +752,32 @@ if (it.riskLabel === '⚠️ high-risk') {
         it.media.preview &&
         (it.media.preview.mp4 || it.media.preview.webm || it.media.preview.poster);
 
-      body.appendChild(textCol);
-
       if (isRealThumb) {
         const mediaWrap = document.createElement('div');
         mediaWrap.className = 'maru-card-media';
-        mediaWrap.dataset.count = String(Math.min(naturalImages.length, 3));
+        mediaWrap.style.marginTop = '10px';
+        mediaWrap.style.display = 'grid';
+        mediaWrap.style.gap = '6px';
+        mediaWrap.style.gridTemplateColumns =
+          naturalImages.length >= 3 ? '1.4fr 1fr 1fr' :
+          naturalImages.length === 2 ? '1fr 1fr' :
+          '1fr';
+        mediaWrap.style.width = '100%';
+        mediaWrap.style.maxWidth = naturalImages.length === 1 ? '420px' : '760px';
+        mediaWrap.style.overflow = 'hidden';
 
         naturalImages.forEach((src) => {
           const img = document.createElement('img');
           img.src = src;
           img.loading = 'lazy';
           img.alt = '';
+          img.style.display = 'block';
+          img.style.width = '100%';
+          img.style.height = naturalImages.length === 1 ? '150px' : '135px';
+          img.style.objectFit = 'cover';
+          img.style.borderRadius = '8px';
+          img.style.background = '#f8fafc';
+          img.style.border = '1px solid #eef2f7';
           img.onerror = () => img.remove();
           mediaWrap.appendChild(img);
         });
