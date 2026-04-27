@@ -1,105 +1,98 @@
 /**
  * netlify/functions/maru-search.js
  * ------------------------------------------------------------
- * MARU SEARCH — CANONICAL CAPABILITY CORE (A1.4)
+ * MARU SEARCH — STABILIZED INTERNAL-FIRST + WEEKLY SETTLEMENT (A1.5.4)
  *
- * Goals (expand-only, no regressions):
- * - Keep existing API: exports.handler / exports.maruSearchDispatcher / items + results alias
- * - Add "Capability Layer" inside maru-search:
- *   - Canonical Result Object (thumbnail/mediaType/lang/source fields)
- *   - Resilience: timeouts, safe fetch, soft circuit-breaker (per function runtime)
- *   - Future-ready containers registry (web/snapshot/media/ai) without breaking current flow
- *
- * Notes:
- * - No hard dependency on external storage. "Snapshot/AI" containers are optional and safe-noop unless configured.
+ * Design goal:
+ * - Keep the working 313/314 API shape: handler / maruSearchDispatcher / runEngine / items+results
+ * - Keep the safe 314 parallel/allSettled pattern
+ * - Restore controlled wide scanning so search results do not stall around ~200
+ * - Preserve thumbnails/images/video/map cards for richer search cards
+ * - Do NOT pull collector/planetary in the default search path
  */
 
 'use strict';
 
-// ===== CORE ENGINE INTEGRATION (EXPAND ONLY) =====
 let Core = null;
-try { Core = require("./core"); } catch (e) { Core = null; }
+try { Core = require('./core'); } catch (e) { Core = null; }
 
-const VERSION = 'A1.5-runtime-routing';
-const DEFAULT_LIMIT = 10;
-const MAX_LIMIT = 1000;
+const fs = require('fs');
+const path = require('path');
 
-// ===== Query Cache (runtime memory) =====
-const QUERY_CACHE = new Map();
-const QUERY_CACHE_TTL = 10_000;
+const VERSION = 'A1.5.4-stabilized-internal-first-weekly-settlement';
+const DEFAULT_LIMIT = 1000;
+const MAX_LIMIT = 5000;
+const MIN_RESULT_TARGET = 500;
+const DEFAULT_SOFT_TIMEOUT_MS = 8500;
 
-function cacheKeyFor(q, limit, start, lang){
-  return [String(q||""), Number(limit||0), Number(start||0), String(lang||"")].join("|");
-}
-function getQueryCache(key){
-  const hit = QUERY_CACHE.get(key);
-  if(!hit) return null;
-  if ((Date.now() - hit.t) > QUERY_CACHE_TTL){
-    QUERY_CACHE.delete(key);
-    return null;
-  }
-  return hit.v;
-}
-function setQueryCache(key, value){
-  QUERY_CACHE.set(key, { t: Date.now(), v: value });
+function nowMs(){ return Date.now(); }
+
+function truthy(v){
+  const s = String(v == null ? '' : v).trim().toLowerCase();
+  return s === '1' || s === 'true' || s === 'yes' || s === 'on';
 }
 
-// ===== Resilience (lightweight; safe on Netlify) =====
-const CB = {
-  // name -> { fails, openUntil }
-  states: Object.create(null),
-  maxFails: 4,
-  coolDownMs: 25_000
-};
-
-function nowMs() { return Date.now(); }
-
-function cbCanRun(name){
-  const st = CB.states[name];
-  if (!st) return true;
-  if (!st.openUntil) return true;
-  return nowMs() > st.openUntil;
-}
-function cbOnSuccess(name){
-  const st = CB.states[name];
-  if (!st) return;
-  st.fails = 0;
-  st.openUntil = 0;
-}
-function cbOnFail(name){
-  const st = CB.states[name] || (CB.states[name] = { fails: 0, openUntil: 0 });
-  st.fails += 1;
-  if (st.fails >= CB.maxFails) {
-    st.openUntil = nowMs() + CB.coolDownMs;
-  }
+function explicitExternalRequested(qs){
+  qs = qs || {};
+  const external = String(qs.external == null ? '' : qs.external).trim().toLowerCase();
+  return ['1','true','yes','on','live','deep'].includes(external)
+    || truthy(qs.useExternalSources)
+    || truthy(qs.useExternal)
+    || truthy(qs.useLive)
+    || truthy(qs.live);
 }
 
-async function fetchWithTimeout(url, options, timeoutMs){
-  const ms = Math.max(500, Math.min(12_000, timeoutMs || 8_000));
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), ms);
-  try{
-    return await fetch(url, { ...(options || {}), signal: ctrl.signal });
-  } finally {
-    clearTimeout(t);
-  }
+function explicitExternalBlocked(qs){
+  qs = qs || {};
+  const external = String(qs.external == null ? '' : qs.external).trim().toLowerCase();
+  return external === 'off'
+    || external === '0'
+    || external === 'false'
+    || truthy(qs.noExternal)
+    || truthy(qs.disableExternal);
 }
 
+function safeString(v){ return String(v == null ? '' : v); }
+function stripHtml(s){ return safeString(s).replace(/<[^>]*>/g, ''); }
+
+function clampInt(v, d, min, max){
+  const n = parseInt(v, 10);
+  const x = Number.isFinite(n) ? n : d;
+  return Math.max(min, Math.min(max, x));
+}
+
+function normalizeBaseUrl(v){
+  const s = safeString(v).trim().replace(/\/+$/, '');
+  if(!s) return '';
+  return /^https?:\/\//i.test(s) ? s : 'https://' + s;
+}
 
 function eventBaseUrl(event){
   try{
     const headers = (event && event.headers) || {};
-    const host = headers['x-forwarded-host'] || headers['host'] || "";
-    const proto = headers['x-forwarded-proto'] || "https";
-    if(!host) return "";
-    return `${proto}://${host}`;
-  }catch(e){
-    return "";
+    const host = headers['x-forwarded-host'] || headers['host'] || '';
+    const proto = headers['x-forwarded-proto'] || 'https';
+    if(!host) return '';
+    return (proto + '://' + host).replace(/\/+$/, '');
+  }catch(e){ return ''; }
+}
+
+function resolveRuntimeBaseUrl(event){
+  return normalizeBaseUrl(process.env.DEPLOY_URL || process.env.URL || process.env.SITE_URL) || eventBaseUrl(event);
+}
+
+async function fetchWithTimeout(url, options, timeoutMs){
+  const ms = Math.max(500, Math.min(12000, timeoutMs || 6000));
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try{
+    return await fetch(url, Object.assign({}, options || {}, { signal: ctrl.signal }));
+  } finally {
+    clearTimeout(timer);
   }
 }
 
-// ===== HTTP helpers =====
-function ok(body) {
+function ok(body){
   return {
     statusCode: 200,
     headers: {
@@ -107,136 +100,37 @@ function ok(body) {
       'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
       'Vary': 'Accept-Language, Query-String',
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'content-type',
+      'Access-Control-Allow-Headers': 'content-type'
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(body)
   };
 }
 
-function fail(message, detail) {
+function fail(message, detail){
   return ok({
     status: 'error',
     engine: 'maru-search',
     version: VERSION,
     message,
-    detail: detail || null,
+    detail: detail || null
   });
 }
 
-function pickQ(event) {
-  const qs = event.queryStringParameters || {};
-  const q = String(qs.q || qs.query || '').trim();
-  const limitRaw = parseInt(qs.limit || DEFAULT_LIMIT, 10);
-  const limit = Math.min(Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : DEFAULT_LIMIT, MAX_LIMIT);
-
-  const startRaw = parseInt(qs.start || 1, 10);
-  const start = Number.isFinite(startRaw) && startRaw > 0 ? startRaw : 1;
-
-  // future: explicit mode selection
-  const mode = String(qs.mode || 'search').trim() || 'search';
-  const lang = String(qs.lang || '').trim() || null;
-
-  return { q, limit, start, mode, lang };
+function pickQ(event){
+  const qs = (event && event.queryStringParameters) || {};
+  const q = safeString(qs.q || qs.query || '').trim();
+  const limit = clampInt(qs.limit || qs.max || qs.count, DEFAULT_LIMIT, 1, MAX_LIMIT);
+  const start = clampInt(qs.start || 1, 1, 1, 1000);
+  const lang = safeString(qs.lang || qs.uiLang || qs.locale || '').trim() || null;
+  const deep = truthy(qs.deep) || String(qs.external || '').toLowerCase() === 'deep';
+  // Default is internal-only. External APIs run only when explicitly requested.
+  const externalOff = explicitExternalBlocked(qs) || !explicitExternalRequested(qs);
+  const noMedia = truthy(qs.noMedia) || truthy(qs.disableMedia);
+  return { q, limit, start, lang, deep, externalOff, noMedia, raw: qs };
 }
 
-function stripHtml(s) {
-  return String(s || '').replace(/<[^>]*>/g, '');
-}
-
-// ===== Canonical Result helpers (Capability Layer) =====
-function safeUrl(u){
-  const s = String(u || '').trim();
-  if (!s) return '';
-  return s;
-}
-
-function domainOf(url){
-  try { return new URL(url).hostname.replace(/^www\./,''); }
-  catch(e){ return ''; }
-}
-
-function faviconOf(url){
-  const d = domainOf(url);
-  if (!d) return '';
-  // Google S2 favicon service (works globally). Front can still override if needed.
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64`;
-}
-
-function detectLangFromTextFallback(text){
-  // VERY light heuristic; true language intelligence layer will replace this.
-  const t = String(text || '');
-  if (!t) return null;
-  if (/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(t)) return 'ko';
-  if (/[ぁ-ゟ゠-ヿ]/.test(t)) return 'ja';
-  if (/[一-龥]/.test(t)) return 'zh';
-  if (/[А-Яа-яЁё]/.test(t)) return 'ru';
-  return 'en';
-}
-
-function canonicalizeItem(it, query){
-  const url = safeUrl(it.url || it.link || '');
-  const title = String(it.title || '').trim();
-  const summary = String(it.summary || it.snippet || '').trim();
-
-  // Thumbnail priority:
-  // 1) explicit it.thumbnail / it.thumb
-  // 2) payload common keys
-  // 3) favicon fallback
-  const p = (it && typeof it.payload === 'object') ? it.payload : {};
-  const thumb =
-    String(it.thumbnail || it.thumb || p.thumb || p.thumbnail || p.image || p.image_url || p.og_image || '').trim() ||
-    faviconOf(url);
-
-  const lang =
-    it.lang ||
-    p.lang ||
-    detectLangFromTextFallback(title + ' ' + summary) ||
-    null;
-
-  const mediaType =
-    it.mediaType ||
-    p.mediaType ||
-    (it.type === 'image' ? 'image' : (it.type === 'video' ? 'video' : 'article'));
-
-  // stable-ish id (no hard storage). Prefer url, else title.
-  const id = it.id || url || title || ('item-' + Math.random().toString(16).slice(2));
-
-  return {
-    id,
-    type: it.type || 'web',
-    mediaType,
-    title,
-    summary,
-    url,
-    source: it.source || p.source || null,
-    lang,
-    thumbnail: thumb,
-    // existing score fields preserved
-    score: typeof it.score === 'number' ? it.score : 0.9,
-    payload: p
-  };
-}
-
-function toStandardItems(arr, source) {
-  return (Array.isArray(arr) ? arr : []).map((r, idx) => {
-    const item = {
-      id: r.link || r.url || r.title || `${source}-${idx}`,
-      type: r.type || 'web',
-      title: r.title || '',
-      summary: r.snippet || r.summary || '',
-      url: r.link || r.url || '',
-      source,
-      score: 0.9,
-      payload: r.payload || {}
-    };
-    return canonicalizeItem(item, null);
-  });
-}
-
-
-// ===== Runtime Routing / Dedup helpers =====
 function parseAcceptLanguage(header){
-  return String(header || '')
+  return safeString(header)
     .split(',')
     .map(x => x.trim().split(';')[0].toLowerCase())
     .filter(Boolean);
@@ -245,727 +139,746 @@ function parseAcceptLanguage(header){
 function detectRuntimeRegion(event, lang, q){
   try{
     const qs = (event && event.queryStringParameters) || {};
-    const forcedRegion = String(qs.region || qs.geo || '').trim().toUpperCase();
-    const forcedCountry = String(qs.country || '').trim().toUpperCase();
-    if (forcedRegion) return forcedRegion;
-    if (forcedCountry === 'KR') return 'KR';
-    if (forcedCountry === 'US') return 'US';
+    const forcedRegion = safeString(qs.region || qs.geo || '').trim().toUpperCase();
+    const forcedCountry = safeString(qs.country || '').trim().toUpperCase();
+    if(forcedRegion) return forcedRegion;
+    if(forcedCountry === 'KR') return 'KR';
+    if(forcedCountry === 'US') return 'US';
 
     const headers = (event && event.headers) || {};
-    const xfCountry = String(headers['x-country'] || headers['cf-ipcountry'] || headers['x-vercel-ip-country'] || '').trim().toUpperCase();
-    if (xfCountry === 'KR') return 'KR';
-    if (xfCountry === 'US') return 'US';
+    const xfCountry = safeString(headers['x-country'] || headers['cf-ipcountry'] || headers['x-vercel-ip-country'] || '').trim().toUpperCase();
+    if(xfCountry === 'KR') return 'KR';
+    if(xfCountry === 'US') return 'US';
 
-    const langs = [
-      String(lang || '').toLowerCase(),
-      ...parseAcceptLanguage(headers['accept-language'] || headers['Accept-Language'] || '')
-    ].filter(Boolean);
-
-    if (langs.some(x => x.startsWith('ko'))) return 'KR';
-    if (langs.some(x => x.startsWith('en-us'))) return 'US';
-    if (langs.some(x => x.startsWith('en'))) return 'US';
-
-    const text = String(q || '');
-    if (/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(text)) return 'KR';
+    const langs = [safeString(lang).toLowerCase()].concat(parseAcceptLanguage(headers['accept-language'] || headers['Accept-Language'] || '')).filter(Boolean);
+    if(langs.some(x => x.startsWith('ko'))) return 'KR';
+    if(langs.some(x => x.startsWith('en-us'))) return 'US';
+    if(langs.some(x => x.startsWith('en'))) return 'US';
+    if(/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(safeString(q))) return 'KR';
     return 'GLOBAL';
-  }catch(e){
-    return 'GLOBAL';
-  }
+  }catch(e){ return 'GLOBAL'; }
 }
 
 function sourceOrderForRegion(region){
-  switch(String(region || '').toUpperCase()){
-    case 'KR':
-      return ['search_bank', 'web_naver', 'web_google'];
-    case 'US':
-      return ['search_bank', 'web_google', 'web_naver'];
-    default:
-      return ['search_bank', 'web_google', 'web_naver'];
-  }
+  const r = safeString(region).toUpperCase();
+  if(r === 'KR') return ['search_bank','web_naver','web_google','web_bing','web_youtube','web_image','maps'];
+  return ['search_bank','web_google','web_bing','web_naver','web_youtube','web_image','maps'];
 }
 
-function dedupeCanonicalItems(items){
-  const seen = new Set();
+function domainOf(url){
+  try { return new URL(url).hostname.replace(/^www\./, ''); }
+  catch(e){ return ''; }
+}
+
+function faviconOf(url){
+  const d = domainOf(url);
+  return d ? 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(d) + '&sz=64' : '';
+}
+
+function isRealImageUrl(u){
+  const s = safeString(u).trim();
+  if(!s) return false;
+  const low = s.toLowerCase();
+  if(low.includes('google.com/s2/favicons') || low.includes('favicon') || low.endsWith('.ico')) return false;
+  if(low.startsWith('data:')) return true;
+  if(/^https?:\/\//i.test(s) || s.startsWith('/')) return true;
+  return false;
+}
+
+function firstNonEmpty(){
+  for(let i=0; i<arguments.length; i++){
+    const v = arguments[i];
+    if(v === undefined || v === null) continue;
+    const s = safeString(v).trim();
+    if(s) return v;
+  }
+  return '';
+}
+
+function detectLangFromTextFallback(text){
+  const t = safeString(text);
+  if(!t) return null;
+  if(/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(t)) return 'ko';
+  if(/[ぁ-ゟ゠-ヿ]/.test(t)) return 'ja';
+  if(/[一-龥]/.test(t)) return 'zh';
+  if(/[А-Яа-яЁё]/.test(t)) return 'ru';
+  return 'en';
+}
+
+function compactImages(arr){
   const out = [];
+  const seen = new Set();
+  (Array.isArray(arr) ? arr : []).forEach(v => {
+    const s = safeString(v).trim();
+    if(!s || seen.has(s)) return;
+    if(isRealImageUrl(s)){
+      seen.add(s);
+      out.push(s);
+    }
+  });
+  return out.slice(0, 6);
+}
 
-  for (const it of (Array.isArray(items) ? items : [])) {
-    const rawUrl = String(it?.url || '').trim();
-    const normUrl = rawUrl.toLowerCase();
+function mediaPoster(raw, payload){
+  const media = raw && raw.media;
+  const preview = media && media.preview;
+  return firstNonEmpty(
+    preview && preview.poster,
+    payload && payload.poster,
+    payload && payload.thumb,
+    payload && payload.thumbnail
+  );
+}
 
-    const isPlaceholderUrl =
-      !rawUrl ||
-      rawUrl === '#' ||
-      rawUrl === '/' ||
-      normUrl === 'javascript:void(0)' ||
-      normUrl.startsWith('javascript:');
+function canonicalizeItem(raw, query, sourceHint){
+  const it = (raw && typeof raw === 'object') ? raw : {};
+  const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+  const url = safeString(firstNonEmpty(it.url, it.link, it.href, p.url, p.link)).trim();
+  const title = safeString(firstNonEmpty(it.title, it.name, p.title, p.name, url)).trim();
+  const summary = safeString(firstNonEmpty(it.summary, it.snippet, it.description, p.summary, p.snippet, p.description)).trim();
 
-    const key = (
-      !isPlaceholderUrl
-        ? rawUrl
-        : (String(it?.id || '').trim() || String(it?.title || '').trim())
-    ).toLowerCase() || JSON.stringify(it || {}).toLowerCase();
+  const imageCandidates = compactImages([
+    it.thumbnail, it.thumb, it.image, it.image_url, it.og_image,
+    p.thumbnail, p.thumb, p.image, p.image_url, p.og_image,
+    mediaPoster(it, p)
+  ].concat(Array.isArray(it.imageSet) ? it.imageSet : []).concat(Array.isArray(p.imageSet) ? p.imageSet : []));
 
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    out.push(it);
+  const favicon = faviconOf(url);
+  const thumbnail = imageCandidates[0] || favicon;
+  const type = safeString(it.type || p.type || 'web') || 'web';
+  const mediaType = safeString(it.mediaType || p.mediaType || (type === 'image' ? 'image' : (type === 'video' ? 'video' : 'article')));
+  const source = firstNonEmpty(it.source, p.source, sourceHint, domainOf(url));
+  const id = safeString(firstNonEmpty(it.id, url, title, source + '-' + Math.random().toString(16).slice(2))).trim();
+  const tags = Array.isArray(it.tags) ? it.tags : (Array.isArray(p.tags) ? p.tags : []);
+
+  const out = Object.assign({}, it, {
+    id,
+    type,
+    mediaType,
+    title,
+    summary,
+    description: it.description !== undefined ? it.description : summary,
+    url,
+    link: firstNonEmpty(it.link, url),
+    source,
+    lang: it.lang || p.lang || detectLangFromTextFallback(title + ' ' + summary),
+    thumbnail,
+    thumb: firstNonEmpty(it.thumb, imageCandidates[0], thumbnail),
+    image: firstNonEmpty(it.image, imageCandidates[0], ''),
+    imageSet: imageCandidates,
+    media: it.media || p.media || undefined,
+    channel: it.channel || p.channel,
+    section: it.section || p.section,
+    page: it.page || p.page,
+    psom_key: it.psom_key || p.psom_key,
+    route: it.route || p.route,
+    bind: (it.bind && typeof it.bind === 'object') ? it.bind : p.bind,
+    tags,
+    score: typeof it.score === 'number' ? it.score : (typeof p.score === 'number' ? p.score : 0.9),
+    payload: p
+  });
+
+  if(!out.media && mediaType === 'video' && thumbnail){
+    out.media = { type: 'video', preview: { poster: thumbnail } };
   }
 
   return out;
 }
 
+function toStandardItems(arr, source){
+  return (Array.isArray(arr) ? arr : []).map((r, idx) => {
+    const raw = (r && typeof r === 'object') ? r : {};
+    const item = Object.assign({}, raw, {
+      id: firstNonEmpty(raw.id, raw.link, raw.url, raw.title, source + '-' + idx),
+      type: raw.type || 'web',
+      title: firstNonEmpty(raw.title, raw.name, ''),
+      summary: firstNonEmpty(raw.snippet, raw.summary, raw.description, ''),
+      url: firstNonEmpty(raw.url, raw.link, raw.href, ''),
+      link: firstNonEmpty(raw.link, raw.url, raw.href, ''),
+      source: raw.source || source,
+      score: typeof raw.score === 'number' ? raw.score : 0.9,
+      payload: raw.payload || {}
+    });
+    return canonicalizeItem(item, null, source);
+  });
+}
 
-// ===== SNAPSHOT DIRECT ACCESS =====
-const fs = require('fs');
+function dedupeCanonicalItems(items){
+  const seen = new Set();
+  const out = [];
+  for(const it of (Array.isArray(items) ? items : [])){
+    const rawUrl = safeString(it && (it.url || it.link)).trim();
+    const normUrl = rawUrl.toLowerCase();
+    const placeholder = !rawUrl || rawUrl === '#' || rawUrl === '/' || normUrl === 'javascript:void(0)' || normUrl.startsWith('javascript:');
+    const key = (placeholder ? (safeString(it && it.id).trim() || safeString(it && it.title).trim() + '|' + safeString(it && it.source).trim()) : rawUrl).toLowerCase();
+    if(!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(it);
+  }
+  return out;
+}
+
+function snapshotCandidates(){
+  return [
+    './search-bank.snapshot.json', './data/search-bank.snapshot.json', './snapshot.json',
+    path.join(process.cwd(), 'search-bank.snapshot.json'),
+    path.join(process.cwd(), 'data', 'search-bank.snapshot.json'),
+    path.join(__dirname || '.', 'search-bank.snapshot.json'),
+    path.join(__dirname || '.', 'data', 'search-bank.snapshot.json')
+  ];
+}
+
 function loadSnapshotLocal(q, limit){
   try{
-    const path = './snapshot.json';
-    if(!fs.existsSync(path)) return null;
-    const data = JSON.parse(fs.readFileSync(path,'utf-8'));
-    if(!Array.isArray(data)) return null;
-    return data
-      .filter(it => String(it.title||'').toLowerCase().includes(String(q).toLowerCase()))
-      .slice(0, limit);
+    let rows = null;
+    for(const p of snapshotCandidates()){
+      if(fs.existsSync(p)){
+        const data = JSON.parse(fs.readFileSync(p, 'utf-8'));
+        rows = Array.isArray(data) ? data : (Array.isArray(data.items) ? data.items : null);
+        if(rows) break;
+      }
+    }
+    if(!rows) return null;
+    const qq = safeString(q).trim().toLowerCase();
+    const tokens = qq.split(/\s+/).filter(Boolean);
+    const filtered = rows.filter(it => {
+      const h = [it.title, it.name, it.summary, it.description, it.url, it.link, it.channel, it.section, it.page, it.psom_key, it.route, Array.isArray(it.tags) ? it.tags.join(' ') : ''].join(' ').toLowerCase();
+      if(!qq) return true;
+      return h.includes(qq) || tokens.some(t => h.includes(t));
+    });
+    return filtered.slice(0, Math.min(limit || MAX_LIMIT, MAX_LIMIT));
+  }catch(e){ return null; }
+}
+
+function googleLikeSearchLinks(q){
+  const enc = encodeURIComponent(q);
+  return [
+    { title: '[News] ' + q, url: 'https://www.google.com/search?tbm=nws&q=' + enc, source: 'news', sourceType: 'search-link', provider: 'google-news-search-link', placeholder: true, generatedBy: 'maru-search', mediaType: 'article', score: 0.7 },
+    { title: '[Images] ' + q, url: 'https://www.google.com/search?tbm=isch&q=' + enc, source: 'images', sourceType: 'search-link', provider: 'google-image-search-link', placeholder: true, generatedBy: 'maru-search', mediaType: 'image', score: 0.68 },
+    { title: '[Videos] ' + q, url: 'https://www.youtube.com/results?search_query=' + enc, source: 'youtube', sourceType: 'search-link', provider: 'youtube-search-link', placeholder: true, generatedBy: 'maru-search', mediaType: 'video', score: 0.66 },
+    { title: '[Shopping] ' + q, url: 'https://www.google.com/search?tbm=shop&q=' + enc, source: 'shopping', sourceType: 'search-link', provider: 'google-shopping-search-link', placeholder: true, generatedBy: 'maru-search', mediaType: 'product', score: 0.6 }
+  ].map(x => canonicalizeItem(x, q, x.source));
+}
+
+function mapCards(q, region){
+  if(!q) return [];
+  const enc = encodeURIComponent(q);
+  const cards = [
+    { title: '[Map] ' + q + ' - Google Maps', url: 'https://www.google.com/maps/search/' + enc, source: 'google_maps', mediaType: 'map', type: 'map', summary: q + ' 지도 검색', score: 0.72 },
+    { title: '[Map] ' + q + ' - Naver Map', url: 'https://map.naver.com/p/search/' + enc, source: 'naver_map', mediaType: 'map', type: 'map', summary: q + ' 네이버 지도 검색', score: 0.71 }
+  ];
+  return cards.map(x => canonicalizeItem(x, q, x.source));
+}
+
+let SearchBankEngine = null;
+let SearchBankEngineLoaded = false;
+
+function getSearchBankEngine(){
+  if(SearchBankEngineLoaded) return SearchBankEngine;
+  SearchBankEngineLoaded = true;
+  try { SearchBankEngine = require('./search-bank-engine'); } catch(e) { SearchBankEngine = null; }
+  return SearchBankEngine;
+}
+
+async function callSearchBankEngineInternal(event, params){
+  try{
+    const engine = getSearchBankEngine();
+    if(!engine) return null;
+
+    const safeParams = Object.assign({}, params || {});
+
+    if(typeof engine.runEngine === 'function'){
+      return await engine.runEngine(event || {}, safeParams);
+    }
+
+    if(typeof engine.handler === 'function'){
+      const res = await engine.handler({
+        httpMethod: 'GET',
+        headers: (event && event.headers) || {},
+        queryStringParameters: safeParams
+      });
+      if(!res) return null;
+      if(typeof res === 'object' && Object.prototype.hasOwnProperty.call(res, 'body')){
+        try { return JSON.parse(res.body || '{}'); } catch(e) { return null; }
+      }
+      return res;
+    }
+
+    if(typeof engine === 'function'){
+      return await engine(event || {}, safeParams);
+    }
+
+    return null;
   }catch(e){
     return null;
   }
 }
 
-// ===== Containers (future-ready, but safe-noop unless active) =====
 const Containers = {
-
-  // ===== SEARCH BANK (유지, 안정화) =====
   search_bank: {
-    name: 'search_bank',
     async fetch(q, limit, offset, event){
       try{
-        const base = process.env.DEPLOY_URL
-          ? "https://" + process.env.DEPLOY_URL
-          : eventBaseUrl(event);
-
-        const url =
-          base +
-          '/.netlify/functions/search-bank-engine?q=' +
-          encodeURIComponent(q) +
-          '&limit=' + encodeURIComponent(limit) +
-          '&offset=' + encodeURIComponent(offset || 0);
-
-        const res = await fetchWithTimeout(url, null, 6000);
-        if(!res || !res.ok) return null;
-
-        const data = await res.json();
-        if(data && Array.isArray(data.items)){
-          return { source: 'search-bank', results: data.items };
-        }
+        const data = await callSearchBankEngineInternal(event, {
+          q: safeString(q),
+          limit: safeString(limit),
+          offset: safeString(offset || 0),
+          from: 'maru-search',
+          external: 'off',
+          noExternal: '1',
+          disableExternal: '1',
+          skipMaruSearch: '1',
+          noMaruSearch: '1',
+          skipCollector: '1',
+          skipPlanetary: '1',
+          noAnalytics: '1',
+          noRevenue: '1'
+        });
+        if(data && Array.isArray(data.items)) return { source: 'search-bank', results: data.items, total: typeof data.total === 'number' ? data.total : null };
         return null;
-      }catch{
-        return null;
-      }
+      }catch(e){ return null; }
     }
   },
-
-  // ===== NAVER =====
-  web_naver: {
-    name: 'web_naver',
-    async fetch(q, limit, start){
-      return naverSearch(q, limit, start);
-    }
-  },
-
-  // ===== GOOGLE =====
-  web_google: {
-    name: 'web_google',
-    async fetch(q, limit, start){
-      return googleSearch(q, limit, start);
-    }
-  },
-
-  // ===== BING (신규 핵심) =====
-  web_bing: {
-    name: 'web_bing',
-    async fetch(q, limit, start){
-      try{
-        const key = process.env.BING_API_KEY;
-        if (!key) return null;
-
-        const url = `https://api.bing.microsoft.com/v7.0/search?q=${encodeURIComponent(q)}&count=${limit}&offset=${start}`;
-
-        const res = await fetchWithTimeout(url, {
-          headers: { 'Ocp-Apim-Subscription-Key': key }
-        }, 8000);
-
-        if (!res.ok) return null;
-        const data = await res.json();
-
-        return {
-          source: 'bing',
-          results: (data.webPages?.value || []).map(it => ({
-            title: it.name,
-            link: it.url,
-            snippet: it.snippet,
-            type: 'web'
-          }))
-        };
-      }catch{
-        return null;
-      }
-    }
-  },
-
-// ===== BLOCK 398~624 (FULL VERIFIED / SAFE FIX APPLIED) =====
-// ✔ 전체 구조 유지
-// ✔ 기능 삭제 없음
-// ✔ 단일 문제만 수정: wikipedia fetch → timeout 적용
-
-// ===== WIKIPEDIA =====
-web_wikipedia: {
-  name: 'web_wikipedia',
-  async fetch(q){
-    try{
-      const url = 'https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(q);
-      const res = await fetchWithTimeout(url, null, 6000); // 🔧 FIX
-      if(!res.ok) return null;
-      const d = await res.json();
-
-      return {
-        source: 'wikipedia',
-        results: [{
-          title: d.title,
-          link: d.content_urls?.desktop?.page || '',
-          snippet: d.extract,
-          type: 'web'
-        }]
-      };
-    }catch{
-      return null;
-    }
-  }
-},
-
-// ===== SNAPSHOT =====
-snapshot: {
-  name: 'snapshot',
-  async fetch(q, limit){
-    const local = loadSnapshotLocal(q, limit);
-    if(local) return { source:'snapshot-local', results: local };
-    return null;
-  }
-},
-
-// ===== AI =====
-ai: {
-  name: 'ai',
-  async fetch(){
-    return null;
-  }
-},
-
-// ===== YOUTUBE =====
-web_youtube: {
-  name: 'web_youtube',
-  async fetch(q, limit){
-    try{
-      const key = process.env.YOUTUBE_API_KEY;
-      if(!key) return null;
-
-      const url =
-        'https://www.googleapis.com/youtube/v3/search' +
-        '?part=snippet&type=video&maxResults=' + Math.min(limit,50) +
-        '&q=' + encodeURIComponent(q) +
-        '&key=' + key;
-
-      const res = await fetchWithTimeout(url, null, 8000);
-      if(!res.ok) return null;
-
-      const data = await res.json();
-
-      return {
-        source: 'youtube',
-        results: (data.items || []).map(it => ({
-          title: it.snippet.title,
-          link: 'https://www.youtube.com/watch?v=' + it.id.videoId,
-          snippet: it.snippet.description,
-          type: 'video',
-          payload: {
-            thumb: it.snippet.thumbnails?.medium?.url
-          }
-        }))
-      };
-
-    }catch{
-      return null;
-    }
-  }
-},
-
-// ===== IMAGE =====
-web_image: {
-  name: 'web_image',
-  async fetch(q, limit){
-    try{
-      const key = process.env.GOOGLE_API_KEY;
-      const cx  = process.env.GOOGLE_CSE_ID;
-      if(!key || !cx) return null;
-
-      const url =
-        'https://www.googleapis.com/customsearch/v1' +
-        '?key=' + key +
-        '&cx=' + cx +
-        '&q=' + encodeURIComponent(q) +
-        '&searchType=image' +
-        '&num=' + Math.min(limit,10);
-
-      const res = await fetchWithTimeout(url, null, 8000);
-      if(!res.ok) return null;
-
-      const data = await res.json();
-
-      return {
-        source: 'google_image',
-        results: (data.items || []).map(it => ({
-          title: it.title,
-          link: it.link,
-          snippet: '',
-          type: 'image',
-          payload: {
-            thumb: it.link
-          }
-        }))
-      };
-
-    }catch{
-      return null;
-    }
-  }
-}
+  web_naver: { async fetch(q, limit, start){ return naverSearch(q, limit, start); } },
+  web_google: { async fetch(q, limit, start){ return googleSearch(q, limit, start); } },
+  web_bing: { async fetch(q, limit, start){ return bingSearch(q, limit, start); } },
+  web_youtube: { async fetch(q, limit){ return youtubeSearch(q, limit); } },
+  web_image: { async fetch(q, limit, start){ return googleImageSearch(q, limit, start); } },
+  snapshot: { async fetch(q, limit){ const local = loadSnapshotLocal(q, limit); return local ? { source: 'snapshot-local', results: local } : null; } }
 };
 
-// ===== ORCHESTRATOR =====
+function sourceCaps(opts){
+  const deep = !!opts.deep;
+  return {
+    searchBankPages: deep ? 50 : 50,
+    naverPages: deep ? 6 : 2,
+    googlePages: deep ? 6 : 2,
+    bingPages: deep ? 5 : 2,
+    imagePages: deep ? 5 : 1,
+    youtubeLimit: deep ? 50 : 20,
+    timeoutMs: deep ? 10500 : DEFAULT_SOFT_TIMEOUT_MS
+  };
+}
 
-async function orchestrateSearch({ event, q, limit, start, lang }) {
+function addBundle(bundle, fallbackSource, collected, sourceState){
+  if(!bundle || !Array.isArray(bundle.results) || !bundle.results.length) return 0;
+  if(!sourceState.used) sourceState.used = fallbackSource || bundle.source || 'multi';
+  const items = toStandardItems(bundle.results, bundle.source || fallbackSource || 'multi');
+  collected.push.apply(collected, items);
+  return items.length;
+}
 
-  limit = Math.min(limit || 50, 1000);
+async function orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, noMedia }){
+  limit = clampInt(limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
 
   globalThis.__MARU_CACHE = globalThis.__MARU_CACHE || new Map();
-  const cacheKey = q + "::" + limit + "::" + start + "::" + (lang || "");
-
+  const cacheKey = [q, limit, start, lang || '', deep ? 'deep' : 'normal', externalOff ? 'external-off' : 'external-on', noMedia ? 'no-media' : 'media'].join('::');
   const cached = globalThis.__MARU_CACHE.get(cacheKey);
-  if (cached && Date.now() - cached.t < 300000) {
-    return cached.v;
-  }
+  if(cached && Date.now() - cached.t < 300000) return cached.v;
 
+  const started = nowMs();
+  const caps = sourceCaps({ deep });
+  const deadline = started + caps.timeoutMs;
+  const timeLeft = () => Math.max(0, deadline - nowMs());
   const collected = [];
-  let sourceUsed = null;
-
+  const sourceState = { used: null };
+  const trace = [];
   const region = detectRuntimeRegion(event, lang, q);
-  const sourceOrder = sourceOrderForRegion(region);
+  const sourceRoute = sourceOrderForRegion(region);
+
+  function record(name, status, count){ trace.push({ name, status, count: count || 0 }); }
 
   async function pullFromSearchBank(){
+    let count = 0;
     let offset = 0;
-    while (offset < 1000) {
+    for(let i=0; i<caps.searchBankPages && timeLeft() > 900; i++){
       const b = await Containers.search_bank.fetch(q, 100, offset, event).catch(() => null);
-      if (!b?.results?.length) break;
-
-      sourceUsed = sourceUsed || 'search-bank';
-      collected.push(...toStandardItems(b.results, b.source || 'search-bank'));
-
-      if (b.results.length < 100) break;
+      const n = addBundle(b, 'search-bank', collected, sourceState);
+      count += n;
+      if(!b || !b.results || b.results.length < 100) break;
       offset += 100;
+      if(count >= Math.max(MIN_RESULT_TARGET, limit)) break;
+    }
+    record('search-bank', count ? 'ok' : 'empty', count);
+    if(!count){
+      const snap = await Containers.snapshot.fetch(q, Math.max(limit, MIN_RESULT_TARGET)).catch(() => null);
+      const n = addBundle(snap, 'snapshot-local', collected, sourceState);
+      if(n) record('snapshot-local', 'ok', n);
     }
   }
 
   async function pullFromNaver(){
+    if(externalOff) { record('naver', 'suppressed', 0); return; }
+    let count = 0;
     let pageStart = start || 1;
-    while (pageStart <= 1000) {
-      const n = await Containers.web_naver.fetch(q, 100, pageStart).catch(() => null);
-      if (!n?.results?.length) break;
-
-      sourceUsed = sourceUsed || 'naver';
-      collected.push(...toStandardItems(n.results, n.source || 'naver'));
-
-      if (n.results.length < 100) break;
+    for(let i=0; i<caps.naverPages && pageStart <= 1000 && timeLeft() > 1200; i++){
+      const naver = await Containers.web_naver.fetch(q, 100, pageStart).catch(() => null);
+      const n = addBundle(naver, 'naver', collected, sourceState);
+      count += n;
+      if(!naver || !naver.results || naver.results.length < 100) break;
       pageStart += 100;
     }
+    record('naver', count ? 'ok' : 'empty', count);
   }
 
   async function pullFromGoogle(){
+    if(externalOff) { record('google', 'suppressed', 0); return; }
+    let count = 0;
     let pageStart = start || 1;
-    while (pageStart <= 100) {
+    for(let i=0; i<caps.googlePages && pageStart <= 91 && timeLeft() > 1500; i++){
       const g = await Containers.web_google.fetch(q, 10, pageStart).catch(() => null);
-      if (!g?.results?.length) break;
-
-      sourceUsed = sourceUsed || 'google';
-      collected.push(...toStandardItems(g.results, g.source || 'google'));
-
-      if (g.results.length < 10) break;
+      const n = addBundle(g, 'google', collected, sourceState);
+      count += n;
+      if(!g || !g.results || g.results.length < 10) break;
       pageStart += 10;
     }
+    record('google', count ? 'ok' : 'empty', count);
   }
 
   async function pullFromBing(){
-    if (!Containers.web_bing) return;
+    if(externalOff) { record('bing', 'suppressed', 0); return; }
+    let count = 0;
     let offset = 0;
-    while (offset <= 450) {
+    for(let i=0; i<caps.bingPages && offset <= 450 && timeLeft() > 1200; i++){
       const b = await Containers.web_bing.fetch(q, 50, offset).catch(() => null);
-      if (!b?.results?.length) break;
-
-      sourceUsed = sourceUsed || 'bing';
-      collected.push(...toStandardItems(b.results, b.source || 'bing'));
-
-      if (b.results.length < 50) break;
+      const n = addBundle(b, 'bing', collected, sourceState);
+      count += n;
+      if(!b || !b.results || b.results.length < 50) break;
       offset += 50;
     }
-  }
-
-  async function pullFromWikipedia(){
-    if (!Containers.web_wikipedia) return;
-    const w = await Containers.web_wikipedia.fetch(q).catch(() => null);
-    if (w?.results?.length) {
-      collected.push(...toStandardItems(w.results, w.source || 'wikipedia'));
-    }
+    record('bing', count ? 'ok' : 'empty', count);
   }
 
   async function pullFromYouTube(){
-    if (!Containers.web_youtube) return;
-    const y = await Containers.web_youtube.fetch(q, 20).catch(() => null);
-    if (y?.results?.length) {
-      collected.push(...toStandardItems(y.results, y.source || 'youtube'));
-    }
+    if(externalOff || noMedia) { record('youtube', externalOff ? 'suppressed' : 'media-disabled', 0); return; }
+    const y = await Containers.web_youtube.fetch(q, caps.youtubeLimit).catch(() => null);
+    const n = addBundle(y, 'youtube', collected, sourceState);
+    record('youtube', n ? 'ok' : 'empty', n);
   }
 
   async function pullFromImage(){
-    if (!Containers.web_image) return;
-    const img = await Containers.web_image.fetch(q, 10).catch(() => null);
-    if (img?.results?.length) {
-      collected.push(...toStandardItems(img.results, img.source || 'google_image'));
+    if(externalOff || noMedia) { record('google_image', externalOff ? 'suppressed' : 'media-disabled', 0); return; }
+    let count = 0;
+    let pageStart = 1;
+    for(let i=0; i<caps.imagePages && pageStart <= 91 && timeLeft() > 1200; i++){
+      const img = await Containers.web_image.fetch(q, 10, pageStart).catch(() => null);
+      const n = addBundle(img, 'google_image', collected, sourceState);
+      count += n;
+      if(!img || !img.results || img.results.length < 10) break;
+      pageStart += 10;
     }
+    record('google_image', count ? 'ok' : 'empty', count);
   }
 
-  function fetchNews(){
-    return [{
-      title: `[News] ${q}`,
-      url: 'https://www.google.com/search?tbm=nws&q=' + encodeURIComponent(q),
-      source: 'news',
-      mediaType: 'article',
-      thumbnail: '',
-      score: 0.7
-    }];
+  await Promise.allSettled([
+    pullFromSearchBank(),
+    pullFromNaver(),
+    pullFromGoogle(),
+    pullFromBing(),
+    pullFromYouTube(),
+    pullFromImage()
+  ]);
+
+  // No external navigation/link cards in internal-only mode.
+  if(!externalOff){
+    collected.push.apply(collected, mapCards(q, region));
+    collected.push.apply(collected, googleLikeSearchLinks(q));
   }
 
-  function fetchShopping(){
-    return [{
-      title: `[Shopping] ${q}`,
-      url: 'https://www.google.com/search?tbm=shop&q=' + encodeURIComponent(q),
-      source: 'shopping',
-      mediaType: 'product',
-      thumbnail: '',
-      score: 0.6
-    }];
-  }
+  let unique = dedupeCanonicalItems(collected);
+  unique = backfillVisuals(unique);
+  unique = await applyCorePipeline(q, unique);
+  unique = applyServerSideBoosts(unique, { q, lang });
 
-await Promise.all([
-  pullFromSearchBank(),
-  pullFromNaver(),
-  pullFromGoogle(),
-  pullFromBing(),
-  pullFromYouTube(),
-  pullFromImage()
-]);
+  const finalTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
+  const finalItems = unique.slice(0, finalTarget);
 
-collected.push(...fetchNews(), ...fetchShopping());
+  const result = {
+    source: sourceState.used || (finalItems.length ? 'multi' : null),
+    route: sourceRoute,
+    sourceRoute,
+    region,
+    items: finalItems,
+    meta: {
+      count: finalItems.length,
+      requestedLimit: limit,
+      target: finalTarget,
+      totalCandidates: collected.length,
+      deduped: Math.max(0, collected.length - unique.length),
+      richMedia: finalItems.filter(x => x && isRealImageUrl(x.thumbnail)).length,
+      trace,
+      externalSuppressed: !!externalOff,
+      mediaDisabled: !!noMedia,
+      deep: !!deep,
+      elapsedMs: nowMs() - started
+    }
+  };
 
-const unique = dedupeCanonicalItems(collected);
-
-// 🔥 LIMIT 보정 (최소 500)
-const MIN_LIMIT = 500;
-const finalItems = unique.slice(0, Math.max(limit || 0, MIN_LIMIT));
-
-return {
-  source: sourceUsed || 'multi',
-  route: sourceOrder,
-  region,
-  items: finalItems
-};
+  globalThis.__MARU_CACHE.set(cacheKey, { t: Date.now(), v: result });
+  return result;
 }
 
-// ===== Source Fetchers =====
-async function naverSearch(q, limit, start) {
+function backfillVisuals(items){
+  const list = Array.isArray(items) ? items.slice() : [];
+  const imagePool = [];
+  list.forEach(it => {
+    if(!it) return;
+    if(Array.isArray(it.imageSet)) imagePool.push.apply(imagePool, it.imageSet.filter(isRealImageUrl));
+    if(it.mediaType === 'image' && isRealImageUrl(it.url)) imagePool.push(it.url);
+    if(isRealImageUrl(it.thumbnail)) imagePool.push(it.thumbnail);
+  });
+  const pool = compactImages(imagePool);
+  if(!pool.length) return list;
+  let cursor = 0;
+  return list.map((it, idx) => {
+    if(!it || isRealImageUrl(it.thumbnail)) return it;
+    const img = pool[cursor % pool.length];
+    cursor += 1;
+    const imageSet = compactImages([img].concat(Array.isArray(it.imageSet) ? it.imageSet : []).concat(pool.slice(0,3)));
+    return Object.assign({}, it, { thumbnail: img, thumb: it.thumb || img, image: it.image || img, imageSet });
+  });
+}
+
+async function naverSearch(q, limit, start){
   const id = process.env.NAVER_API_KEY;
   const secret = process.env.NAVER_CLIENT_SECRET;
-  if (!id || !secret) return null;
-
-  const url = `https://openapi.naver.com/v1/search/webkr.json?query=${encodeURIComponent(q)}&display=${Math.min(limit, 100)}&start=${start}`;
-  const res = await fetchWithTimeout(url, {
-    headers: {
-      'X-Naver-Client-Id': id,
-      'X-Naver-Client-Secret': secret,
-    },
-  }, 8500);
-
-  if (!res.ok) throw new Error(`NAVER_HTTP_${res.status}`);
+  if(!id || !secret) return null;
+  const url = 'https://openapi.naver.com/v1/search/webkr.json?query=' + encodeURIComponent(q) + '&display=' + Math.min(limit,100) + '&start=' + start;
+  const res = await fetchWithTimeout(url, { headers: { 'X-Naver-Client-Id': id, 'X-Naver-Client-Secret': secret } }, 3000);
+  if(!res.ok) throw new Error('NAVER_HTTP_' + res.status);
   const data = await res.json();
-
-  const items = Array.isArray(data.items) ? data.items : [];
-  const results = items.map(it => ({
-    title: stripHtml(it.title),
-    link: it.link || '',
-    snippet: stripHtml(it.description),
-    type: 'web',
-    payload: { source: 'naver' }
+  const results = (Array.isArray(data.items) ? data.items : []).map(it => ({
+    title: stripHtml(it.title), link: it.link || '', url: it.link || '', snippet: stripHtml(it.description), type: 'web', source: 'naver', payload: { source: 'naver' }
   }));
-
   return { source: 'naver', results };
 }
 
-async function googleSearch(q, limit, start) {
+async function googleSearch(q, limit, start){
   const key = process.env.GOOGLE_API_KEY;
-  const cx  = process.env.GOOGLE_CSE_ID;
-  if (!key || !cx) return null;
-
-  const base =
-    `https://www.googleapis.com/customsearch/v1` +
-    `?key=${encodeURIComponent(key)}` +
-    `&cx=${encodeURIComponent(cx)}` +
-    `&q=${encodeURIComponent(q)}` +
-    `&num=${Math.min(limit, 10)}` +
-    `&start=${start}` +
-    `&gl=us` +
-    `&lr=lang_en|lang_ko` +
-    `&sort=date`;
-
-  const webRes = await fetchWithTimeout(base, null, 8500)
-    .then(r => r.ok ? r.json() : null)
-    .catch(() => null);
-
-  const newsRes = await fetchWithTimeout(base + `&tbm=nws`, null, 8500)
-    .then(r => r.ok ? r.json() : null)
-    .catch(() => null);
-
+  const cx = process.env.GOOGLE_CSE_ID;
+  if(!key || !cx) return null;
+  const base = 'https://www.googleapis.com/customsearch/v1' +
+    '?key=' + encodeURIComponent(key) +
+    '&cx=' + encodeURIComponent(cx) +
+    '&q=' + encodeURIComponent(q) +
+    '&num=' + Math.min(limit,10) +
+    '&start=' + start +
+    '&gl=us' +
+    '&lr=lang_en|lang_ko';
+  const webRes = await fetchWithTimeout(base, null, 3000).then(r => r.ok ? r.json() : null).catch(() => null);
+  const newsRes = await fetchWithTimeout(base + '&sort=date', null, 3000).then(r => r.ok ? r.json() : null).catch(() => null);
   const mergeItems = (data, type, source) => {
     const items = Array.isArray(data && data.items) ? data.items : [];
     return items.map(it => {
       const pagemap = it.pagemap || {};
       const cseThumb = Array.isArray(pagemap.cse_thumbnail) ? pagemap.cse_thumbnail[0] : null;
-      const cseImg   = Array.isArray(pagemap.cse_image) ? pagemap.cse_image[0] : null;
-
-      return {
-        title: it.title || '',
-        link: it.link || '',
-        snippet: it.snippet || '',
-        type,
-        payload: {
-          source,
-          thumb: (cseThumb && cseThumb.src) || (cseImg && cseImg.src) || ''
-        }
-      };
+      const cseImg = Array.isArray(pagemap.cse_image) ? pagemap.cse_image[0] : null;
+      const img = (cseThumb && cseThumb.src) || (cseImg && cseImg.src) || '';
+      return { title: it.title || '', link: it.link || '', url: it.link || '', snippet: it.snippet || '', type, source, thumbnail: img, thumb: img, image: img, payload: { source, thumb: img, image: img } };
     });
   };
-
-  const results = [
-    ...mergeItems(webRes,  'web',  'google'),
-    ...mergeItems(newsRes, 'news', 'google_news')
-  ];
-
-  return { source: 'google+news', results };
+  return { source: 'google', results: mergeItems(webRes, 'web', 'google').concat(mergeItems(newsRes, 'news', 'google_news')) };
 }
 
-async function postJson(url, body){
-  try{
-    const res = await fetchWithTimeout(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body || {})
-    }, 8000);
-
-    if(!res || !res.ok) return null;
-
-    const text = await res.text();
-    try{
-      return JSON.parse(text);
-    }catch{
-      return { ok:true, raw:text };
-    }
-  }catch{
-    return null;
-  }
+async function bingSearch(q, limit, offset){
+  const key = process.env.BING_API_KEY;
+  if(!key) return null;
+  const url = 'https://api.bing.microsoft.com/v7.0/search?q=' + encodeURIComponent(q) + '&count=' + Math.min(limit,50) + '&offset=' + (offset || 0);
+  const res = await fetchWithTimeout(url, { headers: { 'Ocp-Apim-Subscription-Key': key } }, 3000);
+  if(!res.ok) return null;
+  const data = await res.json();
+  return { source: 'bing', results: ((data.webPages && data.webPages.value) || []).map(it => ({ title: it.name, link: it.url, url: it.url, snippet: it.snippet, type: 'web', source: 'bing' })) };
 }
 
-// ===== CORE PIPELINE APPLY (NON-DESTRUCTIVE) =====
-async function applyCorePipeline(query, items) {
-  const q = query;
+async function youtubeSearch(q, limit){
+  const key = process.env.YOUTUBE_API_KEY;
+  if(!key) return null;
+  const url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=' + Math.min(limit,50) + '&q=' + encodeURIComponent(q) + '&key=' + encodeURIComponent(key);
+  const res = await fetchWithTimeout(url, null, 3500);
+  if(!res.ok) return null;
+  const data = await res.json();
+  const results = (data.items || []).map(it => {
+    const thumb = (it.snippet && it.snippet.thumbnails && (it.snippet.thumbnails.high || it.snippet.thumbnails.medium || it.snippet.thumbnails.default) || {}).url || '';
+    const videoId = it.id && it.id.videoId;
+    return { title: (it.snippet && it.snippet.title) || '', link: videoId ? 'https://www.youtube.com/watch?v=' + videoId : '', url: videoId ? 'https://www.youtube.com/watch?v=' + videoId : '', snippet: (it.snippet && it.snippet.description) || '', type: 'video', mediaType: 'video', source: 'youtube', thumbnail: thumb, thumb, image: thumb, media: { type: 'video', preview: { poster: thumb } }, payload: { source: 'youtube', thumb } };
+  });
+  return { source: 'youtube', results };
+}
 
-  if (Core && typeof Core.validateQuery === "function") {
-    const v = Core.validateQuery(q);
-    // 🔧 절대 막지 않음 (완전 패스)
-  }
+async function googleImageSearch(q, limit, start){
+  const key = process.env.GOOGLE_API_KEY;
+  const cx = process.env.GOOGLE_CSE_ID;
+  if(!key || !cx) return null;
+  const url = 'https://www.googleapis.com/customsearch/v1' +
+    '?key=' + encodeURIComponent(key) +
+    '&cx=' + encodeURIComponent(cx) +
+    '&q=' + encodeURIComponent(q) +
+    '&searchType=image' +
+    '&num=' + Math.min(limit,10) +
+    '&start=' + (start || 1);
+  const res = await fetchWithTimeout(url, null, 3500);
+  if(!res.ok) return null;
+  const data = await res.json();
+  return { source: 'google_image', results: (data.items || []).map(it => ({ title: it.title || '', link: it.image && it.image.contextLink ? it.image.contextLink : it.link, url: it.image && it.image.contextLink ? it.image.contextLink : it.link, snippet: it.snippet || '', type: 'image', mediaType: 'image', source: 'google_image', thumbnail: it.link, thumb: it.link, image: it.link, imageSet: [it.link], payload: { source: 'google_image', thumb: it.link, image: it.link, contextLink: it.image && it.image.contextLink } })) };
+}
 
+async function applyCorePipeline(query, items){
   let results = Array.isArray(items) ? items : [];
-
-  if (Core && typeof Core.scoreItem === "function") {
-    results = results.map(it => ({
-      ...it,
-      _coreScore: Core.scoreItem(q, it)
-    })).sort((a, b) => (b._coreScore || 0) - (a._coreScore || 0));
+  if(Core && typeof Core.validateQuery === 'function'){
+    try { Core.validateQuery(query); } catch(e) {}
   }
-
-  return results.map(it => canonicalizeItem(it, q));
+  if(Core && typeof Core.scoreItem === 'function'){
+    results = results.map(it => Object.assign({}, it, { _coreScore: Core.scoreItem(query, it) })).sort((a,b) => (b._coreScore || 0) - (a._coreScore || 0));
+  }
+  return results.map(it => canonicalizeItem(it, query, it.source));
 }
 
-// ===== INTENT =====
 function detectIntent(q){
-  const text = String(q||"").toLowerCase();
-  if(text.includes("buy") || text.includes("price")) return "commerce";
-  if(text.includes("news")) return "news";
-  if(text.includes("video")) return "media";
-  return "general";
+  const text = safeString(q).toLowerCase();
+  if(text.includes('buy') || text.includes('price') || text.includes('shop')) return 'commerce';
+  if(text.includes('news') || text.includes('breaking')) return 'news';
+  if(text.includes('video') || text.includes('watch') || text.includes('영상')) return 'media';
+  if(text.includes('image') || text.includes('photo') || text.includes('사진')) return 'image';
+  return 'general';
 }
 
 function applyIntentBoost(items, q){
   const intent = detectIntent(q);
-  return items.map(it=>{
+  return (Array.isArray(items) ? items : []).map(it => {
     let boost = 0;
-    if(intent === "commerce" && (it.type==="product"||it.mediaType==="product")) boost+=2;
-    if(intent === "media" && (it.mediaType==="video"||it.mediaType==="image")) boost+=1.5;
-    if(intent === "news" && String(it.source||"").includes("news")) boost+=1.2;
-    return {...it, _intentBoost: boost, _finalScore:(it._finalScore||0)+boost};
-  }).sort((a,b)=>b._finalScore-a._finalScore);
+    if(intent === 'commerce' && (it.type === 'product' || it.mediaType === 'product')) boost += 2;
+    if((intent === 'media' || intent === 'image') && (it.mediaType === 'video' || it.mediaType === 'image')) boost += 1.5;
+    if(intent === 'news' && safeString(it.source).includes('news')) boost += 1.2;
+    return Object.assign({}, it, { _intentBoost: boost, _finalScore: (it._finalScore || 0) + boost });
+  }).sort((a,b) => (b._finalScore || 0) - (a._finalScore || 0));
 }
 
-// ===== SERVER BOOST =====
 function applyServerSideBoosts(items, opts){
-  const q = String((opts && opts.q) || "").toLowerCase();
-  const lang = String((opts && opts.lang) || "").toLowerCase();
-
+  const q = safeString(opts && opts.q).toLowerCase();
+  const lang = safeString(opts && opts.lang).toLowerCase();
   const ranked = (Array.isArray(items) ? items : []).map((it, idx) => {
     let bonus = 0;
-    const title = String(it.title || "").toLowerCase();
-    const summary = String(it.summary || "").toLowerCase();
-    const source = String(it.source || "").toLowerCase();
-
-    if (q && title.includes(q)) bonus += 3;
-    if (q && summary.includes(q)) bonus += 1.5;
-    if (lang && String(it.lang || "").toLowerCase() === lang) bonus += 1;
-    if (source.includes("search-bank")) bonus += 0.6;
-    if (it.mediaType === "image" || it.mediaType === "video") bonus += 0.25;
-
-    return { ...it, _bonus: bonus, _finalScore: Number(it._coreScore || it.score || 0) + bonus, _seq: idx };
+    const title = safeString(it.title).toLowerCase();
+    const summary = safeString(it.summary).toLowerCase();
+    const source = safeString(it.source).toLowerCase();
+    if(q && title.includes(q)) bonus += 3;
+    if(q && summary.includes(q)) bonus += 1.5;
+    if(lang && safeString(it.lang).toLowerCase() === lang) bonus += 1;
+    if(source.includes('search-bank')) bonus += 0.6;
+    if(it.mediaType === 'image' || it.mediaType === 'video') bonus += 0.8;
+    if(isRealImageUrl(it.thumbnail)) bonus += 0.5;
+    if(it.type === 'map' || it.mediaType === 'map') bonus += 0.3;
+    return Object.assign({}, it, { _bonus: bonus, _finalScore: Number(it._coreScore || it.score || 0) + bonus, _seq: idx });
   });
-
-  ranked.sort((a,b) => {
-    if ((b._finalScore || 0) !== (a._finalScore || 0)) return (b._finalScore || 0) - (a._finalScore || 0);
-    return (a._seq || 0) - (b._seq || 0);
-  });
-
+  ranked.sort((a,b) => ((b._finalScore || 0) - (a._finalScore || 0)) || ((a._seq || 0) - (b._seq || 0)));
   return applyIntentBoost(ranked, q);
 }
 
-// ===== ANALYTICS =====
-async function syncSearchAnalytics(event, q, items){
+async function postJson(url, body){
   try{
-    const base = eventBaseUrl(event);
-    if(!base) return null;
+    const res = await fetchWithTimeout(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }, 2500);
+    if(!res || !res.ok) return null;
+    const text = await res.text();
+    try { return JSON.parse(text); } catch(e) { return { ok: true, raw: text }; }
+  }catch(e){ return null; }
+}
 
-    return await postJson(`${base}/.netlify/functions/revenue-engine`, {
-      action: "track",
-      event: {
-        type: "search",
-        query: q,
-        count: Array.isArray(items) ? items.length : 0,
-        timestamp: Date.now()
+let RevenueEngine = null;
+let RevenueEngineLoaded = false;
+function getRevenueEngine(){
+  if(RevenueEngineLoaded) return RevenueEngine;
+  RevenueEngineLoaded = true;
+  try { RevenueEngine = require('./revenue-engine'); } catch(e) { RevenueEngine = null; }
+  return RevenueEngine;
+}
+
+async function callRevenueEngineInternal(body){
+  try{
+    const engine = getRevenueEngine();
+    if(!engine) return null;
+    if(typeof engine.runEngine === 'function') return await engine.runEngine(body || {});
+    if(typeof engine.dispatch === 'function') return await engine.dispatch(body || {});
+    if(typeof engine.handle === 'function') return await engine.handle(body || {});
+    if(typeof engine.handler === 'function'){
+      const res = await engine.handler({ httpMethod: 'POST', headers: { 'content-type': 'application/json' }, queryStringParameters: {}, body: JSON.stringify(body || {}) });
+      if(!res) return null;
+      if(typeof res === 'object' && Object.prototype.hasOwnProperty.call(res, 'body')){
+        try { return JSON.parse(res.body || '{}'); } catch(e) { return res; }
       }
-    });
-  }catch{
+      return res;
+    }
+    if(typeof engine === 'function') return await engine(body || {});
     return null;
-  }
+  }catch(e){ return null; }
+}
+
+async function syncSearchAnalytics(event, q, items){
+  return await callRevenueEngineInternal({ action: 'track', event: { type: 'search', query: q, count: Array.isArray(items) ? items.length : 0, timestamp: Date.now() } });
 }
 
 async function distributeRevenue(event, items){
-  try{
-    const base = eventBaseUrl(event);
-    if(!base) return null;
-
-    const queue = (Array.isArray(items) ? items : []).filter(item =>
-      item && (item.type === "ad" || item.type === "product" || item.mediaType === "product")
-    );
-
-    // 🔧 병렬 처리 (속도 개선)
-    await Promise.all(queue.map(item =>
-      postJson(`${base}/.netlify/functions/revenue-engine`, {
-        action: "distribute",
-        producerId: item.producerId || item.payload?.producerId || "global",
-        amount: item._finalScore || item._coreScore || item.score || 1
-      })
-    ));
-
-    return { ok:true, count: queue.length };
-  }catch{
-    return null;
-  }
+  const queue = (Array.isArray(items) ? items : []).filter(item => item && (item.type === 'ad' || item.type === 'product' || item.mediaType === 'product'));
+  await Promise.all(queue.map(item => callRevenueEngineInternal({ action: 'distribute', producerId: item.producerId || (item.payload && item.payload.producerId) || 'global', amount: item._finalScore || item._coreScore || item.score || 1 })));
+  return { ok: true, count: queue.length };
 }
 
-// ===== MAIN HANDLER =====
-exports.handler = async function (event) {
-  try {
-    const { q, limit, start, lang } = pickQ(event);
-
-    if (!q) {
-      return ok({
-        status: 'ok',
-        engine: 'maru-search',
-        version: VERSION,
-        query: q,
-        source: null,
-        items: [],
-        results: [],
-        meta: { count: 0, limit },
-      });
+exports.handler = async function(event){
+  try{
+    const picked = pickQ(event || {});
+    const { q, limit, start, lang, deep, externalOff, noMedia, raw } = picked;
+    if(!q){
+      return ok({ status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: null, items: [], results: [], meta: { count: 0, limit } });
     }
-
-    const base = await orchestrateSearch({ event, q, limit, start, lang });
-
-    // 🔧 비동기 처리 (응답 속도 확보)
-    syncSearchAnalytics(event, q, base.items);
-    distributeRevenue(event, base.items);
-
+    const base = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, noMedia });
+    // Search must not trigger heavy settlement/distribution by default.
+    // Analytics is opt-in for this endpoint; weekly settlement is handled by revenue/commerce engines.
+    const analyticsRequested = truthy(raw && (raw.analytics || raw.track || raw.enableAnalytics)) || truthy(process.env.MARU_SEARCH_ANALYTICS);
+    const realtimeRevenueRequested = truthy(raw && (raw.realtimeRevenue || raw.distributeNow || raw.enableRealtimeRevenue)) || truthy(process.env.MARU_SEARCH_REALTIME_REVENUE);
+    const analyticsOff = truthy(raw && (raw.noAnalytics || raw.disableAnalytics)) || !analyticsRequested;
+    const revenueOff = truthy(raw && (raw.noRevenue || raw.disableRevenue)) || !realtimeRevenueRequested;
+    if(!analyticsOff) syncSearchAnalytics(event, q, base.items).catch(() => null);
+    if(!revenueOff) distributeRevenue(event, base.items).catch(() => null);
     return ok({
-      status: 'ok',
-      engine: 'maru-search',
-      version: VERSION,
-      query: q,
-      source: base.source,
-      items: base.items,
-      results: base.items,
-      meta: { count: (base.items || []).length, limit, region: base.region || null, route: base.route || null },
+      status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: base.source,
+      items: base.items, results: base.items,
+      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1' })
     });
-
-  } catch (e) {
+  }catch(e){
     return fail('Search failed', String((e && e.message) || e));
   }
 };
 
-// ===== DISPATCHER =====
-async function maruSearchDispatcher(req = {}) {
-  const q = String(req.q || req.query || "").trim();
-  const limit = req.limit;
-  const lang = req.lang;
-
-  const res = await exports.handler({ queryStringParameters: { q, limit, lang } });
-
-  try {
-    return JSON.parse(res.body || "{}");
-  } catch {
-    return { status: "fail", message: "BAD_JSON" };
-  }
+async function maruSearchDispatcher(req){
+  req = req || {};
+  const res = await exports.handler({ queryStringParameters: {
+    q: safeString(req.q || req.query || '').trim(),
+    limit: req.limit,
+    start: req.start,
+    lang: req.lang || req.uiLang || req.locale,
+    deep: req.deep,
+    external: req.external,
+    noExternal: req.noExternal,
+    disableExternal: req.disableExternal,
+    noMedia: req.noMedia,
+    disableMedia: req.disableMedia,
+    noAnalytics: req.noAnalytics,
+    noRevenue: req.noRevenue
+  }, headers: req.headers || {} });
+  try { return JSON.parse(res.body || '{}'); }
+  catch(e){ return { status: 'fail', message: 'BAD_JSON' }; }
 }
 
 exports.maruSearchDispatcher = maruSearchDispatcher;
 
-// ===== ENGINE ENTRY =====
-exports.runEngine = async function(event = {}, params = {}){
+exports.runEngine = async function(event, params){
+  params = params || {};
   return await orchestrateSearch({
-    event,
-    q: String(params.q || params.query || "").trim(),
-    limit: params.limit,
-    start: params.start,
-    lang: params.lang || null
+    event: event || {},
+    q: safeString(params.q || params.query || '').trim(),
+    limit: params.limit || DEFAULT_LIMIT,
+    start: params.start || 1,
+    lang: params.lang || params.uiLang || params.locale || null,
+    deep: truthy(params.deep) || String(params.external || '').toLowerCase() === 'deep',
+    externalOff: explicitExternalBlocked(params) || !explicitExternalRequested(params),
+    noMedia: truthy(params.noMedia) || truthy(params.disableMedia)
   });
 };
