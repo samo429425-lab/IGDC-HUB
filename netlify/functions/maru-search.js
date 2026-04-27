@@ -19,7 +19,7 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.7-safe4-authority-media-gateway';
+const VERSION = 'A1.5.8-safe4-nostore-hardfix';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -108,7 +108,9 @@ function ok(body){
     statusCode: 200,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      'Expires': '0',
       'Vary': 'Accept-Language, Query-String',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Headers': 'content-type'
@@ -532,7 +534,7 @@ function sourceCaps(opts){
     googlePages: deep ? 3 : 2,
     bingPages: deep ? 3 : 2,
     imagePages: deep ? 2 : 1,
-    naverImagePages: deep ? 2 : 1,
+    naverImagePages: deep ? 3 : 2,
     youtubeLimit: deep ? 40 : 20,
     timeoutMs: deep ? 12000 : DEFAULT_SOFT_TIMEOUT_MS
   };
@@ -755,6 +757,15 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         externalMode: mode,
         externalGatewayUsed: !!shouldUseExternal,
         externalTriggerMin,
+        providerCaps: {
+          searchBankPages: caps.searchBankPages,
+          naverPages: caps.naverPages,
+          googlePages: caps.googlePages,
+          bingPages: caps.bingPages,
+          naverImagePages: caps.naverImagePages,
+          imagePages: caps.imagePages,
+          youtubeLimit: caps.youtubeLimit
+        },
         mediaDisabled: !!noMedia,
         deep: !!deep,
         responseBytes: responseSizeHint(finalItems),
@@ -812,7 +823,7 @@ async function naverImageSearch(q, limit, start){
   const secret = process.env.NAVER_CLIENT_SECRET;
   if(!id || !secret) return null;
 
-  const url = 'https://openapi.naver.com/v1/search/image?query=' +
+  const url = 'https://openapi.naver.com/v1/search/image.json?query=' +
     encodeURIComponent(q) +
     '&display=' + Math.min(limit, 100) +
     '&start=' + (start || 1) +
