@@ -1,7 +1,7 @@
 /**
  * netlify/functions/maru-search.js
  * ------------------------------------------------------------
- * MARU SEARCH — SAFE PARALLEL WIDE + RICH MEDIA (A1.5.3)
+ * MARU SEARCH — STABILIZED INTERNAL-FIRST + WEEKLY SETTLEMENT (A1.5.4)
  *
  * Design goal:
  * - Keep the working 313/314 API shape: handler / maruSearchDispatcher / runEngine / items+results
@@ -19,18 +19,48 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.3-safe-parallel-wide-rich';
+const VERSION = 'A1.5.5-gateway-controlled-external';
 const DEFAULT_LIMIT = 1000;
-const MAX_LIMIT = 1000;
+const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
 const DEFAULT_SOFT_TIMEOUT_MS = 8500;
-const SEARCH_BANK_INTERNAL_TIMEOUT_MS = 4500;
+
+// MARU gateway policy:
+// - Internal search-bank first.
+// - External APIs are not globally blocked; they are allowed only through maru-search,
+//   after internal results are insufficient or when explicitly requested.
+// - Same query calls are cached and in-flight de-duplicated to prevent recursive / repeated bursts.
+const MARU_GATEWAY_CACHE_TTL_MS = 5 * 60 * 1000;
+const MARU_INFLIGHT_TTL_MS = 30 * 1000;
+const DEFAULT_EXTERNAL_TRIGGER_MIN = 60;
+const MAX_SEARCH_BANK_PAGES_NORMAL = 14;
+const MAX_SEARCH_BANK_PAGES_DEEP = 30;
 
 function nowMs(){ return Date.now(); }
 
 function truthy(v){
   const s = String(v == null ? '' : v).trim().toLowerCase();
   return s === '1' || s === 'true' || s === 'yes' || s === 'on';
+}
+
+function explicitExternalRequested(qs){
+  qs = qs || {};
+  const external = String(qs.external == null ? '' : qs.external).trim().toLowerCase();
+  return ['1','true','yes','on','live','deep'].includes(external)
+    || truthy(qs.useExternalSources)
+    || truthy(qs.useExternal)
+    || truthy(qs.useLive)
+    || truthy(qs.live);
+}
+
+function explicitExternalBlocked(qs){
+  qs = qs || {};
+  const external = String(qs.external == null ? '' : qs.external).trim().toLowerCase();
+  return external === 'off'
+    || external === '0'
+    || external === 'false'
+    || truthy(qs.noExternal)
+    || truthy(qs.disableExternal);
 }
 
 function safeString(v){ return String(v == null ? '' : v); }
@@ -73,21 +103,6 @@ async function fetchWithTimeout(url, options, timeoutMs){
   }
 }
 
-async function withSoftTimeout(promise, timeoutMs, fallback){
-  const ms = Math.max(250, Math.min(12000, timeoutMs || 2500));
-  let timer = null;
-  try{
-    return await Promise.race([
-      Promise.resolve(promise),
-      new Promise(resolve => {
-        timer = setTimeout(() => resolve(fallback), ms);
-      })
-    ]);
-  } finally {
-    if(timer) clearTimeout(timer);
-  }
-}
-
 function ok(body){
   return {
     statusCode: 200,
@@ -119,9 +134,16 @@ function pickQ(event){
   const start = clampInt(qs.start || 1, 1, 1, 1000);
   const lang = safeString(qs.lang || qs.uiLang || qs.locale || '').trim() || null;
   const deep = truthy(qs.deep) || String(qs.external || '').toLowerCase() === 'deep';
-  const externalOff = String(qs.external || '').toLowerCase() === 'off' || truthy(qs.noExternal) || truthy(qs.disableExternal);
+
+  const externalBlocked = explicitExternalBlocked(qs);
+  const externalRequested = explicitExternalRequested(qs);
+
+  // 외부 API 무조건 차단이 아님.
+  // 기본은 auto: 내부 search-bank/snapshot 먼저 확인하고, 부족할 때만 maru-search가 단일 창구로 통제 호출.
+  const externalMode = externalBlocked ? 'off' : (externalRequested || deep ? 'force' : 'auto');
+  const externalOff = externalMode === 'off';
   const noMedia = truthy(qs.noMedia) || truthy(qs.disableMedia);
-  return { q, limit, start, lang, deep, externalOff, noMedia, raw: qs };
+  return { q, limit, start, lang, deep, externalOff, externalMode, noMedia, raw: qs };
 }
 
 function parseAcceptLanguage(header){
@@ -313,6 +335,52 @@ function dedupeCanonicalItems(items){
   return out;
 }
 
+function compactResultItem(it){
+  it = (it && typeof it === 'object') ? it : {};
+  const out = {
+    id: safeString(firstNonEmpty(it.id, it.url, it.link, it.title)).trim(),
+    type: it.type || 'web',
+    mediaType: it.mediaType || 'article',
+    title: safeString(it.title).trim(),
+    summary: safeString(firstNonEmpty(it.summary, it.snippet, it.description)).trim(),
+    description: safeString(firstNonEmpty(it.description, it.summary, it.snippet)).trim(),
+    url: safeString(firstNonEmpty(it.url, it.link, it.href)).trim(),
+    link: safeString(firstNonEmpty(it.link, it.url, it.href)).trim(),
+    source: it.source || null,
+    lang: it.lang || null,
+    thumbnail: safeString(firstNonEmpty(it.thumbnail, it.thumb, it.image)).trim(),
+    thumb: safeString(firstNonEmpty(it.thumb, it.thumbnail, it.image)).trim(),
+    image: safeString(firstNonEmpty(it.image, it.thumbnail, it.thumb)).trim(),
+    imageSet: compactImages(Array.isArray(it.imageSet) ? it.imageSet : [it.image, it.thumbnail, it.thumb]),
+    media: it.media || undefined,
+    channel: it.channel || undefined,
+    section: it.section || undefined,
+    page: it.page || undefined,
+    psom_key: it.psom_key || undefined,
+    route: it.route || undefined,
+    bind: it.bind && typeof it.bind === 'object' ? it.bind : undefined,
+    tags: Array.isArray(it.tags) ? it.tags.slice(0, 12) : [],
+    score: typeof it.score === 'number' ? it.score : undefined,
+    _coreScore: typeof it._coreScore === 'number' ? it._coreScore : undefined,
+    _bonus: typeof it._bonus === 'number' ? it._bonus : undefined,
+    _finalScore: typeof it._finalScore === 'number' ? it._finalScore : undefined,
+    riskLabel: it.riskLabel || undefined
+  };
+  if(!out.thumbnail && out.url) out.thumbnail = faviconOf(out.url);
+  if(!out.thumb) out.thumb = out.thumbnail;
+  Object.keys(out).forEach(k => out[k] === undefined && delete out[k]);
+  return out;
+}
+
+function responseSizeHint(items){
+  try { return Buffer.byteLength(JSON.stringify(items || []), 'utf8'); }
+  catch(e){ return 0; }
+}
+
+function gatewayExternalTriggerCount(){
+  return clampInt(process.env.MARU_EXTERNAL_TRIGGER_MIN, DEFAULT_EXTERNAL_TRIGGER_MIN, 0, 1000);
+}
+
 function snapshotCandidates(){
   return [
     './search-bank.snapshot.json', './data/search-bank.snapshot.json', './snapshot.json',
@@ -367,6 +435,7 @@ function mapCards(q, region){
 
 let SearchBankEngine = null;
 let SearchBankEngineLoaded = false;
+
 function getSearchBankEngine(){
   if(SearchBankEngineLoaded) return SearchBankEngine;
   SearchBankEngineLoaded = true;
@@ -379,38 +448,18 @@ async function callSearchBankEngineInternal(event, params){
     const engine = getSearchBankEngine();
     if(!engine) return null;
 
-    const safeParams = Object.assign({}, params || {}, {
-      from: 'maru-search',
-      skipMaruSearch: '1',
-      noMaruSearch: '1',
-      skipSearchBank: '',
-      noSearchBank: '',
-      external: 'off',
-      noExternal: '1',
-      disableExternal: '1',
-      live: 'off',
-      useLive: 'off',
-      useExternalSources: '0',
-      collector: 'off',
-      useCollector: '0',
-      planetary: 'off',
-      usePlanetary: '0',
-      noAnalytics: '1',
-      noRevenue: '1'
-    });
-
-    const timeoutMs = clampInt((params && params.timeoutMs) || SEARCH_BANK_INTERNAL_TIMEOUT_MS, SEARCH_BANK_INTERNAL_TIMEOUT_MS, 500, 5000);
+    const safeParams = Object.assign({}, params || {});
 
     if(typeof engine.runEngine === 'function'){
-      return await withSoftTimeout(engine.runEngine(event || {}, safeParams), timeoutMs, null);
+      return await engine.runEngine(event || {}, safeParams);
     }
 
     if(typeof engine.handler === 'function'){
-      const res = await withSoftTimeout(engine.handler({
+      const res = await engine.handler({
         httpMethod: 'GET',
         headers: (event && event.headers) || {},
         queryStringParameters: safeParams
-      }), timeoutMs, null);
+      });
       if(!res) return null;
       if(typeof res === 'object' && Object.prototype.hasOwnProperty.call(res, 'body')){
         try { return JSON.parse(res.body || '{}'); } catch(e) { return null; }
@@ -419,7 +468,7 @@ async function callSearchBankEngineInternal(event, params){
     }
 
     if(typeof engine === 'function'){
-      return await withSoftTimeout(engine(event || {}, safeParams), timeoutMs, null);
+      return await engine(event || {}, safeParams);
     }
 
     return null;
@@ -437,12 +486,28 @@ const Containers = {
           query: safeString(q),
           limit: safeString(limit),
           offset: safeString(offset || 0),
-          timeoutMs: SEARCH_BANK_INTERNAL_TIMEOUT_MS
+          from: 'maru-search',
+          // recursion guard: search-bank-engine must not bounce back into maru-search.
+          external: 'off',
+          noExternal: '1',
+          disableExternal: '1',
+          skipMaruSearch: '1',
+          noMaruSearch: '1',
+          skipCollector: '1',
+          skipPlanetary: '1',
+          noAnalytics: '1',
+          noRevenue: '1'
         });
-        if(data && Array.isArray(data.items)) return { source: 'search-bank', results: data.items, total: typeof data.total === 'number' ? data.total : null };
-        if(data && data.data && Array.isArray(data.data.items)) return { source: 'search-bank', results: data.data.items, total: typeof data.total === 'number' ? data.total : null };
-        if(data && data.baseResult && Array.isArray(data.baseResult.items)) return { source: 'search-bank', results: data.baseResult.items, total: typeof data.total === 'number' ? data.total : null };
-        if(data && data.baseResult && data.baseResult.data && Array.isArray(data.baseResult.data.items)) return { source: 'search-bank', results: data.baseResult.data.items, total: typeof data.total === 'number' ? data.total : null };
+        const root = data && data.data && Array.isArray(data.data.items) ? data.data : data;
+        const base = data && data.baseResult ? data.baseResult : root;
+        const baseData = base && base.data && Array.isArray(base.data.items) ? base.data : base;
+        const results =
+          (root && Array.isArray(root.items) && root.items) ||
+          (root && Array.isArray(root.results) && root.results) ||
+          (baseData && Array.isArray(baseData.items) && baseData.items) ||
+          (baseData && Array.isArray(baseData.results) && baseData.results) ||
+          [];
+        if(results.length) return { source: 'search-bank', results, total: typeof (root && root.total) === 'number' ? root.total : null };
         return null;
       }catch(e){ return null; }
     }
@@ -458,13 +523,14 @@ const Containers = {
 function sourceCaps(opts){
   const deep = !!opts.deep;
   return {
-    searchBankPages: deep ? 14 : 10,
-    naverPages: deep ? 6 : 4,
-    googlePages: deep ? 6 : 3,
-    bingPages: deep ? 5 : 3,
-    imagePages: deep ? 5 : 3,
-    youtubeLimit: deep ? 50 : 35,
-    timeoutMs: deep ? 10500 : DEFAULT_SOFT_TIMEOUT_MS
+    searchBankPages: deep ? MAX_SEARCH_BANK_PAGES_DEEP : MAX_SEARCH_BANK_PAGES_NORMAL,
+    // External APIs are controlled by maru-search gateway only; no unbounded loops.
+    naverPages: deep ? 3 : 2,
+    googlePages: deep ? 3 : 2,
+    bingPages: deep ? 3 : 2,
+    imagePages: deep ? 2 : 1,
+    youtubeLimit: deep ? 40 : 20,
+    timeoutMs: deep ? 11000 : DEFAULT_SOFT_TIMEOUT_MS
   };
 }
 
@@ -476,151 +542,186 @@ function addBundle(bundle, fallbackSource, collected, sourceState){
   return items.length;
 }
 
-async function orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, noMedia }){
+async function orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia }){
   limit = clampInt(limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
 
   globalThis.__MARU_CACHE = globalThis.__MARU_CACHE || new Map();
-  const cacheKey = [q, limit, start, lang || '', deep ? 'deep' : 'normal', externalOff ? 'external-off' : 'external-on', noMedia ? 'no-media' : 'media'].join('::');
+  globalThis.__MARU_INFLIGHT = globalThis.__MARU_INFLIGHT || new Map();
+
+  const mode = externalMode || (externalOff ? 'off' : 'auto');
+  const cacheKey = [q, limit, start, lang || '', deep ? 'deep' : 'normal', mode, noMedia ? 'no-media' : 'media'].join('::');
   const cached = globalThis.__MARU_CACHE.get(cacheKey);
-  if(cached && Date.now() - cached.t < 300000) return cached.v;
+  if(cached && Date.now() - cached.t < MARU_GATEWAY_CACHE_TTL_MS) return cached.v;
 
-  const started = nowMs();
-  const caps = sourceCaps({ deep });
-  const deadline = started + caps.timeoutMs;
-  const timeLeft = () => Math.max(0, deadline - nowMs());
-  const collected = [];
-  const sourceState = { used: null };
-  const trace = [];
-  const region = detectRuntimeRegion(event, lang, q);
-  const sourceRoute = sourceOrderForRegion(region);
+  const inflight = globalThis.__MARU_INFLIGHT.get(cacheKey);
+  if(inflight && Date.now() - inflight.t < MARU_INFLIGHT_TTL_MS) return await inflight.p;
 
-  function record(name, status, count){ trace.push({ name, status, count: count || 0 }); }
+  const work = (async () => {
+    const started = nowMs();
+    const caps = sourceCaps({ deep });
+    const deadline = started + caps.timeoutMs;
+    const timeLeft = () => Math.max(0, deadline - nowMs());
+    const collected = [];
+    const sourceState = { used: null };
+    const trace = [];
+    const region = detectRuntimeRegion(event, lang, q);
+    const sourceRoute = sourceOrderForRegion(region);
+    const externalTriggerMin = gatewayExternalTriggerCount();
 
-  async function pullFromSearchBank(){
-    let count = 0;
-    let offset = 0;
-    for(let i=0; i<caps.searchBankPages && timeLeft() > 900; i++){
-      const b = await Containers.search_bank.fetch(q, 100, offset, event).catch(() => null);
-      const n = addBundle(b, 'search-bank', collected, sourceState);
-      count += n;
-      if(!b || !b.results || b.results.length < 100) break;
-      offset += 100;
-      if(count >= Math.max(MIN_RESULT_TARGET, limit)) break;
+    function record(name, status, count, extra){ trace.push(Object.assign({ name, status, count: count || 0 }, extra || {})); }
+
+    async function pullFromSearchBank(){
+      let count = 0;
+      let offset = 0;
+      const pageSigs = new Set();
+      const target = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
+      const maxPages = Math.min(caps.searchBankPages, Math.ceil(target / 100) + 3);
+      for(let i=0; i<maxPages && timeLeft() > 900; i++){
+        const b = await Containers.search_bank.fetch(q, 100, offset, event).catch(() => null);
+        if(!b || !b.results || !b.results.length) break;
+        const sig = b.results.slice(0, 3).map(x => safeString(x && (x.id || x.url || x.link || x.title))).join('|') + '::' +
+          b.results.slice(-3).map(x => safeString(x && (x.id || x.url || x.link || x.title))).join('|');
+        if(sig && pageSigs.has(sig)) { record('search-bank', 'duplicate-page-break', count, { offset }); break; }
+        pageSigs.add(sig);
+        const n = addBundle(b, 'search-bank', collected, sourceState);
+        count += n;
+        if(b.results.length < 100) break;
+        offset += 100;
+        if(count >= target) break;
+      }
+      record('search-bank', count ? 'ok' : 'empty', count);
+      if(!count){
+        const snap = await Containers.snapshot.fetch(q, Math.max(limit, MIN_RESULT_TARGET)).catch(() => null);
+        const n = addBundle(snap, 'snapshot-local', collected, sourceState);
+        if(n) record('snapshot-local', 'ok', n);
+        return n || 0;
+      }
+      return count;
     }
-    record('search-bank', count ? 'ok' : 'empty', count);
-    if(!count){
-      const snap = await Containers.snapshot.fetch(q, Math.max(limit, MIN_RESULT_TARGET)).catch(() => null);
-      const n = addBundle(snap, 'snapshot-local', collected, sourceState);
-      if(n) record('snapshot-local', 'ok', n);
+
+    async function pullFromNaver(){
+      let count = 0;
+      let pageStart = start || 1;
+      for(let i=0; i<caps.naverPages && pageStart <= 1000 && timeLeft() > 1200; i++){
+        const naver = await Containers.web_naver.fetch(q, 100, pageStart).catch(() => null);
+        const n = addBundle(naver, 'naver', collected, sourceState);
+        count += n;
+        if(!naver || !naver.results || naver.results.length < 100) break;
+        pageStart += 100;
+      }
+      record('naver', count ? 'ok' : 'empty', count);
+      return count;
     }
-  }
 
-  async function pullFromNaver(){
-    if(externalOff) { record('naver', 'suppressed', 0); return; }
-    let count = 0;
-    let pageStart = start || 1;
-    for(let i=0; i<caps.naverPages && pageStart <= 1000 && timeLeft() > 1200; i++){
-      const naver = await Containers.web_naver.fetch(q, 100, pageStart).catch(() => null);
-      const n = addBundle(naver, 'naver', collected, sourceState);
-      count += n;
-      if(!naver || !naver.results || naver.results.length < 100) break;
-      pageStart += 100;
+    async function pullFromGoogle(){
+      let count = 0;
+      let pageStart = start || 1;
+      for(let i=0; i<caps.googlePages && pageStart <= 91 && timeLeft() > 1500; i++){
+        const g = await Containers.web_google.fetch(q, 10, pageStart).catch(() => null);
+        const n = addBundle(g, 'google', collected, sourceState);
+        count += n;
+        if(!g || !g.results || g.results.length < 10) break;
+        pageStart += 10;
+      }
+      record('google', count ? 'ok' : 'empty', count);
+      return count;
     }
-    record('naver', count ? 'ok' : 'empty', count);
-  }
 
-  async function pullFromGoogle(){
-    if(externalOff) { record('google', 'suppressed', 0); return; }
-    let count = 0;
-    let pageStart = start || 1;
-    for(let i=0; i<caps.googlePages && pageStart <= 91 && timeLeft() > 1500; i++){
-      const g = await Containers.web_google.fetch(q, 10, pageStart).catch(() => null);
-      const n = addBundle(g, 'google', collected, sourceState);
-      count += n;
-      if(!g || !g.results || g.results.length < 10) break;
-      pageStart += 10;
+    async function pullFromBing(){
+      let count = 0;
+      let offset = 0;
+      for(let i=0; i<caps.bingPages && offset <= 450 && timeLeft() > 1200; i++){
+        const b = await Containers.web_bing.fetch(q, 50, offset).catch(() => null);
+        const n = addBundle(b, 'bing', collected, sourceState);
+        count += n;
+        if(!b || !b.results || b.results.length < 50) break;
+        offset += 50;
+      }
+      record('bing', count ? 'ok' : 'empty', count);
+      return count;
     }
-    record('google', count ? 'ok' : 'empty', count);
-  }
 
-  async function pullFromBing(){
-    if(externalOff) { record('bing', 'suppressed', 0); return; }
-    let count = 0;
-    let offset = 0;
-    for(let i=0; i<caps.bingPages && offset <= 450 && timeLeft() > 1200; i++){
-      const b = await Containers.web_bing.fetch(q, 50, offset).catch(() => null);
-      const n = addBundle(b, 'bing', collected, sourceState);
-      count += n;
-      if(!b || !b.results || b.results.length < 50) break;
-      offset += 50;
+    async function pullFromYouTube(){
+      if(noMedia) { record('youtube', 'media-disabled', 0); return 0; }
+      const y = await Containers.web_youtube.fetch(q, caps.youtubeLimit).catch(() => null);
+      const n = addBundle(y, 'youtube', collected, sourceState);
+      record('youtube', n ? 'ok' : 'empty', n);
+      return n;
     }
-    record('bing', count ? 'ok' : 'empty', count);
-  }
 
-  async function pullFromYouTube(){
-    if(externalOff || noMedia) { record('youtube', externalOff ? 'suppressed' : 'media-disabled', 0); return; }
-    const y = await Containers.web_youtube.fetch(q, caps.youtubeLimit).catch(() => null);
-    const n = addBundle(y, 'youtube', collected, sourceState);
-    record('youtube', n ? 'ok' : 'empty', n);
-  }
-
-  async function pullFromImage(){
-    if(externalOff || noMedia) { record('google_image', externalOff ? 'suppressed' : 'media-disabled', 0); return; }
-    let count = 0;
-    let pageStart = 1;
-    for(let i=0; i<caps.imagePages && pageStart <= 91 && timeLeft() > 1200; i++){
-      const img = await Containers.web_image.fetch(q, 10, pageStart).catch(() => null);
-      const n = addBundle(img, 'google_image', collected, sourceState);
-      count += n;
-      if(!img || !img.results || img.results.length < 10) break;
-      pageStart += 10;
+    async function pullFromImage(){
+      if(noMedia) { record('google_image', 'media-disabled', 0); return 0; }
+      let count = 0;
+      let pageStart = 1;
+      for(let i=0; i<caps.imagePages && pageStart <= 91 && timeLeft() > 1200; i++){
+        const img = await Containers.web_image.fetch(q, 10, pageStart).catch(() => null);
+        const n = addBundle(img, 'google_image', collected, sourceState);
+        count += n;
+        if(!img || !img.results || img.results.length < 10) break;
+        pageStart += 10;
+      }
+      record('google_image', count ? 'ok' : 'empty', count);
+      return count;
     }
-    record('google_image', count ? 'ok' : 'empty', count);
-  }
 
-  await Promise.allSettled([
-    pullFromSearchBank(),
-    pullFromNaver(),
-    pullFromGoogle(),
-    pullFromBing(),
-    pullFromYouTube(),
-    pullFromImage()
-  ]);
+    const internalCount = await pullFromSearchBank();
+    const shouldUseExternal = !externalOff && (mode === 'force' || !!deep || internalCount < externalTriggerMin);
 
-  collected.push.apply(collected, mapCards(q, region));
-  if(!externalOff) collected.push.apply(collected, googleLikeSearchLinks(q));
-
-  let unique = dedupeCanonicalItems(collected);
-  unique = backfillVisuals(unique);
-  unique = await applyCorePipeline(q, unique);
-  unique = applyServerSideBoosts(unique, { q, lang });
-
-  const finalTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
-  const finalItems = unique.slice(0, finalTarget);
-
-  const result = {
-    source: sourceState.used || (finalItems.length ? 'multi' : null),
-    route: sourceRoute,
-    sourceRoute,
-    region,
-    items: finalItems,
-    meta: {
-      count: finalItems.length,
-      requestedLimit: limit,
-      target: finalTarget,
-      totalCandidates: collected.length,
-      deduped: Math.max(0, collected.length - unique.length),
-      richMedia: finalItems.filter(x => x && isRealImageUrl(x.thumbnail)).length,
-      trace,
-      externalSuppressed: !!externalOff,
-      mediaDisabled: !!noMedia,
-      deep: !!deep,
-      elapsedMs: nowMs() - started
+    if(shouldUseExternal){
+      // Single maru-search gateway pass. No recursive loops, no repeated fan-out.
+      await Promise.allSettled([
+        pullFromNaver(),
+        pullFromGoogle(),
+        pullFromBing(),
+        (deep || /영상|비디오|video|youtube|유튜브/i.test(q)) ? pullFromYouTube() : Promise.resolve(0),
+        (deep || /이미지|사진|image|photo|지도|map/i.test(q)) ? pullFromImage() : Promise.resolve(0)
+      ]);
+      collected.push.apply(collected, mapCards(q, region));
+      collected.push.apply(collected, googleLikeSearchLinks(q));
+    }else{
+      record('external-gateway', externalOff ? 'blocked-by-request' : 'skipped-internal-enough', 0, { internalCount, trigger: externalTriggerMin, mode });
     }
-  };
 
-  globalThis.__MARU_CACHE.set(cacheKey, { t: Date.now(), v: result });
-  return result;
+    let unique = dedupeCanonicalItems(collected);
+    unique = backfillVisuals(unique);
+    unique = await applyCorePipeline(q, unique);
+    unique = applyServerSideBoosts(unique, { q, lang });
+
+    const finalTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
+    const finalItems = unique.slice(0, finalTarget).map(compactResultItem);
+
+    const result = {
+      source: sourceState.used || (finalItems.length ? 'multi' : null),
+      route: sourceRoute,
+      sourceRoute,
+      region,
+      items: finalItems,
+      meta: {
+        count: finalItems.length,
+        requestedLimit: limit,
+        target: finalTarget,
+        totalCandidates: collected.length,
+        deduped: Math.max(0, collected.length - unique.length),
+        richMedia: finalItems.filter(x => x && isRealImageUrl(x.thumbnail)).length,
+        trace,
+        externalSuppressed: !!externalOff,
+        externalMode: mode,
+        externalGatewayUsed: !!shouldUseExternal,
+        externalTriggerMin,
+        mediaDisabled: !!noMedia,
+        deep: !!deep,
+        responseBytes: responseSizeHint(finalItems),
+        elapsedMs: nowMs() - started
+      }
+    };
+
+    globalThis.__MARU_CACHE.set(cacheKey, { t: Date.now(), v: result });
+    return result;
+  })();
+
+  globalThis.__MARU_INFLIGHT.set(cacheKey, { t: Date.now(), p: work });
+  try { return await work; }
+  finally { globalThis.__MARU_INFLIGHT.delete(cacheKey); }
 }
 
 function backfillVisuals(items){
@@ -830,19 +931,23 @@ async function distributeRevenue(event, items){
 exports.handler = async function(event){
   try{
     const picked = pickQ(event || {});
-    const { q, limit, start, lang, deep, externalOff, noMedia, raw } = picked;
+    const { q, limit, start, lang, deep, externalOff, externalMode, noMedia, raw } = picked;
     if(!q){
       return ok({ status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: null, items: [], results: [], meta: { count: 0, limit } });
     }
-    const base = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, noMedia });
-    const analyticsOff = truthy(raw && (raw.noAnalytics || raw.disableAnalytics));
-    const revenueOff = truthy(raw && (raw.noRevenue || raw.disableRevenue)) || analyticsOff;
+    const base = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia });
+    // Search must not trigger heavy settlement/distribution by default.
+    // Analytics is opt-in for this endpoint; weekly settlement is handled by revenue/commerce engines.
+    const analyticsRequested = truthy(raw && (raw.analytics || raw.track || raw.enableAnalytics)) || truthy(process.env.MARU_SEARCH_ANALYTICS);
+    const realtimeRevenueRequested = truthy(raw && (raw.realtimeRevenue || raw.distributeNow || raw.enableRealtimeRevenue)) || truthy(process.env.MARU_SEARCH_REALTIME_REVENUE);
+    const analyticsOff = truthy(raw && (raw.noAnalytics || raw.disableAnalytics)) || !analyticsRequested;
+    const revenueOff = truthy(raw && (raw.noRevenue || raw.disableRevenue)) || !realtimeRevenueRequested;
     if(!analyticsOff) syncSearchAnalytics(event, q, base.items).catch(() => null);
     if(!revenueOff) distributeRevenue(event, base.items).catch(() => null);
     return ok({
       status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: base.source,
       items: base.items, results: base.items,
-      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff })
+      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));
@@ -880,7 +985,8 @@ exports.runEngine = async function(event, params){
     start: params.start || 1,
     lang: params.lang || params.uiLang || params.locale || null,
     deep: truthy(params.deep) || String(params.external || '').toLowerCase() === 'deep',
-    externalOff: String(params.external || '').toLowerCase() === 'off' || truthy(params.noExternal) || truthy(params.disableExternal),
+    externalOff: explicitExternalBlocked(params),
+    externalMode: explicitExternalBlocked(params) ? 'off' : (explicitExternalRequested(params) || truthy(params.deep) ? 'force' : 'auto'),
     noMedia: truthy(params.noMedia) || truthy(params.disableMedia)
   });
 };
