@@ -19,7 +19,7 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.8-safe4-nostore-hardfix';
+const VERSION = 'A1.5.11-natural-flow-safe-gateway';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -339,10 +339,27 @@ function dedupeCanonicalItems(items){
 
 function compactResultItem(it){
   it = (it && typeof it === 'object') ? it : {};
-  const out = {
+
+  const type = it.type || 'web';
+  const mediaType = it.mediaType || (type === 'image' ? 'image' : 'article');
+  const sourceText = safeString(it.source).toLowerCase();
+  const imageLike =
+    mediaType === 'image' ||
+    type === 'image' ||
+    sourceText.includes('image');
+
+  const ownImages = compactImages([
+    it.thumbnail,
+    it.thumb,
+    it.image
+  ].concat(Array.isArray(it.imageSet) ? it.imageSet : []));
+
+  const ownThumb = ownImages[0] || '';
+
+  return {
     id: safeString(firstNonEmpty(it.id, it.url, it.link, it.title)).trim(),
-    type: it.type || 'web',
-    mediaType: it.mediaType || 'article',
+    type,
+    mediaType,
     title: safeString(it.title).trim(),
     summary: safeString(firstNonEmpty(it.summary, it.snippet, it.description)).trim(),
     description: safeString(firstNonEmpty(it.description, it.summary, it.snippet)).trim(),
@@ -350,10 +367,10 @@ function compactResultItem(it){
     link: safeString(firstNonEmpty(it.link, it.url, it.href)).trim(),
     source: it.source || null,
     lang: it.lang || null,
-    thumbnail: safeString(firstNonEmpty(it.thumbnail, it.thumb, it.image)).trim(),
-    thumb: safeString(firstNonEmpty(it.thumb, it.thumbnail, it.image)).trim(),
-    image: safeString(firstNonEmpty(it.image, it.thumbnail, it.thumb)).trim(),
-    imageSet: compactImages(Array.isArray(it.imageSet) ? it.imageSet : [it.image, it.thumbnail, it.thumb]),
+    thumbnail: ownThumb,
+    thumb: ownThumb,
+    image: ownThumb,
+    imageSet: imageLike ? ownImages.slice(0, 3) : [],
     media: it.media || undefined,
     channel: it.channel || undefined,
     section: it.section || undefined,
@@ -363,15 +380,9 @@ function compactResultItem(it){
     bind: it.bind && typeof it.bind === 'object' ? it.bind : undefined,
     tags: Array.isArray(it.tags) ? it.tags.slice(0, 12) : [],
     score: typeof it.score === 'number' ? it.score : undefined,
-    _coreScore: typeof it._coreScore === 'number' ? it._coreScore : undefined,
-    _bonus: typeof it._bonus === 'number' ? it._bonus : undefined,
     _finalScore: typeof it._finalScore === 'number' ? it._finalScore : undefined,
-    riskLabel: it.riskLabel || undefined
+    _authorityScore: typeof it._authorityScore === 'number' ? it._authorityScore : undefined
   };
-  if(!out.thumbnail && out.url) out.thumbnail = faviconOf(out.url);
-  if(!out.thumb) out.thumb = out.thumbnail;
-  Object.keys(out).forEach(k => out[k] === undefined && delete out[k]);
-  return out;
 }
 
 function responseSizeHint(items){
@@ -516,6 +527,12 @@ const Containers = {
   },
   web_naver: { async fetch(q, limit, start){ return naverSearch(q, limit, start); } },
   web_naver_image: { async fetch(q, limit, start){ return naverImageSearch(q, limit, start); } },
+  web_naver_blog: { async fetch(q, limit, start){ return naverGenericSearch('blog.json', q, limit, start, 'naver_blog', 'blog'); } },
+  web_naver_news: { async fetch(q, limit, start){ return naverGenericSearch('news.json', q, limit, start, 'naver_news', 'news'); } },
+  web_naver_cafe: { async fetch(q, limit, start){ return naverGenericSearch('cafearticle.json', q, limit, start, 'naver_cafe', 'community'); } },
+  web_naver_encyc: { async fetch(q, limit, start){ return naverGenericSearch('encyc.json', q, limit, start, 'naver_encyc', 'encyclopedia'); } },
+  web_naver_kin: { async fetch(q, limit, start){ return naverGenericSearch('kin.json', q, limit, start, 'naver_kin', 'qa'); } },
+  web_naver_local: { async fetch(q, limit, start){ return naverGenericSearch('local.json', q, Math.min(limit, 5), start, 'naver_local', 'local'); } },
   web_google: { async fetch(q, limit, start){ return googleSearch(q, limit, start); } },
   web_bing: { async fetch(q, limit, start){ return bingSearch(q, limit, start); } },
   web_youtube: { async fetch(q, limit){ return youtubeSearch(q, limit); } },
@@ -531,6 +548,13 @@ function sourceCaps(opts){
     // Normal mode target: enough for 30~50 front pages when the provider has data.
     // Naver supports 100 per page; 8 pages = up to 800 results in one controlled gateway pass.
     naverPages: deep ? 10 : 8,
+    // Controlled vertical expansion. Runs only inside maru-search gateway, never recursively.
+    naverBlogPages: deep ? 3 : 2,
+    naverNewsPages: deep ? 2 : 1,
+    naverCafePages: deep ? 2 : 1,
+    naverEncycPages: deep ? 1 : 1,
+    naverKinPages: deep ? 1 : 1,
+    naverLocalPages: 1,
     googlePages: deep ? 3 : 2,
     bingPages: deep ? 3 : 2,
     imagePages: deep ? 2 : 1,
@@ -713,6 +737,47 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       return total;
     }
 
+    async function pullFromNaverVerticals(){
+      let total = 0;
+
+      async function runPaged(name, container, pages, display){
+        let count = 0;
+        const starts = [];
+        for(let i=0; i<pages; i++){
+          const st = 1 + (i * display);
+          if(st > 1000) break;
+          starts.push(st);
+        }
+
+        const settled = await Promise.allSettled(
+          starts.map(st =>
+            container.fetch(q, display, st)
+              .then(bundle => ({ st, bundle }))
+              .catch(() => ({ st, bundle: null }))
+          )
+        );
+
+        for(const item of settled){
+          const pack = item && item.status === 'fulfilled' ? item.value : null;
+          const n = addBundle(pack && pack.bundle, name, collected, sourceState);
+          count += n;
+        }
+
+        record(name, count ? 'ok' : 'empty', count, { pagesTried: starts.length, mode: 'controlled-vertical' });
+        total += count;
+      }
+
+      // These verticals are the missing source pool behind the 203/263 ceiling.
+      await runPaged('naver_blog', Containers.web_naver_blog, caps.naverBlogPages || 0, 100);
+      await runPaged('naver_news', Containers.web_naver_news, caps.naverNewsPages || 0, 100);
+      await runPaged('naver_cafe', Containers.web_naver_cafe, caps.naverCafePages || 0, 100);
+      await runPaged('naver_encyc', Containers.web_naver_encyc, caps.naverEncycPages || 0, 100);
+      await runPaged('naver_kin', Containers.web_naver_kin, caps.naverKinPages || 0, 100);
+      await runPaged('naver_local', Containers.web_naver_local, caps.naverLocalPages || 0, 5);
+
+      return total;
+    }
+
     const internalCount = await pullFromSearchBank();
     const shouldUseExternal = !externalOff && (mode === 'force' || !!deep || internalCount < externalTriggerMin);
 
@@ -725,8 +790,17 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         (deep || /영상|비디오|video|youtube|유튜브/i.test(q)) ? pullFromYouTube() : Promise.resolve(0),
         pullFromImage()
       ]);
+
+      const afterPrimaryExternal = collected.length;
+      const naturalExpansionTarget = Math.min(Math.max(limit, MIN_RESULT_TARGET), 700);
+      if((mode === 'force' || deep || afterPrimaryExternal < naturalExpansionTarget) && timeLeft() > 1800){
+        await pullFromNaverVerticals();
+      } else {
+        record('naver_verticals', 'skipped-enough-primary', 0, { afterPrimaryExternal, naturalExpansionTarget });
+      }
+
       collected.push.apply(collected, mapCards(q, region));
-      collected.push.apply(collected, googleLikeSearchLinks(q));
+      record('search-link-cards', 'skipped-natural-flow', 0);
     }else{
       record('external-gateway', externalOff ? 'blocked-by-request' : 'skipped-internal-enough', 0, { internalCount, trigger: externalTriggerMin, mode });
     }
@@ -757,9 +831,17 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         externalMode: mode,
         externalGatewayUsed: !!shouldUseExternal,
         externalTriggerMin,
+        naturalFlow: true,
+        syntheticSearchLinks: false,
         providerCaps: {
           searchBankPages: caps.searchBankPages,
           naverPages: caps.naverPages,
+          naverBlogPages: caps.naverBlogPages,
+          naverNewsPages: caps.naverNewsPages,
+          naverCafePages: caps.naverCafePages,
+          naverEncycPages: caps.naverEncycPages,
+          naverKinPages: caps.naverKinPages,
+          naverLocalPages: caps.naverLocalPages,
           googlePages: caps.googlePages,
           bingPages: caps.bingPages,
           naverImagePages: caps.naverImagePages,
@@ -783,23 +865,32 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 }
 
 function backfillVisuals(items){
-  const list = Array.isArray(items) ? items.slice() : [];
-  const imagePool = [];
-  list.forEach(it => {
-    if(!it) return;
-    if(Array.isArray(it.imageSet)) imagePool.push.apply(imagePool, it.imageSet.filter(isRealImageUrl));
-    if(it.mediaType === 'image' && isRealImageUrl(it.url)) imagePool.push(it.url);
-    if(isRealImageUrl(it.thumbnail)) imagePool.push(it.thumbnail);
-  });
-  const pool = compactImages(imagePool);
-  if(!pool.length) return list;
-  let cursor = 0;
-  return list.map((it, idx) => {
-    if(!it || isRealImageUrl(it.thumbnail)) return it;
-    const img = pool[cursor % pool.length];
-    cursor += 1;
-    const imageSet = compactImages([img].concat(Array.isArray(it.imageSet) ? it.imageSet : []).concat(pool.slice(0,3)));
-    return Object.assign({}, it, { thumbnail: img, thumb: it.thumb || img, image: it.image || img, imageSet });
+  // Natural media only:
+  // - no borrowed/random images
+  // - no artificial gallery on normal web/official results
+  // - show image only when that result itself carries a real image field
+  return (Array.isArray(items) ? items : []).map(it => {
+    if(!it) return it;
+
+    const imageLike =
+      it.mediaType === 'image' ||
+      it.type === 'image' ||
+      safeString(it.source).toLowerCase().includes('image');
+
+    const ownImages = compactImages([
+      it.thumbnail,
+      it.thumb,
+      it.image
+    ].concat(Array.isArray(it.imageSet) ? it.imageSet : []));
+
+    const ownThumb = ownImages[0] || '';
+
+    return Object.assign({}, it, {
+      thumbnail: ownThumb,
+      thumb: ownThumb,
+      image: ownThumb,
+      imageSet: imageLike ? ownImages.slice(0, 3) : []
+    });
   });
 }
 
@@ -843,7 +934,8 @@ async function naverImageSearch(q, limit, start){
     source: 'naver_image',
     results: (Array.isArray(data.items) ? data.items : []).map(it => {
       const thumb = it.thumbnail || it.link || '';
-      const context = it.link || it.originallink || '';
+      const imageUrl = it.link || thumb || '';
+      const context = it.originallink || imageUrl;
       return {
         title: stripHtml(it.title || q),
         link: context,
@@ -854,8 +946,8 @@ async function naverImageSearch(q, limit, start){
         source: 'naver_image',
         thumbnail: thumb,
         thumb,
-        image: thumb,
-        imageSet: [thumb, context].filter(Boolean),
+        image: imageUrl,
+        imageSet: [thumb, imageUrl].filter(Boolean),
         payload: {
           source: 'naver_image',
           thumb,
@@ -866,6 +958,66 @@ async function naverImageSearch(q, limit, start){
     })
   };
 }
+
+async function naverGenericSearch(endpoint, q, limit, start, source, type){
+  const id = process.env.NAVER_API_KEY;
+  const secret = process.env.NAVER_CLIENT_SECRET;
+  if(!id || !secret) return null;
+
+  const display = Math.max(1, Math.min(limit || 100, endpoint === 'local.json' ? 5 : 100));
+  const url = 'https://openapi.naver.com/v1/search/' + endpoint +
+    '?query=' + encodeURIComponent(q) +
+    '&display=' + display +
+    '&start=' + (start || 1) +
+    (endpoint === 'blog.json' || endpoint === 'cafearticle.json' || endpoint === 'kin.json' ? '&sort=sim' : '');
+
+  const res = await fetchWithTimeout(url, {
+    headers: {
+      'X-Naver-Client-Id': id,
+      'X-Naver-Client-Secret': secret
+    }
+  }, 3000);
+
+  if(!res.ok) return null;
+  const data = await res.json();
+
+  const results = (Array.isArray(data.items) ? data.items : []).map(it => {
+    const title = stripHtml(it.title || q);
+    const desc = stripHtml(it.description || it.summary || '');
+    const link = it.link || it.originallink || '';
+    const address = [it.category, it.roadAddress || it.address].filter(Boolean).join(' · ');
+    const thumb = it.thumbnail || '';
+
+    return {
+      title,
+      link,
+      url: link,
+      snippet: address ? (desc ? desc + ' · ' + address : address) : desc,
+      summary: address ? (desc ? desc + ' · ' + address : address) : desc,
+      type,
+      mediaType: type === 'news' ? 'article' : (type === 'local' ? 'map' : 'article'),
+      source,
+      thumbnail: thumb,
+      thumb,
+      image: thumb,
+      imageSet: [],
+      payload: {
+        source,
+        endpoint,
+        bloggername: it.bloggername,
+        cafename: it.cafename,
+        postdate: it.postdate,
+        pubDate: it.pubDate,
+        category: it.category,
+        address: it.address,
+        roadAddress: it.roadAddress
+      }
+    };
+  });
+
+  return { source, results };
+}
+
 
 async function googleSearch(q, limit, start){
   const key = process.env.GOOGLE_API_KEY;
