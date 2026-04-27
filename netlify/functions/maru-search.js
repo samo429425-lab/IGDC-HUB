@@ -1,7 +1,7 @@
 /**
  * netlify/functions/maru-search.js
  * ------------------------------------------------------------
- * MARU SEARCH — SAFE PARALLEL WIDE + RICH MEDIA (A1.5.3)
+ * MARU SEARCH — STABILIZED INTERNAL-FIRST + WEEKLY SETTLEMENT (A1.5.4)
  *
  * Design goal:
  * - Keep the working 313/314 API shape: handler / maruSearchDispatcher / runEngine / items+results
@@ -19,17 +19,37 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.6-progressive-cache-efficient';
+const VERSION = 'A1.5.4-stabilized-internal-first-weekly-settlement';
 const DEFAULT_LIMIT = 1000;
-const MAX_LIMIT = 1000;
+const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
-const DEFAULT_SOFT_TIMEOUT_MS = 5000;
+const DEFAULT_SOFT_TIMEOUT_MS = 8500;
 
 function nowMs(){ return Date.now(); }
 
 function truthy(v){
   const s = String(v == null ? '' : v).trim().toLowerCase();
   return s === '1' || s === 'true' || s === 'yes' || s === 'on';
+}
+
+function explicitExternalRequested(qs){
+  qs = qs || {};
+  const external = String(qs.external == null ? '' : qs.external).trim().toLowerCase();
+  return ['1','true','yes','on','live','deep'].includes(external)
+    || truthy(qs.useExternalSources)
+    || truthy(qs.useExternal)
+    || truthy(qs.useLive)
+    || truthy(qs.live);
+}
+
+function explicitExternalBlocked(qs){
+  qs = qs || {};
+  const external = String(qs.external == null ? '' : qs.external).trim().toLowerCase();
+  return external === 'off'
+    || external === '0'
+    || external === 'false'
+    || truthy(qs.noExternal)
+    || truthy(qs.disableExternal);
 }
 
 function safeString(v){ return String(v == null ? '' : v); }
@@ -72,31 +92,6 @@ async function fetchWithTimeout(url, options, timeoutMs){
   }
 }
 
-function promiseWithTimeoutValue(promise, timeoutMs, fallbackValue){
-  const ms = Math.max(250, Math.min(12000, timeoutMs || 5000));
-  return new Promise(resolve => {
-    let done = false;
-    const timer = setTimeout(() => {
-      if(done) return;
-      done = true;
-      resolve(fallbackValue);
-    }, ms);
-    Promise.resolve(promise)
-      .then(value => {
-        if(done) return;
-        done = true;
-        clearTimeout(timer);
-        resolve(value);
-      })
-      .catch(() => {
-        if(done) return;
-        done = true;
-        clearTimeout(timer);
-        resolve(fallbackValue);
-      });
-  });
-}
-
 function ok(body){
   return {
     statusCode: 200,
@@ -125,15 +120,13 @@ function pickQ(event){
   const qs = (event && event.queryStringParameters) || {};
   const q = safeString(qs.q || qs.query || '').trim();
   const limit = clampInt(qs.limit || qs.max || qs.count, DEFAULT_LIMIT, 1, MAX_LIMIT);
-  const page = clampInt(qs.page || 1, 1, 1, 100000);
-  const fallbackOffset = (page - 1) * limit;
-  const offset = clampInt(qs.offset !== undefined ? qs.offset : (qs.cursor !== undefined ? qs.cursor : fallbackOffset), fallbackOffset, 0, 100000);
-  const start = clampInt(qs.start || (offset + 1), 1, 1, 100000);
+  const start = clampInt(qs.start || 1, 1, 1, 1000);
   const lang = safeString(qs.lang || qs.uiLang || qs.locale || '').trim() || null;
   const deep = truthy(qs.deep) || String(qs.external || '').toLowerCase() === 'deep';
-  const externalOff = String(qs.external || '').toLowerCase() === 'off' || truthy(qs.noExternal) || truthy(qs.disableExternal);
+  // Default is internal-only. External APIs run only when explicitly requested.
+  const externalOff = explicitExternalBlocked(qs) || !explicitExternalRequested(qs);
   const noMedia = truthy(qs.noMedia) || truthy(qs.disableMedia);
-  return { q, limit, offset, page, start, lang, deep, externalOff, noMedia, raw: qs };
+  return { q, limit, start, lang, deep, externalOff, noMedia, raw: qs };
 }
 
 function parseAcceptLanguage(header){
@@ -425,12 +418,21 @@ const Containers = {
   search_bank: {
     async fetch(q, limit, offset, event){
       try{
-        const data = await promiseWithTimeoutValue(callSearchBankEngineInternal(event, {
+        const data = await callSearchBankEngineInternal(event, {
           q: safeString(q),
           limit: safeString(limit),
           offset: safeString(offset || 0),
-          from: 'maru-search'
-        }), 2200, null);
+          from: 'maru-search',
+          external: 'off',
+          noExternal: '1',
+          disableExternal: '1',
+          skipMaruSearch: '1',
+          noMaruSearch: '1',
+          skipCollector: '1',
+          skipPlanetary: '1',
+          noAnalytics: '1',
+          noRevenue: '1'
+        });
         if(data && Array.isArray(data.items)) return { source: 'search-bank', results: data.items, total: typeof data.total === 'number' ? data.total : null };
         return null;
       }catch(e){ return null; }
@@ -447,13 +449,13 @@ const Containers = {
 function sourceCaps(opts){
   const deep = !!opts.deep;
   return {
-    searchBankPages: deep ? 14 : 10,
-    naverPages: deep ? 6 : 4,
-    googlePages: deep ? 6 : 3,
-    bingPages: deep ? 5 : 3,
-    imagePages: deep ? 5 : 3,
-    youtubeLimit: deep ? 50 : 35,
-    timeoutMs: deep ? 8500 : DEFAULT_SOFT_TIMEOUT_MS
+    searchBankPages: deep ? 50 : 50,
+    naverPages: deep ? 6 : 2,
+    googlePages: deep ? 6 : 2,
+    bingPages: deep ? 5 : 2,
+    imagePages: deep ? 5 : 1,
+    youtubeLimit: deep ? 50 : 20,
+    timeoutMs: deep ? 10500 : DEFAULT_SOFT_TIMEOUT_MS
   };
 }
 
@@ -465,20 +467,16 @@ function addBundle(bundle, fallbackSource, collected, sourceState){
   return items.length;
 }
 
-async function orchestrateSearch({ event, q, limit, offset, page, start, lang, deep, externalOff, noMedia }){
+async function orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, noMedia }){
   limit = clampInt(limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
-  offset = clampInt(offset, 0, 0, 100000);
-  page = clampInt(page || Math.floor(offset / Math.max(1, limit)) + 1, 1, 1, 100000);
 
   globalThis.__MARU_CACHE = globalThis.__MARU_CACHE || new Map();
-  const cacheKey = [q, limit, offset, page, start, lang || '', deep ? 'deep' : 'normal', externalOff ? 'external-off' : 'external-on', noMedia ? 'no-media' : 'media'].join('::');
+  const cacheKey = [q, limit, start, lang || '', deep ? 'deep' : 'normal', externalOff ? 'external-off' : 'external-on', noMedia ? 'no-media' : 'media'].join('::');
   const cached = globalThis.__MARU_CACHE.get(cacheKey);
   if(cached && Date.now() - cached.t < 300000) return cached.v;
 
   const started = nowMs();
   const caps = sourceCaps({ deep });
-  const targetEnd = Math.min(MAX_LIMIT, offset + limit);
-  const scanTarget = Math.min(MAX_LIMIT, Math.max(MIN_RESULT_TARGET, targetEnd + 60));
   const deadline = started + caps.timeoutMs;
   const timeLeft = () => Math.max(0, deadline - nowMs());
   const collected = [];
@@ -487,61 +485,22 @@ async function orchestrateSearch({ event, q, limit, offset, page, start, lang, d
   const region = detectRuntimeRegion(event, lang, q);
   const sourceRoute = sourceOrderForRegion(region);
 
-  globalThis.__MARU_POOL_CACHE = globalThis.__MARU_POOL_CACHE || new Map();
-  const poolKey = [q, lang || '', deep ? 'deep' : 'normal', externalOff ? 'external-off' : 'external-on', noMedia ? 'no-media' : 'media'].join('::');
-  const poolHit = globalThis.__MARU_POOL_CACHE.get(poolKey);
-  const poolFresh = !!(poolHit && Array.isArray(poolHit.items) && (Date.now() - poolHit.t < 300000));
-
-  if(poolFresh && poolHit.items.length >= targetEnd){
-    const finalItems = poolHit.items.slice(offset, Math.min(offset + limit, poolHit.items.length));
-    const hasMore = poolHit.items.length > (offset + finalItems.length) || !!poolHit.hasMore;
-    const result = {
-      source: poolHit.source || (finalItems.length ? 'multi' : null),
-      route: sourceRoute,
-      sourceRoute,
-      region,
-      items: finalItems,
-      meta: {
-        count: finalItems.length,
-        requestedLimit: limit,
-        offset,
-        page,
-        nextOffset: hasMore ? offset + finalItems.length : null,
-        hasMore,
-        target: Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET, targetEnd)),
-        totalCandidates: poolHit.totalCandidates || poolHit.items.length,
-        totalLoaded: poolHit.items.length,
-        deduped: poolHit.deduped || 0,
-        richMedia: finalItems.filter(x => x && isRealImageUrl(x.thumbnail)).length,
-        trace: [{ name: 'pool-cache', status: 'hit', count: finalItems.length }].concat(poolHit.trace || []),
-        externalSuppressed: !!externalOff,
-        mediaDisabled: !!noMedia,
-        deep: !!deep,
-        elapsedMs: nowMs() - started,
-        cached: true
-      }
-    };
-    globalThis.__MARU_CACHE.set(cacheKey, { t: Date.now(), v: result });
-    return result;
-  }
-
   function record(name, status, count){ trace.push({ name, status, count: count || 0 }); }
 
   async function pullFromSearchBank(){
     let count = 0;
-    let bankOffset = 0;
-    const dynamicPages = Math.min(deep ? 22 : 16, Math.max(caps.searchBankPages, Math.ceil(scanTarget / 100) + 1));
-    for(let i=0; i<dynamicPages && timeLeft() > 700; i++){
-      const b = await Containers.search_bank.fetch(q, 100, bankOffset, event).catch(() => null);
+    let offset = 0;
+    for(let i=0; i<caps.searchBankPages && timeLeft() > 900; i++){
+      const b = await Containers.search_bank.fetch(q, 100, offset, event).catch(() => null);
       const n = addBundle(b, 'search-bank', collected, sourceState);
       count += n;
       if(!b || !b.results || b.results.length < 100) break;
-      bankOffset += 100;
-      if(count >= scanTarget) break;
+      offset += 100;
+      if(count >= Math.max(MIN_RESULT_TARGET, limit)) break;
     }
     record('search-bank', count ? 'ok' : 'empty', count);
     if(!count){
-      const snap = await Containers.snapshot.fetch(q, scanTarget).catch(() => null);
+      const snap = await Containers.snapshot.fetch(q, Math.max(limit, MIN_RESULT_TARGET)).catch(() => null);
       const n = addBundle(snap, 'snapshot-local', collected, sourceState);
       if(n) record('snapshot-local', 'ok', n);
     }
@@ -610,31 +569,28 @@ async function orchestrateSearch({ event, q, limit, offset, page, start, lang, d
     record('google_image', count ? 'ok' : 'empty', count);
   }
 
-  const settled = await promiseWithTimeoutValue(Promise.allSettled([
+  await Promise.allSettled([
     pullFromSearchBank(),
     pullFromNaver(),
     pullFromGoogle(),
     pullFromBing(),
     pullFromYouTube(),
     pullFromImage()
-  ]), Math.max(1200, timeLeft()), 'timebox');
+  ]);
 
-  if(settled === 'timebox') record('timebox', 'timeout', collected.length);
-
-  collected.push.apply(collected, mapCards(q, region));
-  if(!externalOff) collected.push.apply(collected, googleLikeSearchLinks(q));
+  // No external navigation/link cards in internal-only mode.
+  if(!externalOff){
+    collected.push.apply(collected, mapCards(q, region));
+    collected.push.apply(collected, googleLikeSearchLinks(q));
+  }
 
   let unique = dedupeCanonicalItems(collected);
-  if(poolFresh && poolHit.items.length){
-    unique = dedupeCanonicalItems(poolHit.items.concat(unique));
-  }
+  unique = backfillVisuals(unique);
   unique = await applyCorePipeline(q, unique);
   unique = applyServerSideBoosts(unique, { q, lang });
 
-  const finalTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET, targetEnd));
-  const finalItems = unique.slice(offset, Math.min(offset + limit, unique.length));
-  const nextOffset = offset + finalItems.length;
-  const hasMore = unique.length > nextOffset || (nextOffset < MAX_LIMIT && collected.length >= scanTarget && finalItems.length > 0);
+  const finalTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
+  const finalItems = unique.slice(0, finalTarget);
 
   const result = {
     source: sourceState.used || (finalItems.length ? 'multi' : null),
@@ -645,13 +601,8 @@ async function orchestrateSearch({ event, q, limit, offset, page, start, lang, d
     meta: {
       count: finalItems.length,
       requestedLimit: limit,
-      offset,
-      page,
-      nextOffset: hasMore ? nextOffset : null,
-      hasMore,
       target: finalTarget,
       totalCandidates: collected.length,
-      totalLoaded: unique.length,
       deduped: Math.max(0, collected.length - unique.length),
       richMedia: finalItems.filter(x => x && isRealImageUrl(x.thumbnail)).length,
       trace,
@@ -662,18 +613,29 @@ async function orchestrateSearch({ event, q, limit, offset, page, start, lang, d
     }
   };
 
-  globalThis.__MARU_POOL_CACHE.set(poolKey, {
-    t: Date.now(),
-    items: unique.slice(0, MAX_LIMIT),
-    hasMore,
-    source: sourceState.used || (finalItems.length ? 'multi' : null),
-    totalCandidates: collected.length,
-    deduped: Math.max(0, collected.length - unique.length),
-    trace: trace.slice(0, 20)
-  });
-
   globalThis.__MARU_CACHE.set(cacheKey, { t: Date.now(), v: result });
   return result;
+}
+
+function backfillVisuals(items){
+  const list = Array.isArray(items) ? items.slice() : [];
+  const imagePool = [];
+  list.forEach(it => {
+    if(!it) return;
+    if(Array.isArray(it.imageSet)) imagePool.push.apply(imagePool, it.imageSet.filter(isRealImageUrl));
+    if(it.mediaType === 'image' && isRealImageUrl(it.url)) imagePool.push(it.url);
+    if(isRealImageUrl(it.thumbnail)) imagePool.push(it.thumbnail);
+  });
+  const pool = compactImages(imagePool);
+  if(!pool.length) return list;
+  let cursor = 0;
+  return list.map((it, idx) => {
+    if(!it || isRealImageUrl(it.thumbnail)) return it;
+    const img = pool[cursor % pool.length];
+    cursor += 1;
+    const imageSet = compactImages([img].concat(Array.isArray(it.imageSet) ? it.imageSet : []).concat(pool.slice(0,3)));
+    return Object.assign({}, it, { thumbnail: img, thumb: it.thumb || img, image: it.image || img, imageSet });
+  });
 }
 
 async function naverSearch(q, limit, start){
@@ -862,19 +824,23 @@ async function distributeRevenue(event, items){
 exports.handler = async function(event){
   try{
     const picked = pickQ(event || {});
-    const { q, limit, offset, page, start, lang, deep, externalOff, noMedia, raw } = picked;
+    const { q, limit, start, lang, deep, externalOff, noMedia, raw } = picked;
     if(!q){
       return ok({ status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: null, items: [], results: [], meta: { count: 0, limit } });
     }
-    const base = await orchestrateSearch({ event, q, limit, offset, page, start, lang, deep, externalOff, noMedia });
-    const analyticsOff = truthy(raw && (raw.noAnalytics || raw.disableAnalytics));
-    const revenueOff = truthy(raw && (raw.noRevenue || raw.disableRevenue)) || analyticsOff;
+    const base = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, noMedia });
+    // Search must not trigger heavy settlement/distribution by default.
+    // Analytics is opt-in for this endpoint; weekly settlement is handled by revenue/commerce engines.
+    const analyticsRequested = truthy(raw && (raw.analytics || raw.track || raw.enableAnalytics)) || truthy(process.env.MARU_SEARCH_ANALYTICS);
+    const realtimeRevenueRequested = truthy(raw && (raw.realtimeRevenue || raw.distributeNow || raw.enableRealtimeRevenue)) || truthy(process.env.MARU_SEARCH_REALTIME_REVENUE);
+    const analyticsOff = truthy(raw && (raw.noAnalytics || raw.disableAnalytics)) || !analyticsRequested;
+    const revenueOff = truthy(raw && (raw.noRevenue || raw.disableRevenue)) || !realtimeRevenueRequested;
     if(!analyticsOff) syncSearchAnalytics(event, q, base.items).catch(() => null);
     if(!revenueOff) distributeRevenue(event, base.items).catch(() => null);
     return ok({
       status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: base.source,
       items: base.items, results: base.items,
-      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff })
+      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));
@@ -886,8 +852,6 @@ async function maruSearchDispatcher(req){
   const res = await exports.handler({ queryStringParameters: {
     q: safeString(req.q || req.query || '').trim(),
     limit: req.limit,
-    offset: req.offset,
-    page: req.page,
     start: req.start,
     lang: req.lang || req.uiLang || req.locale,
     deep: req.deep,
@@ -911,12 +875,10 @@ exports.runEngine = async function(event, params){
     event: event || {},
     q: safeString(params.q || params.query || '').trim(),
     limit: params.limit || DEFAULT_LIMIT,
-    offset: params.offset || 0,
-    page: params.page || 1,
     start: params.start || 1,
     lang: params.lang || params.uiLang || params.locale || null,
     deep: truthy(params.deep) || String(params.external || '').toLowerCase() === 'deep',
-    externalOff: String(params.external || '').toLowerCase() === 'off' || truthy(params.noExternal) || truthy(params.disableExternal),
+    externalOff: explicitExternalBlocked(params) || !explicitExternalRequested(params),
     noMedia: truthy(params.noMedia) || truthy(params.disableMedia)
   });
 };
