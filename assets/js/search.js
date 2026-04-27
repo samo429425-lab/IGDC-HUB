@@ -1,5 +1,5 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
-// PATCH: fast balanced vertical tabs v1 + right-side media cards
+// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -100,44 +100,72 @@ function ensureSearchCardMediaStyle(){
       flex: 1 1 auto;
     }
     .maru-card-media {
-      flex: 0 0 190px;
-      width: 190px;
-      max-width: 32%;
+      flex: 0 0 280px;
+      width: 280px;
+      max-width: 42%;
       margin-top: 0 !important;
       display: grid;
-      gap: 5px;
+      gap: 7px;
       overflow: hidden;
       align-self: flex-start;
     }
     .maru-card-media img {
       display: block;
       width: 100%;
-      height: 118px;
+      height: 168px;
       object-fit: cover;
-      border-radius: 8px;
+      border-radius: 10px;
       background: #f8fafc;
       border: 1px solid #eef2f7;
     }
+    .maru-card-media[data-count="1"] {
+      grid-template-columns: 1fr;
+      flex-basis: 280px;
+      width: 280px;
+    }
     .maru-card-media[data-count="2"] {
       grid-template-columns: 1fr 1fr;
-      flex-basis: 230px;
-      width: 230px;
+      flex-basis: 310px;
+      width: 310px;
     }
     .maru-card-media[data-count="2"] img {
-      height: 106px;
+      height: 154px;
     }
     .maru-card-media[data-count="3"] {
-      grid-template-columns: 1.25fr 1fr;
+      grid-template-columns: 1.35fr 1fr;
       grid-template-rows: 1fr 1fr;
-      flex-basis: 245px;
-      width: 245px;
+      flex-basis: 330px;
+      width: 330px;
     }
     .maru-card-media[data-count="3"] img:first-child {
       grid-row: 1 / span 2;
-      height: 136px;
+      height: 206px;
     }
     .maru-card-media[data-count="3"] img:not(:first-child) {
-      height: 65px;
+      height: 99px;
+    }
+
+    /* Book / webtoon / shopping-like vertical cover cards */
+    .maru-card-media[data-kind="poster"] {
+      flex-basis: 150px;
+      width: 150px;
+      max-width: 24%;
+    }
+    .maru-card-media[data-kind="poster"] img {
+      height: 210px;
+      object-fit: cover;
+    }
+
+    /* News / article-like cards: slightly wide, readable image */
+    .maru-card-media[data-kind="article"] {
+      flex-basis: 280px;
+      width: 280px;
+    }
+
+    /* Image/search-gallery style cards */
+    .maru-card-media[data-kind="gallery"] {
+      flex-basis: 330px;
+      width: 330px;
     }
     @media (max-width: 720px) {
       .maru-search-card-body {
@@ -149,7 +177,7 @@ function ensureSearchCardMediaStyle(){
         margin-top: 10px !important;
       }
       .maru-card-media img {
-        height: 150px;
+        height: 190px;
       }
     }
   `;
@@ -729,6 +757,40 @@ async function fetchSearch(q, type = activeType){
       return out.slice(0, 3);
     }
 
+
+    function classifyVisualKindClient(it){
+      const source = String((it && it.source) || '').toLowerCase();
+      const type = String((it && it.type) || '').toLowerCase();
+      const mediaType = String((it && it.mediaType) || '').toLowerCase();
+      const title = String((it && it.title) || '').toLowerCase();
+      const summary = String((it && (it.summary || it.description)) || '').toLowerCase();
+      const text = `${source} ${type} ${mediaType} ${title} ${summary}`;
+
+      if (
+        source.includes('book') ||
+        type === 'book' ||
+        text.includes('도서') ||
+        text.includes('책 ') ||
+        text.includes('웹툰') ||
+        text.includes('만화') ||
+        text.includes('shopping') ||
+        text.includes('쇼핑')
+      ) {
+        return 'poster';
+      }
+
+      if (
+        source.includes('image') ||
+        mediaType === 'image' ||
+        type === 'image'
+      ) {
+        return 'gallery';
+      }
+
+      return 'article';
+    }
+
+
     function renderItem(it){
       const url = it.url || it.link || '';
       const domain = domainOf(url);
@@ -838,7 +900,17 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (isRealThumb) {
         const mediaWrap = document.createElement('div');
         mediaWrap.className = 'maru-card-media';
-        mediaWrap.dataset.count = String(Math.min(naturalImages.length, 3));
+        const mediaCount = Math.min(naturalImages.length, 3);
+        const mediaKind = classifyVisualKindClient(it);
+        mediaWrap.dataset.count = String(mediaCount);
+        mediaWrap.dataset.kind = mediaKind;
+        body.dataset.mediaCount = String(mediaCount);
+        body.dataset.mediaKind = mediaKind;
+        body.style.minHeight =
+          mediaKind === 'poster' ? '220px' :
+          mediaCount >= 3 ? '214px' :
+          mediaCount === 2 ? '164px' :
+          '176px';
 
         naturalImages.forEach((src) => {
           const img = document.createElement('img');
