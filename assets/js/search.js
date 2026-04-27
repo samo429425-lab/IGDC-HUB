@@ -1,5 +1,5 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
-// PATCH: natural media card height v5 + tabs + render-page-image-enrich
+// PATCH: natural media card height v6 + tabs + meaningful-image-filter
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -536,6 +536,75 @@ async function fetchSearch(q, type = activeType){
       return d ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64` : '';
     }
 
+
+    function isLikelyMeaninglessImageUrlClient(imageUrl){
+      const s = String(imageUrl || '').toLowerCase();
+      if(!s) return true;
+
+      const bad = [
+        'favicon', 'logo', 'symbol', 'emblem', 'slogan', 'brand',
+        '/ci', '_ci', '-ci', '/bi', '_bi', '-bi',
+        'placeholder', 'noimage', 'no_image', 'default-image', 'default_img',
+        'sprite', 'button', 'btn_', '/btn', 'sns_logo', 'kakao', 'facebook',
+        'header_logo', 'footer_logo'
+      ];
+
+      if(bad.some(k => s.includes(k))) return true;
+      if(/\.(svg|ico)(\?|#|$)/i.test(s)) return true;
+
+      return false;
+    }
+
+    function isGenericGovOfficialItemClient(it){
+      const url = String((it && (it.url || it.link)) || '').toLowerCase();
+      const host = domainOf(url).toLowerCase();
+      const title = String((it && it.title) || '').toLowerCase();
+      const summary = String((it && (it.summary || it.description)) || '').toLowerCase();
+      const text = `${title} ${summary} ${url}`;
+
+      const isGov =
+        host.includes('.go.kr') ||
+        host.endsWith('.gov') ||
+        host.includes('.gov.') ||
+        host.includes('gov.uk') ||
+        host.includes('go.jp') ||
+        host.includes('gov.cn');
+
+      if(!isGov) return false;
+
+      const meaningfulTerms = [
+        '관광', '여행', '명소', '야경', '축제', '행사', '문화', '공연',
+        '갤러리', '사진', '포토', '한컷', '리포트', '스토리', '영상',
+        'tour', 'travel', 'visit', 'photo', 'gallery', 'festival', 'culture',
+        'landmark', 'attraction', 'story', 'video'
+      ];
+
+      return !meaningfulTerms.some(k => text.includes(k));
+    }
+
+    function isMeaningfulImageForItemClient(imageUrl, it){
+      const s = String(imageUrl || '').trim();
+      if(!s) return false;
+
+      const source = String((it && it.source) || '').toLowerCase();
+      const type = String((it && it.type) || '').toLowerCase();
+      const mediaType = String((it && it.mediaType) || '').toLowerCase();
+
+      const isMediaResult =
+        source.includes('image') ||
+        source.includes('youtube') ||
+        type === 'image' ||
+        type === 'video' ||
+        mediaType === 'image' ||
+        mediaType === 'video';
+
+      if(isLikelyMeaninglessImageUrlClient(s) && !isMediaResult) return false;
+      if(isGenericGovOfficialItemClient(it) && !isMediaResult) return false;
+
+      return true;
+    }
+
+
     function collectNaturalImages(it){
       const sourceText = String((it && it.source) || '').toLowerCase();
       const raw = []
@@ -559,11 +628,11 @@ async function fetchSearch(q, type = activeType){
 
         if (isFaviconLike) return;
         if (!/^https?:\/\//i.test(s) && !s.startsWith('/')) return;
+        if (!isMeaningfulImageForItemClient(s, it)) return;
 
         let key = s.split('#')[0].toLowerCase();
         try {
           const u = new URL(s, location.origin);
-          // Same image with different size/cache query should count as one.
           key = (u.origin + u.pathname).toLowerCase();
         } catch(e) {}
 
