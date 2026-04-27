@@ -409,6 +409,28 @@ async function fetchSearch(q){
       return d ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64` : '';
     }
 
+    function pickResultImage(it){
+      it = it || {};
+      const payload = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const media = (it.media && typeof it.media === 'object') ? it.media : {};
+      const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
+      const candidates = [
+        it.thumbnail, it.thumb, it.image, it.image_url, it.og_image,
+        payload.thumbnail, payload.thumb, payload.image, payload.image_url, payload.og_image,
+        preview.poster
+      ];
+      if (Array.isArray(it.imageSet)) { for (let i = 0; i < it.imageSet.length; i++) candidates.push(it.imageSet[i]); }
+      if (Array.isArray(payload.imageSet)) { for (let i = 0; i < payload.imageSet.length; i++) candidates.push(payload.imageSet[i]); }
+      for (let i = 0; i < candidates.length; i++) {
+        const v = String(candidates[i] || '').trim();
+        if (!v) continue;
+        const low = v.toLowerCase();
+        if (low.includes('google.com/s2/favicons') || low.includes('favicon') || low.endsWith('.ico')) continue;
+        return v;
+      }
+      return '';
+    }
+
     function renderItem(it){
       const url = it.url || it.link || '';
       const domain = domainOf(url);
@@ -504,7 +526,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         it.thumbnail = it.imageSet[0];
       }
 
-      const thumbUrl = (it.thumbnail || '').trim();
+      const thumbUrl = pickResultImage(it);
       const isFaviconLike =
         thumbUrl.includes('google.com/s2/favicons') ||
         thumbUrl.includes('favicon') ||
