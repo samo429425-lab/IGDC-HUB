@@ -19,7 +19,7 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.20-fast-balanced-verticals-pinfix';
+const VERSION = 'A1.5.24-intent-wording-expansion';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -569,6 +569,33 @@ function mapCards(q, region){
   return cards.map(x => canonicalizeItem(x, q, x.source));
 }
 
+
+function transportCards(q){
+  if(!q) return [];
+  const enc = encodeURIComponent(q);
+  const cards = [
+    {
+      title: '[Subway] ' + q + ' 지하철 / 대중교통',
+      url: 'https://map.naver.com/p/search/' + enc + '%20%EC%A7%80%ED%95%98%EC%B2%A0',
+      source: 'naver_map_transport',
+      mediaType: 'map',
+      type: 'map',
+      summary: q + ' 지하철·대중교통 검색',
+      score: 0.69
+    },
+    {
+      title: '[Transit] ' + q + ' Google Maps Transit',
+      url: 'https://www.google.com/maps/search/' + enc + '%20transit',
+      source: 'google_maps_transport',
+      mediaType: 'map',
+      type: 'map',
+      summary: q + ' 교통·환승 지도 검색',
+      score: 0.68
+    }
+  ];
+  return cards.map(x => canonicalizeItem(x, q, x.source));
+}
+
 let SearchBankEngine = null;
 let SearchBankEngineLoaded = false;
 
@@ -663,6 +690,332 @@ const Containers = {
   web_image: { async fetch(q, limit, start){ return googleImageSearch(q, limit, start); } },
   snapshot: { async fetch(q, limit){ const local = loadSnapshotLocal(q, limit); return local ? { source: 'snapshot-local', results: local } : null; } }
 };
+
+
+function uniqueCompactStrings(arr, maxCount){
+  const out = [];
+  const seen = new Set();
+  (Array.isArray(arr) ? arr : []).forEach(v => {
+    const s = safeString(v).trim();
+    if(!s) return;
+    const key = s.toLowerCase();
+    if(seen.has(key)) return;
+    seen.add(key);
+    out.push(s);
+  });
+  return out.slice(0, maxCount || out.length);
+}
+
+function queryScriptProfile(q){
+  const s = safeString(q);
+  if(/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(s)) return 'ko';
+  if(/[ぁ-ゟ゠-ヿ]/.test(s)) return 'ja';
+  if(/[一-龥]/.test(s)) return 'zh';
+  if(/[А-Яа-яЁё]/.test(s)) return 'ru';
+  if(/[A-Za-z]/.test(s)) return 'latin';
+  return 'global';
+}
+
+function detectQueryIntentCluster(q){
+  const text = safeString(q).toLowerCase();
+
+  if(hasAnyLooseTerm(text, [
+    '봉사단체','자원봉사','비영리','ngo','npo','nonprofit','non-profit','charity','volunteer',
+    'foundation','association','organization','organisation','소규모 단체','시민단체','공익단체','구호단체'
+  ])) return 'organization';
+
+  if(hasAnyLooseTerm(text, [
+    '무기','방산','국방','군사','군수','무기 동향','방위산업','arms','weapon','weapons','defense',
+    'defence','military','arms trade','arms market','security trend'
+  ])) return 'defense_trend';
+
+  if(hasAnyLooseTerm(text, [
+    '동향','트렌드','시장','산업','통계','보고서','리포트','trend','trends','market','industry',
+    'statistics','report','research','analysis'
+  ])) return 'trend';
+
+  if(hasAnyLooseTerm(text, [
+    '목록','리스트','단체','기관','협회','재단','업체','회사','directory','list','database',
+    'association','foundation','companies','organizations','institutions'
+  ])) return 'directory';
+
+  return 'general';
+}
+
+function semanticExpansionTerms(searchType, profile, q){
+  const t = normalizeSearchType(searchType);
+  const cluster = detectQueryIntentCluster(q);
+
+  const placeKo = ['랜드마크','명소','맛집','카페','공원','박물관','미술관','타워','전망대','시장','거리','역','지하철','교통','법원','구청','시청','관공서','주소'];
+  const placeEn = ['landmark','attractions','restaurants','cafes','parks','museum','gallery','tower','viewpoint','market','street','station','subway','transit','court','city hall','district office','government office','address'];
+  const placeGlobal = ['landmark','restaurant','cafe','park','museum','station','transit','court','city hall'];
+
+  const intentKo = {
+    organization: ['목록','리스트','국제','전국','지역','협회','재단','NGO','NPO','비영리','자원봉사','공익','구호','단체 소개','연락처','공식 사이트','네트워크'],
+    defense_trend: ['동향','뉴스','시장','산업','국제','전 세계','보고서','통계','정책','국방','방산','안보','수출입','기술','전망','분석'],
+    trend: ['동향','뉴스','시장','산업','보고서','통계','연구','분석','전망','정책','국제','글로벌'],
+    directory: ['목록','리스트','데이터베이스','공식 사이트','협회','기관','연락처','지역','전국','국제']
+  };
+
+  const intentEn = {
+    organization: ['directory','list','global','international','local','association','foundation','NGO','NPO','nonprofit','charity','volunteer','civil society','official site','network','contact'],
+    defense_trend: ['trends','news','market','industry','global','worldwide','report','statistics','policy','defense','military','security','arms trade','technology','forecast','analysis'],
+    trend: ['trends','news','market','industry','report','statistics','research','analysis','forecast','policy','global','worldwide'],
+    directory: ['directory','list','database','official site','association','institution','contact','local','global','international']
+  };
+
+  const byType = {
+    tour: {
+      ko: ['관광','여행','가볼만한곳','랜드마크','명소','맛집','카페','공원','야경','전시','축제','박물관','미술관','타워','전망대','산책','시장','거리','교통'],
+      en: ['travel','tourism','things to do','landmarks','attractions','restaurants','cafes','parks','night view','exhibition','festival','museum','gallery','tower','viewpoint','walk','market','street','transit'],
+      global: placeGlobal
+    },
+    map: {
+      ko: ['지도','주소','길찾기','위치','근처','지하철','지하철역','버스','교통','노선','환승','주차장','맛집','카페','공원','법원','구청','시청','관공서'],
+      en: ['map','address','directions','location','nearby','subway','metro station','bus','transit','route','parking','restaurants','cafes','parks','court','city hall','district office','government office'],
+      global: ['map','address','directions','nearby','station','transit','court','city hall','restaurant','cafe']
+    },
+    knowledge: {
+      ko: ['정보','역사','뜻','백과','지식','공식','자료','문화','교통','행정','법원','기관','인물','작품','책','보고서','통계'],
+      en: ['information','history','meaning','encyclopedia','knowledge','official','data','culture','transportation','administration','court','institution','people','works','books','report','statistics'],
+      global: ['information','history','official','encyclopedia','data','books','report']
+    },
+    image: {
+      ko: ['사진','이미지','풍경','갤러리','포토','랜드마크','공원','카페','야경','건축','작품'],
+      en: ['photos','images','scenery','gallery','landmark','parks','cafes','night view','architecture','artwork'],
+      global: ['photos','images','gallery','landmark']
+    },
+    cafe: {
+      ko: ['카페','맛집','후기','리뷰','디저트','브런치','분위기','공간','추천','근처'],
+      en: ['cafe','restaurants','reviews','dessert','brunch','atmosphere','space','recommended','nearby'],
+      global: ['cafe','restaurants','reviews','nearby']
+    },
+    blog: {
+      ko: ['블로그','후기','리뷰','여행','맛집','카페','일상','추천'],
+      en: ['blog','reviews','travel','restaurants','cafes','daily life','recommended'],
+      global: ['blog','reviews','travel']
+    },
+    news: {
+      ko: ['뉴스','오늘','실시간','속보','이슈','행사','발표','공식','동향','분석'],
+      en: ['news','today','latest','breaking','issue','event','announcement','official','trends','analysis'],
+      global: ['news','latest','breaking','event','trends']
+    },
+    sns: {
+      ko: ['유튜브','인스타그램','틱톡','쇼츠','릴스','SNS','영상','후기'],
+      en: ['youtube','instagram','tiktok','shorts','reels','social','video','reviews'],
+      global: ['youtube','instagram','tiktok','video']
+    },
+    video: {
+      ko: ['영상','동영상','유튜브','쇼츠','브이로그','리뷰'],
+      en: ['video','youtube','shorts','vlog','review'],
+      global: ['video','youtube']
+    },
+    book: {
+      ko: ['책','도서','서점','출판','저자','전자책','추천도서','작품'],
+      en: ['book','books','bookstore','publishing','author','ebook','recommended books','works'],
+      global: ['book','author','works']
+    },
+    webtoon: {
+      ko: ['웹툰','만화','웹소설','캐릭터','애니','코믹','작가','추천'],
+      en: ['webtoon','comic','manga','web novel','character','animation','author','recommendation'],
+      global: ['webtoon','comic','manga']
+    },
+    shopping: {
+      ko: ['쇼핑','가격','구매','추천','리뷰','판매','상품'],
+      en: ['shopping','price','buy','recommended','reviews','sale','product'],
+      global: ['shopping','price','reviews']
+    },
+    web: {
+      ko: ['정보','사이트','홈페이지','공식','자료','서비스'],
+      en: ['information','site','homepage','official','data','service'],
+      global: ['information','official','site']
+    }
+  };
+
+  const group = byType[t] || byType.web;
+  let picked = [];
+
+  if(profile === 'ko') picked = group.ko || [];
+  else if(profile === 'latin') picked = group.en || [];
+  else picked = (group.global || []).concat((group.en || []).slice(0, 3));
+
+  if(['tour','map'].includes(t)){
+    picked = picked.concat(profile === 'ko' ? placeEn.slice(0, 4) : placeKo.slice(0, 4));
+  }
+
+  if(cluster !== 'general'){
+    picked = picked.concat(profile === 'ko' ? (intentKo[cluster] || []) : (intentEn[cluster] || []));
+  }
+
+  return uniqueCompactStrings(picked, 24);
+}
+
+function expandedSearchQueries(q, searchType){
+  const base = safeString(q).trim();
+  if(!base) return [];
+  const t = normalizeSearchType(searchType);
+  const profile = queryScriptProfile(base);
+  const cluster = detectQueryIntentCluster(base);
+
+  // all 검색도 강한 의도어는 가볍게 확장한다.
+  // 예: 봉사단체, 소규모 단체, NGO, 무기 동향, 시장/산업/보고서 등.
+  const terms = semanticExpansionTerms(t === 'all' && cluster !== 'general' ? 'web' : t, profile, base);
+  const variants = [base];
+
+  const maxVariants = t === 'all'
+    ? (cluster === 'general' ? 1 : 7)
+    : 12;
+
+  if(maxVariants <= 1) return variants;
+
+  for(const term of terms){
+    const tt = safeString(term).trim();
+    if(!tt) continue;
+    const lowBase = base.toLowerCase();
+    const lowTerm = tt.toLowerCase();
+
+    if(lowBase === lowTerm || lowBase.includes(lowTerm)) continue;
+    variants.push(base + ' ' + tt);
+    if(variants.length >= maxVariants) break;
+  }
+
+  return uniqueCompactStrings(variants, maxVariants);
+}
+
+function semanticExpansionTerms(searchType, profile){
+  const t = normalizeSearchType(searchType);
+
+  const placeKo = ['랜드마크','명소','맛집','카페','공원','박물관','미술관','타워','전망대','시장','거리','역','지하철','교통','법원','구청','시청','관공서','주소'];
+  const placeEn = ['landmark','attractions','restaurants','cafes','parks','museum','gallery','tower','viewpoint','market','street','station','subway','transit','court','city hall','district office','government office','address'];
+  const placeGlobal = ['landmark','restaurant','cafe','park','museum','station','transit','court','city hall'];
+
+  const byType = {
+    tour: {
+      ko: ['관광','여행','가볼만한곳','랜드마크','명소','맛집','카페','공원','야경','전시','축제','박물관','미술관','타워','전망대','산책','시장','거리','교통'],
+      en: ['travel','tourism','things to do','landmarks','attractions','restaurants','cafes','parks','night view','exhibition','festival','museum','gallery','tower','viewpoint','walk','market','street','transit'],
+      global: placeGlobal
+    },
+    map: {
+      ko: ['지도','주소','길찾기','위치','근처','지하철','지하철역','버스','교통','노선','환승','주차장','맛집','카페','공원','법원','구청','시청','관공서'],
+      en: ['map','address','directions','location','nearby','subway','metro station','bus','transit','route','parking','restaurants','cafes','parks','court','city hall','district office','government office'],
+      global: ['map','address','directions','nearby','station','transit','court','city hall','restaurant','cafe']
+    },
+    knowledge: {
+      ko: ['정보','역사','뜻','백과','지식','공식','자료','문화','교통','행정','법원','기관','인물','작품','책'],
+      en: ['information','history','meaning','encyclopedia','knowledge','official','data','culture','transportation','administration','court','institution','people','works','books'],
+      global: ['information','history','official','encyclopedia','data','books']
+    },
+    image: {
+      ko: ['사진','이미지','풍경','갤러리','포토','랜드마크','공원','카페','야경','건축','작품'],
+      en: ['photos','images','scenery','gallery','landmark','parks','cafes','night view','architecture','artwork'],
+      global: ['photos','images','gallery','landmark']
+    },
+    cafe: {
+      ko: ['카페','맛집','후기','리뷰','디저트','브런치','분위기','공간','추천','근처'],
+      en: ['cafe','restaurants','reviews','dessert','brunch','atmosphere','space','recommended','nearby'],
+      global: ['cafe','restaurants','reviews','nearby']
+    },
+    blog: {
+      ko: ['블로그','후기','리뷰','여행','맛집','카페','일상','추천'],
+      en: ['blog','reviews','travel','restaurants','cafes','daily life','recommended'],
+      global: ['blog','reviews','travel']
+    },
+    news: {
+      ko: ['뉴스','오늘','실시간','속보','이슈','행사','발표','공식'],
+      en: ['news','today','latest','breaking','issue','event','announcement','official'],
+      global: ['news','latest','breaking','event']
+    },
+    sns: {
+      ko: ['유튜브','인스타그램','틱톡','쇼츠','릴스','SNS','영상','후기'],
+      en: ['youtube','instagram','tiktok','shorts','reels','social','video','reviews'],
+      global: ['youtube','instagram','tiktok','video']
+    },
+    video: {
+      ko: ['영상','동영상','유튜브','쇼츠','브이로그','리뷰'],
+      en: ['video','youtube','shorts','vlog','review'],
+      global: ['video','youtube']
+    },
+    book: {
+      ko: ['책','도서','서점','출판','저자','전자책','추천도서','작품'],
+      en: ['book','books','bookstore','publishing','author','ebook','recommended books','works'],
+      global: ['book','author','works']
+    },
+    webtoon: {
+      ko: ['웹툰','만화','웹소설','캐릭터','애니','코믹','작가','추천'],
+      en: ['webtoon','comic','manga','web novel','character','animation','author','recommendation'],
+      global: ['webtoon','comic','manga']
+    },
+    shopping: {
+      ko: ['쇼핑','가격','구매','추천','리뷰','판매','상품'],
+      en: ['shopping','price','buy','recommended','reviews','sale','product'],
+      global: ['shopping','price','reviews']
+    },
+    web: {
+      ko: ['정보','사이트','홈페이지','공식','자료','서비스'],
+      en: ['information','site','homepage','official','data','service'],
+      global: ['information','official','site']
+    }
+  };
+
+  const group = byType[t] || byType.web;
+  let picked = [];
+
+  if(profile === 'ko') picked = group.ko || [];
+  else if(profile === 'latin') picked = group.en || [];
+  else picked = (group.global || []).concat((group.en || []).slice(0, 3));
+
+  // For local/place-heavy tabs, mix a few universal terms so non-Korean/global searches can still broaden.
+  if(['tour','map'].includes(t)){
+    picked = picked.concat(profile === 'ko' ? placeEn.slice(0, 4) : placeKo.slice(0, 4));
+  }
+
+  return uniqueCompactStrings(picked, 18);
+}
+
+function expandedSearchQueries(q, searchType){
+  const base = safeString(q).trim();
+  if(!base) return [];
+  const t = normalizeSearchType(searchType);
+  const profile = queryScriptProfile(base);
+
+  // all 검색은 속도 유지를 위해 확장하지 않고,
+  // 선택 탭에서만 전 세계/다국어 맥락 확장을 연다.
+  if(t === 'all') return [base];
+
+  const terms = semanticExpansionTerms(t, profile);
+  const variants = [base];
+
+  for(const term of terms){
+    const tt = safeString(term).trim();
+    if(!tt) continue;
+    const lowBase = base.toLowerCase();
+    const lowTerm = tt.toLowerCase();
+
+    // 같은 단어 반복 방지: "맛집 맛집", "webtoon webtoon" 같은 확장 제거
+    if(lowBase === lowTerm || lowBase.includes(lowTerm)) continue;
+    variants.push(base + ' ' + tt);
+  }
+
+  return uniqueCompactStrings(variants, 12);
+}
+
+function itemLooseText(it){
+  const url = safeString(firstNonEmpty(it && it.url, it && it.link)).toLowerCase();
+  return [
+    url,
+    domainOf(url),
+    safeString(it && it.source),
+    safeString(it && it.type),
+    safeString(it && it.mediaType),
+    safeString(it && it.title),
+    safeString(firstNonEmpty(it && it.summary, it && it.description))
+  ].join(' ').toLowerCase();
+}
+
+function hasAnyLooseTerm(text, terms){
+  const t = safeString(text).toLowerCase();
+  return (Array.isArray(terms) ? terms : []).some(x => t.includes(safeString(x).toLowerCase()));
+}
 
 function sourceCaps(opts){
   const deep = !!opts.deep;
@@ -913,6 +1266,135 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       return total;
     }
 
+
+    async function pullFromIntentExpansion(){
+      if(viewType === 'all') return 0;
+      if(timeLeft() <= 1300) {
+        record('intent-expansion', 'skipped-time', 0, { searchType: viewType });
+        return 0;
+      }
+
+      const variants = expandedSearchQueries(q, viewType).slice(1, 10);
+      if(!variants.length) {
+        record('intent-expansion', 'skipped-no-variants', 0, { searchType: viewType });
+        return 0;
+      }
+
+      let total = 0;
+
+      async function one(name, container, queryText, display, startAt){
+        if(!container || typeof container.fetch !== 'function' || timeLeft() <= 900) return 0;
+        try{
+          const bundle = await container.fetch(queryText, display, startAt || 1);
+          const n = addBundle(bundle, name, collected, sourceState);
+          total += n;
+          return n;
+        }catch(e){
+          return 0;
+        }
+      }
+
+      function containersForType(t){
+        if(t === 'tour') return [
+          ['naver_local_intent', Containers.web_naver_local, 5],
+          ['google_web_intent', Containers.web_google, 10],
+          ['bing_web_intent', Containers.web_bing, 20],
+          ['naver_blog_intent', Containers.web_naver_blog, 30],
+          ['naver_cafe_intent', Containers.web_naver_cafe, 30],
+          ['naver_image_intent', Containers.web_naver_image, 30],
+          ['naver_news_intent', Containers.web_naver_news, 30]
+        ];
+        if(t === 'map') return [
+          ['naver_local_intent', Containers.web_naver_local, 5],
+          ['google_web_intent', Containers.web_google, 10],
+          ['bing_web_intent', Containers.web_bing, 20],
+          ['naver_blog_intent', Containers.web_naver_blog, 30],
+          ['naver_cafe_intent', Containers.web_naver_cafe, 30],
+          ['naver_image_intent', Containers.web_naver_image, 20]
+        ];
+        if(t === 'webtoon') return [
+          ['naver_webtoon_web', Containers.web_naver, 50],
+          ['naver_webtoon_image', Containers.web_naver_image, 30],
+          ['naver_webtoon_blog', Containers.web_naver_blog, 30],
+          ['naver_webtoon_cafe', Containers.web_naver_cafe, 30],
+          ['naver_webtoon_book', Containers.web_naver_book, 40]
+        ];
+        if(t === 'book') return [
+          ['naver_book_intent', Containers.web_naver_book, 60],
+          ['naver_blog_intent', Containers.web_naver_blog, 30],
+          ['naver_kin_intent', Containers.web_naver_kin, 30],
+          ['naver_image_intent', Containers.web_naver_image, 20]
+        ];
+        if(t === 'knowledge') return [
+          ['naver_encyc_intent', Containers.web_naver_encyc, 50],
+          ['naver_kin_intent', Containers.web_naver_kin, 50],
+          ['naver_book_intent', Containers.web_naver_book, 40],
+          ['google_web_intent', Containers.web_google, 10],
+          ['bing_web_intent', Containers.web_bing, 20],
+          ['naver_news_intent', Containers.web_naver_news, 30]
+        ];
+        if(t === 'sns') return [
+          ['youtube_intent', Containers.web_youtube, 12],
+          ['naver_blog_intent', Containers.web_naver_blog, 30],
+          ['naver_cafe_intent', Containers.web_naver_cafe, 30],
+          ['naver_image_intent', Containers.web_naver_image, 20]
+        ];
+        if(t === 'cafe') return [
+          ['naver_cafe_intent', Containers.web_naver_cafe, 50],
+          ['naver_blog_intent', Containers.web_naver_blog, 30],
+          ['naver_local_intent', Containers.web_naver_local, 5],
+          ['naver_image_intent', Containers.web_naver_image, 20]
+        ];
+        if(t === 'image') return [
+          ['naver_image_intent', Containers.web_naver_image, 50],
+          ['google_image_intent', Containers.web_image, 10],
+          ['naver_blog_intent', Containers.web_naver_blog, 20],
+          ['naver_cafe_intent', Containers.web_naver_cafe, 20]
+        ];
+        if(t === 'video') return [
+          ['youtube_intent', Containers.web_youtube, 20],
+          ['naver_blog_intent', Containers.web_naver_blog, 20],
+          ['naver_image_intent', Containers.web_naver_image, 20]
+        ];
+        if(t === 'news') return [
+          ['naver_news_intent', Containers.web_naver_news, 70],
+          ['naver_web_intent', Containers.web_naver, 50],
+          ['google_news_intent', Containers.web_google, 10]
+        ];
+        return [
+          ['naver_web_intent', Containers.web_naver, 50],
+          ['google_web_intent', Containers.web_google, 10],
+          ['bing_web_intent', Containers.web_bing, 20],
+          ['naver_news_intent', Containers.web_naver_news, 30],
+          ['naver_encyc_intent', Containers.web_naver_encyc, 30],
+          ['naver_blog_intent', Containers.web_naver_blog, 30],
+          ['naver_cafe_intent', Containers.web_naver_cafe, 30],
+          ['naver_image_intent', Containers.web_naver_image, 20]
+        ];
+      }
+
+      const selected = containersForType(viewType);
+      const tasks = [];
+
+      for(const queryText of variants){
+        for(const spec of selected){
+          if(tasks.length >= (detectQueryIntentCluster(q) !== 'general' ? 30 : 24)) break;
+          tasks.push(one(spec[0], spec[1], queryText, spec[2], 1));
+        }
+        if(tasks.length >= (detectQueryIntentCluster(q) !== 'general' ? 30 : 24)) break;
+      }
+
+      await Promise.allSettled(tasks);
+      record('intent-expansion', total ? 'ok' : 'empty', total, {
+        searchType: viewType,
+        queries: variants,
+        tasks: tasks.length,
+        expansionBudget: detectQueryIntentCluster(q) !== 'general' ? 30 : 24,
+        mode: 'informal-controlled'
+      });
+      return total;
+    }
+
     const internalCount = await pullFromSearchBank();
     const shouldUseExternal = !externalOff && (mode === 'force' || !!deep || viewType !== 'all' || internalCount < externalTriggerMin);
 
@@ -934,6 +1416,10 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         record('naver_verticals', 'skipped-enough-primary', 0, { afterPrimaryExternal, naturalExpansionTarget });
       }
 
+      if((viewType !== 'all' || detectQueryIntentCluster(q) !== 'general') && timeLeft() > 1300){
+        await pullFromIntentExpansion();
+      }
+
       record('search-link-cards', 'skipped-natural-flow', 0);
     }else{
       record('external-gateway', externalOff ? 'blocked-by-request' : 'skipped-internal-enough', 0, { internalCount, trigger: externalTriggerMin, mode });
@@ -943,6 +1429,14 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     if(directMapCards.length){
       collected.push.apply(collected, directMapCards);
       record('map-link-cards', 'ok', directMapCards.length, { mode: 'direct-navigation-links' });
+    }
+
+    if(viewType === 'map' || viewType === 'tour'){
+      const directTransportCards = transportCards(q);
+      if(directTransportCards.length){
+        collected.push.apply(collected, directTransportCards);
+        record('transport-link-cards', 'ok', directTransportCards.length, { mode: 'direct-navigation-links' });
+      }
     }
 
     let unique = dedupeCanonicalItems(collected);
@@ -980,6 +1474,9 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         naturalFlow: true,
         balancedRanking: viewType === 'all',
         searchType: viewType,
+        informalVerticalExpansion: viewType !== 'all',
+        globalContextExpansion: viewType !== 'all' || detectQueryIntentCluster(q) !== 'general',
+        intentCluster: detectQueryIntentCluster(q),
         syntheticSearchLinks: false,
         providerCaps: {
           searchBankPages: caps.searchBankPages,
@@ -1431,20 +1928,32 @@ function classifySearchCategory(it){
   const text = [host, source, title, summary, mediaType, type].join(' ');
 
   if(mediaType === 'image' || type === 'image' || source.includes('image')) return 'image';
-  if(source.includes('news') || type === 'news' || text.includes('뉴스') || text.includes('속보') || text.includes('실시간') || text.includes('보도자료')) return 'news';
-  if(mediaType === 'map' || type === 'map' || source.includes('local') || source.includes('map') || text.includes('지도') || text.includes('길찾기') || text.includes('주소')) return 'map';
-  if(source.includes('book') || type === 'book' || text.includes('도서') || text.includes('책 ') || text.includes('서적') || text.includes('출판') || text.includes('저자')) return 'book';
+  if(source.includes('news') || type === 'news' || text.includes('뉴스') || text.includes('속보') || text.includes('실시간') || text.includes('보도자료') || text.includes('breaking') || text.includes('latest')) return 'news';
+  if(mediaType === 'map' || type === 'map' || source.includes('local') || source.includes('map') || text.includes('지도') || text.includes('길찾기') || text.includes('주소') || text.includes('directions') || text.includes('nearby') || text.includes('transit')) return 'map';
+  if(source.includes('book') || type === 'book' || text.includes('도서') || text.includes('책 ') || text.includes('서적') || text.includes('출판') || text.includes('저자') || text.includes('book') || text.includes('author')) return 'book';
   if(source.includes('blog')) return 'blog';
   if(source.includes('cafe') || type === 'community') return 'cafe';
   if(source.includes('kin') || text.includes('지식') || text.includes('q&a') || text.includes('문답')) return 'knowledge';
   if(source.includes('encyc') || host.includes('wikipedia.org') || host.includes('wikidata.org') || host.includes('namu.wiki') || host.includes('doopedia') || host.includes('britannica')) return 'knowledge';
-  if(text.includes('관광') || text.includes('여행') || text.includes('명소') || text.includes('축제') || text.includes('맛집') || text.includes('야경') || host.includes('visit')) return 'tour';
+
+  if(
+    text.includes('관광') || text.includes('여행') || text.includes('명소') || text.includes('축제') ||
+    text.includes('맛집') || text.includes('카페') || text.includes('공원') || text.includes('야경') ||
+    text.includes('랜드마크') || text.includes('타워') || text.includes('전망대') || text.includes('박물관') || text.includes('미술관') ||
+    text.includes('tour') || text.includes('travel') || text.includes('landmark') || text.includes('attraction') ||
+    text.includes('restaurant') || text.includes('cafe') || text.includes('park') || text.includes('museum') || text.includes('gallery') ||
+    host.includes('visit')
+  ) return 'tour';
+
+  if(text.includes('법원') || text.includes('구청') || text.includes('시청') || text.includes('관공서') || text.includes('court') || text.includes('city hall') || text.includes('district office') || text.includes('government office')) return 'map';
+  if(text.includes('지하철') || text.includes('지하철역') || text.includes('버스') || text.includes('교통') || text.includes('metro') || text.includes('subway') || text.includes('station') || text.includes('bus route')) return 'map';
+
   if(text.includes('인스타') || host.includes('instagram.') || host.includes('threads.net') || host.includes('tiktok.') || host.includes('facebook.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social')) return 'sns';
   if(mediaType === 'video' || type === 'video' || source.includes('youtube') || source.includes('video') || host.includes('youtube.com') || host.includes('youtu.be')) return 'video';
-  if(text.includes('쇼핑') || text.includes('가격') || text.includes('구매') || type === 'product' || mediaType === 'product') return 'shopping';
-  if(text.includes('스포츠') || text.includes('축구') || text.includes('야구') || text.includes('농구')) return 'sports';
-  if(text.includes('증권') || text.includes('주식') || text.includes('환율') || text.includes('금융')) return 'finance';
-  if(text.includes('웹툰') || text.includes('만화') || text.includes('webtoon')) return 'webtoon';
+  if(text.includes('쇼핑') || text.includes('가격') || text.includes('구매') || text.includes('shopping') || text.includes('price') || text.includes('product') || type === 'product' || mediaType === 'product') return 'shopping';
+  if(text.includes('스포츠') || text.includes('축구') || text.includes('야구') || text.includes('농구') || text.includes('sports')) return 'sports';
+  if(text.includes('증권') || text.includes('주식') || text.includes('환율') || text.includes('금융') || text.includes('finance') || text.includes('stock')) return 'finance';
+  if(text.includes('웹툰') || text.includes('만화') || text.includes('webtoon') || text.includes('comic') || text.includes('manga')) return 'webtoon';
 
   if(host.includes('go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('gov.uk') || host.includes('korea.kr')) return 'official';
 
@@ -1501,17 +2010,57 @@ function authorityBonusForItem(it, q){
   return bonus;
 }
 
-function matchesSearchType(it, searchType){
+function matchesSearchType(it, searchType, q){
   const t = normalizeSearchType(searchType);
   if(t === 'all') return true;
+
   const cat = classifySearchCategory(it);
-  if(t === 'web') return ['web','official'].includes(cat);
-  if(t === 'map') return cat === 'map' || cat === 'tour';
-  if(t === 'knowledge') return cat === 'knowledge' || cat === 'official' || cat === 'book';
-  if(t === 'tour') return cat === 'tour' || cat === 'map';
-  if(t === 'sns') return ['sns','video','blog','cafe'].includes(cat);
-  if(t === 'book') return cat === 'book';
-  return cat === t;
+  const text = itemLooseText(it);
+  const query = safeString(q).toLowerCase();
+
+  if(t === 'web') return ['web','official','news','blog','cafe','knowledge','tour'].includes(cat);
+
+  if(t === 'map') {
+    return ['map','tour','cafe','blog','image','web','official','news'].includes(cat) ||
+      hasAnyLooseTerm(text, [
+        '지도','주소','길찾기','위치','근처','맛집','카페','공원',
+        '지하철','지하철역','역 ', '역)', '역,', '버스','교통','노선','환승','주차장',
+        '법원','구청','시청','관공서','랜드마크',
+        'map','address','directions','location','nearby','restaurant','cafe','park',
+        'subway','metro','station','bus','transit','route','parking','court','city hall','district office','government office','landmark'
+      ]);
+  }
+
+  if(t === 'knowledge') {
+    return ['knowledge','official','book','news','web','tour','map'].includes(cat) ||
+      hasAnyLooseTerm(text, ['정보','역사','뜻','의미','백과','지식','자료','문화','교통','행정','생활정보','법원','기관','information','history','meaning','official','data','culture','institution']);
+  }
+
+  if(t === 'tour') {
+    return ['tour','map','cafe','blog','image','video','news','knowledge','web','official'].includes(cat) ||
+      hasAnyLooseTerm(text, [
+        '관광','여행','명소','공원','카페','맛집','야경','축제','행사',
+        '박물관','미술관','한강','산책','둘레길','문화','전시','공연',
+        '데이트','가볼만한곳','지하철','교통','버스','역','시장','거리','랜드마크','타워','전망대',
+        'travel','tourism','things to do','landmark','attraction','restaurant','cafe','park','museum','gallery','tower','viewpoint','market','street','transit'
+      ]);
+  }
+
+  if(t === 'sns') {
+    return ['sns','video','blog','cafe','image','news'].includes(cat) ||
+      hasAnyLooseTerm(text, ['유튜브','youtube','인스타','instagram','threads','틱톡','tiktok','facebook','x.com','twitter','sns','소셜','쇼츠','릴스','social','shorts','reels']);
+  }
+
+  if(t === 'book') return ['book','knowledge','webtoon','blog','image','shopping','web'].includes(cat) || hasAnyLooseTerm(text, ['책','도서','서점','출판','저자','웹소설','전자책','book','author','ebook','publishing']);
+  if(t === 'webtoon') return ['webtoon','image','book','blog','cafe','video','web'].includes(cat) || hasAnyLooseTerm(text, ['웹툰','만화','웹소설','캐릭터','애니','코믹','comic','cartoon','manga','web novel','character','author']);
+  if(t === 'cafe') return ['cafe','blog','tour','map','image','web','news'].includes(cat) || hasAnyLooseTerm(text, ['카페','커뮤니티','후기','모임','맛집','디저트','브런치','분위기','공간','cafe','restaurant','review','dessert','brunch']);
+  if(t === 'blog') return ['blog','cafe','tour','image','web','news','map'].includes(cat);
+  if(t === 'image') return ['image','tour','blog','cafe','video','web','map'].includes(cat) || hasAnyLooseTerm(text, ['사진','이미지','풍경','갤러리','포토','공원','카페','야경','photo','image','gallery','landmark']);
+  if(t === 'video') return ['video','sns','image','blog','tour'].includes(cat) || hasAnyLooseTerm(text, ['영상','동영상','유튜브','youtube','쇼츠','브이로그','video','vlog']);
+
+  if(cat === t) return true;
+  if(query && text.includes(query) && ['web','blog','cafe','image','video','news','map','tour','knowledge'].includes(cat)) return true;
+  return false;
 }
 
 function balanceMixedResults(ranked){
@@ -1595,7 +2144,7 @@ function applyServerSideBoosts(items, opts){
   const searchType = normalizeSearchType(opts && opts.searchType);
 
   const ranked = (Array.isArray(items) ? items : [])
-    .filter(it => matchesSearchType(it, searchType))
+    .filter(it => matchesSearchType(it, searchType, q))
     .map((it, idx) => {
       let bonus = authorityBonusForItem(it, q);
       if(lang && safeString(it.lang).toLowerCase() === lang) bonus += 1;
