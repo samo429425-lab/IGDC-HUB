@@ -1,5 +1,5 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
-// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards + stable display groups + return link
+// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards + stable display groups + visible return link
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -170,30 +170,38 @@ function ensureSearchCardMediaStyle(){
     }
 
 
-    .maru-return-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 24px 0;
-      background: #fff;
-    }
     .maru-return-link {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 6px;
-      padding: 7px 11px;
+      flex: 0 0 auto;
+      min-height: 36px;
+      padding: 8px 12px;
+      margin-right: 8px;
       border-radius: 999px;
-      border: 1px solid #dbeafe;
+      border: 1px solid #bfdbfe;
       background: #eff6ff;
-      color: #1e40af;
+      color: #1d4ed8;
       font-size: 13px;
       font-weight: 800;
       text-decoration: none;
+      white-space: nowrap;
       cursor: pointer;
     }
     .maru-return-link:hover {
       background: #dbeafe;
-      border-color: #bfdbfe;
+      border-color: #93c5fd;
+    }
+    .maru-return-link:active {
+      transform: translateY(1px);
+    }
+    @media (max-width: 720px) {
+      .maru-return-link {
+        padding: 7px 10px;
+        font-size: 12px;
+        margin-right: 4px;
+      }
     }
 
     .maru-display-section {
@@ -266,6 +274,7 @@ function ensureSearchCardMediaStyle(){
 }
 
 ensureSearchCardMediaStyle();
+ensureReturnLink();
 
 
 const type0 = normalizeSearchType(params.get('type') || 'all');
@@ -283,16 +292,55 @@ function getSafeReturnUrl() {
   }
 }
 
+function getReturnTargetUrl() {
+  const from = getSafeReturnUrl();
+  if (from) return from;
+
+  try {
+    if (document.referrer) {
+      const r = new URL(document.referrer, location.origin);
+      if (r.origin === location.origin && r.pathname !== location.pathname) {
+        return r.pathname + r.search + r.hash;
+      }
+    }
+  } catch (e) {}
+
+  try {
+    if (window.opener && !window.opener.closed && window.opener.location) {
+      const op = new URL(window.opener.location.href, location.origin);
+      if (op.origin === location.origin && op.pathname !== location.pathname) {
+        return op.pathname + op.search + op.hash;
+      }
+    }
+  } catch (e) {}
+
+  return '/home.html';
+}
+
+function navigateReturnTarget(returnUrl) {
+  const target = returnUrl || getReturnTargetUrl() || '/home.html';
+
+  try {
+    if (window.opener && !window.opener.closed) {
+      // If this search page was opened as a separate tab/window,
+      // restore the opener and close this search tab when the browser allows it.
+      window.opener.location.href = target;
+      window.opener.focus();
+      window.close();
+      setTimeout(() => { window.location.href = target; }, 160);
+      return;
+    }
+  } catch (e) {}
+
+  window.location.href = target;
+}
+
 function ensureReturnLink() {
   if (!isSearchPage) return;
 
-  const returnUrl = getSafeReturnUrl();
+  const returnUrl = getReturnTargetUrl();
   if (!returnUrl) return;
-  if (document.getElementById('maru-return-row')) return;
-
-  const row = document.createElement('div');
-  row.id = 'maru-return-row';
-  row.className = 'maru-return-row';
+  if (document.getElementById('maru-return-link')) return;
 
   const a = document.createElement('a');
   a.id = 'maru-return-link';
@@ -300,25 +348,34 @@ function ensureReturnLink() {
   a.href = returnUrl;
   a.target = '_self';
   a.rel = 'noopener';
-  a.textContent = '← 이전 페이지로 돌아가기';
+  a.setAttribute('aria-label', '이전 페이지로 돌아가기');
+  a.textContent = '← 돌아가기';
 
   a.addEventListener('click', (e) => {
     e.preventDefault();
-    window.location.href = returnUrl;
+    e.stopPropagation();
+    navigateReturnTarget(returnUrl);
   });
 
-  row.appendChild(a);
+  const header = input && input.closest ? input.closest('header') : null;
+  const searchBox = input && input.closest ? input.closest('.search-box') : null;
 
-  const anchor =
-    document.getElementById('maru-search-tabs') ||
-    status ||
-    document.getElementById('searchResults');
-
-  if (anchor && anchor.parentNode) {
-    anchor.parentNode.insertBefore(row, anchor);
-  } else {
-    document.body.insertBefore(row, document.body.firstChild);
+  if (header) {
+    header.insertBefore(a, header.firstChild);
+    return;
   }
+
+  if (searchBox && searchBox.parentNode) {
+    searchBox.parentNode.insertBefore(a, searchBox);
+    return;
+  }
+
+  if (status && status.parentNode) {
+    status.parentNode.insertBefore(a, status);
+    return;
+  }
+
+  document.body.insertBefore(a, document.body.firstChild);
 }
 
 function buildSearchUrl(q) {
