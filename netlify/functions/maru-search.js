@@ -319,34 +319,133 @@ function dedupeCanonicalItems(items){
 }
 
 function snapshotCandidates(){
-  return [
-    './search-bank.snapshot.json', './data/search-bank.snapshot.json', './snapshot.json',
-    path.join(process.cwd(), 'search-bank.snapshot.json'),
-    path.join(process.cwd(), 'data', 'search-bank.snapshot.json'),
-    path.join(__dirname || '.', 'search-bank.snapshot.json'),
-    path.join(__dirname || '.', 'data', 'search-bank.snapshot.json')
+  const bases = [
+    '.',
+    './data',
+    './assets/data',
+    './public',
+    process.cwd(),
+    path.join(process.cwd(), 'data'),
+    path.join(process.cwd(), 'assets', 'data'),
+    path.join(process.cwd(), 'public'),
+    __dirname || '.',
+    path.join(__dirname || '.', 'data'),
+    path.join(__dirname || '.', 'assets', 'data'),
+    path.join(__dirname || '.', '..'),
+    path.join(__dirname || '.', '..', 'data'),
+    path.join(__dirname || '.', '..', 'assets', 'data')
   ];
+  const names = [
+    'search-bank.snapshot.json',
+    'search-bank.snapshot(144).json',
+    'search-bank.snapshot',
+    'snapshot.json'
+  ];
+  const out = [];
+  const seen = new Set();
+  function add(p){
+    const s = safeString(p);
+    if(!s || seen.has(s)) return;
+    seen.add(s);
+    out.push(s);
+  }
+  bases.forEach(base => names.forEach(name => add(path.join(base, name))));
+  // Last-resort discovery for archived snapshot filenames such as search-bank.snapshot(144).json.
+  bases.forEach(base => {
+    try{
+      if(!fs.existsSync(base) || !fs.statSync(base).isDirectory()) return;
+      fs.readdirSync(base).forEach(name => {
+        if(/^search-bank\.snapshot.*\.json$/i.test(name) || /^snapshot.*\.json$/i.test(name)){
+          add(path.join(base, name));
+        }
+      });
+    }catch(e){}
+  });
+  return out;
 }
 
-function loadSnapshotLocal(q, limit){
-  try{
-    let rows = null;
-    for(const p of snapshotCandidates()){
-      if(fs.existsSync(p)){
-        const data = JSON.parse(fs.readFileSync(p, 'utf-8'));
-        rows = Array.isArray(data) ? data : (Array.isArray(data.items) ? data.items : null);
-        if(rows) break;
-      }
+function unwrapSearchPayload(data){
+  if(!data) return null;
+  if(typeof data === 'string'){
+    try { return JSON.parse(data); } catch(e) { return null; }
+  }
+  if(typeof data === 'object' && Object.prototype.hasOwnProperty.call(data, 'body')){
+    const body = data.body;
+    if(typeof body === 'string'){
+      try { return JSON.parse(body || '{}'); } catch(e) { return null; }
     }
-    if(!rows) return null;
+    if(body && typeof body === 'object') return body;
+  }
+  return data;
+}
+
+function extractSearchItems(data){
+  const d = unwrapSearchPayload(data);
+  if(!d) return [];
+  if(Array.isArray(d.items)) return d.items;
+  if(Array.isArray(d.results)) return d.results;
+  if(Array.isArray(d.data)) return d.data;
+  if(d.data && Array.isArray(d.data.items)) return d.data.items;
+  if(d.data && Array.isArray(d.data.results)) return d.data.results;
+  if(d.baseResult && Array.isArray(d.baseResult.items)) return d.baseResult.items;
+  if(d.baseResult && Array.isArray(d.baseResult.results)) return d.baseResult.results;
+  if(d.baseResult && d.baseResult.data && Array.isArray(d.baseResult.data.items)) return d.baseResult.data.items;
+  if(d.baseResult && d.baseResult.data && Array.isArray(d.baseResult.data.results)) return d.baseResult.data.results;
+  return [];
+}
+
+function normalizeSearchBundle(data, fallbackSource){
+  const d = unwrapSearchPayload(data) || {};
+  const items = extractSearchItems(d);
+  if(!items.length) return null;
+  const total = typeof d.total === 'number' ? d.total : (typeof d.count === 'number' ? d.count : null);
+  return { source: d.source || d.engine || fallbackSource || 'search-bank', results: items, total };
+}
+
+let SnapshotRowsCache = null;
+let SnapshotRowsPath = null;
+
+function getSnapshotRowsLocal(){
+  if(Array.isArray(SnapshotRowsCache)) return SnapshotRowsCache;
+  SnapshotRowsCache = [];
+  SnapshotRowsPath = null;
+  for(const p of snapshotCandidates()){
+    try{
+      if(!fs.existsSync(p)) continue;
+      const data = JSON.parse(fs.readFileSync(p, 'utf-8'));
+      let rows = extractSearchItems(data);
+      if(!rows.length && Array.isArray(data)) rows = data;
+      if(rows && rows.length){
+        SnapshotRowsCache = rows;
+        SnapshotRowsPath = p;
+        break;
+      }
+    }catch(e){}
+  }
+  return SnapshotRowsCache;
+}
+
+function loadSnapshotLocal(q, limit, offset){
+  try{
+    const rows = getSnapshotRowsLocal();
+    if(!rows || !rows.length) return null;
     const qq = safeString(q).trim().toLowerCase();
     const tokens = qq.split(/\s+/).filter(Boolean);
     const filtered = rows.filter(it => {
-      const h = [it.title, it.name, it.summary, it.description, it.url, it.link, it.channel, it.section, it.page, it.psom_key, it.route, Array.isArray(it.tags) ? it.tags.join(' ') : ''].join(' ').toLowerCase();
+      const h = [
+        it && it.id, it && it.title, it && it.name, it && it.summary, it && it.description,
+        it && it.url, it && it.link, it && it.channel, it && it.section, it && it.page,
+        it && it.psom_key, it && it.route, it && it.category,
+        Array.isArray(it && it.tags) ? it.tags.join(' ') : '',
+        it && it.bind && it.bind.page, it && it.bind && it.bind.section, it && it.bind && it.bind.psom_key,
+        it && it.payload && it.payload.title, it && it.payload && it.payload.summary
+      ].join(' ').toLowerCase();
       if(!qq) return true;
       return h.includes(qq) || tokens.some(t => h.includes(t));
     });
-    return filtered.slice(0, Math.min(limit || MAX_LIMIT, MAX_LIMIT));
+    const startAt = Math.max(0, parseInt(offset || 0, 10) || 0);
+    const take = Math.min(limit || MAX_LIMIT, MAX_LIMIT);
+    return filtered.slice(startAt, startAt + take);
   }catch(e){ return null; }
 }
 
@@ -376,7 +475,31 @@ let SearchBankEngineLoaded = false;
 function getSearchBankEngine(){
   if(SearchBankEngineLoaded) return SearchBankEngine;
   SearchBankEngineLoaded = true;
-  try { SearchBankEngine = require('./search-bank-engine'); } catch(e) { SearchBankEngine = null; }
+  const names = [
+    './search-bank-engine',
+    './searchBankEngine',
+    './search-bank.engine',
+    './search-bank',
+    './maru-search-bank-engine',
+    './engines/search-bank-engine',
+    './lib/search-bank-engine'
+  ];
+  const bases = [__dirname || '.', process.cwd()];
+  for(const name of names){
+    try { SearchBankEngine = require(name); if(SearchBankEngine) return SearchBankEngine; } catch(e) {}
+  }
+  for(const base of bases){
+    for(const name of names){
+      try {
+        const full = path.join(base, name.replace(/^\.\//, ''));
+        if(fs.existsSync(full + '.js') || fs.existsSync(full) || fs.existsSync(path.join(full, 'index.js'))){
+          SearchBankEngine = require(full);
+          if(SearchBankEngine) return SearchBankEngine;
+        }
+      } catch(e) {}
+    }
+  }
+  SearchBankEngine = null;
   return SearchBankEngine;
 }
 
@@ -386,29 +509,27 @@ async function callSearchBankEngineInternal(event, params){
     if(!engine) return null;
 
     const safeParams = Object.assign({}, params || {});
+    const safeEvent = {
+      httpMethod: 'GET',
+      headers: (event && event.headers) || {},
+      queryStringParameters: safeParams
+    };
+
+    let res = null;
 
     if(typeof engine.runEngine === 'function'){
-      return await engine.runEngine(event || {}, safeParams);
+      res = await engine.runEngine(event || safeEvent, safeParams);
+    } else if(typeof engine.maruSearchDispatcher === 'function'){
+      res = await engine.maruSearchDispatcher(safeParams);
+    } else if(typeof engine.search === 'function'){
+      res = await engine.search(safeParams, event || {});
+    } else if(typeof engine.handler === 'function'){
+      res = await engine.handler(safeEvent);
+    } else if(typeof engine === 'function'){
+      res = await engine(event || safeEvent, safeParams);
     }
 
-    if(typeof engine.handler === 'function'){
-      const res = await engine.handler({
-        httpMethod: 'GET',
-        headers: (event && event.headers) || {},
-        queryStringParameters: safeParams
-      });
-      if(!res) return null;
-      if(typeof res === 'object' && Object.prototype.hasOwnProperty.call(res, 'body')){
-        try { return JSON.parse(res.body || '{}'); } catch(e) { return null; }
-      }
-      return res;
-    }
-
-    if(typeof engine === 'function'){
-      return await engine(event || {}, safeParams);
-    }
-
-    return null;
+    return unwrapSearchPayload(res);
   }catch(e){
     return null;
   }
@@ -418,10 +539,13 @@ const Containers = {
   search_bank: {
     async fetch(q, limit, offset, event){
       try{
+        const safeLimit = Math.max(1, Math.min(parseInt(limit || 100, 10) || 100, MAX_LIMIT));
+        const safeOffset = Math.max(0, parseInt(offset || 0, 10) || 0);
         const data = await callSearchBankEngineInternal(event, {
           q: safeString(q),
-          limit: safeString(limit),
-          offset: safeString(offset || 0),
+          query: safeString(q),
+          limit: safeString(safeLimit),
+          offset: safeString(safeOffset),
           from: 'maru-search',
           external: 'off',
           noExternal: '1',
@@ -433,7 +557,13 @@ const Containers = {
           noAnalytics: '1',
           noRevenue: '1'
         });
-        if(data && Array.isArray(data.items)) return { source: 'search-bank', results: data.items, total: typeof data.total === 'number' ? data.total : null };
+        const bundle = normalizeSearchBundle(data, 'search-bank');
+        if(bundle) return bundle;
+
+        // Internal-only fallback: read bundled snapshot directly. No external API or function URL call.
+        const local = loadSnapshotLocal(q, safeLimit, safeOffset);
+        if(local && local.length) return { source: 'snapshot-local', results: local, total: null };
+
         return null;
       }catch(e){ return null; }
     }
@@ -443,7 +573,7 @@ const Containers = {
   web_bing: { async fetch(q, limit, start){ return bingSearch(q, limit, start); } },
   web_youtube: { async fetch(q, limit){ return youtubeSearch(q, limit); } },
   web_image: { async fetch(q, limit, start){ return googleImageSearch(q, limit, start); } },
-  snapshot: { async fetch(q, limit){ const local = loadSnapshotLocal(q, limit); return local ? { source: 'snapshot-local', results: local } : null; } }
+  snapshot: { async fetch(q, limit, offset){ const local = loadSnapshotLocal(q, limit, offset || 0); return (local && local.length) ? { source: 'snapshot-local', results: local } : null; } }
 };
 
 function sourceCaps(opts){
