@@ -1,5 +1,5 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
-// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards + stable display groups + visible return link
+// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards + stable display groups
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -169,41 +169,6 @@ function ensureSearchCardMediaStyle(){
       width: 330px;
     }
 
-
-    .maru-return-link {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      flex: 0 0 auto;
-      min-height: 36px;
-      padding: 8px 12px;
-      margin-right: 8px;
-      border-radius: 999px;
-      border: 1px solid #bfdbfe;
-      background: #eff6ff;
-      color: #1d4ed8;
-      font-size: 13px;
-      font-weight: 800;
-      text-decoration: none;
-      white-space: nowrap;
-      cursor: pointer;
-    }
-    .maru-return-link:hover {
-      background: #dbeafe;
-      border-color: #93c5fd;
-    }
-    .maru-return-link:active {
-      transform: translateY(1px);
-    }
-    @media (max-width: 720px) {
-      .maru-return-link {
-        padding: 7px 10px;
-        font-size: 12px;
-        margin-right: 4px;
-      }
-    }
-
     .maru-display-section {
       margin: 0 0 12px 0;
       padding: 0;
@@ -274,7 +239,6 @@ function ensureSearchCardMediaStyle(){
 }
 
 ensureSearchCardMediaStyle();
-ensureReturnLink();
 
 
 const type0 = normalizeSearchType(params.get('type') || 'all');
@@ -290,92 +254,6 @@ function getSafeReturnUrl() {
   } catch (e) {
     return '';
   }
-}
-
-function getReturnTargetUrl() {
-  const from = getSafeReturnUrl();
-  if (from) return from;
-
-  try {
-    if (document.referrer) {
-      const r = new URL(document.referrer, location.origin);
-      if (r.origin === location.origin && r.pathname !== location.pathname) {
-        return r.pathname + r.search + r.hash;
-      }
-    }
-  } catch (e) {}
-
-  try {
-    if (window.opener && !window.opener.closed && window.opener.location) {
-      const op = new URL(window.opener.location.href, location.origin);
-      if (op.origin === location.origin && op.pathname !== location.pathname) {
-        return op.pathname + op.search + op.hash;
-      }
-    }
-  } catch (e) {}
-
-  return '/home.html';
-}
-
-function navigateReturnTarget(returnUrl) {
-  const target = returnUrl || getReturnTargetUrl() || '/home.html';
-
-  try {
-    if (window.opener && !window.opener.closed) {
-      // If this search page was opened as a separate tab/window,
-      // restore the opener and close this search tab when the browser allows it.
-      window.opener.location.href = target;
-      window.opener.focus();
-      window.close();
-      setTimeout(() => { window.location.href = target; }, 160);
-      return;
-    }
-  } catch (e) {}
-
-  window.location.href = target;
-}
-
-function ensureReturnLink() {
-  if (!isSearchPage) return;
-
-  const returnUrl = getReturnTargetUrl();
-  if (!returnUrl) return;
-  if (document.getElementById('maru-return-link')) return;
-
-  const a = document.createElement('a');
-  a.id = 'maru-return-link';
-  a.className = 'maru-return-link';
-  a.href = returnUrl;
-  a.target = '_self';
-  a.rel = 'noopener';
-  a.setAttribute('aria-label', '이전 페이지로 돌아가기');
-  a.textContent = '← 돌아가기';
-
-  a.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    navigateReturnTarget(returnUrl);
-  });
-
-  const header = input && input.closest ? input.closest('header') : null;
-  const searchBox = input && input.closest ? input.closest('.search-box') : null;
-
-  if (header) {
-    header.insertBefore(a, header.firstChild);
-    return;
-  }
-
-  if (searchBox && searchBox.parentNode) {
-    searchBox.parentNode.insertBefore(a, searchBox);
-    return;
-  }
-
-  if (status && status.parentNode) {
-    status.parentNode.insertBefore(a, status);
-    return;
-  }
-
-  document.body.insertBefore(a, document.body.firstChild);
 }
 
 function buildSearchUrl(q) {
@@ -397,34 +275,9 @@ function buildSearchUrl(q) {
 }
 
 function ensureSearchHistoryBridge() {
-  if (!isSearchPage) return;
-
-  const returnUrl = getSafeReturnUrl();
-  if (!returnUrl) return;
-
-  const state = history.state || {};
-  if (state && state.__searchBridgeInstalled) return;
-
-  history.replaceState(
-    {
-      ...(state || {}),
-      __searchBridgeInstalled: true,
-      __searchEntry: true,
-      q: q0 || '',
-      from: returnUrl
-    },
-    '',
-    location.href
-  );
-
-  history.pushState(
-    {
-      __searchBridgeMarker: true,
-      from: returnUrl
-    },
-    '',
-    location.href
-  );
+  // Disabled: browser chrome Back is now handled natively by the home bridge entry.
+  // Do not mutate search.html history here.
+  return;
 }
 
 function syncSearchFromUrl(run = true) {
@@ -507,7 +360,6 @@ if (q0) {
 
 ensureSearchTabs();
 updateSearchTabsActive();
-ensureReturnLink();
 
 if (q0) {
   syncSearchFromUrl(true);
