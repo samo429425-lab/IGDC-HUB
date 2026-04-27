@@ -1,5 +1,5 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
-// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards + stable display groups
+// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards + stable display groups + back bridge
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -283,25 +283,36 @@ function ensureSearchHistoryBridge() {
   const state = history.state || {};
   if (state && state.__searchBridgeInstalled) return;
 
+  const searchUrl = location.pathname + location.search + location.hash;
+
+  // If search.html was opened in a fresh tab/window, the browser Back button can be disabled.
+  // Build a tiny same-tab bridge:
+  //   entry 0 = current search URL with __searchEntry marker
+  //   entry 1 = current search URL with __searchBridgeMarker
+  // When the user presses browser Back, popstate lands on entry 0 and redirects to returnUrl.
   history.replaceState(
     {
       ...(state || {}),
       __searchBridgeInstalled: true,
       __searchEntry: true,
       q: q0 || '',
+      type: activeType || 'all',
       from: returnUrl
     },
     '',
-    location.href
+    searchUrl
   );
 
   history.pushState(
     {
+      __searchBridgeInstalled: true,
       __searchBridgeMarker: true,
+      q: q0 || '',
+      type: activeType || 'all',
       from: returnUrl
     },
     '',
-    location.href
+    searchUrl
   );
 }
 
@@ -335,7 +346,7 @@ window.addEventListener('popstate', (e) => {
   const state = e.state || {};
 
   // 1️⃣ 검색 진입 이전 페이지로 복귀
-  if (state.__searchEntry && state.from) {
+  if ((state.__searchEntry || state.__searchBridgeReturn) && state.from) {
     location.href = state.from;
     return;
   }
@@ -385,6 +396,7 @@ if (q0) {
 
 ensureSearchTabs();
 updateSearchTabsActive();
+ensureSearchHistoryBridge();
 
 if (q0) {
   syncSearchFromUrl(true);
@@ -663,7 +675,12 @@ async function fetchSearch(q, type = activeType){
       if (activeType && activeType !== 'all') u.searchParams.set('type', activeType);
       else u.searchParams.delete('type');
 
-      history.pushState({ q, type: activeType, page: 1, block: 0 }, '', u.toString());
+      const safeReturnUrl = getSafeReturnUrl();
+      if (safeReturnUrl) {
+        u.searchParams.set('from', safeReturnUrl);
+      }
+
+      history.pushState({ q, type: activeType, page: 1, block: 0, from: safeReturnUrl || '' }, '', u.toString());
       runSearch(q, activeType);
     }
 
