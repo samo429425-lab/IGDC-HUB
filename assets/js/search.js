@@ -1,5 +1,5 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
-// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards + stable display groups + hard back bridge
+// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards + stable display groups + return link
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -169,6 +169,33 @@ function ensureSearchCardMediaStyle(){
       width: 330px;
     }
 
+
+    .maru-return-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 24px 0;
+      background: #fff;
+    }
+    .maru-return-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 11px;
+      border-radius: 999px;
+      border: 1px solid #dbeafe;
+      background: #eff6ff;
+      color: #1e40af;
+      font-size: 13px;
+      font-weight: 800;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .maru-return-link:hover {
+      background: #dbeafe;
+      border-color: #bfdbfe;
+    }
+
     .maru-display-section {
       margin: 0 0 12px 0;
       padding: 0;
@@ -256,6 +283,44 @@ function getSafeReturnUrl() {
   }
 }
 
+function ensureReturnLink() {
+  if (!isSearchPage) return;
+
+  const returnUrl = getSafeReturnUrl();
+  if (!returnUrl) return;
+  if (document.getElementById('maru-return-row')) return;
+
+  const row = document.createElement('div');
+  row.id = 'maru-return-row';
+  row.className = 'maru-return-row';
+
+  const a = document.createElement('a');
+  a.id = 'maru-return-link';
+  a.className = 'maru-return-link';
+  a.href = returnUrl;
+  a.target = '_self';
+  a.rel = 'noopener';
+  a.textContent = '← 이전 페이지로 돌아가기';
+
+  a.addEventListener('click', (e) => {
+    e.preventDefault();
+    window.location.href = returnUrl;
+  });
+
+  row.appendChild(a);
+
+  const anchor =
+    document.getElementById('maru-search-tabs') ||
+    status ||
+    document.getElementById('searchResults');
+
+  if (anchor && anchor.parentNode) {
+    anchor.parentNode.insertBefore(row, anchor);
+  } else {
+    document.body.insertBefore(row, document.body.firstChild);
+  }
+}
+
 function buildSearchUrl(q) {
   const u = new URL('/search.html', location.origin);
   u.searchParams.set('q', q);
@@ -283,38 +348,25 @@ function ensureSearchHistoryBridge() {
   const state = history.state || {};
   if (state && state.__searchBridgeInstalled) return;
 
-  const searchUrl = location.pathname + location.search + location.hash;
-
-  /*
-    Hard back bridge:
-    - 새 탭/_blank 검색창은 브라우저 이전 history가 없어서 back 버튼은 켜져도
-      같은 URL state 이동만 하고 체감상 홈으로 안 넘어갈 수 있다.
-    - 그래서 history entry 0의 URL 자체를 from URL로 바꾼 뒤,
-      현재 search URL을 entry 1로 다시 push한다.
-    - 사용자가 브라우저 뒤로가기를 누르면 entry 0으로 이동하고,
-      popstate에서 즉시 from으로 location.replace 한다.
-  */
   history.replaceState(
     {
+      ...(state || {}),
       __searchBridgeInstalled: true,
-      __searchBridgeReturn: true,
+      __searchEntry: true,
+      q: q0 || '',
       from: returnUrl
     },
     '',
-    returnUrl
+    location.href
   );
 
   history.pushState(
     {
-      ...(state || {}),
-      __searchBridgeInstalled: true,
       __searchBridgeMarker: true,
-      q: q0 || '',
-      type: activeType || 'all',
       from: returnUrl
     },
     '',
-    searchUrl
+    location.href
   );
 }
 
@@ -348,8 +400,8 @@ window.addEventListener('popstate', (e) => {
   const state = e.state || {};
 
   // 1️⃣ 검색 진입 이전 페이지로 복귀
-  if ((state.__searchBridgeReturn || state.__searchEntry) && state.from) {
-    location.replace(state.from);
+  if (state.__searchEntry && state.from) {
+    location.href = state.from;
     return;
   }
 
@@ -398,7 +450,7 @@ if (q0) {
 
 ensureSearchTabs();
 updateSearchTabsActive();
-ensureSearchHistoryBridge();
+ensureReturnLink();
 
 if (q0) {
   syncSearchFromUrl(true);
@@ -677,12 +729,7 @@ async function fetchSearch(q, type = activeType){
       if (activeType && activeType !== 'all') u.searchParams.set('type', activeType);
       else u.searchParams.delete('type');
 
-      const safeReturnUrl = getSafeReturnUrl();
-      if (safeReturnUrl) {
-        u.searchParams.set('from', safeReturnUrl);
-      }
-
-      history.pushState({ q, type: activeType, page: 1, block: 0, from: safeReturnUrl || '' }, '', u.toString());
+      history.pushState({ q, type: activeType, page: 1, block: 0 }, '', u.toString());
       runSearch(q, activeType);
     }
 
