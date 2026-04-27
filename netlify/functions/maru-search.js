@@ -1,115 +1,94 @@
 /**
  * netlify/functions/maru-search.js
  * ------------------------------------------------------------
- * MARU SEARCH — CANONICAL CAPABILITY CORE (A1.4)
+ * MARU SEARCH — SAFE PARALLEL WIDE + RICH MEDIA (A1.5.3)
  *
- * Goals (expand-only, no regressions):
- * - Keep existing API: exports.handler / exports.maruSearchDispatcher / items + results alias
- * - Add "Capability Layer" inside maru-search:
- *   - Canonical Result Object (thumbnail/mediaType/lang/source fields)
- *   - Resilience: timeouts, safe fetch, soft circuit-breaker (per function runtime)
- *   - Future-ready containers registry (web/snapshot/media/ai) without breaking current flow
- *
- * Notes:
- * - No hard dependency on external storage. "Snapshot/AI" containers are optional and safe-noop unless configured.
+ * Design goal:
+ * - Keep the working 313/314 API shape: handler / maruSearchDispatcher / runEngine / items+results
+ * - Keep the safe 314 parallel/allSettled pattern
+ * - Restore controlled wide scanning so search results do not stall around ~200
+ * - Preserve thumbnails/images/video/map cards for richer search cards
+ * - Do NOT pull collector/planetary in the default search path
  */
 
 'use strict';
 
-// ===== CORE ENGINE INTEGRATION (EXPAND ONLY) =====
 let Core = null;
-try { Core = require("./core"); } catch (e) { Core = null; }
+try { Core = require('./core'); } catch (e) { Core = null; }
 
-const VERSION = 'A1.5.2-safe-parallel-efficient';
-const DEFAULT_LIMIT = 10;
+const fs = require('fs');
+const path = require('path');
+
+const VERSION = 'A1.5.3-safe-parallel-wide-rich';
+const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 1000;
+const MIN_RESULT_TARGET = 500;
+const DEFAULT_SOFT_TIMEOUT_MS = 8500;
+const SEARCH_BANK_INTERNAL_TIMEOUT_MS = 4500;
 
-// ===== Query Cache (runtime memory) =====
-const QUERY_CACHE = new Map();
-const QUERY_CACHE_TTL = 10_000;
+function nowMs(){ return Date.now(); }
 
-function cacheKeyFor(q, limit, start, lang){
-  return [String(q||""), Number(limit||0), Number(start||0), String(lang||"")].join("|");
-}
-function getQueryCache(key){
-  const hit = QUERY_CACHE.get(key);
-  if(!hit) return null;
-  if ((Date.now() - hit.t) > QUERY_CACHE_TTL){
-    QUERY_CACHE.delete(key);
-    return null;
-  }
-  return hit.v;
-}
-function setQueryCache(key, value){
-  QUERY_CACHE.set(key, { t: Date.now(), v: value });
+function truthy(v){
+  const s = String(v == null ? '' : v).trim().toLowerCase();
+  return s === '1' || s === 'true' || s === 'yes' || s === 'on';
 }
 
-// ===== Resilience (lightweight; safe on Netlify) =====
-const CB = {
-  // name -> { fails, openUntil }
-  states: Object.create(null),
-  maxFails: 4,
-  coolDownMs: 25_000
-};
+function safeString(v){ return String(v == null ? '' : v); }
+function stripHtml(s){ return safeString(s).replace(/<[^>]*>/g, ''); }
 
-function nowMs() { return Date.now(); }
-
-function cbCanRun(name){
-  const st = CB.states[name];
-  if (!st) return true;
-  if (!st.openUntil) return true;
-  return nowMs() > st.openUntil;
-}
-function cbOnSuccess(name){
-  const st = CB.states[name];
-  if (!st) return;
-  st.fails = 0;
-  st.openUntil = 0;
-}
-function cbOnFail(name){
-  const st = CB.states[name] || (CB.states[name] = { fails: 0, openUntil: 0 });
-  st.fails += 1;
-  if (st.fails >= CB.maxFails) {
-    st.openUntil = nowMs() + CB.coolDownMs;
-  }
+function clampInt(v, d, min, max){
+  const n = parseInt(v, 10);
+  const x = Number.isFinite(n) ? n : d;
+  return Math.max(min, Math.min(max, x));
 }
 
-async function fetchWithTimeout(url, options, timeoutMs){
-  const ms = Math.max(500, Math.min(12_000, timeoutMs || 8_000));
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), ms);
-  try{
-    return await fetch(url, { ...(options || {}), signal: ctrl.signal });
-  } finally {
-    clearTimeout(t);
-  }
+function normalizeBaseUrl(v){
+  const s = safeString(v).trim().replace(/\/+$/, '');
+  if(!s) return '';
+  return /^https?:\/\//i.test(s) ? s : 'https://' + s;
 }
-
 
 function eventBaseUrl(event){
   try{
     const headers = (event && event.headers) || {};
-    const host = headers['x-forwarded-host'] || headers['host'] || "";
-    const proto = headers['x-forwarded-proto'] || "https";
-    if(!host) return "";
+    const host = headers['x-forwarded-host'] || headers['host'] || '';
+    const proto = headers['x-forwarded-proto'] || 'https';
+    if(!host) return '';
     return (proto + '://' + host).replace(/\/+$/, '');
-  }catch(e){
-    return "";
-  }
-}
-
-function normalizeBaseUrl(v){
-  const raw = String(v || '').trim().replace(/\/+$/, '');
-  if(!raw) return '';
-  return /^https?:\/\//i.test(raw) ? raw : 'https://' + raw;
+  }catch(e){ return ''; }
 }
 
 function resolveRuntimeBaseUrl(event){
   return normalizeBaseUrl(process.env.DEPLOY_URL || process.env.URL || process.env.SITE_URL) || eventBaseUrl(event);
 }
 
-// ===== HTTP helpers =====
-function ok(body) {
+async function fetchWithTimeout(url, options, timeoutMs){
+  const ms = Math.max(500, Math.min(12000, timeoutMs || 6000));
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try{
+    return await fetch(url, Object.assign({}, options || {}, { signal: ctrl.signal }));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function withSoftTimeout(promise, timeoutMs, fallback){
+  const ms = Math.max(250, Math.min(12000, timeoutMs || 2500));
+  let timer = null;
+  try{
+    return await Promise.race([
+      Promise.resolve(promise),
+      new Promise(resolve => {
+        timer = setTimeout(() => resolve(fallback), ms);
+      })
+    ]);
+  } finally {
+    if(timer) clearTimeout(timer);
+  }
+}
+
+function ok(body){
   return {
     statusCode: 200,
     headers: {
@@ -117,151 +96,36 @@ function ok(body) {
       'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
       'Vary': 'Accept-Language, Query-String',
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'content-type',
+      'Access-Control-Allow-Headers': 'content-type'
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(body)
   };
 }
 
-function fail(message, detail) {
+function fail(message, detail){
   return ok({
     status: 'error',
     engine: 'maru-search',
     version: VERSION,
     message,
-    detail: detail || null,
+    detail: detail || null
   });
 }
 
-function truthyParam(v){
-  const t = String(v == null ? '' : v).trim().toLowerCase();
-  return t === '1' || t === 'true' || t === 'yes' || t === 'on';
+function pickQ(event){
+  const qs = (event && event.queryStringParameters) || {};
+  const q = safeString(qs.q || qs.query || '').trim();
+  const limit = clampInt(qs.limit || qs.max || qs.count, DEFAULT_LIMIT, 1, MAX_LIMIT);
+  const start = clampInt(qs.start || 1, 1, 1, 1000);
+  const lang = safeString(qs.lang || qs.uiLang || qs.locale || '').trim() || null;
+  const deep = truthy(qs.deep) || String(qs.external || '').toLowerCase() === 'deep';
+  const externalOff = String(qs.external || '').toLowerCase() === 'off' || truthy(qs.noExternal) || truthy(qs.disableExternal);
+  const noMedia = truthy(qs.noMedia) || truthy(qs.disableMedia);
+  return { q, limit, start, lang, deep, externalOff, noMedia, raw: qs };
 }
 
-function pickQ(event) {
-  const qs = event.queryStringParameters || {};
-  const q = String(qs.q || qs.query || '').trim();
-  const limitRaw = parseInt(qs.limit || DEFAULT_LIMIT, 10);
-  const limit = Math.min(Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : DEFAULT_LIMIT, MAX_LIMIT);
-
-  const startRaw = parseInt(qs.start || 1, 10);
-  const start = Number.isFinite(startRaw) && startRaw > 0 ? startRaw : 1;
-
-  // future: explicit mode selection
-  const mode = String(qs.mode || 'search').trim() || 'search';
-  const lang = String(qs.lang || qs.uiLang || qs.locale || '').trim() || null;
-
-  // External API control:
-  // - default: efficient auto mode
-  // - deep=1 or external=deep/full: wider external scan
-  // - external=off/noExternal/disableExternal: explicit suppression only
-  const external = qs.external == null ? null : String(qs.external).trim();
-  const noExternal = qs.noExternal;
-  const disableExternal = qs.disableExternal;
-  const deep = truthyParam(qs.deep || qs.deepSearch || qs.deepExternal || qs.extended) || /^(deep|full|max)$/i.test(String(external || ''));
-  const includeMedia = truthyParam(qs.media || qs.includeMedia || qs.includeImages || qs.includeVideo || qs.images || qs.video);
-
-  return { q, limit, start, mode, lang, external, noExternal, disableExternal, deep, includeMedia };
-}
-
-function stripHtml(s) {
-  return String(s || '').replace(/<[^>]*>/g, '');
-}
-
-// ===== Canonical Result helpers (Capability Layer) =====
-function safeUrl(u){
-  const s = String(u || '').trim();
-  if (!s) return '';
-  return s;
-}
-
-function domainOf(url){
-  try { return new URL(url).hostname.replace(/^www\./,''); }
-  catch(e){ return ''; }
-}
-
-function faviconOf(url){
-  const d = domainOf(url);
-  if (!d) return '';
-  // Google S2 favicon service (works globally). Front can still override if needed.
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64`;
-}
-
-function detectLangFromTextFallback(text){
-  // VERY light heuristic; true language intelligence layer will replace this.
-  const t = String(text || '');
-  if (!t) return null;
-  if (/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(t)) return 'ko';
-  if (/[ぁ-ゟ゠-ヿ]/.test(t)) return 'ja';
-  if (/[一-龥]/.test(t)) return 'zh';
-  if (/[А-Яа-яЁё]/.test(t)) return 'ru';
-  return 'en';
-}
-
-function canonicalizeItem(it, query){
-  const url = safeUrl(it.url || it.link || '');
-  const title = String(it.title || '').trim();
-  const summary = String(it.summary || it.snippet || '').trim();
-
-  // Thumbnail priority:
-  // 1) explicit it.thumbnail / it.thumb
-  // 2) payload common keys
-  // 3) favicon fallback
-  const p = (it && typeof it.payload === 'object') ? it.payload : {};
-  const thumb =
-    String(it.thumbnail || it.thumb || p.thumb || p.thumbnail || p.image || p.image_url || p.og_image || '').trim() ||
-    faviconOf(url);
-
-  const lang =
-    it.lang ||
-    p.lang ||
-    detectLangFromTextFallback(title + ' ' + summary) ||
-    null;
-
-  const mediaType =
-    it.mediaType ||
-    p.mediaType ||
-    (it.type === 'image' ? 'image' : (it.type === 'video' ? 'video' : 'article'));
-
-  // stable-ish id (no hard storage). Prefer url, else title.
-  const id = it.id || url || title || ('item-' + Math.random().toString(16).slice(2));
-
-  return {
-    id,
-    type: it.type || 'web',
-    mediaType,
-    title,
-    summary,
-    url,
-    source: it.source || p.source || null,
-    lang,
-    thumbnail: thumb,
-    // existing score fields preserved
-    score: typeof it.score === 'number' ? it.score : 0.9,
-    payload: p
-  };
-}
-
-function toStandardItems(arr, source) {
-  return (Array.isArray(arr) ? arr : []).map((r, idx) => {
-    const item = {
-      id: r.link || r.url || r.title || `${source}-${idx}`,
-      type: r.type || 'web',
-      title: r.title || '',
-      summary: r.snippet || r.summary || '',
-      url: r.link || r.url || '',
-      source,
-      score: 0.9,
-      payload: r.payload || {}
-    };
-    return canonicalizeItem(item, null);
-  });
-}
-
-
-// ===== Runtime Routing / Dedup helpers =====
 function parseAcceptLanguage(header){
-  return String(header || '')
+  return safeString(header)
     .split(',')
     .map(x => x.trim().split(';')[0].toLowerCase())
     .filter(Boolean);
@@ -270,577 +134,488 @@ function parseAcceptLanguage(header){
 function detectRuntimeRegion(event, lang, q){
   try{
     const qs = (event && event.queryStringParameters) || {};
-    const forcedRegion = String(qs.region || qs.geo || '').trim().toUpperCase();
-    const forcedCountry = String(qs.country || '').trim().toUpperCase();
-    if (forcedRegion) return forcedRegion;
-    if (forcedCountry === 'KR') return 'KR';
-    if (forcedCountry === 'US') return 'US';
+    const forcedRegion = safeString(qs.region || qs.geo || '').trim().toUpperCase();
+    const forcedCountry = safeString(qs.country || '').trim().toUpperCase();
+    if(forcedRegion) return forcedRegion;
+    if(forcedCountry === 'KR') return 'KR';
+    if(forcedCountry === 'US') return 'US';
 
     const headers = (event && event.headers) || {};
-    const xfCountry = String(headers['x-country'] || headers['cf-ipcountry'] || headers['x-vercel-ip-country'] || '').trim().toUpperCase();
-    if (xfCountry === 'KR') return 'KR';
-    if (xfCountry === 'US') return 'US';
+    const xfCountry = safeString(headers['x-country'] || headers['cf-ipcountry'] || headers['x-vercel-ip-country'] || '').trim().toUpperCase();
+    if(xfCountry === 'KR') return 'KR';
+    if(xfCountry === 'US') return 'US';
 
-    const langs = [
-      String(lang || '').toLowerCase(),
-      ...parseAcceptLanguage(headers['accept-language'] || headers['Accept-Language'] || '')
-    ].filter(Boolean);
-
-    if (langs.some(x => x.startsWith('ko'))) return 'KR';
-    if (langs.some(x => x.startsWith('en-us'))) return 'US';
-    if (langs.some(x => x.startsWith('en'))) return 'US';
-
-    const text = String(q || '');
-    if (/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(text)) return 'KR';
+    const langs = [safeString(lang).toLowerCase()].concat(parseAcceptLanguage(headers['accept-language'] || headers['Accept-Language'] || '')).filter(Boolean);
+    if(langs.some(x => x.startsWith('ko'))) return 'KR';
+    if(langs.some(x => x.startsWith('en-us'))) return 'US';
+    if(langs.some(x => x.startsWith('en'))) return 'US';
+    if(/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(safeString(q))) return 'KR';
     return 'GLOBAL';
-  }catch(e){
-    return 'GLOBAL';
-  }
+  }catch(e){ return 'GLOBAL'; }
 }
 
 function sourceOrderForRegion(region){
-  switch(String(region || '').toUpperCase()){
-    case 'KR':
-      return ['search_bank', 'web_naver', 'web_google'];
-    case 'US':
-      return ['search_bank', 'web_google', 'web_naver'];
-    default:
-      return ['search_bank', 'web_google', 'web_naver'];
-  }
+  const r = safeString(region).toUpperCase();
+  if(r === 'KR') return ['search_bank','web_naver','web_google','web_bing','web_youtube','web_image','maps'];
+  return ['search_bank','web_google','web_bing','web_naver','web_youtube','web_image','maps'];
 }
 
-function dedupeCanonicalItems(items){
-  const seen = new Set();
+function domainOf(url){
+  try { return new URL(url).hostname.replace(/^www\./, ''); }
+  catch(e){ return ''; }
+}
+
+function faviconOf(url){
+  const d = domainOf(url);
+  return d ? 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(d) + '&sz=64' : '';
+}
+
+function isRealImageUrl(u){
+  const s = safeString(u).trim();
+  if(!s) return false;
+  const low = s.toLowerCase();
+  if(low.includes('google.com/s2/favicons') || low.includes('favicon') || low.endsWith('.ico')) return false;
+  if(low.startsWith('data:')) return true;
+  if(/^https?:\/\//i.test(s) || s.startsWith('/')) return true;
+  return false;
+}
+
+function firstNonEmpty(){
+  for(let i=0; i<arguments.length; i++){
+    const v = arguments[i];
+    if(v === undefined || v === null) continue;
+    const s = safeString(v).trim();
+    if(s) return v;
+  }
+  return '';
+}
+
+function detectLangFromTextFallback(text){
+  const t = safeString(text);
+  if(!t) return null;
+  if(/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(t)) return 'ko';
+  if(/[ぁ-ゟ゠-ヿ]/.test(t)) return 'ja';
+  if(/[一-龥]/.test(t)) return 'zh';
+  if(/[А-Яа-яЁё]/.test(t)) return 'ru';
+  return 'en';
+}
+
+function compactImages(arr){
   const out = [];
+  const seen = new Set();
+  (Array.isArray(arr) ? arr : []).forEach(v => {
+    const s = safeString(v).trim();
+    if(!s || seen.has(s)) return;
+    if(isRealImageUrl(s)){
+      seen.add(s);
+      out.push(s);
+    }
+  });
+  return out.slice(0, 6);
+}
 
-  for (const it of (Array.isArray(items) ? items : [])) {
-    const rawUrl = String(it?.url || '').trim();
-    const normUrl = rawUrl.toLowerCase();
+function mediaPoster(raw, payload){
+  const media = raw && raw.media;
+  const preview = media && media.preview;
+  return firstNonEmpty(
+    preview && preview.poster,
+    payload && payload.poster,
+    payload && payload.thumb,
+    payload && payload.thumbnail
+  );
+}
 
-    const isPlaceholderUrl =
-      !rawUrl ||
-      rawUrl === '#' ||
-      rawUrl === '/' ||
-      normUrl === 'javascript:void(0)' ||
-      normUrl.startsWith('javascript:');
+function canonicalizeItem(raw, query, sourceHint){
+  const it = (raw && typeof raw === 'object') ? raw : {};
+  const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+  const url = safeString(firstNonEmpty(it.url, it.link, it.href, p.url, p.link)).trim();
+  const title = safeString(firstNonEmpty(it.title, it.name, p.title, p.name, url)).trim();
+  const summary = safeString(firstNonEmpty(it.summary, it.snippet, it.description, p.summary, p.snippet, p.description)).trim();
 
-    const key = (
-      !isPlaceholderUrl
-        ? rawUrl
-        : (String(it?.id || '').trim() || String(it?.title || '').trim())
-    ).toLowerCase() || JSON.stringify(it || {}).toLowerCase();
+  const imageCandidates = compactImages([
+    it.thumbnail, it.thumb, it.image, it.image_url, it.og_image,
+    p.thumbnail, p.thumb, p.image, p.image_url, p.og_image,
+    mediaPoster(it, p)
+  ].concat(Array.isArray(it.imageSet) ? it.imageSet : []).concat(Array.isArray(p.imageSet) ? p.imageSet : []));
 
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    out.push(it);
+  const favicon = faviconOf(url);
+  const thumbnail = imageCandidates[0] || favicon;
+  const type = safeString(it.type || p.type || 'web') || 'web';
+  const mediaType = safeString(it.mediaType || p.mediaType || (type === 'image' ? 'image' : (type === 'video' ? 'video' : 'article')));
+  const source = firstNonEmpty(it.source, p.source, sourceHint, domainOf(url));
+  const id = safeString(firstNonEmpty(it.id, url, title, source + '-' + Math.random().toString(16).slice(2))).trim();
+  const tags = Array.isArray(it.tags) ? it.tags : (Array.isArray(p.tags) ? p.tags : []);
+
+  const out = Object.assign({}, it, {
+    id,
+    type,
+    mediaType,
+    title,
+    summary,
+    description: it.description !== undefined ? it.description : summary,
+    url,
+    link: firstNonEmpty(it.link, url),
+    source,
+    lang: it.lang || p.lang || detectLangFromTextFallback(title + ' ' + summary),
+    thumbnail,
+    thumb: firstNonEmpty(it.thumb, imageCandidates[0], thumbnail),
+    image: firstNonEmpty(it.image, imageCandidates[0], ''),
+    imageSet: imageCandidates,
+    media: it.media || p.media || undefined,
+    channel: it.channel || p.channel,
+    section: it.section || p.section,
+    page: it.page || p.page,
+    psom_key: it.psom_key || p.psom_key,
+    route: it.route || p.route,
+    bind: (it.bind && typeof it.bind === 'object') ? it.bind : p.bind,
+    tags,
+    score: typeof it.score === 'number' ? it.score : (typeof p.score === 'number' ? p.score : 0.9),
+    payload: p
+  });
+
+  if(!out.media && mediaType === 'video' && thumbnail){
+    out.media = { type: 'video', preview: { poster: thumbnail } };
   }
 
   return out;
 }
 
+function toStandardItems(arr, source){
+  return (Array.isArray(arr) ? arr : []).map((r, idx) => {
+    const raw = (r && typeof r === 'object') ? r : {};
+    const item = Object.assign({}, raw, {
+      id: firstNonEmpty(raw.id, raw.link, raw.url, raw.title, source + '-' + idx),
+      type: raw.type || 'web',
+      title: firstNonEmpty(raw.title, raw.name, ''),
+      summary: firstNonEmpty(raw.snippet, raw.summary, raw.description, ''),
+      url: firstNonEmpty(raw.url, raw.link, raw.href, ''),
+      link: firstNonEmpty(raw.link, raw.url, raw.href, ''),
+      source: raw.source || source,
+      score: typeof raw.score === 'number' ? raw.score : 0.9,
+      payload: raw.payload || {}
+    });
+    return canonicalizeItem(item, null, source);
+  });
+}
 
-// ===== SNAPSHOT DIRECT ACCESS =====
-const fs = require('fs');
-const path = require('path');
-function snapshotCandidatePaths(){
+function dedupeCanonicalItems(items){
+  const seen = new Set();
+  const out = [];
+  for(const it of (Array.isArray(items) ? items : [])){
+    const rawUrl = safeString(it && (it.url || it.link)).trim();
+    const normUrl = rawUrl.toLowerCase();
+    const placeholder = !rawUrl || rawUrl === '#' || rawUrl === '/' || normUrl === 'javascript:void(0)' || normUrl.startsWith('javascript:');
+    const key = (placeholder ? (safeString(it && it.id).trim() || safeString(it && it.title).trim() + '|' + safeString(it && it.source).trim()) : rawUrl).toLowerCase();
+    if(!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(it);
+  }
+  return out;
+}
+
+function snapshotCandidates(){
   return [
-    './search-bank.snapshot.json',
-    './data/search-bank.snapshot.json',
-    './snapshot.json',
-    path.join(__dirname || '.', 'search-bank.snapshot.json'),
-    path.join(__dirname || '.', 'data', 'search-bank.snapshot.json'),
+    './search-bank.snapshot.json', './data/search-bank.snapshot.json', './snapshot.json',
     path.join(process.cwd(), 'search-bank.snapshot.json'),
-    path.join(process.cwd(), 'data', 'search-bank.snapshot.json')
+    path.join(process.cwd(), 'data', 'search-bank.snapshot.json'),
+    path.join(__dirname || '.', 'search-bank.snapshot.json'),
+    path.join(__dirname || '.', 'data', 'search-bank.snapshot.json')
   ];
 }
+
 function loadSnapshotLocal(q, limit){
   try{
-    let data = null;
-    for(const p of snapshotCandidatePaths()){
+    let rows = null;
+    for(const p of snapshotCandidates()){
       if(fs.existsSync(p)){
-        data = JSON.parse(fs.readFileSync(p,'utf-8'));
-        break;
+        const data = JSON.parse(fs.readFileSync(p, 'utf-8'));
+        rows = Array.isArray(data) ? data : (Array.isArray(data.items) ? data.items : null);
+        if(rows) break;
       }
     }
-    const rows = Array.isArray(data) ? data : (Array.isArray(data && data.items) ? data.items : null);
     if(!rows) return null;
-    const qq = String(q || '').toLowerCase().trim();
-    return rows
-      .filter(it => {
-        if(!qq) return true;
-        const hay = [
-          it.title, it.name, it.summary, it.description, it.url, it.link,
-          it.channel, it.section, it.page, it.psom_key, it.route,
-          it.category, it.semantic_category,
-          it.bind && it.bind.page, it.bind && it.bind.section, it.bind && it.bind.psom_key,
-          Array.isArray(it.tags) ? it.tags.join(' ') : ''
-        ].filter(Boolean).join(' ').toLowerCase();
-        return hay.includes(qq) || qq.split(/\s+/).some(tok => tok && hay.includes(tok));
-      })
-      .slice(0, Math.min(limit || 100, MAX_LIMIT));
+    const qq = safeString(q).trim().toLowerCase();
+    const tokens = qq.split(/\s+/).filter(Boolean);
+    const filtered = rows.filter(it => {
+      const h = [it.title, it.name, it.summary, it.description, it.url, it.link, it.channel, it.section, it.page, it.psom_key, it.route, Array.isArray(it.tags) ? it.tags.join(' ') : ''].join(' ').toLowerCase();
+      if(!qq) return true;
+      return h.includes(qq) || tokens.some(t => h.includes(t));
+    });
+    return filtered.slice(0, Math.min(limit || MAX_LIMIT, MAX_LIMIT));
+  }catch(e){ return null; }
+}
+
+function googleLikeSearchLinks(q){
+  const enc = encodeURIComponent(q);
+  return [
+    { title: '[News] ' + q, url: 'https://www.google.com/search?tbm=nws&q=' + enc, source: 'news', sourceType: 'search-link', provider: 'google-news-search-link', placeholder: true, generatedBy: 'maru-search', mediaType: 'article', score: 0.7 },
+    { title: '[Images] ' + q, url: 'https://www.google.com/search?tbm=isch&q=' + enc, source: 'images', sourceType: 'search-link', provider: 'google-image-search-link', placeholder: true, generatedBy: 'maru-search', mediaType: 'image', score: 0.68 },
+    { title: '[Videos] ' + q, url: 'https://www.youtube.com/results?search_query=' + enc, source: 'youtube', sourceType: 'search-link', provider: 'youtube-search-link', placeholder: true, generatedBy: 'maru-search', mediaType: 'video', score: 0.66 },
+    { title: '[Shopping] ' + q, url: 'https://www.google.com/search?tbm=shop&q=' + enc, source: 'shopping', sourceType: 'search-link', provider: 'google-shopping-search-link', placeholder: true, generatedBy: 'maru-search', mediaType: 'product', score: 0.6 }
+  ].map(x => canonicalizeItem(x, q, x.source));
+}
+
+function mapCards(q, region){
+  if(!q) return [];
+  const enc = encodeURIComponent(q);
+  const cards = [
+    { title: '[Map] ' + q + ' - Google Maps', url: 'https://www.google.com/maps/search/' + enc, source: 'google_maps', mediaType: 'map', type: 'map', summary: q + ' 지도 검색', score: 0.72 },
+    { title: '[Map] ' + q + ' - Naver Map', url: 'https://map.naver.com/p/search/' + enc, source: 'naver_map', mediaType: 'map', type: 'map', summary: q + ' 네이버 지도 검색', score: 0.71 }
+  ];
+  return cards.map(x => canonicalizeItem(x, q, x.source));
+}
+
+let SearchBankEngine = null;
+let SearchBankEngineLoaded = false;
+function getSearchBankEngine(){
+  if(SearchBankEngineLoaded) return SearchBankEngine;
+  SearchBankEngineLoaded = true;
+  try { SearchBankEngine = require('./search-bank-engine'); } catch(e) { SearchBankEngine = null; }
+  return SearchBankEngine;
+}
+
+async function callSearchBankEngineInternal(event, params){
+  try{
+    const engine = getSearchBankEngine();
+    if(!engine) return null;
+
+    const safeParams = Object.assign({}, params || {}, {
+      from: 'maru-search',
+      skipMaruSearch: '1',
+      noMaruSearch: '1',
+      skipSearchBank: '',
+      noSearchBank: '',
+      external: 'off',
+      noExternal: '1',
+      disableExternal: '1',
+      live: 'off',
+      useLive: 'off',
+      useExternalSources: '0',
+      collector: 'off',
+      useCollector: '0',
+      planetary: 'off',
+      usePlanetary: '0',
+      noAnalytics: '1',
+      noRevenue: '1'
+    });
+
+    const timeoutMs = clampInt((params && params.timeoutMs) || SEARCH_BANK_INTERNAL_TIMEOUT_MS, SEARCH_BANK_INTERNAL_TIMEOUT_MS, 500, 5000);
+
+    if(typeof engine.runEngine === 'function'){
+      return await withSoftTimeout(engine.runEngine(event || {}, safeParams), timeoutMs, null);
+    }
+
+    if(typeof engine.handler === 'function'){
+      const res = await withSoftTimeout(engine.handler({
+        httpMethod: 'GET',
+        headers: (event && event.headers) || {},
+        queryStringParameters: safeParams
+      }), timeoutMs, null);
+      if(!res) return null;
+      if(typeof res === 'object' && Object.prototype.hasOwnProperty.call(res, 'body')){
+        try { return JSON.parse(res.body || '{}'); } catch(e) { return null; }
+      }
+      return res;
+    }
+
+    if(typeof engine === 'function'){
+      return await withSoftTimeout(engine(event || {}, safeParams), timeoutMs, null);
+    }
+
+    return null;
   }catch(e){
     return null;
   }
 }
 
-// ===== Containers (future-ready, but safe-noop unless active) =====
 const Containers = {
-
-  // ===== SEARCH BANK (유지, 안정화) =====
   search_bank: {
-    name: 'search_bank',
     async fetch(q, limit, offset, event){
       try{
-        const base = resolveRuntimeBaseUrl(event);
-
-        const url =
-          base +
-          '/.netlify/functions/search-bank-engine?q=' +
-          encodeURIComponent(q) +
-          '&limit=' + encodeURIComponent(limit) +
-          '&offset=' + encodeURIComponent(offset || 0);
-
-        const res = await fetchWithTimeout(url, null, 6000);
-        if(!res || !res.ok) return null;
-
-        const data = await res.json();
-        if(data && Array.isArray(data.items)){
-          return { source: 'search-bank', results: data.items };
-        }
+        const data = await callSearchBankEngineInternal(event, {
+          q: safeString(q),
+          query: safeString(q),
+          limit: safeString(limit),
+          offset: safeString(offset || 0),
+          timeoutMs: SEARCH_BANK_INTERNAL_TIMEOUT_MS
+        });
+        if(data && Array.isArray(data.items)) return { source: 'search-bank', results: data.items, total: typeof data.total === 'number' ? data.total : null };
+        if(data && data.data && Array.isArray(data.data.items)) return { source: 'search-bank', results: data.data.items, total: typeof data.total === 'number' ? data.total : null };
+        if(data && data.baseResult && Array.isArray(data.baseResult.items)) return { source: 'search-bank', results: data.baseResult.items, total: typeof data.total === 'number' ? data.total : null };
+        if(data && data.baseResult && data.baseResult.data && Array.isArray(data.baseResult.data.items)) return { source: 'search-bank', results: data.baseResult.data.items, total: typeof data.total === 'number' ? data.total : null };
         return null;
-      }catch{
-        return null;
-      }
+      }catch(e){ return null; }
     }
   },
-
-  // ===== NAVER =====
-  web_naver: {
-    name: 'web_naver',
-    async fetch(q, limit, start){
-      return naverSearch(q, limit, start);
-    }
-  },
-
-  // ===== GOOGLE =====
-  web_google: {
-    name: 'web_google',
-    async fetch(q, limit, start){
-      return googleSearch(q, limit, start);
-    }
-  },
-
-  // ===== BING (신규 핵심) =====
-  web_bing: {
-    name: 'web_bing',
-    async fetch(q, limit, start){
-      try{
-        const key = process.env.BING_API_KEY;
-        if (!key) return null;
-
-        const url = `https://api.bing.microsoft.com/v7.0/search?q=${encodeURIComponent(q)}&count=${limit}&offset=${start}`;
-
-        const res = await fetchWithTimeout(url, {
-          headers: { 'Ocp-Apim-Subscription-Key': key }
-        }, 8000);
-
-        if (!res.ok) return null;
-        const data = await res.json();
-
-        return {
-          source: 'bing',
-          results: (data.webPages?.value || []).map(it => ({
-            title: it.name,
-            link: it.url,
-            snippet: it.snippet,
-            type: 'web'
-          }))
-        };
-      }catch{
-        return null;
-      }
-    }
-  },
-
-// ===== BLOCK 398~624 (FULL VERIFIED / SAFE FIX APPLIED) =====
-// ✔ 전체 구조 유지
-// ✔ 기능 삭제 없음
-// ✔ 단일 문제만 수정: wikipedia fetch → timeout 적용
-
-// ===== WIKIPEDIA =====
-web_wikipedia: {
-  name: 'web_wikipedia',
-  async fetch(q){
-    try{
-      const url = 'https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(q);
-      const res = await fetchWithTimeout(url, null, 6000); // 🔧 FIX
-      if(!res.ok) return null;
-      const d = await res.json();
-
-      return {
-        source: 'wikipedia',
-        results: [{
-          title: d.title,
-          link: d.content_urls?.desktop?.page || '',
-          snippet: d.extract,
-          type: 'web'
-        }]
-      };
-    }catch{
-      return null;
-    }
-  }
-},
-
-// ===== SNAPSHOT =====
-snapshot: {
-  name: 'snapshot',
-  async fetch(q, limit){
-    const local = loadSnapshotLocal(q, limit);
-    if(local) return { source:'snapshot-local', results: local };
-    return null;
-  }
-},
-
-// ===== AI =====
-ai: {
-  name: 'ai',
-  async fetch(){
-    return null;
-  }
-},
-
-// ===== YOUTUBE =====
-web_youtube: {
-  name: 'web_youtube',
-  async fetch(q, limit){
-    try{
-      const key = process.env.YOUTUBE_API_KEY;
-      if(!key) return null;
-
-      const url =
-        'https://www.googleapis.com/youtube/v3/search' +
-        '?part=snippet&type=video&maxResults=' + Math.min(limit,50) +
-        '&q=' + encodeURIComponent(q) +
-        '&key=' + key;
-
-      const res = await fetchWithTimeout(url, null, 8000);
-      if(!res.ok) return null;
-
-      const data = await res.json();
-
-      return {
-        source: 'youtube',
-        results: (data.items || []).map(it => ({
-          title: it.snippet.title,
-          link: 'https://www.youtube.com/watch?v=' + it.id.videoId,
-          snippet: it.snippet.description,
-          type: 'video',
-          payload: {
-            thumb: it.snippet.thumbnails?.medium?.url
-          }
-        }))
-      };
-
-    }catch{
-      return null;
-    }
-  }
-},
-
-// ===== IMAGE =====
-web_image: {
-  name: 'web_image',
-  async fetch(q, limit){
-    try{
-      const key = process.env.GOOGLE_API_KEY;
-      const cx  = process.env.GOOGLE_CSE_ID;
-      if(!key || !cx) return null;
-
-      const url =
-        'https://www.googleapis.com/customsearch/v1' +
-        '?key=' + key +
-        '&cx=' + cx +
-        '&q=' + encodeURIComponent(q) +
-        '&searchType=image' +
-        '&num=' + Math.min(limit,10);
-
-      const res = await fetchWithTimeout(url, null, 8000);
-      if(!res.ok) return null;
-
-      const data = await res.json();
-
-      return {
-        source: 'google_image',
-        results: (data.items || []).map(it => ({
-          title: it.title,
-          link: it.link,
-          snippet: '',
-          type: 'image',
-          payload: {
-            thumb: it.link
-          }
-        }))
-      };
-
-    }catch{
-      return null;
-    }
-  }
-}
+  web_naver: { async fetch(q, limit, start){ return naverSearch(q, limit, start); } },
+  web_google: { async fetch(q, limit, start){ return googleSearch(q, limit, start); } },
+  web_bing: { async fetch(q, limit, start){ return bingSearch(q, limit, start); } },
+  web_youtube: { async fetch(q, limit){ return youtubeSearch(q, limit); } },
+  web_image: { async fetch(q, limit, start){ return googleImageSearch(q, limit, start); } },
+  snapshot: { async fetch(q, limit){ const local = loadSnapshotLocal(q, limit); return local ? { source: 'snapshot-local', results: local } : null; } }
 };
 
-// ===== ORCHESTRATOR =====
+function sourceCaps(opts){
+  const deep = !!opts.deep;
+  return {
+    searchBankPages: deep ? 14 : 10,
+    naverPages: deep ? 6 : 4,
+    googlePages: deep ? 6 : 3,
+    bingPages: deep ? 5 : 3,
+    imagePages: deep ? 5 : 3,
+    youtubeLimit: deep ? 50 : 35,
+    timeoutMs: deep ? 10500 : DEFAULT_SOFT_TIMEOUT_MS
+  };
+}
 
-async function orchestrateSearch({ event, q, limit, start, lang, external, noExternal, disableExternal, deep, includeMedia }) {
+function addBundle(bundle, fallbackSource, collected, sourceState){
+  if(!bundle || !Array.isArray(bundle.results) || !bundle.results.length) return 0;
+  if(!sourceState.used) sourceState.used = fallbackSource || bundle.source || 'multi';
+  const items = toStandardItems(bundle.results, bundle.source || fallbackSource || 'multi');
+  collected.push.apply(collected, items);
+  return items.length;
+}
 
-  limit = Math.min(limit || 50, MAX_LIMIT);
-
-  const rawExternal = String(external == null ? '' : external).trim().toLowerCase();
-  const externalSuppressed = rawExternal === 'off' || truthyParam(noExternal) || truthyParam(disableExternal);
-  const deepMode = !!deep || rawExternal === 'deep' || rawExternal === 'full' || rawExternal === 'max';
-  const externalForced = rawExternal === '1' || rawExternal === 'true' || rawExternal === 'on' || rawExternal === 'yes';
-  const externalMode = externalSuppressed ? 'off' : (deepMode ? 'deep' : (externalForced ? 'on' : 'auto'));
+async function orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, noMedia }){
+  limit = clampInt(limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
 
   globalThis.__MARU_CACHE = globalThis.__MARU_CACHE || new Map();
-  const cacheKey = q + "::" + limit + "::" + start + "::" + (lang || "") + "::" + externalMode + "::" + (includeMedia ? 'media' : 'nomedia') + "::efficient";
-
+  const cacheKey = [q, limit, start, lang || '', deep ? 'deep' : 'normal', externalOff ? 'external-off' : 'external-on', noMedia ? 'no-media' : 'media'].join('::');
   const cached = globalThis.__MARU_CACHE.get(cacheKey);
-  if (cached && Date.now() - cached.t < 300000) {
-    return cached.v;
-  }
+  if(cached && Date.now() - cached.t < 300000) return cached.v;
 
+  const started = nowMs();
+  const caps = sourceCaps({ deep });
+  const deadline = started + caps.timeoutMs;
+  const timeLeft = () => Math.max(0, deadline - nowMs());
   const collected = [];
+  const sourceState = { used: null };
   const trace = [];
-  let sourceUsed = null;
-
   const region = detectRuntimeRegion(event, lang, q);
-  const sourceOrder = sourceOrderForRegion(region);
+  const sourceRoute = sourceOrderForRegion(region);
 
-  // 314의 안전성을 유지하면서 API 호출량을 기본 절약형으로 제한한다.
-  // deep=1/external=deep 일 때만 확장 scan을 사용한다.
-  const SEARCH_SOFT_TIMEOUT_MS = deepMode ? 8500 : 6500;
-  const TARGET_MIN_RESULTS = Math.min(MAX_LIMIT, Math.max(limit || 0, deepMode ? 700 : 500));
-  const mediaIntent = /(image|photo|picture|video|watch|media|이미지|사진|포토|영상|동영상|미디어)/i.test(String(q || ''));
-
-  const budgets = {
-    searchBankPages: deepMode ? 8 : 6,       // internal/site function, no external API credit
-    naverPages: externalSuppressed ? 0 : (deepMode ? 4 : 2),
-    googlePages: externalSuppressed ? 0 : (deepMode ? 3 : 1), // each page currently performs web + news CSE calls
-    bingPages: externalSuppressed ? 0 : (deepMode ? 3 : 1),
-    youtubeCalls: externalSuppressed ? 0 : ((deepMode || includeMedia || mediaIntent) ? 1 : 0),
-    imageCalls: externalSuppressed ? 0 : ((deepMode || includeMedia || mediaIntent) ? 1 : 0)
-  };
-
-  function withSoftTimeout(promise, ms){
-    let timer = null;
-    const timeout = new Promise(resolve => {
-      timer = setTimeout(() => resolve({ timeout:true }), ms);
-    });
-    return Promise.race([promise, timeout]).finally(() => {
-      if(timer) clearTimeout(timer);
-    });
-  }
-
-  function record(name, status, count, extra){
-    trace.push({ name, status, count: count || 0, ...(extra || {}) });
-  }
-
-  function addBundle(bundle, fallbackSource){
-    if(!bundle || !Array.isArray(bundle.results) || !bundle.results.length) return 0;
-    const standardized = toStandardItems(bundle.results, bundle.source || fallbackSource || 'multi');
-    sourceUsed = sourceUsed || fallbackSource || bundle.source || 'multi';
-    collected.push(...standardized);
-    return standardized.length;
-  }
-
-  function uniqueCount(){
-    return dedupeCanonicalItems(collected).length;
-  }
-
-  function enough(){
-    return uniqueCount() >= TARGET_MIN_RESULTS;
-  }
+  function record(name, status, count){ trace.push({ name, status, count: count || 0 }); }
 
   async function pullFromSearchBank(){
-    const name = 'search-bank';
-    if(!cbCanRun(name)){
-      record(name, 'circuit-open', 0);
-      return;
-    }
-    let offset = 0;
     let count = 0;
-    const pageSize = 100;
-    const maxPages = budgets.searchBankPages;
-    try{
-      for(let page = 0; page < maxPages; page++){
-        const b = await Containers.search_bank.fetch(q, pageSize, offset, event).catch(() => null);
-        if(!b || !Array.isArray(b.results) || !b.results.length) break;
-        count += addBundle(b, name);
-        if(b.results.length < pageSize) break;
-        offset += pageSize;
-        if(enough()) break;
-      }
-      if(count){ cbOnSuccess(name); record(name, 'ok', count, { pages:maxPages }); }
-      else { cbOnFail(name); record(name, 'empty', 0); }
-    }catch(e){
-      cbOnFail(name);
-      record(name, 'fail', count, { error: e && e.message ? e.message : 'error' });
+    let offset = 0;
+    for(let i=0; i<caps.searchBankPages && timeLeft() > 900; i++){
+      const b = await Containers.search_bank.fetch(q, 100, offset, event).catch(() => null);
+      const n = addBundle(b, 'search-bank', collected, sourceState);
+      count += n;
+      if(!b || !b.results || b.results.length < 100) break;
+      offset += 100;
+      if(count >= Math.max(MIN_RESULT_TARGET, limit)) break;
     }
-  }
-
-  async function pullFromSnapshotLocal(){
-    const snap = await Containers.snapshot.fetch(q, TARGET_MIN_RESULTS).catch(() => null);
-    const count = addBundle(snap, 'snapshot-local');
-    if(count) record('snapshot-local', 'ok', count);
+    record('search-bank', count ? 'ok' : 'empty', count);
+    if(!count){
+      const snap = await Containers.snapshot.fetch(q, Math.max(limit, MIN_RESULT_TARGET)).catch(() => null);
+      const n = addBundle(snap, 'snapshot-local', collected, sourceState);
+      if(n) record('snapshot-local', 'ok', n);
+    }
   }
 
   async function pullFromNaver(){
-    const name = 'naver';
-    let pageStart = start || 1;
+    if(externalOff) { record('naver', 'suppressed', 0); return; }
     let count = 0;
-    const maxPages = budgets.naverPages;
-    for(let page = 0; page < maxPages; page++){
-      const n = await Containers.web_naver.fetch(q, 100, pageStart).catch(() => null);
-      if(!n || !Array.isArray(n.results) || !n.results.length) break;
-      count += addBundle(n, name);
-      if(n.results.length < 100) break;
+    let pageStart = start || 1;
+    for(let i=0; i<caps.naverPages && pageStart <= 1000 && timeLeft() > 1200; i++){
+      const naver = await Containers.web_naver.fetch(q, 100, pageStart).catch(() => null);
+      const n = addBundle(naver, 'naver', collected, sourceState);
+      count += n;
+      if(!naver || !naver.results || naver.results.length < 100) break;
       pageStart += 100;
-      if(!deepMode && enough()) break;
     }
-    if(count) record(name, 'ok', count, { pages:maxPages });
+    record('naver', count ? 'ok' : 'empty', count);
   }
 
   async function pullFromGoogle(){
-    const name = 'google';
-    let pageStart = start || 1;
+    if(externalOff) { record('google', 'suppressed', 0); return; }
     let count = 0;
-    const maxPages = budgets.googlePages;
-    for(let page = 0; page < maxPages; page++){
+    let pageStart = start || 1;
+    for(let i=0; i<caps.googlePages && pageStart <= 91 && timeLeft() > 1500; i++){
       const g = await Containers.web_google.fetch(q, 10, pageStart).catch(() => null);
-      if(!g || !Array.isArray(g.results) || !g.results.length) break;
-      count += addBundle(g, name);
-      if(g.results.length < 10) break;
+      const n = addBundle(g, 'google', collected, sourceState);
+      count += n;
+      if(!g || !g.results || g.results.length < 10) break;
       pageStart += 10;
-      if(!deepMode && enough()) break;
     }
-    if(count) record(name, 'ok', count, { pages:maxPages });
+    record('google', count ? 'ok' : 'empty', count);
   }
 
   async function pullFromBing(){
-    if (!Containers.web_bing) return;
-    const name = 'bing';
-    let offset = 0;
+    if(externalOff) { record('bing', 'suppressed', 0); return; }
     let count = 0;
-    const maxPages = budgets.bingPages;
-    for(let page = 0; page < maxPages; page++){
+    let offset = 0;
+    for(let i=0; i<caps.bingPages && offset <= 450 && timeLeft() > 1200; i++){
       const b = await Containers.web_bing.fetch(q, 50, offset).catch(() => null);
-      if(!b || !Array.isArray(b.results) || !b.results.length) break;
-      count += addBundle(b, name);
-      if(b.results.length < 50) break;
+      const n = addBundle(b, 'bing', collected, sourceState);
+      count += n;
+      if(!b || !b.results || b.results.length < 50) break;
       offset += 50;
-      if(!deepMode && enough()) break;
     }
-    if(count) record(name, 'ok', count, { pages:maxPages });
+    record('bing', count ? 'ok' : 'empty', count);
   }
 
   async function pullFromYouTube(){
-    if (!Containers.web_youtube || budgets.youtubeCalls < 1) return;
-    const y = await Containers.web_youtube.fetch(q, 20).catch(() => null);
-    const count = addBundle(y, 'youtube');
-    if(count) record('youtube', 'ok', count);
+    if(externalOff || noMedia) { record('youtube', externalOff ? 'suppressed' : 'media-disabled', 0); return; }
+    const y = await Containers.web_youtube.fetch(q, caps.youtubeLimit).catch(() => null);
+    const n = addBundle(y, 'youtube', collected, sourceState);
+    record('youtube', n ? 'ok' : 'empty', n);
   }
 
   async function pullFromImage(){
-    if (!Containers.web_image || budgets.imageCalls < 1) return;
-    const img = await Containers.web_image.fetch(q, 10).catch(() => null);
-    const count = addBundle(img, 'google_image');
-    if(count) record('google_image', 'ok', count);
+    if(externalOff || noMedia) { record('google_image', externalOff ? 'suppressed' : 'media-disabled', 0); return; }
+    let count = 0;
+    let pageStart = 1;
+    for(let i=0; i<caps.imagePages && pageStart <= 91 && timeLeft() > 1200; i++){
+      const img = await Containers.web_image.fetch(q, 10, pageStart).catch(() => null);
+      const n = addBundle(img, 'google_image', collected, sourceState);
+      count += n;
+      if(!img || !img.results || img.results.length < 10) break;
+      pageStart += 10;
+    }
+    record('google_image', count ? 'ok' : 'empty', count);
   }
 
-  function fetchNews(){
-    return [{
-      title: '[News] ' + q,
-      url: 'https://www.google.com/search?tbm=nws&q=' + encodeURIComponent(q),
-      source: 'news',
-      sourceType: 'search-link',
-      provider: 'google-news-search-link',
-      generatedBy: 'maru-search',
-      placeholder: true,
-      mediaType: 'article',
-      thumbnail: '',
-      score: 0.7
-    }];
-  }
-
-  function fetchShopping(){
-    return [{
-      title: '[Shopping] ' + q,
-      url: 'https://www.google.com/search?tbm=shop&q=' + encodeURIComponent(q),
-      source: 'shopping',
-      sourceType: 'search-link',
-      provider: 'google-shopping-search-link',
-      generatedBy: 'maru-search',
-      placeholder: true,
-      mediaType: 'product',
-      thumbnail: '',
-      score: 0.6
-    }];
-  }
-
-  const fallbackItems = fetchNews().concat(fetchShopping());
-
-  // Phase 1: internal/search-bank + light web sources. This keeps the main search alive.
-  await withSoftTimeout(Promise.allSettled([
+  await Promise.allSettled([
     pullFromSearchBank(),
     pullFromNaver(),
     pullFromGoogle(),
-    pullFromBing()
-  ]), SEARCH_SOFT_TIMEOUT_MS);
+    pullFromBing(),
+    pullFromYouTube(),
+    pullFromImage()
+  ]);
 
-  // Phase 2: media/image sources only when useful, not on every ordinary query.
-  const afterPhase1 = uniqueCount();
-  const shouldUseMedia = !externalSuppressed && (deepMode || includeMedia || mediaIntent);
-  if(shouldUseMedia){
-    await withSoftTimeout(Promise.allSettled([
-      pullFromYouTube(),
-      pullFromImage()
-    ]), Math.min(3500, SEARCH_SOFT_TIMEOUT_MS));
-  } else if(externalSuppressed) {
-    record('external', 'suppressed', 0);
-  } else {
-    record('media-external', 'skipped', 0, { reason:'not_needed' });
-  }
-
-  if(!collected.length || dedupeCanonicalItems(collected).length < Math.min(100, TARGET_MIN_RESULTS)){
-    await pullFromSnapshotLocal();
-  }
-
-  collected.push(...fallbackItems.map(it => canonicalizeItem(it, q)));
+  collected.push.apply(collected, mapCards(q, region));
+  if(!externalOff) collected.push.apply(collected, googleLikeSearchLinks(q));
 
   let unique = dedupeCanonicalItems(collected);
+  unique = backfillVisuals(unique);
   unique = await applyCorePipeline(q, unique);
   unique = applyServerSideBoosts(unique, { q, lang });
 
-  const finalItems = unique.slice(0, TARGET_MIN_RESULTS);
+  const finalTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
+  const finalItems = unique.slice(0, finalTarget);
 
   const result = {
-    source: sourceUsed || (finalItems.length ? 'multi' : null),
-    route: sourceOrder,
+    source: sourceState.used || (finalItems.length ? 'multi' : null),
+    route: sourceRoute,
+    sourceRoute,
     region,
     items: finalItems,
     meta: {
       count: finalItems.length,
       requestedLimit: limit,
-      returnedLimit: TARGET_MIN_RESULTS,
-      externalMode,
-      externalSuppressed,
-      deepMode,
-      includeMedia: !!includeMedia,
-      mediaIntent,
-      budgets,
+      target: finalTarget,
+      totalCandidates: collected.length,
+      deduped: Math.max(0, collected.length - unique.length),
+      richMedia: finalItems.filter(x => x && isRealImageUrl(x.thumbnail)).length,
       trace,
-      placeholderCount: finalItems.filter(x => x && x.placeholder === true).length
+      externalSuppressed: !!externalOff,
+      mediaDisabled: !!noMedia,
+      deep: !!deep,
+      elapsedMs: nowMs() - started
     }
   };
 
@@ -848,116 +623,177 @@ async function orchestrateSearch({ event, q, limit, start, lang, external, noExt
   return result;
 }
 
-// ===== Source Fetchers =====
-async function naverSearch(q, limit, start) {
+function backfillVisuals(items){
+  const list = Array.isArray(items) ? items.slice() : [];
+  const imagePool = [];
+  list.forEach(it => {
+    if(!it) return;
+    if(Array.isArray(it.imageSet)) imagePool.push.apply(imagePool, it.imageSet.filter(isRealImageUrl));
+    if(it.mediaType === 'image' && isRealImageUrl(it.url)) imagePool.push(it.url);
+    if(isRealImageUrl(it.thumbnail)) imagePool.push(it.thumbnail);
+  });
+  const pool = compactImages(imagePool);
+  if(!pool.length) return list;
+  let cursor = 0;
+  return list.map((it, idx) => {
+    if(!it || isRealImageUrl(it.thumbnail)) return it;
+    const img = pool[cursor % pool.length];
+    cursor += 1;
+    const imageSet = compactImages([img].concat(Array.isArray(it.imageSet) ? it.imageSet : []).concat(pool.slice(0,3)));
+    return Object.assign({}, it, { thumbnail: img, thumb: it.thumb || img, image: it.image || img, imageSet });
+  });
+}
+
+async function naverSearch(q, limit, start){
   const id = process.env.NAVER_API_KEY;
   const secret = process.env.NAVER_CLIENT_SECRET;
-  if (!id || !secret) return null;
-
-  const url = `https://openapi.naver.com/v1/search/webkr.json?query=${encodeURIComponent(q)}&display=${Math.min(limit, 100)}&start=${start}`;
-  const res = await fetchWithTimeout(url, {
-    headers: {
-      'X-Naver-Client-Id': id,
-      'X-Naver-Client-Secret': secret,
-    },
-  }, 8500);
-
-  if (!res.ok) throw new Error(`NAVER_HTTP_${res.status}`);
+  if(!id || !secret) return null;
+  const url = 'https://openapi.naver.com/v1/search/webkr.json?query=' + encodeURIComponent(q) + '&display=' + Math.min(limit,100) + '&start=' + start;
+  const res = await fetchWithTimeout(url, { headers: { 'X-Naver-Client-Id': id, 'X-Naver-Client-Secret': secret } }, 3000);
+  if(!res.ok) throw new Error('NAVER_HTTP_' + res.status);
   const data = await res.json();
-
-  const items = Array.isArray(data.items) ? data.items : [];
-  const results = items.map(it => ({
-    title: stripHtml(it.title),
-    link: it.link || '',
-    snippet: stripHtml(it.description),
-    type: 'web',
-    payload: { source: 'naver' }
+  const results = (Array.isArray(data.items) ? data.items : []).map(it => ({
+    title: stripHtml(it.title), link: it.link || '', url: it.link || '', snippet: stripHtml(it.description), type: 'web', source: 'naver', payload: { source: 'naver' }
   }));
-
   return { source: 'naver', results };
 }
 
-async function googleSearch(q, limit, start) {
+async function googleSearch(q, limit, start){
   const key = process.env.GOOGLE_API_KEY;
-  const cx  = process.env.GOOGLE_CSE_ID;
-  if (!key || !cx) return null;
-
-  const base =
-    `https://www.googleapis.com/customsearch/v1` +
-    `?key=${encodeURIComponent(key)}` +
-    `&cx=${encodeURIComponent(cx)}` +
-    `&q=${encodeURIComponent(q)}` +
-    `&num=${Math.min(limit, 10)}` +
-    `&start=${start}` +
-    `&gl=us` +
-    `&lr=lang_en|lang_ko` +
-    `&sort=date`;
-
-  const webRes = await fetchWithTimeout(base, null, 8500)
-    .then(r => r.ok ? r.json() : null)
-    .catch(() => null);
-
-  const newsRes = await fetchWithTimeout(base + `&tbm=nws`, null, 8500)
-    .then(r => r.ok ? r.json() : null)
-    .catch(() => null);
-
+  const cx = process.env.GOOGLE_CSE_ID;
+  if(!key || !cx) return null;
+  const base = 'https://www.googleapis.com/customsearch/v1' +
+    '?key=' + encodeURIComponent(key) +
+    '&cx=' + encodeURIComponent(cx) +
+    '&q=' + encodeURIComponent(q) +
+    '&num=' + Math.min(limit,10) +
+    '&start=' + start +
+    '&gl=us' +
+    '&lr=lang_en|lang_ko';
+  const webRes = await fetchWithTimeout(base, null, 3000).then(r => r.ok ? r.json() : null).catch(() => null);
+  const newsRes = await fetchWithTimeout(base + '&sort=date', null, 3000).then(r => r.ok ? r.json() : null).catch(() => null);
   const mergeItems = (data, type, source) => {
     const items = Array.isArray(data && data.items) ? data.items : [];
     return items.map(it => {
       const pagemap = it.pagemap || {};
       const cseThumb = Array.isArray(pagemap.cse_thumbnail) ? pagemap.cse_thumbnail[0] : null;
-      const cseImg   = Array.isArray(pagemap.cse_image) ? pagemap.cse_image[0] : null;
-
-      return {
-        title: it.title || '',
-        link: it.link || '',
-        snippet: it.snippet || '',
-        type,
-        payload: {
-          source,
-          thumb: (cseThumb && cseThumb.src) || (cseImg && cseImg.src) || ''
-        }
-      };
+      const cseImg = Array.isArray(pagemap.cse_image) ? pagemap.cse_image[0] : null;
+      const img = (cseThumb && cseThumb.src) || (cseImg && cseImg.src) || '';
+      return { title: it.title || '', link: it.link || '', url: it.link || '', snippet: it.snippet || '', type, source, thumbnail: img, thumb: img, image: img, payload: { source, thumb: img, image: img } };
     });
   };
+  return { source: 'google', results: mergeItems(webRes, 'web', 'google').concat(mergeItems(newsRes, 'news', 'google_news')) };
+}
 
-  const results = [
-    ...mergeItems(webRes,  'web',  'google'),
-    ...mergeItems(newsRes, 'news', 'google_news')
-  ];
+async function bingSearch(q, limit, offset){
+  const key = process.env.BING_API_KEY;
+  if(!key) return null;
+  const url = 'https://api.bing.microsoft.com/v7.0/search?q=' + encodeURIComponent(q) + '&count=' + Math.min(limit,50) + '&offset=' + (offset || 0);
+  const res = await fetchWithTimeout(url, { headers: { 'Ocp-Apim-Subscription-Key': key } }, 3000);
+  if(!res.ok) return null;
+  const data = await res.json();
+  return { source: 'bing', results: ((data.webPages && data.webPages.value) || []).map(it => ({ title: it.name, link: it.url, url: it.url, snippet: it.snippet, type: 'web', source: 'bing' })) };
+}
 
-  return { source: 'google+news', results };
+async function youtubeSearch(q, limit){
+  const key = process.env.YOUTUBE_API_KEY;
+  if(!key) return null;
+  const url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=' + Math.min(limit,50) + '&q=' + encodeURIComponent(q) + '&key=' + encodeURIComponent(key);
+  const res = await fetchWithTimeout(url, null, 3500);
+  if(!res.ok) return null;
+  const data = await res.json();
+  const results = (data.items || []).map(it => {
+    const thumb = (it.snippet && it.snippet.thumbnails && (it.snippet.thumbnails.high || it.snippet.thumbnails.medium || it.snippet.thumbnails.default) || {}).url || '';
+    const videoId = it.id && it.id.videoId;
+    return { title: (it.snippet && it.snippet.title) || '', link: videoId ? 'https://www.youtube.com/watch?v=' + videoId : '', url: videoId ? 'https://www.youtube.com/watch?v=' + videoId : '', snippet: (it.snippet && it.snippet.description) || '', type: 'video', mediaType: 'video', source: 'youtube', thumbnail: thumb, thumb, image: thumb, media: { type: 'video', preview: { poster: thumb } }, payload: { source: 'youtube', thumb } };
+  });
+  return { source: 'youtube', results };
+}
+
+async function googleImageSearch(q, limit, start){
+  const key = process.env.GOOGLE_API_KEY;
+  const cx = process.env.GOOGLE_CSE_ID;
+  if(!key || !cx) return null;
+  const url = 'https://www.googleapis.com/customsearch/v1' +
+    '?key=' + encodeURIComponent(key) +
+    '&cx=' + encodeURIComponent(cx) +
+    '&q=' + encodeURIComponent(q) +
+    '&searchType=image' +
+    '&num=' + Math.min(limit,10) +
+    '&start=' + (start || 1);
+  const res = await fetchWithTimeout(url, null, 3500);
+  if(!res.ok) return null;
+  const data = await res.json();
+  return { source: 'google_image', results: (data.items || []).map(it => ({ title: it.title || '', link: it.image && it.image.contextLink ? it.image.contextLink : it.link, url: it.image && it.image.contextLink ? it.image.contextLink : it.link, snippet: it.snippet || '', type: 'image', mediaType: 'image', source: 'google_image', thumbnail: it.link, thumb: it.link, image: it.link, imageSet: [it.link], payload: { source: 'google_image', thumb: it.link, image: it.link, contextLink: it.image && it.image.contextLink } })) };
+}
+
+async function applyCorePipeline(query, items){
+  let results = Array.isArray(items) ? items : [];
+  if(Core && typeof Core.validateQuery === 'function'){
+    try { Core.validateQuery(query); } catch(e) {}
+  }
+  if(Core && typeof Core.scoreItem === 'function'){
+    results = results.map(it => Object.assign({}, it, { _coreScore: Core.scoreItem(query, it) })).sort((a,b) => (b._coreScore || 0) - (a._coreScore || 0));
+  }
+  return results.map(it => canonicalizeItem(it, query, it.source));
+}
+
+function detectIntent(q){
+  const text = safeString(q).toLowerCase();
+  if(text.includes('buy') || text.includes('price') || text.includes('shop')) return 'commerce';
+  if(text.includes('news') || text.includes('breaking')) return 'news';
+  if(text.includes('video') || text.includes('watch') || text.includes('영상')) return 'media';
+  if(text.includes('image') || text.includes('photo') || text.includes('사진')) return 'image';
+  return 'general';
+}
+
+function applyIntentBoost(items, q){
+  const intent = detectIntent(q);
+  return (Array.isArray(items) ? items : []).map(it => {
+    let boost = 0;
+    if(intent === 'commerce' && (it.type === 'product' || it.mediaType === 'product')) boost += 2;
+    if((intent === 'media' || intent === 'image') && (it.mediaType === 'video' || it.mediaType === 'image')) boost += 1.5;
+    if(intent === 'news' && safeString(it.source).includes('news')) boost += 1.2;
+    return Object.assign({}, it, { _intentBoost: boost, _finalScore: (it._finalScore || 0) + boost });
+  }).sort((a,b) => (b._finalScore || 0) - (a._finalScore || 0));
+}
+
+function applyServerSideBoosts(items, opts){
+  const q = safeString(opts && opts.q).toLowerCase();
+  const lang = safeString(opts && opts.lang).toLowerCase();
+  const ranked = (Array.isArray(items) ? items : []).map((it, idx) => {
+    let bonus = 0;
+    const title = safeString(it.title).toLowerCase();
+    const summary = safeString(it.summary).toLowerCase();
+    const source = safeString(it.source).toLowerCase();
+    if(q && title.includes(q)) bonus += 3;
+    if(q && summary.includes(q)) bonus += 1.5;
+    if(lang && safeString(it.lang).toLowerCase() === lang) bonus += 1;
+    if(source.includes('search-bank')) bonus += 0.6;
+    if(it.mediaType === 'image' || it.mediaType === 'video') bonus += 0.8;
+    if(isRealImageUrl(it.thumbnail)) bonus += 0.5;
+    if(it.type === 'map' || it.mediaType === 'map') bonus += 0.3;
+    return Object.assign({}, it, { _bonus: bonus, _finalScore: Number(it._coreScore || it.score || 0) + bonus, _seq: idx });
+  });
+  ranked.sort((a,b) => ((b._finalScore || 0) - (a._finalScore || 0)) || ((a._seq || 0) - (b._seq || 0)));
+  return applyIntentBoost(ranked, q);
 }
 
 async function postJson(url, body){
   try{
-    const res = await fetchWithTimeout(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body || {})
-    }, 8000);
-
+    const res = await fetchWithTimeout(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }, 2500);
     if(!res || !res.ok) return null;
-
     const text = await res.text();
-    try{
-      return JSON.parse(text);
-    }catch{
-      return { ok:true, raw:text };
-    }
-  }catch{
-    return null;
-  }
+    try { return JSON.parse(text); } catch(e) { return { ok: true, raw: text }; }
+  }catch(e){ return null; }
 }
 
 let RevenueEngine = null;
 let RevenueEngineLoaded = false;
-
 function getRevenueEngine(){
   if(RevenueEngineLoaded) return RevenueEngine;
   RevenueEngineLoaded = true;
-  try { RevenueEngine = require("./revenue-engine"); }
-  catch (e) { RevenueEngine = null; }
+  try { RevenueEngine = require('./revenue-engine'); } catch(e) { RevenueEngine = null; }
   return RevenueEngine;
 }
 
@@ -965,230 +801,86 @@ async function callRevenueEngineInternal(body){
   try{
     const engine = getRevenueEngine();
     if(!engine) return null;
-
-    if(typeof engine.runEngine === "function") {
-      return await engine.runEngine(body || {});
-    }
-
-    if(typeof engine.dispatch === "function") {
-      return await engine.dispatch(body || {});
-    }
-
-    if(typeof engine.handle === "function") {
-      return await engine.handle(body || {});
-    }
-
-    if(typeof engine.handler === "function") {
-      const res = await engine.handler({
-        httpMethod: "POST",
-        headers: { "content-type": "application/json" },
-        queryStringParameters: {},
-        body: JSON.stringify(body || {})
-      });
-
+    if(typeof engine.runEngine === 'function') return await engine.runEngine(body || {});
+    if(typeof engine.dispatch === 'function') return await engine.dispatch(body || {});
+    if(typeof engine.handle === 'function') return await engine.handle(body || {});
+    if(typeof engine.handler === 'function'){
+      const res = await engine.handler({ httpMethod: 'POST', headers: { 'content-type': 'application/json' }, queryStringParameters: {}, body: JSON.stringify(body || {}) });
       if(!res) return null;
-      if(typeof res === "object" && Object.prototype.hasOwnProperty.call(res, "body")) {
-        try { return JSON.parse(res.body || "{}"); }
-        catch (e) { return res; }
+      if(typeof res === 'object' && Object.prototype.hasOwnProperty.call(res, 'body')){
+        try { return JSON.parse(res.body || '{}'); } catch(e) { return res; }
       }
       return res;
     }
-
-    if(typeof engine === "function") {
-      return await engine(body || {});
-    }
-
+    if(typeof engine === 'function') return await engine(body || {});
     return null;
-  }catch{
-    return null;
-  }
+  }catch(e){ return null; }
 }
 
-// ===== CORE PIPELINE APPLY (NON-DESTRUCTIVE) =====
-async function applyCorePipeline(query, items) {
-  const q = query;
-
-  if (Core && typeof Core.validateQuery === "function") {
-    const v = Core.validateQuery(q);
-    // 🔧 절대 막지 않음 (완전 패스)
-  }
-
-  let results = Array.isArray(items) ? items : [];
-
-  if (Core && typeof Core.scoreItem === "function") {
-    results = results.map(it => ({
-      ...it,
-      _coreScore: Core.scoreItem(q, it)
-    })).sort((a, b) => (b._coreScore || 0) - (a._coreScore || 0));
-  }
-
-  return results.map(it => canonicalizeItem(it, q));
-}
-
-// ===== INTENT =====
-function detectIntent(q){
-  const text = String(q||"").toLowerCase();
-  if(text.includes("buy") || text.includes("price")) return "commerce";
-  if(text.includes("news")) return "news";
-  if(text.includes("video")) return "media";
-  return "general";
-}
-
-function applyIntentBoost(items, q){
-  const intent = detectIntent(q);
-  return items.map(it=>{
-    let boost = 0;
-    if(intent === "commerce" && (it.type==="product"||it.mediaType==="product")) boost+=2;
-    if(intent === "media" && (it.mediaType==="video"||it.mediaType==="image")) boost+=1.5;
-    if(intent === "news" && String(it.source||"").includes("news")) boost+=1.2;
-    return {...it, _intentBoost: boost, _finalScore:(it._finalScore||0)+boost};
-  }).sort((a,b)=>b._finalScore-a._finalScore);
-}
-
-// ===== SERVER BOOST =====
-function applyServerSideBoosts(items, opts){
-  const q = String((opts && opts.q) || "").toLowerCase();
-  const lang = String((opts && opts.lang) || "").toLowerCase();
-
-  const ranked = (Array.isArray(items) ? items : []).map((it, idx) => {
-    let bonus = 0;
-    const title = String(it.title || "").toLowerCase();
-    const summary = String(it.summary || "").toLowerCase();
-    const source = String(it.source || "").toLowerCase();
-
-    if (q && title.includes(q)) bonus += 3;
-    if (q && summary.includes(q)) bonus += 1.5;
-    if (lang && String(it.lang || "").toLowerCase() === lang) bonus += 1;
-    if (source.includes("search-bank")) bonus += 0.6;
-    if (it.mediaType === "image" || it.mediaType === "video") bonus += 0.25;
-
-    return { ...it, _bonus: bonus, _finalScore: Number(it._coreScore || it.score || 0) + bonus, _seq: idx };
-  });
-
-  ranked.sort((a,b) => {
-    if ((b._finalScore || 0) !== (a._finalScore || 0)) return (b._finalScore || 0) - (a._finalScore || 0);
-    return (a._seq || 0) - (b._seq || 0);
-  });
-
-  return applyIntentBoost(ranked, q);
-}
-
-// ===== ANALYTICS =====
 async function syncSearchAnalytics(event, q, items){
-  try{
-    return await callRevenueEngineInternal({
-      action: "track",
-      event: {
-        type: "search",
-        query: q,
-        count: Array.isArray(items) ? items.length : 0,
-        timestamp: Date.now()
-      }
-    });
-  }catch{
-    return null;
-  }
+  return await callRevenueEngineInternal({ action: 'track', event: { type: 'search', query: q, count: Array.isArray(items) ? items.length : 0, timestamp: Date.now() } });
 }
 
 async function distributeRevenue(event, items){
-  try{
-    const queue = (Array.isArray(items) ? items : []).filter(item =>
-      item && (item.type === "ad" || item.type === "product" || item.mediaType === "product")
-    );
-
-    // 🔧 병렬 처리 (속도 개선)
-    await Promise.all(queue.map(item =>
-      callRevenueEngineInternal({
-        action: "distribute",
-        producerId: item.producerId || item.payload?.producerId || "global",
-        amount: item._finalScore || item._coreScore || item.score || 1
-      })
-    ));
-
-    return { ok:true, count: queue.length };
-  }catch{
-    return null;
-  }
+  const queue = (Array.isArray(items) ? items : []).filter(item => item && (item.type === 'ad' || item.type === 'product' || item.mediaType === 'product'));
+  await Promise.all(queue.map(item => callRevenueEngineInternal({ action: 'distribute', producerId: item.producerId || (item.payload && item.payload.producerId) || 'global', amount: item._finalScore || item._coreScore || item.score || 1 })));
+  return { ok: true, count: queue.length };
 }
 
-// ===== MAIN HANDLER =====
-exports.handler = async function (event) {
-  try {
-    const { q, limit, start, lang, external, noExternal, disableExternal, deep, includeMedia } = pickQ(event);
-
-    if (!q) {
-      return ok({
-        status: 'ok',
-        engine: 'maru-search',
-        version: VERSION,
-        query: q,
-        source: null,
-        items: [],
-        results: [],
-        meta: { count: 0, limit },
-      });
+exports.handler = async function(event){
+  try{
+    const picked = pickQ(event || {});
+    const { q, limit, start, lang, deep, externalOff, noMedia, raw } = picked;
+    if(!q){
+      return ok({ status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: null, items: [], results: [], meta: { count: 0, limit } });
     }
-
-    const base = await orchestrateSearch({ event, q, limit, start, lang, external, noExternal, disableExternal, deep, includeMedia });
-
-    // 🔧 비동기 처리 (응답 속도 확보)
-    syncSearchAnalytics(event, q, base.items);
-    distributeRevenue(event, base.items);
-
+    const base = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, noMedia });
+    const analyticsOff = truthy(raw && (raw.noAnalytics || raw.disableAnalytics));
+    const revenueOff = truthy(raw && (raw.noRevenue || raw.disableRevenue)) || analyticsOff;
+    if(!analyticsOff) syncSearchAnalytics(event, q, base.items).catch(() => null);
+    if(!revenueOff) distributeRevenue(event, base.items).catch(() => null);
     return ok({
-      status: 'ok',
-      engine: 'maru-search',
-      version: VERSION,
-      query: q,
-      source: base.source,
-      items: base.items,
-      results: base.items,
-      meta: { ...((base && base.meta) || {}), count: (base.items || []).length, limit, region: base.region || null, route: base.route || null },
+      status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: base.source,
+      items: base.items, results: base.items,
+      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff })
     });
-
-  } catch (e) {
+  }catch(e){
     return fail('Search failed', String((e && e.message) || e));
   }
 };
 
-// ===== DISPATCHER =====
-async function maruSearchDispatcher(req = {}) {
-  const q = String(req.q || req.query || "").trim();
-  const limit = req.limit;
-  const lang = req.lang;
-
+async function maruSearchDispatcher(req){
+  req = req || {};
   const res = await exports.handler({ queryStringParameters: {
-    q, limit, lang,
+    q: safeString(req.q || req.query || '').trim(),
+    limit: req.limit,
+    start: req.start,
+    lang: req.lang || req.uiLang || req.locale,
+    deep: req.deep,
     external: req.external,
     noExternal: req.noExternal,
     disableExternal: req.disableExternal,
-    deep: req.deep || req.deepSearch || req.deepExternal,
-    media: req.media || req.includeMedia,
-    includeImages: req.includeImages,
-    includeVideo: req.includeVideo
-  } });
-
-  try {
-    return JSON.parse(res.body || "{}");
-  } catch {
-    return { status: "fail", message: "BAD_JSON" };
-  }
+    noMedia: req.noMedia,
+    disableMedia: req.disableMedia,
+    noAnalytics: req.noAnalytics,
+    noRevenue: req.noRevenue
+  }, headers: req.headers || {} });
+  try { return JSON.parse(res.body || '{}'); }
+  catch(e){ return { status: 'fail', message: 'BAD_JSON' }; }
 }
 
 exports.maruSearchDispatcher = maruSearchDispatcher;
 
-// ===== ENGINE ENTRY =====
-exports.runEngine = async function(event = {}, params = {}){
+exports.runEngine = async function(event, params){
+  params = params || {};
   return await orchestrateSearch({
-    event,
-    q: String(params.q || params.query || "").trim(),
-    limit: params.limit,
-    start: params.start,
+    event: event || {},
+    q: safeString(params.q || params.query || '').trim(),
+    limit: params.limit || DEFAULT_LIMIT,
+    start: params.start || 1,
     lang: params.lang || params.uiLang || params.locale || null,
-    external: params.external,
-    noExternal: params.noExternal,
-    disableExternal: params.disableExternal,
-    deep: params.deep || params.deepSearch || params.deepExternal,
-    includeMedia: params.media || params.includeMedia || params.includeImages || params.includeVideo
+    deep: truthy(params.deep) || String(params.external || '').toLowerCase() === 'deep',
+    externalOff: String(params.external || '').toLowerCase() === 'off' || truthy(params.noExternal) || truthy(params.disableExternal),
+    noMedia: truthy(params.noMedia) || truthy(params.disableMedia)
   });
 };
