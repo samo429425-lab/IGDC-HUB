@@ -2040,33 +2040,6 @@ a[id*="qna"]{
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  const params = new URLSearchParams(location.search);
-  const isBridge = params.get('__igdc_search_bridge') === '1';
-
-  if (isBridge) {
-    const q = (params.get('q') || '').trim();
-    const bridgeKey = 'igdc_search_bridge_used:' + location.pathname + location.search;
-
-    if (q && !sessionStorage.getItem(bridgeKey)) {
-      sessionStorage.setItem(bridgeKey, '1');
-
-      const target = new URL('/search.html', location.origin);
-      target.searchParams.set('q', q);
-      target.searchParams.set('from', '/home.html');
-
-      // 여기서는 replace가 아니라 href를 써야 새 탭 history에
-      // home bridge entry → search.html entry가 생긴다.
-      window.location.href = target.pathname + target.search + target.hash;
-      return;
-    }
-
-    // 사용자가 브라우저 뒤로가기로 bridge entry에 돌아온 경우:
-    // 다시 search.html로 튕기지 말고 홈 화면으로 정리한다.
-    try {
-      history.replaceState(null, '', '/home.html');
-    } catch (e) {}
-  }
-
   const input = document.getElementById('homeSearchInput');
   const btn = document.getElementById('homeSearchBtn');
   if (!input || !btn) return;
@@ -2074,26 +2047,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const openSearch = () => {
     const q = input.value.trim();
     if (!q) return;
+	
+	history.pushState({}, '', location.href);
 
-    const bridge = new URL('/home.html', location.origin);
-    bridge.searchParams.set('__igdc_search_bridge', '1');
-    bridge.searchParams.set('q', q);
-
-    // 새 탭 / 독립 검색 페이지 구조 유지.
-    // 새 탭의 첫 history entry를 home bridge로 만들고,
-    // 그 다음 search.html로 이동시켜 브라우저 상단 뒤로가기를 자연 활성화한다.
+    // ✅ 새 탭 / 독립 웹페이지 / 팝업 아님
     window.open(
-      bridge.pathname + bridge.search + bridge.hash,
+      `/search.html?q=${encodeURIComponent(q)}`,
       '_blank'
     );
   };
 
   btn.addEventListener('click', openSearch);
   input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      openSearch();
-    }
+    if (e.key === 'Enter') openSearch();
   });
 });
 </script>
@@ -3488,9 +3454,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 })();
 </script>
 <!-- removed stray text: <! end: migration > -->
-
 <!-- removed stray text:  -->
-
 <!-- removed stray text:  -->
 <script>
 (function(){
