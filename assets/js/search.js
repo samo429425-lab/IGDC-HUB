@@ -1,5 +1,5 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
-// PATCH: natural media card height v2 + search type tabs
+// PATCH: natural media card height v5 + tabs + render-page-image-enrich
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -45,6 +45,8 @@ ready(function () {
     let activeType = 'all';
     let lastQuery = '';
     let lastType = 'all';
+    const pageImageEnrichCache = new Set();
+    const itemImageEnrichCache = new Map();
 
 const params = new URLSearchParams(location.search);
 const q0 = (params.get('q') || '').trim();
@@ -399,7 +401,7 @@ function normalizeItems(payload){
 
 async function fetchSearch(q, type = activeType){
   const safeType = normalizeSearchType(type);
-  const url = `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}&type=${encodeURIComponent(safeType)}`;
+  const url = `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}&type=${encodeURIComponent(safeType)}&tab=${encodeURIComponent(safeType)}`;
 
   try {
     const r = await fetch(url, { cache: 'no-store' });
@@ -535,6 +537,7 @@ async function fetchSearch(q, type = activeType){
     }
 
     function collectNaturalImages(it){
+      const sourceText = String((it && it.source) || '').toLowerCase();
       const raw = []
         .concat(it && it.thumbnail ? [it.thumbnail] : [])
         .concat(it && it.thumb ? [it.thumb] : [])
@@ -557,12 +560,23 @@ async function fetchSearch(q, type = activeType){
         if (isFaviconLike) return;
         if (!/^https?:\/\//i.test(s) && !s.startsWith('/')) return;
 
-        const key = s.split('#')[0].toLowerCase();
+        let key = s.split('#')[0].toLowerCase();
+        try {
+          const u = new URL(s, location.origin);
+          // Same image with different size/cache query should count as one.
+          key = (u.origin + u.pathname).toLowerCase();
+        } catch(e) {}
+
         if (seen.has(key)) return;
 
         seen.add(key);
         out.push(s);
       });
+
+      // Naver image API item is one image result; thumbnail/original often look duplicated.
+      if (sourceText.includes('naver_image') && out.length > 1) {
+        return out.slice(0, 1);
+      }
 
       return out.slice(0, 3);
     }
@@ -758,12 +772,114 @@ if (it.riskLabel === '⚠️ high-risk') {
       results.appendChild(card);
     }
 
-    function renderPage(page){
+
+    function itemStableKey(it){
+      return String(
+        (it && (it.id || it.url || it.link || it.title)) || ''
+      ).trim().toLowerCase();
+    }
+
+    function mergeEnrichedItems(baseItems, enrichedItems){
+      const byKey = new Map();
+
+      (Array.isArray(enrichedItems) ? enrichedItems : []).forEach(it => {
+        const key = itemStableKey(it);
+        if(key) byKey.set(key, it);
+      });
+
+      return (Array.isArray(baseItems) ? baseItems : []).map(it => {
+        const key = itemStableKey(it);
+        const hit = key ? byKey.get(key) : null;
+        if(!hit) return it;
+
+        const imgs = collectNaturalImages(hit);
+        if(!imgs.length) return it;
+
+        const merged = {
+          ...it,
+          thumbnail: hit.thumbnail || imgs[0] || it.thumbnail || '',
+          thumb: hit.thumb || imgs[0] || it.thumb || '',
+          image: hit.image || imgs[0] || it.image || '',
+          imageSet: imgs
+        };
+
+        itemImageEnrichCache.set(key, merged);
+        return merged;
+      });
+    }
+
+    async function enrichRenderedPageImages(page, slice, startIndex){
+      const q = (input.value || '').trim();
+      if(!q || !Array.isArray(slice) || !slice.length) return;
+
+      const cacheKey = [q, activeType || 'all', page].join('::');
+      if(pageImageEnrichCache.has(cacheKey)) return;
+      pageImageEnrichCache.add(cacheKey);
+
+      const candidates = slice
+        .map((it, idx) => ({ it, idx }))
+        .filter(x => {
+          const key = itemStableKey(x.it);
+          if(key && itemImageEnrichCache.has(key)) return false;
+          if(collectNaturalImages(x.it).length) return false;
+          const url = String((x.it && (x.it.url || x.it.link)) || '').trim();
+          return /^https?:\/\//i.test(url);
+        })
+        .slice(0, PAGE_SIZE);
+
+      if(!candidates.length) return;
+
+      try{
+        const url =
+          `/.netlify/functions/maru-search?action=enrich-images&q=${encodeURIComponent(q)}&type=${encodeURIComponent(activeType || 'all')}`;
+
+        const res = await fetch(url, {
+          method: 'POST',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            q,
+            type: activeType || 'all',
+            items: candidates.map(x => x.it)
+          })
+        });
+
+        if(!res.ok) return;
+
+        const json = await res.json();
+        const enriched = normalizeItems(json);
+        if(!enriched.length) return;
+
+        const updatedCandidates = mergeEnrichedItems(candidates.map(x => x.it), enriched);
+        let changed = false;
+
+        updatedCandidates.forEach((item, i) => {
+          const globalIdx = startIndex + candidates[i].idx;
+          if(globalIdx >= 0 && globalIdx < allItems.length && collectNaturalImages(item).length){
+            allItems[globalIdx] = item;
+            changed = true;
+          }
+        });
+
+        if(changed && page === currentPage){
+          renderPage(page, true);
+        }
+      }catch(e){
+        console.warn('page image enrichment skipped:', e);
+      }
+    }
+
+
+    function renderPage(page, skipEnrich = false){
       results.innerHTML = '';
       const start = (page - 1) * PAGE_SIZE;
       const slice = allItems.slice(start, start + PAGE_SIZE);
       slice.forEach(renderItem);
       drawPager();
+
+      if(!skipEnrich){
+        enrichRenderedPageImages(page, slice, start);
+      }
     }
 
 function updateSearchPageHistory(page, block) {
@@ -868,6 +984,9 @@ async function runSearch(q, type = activeType){
     const items = await fetchSearch(qq, activeType);
     allItems = dedupeItems([...(items || [])]);
 
+    pageImageEnrichCache.clear();
+    itemImageEnrichCache.clear();
+
     currentBlock = 0;
     currentPage = 1;
     lastQuery = qq;
@@ -879,9 +998,7 @@ async function runSearch(q, type = activeType){
       return;
     }
 
-    results.innerHTML = '';
-    allItems.slice(0, PAGE_SIZE).forEach(renderItem);
-    drawPager();
+    renderPage(1);
     status.textContent = `${allItems.length} results for "${qq}" · ${getTypeLabel(activeType)}`;
 
   } catch(e){
