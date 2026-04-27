@@ -24,7 +24,7 @@ const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 1000;
 const MIN_RESULT_TARGET = 500;
 const DEFAULT_SOFT_TIMEOUT_MS = 8500;
-const SEARCH_BANK_INTERNAL_TIMEOUT_MS = 4500;
+const SEARCH_BANK_INTERNAL_TIMEOUT_MS = 8000;
 
 function nowMs(){ return Date.now(); }
 
@@ -381,10 +381,7 @@ async function callSearchBankEngineInternal(event, params){
 
     const safeParams = Object.assign({}, params || {}, {
       from: 'maru-search',
-      skipMaruSearch: '1',
-      noMaruSearch: '1',
-      skipSearchBank: '',
-      noSearchBank: '',
+      mode: 'search',
       external: 'off',
       noExternal: '1',
       disableExternal: '1',
@@ -399,7 +396,7 @@ async function callSearchBankEngineInternal(event, params){
       noRevenue: '1'
     });
 
-    const timeoutMs = clampInt((params && params.timeoutMs) || SEARCH_BANK_INTERNAL_TIMEOUT_MS, SEARCH_BANK_INTERNAL_TIMEOUT_MS, 500, 5000);
+    const timeoutMs = clampInt((params && params.timeoutMs) || SEARCH_BANK_INTERNAL_TIMEOUT_MS, SEARCH_BANK_INTERNAL_TIMEOUT_MS, 500, 9000);
 
     if(typeof engine.runEngine === 'function'){
       return await withSoftTimeout(engine.runEngine(event || {}, safeParams), timeoutMs, null);
@@ -498,14 +495,10 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 
   async function pullFromSearchBank(){
     let count = 0;
-    let offset = 0;
-    for(let i=0; i<caps.searchBankPages && timeLeft() > 900; i++){
-      const b = await Containers.search_bank.fetch(q, 100, offset, event).catch(() => null);
-      const n = addBundle(b, 'search-bank', collected, sourceState);
-      count += n;
-      if(!b || !b.results || b.results.length < 100) break;
-      offset += 100;
-      if(count >= Math.max(MIN_RESULT_TARGET, limit)) break;
+    const bankLimit = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
+    if(timeLeft() > 900){
+      const b = await Containers.search_bank.fetch(q, bankLimit, 0, event).catch(() => null);
+      count = addBundle(b, 'search-bank', collected, sourceState);
     }
     record('search-bank', count ? 'ok' : 'empty', count);
     if(!count){
@@ -624,24 +617,9 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 }
 
 function backfillVisuals(items){
-  const list = Array.isArray(items) ? items.slice() : [];
-  const imagePool = [];
-  list.forEach(it => {
-    if(!it) return;
-    if(Array.isArray(it.imageSet)) imagePool.push.apply(imagePool, it.imageSet.filter(isRealImageUrl));
-    if(it.mediaType === 'image' && isRealImageUrl(it.url)) imagePool.push(it.url);
-    if(isRealImageUrl(it.thumbnail)) imagePool.push(it.thumbnail);
-  });
-  const pool = compactImages(imagePool);
-  if(!pool.length) return list;
-  let cursor = 0;
-  return list.map((it, idx) => {
-    if(!it || isRealImageUrl(it.thumbnail)) return it;
-    const img = pool[cursor % pool.length];
-    cursor += 1;
-    const imageSet = compactImages([img].concat(Array.isArray(it.imageSet) ? it.imageSet : []).concat(pool.slice(0,3)));
-    return Object.assign({}, it, { thumbnail: img, thumb: it.thumb || img, image: it.image || img, imageSet });
-  });
+  // Keep each result's own thumbnail/image/video poster only.
+  // Do not borrow images from unrelated results; that can create misleading or visually broken cards.
+  return Array.isArray(items) ? items.slice() : [];
 }
 
 async function naverSearch(q, limit, start){
