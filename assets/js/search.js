@@ -403,7 +403,8 @@ function applySearchUiLanguage(){
         text-align: left;
         unicode-bidi: plaintext;
       }
-      body.igdc-search-rtl #maru-page-controls { direction: ltr; text-align: center; }
+      body.igdc-search-rtl #maru-page-controls { direction: rtl; text-align: center; }
+      body.igdc-search-rtl #maru-page-controls button { direction: ltr; }
       body.igdc-search-rtl .maru-card-media { direction: ltr; }
     `;
     document.head.appendChild(rtlStyle);
@@ -581,9 +582,56 @@ function ensureSearchCardMediaStyle(){
       border-color: #c7d2fe;
     }
 
+    #maru-page-controls {
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 0 10px 6px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+    }
+    #maru-page-controls button {
+      flex: 0 0 auto;
+      box-sizing: border-box;
+    }
+
     @media (max-width: 720px) {
+      #maru-search-tabs {
+        max-width: 100vw;
+        box-sizing: border-box;
+      }
+      #maru-page-controls {
+        justify-content: flex-start !important;
+        max-width: 100vw;
+        padding: 0 12px 8px;
+      }
+      #maru-page-controls button {
+        min-width: 42px;
+        height: 42px;
+        padding: 0 10px;
+        font-size: 15px;
+      }
+      #searchResults {
+        max-width: 100%;
+        box-sizing: border-box;
+        overflow-x: hidden;
+      }
+      #searchResults .card,
+      #searchResults .maru-display-section {
+        max-width: 100%;
+        box-sizing: border-box;
+      }
+      .maru-display-section-body {
+        overflow-x: hidden;
+      }
       .maru-search-card-body {
         display: block;
+      }
+      .maru-search-card-text {
+        overflow-wrap: anywhere;
+        word-break: break-word;
       }
       .maru-card-media {
         width: 100%;
@@ -1047,6 +1095,11 @@ async function fetchSearch(q, type = activeType){
         bar.style.justifyContent = 'center';
         bar.style.gap = '6px';
         bar.style.margin = '8px 0 14px';
+        bar.style.width = '100%';
+        bar.style.maxWidth = '100%';
+        bar.style.boxSizing = 'border-box';
+        bar.style.overflowX = 'auto';
+        bar.style.overflowY = 'hidden';
         status.parentNode.insertBefore(bar, status.nextSibling);
       }
       return bar;
@@ -1687,6 +1740,14 @@ function updateSearchPageHistory(page, block) {
   );
 }
 
+function getPagerBlockSize(){
+  try {
+    return (window.matchMedia && window.matchMedia('(max-width: 720px)').matches) ? 5 : BLOCK_SIZE;
+  } catch(e) {
+    return BLOCK_SIZE;
+  }
+}
+
 function drawPager(){
   const pages = Math.max(1, Math.ceil(allItems.length / PAGE_SIZE));
   if (pages <= 1) { clearPager(); return; }
@@ -1694,15 +1755,22 @@ function drawPager(){
   const bar = ensurePager();
   bar.innerHTML = '';
 
-  const blockStart = currentBlock * BLOCK_SIZE + 1;
-  const blockEnd = Math.min(blockStart + BLOCK_SIZE - 1, pages);
+  const isRtlPager = RTL_SEARCH_LANGS.has(UI_LANG);
+  const pagerBlockSize = getPagerBlockSize();
+  currentBlock = Math.floor((Math.max(1, currentPage) - 1) / pagerBlockSize);
+
+  bar.dir = isRtlPager ? 'rtl' : 'ltr';
+  bar.style.direction = isRtlPager ? 'rtl' : 'ltr';
+
+  const blockStart = currentBlock * pagerBlockSize + 1;
+  const blockEnd = Math.min(blockStart + pagerBlockSize - 1, pages);
 
   if (blockStart > 1){
     const left = document.createElement('button');
-    left.textContent = '◀';
+    left.textContent = isRtlPager ? '▶' : '◀';
     left.onclick = () => {
       currentBlock = Math.max(0, currentBlock - 1);
-      currentPage = currentBlock * BLOCK_SIZE + 1;
+      currentPage = currentBlock * pagerBlockSize + 1;
       updateSearchPageHistory(currentPage, currentBlock);
       renderPage(currentPage);
     };
@@ -1715,7 +1783,7 @@ function drawPager(){
     b.style.opacity = (p === currentPage) ? '0.6' : '1';
     b.onclick = () => {
       currentPage = p;
-      currentBlock = Math.floor((p - 1) / BLOCK_SIZE);
+      currentBlock = Math.floor((p - 1) / pagerBlockSize);
       updateSearchPageHistory(currentPage, currentBlock);
       renderPage(currentPage);
     };
@@ -1724,11 +1792,11 @@ function drawPager(){
 
   if (blockEnd < pages){
     const right = document.createElement('button');
-    right.textContent = '▶';
+    right.textContent = isRtlPager ? '◀' : '▶';
     right.onclick = () => {
-      const maxBlock = Math.floor((pages - 1) / BLOCK_SIZE);
+      const maxBlock = Math.floor((pages - 1) / pagerBlockSize);
       currentBlock = Math.min(maxBlock, currentBlock + 1);
-      currentPage = currentBlock * BLOCK_SIZE + 1;
+      currentPage = currentBlock * pagerBlockSize + 1;
       updateSearchPageHistory(currentPage, currentBlock);
       renderPage(currentPage);
     };
