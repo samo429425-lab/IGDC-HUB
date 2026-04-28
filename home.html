@@ -2048,8 +2048,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const q = input.value.trim();
     if (!q) return;
 
-    window.location.href =
-      `/search.html?q=${encodeURIComponent(q)}&from=${encodeURIComponent(location.pathname + location.search + location.hash)}`;
+    const url = `/search.html?q=${encodeURIComponent(q)}&from=${encodeURIComponent('/home.html')}`;
+
+    window.top.location.href = url;
   };
 
   btn.addEventListener('click', openSearch);
