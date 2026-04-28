@@ -2047,19 +2047,22 @@ document.addEventListener('DOMContentLoaded', () => {
   const openSearch = () => {
     const q = input.value.trim();
     if (!q) return;
-	
-	history.pushState({}, '', location.href);
 
-    // ✅ 새 탭 / 독립 웹페이지 / 팝업 아님
-    window.open(
-      `/search.html?q=${encodeURIComponent(q)}`,
-      '_blank'
-    );
+    const u = new URL('/search.html', location.origin);
+    u.searchParams.set('q', q);
+    u.searchParams.set('from', location.pathname + location.search + location.hash);
+
+    // 같은 탭에서 독립 search.html로 이동.
+    // search.html 자체가 독립 검색 페이지라 홈 네비/인덱스는 따라오지 않는다.
+    window.location.href = u.pathname + u.search + u.hash;
   };
 
   btn.addEventListener('click', openSearch);
   input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') openSearch();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      openSearch();
+    }
   });
 });
 </script>
@@ -3454,7 +3457,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 })();
 </script>
 <!-- removed stray text: <! end: migration > -->
+
 <!-- removed stray text:  -->
+
 <!-- removed stray text:  -->
 <script>
 (function(){
