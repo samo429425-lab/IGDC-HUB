@@ -2044,6 +2044,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const btn = document.getElementById('homeSearchBtn');
   if (!input || !btn) return;
 
+  const STORAGE_KEY = 'igdc_home_search_keyword';
+
+  try {
+    const saved = window.top.sessionStorage.getItem(STORAGE_KEY);
+    if (saved && !input.value.trim()) {
+      input.value = saved;
+    }
+  } catch (e) {}
+
   const getReturnUrl = () => {
     try {
       const u = new URL(window.top.location.href);
@@ -2056,6 +2065,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const openSearch = () => {
     const q = input.value.trim();
     if (!q) return;
+
+    try {
+      window.top.sessionStorage.setItem(STORAGE_KEY, q);
+    } catch (e) {}
 
     const from = getReturnUrl();
 
