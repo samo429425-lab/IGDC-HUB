@@ -261,43 +261,88 @@ function normalizeUiLang(v){
 }
 
 function inferLangFromPath(pathname){
-  const s = String(pathname || '');
-  const file = s.split('/').pop() || '';
-  const m = file.match(/_([a-z]{2,3}|zh[-_]?hant)(?:\.html)?$/i);
-  return m ? normalizeUiLang(m[1]) : '';
+  const raw = String(pathname || '').trim();
+  if(!raw) return '';
+
+  let path = raw;
+  try{ path = new URL(raw, location.origin).pathname; }catch(e){}
+  try{ path = decodeURIComponent(path); }catch(e){}
+  path = path.replace(/\\/g, '/');
+
+  const parts = path.split('/').filter(Boolean);
+  const file = parts.length ? parts[parts.length - 1] : '';
+
+  const fileLang = file.match(/_([a-z]{2,3}|zh[-_]?hant)(?:\.html)?$/i);
+  if(fileLang){
+    const hit = normalizeUiLang(fileLang[1]);
+    if(hit) return hit;
+  }
+
+  for(let i = parts.length - 1; i >= 0; i--){
+    const seg = String(parts[i] || '').replace(/\.html$/i, '');
+    const hit = normalizeUiLang(seg);
+    if(hit) return hit;
+  }
+
+  if(/^home\.html$/i.test(file)) return 'ko';
+  return '';
 }
 
 function inferLangFromFromParam(){
+  const from = (params.get('from') || '').trim();
+  if(!from) return '';
+  return inferLangFromPath(from);
+}
+
+function inferLangFromReferrer(){
   try{
-    const from = (params.get('from') || '').trim();
-    if(!from) return '';
-    const u = new URL(from, location.origin);
+    if(!document.referrer) return '';
+    const u = new URL(document.referrer);
+    if(u.origin !== location.origin) return '';
     return inferLangFromPath(u.pathname);
   }catch(e){
-    return inferLangFromPath(params.get('from') || '');
+    return '';
   }
 }
 
 function detectUiLang(){
-  const fromLang = inferLangFromFromParam();
   const urlLang = normalizeUiLang(params.get('lang') || params.get('locale') || params.get('ui'));
+  const fromLang = inferLangFromFromParam();
+  const refLang = inferLangFromReferrer();
   const pathLang = inferLangFromPath(location.pathname);
   const docLang = normalizeUiLang(document.documentElement.getAttribute('lang') || '');
+  const bridgeLang = normalizeUiLang(window.IGTC_CURRENT_LANG || window.IGDC_CURRENT_LANG || '');
   let stored = '';
-  try{ stored = normalizeUiLang(localStorage.getItem('igdc_search_lang') || localStorage.getItem('igdc_lang') || ''); }catch(e){}
+  try{ stored = normalizeUiLang(localStorage.getItem('igdc_lang') || ''); }catch(e){}
 
   if(urlLang) return urlLang;
-  if(fromLang) return fromLang;
+
+  if(isSearchPage){
+    if(fromLang) return fromLang;
+    if(refLang) return refLang;
+    if(pathLang) return pathLang;
+    if(bridgeLang) return bridgeLang;
+    if(docLang && docLang !== 'ko') return docLang;
+    if(stored) return stored;
+    return 'ko';
+  }
+
   if(pathLang) return pathLang;
-  if(!isSearchPage && docLang) return docLang;
+  if(docLang) return docLang;
+  if(bridgeLang) return bridgeLang;
   if(stored) return stored;
-  if(docLang && docLang !== 'ko') return docLang;
   return 'ko';
+}
+
+function langForUrl(lang){
+  const v = normalizeUiLang(lang || detectUiLang()) || 'ko';
+  return v === 'zh-Hant' ? 'zht' : v;
 }
 
 const UI_LANG = detectUiLang();
 const UI = SEARCH_I18N[UI_LANG] || SEARCH_I18N.ko;
-try{ localStorage.setItem('igdc_search_lang', UI_LANG); }catch(e){}
+// Do not write the search UI language back to localStorage here.
+// The search page must not lock future visits into a previously used language.
 
 function tr(key, vars){
   const dict = (UI && UI.strings) || {};
@@ -563,7 +608,7 @@ function getSafeReturnUrl() {
 function buildSearchUrl(q) {
   const u = new URL('/search.html', location.origin);
   u.searchParams.set('q', q);
-  u.searchParams.set('lang', UI_LANG);
+  u.searchParams.set('lang', langForUrl(detectUiLang()));
   if (activeType && activeType !== 'all') {
     u.searchParams.set('type', activeType);
   }
@@ -714,7 +759,7 @@ btn.addEventListener('click', (e) => {
 
     const u = new URL(location.href);
     u.searchParams.set('q', q);
-    u.searchParams.set('lang', UI_LANG);
+    u.searchParams.set('lang', langForUrl(UI_LANG));
     u.searchParams.set('page', '1');
     u.searchParams.set('block', '0');
     if (activeType && activeType !== 'all') u.searchParams.set('type', activeType);
@@ -752,7 +797,7 @@ input.addEventListener('keydown', (e) => {
 
     const u = new URL(location.href);
     u.searchParams.set('q', q);
-    u.searchParams.set('lang', UI_LANG);
+    u.searchParams.set('lang', langForUrl(UI_LANG));
     u.searchParams.set('page', '1');
     u.searchParams.set('block', '0');
     if (activeType && activeType !== 'all') u.searchParams.set('type', activeType);
@@ -869,7 +914,7 @@ function normalizeItems(payload){
 
 async function fetchSearch(q, type = activeType){
   const safeType = normalizeSearchType(type);
-  const url = `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}&type=${encodeURIComponent(safeType)}&tab=${encodeURIComponent(safeType)}&lang=${encodeURIComponent(UI_LANG)}`;
+  const url = `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}&type=${encodeURIComponent(safeType)}&tab=${encodeURIComponent(safeType)}&lang=${encodeURIComponent(langForUrl(UI_LANG))}`;
 
   try {
     const r = await fetch(url, { cache: 'no-store' });
@@ -965,7 +1010,7 @@ async function fetchSearch(q, type = activeType){
 
       const u = new URL(location.href);
       u.searchParams.set('q', q);
-      u.searchParams.set('lang', UI_LANG);
+      u.searchParams.set('lang', langForUrl(UI_LANG));
       u.searchParams.set('page', '1');
       u.searchParams.set('block', '0');
       if (activeType && activeType !== 'all') u.searchParams.set('type', activeType);
@@ -1600,7 +1645,7 @@ function updateSearchPageHistory(page, block) {
   if (!isSearchPage) return;
 
   const u = new URL(location.href);
-  u.searchParams.set('lang', UI_LANG);
+  u.searchParams.set('lang', langForUrl(UI_LANG));
   u.searchParams.set('page', String(page));
   u.searchParams.set('block', String(block));
   if (activeType && activeType !== 'all') u.searchParams.set('type', activeType);
@@ -1742,14 +1787,42 @@ async function runSearch(q, type = activeType){
     return aliases[low] || aliases[base] || base || 'ko';
   }
 
+  function inferLangFromGlobalPath(pathname){
+    const raw = String(pathname || '').trim();
+    if(!raw) return '';
+    let path = raw;
+    try{ path = new URL(raw, location.origin).pathname; }catch(e){}
+    try{ path = decodeURIComponent(path); }catch(e){}
+    path = path.replace(/\\/g, '/');
+    const parts = path.split('/').filter(Boolean);
+    const file = parts.length ? parts[parts.length - 1] : '';
+    const m = file.match(/_([a-z]{2,3}|zh[-_]?hant)(?:\.html)?$/i);
+    if(m){
+      const hit = normalizeGlobalSearchLang(m[1]);
+      if(hit) return hit;
+    }
+    for(let i = parts.length - 1; i >= 0; i--){
+      const hit = normalizeGlobalSearchLang(String(parts[i] || '').replace(/\.html$/i, ''));
+      if(hit) return hit;
+    }
+    if(/^home\.html$/i.test(file)) return 'ko';
+    return '';
+  }
+
   function inferGlobalSearchLang(){
+    const pathLang = inferLangFromGlobalPath(location.pathname);
+    if(pathLang) return pathLang;
+
     const htmlLang = normalizeGlobalSearchLang(document.documentElement.getAttribute('lang') || '');
     if(htmlLang) return htmlLang;
-    const file = (location.pathname || '').split('/').pop() || '';
-    const m = file.match(/_([a-z]{2,3}|zh[-_]?hant)(?:\.html)?$/i);
-    if(m) return normalizeGlobalSearchLang(m[1]);
+
     try{
-      const stored = normalizeGlobalSearchLang(localStorage.getItem('igdc_search_lang') || localStorage.getItem('igdc_lang') || '');
+      const bridgeLang = normalizeGlobalSearchLang(window.IGTC_CURRENT_LANG || window.IGDC_CURRENT_LANG || '');
+      if(bridgeLang) return bridgeLang;
+    }catch(e){}
+
+    try{
+      const stored = normalizeGlobalSearchLang(localStorage.getItem('igdc_lang') || '');
       if(stored) return stored;
     }catch(e){}
     return 'ko';
