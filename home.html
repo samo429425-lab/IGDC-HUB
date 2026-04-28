@@ -2044,11 +2044,23 @@ document.addEventListener('DOMContentLoaded', () => {
   const btn = document.getElementById('homeSearchBtn');
   if (!input || !btn) return;
 
+  const getReturnUrl = () => {
+    try {
+      const u = new URL(window.top.location.href);
+      return u.pathname + u.search + u.hash;
+    } catch (e) {
+      return '/index.html';
+    }
+  };
+
   const openSearch = () => {
     const q = input.value.trim();
     if (!q) return;
 
-    const url = `/search.html?q=${encodeURIComponent(q)}&from=${encodeURIComponent('/home.html')}`;
+    const from = getReturnUrl();
+
+    const url =
+      `/search.html?q=${encodeURIComponent(q)}&from=${encodeURIComponent(from)}`;
 
     window.top.location.href = url;
   };
