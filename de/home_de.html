@@ -1847,21 +1847,46 @@ document.addEventListener('DOMContentLoaded', () => {
   const btn = document.getElementById('homeSearchBtn');
   if (!input || !btn) return;
 
+  const STORAGE_KEY = 'igdc_home_search_keyword';
+
+  try {
+    const saved = window.top.sessionStorage.getItem(STORAGE_KEY);
+    if (saved && !input.value.trim()) {
+      input.value = saved;
+    }
+  } catch (e) {}
+
+  const getReturnUrl = () => {
+    try {
+      const u = new URL(window.top.location.href);
+      return u.pathname + u.search + u.hash;
+    } catch (e) {
+      return '/index.html';
+    }
+  };
+
   const openSearch = () => {
     const q = input.value.trim();
     if (!q) return;
 
-    history.pushState({}, '', location.href);
+    try {
+      window.top.sessionStorage.setItem(STORAGE_KEY, q);
+    } catch (e) {}
 
-    window.open(
-      `/search.html?q=${encodeURIComponent(q)}`,
-      '_blank'
-    );
+    const from = getReturnUrl();
+
+    const url =
+      `/search.html?q=${encodeURIComponent(q)}&from=${encodeURIComponent(from)}`;
+
+    window.top.location.href = url;
   };
 
   btn.addEventListener('click', openSearch);
   input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') openSearch();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      openSearch();
+    }
   });
 });
 </script>
