@@ -1,5 +1,5 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
-// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards + stable display groups + close-tab browser-back
+// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards + stable display groups + close-tab browser-back watchdog
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -309,16 +309,27 @@ function samePathUrl(a, b) {
 }
 
 function goSearchReturnHome(state) {
+  if (window.__igdcSearchReturning) return;
+  window.__igdcSearchReturning = true;
+
   const target = resolveSearchReturnUrl(state);
 
-  /*
-    Desired behavior:
-    - search.html is opened as a separate tab/window from home.
-    - Browser chrome Back button should make this search tab/window disappear.
-    - Then the user naturally sees the original home tab/window again.
+  const fallback = () => {
+    try {
+      if (samePathUrl(location.href, target)) {
+        location.reload();
+      } else {
+        location.replace(target);
+      }
+    } catch (e) {
+      location.href = target;
+    }
+  };
 
-    window.close() only works reliably for script-opened windows/tabs.
-    If the browser blocks close(), fallback to loading the home target.
+  /*
+    If search.html was opened as a separate browser window/tab,
+    browser Back should effectively close this search window and reveal the opener home.
+    If close is blocked, force-load the home target.
   */
   try {
     if (window.opener && !window.opener.closed) {
@@ -328,32 +339,19 @@ function goSearchReturnHome(state) {
 
       window.close();
 
-      // If close is blocked, this code continues after a short delay.
       setTimeout(() => {
         try {
-          if (!window.closed) {
-            if (samePathUrl(location.href, target)) {
-              location.reload();
-            } else {
-              location.replace(target);
-            }
-          }
+          if (!window.closed) fallback();
         } catch (e) {
-          location.href = target;
+          fallback();
         }
-      }, 180);
+      }, 80);
 
       return;
     }
   } catch (e) {}
 
-  // Fallback for non-script-opened tab/window or blocked opener access.
-  if (samePathUrl(location.href, target)) {
-    location.reload();
-    return;
-  }
-
-  location.replace(target);
+  fallback();
 }
 
 function buildSearchUrl(q) {
@@ -448,25 +446,67 @@ function installSearchHistoryBridge() {
   if (!isSearchPage) return;
 
   ensureSearchHistoryBridge(true);
+  startSearchBackWatchdog();
 
-  // Some browsers update the chrome Back arrow only after load/pageshow.
-  // These retries do not stack history because the active-state guard stops duplicates.
+  // Some browsers paint the Back arrow before state is fully usable.
+  // The guard inside ensureSearchHistoryBridge prevents duplicate stacking.
   setTimeout(() => ensureSearchHistoryBridge(false), 0);
   setTimeout(() => ensureSearchHistoryBridge(false), 120);
 
   window.addEventListener('load', () => {
-    setTimeout(() => ensureSearchHistoryBridge(false), 0);
+    setTimeout(() => {
+      ensureSearchHistoryBridge(false);
+      startSearchBackWatchdog();
+    }, 0);
   }, { once: true });
 
   window.addEventListener('pageshow', () => {
-    const st = history.state || {};
-    if (st.__igdcSearchBridgeReturn) {
-      goSearchReturnHome(st);
+    if (isSearchReturnHistoryPosition()) {
+      goSearchReturnHome(history.state || {});
       return;
     }
-    setTimeout(() => ensureSearchHistoryBridge(false), 0);
-  }, { once: true });
+    setTimeout(() => {
+      ensureSearchHistoryBridge(false);
+      startSearchBackWatchdog();
+    }, 0);
+  });
 }
+
+
+function isSearchReturnHistoryPosition() {
+  const st = history.state || {};
+  if (st.__igdcSearchBridgeReturn || st.__searchBridgeReturn || st.__searchEntry) return true;
+
+  // The document is still this search.js document, but the browser URL has moved
+  // to the synthetic return URL. This is the exact case where the Back button
+  // appears to do nothing until a hard refresh.
+  try {
+    return isSearchPage && !/\/search(?:\.html)?\/?$/i.test(location.pathname);
+  } catch (e) {
+    return false;
+  }
+}
+
+function startSearchBackWatchdog() {
+  if (!isSearchPage || window.__igdcSearchBackWatchdogStarted) return;
+  window.__igdcSearchBackWatchdogStarted = true;
+
+  const check = () => {
+    if (window.__igdcSearchReturning) return;
+    if (isSearchReturnHistoryPosition()) {
+      goSearchReturnHome(history.state || {});
+    }
+  };
+
+  // Catch the first Back click even if popstate is delayed/missed.
+  window.addEventListener('popstate', () => setTimeout(check, 0), true);
+  window.addEventListener('pageshow', () => setTimeout(check, 0), true);
+  window.addEventListener('hashchange', () => setTimeout(check, 0), true);
+
+  const timer = setInterval(check, 80);
+  window.addEventListener('beforeunload', () => clearInterval(timer), { once: true });
+}
+
 
 function syncSearchFromUrl(run = true) {
   const sp = new URLSearchParams(location.search);
@@ -498,7 +538,7 @@ window.addEventListener('popstate', (e) => {
   const state = e.state || {};
 
   // 1️⃣ 검색 진입 이전 페이지로 복귀
-  if (state.__igdcSearchBridgeReturn || state.__searchBridgeReturn || state.__searchEntry || !/\/search(?:\.html)?\/?$/i.test(location.pathname)) {
+  if (isSearchReturnHistoryPosition()) {
     goSearchReturnHome(state);
     return;
   }
