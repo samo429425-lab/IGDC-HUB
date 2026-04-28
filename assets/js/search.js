@@ -1,5 +1,5 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
-// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards + stable display groups + native same-tab back
+// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards + stable display groups + close-tab browser-back
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -246,14 +246,114 @@ activeType = type0;
 
 function getSafeReturnUrl() {
   try {
-    const from = (new URLSearchParams(location.search).get('from') || '').trim();
-    if (!from) return '';
-    const u = new URL(from, location.origin);
-    if (u.origin !== location.origin) return '';
-    return u.pathname + u.search + u.hash;
+    const sp = new URLSearchParams(location.search);
+    const from = (sp.get('from') || '').trim();
+
+    if (from) {
+      const u = new URL(from, location.origin);
+      if (u.origin === location.origin && !/\/search(?:\.html)?\/?$/i.test(u.pathname)) {
+        return u.pathname + u.search + u.hash;
+      }
+    }
+
+    if (document.referrer) {
+      const r = new URL(document.referrer, location.origin);
+      if (r.origin === location.origin && !/\/search(?:\.html)?\/?$/i.test(r.pathname)) {
+        return r.pathname + r.search + r.hash;
+      }
+    }
+
+    try {
+      if (window.opener && !window.opener.closed && window.opener.location) {
+        const op = new URL(window.opener.location.href, location.origin);
+        if (op.origin === location.origin && !/\/search(?:\.html)?\/?$/i.test(op.pathname)) {
+          return op.pathname + op.search + op.hash;
+        }
+      }
+    } catch (e) {}
+
+    return '/home.html';
   } catch (e) {
-    return '';
+    return '/home.html';
   }
+}
+
+function getCurrentSearchUrlClean() {
+  const u = new URL(location.href);
+  u.searchParams.delete('__igdc_back');
+  return u.pathname + u.search + u.hash;
+}
+
+function resolveSearchReturnUrl(state) {
+  const s = state || {};
+  if (s.from) {
+    try {
+      const u = new URL(String(s.from), location.origin);
+      if (u.origin === location.origin) return u.pathname + u.search + u.hash;
+    } catch (e) {}
+  }
+  return getSafeReturnUrl() || '/home.html';
+}
+
+function samePathUrl(a, b) {
+  try {
+    const ua = new URL(a, location.origin);
+    const ub = new URL(b, location.origin);
+    return ua.origin === ub.origin &&
+      ua.pathname === ub.pathname &&
+      ua.search === ub.search &&
+      ua.hash === ub.hash;
+  } catch (e) {
+    return false;
+  }
+}
+
+function goSearchReturnHome(state) {
+  const target = resolveSearchReturnUrl(state);
+
+  /*
+    Desired behavior:
+    - search.html is opened as a separate tab/window from home.
+    - Browser chrome Back button should make this search tab/window disappear.
+    - Then the user naturally sees the original home tab/window again.
+
+    window.close() only works reliably for script-opened windows/tabs.
+    If the browser blocks close(), fallback to loading the home target.
+  */
+  try {
+    if (window.opener && !window.opener.closed) {
+      try {
+        window.opener.focus();
+      } catch (focusErr) {}
+
+      window.close();
+
+      // If close is blocked, this code continues after a short delay.
+      setTimeout(() => {
+        try {
+          if (!window.closed) {
+            if (samePathUrl(location.href, target)) {
+              location.reload();
+            } else {
+              location.replace(target);
+            }
+          }
+        } catch (e) {
+          location.href = target;
+        }
+      }, 180);
+
+      return;
+    }
+  } catch (e) {}
+
+  // Fallback for non-script-opened tab/window or blocked opener access.
+  if (samePathUrl(location.href, target)) {
+    location.reload();
+    return;
+  }
+
+  location.replace(target);
 }
 
 function buildSearchUrl(q) {
@@ -274,10 +374,98 @@ function buildSearchUrl(q) {
   return u.pathname + u.search + u.hash;
 }
 
-function ensureSearchHistoryBridge() {
-  // Same-tab navigation gives the browser a real native Back entry.
-  // Do not create synthetic history entries here.
-  return;
+function ensureSearchHistoryBridge(force) {
+  if (!isSearchPage) return;
+
+  const returnUrl = getSafeReturnUrl() || '/home.html';
+  const currentUrl = getCurrentSearchUrlClean();
+  const state = history.state || {};
+
+  if (!force && state.__igdcSearchBridgeActive && state.from === returnUrl) return;
+
+  try {
+    /*
+      Browser top-left Back must be real/active even when search.html opened as a separate tab/window.
+
+      History after this runs:
+        entry 0: /home.html                 state.__igdcSearchBridgeReturn
+        entry 1: /search.html?q=...&from=... state.__igdcSearchBridgeActive
+
+      User presses browser Back on entry 1:
+        popstate lands on entry 0
+        search.js immediately location.replace('/home.html')
+    */
+    history.replaceState(
+      {
+        __igdcSearchBridgeReturn: true,
+        from: returnUrl,
+        q: q0 || '',
+        type: activeType || 'all'
+      },
+      '',
+      returnUrl
+    );
+
+    history.pushState(
+      {
+        __igdcSearchBridgeActive: true,
+        from: returnUrl,
+        q: q0 || '',
+        type: activeType || 'all'
+      },
+      '',
+      currentUrl
+    );
+  } catch (e) {
+    // Fallback: at least activate a same-URL bridge.
+    try {
+      history.replaceState(
+        {
+          __igdcSearchBridgeReturn: true,
+          from: returnUrl,
+          q: q0 || '',
+          type: activeType || 'all'
+        },
+        '',
+        currentUrl
+      );
+
+      history.pushState(
+        {
+          __igdcSearchBridgeActive: true,
+          from: returnUrl,
+          q: q0 || '',
+          type: activeType || 'all'
+        },
+        '',
+        currentUrl
+      );
+    } catch (err) {}
+  }
+}
+
+function installSearchHistoryBridge() {
+  if (!isSearchPage) return;
+
+  ensureSearchHistoryBridge(true);
+
+  // Some browsers update the chrome Back arrow only after load/pageshow.
+  // These retries do not stack history because the active-state guard stops duplicates.
+  setTimeout(() => ensureSearchHistoryBridge(false), 0);
+  setTimeout(() => ensureSearchHistoryBridge(false), 120);
+
+  window.addEventListener('load', () => {
+    setTimeout(() => ensureSearchHistoryBridge(false), 0);
+  }, { once: true });
+
+  window.addEventListener('pageshow', () => {
+    const st = history.state || {};
+    if (st.__igdcSearchBridgeReturn) {
+      goSearchReturnHome(st);
+      return;
+    }
+    setTimeout(() => ensureSearchHistoryBridge(false), 0);
+  }, { once: true });
 }
 
 function syncSearchFromUrl(run = true) {
@@ -310,8 +498,8 @@ window.addEventListener('popstate', (e) => {
   const state = e.state || {};
 
   // 1️⃣ 검색 진입 이전 페이지로 복귀
-  if (state.__searchEntry && state.from) {
-    location.href = state.from;
+  if (state.__igdcSearchBridgeReturn || state.__searchBridgeReturn || state.__searchEntry || !/\/search(?:\.html)?\/?$/i.test(location.pathname)) {
+    goSearchReturnHome(state);
     return;
   }
 
@@ -360,6 +548,7 @@ if (q0) {
 
 ensureSearchTabs();
 updateSearchTabsActive();
+installSearchHistoryBridge();
 
 if (q0) {
   syncSearchFromUrl(true);
@@ -638,7 +827,12 @@ async function fetchSearch(q, type = activeType){
       if (activeType && activeType !== 'all') u.searchParams.set('type', activeType);
       else u.searchParams.delete('type');
 
-      history.pushState({ q, type: activeType, page: 1, block: 0 }, '', u.toString());
+      const safeReturnUrl = getSafeReturnUrl();
+      if (safeReturnUrl) {
+        u.searchParams.set('from', safeReturnUrl);
+      }
+
+      history.pushState({ q, type: activeType, page: 1, block: 0, from: safeReturnUrl || '' }, '', u.toString());
       runSearch(q, activeType);
     }
 
