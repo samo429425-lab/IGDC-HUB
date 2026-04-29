@@ -12,7 +12,7 @@
 
 "use strict";
 
-const VERSION = "v2.1-safe-bridge";
+const VERSION = "v2.1-safe-bridge-quality-gate";
 
 let Core = null;
 try { Core = require("./core"); } catch (_) {
@@ -82,15 +82,35 @@ function canonicalizeItem(raw, query){
   const title = s(raw.title || raw.name || "").trim();
   const summary = s(raw.summary || raw.snippet || raw.description || "").trim();
 
-  // prefer existing canonical keys
-  const payload = (raw.payload && typeof raw.payload === 'object') ? raw.payload : {};
+  // prefer existing canonical keys; preserve routing/slot metadata for insight quality gate
+  const basePayload = (raw.payload && typeof raw.payload === 'object') ? raw.payload : {};
+  const rawSource = (raw.source && typeof raw.source === 'object')
+    ? (raw.source.name || raw.source.platform || raw.source.id || "")
+    : raw.source;
+  const payload = {
+    ...basePayload,
+    source: basePayload.source || rawSource || null,
+    tags: Array.isArray(basePayload.tags) ? basePayload.tags : (Array.isArray(raw.tags) ? raw.tags : []),
+    channel: basePayload.channel || raw.channel || raw.bind?.channel || null,
+    section: basePayload.section || raw.section || raw.bind?.section || null,
+    page: basePayload.page || raw.page || raw.bind?.page || null,
+    route: basePayload.route || raw.route || raw.bind?.route || null,
+    geo: basePayload.geo || raw.geo || null,
+    bind: basePayload.bind || raw.bind || null,
+    extension: basePayload.extension || raw.extension || null,
+    monetization: basePayload.monetization || raw.monetization || null,
+    revenue: basePayload.revenue || raw.revenue || null,
+    revenueDestination: basePayload.revenueDestination || raw.revenueDestination || null,
+    directSale: basePayload.directSale || raw.directSale || null,
+    media: basePayload.media || raw.media || null
+  };
 
   const id = s(raw.id || url || title || "").trim() || ("item-" + Math.random().toString(16).slice(2));
 
   const type = s(raw.type || payload.type || "web").trim() || "web";
   const mediaType = s(raw.mediaType || payload.mediaType || (type === 'video' ? 'video' : (type === 'image' ? 'image' : 'article'))).trim();
 
-  const source = s(raw.source || payload.source || domainOf(url) || "").trim() || null;
+  const source = s(rawSource || payload.source || domainOf(url) || "").trim() || null;
   const thumbnail = s(raw.thumbnail || raw.thumb || payload.thumb || payload.thumbnail || payload.image || payload.image_url || payload.og_image || "").trim() || "";
 
   // keep existing scoring signals if present
@@ -138,6 +158,228 @@ function dedup(items){
     out.push(it);
   }
   return out;
+}
+
+function payloadOf(it){
+  return (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
+}
+
+function flatText(v){
+  try{
+    if(Array.isArray(v)) return v.map(flatText).join(' ');
+    if(v && typeof v === 'object') return Object.keys(v).map(k => flatText(v[k])).join(' ');
+    return s(v);
+  }catch(_){ return ''; }
+}
+
+function hasRealUrl(it){
+  const u = s(it && it.url).trim();
+  if(!u || u === '#') return false;
+  if(/^javascript:/i.test(u)) return false;
+  if(/^void\(/i.test(u)) return false;
+  return true;
+}
+
+function isGenericPlaceholderTitle(title){
+  const raw = s(title).trim();
+  const t = low(raw);
+  if(!t) return true;
+  return (
+    /^network item\s*\d+$/i.test(raw) ||
+    /^item\s*\d+$/i.test(raw) ||
+    /^sample\s+item\s*\d*$/i.test(raw) ||
+    t.includes('placeholder') ||
+    t.includes('sample') ||
+    t.includes('demo') ||
+    t.includes('dummy') ||
+    t.includes('seed placeholder')
+  );
+}
+
+function isPreparedExpansionSlot(it, context){
+  const p = payloadOf(it);
+  const hay = low([
+    it && it.title,
+    it && it.summary,
+    it && it.source,
+    it && it.type,
+    it && it.mediaType,
+    it && it.url,
+    p.channel,
+    p.section,
+    p.page,
+    p.route,
+    p.source,
+    flatText(p.tags),
+    flatText(p.bind),
+    flatText(p.extension),
+    context && context.intent,
+    context && context.channel,
+    context && context.section,
+    context && context.page,
+    context && context.route
+  ].join(' '));
+
+  const allowHints = [
+    'social', 'networkhub', 'network', 'broadcaster', 'broadcast',
+    'academic', 'literature', 'scholar', 'research', 'journal', 'book',
+    'media', 'video', 'webtoon', 'commerce', 'shopping', 'distribution',
+    'donation', 'tour', 'culture', 'arts', 'education', 'platform'
+  ];
+
+  return allowHints.some(k => hay.includes(k));
+}
+
+function placeholderSignalScore(it){
+  let score = 0;
+  const p = payloadOf(it);
+  const title = s(it && it.title).trim();
+  const summary = s(it && it.summary).trim();
+  const url = s(it && it.url).trim();
+  const source = low((it && it.source) || p.source);
+  const thumb = low((it && it.thumbnail) || p.thumbnail || p.thumb || p.image || p.og_image);
+  const payloadText = low(flatText({
+    tags: p.tags,
+    channel: p.channel,
+    section: p.section,
+    page: p.page,
+    route: p.route,
+    bind: p.bind,
+    extension: p.extension
+  }));
+
+  if(!hasRealUrl(it)) score += 0.30;
+  if(isGenericPlaceholderTitle(title)) score += 0.30;
+  if(!summary || summary.length < 8) score += 0.12;
+
+  if(source.includes('seed')) score += 0.18;
+  if(source.includes('placeholder')) score += 0.22;
+  if(payloadText.includes('placeholder')) score += 0.18;
+  if(payloadText.includes('seed')) score += 0.12;
+  if(payloadText.includes('replaceable')) score += 0.08;
+
+  if(thumb.includes('/assets/sample/')) score += 0.14;
+  if(thumb.includes('placeholder')) score += 0.18;
+  if(thumb.includes('noimage') || thumb.includes('no_image')) score += 0.18;
+
+  if(p.placeholder === true) score += 0.35;
+  if(p.seed === true) score += 0.24;
+  if(p.source === 'seed') score += 0.24;
+  if(p.extension && p.extension.placeholder === true) score += 0.35;
+  if(url.includes('/seed/')) score += 0.28;
+
+  return Math.min(1, score);
+}
+
+function isContextRelevant(it, query, context){
+  const q = low(query);
+  const p = payloadOf(it);
+  const ctx = [
+    context && context.scope,
+    context && context.target,
+    context && context.intent,
+    context && context.region,
+    context && context.country,
+    context && context.state,
+    context && context.city,
+    context && context.channel,
+    context && context.section,
+    context && context.page,
+    context && context.route
+  ].map(low).filter(Boolean);
+
+  const hay = low([
+    it && it.title,
+    it && it.summary,
+    it && it.source,
+    it && it.type,
+    it && it.mediaType,
+    it && it.url,
+    p.channel,
+    p.section,
+    p.page,
+    p.route,
+    p.source,
+    flatText(p.tags),
+    flatText(p.bind),
+    flatText(p.geo),
+    flatText(p.extension)
+  ].join(' '));
+
+  if(q && hay.includes(q)) return true;
+  return ctx.some(v => v && hay.includes(v));
+}
+
+function applyInsightQualityGate(items, query, context){
+  const out = [];
+  const stats = {
+    input: Array.isArray(items) ? items.length : 0,
+    output: 0,
+    dropped: 0,
+    downgraded: 0,
+    preparedSlots: 0
+  };
+
+  for(const it of Array.isArray(items) ? items : []){
+    if(!it) continue;
+
+    const signal = placeholderSignalScore(it);
+    const relevant = isContextRelevant(it, query, context);
+    const realUrl = hasRealUrl(it);
+    const hasBody = !!(s(it.title).trim() && s(it.summary).trim().length >= 8);
+    const preparedSlot = isPreparedExpansionSlot(it, context);
+
+    if(preparedSlot) stats.preparedSlots++;
+
+    // Exclude only clear noise. Future social/broadcast/academic/literature slots are preserved.
+    if(signal >= 0.78 && !realUrl && !hasBody && !relevant && !preparedSlot){
+      stats.dropped++;
+      continue;
+    }
+
+    let penalty = 0;
+    let qualityClass = 'real_content';
+
+    if(signal >= 0.50){
+      qualityClass = preparedSlot ? 'prepared_slot' : 'placeholder_likely';
+      penalty = preparedSlot ? 0.18 : (relevant ? 0.28 : 0.58);
+    }else if(signal >= 0.24){
+      qualityClass = preparedSlot ? 'prepared_slot' : 'weak_placeholder_signal';
+      penalty = preparedSlot ? 0.08 : (relevant ? 0.12 : 0.24);
+    }
+
+    if(penalty > 0) stats.downgraded++;
+
+    out.push({
+      ...it,
+      score: Math.max(0, Number(it.score || 0) - penalty),
+      payload: {
+        ...payloadOf(it),
+        insightQuality: {
+          class: qualityClass,
+          placeholderSignal: signal,
+          relevant,
+          preparedSlot,
+          penalty,
+          summaryEligible: qualityClass === 'real_content' || (realUrl && signal < 0.50)
+        }
+      }
+    });
+  }
+
+  stats.output = out.length;
+  return { items: out, stats };
+}
+
+function summarySafeItems(items){
+  const clean = (Array.isArray(items) ? items : []).filter(it => {
+    const iq = it && it.payload && it.payload.insightQuality;
+    if(iq && iq.summaryEligible === false) return false;
+    const signal = iq ? Number(iq.placeholderSignal || 0) : placeholderSignalScore(it);
+    return signal < 0.50 || hasRealUrl(it);
+  });
+
+  return clean.length ? clean : (Array.isArray(items) ? items : []);
 }
 
 function pickSummary(query, items){
@@ -367,13 +609,15 @@ if(bankRes.ok && bankRes.data){
   trace.search_bank.error = bankRes.error || 'BANK_FAIL';
 }
 
-  // merge + dedup + rank
+  // merge + dedup + quality gate + rank
   let merged = dedup([ ...bankItems, ...msItems ]);
+  const qualityGate = applyInsightQualityGate(merged, query, context);
+  merged = qualityGate.items;
   merged.sort((a,b)=> (b.score||0) - (a.score||0));
   merged = merged.slice(0, limit);
 
-  // summary
-  const summary = pickSummary(query, merged);
+  // summary: avoid using prepared/placeholder slot titles as representative insight text
+  const summary = pickSummary(query, summarySafeItems(merged));
 
   // issues (future). keep stable array.
   const issues = [];
@@ -405,7 +649,8 @@ if(bankRes.ok && bankRes.data){
     served_from: {
     bank: bankRes.ok ? (bankRes.data && bankRes.data.served_from) : null,
     search: msRes.ok ? (msRes.data && (msRes.data.source || msRes.data.engine)) : null
-}
+},
+    quality: qualityGate.stats
     },
 
     // Raw passthrough (for debugging / future consumers)
