@@ -12,7 +12,7 @@
 
 "use strict";
 
-const VERSION = "v2.1-safe-bridge-quality-gate";
+const VERSION = "v2.2-global-insight-brief-external-on";
 
 let Core = null;
 try { Core = require("./core"); } catch (_) {
@@ -382,14 +382,277 @@ function summarySafeItems(items){
   return clean.length ? clean : (Array.isArray(items) ? items : []);
 }
 
+
+
+function truthyValue(v){
+  if(v === true) return true;
+  if(v === false || v == null) return false;
+  const t = low(v).trim();
+  return !!t && !['0','false','no','off','disable','disabled','null','undefined'].includes(t);
+}
+
+function isExternalExplicitlyOff(context){
+  context = context || {};
+  const ext = low(context.external).trim();
+  return ext === 'off' || ext === '0' || ext === 'false'
+    || truthyValue(context.noExternal)
+    || truthyValue(context.disableExternal);
+}
+
+function shouldForceExternalForInsight(mode, context){
+  const m = low(mode || 'global-insight');
+  const c = context || {};
+  if(isExternalExplicitlyOff(c)) return false;
+  if(m.includes('global-insight')) return true;
+  if(['region','country','global','continent','area'].includes(low(c.scope))) return true;
+  if(['summary','brief','country_brief','region_brief','global_brief','analysis','research','media','news'].includes(low(c.intent))) return true;
+  return false;
+}
+
+function withGlobalInsightSearchDefaults(context, mode){
+  const out = { ...(context || {}) };
+  if(shouldForceExternalForInsight(mode, out)){
+    if(out.external == null || s(out.external).trim() === '') out.external = 'deep';
+    if(out.deep == null) out.deep = true;
+    out.useExternal = true;
+    out.useLive = true;
+    out.useExternalSources = true;
+  }
+  return out;
+}
+
+const REGION_ALIASES = [
+  { key:'europe', labels:['유럽','europe','eu','european union','유럽연합'], nameKo:'유럽' },
+  { key:'americas', labels:['아메리카','americas','america','미주','북미','남미','라틴아메리카','north america','south america','latin america'], nameKo:'아메리카' },
+  { key:'africa', labels:['아프리카','africa'], nameKo:'아프리카' },
+  { key:'asia', labels:['아시아','asia','동아시아','동남아','중앙아시아','east asia','southeast asia','central asia'], nameKo:'아시아' },
+  { key:'middle_east', labels:['중동','middle east','mena','서아시아'], nameKo:'중동' },
+  { key:'oceania', labels:['오세아니아','oceania','태평양','pacific'], nameKo:'오세아니아' }
+];
+
+const COUNTRY_ALIASES = [
+  { key:'us', labels:['미국','usa','u.s.','united states','america','미합중국'], nameKo:'미국' },
+  { key:'uk', labels:['영국','uk','united kingdom','britain','great britain'], nameKo:'영국' },
+  { key:'japan', labels:['일본','japan'], nameKo:'일본' },
+  { key:'singapore', labels:['싱가포르','singapore'], nameKo:'싱가포르' },
+  { key:'china', labels:['중국','china'], nameKo:'중국' },
+  { key:'germany', labels:['독일','germany'], nameKo:'독일' },
+  { key:'france', labels:['프랑스','france'], nameKo:'프랑스' },
+  { key:'ukraine', labels:['우크라이나','ukraine'], nameKo:'우크라이나' },
+  { key:'russia', labels:['러시아','russia'], nameKo:'러시아' },
+  { key:'india', labels:['인도','india'], nameKo:'인도' },
+  { key:'korea', labels:['한국','대한민국','south korea','republic of korea','korea'], nameKo:'대한민국' },
+  { key:'canada', labels:['캐나다','canada'], nameKo:'캐나다' },
+  { key:'australia', labels:['호주','오스트레일리아','australia'], nameKo:'호주' },
+  { key:'brazil', labels:['브라질','brazil'], nameKo:'브라질' }
+];
+
+function matchAlias(query, list){
+  const q = low(query).trim();
+  if(!q) return null;
+  for(const item of list){
+    if(item.labels.some(label => q === low(label) || q.includes(low(label)))) return item;
+  }
+  return null;
+}
+
+function inferFocus(query, context){
+  const hay = low([query, context && context.intent, context && context.channel, context && context.section].join(' '));
+  if(/교육|학술|학교|대학|education|academic|university/.test(hay)) return 'education';
+  if(/문화|종교|문학|예술|culture|religion|literature|arts/.test(hay)) return 'culture';
+  if(/경제|산업|무역|시장|금융|commerce|economy|industry|trade|finance/.test(hay)) return 'economy';
+  if(/안보|국방|전쟁|분쟁|외교|security|defense|war|conflict|diplomacy/.test(hay)) return 'security';
+  if(/뉴스|미디어|영상|방송|media|video|news|broadcast/.test(hay)) return 'media';
+  if(/정치|정부|선거|policy|politic|government|election/.test(hay)) return 'politics';
+  return null;
+}
+
+function buildInsightProfile(query, context){
+  context = context || {};
+  const targetText = s(context.target || context.country || context.region || query).trim();
+  const regionHit = matchAlias(targetText || query, REGION_ALIASES);
+  const countryHit = matchAlias(targetText || query, COUNTRY_ALIASES);
+  const focus = inferFocus(query, context);
+  let scope = low(context.scope || 'global');
+  let kind = 'topic';
+  let targetName = targetText || query;
+
+  if(scope === 'region' || scope === 'continent' || regionHit){
+    kind = 'region';
+    scope = 'region';
+    targetName = regionHit ? regionHit.nameKo : targetName;
+  }else if(scope === 'country' || countryHit || (targetText && targetText.length <= 24 && !focus)){
+    kind = 'country';
+    scope = 'country';
+    targetName = countryHit ? countryHit.nameKo : targetName;
+  }
+
+  const baseTerms = kind === 'region'
+    ? '정치 경제 문화 국가 현황 안보 분쟁 뉴스 미디어 overview politics economy culture security news'
+    : kind === 'country'
+      ? '인구 영토 국가 개요 정치 경제 문화 종교 사회 안보 외교 뉴스 overview population territory politics economy culture religion security news'
+      : '개요 배경 현황 주요 이슈 전망 관련 뉴스 분석 overview background current issues analysis news';
+
+  const focusTerms = focus ? ({
+    education:'교육 학술 대학 연구 제도 education academic research',
+    culture:'문화 종교 문학 예술 사회 culture religion literature arts society',
+    economy:'경제 산업 무역 시장 금융 economy industry trade market finance',
+    security:'안보 국방 전쟁 분쟁 외교 security defense war conflict diplomacy',
+    media:'뉴스 미디어 영상 방송 현장 자료 news media video broadcast',
+    politics:'정치 정부 정책 선거 외교 politics government policy election diplomacy'
+  }[focus] || '') : '';
+
+  return {
+    kind,
+    scope,
+    target: targetName,
+    focus,
+    defaultLimit: kind === 'region' || kind === 'country' ? 80 : 60,
+    searchQuery: [query, targetName !== query ? targetName : '', baseTerms, focusTerms].filter(Boolean).join(' ')
+  };
+}
+
+function applyInsightProfileToContext(context, profile){
+  return {
+    ...(context || {}),
+    scope: profile.scope || (context && context.scope) || 'global',
+    target: (context && context.target) || profile.target || null,
+    intent: profile.focus ? profile.focus : ((context && context.intent) || (profile.kind === 'country' ? 'country_brief' : (profile.kind === 'region' ? 'region_brief' : 'summary'))),
+    insightKind: profile.kind,
+    insightFocus: profile.focus || null
+  };
+}
+
+function snippet(v, max = 150){
+  const t = s(v).replace(/\s+/g, ' ').trim();
+  if(!t) return '';
+  return t.length > max ? t.slice(0, max - 1) + '…' : t;
+}
+
+function itemText(it){
+  const p = payloadOf(it);
+  return low([it && it.title, it && it.summary, it && it.source, it && it.type, it && it.mediaType, it && it.url, flatText(p.tags), flatText(p.geo), flatText(p.bind)].join(' '));
+}
+
+function sectionDefinitions(profile){
+  const commonNews = { id:'news_media', title:'뉴스·미디어·현안', keywords:/뉴스|속보|전쟁|분쟁|우크라이나|media|news|video|youtube|broadcast|war|conflict|current/i };
+  if(profile.kind === 'country'){
+    return [
+      { id:'overview', title:'기본 개요', keywords:/개요|인구|영토|수도|국가|사회|overview|population|territory|capital|profile/i },
+      { id:'politics', title:'정치·정부·외교', keywords:/정치|정부|대통령|총리|의회|외교|선거|policy|politic|government|election|diplomacy/i },
+      { id:'economy', title:'경제·산업·시장', keywords:/경제|산업|무역|수출|시장|금융|기업|gdp|economy|industry|trade|market|finance|business/i },
+      { id:'culture', title:'문화·종교·사회', keywords:/문화|종교|교육|사회|문학|예술|관광|culture|religion|education|society|literature|arts|tour/i },
+      { id:'security', title:'안보·국방·리스크', keywords:/안보|국방|군사|전쟁|분쟁|위험|제재|security|defense|military|war|conflict|risk|sanction/i },
+      commonNews
+    ];
+  }
+  if(profile.kind === 'region'){
+    return [
+      { id:'overview', title:'권역 개요', keywords:/개요|권역|국가|지역|동맹|연합|overview|region|countries|union|bloc/i },
+      { id:'countries', title:'주요 국가·지역 상황', keywords:/국가|지역|수도|인구|유럽연합|eu|country|state|region|population/i },
+      { id:'politics_security', title:'정치·안보·분쟁', keywords:/정치|안보|전쟁|분쟁|외교|우크라이나|nato|security|war|conflict|diplomacy|politic/i },
+      { id:'economy', title:'경제·산업·무역', keywords:/경제|산업|무역|에너지|시장|금융|economy|industry|trade|energy|market|finance/i },
+      { id:'culture_society', title:'문화·사회·이동', keywords:/문화|사회|교육|종교|관광|이민|culture|society|education|religion|tour|migration/i },
+      commonNews
+    ];
+  }
+  return [
+    { id:'overview', title:'핵심 개요', keywords:/개요|배경|정의|overview|background|profile/i },
+    { id:'current', title:'현재 이슈', keywords:/뉴스|현황|최근|속보|current|latest|news|issue/i },
+    { id:'analysis', title:'분석 포인트', keywords:/분석|전망|영향|리스크|analysis|impact|risk|outlook/i },
+    { id:'media', title:'관련 자료·미디어', keywords:/미디어|영상|이미지|방송|media|video|image|broadcast|youtube/i }
+  ];
+}
+
+function selectSectionItems(items, def, used){
+  const arr = Array.isArray(items) ? items : [];
+  const matches = arr.filter(it => !used.has(it.id || it.url || it.title) && def.keywords.test(itemText(it))).slice(0, 4);
+  if(matches.length < 2){
+    for(const it of arr){
+      const key = it.id || it.url || it.title;
+      if(matches.length >= 3) break;
+      if(used.has(key)) continue;
+      if(matches.includes(it)) continue;
+      matches.push(it);
+    }
+  }
+  matches.forEach(it => used.add(it.id || it.url || it.title));
+  return matches;
+}
+
+function bulletFromItem(it){
+  const title = snippet(it && it.title, 90);
+  const body = snippet((it && (it.summary || it.description)) || '', 130);
+  const source = snippet((it && it.source) || domainOf(it && it.url), 36);
+  if(title && body) return `${title} — ${body}${source ? ` (${source})` : ''}`;
+  if(title) return `${title}${source ? ` (${source})` : ''}`;
+  if(body) return body;
+  return '';
+}
+
+function buildInsightBrief(query, items, context, profile){
+  const safeItems = Array.isArray(items) ? items : [];
+  profile = profile || buildInsightProfile(query, context);
+  const target = profile.target || query;
+  const used = new Set();
+  const defs = sectionDefinitions(profile);
+
+  const sections = defs.map(def => {
+    const picked = selectSectionItems(safeItems, def, used);
+    const bullets = picked.map(bulletFromItem).filter(Boolean);
+    if(!bullets.length){
+      bullets.push('현재 수집 결과에서 이 항목을 직접 뒷받침하는 자료가 부족합니다. 외부 검색 또는 세부 질문으로 보강할 수 있습니다.');
+    }
+    return {
+      id: def.id,
+      title: def.title,
+      bullets,
+      items: picked.slice(0, 3)
+    };
+  });
+
+  if(profile.focus){
+    const focusLabel = {
+      education:'교육·학술', culture:'문화·종교·사회', economy:'경제·산업', security:'안보·분쟁', media:'미디어·뉴스', politics:'정치·정책'
+    }[profile.focus] || '세부 주제';
+    sections.unshift({
+      id:'focused_request',
+      title:`요청 집중 분야: ${focusLabel}`,
+      bullets:[`이번 요청은 ${target}의 ${focusLabel} 축을 우선으로 해석했습니다. 관련 자료를 상단에 배치하고 나머지는 배경 정보로 정리합니다.`],
+      items: []
+    });
+  }
+
+  const title = profile.kind === 'region'
+    ? `“${target}” 권역 인사이트 요약`
+    : profile.kind === 'country'
+      ? `“${target}” 국가 인사이트 요약`
+      : `“${query}” 글로벌 인사이트 요약`;
+
+  const lines = [
+    title,
+    `수집 기준: Search Bank/Snapshot 보강 + Maru Search 외부 검색 기본 확장 · 관련 자료 ${safeItems.length}건`,
+    ''
+  ];
+  for(const sec of sections){
+    lines.push(`■ ${sec.title}`);
+    sec.bullets.slice(0, 3).forEach(b => lines.push(`- ${b}`));
+    lines.push('');
+  }
+
+  return {
+    headline: title,
+    summary: lines.join('\n').trim(),
+    text: lines.join('\n').trim(),
+    sections,
+    profile
+  };
+}
+
 function pickSummary(query, items){
   const q = s(query).trim();
   if(!q) return "";
-  const top = (Array.isArray(items) ? items : []).slice(0, 5)
-    .map(it => s(it.title || "").trim())
-    .filter(Boolean);
-  if(top.length) return `“${q}” 관련 상위 결과: ${top.join(' · ')}`;
-  return `“${q}” 관련 인사이트를 취합 중입니다.`;
+  return buildInsightBrief(q, items, { scope:'global', intent:'summary' }, null).summary;
 }
 
 function ok(body){
@@ -425,27 +688,33 @@ async function callMaruSearch(query, mode, limit, context){
   try{
     context = context || {};
     const runMode = mode || "global-insight";
+    const searchContext = withGlobalInsightSearchDefaults(context, runMode);
+    const externalOff = isExternalExplicitlyOff(searchContext);
     const res = await MaruSearch.runEngine({}, {
       q: query,
       query: query,
       mode: runMode,
       limit,
-      scope: context.scope || null,
-      target: context.target || null,
-      intent: context.intent || null,
-      uiLang: context.uiLang || null,
-      targetLang: context.targetLang || null,
-      region: context.region || null,
-      country: context.country || null,
-      state: context.state || null,
-      city: context.city || null,
-      channel: context.channel || null,
-      section: context.section || null,
-      page: context.page || null,
-      route: context.route || null,
-      external: context.external,
-      noExternal: context.noExternal,
-      disableExternal: context.disableExternal,
+      scope: searchContext.scope || null,
+      target: searchContext.target || null,
+      intent: searchContext.intent || null,
+      uiLang: searchContext.uiLang || null,
+      targetLang: searchContext.targetLang || null,
+      region: searchContext.region || null,
+      country: searchContext.country || null,
+      state: searchContext.state || null,
+      city: searchContext.city || null,
+      channel: searchContext.channel || null,
+      section: searchContext.section || null,
+      page: searchContext.page || null,
+      route: searchContext.route || null,
+      external: searchContext.external,
+      noExternal: searchContext.noExternal,
+      disableExternal: searchContext.disableExternal,
+      deep: !externalOff && truthyValue(searchContext.deep),
+      useExternal: !externalOff && truthyValue(searchContext.useExternal),
+      useLive: !externalOff && truthyValue(searchContext.useLive),
+      useExternalSources: !externalOff && truthyValue(searchContext.useExternalSources),
       noAnalytics: true,
       noRevenue: true,
       from: "global-insight"
@@ -516,8 +785,11 @@ async function callSearchBank(event, query, limit, context){
 async function runGlobalInsightV2(event, params){
   const query = normalizeQuery(params.q || params.query);
   const mode = s(params.mode || 'global-insight').trim() || 'global-insight';
-  const limit = clampInt(params.limit, 20, 1, 1000);
+  const requestedLimit = clampInt(params.limit, 20, 1, 1000);
   const context = normalizeContext(params);
+  const insightProfile = buildInsightProfile(query, context);
+  const effectiveContext = applyInsightProfileToContext(context, insightProfile);
+  const effectiveLimit = clampInt(Math.max(requestedLimit, insightProfile.defaultLimit || requestedLimit), 20, 1, 1000);
 
   // Validate query (non-breaking)
   if(Core && typeof Core.validateQuery === 'function'){
@@ -536,7 +808,7 @@ async function runGlobalInsightV2(event, params){
         summary: query ? `“${query}” 관련 인사이트를 취합 중입니다.` : '',
         text: query ? `“${query}” 관련 인사이트를 취합 중입니다.` : '',
         issues: [],
-        meta: { trace: { core_validate: 'blocked' }, count: 0, limit }
+        meta: { trace: { core_validate: 'blocked' }, count: 0, limit: effectiveLimit, requestedLimit }
       };
     }
   }
@@ -555,7 +827,7 @@ async function runGlobalInsightV2(event, params){
       summary: '',
       text: '',
       issues: [],
-      meta: { trace: { empty_query: true }, count: 0, limit }
+      meta: { trace: { empty_query: true }, count: 0, limit: effectiveLimit, requestedLimit }
     };
   }
 
@@ -565,8 +837,8 @@ async function runGlobalInsightV2(event, params){
   };
 
 const [ms, bank] = await Promise.allSettled([
-  callMaruSearch(query, mode, limit, context),
-  callSearchBank(event, query, Math.min(limit, 200), context)
+  callMaruSearch(insightProfile.searchQuery || query, mode, effectiveLimit, effectiveContext),
+  callSearchBank(event, query, Math.min(effectiveLimit, 200), effectiveContext)
 ]);
 
 const msRes =
@@ -611,13 +883,15 @@ if(bankRes.ok && bankRes.data){
 
   // merge + dedup + quality gate + rank
   let merged = dedup([ ...bankItems, ...msItems ]);
-  const qualityGate = applyInsightQualityGate(merged, query, context);
+  const qualityGate = applyInsightQualityGate(merged, query, effectiveContext);
   merged = qualityGate.items;
   merged.sort((a,b)=> (b.score||0) - (a.score||0));
-  merged = merged.slice(0, limit);
+  merged = merged.slice(0, effectiveLimit);
 
-  // summary: avoid using prepared/placeholder slot titles as representative insight text
-  const summary = pickSummary(query, summarySafeItems(merged));
+  // briefing: global insight uses Maru Search as collection layer and composes a readable brief here.
+  const brief = buildInsightBrief(query, summarySafeItems(merged), effectiveContext, insightProfile);
+  const summary = brief.summary;
+  const text = brief.text;
 
   // issues (future). keep stable array.
   const issues = [];
@@ -629,28 +903,37 @@ if(bankRes.ok && bankRes.data){
     timestamp: nowISO(),
     query,
     mode,
-    context,
+    context: effectiveContext,
 
     // Canonical outputs
     items: merged,
     results: merged, // legacy alias
 
     // Human-facing
+    headline: brief.headline,
     summary,
-    text: summary,
+    text,
+    brief,
+    sections: brief.sections,
 
     issues,
 
     meta: {
       count: merged.length,
-      limit,
+      limit: effectiveLimit,
+      requestedLimit,
       trace,
 	  
     served_from: {
     bank: bankRes.ok ? (bankRes.data && bankRes.data.served_from) : null,
     search: msRes.ok ? (msRes.data && (msRes.data.source || msRes.data.engine)) : null
 },
-    quality: qualityGate.stats
+    quality: qualityGate.stats,
+    insightProfile: brief.profile,
+    externalDefault: {
+      maruSearch: shouldForceExternalForInsight(mode, effectiveContext) ? 'on' : 'off_or_request_controlled',
+      value: withGlobalInsightSearchDefaults(effectiveContext, mode).external || null
+    }
     },
 
     // Raw passthrough (for debugging / future consumers)
@@ -677,6 +960,9 @@ if(bankRes.ok && bankRes.data){
         n.results = Array.isArray(n.results) ? n.results : n.items;
         n.summary = s(n.summary || n.text || payload.summary);
         n.text = s(n.text || n.summary || payload.text);
+        n.headline = s(n.headline || payload.headline || '');
+        n.brief = n.brief || payload.brief;
+        n.sections = Array.isArray(n.sections) ? n.sections : payload.sections;
         n.meta = (n.meta && typeof n.meta === 'object') ? n.meta : payload.meta;
         if(!n.meta.trace) n.meta.trace = payload.meta.trace;
         return n;
