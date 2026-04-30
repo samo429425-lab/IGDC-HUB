@@ -12,7 +12,7 @@
 
 "use strict";
 
-const VERSION = "v2.2-global-insight-brief-external-on";
+const VERSION = "v2.3-global-insight-media-ready";
 
 let Core = null;
 try { Core = require("./core"); } catch (_) {
@@ -75,6 +75,165 @@ function domainOf(url){
   catch(_){ return ""; }
 }
 
+function asArray(v){
+  if(Array.isArray(v)) return v;
+  if(v == null || v === '') return [];
+  return [v];
+}
+
+function uniqStrings(arr){
+  const out = [];
+  const seen = new Set();
+  for(const v of Array.isArray(arr) ? arr : []){
+    const x = s(v).trim();
+    if(!x) continue;
+    const key = low(x).split('#')[0];
+    if(seen.has(key)) continue;
+    seen.add(key);
+    out.push(x);
+  }
+  return out;
+}
+
+function isLikelyMediaUrl(v){
+  const x = low(v);
+  if(!x) return false;
+  return /\.(jpg|jpeg|png|webp|gif|avif|mp4|webm|mov|m4v)(\?|#|$)/i.test(x)
+    || x.includes('youtube.com')
+    || x.includes('youtu.be')
+    || x.includes('vimeo.com')
+    || x.includes('/video')
+    || x.includes('/image');
+}
+
+function extractYoutubeId(url){
+  const u = s(url).trim();
+  if(!u) return '';
+  try{
+    const parsed = new URL(u);
+    const host = low(parsed.hostname);
+    if(host.includes('youtu.be')) return parsed.pathname.replace(/^\//,'').split('/')[0] || '';
+    if(host.includes('youtube.com')){
+      const v = parsed.searchParams.get('v');
+      if(v) return v;
+      const parts = parsed.pathname.split('/').filter(Boolean);
+      const ix = parts.findIndex(x => ['embed','shorts','watch'].includes(low(x)));
+      if(ix >= 0 && parts[ix+1]) return parts[ix+1];
+    }
+  }catch(_){ }
+  return '';
+}
+
+function collectMediaImages(raw, payload, thumbnail){
+  raw = raw || {};
+  payload = payload || {};
+  const media = (raw.media && typeof raw.media === 'object') ? raw.media : ((payload.media && typeof payload.media === 'object') ? payload.media : {});
+  const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
+
+  const candidates = []
+    .concat(asArray(thumbnail))
+    .concat(asArray(raw.thumbnail))
+    .concat(asArray(raw.thumb))
+    .concat(asArray(raw.image))
+    .concat(asArray(raw.image_url))
+    .concat(asArray(raw.og_image))
+    .concat(asArray(raw.poster))
+    .concat(asArray(raw.cover))
+    .concat(asArray(raw.imageSet))
+    .concat(asArray(raw.images))
+    .concat(asArray(payload.thumbnail))
+    .concat(asArray(payload.thumb))
+    .concat(asArray(payload.image))
+    .concat(asArray(payload.image_url))
+    .concat(asArray(payload.og_image))
+    .concat(asArray(payload.poster))
+    .concat(asArray(payload.cover))
+    .concat(asArray(payload.imageSet))
+    .concat(asArray(payload.images))
+    .concat(asArray(preview.poster))
+    .concat(asArray(preview.thumbnail))
+    .concat(asArray(preview.image));
+
+  return uniqStrings(candidates).filter(v => {
+    const x = low(v);
+    if(!x) return false;
+    if(x.includes('google.com/s2/favicons') || x.includes('favicon') || x.endsWith('.ico')) return false;
+    return /^https?:\/\//i.test(v) || v.startsWith('/');
+  }).slice(0, 8);
+}
+
+function normalizeMediaObject(raw, payload){
+  raw = raw || {};
+  payload = payload || {};
+  const base = (raw.media && typeof raw.media === 'object') ? raw.media : ((payload.media && typeof payload.media === 'object') ? payload.media : null);
+  const preview = base && base.preview && typeof base.preview === 'object' ? base.preview : {};
+  const videoUrl = s(raw.videoUrl || raw.video_url || raw.video || payload.videoUrl || payload.video_url || payload.video || preview.mp4 || preview.webm || '').trim();
+  const poster = s(raw.poster || payload.poster || preview.poster || raw.thumbnail || raw.thumb || raw.image || payload.thumbnail || payload.thumb || payload.image || '').trim();
+
+  if(!base && !videoUrl && !poster) return null;
+
+  const out = {
+    ...(base || {}),
+    type: (base && (base.type || base.kind)) || raw.mediaType || raw.type || payload.mediaType || payload.type || null,
+    kind: (base && (base.kind || base.type)) || raw.mediaType || raw.type || payload.mediaType || payload.type || null,
+    preview: {
+      ...(preview || {}),
+      poster: preview.poster || poster || undefined,
+      mp4: preview.mp4 || (/\.mp4(\?|#|$)/i.test(videoUrl) ? videoUrl : undefined),
+      webm: preview.webm || (/\.webm(\?|#|$)/i.test(videoUrl) ? videoUrl : undefined)
+    }
+  };
+
+  Object.keys(out.preview).forEach(k => out.preview[k] == null && delete out.preview[k]);
+  return out;
+}
+
+function hasMediaSignal(it){
+  if(!it) return false;
+  const p = payloadOf(it);
+  const mt = low(it.mediaType || p.mediaType || it.type || p.type);
+  const hay = low([it.source, it.url, it.title, p.source, flatText(p.tags), p.channel, p.section].join(' '));
+  return mt === 'image' || mt === 'video' || mt === 'media'
+    || !!it.thumbnail || !!it.image || (Array.isArray(it.imageSet) && it.imageSet.length > 0)
+    || !!it.media || !!it.videoUrl || !!it.youtubeId
+    || hay.includes('youtube') || hay.includes('video') || hay.includes('media') || hay.includes('image') || hay.includes('broadcast') || isLikelyMediaUrl(it.url);
+}
+
+function buildMediaItems(items, context){
+  const out = [];
+  const seen = new Set();
+  for(const it of Array.isArray(items) ? items : []){
+    if(!hasMediaSignal(it)) continue;
+    const key = low(s(it.url || it.videoUrl || it.youtubeId || it.thumbnail || it.id || it.title));
+    if(!key || seen.has(key)) continue;
+    seen.add(key);
+    const p = payloadOf(it);
+    const images = uniqStrings([].concat(asArray(it.imageSet)).concat(asArray(it.thumbnail)).concat(asArray(it.image)).concat(asArray(p.imageSet)).concat(asArray(p.thumbnail)).concat(asArray(p.image))).slice(0, 8);
+    const youtubeId = s(it.youtubeId || p.youtubeId || extractYoutubeId(it.url || it.videoUrl || p.videoUrl || '')).trim();
+    const mediaType = s(it.mediaType || p.mediaType || (youtubeId || it.videoUrl ? 'video' : (images.length ? 'image' : it.type || 'media'))).trim() || 'media';
+
+    out.push({
+      id: it.id,
+      type: it.type || mediaType,
+      mediaType,
+      title: it.title,
+      summary: it.summary,
+      url: it.url,
+      source: it.source,
+      thumbnail: it.thumbnail || images[0] || '',
+      image: it.image || images[0] || '',
+      imageSet: images,
+      media: it.media || p.media || null,
+      videoUrl: it.videoUrl || p.videoUrl || '',
+      youtubeId,
+      score: Number(it.score || 0),
+      sectionHint: p.section || p.channel || (context && (context.section || context.channel)) || null,
+      payload: p
+    });
+  }
+  return out.sort((a,b)=> (b.score||0) - (a.score||0)).slice(0, 36);
+}
+
 function canonicalizeItem(raw, query){
   if(!raw || typeof raw !== 'object') return null;
 
@@ -102,7 +261,15 @@ function canonicalizeItem(raw, query){
     revenue: basePayload.revenue || raw.revenue || null,
     revenueDestination: basePayload.revenueDestination || raw.revenueDestination || null,
     directSale: basePayload.directSale || raw.directSale || null,
-    media: basePayload.media || raw.media || null
+    media: basePayload.media || raw.media || null,
+    mediaType: basePayload.mediaType || raw.mediaType || null,
+    imageSet: Array.isArray(basePayload.imageSet) ? basePayload.imageSet : (Array.isArray(raw.imageSet) ? raw.imageSet : []),
+    images: Array.isArray(basePayload.images) ? basePayload.images : (Array.isArray(raw.images) ? raw.images : []),
+    thumbnail: basePayload.thumbnail || raw.thumbnail || raw.thumb || null,
+    image: basePayload.image || raw.image || null,
+    poster: basePayload.poster || raw.poster || null,
+    videoUrl: basePayload.videoUrl || raw.videoUrl || raw.video_url || raw.video || null,
+    youtubeId: basePayload.youtubeId || raw.youtubeId || raw.youtube_id || null
   };
 
   const id = s(raw.id || url || title || "").trim() || ("item-" + Math.random().toString(16).slice(2));
@@ -112,6 +279,11 @@ function canonicalizeItem(raw, query){
 
   const source = s(rawSource || payload.source || domainOf(url) || "").trim() || null;
   const thumbnail = s(raw.thumbnail || raw.thumb || payload.thumb || payload.thumbnail || payload.image || payload.image_url || payload.og_image || "").trim() || "";
+  const imageSet = collectMediaImages(raw, payload, thumbnail);
+  const image = s(raw.image || payload.image || imageSet[0] || thumbnail || "").trim();
+  const media = normalizeMediaObject(raw, payload);
+  const videoUrl = s(raw.videoUrl || raw.video_url || raw.video || payload.videoUrl || payload.video_url || payload.video || (media && media.preview && (media.preview.mp4 || media.preview.webm)) || "").trim();
+  const youtubeId = s(raw.youtubeId || raw.youtube_id || payload.youtubeId || payload.youtube_id || extractYoutubeId(url || videoUrl)).trim();
 
   // keep existing scoring signals if present
   const score =
@@ -139,9 +311,24 @@ function canonicalizeItem(raw, query){
     summary,
     url,
     source,
-    thumbnail,
+    thumbnail: thumbnail || imageSet[0] || image,
+    thumb: raw.thumb || payload.thumb || thumbnail || imageSet[0] || image,
+    image,
+    imageSet,
+    media,
+    videoUrl,
+    youtubeId,
     score: score + qBoost,
-    payload
+    payload: {
+      ...payload,
+      thumbnail: payload.thumbnail || thumbnail || imageSet[0] || image || null,
+      thumb: payload.thumb || raw.thumb || thumbnail || imageSet[0] || image || null,
+      image: payload.image || image || null,
+      imageSet,
+      media,
+      videoUrl: videoUrl || null,
+      youtubeId: youtubeId || null
+    }
   };
 }
 
@@ -887,6 +1074,7 @@ if(bankRes.ok && bankRes.data){
   merged = qualityGate.items;
   merged.sort((a,b)=> (b.score||0) - (a.score||0));
   merged = merged.slice(0, effectiveLimit);
+  const mediaItems = buildMediaItems(merged, effectiveContext);
 
   // briefing: global insight uses Maru Search as collection layer and composes a readable brief here.
   const brief = buildInsightBrief(query, summarySafeItems(merged), effectiveContext, insightProfile);
@@ -908,6 +1096,7 @@ if(bankRes.ok && bankRes.data){
     // Canonical outputs
     items: merged,
     results: merged, // legacy alias
+    mediaItems,
 
     // Human-facing
     headline: brief.headline,
@@ -929,6 +1118,7 @@ if(bankRes.ok && bankRes.data){
     search: msRes.ok ? (msRes.data && (msRes.data.source || msRes.data.engine)) : null
 },
     quality: qualityGate.stats,
+    media: { count: mediaItems.length },
     insightProfile: brief.profile,
     externalDefault: {
       maruSearch: shouldForceExternalForInsight(mode, effectiveContext) ? 'on' : 'off_or_request_controlled',
@@ -963,6 +1153,7 @@ if(bankRes.ok && bankRes.data){
         n.headline = s(n.headline || payload.headline || '');
         n.brief = n.brief || payload.brief;
         n.sections = Array.isArray(n.sections) ? n.sections : payload.sections;
+        n.mediaItems = Array.isArray(n.mediaItems) ? n.mediaItems : payload.mediaItems;
         n.meta = (n.meta && typeof n.meta === 'object') ? n.meta : payload.meta;
         if(!n.meta.trace) n.meta.trace = payload.meta.trace;
         return n;
