@@ -796,7 +796,7 @@
 <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
 <strong style="color:#004080;">🔗 IGDC 핵심 링크</strong>
 <button id="igdc-open-core"
-  onclick="IGDC_CORE_CLICK()"
+  type="button"
   style="padding:6px 10px;border:1px solid #99c2ff;border-radius:8px;background:#fff;cursor:pointer;">
   컨텍스트 불러오기
 </button>
@@ -1080,22 +1080,26 @@ function openPopup(url){
   return false;
 }
 </script>
-<!-- Donation popup (백엔드 유입 모달과 유사한 구조) -->
+<!-- Donation popup (Admin ledger donation modal) -->
 <div aria-hidden="true" class="donation-backdrop" id="donationBackdrop"></div>
+
 <div aria-labelledby="donationTitle" aria-modal="true" class="donation-modal" id="donationModal" role="dialog">
   <div class="donation-sheet">
     <div class="donation-header">
       <h2 id="donationTitle" style="margin:0;font-size:1.1rem;">도네이션 유입 상황</h2>
-      <button aria-label="닫기" class="donation-close" onclick="closeDonationModal()">✕</button>
+      <button aria-label="닫기" class="donation-close" onclick="return closeDonationModal()">✕</button>
     </div>
+
     <div class="donation-body">
       <section class="donation-panel" aria-label="도네이션 유입 상황 요약">
-        <p class="donation-muted">최근 유입된 도네이션 내역입니다. (실시간 데이터 기준)</p>
+        <p class="donation-muted">최근 유입된 도네이션 내역입니다. /api/ledger 기준으로 표시합니다.</p>
 
-        <!-- 상단 통계 배지 -->
-        <div class="igdc-inflow-stats" id="donationStats"></div>
+        <div class="igdc-inflow-stats" id="donationStats">
+          <span>건수: -</span>
+          <span>합계: -</span>
+          <span>최근: -</span>
+        </div>
 
-        <!-- 도네이션 내역 테이블 -->
         <div class="igdc-inflow-table-wrap">
           <table id="donationTable">
             <thead>
@@ -1108,14 +1112,16 @@ function openPopup(url){
               </tr>
             </thead>
             <tbody id="donationTbody">
-              <!-- JS에서 행을 채웁니다 -->
+              <tr>
+                <td colspan="5">도네이션 데이터를 불러오기 전입니다.</td>
+              </tr>
             </tbody>
           </table>
         </div>
       </section>
 
       <div style="margin-top:12px;text-align:right;">
-        <button class="donation-close" onclick="closeDonationModal()">닫기</button>
+        <button class="donation-close" onclick="return closeDonationModal()">닫기</button>
       </div>
     </div>
   </div>
