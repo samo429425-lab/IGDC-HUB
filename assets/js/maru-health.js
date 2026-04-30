@@ -18,7 +18,7 @@
 
   if (!global || !document) return;
 
-  var VERSION = "asset-js-target-card-v1.1";
+  var VERSION = "asset-js-target-card-v1.3-eight-page-audit-final";
   var MODAL_ID = "maru-health-revenue-map-modal";
   var STYLE_ID = "maru-health-revenue-map-style";
   var TARGET_TEXTS = ["수익", "썸네일", "상품", "맵핑"];
@@ -85,19 +85,22 @@
 
   function statusLabel(status) {
     if (status === "ok") return "OK";
-    if (status === "warn") return "WARN";
+    if (status === "warn") return "부분확인";
+    if (status === "pending") return "-";
     return "ERROR";
   }
 
   function statusKo(status) {
     if (status === "ok") return "정상";
     if (status === "warn") return "주의";
+    if (status === "pending") return "대기";
     return "오류";
   }
 
   function statusClass(status) {
     if (status === "ok") return "igdc-sc-badge-ok";
     if (status === "warn") return "igdc-sc-badge-warn";
+    if (status === "pending") return "";
     return "igdc-sc-badge-error";
   }
 
@@ -258,6 +261,143 @@
     );
   }
 
+  function unique(arr) {
+    var out = [];
+    var seen = {};
+    (Array.isArray(arr) ? arr : []).forEach(function (v) {
+      v = s(v).trim();
+      if (!v) return;
+      var k = v.toLowerCase();
+      if (seen[k]) return;
+      seen[k] = true;
+      out.push(v);
+    });
+    return out;
+  }
+
+  function pageAuditTargets() {
+    return [
+      { key: "home", label: "홈", url: "/home.html", expected: "active" },
+      { key: "networkhub", label: "마켓/네트워크", url: "/networkhub.html", expected: "active" },
+      { key: "distributionhub", label: "유통허브", url: "/distributionhub.html", expected: "active" },
+      { key: "socialnetwork", label: "소셜 네트워크", url: "/socialnetwork.html", expected: "active" },
+      { key: "mediahub", label: "미디어 허브", url: "/mediahub.html", expected: "active" },
+      { key: "tour", label: "여행·관광·숙박", url: "/tour.html", expected: "active" },
+      { key: "donation", label: "후원", url: "/donation.html", expected: "active" },
+      { key: "literature_academic", label: "문학·학술교류", url: "/literature_academic.html", expected: "prepared" }
+    ];
+  }
+
+  function countHtmlMedia(html, url) {
+    var doc = null;
+    try {
+      doc = new DOMParser().parseFromString(s(html), "text/html");
+    } catch (_) {
+      return { url: url, ok: false, imageCount: 0, slotCount: 0, mediaRefs: 0, error: "parse_failed" };
+    }
+
+    var imgs = unique(Array.prototype.slice.call(doc.querySelectorAll("img")).map(function (img) {
+      return img.getAttribute("src") || img.getAttribute("data-src") || img.getAttribute("data-original") || "";
+    }).filter(Boolean));
+
+    var bgRefs = [];
+    Array.prototype.slice.call(doc.querySelectorAll("[style]")).forEach(function (el) {
+      var st = s(el.getAttribute("style"));
+      var m;
+      var re = /url\((['"]?)(.*?)\1\)/ig;
+      while ((m = re.exec(st))) {
+        if (m[2]) bgRefs.push(m[2]);
+      }
+    });
+    bgRefs = unique(bgRefs);
+
+    var cardSelectors = [
+      ".card", ".product-card", ".media-card", ".tour-card", ".donation-card",
+      ".network-card", ".distribution-card", ".maru-card", "[data-slot]",
+      "[data-card]", "[data-section]", "[data-thumb]", "[data-image]"
+    ];
+
+    var slotNodes = [];
+    cardSelectors.forEach(function (sel) {
+      try {
+        Array.prototype.slice.call(doc.querySelectorAll(sel)).forEach(function (el) {
+          slotNodes.push(el);
+        });
+      } catch (_) {}
+    });
+
+    var srcText = s(html);
+    var assetMediaRefs = (srcText.match(/\/assets\/(?:sample|img|hero|media|logos|uploads|images)[^"'\\\s)]+/ig) || []);
+    var mediaRefs = unique(imgs.concat(bgRefs).concat(assetMediaRefs));
+
+    return {
+      url: url,
+      ok: true,
+      imageCount: imgs.length + bgRefs.length,
+      imgTags: imgs.length,
+      backgroundImages: bgRefs.length,
+      slotCount: unique(slotNodes.map(function (el, idx) {
+        return el.id || el.getAttribute("data-slot") || el.getAttribute("data-card") || el.className || ("slot-" + idx);
+      })).length,
+      mediaRefs: mediaRefs.length,
+      sample: mediaRefs.slice(0, 8)
+    };
+  }
+
+  async function auditFrontendThumbnails() {
+    var targets = pageAuditTargets();
+    var rows = [];
+
+    await Promise.all(targets.map(async function (target) {
+      try {
+        var r = await fetchJson(target.url, { timeout: 5000 });
+        var row = countHtmlMedia(r.text || "", target.url);
+        row.label = target.label;
+        row.expected = target.expected || "active";
+        row.prepared = (target.expected === "prepared");
+        row.status = r.status;
+        row.elapsed = r.elapsed;
+        row.ok = r.ok && row.ok;
+        rows.push(row);
+      } catch (e) {
+        rows.push({
+          label: target.label,
+          url: target.url,
+          expected: target.expected || "active",
+          prepared: (target.expected === "prepared"),
+          ok: false,
+          imageCount: 0,
+          slotCount: 0,
+          mediaRefs: 0,
+          error: shortError(e)
+        });
+      }
+    }));
+
+    var order = pageAuditTargets().map(function (x) { return x.url; });
+    rows.sort(function (a, b) {
+      return order.indexOf(a.url) - order.indexOf(b.url);
+    });
+
+    var totals = rows.reduce(function (acc, row) {
+      acc.imageCount += Number(row.imageCount || 0);
+      acc.imgTags += Number(row.imgTags || 0);
+      acc.backgroundImages += Number(row.backgroundImages || 0);
+      acc.slotCount += Number(row.slotCount || 0);
+      acc.mediaRefs += Number(row.mediaRefs || 0);
+      if (row.ok) acc.okPages++;
+      if (row.prepared) acc.preparedPages++;
+      else acc.activePages++;
+      return acc;
+    }, { imageCount: 0, imgTags: 0, backgroundImages: 0, slotCount: 0, mediaRefs: 0, okPages: 0, preparedPages: 0, activePages: 0 });
+
+    return {
+      targets: targets,
+      rows: rows,
+      totals: totals
+    };
+  }
+
   function hasCommerceSignal(it) {
     var text = low([
       it && it.id,
@@ -369,33 +509,51 @@
       "/.netlify/functions/search-bank-engine?q=media&limit=20&external=off"
     ];
 
+    var audit = await auditFrontendThumbnails();
     var pack = await probeFirst(endpoints);
-    if (!pack.ok) {
-      return {
-        status: "warn",
-        label: "썸네일",
-        message: "썸네일 후보 endpoint 확인 불가",
-        count: 0,
-        withImage: 0,
-        attempts: pack.attempts,
-        raw: null
-      };
+
+    var probeItems = [];
+    var withImage = 0;
+    var probeStatus = "warn";
+    var probeEndpoint = null;
+    var probeElapsed = null;
+    var probeRaw = null;
+
+    if (pack.ok) {
+      probeItems = extractItems(pack.response.json);
+      withImage = probeItems.filter(hasImage).length;
+      probeStatus = probeItems.length && withImage ? "ok" : "warn";
+      probeEndpoint = pack.response.endpoint;
+      probeElapsed = pack.response.elapsed;
+      probeRaw = pack.response.json;
     }
 
-    var items = extractItems(pack.response.json);
-    var withImage = items.filter(hasImage).length;
-    var status = items.length && withImage ? "ok" : "warn";
+    var frontTotal = audit && audit.totals ? Number(audit.totals.imageCount || 0) : 0;
+    var refTotal = audit && audit.totals ? Number(audit.totals.mediaRefs || 0) : 0;
+    var slotTotal = audit && audit.totals ? Number(audit.totals.slotCount || 0) : 0;
+    var okPages = audit && audit.totals ? Number(audit.totals.okPages || 0) : 0;
+
+    var status = frontTotal > 0 || withImage > 0 ? "ok" : probeStatus;
 
     return {
       status: status,
       label: "썸네일",
-      message: withImage ? "이미지/영상 썸네일 후보 확인" : "응답은 있으나 썸네일 후보 부족",
-      count: items.length,
+      message: frontTotal
+        ? "프론트 7개 페이지 썸네일/미디어 참조 확인"
+        : (withImage ? "검색 미디어 후보 확인" : "썸네일 후보 부족"),
+      count: probeItems.length,
       withImage: withImage,
-      endpoint: pack.response.endpoint,
-      elapsed: pack.response.elapsed,
-      attempts: pack.attempts,
-      raw: pack.response.json
+      frontendImages: frontTotal,
+      frontendMediaRefs: refTotal,
+      frontendSlots: slotTotal,
+      okPages: okPages,
+      activePages: audit && audit.totals ? Number(audit.totals.activePages || 0) : 0,
+      preparedPages: audit && audit.totals ? Number(audit.totals.preparedPages || 0) : 0,
+      endpoint: probeEndpoint,
+      elapsed: probeElapsed,
+      attempts: pack.attempts || [],
+      pageAudit: audit,
+      raw: probeRaw
     };
   }
 
@@ -453,7 +611,7 @@
 
     var body = [
       "수익 " + statusKo(rev.status || "warn"),
-      "썸네일 " + readyText(thumb.withImage, 0) + "/" + readyText(thumb.count, 0),
+      "썸네일 8페이지 " + readyText(thumb.frontendImages, 0) + " · 검색 " + readyText(thumb.withImage, 0) + "/" + readyText(thumb.count, 0),
       "상품맵 " + readyText(prod.mapped, 0) + "/" + readyText(prod.count, 0)
     ].join(" · ");
 
@@ -557,6 +715,46 @@
     '</div>';
   }
 
+
+  function pageAuditSection(th) {
+    th = th || {};
+    var audit = th.pageAudit || {};
+    var rows = Array.isArray(audit.rows) ? audit.rows : [];
+
+    if (!rows.length) {
+      return '<div class="maru-health-section">' +
+        '<div class="maru-health-section-head"><div class="maru-health-section-title">프론트 페이지 썸네일 감사</div>' + badge("warn") + '</div>' +
+        '<div class="maru-health-note">프론트 페이지 감사 데이터가 없습니다.</div>' +
+      '</div>';
+    }
+
+    var body = rows.map(function (r) {
+      var stateText = r.prepared
+        ? (r.ok ? "준비중" : "준비중/미연결")
+        : (r.ok ? "OK" : "WARN");
+      return '<tr>' +
+        '<td>' + escapeHtml(r.label || r.url || "-") + '</td>' +
+        '<td>' + escapeHtml(stateText) + '</td>' +
+        '<td>' + escapeHtml(r.imageCount == null ? 0 : r.imageCount) + '</td>' +
+        '<td>' + escapeHtml(r.mediaRefs == null ? 0 : r.mediaRefs) + '</td>' +
+        '<td>' + escapeHtml(r.slotCount == null ? 0 : r.slotCount) + '</td>' +
+        '<td>' + escapeHtml(r.elapsed == null ? "-" : r.elapsed + "ms") + '</td>' +
+      '</tr>';
+    }).join("");
+
+    return '<div class="maru-health-section">' +
+      '<div class="maru-health-section-head">' +
+        '<div class="maru-health-section-title">프론트 8개 페이지 썸네일 감사</div>' +
+        badge(th.status || "warn") +
+      '</div>' +
+      '<div class="maru-health-note">이 수치는 검색 probe 500건이 아니라 실제 8개 프론트 HTML에서 감지한 img/background/media 참조 기준입니다. 문학·학술교류는 준비중 페이지로 별도 표시합니다.</div>' +
+      '<table class="maru-health-table">' +
+        '<thead><tr><th>페이지</th><th>상태</th><th>이미지</th><th>미디어 참조</th><th>슬롯</th><th>응답</th></tr></thead>' +
+        '<tbody>' + body + '</tbody>' +
+      '</table>' +
+    '</div>';
+  }
+
   function openModal(result) {
     injectStyle();
     closeModal();
@@ -587,6 +785,12 @@
         status: th.status,
         count: th.count,
         withImage: th.withImage,
+        frontendImages: th.frontendImages,
+        frontendMediaRefs: th.frontendMediaRefs,
+        frontendSlots: th.frontendSlots,
+        okPages: th.okPages,
+        activePages: th.activePages,
+        preparedPages: th.preparedPages,
         endpoint: th.endpoint,
         message: th.message
       },
@@ -613,11 +817,12 @@
           '<div class="maru-health-summary-grid">' +
             metricBox("전체 상태", statusKo(summary.status), "OK " + (summary.okCount || 0) + " · WARN " + (summary.warnCount || 0) + " · ERROR " + (summary.errorCount || 0)) +
             metricBox("수익", statusKo(rev.status || "warn"), "항목 " + readyText(rev.count, 0) + " · 합계 " + readyText(rev.total, 0)) +
-            metricBox("썸네일", readyText(th.withImage, 0) + "/" + readyText(th.count, 0), "이미지/영상 후보") +
+            metricBox("썸네일", "8페이지 " + readyText(th.frontendImages, 0), "검색후보 " + readyText(th.withImage, 0) + "/" + readyText(th.count, 0) + " · 슬롯 " + readyText(th.frontendSlots, 0) + " · 준비 " + readyText(th.preparedPages, 0)) +
             metricBox("상품 맵핑", readyText(pr.mapped, 0) + "/" + readyText(pr.count, 0), "커머스 신호 " + readyText(pr.commerce, 0)) +
           '</div>' +
           section(rev) +
           section(th) +
+          pageAuditSection(th) +
           section(pr) +
           '<div class="maru-health-section">' +
             '<div class="maru-health-section-head"><div class="maru-health-section-title">판정 요약</div>' + badge(summary.status) + '</div>' +
@@ -654,7 +859,7 @@
     var card = findTargetCard();
     if (card) {
       hookTargetCard(card);
-      setCardState(card, "warn", "수익·썸네일·상품 맵핑 대기 중");
+      setCardState(card, "pending", "수익·썸네일·상품 맵핑 점검 대기");
       hookExistingRunButton();
       return true;
     }
@@ -676,7 +881,12 @@
       var card = findTargetCard();
       if (card) {
         hookTargetCard(card);
-        runTargetCheck({ auto: true, reason: "initial-hydrate" });
+        setCardState(card, "pending", "전체 헬스체크 실행 시 함께 점검됩니다.");
+      }
+
+      var flag = (location.search || "") + " " + (location.hash || "");
+      if (/health=1|health-run|maru-health/i.test(flag)) {
+        runTargetCheck({ auto: true, reason: "url-flag" });
       }
     }, 900);
   }
