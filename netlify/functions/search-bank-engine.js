@@ -40,6 +40,24 @@ try { SearchBankSync = require("./maru-searchbank-sync"); } catch (e) { SearchBa
 let CommerceEngine = null;
 try { CommerceEngine = require("./maru-commerce-engine"); } catch (e) { CommerceEngine = null; }
 
+
+function applyCommerceEngineToItems(items, ctx){
+  if(!Array.isArray(items) || !items.length) return Array.isArray(items) ? items : [];
+  if(!CommerceEngine) return items;
+  try{
+    if(typeof CommerceEngine.normalizeItems === "function"){
+      return CommerceEngine.normalizeItems(items, { source:"search-bank", ctx });
+    }
+    if(typeof CommerceEngine.normalizeCommerceItem === "function"){
+      return items.map(item => CommerceEngine.normalizeCommerceItem(item, { source:"search-bank", ctx }));
+    }
+    return items;
+  }catch(e){
+    try{ console.error("SearchBank Commerce Bridge Error:", e && e.message); }catch(_){}
+    return items;
+  }
+}
+
 let PlanetaryConnector = null;
 try { PlanetaryConnector = require("./planetary-data-connector"); } catch (e) { PlanetaryConnector = null; }
 
@@ -169,7 +187,7 @@ async function liveProvider(event, q, limit){
   if(!truthy(process.env.MARU_BANK_LIVE)) return null;
   const base = eventBaseUrl(event);
   if(!base) return null;
-  const j = await fetchJson(`${base}/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(limit)}`);
+  const j = await fetchJson(`${base}/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(limit)}&from=search-bank&skipSearchBank=1`);
   if(!j) return null;
   if(Array.isArray(j.items)) return { meta:{ source:"maru-search" }, items:j.items };
   if(j.data && Array.isArray(j.data.items)) return { meta:{ source:"maru-search" }, items:j.data.items };
@@ -293,6 +311,14 @@ function externalCollectionEnabled(ctx, adapterName){
   const p = ctx?.params || {};
   const manual = truthy(p.useExternalSources || p.external || p.useLive || p.live || p[adapterName] || p[`use_${adapterName}`]) || truthy(process.env.MARU_BANK_EXTERNAL);
   return manual || slotExternalEnabled(ctx, adapterName);
+}
+function maruSearchReentrySuppressed(ctx){
+  const p = ctx?.params || {};
+  return low(p.from) === "maru-search"
+    || truthy(p.skipSearchBank)
+    || truthy(p.noSearchBank)
+    || truthy(p.skipMaruSearch)
+    || truthy(p.noMaruSearch);
 }
 
 function compactTokens(parts){
@@ -525,7 +551,8 @@ function resolveOperationalPolicy(ctx={}, existingItems=[]){
     regionQuota: quota,
     coverage,
     autoExternalReason: ctx.slotContext?.autoFill ? "slot" : (underfilled.length ? "underfilled_region" : null),
-    generated_at: nowIso()
+    generated_at: nowIso(),
+    commerce_bridge: CommerceEngine ? "active" : "not_loaded"
   };
 }
 function channelBlockedForPolicy(channel, policy){ const ch=low(channel||""); if(!ch || !policy) return false; if(policy.blockedChannels?.includes(ch)) return true; if(policy.allowedChannels?.length && !policy.allowedChannels.includes(ch)) return true; return false; }
@@ -1218,6 +1245,7 @@ class LiveSearchAdapter extends BaseSourceAdapter {
   constructor(){ super("live"); }
   async collect(ctx){
     if(externalSuppressed(ctx)) return [];
+    if(maruSearchReentrySuppressed(ctx)) return [];
     if(!(truthy(process.env.MARU_BANK_LIVE) || externalCollectionEnabled(ctx, "live"))) return [];
 
     if(MaruSearch && typeof MaruSearch.runEngine === "function"){
@@ -1226,7 +1254,9 @@ class LiveSearchAdapter extends BaseSourceAdapter {
         query: ctx.queryIntent.raw || ctx.q || "",
         limit: Math.min(ctx.limit || 100, 300),
         lang: ctx.params.lang || ctx.queryIntent?.languageHint || undefined,
-        mode: ctx.params.mode || "search"
+        mode: ctx.params.mode || "search",
+        from: "search-bank",
+        skipSearchBank: true
       });
       if(Array.isArray(res?.items)) return res.items;
       if(Array.isArray(res?.results)) return res.results;
@@ -1252,6 +1282,7 @@ class MaruSearchSourceAdapter extends BaseSourceAdapter {
     ]));
   }
   async collect(ctx){
+    if(maruSearchReentrySuppressed(ctx)) return [];
     if(!MaruSearch || typeof MaruSearch.runEngine !== "function") return [];
     if(!externalCollectionEnabled(ctx, this.name)) return [];
     const q = this.buildQuery(ctx) || ctx.queryIntent?.raw || ctx.q || "";
@@ -1261,7 +1292,9 @@ class MaruSearchSourceAdapter extends BaseSourceAdapter {
       query: q,
       limit: Math.min(ctx.limit || 50, 200),
       lang: ctx.params.lang || ctx.queryIntent?.languageHint || undefined,
-      mode: ctx.params.mode || "search"
+      mode: ctx.params.mode || "search",
+      from: "search-bank",
+      skipSearchBank: true
     });
     if(Array.isArray(res?.items)) return res.items;
     if(Array.isArray(res?.results)) return res.results;
@@ -1299,7 +1332,10 @@ class PlanetarySourceAdapter extends BaseSourceAdapter {
       sector: ctx.queryIntent?.sectorHint?.major || ctx.params.sector || undefined,
       type: ctx.params.type || ctx.queryIntent?.entityHint?.type || undefined,
       usePlanetary: true,
-      federation: ctx.params.federation
+      federation: ctx.params.federation,
+      from: "search-bank",
+      useMaruSearchFallback: false,
+      skipMaruSearch: true
     });
     if(Array.isArray(res?.items)) return res.items;
     if(Array.isArray(res?.results)) return res.results.flatMap(r => Array.isArray(r?.items) ? r.items : []);
@@ -1319,7 +1355,9 @@ class CollectorSourceAdapter extends BaseSourceAdapter {
       region: ctx.geoContext.region,
       country: ctx.geoContext.country,
       sector: ctx.queryIntent?.sectorHint?.major || ctx.params.sector || undefined,
-      engine: ctx.params.engine || "search"
+      engine: ctx.params.engine || "search",
+      from: "search-bank",
+      skipMaruSearch: true
     });
     if(Array.isArray(res?.items)) return res.items;
     if(Array.isArray(res?.results)) return res.results;
@@ -1771,15 +1809,18 @@ if(persistCandidates.length || truthy(params.forceSnapshotWrite)){
     return applyOperationalPolicy(enriched, adapterCtx);
   });
 
+  const commercePage = applyCommerceEngineToItems(page, adapterCtx);
+
 	
 /* ===== SNAPSHOT AUTO PIPELINE ===== */
 try{
   if(SearchBankSync && typeof SearchBankSync.run === "function"){
     const syncItems = (newItems && newItems.length) ? newItems : persistCandidates;
-    if(syncItems && syncItems.length){
+    const commerceSyncItems = applyCommerceEngineToItems(syncItems || [], adapterCtx);
+    if(commerceSyncItems && commerceSyncItems.length){
       await SearchBankSync.run({
         source: "search-bank",
-        items: syncItems,
+        items: commerceSyncItems,
         query: q
       });
     }
@@ -1813,7 +1854,7 @@ return {
     offset
   },
   total,
-  items: page,
+  items: commercePage,
   meta: {
     bank_meta: bank.meta || undefined,
     query_intent: queryIntent,
@@ -1844,6 +1885,7 @@ exports.selectAdapters = selectAdapters;
 exports.canonicalRegionName = canonicalRegionName;
 exports.externalCollectionEnabled = externalCollectionEnabled;
 exports.externalSuppressed = externalSuppressed;
+exports.maruSearchReentrySuppressed = maruSearchReentrySuppressed;
 exports.resolveSlotPolicy = resolveSlotPolicy;
 exports.applySlotContract = applySlotContract;
 exports.slotAcceptsItem = slotAcceptsItem;

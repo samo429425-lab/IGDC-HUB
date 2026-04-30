@@ -19,7 +19,7 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.30-stable-display-groups';
+const VERSION = 'A1.5.28-permissive-thumbnail-filter';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -564,51 +564,6 @@ function mediaQualityProfileForItem(it, images){
 
 
 
-
-function collectImageLikeValues(node, depth, out, seen){
-  if(depth < 0 || !node) return;
-  if(typeof node === 'string'){
-    const s = safeString(node).trim();
-    if(s && isRealImageUrl(s) && !seen.has(s)){
-      seen.add(s);
-      out.push(s);
-    }
-    return;
-  }
-  if(Array.isArray(node)){
-    for(const v of node){
-      collectImageLikeValues(v, depth - 1, out, seen);
-      if(out.length >= 80) return;
-    }
-    return;
-  }
-  if(typeof node !== 'object') return;
-
-  const keys = Object.keys(node);
-  for(const k of keys){
-    const v = node[k];
-    const lk = safeString(k).toLowerCase();
-
-    if(typeof v === 'string'){
-      const s = safeString(v).trim();
-      if(!s) continue;
-      if(isRealImageUrl(s) && (
-        /(image|img|thumb|thumbnail|poster|photo|picture|visual|cover|banner|hero|preview|gallery|media)/i.test(lk) ||
-        /\.(jpg|jpeg|png|webp|gif|avif|svg)(\?|#|$)/i.test(s)
-      )){
-        if(!seen.has(s)){
-          seen.add(s);
-          out.push(s);
-          if(out.length >= 80) return;
-        }
-      }
-    }else if((Array.isArray(v) || (v && typeof v === 'object')) && /(image|img|thumb|thumbnail|poster|photo|picture|visual|cover|banner|hero|preview|gallery|media|pagemap)/i.test(lk)){
-      collectImageLikeValues(v, depth - 1, out, seen);
-      if(out.length >= 80) return;
-    }
-  }
-}
-
 function providedMediaCandidatesForItem(it){
   it = (it && typeof it === 'object') ? it : {};
   const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
@@ -622,9 +577,6 @@ function providedMediaCandidatesForItem(it){
   const mediaType = safeString(it.mediaType || p.mediaType).toLowerCase();
   const isImageLike = source.includes('image') || type === 'image' || mediaType === 'image';
 
-  const out = [];
-  const seen = new Set();
-
   const direct = [
     it.image,
     it.thumbnail,
@@ -634,8 +586,6 @@ function providedMediaCandidatesForItem(it){
     it.imageUrl,
     it.originalImage,
     it.poster,
-    it.previewImage,
-    it.preview_image,
     preview.poster,
     preview.thumbnail,
     preview.thumb,
@@ -649,42 +599,20 @@ function providedMediaCandidatesForItem(it){
     p.imageUrl,
     p.originalImage,
     p.poster,
-    p.previewImage,
-    p.preview_image,
     pPreview.poster,
     pPreview.thumbnail,
     pPreview.thumb,
     pPreview.image
   ];
 
+  // Some image APIs use link as the actual image URL and originallink/contextLink as the page URL.
   if(isImageLike){
-    direct.unshift(it.link, it.url, p.link, p.url, p.contextLink, p.originallink);
+    direct.unshift(it.link, it.url, p.link, p.url, p.contextLink);
   }
 
-  for(const x of direct){
-    const s = safeString(x).trim();
-    if(s && isRealImageUrl(s) && !seen.has(s)){
-      seen.add(s);
-      out.push(s);
-    }
-  }
-
-  []
+  return direct
     .concat(Array.isArray(it.imageSet) ? it.imageSet : [])
-    .concat(Array.isArray(p.imageSet) ? p.imageSet : [])
-    .forEach(x => {
-      const s = safeString(x).trim();
-      if(s && isRealImageUrl(s) && !seen.has(s)){
-        seen.add(s);
-        out.push(s);
-      }
-    });
-
-  // Broad but bounded collection from provider payloads.
-  collectImageLikeValues(it, 2, out, seen);
-  collectImageLikeValues(p, 3, out, seen);
-
-  return out.slice(0, 80);
+    .concat(Array.isArray(p.imageSet) ? p.imageSet : []);
 }
 
 function hasProviderSuppliedMedia(it){
@@ -708,7 +636,7 @@ function naturalImagesForItem(it, maxCount){
     if(seen.has(key)) continue;
     seen.add(key);
     out.push(img);
-    if(out.length >= (maxCount || 5)) break;
+    if(out.length >= (maxCount || 3)) break;
   }
 
   return out;
@@ -1305,135 +1233,6 @@ function addBundle(bundle, fallbackSource, collected, sourceState){
   return items.length;
 }
 
-function displayGroupForItem(it){
-  const cat = classifySearchCategory(it);
-  const source = safeString(it && it.source).toLowerCase();
-  const url = safeString(firstNonEmpty(it && it.url, it && it.link)).toLowerCase();
-  const host = domainOf(url).toLowerCase();
-
-  if(cat === 'official') return 'authority';
-  if(cat === 'news') return 'news';
-  if(cat === 'map' || cat === 'tour') return 'local_tour';
-  if(cat === 'image' || cat === 'video') return 'media';
-  if(cat === 'sns' || source.includes('youtube') || host.includes('youtube.com') || host.includes('instagram.') || host.includes('facebook.') || host.includes('tiktok.') || host.includes('x.com') || host.includes('twitter.')) return 'social';
-  if(cat === 'blog' || cat === 'cafe') return 'community';
-  if(cat === 'knowledge' || cat === 'book') return 'knowledge';
-  if(cat === 'shopping') return 'shopping';
-  if(cat === 'sports') return 'sports';
-  if(cat === 'finance') return 'finance';
-  if(cat === 'webtoon') return 'webtoon';
-  return 'web';
-}
-
-function displayGroupLabel(group){
-  const labels = {
-    authority: '공식/권위',
-    news: '뉴스',
-    local_tour: '지도/관광/지역',
-    media: '이미지/영상',
-    social: '소셜',
-    community: '블로그/카페/커뮤니티',
-    knowledge: '지식/도서',
-    shopping: '쇼핑',
-    sports: '스포츠',
-    finance: '금융',
-    webtoon: '웹툰',
-    web: '웹'
-  };
-  return labels[group] || '웹';
-}
-
-function displayGroupPreviewLimit(group){
-  const limits = {
-    authority: 3,
-    news: 4,
-    local_tour: 4,
-    media: 4,
-    social: 3,
-    community: 3,
-    knowledge: 3,
-    shopping: 3,
-    sports: 3,
-    finance: 3,
-    webtoon: 3,
-    web: 15
-  };
-  return limits[group] || 3;
-}
-
-function buildDisplayGroupSummary(items){
-  const order = ['authority','news','local_tour','media','social','community','knowledge','shopping','sports','finance','webtoon','web'];
-  const counts = Object.create(null);
-
-  for(const it of Array.isArray(items) ? items : []){
-    const g = displayGroupForItem(it);
-    counts[g] = (counts[g] || 0) + 1;
-  }
-
-  return order
-    .filter(group => counts[group])
-    .map(group => ({
-      group,
-      label: displayGroupLabel(group),
-      count: counts[group],
-      previewLimit: displayGroupPreviewLimit(group),
-      collapsedCount: Math.max(0, counts[group] - displayGroupPreviewLimit(group))
-    }));
-}
-
-function annotateDisplayGroups(items){
-  const counters = Object.create(null);
-  const summary = buildDisplayGroupSummary(items);
-  const summaryMap = Object.create(null);
-
-  for(const row of summary){
-    summaryMap[row.group] = row;
-  }
-
-  const annotated = (Array.isArray(items) ? items : []).map(it => {
-    const group = displayGroupForItem(it);
-    const idx = (counters[group] || 0) + 1;
-    counters[group] = idx;
-
-    const limit = displayGroupPreviewLimit(group);
-    const row = summaryMap[group] || {
-      group,
-      label: displayGroupLabel(group),
-      count: 1,
-      previewLimit: limit,
-      collapsedCount: 0
-    };
-
-    return Object.assign({}, it, {
-      displayGroup: group,
-      displayGroupLabel: row.label,
-      displayGroupIndex: idx,
-      displayGroupPreviewLimit: limit,
-      displayGroupCollapsed: idx > limit,
-      displayGroupCount: row.count,
-      displayGroupCollapsedCount: row.collapsedCount
-    });
-  });
-
-  return {
-    items: annotated,
-    groups: summary
-  };
-}
-
-function socialProviderSlots(){
-  const env = (typeof process !== 'undefined' && process && process.env) ? process.env : {};
-  return {
-    youtube: !!(env.YOUTUBE_API_KEY || env.GOOGLE_API_KEY),
-    google: !!(env.GOOGLE_API_KEY || env.GOOGLE_CSE_ID),
-    facebook: !!(env.FACEBOOK_ACCESS_TOKEN || env.META_ACCESS_TOKEN),
-    instagram: !!(env.INSTAGRAM_ACCESS_TOKEN || env.META_ACCESS_TOKEN),
-    mode: 'optional-safe-slot'
-  };
-}
-
-
-
 async function orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType }){
   limit = clampInt(limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
 
@@ -1833,9 +1632,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     trace.push({ name: 'initial-og-image-enrich', status: 'skipped-fast-first', count: 0 });
 
     const finalTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
-    const compactFinalItems = unique.slice(0, finalTarget).map(compactResultItem);
-    const displayGroupBundle = annotateDisplayGroups(compactFinalItems);
-    const finalItems = displayGroupBundle.items;
+    const finalItems = unique.slice(0, finalTarget).map(compactResultItem);
 
     const result = {
       source: sourceState.used || (finalItems.length ? 'multi' : null),
@@ -1854,22 +1651,8 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         ownPageMediaOnly: true,
         providedThumbnailPreserve: true,
         permissiveThumbnailFilter: true,
-        broadThumbnailCapture: true,
-        stableDisplayGroups: true,
-        displayGroups: displayGroupBundle.groups,
-        displayGroupPolicy: {
-          mode: 'metadata-only-ui-safe',
-          authorityPreview: 3,
-          newsPreview: 4,
-          localTourPreview: 4,
-          mediaPreview: 4,
-          socialPreview: 3,
-          communityPreview: 3,
-          knowledgePreview: 3
-        },
-        socialProviderSlots: socialProviderSlots(),
         imagePolicy: 'fast-first-own-page-representative-media-only',
-        trace: trace.concat([{ name: 'stable-display-groups', status: 'ok', count: finalItems.length, groups: displayGroupBundle.groups.length }]),
+        trace,
         externalSuppressed: !!externalOff,
         externalMode: mode,
         externalGatewayUsed: !!shouldUseExternal,
@@ -2000,89 +1783,73 @@ function extractOgImageFromHtml(html, baseUrl){
 
   const candidates = [];
 
-  const push = (u, source, weight) => {
-    if(!u) return;
-    pushOwnImageCandidate(candidates, u, baseUrl, source, weight);
-  };
-
-  // 1) explicit meta / social images
+  // 1) Explicit representative images selected by the page owner.
   const metaPatterns = [
-    /<meta[^>]+property=["']og:image(?::url|:secure_url)?["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
-    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image(?::url|:secure_url)?["'][^>]*>/ig,
-    /<meta[^>]+name=["']twitter:image(?::src)?["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
-    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image(?::src)?["'][^>]*>/ig,
+    /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["'][^>]*>/ig,
+    /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["'][^>]*>/ig,
+    /<meta[^>]+property=["']og:image:secure_url["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image:secure_url["'][^>]*>/ig,
     /<meta[^>]+itemprop=["']image["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
     /<meta[^>]+content=["']([^"']+)["'][^>]+itemprop=["']image["'][^>]*>/ig
   ];
+
   for(const re of metaPatterns){
     let m;
-    while((m = re.exec(text)) && candidates.length < 40){
-      if(m && m[1]) push(m[1], 'meta', 100);
+    while((m = re.exec(text)) && candidates.length < 24){
+      if(m && m[1]) pushOwnImageCandidate(candidates, m[1], baseUrl, 'meta', 100);
     }
   }
 
-  // 2) image link / preload
+  // 2) link rel=image_src / preload image.
   const linkRe = /<link[^>]+(?:rel=["'][^"']*(?:image_src|preload)[^"']*["'][^>]*href=["']([^"']+)["']|href=["']([^"']+)["'][^>]*rel=["'][^"']*(?:image_src|preload)[^"']*["'])[^>]*>/ig;
   let lm;
-  while((lm = linkRe.exec(text)) && candidates.length < 50){
-    push(lm[1] || lm[2], 'link', 82);
+  while((lm = linkRe.exec(text)) && candidates.length < 30){
+    const u = lm[1] || lm[2];
+    if(u) pushOwnImageCandidate(candidates, u, baseUrl, 'link', 80);
   }
 
-  // 3) schema/json-l d
+  // 3) JSON-LD/schema.org image fields. Keep this regex light and bounded.
   const jsonImageRe = /"image"\s*:\s*(?:"([^"]+)"|\{\s*"url"\s*:\s*"([^"]+)"|\[\s*"([^"]+)")/ig;
   let jm;
-  while((jm = jsonImageRe.exec(text)) && candidates.length < 60){
-    push(jm[1] || jm[2] || jm[3], 'schema', 76);
-  }
-  const thumbRe = /"thumbnailUrl"\s*:\s*"([^"]+)"/ig;
-  let tm;
-  while((tm = thumbRe.exec(text)) && candidates.length < 66){
-    push(tm[1], 'schema-thumbnail', 72);
+  while((jm = jsonImageRe.exec(text)) && candidates.length < 36){
+    const u = jm[1] || jm[2] || jm[3];
+    if(u) pushOwnImageCandidate(candidates, u, baseUrl, 'schema', 70);
   }
 
-  // 4) video poster
+  const thumbnailUrlRe = /"thumbnailUrl"\s*:\s*"([^"]+)"/ig;
+  let tm;
+  while((tm = thumbnailUrlRe.exec(text)) && candidates.length < 40){
+    if(tm && tm[1]) pushOwnImageCandidate(candidates, tm[1], baseUrl, 'schema-thumbnail', 65);
+  }
+
+  // 4) Video poster owned by the result page.
   const posterRe = /<video[^>]+poster=["']([^"']+)["'][^>]*>/ig;
   let pm;
-  while((pm = posterRe.exec(text)) && candidates.length < 72){
-    push(pm[1], 'video-poster', 78);
+  while((pm = posterRe.exec(text)) && candidates.length < 44){
+    if(pm && pm[1]) pushOwnImageCandidate(candidates, pm[1], baseUrl, 'video-poster', 75);
   }
 
-  const top = text.slice(0, 240000);
-
-  // 5) background-image
-  const bgRe = /background-image\s*:\s*url\((['"]?)(.*?)\1\)/ig;
-  let bm;
-  while((bm = bgRe.exec(top)) && candidates.length < 86){
-    push(bm[2], 'background-image', 60);
-  }
-
-  // 6) source/srcset and picture
-  const sourceRe = /<(?:source|img)[^>]+(?:srcset|data-srcset)=["']([^"']+)["'][^>]*>/ig;
-  let sm;
-  while((sm = sourceRe.exec(top)) && candidates.length < 98){
-    const best = bestFromSrcset(sm[1]);
-    if(best) push(best, 'srcset', 66);
-  }
-
-  // 7) meaningful img / amp-img / noscript img / data-* image attrs
-  const imgRe = /<(?:img|amp-img)\b[^>]*>/ig;
-  let im, inspected = 0;
-  while((im = imgRe.exec(top)) && inspected < 160 && candidates.length < 132){
+  // 5) First meaningful page images.
+  // This is still own-page media, not generated media and not borrowed media.
+  const headAndTop = text.slice(0, 180000);
+  const imgRe = /<img\b[^>]*>/ig;
+  let im;
+  let inspected = 0;
+  while((im = imgRe.exec(headAndTop)) && inspected < 80 && candidates.length < 60){
     inspected += 1;
     const tag = im[0];
     const srcset = attrValue(tag, 'srcset') || attrValue(tag, 'data-srcset');
-    const attrs = [
-      bestFromSrcset(srcset),
-      attrValue(tag, 'src'),
-      attrValue(tag, 'data-src'),
-      attrValue(tag, 'data-original'),
-      attrValue(tag, 'data-lazy-src'),
-      attrValue(tag, 'data-url'),
-      attrValue(tag, 'data-image'),
-      attrValue(tag, 'data-thumb'),
-      attrValue(tag, 'data-thumbnail'),
-      attrValue(tag, 'data-poster')
-    ].filter(Boolean);
+    const src =
+      bestFromSrcset(srcset) ||
+      attrValue(tag, 'src') ||
+      attrValue(tag, 'data-src') ||
+      attrValue(tag, 'data-original') ||
+      attrValue(tag, 'data-lazy-src') ||
+      attrValue(tag, 'data-url');
+
+    if(!src) continue;
 
     const width = parseInt(attrValue(tag, 'width') || '0', 10) || 0;
     const height = parseInt(attrValue(tag, 'height') || '0', 10) || 0;
@@ -2090,20 +1857,16 @@ function extractOgImageFromHtml(html, baseUrl){
     const cls = low(attrValue(tag, 'class'));
     const tagText = low(tag);
 
-    for(const src of attrs){
-      if(!src) continue;
-      if(width && height && width * height < 12000) continue;
-      if(hasAnyLooseTerm(cls + ' ' + alt + ' ' + tagText, ['captcha','tracking','pixel','spacer'])) continue;
+    if(width && height && width * height < 30000) continue;
+    if(hasAnyLooseTerm(cls + ' ' + alt + ' ' + tagText, ['logo','icon','sprite','captcha','banner-text','text-banner','sns','share','qr'])) continue;
 
-      let weight = 48;
-      if(width * height >= 480000) weight += 18;
-      else if(width * height >= 120000) weight += 9;
-      if(hasAnyLooseTerm(cls + ' ' + alt, ['main','visual','hero','photo','image','gallery','cover','poster','featured','대표','사진'])) weight += 14;
-      if(hasAnyLooseTerm(cls + ' ' + alt, ['logo','icon','sprite','blank'])) weight -= 16;
+    let weight = 45;
+    if(width * height >= 480000) weight += 20;
+    else if(width * height >= 180000) weight += 10;
+    if(hasAnyLooseTerm(cls + ' ' + alt, ['thumb','thumbnail'])) weight -= 8;
+    if(hasAnyLooseTerm(cls + ' ' + alt, ['main','visual','hero','photo','image','대표','사진','갤러리'])) weight += 16;
 
-      push(src, 'page-img', weight);
-      if(candidates.length >= 132) break;
-    }
+    pushOwnImageCandidate(candidates, src, baseUrl, 'page-img', weight);
   }
 
   if(!candidates.length) return '';
