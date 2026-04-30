@@ -802,86 +802,137 @@
       Core Link 관리
     </button>
 
-    <span id="igdc-core-status" style="font-size:12px;color:#555;">상태: 승인 대기 확인 중…</span>
+    <span id="igdc-core-status" style="font-size:12px;color:#555;">
+      상태: 연동 게이트웨이 초기화 중…
+    </span>
   </div>
 
   <div id="igdc-core-help" style="font-size:12px;color:#666;margin-top:6px;">
-    외부 서버/API/파트너/콘텐츠 공급처/Web3 provider와의 연동 요청을 관리자가 승인·차단·테스트하는 게이트웨이입니다.
-    클릭 즉시 자동 연결하지 않습니다.
+    내부 기본 연동 상태와 외부 서버/API/파트너/콘텐츠 공급처/Web3 provider의 연동 요청을 구분해 관리합니다.
+    승인 전 자동 연결은 하지 않습니다.
   </div>
 </section>
 
-<div id="igdc-core-gateway-backdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.38);z-index:1500;align-items:center;justify-content:center;">
-  <div id="igdc-core-gateway-modal" role="dialog" aria-modal="true" aria-labelledby="igdc-core-gateway-title"
-       style="background:#fff;border-radius:12px;max-width:1060px;width:94vw;max-height:88vh;box-shadow:0 24px 80px rgba(0,0,0,.28);display:flex;flex-direction:column;overflow:hidden;">
+<div id="igdc-core-gateway-backdrop"
+     aria-hidden="true"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.38);z-index:1500;align-items:center;justify-content:center;">
+  <div id="igdc-core-gateway-modal"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="igdc-core-gateway-title"
+       style="background:#fff;border-radius:12px;max-width:1180px;width:95vw;max-height:90vh;box-shadow:0 24px 80px rgba(0,0,0,.28);display:flex;flex-direction:column;overflow:hidden;">
+
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid #eee;background:#fafafa;">
       <div>
-        <h2 id="igdc-core-gateway-title" style="margin:0;font-size:1.08rem;color:#004080;">IGDC Core Link 연동 게이트웨이</h2>
-        <div style="font-size:12px;color:#666;margin-top:3px;">승인 전 자동 연결 금지 · 테스트/승인/차단/해제는 관리자 수동 실행</div>
+        <h2 id="igdc-core-gateway-title" style="margin:0;font-size:1.08rem;color:#004080;">
+          IGDC Core Link 연동 게이트웨이
+        </h2>
+        <div style="font-size:12px;color:#666;margin-top:3px;">
+          내부/외부 구분 · 연동됨/미연동 구분 · 위험 서버 분별 · 승인/차단은 관리자 수동 실행
+        </div>
       </div>
-      <button type="button" onclick="return IGDC_CORE_GATEWAY_CLOSE()"
-              style="border:1px solid #ddd;border-radius:8px;background:#fff;padding:6px 10px;cursor:pointer;">닫기</button>
+
+      <button type="button"
+              onclick="return IGDC_CORE_GATEWAY_CLOSE()"
+              style="border:1px solid #ddd;border-radius:8px;background:#fff;padding:6px 10px;cursor:pointer;">
+        닫기
+      </button>
     </div>
 
     <div style="padding:12px 16px;overflow:auto;font-size:12px;">
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-        <button type="button" onclick="return IGDC_CORE_GATEWAY_REFRESH()"
-                style="padding:6px 10px;border:1px solid #99c2ff;border-radius:8px;background:#fff;cursor:pointer;">새로고침</button>
-        <button type="button" onclick="return IGDC_CORE_GATEWAY_ADD_CANDIDATE()"
-                style="padding:6px 10px;border:1px solid #d8b894;border-radius:8px;background:#fff8ee;cursor:pointer;">후보 링크 추가</button>
-        <span id="igdc-core-gateway-summary" style="align-self:center;color:#555;">요청/후보/승인/차단 목록을 불러오는 중…</span>
+        <button type="button"
+                onclick="return IGDC_CORE_GATEWAY_REFRESH()"
+                style="padding:6px 10px;border:1px solid #99c2ff;border-radius:8px;background:#fff;cursor:pointer;">
+          새로고침
+        </button>
+
+        <button type="button"
+                onclick="return IGDC_CORE_GATEWAY_ADD_CANDIDATE()"
+                style="padding:6px 10px;border:1px solid #d8b894;border-radius:8px;background:#fff8ee;cursor:pointer;">
+          후보 링크 추가
+        </button>
+
+        <button type="button"
+                onclick="return IGDC_CORE_GATEWAY_RESET()"
+                style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#f8fafc;cursor:pointer;">
+          기본값 복원
+        </button>
+
+        <span id="igdc-core-gateway-summary" style="align-self:center;color:#555;">
+          목록을 불러오는 중…
+        </span>
       </div>
 
-      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px;">
+      <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:12px;">
         <div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;background:#fbfdff;">
-          <div style="font-weight:800;color:#334155;">연동 요청</div>
+          <div style="font-weight:800;color:#334155;">내부 연동됨</div>
+          <div id="igdc-core-count-internal" style="font-size:20px;font-weight:900;margin-top:6px;">-</div>
+          <div style="font-size:11px;color:#777;">기본 엔진/endpoint</div>
+        </div>
+
+        <div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;background:#fbfdff;">
+          <div style="font-weight:800;color:#334155;">승인 대기</div>
           <div id="igdc-core-count-pending" style="font-size:20px;font-weight:900;margin-top:6px;">-</div>
           <div style="font-size:11px;color:#777;">외부 → IGDC 요청</div>
         </div>
+
         <div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;background:#fbfdff;">
-          <div style="font-weight:800;color:#334155;">후보 링크</div>
-          <div id="igdc-core-count-candidate" style="font-size:20px;font-weight:900;margin-top:6px;">-</div>
-          <div style="font-size:11px;color:#777;">IGDC → 외부 후보</div>
-        </div>
-        <div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;background:#fbfdff;">
-          <div style="font-weight:800;color:#334155;">승인됨</div>
+          <div style="font-weight:800;color:#334155;">승인 링크</div>
           <div id="igdc-core-count-approved" style="font-size:20px;font-weight:900;margin-top:6px;">-</div>
-          <div style="font-size:11px;color:#777;">Core 등록 가능</div>
+          <div style="font-size:11px;color:#777;">관리자 승인 완료</div>
         </div>
+
         <div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;background:#fbfdff;">
-          <div style="font-weight:800;color:#334155;">차단됨</div>
+          <div style="font-weight:800;color:#334155;">차단 링크</div>
           <div id="igdc-core-count-blocked" style="font-size:20px;font-weight:900;margin-top:6px;">-</div>
           <div style="font-size:11px;color:#777;">연동 금지</div>
+        </div>
+
+        <div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;background:#fbfdff;">
+          <div style="font-weight:800;color:#334155;">위험/차단</div>
+          <div id="igdc-core-count-risk" style="font-size:20px;font-weight:900;margin-top:6px;">-</div>
+          <div style="font-size:11px;color:#777;">주의 필요</div>
         </div>
       </div>
 
       <section style="border:1px solid #eef2f7;border-radius:10px;overflow:hidden;margin-bottom:10px;">
-        <div style="padding:9px 11px;background:#f8fafc;border-bottom:1px solid #eef2f7;font-weight:800;color:#334155;">연동 요청 / 후보 / 승인 / 차단 목록</div>
-        <div style="max-height:420px;overflow:auto;">
+        <div style="padding:9px 11px;background:#f8fafc;border-bottom:1px solid #eef2f7;font-weight:800;color:#334155;">
+          Core Link 연동 목록
+        </div>
+
+        <div style="max-height:430px;overflow:auto;">
           <table style="width:100%;border-collapse:collapse;font-size:12px;">
             <thead>
               <tr>
+                <th style="text-align:left;padding:7px;border-bottom:1px solid #eef2f7;">내/외부</th>
                 <th style="text-align:left;padding:7px;border-bottom:1px solid #eef2f7;">구분</th>
                 <th style="text-align:left;padding:7px;border-bottom:1px solid #eef2f7;">이름</th>
                 <th style="text-align:left;padding:7px;border-bottom:1px solid #eef2f7;">도메인 / Endpoint</th>
                 <th style="text-align:left;padding:7px;border-bottom:1px solid #eef2f7;">목적</th>
-                <th style="text-align:left;padding:7px;border-bottom:1px solid #eef2f7;">상태</th>
+                <th style="text-align:left;padding:7px;border-bottom:1px solid #eef2f7;">연동상태</th>
+                <th style="text-align:left;padding:7px;border-bottom:1px solid #eef2f7;">위험도</th>
                 <th style="text-align:left;padding:7px;border-bottom:1px solid #eef2f7;">관리</th>
               </tr>
             </thead>
             <tbody id="igdc-core-gateway-tbody">
-              <tr><td colspan="6" style="padding:10px;">목록을 불러오는 중입니다.</td></tr>
+              <tr>
+                <td colspan="8" style="padding:10px;">목록을 불러오는 중입니다.</td>
+              </tr>
             </tbody>
           </table>
         </div>
       </section>
 
       <section style="border:1px solid #eef2f7;border-radius:10px;overflow:hidden;">
-        <div style="padding:9px 11px;background:#f8fafc;border-bottom:1px solid #eef2f7;font-weight:800;color:#334155;">운영 원칙</div>
+        <div style="padding:9px 11px;background:#f8fafc;border-bottom:1px solid #eef2f7;font-weight:800;color:#334155;">
+          운영 원칙
+        </div>
         <div style="padding:10px 12px;color:#555;line-height:1.55;">
-          이 게이트웨이는 자동 연결용이 아닙니다. 외부 요청 또는 내부 후보 링크는 먼저 목록에 올라오고,
-          관리자가 <strong>테스트</strong>로 연결 가능성만 확인한 뒤, 필요한 경우에만 <strong>승인</strong>합니다.
-          승인 전에는 Core Registry에 등록하지 않고, 차단된 항목은 재검토 전까지 연동하지 않습니다.
+          내부 기본 엔진은 승인/차단 대상이 아니라 상태확인/재동기화 대상입니다.
+          외부 요청과 외부 후보는 테스트 후 관리자가 직접 승인하거나 차단합니다.
+          HTTP, IP 직접 접속, 결제·지갑·토큰 권한이 섞인 외부 endpoint는 위험 또는 주의 대상으로 표시하며,
+          위험 항목은 바로 승인할 수 없습니다.
         </div>
       </section>
     </div>
@@ -890,7 +941,7 @@
 
 <script id="igdc-core-gateway-script">
 (function(){
-  var STORAGE_KEY = "IGDC_CORE_LINK_GATEWAY_V1";
+  var STORAGE_KEY = "IGDC_CORE_LINK_GATEWAY_FINAL_V1";
 
   function s(v){ return String(v == null ? "" : v); }
 
@@ -906,226 +957,425 @@
     return "core-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
   }
 
-  function defaultLinks(){
+  function isInternalEndpoint(endpoint){
+    var ep = s(endpoint).trim();
+    return !ep ||
+      ep === "igdc_core_status" ||
+      ep === "pending-adapter" ||
+      ep.indexOf("/") === 0 ||
+      ep.indexOf("./") === 0 ||
+      ep.indexOf("../") === 0;
+  }
+
+  function domainOf(endpoint){
+    try {
+      return new URL(endpoint, location.origin).hostname.replace(/^www\./,"");
+    } catch(e) {
+      return "";
+    }
+  }
+
+  function initialRows(){
     return [
       {
         id:"core-search-bank",
-        group:"candidate",
+        scope:"internal",
+        group:"internal-connected",
         name:"Search Bank Engine",
         endpoint:"/.netlify/functions/search-bank-engine",
         purpose:"검색/슬롯/스냅샷 데이터 게이트웨이",
-        status:"candidate",
+        state:"connected",
         source:"internal"
       },
       {
         id:"core-maru-search",
-        group:"candidate",
+        scope:"internal",
+        group:"internal-connected",
         name:"Maru Search",
         endpoint:"/.netlify/functions/maru-search",
         purpose:"외부 검색/미디어/뉴스/상품 검색 통로",
-        status:"candidate",
+        state:"connected",
         source:"internal"
       },
       {
         id:"core-revenue-commerce",
-        group:"candidate",
+        scope:"internal",
+        group:"internal-connected",
         name:"Revenue / Commerce Engine",
         endpoint:"/.netlify/functions/maru-revenue-engine",
         purpose:"수익 구조/상품/정산/제휴 라인",
-        status:"candidate",
+        state:"connected",
         source:"internal"
       },
       {
         id:"core-ledger-donation",
-        group:"candidate",
+        scope:"internal",
+        group:"internal-connected",
         name:"Ledger / Donation",
         endpoint:"/api/ledger",
         purpose:"도네이션/입금/정산 로그 확인",
-        status:"candidate",
+        state:"connected",
         source:"internal"
       },
       {
         id:"core-web3-wallet",
-        group:"candidate",
+        scope:"internal",
+        group:"internal-connected",
         name:"Web3 / Wallet Provider",
         endpoint:"/api/wallets",
         purpose:"블록체인 지갑/네트워크 상태 확인",
-        status:"candidate",
+        state:"connected",
         source:"internal"
       },
       {
         id:"core-supabase-registry",
-        group:"candidate",
+        scope:"internal",
+        group:"internal-connected",
         name:"Supabase Core Registry",
         endpoint:"igdc_core_status",
-        purpose:"Core Link 등록/상태/승인 이력 저장 후보",
-        status:"candidate",
+        purpose:"Core Link 등록/상태/승인 이력 저장소",
+        state:"connected",
         source:"internal"
       },
       {
         id:"core-global-insight",
-        group:"candidate",
+        scope:"internal",
+        group:"internal-connected",
         name:"Maru Global Insight",
         endpoint:"/.netlify/functions/maru-global-insight-engine",
         purpose:"글로벌 인사이트/국가·권역 분석 연결",
-        status:"candidate",
+        state:"connected",
         source:"internal"
       },
       {
         id:"core-planetary-collector",
-        group:"candidate",
+        scope:"internal",
+        group:"internal-partial",
         name:"Planetary / Collector",
         endpoint:"/.netlify/functions/planetary-data-connector",
-        purpose:"외부 데이터 어댑터/수집기/연합 소스 후보",
-        status:"candidate",
+        purpose:"외부 데이터 어댑터/수집기/연합 소스 확장",
+        state:"partial",
         source:"internal"
       },
       {
         id:"core-media-sns-broadcaster",
-        group:"candidate",
+        scope:"external",
+        group:"external-candidate",
         name:"Media / SNS / Broadcaster Adapter",
         endpoint:"pending-adapter",
         purpose:"향후 SNS·방송·미디어 소스 어댑터 연결 후보",
-        status:"candidate",
+        state:"planned",
         source:"planned"
       }
     ];
   }
 
-  function loadLocal(){
+  function loadRows(){
     try{
       var raw = localStorage.getItem(STORAGE_KEY);
-      if(!raw) return null;
-      var data = JSON.parse(raw);
-      return Array.isArray(data) ? data : null;
-    }catch(e){
-      return null;
-    }
-  }
+      if(raw){
+        var rows = JSON.parse(raw);
+        if(Array.isArray(rows) && rows.length) return rows;
+      }
+    }catch(e){}
 
-  function saveLocal(rows){
-    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(rows || [])); }catch(e){}
-  }
-
-  function getRows(){
-    var rows = loadLocal();
-    if(rows && rows.length) return rows;
-    rows = defaultLinks();
-    saveLocal(rows);
+    var rows = initialRows();
+    saveRows(rows);
     return rows;
   }
 
-  function setRows(rows){
-    saveLocal(rows || []);
-    render(rows || []);
+  function saveRows(rows){
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(rows || []));
+    } catch(e) {}
   }
 
-  function statusLabel(st){
+  function normalizeState(st){
+    st = s(st || "").trim();
+    return st || "candidate";
+  }
+
+  function stateLabel(st){
+    st = normalizeState(st);
+    if(st === "connected") return "연동됨";
+    if(st === "partial") return "부분연동";
+    if(st === "planned") return "준비중";
     if(st === "pending") return "승인대기";
     if(st === "candidate") return "후보";
-    if(st === "approved") return "승인됨";
-    if(st === "blocked") return "차단됨";
     if(st === "test-ok") return "테스트OK";
     if(st === "test-fail") return "테스트실패";
-    return st || "-";
+    if(st === "approved") return "승인됨";
+    if(st === "blocked") return "차단됨";
+    if(st === "released") return "해제됨";
+    return st;
   }
 
   function groupLabel(g){
-    if(g === "pending") return "연동요청";
-    if(g === "candidate") return "후보";
-    if(g === "approved") return "승인";
-    if(g === "blocked") return "차단";
+    g = s(g || "").trim();
+    if(g === "internal-connected") return "내부 기본";
+    if(g === "internal-partial") return "내부 확장";
+    if(g === "external-request") return "외부 요청";
+    if(g === "external-candidate") return "외부 후보";
+    if(g === "approved") return "승인 링크";
+    if(g === "blocked") return "차단 링크";
     return g || "-";
   }
 
-  function updateStatus(rows){
-    rows = rows || getRows();
+  function scopeLabel(scope){
+    return scope === "internal" ? "내부" : "외부";
+  }
 
-    var pending = rows.filter(function(r){ return r.status === "pending"; }).length;
-    var candidate = rows.filter(function(r){ return r.status === "candidate" || r.status === "test-ok" || r.status === "test-fail"; }).length;
-    var approved = rows.filter(function(r){ return r.status === "approved"; }).length;
-    var blocked = rows.filter(function(r){ return r.status === "blocked"; }).length;
+  function assessRisk(row){
+    row = row || {};
+
+    var endpoint = s(row.endpoint).trim();
+    var purpose = s(row.purpose).trim();
+    var state = normalizeState(row.state);
+    var scope = row.scope || (isInternalEndpoint(endpoint) ? "internal" : "external");
+    var text = [row.name, endpoint, purpose, row.source].join(" ").toLowerCase();
+
+    if(state === "blocked" || row.group === "blocked"){
+      return { level:"blocked", label:"차단", reason:"관리자 차단 상태" };
+    }
+
+    if(scope === "internal" && isInternalEndpoint(endpoint)){
+      if(state === "partial") return { level:"safe", label:"안전", reason:"내부 확장 엔진" };
+      if(state === "planned") return { level:"watch", label:"관찰", reason:"내부 준비중 항목" };
+      return { level:"safe", label:"안전", reason:"내부 기본 연동" };
+    }
+
+    if(!endpoint || endpoint === "-" || endpoint === "pending-adapter" || endpoint === "pending-endpoint"){
+      return { level:"watch", label:"관찰", reason:"endpoint 미정/준비중" };
+    }
+
+    if(/^http:\/\//i.test(endpoint)){
+      return { level:"danger", label:"위험", reason:"HTTP 비보안 endpoint" };
+    }
+
+    var d = domainOf(endpoint);
+    if(/^\d{1,3}(\.\d{1,3}){3}$/.test(d)){
+      return { level:"danger", label:"위험", reason:"IP 직접 접속" };
+    }
+
+    if(/token|secret|key|admin|root|checkout|payment|wallet|private/.test(text) && scope === "external"){
+      return { level:"warn", label:"주의", reason:"권한/결제/지갑 관련 외부 연동" };
+    }
+
+    if(!purpose || purpose.length < 5){
+      return { level:"warn", label:"주의", reason:"연동 목적 불명확" };
+    }
+
+    if(/^https:\/\//i.test(endpoint)){
+      return { level:"normal", label:"보통", reason:"HTTPS 외부 후보" };
+    }
+
+    return { level:"warn", label:"주의", reason:"검증 필요" };
+  }
+
+  function badge(text, color, bg, border){
+    return "<span style='display:inline-block;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:800;color:" +
+      color + ";background:" + bg + ";border:1px solid " + border + ";white-space:nowrap;'>" +
+      escapeHtml(text) +
+      "</span>";
+  }
+
+  function riskBadge(risk){
+    if(!risk) risk = { level:"warn", label:"주의" };
+
+    if(risk.level === "safe") return badge(risk.label, "#047857", "#f0fdf4", "#bbf7d0");
+    if(risk.level === "normal") return badge(risk.label, "#1d4ed8", "#eff6ff", "#bfdbfe");
+    if(risk.level === "watch") return badge(risk.label, "#6b7280", "#f9fafb", "#e5e7eb");
+    if(risk.level === "danger") return badge(risk.label, "#b91c1c", "#fef2f2", "#fecaca");
+    if(risk.level === "blocked") return badge(risk.label, "#7f1d1d", "#fee2e2", "#fecaca");
+
+    return badge(risk.label || "주의", "#a16207", "#fffbeb", "#fde68a");
+  }
+
+  function stateBadge(st){
+    st = normalizeState(st);
+
+    if(st === "connected" || st === "approved" || st === "test-ok") {
+      return badge(stateLabel(st), "#047857", "#f0fdf4", "#bbf7d0");
+    }
+
+    if(st === "candidate" || st === "pending") {
+      return badge(stateLabel(st), "#1d4ed8", "#eff6ff", "#bfdbfe");
+    }
+
+    if(st === "partial" || st === "planned" || st === "released") {
+      return badge(stateLabel(st), "#a16207", "#fffbeb", "#fde68a");
+    }
+
+    if(st === "blocked" || st === "test-fail") {
+      return badge(stateLabel(st), "#b91c1c", "#fef2f2", "#fecaca");
+    }
+
+    return badge(stateLabel(st), "#475569", "#f8fafc", "#e2e8f0");
+  }
+
+  function updateSummary(rows){
+    rows = rows || loadRows();
+
+    var internalConnected = rows.filter(function(r){
+      return r.scope === "internal" && r.state === "connected";
+    }).length;
+
+    var pending = rows.filter(function(r){
+      return r.state === "pending";
+    }).length;
+
+    var approved = rows.filter(function(r){
+      return r.state === "approved";
+    }).length;
+
+    var blocked = rows.filter(function(r){
+      return r.state === "blocked";
+    }).length;
+
+    var risk = rows.filter(function(r){
+      var x = assessRisk(r);
+      return x.level === "danger" || x.level === "blocked";
+    }).length;
+
+    var map = {
+      "igdc-core-count-internal": internalConnected,
+      "igdc-core-count-pending": pending,
+      "igdc-core-count-approved": approved,
+      "igdc-core-count-blocked": blocked,
+      "igdc-core-count-risk": risk
+    };
+
+    Object.keys(map).forEach(function(id){
+      var el = document.getElementById(id);
+      if(el) el.textContent = map[id];
+    });
 
     var statusEl = document.getElementById("igdc-core-status");
     if(statusEl){
-      statusEl.textContent = "상태: 승인대기 " + pending + " · 후보 " + candidate + " · 승인 " + approved + " · 차단 " + blocked;
-      statusEl.style.color = pending ? "#c08700" : "#0a7";
+      statusEl.textContent =
+        "상태: 내부연동 " + internalConnected +
+        " · 승인대기 " + pending +
+        " · 승인 " + approved +
+        " · 차단/위험 " + (blocked + risk);
+
+      statusEl.style.color = (pending || risk) ? "#c08700" : "#0a7";
     }
-
-    var ids = {
-      "igdc-core-count-pending": pending,
-      "igdc-core-count-candidate": candidate,
-      "igdc-core-count-approved": approved,
-      "igdc-core-count-blocked": blocked
-    };
-
-    Object.keys(ids).forEach(function(id){
-      var el = document.getElementById(id);
-      if(el) el.textContent = ids[id];
-    });
 
     var summary = document.getElementById("igdc-core-gateway-summary");
     if(summary){
-      summary.textContent = "승인대기 " + pending + " · 후보 " + candidate + " · 승인 " + approved + " · 차단 " + blocked;
+      summary.textContent =
+        "내부연동 " + internalConnected +
+        " · 승인대기 " + pending +
+        " · 승인 " + approved +
+        " · 차단 " + blocked +
+        " · 위험 " + risk;
     }
   }
 
-  function actionButton(id, label, action, bg){
-    return "<button type='button' data-id='" + escapeHtml(id) + "' data-action='" + escapeHtml(action) + "' " +
-      "style='margin:1px 2px;padding:4px 7px;border:1px solid #ddd;border-radius:7px;background:" + (bg || "#fff") + ";cursor:pointer;font-size:11px;'>" +
+  function actionButton(id, label, action, bg, disabled){
+    return "<button type='button' data-id='" + escapeHtml(id) + "' data-action='" + escapeHtml(action) + "'" +
+      (disabled ? " disabled" : "") +
+      " style='margin:1px 2px;padding:4px 7px;border:1px solid #ddd;border-radius:7px;background:" + (bg || "#fff") +
+      ";cursor:" + (disabled ? "not-allowed" : "pointer") +
+      ";font-size:11px;opacity:" + (disabled ? ".45" : "1") + ";'>" +
       escapeHtml(label) +
       "</button>";
   }
 
+  function actionsFor(row){
+    var risk = assessRisk(row);
+    var state = normalizeState(row.state);
+    var scope = row.scope || "external";
+    var danger = risk.level === "danger" || risk.level === "blocked";
+    var html = "";
+
+    if(scope === "internal" && state === "connected"){
+      html += actionButton(row.id, "상태확인", "test", "#f8fafc", false);
+      html += actionButton(row.id, "재동기화", "sync", "#eff6ff", false);
+      return html;
+    }
+
+    if(scope === "internal" && (state === "partial" || state === "planned" || state === "candidate" || state === "test-fail" || state === "test-ok")){
+      html += actionButton(row.id, "테스트", "test", "#f8fafc", false);
+      html += actionButton(row.id, "연결", "connect", "#f0fdf4", danger);
+      html += actionButton(row.id, "보류", "hold", "#fffbeb", false);
+      return html;
+    }
+
+    if(state === "approved"){
+      html += actionButton(row.id, "상태확인", "test", "#f8fafc", false);
+      html += actionButton(row.id, "해제", "release", "#fef2f2", false);
+      return html;
+    }
+
+    if(state === "blocked"){
+      html += actionButton(row.id, "재검토", "review", "#fffbeb", false);
+      html += actionButton(row.id, "차단유지", "keep-blocked", "#fee2e2", false);
+      return html;
+    }
+
+    html += actionButton(row.id, "테스트", "test", "#f8fafc", false);
+    html += actionButton(row.id, "승인", "approve", "#f0fdf4", danger);
+    html += actionButton(row.id, "차단", "block", "#fff7ed", false);
+
+    return html;
+  }
+
   function render(rows){
-    rows = rows || getRows();
+    rows = rows || loadRows();
 
     var tbody = document.getElementById("igdc-core-gateway-tbody");
     if(!tbody) return;
 
     if(!rows.length){
-      tbody.innerHTML = "<tr><td colspan='6' style='padding:10px;'>등록된 연동 요청이나 후보 링크가 없습니다.</td></tr>";
-      updateStatus(rows);
+      tbody.innerHTML = "<tr><td colspan='8' style='padding:10px;'>등록된 연동 요청이나 후보 링크가 없습니다.</td></tr>";
+      updateSummary(rows);
       return;
     }
 
+    var order = {
+      "internal-connected": 1,
+      "internal-partial": 2,
+      "external-request": 3,
+      "external-candidate": 4,
+      "approved": 5,
+      "blocked": 6
+    };
+
+    rows = rows.slice().sort(function(a,b){
+      return (order[a.group] || 99) - (order[b.group] || 99) ||
+        s(a.name).localeCompare(s(b.name));
+    });
+
     tbody.innerHTML = rows.map(function(r){
-      var buttons = "";
+      var risk = assessRisk(r);
+      var memo = risk.reason || "";
 
-      buttons += actionButton(r.id, "테스트", "test", "#f8fafc");
-
-      if(r.status !== "approved"){
-        buttons += actionButton(r.id, "승인", "approve", "#f0fdf4");
-      }
-
-      if(r.status !== "blocked"){
-        buttons += actionButton(r.id, "차단", "block", "#fff7ed");
-      }
-
-      if(r.status === "approved"){
-        buttons += actionButton(r.id, "해제", "release", "#fef2f2");
+      if(r.lastTest) {
+        memo += (memo ? " · " : "") + "최근 테스트: " + r.lastTest;
       }
 
       return "<tr>" +
+        "<td style='padding:7px;border-bottom:1px solid #eef2f7;'>" + escapeHtml(scopeLabel(r.scope)) + "</td>" +
         "<td style='padding:7px;border-bottom:1px solid #eef2f7;'>" + escapeHtml(groupLabel(r.group)) + "</td>" +
         "<td style='padding:7px;border-bottom:1px solid #eef2f7;font-weight:700;'>" + escapeHtml(r.name) + "</td>" +
         "<td style='padding:7px;border-bottom:1px solid #eef2f7;font-family:monospace;font-size:11px;'>" + escapeHtml(r.endpoint) + "</td>" +
         "<td style='padding:7px;border-bottom:1px solid #eef2f7;'>" + escapeHtml(r.purpose) + "</td>" +
-        "<td style='padding:7px;border-bottom:1px solid #eef2f7;'>" + escapeHtml(statusLabel(r.status)) + "</td>" +
-        "<td style='padding:7px;border-bottom:1px solid #eef2f7;white-space:nowrap;'>" + buttons + "</td>" +
+        "<td style='padding:7px;border-bottom:1px solid #eef2f7;'>" + stateBadge(r.state) + "</td>" +
+        "<td style='padding:7px;border-bottom:1px solid #eef2f7;'>" +
+          riskBadge(risk) +
+          "<div style='font-size:10px;color:#777;margin-top:2px;'>" + escapeHtml(memo) + "</div>" +
+        "</td>" +
+        "<td style='padding:7px;border-bottom:1px solid #eef2f7;white-space:nowrap;'>" + actionsFor(r) + "</td>" +
       "</tr>";
     }).join("");
 
-    updateStatus(rows);
+    updateSummary(rows);
   }
 
   async function refreshFromServer(){
-    var rows = getRows();
+    var rows = loadRows();
 
-    /*
-      향후 백엔드가 준비되면 아래 endpoint가 연동 요청 목록을 내려줄 수 있다.
-      현재는 실패해도 local 후보 목록을 유지한다.
-    */
     try{
       var res = await fetch("/api/igdc/core/link/requests", {
         credentials:"same-origin",
@@ -1138,22 +1388,24 @@
 
         incoming.forEach(function(x){
           if(!x) return;
+
           var id = x.id || ("request-" + (x.domain || x.endpoint || x.name || uid()));
           var exists = rows.some(function(r){ return r.id === id; });
           if(exists) return;
 
           rows.push({
             id:id,
-            group:"pending",
+            scope:"external",
+            group:"external-request",
             name:x.name || x.domain || x.endpoint || "외부 연동 요청",
             endpoint:x.endpoint || x.url || x.domain || "-",
             purpose:x.purpose || x.reason || "외부에서 IGDC Core 연동 요청",
-            status:"pending",
+            state:"pending",
             source:"external"
           });
         });
 
-        saveLocal(rows);
+        saveRows(rows);
       }
     }catch(e){}
 
@@ -1161,44 +1413,60 @@
     return false;
   }
 
-  async function testLink(row){
+  async function testRow(row){
     if(!row) return;
 
-    row.status = "test-fail";
+    var ep = s(row.endpoint).trim();
 
-    if(row.endpoint && row.endpoint !== "pending-adapter" && row.endpoint.indexOf("igdc_core_status") < 0){
-      try{
-        var res = await fetch(row.endpoint, {
-          method:"GET",
-          credentials:"same-origin",
-          cache:"no-store"
-        });
-        row.status = res.ok ? "test-ok" : "test-fail";
-      }catch(e){
-        row.status = "test-fail";
+    if(!ep || ep === "pending-adapter" || ep === "pending-endpoint" || ep === "igdc_core_status"){
+      row.lastTest = "테스트 보류";
+      if(row.state !== "connected" && row.state !== "approved") row.state = "planned";
+      return;
+    }
+
+    try{
+      var res = await fetch(ep, {
+        method:"GET",
+        credentials:"same-origin",
+        cache:"no-store"
+      });
+
+      row.lastTest = res.ok ? "OK" : ("HTTP " + res.status);
+
+      if(row.state !== "connected" && row.state !== "approved") {
+        row.state = res.ok ? "test-ok" : "test-fail";
       }
-    }else{
-      row.status = "test-ok";
+    }catch(e){
+      row.lastTest = "실패";
+
+      if(row.state !== "connected" && row.state !== "approved") {
+        row.state = "test-fail";
+      }
     }
   }
 
-  async function approveLink(row){
-    if(!row) return;
-
-    /*
-      승인 버튼을 눌렀을 때만 등록 시도.
-      endpoint가 없으면 local 승인만 한다.
-    */
+  async function postAction(path, row){
     try{
-      await fetch("/api/igdc/core/link/approve", {
+      await fetch(path, {
         method:"POST",
         credentials:"same-origin",
         headers:{ "Content-Type":"application/json" },
         body:JSON.stringify(row)
       });
     }catch(e){}
+  }
 
-    row.status = "approved";
+  async function approveRow(row){
+    var risk = assessRisk(row);
+
+    if(risk.level === "danger" || risk.level === "blocked"){
+      alert("위험 또는 차단 항목은 바로 승인할 수 없습니다. 먼저 차단/재검토 기준을 확인하세요.");
+      return;
+    }
+
+    await postAction("/api/igdc/core/link/approve", row);
+
+    row.state = "approved";
     row.group = "approved";
 
     try{
@@ -1208,19 +1476,10 @@
     }catch(e){}
   }
 
-  async function blockLink(row){
-    if(!row) return;
+  async function blockRow(row){
+    await postAction("/api/igdc/core/link/block", row);
 
-    try{
-      await fetch("/api/igdc/core/link/block", {
-        method:"POST",
-        credentials:"same-origin",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify(row)
-      });
-    }catch(e){}
-
-    row.status = "blocked";
+    row.state = "blocked";
     row.group = "blocked";
 
     try{
@@ -1230,39 +1489,73 @@
     }catch(e){}
   }
 
-  function releaseLink(row){
-    if(!row) return;
-    row.status = "candidate";
-    row.group = "candidate";
+  async function syncRow(row){
+    await postAction("/api/igdc/core/link/sync", row);
+
+    row.lastTest = "재동기화 요청";
 
     try{
-      window.dispatchEvent(new CustomEvent("IGDC_CORE_LINK_RELEASED", {
+      window.dispatchEvent(new CustomEvent("IGDC_CORE_LINK_SYNC", {
         detail:{ id:row.id, row:row, ts:Date.now() }
       }));
     }catch(e){}
   }
 
-  async function handleAction(id, action){
-    var rows = getRows();
-    var row = rows.find(function(r){ return r.id === id; });
-    if(!row) return false;
+  function connectInternal(row){
+    var risk = assessRisk(row);
 
-    if(action === "test"){
-      await testLink(row);
-    }else if(action === "approve"){
-      await approveLink(row);
-    }else if(action === "block"){
-      await blockLink(row);
-    }else if(action === "release"){
-      releaseLink(row);
+    if(risk.level === "danger" || risk.level === "blocked"){
+      alert("위험 항목은 내부 연결로 전환할 수 없습니다.");
+      return;
     }
 
-    setRows(rows);
+    row.scope = "internal";
+    row.group = "internal-connected";
+    row.state = "connected";
+    row.lastTest = "관리자 연결";
+  }
+
+  function releaseRow(row){
+    row.state = "candidate";
+    row.group = row.scope === "internal" ? "internal-partial" : "external-candidate";
+    row.lastTest = "해제됨";
+  }
+
+  function reviewRow(row){
+    row.state = "candidate";
+    row.group = row.scope === "internal" ? "internal-partial" : "external-candidate";
+    row.lastTest = "재검토 전환";
+  }
+
+  function holdRow(row){
+    row.state = "planned";
+    row.lastTest = "보류";
+  }
+
+  async function handleAction(id, action){
+    var rows = loadRows();
+    var row = rows.find(function(r){ return r.id === id; });
+
+    if(!row) return false;
+
+    if(action === "test") await testRow(row);
+    else if(action === "sync") await syncRow(row);
+    else if(action === "connect") connectInternal(row);
+    else if(action === "approve") await approveRow(row);
+    else if(action === "block") await blockRow(row);
+    else if(action === "release") releaseRow(row);
+    else if(action === "review") reviewRow(row);
+    else if(action === "hold") holdRow(row);
+    else if(action === "keep-blocked") row.lastTest = "차단 유지";
+
+    saveRows(rows);
+    render(rows);
     return false;
   }
 
   function openGateway(){
     var b = document.getElementById("igdc-core-gateway-backdrop");
+
     if(b){
       b.style.display = "flex";
       b.setAttribute("aria-hidden","false");
@@ -1274,14 +1567,19 @@
 
   function closeGateway(){
     var b = document.getElementById("igdc-core-gateway-backdrop");
+
     if(b){
       b.style.display = "none";
       b.setAttribute("aria-hidden","true");
     }
+
     return false;
   }
 
   function addCandidate(){
+    var scope = prompt("내부 후보면 internal, 외부 후보면 external을 입력하세요.", "external");
+    scope = (s(scope).trim().toLowerCase() === "internal") ? "internal" : "external";
+
     var name = prompt("후보 링크 이름을 입력하세요.");
     if(!name) return false;
 
@@ -1291,18 +1589,30 @@
     var purpose = prompt("연동 목적을 입력하세요.");
     if(!purpose) purpose = "관리자 추가 후보 링크";
 
-    var rows = getRows();
+    var rows = loadRows();
+
     rows.push({
       id:uid(),
-      group:"candidate",
+      scope:scope,
+      group:scope === "internal" ? "internal-partial" : "external-candidate",
       name:name,
       endpoint:endpoint,
       purpose:purpose,
-      status:"candidate",
+      state:"candidate",
       source:"manual"
     });
 
-    setRows(rows);
+    saveRows(rows);
+    render(rows);
+    return false;
+  }
+
+  function resetGateway(){
+    if(!confirm("Core Link 게이트웨이 목록을 기본값으로 초기화할까요?")) return false;
+
+    var rows = initialRows();
+    saveRows(rows);
+    render(rows);
     return false;
   }
 
@@ -1311,9 +1621,11 @@
   window.IGDC_CORE_GATEWAY_CLOSE = closeGateway;
   window.IGDC_CORE_GATEWAY_REFRESH = refreshFromServer;
   window.IGDC_CORE_GATEWAY_ADD_CANDIDATE = addCandidate;
+  window.IGDC_CORE_GATEWAY_RESET = resetGateway;
 
   document.addEventListener("DOMContentLoaded", function(){
     var btn = document.getElementById("igdc-open-core");
+
     if(btn){
       btn.removeAttribute("onclick");
       btn.addEventListener("click", function(ev){
@@ -1325,6 +1637,7 @@
     }
 
     var backdrop = document.getElementById("igdc-core-gateway-backdrop");
+
     if(backdrop){
       backdrop.addEventListener("click", function(ev){
         if(ev.target === backdrop) closeGateway();
@@ -1332,17 +1645,22 @@
     }
 
     var tbody = document.getElementById("igdc-core-gateway-tbody");
+
     if(tbody){
       tbody.addEventListener("click", function(ev){
-        var btn = ev.target && ev.target.closest ? ev.target.closest("button[data-action]") : null;
+        var target = ev.target;
+        var btn = target && target.closest ? target.closest("button[data-action]") : null;
+
         if(!btn) return;
+
         ev.preventDefault();
         ev.stopPropagation();
+
         handleAction(btn.getAttribute("data-id"), btn.getAttribute("data-action"));
       });
     }
 
-    render(getRows());
+    render(loadRows());
   });
 })();
 </script>
