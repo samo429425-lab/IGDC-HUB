@@ -76,6 +76,10 @@ function normalizeSearchType(v){
     knowledge: 'knowledge', know: 'knowledge', encyclopedia: 'knowledge', wiki: 'knowledge',
     tour: 'tour', travel: 'tour', tourism: 'tour', place_tour: 'tour',
     video: 'video', youtube: 'video', media: 'video',
+    audio: 'audio', music: 'audio', podcast: 'audio', voice: 'audio',
+    live: 'live', stream: 'live', broadcast: 'live',
+    xr: 'xr', vr: 'vr', ar: 'ar', hologram: 'hologram', holo: 'hologram',
+    '3d': '3d', three_d: '3d', spatial: 'spatial', volumetric: 'volumetric', metaverse: 'metaverse',
     sns: 'sns', social: 'sns', blog: 'blog', cafe: 'cafe', community: 'cafe',
     shopping: 'shopping', shop: 'shopping', commerce: 'shopping',
     sports: 'sports', sport: 'sports', finance: 'finance', stock: 'finance', market: 'finance',
@@ -677,6 +681,12 @@ function compactResultItem(it){
     imageSet: ownImages,
     mediaQuality: mediaQualityProfileForItem(it, ownImages),
     media: it.media || undefined,
+    mediaPackage: it.mediaPackage || undefined,
+    mediaEngine: it.mediaEngine || undefined,
+    immersive: it.immersive || undefined,
+    rights: it.rights || undefined,
+    risk: it.risk || undefined,
+    ai: it.ai || undefined,
     channel: it.channel || undefined,
     section: it.section || undefined,
     page: it.page || undefined,
@@ -821,6 +831,141 @@ async function callSearchBankEngineInternal(event, params){
     return null;
   }
 }
+
+// ---------- optional media engine hook ----------
+// Keep this hook narrow and lazy. It only runs for explicit media intent.
+// maru-media-engine internally calls maru-media-adapter.
+let MaruMediaEngine = null;
+let MaruMediaEngineLoaded = false;
+
+function getMaruMediaEngine(){
+  if(MaruMediaEngineLoaded) return MaruMediaEngine;
+  MaruMediaEngineLoaded = true;
+  try { MaruMediaEngine = require('./maru-media-engine'); } catch(e) { MaruMediaEngine = null; }
+  return MaruMediaEngine;
+}
+
+const MARU_MEDIA_ENGINE_TYPES = new Set([
+  'video','image','news','sns','audio','live',
+  'xr','vr','ar','hologram','3d','spatial','volumetric','metaverse'
+]);
+
+function normalizeMediaEngineType(v, q){
+  const raw = safeString(v || '').trim().toLowerCase();
+  const alias = {
+    media: 'video',
+    youtube: 'video',
+    img: 'image',
+    images: 'image',
+    photo: 'image',
+    photos: 'image',
+    music: 'audio',
+    podcast: 'audio',
+    stream: 'live',
+    broadcast: 'live',
+    social: 'sns',
+    holo: 'hologram',
+    three_d: '3d'
+  };
+  const t = alias[raw] || raw;
+  if(MARU_MEDIA_ENGINE_TYPES.has(t)) return t;
+
+  const text = safeString(q || '').toLowerCase();
+  if(/홀로그램|hologram|holo/.test(text)) return 'hologram';
+  if(/가상현실|virtual reality|\bvr\b|vr-headset/.test(text)) return 'vr';
+  if(/증강현실|augmented reality|\bar\b|ar-glasses/.test(text)) return 'ar';
+  if(/\bxr\b|mixed reality|webxr|혼합현실/.test(text)) return 'xr';
+  if(/3d|three[-_\s]?d|gltf|glb|usdz|모델링|입체/.test(text)) return '3d';
+  if(/spatial|공간형|공간 미디어|spatial video/.test(text)) return 'spatial';
+  if(/volumetric|볼류메트릭|체적/.test(text)) return 'volumetric';
+  if(/metaverse|메타버스/.test(text)) return 'metaverse';
+  if(/뉴스|news|기사|article|headline/.test(text)) return 'news';
+  if(/sns|social|소셜|인스타|instagram|틱톡|tiktok|트위터|twitter|x\.com/.test(text)) return 'sns';
+  if(/이미지|image|photo|picture|사진/.test(text)) return 'image';
+  if(/오디오|audio|음악|music|podcast|팟캐스트|voice/.test(text)) return 'audio';
+  if(/라이브|live|stream|방송|broadcast/.test(text)) return 'live';
+  if(/영상|비디오|동영상|video|youtube|유튜브|shorts|쇼츠|media|미디어/.test(text)) return 'video';
+
+  return 'video';
+}
+
+function hasMediaEngineIntentText(q){
+  const text = safeString(q || '').toLowerCase();
+  return /영상|비디오|동영상|유튜브|youtube|shorts|쇼츠|뉴스|news|sns|소셜|이미지|image|사진|오디오|audio|라이브|live|가상현실|증강현실|홀로그램|hologram|\bxr\b|\bvr\b|\bar\b|3d|spatial|volumetric|metaverse|메타버스/.test(text);
+}
+
+function mediaEngineRequested(raw){
+  raw = raw || {};
+  return truthy(raw.includeMedia) ||
+    truthy(raw.useMediaEngine) ||
+    truthy(raw.mediaEngine) ||
+    truthy(raw.enableMediaEngine) ||
+    truthy(raw.withMediaPackage);
+}
+
+function mediaEngineBlocked(raw, noMedia){
+  raw = raw || {};
+  return !!noMedia ||
+    truthy(raw.noMediaEngine) ||
+    truthy(raw.disableMediaEngine);
+}
+
+function shouldUseMaruMediaEngine(q, viewType, raw, noMedia){
+  if(mediaEngineBlocked(raw, noMedia)) return false;
+  if(mediaEngineRequested(raw)) return true;
+
+  const requestedType = normalizeMediaEngineType(
+    raw && (raw.mediaType || raw.type || raw.category || raw.tab || raw.vertical),
+    q
+  );
+
+  return MARU_MEDIA_ENGINE_TYPES.has(viewType) ||
+    MARU_MEDIA_ENGINE_TYPES.has(requestedType) ||
+    hasMediaEngineIntentText(q);
+}
+
+async function callMaruMediaEngineInternal(event, params){
+  try{
+    const engine = getMaruMediaEngine();
+    if(!engine) return null;
+
+    const safeParams = Object.assign({}, params || {}, {
+      from: 'maru-search',
+      source: 'maru-search',
+      // recursion guard: media-adapter must not bounce back into maru-search unless explicitly re-enabled there.
+      useMaruSearch: '0',
+      viaMaruSearch: '0',
+      noAnalytics: '1',
+      noRevenue: '1'
+    });
+
+    if(typeof engine.runEngine === 'function'){
+      return await engine.runEngine(event || {}, safeParams);
+    }
+
+    if(typeof engine.handler === 'function'){
+      const res = await engine.handler({
+        httpMethod: 'GET',
+        headers: (event && event.headers) || {},
+        queryStringParameters: safeParams
+      });
+      if(!res) return null;
+      if(typeof res === 'object' && Object.prototype.hasOwnProperty.call(res, 'body')){
+        try { return JSON.parse(res.body || '{}'); } catch(e) { return null; }
+      }
+      return res;
+    }
+
+    if(typeof engine === 'function'){
+      return await engine(event || {}, safeParams);
+    }
+
+    return null;
+  }catch(e){
+    return null;
+  }
+}
+
 
 const Containers = {
   search_bank: {
@@ -1233,7 +1378,7 @@ function addBundle(bundle, fallbackSource, collected, sourceState){
   return items.length;
 }
 
-async function orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType }){
+async function orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType, raw }){
   limit = clampInt(limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
 
   globalThis.__MARU_CACHE = globalThis.__MARU_CACHE || new Map();
@@ -1241,7 +1386,10 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 
   const mode = externalMode || (externalOff ? 'off' : 'auto');
   const viewType = normalizeSearchType(searchType);
-  const cacheKey = [q, limit, start, lang || '', deep ? 'deep' : 'normal', mode, noMedia ? 'no-media' : 'media', viewType].join('::');
+  const rawParams = raw || {};
+  const mediaEngineEnabled = shouldUseMaruMediaEngine(q, viewType, rawParams, noMedia);
+  const mediaEngineType = normalizeMediaEngineType(rawParams.mediaType || rawParams.type || rawParams.category || viewType, q);
+  const cacheKey = [q, limit, start, lang || '', deep ? 'deep' : 'normal', mode, noMedia ? 'no-media' : 'media', viewType, mediaEngineEnabled ? ('media-engine:' + mediaEngineType) : 'media-engine:off'].join('::');
   const cached = globalThis.__MARU_CACHE.get(cacheKey);
   if(cached && Date.now() - cached.t < MARU_GATEWAY_CACHE_TTL_MS) return cached.v;
 
@@ -1621,6 +1769,49 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       }
     }
 
+    async function pullFromMaruMediaEngine(){
+      if(!mediaEngineEnabled){
+        record('maru-media-engine', mediaEngineBlocked(rawParams, noMedia) ? 'blocked' : 'skipped-no-media-intent', 0, { type: mediaEngineType });
+        return 0;
+      }
+      if(timeLeft() <= 1200){
+        record('maru-media-engine', 'skipped-time', 0, { type: mediaEngineType });
+        return 0;
+      }
+
+      const mediaLimit = Math.min(100, Math.max(20, Math.ceil(Math.min(limit, MAX_LIMIT) * 0.15)));
+      const data = await callMaruMediaEngineInternal(event, {
+        q,
+        query: q,
+        limit: mediaLimit,
+        type: mediaEngineType,
+        mediaType: mediaEngineType,
+        lang,
+        region,
+        country: rawParams.country || rawParams.geo || null,
+        external: mode === 'force' ? '1' : 'off',
+        noExternal: mode === 'force' ? '0' : '1',
+        disableExternal: mode === 'force' ? '0' : '1'
+      });
+
+      const root = data && data.data && Array.isArray(data.data.items) ? data.data : data;
+      const items =
+        (root && Array.isArray(root.items) && root.items) ||
+        (root && Array.isArray(root.results) && root.results) ||
+        [];
+
+      if(!items.length){
+        record('maru-media-engine', data ? 'empty' : 'unavailable', 0, { type: mediaEngineType });
+        return 0;
+      }
+
+      const n = addBundle({ source: 'maru-media-engine', results: items }, 'maru-media-engine', collected, sourceState);
+      record('maru-media-engine', n ? 'ok' : 'empty', n, { type: mediaEngineType, mediaPackage: true });
+      return n;
+    }
+
+    await pullFromMaruMediaEngine();
+
     let unique = dedupeCanonicalItems(collected);
     unique = backfillVisuals(unique);
     unique = await applyCorePipeline(q, unique);
@@ -1681,6 +1872,11 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
           youtubeLimit: caps.youtubeLimit
         },
         mediaDisabled: !!noMedia,
+        mediaEngineHook: {
+          enabled: !!mediaEngineEnabled,
+          type: mediaEngineType,
+          routedThrough: mediaEngineEnabled ? 'maru-media-engine' : null
+        },
         deep: !!deep,
         responseBytes: responseSizeHint(finalItems),
         elapsedMs: nowMs() - started
@@ -2631,7 +2827,7 @@ exports.handler = async function(event){
     if(!q){
       return ok({ status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: null, items: [], results: [], meta: { count: 0, limit } });
     }
-    const base = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType });
+    const base = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType, raw });
     // Search must not trigger heavy settlement/distribution by default.
     // Analytics is opt-in for this endpoint; weekly settlement is handled by revenue/commerce engines.
     const analyticsRequested = truthy(raw && (raw.analytics || raw.track || raw.enableAnalytics)) || truthy(process.env.MARU_SEARCH_ANALYTICS);
@@ -2663,6 +2859,13 @@ async function maruSearchDispatcher(req){
     disableExternal: req.disableExternal,
     noMedia: req.noMedia,
     disableMedia: req.disableMedia,
+    includeMedia: req.includeMedia,
+    useMediaEngine: req.useMediaEngine,
+    mediaEngine: req.mediaEngine,
+    enableMediaEngine: req.enableMediaEngine,
+    noMediaEngine: req.noMediaEngine,
+    disableMediaEngine: req.disableMediaEngine,
+    mediaType: req.mediaType,
     type: req.type || req.category || req.tab || req.vertical,
     noAnalytics: req.noAnalytics,
     noRevenue: req.noRevenue
@@ -2685,6 +2888,7 @@ exports.runEngine = async function(event, params){
     externalOff: explicitExternalBlocked(params),
     externalMode: explicitExternalBlocked(params) ? 'off' : (explicitExternalRequested(params) || truthy(params.deep) ? 'force' : 'auto'),
     noMedia: truthy(params.noMedia) || truthy(params.disableMedia),
-    searchType: params.type || params.category || params.tab || params.vertical || 'all'
+    searchType: params.type || params.category || params.tab || params.vertical || 'all',
+    raw: params
   });
 };
