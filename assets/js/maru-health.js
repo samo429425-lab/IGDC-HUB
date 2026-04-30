@@ -23,7 +23,7 @@
 
   if(!global || !document) return;
 
-  var VERSION = "front-slot-revenue-final-v1.0";
+  var VERSION = "front-slot-revenue-final-v1.1-sample-revenue-warn";
   var MODAL_ID = "maru-health-final-slot-modal";
   var STYLE_ID = "maru-health-final-slot-style";
   var TARGET_TEXTS = ["수익", "썸네일", "상품", "맵핑"];
@@ -447,7 +447,15 @@
     }
 
     if(!lines.length){
-      lines.push(lineResult("none", false, !hasProductCommerceSignal(it), "수익 구조 필드 없음", hasProductCommerceSignal(it) ? "error" : "warn"));
+      // Placeholder/sample slots are design placeholders.
+      // Missing revenue/payment fields on placeholders should be WARN, not ERROR.
+      // ERROR is reserved for real product/content items with missing required revenue/payment lines.
+      var hasProduct = hasProductCommerceSignal(it);
+      if (isSample) {
+        lines.push(lineResult("none", false, true, hasProduct ? "샘플 상품 슬롯: 수익 라인 준비중" : "샘플 콘텐츠 슬롯: 수익 라인 준비중", "warn"));
+      } else {
+        lines.push(lineResult("none", false, !hasProduct, "실제 상품/콘텐츠 수익 구조 필드 없음", hasProduct ? "error" : "warn"));
+      }
     }
 
     var severity = "ok";
@@ -833,8 +841,10 @@
     if(!delivery || !delivery.ok) return "warn";
 
     var t = delivery.analysis && delivery.analysis.totals || {};
-    if((t.revenueError || 0) > 0) return "error";
-    if((t.real || 0) === 0 || (delivery.analysis.sampleRate || 0) > 50 || !revenue.ok) return "warn";
+    // ERROR only means actual real content has broken revenue/payment lines.
+    // When all items are sample/placeholder, the expected state is WARN/준비중.
+    if((t.real || 0) > 0 && (t.revenueError || 0) > 0) return "error";
+    if((t.real || 0) === 0 || (delivery.analysis.sampleRate || 0) > 50 || !revenue.ok || (t.revenueWarn || 0) > 0) return "warn";
     return "ok";
   }
 
@@ -1082,7 +1092,7 @@
             '<div class="mhf-note">' +
               '금액은 수익 대시보드에서 확인하고, 여기서는 연결 상태만 봅니다. ' +
               '광고/impression, engagement, referral, linkRevenue, affiliateRevenue, settlementDestination, directSale, blockchainPayment 라인을 검사합니다. ' +
-              '샘플 슬롯의 url=#은 오류가 아니라 WARN 성격으로 분리하고, 실제 콘텐츠에서 결제/링크/정산 필수값이 없으면 ERROR로 봅니다.' +
+              '샘플 슬롯의 url=# 및 수익 라인 미장착은 오류가 아니라 WARN/준비중으로 분리하고, 실제 콘텐츠에서 결제/링크/정산 필수값이 없을 때만 ERROR로 봅니다.' +
             '</div>' +
           '</div>' +
           '<div class="mhf-section">' +
