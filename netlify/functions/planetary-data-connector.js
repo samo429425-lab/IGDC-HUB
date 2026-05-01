@@ -610,6 +610,9 @@ async function connect(event, params = {}){
 let maruBase = null;
 
 try{
+  const suppressMaruBase = [normalized.raw && normalized.raw.noMaruSearch, normalized.raw && normalized.raw.skipMaruSearch, normalized.raw && normalized.raw.noSanmaru, normalized.raw && normalized.raw.skipSanmaru].some(v => ["1","true","yes","on"].includes(String(v == null ? "" : v).toLowerCase())) || String((normalized.raw && (normalized.raw.from || normalized.raw.source)) || "").toLowerCase() === "sanmaru";
+  if(suppressMaruBase){ throw new Error("maru_search_suppressed_by_sanmaru_guard"); }
+
   const MaruSearch = require("./maru-search");
 
   if(MaruSearch && typeof MaruSearch.runEngine === "function"){

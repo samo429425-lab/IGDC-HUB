@@ -479,6 +479,9 @@ async function runCollector(event){
   try{
     const MaruSearch = require("./maru-search");
 
+    const suppressMaruBase = truthy(params.noMaruSearch) || truthy(params.skipMaruSearch) || truthy(params.noSanmaru) || truthy(params.skipSanmaru) || String(params.from || params.source || "").toLowerCase() === "sanmaru";
+    if(suppressMaruBase){ throw new Error("maru_search_suppressed_by_sanmaru_guard"); }
+
     if(MaruSearch && typeof MaruSearch.runEngine === "function"){
       baseResult = await withTimeout(
         MaruSearch.runEngine(event,{

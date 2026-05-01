@@ -158,10 +158,19 @@ async function sanmaru(query,context){
 
  try{
 
-  /*
-  SANMARU meta engine
-  future integration layer
-  */
+  const Sanmaru = require("./sanmaru_engine_v2");
+
+  if(Sanmaru && typeof Sanmaru.runSanmaru === "function"){
+   const res = await Sanmaru.runSanmaru(query, {
+    ...(context || {}),
+    from: "ai-adapters",
+    source: "ai-adapters",
+    noAiSanmaru: true
+   });
+
+   if(res && Array.isArray(res.items)) return res.items;
+   if(res && Array.isArray(res.results)) return res.results;
+  }
 
   return [];
 
