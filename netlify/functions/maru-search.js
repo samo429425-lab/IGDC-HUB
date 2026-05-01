@@ -19,11 +19,11 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.30-search-area-expansion-gateway';
+const VERSION = 'A1.5.31-no-shrink-discovery-gateway';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
-const DEFAULT_SOFT_TIMEOUT_MS = 10500;
+const DEFAULT_SOFT_TIMEOUT_MS = 8200;
 
 // MARU gateway policy:
 // - Internal search-bank first.
@@ -804,6 +804,82 @@ function transportCards(q){
   return cards.map(x => canonicalizeItem(x, q, x.source));
 }
 
+
+function platformDiscoveryCards(q, region, maxCount){
+  if(!q) return [];
+  const enc = encodeURIComponent(q);
+  const cards = [
+    { title: '[Official] ' + q + ' 공식 홈페이지 / 기관', url: 'https://www.google.com/search?q=' + enc + '+official+website', source: 'official_discovery', mediaType: 'article', type: 'web', summary: q + ' 공식 홈페이지·기관·기업 사이트 탐색', score: 0.74 },
+    { title: '[Naver] ' + q + ' 네이버 통합검색', url: 'https://search.naver.com/search.naver?query=' + enc, source: 'naver_discovery', mediaType: 'article', type: 'web', summary: q + ' 네이버 웹·뉴스·블로그·카페 통합 탐색', score: 0.72 },
+    { title: '[Google] ' + q + ' Google Search', url: 'https://www.google.com/search?q=' + enc, source: 'google_discovery', mediaType: 'article', type: 'web', summary: q + ' 구글 웹·뉴스·이미지·동영상 통합 탐색', score: 0.72 },
+    { title: '[YouTube] ' + q + ' 영상 검색', url: 'https://www.youtube.com/results?search_query=' + enc, source: 'youtube_discovery', mediaType: 'video', type: 'video', summary: q + ' 유튜브 영상·쇼츠·채널 탐색', score: 0.71 },
+    { title: '[Wikipedia] ' + q + ' 백과 / 위키', url: 'https://www.google.com/search?q=' + enc + '+site%3Awikipedia.org', source: 'wikipedia_discovery', mediaType: 'article', type: 'knowledge', summary: q + ' 위키백과·백과 정보 탐색', score: 0.68 },
+    { title: '[Instagram] ' + q + ' Instagram', url: 'https://www.google.com/search?q=' + enc + '+site%3Ainstagram.com', source: 'instagram_discovery', mediaType: 'social', type: 'sns', summary: q + ' 인스타그램 공개 페이지 탐색', score: 0.64 },
+    { title: '[Facebook] ' + q + ' Facebook', url: 'https://www.google.com/search?q=' + enc + '+site%3Afacebook.com', source: 'facebook_discovery', mediaType: 'social', type: 'sns', summary: q + ' 페이스북 공개 페이지 탐색', score: 0.63 },
+    { title: '[TikTok] ' + q + ' TikTok', url: 'https://www.google.com/search?q=' + enc + '+site%3Atiktok.com', source: 'tiktok_discovery', mediaType: 'video', type: 'sns', summary: q + ' 틱톡 공개 영상·계정 탐색', score: 0.63 },
+    { title: '[X/Twitter] ' + q + ' X / Twitter', url: 'https://www.google.com/search?q=' + enc + '+site%3Ax.com+OR+site%3Atwitter.com', source: 'x_twitter_discovery', mediaType: 'social', type: 'sns', summary: q + ' X/Twitter 공개 글·계정 탐색', score: 0.62 },
+    { title: '[LinkedIn] ' + q + ' LinkedIn / 기업', url: 'https://www.google.com/search?q=' + enc + '+site%3Alinkedin.com', source: 'linkedin_discovery', mediaType: 'article', type: 'web', summary: q + ' 링크드인 기업·기관·인물 페이지 탐색', score: 0.61 },
+    { title: '[Naver Blog] ' + q + ' 블로그', url: 'https://search.naver.com/search.naver?where=blog&query=' + enc, source: 'naver_blog_discovery', mediaType: 'article', type: 'blog', summary: q + ' 네이버 블로그 후기·자료 탐색', score: 0.66 },
+    { title: '[Naver Cafe] ' + q + ' 카페/커뮤니티', url: 'https://search.naver.com/search.naver?where=article&query=' + enc, source: 'naver_cafe_discovery', mediaType: 'article', type: 'cafe', summary: q + ' 네이버 카페·커뮤니티 글 탐색', score: 0.64 },
+    { title: '[Tour] ' + q + ' 관광 / 여행', url: 'https://www.google.com/search?q=' + enc + '+tourism+travel', source: 'tourism_discovery', mediaType: 'article', type: 'tour', summary: q + ' 관광·여행·명소 자료 탐색', score: 0.67 },
+    { title: '[Map] ' + q + ' 지도', url: 'https://www.google.com/maps/search/' + enc, source: 'map_discovery', mediaType: 'map', type: 'map', summary: q + ' 지도·위치·지역 정보 탐색', score: 0.66 },
+    { title: '[Company] ' + q + ' 기업 / 서비스 / 홈페이지', url: 'https://www.google.com/search?q=' + enc + '+company+homepage+service', source: 'corporate_homepage_discovery', mediaType: 'article', type: 'web', summary: q + ' 기업·브랜드·서비스 홈페이지 탐색', score: 0.65 }
+  ];
+  return cards.slice(0, Math.max(0, maxCount || cards.length)).map(x => canonicalizeItem(x, q, x.source));
+}
+
+function discoveryQueryVariants(q, searchType, region){
+  const base = safeString(q).trim();
+  if(!base) return [];
+  const profile = queryScriptProfile(base);
+  const t = normalizeSearchType(searchType);
+  const ko = [
+    base,
+    base + ' 공식 홈페이지',
+    base + ' 관광 여행',
+    base + ' 지도 위치',
+    base + ' 뉴스',
+    base + ' 블로그 후기',
+    base + ' 카페 커뮤니티',
+    base + ' 유튜브 영상',
+    base + ' 인스타그램',
+    base + ' 페이스북',
+    base + ' 틱톡',
+    base + ' 기업 회사 서비스',
+    base + ' 위키백과 백과',
+    'site:youtube.com ' + base,
+    'site:instagram.com ' + base,
+    'site:facebook.com ' + base,
+    'site:tiktok.com ' + base,
+    'site:linkedin.com ' + base,
+    'site:wikipedia.org ' + base
+  ];
+  const en = [
+    base,
+    base + ' official website',
+    base + ' tourism travel',
+    base + ' map location',
+    base + ' news',
+    base + ' blog review',
+    base + ' community forum',
+    base + ' youtube video',
+    base + ' instagram',
+    base + ' facebook',
+    base + ' tiktok',
+    base + ' company homepage service',
+    base + ' wikipedia encyclopedia',
+    'site:youtube.com ' + base,
+    'site:instagram.com ' + base,
+    'site:facebook.com ' + base,
+    'site:tiktok.com ' + base,
+    'site:linkedin.com ' + base,
+    'site:wikipedia.org ' + base
+  ];
+  let variants = profile === 'ko' ? ko : en;
+  if(t !== 'all') variants = variants.concat(expandedSearchQueries(base, t));
+  return uniqueCompactStrings(variants, 24);
+}
+
 let SearchBankEngine = null;
 let SearchBankEngineLoaded = false;
 
@@ -1185,26 +1261,31 @@ function expandedSearchQueries(q, searchType){
   if(!base) return [];
   const t = normalizeSearchType(searchType);
   const profile = queryScriptProfile(base);
-
-  // all 검색은 속도 유지를 위해 확장하지 않고,
-  // 선택 탭에서만 전 세계/다국어 맥락 확장을 연다.
-  if(t === 'all') return [base];
-
-  const terms = semanticExpansionTerms(t, profile);
   const variants = [base];
+
+  const allModeTermsKo = [
+    '공식 홈페이지','정부 기관','관광','여행','지도','뉴스','블로그','카페','커뮤니티',
+    '유튜브','영상','SNS','인스타그램','페이스북','틱톡','X 트위터','기업','회사','서비스','위키백과'
+  ];
+  const allModeTermsEn = [
+    'official website','government','tourism','travel','map','news','blog','community',
+    'youtube','video','social media','instagram','facebook','tiktok','x twitter','company','homepage','wikipedia'
+  ];
+
+  const terms = t === 'all'
+    ? (profile === 'ko' ? allModeTermsKo : allModeTermsEn)
+    : semanticExpansionTerms(t, profile);
 
   for(const term of terms){
     const tt = safeString(term).trim();
     if(!tt) continue;
     const lowBase = base.toLowerCase();
     const lowTerm = tt.toLowerCase();
-
-    // 같은 단어 반복 방지: "맛집 맛집", "webtoon webtoon" 같은 확장 제거
     if(lowBase === lowTerm || lowBase.includes(lowTerm)) continue;
     variants.push(base + ' ' + tt);
   }
 
-  return uniqueCompactStrings(variants, 12);
+  return uniqueCompactStrings(variants, t === 'all' ? 22 : 12);
 }
 
 function itemLooseText(it){
@@ -1231,23 +1312,25 @@ function sourceCaps(opts){
   const mode = normalizeExpansionMode({ expansion: opts.expansionMode });
   const wide = deep || isWideExpansionMode(mode) || (Number(opts.candidatePool || 0) > MIN_RESULT_TARGET);
   return {
-    searchBankPages: deep ? MAX_SEARCH_BANK_PAGES_DEEP : (wide ? Math.max(MAX_SEARCH_BANK_PAGES_NORMAL, 22) : MAX_SEARCH_BANK_PAGES_NORMAL),
+    searchBankPages: deep ? MAX_SEARCH_BANK_PAGES_DEEP : (wide ? Math.max(MAX_SEARCH_BANK_PAGES_NORMAL, 24) : MAX_SEARCH_BANK_PAGES_NORMAL),
     // External APIs are controlled by maru-search gateway only; no recursive / unbounded loops.
     // Wide mode expands the search area while keeping a single controlled gateway pass.
     naverPages: deep ? 10 : (wide ? 8 : 5),
-    naverBlogPages: deep ? 4 : (wide ? 2 : 1),
-    naverNewsPages: deep ? 4 : (wide ? 3 : 2),
-    naverCafePages: deep ? 3 : (wide ? 2 : 1),
-    naverEncycPages: deep ? 2 : 1,
-    naverKinPages: deep ? 2 : 1,
+    naverBlogPages: deep ? 5 : (wide ? 3 : 2),
+    naverNewsPages: deep ? 5 : (wide ? 3 : 2),
+    naverCafePages: deep ? 4 : (wide ? 3 : 2),
+    naverEncycPages: deep ? 3 : (wide ? 2 : 1),
+    naverKinPages: deep ? 3 : (wide ? 2 : 1),
     naverBookPages: deep ? 3 : (wide ? 2 : 1),
-    naverLocalPages: wide ? 2 : 1,
-    googlePages: deep ? 5 : (wide ? 3 : 2),
-    bingPages: deep ? 4 : (wide ? 2 : 1),
-    imagePages: deep ? 4 : (wide ? 2 : 1),
-    naverImagePages: deep ? 5 : (wide ? 3 : 2),
-    youtubeLimit: deep ? 50 : (wide ? 40 : 20),
-    timeoutMs: deep ? 14000 : (wide ? 12000 : DEFAULT_SOFT_TIMEOUT_MS)
+    naverLocalPages: wide ? 3 : 1,
+    googlePages: deep ? 7 : (wide ? 5 : 3),
+    bingPages: deep ? 6 : (wide ? 4 : 2),
+    imagePages: deep ? 5 : (wide ? 3 : 2),
+    naverImagePages: deep ? 6 : (wide ? 4 : 2),
+    youtubeLimit: deep ? 50 : (wide ? 50 : 35),
+    discoveryTasks: deep ? 54 : (wide ? 42 : 30),
+    discoveryLinkCards: deep ? 24 : (wide ? 20 : 14),
+    timeoutMs: deep ? 10500 : (wide ? 9000 : DEFAULT_SOFT_TIMEOUT_MS)
   };
 }
 
@@ -1353,29 +1436,28 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 
     async function pullFromGoogle(){
       let count = 0;
+      const starts = [];
       let pageStart = start || 1;
-      for(let i=0; i<caps.googlePages && pageStart <= 91 && timeLeft() > 1500; i++){
-        const g = await Containers.web_google.fetch(q, 10, pageStart).catch(() => null);
-        const n = addBundle(g, 'google', collected, sourceState);
-        count += n;
-        if(!g || !g.results || g.results.length < 10) break;
-        pageStart += 10;
+      for(let i=0; i<caps.googlePages && pageStart <= 91; i++){ starts.push(pageStart); pageStart += 10; }
+      const settled = await Promise.allSettled(starts.map(st => Containers.web_google.fetch(q, 10, st).catch(() => null)));
+      for(const r of settled){
+        const g = r && r.status === 'fulfilled' ? r.value : null;
+        count += addBundle(g, 'google', collected, sourceState);
       }
-      record('google', count ? 'ok' : 'empty', count);
+      record('google', count ? 'ok' : 'empty', count, { pagesTried: starts.length, mode: 'controlled-parallel' });
       return count;
     }
 
     async function pullFromBing(){
       let count = 0;
-      let offset = 0;
-      for(let i=0; i<caps.bingPages && offset <= 450 && timeLeft() > 1200; i++){
-        const b = await Containers.web_bing.fetch(q, 50, offset).catch(() => null);
-        const n = addBundle(b, 'bing', collected, sourceState);
-        count += n;
-        if(!b || !b.results || b.results.length < 50) break;
-        offset += 50;
+      const offsets = [];
+      for(let i=0, offset=0; i<caps.bingPages && offset <= 450; i++, offset += 50) offsets.push(offset);
+      const settled = await Promise.allSettled(offsets.map(offset => Containers.web_bing.fetch(q, 50, offset).catch(() => null)));
+      for(const r of settled){
+        const b = r && r.status === 'fulfilled' ? r.value : null;
+        count += addBundle(b, 'bing', collected, sourceState);
       }
-      record('bing', count ? 'ok' : 'empty', count);
+      record('bing', count ? 'ok' : 'empty', count, { pagesTried: offsets.length, mode: 'controlled-parallel' });
       return count;
     }
 
@@ -1409,18 +1491,18 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       }
       record('naver_image', naverCount ? 'ok' : 'empty', naverCount);
 
-      // Google image: global thumbnail pool. Small probe in normal mode.
+      // Google image: global thumbnail pool. Controlled parallel probe.
       let googleCount = 0;
-      let pageStart = 1;
-      for(let i=0; i<caps.imagePages && pageStart <= 91 && timeLeft() > 1200; i++){
-        const img = await Containers.web_image.fetch(q, 10, pageStart).catch(() => null);
+      const gStarts = [];
+      for(let i=0, pageStart=1; i<caps.imagePages && pageStart <= 91; i++, pageStart += 10) gStarts.push(pageStart);
+      const gSettled = await Promise.allSettled(gStarts.map(st => Containers.web_image.fetch(q, 10, st).catch(() => null)));
+      for(const r of gSettled){
+        const img = r && r.status === 'fulfilled' ? r.value : null;
         const n = addBundle(img, 'google_image', collected, sourceState);
         googleCount += n;
         total += n;
-        if(!img || !img.results || img.results.length < 10) break;
-        pageStart += 10;
       }
-      record('google_image', googleCount ? 'ok' : 'empty', googleCount);
+      record('google_image', googleCount ? 'ok' : 'empty', googleCount, { pagesTried: gStarts.length, mode: 'controlled-parallel' });
 
       return total;
     }
@@ -1603,6 +1685,54 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       return total;
     }
 
+
+    async function pullFromDiscoverySurfaces(){
+      const variants = discoveryQueryVariants(q, viewType, region);
+      if(!variants.length || timeLeft() <= 1100){
+        record('open-discovery-surfaces', 'skipped-no-budget', 0, { variants: variants.length });
+        return 0;
+      }
+
+      let total = 0;
+      const specs = [
+        ['discovery_google', Containers.web_google, 10],
+        ['discovery_bing', Containers.web_bing, 20],
+        ['discovery_naver_web', Containers.web_naver, 30],
+        ['discovery_naver_blog', Containers.web_naver_blog, 30],
+        ['discovery_naver_cafe', Containers.web_naver_cafe, 30],
+        ['discovery_naver_news', Containers.web_naver_news, 30],
+        ['discovery_youtube', Containers.web_youtube, 12]
+      ];
+      const tasks = [];
+      const maxTasks = Math.max(8, Math.min(caps.discoveryTasks || 24, specs.length * variants.length));
+
+      async function one(name, container, queryText, display){
+        if(!container || typeof container.fetch !== 'function') return 0;
+        try{
+          const bundle = await container.fetch(queryText, display, 1);
+          return addBundle(bundle, name, collected, sourceState);
+        }catch(e){ return 0; }
+      }
+
+      for(const queryText of variants){
+        for(const spec of specs){
+          if(tasks.length >= maxTasks) break;
+          tasks.push(one(spec[0], spec[1], queryText, spec[2]));
+        }
+        if(tasks.length >= maxTasks) break;
+      }
+
+      const settled = await Promise.allSettled(tasks);
+      for(const r of settled){ if(r && r.status === 'fulfilled') total += Number(r.value || 0); }
+      record('open-discovery-surfaces', total ? 'ok' : 'empty', total, {
+        mode: 'official-social-corporate-media-open-web',
+        queries: variants.slice(0, 12),
+        tasks: tasks.length,
+        principle: 'authorized-open-search-apis-and-platform-discovery-not-random-crawling'
+      });
+      return total;
+    }
+
     const internalCount = await pullFromSearchBank();
     const shouldUseExternal = !externalOff;
 
@@ -1628,7 +1758,17 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         await pullFromIntentExpansion();
       }
 
-      record('search-link-cards', 'skipped-natural-flow', 0);
+      if(timeLeft() > 1200){
+        await pullFromDiscoverySurfaces();
+      }else{
+        record('open-discovery-surfaces', 'skipped-time-budget', 0);
+      }
+
+      const discoveryCards = platformDiscoveryCards(q, region, caps.discoveryLinkCards || 14);
+      if(discoveryCards.length){
+        collected.push.apply(collected, discoveryCards);
+        record('platform-discovery-cards', 'ok', discoveryCards.length, { mode: 'authorized-public-platform-entry-points' });
+      }
     }else{
       record('external-gateway', externalOff ? 'blocked-by-request' : 'skipped-internal-enough', 0, { internalCount, trigger: externalTriggerMin, mode });
     }
@@ -2644,7 +2784,10 @@ function mediaEngineExplicitBlocked(raw, noMedia){
 
 function shouldAttachMediaEngine(raw, noMedia){
   if(mediaEngineExplicitBlocked(raw, noMedia)) return false;
-  return mediaEngineExplicitRequested(raw);
+  // Media/SNS/video must be part of the normal search spectrum, not explicit-only.
+  // Explicit flags still work, but general search now receives a small controlled media pulse.
+  if(mediaEngineExplicitRequested(raw)) return true;
+  return !truthy(raw && raw.noAutoMediaEngine) && !truthy(process.env.MARU_MEDIA_ENGINE_AUTO_DISABLE);
 }
 
 function mediaEngineQueryType(searchType, raw){
@@ -2681,7 +2824,7 @@ async function attachMediaEngineResults(base, event, ctx){
 
   const hookMeta = {
     enabled: false,
-    mode: 'explicit_opt_in_only',
+    mode: 'auto-controlled-media-pulse',
     routedThrough: null,
     status: 'skipped',
     count: 0
@@ -2722,9 +2865,9 @@ async function attachMediaEngineResults(base, event, ctx){
       viaMaruSearch: '0',
       noRevenue: '1',
       noAnalytics: '1',
-      external: truthy(raw.mediaExternal) || truthy(raw.mediaEngineExternal) ? '1' : 'off',
-      noExternal: truthy(raw.mediaExternal) || truthy(raw.mediaEngineExternal) ? undefined : '1',
-      disableExternal: truthy(raw.mediaExternal) || truthy(raw.mediaEngineExternal) ? undefined : '1'
+      external: (truthy(raw.mediaExternal) || truthy(raw.mediaEngineExternal) || truthy(raw.live) || truthy(raw.useExternal) || isWideExpansionMode(normalizeExpansionMode(raw))) ? '1' : 'off',
+      noExternal: (truthy(raw.mediaExternal) || truthy(raw.mediaEngineExternal) || truthy(raw.live) || truthy(raw.useExternal) || isWideExpansionMode(normalizeExpansionMode(raw))) ? undefined : '1',
+      disableExternal: (truthy(raw.mediaExternal) || truthy(raw.mediaEngineExternal) || truthy(raw.live) || truthy(raw.useExternal) || isWideExpansionMode(normalizeExpansionMode(raw))) ? undefined : '1'
     };
 
     const res = await engine.runEngine({}, payload);
@@ -2740,7 +2883,7 @@ async function attachMediaEngineResults(base, event, ctx){
       name: 'maru-media-engine',
       status: converted.length ? 'ok' : 'empty',
       count: converted.length,
-      mode: 'explicit_opt_in_only'
+      mode: 'auto-controlled-media-pulse'
     });
 
     hookMeta.enabled = true;
@@ -2849,6 +2992,11 @@ async function callSanmaruGlobalLibrary(event, picked){
       noMedia: picked.noMedia ? '1' : '0',
       noAnalytics: '1',
       noRevenue: '1',
+      // Maru Search itself is already running the wide platform gateway in this request.
+      // Prevent Sanmaru from recursively calling Maru Search again and slowing the response.
+      skipMaruSearch: '1',
+      noMaruSearch: '1',
+      disableMaruSearch: '1',
       from: 'maru-search-platform-road'
     });
 
@@ -2865,6 +3013,44 @@ async function callSanmaruGlobalLibrary(event, picked){
   }
 }
 
+
+
+function localTimeout(promise, ms, fallback){
+  let timer;
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise(resolve => { timer = setTimeout(() => resolve(fallback), Math.max(300, ms || 1000)); })
+  ]).finally(() => clearTimeout(timer));
+}
+
+function mergeSearchBases(legacyBase, sanmaruGateway, picked){
+  const legacyItems = Array.isArray(legacyBase && legacyBase.items) ? legacyBase.items : [];
+  const sanmaruItems = Array.isArray(sanmaruGateway && sanmaruGateway.items) ? sanmaruGateway.items : [];
+  const target = Math.min(MAX_LIMIT, Math.max(picked && picked.limit || DEFAULT_LIMIT, picked && picked.candidatePool || 0, MIN_RESULT_TARGET));
+  const merged = dedupeCanonicalItems([].concat(legacyItems, sanmaruItems)).slice(0, target);
+  const legacyMeta = (legacyBase && legacyBase.meta) || {};
+  const sanmaruMeta = (sanmaruGateway && sanmaruGateway.result && sanmaruGateway.result.meta) || {};
+  return {
+    source: legacyBase && legacyBase.source ? legacyBase.source : (sanmaruItems.length ? 'sanmaru' : null),
+    route: legacyBase && legacyBase.route ? legacyBase.route : 'maru-search-no-shrink-merge',
+    sourceRoute: legacyBase && (legacyBase.sourceRoute || legacyBase.route) ? (legacyBase.sourceRoute || legacyBase.route) : 'maru-search-no-shrink-merge',
+    region: legacyBase && legacyBase.region ? legacyBase.region : (sanmaruMeta.region || null),
+    items: merged,
+    results: merged,
+    meta: Object.assign({}, legacyMeta, {
+      sanmaruGatewayUsed: !!(sanmaruGateway && sanmaruGateway.ok),
+      sanmaruGatewayMode: 'augment-not-replace',
+      gatewayMode: 'maru-search-wide-plus-sanmaru-augmentation',
+      legacyWideSearchPreserved: true,
+      legacyCountBeforeSanmaru: legacyItems.length,
+      sanmaruAugmentCount: sanmaruItems.length,
+      mergedCountAfterSanmaru: merged.length,
+      sanmaruElapsedMs: sanmaruGateway ? sanmaruGateway.elapsedMs : null,
+      sanmaruStatus: sanmaruGateway ? sanmaruGateway.reason : 'not-called',
+      sanmaruMeta: sanmaruMeta && sanmaruMeta.engine ? { engine: sanmaruMeta.engine, version: sanmaruMeta.version, traceCount: Array.isArray(sanmaruMeta.trace) ? sanmaruMeta.trace.length : undefined } : undefined
+    })
+  };
+}
 
 exports.handler = async function(event){
   try{
@@ -2907,32 +3093,15 @@ exports.handler = async function(event){
     let base = null;
     let sanmaruGateway = null;
 
-    if(!sanmaruBypassRequested(raw)){
-      sanmaruGateway = await callSanmaruGlobalLibrary(event, picked);
-    }
+    const legacyPromise = runLegacySearch(event, { q, limit, candidatePool, expansion: expansionMode, searchExpansion: expansionMode, page, perPage, start, lang, deep, external: externalMode, noExternal: externalOff ? '1' : '0', noMedia: noMedia ? '1' : '0', type: searchType });
+    const sanmaruPromise = !sanmaruBypassRequested(raw)
+      ? localTimeout(callSanmaruGlobalLibrary(event, picked), deep ? 4200 : 2800, { ok:false, reason:'sanmaru-soft-timeout', elapsedMs: deep ? 4200 : 2800, items: [] })
+      : Promise.resolve({ ok:false, reason:'bypassed-by-request', elapsedMs: 0, items: [] });
 
-    if(sanmaruGateway && sanmaruGateway.ok && Array.isArray(sanmaruGateway.items) && sanmaruGateway.items.length){
-      base = {
-        source: 'sanmaru',
-        route: 'sanmaru-global-library',
-        sourceRoute: 'sanmaru-global-library',
-        region: sanmaruGateway.result && sanmaruGateway.result.meta ? sanmaruGateway.result.meta.region : null,
-        items: sanmaruGateway.items,
-        meta: Object.assign({}, (sanmaruGateway.result && sanmaruGateway.result.meta) || {}, {
-          maruSearchRole: 'platform-information-road',
-          sanmaruGatewayUsed: true,
-          gatewayMode: 'maru-search-road-to-sanmaru-global-library',
-          sanmaruElapsedMs: sanmaruGateway.elapsedMs
-        })
-      };
-    }else{
-      base = await runLegacySearch(event, { q, limit, candidatePool, expansion: expansionMode, searchExpansion: expansionMode, page, perPage, start, lang, deep, external: externalMode, noExternal: externalOff ? '1' : '0', noMedia: noMedia ? '1' : '0', type: searchType });
-      base.meta = Object.assign({}, base.meta || {}, {
-        sanmaruGatewayUsed: false,
-        sanmaruFallbackReason: sanmaruGateway ? sanmaruGateway.reason : (sanmaruBypassRequested(raw) ? 'bypassed-by-request' : 'not-called'),
-        gatewayMode: 'legacy-maru-search-fallback'
-      });
-    }
+    const settledBase = await Promise.allSettled([legacyPromise, sanmaruPromise]);
+    const legacyBase = settledBase[0] && settledBase[0].status === 'fulfilled' ? settledBase[0].value : { items: [], results: [], meta: { legacyError: 'legacy-search-failed' } };
+    sanmaruGateway = settledBase[1] && settledBase[1].status === 'fulfilled' ? settledBase[1].value : { ok:false, reason:'sanmaru-promise-failed', elapsedMs: null, items: [] };
+    base = mergeSearchBases(legacyBase, sanmaruGateway, picked);
 
     base = await attachMediaEngineResults(base, event, { q, limit, start, lang, searchType, raw, noMedia });
     // Search must not trigger heavy settlement/distribution by default.
@@ -2981,7 +3150,12 @@ async function maruSearchDispatcher(req){
     mediaExternal: req.mediaExternal,
     mediaEngineExternal: req.mediaEngineExternal,
     includeImmersive: req.includeImmersive,
-    useImmersiveMedia: req.useImmersiveMedia
+    useImmersiveMedia: req.useImmersiveMedia,
+    candidatePool: req.candidatePool || req.candidatePoolTarget || req.pool,
+    searchExpansion: req.searchExpansion || req.expansion || req.scope,
+    expansion: req.expansion || req.searchExpansion || req.scope,
+    page: req.page,
+    perPage: req.perPage
   }, headers: req.headers || {} });
   try { return JSON.parse(res.body || '{}'); }
   catch(e){ return { status: 'fail', message: 'BAD_JSON' }; }

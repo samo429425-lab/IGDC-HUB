@@ -22,20 +22,23 @@
 
 const crypto = require("crypto");
 
-const VERSION = "sanmaru-engine-v2.1.0-secure-head-core";
+const VERSION = "sanmaru-engine-v2.3.1-no-shrink-discovery-aware";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 1000;
-const MAX_LIMIT = 5000;
-const DEFAULT_TIMEOUT_MS = 8500;
-const DEEP_TIMEOUT_MS = 12000;
+const MAX_LIMIT = 10000;
+const DEFAULT_TIMEOUT_MS = 10500;
+const DEEP_TIMEOUT_MS = 15000;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const INFLIGHT_TTL_MS = 30 * 1000;
 const RATE_WINDOW_MS = 10 * 1000;
 const RATE_MAX = 60;
 const MAX_QUERY_LENGTH = 240;
-const MIN_FAST_TARGET = 80;
-const DEFAULT_EXTERNAL_TRIGGER_MIN = 80;
+const MIN_FAST_TARGET = 1000;
+const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
+const DEFAULT_CANDIDATE_POOL_TARGET = 3000;
+const MAX_INDEX_FAST_LIMIT = 2000;
+const MAX_SEARCH_BANK_FAST_LIMIT = 2000;
 
 const globalState = globalThis.__SANMARU_V2_STATE || (globalThis.__SANMARU_V2_STATE = {
   cache: new Map(),
@@ -45,6 +48,114 @@ const globalState = globalThis.__SANMARU_V2_STATE || (globalThis.__SANMARU_V2_ST
   memory: new Map(),
   telemetry: []
 });
+
+
+const MOUNT_REGISTRY = {
+  "searchbank-index": {
+    type: "fast-memory",
+    permission: "owned",
+    role: "Sanmaru fast reusable index layer",
+    enabled: true
+  },
+  "searchbank": {
+    type: "operational-memory",
+    permission: "owned",
+    role: "Sanmaru operating memory / snapshot source",
+    enabled: true
+  },
+  "maru-search-wide-gateway": {
+    type: "platform-information-road",
+    permission: "owned",
+    role: "Maru Search broad gateway mount; preserves the platform body and existing wide search spectrum",
+    enabled: true
+  },
+  "collector": {
+    type: "owned-collector",
+    permission: "owned",
+    role: "Internal collector ridge under Sanmaru",
+    enabled: true
+  },
+  "planetary": {
+    type: "federation",
+    permission: "owned-or-registered",
+    role: "Planetary federation ridge under Sanmaru",
+    enabled: true
+  },
+  "naver": {
+    type: "external-search",
+    permission: "api-key-required",
+    role: "Reserved/active Naver mount; normally routed through Maru Search wide gateway to avoid duplicate API bursts",
+    enabled: !!(process.env.NAVER_API_KEY && process.env.NAVER_CLIENT_SECRET)
+  },
+  "google": {
+    type: "external-search",
+    permission: "api-key-required",
+    role: "Reserved/active Google CSE mount; normally routed through Maru Search wide gateway to avoid duplicate API bursts",
+    enabled: !!(process.env.GOOGLE_API_KEY && process.env.GOOGLE_CSE_ID)
+  },
+  "bing": {
+    type: "external-search",
+    permission: "api-key-required",
+    role: "Reserved/active Bing mount; normally routed through Maru Search wide gateway to avoid duplicate API bursts",
+    enabled: !!process.env.BING_API_KEY
+  },
+  "youtube": {
+    type: "media-search",
+    permission: "api-key-required",
+    role: "Reserved/active YouTube media mount; normally routed through Maru Search wide gateway to avoid duplicate API bursts",
+    enabled: !!process.env.YOUTUBE_API_KEY
+  },
+  "ai-gpu": {
+    type: "analysis-provider",
+    permission: "provider-key-or-local-runtime-required",
+    role: "AI/GPU classification, dedupe, summarization and promotion decision layer",
+    enabled: !!(process.env.OPENAI_API_KEY || process.env.AI_PROVIDER_KEY || process.env.SANMARU_AI_GPU_ENABLED)
+  },
+  "official-web": {
+    type: "open-web-discovery",
+    permission: "public-search-or-api-required",
+    role: "Official homepage, government, institution and authority discovery through Maru Search controlled gateway",
+    enabled: true
+  },
+  "social-public-web": {
+    type: "public-social-discovery",
+    permission: "public-search-or-platform-api-required",
+    role: "Public YouTube/Instagram/Facebook/TikTok/X/LinkedIn discovery without private scraping",
+    enabled: true
+  },
+  "corporate-homepage": {
+    type: "enterprise-public-web-discovery",
+    permission: "public-search-or-contract-api-required",
+    role: "Company, brand, service homepage and public business profile discovery",
+    enabled: true
+  },
+  "blog-community": {
+    type: "blog-community-discovery",
+    permission: "public-search-or-api-required",
+    role: "Public blog, cafe, forum and community discovery through authorized search channels",
+    enabled: true
+  },
+  "future-authorized-db": {
+    type: "reserved-mount-slot",
+    permission: "contract-or-public-permission-required",
+    role: "Disabled slot for future lawful/authorized DB, server, API or platform channels",
+    enabled: false
+  }
+};
+
+function mountRegistrySnapshot(){
+  const out = {};
+  for(const [name, meta] of Object.entries(MOUNT_REGISTRY)){
+    out[name] = {
+      type: meta.type,
+      permission: meta.permission,
+      role: meta.role,
+      enabled: !!meta.enabled,
+      status: meta.enabled ? "active-or-ready" : "reserved-or-key-missing"
+    };
+  }
+  return out;
+}
 
 function s(v){ return String(v == null ? "" : v); }
 function low(v){ return s(v).trim().toLowerCase(); }
@@ -389,6 +500,35 @@ function finalRank(query, items, ctx){
   return ranked;
 }
 
+function countFacet(items, picker, max){
+  const map = Object.create(null);
+  for(const it of Array.isArray(items) ? items : []){
+    const key = s(picker(it) || "unknown").trim() || "unknown";
+    map[key] = (map[key] || 0) + 1;
+  }
+  return Object.entries(map)
+    .sort((a,b) => b[1] - a[1])
+    .slice(0, max || 30)
+    .map(([name,count]) => ({ name, count }));
+}
+
+function sourceDiversity(items){
+  return countFacet(items, it => firstNonEmpty(it && it.source, it && it.provider, "unknown"), 40);
+}
+
+function categoryDiversity(items){
+  return countFacet(items, it => firstNonEmpty(it && it.searchCategory, it && it.type, it && it.category, categoryOfItem(it)), 30);
+}
+
+function searchAreaExpansionMode(ctx){
+  const raw = ctx.raw || {};
+  const mode = low(firstNonEmpty(ctx.expansion, ctx.searchExpansion, raw.expansion, raw.searchExpansion, raw.searchArea, raw.area, raw.scope));
+  if(["wide","global","library","full","max","world"].includes(mode)) return mode;
+  if(ctx.deep) return "deep";
+  if((ctx.candidatePoolTarget || 0) > (ctx.limit || 0)) return "wide";
+  return "balanced";
+}
+
 function withTimeout(promise, ms){
   let timer;
   return Promise.race([
@@ -460,7 +600,7 @@ async function callSearchBankIndex(ctx){
       action: "query",
       q: ctx.q,
       query: ctx.q,
-      limit: Math.min(ctx.limit, 300),
+      limit: Math.min(ctx.candidatePoolTarget || ctx.limit || DEFAULT_LIMIT, MAX_INDEX_FAST_LIMIT),
       type: ctx.searchType === "all" ? "" : ctx.searchType,
       lang: ctx.lang,
       from: "sanmaru",
@@ -468,10 +608,10 @@ async function callSearchBankIndex(ctx){
       skipSanmaru: "1"
     };
     let res = null;
-    if(typeof mod.runEngine === "function") res = await withTimeout(mod.runEngine(ctx.event || {}, params), 900);
-    else if(typeof mod.query === "function") res = await withTimeout(mod.query(ctx.q, params), 900);
+    if(typeof mod.runEngine === "function") res = await withTimeout(mod.runEngine(ctx.event || {}, params), ctx.deep ? 1800 : 1300);
+    else if(typeof mod.query === "function") res = await withTimeout(mod.query(ctx.q, params), ctx.deep ? 1800 : 1300);
     else if(typeof mod.handler === "function"){
-      const h = await withTimeout(mod.handler({ httpMethod:"GET", headers:(ctx.event && ctx.event.headers) || {}, queryStringParameters: params }), 900);
+      const h = await withTimeout(mod.handler({ httpMethod:"GET", headers:(ctx.event && ctx.event.headers) || {}, queryStringParameters: params }), ctx.deep ? 1800 : 1300);
       res = h && typeof h.body === "string" ? JSON.parse(h.body || "{}") : h;
     }
     const items = normalizeItemsFromResponse(res).map(x => canonicalItem(x, ctx.q, "search-bank-index"));
@@ -490,7 +630,7 @@ async function callSearchBank(ctx){
     const params = {
       q: ctx.q,
       query: ctx.q,
-      limit: Math.min(ctx.limit, 500),
+      limit: Math.min(ctx.candidatePoolTarget || ctx.limit || DEFAULT_LIMIT, MAX_SEARCH_BANK_FAST_LIMIT),
       type: ctx.searchType === "all" ? "" : ctx.searchType,
       lang: ctx.lang,
       from: "sanmaru",
@@ -619,8 +759,10 @@ async function youtube(ctx){
 async function callOptionalModuleAdapter(ctx, name, modulePath, runParams, timeoutMs){
   const started = nowMs();
   try{
-    if(!truthy(ctx.raw && (ctx.raw["use" + name] || ctx.raw[name] || ctx.raw["enable" + name])) && !truthy(process.env["SANMARU_ENABLE_" + name.toUpperCase()])){
-      return { trace: adapterResult(name, "disabled", started, []), items: [] };
+    const raw = ctx.raw || {};
+    const disabledByRequest = truthy(raw["skip" + name]) || truthy(raw["disable" + name]) || truthy(raw["no" + name]);
+    if(disabledByRequest){
+      return { trace: adapterResult(name, "disabled-by-request", started, []), items: [] };
     }
     let mod = null;
     try{ mod = require(modulePath); }catch(e){ mod = null; }
@@ -653,80 +795,18 @@ async function callOptionalModuleAdapter(ctx, name, modulePath, runParams, timeo
   }
 }
 
-
-function legacyMaruSearchEnabled(ctx, currentItems){
-  const raw = (ctx && ctx.raw) || {};
-  if(truthy(raw.noLegacyMaru || raw.disableLegacyMaru || raw.skipLegacyMaru)) return false;
-  if(truthy(process.env.SANMARU_DISABLE_LEGACY_MARU)) return false;
-  if(truthy(raw.useLegacyMaru || raw.legacyMaru || raw.forceLegacyMaru)) return true;
-  if(truthy(process.env.SANMARU_ENABLE_LEGACY_MARU)) return true;
-  const currentCount = dedupeItems(Array.isArray(currentItems) ? currentItems : []).length;
-  return ctx.externalAllowed && currentCount < Math.min(ctx.limit, MIN_FAST_TARGET);
-}
-
-async function callLegacyMaruSearch(ctx, currentItems){
-  const started = nowMs();
-  try{
-    if(!legacyMaruSearchEnabled(ctx, currentItems)){
-      return { trace: adapterResult("legacy-maru-search", "skipped", started, []), items: [] };
-    }
-
-    let mod = null;
-    try{ mod = require("./maru-search"); }catch(e){ mod = null; }
-    if(!mod) return { trace: adapterResult("legacy-maru-search", "unavailable", started, []), items: [] };
-
-    const params = {
-      q: ctx.q,
-      query: ctx.q,
-      limit: Math.min(ctx.limit, 500),
-      type: ctx.searchType === "all" ? "all" : ctx.searchType,
-      lang: ctx.lang,
-      deep: ctx.deep ? "1" : "0",
-      external: ctx.externalForced ? "force" : (ctx.externalOff ? "off" : "auto"),
-      noExternal: ctx.externalOff ? "1" : "0",
-      disableExternal: ctx.externalOff ? "1" : "0",
-      noMedia: ctx.noMedia ? "1" : "0",
-      disableMedia: ctx.noMedia ? "1" : "0",
-      from: "sanmaru",
-      source: "sanmaru-legacy-adapter",
-      noSanmaru: "1",
-      skipSanmaru: "1",
-      disableSanmaru: "1",
-      noAnalytics: "1",
-      noRevenue: "1"
-    };
-
-    let res = null;
-    if(typeof mod.runEngine === "function") res = await withTimeout(mod.runEngine(ctx.event || {}, params), ctx.deep ? 4200 : 2800);
-    else if(typeof mod.maruSearchDispatcher === "function") res = await withTimeout(mod.maruSearchDispatcher(params), ctx.deep ? 4200 : 2800);
-    else if(typeof mod.handler === "function"){
-      const h = await withTimeout(mod.handler({
-        httpMethod:"GET",
-        headers:(ctx.event && ctx.event.headers) || {},
-        queryStringParameters: params
-      }), ctx.deep ? 4200 : 2800);
-      res = h && typeof h.body === "string" ? JSON.parse(h.body || "{}") : h;
-    }
-
-    const items = normalizeItemsFromResponse(res).map(x => canonicalItem(x, ctx.q, "legacy-maru-search"));
-    return { trace: adapterResult("legacy-maru-search", items.length ? "ok" : "empty", started, items, { mode:"sanmaru-controlled-legacy-adapter" }), items };
-  }catch(e){
-    return { trace: adapterResult("legacy-maru-search", responseErrorCode(e), started, [], { error: responseErrorCode(e) }), items: [] };
-  }
-}
-
 const ADAPTERS = [
-  { name:"naver-web", timeoutMs:3200, match:ctx => ctx.externalAllowed && (ctx.region === "KR" || ctx.externalForced || ctx.needExternal), access:ctx => naverGeneric(ctx, "webkr.json", "naver", "web", ctx.deep ? 100 : 60, 1) },
-  { name:"naver-news", timeoutMs:3200, match:ctx => ctx.externalAllowed && (ctx.intents.includes("news") || ctx.externalForced || ctx.needExternal), access:ctx => naverGeneric(ctx, "news.json", "naver_news", "news", ctx.deep ? 80 : 40, 1) },
-  { name:"naver-blog", timeoutMs:3200, match:ctx => ctx.externalAllowed && (ctx.intents.includes("blog") || ctx.intents.includes("tour") || ctx.intents.includes("cafe") || ctx.externalForced), access:ctx => naverGeneric(ctx, "blog.json", "naver_blog", "blog", ctx.deep ? 60 : 30, 1) },
-  { name:"naver-cafe", timeoutMs:3200, match:ctx => ctx.externalAllowed && (ctx.intents.includes("cafe") || ctx.intents.includes("tour") || ctx.externalForced), access:ctx => naverGeneric(ctx, "cafearticle.json", "naver_cafe", "cafe", ctx.deep ? 60 : 30, 1) },
-  { name:"naver-local", timeoutMs:3000, match:ctx => ctx.externalAllowed && (ctx.intents.includes("map") || ctx.intents.includes("tour") || ctx.externalForced), access:ctx => naverGeneric(ctx, "local.json", "naver_local", "local", 5, 1) },
-  { name:"naver-book", timeoutMs:3200, match:ctx => ctx.externalAllowed && (ctx.intents.includes("book") || ctx.externalForced), access:ctx => naverGeneric(ctx, "book.json", "naver_book", "book", ctx.deep ? 80 : 40, 1) },
-  { name:"naver-image", timeoutMs:3200, match:ctx => ctx.externalAllowed && !ctx.noMedia && (ctx.intents.includes("image") || ctx.intents.includes("tour") || ctx.intents.includes("video") || ctx.externalForced || ctx.needExternal), access:ctx => naverImage(ctx) },
-  { name:"google-web", timeoutMs:3400, match:ctx => ctx.externalAllowed && (ctx.region !== "KR" || ctx.externalForced || ctx.needExternal || ctx.intents.includes("knowledge") || ctx.intents.includes("news")), access:ctx => googleWeb(ctx) },
-  { name:"google-image", timeoutMs:3400, match:ctx => ctx.externalAllowed && !ctx.noMedia && (ctx.intents.includes("image") || ctx.externalForced || ctx.needExternal), access:ctx => googleImage(ctx) },
-  { name:"bing-web", timeoutMs:3400, match:ctx => ctx.externalAllowed && (ctx.externalForced || ctx.needExternal || ctx.region !== "KR"), access:ctx => bingWeb(ctx) },
-  { name:"youtube", timeoutMs:3800, match:ctx => ctx.externalAllowed && !ctx.noMedia && (ctx.intents.includes("video") || ctx.intents.includes("sns") || ctx.externalForced), access:ctx => youtube(ctx) },
+  { name:"naver-web", timeoutMs:3200, match:ctx => ctx.externalAllowed, access:ctx => naverGeneric(ctx, "webkr.json", "naver", "web", ctx.deep ? 100 : 100, 1) },
+  { name:"naver-news", timeoutMs:3200, match:ctx => ctx.externalAllowed, access:ctx => naverGeneric(ctx, "news.json", "naver_news", "news", ctx.deep ? 100 : 80, 1) },
+  { name:"naver-blog", timeoutMs:3200, match:ctx => ctx.externalAllowed, access:ctx => naverGeneric(ctx, "blog.json", "naver_blog", "blog", ctx.deep ? 100 : 60, 1) },
+  { name:"naver-cafe", timeoutMs:3200, match:ctx => ctx.externalAllowed, access:ctx => naverGeneric(ctx, "cafearticle.json", "naver_cafe", "cafe", ctx.deep ? 100 : 60, 1) },
+  { name:"naver-local", timeoutMs:3000, match:ctx => ctx.externalAllowed, access:ctx => naverGeneric(ctx, "local.json", "naver_local", "local", 5, 1) },
+  { name:"naver-book", timeoutMs:3200, match:ctx => ctx.externalAllowed, access:ctx => naverGeneric(ctx, "book.json", "naver_book", "book", ctx.deep ? 100 : 60, 1) },
+  { name:"naver-image", timeoutMs:3200, match:ctx => ctx.externalAllowed && !ctx.noMedia, access:ctx => naverImage(ctx) },
+  { name:"google-web", timeoutMs:3400, match:ctx => ctx.externalAllowed, access:ctx => googleWeb(ctx) },
+  { name:"google-image", timeoutMs:3400, match:ctx => ctx.externalAllowed && !ctx.noMedia, access:ctx => googleImage(ctx) },
+  { name:"bing-web", timeoutMs:3400, match:ctx => ctx.externalAllowed, access:ctx => bingWeb(ctx) },
+  { name:"youtube", timeoutMs:3800, match:ctx => ctx.externalAllowed && !ctx.noMedia, access:ctx => youtube(ctx) },
 ];
 
 async function executeAdapter(adapter, ctx){
@@ -746,14 +826,83 @@ async function executeAdapter(adapter, ctx){
 }
 
 function selectAdapters(ctx){
+  if(!ctx.directExternalAllowed){
+    return [];
+  }
   const selected = [];
   for(const adapter of ADAPTERS){
     try{
       if(adapter.match(ctx)) selected.push(adapter);
     }catch(e){}
   }
-  const cap = ctx.deep ? 12 : 8;
-  return selected.slice(0, cap);
+  return selected;
+}
+
+
+async function callMaruSearchWideGateway(ctx){
+  const started = nowMs();
+  try{
+    const raw = ctx.raw || {};
+    if(truthy(raw.skipMaruSearch) || truthy(raw.noMaruSearch) || truthy(raw.disableMaruSearch)){
+      return { trace: adapterResult("maru-search-wide-gateway", "disabled-by-request", started, []), items: [] };
+    }
+    let mod = null;
+    try{ mod = require("./maru-search"); }catch(e){ mod = null; }
+    if(!mod) return { trace: adapterResult("maru-search-wide-gateway", "unavailable", started, []), items: [] };
+
+    const payload = {
+      q: ctx.q,
+      query: ctx.q,
+      limit: Math.min(ctx.candidatePoolTarget || ctx.limit || DEFAULT_LIMIT, MAX_LIMIT),
+      candidatePool: Math.min(ctx.candidatePoolTarget || ctx.limit || DEFAULT_LIMIT, MAX_LIMIT),
+      searchExpansion: searchAreaExpansionMode(ctx),
+      expansion: searchAreaExpansionMode(ctx),
+      page: ctx.page || 1,
+      perPage: ctx.perPage || 15,
+      start: ctx.start || 1,
+      type: ctx.searchType,
+      category: ctx.searchType,
+      lang: ctx.lang,
+      deep: ctx.deep ? "1" : "0",
+      external: ctx.externalAllowed ? "force" : "off",
+      noExternal: ctx.externalAllowed ? "0" : "1",
+      disableExternal: ctx.externalAllowed ? "0" : "1",
+      noMedia: ctx.noMedia ? "1" : "0",
+      noAnalytics: "1",
+      noRevenue: "1",
+      noSanmaru: "1",
+      skipSanmaru: "1",
+      disableSanmaru: "1",
+      legacyOnly: "1",
+      __sanmaruLegacy: "1",
+      __fromSanmaru: "1"
+    };
+
+    let res = null;
+    if(typeof mod.runLegacySearch === "function"){
+      res = await withTimeout(mod.runLegacySearch(ctx.event || {}, payload), ctx.deep ? 9000 : 6500);
+    }else if(typeof mod.runEngine === "function"){
+      res = await withTimeout(mod.runEngine(ctx.event || {}, payload), ctx.deep ? 9000 : 6500);
+    }else{
+      return { trace: adapterResult("maru-search-wide-gateway", "no-compatible-export", started, []), items: [] };
+    }
+
+    const items = normalizeItemsFromResponse(res).map(x => canonicalItem(x, ctx.q, "maru-search-wide-gateway"));
+    return {
+      trace: adapterResult("maru-search-wide-gateway", items.length ? "ok" : "empty", started, items, {
+        role: "platform-information-road-preserved",
+        externalMode: payload.external,
+        sourceMeta: res && res.meta ? {
+          totalCandidates: res.meta.totalCandidates,
+          externalGatewayUsed: res.meta.externalGatewayUsed,
+          traceCount: Array.isArray(res.meta.trace) ? res.meta.trace.length : undefined
+        } : undefined
+      }),
+      items
+    };
+  }catch(e){
+    return { trace: adapterResult("maru-search-wide-gateway", responseErrorCode(e), started, [], { error: responseErrorCode(e) }), items: [] };
+  }
 }
 
 async function maybePromote(ctx, items, meta){
@@ -812,9 +961,11 @@ function parseCtx(input, maybeCtx){
   const limit = clampInt(firstNonEmpty(ctx.limit, raw.limit, qs.limit), DEFAULT_LIMIT, 1, MAX_LIMIT);
   const externalRaw = low(firstNonEmpty(ctx.external, raw.external, qs.external, "auto"));
   const externalOff = externalRaw === "off" || externalRaw === "0" || externalRaw === "false" || truthy(ctx.noExternal || raw.noExternal || qs.noExternal || ctx.disableExternal || raw.disableExternal || qs.disableExternal);
-  const deep = truthy(ctx.deep || raw.deep || qs.deep) || externalRaw === "deep";
-  const externalForced = ["1","true","yes","on","force","live","deep"].includes(externalRaw) || truthy(ctx.useExternal || raw.useExternal || qs.useExternal || ctx.useLive || raw.useLive || qs.useLive);
   const lang = firstNonEmpty(ctx.lang, ctx.uiLang, ctx.locale, raw.lang, raw.uiLang, raw.locale, qs.lang, qs.uiLang, qs.locale);
+  const expansionRaw = low(firstNonEmpty(ctx.expansion, ctx.searchExpansion, raw.expansion, raw.searchExpansion, qs.expansion, qs.searchExpansion, ""));
+  const wideExpansion = ["wide","global","library","full","max","world"].includes(expansionRaw);
+  const deep = truthy(ctx.deep || raw.deep || qs.deep) || externalRaw === "deep" || wideExpansion;
+  const externalForced = ["1","true","yes","on","force","live","deep"].includes(externalRaw) || truthy(ctx.useExternal || raw.useExternal || qs.useExternal || ctx.useLive || raw.useLive || qs.useLive);
 
   return Object.assign(ctx, {
     event,
@@ -834,6 +985,12 @@ function parseCtx(input, maybeCtx){
     externalAllowed: !externalOff,
     timeoutMs: clampInt(ctx.timeoutMs || raw.timeoutMs || qs.timeoutMs, deep ? DEEP_TIMEOUT_MS : DEFAULT_TIMEOUT_MS, 1500, deep ? 15000 : 12000),
     region: detectRuntimeRegion(event, lang, clean.value),
+    page: clampInt(firstNonEmpty(ctx.page, raw.page, qs.page), 1, 1, 100000),
+    perPage: clampInt(firstNonEmpty(ctx.perPage, raw.perPage, qs.perPage), 15, 1, 200),
+    start: clampInt(firstNonEmpty(ctx.start, raw.start, qs.start), 1, 1, 1000000),
+    candidatePoolTarget: clampInt(firstNonEmpty(ctx.candidatePool, raw.candidatePool, qs.candidatePool, ctx.candidatePoolTarget, raw.candidatePoolTarget, qs.candidatePoolTarget, wideExpansion ? DEFAULT_CANDIDATE_POOL_TARGET : "", ctx.limit, raw.limit, qs.limit), DEFAULT_CANDIDATE_POOL_TARGET, 1, MAX_LIMIT),
+    expansion: expansionRaw || (wideExpansion ? "wide" : "balanced"),
+    directExternalAllowed: truthy(ctx.directExternal || raw.directExternal || qs.directExternal || ctx.sanmaruDirectExternal || raw.sanmaruDirectExternal || qs.sanmaruDirectExternal || process.env.SANMARU_DIRECT_EXTERNAL),
     requestId: firstNonEmpty(ctx.requestId, stableHash([clean.value, nowMs(), Math.random()].join("|")))
   });
 }
@@ -854,7 +1011,7 @@ async function runSanmaru(input, maybeCtx){
   globalState.cache = globalState.cache || new Map();
   globalState.inflight = globalState.inflight || new Map();
 
-  const cacheKey = stableHash([ctx.q, ctx.limit, ctx.searchType, ctx.lang || "", ctx.deep ? "deep" : "normal", ctx.externalOff ? "off" : (ctx.externalForced ? "force" : "auto"), ctx.noMedia ? "nomedia" : "media"].join("|"));
+  const cacheKey = stableHash([ctx.q, ctx.limit, ctx.candidatePoolTarget || "", ctx.page || 1, ctx.perPage || 15, ctx.searchType, ctx.lang || "", searchAreaExpansionMode(ctx), ctx.deep ? "deep" : "normal", ctx.externalOff ? "off" : (ctx.externalForced ? "force" : "auto"), ctx.noMedia ? "nomedia" : "media"].join("|"));
   const cached = globalState.cache.get(cacheKey);
   if(cached && nowMs() - cached.t < CACHE_TTL_MS){
     return Object.assign({}, safeJsonClone(cached.v), { meta: Object.assign({}, cached.v.meta || {}, { cache:{ hit:true, key:cacheKey } }) });
@@ -869,47 +1026,62 @@ async function runSanmaru(input, maybeCtx){
     const intents = detectIntent(ctx.q, ctx.searchType);
     ctx.intents = intents;
 
-    const indexRes = await callSearchBankIndex(ctx);
-    trace.push(indexRes.trace);
-    items.push(...indexRes.items);
+    const fastSettled = await Promise.allSettled([
+      callSearchBankIndex(ctx),
+      callSearchBank(ctx)
+    ]);
 
-    const bankRes = await callSearchBank(ctx);
+    const indexRes = fastSettled[0] && fastSettled[0].status === "fulfilled"
+      ? fastSettled[0].value
+      : { trace: adapterResult("searchbank-index", "error", engineStarted, []), items: [] };
+    const bankRes = fastSettled[1] && fastSettled[1].status === "fulfilled"
+      ? fastSettled[1].value
+      : { trace: adapterResult("searchbank", "error", engineStarted, []), items: [] };
+
+    trace.push(indexRes.trace);
     trace.push(bankRes.trace);
-    items.push(...bankRes.items);
+    items.push(...indexRes.items, ...bankRes.items);
 
     const fastCount = dedupeItems(items).length;
-    const forcedOrDeep = !!ctx.externalForced || !!ctx.deep;
-    ctx.needExternal = ctx.externalAllowed && (forcedOrDeep || ctx.searchType !== "all" || fastCount < DEFAULT_EXTERNAL_TRIGGER_MIN);
+    ctx.needExternal = ctx.externalAllowed;
 
     const selected = selectAdapters(ctx);
+    const mountTasks = [];
+
     if(ctx.externalAllowed && selected.length){
-      const settled = await Promise.allSettled(selected.map(a => executeAdapter(a, ctx)));
-      for(const r of settled){
-        const value = r && r.status === "fulfilled" ? r.value : null;
-        if(value){ trace.push(value.trace); items.push(...value.items); }
-      }
+      for(const adapter of selected) mountTasks.push(executeAdapter(adapter, ctx));
     }else{
-      trace.push({ name:"external-adapters", status:ctx.externalAllowed ? "skipped-fast-memory-enough" : "blocked-by-request", count:0 });
+      trace.push({
+        name:"direct-external-adapters",
+        status: ctx.externalAllowed
+          ? (ctx.directExternalAllowed ? "no-selected-adapters" : "covered-by-maru-search-wide-gateway")
+          : "blocked-by-request",
+        count:0,
+        mode:"single-controlled-platform-gateway-by-default"
+      });
     }
 
-    // Stage-1 migration guard:
-    // maru-search is now the gateway into Sanmaru, but the old maru-search fan-out
-    // remains available only as a Sanmaru-controlled legacy adapter. Recursion is
-    // blocked with noSanmaru/skipSanmaru flags.
-    const legacyRes = await callLegacyMaruSearch(ctx, items);
-    trace.push(legacyRes.trace);
-    items.push(...legacyRes.items);
+    mountTasks.push(callMaruSearchWideGateway(ctx));
+    mountTasks.push(callOptionalModuleAdapter(ctx, "collector", "./collector", { useCollector:"1" }, ctx.deep ? 4200 : 3000));
+    mountTasks.push(callOptionalModuleAdapter(ctx, "planetary", "./planetary-data-connector", { usePlanetary:true, federation:"on" }, ctx.deep ? 4600 : 3200));
 
-    const collectorRes = await callOptionalModuleAdapter(ctx, "collector", "./collector", { useCollector:"1" }, 2200);
-    trace.push(collectorRes.trace);
-    items.push(...collectorRes.items);
+    const settled = await Promise.allSettled(mountTasks);
+    for(const r of settled){
+      const value = r && r.status === "fulfilled" ? r.value : null;
+      if(value){ trace.push(value.trace); items.push(...value.items); }
+    }
 
-    const planetaryRes = await callOptionalModuleAdapter(ctx, "planetary", "./planetary-data-connector", { usePlanetary:true, federation:"on" }, 2400);
-    trace.push(planetaryRes.trace);
-    items.push(...planetaryRes.items);
+    trace.push({
+      name:"sanmaru-mount-layer",
+      status:"candidate-pool-expanded",
+      count:dedupeItems(items).length,
+      fastMemoryCount:fastCount,
+      directExternal:!!ctx.directExternalAllowed,
+      principle:"mount-authorized-channels-and-expand-never-replace"
+    });
 
     let ranked = finalRank(ctx.q, items, ctx);
-    const finalTarget = Math.min(ctx.limit, Math.max(ctx.limit, MIN_FAST_TARGET));
+    const finalTarget = Math.min(MAX_LIMIT, Math.max(ctx.limit, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET));
     ranked = ranked.slice(0, finalTarget).map(it => {
       const copy = Object.assign({}, it);
       delete copy._sanmaruSeq;
@@ -932,6 +1104,17 @@ async function runSanmaru(input, maybeCtx){
         requestedLimit: ctx.limit,
         totalCandidates: items.length,
         deduped: Math.max(0, items.length - dedupeItems(items).length),
+        sourceDiversity: sourceDiversity(ranked),
+        categoryDiversity: categoryDiversity(ranked),
+        searchAreaExpansion: {
+          mode: searchAreaExpansionMode(ctx),
+          candidatePoolTarget: ctx.candidatePoolTarget,
+          finalTarget,
+          page: ctx.page,
+          perPage: ctx.perPage,
+          hasMore: ranked.length >= finalTarget,
+          principle: "expand-search-area-with-authorized-mounts-never-reduce-platform-spectrum"
+        },
         elapsedMs: nowMs() - engineStarted,
         region: ctx.region,
         lang: ctx.lang || null,
@@ -939,11 +1122,9 @@ async function runSanmaru(input, maybeCtx){
         intents,
         queryRisk: ctx.queryRisk || null,
         secure: true,
-        role: "virtual-web-ecosystem-integrated-information-bank-engine",
-        entry:"sanmaru-head-controller",
-        gatewayMode:"head-engine-first",
-        fastMemoryLayer:"search-bank-index",
-        legacyAdapter:"legacy-maru-search",
+        role: "global-virtual-information-library-mount-engine",
+        platformRole: "Sanmaru is the authorized global information library mount layer; Maru Search is the platform information road/gateway",
+        mountRegistry: mountRegistrySnapshot(),
         cache:{ hit:false, key:cacheKey },
         searchBankIndex:{ used:true, status:indexRes.trace.status, count:indexRes.trace.count, latency:indexRes.trace.latency },
         searchBank:{ used:true, status:bankRes.trace.status, count:bankRes.trace.count, latency:bankRes.trace.latency },
@@ -952,6 +1133,7 @@ async function runSanmaru(input, maybeCtx){
           forced: ctx.externalForced,
           deep: ctx.deep,
           selected: selected.map(x => x.name),
+          directExternalAdaptersEnabled: !!ctx.directExternalAllowed,
           trace: trace.filter(x => x && !["searchbank-index","searchbank"].includes(x.name))
         },
         promotion,
@@ -1000,7 +1182,8 @@ function healthSnapshot(){
     cacheSize: globalState.cache ? globalState.cache.size : 0,
     memorySize: globalState.memory ? globalState.memory.size : 0,
     circuits,
-    adapters: ["searchbank-index","searchbank"].concat(ADAPTERS.map(x => x.name), ["collector","planetary"]),
+    mountRegistry: mountRegistrySnapshot(),
+    adapters: ["searchbank-index","searchbank","maru-search-wide-gateway"].concat(ADAPTERS.map(x => x.name), ["collector","planetary","ai-gpu"]),
     generatedAt: nowIso()
   };
 }
@@ -1052,13 +1235,16 @@ async function handler(event){
     noExternal: merged.noExternal,
     disableExternal: merged.disableExternal,
     noMedia: merged.noMedia,
-    disableMedia: merged.disableMedia
+    disableMedia: merged.disableMedia,
+    candidatePool: firstNonEmpty(merged.candidatePool, merged.candidatePoolTarget),
+    expansion: firstNonEmpty(merged.expansion, merged.searchExpansion),
+    directExternal: merged.directExternal
   });
   return ok(res);
 }
 
 async function runEngine(event, params){
-  return await runSanmaru({ event: event || {}, raw: params || {}, q: firstNonEmpty(params && params.q, params && params.query), limit: params && params.limit, type: params && (params.type || params.category || params.tab || params.vertical), lang: params && (params.lang || params.uiLang || params.locale), deep: params && params.deep, external: params && params.external, noExternal: params && params.noExternal, disableExternal: params && params.disableExternal, noMedia: params && params.noMedia, disableMedia: params && params.disableMedia });
+  return await runSanmaru({ event: event || {}, raw: params || {}, q: firstNonEmpty(params && params.q, params && params.query), limit: params && params.limit, type: params && (params.type || params.category || params.tab || params.vertical), lang: params && (params.lang || params.uiLang || params.locale), deep: params && params.deep, external: params && params.external, noExternal: params && params.noExternal, disableExternal: params && params.disableExternal, noMedia: params && params.noMedia, disableMedia: params && params.disableMedia, candidatePool: params && (params.candidatePool || params.candidatePoolTarget), expansion: params && (params.expansion || params.searchExpansion), directExternal: params && params.directExternal });
 }
 
 module.exports = {
@@ -1070,7 +1256,8 @@ module.exports = {
   sanitizeQuery,
   canonicalItem,
   finalRank,
-  detectIntent
+  detectIntent,
+  mountRegistry: mountRegistrySnapshot
 };
 
 exports.version = VERSION;
@@ -1078,3 +1265,4 @@ exports.runSanmaru = runSanmaru;
 exports.runEngine = runEngine;
 exports.handler = handler;
 exports.health = healthSnapshot;
+exports.mountRegistry = mountRegistrySnapshot;
