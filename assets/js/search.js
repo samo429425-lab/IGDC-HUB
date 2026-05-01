@@ -216,9 +216,35 @@ function ensureSearchCardMediaStyle(){
       font-weight: 800;
       cursor: pointer;
     }
-    .maru-display-more:hover {
+    .maru-video-embed-wrap {
+      flex: 0 0 360px;
+      width: 360px;
+      max-width: 46%;
+      aspect-ratio: 16 / 9;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #0f172a;
+      border: 1px solid #e5e7eb;
+      align-self: flex-start;
+    }
+    .maru-video-embed-wrap iframe,
+    .maru-video-embed-wrap video {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #000;
+      object-fit: cover;
+    }
+    .maru-video-badge {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 3px 7px;
+      border-radius: 999px;
       background: #eef2ff;
-      border-color: #c7d2fe;
+      color: #4338ca;
+      font-size: 11px;
+      font-weight: 800;
     }
 
     @media (max-width: 720px) {
@@ -1057,6 +1083,217 @@ async function fetchSearch(q, type = activeType){
     }
 
 
+    function extractYouTubeIdFromUrl(url){
+      const raw = String(url || '').trim();
+      if (!raw) return '';
+
+      try {
+        const u = new URL(raw, location.origin);
+        const host = u.hostname.replace(/^www\./, '').toLowerCase();
+
+        if (host === 'youtu.be') {
+          return (u.pathname.split('/').filter(Boolean)[0] || '').trim();
+        }
+
+        if (host.includes('youtube.com')) {
+          if (u.searchParams.get('v')) return u.searchParams.get('v').trim();
+
+          const parts = u.pathname.split('/').filter(Boolean);
+          const embedIdx = parts.indexOf('embed');
+          if (embedIdx >= 0 && parts[embedIdx + 1]) return parts[embedIdx + 1].trim();
+
+          const shortsIdx = parts.indexOf('shorts');
+          if (shortsIdx >= 0 && parts[shortsIdx + 1]) return parts[shortsIdx + 1].trim();
+
+          const liveIdx = parts.indexOf('live');
+          if (liveIdx >= 0 && parts[liveIdx + 1]) return parts[liveIdx + 1].trim();
+        }
+
+        if (host === 'img.youtube.com' || host === 'i.ytimg.com') {
+          const parts = u.pathname.split('/').filter(Boolean);
+          const viIdx = parts.indexOf('vi');
+          if (viIdx >= 0 && parts[viIdx + 1]) return parts[viIdx + 1].trim();
+        }
+      } catch(e) {}
+
+      const m =
+        raw.match(/[?&]v=([A-Za-z0-9_-]+)/) ||
+        raw.match(/youtu\.be\/([A-Za-z0-9_-]+)/) ||
+        raw.match(/youtube\.com\/embed\/([A-Za-z0-9_-]+)/) ||
+        raw.match(/youtube\.com\/shorts\/([A-Za-z0-9_-]+)/) ||
+        raw.match(/img\.youtube\.com\/vi\/([A-Za-z0-9_-]+)/);
+
+      return m ? String(m[1] || '').trim() : '';
+    }
+
+    function isValidYouTubeId(id){
+      return /^[A-Za-z0-9_-]{11}$/.test(String(id || '').trim());
+    }
+
+    function isYouTubeUrl(url){
+      const s = String(url || '').toLowerCase();
+      return s.includes('youtube.com') || s.includes('youtu.be') || s.includes('ytimg.com') || s.includes('img.youtube.com');
+    }
+
+    function looksLikeGeneratedMediaPlaceholderToken(v){
+      const s = String(v || '').toLowerCase();
+      return /media(movie|drama|thriller|romance|variety|documentary|animation|music|shorts)?0*\d+/i.test(s) ||
+             /movie\s*slot\s*\d+/i.test(s) ||
+             /drama\s*slot\s*\d+/i.test(s) ||
+             /media\s*slot\s*\d+/i.test(s);
+    }
+
+    function isSeedPlaceholderItem(it){
+      if (!it || typeof it !== 'object') return false;
+
+      const sourceName = String(it.source?.name || it.source || '').toLowerCase();
+      const title = String(it.title || it.name || '').toLowerCase();
+      const summary = String(it.summary || it.description || '').toLowerCase();
+      const url = String(it.url || it.link || it.videoUrl || '').toLowerCase();
+      const thumb = String(it.thumbnail || it.thumb || it.image || '').toLowerCase();
+
+      const hasPlaceholderObject =
+        !!(it.extension && it.extension.placeholder) ||
+        !!(it.placeholder === true) ||
+        !!(it.isPlaceholder === true);
+
+      return (
+        sourceName === 'seed' ||
+        hasPlaceholderObject ||
+        summary.includes('seed placeholder') ||
+        summary.includes('replace with ranked media content') ||
+        looksLikeGeneratedMediaPlaceholderToken(title) ||
+        looksLikeGeneratedMediaPlaceholderToken(url) ||
+        looksLikeGeneratedMediaPlaceholderToken(thumb)
+      );
+    }
+
+    function hasInvalidYouTubeVideoUrl(it){
+      const urls = [
+        it && it.url,
+        it && it.link,
+        it && it.videoUrl,
+        it && it.media && it.media.url,
+        it && it.media && it.media.videoUrl,
+        it && it.thumbnail,
+        it && it.thumb,
+        it && it.image
+      ].filter(Boolean);
+
+      return urls.some(u => {
+        const s = String(u || '');
+        if (!isYouTubeUrl(s)) return false;
+        const id = extractYouTubeIdFromUrl(s);
+        return !isValidYouTubeId(id);
+      });
+    }
+
+    function shouldRejectSearchResultItem(it){
+      if (!it) return true;
+      if (isSeedPlaceholderItem(it)) return true;
+      if (hasInvalidYouTubeVideoUrl(it)) return true;
+      return false;
+    }
+
+    function filterSearchResultItems(items){
+      return (Array.isArray(items) ? items : []).filter(it => !shouldRejectSearchResultItem(it));
+    }
+
+    function getDirectVideoUrl(it){
+      const urls = [
+        it && it.videoUrl,
+        it && it.media && it.media.videoUrl,
+        it && it.media && it.media.url,
+        it && it.media && it.media.src,
+        it && it.media && it.media.preview && it.media.preview.mp4,
+        it && it.media && it.media.preview && it.media.preview.webm,
+        it && it.url,
+        it && it.link
+      ].filter(Boolean);
+
+      for (const u of urls) {
+        const s = String(u || '').trim();
+        if (/\.(mp4|webm|ogg)(\?|#|$)/i.test(s)) return s;
+      }
+
+      return '';
+    }
+
+    function getPlayableMediaInfo(it, url){
+      const candidates = [
+        url,
+        it && it.url,
+        it && it.link,
+        it && it.videoUrl,
+        it && it.media && it.media.url,
+        it && it.media && it.media.videoUrl
+      ].filter(Boolean);
+
+      for (const u of candidates) {
+        const s = String(u || '').trim();
+        if (isYouTubeUrl(s)) {
+          const id = extractYouTubeIdFromUrl(s);
+          if (isValidYouTubeId(id)) {
+            return {
+              kind: 'youtube',
+              id,
+              embedUrl: `https://www.youtube.com/embed/${encodeURIComponent(id)}`,
+              originalUrl: s
+            };
+          }
+        }
+      }
+
+      const direct = getDirectVideoUrl(it);
+      if (direct) {
+        return {
+          kind: 'direct',
+          src: direct,
+          mime: /\.webm(\?|#|$)/i.test(direct) ? 'video/webm' : /\.ogg(\?|#|$)/i.test(direct) ? 'video/ogg' : 'video/mp4'
+        };
+      }
+
+      return null;
+    }
+
+    function renderPlayableMedia(mediaInfo, it){
+      if (!mediaInfo) return null;
+
+      const wrap = document.createElement('div');
+      wrap.className = 'maru-video-embed-wrap';
+
+      if (mediaInfo.kind === 'youtube') {
+        const iframe = document.createElement('iframe');
+        iframe.src = mediaInfo.embedUrl;
+        iframe.loading = 'lazy';
+        iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+        iframe.allowFullscreen = true;
+        iframe.title = (it && it.title) ? String(it.title).slice(0, 120) : 'YouTube video';
+        wrap.appendChild(iframe);
+        return wrap;
+      }
+
+      if (mediaInfo.kind === 'direct') {
+        const video = document.createElement('video');
+        video.controls = true;
+        video.playsInline = true;
+        video.preload = 'metadata';
+        if (it && (it.poster || it.thumbnail || it.thumb || it.image)) {
+          video.poster = it.poster || it.thumbnail || it.thumb || it.image;
+        }
+
+        const source = document.createElement('source');
+        source.src = mediaInfo.src;
+        source.type = mediaInfo.mime || 'video/mp4';
+        video.appendChild(source);
+        wrap.appendChild(video);
+        return wrap;
+      }
+
+      return null;
+    }
+
+
     function renderItem(it, mountTarget){
       const url = it.url || it.link || '';
       const domain = domainOf(url);
@@ -1065,9 +1302,14 @@ async function fetchSearch(q, type = activeType){
       card.className = 'card';
       applySearchRevenueDataset(card, it, url);
 
+      const playableMedia = getPlayableMediaInfo(it, url);
+
       if (url) {
         card.style.cursor = 'pointer';
-        card.addEventListener('click', () => { window.location.href = url; });
+        card.addEventListener('click', (e) => {
+          if (e.target && e.target.closest && e.target.closest('a, button, iframe, video, .maru-video-embed-wrap, .maru-card-media')) return;
+          window.location.href = url;
+        });
       }
 
       const body = document.createElement('div');
@@ -1164,7 +1406,16 @@ if (it.riskLabel === '⚠️ high-risk') {
 
       body.appendChild(textCol);
 
-      if (isRealThumb) {
+      const playableMediaNode = renderPlayableMedia(playableMedia, it);
+      if (playableMediaNode) {
+        const badge = document.createElement('div');
+        badge.className = 'maru-video-badge';
+        badge.textContent = playableMedia.kind === 'youtube' ? '영상 재생' : '동영상';
+        textCol.appendChild(badge);
+        body.appendChild(playableMediaNode);
+      }
+
+      if (!playableMediaNode && isRealThumb) {
         const mediaWrap = document.createElement('div');
         mediaWrap.className = 'maru-card-media';
         const mediaCount = Math.min(naturalImages.length, 3);
@@ -1466,7 +1717,8 @@ async function runSearch(q, type = activeType){
 
   try {
     const items = await fetchSearch(qq, activeType);
-    allItems = dedupeItems([...(items || [])]);
+    const filteredItems = filterSearchResultItems(items || []);
+    allItems = dedupeItems([...(filteredItems || [])]);
 
     pageImageEnrichCache.clear();
     itemImageEnrichCache.clear();
