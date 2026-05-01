@@ -19,7 +19,7 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.34-visible15-instant-library';
+const VERSION = 'A1.5.35-global-intelligence-instant-surfaces';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -928,14 +928,14 @@ function sectionIdForItem(it){
   const type = safeString(it && it.type).toLowerCase();
   const text = [host, source, type, mediaType, safeString(it && it.title), safeString(firstNonEmpty(it && it.summary, it && it.description))].join(' ').toLowerCase();
 
-  if(category === 'official' || host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr') || /공식|관공서|시청|구청|정부|공공기관|official|government office/.test(text)) return 'official_authority';
   if(category === 'map' || category === 'tour' || mediaType === 'map' || type === 'map' || /지도|주소|위치|길찾기|관광|여행|맛집|명소|랜드마크|박물관|미술관|축제|교통|지하철|map|nearby|travel|tour|restaurant|landmark|attraction/.test(text)) return 'map_local_tour';
+  if(category === 'official' || source.includes('official') || source.includes('public') || host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr') || /공식\s*홈페이지|공공기관|정부|official\s*site|government\s*office/.test(text)) return 'official_authority';
   if(category === 'knowledge' || category === 'book' || host.includes('wikipedia') || host.includes('wikidata') || host.includes('britannica') || host.includes('namu.wiki') || /위키|백과|지식|논문|연구|자료|encyclopedia|knowledge|research|paper/.test(text)) return 'knowledge_wiki';
   if(category === 'news' || source.includes('news') || /뉴스|속보|보도|신문|latest|breaking|press/.test(text)) return 'news';
+  if(category === 'cafe' || category === 'sns' || source.includes('cafe') || source.includes('sns') || source.includes('social') || host.includes('instagram') || host.includes('facebook') || host.includes('tiktok') || host.includes('twitter') || host.includes('x.com') || host.includes('threads.net') || /카페|커뮤니티|인스타|페이스북|틱톡|트위터|SNS|community|forum|instagram|facebook|tiktok/.test(text)) return 'community_sns';
   if(category === 'video' || mediaType === 'video' || type === 'video' || source.includes('youtube') || host.includes('youtube') || host.includes('youtu.be') || /동영상|영상|유튜브|브이로그|쇼츠|릴스|vlog|video|shorts|reels/.test(text)) return 'video_vlog';
   if(category === 'image' || mediaType === 'image' || type === 'image' || source.includes('image') || /이미지|사진|갤러리|포토|스냅샷|photo|image|gallery/.test(text)) return 'image_gallery';
   if(category === 'blog' || source.includes('blog') || host.includes('blog') || /블로그|후기|리뷰|방문기|blog|review/.test(text)) return 'blog_review';
-  if(category === 'cafe' || category === 'sns' || source.includes('cafe') || source.includes('sns') || source.includes('social') || host.includes('instagram') || host.includes('facebook') || host.includes('tiktok') || host.includes('twitter') || host.includes('x.com') || host.includes('threads.net') || /카페|커뮤니티|인스타|페이스북|틱톡|트위터|SNS|community|forum|instagram|facebook|tiktok/.test(text)) return 'community_sns';
   if(category === 'shopping' || mediaType === 'product' || type === 'product' || /쇼핑|상품|가격|구매|판매|광고|프로모션|shopping|product|price|buy|sale|ad\b/.test(text)) return 'shopping_product';
   if(/회사|기업|브랜드|홈페이지|공식 사이트|company|corporate|brand|homepage|official site/.test(text)) return 'company_web';
   return 'general_web';
@@ -983,19 +983,19 @@ function buildSearchSections(items, q, opts){
 
   // Visible search cards are a separate paged stream. Items hidden behind a section
   // dropdown are not counted in the visible 15-card page budget.
+  // Fair-cycle one visible card per section first so official/map/wiki/news/tour/media/blog/cafe/SNS/shopping
+  // all have a chance to appear on page 1 instead of one large section consuming the whole page.
   const visibleFlow = [];
-  const maxRounds = list.length + 1;
+  for(const sec of fullSections) sec.cursor = 0;
+  const maxRounds = list.length + fullSections.length + 1;
   let round = 0;
   while(visibleFlow.length < list.length && round < maxRounds){
     let pushed = false;
     for(const sec of fullSections){
-      const quota = Math.max(1, sec.meta.previewLimit || 1);
-      const roundStart = round * quota;
-      const roundItems = sec.all.slice(roundStart, roundStart + quota);
-      for(const item of roundItems){
-        visibleFlow.push(item);
-        pushed = true;
-      }
+      if(sec.cursor >= sec.all.length) continue;
+      visibleFlow.push(sec.all[sec.cursor]);
+      sec.cursor += 1;
+      pushed = true;
     }
     if(!pushed) break;
     round++;
@@ -1160,23 +1160,34 @@ function openDiscoverySurfaceCards(q){
   if(!q) return [];
   const enc = encodeURIComponent(q);
   const cards = [
-    { title: '[News] ' + q + ' - Google News', url: 'https://news.google.com/search?q=' + enc, source: 'google_news_discovery', mediaType: 'article', type: 'news', summary: q + ' 구글 뉴스 검색', score: 0.66 },
-    { title: '[News] ' + q + ' - Naver News', url: 'https://search.naver.com/search.naver?where=news&query=' + enc, source: 'naver_news_discovery', mediaType: 'article', type: 'news', summary: q + ' 네이버 뉴스 검색', score: 0.66 },
-    { title: '[Video] ' + q + ' - YouTube', url: 'https://www.youtube.com/results?search_query=' + enc, source: 'youtube_discovery', mediaType: 'video', type: 'video', summary: q + ' 유튜브 영상·브이로그 검색', score: 0.64 },
-    { title: '[Vlog] ' + q + ' 브이로그 / 리뷰 영상', url: 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q + ' vlog review'), source: 'youtube_vlog_discovery', mediaType: 'video', type: 'video', summary: q + ' 브이로그·리뷰 영상 검색', score: 0.63 },
-    { title: '[Shorts] ' + q + ' Shorts / Reels', url: 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q + ' shorts reels'), source: 'shorts_reels_discovery', mediaType: 'video', type: 'video', summary: q + ' 쇼츠·릴스 영상 검색', score: 0.61 },
-    { title: '[SNS] ' + q + ' - Instagram', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:instagram.com'), source: 'instagram_discovery', mediaType: 'article', type: 'sns', summary: q + ' 인스타그램 공개 게시물 검색', score: 0.58 },
-    { title: '[SNS] ' + q + ' - Facebook', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:facebook.com'), source: 'facebook_discovery', mediaType: 'article', type: 'sns', summary: q + ' 페이스북 공개 페이지 검색', score: 0.57 },
-    { title: '[SNS] ' + q + ' - TikTok', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:tiktok.com'), source: 'tiktok_discovery', mediaType: 'video', type: 'sns', summary: q + ' 틱톡 공개 영상 검색', score: 0.57 },
-    { title: '[SNS] ' + q + ' - X / Twitter', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:x.com OR site:twitter.com'), source: 'x_twitter_discovery', mediaType: 'article', type: 'sns', summary: q + ' X/Twitter 공개 게시물 검색', score: 0.56 },
-    { title: '[Company] ' + q + ' 공식 홈페이지 / 기업 사이트', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' 공식 홈페이지 회사 기업 official site'), source: 'company_official_discovery', mediaType: 'article', type: 'web', summary: q + ' 공식 홈페이지·회사·기업 사이트 검색', score: 0.60 },
-    { title: '[Official] ' + q + ' 정부 / 공공 / 기관', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:go.kr OR site:gov official'), source: 'official_gov_discovery', mediaType: 'article', type: 'web', summary: q + ' 정부·공공·기관 공식 정보 검색', score: 0.60 },
-    { title: '[Blog] ' + q + ' - Naver Blog', url: 'https://search.naver.com/search.naver?where=blog&query=' + enc, source: 'naver_blog_discovery', mediaType: 'article', type: 'blog', summary: q + ' 네이버 블로그 검색', score: 0.59 },
-    { title: '[Cafe] ' + q + ' - Naver Cafe', url: 'https://search.naver.com/search.naver?where=article&query=' + enc, source: 'naver_cafe_discovery', mediaType: 'article', type: 'cafe', summary: q + ' 네이버 카페·커뮤니티 검색', score: 0.58 },
-    { title: '[Community] ' + q + ' 커뮤니티 / 후기', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' 커뮤니티 후기 리뷰 forum community'), source: 'community_discovery', mediaType: 'article', type: 'community', summary: q + ' 커뮤니티·후기·리뷰 검색', score: 0.56 },
-    { title: '[Knowledge] ' + q + ' 위키 / 백과 / 지식', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' wikipedia encyclopedia wiki 지식백과'), source: 'knowledge_discovery', mediaType: 'article', type: 'knowledge', summary: q + ' 위키·백과·지식 검색', score: 0.57 }
+    { title: '[Official] ' + q + ' 공식 홈페이지 / 대표 사이트', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' 공식 홈페이지 official site'), source: 'official_homepage_discovery', mediaType: 'article', type: 'official', summary: q + ' 공식 홈페이지·대표 사이트 검색', score: 0.78 },
+    { title: '[Public] ' + q + ' 공공기관 / 정부 / 지자체', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:go.kr OR site:gov OR 공공기관 OR 지자체'), source: 'official_gov_discovery', mediaType: 'article', type: 'official', summary: q + ' 정부·공공기관·지자체 공식 정보 검색', score: 0.77 },
+    { title: '[Address] ' + q + ' 주소 / 지도 / 길찾기', url: 'https://www.google.com/maps/search/' + enc, source: 'google_maps_discovery', mediaType: 'map', type: 'map', summary: q + ' 주소·지도·길찾기 검색', score: 0.75 },
+    { title: '[Naver Map] ' + q + ' 지도 / 지역 정보', url: 'https://map.naver.com/p/search/' + enc, source: 'naver_map_discovery', mediaType: 'map', type: 'map', summary: q + ' 네이버 지도·지역 정보 검색', score: 0.74 },
+    { title: '[Tour] ' + q + ' 관광 / 명소 / 공식 홍보', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' 관광 명소 공식 홍보 여행 사진'), source: 'tour_official_promo_discovery', mediaType: 'article', type: 'tour', summary: q + ' 관광·명소·공식 홍보 자료 검색', score: 0.73 },
+    { title: '[Wiki] ' + q + ' 위키 / 백과 / 지식', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' wikipedia encyclopedia wiki 지식백과'), source: 'knowledge_wiki_discovery', mediaType: 'article', type: 'knowledge', summary: q + ' 위키·백과·지식 검색', score: 0.72 },
+    { title: '[News] ' + q + ' - Naver News', url: 'https://search.naver.com/search.naver?where=news&query=' + enc, source: 'naver_news_discovery', mediaType: 'article', type: 'news', summary: q + ' 네이버 뉴스 검색', score: 0.70 },
+    { title: '[News] ' + q + ' - Google News', url: 'https://news.google.com/search?q=' + enc, source: 'google_news_discovery', mediaType: 'article', type: 'news', summary: q + ' 구글 뉴스 검색', score: 0.69 },
+    { title: '[Image] ' + q + ' 고품질 이미지 / 포토 / 갤러리', url: 'https://search.naver.com/search.naver?where=image&query=' + enc, source: 'naver_image_discovery', mediaType: 'image', type: 'image', summary: q + ' 이미지·사진·갤러리 검색', score: 0.68 },
+    { title: '[Video] ' + q + ' - YouTube', url: 'https://www.youtube.com/results?search_query=' + enc, source: 'youtube_discovery', mediaType: 'video', type: 'video', summary: q + ' 유튜브 영상·공식 채널·브이로그 검색', score: 0.67 },
+    { title: '[Shorts/Reels] ' + q + ' 쇼츠 / 릴스 / 짧은 영상', url: 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q + ' shorts reels'), source: 'shorts_reels_discovery', mediaType: 'video', type: 'video', summary: q + ' 쇼츠·릴스·짧은 영상 검색', score: 0.66 },
+    { title: '[Blog] ' + q + ' - Naver Blog', url: 'https://search.naver.com/search.naver?where=blog&query=' + enc, source: 'naver_blog_discovery', mediaType: 'article', type: 'blog', summary: q + ' 네이버 블로그·후기 검색', score: 0.65 },
+    { title: '[Cafe] ' + q + ' - Naver Cafe / 커뮤니티', url: 'https://search.naver.com/search.naver?where=article&query=' + enc, source: 'naver_cafe_discovery', mediaType: 'article', type: 'cafe', summary: q + ' 네이버 카페·커뮤니티 검색', score: 0.64 },
+    { title: '[Shopping] ' + q + ' 상품 / 가격 / 구매 정보', url: 'https://search.shopping.naver.com/search/all?query=' + enc, source: 'naver_shopping_discovery', mediaType: 'product', type: 'shopping', summary: q + ' 쇼핑·가격·상품 검색', score: 0.63 },
+    { title: '[SNS] ' + q + ' - Instagram', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:instagram.com'), source: 'instagram_discovery', mediaType: 'article', type: 'sns', summary: q + ' 인스타그램 공개 게시물 검색', score: 0.62 },
+    { title: '[SNS] ' + q + ' - Facebook', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:facebook.com'), source: 'facebook_discovery', mediaType: 'article', type: 'sns', summary: q + ' 페이스북 공개 페이지 검색', score: 0.61 },
+    { title: '[SNS] ' + q + ' - TikTok', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:tiktok.com'), source: 'tiktok_discovery', mediaType: 'video', type: 'sns', summary: q + ' 틱톡 공개 영상 검색', score: 0.60 },
+    { title: '[SNS] ' + q + ' - X / Twitter', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:x.com OR site:twitter.com'), source: 'x_twitter_discovery', mediaType: 'article', type: 'sns', summary: q + ' X/Twitter 공개 게시물 검색', score: 0.59 },
+    { title: '[Community] ' + q + ' 커뮤니티 / 후기 / 리뷰', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' 커뮤니티 후기 리뷰 forum community'), source: 'community_discovery', mediaType: 'article', type: 'community', summary: q + ' 커뮤니티·후기·리뷰 검색', score: 0.58 },
+    { title: '[Company] ' + q + ' 기업 / 브랜드 / 서비스', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' 회사 기업 브랜드 서비스 official'), source: 'company_official_discovery', mediaType: 'article', type: 'web', summary: q + ' 기업·브랜드·서비스 정보 검색', score: 0.57 }
   ];
-  return cards.map(x => canonicalizeItem(x, q, x.source));
+  return cards.map(x => {
+    const item = canonicalizeItem(x, q, x.source);
+    item.instantSurface = true;
+    item.mediaSnapshotPolicy = 'provider-result-first-og-image-later-no-logo-ad-slogan';
+    item.lazyMount = { enabled:true, q:safeString(q), source:x.source, type:x.type, action:'expand-section-or-provider' };
+    return item;
+  });
 }
 
 let SearchBankEngine = null;
@@ -1267,6 +1278,8 @@ const Containers = {
   web_naver_kin: { async fetch(q, limit, start){ return naverGenericSearch('kin.json', q, limit, start, 'naver_kin', 'qa'); } },
   web_naver_local: { async fetch(q, limit, start){ return naverGenericSearch('local.json', q, Math.min(limit, 5), start, 'naver_local', 'local'); } },
   web_naver_book: { async fetch(q, limit, start){ return naverGenericSearch('book.json', q, limit, start, 'naver_book', 'book'); } },
+  web_naver_shop: { async fetch(q, limit, start){ return naverGenericSearch('shop.json', q, limit, start, 'naver_shop', 'shopping'); } },
+  web_naver_doc: { async fetch(q, limit, start){ return naverGenericSearch('doc.json', q, limit, start, 'naver_doc', 'knowledge'); } },
   web_google: { async fetch(q, limit, start){ return googleSearch(q, limit, start); } },
   web_bing: { async fetch(q, limit, start){ return bingSearch(q, limit, start); } },
   web_youtube: { async fetch(q, limit){ return youtubeSearch(q, limit); } },
@@ -1647,6 +1660,8 @@ function sourceCaps(opts){
     naverEncycPages: deep ? 1 : 1,
     naverKinPages: deep ? 1 : 1,
     naverBookPages: deep ? 2 : 1,
+    naverShopPages: deep ? 2 : 1,
+    naverDocPages: deep ? 1 : 1,
     naverLocalPages: 1,
     googlePages: deep ? 4 : 2,
     bingPages: deep ? 3 : 2,
@@ -1877,6 +1892,12 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         runPaged('naver_cafe', Containers.web_naver_cafe, caps.naverCafePages || 0, 100),
         Containers.web_naver_book
           ? runPaged('naver_book', Containers.web_naver_book, caps.naverBookPages || 0, 100)
+          : Promise.resolve(0),
+        Containers.web_naver_shop
+          ? runPaged('naver_shop', Containers.web_naver_shop, caps.naverShopPages || 0, 100)
+          : Promise.resolve(0),
+        Containers.web_naver_doc
+          ? runPaged('naver_doc', Containers.web_naver_doc, caps.naverDocPages || 0, 100)
           : Promise.resolve(0)
       ]);
 
@@ -1961,6 +1982,12 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
           ['naver_local_intent', Containers.web_naver_local, 5],
           ['naver_image_intent', Containers.web_naver_image, 20]
         ];
+        if(t === 'shopping') return [
+          ['naver_shop_intent', Containers.web_naver_shop, 60],
+          ['naver_image_intent', Containers.web_naver_image, 20],
+          ['naver_blog_intent', Containers.web_naver_blog, 20],
+          ['naver_cafe_intent', Containers.web_naver_cafe, 20]
+        ];
         if(t === 'image') return [
           ['naver_image_intent', Containers.web_naver_image, 50],
           ['google_image_intent', Containers.web_image, 10],
@@ -2012,10 +2039,33 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     }
 
     const internalCount = await pullFromSearchBank();
+
+    // Fast-first surface layer:
+    // Sanmaru/Maru must show a useful first page immediately. These cards are bridge shelves
+    // for official/public/address/wiki/news/tour/image/video/blog/cafe/SNS/shopping surfaces.
+    // They do not replace real provider/API results; if external=force/deep/full is requested,
+    // provider results are mounted below through the existing pipeline.
+    let instantSurfaceApplied = false;
+    if(fastFirst){
+      const surfaceCards = [];
+      surfaceCards.push.apply(surfaceCards, mapCards(q, region));
+      if(viewType === 'map' || viewType === 'tour') surfaceCards.push.apply(surfaceCards, transportCards(q));
+      surfaceCards.push.apply(surfaceCards, openDiscoverySurfaceCards(q));
+      if(surfaceCards.length){
+        collected.push.apply(collected, surfaceCards);
+        instantSurfaceApplied = true;
+        record('instant-global-surface', 'ok', surfaceCards.length, {
+          visibleBudget: DEFAULT_VISIBLE_CARDS_PER_PAGE,
+          principle: 'first-visible-page-now-provider-mounts-on-demand',
+          includes: ['official','public','address','wiki','news','tour','image','youtube','blog','cafe','sns','shopping']
+        });
+      }
+    }
     // PRESERVE + EXPAND: Search Bank/Index must never stop the broad Maru Search gateway.
     // If the caller did not explicitly block external sources, run the controlled gateway pass.
     // This restores news/blog/cafe/youtube/image/company discovery that disappeared when internal results were considered "enough".
-    const shouldUseExternal = !externalOff && !(fastFirst && collected.length >= fastFirstMinVisible);
+    const forceExternal = mode === 'force';
+    const shouldUseExternal = !externalOff && (forceExternal || !(fastFirst && collected.length >= fastFirstMinVisible));
     if(!shouldUseExternal && !externalOff && fastFirst){
       record('external-gateway', 'deferred-fast-first', 0, { internalCount, visibleReady: collected.length, fastFirstMinVisible, mode });
     }
@@ -2048,14 +2098,14 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     }
 
     const directMapCards = mapCards(q, region);
-    if(directMapCards.length){
+    if(!instantSurfaceApplied && directMapCards.length){
       collected.push.apply(collected, directMapCards);
       record('map-link-cards', 'ok', directMapCards.length, { mode: 'direct-navigation-links' });
     }
 
     if(viewType === 'map' || viewType === 'tour'){
       const directTransportCards = transportCards(q);
-      if(directTransportCards.length){
+      if(!instantSurfaceApplied && directTransportCards.length){
         collected.push.apply(collected, directTransportCards);
         record('transport-link-cards', 'ok', directTransportCards.length, { mode: 'direct-navigation-links' });
       }
@@ -2064,7 +2114,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     // Open/public discovery surfaces: SNS, company/official pages, blogs, communities, videos, vlogs and news.
     // These are additive bridge cards only; they do not replace provider/API results and do not touch media/image fields.
     const discoveryCards = openDiscoverySurfaceCards(q);
-    if(discoveryCards.length){
+    if(!instantSurfaceApplied && discoveryCards.length){
       collected.push.apply(collected, discoveryCards);
       record('open-discovery-surfaces', 'ok', discoveryCards.length, {
         includes: ['news','youtube','vlog','instagram','facebook','tiktok','x-twitter','company-official','blog','cafe','community','knowledge']
@@ -2121,6 +2171,9 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         globalContextExpansion: viewType !== 'all' || detectQueryIntentCluster(q) !== 'general',
         intentCluster: detectQueryIntentCluster(q),
         syntheticSearchLinks: false,
+        instantGlobalSurface: !!instantSurfaceApplied,
+        firstVisiblePagePolicy: 'render-15-visible-cards-immediately-hidden-dropdown-items-not-counted',
+        lazyMountPolicy: 'external-provider-and-media-snapshot-mounts-on-demand-or-force',
         providerCaps: {
           searchBankPages: caps.searchBankPages,
           naverPages: caps.naverPages,
@@ -2130,6 +2183,8 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
           naverEncycPages: caps.naverEncycPages,
           naverKinPages: caps.naverKinPages,
           naverBookPages: caps.naverBookPages,
+          naverShopPages: caps.naverShopPages,
+          naverDocPages: caps.naverDocPages,
           naverLocalPages: caps.naverLocalPages,
           googlePages: caps.googlePages,
           bingPages: caps.bingPages,
@@ -2795,6 +2850,13 @@ function classifySearchCategory(it){
   const type = safeString(it && it.type).toLowerCase();
   const text = [host, source, title, summary, mediaType, type].join(' ');
 
+  if(type === 'tour' || source.includes('tour')) return 'tour';
+  if(type === 'sns' || source.includes('instagram') || source.includes('facebook') || source.includes('tiktok') || source.includes('twitter') || source.includes('x_twitter') || source.includes('sns') || source.includes('social')) return 'sns';
+  if(type === 'video' || mediaType === 'video' || source.includes('youtube') || source.includes('video')) return 'video';
+  if(type === 'official' || source.includes('official') || source.includes('public_surface') || source.includes('gov_discovery')) return 'official';
+  if(type === 'shopping' || type === 'product' || mediaType === 'product' || source.includes('shopping') || source.includes('shop')) return 'shopping';
+  if(type === 'blog' || source.includes('blog')) return 'blog';
+  if(type === 'cafe' || source.includes('cafe') || type === 'community') return 'cafe';
   if(mediaType === 'image' || type === 'image' || source.includes('image')) return 'image';
   if(source.includes('news') || type === 'news' || text.includes('뉴스') || text.includes('속보') || text.includes('실시간') || text.includes('보도자료') || text.includes('breaking') || text.includes('latest')) return 'news';
   if(mediaType === 'map' || type === 'map' || source.includes('local') || source.includes('map') || text.includes('지도') || text.includes('길찾기') || text.includes('주소') || text.includes('directions') || text.includes('nearby') || text.includes('transit')) return 'map';
@@ -2936,7 +2998,7 @@ function balanceMixedResults(ranked){
   const used = new Set();
   const buckets = Object.create(null);
 
-  const order = ['news','tour','map','knowledge','image','video','book','blog','cafe','sns','web','official','shopping','sports','finance','webtoon'];
+  const order = ['official','map','tour','knowledge','news','image','video','blog','cafe','sns','shopping','book','web','sports','finance','webtoon'];
 
   for(const it of ranked){
     const cat = classifySearchCategory(it);
@@ -2962,18 +3024,19 @@ function balanceMixedResults(ranked){
   }
 
   // First screen balance:
-  // authority only 1~2, then real-time/news/local/tour/knowledge/book/media.
+  // official/public/address/wiki/tour/news/media/community/SNS/shopping must all have room,
+  // and collapsed dropdown items are not counted in the 15 visible-card page budget.
   take('official', 2);
-  take('news', 3);
   take('map', 2);
-  take('tour', 2);
-  take('knowledge', 2);
-  take('book', 1);
-  take('image', 2);
+  take('tour', 1);
+  take('knowledge', 1);
+  take('news', 2);
+  take('image', 1);
   take('video', 1);
   take('blog', 1);
   take('cafe', 1);
-  take('sns', 1);
+  take('sns', 2);
+  take('shopping', 1);
 
   let guard = 0;
   while(out.length < ranked.length && guard < ranked.length * 2){
@@ -3405,7 +3468,7 @@ exports.handler = async function(event){
       items: base.items, results: base.items,
       sections: sectionPack.sections,
       sectionPack,
-      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: sectionPack.mode, totalSections: sectionPack.totalSections, counts: sectionPack.counts, order: sectionPack.order, visibleCardsPerPage: sectionPack.visibleCardsPerPage, visibleCount: sectionPack.visibleCount, page: sectionPack.page, totalPages: sectionPack.totalPages, hasNextPage: sectionPack.hasNextPage, hiddenItemsExcludedFromVisibleCount: true }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', preservationPatch: 'A1.5.34-visible15-instant-library' })
+      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: sectionPack.mode, totalSections: sectionPack.totalSections, counts: sectionPack.counts, order: sectionPack.order, visibleCardsPerPage: sectionPack.visibleCardsPerPage, visibleCount: sectionPack.visibleCount, page: sectionPack.page, totalPages: sectionPack.totalPages, hasNextPage: sectionPack.hasNextPage, hiddenItemsExcludedFromVisibleCount: true }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', preservationPatch: 'A1.5.35-global-intelligence-instant-surfaces' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));

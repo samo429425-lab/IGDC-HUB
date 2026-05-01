@@ -22,7 +22,7 @@
 
 const crypto = require("crypto");
 
-const VERSION = "sanmaru-engine-v2.3.2-resident-library-fast-first";
+const VERSION = "sanmaru-engine-v2.3.3-global-resident-library-instant-surface";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 1000;
@@ -326,6 +326,14 @@ function categoryOfItem(item){
   const url = low(firstNonEmpty(it.url, it.link));
   const text = low([it.title, it.summary, it.snippet, it.description, source, url].join(" "));
 
+  if(type === "tour" || source.includes("tour")) return "tour";
+  if(type === "official" || source.includes("official") || source.includes("public_surface")) return "official";
+  if(type === "map" || type === "local" || source.includes("map")) return "map";
+  if(type === "shopping" || type === "product" || source.includes("shopping") || source.includes("shop")) return "shopping";
+  if(type === "sns" || source.includes("instagram") || source.includes("facebook") || source.includes("tiktok") || source.includes("twitter") || source.includes("x_twitter") || source.includes("sns") || source.includes("social")) return "sns";
+  if(type === "video" || source.includes("youtube") || source.includes("video")) return "video";
+  if(type === "blog" || source.includes("blog")) return "blog";
+  if(type === "cafe" || source.includes("cafe")) return "cafe";
   if(source.includes("youtube") || type === "video" || url.includes("youtube.com/watch") || url.includes("youtu.be/")) return "video";
   if(source.includes("image") || type === "image") return "image";
   if(source.includes("news") || type === "news") return "news";
@@ -446,7 +454,7 @@ function canonicalItem(raw, query, adapterName){
     sanmaru: Object.assign({}, it.sanmaru || {}, { touched: true, engine: VERSION })
   });
 
-  if(category === "video" && /youtube|youtu\.be/.test(low(url)) && !isRealYouTubeVideoUrl(url)) {
+  if(category === "video" && !out.instantSurface && /youtube|youtu\.be/.test(low(url)) && !isRealYouTubeVideoUrl(url)) {
     out._sanmaruRejectedReason = "invalid_youtube_video_id";
   }
   return out;
@@ -485,16 +493,58 @@ function scoreItem(query, item, ctx){
   if(cat === normalizeSearchType(ctx.searchType)) score += 2;
   if(ctx.intents && ctx.intents.includes(cat)) score += 1.5;
   if(item.thumbnail) score += 0.8;
-  if(cat === "official") score += 1.4;
-  if(cat === "news") score += 1.2;
+  if(item.instantSurface){
+    const src = low(item.source);
+    score += 10;
+    if(src.includes("official")) score += 3.2;
+    else if(src.includes("public")) score += 3.0;
+    else if(src.includes("map")) score += 2.6;
+    else if(src.includes("tour")) score += 2.4;
+    else if(src.includes("knowledge")) score += 2.2;
+    else if(src.includes("news")) score += 2.0;
+    else if(src.includes("image")) score += 1.8;
+    else if(src.includes("youtube")) score += 1.7;
+    else if(src.includes("blog")) score += 1.5;
+    else if(src.includes("cafe")) score += 1.4;
+    else if(src.includes("instagram") || src.includes("facebook") || src.includes("tiktok")) score += 1.3;
+    else if(src.includes("shopping")) score += 1.2;
+  }
+  if(cat === "official") score += 2.2;
+  if(cat === "map" || cat === "tour") score += 1.9;
+  if(cat === "knowledge") score += 1.5;
+  if(cat === "news") score += 1.4;
+  if(cat === "video" || cat === "image") score += 1.1;
+  if(cat === "blog" || cat === "cafe" || cat === "sns") score += 0.9;
   if(source.includes("placeholder")) score -= 8;
   return score;
 }
 
+function instantSurfacePriority(it){
+  if(!it || !it.instantSurface) return 0;
+  const src = low(it.source);
+  if(src.includes("official")) return 120;
+  if(src.includes("public")) return 118;
+  if(src.includes("google_maps")) return 116;
+  if(src.includes("naver_map")) return 114;
+  if(src.includes("tour")) return 112;
+  if(src.includes("knowledge")) return 110;
+  if(src.includes("news")) return 108;
+  if(src.includes("image")) return 106;
+  if(src.includes("youtube")) return 104;
+  if(src.includes("blog")) return 102;
+  if(src.includes("cafe")) return 100;
+  if(src.includes("instagram")) return 98;
+  if(src.includes("facebook")) return 96;
+  if(src.includes("tiktok")) return 94;
+  if(src.includes("shopping")) return 92;
+  return 80;
+}
+
 function finalRank(query, items, ctx){
   const ranked = dedupeItems((Array.isArray(items) ? items : []).map(x => canonicalItem(x, query, x && x.source)))
-    .map((it, idx) => Object.assign({}, it, { sanmaruScore: scoreItem(query, it, ctx), _sanmaruSeq: idx }));
+    .map((it, idx) => Object.assign({}, it, { sanmaruScore: scoreItem(query, it, ctx), _sanmaruSeq: idx, _instantSurfacePriority: instantSurfacePriority(it) }));
   ranked.sort((a,b) =>
+    ((b._instantSurfacePriority || 0) - (a._instantSurfacePriority || 0)) ||
     ((b.sanmaruScore || 0) - (a.sanmaruScore || 0)) ||
     ((b.sourceTrust || 0) - (a.sourceTrust || 0)) ||
     ((a._sanmaruSeq || 0) - (b._sanmaruSeq || 0))
@@ -581,6 +631,36 @@ function normalizeItemsFromResponse(res){
   if(res.baseResult && Array.isArray(res.baseResult.items)) return res.baseResult.items;
   if(res.baseResult && res.baseResult.data && Array.isArray(res.baseResult.data.items)) return res.baseResult.data.items;
   return [];
+}
+
+function sanmaruInstantLibraryCards(ctx){
+  const q = s(ctx && ctx.q).trim();
+  if(!q) return [];
+  const enc = encodeURIComponent(q);
+  const seed = [
+    { title:'[Official] ' + q + ' 공식 홈페이지 / 대표 사이트', url:'https://www.google.com/search?q=' + encodeURIComponent(q + ' 공식 홈페이지 official site'), source:'sanmaru_official_surface', type:'official', mediaType:'article', summary:q + ' 공식 홈페이지·대표 사이트 검색', score:0.82 },
+    { title:'[Public] ' + q + ' 공공기관 / 정부 / 지자체', url:'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:go.kr OR site:gov OR 공공기관 OR 지자체'), source:'sanmaru_public_surface', type:'official', mediaType:'article', summary:q + ' 정부·공공기관·지자체 공식 정보 검색', score:0.81 },
+    { title:'[Address] ' + q + ' 주소 / 지도 / 길찾기', url:'https://www.google.com/maps/search/' + enc, source:'sanmaru_google_maps_surface', type:'map', mediaType:'map', summary:q + ' 주소·지도·길찾기 검색', score:0.80 },
+    { title:'[Naver Map] ' + q + ' 지도 / 지역 정보', url:'https://map.naver.com/p/search/' + enc, source:'sanmaru_naver_map_surface', type:'map', mediaType:'map', summary:q + ' 네이버 지도·지역 정보 검색', score:0.79 },
+    { title:'[Tour] ' + q + ' 관광 / 명소 / 공식 홍보', url:'https://www.google.com/search?q=' + encodeURIComponent(q + ' 관광 명소 공식 홍보 여행 사진'), source:'sanmaru_tour_surface', type:'tour', mediaType:'article', summary:q + ' 관광·명소·공식 홍보 자료 검색', score:0.78 },
+    { title:'[Wiki] ' + q + ' 위키 / 백과 / 지식', url:'https://www.google.com/search?q=' + encodeURIComponent(q + ' wikipedia encyclopedia wiki 지식백과'), source:'sanmaru_knowledge_surface', type:'knowledge', mediaType:'article', summary:q + ' 위키·백과·지식 검색', score:0.77 },
+    { title:'[News] ' + q + ' - Naver News', url:'https://search.naver.com/search.naver?where=news&query=' + enc, source:'sanmaru_naver_news_surface', type:'news', mediaType:'article', summary:q + ' 네이버 뉴스 검색', score:0.76 },
+    { title:'[Image] ' + q + ' 이미지 / 포토 / 갤러리', url:'https://search.naver.com/search.naver?where=image&query=' + enc, source:'sanmaru_image_surface', type:'image', mediaType:'image', summary:q + ' 이미지·사진·갤러리 검색', score:0.75 },
+    { title:'[Video] ' + q + ' - YouTube', url:'https://www.youtube.com/results?search_query=' + enc, source:'sanmaru_youtube_surface', type:'video', mediaType:'video', summary:q + ' 유튜브 영상·공식 채널·브이로그 검색', score:0.74 },
+    { title:'[Blog] ' + q + ' - Naver Blog', url:'https://search.naver.com/search.naver?where=blog&query=' + enc, source:'sanmaru_blog_surface', type:'blog', mediaType:'article', summary:q + ' 네이버 블로그·후기 검색', score:0.73 },
+    { title:'[Cafe] ' + q + ' - Naver Cafe / 커뮤니티', url:'https://search.naver.com/search.naver?where=article&query=' + enc, source:'sanmaru_cafe_surface', type:'cafe', mediaType:'article', summary:q + ' 네이버 카페·커뮤니티 검색', score:0.72 },
+    { title:'[Shopping] ' + q + ' 상품 / 가격 / 구매 정보', url:'https://search.shopping.naver.com/search/all?query=' + enc, source:'sanmaru_shopping_surface', type:'shopping', mediaType:'product', summary:q + ' 쇼핑·가격·상품 검색', score:0.71 },
+    { title:'[SNS] ' + q + ' - Instagram', url:'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:instagram.com'), source:'sanmaru_instagram_surface', type:'sns', mediaType:'article', summary:q + ' 인스타그램 공개 게시물 검색', score:0.70 },
+    { title:'[SNS] ' + q + ' - Facebook', url:'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:facebook.com'), source:'sanmaru_facebook_surface', type:'sns', mediaType:'article', summary:q + ' 페이스북 공개 페이지 검색', score:0.69 },
+    { title:'[SNS] ' + q + ' - TikTok', url:'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:tiktok.com'), source:'sanmaru_tiktok_surface', type:'sns', mediaType:'video', summary:q + ' 틱톡 공개 영상 검색', score:0.68 }
+  ];
+  return seed.map(x => {
+    const item = canonicalItem(Object.assign({}, x, { instantSurface:true }), q, x.source);
+    item.instantSurface = true;
+    item.lazyMount = { enabled:true, source:x.source, type:x.type, q, action:'provider-or-section-expand' };
+    item.mediaSnapshotPolicy = 'real-provider-thumbnail-first-og-image-later-no-logo-ad-slogan';
+    return item;
+  });
 }
 
 function adapterResult(name, status, started, items, extra){
@@ -804,6 +884,10 @@ const ADAPTERS = [
   { name:"naver-cafe", timeoutMs:3200, match:ctx => ctx.externalAllowed, access:ctx => naverGeneric(ctx, "cafearticle.json", "naver_cafe", "cafe", ctx.deep ? 100 : 60, 1) },
   { name:"naver-local", timeoutMs:3000, match:ctx => ctx.externalAllowed, access:ctx => naverGeneric(ctx, "local.json", "naver_local", "local", 5, 1) },
   { name:"naver-book", timeoutMs:3200, match:ctx => ctx.externalAllowed, access:ctx => naverGeneric(ctx, "book.json", "naver_book", "book", ctx.deep ? 100 : 60, 1) },
+  { name:"naver-kin", timeoutMs:3200, match:ctx => ctx.externalAllowed, access:ctx => naverGeneric(ctx, "kin.json", "naver_kin", "knowledge", ctx.deep ? 100 : 60, 1) },
+  { name:"naver-encyc", timeoutMs:3200, match:ctx => ctx.externalAllowed, access:ctx => naverGeneric(ctx, "encyc.json", "naver_encyc", "knowledge", ctx.deep ? 100 : 60, 1) },
+  { name:"naver-shop", timeoutMs:3200, match:ctx => ctx.externalAllowed, access:ctx => naverGeneric(ctx, "shop.json", "naver_shop", "shopping", ctx.deep ? 100 : 60, 1) },
+  { name:"naver-doc", timeoutMs:3200, match:ctx => ctx.externalAllowed, access:ctx => naverGeneric(ctx, "doc.json", "naver_doc", "knowledge", ctx.deep ? 100 : 60, 1) },
   { name:"naver-image", timeoutMs:3200, match:ctx => ctx.externalAllowed && !ctx.noMedia, access:ctx => naverImage(ctx) },
   { name:"google-web", timeoutMs:3400, match:ctx => ctx.externalAllowed, access:ctx => googleWeb(ctx) },
   { name:"google-image", timeoutMs:3400, match:ctx => ctx.externalAllowed && !ctx.noMedia, access:ctx => googleImage(ctx) },
@@ -1096,12 +1180,22 @@ async function runSanmaru(input, maybeCtx){
     trace.push(bankRes.trace);
     items.push(...indexRes.items, ...bankRes.items);
 
+    const instantCards = sanmaruInstantLibraryCards(ctx);
+    if(ctx.fastFirst && instantCards.length){
+      items.push(...instantCards);
+      trace.push(adapterResult('sanmaru-instant-global-surface', 'ok', engineStarted, instantCards, {
+        visibleBudget: FAST_VISIBLE_PER_PAGE,
+        principle: 'resident-library-supplies-first-page-now-provider-mounts-later',
+        includes: ['official','public','address','wiki','news','tour','image','youtube','blog','cafe','sns','shopping']
+      }));
+    }
+
     const fastCount = dedupeItems(items).length;
     ctx.needExternal = ctx.externalAllowed;
 
     const selected = selectAdapters(ctx);
 
-    if(ctx.fastFirst && fastCount >= Math.min(ctx.perPage || FAST_VISIBLE_PER_PAGE, FAST_FIRST_MIN_RESULTS)){
+    if(ctx.fastFirst && !ctx.externalForced && fastCount >= Math.min(ctx.perPage || FAST_VISIBLE_PER_PAGE, FAST_FIRST_MIN_RESULTS)){
       trace.push({
         name:"sanmaru-resident-library",
         status:"fast-first-ready",
@@ -1158,6 +1252,12 @@ async function runSanmaru(input, maybeCtx){
           fastFirst: true,
           firstVisiblePageReady: true,
           visibleCardsPerPage: FAST_VISIBLE_PER_PAGE,
+        instantGlobalSurface: instantCards.length,
+        firstVisiblePagePolicy: 'supply-visible-list-immediately-heavy-mounts-deferred',
+        mediaSnapshotPolicy: 'provider-thumbnails-and-own-page-og-images-first-no-logo-ad-slogan',
+          instantGlobalSurface: instantCards.length,
+          firstVisiblePagePolicy: 'supply-visible-list-immediately-heavy-mounts-deferred',
+          mediaSnapshotPolicy: 'provider-thumbnails-and-own-page-og-images-first-no-logo-ad-slogan',
           mountRegistry: mountRegistrySnapshot(),
           cache:{ hit:false, key:cacheKey },
           searchBankIndex:{ used:true, status:indexRes.trace.status, count:indexRes.trace.count, latency:indexRes.trace.latency },
@@ -1399,7 +1499,8 @@ module.exports = {
   canonicalItem,
   finalRank,
   detectIntent,
-  mountRegistry: mountRegistrySnapshot
+  mountRegistry: mountRegistrySnapshot,
+  sanmaruInstantLibraryCards
 };
 
 exports.version = VERSION;
@@ -1408,3 +1509,4 @@ exports.runEngine = runEngine;
 exports.handler = handler;
 exports.health = healthSnapshot;
 exports.mountRegistry = mountRegistrySnapshot;
+exports.sanmaruInstantLibraryCards = sanmaruInstantLibraryCards;

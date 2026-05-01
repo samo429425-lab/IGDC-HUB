@@ -227,7 +227,7 @@ function spacingQueryVariants(q){
   const out = [raw];
   const compact = raw.replace(/\s+/g, "");
   if(compact && compact !== raw) out.push(compact);
-  const suffixes = ["영상","동영상","이미지","사진","뉴스","지도","맛집","카페","여행","관광","후기","리뷰","쇼핑","가격","책","도서","웹툰","기관","단체","회사","홈페이지","공식","보고서","통계","동향"];
+  const suffixes = ["영상","동영상","이미지","사진","뉴스","지도","맛집","카페","여행","관광","후기","리뷰","쇼핑","가격","책","도서","웹툰","기관","단체","회사","홈페이지","공식","보고서","통계","동향","유튜브","SNS","인스타그램","페이스북","틱톡","쇼츠","릴스","홍보","공공기관"];
   for(const suffix of suffixes){
     if(compact.endsWith(suffix) && compact.length > suffix.length + 1){
       out.push(compact.slice(0, compact.length - suffix.length) + " " + suffix);
