@@ -19,7 +19,7 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.28-permissive-thumbnail-filter';
+const VERSION = 'A1.5.30-search-area-expansion-gateway';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -65,6 +65,28 @@ function explicitExternalBlocked(qs){
     || external === 'false'
     || truthy(qs.noExternal)
     || truthy(qs.disableExternal);
+}
+
+function normalizeExpansionMode(qs){
+  qs = qs || {};
+  const raw = safeString(qs.expansion || qs.searchExpansion || qs.searchArea || qs.scope || process.env.MARU_SEARCH_EXPANSION || '').trim().toLowerCase();
+  if(['wide','global','library','full','max','world'].includes(raw)) return raw;
+  if(['off','minimal','fast'].includes(raw)) return raw;
+  if(truthy(qs.deep) || String(qs.external || '').toLowerCase() === 'deep') return 'deep';
+  return 'balanced';
+}
+
+function isWideExpansionMode(mode){
+  return ['wide','global','library','full','max','world','deep'].includes(safeString(mode).toLowerCase());
+}
+
+function pickCandidatePool(qs, limit){
+  qs = qs || {};
+  const mode = normalizeExpansionMode(qs);
+  const requested = firstNonEmpty(qs.candidatePool, qs.candidatePoolTarget, qs.pool, qs.maxPool);
+  if(requested) return clampInt(requested, limit || DEFAULT_LIMIT, 1, MAX_LIMIT);
+  if(isWideExpansionMode(mode)) return Math.min(MAX_LIMIT, Math.max(limit || DEFAULT_LIMIT, 3000));
+  return Math.min(MAX_LIMIT, Math.max(limit || DEFAULT_LIMIT, MIN_RESULT_TARGET));
 }
 
 function normalizeSearchType(v){
@@ -157,7 +179,8 @@ function pickQ(event){
   const limit = clampInt(qs.limit || qs.max || qs.count, DEFAULT_LIMIT, 1, MAX_LIMIT);
   const start = clampInt(qs.start || 1, 1, 1, 1000);
   const lang = safeString(qs.lang || qs.uiLang || qs.locale || '').trim() || null;
-  const deep = truthy(qs.deep) || String(qs.external || '').toLowerCase() === 'deep';
+  const expansionMode = normalizeExpansionMode(qs);
+  const deep = truthy(qs.deep) || String(qs.external || '').toLowerCase() === 'deep' || isWideExpansionMode(expansionMode);
 
   const externalBlocked = explicitExternalBlocked(qs);
   const externalRequested = explicitExternalRequested(qs);
@@ -168,7 +191,10 @@ function pickQ(event){
   const externalOff = externalMode === 'off';
   const noMedia = truthy(qs.noMedia) || truthy(qs.disableMedia);
   const searchType = normalizeSearchType(qs.type || qs.category || qs.tab || qs.vertical);
-  return { q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType, raw: qs };
+  const candidatePool = pickCandidatePool(qs, limit);
+  const page = clampInt(qs.page, 1, 1, 100000);
+  const perPage = clampInt(qs.perPage, 15, 1, 200);
+  return { q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType, candidatePool, expansionMode, page, perPage, raw: qs };
 }
 
 function parseAcceptLanguage(header){
@@ -781,109 +807,6 @@ function transportCards(q){
 let SearchBankEngine = null;
 let SearchBankEngineLoaded = false;
 
-
-let SanmaruEngineLoaded = false;
-let SanmaruEngine = null;
-function getSanmaruEngine(){
-  if(SanmaruEngineLoaded) return SanmaruEngine;
-  SanmaruEngineLoaded = true;
-  try { SanmaruEngine = require('./sanmaru_engine_v2'); } catch(e) { SanmaruEngine = null; }
-  return SanmaruEngine;
-}
-function sanmaruGatewayBlocked(raw){
-  raw = raw || {};
-  if(truthy(process.env.MARU_SEARCH_DISABLE_SANMARU)) return true;
-  return truthy(raw.noSanmaru || raw.skipSanmaru || raw.disableSanmaru || raw.legacyOnly || raw.noHeadEngine);
-}
-function sanmaruGatewayForced(raw){
-  raw = raw || {};
-  return truthy(raw.sanmaruOnly || raw.forceSanmaru || raw.useSanmaru || raw.headEngine);
-}
-function normalizeSanmaruItems(res){
-  if(!res) return [];
-  if(Array.isArray(res)) return res;
-  if(Array.isArray(res.items)) return res.items;
-  if(Array.isArray(res.results)) return res.results;
-  if(res.data && Array.isArray(res.data.items)) return res.data.items;
-  if(res.data && Array.isArray(res.data.results)) return res.data.results;
-  return [];
-}
-async function callSanmaruHeadGateway(event, picked){
-  const started = nowMs();
-  const raw = (picked && picked.raw) || {};
-  if(sanmaruGatewayBlocked(raw)){
-    return { used:false, blocked:true, status:'blocked-by-request', latency:nowMs()-started };
-  }
-  const engine = getSanmaruEngine();
-  if(!engine){
-    return { used:false, blocked:false, status:'unavailable', latency:nowMs()-started };
-  }
-  try{
-    const params = {
-      event: event || {},
-      raw: Object.assign({}, raw, {
-        from: 'maru-search-gateway',
-        source: 'maru-search-gateway',
-        noAnalytics: '1',
-        noRevenue: '1'
-      }),
-      q: picked.q,
-      query: picked.q,
-      limit: picked.limit,
-      start: picked.start,
-      lang: picked.lang,
-      type: picked.searchType,
-      deep: picked.deep,
-      external: picked.externalMode || (picked.externalOff ? 'off' : 'auto'),
-      noExternal: picked.externalOff ? '1' : '0',
-      disableExternal: picked.externalOff ? '1' : '0',
-      noMedia: picked.noMedia ? '1' : '0',
-      disableMedia: picked.noMedia ? '1' : '0',
-      timeoutMs: raw.sanmaruTimeoutMs || raw.timeoutMs || (picked.deep ? 12000 : 8500)
-    };
-
-    let res = null;
-    if(typeof engine.runSanmaru === 'function') res = await engine.runSanmaru(params);
-    else if(typeof engine.runEngine === 'function') res = await engine.runEngine(event || {}, params.raw);
-    else if(typeof engine.handler === 'function'){
-      const h = await engine.handler({
-        httpMethod:'GET',
-        headers:(event && event.headers) || {},
-        queryStringParameters:Object.assign({}, params.raw, {
-          q:picked.q,
-          limit:picked.limit,
-          type:picked.searchType,
-          lang:picked.lang,
-          external:params.external,
-          noExternal:params.noExternal,
-          noMedia:params.noMedia
-        })
-      });
-      res = h && typeof h.body === 'string' ? JSON.parse(h.body || '{}') : h;
-    }
-
-    const items = normalizeSanmaruItems(res).map(compactResultItem);
-    return {
-      used:true,
-      status:(res && res.status) || 'ok',
-      engine:(res && res.engine) || 'sanmaru',
-      version:(res && res.version) || null,
-      items,
-      source:(res && res.source) || (items.length ? 'sanmaru' : null),
-      route:'sanmaru-head',
-      meta:Object.assign({}, (res && res.meta) || {}, {
-        gateway:'maru-search->sanmaru',
-        gatewayRole:'sanmaru-head-trigger',
-        sanmaruElapsedMs: nowMs() - started
-      }),
-      latency:nowMs()-started,
-      forced:sanmaruGatewayForced(raw)
-    };
-  }catch(e){
-    return { used:true, status:'error', error:safeString((e && e.message) || e).slice(0, 120), items:[], latency:nowMs()-started, forced:sanmaruGatewayForced(raw) };
-  }
-}
-
 function getSearchBankEngine(){
   if(SearchBankEngineLoaded) return SearchBankEngine;
   SearchBankEngineLoaded = true;
@@ -1303,28 +1226,28 @@ function hasAnyLooseTerm(text, terms){
 }
 
 function sourceCaps(opts){
+  opts = opts || {};
   const deep = !!opts.deep;
+  const mode = normalizeExpansionMode({ expansion: opts.expansionMode });
+  const wide = deep || isWideExpansionMode(mode) || (Number(opts.candidatePool || 0) > MIN_RESULT_TARGET);
   return {
-    searchBankPages: deep ? MAX_SEARCH_BANK_PAGES_DEEP : MAX_SEARCH_BANK_PAGES_NORMAL,
+    searchBankPages: deep ? MAX_SEARCH_BANK_PAGES_DEEP : (wide ? Math.max(MAX_SEARCH_BANK_PAGES_NORMAL, 22) : MAX_SEARCH_BANK_PAGES_NORMAL),
     // External APIs are controlled by maru-search gateway only; no recursive / unbounded loops.
-    // Normal mode target: enough for 30~50 front pages when the provider has data.
-    // Naver supports 100 per page; 8 pages = up to 800 results in one controlled gateway pass.
-    // Fast-first mode: primary web is enough for broad coverage; verticals fill quality.
-    naverPages: deep ? 8 : 5,
-    // Controlled vertical expansion. Runs only inside maru-search gateway, never recursively.
-    naverBlogPages: deep ? 3 : 1,
-    naverNewsPages: deep ? 3 : 2,
-    naverCafePages: deep ? 2 : 1,
-    naverEncycPages: deep ? 1 : 1,
-    naverKinPages: deep ? 1 : 1,
-    naverBookPages: deep ? 2 : 1,
-    naverLocalPages: 1,
-    googlePages: deep ? 3 : 2,
-    bingPages: deep ? 2 : 1,
-    imagePages: deep ? 2 : 1,
-    naverImagePages: deep ? 3 : 2,
-    youtubeLimit: deep ? 40 : 20,
-    timeoutMs: deep ? 12000 : DEFAULT_SOFT_TIMEOUT_MS
+    // Wide mode expands the search area while keeping a single controlled gateway pass.
+    naverPages: deep ? 10 : (wide ? 8 : 5),
+    naverBlogPages: deep ? 4 : (wide ? 2 : 1),
+    naverNewsPages: deep ? 4 : (wide ? 3 : 2),
+    naverCafePages: deep ? 3 : (wide ? 2 : 1),
+    naverEncycPages: deep ? 2 : 1,
+    naverKinPages: deep ? 2 : 1,
+    naverBookPages: deep ? 3 : (wide ? 2 : 1),
+    naverLocalPages: wide ? 2 : 1,
+    googlePages: deep ? 5 : (wide ? 3 : 2),
+    bingPages: deep ? 4 : (wide ? 2 : 1),
+    imagePages: deep ? 4 : (wide ? 2 : 1),
+    naverImagePages: deep ? 5 : (wide ? 3 : 2),
+    youtubeLimit: deep ? 50 : (wide ? 40 : 20),
+    timeoutMs: deep ? 14000 : (wide ? 12000 : DEFAULT_SOFT_TIMEOUT_MS)
   };
 }
 
@@ -1336,7 +1259,7 @@ function addBundle(bundle, fallbackSource, collected, sourceState){
   return items.length;
 }
 
-async function orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType }){
+async function orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType, candidatePool, expansionMode }){
   limit = clampInt(limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
 
   globalThis.__MARU_CACHE = globalThis.__MARU_CACHE || new Map();
@@ -1344,7 +1267,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 
   const mode = externalMode || (externalOff ? 'off' : 'auto');
   const viewType = normalizeSearchType(searchType);
-  const cacheKey = [q, limit, start, lang || '', deep ? 'deep' : 'normal', mode, noMedia ? 'no-media' : 'media', viewType].join('::');
+  const cacheKey = [q, limit, candidatePool || '', expansionMode || '', start, lang || '', deep ? 'deep' : 'normal', mode, noMedia ? 'no-media' : 'media', viewType].join('::');
   const cached = globalThis.__MARU_CACHE.get(cacheKey);
   if(cached && Date.now() - cached.t < MARU_GATEWAY_CACHE_TTL_MS) return cached.v;
 
@@ -1353,7 +1276,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 
   const work = (async () => {
     const started = nowMs();
-    const caps = sourceCaps({ deep });
+    const caps = sourceCaps({ deep, candidatePool, expansionMode });
     const deadline = started + caps.timeoutMs;
     const timeLeft = () => Math.max(0, deadline - nowMs());
     const collected = [];
@@ -1372,7 +1295,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       let count = 0;
       let offset = 0;
       const pageSigs = new Set();
-      const target = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
+      const target = Math.min(MAX_LIMIT, Math.max(limit, candidatePool || 0, MIN_RESULT_TARGET));
       const maxPages = Math.min(caps.searchBankPages, Math.ceil(target / 100) + 3);
       for(let i=0; i<maxPages && timeLeft() > 900; i++){
         const b = await Containers.search_bank.fetch(q, 100, offset, event).catch(() => null);
@@ -1553,13 +1476,13 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 
 
     async function pullFromIntentExpansion(){
-      if(viewType === 'all') return 0;
+      if(viewType === 'all' && !isWideExpansionMode(expansionMode) && detectQueryIntentCluster(q) === 'general') return 0;
       if(timeLeft() <= 1300) {
         record('intent-expansion', 'skipped-time', 0, { searchType: viewType });
         return 0;
       }
 
-      const variants = expandedSearchQueries(q, viewType).slice(1, 10);
+      const variants = expandedSearchQueries(q, viewType === 'all' ? 'web' : viewType).slice(1, isWideExpansionMode(expansionMode) ? 14 : 10);
       if(!variants.length) {
         record('intent-expansion', 'skipped-no-variants', 0, { searchType: viewType });
         return 0;
@@ -1663,10 +1586,10 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 
       for(const queryText of variants){
         for(const spec of selected){
-          if(tasks.length >= (detectQueryIntentCluster(q) !== 'general' ? 30 : 24)) break;
+          if(tasks.length >= (isWideExpansionMode(expansionMode) ? 42 : (detectQueryIntentCluster(q) !== 'general' ? 30 : 24))) break;
           tasks.push(one(spec[0], spec[1], queryText, spec[2], 1));
         }
-        if(tasks.length >= (detectQueryIntentCluster(q) !== 'general' ? 30 : 24)) break;
+        if(tasks.length >= (isWideExpansionMode(expansionMode) ? 42 : (detectQueryIntentCluster(q) !== 'general' ? 30 : 24))) break;
       }
 
       await Promise.allSettled(tasks);
@@ -1674,14 +1597,14 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         searchType: viewType,
         queries: variants,
         tasks: tasks.length,
-        expansionBudget: detectQueryIntentCluster(q) !== 'general' ? 30 : 24,
+        expansionBudget: isWideExpansionMode(expansionMode) ? 42 : (detectQueryIntentCluster(q) !== 'general' ? 30 : 24),
         mode: 'informal-controlled'
       });
       return total;
     }
 
     const internalCount = await pullFromSearchBank();
-    const shouldUseExternal = !externalOff && (mode === 'force' || !!deep || viewType !== 'all' || internalCount < externalTriggerMin);
+    const shouldUseExternal = !externalOff;
 
     if(shouldUseExternal){
       // Single maru-search gateway pass. No recursive loops, no repeated fan-out.
@@ -1689,19 +1612,19 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         pullFromNaver(),
         pullFromGoogle(),
         pullFromBing(),
-        (deep || viewType === 'video' || /영상|비디오|video|youtube|유튜브/i.test(q)) ? pullFromYouTube() : Promise.resolve(0),
+        (!noMedia ? pullFromYouTube() : Promise.resolve(0)),
         pullFromImage()
       ]);
 
       const afterPrimaryExternal = collected.length;
-      const naturalExpansionTarget = Math.min(Math.max(limit, MIN_RESULT_TARGET), 700);
+      const naturalExpansionTarget = Math.min(MAX_LIMIT, Math.max(limit, candidatePool || 0, MIN_RESULT_TARGET));
       if((mode === 'force' || deep || viewType !== 'all' || viewType === 'all' || afterPrimaryExternal < naturalExpansionTarget) && timeLeft() > 1800){
         await pullFromNaverVerticals();
       } else {
         record('naver_verticals', 'skipped-enough-primary', 0, { afterPrimaryExternal, naturalExpansionTarget });
       }
 
-      if((viewType !== 'all' || detectQueryIntentCluster(q) !== 'general') && timeLeft() > 1300){
+      if((viewType !== 'all' || isWideExpansionMode(expansionMode) || detectQueryIntentCluster(q) !== 'general') && timeLeft() > 1300){
         await pullFromIntentExpansion();
       }
 
@@ -1734,7 +1657,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     // search.js enriches only the currently rendered page after cards are already shown.
     trace.push({ name: 'initial-og-image-enrich', status: 'skipped-fast-first', count: 0 });
 
-    const finalTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
+    const finalTarget = Math.min(MAX_LIMIT, Math.max(limit, candidatePool || 0, MIN_RESULT_TARGET));
     const finalItems = unique.slice(0, finalTarget).map(compactResultItem);
 
     const result = {
@@ -1748,6 +1671,8 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         requestedLimit: limit,
         target: finalTarget,
         totalCandidates: collected.length,
+        searchAreaExpansion: { mode: expansionMode || 'balanced', candidatePoolTarget: candidatePool || finalTarget, finalTarget, page: 1, perPage: 15, principle: 'maru-search-expands-authorized-search-area-through-sanmaru-and-controlled-wide-gateway' },
+        sourceDiversity: trace.filter(x => x && x.count).map(x => ({ name: x.name, count: x.count })),
         deduped: Math.max(0, collected.length - unique.length),
         richMedia: finalItems.filter(x => x && isRealImageUrl(x.thumbnail)).length,
         mediaQualityPriority: true,
@@ -2863,10 +2788,88 @@ function parseEventJsonBody(event){
 }
 
 
+function sanmaruBypassRequested(raw){
+  raw = raw || {};
+  return truthy(raw.noSanmaru)
+    || truthy(raw.skipSanmaru)
+    || truthy(raw.disableSanmaru)
+    || truthy(raw.legacyOnly)
+    || truthy(raw.__sanmaruLegacy)
+    || String(raw.external || '').toLowerCase() === 'legacy';
+}
+
+async function runLegacySearch(event, params){
+  params = params || {};
+  return await orchestrateSearch({
+    event: event || {},
+    q: safeString(params.q || params.query || '').trim(),
+    limit: params.limit || DEFAULT_LIMIT,
+    start: params.start || 1,
+    lang: params.lang || params.uiLang || params.locale || null,
+    deep: truthy(params.deep) || String(params.external || '').toLowerCase() === 'deep',
+    externalOff: explicitExternalBlocked(params),
+    externalMode: explicitExternalBlocked(params) ? 'off' : (explicitExternalRequested(params) || truthy(params.deep) ? 'force' : 'auto'),
+    noMedia: truthy(params.noMedia) || truthy(params.disableMedia),
+    searchType: params.type || params.category || params.tab || params.vertical || 'all',
+    candidatePool: pickCandidatePool(params, params.limit || DEFAULT_LIMIT),
+    expansionMode: normalizeExpansionMode(params)
+  });
+}
+
+async function callSanmaruGlobalLibrary(event, picked){
+  const raw = (picked && picked.raw) || {};
+  const started = nowMs();
+  try{
+    let Sanmaru = null;
+    try{ Sanmaru = require('./sanmaru_engine_v2'); }catch(e){ Sanmaru = null; }
+    if(!Sanmaru || typeof Sanmaru.runSanmaru !== 'function'){
+      return { ok:false, reason:'sanmaru-unavailable', elapsedMs: nowMs() - started };
+    }
+
+    const res = await Sanmaru.runSanmaru({
+      event: event || {},
+      raw: raw || {},
+      q: picked.q,
+      query: picked.q,
+      limit: picked.limit,
+      candidatePool: picked.candidatePool,
+      candidatePoolTarget: picked.candidatePool,
+      expansion: picked.expansionMode,
+      searchExpansion: picked.expansionMode,
+      start: picked.start,
+      page: raw.page,
+      perPage: raw.perPage,
+      type: picked.searchType,
+      category: picked.searchType,
+      lang: picked.lang,
+      deep: picked.deep,
+      external: picked.externalMode || 'auto',
+      noExternal: picked.externalOff ? '1' : '0',
+      disableExternal: picked.externalOff ? '1' : '0',
+      noMedia: picked.noMedia ? '1' : '0',
+      noAnalytics: '1',
+      noRevenue: '1',
+      from: 'maru-search-platform-road'
+    });
+
+    const items = Array.isArray(res && res.items) ? res.items : (Array.isArray(res && res.results) ? res.results : []);
+    return {
+      ok: res && res.status !== 'error' && res.status !== 'blocked',
+      reason: res && res.status,
+      elapsedMs: nowMs() - started,
+      result: res,
+      items
+    };
+  }catch(e){
+    return { ok:false, reason:String((e && e.message) || e).slice(0, 80), elapsedMs: nowMs() - started };
+  }
+}
+
+
 exports.handler = async function(event){
   try{
     const picked = pickQ(event || {});
-    const { q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType, raw } = picked;
+    const { q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType, candidatePool, expansionMode, page, perPage, raw } = picked;
 
     const action = safeString((raw && (raw.action || raw.mode || raw.fn)) || '').trim().toLowerCase();
     if(action === 'enrich-images' || action === 'enrichimages' || action === 'image-enrich'){
@@ -2901,45 +2904,33 @@ exports.handler = async function(event){
     if(!q){
       return ok({ status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: null, items: [], results: [], meta: { count: 0, limit } });
     }
-    const sanmaruHead = await callSanmaruHeadGateway(event, picked);
     let base = null;
-    let sanmaruGatewayUsed = false;
+    let sanmaruGateway = null;
 
-    if(sanmaruHead && sanmaruHead.used && (sanmaruHead.items || []).length){
-      sanmaruGatewayUsed = true;
+    if(!sanmaruBypassRequested(raw)){
+      sanmaruGateway = await callSanmaruGlobalLibrary(event, picked);
+    }
+
+    if(sanmaruGateway && sanmaruGateway.ok && Array.isArray(sanmaruGateway.items) && sanmaruGateway.items.length){
       base = {
-        source: sanmaruHead.source || 'sanmaru',
-        route: 'sanmaru-head',
-        sourceRoute: 'sanmaru-head',
-        region: sanmaruHead.meta && sanmaruHead.meta.region || detectRuntimeRegion(event, lang, q),
-        items: sanmaruHead.items,
-        meta: Object.assign({}, sanmaruHead.meta || {}, {
-          count: sanmaruHead.items.length,
-          sanmaru: {
-            used: true,
-            status: sanmaruHead.status,
-            engine: sanmaruHead.engine,
-            version: sanmaruHead.version,
-            latency: sanmaruHead.latency,
-            route: 'head-engine-first'
-          },
-          gatewayMode: 'sanmaru-head-first',
-          legacyFallback: false
+        source: 'sanmaru',
+        route: 'sanmaru-global-library',
+        sourceRoute: 'sanmaru-global-library',
+        region: sanmaruGateway.result && sanmaruGateway.result.meta ? sanmaruGateway.result.meta.region : null,
+        items: sanmaruGateway.items,
+        meta: Object.assign({}, (sanmaruGateway.result && sanmaruGateway.result.meta) || {}, {
+          maruSearchRole: 'platform-information-road',
+          sanmaruGatewayUsed: true,
+          gatewayMode: 'maru-search-road-to-sanmaru-global-library',
+          sanmaruElapsedMs: sanmaruGateway.elapsedMs
         })
       };
     }else{
-      base = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType });
+      base = await runLegacySearch(event, { q, limit, candidatePool, expansion: expansionMode, searchExpansion: expansionMode, page, perPage, start, lang, deep, external: externalMode, noExternal: externalOff ? '1' : '0', noMedia: noMedia ? '1' : '0', type: searchType });
       base.meta = Object.assign({}, base.meta || {}, {
-        sanmaru: {
-          used: !!(sanmaruHead && sanmaruHead.used),
-          status: sanmaruHead ? sanmaruHead.status : 'not-called',
-          blocked: !!(sanmaruHead && sanmaruHead.blocked),
-          error: sanmaruHead && sanmaruHead.error || null,
-          latency: sanmaruHead && sanmaruHead.latency || 0,
-          route: 'legacy-fallback'
-        },
-        gatewayMode: 'legacy-fallback-after-sanmaru',
-        legacyFallback: true
+        sanmaruGatewayUsed: false,
+        sanmaruFallbackReason: sanmaruGateway ? sanmaruGateway.reason : (sanmaruBypassRequested(raw) ? 'bypassed-by-request' : 'not-called'),
+        gatewayMode: 'legacy-maru-search-fallback'
       });
     }
 
@@ -2955,7 +2946,7 @@ exports.handler = async function(event){
     return ok({
       status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: base.source,
       items: base.items, results: base.items,
-      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', sanmaruGatewayUsed: !!sanmaruGatewayUsed })
+      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, candidatePool, expansionMode, page, perPage, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));
@@ -2998,10 +2989,15 @@ async function maruSearchDispatcher(req){
 
 exports.maruSearchDispatcher = maruSearchDispatcher;
 
+exports.runLegacySearch = runLegacySearch;
+exports.orchestrateSearch = orchestrateSearch;
+
 exports.runEngine = async function(event, params){
   params = params || {};
-  return await orchestrateSearch({
-    event: event || {},
+  if(sanmaruBypassRequested(params)){
+    return await runLegacySearch(event || {}, params);
+  }
+  const picked = {
     q: safeString(params.q || params.query || '').trim(),
     limit: params.limit || DEFAULT_LIMIT,
     start: params.start || 1,
@@ -3010,6 +3006,33 @@ exports.runEngine = async function(event, params){
     externalOff: explicitExternalBlocked(params),
     externalMode: explicitExternalBlocked(params) ? 'off' : (explicitExternalRequested(params) || truthy(params.deep) ? 'force' : 'auto'),
     noMedia: truthy(params.noMedia) || truthy(params.disableMedia),
-    searchType: params.type || params.category || params.tab || params.vertical || 'all'
+    searchType: params.type || params.category || params.tab || params.vertical || 'all',
+    candidatePool: pickCandidatePool(params, params.limit || DEFAULT_LIMIT),
+    expansionMode: normalizeExpansionMode(params),
+    raw: params
+  };
+  const sanmaruGateway = await callSanmaruGlobalLibrary(event || {}, picked);
+  if(sanmaruGateway && sanmaruGateway.ok && Array.isArray(sanmaruGateway.items) && sanmaruGateway.items.length){
+    return {
+      source: 'sanmaru',
+      route: 'sanmaru-global-library',
+      sourceRoute: 'sanmaru-global-library',
+      region: sanmaruGateway.result && sanmaruGateway.result.meta ? sanmaruGateway.result.meta.region : null,
+      items: sanmaruGateway.items,
+      results: sanmaruGateway.items,
+      meta: Object.assign({}, (sanmaruGateway.result && sanmaruGateway.result.meta) || {}, {
+        maruSearchRole: 'platform-information-road',
+        sanmaruGatewayUsed: true,
+        gatewayMode: 'maru-search-road-to-sanmaru-global-library',
+        sanmaruElapsedMs: sanmaruGateway.elapsedMs
+      })
+    };
+  }
+  const legacy = await runLegacySearch(event || {}, params);
+  legacy.meta = Object.assign({}, legacy.meta || {}, {
+    sanmaruGatewayUsed: false,
+    sanmaruFallbackReason: sanmaruGateway ? sanmaruGateway.reason : 'not-called',
+    gatewayMode: 'legacy-maru-search-fallback'
   });
+  return legacy;
 };
