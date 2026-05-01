@@ -782,164 +782,106 @@ let SearchBankEngine = null;
 let SearchBankEngineLoaded = false;
 
 
-let SanmaruEngine = null;
 let SanmaruEngineLoaded = false;
-
+let SanmaruEngine = null;
 function getSanmaruEngine(){
   if(SanmaruEngineLoaded) return SanmaruEngine;
   SanmaruEngineLoaded = true;
   try { SanmaruEngine = require('./sanmaru_engine_v2'); } catch(e) { SanmaruEngine = null; }
   return SanmaruEngine;
 }
-
-function promiseWithTimeout(promise, timeoutMs, label){
-  const ms = Math.max(800, Math.min(15000, timeoutMs || 4500));
-  let timer = null;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error((label || 'operation') + '_timeout')), ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => { if(timer) clearTimeout(timer); });
+function sanmaruGatewayBlocked(raw){
+  raw = raw || {};
+  if(truthy(process.env.MARU_SEARCH_DISABLE_SANMARU)) return true;
+  return truthy(raw.noSanmaru || raw.skipSanmaru || raw.disableSanmaru || raw.legacyOnly || raw.noHeadEngine);
 }
-
-function isUsableSanmaruResult(res){
-  if(!res || typeof res !== 'object') return false;
-  if(res.status && String(res.status).toLowerCase() !== 'ok') return false;
-  const arr = Array.isArray(res.items) ? res.items : (Array.isArray(res.results) ? res.results : []);
-  return arr.length > 0;
+function sanmaruGatewayForced(raw){
+  raw = raw || {};
+  return truthy(raw.sanmaruOnly || raw.forceSanmaru || raw.useSanmaru || raw.headEngine);
 }
-
-function sanmaruGatewayTimeoutMs(params){
-  const raw = (params && params.raw) || {};
-  const deep = !!(params && params.deep);
-  const forced = explicitExternalRequested(raw) || String(raw.external || '').toLowerCase() === 'deep';
-  const env = clampInt(process.env.SANMARU_GATEWAY_TIMEOUT_MS, 0, 0, 15000);
-  if(env > 0) return env;
-  if(deep || forced) return 6500;
-  return 4200;
+function normalizeSanmaruItems(res){
+  if(!res) return [];
+  if(Array.isArray(res)) return res;
+  if(Array.isArray(res.items)) return res.items;
+  if(Array.isArray(res.results)) return res.results;
+  if(res.data && Array.isArray(res.data.items)) return res.data.items;
+  if(res.data && Array.isArray(res.data.results)) return res.data.results;
+  return [];
 }
-
-function sanmaruMinimumUsableCount(limit, searchType){
-  const type = normalizeSearchType(searchType);
-  const requested = clampInt(limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
-  if(type === 'video' || type === 'image' || type === 'news') return Math.min(requested, 40);
-  return Math.min(requested, MIN_RESULT_TARGET);
-}
-
-async function callSanmaruGateway(event, params){
+async function callSanmaruHeadGateway(event, picked){
   const started = nowMs();
-  const mod = getSanmaruEngine();
-  const timeoutMs = sanmaruGatewayTimeoutMs(params || {});
-
-  if(!mod || (typeof mod.runSanmaru !== 'function' && typeof mod.runEngine !== 'function')){
-    return { used: false, ok: false, reason: 'sanmaru_not_available', items: [], result: null, latency: nowMs() - started, timeoutMs };
+  const raw = (picked && picked.raw) || {};
+  if(sanmaruGatewayBlocked(raw)){
+    return { used:false, blocked:true, status:'blocked-by-request', latency:nowMs()-started };
   }
-
-  const payload = {
-    event: event || {},
-    raw: Object.assign({}, (params && params.raw) || {}, {
-      from: 'maru-search',
-      via: 'sanmaru',
-      noMaruSearch: '1',
-      skipMaruSearch: '1'
-    }),
-    q: safeString(params && params.q).trim(),
-    query: safeString(params && params.q).trim(),
-    limit: params && params.limit,
-    start: params && params.start,
-    lang: params && params.lang,
-    type: params && params.searchType,
-    searchType: params && params.searchType,
-    deep: params && params.deep,
-    external: params && params.externalMode,
-    noExternal: params && params.externalOff,
-    disableExternal: params && params.externalOff,
-    noMedia: params && params.noMedia,
-    timeoutMs
-  };
-
+  const engine = getSanmaruEngine();
+  if(!engine){
+    return { used:false, blocked:false, status:'unavailable', latency:nowMs()-started };
+  }
   try{
-    const call = typeof mod.runSanmaru === 'function' ? mod.runSanmaru(payload) : mod.runEngine(event || {}, payload);
-    const res = await promiseWithTimeout(call, timeoutMs, 'sanmaru');
-    const items = Array.isArray(res && res.items) ? res.items : (Array.isArray(res && res.results) ? res.results : []);
+    const params = {
+      event: event || {},
+      raw: Object.assign({}, raw, {
+        from: 'maru-search-gateway',
+        source: 'maru-search-gateway',
+        noAnalytics: '1',
+        noRevenue: '1'
+      }),
+      q: picked.q,
+      query: picked.q,
+      limit: picked.limit,
+      start: picked.start,
+      lang: picked.lang,
+      type: picked.searchType,
+      deep: picked.deep,
+      external: picked.externalMode || (picked.externalOff ? 'off' : 'auto'),
+      noExternal: picked.externalOff ? '1' : '0',
+      disableExternal: picked.externalOff ? '1' : '0',
+      noMedia: picked.noMedia ? '1' : '0',
+      disableMedia: picked.noMedia ? '1' : '0',
+      timeoutMs: raw.sanmaruTimeoutMs || raw.timeoutMs || (picked.deep ? 12000 : 8500)
+    };
+
+    let res = null;
+    if(typeof engine.runSanmaru === 'function') res = await engine.runSanmaru(params);
+    else if(typeof engine.runEngine === 'function') res = await engine.runEngine(event || {}, params.raw);
+    else if(typeof engine.handler === 'function'){
+      const h = await engine.handler({
+        httpMethod:'GET',
+        headers:(event && event.headers) || {},
+        queryStringParameters:Object.assign({}, params.raw, {
+          q:picked.q,
+          limit:picked.limit,
+          type:picked.searchType,
+          lang:picked.lang,
+          external:params.external,
+          noExternal:params.noExternal,
+          noMedia:params.noMedia
+        })
+      });
+      res = h && typeof h.body === 'string' ? JSON.parse(h.body || '{}') : h;
+    }
+
+    const items = normalizeSanmaruItems(res).map(compactResultItem);
     return {
-      used: true,
-      ok: isUsableSanmaruResult(res),
-      reason: isUsableSanmaruResult(res) ? 'ok' : safeString(res && res.status || 'empty'),
-      items: items.map(x => canonicalizeItem(x, payload.q, 'sanmaru')),
-      result: res || null,
-      latency: nowMs() - started,
-      timeoutMs,
-      version: res && res.version
+      used:true,
+      status:(res && res.status) || 'ok',
+      engine:(res && res.engine) || 'sanmaru',
+      version:(res && res.version) || null,
+      items,
+      source:(res && res.source) || (items.length ? 'sanmaru' : null),
+      route:'sanmaru-head',
+      meta:Object.assign({}, (res && res.meta) || {}, {
+        gateway:'maru-search->sanmaru',
+        gatewayRole:'sanmaru-head-trigger',
+        sanmaruElapsedMs: nowMs() - started
+      }),
+      latency:nowMs()-started,
+      forced:sanmaruGatewayForced(raw)
     };
   }catch(e){
-    return {
-      used: true,
-      ok: false,
-      reason: /timeout/i.test(safeString(e && e.message)) ? 'sanmaru_timeout' : 'sanmaru_error',
-      error: safeString((e && e.message) || e).slice(0, 180),
-      items: [],
-      result: null,
-      latency: nowMs() - started,
-      timeoutMs
-    };
+    return { used:true, status:'error', error:safeString((e && e.message) || e).slice(0, 120), items:[], latency:nowMs()-started, forced:sanmaruGatewayForced(raw) };
   }
-}
-
-function mergeSanmaruAndLegacy(sanmaruItems, legacyItems, limit){
-  const max = clampInt(limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
-  const merged = dedupeCanonicalItems([].concat(Array.isArray(sanmaruItems) ? sanmaruItems : [], Array.isArray(legacyItems) ? legacyItems : []));
-  return merged.slice(0, max);
-}
-
-async function runSanmaruFirstSearch(event, picked){
-  const { q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType } = picked;
-  const started = nowMs();
-  const sanmaru = await callSanmaruGateway(event, { q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType, raw: picked.raw || {} });
-  const minUsable = sanmaruMinimumUsableCount(limit, searchType);
-  const sanmaruCount = sanmaru.items.length;
-  const needsLegacy = !sanmaru.ok || sanmaruCount < minUsable;
-
-  let legacy = null;
-  if(needsLegacy){
-    legacy = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType });
-  }
-
-  const legacyItems = legacy && Array.isArray(legacy.items) ? legacy.items : [];
-  const items = needsLegacy ? mergeSanmaruAndLegacy(sanmaru.items, legacyItems, limit) : mergeSanmaruAndLegacy(sanmaru.items, [], limit);
-  const baseMeta = Object.assign({}, (sanmaru.result && sanmaru.result.meta) || {}, needsLegacy && legacy ? (legacy.meta || {}) : {});
-
-  return {
-    source: sanmaru.ok ? 'sanmaru' : (legacy && legacy.source) || null,
-    region: (sanmaru.result && sanmaru.result.meta && sanmaru.result.meta.region) || (legacy && legacy.region) || null,
-    route: needsLegacy && legacy ? legacy.route : null,
-    sourceRoute: needsLegacy && legacy ? (legacy.sourceRoute || legacy.route) : null,
-    items,
-    results: items,
-    meta: Object.assign({}, baseMeta, {
-      engineChain: ['maru-search-gateway', 'sanmaru', needsLegacy ? 'maru-search-legacy-fallback' : null].filter(Boolean),
-      primaryEngine: 'sanmaru',
-      fallbackEngine: needsLegacy ? 'maru-search-legacy' : null,
-      fallback: !!needsLegacy,
-      fallbackReason: needsLegacy ? (sanmaru.ok ? 'sanmaru_result_below_minimum' : sanmaru.reason) : '',
-      sanmaruGateway: {
-        used: sanmaru.used,
-        ok: sanmaru.ok,
-        reason: sanmaru.reason,
-        count: sanmaruCount,
-        minUsable,
-        latency: sanmaru.latency,
-        timeoutMs: sanmaru.timeoutMs,
-        version: sanmaru.version || null
-      },
-      legacyGateway: {
-        used: !!needsLegacy,
-        count: legacyItems.length,
-        source: legacy && legacy.source || null
-      },
-      count: items.length,
-      elapsedMs: nowMs() - started
-    })
-  };
 }
 
 function getSearchBankEngine(){
@@ -2959,7 +2901,48 @@ exports.handler = async function(event){
     if(!q){
       return ok({ status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: null, items: [], results: [], meta: { count: 0, limit } });
     }
-    let base = await runSanmaruFirstSearch(event || {}, picked);
+    const sanmaruHead = await callSanmaruHeadGateway(event, picked);
+    let base = null;
+    let sanmaruGatewayUsed = false;
+
+    if(sanmaruHead && sanmaruHead.used && (sanmaruHead.items || []).length){
+      sanmaruGatewayUsed = true;
+      base = {
+        source: sanmaruHead.source || 'sanmaru',
+        route: 'sanmaru-head',
+        sourceRoute: 'sanmaru-head',
+        region: sanmaruHead.meta && sanmaruHead.meta.region || detectRuntimeRegion(event, lang, q),
+        items: sanmaruHead.items,
+        meta: Object.assign({}, sanmaruHead.meta || {}, {
+          count: sanmaruHead.items.length,
+          sanmaru: {
+            used: true,
+            status: sanmaruHead.status,
+            engine: sanmaruHead.engine,
+            version: sanmaruHead.version,
+            latency: sanmaruHead.latency,
+            route: 'head-engine-first'
+          },
+          gatewayMode: 'sanmaru-head-first',
+          legacyFallback: false
+        })
+      };
+    }else{
+      base = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType });
+      base.meta = Object.assign({}, base.meta || {}, {
+        sanmaru: {
+          used: !!(sanmaruHead && sanmaruHead.used),
+          status: sanmaruHead ? sanmaruHead.status : 'not-called',
+          blocked: !!(sanmaruHead && sanmaruHead.blocked),
+          error: sanmaruHead && sanmaruHead.error || null,
+          latency: sanmaruHead && sanmaruHead.latency || 0,
+          route: 'legacy-fallback'
+        },
+        gatewayMode: 'legacy-fallback-after-sanmaru',
+        legacyFallback: true
+      });
+    }
+
     base = await attachMediaEngineResults(base, event, { q, limit, start, lang, searchType, raw, noMedia });
     // Search must not trigger heavy settlement/distribution by default.
     // Analytics is opt-in for this endpoint; weekly settlement is handled by revenue/commerce engines.
@@ -2972,7 +2955,7 @@ exports.handler = async function(event){
     return ok({
       status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: base.source,
       items: base.items, results: base.items,
-      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1' })
+      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', sanmaruGatewayUsed: !!sanmaruGatewayUsed })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));
