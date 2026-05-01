@@ -53,384 +53,23 @@ const params = new URLSearchParams(location.search);
 const q0 = (params.get('q') || '').trim();
 const from0 = (params.get('from') || '').trim();
 
-const RTL_SEARCH_LANGS = new Set(['ar','fa','ur']);
-
-const SEARCH_TAB_KEYS = [
-  'all','image','news','map','knowledge','tour','video','sns','blog','cafe','book','shopping','sports','finance','webtoon'
+const SEARCH_TABS = [
+  ['all', '전체'],
+  ['image', '이미지'],
+  ['news', '뉴스'],
+  ['map', '지도'],
+  ['knowledge', '지식'],
+  ['tour', '관광'],
+  ['video', '영상'],
+  ['sns', '소셜'],
+  ['blog', '블로그'],
+  ['cafe', '카페'],
+  ['book', '도서'],
+  ['shopping', '쇼핑'],
+  ['sports', '스포츠'],
+  ['finance', '증권'],
+  ['webtoon', '웹툰']
 ];
-
-const SEARCH_I18N = {
-  ko: {
-    name: '한국어',
-    tabs: { all:'전체', image:'이미지', news:'뉴스', map:'지도', knowledge:'지식', tour:'관광', video:'영상', sns:'소셜', blog:'블로그', cafe:'카페', book:'도서', shopping:'쇼핑', sports:'스포츠', finance:'증권', webtoon:'웹툰' },
-    groups: { authority:'공식/권위', news:'뉴스', local_tour:'지도/관광/지역', media:'이미지/영상', social:'소셜', community:'블로그/카페/커뮤니티', knowledge:'지식/도서', shopping:'쇼핑', sports:'스포츠', finance:'금융', webtoon:'웹툰', web:'웹' },
-    strings: { pageTitle:'IGDC 글로벌 검색', brand:'IGDC 글로벌 검색', placeholder:'전 세계를 검색하세요…', searchButton:'검색', searching:'"{q}"에 대한 {type} 검색 중...', noResults:'"{q}"에 대한 결과가 없습니다', results:'"{q}"에 대한 {count}개 결과 · {type}', count:'{count}개', showMore:'{label} {count}개 더보기', collapse:'접기', noTitle:'(제목 없음)', poweredBy:'Powered by IGDC · 글로벌 통합 검색' }
-  },
-  en: {
-    name: 'English',
-    tabs: { all:'All', image:'Images', news:'News', map:'Maps', knowledge:'Knowledge', tour:'Travel', video:'Videos', sns:'Social', blog:'Blogs', cafe:'Forums', book:'Books', shopping:'Shopping', sports:'Sports', finance:'Finance', webtoon:'Webtoons' },
-    groups: { authority:'Official/Authority', news:'News', local_tour:'Maps/Travel/Local', media:'Images/Videos', social:'Social', community:'Blogs/Forums', knowledge:'Knowledge/Books', shopping:'Shopping', sports:'Sports', finance:'Finance', webtoon:'Webtoons', web:'Web' },
-    strings: { pageTitle:'IGDC Global Search', brand:'IGDC Global Search', placeholder:'Search the world…', searchButton:'Search', searching:'Searching {type} for "{q}"...', noResults:'No results for "{q}"', results:'{count} results for "{q}" · {type}', count:'{count}', showMore:'Show {count} more in {label}', collapse:'Collapse', noTitle:'(no title)', poweredBy:'Powered by IGDC · Global Unified Search' }
-  },
-  de: {
-    name: 'Deutsch',
-    tabs: { all:'Alle', image:'Bilder', news:'Nachrichten', map:'Karten', knowledge:'Wissen', tour:'Reisen', video:'Videos', sns:'Sozial', blog:'Blogs', cafe:'Foren', book:'Bücher', shopping:'Shopping', sports:'Sport', finance:'Finanzen', webtoon:'Webtoons' },
-    groups: { authority:'Offiziell/Autorität', news:'Nachrichten', local_tour:'Karten/Reisen/Lokal', media:'Bilder/Videos', social:'Sozial', community:'Blogs/Foren', knowledge:'Wissen/Bücher', shopping:'Shopping', sports:'Sport', finance:'Finanzen', webtoon:'Webtoons', web:'Web' },
-    strings: { pageTitle:'IGDC Globale Suche', brand:'IGDC Globale Suche', placeholder:'Die Welt durchsuchen…', searchButton:'Suchen', searching:'Suche {type} nach „{q}“...', noResults:'Keine Ergebnisse für „{q}“', results:'{count} Ergebnisse für „{q}“ · {type}', count:'{count}', showMore:'{count} weitere in {label} anzeigen', collapse:'Einklappen', noTitle:'(kein Titel)', poweredBy:'Powered by IGDC · Globale Einheitssuche' }
-  },
-  bn: {
-    name: 'বাংলা',
-    tabs: { all:'সব', image:'ছবি', news:'সংবাদ', map:'মানচিত্র', knowledge:'জ্ঞান', tour:'ভ্রমণ', video:'ভিডিও', sns:'সোশ্যাল', blog:'ব্লগ', cafe:'ফোরাম', book:'বই', shopping:'শপিং', sports:'খেলা', finance:'অর্থ', webtoon:'ওয়েবটুন' },
-    groups: { authority:'অফিসিয়াল/প্রামাণিক', news:'সংবাদ', local_tour:'মানচিত্র/ভ্রমণ/স্থানীয়', media:'ছবি/ভিডিও', social:'সোশ্যাল', community:'ব্লগ/ফোরাম', knowledge:'জ্ঞান/বই', shopping:'শপিং', sports:'খেলা', finance:'অর্থ', webtoon:'ওয়েবটুন', web:'ওয়েব' },
-    strings: { pageTitle:'IGDC গ্লোবাল সার্চ', brand:'IGDC গ্লোবাল সার্চ', placeholder:'বিশ্বজুড়ে অনুসন্ধান করুন…', searchButton:'অনুসন্ধান', searching:'"{q}"-এর জন্য {type} অনুসন্ধান চলছে...', noResults:'"{q}"-এর জন্য কোনো ফল নেই', results:'"{q}"-এর জন্য {count}টি ফলাফল · {type}', count:'{count}টি', showMore:'{label}-এ আরও {count}টি দেখুন', collapse:'গুটিয়ে নিন', noTitle:'(শিরোনাম নেই)', poweredBy:'Powered by IGDC · গ্লোবাল ইউনিফাইড সার্চ' }
-  },
-  ar: {
-    name: 'العربية',
-    tabs: { all:'الكل', image:'الصور', news:'الأخبار', map:'الخرائط', knowledge:'المعرفة', tour:'السفر', video:'الفيديو', sns:'التواصل', blog:'المدونات', cafe:'المنتديات', book:'الكتب', shopping:'التسوق', sports:'الرياضة', finance:'المال', webtoon:'ويبتون' },
-    groups: { authority:'رسمي/موثوق', news:'الأخبار', local_tour:'خرائط/سفر/محلي', media:'صور/فيديو', social:'التواصل', community:'مدونات/منتديات', knowledge:'معرفة/كتب', shopping:'تسوق', sports:'رياضة', finance:'مال', webtoon:'ويبتون', web:'الويب' },
-    strings: { pageTitle:'بحث IGDC العالمي', brand:'بحث IGDC العالمي', placeholder:'ابحث في العالم…', searchButton:'بحث', searching:'جارٍ البحث في {type} عن "{q}"...', noResults:'لا توجد نتائج لـ "{q}"', results:'{count} نتيجة لـ "{q}" · {type}', count:'{count}', showMore:'عرض {count} المزيد في {label}', collapse:'طي', noTitle:'(بدون عنوان)', poweredBy:'Powered by IGDC · البحث العالمي الموحد' }
-  },
-  pl: {
-    name:'Polski',
-    tabs:{ all:'Wszystko', image:'Obrazy', news:'Wiadomości', map:'Mapy', knowledge:'Wiedza', tour:'Podróże', video:'Wideo', sns:'Społeczności', blog:'Blogi', cafe:'Fora', book:'Książki', shopping:'Zakupy', sports:'Sport', finance:'Finanse', webtoon:'Webtoony' },
-    groups:{ authority:'Oficjalne/Autorytet', news:'Wiadomości', local_tour:'Mapy/Podróże/Lokalne', media:'Obrazy/Wideo', social:'Społeczności', community:'Blogi/Fora', knowledge:'Wiedza/Książki', shopping:'Zakupy', sports:'Sport', finance:'Finanse', webtoon:'Webtoony', web:'Sieć' },
-    strings:{ pageTitle:'Globalne wyszukiwanie IGDC', brand:'Globalne wyszukiwanie IGDC', placeholder:'Szukaj na świecie…', searchButton:'Szukaj', searching:'Wyszukiwanie {type} dla „{q}”...', noResults:'Brak wyników dla „{q}”', results:'{count} wyników dla „{q}” · {type}', count:'{count}', showMore:'Pokaż jeszcze {count} w {label}', collapse:'Zwiń', noTitle:'(brak tytułu)', poweredBy:'Powered by IGDC · Globalne wyszukiwanie zunifikowane' }
-  },
-  pt: {
-    name:'Português',
-    tabs:{ all:'Tudo', image:'Imagens', news:'Notícias', map:'Mapas', knowledge:'Conhecimento', tour:'Turismo', video:'Vídeos', sns:'Social', blog:'Blogs', cafe:'Fóruns', book:'Livros', shopping:'Compras', sports:'Esportes', finance:'Finanças', webtoon:'Webtoons' },
-    groups:{ authority:'Oficial/Autoridade', news:'Notícias', local_tour:'Mapas/Turismo/Local', media:'Imagens/Vídeos', social:'Social', community:'Blogs/Fóruns', knowledge:'Conhecimento/Livros', shopping:'Compras', sports:'Esportes', finance:'Finanças', webtoon:'Webtoons', web:'Web' },
-    strings:{ pageTitle:'Busca Global IGDC', brand:'Busca Global IGDC', placeholder:'Pesquise no mundo…', searchButton:'Buscar', searching:'Buscando {type} por "{q}"...', noResults:'Nenhum resultado para "{q}"', results:'{count} resultados para "{q}" · {type}', count:'{count}', showMore:'Mostrar mais {count} em {label}', collapse:'Recolher', noTitle:'(sem título)', poweredBy:'Powered by IGDC · Busca Global Unificada' }
-  },
-  ru: {
-    name:'Русский',
-    tabs:{ all:'Все', image:'Изображения', news:'Новости', map:'Карты', knowledge:'Знания', tour:'Туризм', video:'Видео', sns:'Соцсети', blog:'Блоги', cafe:'Форумы', book:'Книги', shopping:'Покупки', sports:'Спорт', finance:'Финансы', webtoon:'Вебтуны' },
-    groups:{ authority:'Официальное/Авторитетное', news:'Новости', local_tour:'Карты/Туризм/Местное', media:'Изображения/Видео', social:'Соцсети', community:'Блоги/Форумы', knowledge:'Знания/Книги', shopping:'Покупки', sports:'Спорт', finance:'Финансы', webtoon:'Вебтуны', web:'Веб' },
-    strings:{ pageTitle:'Глобальный поиск IGDC', brand:'Глобальный поиск IGDC', placeholder:'Искать по миру…', searchButton:'Поиск', searching:'Поиск {type} по запросу «{q}»...', noResults:'Нет результатов для «{q}»', results:'{count} результатов для «{q}» · {type}', count:'{count}', showMore:'Показать еще {count} в {label}', collapse:'Свернуть', noTitle:'(без названия)', poweredBy:'Powered by IGDC · Глобальный единый поиск' }
-  },
-  sv: {
-    name:'Svenska',
-    tabs:{ all:'Alla', image:'Bilder', news:'Nyheter', map:'Kartor', knowledge:'Kunskap', tour:'Resor', video:'Videor', sns:'Socialt', blog:'Bloggar', cafe:'Forum', book:'Böcker', shopping:'Shopping', sports:'Sport', finance:'Finans', webtoon:'Webtoons' },
-    groups:{ authority:'Officiellt/Auktoritet', news:'Nyheter', local_tour:'Kartor/Resor/Lokalt', media:'Bilder/Videor', social:'Socialt', community:'Bloggar/Forum', knowledge:'Kunskap/Böcker', shopping:'Shopping', sports:'Sport', finance:'Finans', webtoon:'Webtoons', web:'Webb' },
-    strings:{ pageTitle:'IGDC Global sökning', brand:'IGDC Global sökning', placeholder:'Sök i världen…', searchButton:'Sök', searching:'Söker {type} efter ”{q}”...', noResults:'Inga resultat för ”{q}”', results:'{count} resultat för ”{q}” · {type}', count:'{count}', showMore:'Visa {count} fler i {label}', collapse:'Fäll ihop', noTitle:'(ingen titel)', poweredBy:'Powered by IGDC · Global enhetlig sökning' }
-  },
-  sw: {
-    name:'Kiswahili',
-    tabs:{ all:'Zote', image:'Picha', news:'Habari', map:'Ramani', knowledge:'Maarifa', tour:'Utalii', video:'Video', sns:'Mitandao', blog:'Blogu', cafe:'Majukwaa', book:'Vitabu', shopping:'Ununuzi', sports:'Michezo', finance:'Fedha', webtoon:'Webtoon' },
-    groups:{ authority:'Rasmi/Mamlaka', news:'Habari', local_tour:'Ramani/Utalii/Eneo', media:'Picha/Video', social:'Mitandao', community:'Blogu/Majukwaa', knowledge:'Maarifa/Vitabu', shopping:'Ununuzi', sports:'Michezo', finance:'Fedha', webtoon:'Webtoon', web:'Wavuti' },
-    strings:{ pageTitle:'Utafutaji wa Kimataifa wa IGDC', brand:'Utafutaji wa Kimataifa wa IGDC', placeholder:'Tafuta duniani…', searchButton:'Tafuta', searching:'Inatafuta {type} kwa "{q}"...', noResults:'Hakuna matokeo kwa "{q}"', results:'Matokeo {count} kwa "{q}" · {type}', count:'{count}', showMore:'Onyesha {count} zaidi katika {label}', collapse:'Kunja', noTitle:'(hakuna kichwa)', poweredBy:'Powered by IGDC · Utafutaji wa Kimataifa uliounganishwa' }
-  },
-  ta: {
-    name:'தமிழ்',
-    tabs:{ all:'அனைத்தும்', image:'படங்கள்', news:'செய்திகள்', map:'வரைபடங்கள்', knowledge:'அறிவு', tour:'சுற்றுலா', video:'வீடியோக்கள்', sns:'சமூக', blog:'வலைப்பதிவுகள்', cafe:'மன்றங்கள்', book:'நூல்கள்', shopping:'வாங்குதல்', sports:'விளையாட்டு', finance:'நிதி', webtoon:'வெப்டூன்' },
-    groups:{ authority:'அதிகாரப்பூர்வம்/நம்பகமானது', news:'செய்திகள்', local_tour:'வரைபடங்கள்/சுற்றுலா/உள்ளூர்', media:'படங்கள்/வீடியோக்கள்', social:'சமூக', community:'வலைப்பதிவுகள்/மன்றங்கள்', knowledge:'அறிவு/நூல்கள்', shopping:'வாங்குதல்', sports:'விளையாட்டு', finance:'நிதி', webtoon:'வெப்டூன்', web:'வலை' },
-    strings:{ pageTitle:'IGDC உலகளாவிய தேடல்', brand:'IGDC உலகளாவிய தேடல்', placeholder:'உலகம் முழுவதும் தேடுங்கள்…', searchButton:'தேடு', searching:'"{q}" க்கான {type} தேடப்படுகிறது...', noResults:'"{q}" க்கான முடிவுகள் இல்லை', results:'"{q}" க்கான {count} முடிவுகள் · {type}', count:'{count}', showMore:'{label} இல் மேலும் {count} காண்க', collapse:'சுருக்கு', noTitle:'(தலைப்பு இல்லை)', poweredBy:'Powered by IGDC · உலகளாவிய ஒருங்கிணைந்த தேடல்' }
-  },
-  th: {
-    name:'ไทย',
-    tabs:{ all:'ทั้งหมด', image:'รูปภาพ', news:'ข่าว', map:'แผนที่', knowledge:'ความรู้', tour:'ท่องเที่ยว', video:'วิดีโอ', sns:'โซเชียล', blog:'บล็อก', cafe:'ฟอรัม', book:'หนังสือ', shopping:'ช้อปปิ้ง', sports:'กีฬา', finance:'การเงิน', webtoon:'เว็บตูน' },
-    groups:{ authority:'ทางการ/เชื่อถือได้', news:'ข่าว', local_tour:'แผนที่/ท่องเที่ยว/ท้องถิ่น', media:'รูปภาพ/วิดีโอ', social:'โซเชียล', community:'บล็อก/ฟอรัม', knowledge:'ความรู้/หนังสือ', shopping:'ช้อปปิ้ง', sports:'กีฬา', finance:'การเงิน', webtoon:'เว็บตูน', web:'เว็บ' },
-    strings:{ pageTitle:'ค้นหาทั่วโลก IGDC', brand:'ค้นหาทั่วโลก IGDC', placeholder:'ค้นหาทั่วโลก…', searchButton:'ค้นหา', searching:'กำลังค้นหา {type} สำหรับ "{q}"...', noResults:'ไม่พบผลลัพธ์สำหรับ "{q}"', results:'{count} ผลลัพธ์สำหรับ "{q}" · {type}', count:'{count}', showMore:'แสดงเพิ่มอีก {count} ใน {label}', collapse:'ยุบ', noTitle:'(ไม่มีชื่อ)', poweredBy:'Powered by IGDC · การค้นหารวมทั่วโลก' }
-  },
-  tl: {
-    name:'Tagalog',
-    tabs:{ all:'Lahat', image:'Mga Larawan', news:'Balita', map:'Mapa', knowledge:'Kaalaman', tour:'Paglalakbay', video:'Video', sns:'Social', blog:'Blog', cafe:'Forum', book:'Aklat', shopping:'Shopping', sports:'Sports', finance:'Pananalapi', webtoon:'Webtoon' },
-    groups:{ authority:'Opisyal/Awtoridad', news:'Balita', local_tour:'Mapa/Paglalakbay/Lokal', media:'Larawan/Video', social:'Social', community:'Blog/Forum', knowledge:'Kaalaman/Aklat', shopping:'Shopping', sports:'Sports', finance:'Pananalapi', webtoon:'Webtoon', web:'Web' },
-    strings:{ pageTitle:'IGDC Global Search', brand:'IGDC Global Search', placeholder:'Maghanap sa buong mundo…', searchButton:'Hanapin', searching:'Hinahanap ang {type} para sa "{q}"...', noResults:'Walang resulta para sa "{q}"', results:'{count} resulta para sa "{q}" · {type}', count:'{count}', showMore:'Ipakita pa ang {count} sa {label}', collapse:'Isara', noTitle:'(walang pamagat)', poweredBy:'Powered by IGDC · Global Unified Search' }
-  },
-  tr: {
-    name:'Türkçe',
-    tabs:{ all:'Tümü', image:'Görseller', news:'Haberler', map:'Haritalar', knowledge:'Bilgi', tour:'Seyahat', video:'Videolar', sns:'Sosyal', blog:'Bloglar', cafe:'Forumlar', book:'Kitaplar', shopping:'Alışveriş', sports:'Spor', finance:'Finans', webtoon:'Webtoon' },
-    groups:{ authority:'Resmi/Otorite', news:'Haberler', local_tour:'Harita/Seyahat/Yerel', media:'Görsel/Video', social:'Sosyal', community:'Blog/Forum', knowledge:'Bilgi/Kitap', shopping:'Alışveriş', sports:'Spor', finance:'Finans', webtoon:'Webtoon', web:'Web' },
-    strings:{ pageTitle:'IGDC Küresel Arama', brand:'IGDC Küresel Arama', placeholder:'Dünyada ara…', searchButton:'Ara', searching:'"{q}" için {type} aranıyor...', noResults:'"{q}" için sonuç yok', results:'"{q}" için {count} sonuç · {type}', count:'{count}', showMore:'{label} içinde {count} tane daha göster', collapse:'Daralt', noTitle:'(başlıksız)', poweredBy:'Powered by IGDC · Küresel Birleşik Arama' }
-  },
-  uk: {
-    name:'Українська',
-    tabs:{ all:'Усе', image:'Зображення', news:'Новини', map:'Карти', knowledge:'Знання', tour:'Туризм', video:'Відео', sns:'Соцмережі', blog:'Блоги', cafe:'Форуми', book:'Книги', shopping:'Покупки', sports:'Спорт', finance:'Фінанси', webtoon:'Вебтуни' },
-    groups:{ authority:'Офіційне/Авторитетне', news:'Новини', local_tour:'Карти/Туризм/Місцеве', media:'Зображення/Відео', social:'Соцмережі', community:'Блоги/Форуми', knowledge:'Знання/Книги', shopping:'Покупки', sports:'Спорт', finance:'Фінанси', webtoon:'Вебтуни', web:'Веб' },
-    strings:{ pageTitle:'Глобальний пошук IGDC', brand:'Глобальний пошук IGDC', placeholder:'Шукайте у світі…', searchButton:'Пошук', searching:'Пошук {type} для «{q}»...', noResults:'Немає результатів для «{q}»', results:'{count} результатів для «{q}» · {type}', count:'{count}', showMore:'Показати ще {count} у {label}', collapse:'Згорнути', noTitle:'(без назви)', poweredBy:'Powered by IGDC · Глобальний єдиний пошук' }
-  },
-  ur: {
-    name:'اردو',
-    tabs:{ all:'سب', image:'تصاویر', news:'خبریں', map:'نقشے', knowledge:'علم', tour:'سفر', video:'ویڈیوز', sns:'سوشل', blog:'بلاگز', cafe:'فورمز', book:'کتابیں', shopping:'خریداری', sports:'کھیل', finance:'مالیات', webtoon:'ویب ٹون' },
-    groups:{ authority:'سرکاری/مستند', news:'خبریں', local_tour:'نقشے/سفر/مقامی', media:'تصاویر/ویڈیوز', social:'سوشل', community:'بلاگز/فورمز', knowledge:'علم/کتابیں', shopping:'خریداری', sports:'کھیل', finance:'مالیات', webtoon:'ویب ٹون', web:'ویب' },
-    strings:{ pageTitle:'IGDC عالمی تلاش', brand:'IGDC عالمی تلاش', placeholder:'دنیا بھر میں تلاش کریں…', searchButton:'تلاش', searching:'"{q}" کے لیے {type} تلاش ہو رہی ہے...', noResults:'"{q}" کے لیے کوئی نتیجہ نہیں', results:'"{q}" کے لیے {count} نتائج · {type}', count:'{count}', showMore:'{label} میں مزید {count} دکھائیں', collapse:'بند کریں', noTitle:'(بلا عنوان)', poweredBy:'Powered by IGDC · عالمی متحد تلاش' }
-  },
-  uz: {
-    name:'O‘zbekcha',
-    tabs:{ all:'Barchasi', image:'Rasmlar', news:'Yangiliklar', map:'Xaritalar', knowledge:'Bilim', tour:'Sayohat', video:'Videolar', sns:'Ijtimoiy', blog:'Bloglar', cafe:'Forumlar', book:'Kitoblar', shopping:'Xaridlar', sports:'Sport', finance:'Moliya', webtoon:'Vebtun' },
-    groups:{ authority:'Rasmiy/Ishonchli', news:'Yangiliklar', local_tour:'Xarita/Sayohat/Mahalliy', media:'Rasm/Video', social:'Ijtimoiy', community:'Blog/Forum', knowledge:'Bilim/Kitob', shopping:'Xaridlar', sports:'Sport', finance:'Moliya', webtoon:'Vebtun', web:'Veb' },
-    strings:{ pageTitle:'IGDC global qidiruv', brand:'IGDC global qidiruv', placeholder:'Dunyo bo‘yicha qidiring…', searchButton:'Qidirish', searching:'"{q}" uchun {type} qidirilmoqda...', noResults:'"{q}" uchun natija yo‘q', results:'"{q}" uchun {count} ta natija · {type}', count:'{count} ta', showMore:'{label} bo‘yicha yana {count} ta ko‘rsatish', collapse:'Yopish', noTitle:'(sarlavhasiz)', poweredBy:'Powered by IGDC · Global yagona qidiruv' }
-  },
-  vi: {
-    name:'Tiếng Việt',
-    tabs:{ all:'Tất cả', image:'Hình ảnh', news:'Tin tức', map:'Bản đồ', knowledge:'Tri thức', tour:'Du lịch', video:'Video', sns:'Mạng xã hội', blog:'Blog', cafe:'Diễn đàn', book:'Sách', shopping:'Mua sắm', sports:'Thể thao', finance:'Tài chính', webtoon:'Webtoon' },
-    groups:{ authority:'Chính thức/Uy tín', news:'Tin tức', local_tour:'Bản đồ/Du lịch/Địa phương', media:'Hình ảnh/Video', social:'Mạng xã hội', community:'Blog/Diễn đàn', knowledge:'Tri thức/Sách', shopping:'Mua sắm', sports:'Thể thao', finance:'Tài chính', webtoon:'Webtoon', web:'Web' },
-    strings:{ pageTitle:'Tìm kiếm toàn cầu IGDC', brand:'Tìm kiếm toàn cầu IGDC', placeholder:'Tìm kiếm khắp thế giới…', searchButton:'Tìm kiếm', searching:'Đang tìm {type} cho "{q}"...', noResults:'Không có kết quả cho "{q}"', results:'{count} kết quả cho "{q}" · {type}', count:'{count}', showMore:'Hiển thị thêm {count} trong {label}', collapse:'Thu gọn', noTitle:'(không có tiêu đề)', poweredBy:'Powered by IGDC · Tìm kiếm hợp nhất toàn cầu' }
-  },
-  zh: {
-    name:'简体中文',
-    tabs:{ all:'全部', image:'图片', news:'新闻', map:'地图', knowledge:'知识', tour:'旅游', video:'视频', sns:'社交', blog:'博客', cafe:'论坛', book:'图书', shopping:'购物', sports:'体育', finance:'财经', webtoon:'网漫' },
-    groups:{ authority:'官方/权威', news:'新闻', local_tour:'地图/旅游/本地', media:'图片/视频', social:'社交', community:'博客/论坛', knowledge:'知识/图书', shopping:'购物', sports:'体育', finance:'财经', webtoon:'网漫', web:'网页' },
-    strings:{ pageTitle:'IGDC 全球搜索', brand:'IGDC 全球搜索', placeholder:'搜索全世界…', searchButton:'搜索', searching:'正在搜索“{q}”的{type}...', noResults:'没有找到“{q}”的结果', results:'“{q}”的 {count} 条结果 · {type}', count:'{count}条', showMore:'在{label}中查看更多 {count} 条', collapse:'收起', noTitle:'（无标题）', poweredBy:'Powered by IGDC · 全球统一搜索' }
-  },
-  'zh-Hant': {
-    name:'繁體中文',
-    tabs:{ all:'全部', image:'圖片', news:'新聞', map:'地圖', knowledge:'知識', tour:'旅遊', video:'影片', sns:'社群', blog:'部落格', cafe:'論壇', book:'書籍', shopping:'購物', sports:'體育', finance:'財經', webtoon:'網漫' },
-    groups:{ authority:'官方/權威', news:'新聞', local_tour:'地圖/旅遊/在地', media:'圖片/影片', social:'社群', community:'部落格/論壇', knowledge:'知識/書籍', shopping:'購物', sports:'體育', finance:'財經', webtoon:'網漫', web:'網頁' },
-    strings:{ pageTitle:'IGDC 全球搜尋', brand:'IGDC 全球搜尋', placeholder:'搜尋全世界…', searchButton:'搜尋', searching:'正在搜尋「{q}」的{type}...', noResults:'找不到「{q}」的結果', results:'「{q}」的 {count} 筆結果 · {type}', count:'{count}筆', showMore:'在{label}中查看更多 {count} 筆', collapse:'收合', noTitle:'（無標題）', poweredBy:'Powered by IGDC · 全球統一搜尋' }
-  },
-  fa: {
-    name:'فارسی',
-    tabs:{ all:'همه', image:'تصاویر', news:'اخبار', map:'نقشه‌ها', knowledge:'دانش', tour:'سفر', video:'ویدیوها', sns:'اجتماعی', blog:'وبلاگ‌ها', cafe:'انجمن‌ها', book:'کتاب‌ها', shopping:'خرید', sports:'ورزش', finance:'مالی', webtoon:'وب‌تون' },
-    groups:{ authority:'رسمی/معتبر', news:'اخبار', local_tour:'نقشه/سفر/محلی', media:'تصاویر/ویدیوها', social:'اجتماعی', community:'وبلاگ/انجمن', knowledge:'دانش/کتاب', shopping:'خرید', sports:'ورزش', finance:'مالی', webtoon:'وب‌تون', web:'وب' },
-    strings:{ pageTitle:'جستجوی جهانی IGDC', brand:'جستجوی جهانی IGDC', placeholder:'در جهان جستجو کنید…', searchButton:'جستجو', searching:'در حال جستجوی {type} برای «{q}»...', noResults:'نتیجه‌ای برای «{q}» یافت نشد', results:'{count} نتیجه برای «{q}» · {type}', count:'{count}', showMore:'نمایش {count} مورد بیشتر در {label}', collapse:'بستن', noTitle:'(بدون عنوان)', poweredBy:'Powered by IGDC · جستجوی یکپارچه جهانی' }
-  },
-  fr: {
-    name:'Français',
-    tabs:{ all:'Tout', image:'Images', news:'Actualités', map:'Cartes', knowledge:'Savoir', tour:'Voyage', video:'Vidéos', sns:'Social', blog:'Blogs', cafe:'Forums', book:'Livres', shopping:'Shopping', sports:'Sports', finance:'Finance', webtoon:'Webtoons' },
-    groups:{ authority:'Officiel/Autorité', news:'Actualités', local_tour:'Cartes/Voyage/Local', media:'Images/Vidéos', social:'Social', community:'Blogs/Forums', knowledge:'Savoir/Livres', shopping:'Shopping', sports:'Sports', finance:'Finance', webtoon:'Webtoons', web:'Web' },
-    strings:{ pageTitle:'Recherche mondiale IGDC', brand:'Recherche mondiale IGDC', placeholder:'Rechercher dans le monde…', searchButton:'Rechercher', searching:'Recherche {type} pour « {q} »...', noResults:'Aucun résultat pour « {q} »', results:'{count} résultats pour « {q} » · {type}', count:'{count}', showMore:'Afficher {count} de plus dans {label}', collapse:'Réduire', noTitle:'(sans titre)', poweredBy:'Powered by IGDC · Recherche mondiale unifiée' }
-  },
-  hi: {
-    name:'हिन्दी',
-    tabs:{ all:'सभी', image:'चित्र', news:'समाचार', map:'मानचित्र', knowledge:'ज्ञान', tour:'पर्यटन', video:'वीडियो', sns:'सोशल', blog:'ब्लॉग', cafe:'फ़ोरम', book:'पुस्तकें', shopping:'खरीदारी', sports:'खेल', finance:'वित्त', webtoon:'वेबटून' },
-    groups:{ authority:'आधिकारिक/प्रामाणिक', news:'समाचार', local_tour:'मानचित्र/पर्यटन/स्थानीय', media:'चित्र/वीडियो', social:'सोशल', community:'ब्लॉग/फ़ोरम', knowledge:'ज्ञान/पुस्तकें', shopping:'खरीदारी', sports:'खेल', finance:'वित्त', webtoon:'वेबटून', web:'वेब' },
-    strings:{ pageTitle:'IGDC वैश्विक खोज', brand:'IGDC वैश्विक खोज', placeholder:'दुनिया में खोजें…', searchButton:'खोजें', searching:'"{q}" के लिए {type} खोजा जा रहा है...', noResults:'"{q}" के लिए कोई परिणाम नहीं', results:'"{q}" के लिए {count} परिणाम · {type}', count:'{count}', showMore:'{label} में {count} और दिखाएँ', collapse:'समेटें', noTitle:'(शीर्षक नहीं)', poweredBy:'Powered by IGDC · वैश्विक एकीकृत खोज' }
-  },
-  hu: {
-    name:'Magyar',
-    tabs:{ all:'Összes', image:'Képek', news:'Hírek', map:'Térképek', knowledge:'Tudás', tour:'Utazás', video:'Videók', sns:'Közösségi', blog:'Blogok', cafe:'Fórumok', book:'Könyvek', shopping:'Vásárlás', sports:'Sport', finance:'Pénzügy', webtoon:'Webtoonok' },
-    groups:{ authority:'Hivatalos/Hiteles', news:'Hírek', local_tour:'Térképek/Utazás/Helyi', media:'Képek/Videók', social:'Közösségi', community:'Blogok/Fórumok', knowledge:'Tudás/Könyvek', shopping:'Vásárlás', sports:'Sport', finance:'Pénzügy', webtoon:'Webtoonok', web:'Web' },
-    strings:{ pageTitle:'IGDC globális keresés', brand:'IGDC globális keresés', placeholder:'Keressen a világban…', searchButton:'Keresés', searching:'{type} keresése erre: „{q}”...', noResults:'Nincs találat erre: „{q}”', results:'{count} találat erre: „{q}” · {type}', count:'{count}', showMore:'További {count} megjelenítése itt: {label}', collapse:'Összecsukás', noTitle:'(nincs cím)', poweredBy:'Powered by IGDC · Globális egységes keresés' }
-  },
-  es: {
-    name:'Español',
-    tabs:{ all:'Todo', image:'Imágenes', news:'Noticias', map:'Mapas', knowledge:'Conocimiento', tour:'Viajes', video:'Videos', sns:'Social', blog:'Blogs', cafe:'Foros', book:'Libros', shopping:'Compras', sports:'Deportes', finance:'Finanzas', webtoon:'Webtoons' },
-    groups:{ authority:'Oficial/Autoridad', news:'Noticias', local_tour:'Mapas/Viajes/Local', media:'Imágenes/Videos', social:'Social', community:'Blogs/Foros', knowledge:'Conocimiento/Libros', shopping:'Compras', sports:'Deportes', finance:'Finanzas', webtoon:'Webtoons', web:'Web' },
-    strings:{ pageTitle:'Búsqueda global IGDC', brand:'Búsqueda global IGDC', placeholder:'Busca en el mundo…', searchButton:'Buscar', searching:'Buscando {type} para "{q}"...', noResults:'No hay resultados para "{q}"', results:'{count} resultados para "{q}" · {type}', count:'{count}', showMore:'Mostrar {count} más en {label}', collapse:'Contraer', noTitle:'(sin título)', poweredBy:'Powered by IGDC · Búsqueda global unificada' }
-  },
-  id: {
-    name:'Indonesia',
-    tabs:{ all:'Semua', image:'Gambar', news:'Berita', map:'Peta', knowledge:'Pengetahuan', tour:'Wisata', video:'Video', sns:'Sosial', blog:'Blog', cafe:'Forum', book:'Buku', shopping:'Belanja', sports:'Olahraga', finance:'Keuangan', webtoon:'Webtoon' },
-    groups:{ authority:'Resmi/Otoritatif', news:'Berita', local_tour:'Peta/Wisata/Lokal', media:'Gambar/Video', social:'Sosial', community:'Blog/Forum', knowledge:'Pengetahuan/Buku', shopping:'Belanja', sports:'Olahraga', finance:'Keuangan', webtoon:'Webtoon', web:'Web' },
-    strings:{ pageTitle:'Pencarian Global IGDC', brand:'Pencarian Global IGDC', placeholder:'Cari di seluruh dunia…', searchButton:'Cari', searching:'Mencari {type} untuk "{q}"...', noResults:'Tidak ada hasil untuk "{q}"', results:'{count} hasil untuk "{q}" · {type}', count:'{count}', showMore:'Tampilkan {count} lagi di {label}', collapse:'Ciutkan', noTitle:'(tanpa judul)', poweredBy:'Powered by IGDC · Pencarian Global Terpadu' }
-  },
-  it: {
-    name:'Italiano',
-    tabs:{ all:'Tutto', image:'Immagini', news:'Notizie', map:'Mappe', knowledge:'Conoscenza', tour:'Viaggi', video:'Video', sns:'Social', blog:'Blog', cafe:'Forum', book:'Libri', shopping:'Shopping', sports:'Sport', finance:'Finanza', webtoon:'Webtoon' },
-    groups:{ authority:'Ufficiale/Autorevole', news:'Notizie', local_tour:'Mappe/Viaggi/Locale', media:'Immagini/Video', social:'Social', community:'Blog/Forum', knowledge:'Conoscenza/Libri', shopping:'Shopping', sports:'Sport', finance:'Finanza', webtoon:'Webtoon', web:'Web' },
-    strings:{ pageTitle:'Ricerca globale IGDC', brand:'Ricerca globale IGDC', placeholder:'Cerca nel mondo…', searchButton:'Cerca', searching:'Ricerca {type} per "{q}"...', noResults:'Nessun risultato per "{q}"', results:'{count} risultati per "{q}" · {type}', count:'{count}', showMore:'Mostra altri {count} in {label}', collapse:'Comprimi', noTitle:'(senza titolo)', poweredBy:'Powered by IGDC · Ricerca globale unificata' }
-  },
-  ja: {
-    name:'日本語',
-    tabs:{ all:'すべて', image:'画像', news:'ニュース', map:'地図', knowledge:'知識', tour:'旅行', video:'動画', sns:'ソーシャル', blog:'ブログ', cafe:'フォーラム', book:'書籍', shopping:'ショッピング', sports:'スポーツ', finance:'金融', webtoon:'ウェブトゥーン' },
-    groups:{ authority:'公式/権威', news:'ニュース', local_tour:'地図/旅行/地域', media:'画像/動画', social:'ソーシャル', community:'ブログ/フォーラム', knowledge:'知識/書籍', shopping:'ショッピング', sports:'スポーツ', finance:'金融', webtoon:'ウェブトゥーン', web:'ウェブ' },
-    strings:{ pageTitle:'IGDC グローバル検索', brand:'IGDC グローバル検索', placeholder:'世界を検索…', searchButton:'検索', searching:'「{q}」の{type}を検索中...', noResults:'「{q}」の結果はありません', results:'「{q}」の {count} 件の結果 · {type}', count:'{count}件', showMore:'{label}でさらに{count}件表示', collapse:'閉じる', noTitle:'（タイトルなし）', poweredBy:'Powered by IGDC · グローバル統合検索' }
-  },
-  nl: {
-    name:'Nederlands',
-    tabs:{ all:'Alles', image:'Afbeeldingen', news:'Nieuws', map:'Kaarten', knowledge:'Kennis', tour:'Reizen', video:'Video’s', sns:'Sociaal', blog:'Blogs', cafe:'Forums', book:'Boeken', shopping:'Winkelen', sports:'Sport', finance:'Financiën', webtoon:'Webtoons' },
-    groups:{ authority:'Officieel/Autoriteit', news:'Nieuws', local_tour:'Kaarten/Reizen/Lokaal', media:'Afbeeldingen/Video’s', social:'Sociaal', community:'Blogs/Forums', knowledge:'Kennis/Boeken', shopping:'Winkelen', sports:'Sport', finance:'Financiën', webtoon:'Webtoons', web:'Web' },
-    strings:{ pageTitle:'IGDC Wereldwijde zoekfunctie', brand:'IGDC Wereldwijde zoekfunctie', placeholder:'Zoek wereldwijd…', searchButton:'Zoeken', searching:'Zoeken naar {type} voor "{q}"...', noResults:'Geen resultaten voor "{q}"', results:'{count} resultaten voor "{q}" · {type}', count:'{count}', showMore:'Toon nog {count} in {label}', collapse:'Inklappen', noTitle:'(geen titel)', poweredBy:'Powered by IGDC · Wereldwijde uniforme zoekfunctie' }
-  },
-  ms: {
-    name:'Bahasa Melayu',
-    tabs:{ all:'Semua', image:'Imej', news:'Berita', map:'Peta', knowledge:'Pengetahuan', tour:'Pelancongan', video:'Video', sns:'Sosial', blog:'Blog', cafe:'Forum', book:'Buku', shopping:'Beli-belah', sports:'Sukan', finance:'Kewangan', webtoon:'Webtoon' },
-    groups:{ authority:'Rasmi/Berautoriti', news:'Berita', local_tour:'Peta/Pelancongan/Tempatan', media:'Imej/Video', social:'Sosial', community:'Blog/Forum', knowledge:'Pengetahuan/Buku', shopping:'Beli-belah', sports:'Sukan', finance:'Kewangan', webtoon:'Webtoon', web:'Web' },
-    strings:{ pageTitle:'Carian Global IGDC', brand:'Carian Global IGDC', placeholder:'Cari di seluruh dunia…', searchButton:'Cari', searching:'Mencari {type} untuk "{q}"...', noResults:'Tiada hasil untuk "{q}"', results:'{count} hasil untuk "{q}" · {type}', count:'{count}', showMore:'Tunjukkan {count} lagi dalam {label}', collapse:'Runtuhkan', noTitle:'(tiada tajuk)', poweredBy:'Powered by IGDC · Carian Global Bersepadu' }
-  }
-};
-
-const SEARCH_LANG_ALIASES = {
-  kr:'ko', kor:'ko', korean:'ko',
-  en:'en', eng:'en',
-  de:'de', ger:'de', deu:'de',
-  bn:'bn', ar:'ar', pl:'pl', pt:'pt', ru:'ru', sv:'sv', sw:'sw', ta:'ta', th:'th', tl:'tl', tr:'tr', uk:'uk', ur:'ur', uz:'uz', vi:'vi', fa:'fa', fr:'fr', hi:'hi', hu:'hu',
-  zh:'zh', cn:'zh', 'zh-cn':'zh', zhs:'zh', 'zh-hans':'zh',
-  zht:'zh-Hant', tw:'zh-Hant', 'zh-tw':'zh-Hant', 'zh-hk':'zh-Hant', 'zh-hant':'zh-Hant',
-  es:'es', id:'id', it:'it', ja:'ja', jp:'ja', nl:'nl', ms:'ms'
-};
-
-function normalizeUiLang(v){
-  const raw = String(v || '').trim();
-  if(!raw) return '';
-  const low = raw.replace('_','-').toLowerCase();
-  const base = low.split('-')[0];
-  return SEARCH_LANG_ALIASES[low] || SEARCH_LANG_ALIASES[base] || (SEARCH_I18N[raw] ? raw : (SEARCH_I18N[low] ? low : ''));
-}
-
-function inferLangFromPath(pathname){
-  const raw = String(pathname || '').trim();
-  if(!raw) return '';
-
-  let path = raw;
-  try{ path = new URL(raw, location.origin).pathname; }catch(e){}
-  try{ path = decodeURIComponent(path); }catch(e){}
-  path = path.replace(/\\/g, '/');
-
-  const parts = path.split('/').filter(Boolean);
-  const file = parts.length ? parts[parts.length - 1] : '';
-
-  const fileLang = file.match(/_([a-z]{2,3}|zh[-_]?hant)(?:\.html)?$/i);
-  if(fileLang){
-    const hit = normalizeUiLang(fileLang[1]);
-    if(hit) return hit;
-  }
-
-  for(let i = parts.length - 1; i >= 0; i--){
-    const seg = String(parts[i] || '').replace(/\.html$/i, '');
-    const hit = normalizeUiLang(seg);
-    if(hit) return hit;
-  }
-
-  if(/^home\.html$/i.test(file)) return 'ko';
-  return '';
-}
-
-function inferLangFromFromParam(){
-  const from = (params.get('from') || '').trim();
-  if(!from) return '';
-  return inferLangFromPath(from);
-}
-
-function inferLangFromReferrer(){
-  try{
-    if(!document.referrer) return '';
-    const u = new URL(document.referrer);
-    if(u.origin !== location.origin) return '';
-    return inferLangFromPath(u.pathname);
-  }catch(e){
-    return '';
-  }
-}
-
-function detectUiLang(){
-  const urlLang = normalizeUiLang(params.get('lang') || params.get('locale') || params.get('ui'));
-  const fromLang = inferLangFromFromParam();
-  const refLang = inferLangFromReferrer();
-  const pathLang = inferLangFromPath(location.pathname);
-  const docLang = normalizeUiLang(document.documentElement.getAttribute('lang') || '');
-  const bridgeLang = normalizeUiLang(window.IGTC_CURRENT_LANG || window.IGDC_CURRENT_LANG || '');
-  let stored = '';
-  try{ stored = normalizeUiLang(localStorage.getItem('igdc_lang') || ''); }catch(e){}
-
-  if(urlLang) return urlLang;
-
-  if(isSearchPage){
-    if(fromLang) return fromLang;
-    if(refLang) return refLang;
-    if(pathLang) return pathLang;
-    if(bridgeLang) return bridgeLang;
-    if(docLang && docLang !== 'ko') return docLang;
-    if(stored) return stored;
-    return 'ko';
-  }
-
-  if(pathLang) return pathLang;
-  if(docLang) return docLang;
-  if(bridgeLang) return bridgeLang;
-  if(stored) return stored;
-  return 'ko';
-}
-
-function langForUrl(lang){
-  const v = normalizeUiLang(lang || detectUiLang()) || 'ko';
-  return v === 'zh-Hant' ? 'zht' : v;
-}
-
-const UI_LANG = detectUiLang();
-const UI = SEARCH_I18N[UI_LANG] || SEARCH_I18N.ko;
-// Do not write the search UI language back to localStorage here.
-// The search page must not lock future visits into a previously used language.
-
-function tr(key, vars){
-  const dict = (UI && UI.strings) || {};
-  const base = SEARCH_I18N.ko.strings || {};
-  const template = String(dict[key] || base[key] || key);
-  return template.replace(/\{(\w+)\}/g, (_, name) => {
-    return vars && Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : '';
-  });
-}
-
-function tabLabel(type){
-  return (UI.tabs && UI.tabs[type]) || SEARCH_I18N.ko.tabs[type] || type;
-}
-
-function groupLabel(group){
-  return (UI.groups && UI.groups[group]) || SEARCH_I18N.ko.groups[group] || group || tabLabel('all');
-}
-
-function formatCount(count){
-  return tr('count', { count });
-}
-
-function formatShowMore(label, count){
-  return tr('showMore', { label, count });
-}
-
-function applySearchUiLanguage(){
-  const langForHtml = UI_LANG === 'zh-Hant' ? 'zh-Hant' : UI_LANG;
-  const isRtl = RTL_SEARCH_LANGS.has(UI_LANG);
-  const dir = isRtl ? 'rtl' : 'ltr';
-
-  document.documentElement.setAttribute('lang', langForHtml);
-  // Keep the search page layout in its original position.
-  // RTL is scoped to the search input/tabs/status/results area only.
-  document.documentElement.removeAttribute('dir');
-  if(document.body){
-    document.body.removeAttribute('dir');
-    document.body.classList.toggle('igdc-search-rtl', isRtl);
-  }
-  if(isSearchPage) document.title = tr('pageTitle');
-
-  if(!document.getElementById('igdc-search-rtl-scope-style')){
-    const rtlStyle = document.createElement('style');
-    rtlStyle.id = 'igdc-search-rtl-scope-style';
-    rtlStyle.textContent = `
-      body.igdc-search-rtl #searchInput { direction: rtl; text-align: right; }
-      body.igdc-search-rtl #maru-search-tabs,
-      body.igdc-search-rtl #searchStatus { direction: rtl; text-align: right; }
-      body.igdc-search-rtl #maru-search-tabs { justify-content: flex-start; }
-      body.igdc-search-rtl #searchResults { direction: ltr; text-align: left; }
-      body.igdc-search-rtl #searchResults .card,
-      body.igdc-search-rtl #searchResults .maru-display-section,
-      body.igdc-search-rtl #searchResults .maru-display-section-head,
-      body.igdc-search-rtl #searchResults .maru-display-section-body,
-      body.igdc-search-rtl #searchResults .maru-search-card-body,
-      body.igdc-search-rtl #searchResults .maru-search-card-text {
-        direction: ltr;
-        text-align: left;
-        unicode-bidi: plaintext;
-      }
-      body.igdc-search-rtl #maru-page-controls { direction: rtl; text-align: center; }
-      body.igdc-search-rtl #maru-page-controls button { direction: ltr; }
-      body.igdc-search-rtl .maru-card-media { direction: ltr; }
-    `;
-    document.head.appendChild(rtlStyle);
-  }
-
-  const brand = document.querySelector('.brand');
-  if(brand) brand.textContent = tr('brand');
-
-  if(input){
-    input.placeholder = tr('placeholder');
-    input.setAttribute('aria-label', tr('placeholder'));
-    input.dir = dir;
-    input.style.textAlign = isRtl ? 'right' : '';
-  }
-  if(btn) btn.textContent = tr('searchButton');
-  if(status){ status.dir = dir; status.style.textAlign = isRtl ? 'right' : ''; }
-  if(results){
-    results.dir = 'ltr';
-    results.style.textAlign = 'left';
-  }
-
-  const footer = document.querySelector('footer');
-  if(footer) footer.textContent = tr('poweredBy');
-}
-
-const SEARCH_TABS = SEARCH_TAB_KEYS.map(type => [type, tabLabel(type)]);
 
 function normalizeSearchType(v){
   const raw = String(v || '').trim().toLowerCase();
@@ -441,7 +80,7 @@ function normalizeSearchType(v){
 
 function getTypeLabel(type){
   const hit = SEARCH_TABS.find(x => x[0] === normalizeSearchType(type));
-  return hit ? hit[1] : tabLabel('all');
+  return hit ? hit[1] : '전체';
 }
 
 
@@ -582,56 +221,9 @@ function ensureSearchCardMediaStyle(){
       border-color: #c7d2fe;
     }
 
-    #maru-page-controls {
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
-      overflow-x: auto;
-      overflow-y: hidden;
-      padding: 0 10px 6px;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: thin;
-    }
-    #maru-page-controls button {
-      flex: 0 0 auto;
-      box-sizing: border-box;
-    }
-
     @media (max-width: 720px) {
-      #maru-search-tabs {
-        max-width: 100vw;
-        box-sizing: border-box;
-      }
-      #maru-page-controls {
-        justify-content: flex-start !important;
-        max-width: 100vw;
-        padding: 0 12px 8px;
-      }
-      #maru-page-controls button {
-        min-width: 42px;
-        height: 42px;
-        padding: 0 10px;
-        font-size: 15px;
-      }
-      #searchResults {
-        max-width: 100%;
-        box-sizing: border-box;
-        overflow-x: hidden;
-      }
-      #searchResults .card,
-      #searchResults .maru-display-section {
-        max-width: 100%;
-        box-sizing: border-box;
-      }
-      .maru-display-section-body {
-        overflow-x: hidden;
-      }
       .maru-search-card-body {
         display: block;
-      }
-      .maru-search-card-text {
-        overflow-wrap: anywhere;
-        word-break: break-word;
       }
       .maru-card-media {
         width: 100%;
@@ -647,7 +239,6 @@ function ensureSearchCardMediaStyle(){
 }
 
 ensureSearchCardMediaStyle();
-applySearchUiLanguage();
 
 
 const type0 = normalizeSearchType(params.get('type') || 'all');
@@ -668,7 +259,6 @@ function getSafeReturnUrl() {
 function buildSearchUrl(q) {
   const u = new URL('/search.html', location.origin);
   u.searchParams.set('q', q);
-  u.searchParams.set('lang', langForUrl(detectUiLang()));
   if (activeType && activeType !== 'all') {
     u.searchParams.set('type', activeType);
   }
@@ -819,7 +409,6 @@ btn.addEventListener('click', (e) => {
 
     const u = new URL(location.href);
     u.searchParams.set('q', q);
-    u.searchParams.set('lang', langForUrl(UI_LANG));
     u.searchParams.set('page', '1');
     u.searchParams.set('block', '0');
     if (activeType && activeType !== 'all') u.searchParams.set('type', activeType);
@@ -857,7 +446,6 @@ input.addEventListener('keydown', (e) => {
 
     const u = new URL(location.href);
     u.searchParams.set('q', q);
-    u.searchParams.set('lang', langForUrl(UI_LANG));
     u.searchParams.set('page', '1');
     u.searchParams.set('block', '0');
     if (activeType && activeType !== 'all') u.searchParams.set('type', activeType);
@@ -974,7 +562,7 @@ function normalizeItems(payload){
 
 async function fetchSearch(q, type = activeType){
   const safeType = normalizeSearchType(type);
-  const url = `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}&type=${encodeURIComponent(safeType)}&tab=${encodeURIComponent(safeType)}&lang=${encodeURIComponent(langForUrl(UI_LANG))}`;
+  const url = `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}&type=${encodeURIComponent(safeType)}&tab=${encodeURIComponent(safeType)}`;
 
   try {
     const r = await fetch(url, { cache: 'no-store' });
@@ -1070,7 +658,6 @@ async function fetchSearch(q, type = activeType){
 
       const u = new URL(location.href);
       u.searchParams.set('q', q);
-      u.searchParams.set('lang', langForUrl(UI_LANG));
       u.searchParams.set('page', '1');
       u.searchParams.set('block', '0');
       if (activeType && activeType !== 'all') u.searchParams.set('type', activeType);
@@ -1095,11 +682,6 @@ async function fetchSearch(q, type = activeType){
         bar.style.justifyContent = 'center';
         bar.style.gap = '6px';
         bar.style.margin = '8px 0 14px';
-        bar.style.width = '100%';
-        bar.style.maxWidth = '100%';
-        bar.style.boxSizing = 'border-box';
-        bar.style.overflowX = 'auto';
-        bar.style.overflowY = 'hidden';
         status.parentNode.insertBefore(bar, status.nextSibling);
       }
       return bar;
@@ -1277,7 +859,21 @@ async function fetchSearch(q, type = activeType){
 
     function displayGroupLabel(group, sample){
       const fallback = sample && sample.displayGroupLabel;
-      return fallback || groupLabel(group);
+      const labels = {
+        authority: '공식/권위',
+        news: '뉴스',
+        local_tour: '지도/관광/지역',
+        media: '이미지/영상',
+        social: '소셜',
+        community: '블로그/카페/커뮤니티',
+        knowledge: '지식/도서',
+        shopping: '쇼핑',
+        sports: '스포츠',
+        finance: '금융',
+        webtoon: '웹툰',
+        web: '웹'
+      };
+      return fallback || labels[group] || '웹';
     }
 
     function displayGroupPreviewLimit(group, sample){
@@ -1349,7 +945,7 @@ async function fetchSearch(q, type = activeType){
 
         const meta = document.createElement('div');
         meta.className = 'maru-display-section-meta';
-        meta.textContent = formatCount(groupInfo.items.length);
+        meta.textContent = `${groupInfo.items.length}개`;
 
         head.appendChild(title);
         head.appendChild(meta);
@@ -1374,7 +970,7 @@ async function fetchSearch(q, type = activeType){
           const more = document.createElement('button');
           more.type = 'button';
           more.className = 'maru-display-more';
-          more.textContent = expanded ? tr('collapse') : formatShowMore(groupInfo.label, hiddenCount);
+          more.textContent = expanded ? '접기' : `${groupInfo.label} ${hiddenCount}개 더보기`;
           more.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -1386,7 +982,7 @@ async function fetchSearch(q, type = activeType){
             Array.from(body.querySelectorAll('[data-maru-collapsed="1"]')).forEach(card => {
               card.style.display = willExpand ? '' : 'none';
             });
-            more.textContent = willExpand ? tr('collapse') : formatShowMore(groupInfo.label, hiddenCount);
+            more.textContent = willExpand ? '접기' : `${groupInfo.label} ${hiddenCount}개 더보기`;
           });
           body.appendChild(more);
         }
@@ -1398,12 +994,76 @@ async function fetchSearch(q, type = activeType){
     }
 
 
+    function setRevenueDataset(el, key, value){
+      if (!el || value === undefined || value === null || value === '') return;
+      try { el.dataset[key] = String(value); } catch(e) {}
+    }
+
+    function inferSearchRevenueLine(it){
+      const text = String([
+        it && it.revenueLine,
+        it && it.revenue_line,
+        it && it.type,
+        it && it.mediaType,
+        it && it.category,
+        it && it.source,
+        it && it.url,
+        it && it.title
+      ].filter(Boolean).join(' ')).toLowerCase();
+
+      if (text.includes('ad') || text.includes('sponsor') || text.includes('banner')) return 'display_ad';
+      if (text.includes('shopping') || text.includes('shop') || text.includes('product') || text.includes('commerce') || text.includes('affiliate') || text.includes('상품') || text.includes('구매')) return 'product_affiliate';
+      if (text.includes('video') || text.includes('media') || text.includes('youtube') || text.includes('image') || text.includes('영상')) return 'media_engagement';
+      if (text.includes('tour') || text.includes('travel') || text.includes('관광') || text.includes('여행')) return 'tour_commission';
+      if (text.includes('donation') || text.includes('donate') || text.includes('후원') || text.includes('기부')) return 'donation_intent';
+      return 'search_click';
+    }
+
+    function applySearchRevenueDataset(card, it, url){
+      if (!card || !it) return;
+
+      const itemId =
+        it.id ||
+        it.itemId ||
+        it.contentId ||
+        it.productId ||
+        it.slotId ||
+        it.trackId ||
+        url ||
+        it.title ||
+        '';
+
+      setRevenueDataset(card, 'maruRevenue', '1');
+      setRevenueDataset(card, 'itemId', itemId);
+      setRevenueDataset(card, 'contentId', it.contentId || it.content_id || '');
+      setRevenueDataset(card, 'productId', it.productId || it.product_id || it.sku || '');
+      setRevenueDataset(card, 'slotId', it.slotId || it.slot_id || '');
+      setRevenueDataset(card, 'trackId', it.trackId || it.track_id || '');
+      setRevenueDataset(card, 'campaignId', it.campaignId || it.campaign_id || '');
+      setRevenueDataset(card, 'providerId', it.providerId || it.provider_id || it.provider || it.source?.name || it.source || '');
+      setRevenueDataset(card, 'sellerId', it.sellerId || it.seller_id || it.seller || '');
+      setRevenueDataset(card, 'title', it.title || '');
+      setRevenueDataset(card, 'url', url || it.url || it.link || '');
+      setRevenueDataset(card, 'itemType', it.type || it.itemType || '');
+      setRevenueDataset(card, 'mediaType', it.mediaType || '');
+      setRevenueDataset(card, 'category', it.category || activeType || 'search');
+      setRevenueDataset(card, 'page', 'search');
+      setRevenueDataset(card, 'section', activeType || 'all');
+      setRevenueDataset(card, 'revenueLine', it.revenueLine || it.revenue_line || inferSearchRevenueLine(it));
+      setRevenueDataset(card, 'snapshotSource', it.snapshotSource || it._snapshotSource || '');
+      setRevenueDataset(card, 'snapshotRecordId', it.snapshotRecordId || it.snapshot_record_id || '');
+      setRevenueDataset(card, 'price', it.price || it.amount || '');
+      setRevenueDataset(card, 'currency', it.currency || it.ccy || '');
+    }
+
+
     function renderItem(it, mountTarget){
       const url = it.url || it.link || '';
       const domain = domainOf(url);
 
       const card = document.createElement('div');
       card.className = 'card';
+      applySearchRevenueDataset(card, it, url);
 
       if (url) {
         card.style.cursor = 'pointer';
@@ -1425,12 +1085,12 @@ async function fetchSearch(q, type = activeType){
         a.href = url;
         a.target = '_self';
         a.rel = 'noopener';
-        a.textContent = (it.title || '').trim() || tr('noTitle');
+        a.textContent = (it.title || '').trim() || '(no title)';
         a.style.color = 'inherit';
         a.style.textDecoration = 'none';
         t.appendChild(a);
       } else {
-        t.textContent = (it.title || '').trim() || tr('noTitle');
+        t.textContent = (it.title || '').trim() || '(no title)';
       }
 
       const l = document.createElement('div');
@@ -1649,7 +1309,7 @@ if (it.riskLabel === '⚠️ high-risk') {
 
       try{
         const url =
-          `/.netlify/functions/maru-search?action=enrich-images&q=${encodeURIComponent(q)}&type=${encodeURIComponent(activeType || 'all')}&lang=${encodeURIComponent(UI_LANG)}`;
+          `/.netlify/functions/maru-search?action=enrich-images&q=${encodeURIComponent(q)}&type=${encodeURIComponent(activeType || 'all')}`;
 
         const res = await fetch(url, {
           method: 'POST',
@@ -1710,7 +1370,6 @@ function updateSearchPageHistory(page, block) {
   if (!isSearchPage) return;
 
   const u = new URL(location.href);
-  u.searchParams.set('lang', langForUrl(UI_LANG));
   u.searchParams.set('page', String(page));
   u.searchParams.set('block', String(block));
   if (activeType && activeType !== 'all') u.searchParams.set('type', activeType);
@@ -1740,14 +1399,6 @@ function updateSearchPageHistory(page, block) {
   );
 }
 
-function getPagerBlockSize(){
-  try {
-    return (window.matchMedia && window.matchMedia('(max-width: 720px)').matches) ? 5 : BLOCK_SIZE;
-  } catch(e) {
-    return BLOCK_SIZE;
-  }
-}
-
 function drawPager(){
   const pages = Math.max(1, Math.ceil(allItems.length / PAGE_SIZE));
   if (pages <= 1) { clearPager(); return; }
@@ -1755,22 +1406,15 @@ function drawPager(){
   const bar = ensurePager();
   bar.innerHTML = '';
 
-  const isRtlPager = RTL_SEARCH_LANGS.has(UI_LANG);
-  const pagerBlockSize = getPagerBlockSize();
-  currentBlock = Math.floor((Math.max(1, currentPage) - 1) / pagerBlockSize);
-
-  bar.dir = isRtlPager ? 'rtl' : 'ltr';
-  bar.style.direction = isRtlPager ? 'rtl' : 'ltr';
-
-  const blockStart = currentBlock * pagerBlockSize + 1;
-  const blockEnd = Math.min(blockStart + pagerBlockSize - 1, pages);
+  const blockStart = currentBlock * BLOCK_SIZE + 1;
+  const blockEnd = Math.min(blockStart + BLOCK_SIZE - 1, pages);
 
   if (blockStart > 1){
     const left = document.createElement('button');
-    left.textContent = isRtlPager ? '▶' : '◀';
+    left.textContent = '◀';
     left.onclick = () => {
       currentBlock = Math.max(0, currentBlock - 1);
-      currentPage = currentBlock * pagerBlockSize + 1;
+      currentPage = currentBlock * BLOCK_SIZE + 1;
       updateSearchPageHistory(currentPage, currentBlock);
       renderPage(currentPage);
     };
@@ -1783,7 +1427,7 @@ function drawPager(){
     b.style.opacity = (p === currentPage) ? '0.6' : '1';
     b.onclick = () => {
       currentPage = p;
-      currentBlock = Math.floor((p - 1) / pagerBlockSize);
+      currentBlock = Math.floor((p - 1) / BLOCK_SIZE);
       updateSearchPageHistory(currentPage, currentBlock);
       renderPage(currentPage);
     };
@@ -1792,11 +1436,11 @@ function drawPager(){
 
   if (blockEnd < pages){
     const right = document.createElement('button');
-    right.textContent = isRtlPager ? '◀' : '▶';
+    right.textContent = '▶';
     right.onclick = () => {
-      const maxBlock = Math.floor((pages - 1) / pagerBlockSize);
+      const maxBlock = Math.floor((pages - 1) / BLOCK_SIZE);
       currentBlock = Math.min(maxBlock, currentBlock + 1);
-      currentPage = currentBlock * pagerBlockSize + 1;
+      currentPage = currentBlock * BLOCK_SIZE + 1;
       updateSearchPageHistory(currentPage, currentBlock);
       renderPage(currentPage);
     };
@@ -1816,7 +1460,7 @@ async function runSearch(q, type = activeType){
     return;
   }
 
-  status.textContent = tr('searching', { type: getTypeLabel(activeType), q: qq });
+  status.textContent = `Searching ${getTypeLabel(activeType)} for "${qq}"...`;
   renderSkeleton();
   clearPager();
 
@@ -1835,79 +1479,25 @@ async function runSearch(q, type = activeType){
 
     if (!allItems.length) {
       results.innerHTML = '';
-      status.textContent = tr('noResults', { q: qq });
+      status.textContent = `No results for "${qq}"`;
       return;
     }
 
     renderPage(1);
-    status.textContent = tr('results', { count: allItems.length, q: qq, type: getTypeLabel(activeType) });
+    status.textContent = `${allItems.length} results for "${qq}" · ${getTypeLabel(activeType)}`;
 
   } catch(e){
     console.error(e);
     allItems = [];
     results.innerHTML = '';
     clearPager();
-    status.textContent = tr('noResults', { q: qq });
+    status.textContent = `No results for "${qq}"`;
   }
 }
   });
 })();
 
 (function () {
-  function normalizeGlobalSearchLang(v){
-    const raw = String(v || '').trim();
-    if(!raw) return '';
-    const low = raw.replace('_','-').toLowerCase();
-    const base = low.split('-')[0];
-    const aliases = {
-      kr:'ko', kor:'ko', ko:'ko', en:'en', de:'de', bn:'bn', ar:'ar', pl:'pl', pt:'pt', ru:'ru', sv:'sv', sw:'sw', ta:'ta', th:'th', tl:'tl', tr:'tr', uk:'uk', ur:'ur', uz:'uz', vi:'vi', fa:'fa', fr:'fr', hi:'hi', hu:'hu',
-      zh:'zh', cn:'zh', 'zh-cn':'zh', zhs:'zh', 'zh-hans':'zh', zht:'zh-Hant', tw:'zh-Hant', 'zh-tw':'zh-Hant', 'zh-hk':'zh-Hant', 'zh-hant':'zh-Hant',
-      es:'es', id:'id', it:'it', ja:'ja', jp:'ja', nl:'nl', ms:'ms'
-    };
-    return aliases[low] || aliases[base] || base || 'ko';
-  }
-
-  function inferLangFromGlobalPath(pathname){
-    const raw = String(pathname || '').trim();
-    if(!raw) return '';
-    let path = raw;
-    try{ path = new URL(raw, location.origin).pathname; }catch(e){}
-    try{ path = decodeURIComponent(path); }catch(e){}
-    path = path.replace(/\\/g, '/');
-    const parts = path.split('/').filter(Boolean);
-    const file = parts.length ? parts[parts.length - 1] : '';
-    const m = file.match(/_([a-z]{2,3}|zh[-_]?hant)(?:\.html)?$/i);
-    if(m){
-      const hit = normalizeGlobalSearchLang(m[1]);
-      if(hit) return hit;
-    }
-    for(let i = parts.length - 1; i >= 0; i--){
-      const hit = normalizeGlobalSearchLang(String(parts[i] || '').replace(/\.html$/i, ''));
-      if(hit) return hit;
-    }
-    if(/^home\.html$/i.test(file)) return 'ko';
-    return '';
-  }
-
-  function inferGlobalSearchLang(){
-    const pathLang = inferLangFromGlobalPath(location.pathname);
-    if(pathLang) return pathLang;
-
-    const htmlLang = normalizeGlobalSearchLang(document.documentElement.getAttribute('lang') || '');
-    if(htmlLang) return htmlLang;
-
-    try{
-      const bridgeLang = normalizeGlobalSearchLang(window.IGTC_CURRENT_LANG || window.IGDC_CURRENT_LANG || '');
-      if(bridgeLang) return bridgeLang;
-    }catch(e){}
-
-    try{
-      const stored = normalizeGlobalSearchLang(localStorage.getItem('igdc_lang') || '');
-      if(stored) return stored;
-    }catch(e){}
-    return 'ko';
-  }
-
   function runGlobalSearch() {
     const input = document.getElementById('globalSearchInput');
     if (!input) return;
@@ -1917,7 +1507,6 @@ async function runSearch(q, type = activeType){
 
     const u = new URL('/search.html', location.origin);
     u.searchParams.set('q', q);
-    u.searchParams.set('lang', inferGlobalSearchLang());
     u.searchParams.set('from', location.pathname + location.search + location.hash);
 
     window.location.href = u.pathname + u.search + u.hash;
@@ -1936,3 +1525,101 @@ async function runSearch(q, type = activeType){
   });
 })();
 
+
+
+/* ------------------------------------------------------------------
+ * MARU Search Revenue Hook Loader
+ * Added by revenue tracking patch.
+ *
+ * Purpose:
+ * - Load /assets/js/maru-revenue-tracker.js
+ * - Load /assets/js/maru-revenue-autohook.js
+ * - Bind search submit/result impression/click events.
+ * ------------------------------------------------------------------ */
+(function loadMaruSearchRevenueHooks(){
+  "use strict";
+
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+
+  function loadScriptOnce(src, id, globalName, done){
+    if (window[globalName]) {
+      if (typeof done === "function") done();
+      return;
+    }
+
+    var existing = document.getElementById(id);
+    if (existing) {
+      existing.addEventListener("load", function(){
+        if (typeof done === "function") done();
+      }, { once:true });
+      existing.addEventListener("error", function(){
+        console.warn("[MARU Search Revenue] failed to load:", src);
+      }, { once:true });
+      return;
+    }
+
+    var s = document.createElement("script");
+    s.id = id;
+    s.src = src;
+    s.async = false;
+    s.onload = function(){
+      if (typeof done === "function") done();
+    };
+    s.onerror = function(){
+      console.warn("[MARU Search Revenue] failed to load:", src);
+    };
+
+    (document.head || document.documentElement).appendChild(s);
+  }
+
+  function bindSearchRevenue(){
+    try {
+      if (
+        window.MaruRevenueTracker &&
+        typeof window.MaruRevenueTracker.bindSearch === "function" &&
+        !window.__MARU_SEARCH_REVENUE_BIND_DONE__
+      ) {
+        window.__MARU_SEARCH_REVENUE_BIND_DONE__ = true;
+        window.MaruRevenueTracker.bindSearch("#searchInput", "#searchResults", {
+          pageType: "search",
+          service: "search.js",
+          buttonSelector: "#searchBtn"
+        });
+      }
+
+      if (
+        window.MaruRevenueAutoHook &&
+        typeof window.MaruRevenueAutoHook.install === "function"
+      ) {
+        window.MaruRevenueAutoHook.install({
+          service: "search.js",
+          observeRootSelector: "#searchResults"
+        });
+      }
+    } catch (e) {
+      console.warn("[MARU Search Revenue] hook skipped:", e);
+    }
+  }
+
+  function boot(){
+    loadScriptOnce(
+      "/assets/js/maru-revenue-tracker.js",
+      "maruRevenueTrackerScript",
+      "MaruRevenueTracker",
+      function(){
+        loadScriptOnce(
+          "/assets/js/maru-revenue-autohook.js",
+          "maruRevenueAutoHookScript",
+          "MaruRevenueAutoHook",
+          bindSearchRevenue
+        );
+      }
+    );
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot, { once:true });
+  } else {
+    boot();
+  }
+})();

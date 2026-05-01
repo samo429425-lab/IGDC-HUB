@@ -201,3 +201,87 @@ document.head.appendChild(style);
     window.addEventListener("load", run, { once: true });
   }
 })();
+
+
+/* ------------------------------------------------------------------
+ * MARU Revenue AutoHook Loader
+ * Added by revenue tracking patch.
+ *
+ * Purpose:
+ * - Load /assets/js/maru-revenue-tracker.js
+ * - Then load /assets/js/maru-revenue-autohook.js
+ * - Do not change this automap's original rendering pipeline.
+ * ------------------------------------------------------------------ */
+(function loadMaruRevenueAutoHookForAutomap(){
+  "use strict";
+
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+
+  function installIfReady(){
+    try {
+      if (
+        window.MaruRevenueAutoHook &&
+        typeof window.MaruRevenueAutoHook.install === "function"
+      ) {
+        window.MaruRevenueAutoHook.install({
+          service: "front-automap"
+        });
+      }
+    } catch (e) {
+      console.warn("[MARU Revenue] autohook install skipped:", e);
+    }
+  }
+
+  function loadScriptOnce(src, id, globalName, done){
+    var existing = document.getElementById(id);
+
+    if (window[globalName]) {
+      if (typeof done === "function") done();
+      return;
+    }
+
+    if (existing) {
+      existing.addEventListener("load", function(){
+        if (typeof done === "function") done();
+      }, { once:true });
+      existing.addEventListener("error", function(){
+        console.warn("[MARU Revenue] failed to load:", src);
+      }, { once:true });
+      return;
+    }
+
+    var script = document.createElement("script");
+    script.id = id;
+    script.src = src;
+    script.async = false;
+    script.onload = function(){
+      if (typeof done === "function") done();
+    };
+    script.onerror = function(){
+      console.warn("[MARU Revenue] failed to load:", src);
+    };
+
+    (document.head || document.documentElement).appendChild(script);
+  }
+
+  if (window.__MARU_REVENUE_AUTOMAP_LOADER_DONE__) {
+    installIfReady();
+    return;
+  }
+
+  window.__MARU_REVENUE_AUTOMAP_LOADER_DONE__ = true;
+
+  loadScriptOnce(
+    "/assets/js/maru-revenue-tracker.js",
+    "maruRevenueTrackerScript",
+    "MaruRevenueTracker",
+    function(){
+      loadScriptOnce(
+        "/assets/js/maru-revenue-autohook.js",
+        "maruRevenueAutoHookScript",
+        "MaruRevenueAutoHook",
+        installIfReady
+      );
+    }
+  );
+})();
