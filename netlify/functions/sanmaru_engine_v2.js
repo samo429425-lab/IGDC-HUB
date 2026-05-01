@@ -22,20 +22,20 @@
 
 const crypto = require("crypto");
 
-const VERSION = "sanmaru-engine-v2.1.0-secure-head-core";
+const VERSION = "sanmaru-engine-v2.2.0-wide-secure-head-core";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
-const DEFAULT_TIMEOUT_MS = 8500;
-const DEEP_TIMEOUT_MS = 12000;
+const DEFAULT_TIMEOUT_MS = 6500;
+const DEEP_TIMEOUT_MS = 9500;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const INFLIGHT_TTL_MS = 30 * 1000;
 const RATE_WINDOW_MS = 10 * 1000;
 const RATE_MAX = 60;
 const MAX_QUERY_LENGTH = 240;
-const MIN_FAST_TARGET = 80;
-const DEFAULT_EXTERNAL_TRIGGER_MIN = 80;
+const MIN_FAST_TARGET = 500;
+const DEFAULT_EXTERNAL_TRIGGER_MIN = 500;
 
 const globalState = globalThis.__SANMARU_V2_STATE || (globalThis.__SANMARU_V2_STATE = {
   cache: new Map(),
@@ -460,7 +460,7 @@ async function callSearchBankIndex(ctx){
       action: "query",
       q: ctx.q,
       query: ctx.q,
-      limit: Math.min(ctx.limit, 300),
+      limit: Math.min(ctx.limit || DEFAULT_LIMIT, MAX_LIMIT),
       type: ctx.searchType === "all" ? "" : ctx.searchType,
       lang: ctx.lang,
       from: "sanmaru",
@@ -487,34 +487,59 @@ async function callSearchBank(ctx){
     let mod = null;
     try{ mod = require("./search-bank-engine"); }catch(e){ mod = null; }
     if(!mod) return { trace: adapterResult("searchbank", "unavailable", started, []), items: [] };
-    const params = {
-      q: ctx.q,
-      query: ctx.q,
-      limit: Math.min(ctx.limit, 500),
-      type: ctx.searchType === "all" ? "" : ctx.searchType,
-      lang: ctx.lang,
-      from: "sanmaru",
-      source: "sanmaru",
-      external: "off",
-      noExternal: "1",
-      disableExternal: "1",
-      skipMaruSearch: "1",
-      noMaruSearch: "1",
-      skipSanmaru: "1",
-      noSanmaru: "1",
-      skipCollector: "1",
-      skipPlanetary: "1",
-      noAnalytics: "1",
-      noRevenue: "1"
-    };
-    let res = null;
-    if(typeof mod.runEngine === "function") res = await withTimeout(mod.runEngine(ctx.event || {}, params), 2200);
-    else if(typeof mod.handler === "function"){
-      const h = await withTimeout(mod.handler({ httpMethod:"GET", headers:(ctx.event && ctx.event.headers) || {}, queryStringParameters: params }), 2200);
-      res = h && typeof h.body === "string" ? JSON.parse(h.body || "{}") : h;
+
+    const target = Math.min(MAX_LIMIT, Math.max(ctx.limit || DEFAULT_LIMIT, MIN_FAST_TARGET));
+    const pageSize = 100;
+    const maxPages = Math.min(ctx.deep ? 30 : 14, Math.ceil(target / pageSize) + 3);
+    const offsets = [];
+    for(let i=0; i<maxPages; i++) offsets.push(i * pageSize);
+
+    async function one(offset){
+      const params = {
+        q: ctx.q,
+        query: ctx.q,
+        limit: pageSize,
+        offset,
+        type: ctx.searchType === "all" ? "" : ctx.searchType,
+        lang: ctx.lang,
+        from: "sanmaru",
+        source: "sanmaru",
+        external: "off",
+        noExternal: "1",
+        disableExternal: "1",
+        skipMaruSearch: "1",
+        noMaruSearch: "1",
+        skipSanmaru: "1",
+        noSanmaru: "1",
+        skipCollector: "1",
+        skipPlanetary: "1",
+        noAnalytics: "1",
+        noRevenue: "1"
+      };
+      let res = null;
+      if(typeof mod.runEngine === "function") res = await withTimeout(mod.runEngine(ctx.event || {}, params), 1800);
+      else if(typeof mod.handler === "function"){
+        const h = await withTimeout(mod.handler({ httpMethod:"GET", headers:(ctx.event && ctx.event.headers) || {}, queryStringParameters: params }), 1800);
+        res = h && typeof h.body === "string" ? JSON.parse(h.body || "{}") : h;
+      }
+      return normalizeItemsFromResponse(res).map(x => canonicalItem(x, ctx.q, "search-bank"));
     }
-    const items = normalizeItemsFromResponse(res).map(x => canonicalItem(x, ctx.q, "search-bank"));
-    return { trace: adapterResult("searchbank", items.length ? "ok" : "empty", started, items), items };
+
+    const settled = await Promise.allSettled(offsets.map(one));
+    const items = [];
+    const pageSigs = new Set();
+    let stoppedByDuplicate = false;
+    for(const r of settled){
+      const pageItems = r && r.status === "fulfilled" && Array.isArray(r.value) ? r.value : [];
+      if(!pageItems.length) continue;
+      const sig = pageItems.slice(0,3).map(x => s(x.id || x.url || x.link || x.title)).join("|") + "::" + pageItems.slice(-3).map(x => s(x.id || x.url || x.link || x.title)).join("|");
+      if(sig && pageSigs.has(sig)){ stoppedByDuplicate = true; continue; }
+      pageSigs.add(sig);
+      items.push(...pageItems);
+      if(items.length >= target) break;
+    }
+    const out = dedupeItems(items).slice(0, target);
+    return { trace: adapterResult("searchbank", out.length ? "ok" : "empty", started, out, { pagesTried: offsets.length, pageSize, target, duplicatePageFiltered: stoppedByDuplicate }), items: out };
   }catch(e){
     return { trace: adapterResult("searchbank", responseErrorCode(e), started, [], { error: responseErrorCode(e) }), items: [] };
   }
@@ -552,12 +577,27 @@ async function naverGeneric(ctx, endpoint, source, type, display, start){
   });
 }
 
-async function naverImage(ctx){
+
+async function naverPaged(ctx, endpoint, source, type, pages, display){
+  const starts = [];
+  const perPage = endpoint === "local.json" ? 5 : Math.min(display || 100, 100);
+  for(let i=0; i<Math.max(1, pages || 1); i++){
+    const st = 1 + (i * perPage);
+    if(st > 1000) break;
+    starts.push(st);
+  }
+  const settled = await Promise.allSettled(starts.map(st => naverGeneric(ctx, endpoint, source, type, perPage, st)));
+  const out = [];
+  for(const r of settled){ if(r && r.status === "fulfilled" && Array.isArray(r.value)) out.push(...r.value); }
+  return dedupeItems(out);
+}
+
+async function naverImage(ctx, start, display){
   const id = process.env.NAVER_API_KEY;
   const secret = process.env.NAVER_CLIENT_SECRET;
   if(!id || !secret) return null;
-  const url = "https://openapi.naver.com/v1/search/image.json?query=" + encodeURIComponent(ctx.q) + "&display=" + Math.min(ctx.deep ? 60 : 30, 100) + "&start=1&sort=sim";
-  const data = await fetchJsonAllowlisted(url, { headers: { "X-Naver-Client-Id": id, "X-Naver-Client-Secret": secret } }, 3000);
+  const url = "https://openapi.naver.com/v1/search/image.json?query=" + encodeURIComponent(ctx.q) + "&display=" + Math.min(display || (ctx.deep ? 60 : 30), 100) + "&start=" + Math.max(1, start || 1) + "&sort=sim";
+  const data = await fetchJsonAllowlisted(url, { headers: { "X-Naver-Client-Id": id, "X-Naver-Client-Secret": secret } }, 2600);
   return (Array.isArray(data.items) ? data.items : []).map(it => {
     const img = firstNonEmpty(it.link, it.thumbnail);
     const context = firstNonEmpty(it.originallink, img);
@@ -565,12 +605,27 @@ async function naverImage(ctx){
   });
 }
 
-async function googleWeb(ctx){
+
+async function naverImagePaged(ctx, pages, display){
+  const starts = [];
+  const perPage = Math.min(display || 30, 100);
+  for(let i=0; i<Math.max(1, pages || 1); i++){
+    const st = 1 + (i * perPage);
+    if(st > 1000) break;
+    starts.push(st);
+  }
+  const settled = await Promise.allSettled(starts.map(st => naverImage(ctx, st, perPage)));
+  const out = [];
+  for(const r of settled){ if(r && r.status === "fulfilled" && Array.isArray(r.value)) out.push(...r.value); }
+  return dedupeItems(out);
+}
+
+async function googleWeb(ctx, start, num){
   const key = process.env.GOOGLE_API_KEY;
   const cx = process.env.GOOGLE_CSE_ID;
   if(!key || !cx) return null;
-  const url = "https://www.googleapis.com/customsearch/v1?key=" + encodeURIComponent(key) + "&cx=" + encodeURIComponent(cx) + "&q=" + encodeURIComponent(ctx.q) + "&num=" + Math.min(ctx.deep ? 10 : 6, 10) + "&start=1&gl=us";
-  const data = await fetchJsonAllowlisted(url, null, 3200);
+  const url = "https://www.googleapis.com/customsearch/v1?key=" + encodeURIComponent(key) + "&cx=" + encodeURIComponent(cx) + "&q=" + encodeURIComponent(ctx.q) + "&num=" + Math.min(num || (ctx.deep ? 10 : 10), 10) + "&start=" + Math.max(1, start || 1) + "&gl=us";
+  const data = await fetchJsonAllowlisted(url, null, 2800);
   return (Array.isArray(data.items) ? data.items : []).map(it => {
     const pagemap = it.pagemap || {};
     const cseThumb = Array.isArray(pagemap.cse_thumbnail) ? pagemap.cse_thumbnail[0] : null;
@@ -580,31 +635,77 @@ async function googleWeb(ctx){
   });
 }
 
-async function googleImage(ctx){
+
+async function googleWebPaged(ctx, pages){
+  const starts = [];
+  for(let i=0; i<Math.max(1, pages || 1); i++){
+    const st = 1 + (i * 10);
+    if(st > 91) break;
+    starts.push(st);
+  }
+  const settled = await Promise.allSettled(starts.map(st => googleWeb(ctx, st, 10)));
+  const out = [];
+  for(const r of settled){ if(r && r.status === "fulfilled" && Array.isArray(r.value)) out.push(...r.value); }
+  return dedupeItems(out);
+}
+
+async function googleImage(ctx, start, num){
   const key = process.env.GOOGLE_API_KEY;
   const cx = process.env.GOOGLE_CSE_ID;
   if(!key || !cx) return null;
-  const url = "https://www.googleapis.com/customsearch/v1?key=" + encodeURIComponent(key) + "&cx=" + encodeURIComponent(cx) + "&q=" + encodeURIComponent(ctx.q) + "&searchType=image&num=" + Math.min(ctx.deep ? 10 : 6, 10) + "&start=1";
-  const data = await fetchJsonAllowlisted(url, null, 3200);
+  const url = "https://www.googleapis.com/customsearch/v1?key=" + encodeURIComponent(key) + "&cx=" + encodeURIComponent(cx) + "&q=" + encodeURIComponent(ctx.q) + "&searchType=image&num=" + Math.min(num || 10, 10) + "&start=" + Math.max(1, start || 1);
+  const data = await fetchJsonAllowlisted(url, null, 2800);
   return (Array.isArray(data.items) ? data.items : []).map(it => {
     const context = it.image && it.image.contextLink ? it.image.contextLink : it.link;
     return canonicalItem({ title: it.title, url: context, link: context, summary: it.snippet, snippet: it.snippet, type:"image", mediaType:"image", source:"google_image", thumbnail: it.link, image: it.link, imageSet:[it.link], payload:{ source:"google_image", contextLink:context } }, ctx.q, "google_image");
   });
 }
 
-async function bingWeb(ctx){
+
+async function googleImagePaged(ctx, pages){
+  const starts = [];
+  for(let i=0; i<Math.max(1, pages || 1); i++){
+    const st = 1 + (i * 10);
+    if(st > 91) break;
+    starts.push(st);
+  }
+  const settled = await Promise.allSettled(starts.map(st => googleImage(ctx, st, 10)));
+  const out = [];
+  for(const r of settled){ if(r && r.status === "fulfilled" && Array.isArray(r.value)) out.push(...r.value); }
+  return dedupeItems(out);
+}
+
+async function bingWeb(ctx, offset, count){
   const key = process.env.BING_API_KEY;
   if(!key) return null;
-  const url = "https://api.bing.microsoft.com/v7.0/search?q=" + encodeURIComponent(ctx.q) + "&count=" + Math.min(ctx.deep ? 40 : 20, 50) + "&offset=0";
-  const data = await fetchJsonAllowlisted(url, { headers: { "Ocp-Apim-Subscription-Key": key } }, 3200);
+  const url = "https://api.bing.microsoft.com/v7.0/search?q=" + encodeURIComponent(ctx.q) + "&count=" + Math.min(count || (ctx.deep ? 50 : 50), 50) + "&offset=" + Math.max(0, offset || 0);
+  const data = await fetchJsonAllowlisted(url, { headers: { "Ocp-Apim-Subscription-Key": key } }, 2800);
   return ((data.webPages && data.webPages.value) || []).map(it => canonicalItem({ title: it.name, url: it.url, link: it.url, summary: it.snippet, snippet: it.snippet, type:"web", source:"bing" }, ctx.q, "bing"));
+}
+
+
+async function bingWebPaged(ctx, pages){
+  const offsets = [];
+  const count = 50;
+  for(let i=0; i<Math.max(1, pages || 1); i++){
+    const off = i * count;
+    if(off > 450) break;
+    offsets.push(off);
+  }
+  const settled = await Promise.allSettled(offsets.map(off => bingWeb(ctx, off, count)));
+  const out = [];
+  for(const r of settled){ if(r && r.status === "fulfilled" && Array.isArray(r.value)) out.push(...r.value); }
+  return dedupeItems(out);
 }
 
 async function youtube(ctx){
   const key = process.env.YOUTUBE_API_KEY;
-  if(!key) return null;
-  const url = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=" + Math.min(ctx.deep ? 35 : 18, 50) + "&q=" + encodeURIComponent(ctx.q) + "&key=" + encodeURIComponent(key);
-  const data = await fetchJsonAllowlisted(url, null, 3600);
+  if(!key){
+    const url = "https://www.youtube.com/results?search_query=" + encodeURIComponent(ctx.q);
+    return [canonicalItem({ title:"[YouTube] " + ctx.q, url, link:url, summary:"YouTube search results for " + ctx.q, type:"video", mediaType:"video", source:"youtube", sourceType:"search-link", placeholder:true, payload:{ source:"youtube", fallback:"search-link" } }, ctx.q, "youtube")];
+  }
+  const url = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=" + Math.min(ctx.deep ? 40 : 20, 50) + "&q=" + encodeURIComponent(ctx.q) + "&key=" + encodeURIComponent(key);
+  const data = await fetchJsonAllowlisted(url, null, 3000);
   return (Array.isArray(data.items) ? data.items : []).map(it => {
     const videoId = it.id && it.id.videoId;
     if(!/^[A-Za-z0-9_-]{11}$/.test(s(videoId))) return null;
@@ -654,17 +755,17 @@ async function callOptionalModuleAdapter(ctx, name, modulePath, runParams, timeo
 }
 
 const ADAPTERS = [
-  { name:"naver-web", timeoutMs:3200, match:ctx => ctx.externalAllowed && (ctx.region === "KR" || ctx.externalForced || ctx.needExternal), access:ctx => naverGeneric(ctx, "webkr.json", "naver", "web", ctx.deep ? 100 : 60, 1) },
-  { name:"naver-news", timeoutMs:3200, match:ctx => ctx.externalAllowed && (ctx.intents.includes("news") || ctx.externalForced || ctx.needExternal), access:ctx => naverGeneric(ctx, "news.json", "naver_news", "news", ctx.deep ? 80 : 40, 1) },
-  { name:"naver-blog", timeoutMs:3200, match:ctx => ctx.externalAllowed && (ctx.intents.includes("blog") || ctx.intents.includes("tour") || ctx.intents.includes("cafe") || ctx.externalForced), access:ctx => naverGeneric(ctx, "blog.json", "naver_blog", "blog", ctx.deep ? 60 : 30, 1) },
-  { name:"naver-cafe", timeoutMs:3200, match:ctx => ctx.externalAllowed && (ctx.intents.includes("cafe") || ctx.intents.includes("tour") || ctx.externalForced), access:ctx => naverGeneric(ctx, "cafearticle.json", "naver_cafe", "cafe", ctx.deep ? 60 : 30, 1) },
-  { name:"naver-local", timeoutMs:3000, match:ctx => ctx.externalAllowed && (ctx.intents.includes("map") || ctx.intents.includes("tour") || ctx.externalForced), access:ctx => naverGeneric(ctx, "local.json", "naver_local", "local", 5, 1) },
-  { name:"naver-book", timeoutMs:3200, match:ctx => ctx.externalAllowed && (ctx.intents.includes("book") || ctx.externalForced), access:ctx => naverGeneric(ctx, "book.json", "naver_book", "book", ctx.deep ? 80 : 40, 1) },
-  { name:"naver-image", timeoutMs:3200, match:ctx => ctx.externalAllowed && !ctx.noMedia && (ctx.intents.includes("image") || ctx.intents.includes("tour") || ctx.intents.includes("video") || ctx.externalForced || ctx.needExternal), access:ctx => naverImage(ctx) },
-  { name:"google-web", timeoutMs:3400, match:ctx => ctx.externalAllowed && (ctx.region !== "KR" || ctx.externalForced || ctx.needExternal || ctx.intents.includes("knowledge") || ctx.intents.includes("news")), access:ctx => googleWeb(ctx) },
-  { name:"google-image", timeoutMs:3400, match:ctx => ctx.externalAllowed && !ctx.noMedia && (ctx.intents.includes("image") || ctx.externalForced || ctx.needExternal), access:ctx => googleImage(ctx) },
-  { name:"bing-web", timeoutMs:3400, match:ctx => ctx.externalAllowed && (ctx.externalForced || ctx.needExternal || ctx.region !== "KR"), access:ctx => bingWeb(ctx) },
-  { name:"youtube", timeoutMs:3800, match:ctx => ctx.externalAllowed && !ctx.noMedia && (ctx.intents.includes("video") || ctx.intents.includes("sns") || ctx.externalForced), access:ctx => youtube(ctx) },
+  { name:"naver-web", timeoutMs:2800, match:ctx => ctx.externalAllowed && (ctx.region === "KR" || ctx.externalForced || ctx.needExternal), access:ctx => naverPaged(ctx, "webkr.json", "naver", "web", ctx.deep ? 8 : 5, 100) },
+  { name:"naver-news", timeoutMs:2800, match:ctx => ctx.externalAllowed && (ctx.intents.includes("news") || ctx.externalForced || ctx.needExternal), access:ctx => naverPaged(ctx, "news.json", "naver_news", "news", ctx.deep ? 3 : 2, 100) },
+  { name:"naver-blog", timeoutMs:2800, match:ctx => ctx.externalAllowed && (ctx.intents.includes("blog") || ctx.intents.includes("tour") || ctx.intents.includes("cafe") || ctx.externalForced || ctx.needExternal), access:ctx => naverPaged(ctx, "blog.json", "naver_blog", "blog", ctx.deep ? 3 : 1, 100) },
+  { name:"naver-cafe", timeoutMs:2800, match:ctx => ctx.externalAllowed && (ctx.intents.includes("cafe") || ctx.intents.includes("tour") || ctx.externalForced || ctx.needExternal), access:ctx => naverPaged(ctx, "cafearticle.json", "naver_cafe", "cafe", ctx.deep ? 2 : 1, 100) },
+  { name:"naver-local", timeoutMs:2400, match:ctx => ctx.externalAllowed && (ctx.intents.includes("map") || ctx.intents.includes("tour") || ctx.externalForced || ctx.needExternal), access:ctx => naverPaged(ctx, "local.json", "naver_local", "local", 1, 5) },
+  { name:"naver-book", timeoutMs:2800, match:ctx => ctx.externalAllowed && (ctx.intents.includes("book") || ctx.externalForced || ctx.needExternal), access:ctx => naverPaged(ctx, "book.json", "naver_book", "book", ctx.deep ? 2 : 1, 100) },
+  { name:"naver-image", timeoutMs:2800, match:ctx => ctx.externalAllowed && !ctx.noMedia && (ctx.intents.includes("image") || ctx.intents.includes("tour") || ctx.intents.includes("video") || ctx.externalForced || ctx.needExternal), access:ctx => naverImagePaged(ctx, ctx.deep ? 3 : 2, 30) },
+  { name:"google-web", timeoutMs:3000, match:ctx => ctx.externalAllowed && (ctx.region !== "KR" || ctx.externalForced || ctx.needExternal || ctx.intents.includes("knowledge") || ctx.intents.includes("news")), access:ctx => googleWebPaged(ctx, ctx.deep ? 3 : 2) },
+  { name:"google-image", timeoutMs:3000, match:ctx => ctx.externalAllowed && !ctx.noMedia && (ctx.intents.includes("image") || ctx.externalForced || ctx.needExternal), access:ctx => googleImagePaged(ctx, ctx.deep ? 2 : 1) },
+  { name:"bing-web", timeoutMs:3000, match:ctx => ctx.externalAllowed && (ctx.externalForced || ctx.needExternal || ctx.region !== "KR"), access:ctx => bingWebPaged(ctx, ctx.deep ? 2 : 1) },
+  { name:"youtube", timeoutMs:3000, match:ctx => ctx.externalAllowed && !ctx.noMedia, access:ctx => youtube(ctx) },
 ];
 
 async function executeAdapter(adapter, ctx){
@@ -690,7 +791,7 @@ function selectAdapters(ctx){
       if(adapter.match(ctx)) selected.push(adapter);
     }catch(e){}
   }
-  const cap = ctx.deep ? 12 : 8;
+  const cap = ctx.deep ? 12 : 10;
   return selected.slice(0, cap);
 }
 
@@ -807,11 +908,12 @@ async function runSanmaru(input, maybeCtx){
     const intents = detectIntent(ctx.q, ctx.searchType);
     ctx.intents = intents;
 
-    const indexRes = await callSearchBankIndex(ctx);
+    const [indexRes, bankRes] = await Promise.all([
+      callSearchBankIndex(ctx),
+      callSearchBank(ctx)
+    ]);
     trace.push(indexRes.trace);
     items.push(...indexRes.items);
-
-    const bankRes = await callSearchBank(ctx);
     trace.push(bankRes.trace);
     items.push(...bankRes.items);
 
