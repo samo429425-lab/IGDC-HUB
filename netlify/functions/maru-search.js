@@ -19,12 +19,11 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.35-safe-body-zero-card-restore';
+const VERSION = 'A1.5.33-original-body-visible-pagepack-hotfix';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
 const DEFAULT_SOFT_TIMEOUT_MS = 10500;
-const DEFAULT_VISIBLE_CARDS_PER_PAGE = 15;
 
 // MARU gateway policy:
 // - Internal search-bank first.
@@ -170,54 +169,6 @@ function pickQ(event){
   const noMedia = truthy(qs.noMedia) || truthy(qs.disableMedia);
   const searchType = normalizeSearchType(qs.type || qs.category || qs.tab || qs.vertical);
   return { q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType, raw: qs };
-}
-
-
-function resolveViewportOptions(raw, requestedLimit){
-  raw = raw || {};
-  const strictLimit = truthy(raw.strictLimit) || truthy(raw.onlyLimit) || truthy(raw.sliceResults) || truthy(raw.exactLimit);
-  const visibleCardsPerPage = clampInt(firstNonEmpty(raw.perPage, raw.pageSize, raw.visibleCardsPerPage, raw.visibleLimit, raw.cardsPerPage), DEFAULT_VISIBLE_CARDS_PER_PAGE, 1, 100);
-  const page = clampInt(firstNonEmpty(raw.page, raw.p, raw.visiblePage, raw.sectionPage), 1, 1, 100000);
-  const explicitCandidate = firstNonEmpty(raw.candidatePool, raw.candidatePoolTarget, raw.poolLimit, raw.dataLimit, raw.maxCandidates, raw.resultLimit);
-  const defaultCandidate = Math.max(DEFAULT_LIMIT, MIN_RESULT_TARGET, requestedLimit || 0);
-  const candidateLimit = strictLimit
-    ? clampInt(requestedLimit, DEFAULT_LIMIT, 1, MAX_LIMIT)
-    : clampInt(explicitCandidate, defaultCandidate, 1, MAX_LIMIT);
-  return {
-    page,
-    perPage: visibleCardsPerPage,
-    visibleCardsPerPage,
-    requestedLimit: clampInt(requestedLimit, DEFAULT_LIMIT, 1, MAX_LIMIT),
-    candidateLimit,
-    strictLimit,
-    rule: 'candidate-pool-is-not-display-page-size'
-  };
-}
-
-function ensureNonEmptySearchBase(base, q, region){
-  base = base && typeof base === 'object' ? base : { items: [], results: [], meta: {} };
-  const items = Array.isArray(base.items) ? base.items : (Array.isArray(base.results) ? base.results : []);
-  if(items.length > 0) return Object.assign({}, base, { items, results: items });
-
-  const fallback = dedupeCanonicalItems([].concat(
-    mapCards(q, region || 'GLOBAL'),
-    openDiscoverySurfaceCards(q)
-  )).map(compactResultItem);
-
-  const trace = Array.isArray(base.meta && base.meta.trace) ? base.meta.trace.slice() : [];
-  trace.push({ name: 'zero-card-fail-open', status: fallback.length ? 'ok' : 'empty', count: fallback.length, mode: 'preserve-renderable-response-shape' });
-
-  return Object.assign({}, base, {
-    source: base.source || (fallback.length ? 'fail-open-discovery' : null),
-    items: fallback,
-    results: fallback,
-    meta: Object.assign({}, base.meta || {}, {
-      count: fallback.length,
-      trace,
-      zeroCardFailOpen: true,
-      zeroCardFailOpenReason: 'upstream returned no renderable items; returned safe discovery surfaces instead of blank page'
-    })
-  });
 }
 
 function parseAcceptLanguage(header){
@@ -995,13 +946,8 @@ function sectionSortScore(item){
   return base + (hasImage * 0.8) + (hasVideo * 0.6);
 }
 
-function itemIdentityKey(it){ return safeString(firstNonEmpty(it && it.url, it && it.link, it && it.openUrl, it && it.id, it && it.title)).toLowerCase(); }
-
 function buildSearchSections(items, q, opts){
-  opts = opts || {};
   const list = Array.isArray(items) ? items : [];
-  const page = clampInt(firstNonEmpty(opts.page, opts.sectionPage, opts.visiblePage), 1, 1, 100000);
-  const visibleCardsPerPage = clampInt(firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit), DEFAULT_VISIBLE_CARDS_PER_PAGE, 1, 100);
   const buckets = Object.create(null);
   const seenBySection = Object.create(null);
 
@@ -1024,120 +970,74 @@ function buildSearchSections(items, q, opts){
     }));
   }
 
-  const fullSections = SEARCH_SECTION_ORDER.map(sectionId => {
+  const sections = SEARCH_SECTION_ORDER.map(sectionId => {
     const meta = SEARCH_SECTION_META[sectionId] || SEARCH_SECTION_META.general_web;
     const all = (buckets[sectionId] || []).slice().sort((a,b) => sectionSortScore(b) - sectionSortScore(a));
     const previewLimit = meta.previewLimit || 6;
-    return { sectionId, meta, all, previewLimit };
-  }).filter(sec => sec.all.length > 0);
-
-  // Legacy sections are preserved exactly as the old front expected.
-  // Do not use this field as the 15-card viewport limiter.
-  const sections = fullSections.map(sec => ({
-    id: sec.sectionId,
-    title: sec.meta.title,
-    label: sec.meta.label,
-    description: sec.meta.description,
-    rank: sec.meta.rank,
-    total: sec.all.length,
-    previewLimit: sec.previewLimit,
-    hasMore: sec.all.length > sec.previewLimit,
-    items: sec.all.slice(0, sec.previewLimit),
-    more: {
-      q: safeString(q || ''),
-      type: sec.sectionId,
-      section: sec.sectionId,
-      perPage: sec.previewLimit,
-      action: 'expand-section'
-    }
-  }));
-
-  // Viewport page is a separate stream. This prevents the 15-card UI rule from
-  // shrinking items/results or breaking the legacy sections array.
-  const visibleFlow = [];
-  const cursors = Object.create(null);
-  let guard = 0;
-  while(visibleFlow.length < list.length && guard < (list.length + fullSections.length + 10)){
-    guard += 1;
-    let moved = false;
-    for(const sec of fullSections){
-      const idx = cursors[sec.sectionId] || 0;
-      if(idx >= sec.all.length) continue;
-      visibleFlow.push(sec.all[idx]);
-      cursors[sec.sectionId] = idx + 1;
-      moved = true;
-      if(visibleFlow.length >= list.length) break;
-    }
-    if(!moved) break;
-  }
-
-  const totalVisibleCandidates = visibleFlow.length;
-  const totalPages = Math.max(1, Math.ceil(totalVisibleCandidates / visibleCardsPerPage));
-  const safePage = Math.min(page, totalPages);
-  const offset = (safePage - 1) * visibleCardsPerPage;
-  const pageItems = visibleFlow.slice(offset, offset + visibleCardsPerPage);
-  const pageKeys = new Set(pageItems.map(itemIdentityKey).filter(Boolean));
-  const pageBySection = Object.create(null);
-  for(const item of pageItems){
-    const sectionId = item.sectionId || sectionIdForItem(item);
-    if(!pageBySection[sectionId]) pageBySection[sectionId] = [];
-    pageBySection[sectionId].push(item);
-  }
-
-  const pageSections = fullSections.map(sec => {
-    const visibleItems = pageBySection[sec.sectionId] || [];
-    const collapsedItems = sec.all.filter(it => !pageKeys.has(itemIdentityKey(it)));
     return {
-      id: sec.sectionId,
-      title: sec.meta.title,
-      label: sec.meta.label,
-      description: sec.meta.description,
-      rank: sec.meta.rank,
-      total: sec.all.length,
-      visibleCount: visibleItems.length,
-      previewLimit: sec.previewLimit,
-      items: visibleItems,
-      collapsedCount: collapsedItems.length,
-      hiddenCount: collapsedItems.length,
-      hasMore: collapsedItems.length > 0,
-      collapsedItems: collapsedItems.slice(0, Math.max(sec.previewLimit, visibleCardsPerPage)),
+      id: sectionId,
+      title: meta.title,
+      label: meta.label,
+      description: meta.description,
+      rank: meta.rank,
+      total: all.length,
+      previewLimit,
+      hasMore: all.length > previewLimit,
+      items: all.slice(0, previewLimit),
       more: {
         q: safeString(q || ''),
-        type: sec.sectionId,
-        section: sec.sectionId,
-        perPage: sec.previewLimit,
+        type: sectionId,
+        section: sectionId,
+        perPage: previewLimit,
         action: 'expand-section'
       }
     };
-  }).filter(sec => sec.visibleCount > 0);
+  }).filter(section => section.total > 0);
 
   const sectionCounts = {};
-  for(const sec of fullSections) sectionCounts[sec.sectionId] = sec.all.length;
+  for(const section of sections) sectionCounts[section.id] = section.total;
 
   return {
     enabled: true,
     mode: 'grouped-expandable-search-sections',
-    viewportMode: 'separate-visible-page-stream-safe',
     order: SEARCH_SECTION_ORDER,
     counts: sectionCounts,
     totalSections: sections.length,
-    visibleCardsPerPage,
-    visibleCount: pageItems.length,
+    sections
+  };
+}
+
+
+function buildVisiblePagePack(items, q, raw){
+  raw = raw || {};
+  const list = Array.isArray(items) ? items : [];
+  const page = clampInt(firstNonEmpty(raw.page, raw.p, raw.visiblePage, raw.sectionPage), 1, 1, 100000);
+  const perPage = clampInt(firstNonEmpty(raw.perPage, raw.pageSize, raw.visibleCardsPerPage, raw.visibleLimit, raw.cardsPerPage), 15, 1, 100);
+  const totalItems = list.length;
+  const totalPages = Math.max(totalItems ? 1 : 0, Math.ceil(totalItems / perPage));
+  const safePage = totalPages ? Math.min(page, totalPages) : 1;
+  const offset = totalPages ? (safePage - 1) * perPage : 0;
+  const pageItems = list.slice(offset, offset + perPage);
+
+  return {
+    enabled: true,
+    mode: 'render-viewport-only-do-not-limit-search-body',
+    q: safeString(q || ''),
     page: safePage,
     requestedPage: page,
+    perPage,
+    visibleCardsPerPage: perPage,
+    visibleCount: pageItems.length,
+    pageItems,
+    totalItems,
     totalPages,
-    totalVisibleCandidates,
-    hasPrevPage: safePage > 1,
-    hasNextPage: safePage < totalPages,
+    hasPrevPage: totalPages ? safePage > 1 : false,
+    hasNextPage: totalPages ? safePage < totalPages : false,
     prevPage: safePage > 1 ? safePage - 1 : null,
     nextPage: safePage < totalPages ? safePage + 1 : null,
-    legacySectionsPreserved: true,
+    bodyPreserved: true,
     doesNotLimitItemsResults: true,
-    hiddenItemsExcludedFromVisibleCount: true,
-    pageItems,
-    pageSections,
-    visibleSections: pageSections,
-    sections
+    sectionsPreserved: true
   };
 }
 
@@ -3383,8 +3283,6 @@ exports.handler = async function(event){
   try{
     const picked = pickQ(event || {});
     const { q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType, raw } = picked;
-    const viewport = resolveViewportOptions(raw || {}, limit);
-    const engineLimit = viewport.candidateLimit;
 
     const action = safeString((raw && (raw.action || raw.mode || raw.fn)) || '').trim().toLowerCase();
     if(action === 'enrich-images' || action === 'enrichimages' || action === 'image-enrich'){
@@ -3417,12 +3315,11 @@ exports.handler = async function(event){
     }
 
     if(!q){
-      return ok({ status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: null, items: [], results: [], sections: [], sectionPack: { enabled: true, sections: [], pageItems: [], pageSections: [], visibleCount: 0, visibleCardsPerPage: DEFAULT_VISIBLE_CARDS_PER_PAGE, totalPages: 0 }, meta: { count: 0, limit } });
+      return ok({ status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: null, items: [], results: [], meta: { count: 0, limit } });
     }
-    let base = await orchestrateSearch({ event, q, limit: engineLimit, start, lang, deep, externalOff, externalMode, noMedia, searchType });
-    base = await attachMediaEngineResults(base, event, { q, limit: engineLimit, requestedLimit: limit, start, lang, searchType, raw, noMedia });
-    base = await attachSanmaruAugmentResults(base, event, { q, limit: engineLimit, requestedLimit: limit, start, lang, searchType, raw, noMedia });
-    base = ensureNonEmptySearchBase(base, q, base.region || detectRuntimeRegion(event, lang, q));
+    let base = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType });
+    base = await attachMediaEngineResults(base, event, { q, limit, start, lang, searchType, raw, noMedia });
+    base = await attachSanmaruAugmentResults(base, event, { q, limit, start, lang, searchType, raw, noMedia });
     // Search must not trigger heavy settlement/distribution by default.
     // Analytics is opt-in for this endpoint; weekly settlement is handled by revenue/commerce engines.
     const analyticsRequested = truthy(raw && (raw.analytics || raw.track || raw.enableAnalytics)) || truthy(process.env.MARU_SEARCH_ANALYTICS);
@@ -3432,17 +3329,29 @@ exports.handler = async function(event){
     if(!analyticsOff) syncSearchAnalytics(event, q, base.items).catch(() => null);
     base.items = (Array.isArray(base.items) ? base.items : []).map(compactResultItem);
     base.results = base.items;
-    const sectionPack = buildSearchSections(base.items, q, { searchType, page: viewport.page, perPage: viewport.visibleCardsPerPage });
+    const sectionPack = buildSearchSections(base.items, q, { searchType });
+    const visiblePagePack = buildVisiblePagePack(base.items, q, raw || {});
+    const sectionPackWithViewport = Object.assign({}, sectionPack, {
+      pageItems: visiblePagePack.pageItems,
+      visiblePagePack,
+      visibleCardsPerPage: visiblePagePack.visibleCardsPerPage,
+      visibleCount: visiblePagePack.visibleCount,
+      page: visiblePagePack.page,
+      totalPages: visiblePagePack.totalPages,
+      hasNextPage: visiblePagePack.hasNextPage,
+      bodyPreserved: true,
+      sectionsPreserved: true,
+      doesNotLimitItemsResults: true
+    });
     if(!revenueOff) distributeRevenue(event, base.items).catch(() => null);
     return ok({
       status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: base.source,
       items: base.items, results: base.items,
       sections: sectionPack.sections,
-      visibleSections: sectionPack.pageSections,
-      pageSections: sectionPack.pageSections,
-      pageItems: sectionPack.pageItems,
-      sectionPack,
-      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, requestedLimit: limit, limit: engineLimit, viewport, page: viewport.page, perPage: viewport.visibleCardsPerPage, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: sectionPack.mode, totalSections: sectionPack.totalSections, counts: sectionPack.counts, order: sectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', preservationPatch: 'A1.5.33-quality-original-image-selection' })
+      pageItems: visiblePagePack.pageItems,
+      visiblePagePack,
+      sectionPack: sectionPackWithViewport,
+      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, bodyPreserved: true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: sectionPack.mode, totalSections: sectionPack.totalSections, counts: sectionPack.counts, order: sectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', preservationPatch: 'A1.5.33-original-body-visible-pagepack-hotfix' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));

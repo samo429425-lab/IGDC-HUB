@@ -22,7 +22,7 @@
 
 const crypto = require("crypto");
 
-const VERSION = "sanmaru-engine-v2.3.2-safe-candidate-pool-preserve";
+const VERSION = "sanmaru-engine-v2.3.1-no-shrink-discovery-aware";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 1000;
@@ -988,7 +988,7 @@ function parseCtx(input, maybeCtx){
     page: clampInt(firstNonEmpty(ctx.page, raw.page, qs.page), 1, 1, 100000),
     perPage: clampInt(firstNonEmpty(ctx.perPage, raw.perPage, qs.perPage), 15, 1, 200),
     start: clampInt(firstNonEmpty(ctx.start, raw.start, qs.start), 1, 1, 1000000),
-    candidatePoolTarget: clampInt(firstNonEmpty(ctx.candidatePool, raw.candidatePool, qs.candidatePool, ctx.candidatePoolTarget, raw.candidatePoolTarget, qs.candidatePoolTarget, DEFAULT_CANDIDATE_POOL_TARGET), DEFAULT_CANDIDATE_POOL_TARGET, 1, MAX_LIMIT),
+    candidatePoolTarget: clampInt(firstNonEmpty(ctx.candidatePool, raw.candidatePool, qs.candidatePool, ctx.candidatePoolTarget, raw.candidatePoolTarget, qs.candidatePoolTarget, wideExpansion ? DEFAULT_CANDIDATE_POOL_TARGET : "", ctx.limit, raw.limit, qs.limit), DEFAULT_CANDIDATE_POOL_TARGET, 1, MAX_LIMIT),
     expansion: expansionRaw || (wideExpansion ? "wide" : "balanced"),
     directExternalAllowed: truthy(ctx.directExternal || raw.directExternal || qs.directExternal || ctx.sanmaruDirectExternal || raw.sanmaruDirectExternal || qs.sanmaruDirectExternal || process.env.SANMARU_DIRECT_EXTERNAL),
     requestId: firstNonEmpty(ctx.requestId, stableHash([clean.value, nowMs(), Math.random()].join("|")))
