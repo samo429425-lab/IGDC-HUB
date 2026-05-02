@@ -1,5 +1,5 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
-// PATCH: fast balanced vertical tabs v1 + naver-like adaptive media cards + stable display groups
+// PATCH: resident-first Sanmaru switch + fast balanced vertical tabs + stable display groups
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -48,6 +48,43 @@ ready(function () {
     const pageImageEnrichCache = new Set();
     const itemImageEnrichCache = new Map();
     const expandedDisplayGroups = new Set();
+
+    // SANMARU resident switch:
+    // The first search signal warms/activates Sanmaru on the server. Later searches
+    // should ask Maru Search to use Sanmaru resident supply first, not re-open every
+    // provider from the browser flow. This is non-blocking for page navigation.
+    const SANMARU_BOOT_URL = '/.netlify/functions/sanmaru_engine_v2';
+    let sanmaruBootPromise = null;
+
+    function sanmaruSignalParams(q, type, reason){
+      const sp = new URLSearchParams();
+      sp.set('action', 'resident-boot');
+      sp.set('reason', reason || 'search-ui');
+      sp.set('residentSwitch', '1');
+      sp.set('warm', '1');
+      if (q) sp.set('q', q);
+      if (type) sp.set('type', normalizeSearchType(type));
+      return sp;
+    }
+
+    function bootSanmaruOnce(reason, q, type){
+      if (sanmaruBootPromise) return sanmaruBootPromise;
+      try {
+        const url = SANMARU_BOOT_URL + '?' + sanmaruSignalParams(q || '', type || activeType || 'all', reason || 'search-ui').toString();
+        sanmaruBootPromise = fetch(url, {
+          method: 'GET',
+          cache: 'no-store',
+          keepalive: true
+        }).catch(() => null);
+      } catch(e) {
+        sanmaruBootPromise = Promise.resolve(null);
+      }
+      return sanmaruBootPromise;
+    }
+
+    function signalSanmaruSearch(q, type, reason){
+      bootSanmaruOnce(reason || 'search-signal', q, type);
+    }
 
 const params = new URLSearchParams(location.search);
 const q0 = (params.get('q') || '').trim();
@@ -283,11 +320,22 @@ function getSafeReturnUrl() {
 }
 
 function buildSearchUrl(q) {
+  const cleanQ = String(q || '').trim();
+  signalSanmaruSearch(cleanQ, 'all', 'home-to-search-handoff');
+
   const u = new URL('/search.html', location.origin);
-  u.searchParams.set('q', q);
-  if (activeType && activeType !== 'all') {
-    u.searchParams.set('type', activeType);
-  }
+  u.searchParams.set('q', cleanQ);
+  u.searchParams.set('page', '1');
+  u.searchParams.set('block', '0');
+
+  // A fresh query from the homepage/search box must not inherit the previous
+  // tab such as type=video. Search page tabs may be clicked after the new
+  // query loads.
+  u.searchParams.delete('type');
+  u.searchParams.set('residentFirst', '1');
+  u.searchParams.set('sanmaruFirst', '1');
+  u.searchParams.set('residentSwitch', '1');
+  u.searchParams.set('handoff', '1');
 
   const currentFrom = getSafeReturnUrl();
   if (currentFrom) {
@@ -413,8 +461,10 @@ ensureSearchTabs();
 updateSearchTabsActive();
 
 if (q0) {
+  signalSanmaruSearch(q0, activeType, 'search-page-url-open');
   syncSearchFromUrl(true);
 } else {
+  bootSanmaruOnce('search-ui-ready', '', activeType);
   status.textContent = '';
 }
 
@@ -433,20 +483,27 @@ btn.addEventListener('click', (e) => {
       return;
     }
 
+    const nextType = 'all';
+    activeType = nextType;
+    updateSearchTabsActive();
+    signalSanmaruSearch(q, nextType, 'search-page-new-query');
+
     const u = new URL(location.href);
     u.searchParams.set('q', q);
     u.searchParams.set('page', '1');
     u.searchParams.set('block', '0');
-    if (activeType && activeType !== 'all') u.searchParams.set('type', activeType);
-    else u.searchParams.delete('type');
+    u.searchParams.delete('type');
+    u.searchParams.set('residentFirst', '1');
+    u.searchParams.set('sanmaruFirst', '1');
+    u.searchParams.set('residentSwitch', '1');
 
     const safeReturnUrl = getSafeReturnUrl();
     if (safeReturnUrl) {
       u.searchParams.set('from', safeReturnUrl);
     }
 
-    history.pushState({ q, type: activeType, from: safeReturnUrl || '' }, '', u.toString());
-    runSearch(q, activeType);
+    history.pushState({ q, type: nextType, from: safeReturnUrl || '' }, '', u.toString());
+    runSearch(q, nextType);
     return;
   }
 
@@ -470,20 +527,27 @@ input.addEventListener('keydown', (e) => {
       return;
     }
 
+    const nextType = 'all';
+    activeType = nextType;
+    updateSearchTabsActive();
+    signalSanmaruSearch(q, nextType, 'search-page-new-query');
+
     const u = new URL(location.href);
     u.searchParams.set('q', q);
     u.searchParams.set('page', '1');
     u.searchParams.set('block', '0');
-    if (activeType && activeType !== 'all') u.searchParams.set('type', activeType);
-    else u.searchParams.delete('type');
+    u.searchParams.delete('type');
+    u.searchParams.set('residentFirst', '1');
+    u.searchParams.set('sanmaruFirst', '1');
+    u.searchParams.set('residentSwitch', '1');
 
     const safeReturnUrl = getSafeReturnUrl();
     if (safeReturnUrl) {
       u.searchParams.set('from', safeReturnUrl);
     }
 
-    history.pushState({ q, type: activeType, from: safeReturnUrl || '' }, '', u.toString());
-    runSearch(q, activeType);
+    history.pushState({ q, type: nextType, from: safeReturnUrl || '' }, '', u.toString());
+    runSearch(q, nextType);
     return;
   }
 
@@ -588,7 +652,21 @@ function normalizeItems(payload){
 
 async function fetchSearch(q, type = activeType){
   const safeType = normalizeSearchType(type);
-  const url = `/.netlify/functions/maru-search?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}&type=${encodeURIComponent(safeType)}&tab=${encodeURIComponent(safeType)}`;
+  signalSanmaruSearch(q, safeType, 'maru-search-fetch');
+
+  const sp = new URLSearchParams();
+  sp.set('q', q);
+  sp.set('limit', String(FETCH_LIMIT));
+  sp.set('type', safeType);
+  sp.set('tab', safeType);
+  sp.set('perPage', String(PAGE_SIZE));
+  sp.set('visibleCardsPerPage', String(PAGE_SIZE));
+  sp.set('residentFirst', '1');
+  sp.set('sanmaruFirst', '1');
+  sp.set('residentSwitch', '1');
+  sp.set('activateResident', '1');
+  sp.set('handoff', isSearchPage ? 'search-html' : 'home');
+  const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
   try {
     const r = await fetch(url, { cache: 'no-store' });
@@ -780,6 +858,58 @@ async function fetchSearch(q, type = activeType){
     }
 
 
+    function extractYouTubeIdQuickClient(v){
+      const raw = String(v || '').trim();
+      if (!raw) return '';
+      const m =
+        raw.match(/[?&]v=([A-Za-z0-9_-]{11})/) ||
+        raw.match(/youtu\.be\/([A-Za-z0-9_-]{11})/) ||
+        raw.match(/youtube\.com\/embed\/([A-Za-z0-9_-]{11})/) ||
+        raw.match(/youtube\.com\/shorts\/([A-Za-z0-9_-]{11})/) ||
+        raw.match(/(?:i\.ytimg\.com|img\.youtube\.com)\/vi\/([A-Za-z0-9_-]{11})/);
+      return m ? String(m[1] || '').trim() : '';
+    }
+
+    function isYoutubeLikeItemClient(it){
+      const hay = [
+        it && it.source,
+        it && it.type,
+        it && it.mediaType,
+        it && it.url,
+        it && it.link,
+        it && it.videoUrl,
+        it && it.watchUrl,
+        it && it.embedUrl,
+        it && it.thumbnail,
+        it && it.thumb,
+        it && it.image,
+        Array.isArray(it && it.imageSet) ? it.imageSet.join(' ') : ''
+      ].join(' ').toLowerCase();
+      return hay.includes('youtube') || hay.includes('youtu.be') || hay.includes('ytimg.com') || hay.includes('img.youtube.com');
+    }
+
+    function preferredYoutubeThumbClient(it){
+      const candidates = [
+        it && it.videoId,
+        it && it.url,
+        it && it.link,
+        it && it.videoUrl,
+        it && it.watchUrl,
+        it && it.embedUrl,
+        it && it.thumbnail,
+        it && it.thumb,
+        it && it.image
+      ].concat(Array.isArray(it && it.imageSet) ? it.imageSet : []);
+
+      for (const v of candidates) {
+        const id = String(v || '').length === 11 && /^[A-Za-z0-9_-]{11}$/.test(String(v || ''))
+          ? String(v)
+          : extractYouTubeIdQuickClient(v);
+        if (id) return `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`;
+      }
+      return '';
+    }
+
     function collectNaturalImages(it){
       const sourceText = String((it && it.source) || '').toLowerCase();
       const raw = []
@@ -816,6 +946,14 @@ async function fetchSearch(q, type = activeType){
         seen.add(key);
         out.push(s);
       });
+
+      // YouTube result cards must expose one representative visual only. If an
+      // iframe is rendered, this prevents a second small thumbnail from being
+      // appended next to the player.
+      if (isYoutubeLikeItemClient(it)) {
+        const best = preferredYoutubeThumbClient(it) || out[0] || '';
+        return best ? [best] : [];
+      }
 
       // Naver image API item is one image result; thumbnail/original often look duplicated.
       if (sourceText.includes('naver_image') && out.length > 1) {
@@ -1442,7 +1580,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         body.appendChild(mediaWrap);
       }
 
-      if (hasVideoPreview) {
+      if (hasVideoPreview && !playableMediaNode && !isYoutubeLikeItemClient(it)) {
         const videoWrap = document.createElement('div');
         videoWrap.style.marginTop = '8px';
         videoWrap.style.maxHeight = '120px';
@@ -1711,6 +1849,7 @@ async function runSearch(q, type = activeType){
     return;
   }
 
+  signalSanmaruSearch(qq, activeType, 'run-search');
   status.textContent = `Searching ${getTypeLabel(activeType)} for "${qq}"...`;
   renderSkeleton();
   clearPager();
@@ -1757,8 +1896,15 @@ async function runSearch(q, type = activeType){
     const q = input.value.trim();
     if (!q) return;
 
+    signalSanmaruSearch(q, 'all', 'global-search-handoff');
+
     const u = new URL('/search.html', location.origin);
     u.searchParams.set('q', q);
+    u.searchParams.set('page', '1');
+    u.searchParams.set('block', '0');
+    u.searchParams.set('residentFirst', '1');
+    u.searchParams.set('sanmaruFirst', '1');
+    u.searchParams.set('residentSwitch', '1');
     u.searchParams.set('from', location.pathname + location.search + location.hash);
 
     window.location.href = u.pathname + u.search + u.hash;
