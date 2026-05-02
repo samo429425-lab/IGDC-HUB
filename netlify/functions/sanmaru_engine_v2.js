@@ -22,7 +22,7 @@
 
 const crypto = require("crypto");
 
-const VERSION = "sanmaru-engine-v2.3.1-no-shrink-discovery-aware";
+const VERSION = "sanmaru-engine-v2.3.3-resident-boot-library";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 1000;
@@ -39,6 +39,28 @@ const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
 const DEFAULT_CANDIDATE_POOL_TARGET = 3000;
 const MAX_INDEX_FAST_LIMIT = 2000;
 const MAX_SEARCH_BANK_FAST_LIMIT = 2000;
+const RESIDENT_BOOT_TTL_MS = 10 * 60 * 1000;
+const RESIDENT_BOOT_QUERY_LIMIT = 300;
+const RESIDENT_BOOT_MAX_ITEMS = 6000;
+const RESIDENT_BOOT_ENABLED = !["1","true","yes","on"].includes(String(process.env.SANMARU_DISABLE_AUTO_BOOT || "").trim().toLowerCase());
+const RESIDENT_BOOT_SEED_QUERIES = [
+  { q:"서울", type:"all" },
+  { q:"서울시청", type:"official" },
+  { q:"서울 지도", type:"map" },
+  { q:"서울 관광", type:"tour" },
+  { q:"서울 뉴스", type:"news" },
+  { q:"서울 영상", type:"video" },
+  { q:"서울 이미지", type:"image" },
+  { q:"서울 블로그", type:"blog" },
+  { q:"서울 카페", type:"cafe" },
+  { q:"서울 지식", type:"knowledge" },
+  { q:"서울 도서", type:"book" },
+  { q:"서울 쇼핑", type:"shopping" },
+  { q:"한국", type:"all" },
+  { q:"대한민국", type:"all" },
+  { q:"Korea", type:"all" },
+  { q:"Seoul", type:"all" }
+];
 
 const globalState = globalThis.__SANMARU_V2_STATE || (globalThis.__SANMARU_V2_STATE = {
   cache: new Map(),
@@ -49,6 +71,23 @@ const globalState = globalThis.__SANMARU_V2_STATE || (globalThis.__SANMARU_V2_ST
   telemetry: []
 });
 
+globalState.resident = globalState.resident || {
+  status: "cold",
+  booting: null,
+  startedAt: 0,
+  bootedAt: 0,
+  reason: null,
+  queries: [],
+  items: [],
+  itemMap: new Map(),
+  queryKeys: new Set(),
+  categoryMap: Object.create(null),
+  sourceMap: Object.create(null),
+  lastError: null,
+  lastDurationMs: 0
+};
+if(!(globalState.resident.itemMap instanceof Map)) globalState.resident.itemMap = new Map();
+if(!(globalState.resident.queryKeys instanceof Set)) globalState.resident.queryKeys = new Set();
 
 const MOUNT_REGISTRY = {
   "searchbank-index": {
@@ -529,6 +568,252 @@ function searchAreaExpansionMode(ctx){
   return "balanced";
 }
 
+function explicitCandidatePoolValue(ctx, raw, qs){
+  return firstNonEmpty(
+    ctx.candidatePool, raw.candidatePool, qs.candidatePool,
+    ctx.candidatePoolTarget, raw.candidatePoolTarget, qs.candidatePoolTarget
+  );
+}
+
+function resolveCandidatePoolTarget(limit, ctx, raw, qs, wideExpansion){
+  const explicitPool = explicitCandidatePoolValue(ctx, raw, qs);
+  if(explicitPool) return clampInt(explicitPool, DEFAULT_CANDIDATE_POOL_TARGET, 1, MAX_LIMIT);
+
+  // IMPORTANT: limit/perPage can be a viewport display request such as 15.
+  // It must not shrink Sanmaru's resident candidate pool.
+  // Sanmaru is a library/mount engine, not a card renderer.
+  if(wideExpansion) return DEFAULT_CANDIDATE_POOL_TARGET;
+  if((limit || 0) <= 200) return DEFAULT_CANDIDATE_POOL_TARGET;
+  return clampInt(limit, DEFAULT_CANDIDATE_POOL_TARGET, 1, MAX_LIMIT);
+}
+
+function residentMemoryKey(ctx){
+  return stableHash([ctx.q, ctx.searchType || "all", ctx.lang || ""].join("|"));
+}
+
+function readResidentMemory(ctx){
+  try{
+    const hit = globalState.memory && globalState.memory.get(residentMemoryKey(ctx));
+    if(hit && Array.isArray(hit.items) && hit.items.length){
+      return hit.items.map(x => canonicalItem(x, ctx.q, "sanmaru-resident-memory"));
+    }
+  }catch(e){}
+  return [];
+}
+
+function writeResidentMemory(ctx, items){
+  try{
+    if(!globalState.memory) globalState.memory = new Map();
+    const list = Array.isArray(items) ? items.slice(0, Math.min(DEFAULT_CANDIDATE_POOL_TARGET, MAX_LIMIT)) : [];
+    if(!list.length) return;
+    globalState.memory.set(residentMemoryKey(ctx), { t: nowMs(), q: ctx.q, items: list });
+    if(globalState.memory.size > 500){
+      const first = globalState.memory.keys().next().value;
+      globalState.memory.delete(first);
+    }
+  }catch(e){}
+}
+
+function sanmaruFinalTarget(ctx){
+  return Math.min(MAX_LIMIT, Math.max(ctx.limit || DEFAULT_LIMIT, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET));
+}
+
+function residentBootState(){
+  globalState.resident = globalState.resident || {};
+  const r = globalState.resident;
+  if(!(r.itemMap instanceof Map)) r.itemMap = new Map();
+  if(!(r.queryKeys instanceof Set)) r.queryKeys = new Set();
+  if(!Array.isArray(r.items)) r.items = [];
+  if(!Array.isArray(r.queries)) r.queries = [];
+  r.categoryMap = r.categoryMap || Object.create(null);
+  r.sourceMap = r.sourceMap || Object.create(null);
+  return r;
+}
+
+function parseResidentBootSeeds(rawSeeds){
+  const envSeeds = firstNonEmpty(rawSeeds, process.env.SANMARU_BOOT_QUERIES);
+  if(envSeeds){
+    const out = s(envSeeds).split(/[\n,|]+/).map(x => x.trim()).filter(Boolean).map(q => ({ q, type:"all" }));
+    if(out.length) return out.slice(0, 80);
+  }
+  return RESIDENT_BOOT_SEED_QUERIES.slice();
+}
+
+function residentBootSnapshot(){
+  const r = residentBootState();
+  return {
+    enabled: RESIDENT_BOOT_ENABLED,
+    status: r.status || "cold",
+    startedAt: r.startedAt || 0,
+    bootedAt: r.bootedAt || 0,
+    reason: r.reason || null,
+    itemCount: Array.isArray(r.items) ? r.items.length : 0,
+    queryCount: r.queryKeys instanceof Set ? r.queryKeys.size : 0,
+    categories: Object.assign({}, r.categoryMap || {}),
+    sources: Object.assign({}, r.sourceMap || {}),
+    lastError: r.lastError || null,
+    lastDurationMs: r.lastDurationMs || 0
+  };
+}
+
+function residentItemKey(item){
+  const url = firstNonEmpty(item && item.url, item && item.link);
+  const title = firstNonEmpty(item && item.title, item && item.name);
+  const src = firstNonEmpty(item && item.source, item && item.provider, "sanmaru-resident");
+  return stableHash([url, title, src].join("|"));
+}
+
+function rememberResidentLibraryItems(ctx, items, source){
+  const r = residentBootState();
+  const list = Array.isArray(items) ? items : [];
+  let added = 0;
+  for(const raw of list){
+    if(!raw || isPlaceholderItem(raw)) continue;
+    const item = canonicalItem(raw, ctx && ctx.q || raw.query || "", firstNonEmpty(raw.source, raw.provider, source, "sanmaru-resident"));
+    const key = residentItemKey(item);
+    if(!key || r.itemMap.has(key)) continue;
+    r.itemMap.set(key, item);
+    r.items.push(item);
+    added++;
+    const cat = firstNonEmpty(item.searchCategory, item.type, categoryOfItem(item), "web");
+    const src = firstNonEmpty(item.source, item.provider, source, "unknown");
+    r.categoryMap[cat] = (r.categoryMap[cat] || 0) + 1;
+    r.sourceMap[src] = (r.sourceMap[src] || 0) + 1;
+    if(r.items.length >= RESIDENT_BOOT_MAX_ITEMS) break;
+  }
+  if(ctx && ctx.q) r.queryKeys.add(residentMemoryKey(ctx));
+  if(added && ctx && ctx.q) writeResidentMemory(ctx, list);
+  return added;
+}
+
+function readResidentLibrary(ctx){
+  const r = residentBootState();
+  if(!Array.isArray(r.items) || !r.items.length) return [];
+  const target = sanmaruFinalTarget(ctx);
+  return finalRank(ctx.q, r.items, ctx).slice(0, Math.min(target, RESIDENT_BOOT_MAX_ITEMS));
+}
+
+function residentSeedCtx(seed, options){
+  const raw = Object.assign({
+    q: seed.q,
+    query: seed.q,
+    type: seed.type || "all",
+    limit: options && options.limit || RESIDENT_BOOT_QUERY_LIMIT,
+    candidatePoolTarget: options && options.candidatePoolTarget || DEFAULT_CANDIDATE_POOL_TARGET,
+    external: "off",
+    noExternal: "1",
+    expansion: "library"
+  }, options && options.raw || {});
+  return parseCtx({
+    event: options && options.event || {},
+    raw,
+    q: seed.q,
+    type: seed.type || "all",
+    limit: raw.limit,
+    candidatePool: raw.candidatePoolTarget,
+    external: raw.external,
+    noExternal: raw.noExternal,
+    expansion: raw.expansion
+  });
+}
+
+async function bootFromSearchBankIndex(seed, options){
+  const started = nowMs();
+  try{
+    let mod = null;
+    try{ mod = require("./search-bank-index-engine"); }catch(e){ mod = null; }
+    if(!mod) return { name:"searchbank-index-boot", status:"unavailable", count:0, latency:nowMs()-started };
+    if(typeof mod.runEngine === "function" && !options.skipBuild){
+      try{ await withTimeout(mod.runEngine({}, { action:"build" }), 1800); }catch(e){}
+    }
+    const ctx = residentSeedCtx(seed, options);
+    let res = null;
+    const params = { action:"query", q:seed.q, query:seed.q, type:seed.type === "all" ? "" : seed.type, limit:options.limit || RESIDENT_BOOT_QUERY_LIMIT, from:"sanmaru-resident-boot", noExternal:"1" };
+    if(typeof mod.query === "function") res = await withTimeout(mod.query(params), 1200);
+    else if(typeof mod.runEngine === "function") res = await withTimeout(mod.runEngine({}, params), 1200);
+    const items = normalizeItemsFromResponse(res);
+    const added = rememberResidentLibraryItems(ctx, items, "searchbank-index-resident-boot");
+    return { name:"searchbank-index-boot", status:items.length ? "ok" : "empty", count:items.length, added, query:seed.q, latency:nowMs()-started };
+  }catch(e){
+    return { name:"searchbank-index-boot", status:responseErrorCode(e), count:0, query:seed && seed.q, latency:nowMs()-started };
+  }
+}
+
+async function bootFromSearchBank(seed, options){
+  const started = nowMs();
+  try{
+    let mod = null;
+    try{ mod = require("./search-bank-engine"); }catch(e){ mod = null; }
+    if(!mod) return { name:"searchbank-boot", status:"unavailable", count:0, latency:nowMs()-started };
+    const ctx = residentSeedCtx(seed, options);
+    const params = { q:seed.q, query:seed.q, type:seed.type === "all" ? "" : seed.type, limit:options.limit || RESIDENT_BOOT_QUERY_LIMIT, external:"off", noExternal:"1", skipSanmaru:"1", from:"sanmaru-resident-boot" };
+    let res = null;
+    if(typeof mod.runEngine === "function") res = await withTimeout(mod.runEngine({}, params), 1500);
+    else if(typeof mod.handler === "function"){
+      const h = await withTimeout(mod.handler({ httpMethod:"GET", queryStringParameters:params }), 1500);
+      res = h && typeof h.body === "string" ? JSON.parse(h.body || "{}") : h;
+    }
+    const items = normalizeItemsFromResponse(res);
+    const added = rememberResidentLibraryItems(ctx, items, "searchbank-resident-boot");
+    return { name:"searchbank-boot", status:items.length ? "ok" : "empty", count:items.length, added, query:seed.q, latency:nowMs()-started };
+  }catch(e){
+    return { name:"searchbank-boot", status:responseErrorCode(e), count:0, query:seed && seed.q, latency:nowMs()-started };
+  }
+}
+
+async function residentBootWork(reason, options){
+  const r = residentBootState();
+  const started = nowMs();
+  const seeds = parseResidentBootSeeds(options && options.seeds).slice(0, options && options.maxSeeds || 32);
+  r.status = "booting";
+  r.startedAt = started;
+  r.reason = reason || "manual";
+  r.lastError = null;
+  r.queries = seeds.map(x => x.q);
+  const trace = [];
+  try{
+    for(let i=0; i<seeds.length; i++){
+      const seed = seeds[i];
+      const idxRes = await bootFromSearchBankIndex(seed, Object.assign({ skipBuild:i > 0 }, options || {}));
+      trace.push(idxRes);
+      const bankRes = await bootFromSearchBank(seed, options || {});
+      trace.push(bankRes);
+      if(nowMs() - started > (options && options.maxBootMs || 8500)) break;
+      if(r.items.length >= RESIDENT_BOOT_MAX_ITEMS) break;
+    }
+    r.status = "ready";
+    r.bootedAt = nowMs();
+    r.lastDurationMs = r.bootedAt - started;
+    return { status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-boot", reason:r.reason, boot:residentBootSnapshot(), trace };
+  }catch(e){
+    r.status = r.items.length ? "partial" : "error";
+    r.lastError = responseErrorCode(e);
+    r.bootedAt = nowMs();
+    r.lastDurationMs = r.bootedAt - started;
+    return { status:r.status === "error" ? "error" : "ok", engine:ENGINE_NAME, version:VERSION, action:"resident-boot", reason:r.reason, boot:residentBootSnapshot(), trace };
+  }finally{
+    r.booting = null;
+  }
+}
+
+function ensureResidentBoot(reasonOrOptions, maybeOptions){
+  const options = typeof reasonOrOptions === "object" ? reasonOrOptions : Object.assign({}, maybeOptions || {}, { reason: reasonOrOptions });
+  const reason = options.reason || "ensure";
+  const r = residentBootState();
+  if(!RESIDENT_BOOT_ENABLED && !options.force){
+    return Promise.resolve({ status:"disabled", engine:ENGINE_NAME, version:VERSION, boot:residentBootSnapshot() });
+  }
+  if(r.booting) return options.wait ? r.booting : Promise.resolve({ status:"booting", engine:ENGINE_NAME, version:VERSION, boot:residentBootSnapshot() });
+  const fresh = (r.status === "ready" || r.status === "partial") && (nowMs() - (r.bootedAt || 0) < (options.ttlMs || RESIDENT_BOOT_TTL_MS));
+  if(fresh && !options.force){
+    return Promise.resolve({ status:"ready", engine:ENGINE_NAME, version:VERSION, boot:residentBootSnapshot() });
+  }
+  r.booting = residentBootWork(reason, options);
+  if(options.wait) return r.booting;
+  r.booting.catch(e => { try{ r.status = r.items && r.items.length ? "partial" : "error"; r.lastError = responseErrorCode(e); r.booting = null; }catch(_e){} });
+  return Promise.resolve({ status:"boot-started", engine:ENGINE_NAME, version:VERSION, boot:residentBootSnapshot() });
+}
+
 function withTimeout(promise, ms){
   let timer;
   return Promise.race([
@@ -988,7 +1273,7 @@ function parseCtx(input, maybeCtx){
     page: clampInt(firstNonEmpty(ctx.page, raw.page, qs.page), 1, 1, 100000),
     perPage: clampInt(firstNonEmpty(ctx.perPage, raw.perPage, qs.perPage), 15, 1, 200),
     start: clampInt(firstNonEmpty(ctx.start, raw.start, qs.start), 1, 1, 1000000),
-    candidatePoolTarget: clampInt(firstNonEmpty(ctx.candidatePool, raw.candidatePool, qs.candidatePool, ctx.candidatePoolTarget, raw.candidatePoolTarget, qs.candidatePoolTarget, wideExpansion ? DEFAULT_CANDIDATE_POOL_TARGET : "", ctx.limit, raw.limit, qs.limit), DEFAULT_CANDIDATE_POOL_TARGET, 1, MAX_LIMIT),
+    candidatePoolTarget: resolveCandidatePoolTarget(limit, ctx, raw, qs, wideExpansion),
     expansion: expansionRaw || (wideExpansion ? "wide" : "balanced"),
     directExternalAllowed: truthy(ctx.directExternal || raw.directExternal || qs.directExternal || ctx.sanmaruDirectExternal || raw.sanmaruDirectExternal || qs.sanmaruDirectExternal || process.env.SANMARU_DIRECT_EXTERNAL),
     requestId: firstNonEmpty(ctx.requestId, stableHash([clean.value, nowMs(), Math.random()].join("|")))
@@ -998,6 +1283,16 @@ function parseCtx(input, maybeCtx){
 async function runSanmaru(input, maybeCtx){
   const ctx = parseCtx(input, maybeCtx);
   const engineStarted = nowMs();
+  let partialItems = [];
+  let partialTrace = [];
+
+  function updatePartial(items, trace){
+    try{
+      partialItems = dedupeItems(Array.isArray(items) ? items : []).slice(0, sanmaruFinalTarget(ctx));
+      partialTrace = Array.isArray(trace) ? trace.slice(0, 80) : [];
+      if(partialItems.length) writeResidentMemory(ctx, partialItems);
+    }catch(e){}
+  }
 
   if(!ctx.queryOk){
     return { status:"ok", engine:ENGINE_NAME, version:VERSION, query:ctx.q, items:[], results:[], meta:{ count:0, reason:ctx.queryCode || "BAD_QUERY", secure:true } };
@@ -1010,6 +1305,7 @@ async function runSanmaru(input, maybeCtx){
 
   globalState.cache = globalState.cache || new Map();
   globalState.inflight = globalState.inflight || new Map();
+  ensureResidentBoot({ reason:"query-touch", wait:false, event:ctx.event }).catch(function(){});
 
   const cacheKey = stableHash([ctx.q, ctx.limit, ctx.candidatePoolTarget || "", ctx.page || 1, ctx.perPage || 15, ctx.searchType, ctx.lang || "", searchAreaExpansionMode(ctx), ctx.deep ? "deep" : "normal", ctx.externalOff ? "off" : (ctx.externalForced ? "force" : "auto"), ctx.noMedia ? "nomedia" : "media"].join("|"));
   const cached = globalState.cache.get(cacheKey);
@@ -1023,6 +1319,18 @@ async function runSanmaru(input, maybeCtx){
   const work = (async () => {
     const trace = [];
     const items = [];
+    const residentItems = readResidentMemory(ctx);
+    if(residentItems.length){
+      items.push(...residentItems);
+      trace.push(adapterResult("sanmaru-resident-memory", "ok", engineStarted, residentItems, { resident:true }));
+      updatePartial(items, trace);
+    }
+    const libraryItems = readResidentLibrary(ctx);
+    if(libraryItems.length){
+      items.push(...libraryItems);
+      trace.push(adapterResult("sanmaru-resident-library", "ok", engineStarted, libraryItems, { resident:true, boot:residentBootSnapshot() }));
+      updatePartial(items, trace);
+    }
     const intents = detectIntent(ctx.q, ctx.searchType);
     ctx.intents = intents;
 
@@ -1041,6 +1349,7 @@ async function runSanmaru(input, maybeCtx){
     trace.push(indexRes.trace);
     trace.push(bankRes.trace);
     items.push(...indexRes.items, ...bankRes.items);
+    updatePartial(items, trace);
 
     const fastCount = dedupeItems(items).length;
     ctx.needExternal = ctx.externalAllowed;
@@ -1068,7 +1377,7 @@ async function runSanmaru(input, maybeCtx){
     const settled = await Promise.allSettled(mountTasks);
     for(const r of settled){
       const value = r && r.status === "fulfilled" ? r.value : null;
-      if(value){ trace.push(value.trace); items.push(...value.items); }
+      if(value){ trace.push(value.trace); items.push(...value.items); updatePartial(items, trace); }
     }
 
     trace.push({
@@ -1081,13 +1390,14 @@ async function runSanmaru(input, maybeCtx){
     });
 
     let ranked = finalRank(ctx.q, items, ctx);
-    const finalTarget = Math.min(MAX_LIMIT, Math.max(ctx.limit, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET));
+    const finalTarget = sanmaruFinalTarget(ctx);
     ranked = ranked.slice(0, finalTarget).map(it => {
       const copy = Object.assign({}, it);
       delete copy._sanmaruSeq;
       delete copy._sanmaruRejectedReason;
       return copy;
     });
+    writeResidentMemory(ctx, ranked);
 
     const promotion = await maybePromote(ctx, ranked, { trace });
 
@@ -1138,6 +1448,7 @@ async function runSanmaru(input, maybeCtx){
         },
         promotion,
         health: healthSnapshot(),
+        residentBoot: residentBootSnapshot(),
         trace
       }
     };
@@ -1149,6 +1460,40 @@ async function runSanmaru(input, maybeCtx){
   globalState.inflight.set(cacheKey, { t: nowMs(), p: work });
   try{ return await withTimeout(work, ctx.timeoutMs); }
   catch(e){
+    const errorCode = responseErrorCode(e);
+    const fallbackItems = finalRank(ctx.q, partialItems.length ? partialItems : readResidentMemory(ctx), ctx)
+      .slice(0, sanmaruFinalTarget(ctx));
+    if(fallbackItems.length){
+      return {
+        status:"ok",
+        engine:ENGINE_NAME,
+        version:VERSION,
+        query:ctx.q,
+        source:"sanmaru-partial",
+        items:fallbackItems,
+        results:fallbackItems,
+        meta:{
+          count:fallbackItems.length,
+          partial:true,
+          timeoutGuard:true,
+          requestedLimit:ctx.limit,
+          elapsedMs: nowMs() - engineStarted,
+          secure:true,
+          error:errorCode,
+          searchAreaExpansion:{
+            mode: searchAreaExpansionMode(ctx),
+            candidatePoolTarget: ctx.candidatePoolTarget,
+            finalTarget: sanmaruFinalTarget(ctx),
+            page: ctx.page,
+            perPage: ctx.perPage,
+            principle:"return-resident-fast-layer-instead-of-empty-on-slow-mount-timeout"
+          },
+          trace: partialTrace,
+          health: healthSnapshot(),
+          residentBoot: residentBootSnapshot()
+        }
+      };
+    }
     return {
       status:"error",
       engine:ENGINE_NAME,
@@ -1160,7 +1505,7 @@ async function runSanmaru(input, maybeCtx){
         count:0,
         elapsedMs: nowMs() - engineStarted,
         secure:true,
-        error: responseErrorCode(e),
+        error:errorCode,
         fallbackRecommended: true,
         health: healthSnapshot()
       }
@@ -1184,6 +1529,7 @@ function healthSnapshot(){
     circuits,
     mountRegistry: mountRegistrySnapshot(),
     adapters: ["searchbank-index","searchbank","maru-search-wide-gateway"].concat(ADAPTERS.map(x => x.name), ["collector","planetary","ai-gpu"]),
+    residentBoot: residentBootSnapshot(),
     generatedAt: nowIso()
   };
 }
@@ -1222,6 +1568,14 @@ async function handler(event){
   const action = low(firstNonEmpty(merged.action, merged.mode, merged.fn));
 
   if(action === "health") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, health:healthSnapshot() });
+  if(["resident-status","library-status","boot-status"].includes(action)){
+    return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action, boot:residentBootSnapshot(), health:healthSnapshot() });
+  }
+  if(["warmup","boot","mount-library","resident-boot","resident-rebuild"].includes(action)){
+    const force = action === "resident-rebuild" || truthy(merged.force || merged.rebuild);
+    const boot = await ensureResidentBoot({ reason:action, wait:true, force, event:event || {}, seeds:merged.seeds || merged.queries, limit:clampInt(merged.bootLimit || merged.limit, RESIDENT_BOOT_QUERY_LIMIT, 1, MAX_LIMIT), maxBootMs:clampInt(merged.maxBootMs, 8500, 1000, 30000) });
+    return ok(Object.assign({}, boot, { action, warmed:true, health:healthSnapshot() }));
+  }
 
   const res = await runSanmaru({
     event: event || {},
@@ -1253,6 +1607,8 @@ module.exports = {
   runEngine,
   handler,
   health: healthSnapshot,
+  ensureResidentBoot,
+  residentBootSnapshot,
   sanitizeQuery,
   canonicalItem,
   finalRank,
@@ -1265,4 +1621,16 @@ exports.runSanmaru = runSanmaru;
 exports.runEngine = runEngine;
 exports.handler = handler;
 exports.health = healthSnapshot;
+exports.ensureResidentBoot = ensureResidentBoot;
+exports.residentBootSnapshot = residentBootSnapshot;
 exports.mountRegistry = mountRegistrySnapshot;
+
+
+// Start the resident library map on cold module load. In serverless runtimes this runs on cold-start;
+// scheduled / explicit action=resident-boot can keep it warm between invocations.
+try{
+  if(RESIDENT_BOOT_ENABLED && !globalThis.__SANMARU_AUTO_RESIDENT_BOOT_STARTED){
+    globalThis.__SANMARU_AUTO_RESIDENT_BOOT_STARTED = true;
+    ensureResidentBoot({ reason:"module-load", wait:false }).catch(function(){});
+  }
+}catch(e){}
