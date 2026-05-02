@@ -24,7 +24,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
-const VERSION = "sanmaru-engine-v2.4.0-global-category-resident-hub";
+const VERSION = "sanmaru-engine-v2.4.0-global-resident-category-supply";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 1000;
@@ -49,22 +49,29 @@ const globalState = globalThis.__SANMARU_V2_STATE || (globalThis.__SANMARU_V2_ST
   circuits: Object.create(null),
   memory: new Map(),
   telemetry: [],
-  providerHealth: Object.create(null),
-  resident: { booted:false, booting:null, bootedAt:0, source:"cold", items:[], itemMap:new Map(), categoryMap:new Map(), sourceMap:new Map(), queryKeys:new Map(), categoryBrain:null, sourceRegistry:null, bootReport:null }
+  resident: null
 });
 
-globalState.cache = globalState.cache || new Map();
-globalState.inflight = globalState.inflight || new Map();
-globalState.rate = globalState.rate || new Map();
-globalState.circuits = globalState.circuits || Object.create(null);
-globalState.memory = globalState.memory || new Map();
-globalState.telemetry = globalState.telemetry || [];
-globalState.providerHealth = globalState.providerHealth || Object.create(null);
-globalState.resident = globalState.resident || { booted:false, booting:null, bootedAt:0, source:"cold", items:[], itemMap:new Map(), categoryMap:new Map(), sourceMap:new Map(), queryKeys:new Map(), categoryBrain:null, sourceRegistry:null, bootReport:null };
-globalState.resident.itemMap = globalState.resident.itemMap || new Map();
-globalState.resident.categoryMap = globalState.resident.categoryMap || new Map();
-globalState.resident.sourceMap = globalState.resident.sourceMap || new Map();
-globalState.resident.queryKeys = globalState.resident.queryKeys || new Map();
+function ensureResidentState(){
+  if(!globalState.resident){
+    globalState.resident = {
+      ready:false,
+      bootedAt:0,
+      bootCount:0,
+      bootReason:null,
+      items:[],
+      itemMap:new Map(),
+      categoryMap:new Map(),
+      sourceMap:new Map(),
+      queryMap:new Map(),
+      providerHealth:new Map(),
+      learnedCategoryAliases:Object.create(null),
+      lastError:null
+    };
+  }
+  return globalState.resident;
+}
+ensureResidentState();
 
 
 const MOUNT_REGISTRY = {
@@ -153,33 +160,33 @@ const MOUNT_REGISTRY = {
     enabled: true
   },
   "public-data": {
-    type: "public-data-center",
+    type: "public-data-source",
     permission: "public-api-or-authorized-access-required",
-    role: "Government/open public datasets and public information centers",
+    role: "Government, municipality, open data and public institution datasets",
     enabled: true
   },
   "academic": {
     type: "academic-library-and-paper-index",
-    permission: "public-api-or-licensed-access-required",
-    role: "University libraries, scholarly metadata, papers, journals and institutional repositories",
+    permission: "public-api-or-authorized-access-required",
+    role: "University libraries, scholarly metadata, journals and academic discovery",
     enabled: true
   },
   "research-paper": {
     type: "research-knowledge-source",
     permission: "public-or-licensed-access-required",
-    role: "Research papers, preprints, citation metadata and open scholarly discovery routes",
+    role: "Papers, preprints, citations, institutional repositories and research metadata",
     enabled: true
   },
   "university-library": {
-    type: "library-catalog-and-repository",
-    permission: "public-api-or-institutional-access-required",
-    role: "University library catalogs, repositories and publication metadata",
+    type: "library-catalog-source",
+    permission: "public-or-licensed-access-required",
+    role: "University library catalogs, books, theses and institutional collections",
     enabled: true
   },
   "wiki-knowledge": {
-    type: "encyclopedia-knowledge",
-    permission: "public-access-or-api-required",
-    role: "Wiki, encyclopedia and reference knowledge routes",
+    type: "open-knowledge-source",
+    permission: "public-search-or-api-required",
+    role: "Wikipedia, encyclopedic and structured public knowledge routes",
     enabled: true
   },
   "future-authorized-db": {
@@ -205,375 +212,333 @@ function mountRegistrySnapshot(){
 }
 
 
-// ------------------------------------------------------------
-// SANMARU GLOBAL CATEGORY / RESIDENT HUB LAYER
-// ------------------------------------------------------------
-// Sanmaru should not be a slow per-request relay. It should boot a resident
-// source/category map, keep internal memory/index data close, and supply Maru
-// Search or other platform callers through a stable upper layer.
-
+// -----------------------------------------------------------------------------
+// SANMARU GLOBAL RESIDENT HUB
+// This layer does not copy the whole world into this function.  It keeps the
+// source map, category brain, health map, resident index/cache and learned query
+// pools ready so Maru Search can ask Sanmaru first instead of re-opening every
+// provider on every keystroke.
+// -----------------------------------------------------------------------------
 const SANMARU_CANONICAL_CATEGORIES = {
-  official: { group:"authority", label:"공식/권위", priority:100, role:"Official homepages, verified organizations, authority pages" },
-  government: { group:"authority", label:"정부/공공기관", priority:98, role:"Government, local government, public institutions" },
-  public_data: { group:"authority", label:"공공 데이터", priority:95, role:"Open datasets and public data centers" },
-  map_local: { group:"local_tour", label:"지도/주소/지역", priority:94, role:"Maps, addresses, local/place data" },
-  tourism: { group:"local_tour", label:"관광/홍보", priority:92, role:"Tourism, public promotion, attractions, events" },
-  news: { group:"news", label:"뉴스", priority:90, role:"News and press content" },
-  knowledge: { group:"knowledge", label:"지식/백과", priority:88, role:"General knowledge, encyclopedia, Q&A" },
-  wiki: { group:"knowledge", label:"위키/백과", priority:87, role:"Wiki and reference knowledge" },
-  book: { group:"knowledge", label:"도서/출판", priority:84, role:"Books, authors, publication metadata" },
-  academic: { group:"academic", label:"학술/대학", priority:83, role:"Academic discovery and university resources" },
-  research_paper: { group:"academic", label:"논문/연구", priority:82, role:"Papers, journals, preprints, citation metadata" },
-  university_library: { group:"academic", label:"대학 도서관", priority:81, role:"University catalogs and repositories" },
-  image: { group:"media", label:"이미지", priority:78, role:"Images, photos, visual content" },
-  video: { group:"media", label:"영상", priority:77, role:"Video and streaming media" },
-  youtube: { group:"media", label:"유튜브", priority:76, role:"YouTube video discovery" },
-  sns: { group:"social", label:"SNS", priority:74, role:"Public social web and platform profile discovery" },
-  blog: { group:"community", label:"블로그", priority:72, role:"Blogs and personal publishing" },
-  cafe: { group:"community", label:"카페", priority:71, role:"Cafe, forum and public community posts" },
-  community: { group:"community", label:"커뮤니티", priority:70, role:"Forums and community discussions" },
-  shopping: { group:"shopping", label:"쇼핑/상품", priority:68, role:"Shopping, products, commerce metadata" },
-  finance: { group:"finance", label:"금융", priority:64, role:"Finance, stocks, markets" },
-  sports: { group:"sports", label:"스포츠", priority:62, role:"Sports, schedules, teams and scores" },
-  webtoon: { group:"webtoon", label:"웹툰/만화", priority:60, role:"Webtoons, comics and manga" },
-  ai_provider: { group:"ai", label:"AI 제공자", priority:58, role:"AI/GPU/LLM provider and analysis routes" },
-  internal_search_bank: { group:"internal", label:"내부 검색은행", priority:120, role:"Owned Search Bank / Index resident memory" },
-  web: { group:"web", label:"웹", priority:40, role:"General web discovery" }
+  official:{ label:"공식/권위", weight:98, routes:["official-web","google","naver","bing","searchbank-index","searchbank"] },
+  government:{ label:"정부/공공기관", weight:96, routes:["official-web","public-data","google","naver","bing"] },
+  public_data:{ label:"공공 데이터", weight:94, routes:["public-data","official-web","google","bing"] },
+  map_local:{ label:"지도/주소/지역", weight:92, routes:["naver","google","bing","maru-search-wide-gateway"] },
+  tourism:{ label:"관광/지역 홍보", weight:90, routes:["official-web","naver","google","youtube","social-public-web"] },
+  news:{ label:"뉴스", weight:88, routes:["naver","google","bing","maru-search-wide-gateway"] },
+  knowledge:{ label:"지식/백과", weight:86, routes:["wiki-knowledge","google","naver","bing","searchbank-index"] },
+  wiki:{ label:"위키", weight:85, routes:["wiki-knowledge","google","bing"] },
+  book:{ label:"도서", weight:82, routes:["naver","google","university-library"] },
+  academic:{ label:"학술", weight:80, routes:["academic","research-paper","university-library","google","bing"] },
+  research_paper:{ label:"논문/연구", weight:79, routes:["research-paper","academic","university-library","google","bing"] },
+  university_library:{ label:"대학 도서관", weight:78, routes:["university-library","academic","research-paper"] },
+  image:{ label:"이미지", weight:76, routes:["naver","google","bing","maru-search-wide-gateway"] },
+  video:{ label:"영상", weight:75, routes:["youtube","google","naver","social-public-web"] },
+  youtube:{ label:"유튜브", weight:74, routes:["youtube","google","maru-search-wide-gateway"] },
+  sns:{ label:"SNS", weight:72, routes:["social-public-web","google","bing","youtube"] },
+  blog:{ label:"블로그", weight:70, routes:["naver","google","blog-community"] },
+  cafe:{ label:"카페", weight:69, routes:["naver","blog-community","google"] },
+  community:{ label:"커뮤니티", weight:68, routes:["blog-community","naver","google","bing"] },
+  shopping:{ label:"쇼핑", weight:66, routes:["naver","google","bing"] },
+  finance:{ label:"금융", weight:64, routes:["google","bing","naver"] },
+  sports:{ label:"스포츠", weight:62, routes:["google","bing","naver"] },
+  webtoon:{ label:"웹툰", weight:60, routes:["naver","google"] },
+  ai_provider:{ label:"AI 정보 공급", weight:58, routes:["ai-gpu"] },
+  internal_search_bank:{ label:"내부 기억층", weight:100, routes:["searchbank-index","searchbank"] },
+  web:{ label:"웹", weight:40, routes:["google","naver","bing","searchbank-index","searchbank"] }
 };
 
-const SANMARU_CATEGORY_ALIASES = {
-  authority:"official", official:"official", homepage:"official", home:"official", site:"official", public:"public_data",
-  gov:"government", government:"government", publicdata:"public_data", data:"public_data",
-  map:"map_local", maps:"map_local", local:"map_local", place:"map_local", address:"map_local", location:"map_local",
-  tour:"tourism", travel:"tourism", tourism:"tourism", festival:"tourism", attraction:"tourism",
-  news:"news", press:"news", headline:"news",
-  knowledge:"knowledge", encyclopedia:"knowledge", qna:"knowledge", kin:"knowledge", wiki:"wiki", wikipedia:"wiki",
-  books:"book", book:"book", author:"book", isbn:"book",
-  paper:"research_paper", papers:"research_paper", research:"research_paper", academic:"academic", scholar:"academic", journal:"research_paper", citation:"research_paper", library:"university_library", university:"university_library",
-  photo:"image", photos:"image", image:"image", images:"image", img:"image", gallery:"image",
-  video:"video", media:"video", youtube:"youtube", shorts:"youtube",
-  social:"sns", sns:"sns", instagram:"sns", facebook:"sns", tiktok:"sns", twitter:"sns", x:"sns", linkedin:"sns",
-  blog:"blog", cafe:"cafe", forum:"community", community:"community",
-  shop:"shopping", shopping:"shopping", product:"shopping", commerce:"shopping", price:"shopping",
-  finance:"finance", stock:"finance", market:"finance", crypto:"finance",
-  sport:"sports", sports:"sports", football:"sports", baseball:"sports", basketball:"sports",
-  webtoon:"webtoon", comic:"webtoon", manga:"webtoon", ai:"ai_provider", llm:"ai_provider", gpu:"ai_provider",
-  searchbank:"internal_search_bank", internal:"internal_search_bank", web:"web", general:"web"
+const PROVIDER_CATEGORY_ALIASES = {
+  naver:{ web:"web", blog:"blog", cafe:"cafe", news:"news", encyc:"knowledge", kin:"knowledge", book:"book", shop:"shopping", image:"image", local:"map_local", webkr:"web" },
+  google:{ web:"web", news:"news", image:"image", video:"video", maps:"map_local", scholar:"academic", books:"book" },
+  bing:{ web:"web", news:"news", image:"image", video:"video", academic:"academic" },
+  youtube:{ search:"youtube", video:"video", shorts:"video" },
+  searchbank:{ memory:"internal_search_bank", snapshot:"internal_search_bank" },
+  social:{ instagram:"sns", facebook:"sns", tiktok:"sns", x:"sns", twitter:"sns", threads:"sns", linkedin:"sns" },
+  academic:{ paper:"research_paper", research:"research_paper", library:"university_library", journal:"academic", citation:"academic" }
 };
 
 const PROVIDER_CAPABILITY_MAP = {
-  "searchbank-index": { role:"owned fast reusable index layer", categories:["internal_search_bank","official","map_local","tourism","news","knowledge","image","video","blog","cafe","community","shopping","book","academic","research_paper","sns","web"], speed:"resident", trust:0.84 },
-  "searchbank": { role:"owned operational memory/snapshot source", categories:["internal_search_bank","official","map_local","tourism","news","knowledge","image","video","blog","cafe","community","shopping","book","sns","web"], speed:"resident", trust:0.78 },
-  "maru-search-wide-gateway": { role:"controlled platform-wide information road", categories:["official","government","public_data","map_local","tourism","news","knowledge","wiki","image","video","youtube","sns","blog","cafe","community","shopping","book","academic","research_paper","web"], speed:"parallel", trust:0.72 },
-  naver: { role:"Korean search categories and vertical APIs", categories:["official","news","blog","cafe","knowledge","book","image","shopping","map_local","tourism","web"], speed:"api", trust:0.68 },
-  google: { role:"global web/image/news/knowledge discovery route", categories:["official","government","public_data","news","knowledge","wiki","image","video","map_local","tourism","academic","research_paper","web"], speed:"api", trust:0.68 },
-  bing: { role:"global web/news/media discovery route", categories:["official","news","image","video","knowledge","web"], speed:"api", trust:0.64 },
-  youtube: { role:"video and channel discovery", categories:["youtube","video","sns","media"], speed:"api", trust:0.62 },
-  "official-web": { role:"official homepage and authority route", categories:["official","government","public_data","web"], speed:"route", trust:0.7 },
-  "public-data": { role:"public data center/open API route", categories:["public_data","government","official"], speed:"route", trust:0.72 },
-  academic: { role:"academic discovery route", categories:["academic","research_paper","university_library","book","knowledge"], speed:"route", trust:0.72 },
-  "research-paper": { role:"paper/preprint/citation route", categories:["research_paper","academic","knowledge"], speed:"route", trust:0.72 },
-  "university-library": { role:"university library/repository route", categories:["university_library","academic","book","research_paper"], speed:"route", trust:0.7 },
-  "social-public-web": { role:"public social web discovery route", categories:["sns","video","image","web"], speed:"route", trust:0.58 },
-  "blog-community": { role:"public blog/cafe/forum route", categories:["blog","cafe","community","knowledge"], speed:"route", trust:0.6 },
-  collector: { role:"owned collector ridge", categories:["internal_search_bank","web","news","image","video"], speed:"module", trust:0.66 },
-  planetary: { role:"federation ridge", categories:["web","official","public_data","academic","news"], speed:"module", trust:0.64 },
-  "ai-gpu": { role:"AI/GPU analysis and classification", categories:["ai_provider","knowledge","research_paper"], speed:"provider", trust:0.6 }
+  "searchbank-index": ["internal_search_bank","official","knowledge","web","news","image","video","blog","cafe","community"],
+  "searchbank": ["internal_search_bank","official","knowledge","web","news","image","video","blog","cafe","community"],
+  "maru-search-wide-gateway": ["web","news","image","video","youtube","map_local","tourism","blog","cafe","community","sns","shopping","book","knowledge"],
+  naver: ["web","news","blog","cafe","knowledge","book","shopping","image","map_local","tourism"],
+  google: ["web","official","knowledge","wiki","news","image","video","map_local","tourism","academic","research_paper","book","sns"],
+  bing: ["web","news","image","video","academic","research_paper","official"],
+  youtube: ["youtube","video","sns","tourism"],
+  "official-web": ["official","government","public_data","tourism"],
+  "social-public-web": ["sns","video","youtube","community"],
+  "blog-community": ["blog","cafe","community"],
+  academic: ["academic","research_paper","university_library"],
+  "research-paper": ["research_paper","academic"],
+  "university-library": ["university_library","academic","book"],
+  "wiki-knowledge": ["wiki","knowledge"]
 };
 
-function canonicalSanmaruCategory(v){
-  const raw = low(v).replace(/[\s-]+/g, "_");
-  if(!raw) return "web";
-  if(SANMARU_CANONICAL_CATEGORIES[raw]) return raw;
-  return SANMARU_CATEGORY_ALIASES[raw] || raw.replace(/_+/g, "_") || "web";
-}
-
-function categoryBrainSnapshot(){
+function categoryMapSnapshot(){
   const out = {};
-  for(const [key, meta] of Object.entries(SANMARU_CANONICAL_CATEGORIES)){
-    out[key] = Object.assign({ key }, meta);
+  for(const [id, meta] of Object.entries(SANMARU_CANONICAL_CATEGORIES)){
+    out[id] = Object.assign({ id }, meta, { providers: providersForCategory(id) });
   }
   return out;
 }
 
 function sourceRegistrySnapshot(){
-  const out = {};
-  for(const [name, meta] of Object.entries(MOUNT_REGISTRY)){
-    const cap = PROVIDER_CAPABILITY_MAP[name] || PROVIDER_CAPABILITY_MAP[name.replace(/^web_/, "")] || null;
-    out[name] = Object.assign({}, meta, cap ? { capability: cap } : {}, {
-      enabled: !!meta.enabled,
-      status: meta.enabled ? "active-or-ready" : "reserved-or-key-missing"
+  const out = mountRegistrySnapshot();
+  for(const [name, cats] of Object.entries(PROVIDER_CAPABILITY_MAP)){
+    out[name] = Object.assign({}, out[name] || { enabled:true, status:"active-or-ready" }, {
+      categories: cats.slice(),
+      capabilityCount: cats.length
     });
-  }
-  for(const [name, cap] of Object.entries(PROVIDER_CAPABILITY_MAP)){
-    if(!out[name]) out[name] = { type:"virtual-provider-route", permission:"public-api-or-authorized-access-required", role:cap.role, enabled:true, status:"active-or-ready", capability:cap };
   }
   return out;
 }
 
-function safeReadJsonFile(file, fallback){
-  try{ if(!file || !fs.existsSync(file)) return fallback; return JSON.parse(fs.readFileSync(file, "utf8")); }
-  catch(e){ return fallback; }
+function providersForCategory(category){
+  const out = [];
+  for(const [provider, cats] of Object.entries(PROVIDER_CAPABILITY_MAP)){
+    if((cats || []).includes(category)) out.push(provider);
+  }
+  return out;
 }
-function sanmaruCandidatePaths(name){
-  return [
-    path.join(__dirname, name), path.join(__dirname, "data", name),
-    path.join(process.cwd(), name), path.join(process.cwd(), "data", name),
-    path.join(process.env.SANMARU_INDEX_WRITABLE_DIR || "/tmp", name), path.join("/tmp", name)
-  ];
+
+function classifyQueryCategories(q, explicitType){
+  const text = low(q);
+  const cats = new Set(["internal_search_bank"]);
+  const type = normalizeSearchType(explicitType || "all");
+  if(type && type !== "all") cats.add(type === "map" ? "map_local" : type === "tour" ? "tourism" : type);
+  if(/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(text) || /city|seoul|busan|tokyo|new york|london|paris/.test(text)) cats.add("official"), cats.add("map_local"), cats.add("tourism"), cats.add("news"), cats.add("image");
+  if(/시청|구청|군청|도청|정부|공공|공식|기관|청사|주소|위치|official|government|public/.test(text)) cats.add("official"), cats.add("government"), cats.add("public_data"), cats.add("map_local");
+  if(/지도|주소|위치|근처|맛집|호텔|교통|지하철|버스|map|near|nearby|local|address/.test(text)) cats.add("map_local"), cats.add("tourism");
+  if(/관광|여행|축제|명소|문화|홍보|tour|travel|festival|attraction/.test(text)) cats.add("tourism"), cats.add("image"), cats.add("video"), cats.add("blog");
+  if(/뉴스|신문|속보|보도|news|breaking|headline/.test(text)) cats.add("news");
+  if(/위키|백과|지식|뜻|의미|wiki|encyclopedia|knowledge|meaning/.test(text)) cats.add("knowledge"), cats.add("wiki");
+  if(/논문|연구|학술|저널|인용|대학|도서관|paper|research|scholar|journal|citation|university|library/.test(text)) cats.add("academic"), cats.add("research_paper"), cats.add("university_library");
+  if(/책|도서|출판|저자|book|author|isbn/.test(text)) cats.add("book"), cats.add("university_library");
+  if(/사진|이미지|포토|갤러리|image|photo|picture|gallery/.test(text)) cats.add("image");
+  if(/영상|동영상|유튜브|youtube|video|shorts|reels|vlog/.test(text)) cats.add("video"), cats.add("youtube");
+  if(/인스타|페이스북|틱톡|트위터|쓰레드|링크드인|sns|instagram|facebook|tiktok|twitter|x\.com|threads|linkedin/.test(text)) cats.add("sns");
+  if(/블로그|후기|리뷰|blog|review/.test(text)) cats.add("blog");
+  if(/카페|커뮤니티|게시판|forum|community|cafe/.test(text)) cats.add("cafe"), cats.add("community");
+  if(/쇼핑|가격|구매|상품|제품|shopping|price|buy|product/.test(text)) cats.add("shopping");
+  if(/주식|금융|환율|crypto|stock|finance|market/.test(text)) cats.add("finance");
+  if(/스포츠|축구|야구|농구|sports|football|baseball|basketball/.test(text)) cats.add("sports");
+  if(/웹툰|만화|webtoon|comic|manga/.test(text)) cats.add("webtoon");
+  cats.add("web");
+  return Array.from(cats).filter(Boolean);
 }
+
+function buildRoutePlanForQuery(q, opts){
+  opts = opts || {};
+  const categories = classifyQueryCategories(q, opts.searchType || opts.type);
+  const routes = [];
+  const seen = new Set();
+  for(const cat of categories){
+    const meta = SANMARU_CANONICAL_CATEGORIES[cat] || SANMARU_CANONICAL_CATEGORIES.web;
+    for(const provider of (meta.routes || providersForCategory(cat))){
+      if(!provider || seen.has(provider)) continue;
+      seen.add(provider);
+      routes.push({ provider, category:cat, weight:meta.weight || 0, enabled: sourceRegistrySnapshot()[provider] ? sourceRegistrySnapshot()[provider].enabled !== false : true });
+    }
+  }
+  routes.sort((a,b) => (b.weight - a.weight) || a.provider.localeCompare(b.provider));
+  return { query:s(q), categories, routes, generatedAt:nowIso(), categoryBrainVersion:VERSION };
+}
+
+function residentFileCandidates(){
+  const names = ["search-bank.snapshot.json", "search-bank.index.json", "search-bank.promoted.json", "search-bank.ingested.json", "sanmaru.resident.json"];
+  const roots = [__dirname, path.join(__dirname, "data"), process.cwd(), path.join(process.cwd(), "data"), "/tmp"];
+  const out = [];
+  for(const root of roots){
+    for(const name of names) out.push(path.join(root, name));
+  }
+  return Array.from(new Set(out));
+}
+
+function readJsonSafe(file){
+  try{
+    if(!fs.existsSync(file)) return null;
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  }catch(e){ return null; }
+}
+
 function looksLikeResidentItem(x){
-  return !!(x && typeof x === "object" && (x.title || x.name || x.label || x.url || x.link || x.href || x.summary || x.description || x.snippet || x.content || x.thumbnail || x.image));
+  return !!(x && typeof x === "object" && (x.title || x.name || x.label || x.url || x.link || x.href || x.summary || x.description || x.snippet || x.thumbnail || x.image));
 }
-function extractResidentItems(obj, depth, out, sourceHint){
-  if(!obj || typeof obj !== "object" || depth > 7 || out.length >= 100000) return;
+
+function extractResidentArrays(obj, out, depth, sourceHint){
+  if(!obj || typeof obj !== "object" || depth > 7 || out.length > 250000) return;
   if(Array.isArray(obj)){
     for(const x of obj){
-      if(out.length >= 100000) break;
-      if(looksLikeResidentItem(x)) out.push(Object.assign({ _sourceHint: sourceHint || "resident-array" }, x));
-      else if(x && typeof x === "object") extractResidentItems(x, depth + 1, out, sourceHint);
+      if(looksLikeResidentItem(x)) out.push(Object.assign({ _residentSourceHint:sourceHint }, x));
+      else extractResidentArrays(x, out, depth + 1, sourceHint);
+      if(out.length > 250000) break;
     }
     return;
   }
-  if(looksLikeResidentItem(obj)) out.push(Object.assign({ _sourceHint: sourceHint || "resident-object" }, obj));
-  const directKeys = ["items","results","data","records","cards","list","rows","contents","searchItems","sections","documents","entries","promoted","ingested"];
-  for(const key of directKeys){
-    if(obj[key]) extractResidentItems(obj[key], depth + 1, out, sourceHint || key);
-    if(out.length >= 100000) return;
+  const direct = ["items","results","data","records","cards","list","rows","contents","sections","searchItems","promoted","ingested"];
+  for(const key of direct){
+    const v = obj[key];
+    if(v) extractResidentArrays(v, out, depth + 1, sourceHint || key);
   }
   if(depth < 4){
     for(const [key, value] of Object.entries(obj)){
-      if(!value || key === "payload" || key === "meta" || key === "config" || key === "settings") continue;
-      if(Array.isArray(value) || (value && typeof value === "object")) extractResidentItems(value, depth + 1, out, sourceHint || key);
-      if(out.length >= 100000) return;
+      if(!value || key === "meta" || key === "config" || key === "settings") continue;
+      if(Array.isArray(value) || (value && typeof value === "object")) extractResidentArrays(value, out, depth + 1, sourceHint || key);
     }
   }
 }
-function loadResidentSeedItems(){
-  const names = ["search-bank.snapshot.json","search-bank.index.json","search-bank.promoted.json","search-bank.ingested.json","sanmaru.resident.json"];
-  const out = [];
-  const files = [];
-  for(const name of names){
-    for(const file of sanmaruCandidatePaths(name)){
-      if(files.includes(file) || !fs.existsSync(file)) continue;
-      files.push(file);
-      const json = safeReadJsonFile(file, null);
-      if(json) extractResidentItems(json, 0, out, name.replace(/\.json$/,""));
-    }
-  }
-  return { items:out, files };
+
+function addToMultiMap(map, key, item){
+  key = s(key || "unknown").trim() || "unknown";
+  if(!map.has(key)) map.set(key, []);
+  map.get(key).push(item);
 }
-function categoriesForItem(item){
-  const it = item || {};
-  const source = low(firstNonEmpty(it.source, it.provider, it.sourceType, it.payload && it.payload.source, it._sourceHint));
-  const type = low(firstNonEmpty(it.searchCategory, it.type, it.mediaType, it.category, it.displayGroup));
-  const url = low(firstNonEmpty(it.url, it.link, it.href));
-  const text = low([it.title, it.summary, it.snippet, it.description, source, type, url].join(" "));
-  const cats = new Set();
-  [type, it.category, it.searchCategory, it.displayGroup].forEach(v => { if(v) cats.add(canonicalSanmaruCategory(v)); });
-  if(source.includes("search-bank")) cats.add("internal_search_bank");
-  if(/\.go\.kr|\.gov\b|govern|official|공식|공공|정부|시청|구청|군청/.test(text + " " + url)) cats.add("official"), cats.add("government");
-  if(/data|dataset|openapi|공공데이터|데이터/.test(text)) cats.add("public_data");
-  if(/map|local|주소|위치|지도|place|roadaddress|address/.test(text)) cats.add("map_local");
-  if(/관광|여행|축제|tour|travel|festival|attraction|홍보/.test(text)) cats.add("tourism");
-  if(/news|뉴스|신문|press|headline/.test(text) || source.includes("news")) cats.add("news");
-  if(/wiki|wikipedia|백과|지식|knowledge|encyclopedia|kin/.test(text)) cats.add("knowledge"), cats.add(text.includes("wiki") ? "wiki" : "knowledge");
-  if(/book|isbn|도서|책|출판|author/.test(text)) cats.add("book");
-  if(/paper|journal|scholar|academic|research|논문|연구|학술|citation|preprint/.test(text)) cats.add("academic"), cats.add("research_paper");
-  if(/university|library|repository|대학|도서관/.test(text)) cats.add("university_library");
-  if(/image|photo|사진|이미지|thumbnail|gallery/.test(text) || source.includes("image")) cats.add("image");
-  if(/youtube|youtu\.be|video|영상|동영상/.test(text + " " + url) || source.includes("youtube")) cats.add("video"), cats.add("youtube");
-  if(/instagram|facebook|tiktok|twitter|x\.com|linkedin|sns|social|인스타|페이스북/.test(text + " " + url)) cats.add("sns");
-  if(/blog|블로그/.test(text) || source.includes("blog")) cats.add("blog");
-  if(/cafe|카페|forum|community|커뮤니티/.test(text) || source.includes("cafe")) cats.add(source.includes("cafe") ? "cafe" : "community");
-  if(/shop|shopping|product|price|쇼핑|상품|가격|구매/.test(text) || source.includes("shop")) cats.add("shopping");
-  if(/finance|stock|market|crypto|금융|주식|증권|환율/.test(text)) cats.add("finance");
-  if(/sports|스포츠|축구|야구|농구/.test(text)) cats.add("sports");
-  if(/webtoon|comic|manga|웹툰|만화/.test(text)) cats.add("webtoon");
-  if(!cats.size) cats.add(categoryOfItem(it) || "web");
-  return Array.from(cats).map(canonicalSanmaruCategory).filter(Boolean);
-}
-function resetResidentMaps(){
-  const r = globalState.resident;
-  r.items = [];
-  r.itemMap = new Map();
-  r.categoryMap = new Map();
-  r.sourceMap = new Map();
-  r.queryKeys = new Map();
-}
-function indexResidentItems(items, reason){
-  const r = globalState.resident;
-  r.categoryBrain = r.categoryBrain || categoryBrainSnapshot();
-  r.sourceRegistry = r.sourceRegistry || sourceRegistrySnapshot();
+
+function absorbResidentItems(items, meta){
+  const resident = ensureResidentState();
+  const input = Array.isArray(items) ? items : [];
   let added = 0;
-  for(const raw of (Array.isArray(items) ? items : [])){
-    if(!raw || typeof raw !== "object" || isPlaceholderItem(raw)) continue;
-    const it = canonicalItem(raw, raw.query || "", firstNonEmpty(raw.source, raw.provider, raw._sourceHint, reason, "resident"));
-    const key = firstNonEmpty(it.url, it.link, it.id, it.title + "|" + it.source).toLowerCase();
-    if(!key || r.itemMap.has(key)) continue;
-    const cats = categoriesForItem(it);
-    it.sanmaruCategories = Array.from(new Set([].concat(it.sanmaruCategories || [], cats)));
-    it.residentReason = reason || it.residentReason || "resident-index";
-    r.itemMap.set(key, it);
-    r.items.push(it);
+  for(const raw of input){
+    if(!raw || typeof raw !== "object") continue;
+    const item = canonicalItem(raw, meta && meta.q, firstNonEmpty(raw.source, raw.provider, raw._residentSourceHint, meta && meta.source, "resident"));
+    if(isPlaceholderItem(item)) continue;
+    const key = firstNonEmpty(item.url, item.link, item.id, item.title + "|" + item.source).toLowerCase();
+    if(!key || resident.itemMap.has(key)) continue;
+    resident.itemMap.set(key, item);
+    resident.items.push(item);
+    addToMultiMap(resident.categoryMap, firstNonEmpty(item.searchCategory, item.type, categoryOfItem(item), "web"), item);
+    addToMultiMap(resident.sourceMap, firstNonEmpty(item.source, item.provider, "unknown"), item);
     added++;
-    const src = low(firstNonEmpty(it.source, it.provider, "resident"));
-    if(src){
-      if(!r.sourceMap.has(src)) r.sourceMap.set(src, []);
-      r.sourceMap.get(src).push(it);
-    }
-    for(const cat of it.sanmaruCategories){
-      if(!r.categoryMap.has(cat)) r.categoryMap.set(cat, []);
-      r.categoryMap.get(cat).push(it);
-    }
-    if(r.items.length >= 100000) break;
   }
-  return added;
-}
-async function ensureResidentBoot(options){
-  const opts = options || {};
-  const r = globalState.resident;
-  const freshMs = Math.max(30 * 1000, parseInt(process.env.SANMARU_RESIDENT_TTL_MS || String(10 * 60 * 1000), 10));
-  if(r.booting && !opts.force) return r.booting;
-  if(r.booted && !opts.force && nowMs() - (r.bootedAt || 0) < freshMs){
-    return residentBootSnapshot("warm");
+  if(meta && meta.q && input.length){
+    const qKey = stableHash([normalizeText(meta.q), meta.searchType || "all", meta.lang || ""].join("|"));
+    const ranked = finalRank(meta.q, input, { q:meta.q, searchType:meta.searchType || "all", intents:classifyQueryCategories(meta.q, meta.searchType) }).slice(0, Math.min(MAX_LIMIT, Math.max(1000, input.length)));
+    resident.queryMap.set(qKey, { t:nowMs(), q:meta.q, searchType:meta.searchType || "all", lang:meta.lang || "", items:ranked });
+    if(resident.queryMap.size > 300){
+      const first = resident.queryMap.keys().next().value;
+      resident.queryMap.delete(first);
+    }
   }
-  r.booting = (async () => {
-    const started = nowMs();
-    r.categoryBrain = categoryBrainSnapshot();
-    r.sourceRegistry = sourceRegistrySnapshot();
-    if(opts.force) resetResidentMaps();
-    const before = r.items.length;
-    const seed = loadResidentSeedItems();
-    const added = indexResidentItems(seed.items, "resident-boot");
-    r.booted = true;
-    r.bootedAt = nowMs();
-    r.source = "resident-boot";
-    r.bootReport = {
-      status:"ok",
-      reason: opts.reason || (opts.force ? "forced-rebuild" : "boot"),
-      added,
-      before,
-      total:r.items.length,
-      files:seed.files,
-      elapsedMs:nowMs() - started,
-      generatedAt:nowIso(),
-      principle:"boot-source-category-route-map-and-owned-memory-before-per-query-search"
-    };
-    r.booting = null;
-    return residentBootSnapshot("booted");
-  })().catch(e => {
-    r.booting = null;
-    r.bootReport = { status:"error", error:responseErrorCode(e), generatedAt:nowIso() };
-    return residentBootSnapshot("boot-error");
-  });
-  return r.booting;
+  return { added, total:resident.items.length };
 }
-function residentBootSnapshot(status){
-  const r = globalState.resident || {};
+
+function ensureResidentBoot(opts){
+  opts = opts || {};
+  const resident = ensureResidentState();
+  if(resident.ready && !opts.force) return residentBootSnapshot();
+  const started = nowMs();
+  try{
+    if(opts.force){
+      resident.items = [];
+      resident.itemMap = new Map();
+      resident.categoryMap = new Map();
+      resident.sourceMap = new Map();
+      resident.queryMap = new Map();
+    }
+    const all = [];
+    const files = [];
+    for(const file of residentFileCandidates()){
+      const data = readJsonSafe(file);
+      if(!data) continue;
+      const arr = [];
+      extractResidentArrays(data, arr, 0, path.basename(file));
+      if(arr.length){
+        files.push({ file:path.basename(file), count:arr.length });
+        all.push(...arr);
+      }
+    }
+    const absorbed = absorbResidentItems(all, { source:"resident-boot" });
+    resident.ready = true;
+    resident.bootedAt = nowMs();
+    resident.bootCount = (resident.bootCount || 0) + 1;
+    resident.bootReason = opts.reason || (opts.force ? "force" : "auto");
+    resident.lastBootFiles = files;
+    resident.lastBootLatency = nowMs() - started;
+    resident.lastError = null;
+    return Object.assign(residentBootSnapshot(), { bootFiles:files, absorbed });
+  }catch(e){
+    resident.lastError = responseErrorCode(e);
+    resident.ready = true;
+    resident.bootedAt = nowMs();
+    return residentBootSnapshot();
+  }
+}
+
+function residentBootSnapshot(){
+  const resident = ensureResidentState();
   return {
-    status: status || (r.booted ? "ready" : "cold"),
-    engine: ENGINE_NAME,
-    version: VERSION,
-    resident:{
-      booted: !!r.booted,
-      bootedAt: r.bootedAt || 0,
-      itemCount: Array.isArray(r.items) ? r.items.length : 0,
-      categoryCount: r.categoryMap && typeof r.categoryMap.size === "number" ? r.categoryMap.size : 0,
-      sourceCount: r.sourceMap && typeof r.sourceMap.size === "number" ? r.sourceMap.size : 0,
-      queryMemoryCount: r.queryKeys && typeof r.queryKeys.size === "number" ? r.queryKeys.size : 0,
-      bootReport: r.bootReport || null
-    },
-    categoryBrain: r.categoryBrain || categoryBrainSnapshot(),
-    sourceRegistry: r.sourceRegistry || sourceRegistrySnapshot(),
-    principle:"Sanmaru is a resident global information-library layer, not a slow per-request relay"
+    ready:!!resident.ready,
+    bootedAt:resident.bootedAt ? new Date(resident.bootedAt).toISOString() : null,
+    bootCount:resident.bootCount || 0,
+    bootReason:resident.bootReason || null,
+    itemCount:resident.items ? resident.items.length : 0,
+    queryCacheSize:resident.queryMap ? resident.queryMap.size : 0,
+    categoryCounts:Array.from((resident.categoryMap || new Map()).entries()).map(([name, arr]) => ({ name, count:arr.length })).sort((a,b)=>b.count-a.count).slice(0,60),
+    sourceCounts:Array.from((resident.sourceMap || new Map()).entries()).map(([name, arr]) => ({ name, count:arr.length })).sort((a,b)=>b.count-a.count).slice(0,60),
+    lastBootLatency:resident.lastBootLatency || 0,
+    lastBootFiles:resident.lastBootFiles || [],
+    lastError:resident.lastError || null
   };
 }
-function extendedQueryCategories(query, searchType){
-  const t = low(query);
-  const cats = new Set();
-  const baseType = normalizeSearchType(searchType || "all");
-  if(baseType && baseType !== "all") cats.add(canonicalSanmaruCategory(baseType));
-  cats.add("internal_search_bank");
-  cats.add("official");
-  cats.add("knowledge");
-  if(/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(t) || /서울|부산|제주|city|시청|구청|군청|주소|위치|지도|여행|관광|맛집|카페/.test(t)) cats.add("map_local"), cats.add("tourism"), cats.add("government");
-  if(/뉴스|신문|속보|news|press/.test(t)) cats.add("news");
-  if(/영상|동영상|유튜브|youtube|video|shorts/.test(t)) cats.add("video"), cats.add("youtube");
-  if(/이미지|사진|photo|image|gallery/.test(t)) cats.add("image");
-  if(/블로그|blog/.test(t)) cats.add("blog");
-  if(/카페|커뮤니티|forum|community|cafe/.test(t)) cats.add("cafe"), cats.add("community");
-  if(/sns|인스타|페이스북|instagram|facebook|tiktok|twitter|x\b|linkedin/.test(t)) cats.add("sns");
-  if(/책|도서|출판|book|author|isbn/.test(t)) cats.add("book");
-  if(/논문|연구|학술|대학|도서관|paper|research|academic|scholar|journal|library|university/.test(t)) cats.add("academic"), cats.add("research_paper"), cats.add("university_library");
-  if(/쇼핑|상품|가격|구매|shopping|product|price|buy/.test(t)) cats.add("shopping");
-  if(/금융|주식|증권|환율|finance|stock|market|crypto/.test(t)) cats.add("finance");
-  if(/스포츠|축구|야구|농구|sports/.test(t)) cats.add("sports");
-  if(cats.size < 8){
-    ["news","image","video","blog","cafe","sns","web"].forEach(x => cats.add(x));
+
+function residentCandidatesSync(q, opts){
+  opts = opts || {};
+  const resident = ensureResidentState();
+  if(!resident.ready) ensureResidentBoot({ reason:"resident-query" });
+  const limit = Math.min(MAX_LIMIT, Math.max(clampInt(opts.limit || opts.candidatePoolTarget, DEFAULT_CANDIDATE_POOL_TARGET, 1, MAX_LIMIT), MIN_FAST_TARGET));
+  const searchType = normalizeSearchType(opts.searchType || opts.type || "all");
+  const qKey = stableHash([normalizeText(q), searchType, opts.lang || ""].join("|"));
+  const cached = resident.queryMap && resident.queryMap.get(qKey);
+  if(cached && Array.isArray(cached.items) && cached.items.length){
+    return cached.items.slice(0, limit);
   }
-  return Array.from(cats).map(canonicalSanmaruCategory).filter(Boolean);
-}
-function buildRoutePlanForQuery(query, ctx){
-  const categories = extendedQueryCategories(query, ctx && ctx.searchType);
-  const sources = new Set(["searchbank-index","searchbank","maru-search-wide-gateway"]);
-  for(const [provider, cap] of Object.entries(PROVIDER_CAPABILITY_MAP)){
-    const providerCats = (cap.categories || []).map(canonicalSanmaruCategory);
-    if(categories.some(c => providerCats.includes(c))) sources.add(provider);
+  const route = buildRoutePlanForQuery(q, { searchType });
+  const pool = [];
+  for(const cat of route.categories){
+    const arr = resident.categoryMap && resident.categoryMap.get(cat);
+    if(arr && arr.length) pool.push(...arr.slice(0, Math.max(200, Math.ceil(limit / 4))));
   }
-  const priorityCategories = categories
-    .map(c => Object.assign({ key:c }, SANMARU_CANONICAL_CATEGORIES[c] || SANMARU_CANONICAL_CATEGORIES.web))
-    .sort((a,b) => (b.priority || 0) - (a.priority || 0))
-    .map(x => x.key);
-  return {
-    query:s(query).trim(),
-    searchType: ctx && ctx.searchType || "all",
-    categories: priorityCategories,
-    sources:Array.from(sources),
-    region:ctx && ctx.region || "GLOBAL",
-    generatedAt:nowIso(),
-    principle:"route-by-resident-category-brain-then-expand-with-authorized-sources"
-  };
-}
-function getResidentCandidatesForRoute(routePlan, ctx){
-  const r = globalState.resident || {};
-  const limit = Math.min(MAX_LIMIT, Math.max(MIN_FAST_TARGET, (ctx && ctx.candidatePoolTarget) || DEFAULT_CANDIDATE_POOL_TARGET));
-  const query = routePlan && routePlan.query || ctx && ctx.q || "";
-  const qTokens = tokenize(query).slice(0, 20);
-  const out = [];
-  const seen = new Set();
-  function addList(list, reason){
-    for(const it of (Array.isArray(list) ? list : [])){
-      if(out.length >= limit) break;
-      const key = firstNonEmpty(it.url, it.link, it.id, it.title + "|" + it.source).toLowerCase();
-      if(!key || seen.has(key)) continue;
+  if(pool.length < limit && resident.items && resident.items.length){
+    const tokens = tokenize(q);
+    const compactQ = normalizeText(q).replace(/\s+/g, "");
+    for(const it of resident.items){
+      if(pool.length >= limit * 3) break;
       const text = normalizeText(itemText(it));
       const compact = text.replace(/\s+/g, "");
-      const match = !qTokens.length || qTokens.some(tok => text.includes(tok) || compact.includes(tok.replace(/\s+/g, "")));
-      if(!match && out.length > 0) continue;
-      seen.add(key);
-      out.push(Object.assign({}, it, { residentMatchReason:reason || "resident-route" }));
+      if(tokens.some(t => text.includes(t)) || (compactQ && compact.includes(compactQ))) pool.push(it);
     }
   }
-  const cats = routePlan && routePlan.categories || [];
-  for(const cat of cats) addList(r.categoryMap && r.categoryMap.get(cat), "category:" + cat);
-  if(out.length < Math.min(limit, 120)) addList(r.items, "resident-library-scan");
-  return { items:out.slice(0, limit), trace: adapterResult("sanmaru-resident-hub", out.length ? "ok" : (r.booted ? "empty" : "cold"), nowMs(), out, { categories:cats.slice(0, 20), booted:!!r.booted }) };
+  const ranked = finalRank(q, pool, { q, searchType, intents:route.categories }).slice(0, limit);
+  return ranked;
 }
-function rememberQueryInResident(ctx, items, reason){
-  try{
-    const r = globalState.resident;
-    const routePlan = buildRoutePlanForQuery(ctx.q, ctx);
-    const key = stableHash([ctx.q, ctx.searchType, ctx.lang || "", reason || "query"].join("|"));
-    r.queryKeys.set(key, { t:nowMs(), q:ctx.q, searchType:ctx.searchType, categories:routePlan.categories, count:Array.isArray(items) ? items.length : 0, items:(Array.isArray(items) ? items : []).slice(0, 1000) });
-    if(r.queryKeys.size > 500){ const first = r.queryKeys.keys().next().value; r.queryKeys.delete(first); }
-    indexResidentItems((Array.isArray(items) ? items : []).slice(0, 1000), reason || "query-result");
-  }catch(e){}
-}
-function providerHealthSnapshot(){
-  const out = {};
-  for(const [k,v] of Object.entries(globalState.providerHealth || {})) out[k] = Object.assign({}, v);
-  return out;
+
+function supplyResidentSync(input, opts){
+  opts = opts || {};
+  const q = typeof input === "string" ? input : firstNonEmpty(input && input.q, input && input.query, opts.q, opts.query);
+  const clean = sanitizeQuery(q);
+  if(!clean.ok) return { status:"ok", engine:ENGINE_NAME, version:VERSION, query:clean.value, items:[], results:[], meta:{ count:0, reason:clean.code, resident:residentBootSnapshot() } };
+  const routePlan = buildRoutePlanForQuery(clean.value, opts);
+  const items = residentCandidatesSync(clean.value, opts).map(x => canonicalItem(x, clean.value, x && x.source));
+  return {
+    status:"ok",
+    engine:ENGINE_NAME,
+    version:VERSION,
+    query:clean.value,
+    source:items.length ? "sanmaru-resident" : null,
+    items,
+    results:items,
+    routePlan,
+    meta:{
+      count:items.length,
+      resident:residentBootSnapshot(),
+      routePlan,
+      sourceRegistryReady:true,
+      categoryBrainReady:true,
+      mode:"resident-supply-sync",
+      doesNotCallExternal:true
+    }
+  };
 }
 
 function s(v){ return String(v == null ? "" : v); }
@@ -1001,24 +966,11 @@ function normalizeItemsFromResponse(res){
 }
 
 function adapterResult(name, status, started, items, extra){
-  const latency = nowMs() - started;
-  const count = Array.isArray(items) ? items.length : 0;
-  try{
-    const cap = PROVIDER_CAPABILITY_MAP[name] || PROVIDER_CAPABILITY_MAP[String(name || "").replace(/^web_/, "")] || null;
-    globalState.providerHealth[name || "unknown"] = {
-      status: status || "unknown",
-      count,
-      latency,
-      categories: cap && Array.isArray(cap.categories) ? cap.categories.slice(0, 20) : undefined,
-      trust: cap && cap.trust,
-      lastSeenAt: nowIso()
-    };
-  }catch(e){}
   return Object.assign({
     name,
     status,
-    count,
-    latency
+    count: Array.isArray(items) ? items.length : 0,
+    latency: nowMs() - started
   }, extra || {});
 }
 
@@ -1420,7 +1372,7 @@ function parseCtx(input, maybeCtx){
     page: clampInt(firstNonEmpty(ctx.page, raw.page, qs.page), 1, 1, 100000),
     perPage: clampInt(firstNonEmpty(ctx.perPage, raw.perPage, qs.perPage), 15, 1, 200),
     start: clampInt(firstNonEmpty(ctx.start, raw.start, qs.start), 1, 1, 1000000),
-    candidatePoolTarget: clampInt(firstNonEmpty(ctx.candidatePool, raw.candidatePool, qs.candidatePool, ctx.candidatePoolTarget, raw.candidatePoolTarget, qs.candidatePoolTarget, wideExpansion ? DEFAULT_CANDIDATE_POOL_TARGET : DEFAULT_CANDIDATE_POOL_TARGET), DEFAULT_CANDIDATE_POOL_TARGET, MIN_FAST_TARGET, MAX_LIMIT),
+    candidatePoolTarget: clampInt(firstNonEmpty(ctx.candidatePool, raw.candidatePool, qs.candidatePool, ctx.candidatePoolTarget, raw.candidatePoolTarget, qs.candidatePoolTarget, wideExpansion ? DEFAULT_CANDIDATE_POOL_TARGET : "", ctx.limit, raw.limit, qs.limit), DEFAULT_CANDIDATE_POOL_TARGET, 1, MAX_LIMIT),
     expansion: expansionRaw || (wideExpansion ? "wide" : "balanced"),
     directExternalAllowed: truthy(ctx.directExternal || raw.directExternal || qs.directExternal || ctx.sanmaruDirectExternal || raw.sanmaruDirectExternal || qs.sanmaruDirectExternal || process.env.SANMARU_DIRECT_EXTERNAL),
     requestId: firstNonEmpty(ctx.requestId, stableHash([clean.value, nowMs(), Math.random()].join("|")))
@@ -1453,18 +1405,20 @@ async function runSanmaru(input, maybeCtx){
   if(inflight && nowMs() - inflight.t < INFLIGHT_TTL_MS) return await inflight.p;
 
   const work = (async () => {
+    ensureResidentBoot({ reason:"runSanmaru" });
     const trace = [];
     const items = [];
-    const intents = detectIntent(ctx.q, ctx.searchType);
+    const routePlan = buildRoutePlanForQuery(ctx.q, { searchType:ctx.searchType, lang:ctx.lang });
+    const residentFirst = residentCandidatesSync(ctx.q, { limit:ctx.candidatePoolTarget || ctx.limit, candidatePoolTarget:ctx.candidatePoolTarget, searchType:ctx.searchType, lang:ctx.lang });
+    if(residentFirst.length){
+      items.push(...residentFirst);
+      trace.push(adapterResult("sanmaru-resident-library", "ok", engineStarted, residentFirst, { mode:"resident-first-no-external", routeCategories:routePlan.categories }));
+    }else{
+      trace.push(adapterResult("sanmaru-resident-library", "empty", engineStarted, [], { mode:"resident-first-no-external", routeCategories:routePlan.categories }));
+    }
+    const intents = Array.from(new Set([].concat(detectIntent(ctx.q, ctx.searchType), routePlan.categories)));
     ctx.intents = intents;
-
-    const routePlan = buildRoutePlanForQuery(ctx.q, ctx);
     ctx.routePlan = routePlan;
-    const bootSnapshot = await withTimeout(ensureResidentBoot({ reason:"query-touch" }), ctx.deep ? 1400 : 900)
-      .catch(e => residentBootSnapshot(responseErrorCode(e)));
-    const residentRes = getResidentCandidatesForRoute(routePlan, ctx);
-    trace.push(residentRes.trace);
-    if(residentRes.items.length) items.push(...residentRes.items);
 
     const fastSettled = await Promise.allSettled([
       callSearchBankIndex(ctx),
@@ -1529,8 +1483,7 @@ async function runSanmaru(input, maybeCtx){
       return copy;
     });
 
-    rememberQueryInResident(ctx, ranked, "sanmaru-ranked-result");
-
+    const residentAbsorb = absorbResidentItems(ranked, { q:ctx.q, searchType:ctx.searchType, lang:ctx.lang, source:"sanmaru-ranked" });
     const promotion = await maybePromote(ctx, ranked, { trace });
 
     const result = {
@@ -1548,6 +1501,9 @@ async function runSanmaru(input, maybeCtx){
         deduped: Math.max(0, items.length - dedupeItems(items).length),
         sourceDiversity: sourceDiversity(ranked),
         categoryDiversity: categoryDiversity(ranked),
+        resident: residentBootSnapshot(),
+        routePlan: ctx.routePlan || buildRoutePlanForQuery(ctx.q, { searchType:ctx.searchType, lang:ctx.lang }),
+        residentAbsorb,
         searchAreaExpansion: {
           mode: searchAreaExpansionMode(ctx),
           candidatePoolTarget: ctx.candidatePoolTarget,
@@ -1567,11 +1523,6 @@ async function runSanmaru(input, maybeCtx){
         role: "global-virtual-information-library-mount-engine",
         platformRole: "Sanmaru is the authorized global information library mount layer; Maru Search is the platform information road/gateway",
         mountRegistry: mountRegistrySnapshot(),
-        sourceRegistry: sourceRegistrySnapshot(),
-        categoryBrain: categoryBrainSnapshot(),
-        routePlan,
-        residentHub: Object.assign({}, residentBootSnapshot("query").resident, { bootStatus:bootSnapshot.status, residentCandidateCount:residentRes.items.length }),
-        providerHealth: providerHealthSnapshot(),
         cache:{ hit:false, key:cacheKey },
         searchBankIndex:{ used:true, status:indexRes.trace.status, count:indexRes.trace.count, latency:indexRes.trace.latency },
         searchBank:{ used:true, status:bankRes.trace.status, count:bankRes.trace.count, latency:bankRes.trace.latency },
@@ -1596,24 +1547,44 @@ async function runSanmaru(input, maybeCtx){
   globalState.inflight.set(cacheKey, { t: nowMs(), p: work });
   try{ return await withTimeout(work, ctx.timeoutMs); }
   catch(e){
-    const routePlan = buildRoutePlanForQuery(ctx.q, ctx);
-    const residentFallback = getResidentCandidatesForRoute(routePlan, ctx).items.slice(0, Math.min(ctx.candidatePoolTarget || DEFAULT_CANDIDATE_POOL_TARGET, MAX_LIMIT));
+    const fallbackItems = residentCandidatesSync(ctx.q, { limit:ctx.candidatePoolTarget || ctx.limit, candidatePoolTarget:ctx.candidatePoolTarget, searchType:ctx.searchType, lang:ctx.lang });
+    if(fallbackItems.length){
+      const rankedFallback = finalRank(ctx.q, fallbackItems, ctx).slice(0, Math.min(MAX_LIMIT, Math.max(ctx.limit, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET)));
+      return {
+        status:"ok",
+        engine:ENGINE_NAME,
+        version:VERSION,
+        query:ctx.q,
+        source:"sanmaru-resident-timeout-fallback",
+        items:rankedFallback,
+        results:rankedFallback,
+        meta:{
+          count:rankedFallback.length,
+          elapsedMs: nowMs() - engineStarted,
+          secure:true,
+          timeoutGuard:true,
+          originalError: responseErrorCode(e),
+          resident: residentBootSnapshot(),
+          routePlan: buildRoutePlanForQuery(ctx.q, { searchType:ctx.searchType, lang:ctx.lang }),
+          health: healthSnapshot()
+        }
+      };
+    }
     return {
-      status: residentFallback.length ? "partial" : "error",
+      status:"ok",
       engine:ENGINE_NAME,
       version:VERSION,
       query:ctx.q,
-      source: residentFallback.length ? "sanmaru-resident-timeout-fallback" : null,
-      items:residentFallback,
-      results:residentFallback,
+      items:[],
+      results:[],
       meta:{
-        count:residentFallback.length,
+        count:0,
         elapsedMs: nowMs() - engineStarted,
         secure:true,
         error: responseErrorCode(e),
-        fallbackRecommended: !residentFallback.length,
-        routePlan,
-        residentHub: residentBootSnapshot("timeout-fallback").resident,
+        timeoutGuard:true,
+        resident: residentBootSnapshot(),
+        fallbackRecommended: true,
         health: healthSnapshot()
       }
     };
@@ -1635,11 +1606,10 @@ function healthSnapshot(){
     memorySize: globalState.memory ? globalState.memory.size : 0,
     circuits,
     mountRegistry: mountRegistrySnapshot(),
-    sourceRegistry: sourceRegistrySnapshot(),
-    categoryBrain: categoryBrainSnapshot(),
-    residentHub: residentBootSnapshot("health").resident,
-    providerHealth: providerHealthSnapshot(),
     adapters: ["searchbank-index","searchbank","maru-search-wide-gateway"].concat(ADAPTERS.map(x => x.name), ["collector","planetary","ai-gpu"]),
+    resident: residentBootSnapshot(),
+    categoryBrainReady: true,
+    sourceRegistryCount: Object.keys(sourceRegistrySnapshot()).length,
     generatedAt: nowIso()
   };
 }
@@ -1678,12 +1648,13 @@ async function handler(event){
   const action = low(firstNonEmpty(merged.action, merged.mode, merged.fn));
 
   if(action === "health") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, health:healthSnapshot() });
-  if(action === "resident-status" || action === "status") return ok(residentBootSnapshot("status"));
-  if(action === "resident-boot" || action === "boot" || action === "warmup" || action === "mount-library") return ok(await ensureResidentBoot({ reason:action || "resident-boot" }));
-  if(action === "resident-rebuild" || action === "rebuild") return ok(await ensureResidentBoot({ reason:"resident-rebuild", force:true }));
-  if(action === "source-registry") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, sourceRegistry:sourceRegistrySnapshot(), mountRegistry:mountRegistrySnapshot(), providerHealth:providerHealthSnapshot() });
-  if(action === "category-map" || action === "category-brain") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, categoryBrain:categoryBrainSnapshot(), aliases:SANMARU_CATEGORY_ALIASES, providerCapabilities:PROVIDER_CAPABILITY_MAP });
-  if(action === "route-plan") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, query:firstNonEmpty(merged.q, merged.query), routePlan:buildRoutePlanForQuery(firstNonEmpty(merged.q, merged.query), { searchType:normalizeSearchType(firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical, "all")), region:detectRuntimeRegion(event || {}, firstNonEmpty(merged.lang, merged.locale), firstNonEmpty(merged.q, merged.query)) }) });
+  if(action === "resident-boot" || action === "boot" || action === "mount-library") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-boot", resident:ensureResidentBoot({ reason:"manual" }) });
+  if(action === "resident-rebuild" || action === "rebuild-resident") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-rebuild", resident:ensureResidentBoot({ force:true, reason:"manual-rebuild" }) });
+  if(action === "resident-status") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-status", resident:residentBootSnapshot(), health:healthSnapshot() });
+  if(action === "source-registry") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"source-registry", sources:sourceRegistrySnapshot() });
+  if(action === "category-map" || action === "category-brain") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"category-map", categories:categoryMapSnapshot(), aliases:PROVIDER_CATEGORY_ALIASES, capabilities:PROVIDER_CAPABILITY_MAP });
+  if(action === "route-plan") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"route-plan", routePlan:buildRoutePlanForQuery(firstNonEmpty(merged.q, merged.query), { searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale) }) });
+  if(action === "supply" || action === "resident-supply") return ok(supplyResidentSync({ q:firstNonEmpty(merged.q, merged.query) }, { limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget), candidatePoolTarget:firstNonEmpty(merged.candidatePool, merged.candidatePoolTarget), searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale) }));
 
   const res = await runSanmaru({
     event: event || {},
@@ -1719,12 +1690,14 @@ module.exports = {
   canonicalItem,
   finalRank,
   detectIntent,
+  mountRegistry: mountRegistrySnapshot,
+  sourceRegistry: sourceRegistrySnapshot,
+  categoryMap: categoryMapSnapshot,
+  buildRoutePlanForQuery,
   ensureResidentBoot,
   residentBootSnapshot,
-  buildRoutePlanForQuery,
-  categoryBrain: categoryBrainSnapshot,
-  sourceRegistry: sourceRegistrySnapshot,
-  mountRegistry: mountRegistrySnapshot
+  supplyResidentSync,
+  absorbResidentItems
 };
 
 exports.version = VERSION;
@@ -1732,13 +1705,12 @@ exports.runSanmaru = runSanmaru;
 exports.runEngine = runEngine;
 exports.handler = handler;
 exports.health = healthSnapshot;
+exports.mountRegistry = mountRegistrySnapshot;
+exports.sourceRegistry = sourceRegistrySnapshot;
+exports.categoryMap = categoryMapSnapshot;
+exports.buildRoutePlanForQuery = buildRoutePlanForQuery;
 exports.ensureResidentBoot = ensureResidentBoot;
 exports.residentBootSnapshot = residentBootSnapshot;
-exports.buildRoutePlanForQuery = buildRoutePlanForQuery;
-exports.categoryBrain = categoryBrainSnapshot;
-exports.sourceRegistry = sourceRegistrySnapshot;
-exports.mountRegistry = mountRegistrySnapshot;
-
-// Non-blocking module-load boot: in serverless this runs on cold start; explicit
-// ?action=resident-boot remains the reliable deployment warm-up path.
-try{ ensureResidentBoot({ reason:"module-load" }).catch(() => null); }catch(e){}
+exports.supplyResidentSync = supplyResidentSync;
+exports.absorbResidentItems = absorbResidentItems;
+try { ensureResidentBoot({ reason:"module-load" }); } catch(e) {}
