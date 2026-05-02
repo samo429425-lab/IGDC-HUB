@@ -19,7 +19,7 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.33-original-body-visible-pagepack-hotfix';
+const VERSION = 'A1.5.36-maru-only-visible15-provider-restore';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -39,12 +39,27 @@ const OG_IMAGE_ENRICH_TIMEOUT_MS = 1200;
 const OG_IMAGE_CACHE_TTL_MS = 30 * 60 * 1000;
 const MAX_SEARCH_BANK_PAGES_NORMAL = 14;
 const MAX_SEARCH_BANK_PAGES_DEEP = 30;
+const DEFAULT_VISIBLE_CARDS_PER_PAGE = 15;
 
 function nowMs(){ return Date.now(); }
 
 function truthy(v){
   const s = String(v == null ? '' : v).trim().toLowerCase();
   return s === '1' || s === 'true' || s === 'yes' || s === 'on';
+}
+
+function envFirst(names){
+  for(const name of (Array.isArray(names) ? names : [])){
+    const v = process.env[name];
+    if(v !== undefined && v !== null && String(v).trim()) return String(v).trim();
+  }
+  return '';
+}
+
+function providerStatusOf(bundle, fallback){
+  if(bundle && bundle.status) return bundle.status;
+  if(bundle && bundle.error) return 'error:' + safeString(bundle.error).slice(0, 80);
+  return fallback || 'empty';
 }
 
 function explicitExternalRequested(qs){
@@ -947,7 +962,11 @@ function sectionSortScore(item){
 }
 
 function buildSearchSections(items, q, opts){
+  opts = opts || {};
   const list = Array.isArray(items) ? items : [];
+  const page = clampInt(opts.page || opts.sectionPage || opts.visiblePage, 1, 1, 100000);
+  const visiblePerPage = clampInt(opts.perPage || opts.pageSize || opts.visibleLimit, DEFAULT_VISIBLE_CARDS_PER_PAGE, 1, 60);
+  const viewportChunkSize = clampInt(opts.viewportChunkSize || opts.chunkSize || 3, 3, 1, 6);
   const buckets = Object.create(null);
   const seenBySection = Object.create(null);
 
@@ -964,209 +983,146 @@ function buildSearchSections(items, q, opts){
 
     buckets[sectionId].push(Object.assign({}, raw, {
       sectionId,
+      sourceSectionId: sectionId,
       sectionTitle: sectionMeta.title,
       sectionLabel: sectionMeta.label,
       sectionRank: sectionMeta.rank
     }));
   }
 
-  const sections = SEARCH_SECTION_ORDER.map(sectionId => {
+  const fullSections = SEARCH_SECTION_ORDER.map(sectionId => {
     const meta = SEARCH_SECTION_META[sectionId] || SEARCH_SECTION_META.general_web;
     const all = (buckets[sectionId] || []).slice().sort((a,b) => sectionSortScore(b) - sectionSortScore(a));
-    const previewLimit = meta.previewLimit || 6;
-    return {
-      id: sectionId,
+    return { sectionId, meta, all };
+  }).filter(sec => sec.all.length > 0);
+
+  // Visible-card stream rule:
+  // - items/results remain the full candidate pool.
+  // - One rendered viewport page must contain 15 actually visible cards.
+  // - Items hidden behind a dropdown/collapse must not consume the page quota.
+  // - To be compatible with front renderers that auto-collapse after 3 cards per section,
+  //   the backend splits the current viewport into small virtual section chunks.
+  const visibleFlow = [];
+  let round = 0;
+  const maxRounds = Math.max(1, list.length + 1);
+  while(visibleFlow.length < list.length && round < maxRounds){
+    let pushed = false;
+    for(const sec of fullSections){
+      const from = round * viewportChunkSize;
+      const chunk = sec.all.slice(from, from + viewportChunkSize);
+      for(const item of chunk){
+        visibleFlow.push(item);
+        pushed = true;
+      }
+    }
+    if(!pushed) break;
+    round++;
+  }
+
+  const totalVisibleCandidates = visibleFlow.length;
+  const totalPages = Math.max(1, Math.ceil(totalVisibleCandidates / visiblePerPage));
+  const safePage = Math.min(page, totalPages);
+  const offset = (safePage - 1) * visiblePerPage;
+  const pageItems = visibleFlow.slice(offset, offset + visiblePerPage);
+
+  const sectionCounts = {};
+  const sectionMetaById = {};
+  for(const sec of fullSections){
+    sectionCounts[sec.sectionId] = sec.all.length;
+    sectionMetaById[sec.sectionId] = sec.meta;
+  }
+
+  const sections = [];
+  const chunkCounters = Object.create(null);
+  let current = null;
+
+  function openChunk(sectionId){
+    const meta = sectionMetaById[sectionId] || SEARCH_SECTION_META[sectionId] || SEARCH_SECTION_META.general_web;
+    chunkCounters[sectionId] = (chunkCounters[sectionId] || 0) + 1;
+    const chunkNo = chunkCounters[sectionId];
+    const id = sectionId + '__vp' + safePage + '_' + chunkNo;
+    const sec = {
+      id,
+      sectionId: id,
+      sourceSectionId: sectionId,
+      originalSectionId: sectionId,
       title: meta.title,
       label: meta.label,
       description: meta.description,
-      rank: meta.rank,
-      total: all.length,
-      previewLimit,
-      hasMore: all.length > previewLimit,
-      items: all.slice(0, previewLimit),
+      rank: meta.rank + (chunkNo / 100),
+      total: 0,
+      fullTotal: sectionCounts[sectionId] || 0,
+      originalSectionTotal: sectionCounts[sectionId] || 0,
+      previewLimit: viewportChunkSize,
+      visibleLimit: viewportChunkSize,
+      visibleCount: 0,
+      hiddenCount: 0,
+      collapsedCount: 0,
+      hasMore: false,
+      viewportChunk: true,
+      hiddenItemsExcludedFromVisibleCount: true,
+      items: [],
       more: {
         q: safeString(q || ''),
         type: sectionId,
         section: sectionId,
-        perPage: previewLimit,
+        sourceSectionId: sectionId,
+        perPage: viewportChunkSize,
+        hiddenCount: Math.max(0, (sectionCounts[sectionId] || 0) - viewportChunkSize),
         action: 'expand-section'
       }
     };
-  }).filter(section => section.total > 0);
+    sections.push(sec);
+    return sec;
+  }
 
-  const sectionCounts = {};
-  for(const section of sections) sectionCounts[section.id] = section.total;
+  for(const item of pageItems){
+    const sourceSectionId = item.sourceSectionId || item.sectionId || sectionIdForItem(item);
+    if(!current || current.sourceSectionId !== sourceSectionId || current.items.length >= viewportChunkSize){
+      current = openChunk(sourceSectionId);
+    }
+    current.items.push(item);
+    current.total = current.items.length;
+    current.visibleCount = current.items.length;
+  }
+
+  const fullSectionSummaries = fullSections.map(sec => ({
+    id: sec.sectionId,
+    sectionId: sec.sectionId,
+    title: sec.meta.title,
+    label: sec.meta.label,
+    description: sec.meta.description,
+    rank: sec.meta.rank,
+    total: sec.all.length,
+    previewLimit: sec.meta.previewLimit || viewportChunkSize,
+    hasMore: sec.all.length > viewportChunkSize
+  }));
 
   return {
     enabled: true,
-    mode: 'grouped-expandable-search-sections',
+    mode: 'visible-card-backfill-viewport-chunks',
     order: SEARCH_SECTION_ORDER,
     counts: sectionCounts,
-    totalSections: sections.length,
-    sections
-  };
-}
-
-
-function buildVisiblePagePack(items, q, raw){
-  raw = raw || {};
-  const list = Array.isArray(items) ? items : [];
-  const page = clampInt(firstNonEmpty(raw.page, raw.p, raw.visiblePage, raw.sectionPage), 1, 1, 100000);
-  const perPage = clampInt(firstNonEmpty(raw.perPage, raw.pageSize, raw.visibleCardsPerPage, raw.visibleLimit, raw.cardsPerPage), 15, 1, 100);
-  const totalItems = list.length;
-  const totalPages = Math.max(totalItems ? 1 : 0, Math.ceil(totalItems / perPage));
-  const safePage = totalPages ? Math.min(page, totalPages) : 1;
-  const offset = totalPages ? (safePage - 1) * perPage : 0;
-  const pageItems = list.slice(offset, offset + perPage);
-
-  return {
-    enabled: true,
-    mode: 'render-viewport-only-do-not-limit-search-body',
-    q: safeString(q || ''),
+    fullSections: fullSectionSummaries,
+    totalSections: fullSections.length,
+    visibleCardsPerPage: visiblePerPage,
+    viewportChunkSize,
+    visibleCount: pageItems.length,
+    totalVisibleCandidates,
     page: safePage,
     requestedPage: page,
-    perPage,
-    visibleCardsPerPage: perPage,
-    visibleCount: pageItems.length,
-    pageItems,
-    totalItems,
     totalPages,
-    hasPrevPage: totalPages ? safePage > 1 : false,
-    hasNextPage: totalPages ? safePage < totalPages : false,
+    hasPrevPage: safePage > 1,
+    hasNextPage: safePage < totalPages,
     prevPage: safePage > 1 ? safePage - 1 : null,
     nextPage: safePage < totalPages ? safePage + 1 : null,
-    bodyPreserved: true,
+    hiddenItemsExcludedFromVisibleCount: true,
+    dropdownItemsDoNotConsumePageQuota: true,
+    backfillFromFollowingResults: true,
     doesNotLimitItemsResults: true,
-    sectionsPreserved: true
-  };
-}
-
-
-function blockingImageEnrichRequested(event){
-  const qs = (event && event.queryStringParameters) || {};
-  return truthy(qs.enrichImages) || truthy(qs.imageEnrich) || truthy(qs.ogImages) || truthy(qs.waitImages) || truthy(process.env.MARU_SEARCH_BLOCKING_IMAGE_ENRICH);
-}
-
-function buildViewportDisplaySections(pageItems, q){
-  const list = Array.isArray(pageItems) ? pageItems : [];
-  const out = [];
-  let sectionSeq = 0;
-  for(let i=0; i<list.length; i += 3){
-    const chunk = list.slice(i, i + 3).map((raw, idx) => {
-      const sectionId = sectionIdForItem(raw);
-      const meta = SEARCH_SECTION_META[sectionId] || SEARCH_SECTION_META.general_web;
-      return Object.assign({}, raw, {
-        sectionId,
-        sectionTitle: meta.title,
-        sectionLabel: meta.label,
-        viewportCard: true,
-        viewportIndex: i + idx
-      });
-    });
-    if(!chunk.length) continue;
-    const firstId = sectionIdForItem(chunk[0]);
-    const meta = SEARCH_SECTION_META[firstId] || SEARCH_SECTION_META.general_web;
-    out.push({
-      id: firstId + '_viewport_' + (++sectionSeq),
-      sourceSectionId: firstId,
-      title: meta.title,
-      label: meta.label,
-      description: meta.description,
-      rank: meta.rank,
-      total: chunk.length,
-      previewLimit: chunk.length,
-      hasMore: false,
-      collapsedCount: 0,
-      hiddenCount: 0,
-      items: chunk,
-      more: {
-        q: safeString(q || ''),
-        type: firstId,
-        section: firstId,
-        action: 'viewport-section-no-collapse'
-      }
-    });
-  }
-  return {
-    enabled: true,
-    mode: 'viewport-visible-card-sections-backfill-15',
-    visibleCount: list.length,
-    sections: out,
-    totalSections: out.length,
-    principle: 'top-level-sections-are-current-visible-page-only-so-collapsed-items-do-not-consume-the-15-card-viewport'
-  };
-}
-
-function getSanmaruResidentForMaru(q, raw, opts){
-  raw = raw || {};
-  opts = opts || {};
-  let Sanmaru = null;
-  try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
-  if(!Sanmaru) return { items: [], meta: { status:'unavailable' } };
-  try{
-    if(typeof Sanmaru.ensureResidentBoot === 'function') Sanmaru.ensureResidentBoot({ reason: opts.reason || 'maru-search-touch' });
-    if(typeof Sanmaru.supplyResidentSync === 'function'){
-      const res = Sanmaru.supplyResidentSync(q, {
-        limit: Math.min(MAX_LIMIT, Math.max(clampInt(raw.limit, DEFAULT_LIMIT, 1, MAX_LIMIT), MIN_RESULT_TARGET)),
-        candidatePoolTarget: Math.min(MAX_LIMIT, Math.max(clampInt(raw.candidatePool || raw.candidatePoolTarget, DEFAULT_LIMIT, 1, MAX_LIMIT), MIN_RESULT_TARGET)),
-        searchType: opts.searchType,
-        lang: opts.lang
-      });
-      const items = (Array.isArray(res && res.items) ? res.items : []).map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru-resident')));
-      return { items, meta: Object.assign({ status: items.length ? 'ok' : 'empty' }, res && res.meta || {}) };
-    }
-    return { items: [], meta: { status:'no-resident-supply-export' } };
-  }catch(e){
-    return { items: [], meta: { status:'soft-failed', error: safeString((e && e.message) || e).slice(0,160) } };
-  }
-}
-
-function absorbIntoSanmaruResident(q, items, ctx){
-  try{
-    let Sanmaru = null;
-    try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
-    if(Sanmaru && typeof Sanmaru.absorbResidentItems === 'function'){
-      Sanmaru.absorbResidentItems(items || [], { q, searchType: ctx && ctx.searchType, lang: ctx && ctx.lang, source:'maru-search-result' });
-    }
-  }catch(e){}
-}
-
-function buildImmediateResidentResponse(q, raw, residentPack, baseMeta){
-  const candidateTarget = Math.min(MAX_LIMIT, Math.max(clampInt(raw && (raw.candidatePool || raw.candidatePoolTarget || raw.limit), DEFAULT_LIMIT, 1, MAX_LIMIT), MIN_RESULT_TARGET));
-  const items = dedupeCanonicalItems(residentPack.items || []).slice(0, candidateTarget).map(compactResultItem);
-  const visiblePagePack = buildVisiblePagePack(items, q, raw || {});
-  const fullSectionPack = buildSearchSections(items, q, { searchType: raw && (raw.type || raw.category || raw.tab || raw.vertical) });
-  const viewportSections = buildViewportDisplaySections(visiblePagePack.pageItems, q);
-  const sectionPack = Object.assign({}, fullSectionPack, {
-    sections: viewportSections.sections,
-    fullSections: fullSectionPack.sections,
-    pageItems: visiblePagePack.pageItems,
-    visiblePagePack,
-    visibleCardsPerPage: visiblePagePack.visibleCardsPerPage,
-    visibleCount: visiblePagePack.visibleCount,
-    page: visiblePagePack.page,
-    totalPages: visiblePagePack.totalPages,
-    hasNextPage: visiblePagePack.hasNextPage,
-    bodyPreserved: true,
-    doesNotLimitItemsResults: true,
-    viewportBackfill: true
-  });
-  return {
-    status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: 'sanmaru-resident',
-    items, results: items,
-    sections: viewportSections.sections,
-    pageItems: visiblePagePack.pageItems,
-    visiblePagePack,
-    sectionPack,
-    meta: Object.assign({}, baseMeta || {}, {
-      count: items.length,
-      fastResidentResponse: true,
-      sanmaruResident: residentPack.meta || {},
-      viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, backfill:true },
-      sections: { enabled:true, mode:viewportSections.mode, totalSections:viewportSections.totalSections, fullSectionCount:fullSectionPack.totalSections },
-      doesNotCallExternal: true,
-      principle: 'Sanmaru resident hub supplied this response; deep provider refresh can be called separately.'
-    })
+    pageItems,
+    pageSections: sections,
+    sections
   };
 }
 
@@ -1832,28 +1788,32 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     async function pullFromGoogle(){
       let count = 0;
       let pageStart = start || 1;
+      let lastBundle = null;
       for(let i=0; i<caps.googlePages && pageStart <= 91 && timeLeft() > 1500; i++){
-        const g = await Containers.web_google.fetch(q, 10, pageStart).catch(() => null);
+        const g = await Containers.web_google.fetch(q, 10, pageStart).catch(e => ({ source: 'google', results: [], status: 'error:' + safeString((e && e.message) || e).slice(0, 80) }));
+        lastBundle = g;
         const n = addBundle(g, 'google', collected, sourceState);
         count += n;
         if(!g || !g.results || g.results.length < 10) break;
         pageStart += 10;
       }
-      record('google', count ? 'ok' : 'empty', count);
+      record('google', count ? 'ok' : providerStatusOf(lastBundle, 'empty'), count);
       return count;
     }
 
     async function pullFromBing(){
       let count = 0;
       let offset = 0;
+      let lastBundle = null;
       for(let i=0; i<caps.bingPages && offset <= 450 && timeLeft() > 1200; i++){
-        const b = await Containers.web_bing.fetch(q, 50, offset).catch(() => null);
+        const b = await Containers.web_bing.fetch(q, 50, offset).catch(e => ({ source: 'bing', results: [], status: 'error:' + safeString((e && e.message) || e).slice(0, 80) }));
+        lastBundle = b;
         const n = addBundle(b, 'bing', collected, sourceState);
         count += n;
         if(!b || !b.results || b.results.length < 50) break;
         offset += 50;
       }
-      record('bing', count ? 'ok' : 'empty', count);
+      record('bing', count ? 'ok' : providerStatusOf(lastBundle, 'empty'), count);
       return count;
     }
 
@@ -1861,7 +1821,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       if(noMedia) { record('youtube', 'media-disabled', 0); return 0; }
       const y = await Containers.web_youtube.fetch(q, caps.youtubeLimit).catch(() => null);
       const n = addBundle(y, 'youtube', collected, sourceState);
-      record('youtube', n ? 'ok' : 'empty', n);
+      record('youtube', n ? 'ok' : providerStatusOf(y, 'empty'), n);
       return n;
     }
 
@@ -1890,15 +1850,17 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       // Google image: global thumbnail pool. Small probe in normal mode.
       let googleCount = 0;
       let pageStart = 1;
+      let lastGoogleImageBundle = null;
       for(let i=0; i<caps.imagePages && pageStart <= 91 && timeLeft() > 1200; i++){
-        const img = await Containers.web_image.fetch(q, 10, pageStart).catch(() => null);
+        const img = await Containers.web_image.fetch(q, 10, pageStart).catch(e => ({ source: 'google_image', results: [], status: 'error:' + safeString((e && e.message) || e).slice(0, 80) }));
+        lastGoogleImageBundle = img;
         const n = addBundle(img, 'google_image', collected, sourceState);
         googleCount += n;
         total += n;
         if(!img || !img.results || img.results.length < 10) break;
         pageStart += 10;
       }
-      record('google_image', googleCount ? 'ok' : 'empty', googleCount);
+      record('google_image', googleCount ? 'ok' : providerStatusOf(lastGoogleImageBundle, 'empty'), googleCount);
 
       return total;
     }
@@ -2146,10 +2108,11 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     // Controlled card-media autofill:
     // Keep the existing wide search pipeline, but make visible search cards useful by filling
     // each result's own OG / provider image where possible within the remaining response budget.
-    if(blockingImageEnrichRequested(event)){
+    const rawQsForEnrich = (event && event.queryStringParameters) || {};
+    if(truthy(rawQsForEnrich.enrichImages) || truthy(rawQsForEnrich.inlineEnrichImages) || truthy(process.env.MARU_SEARCH_INLINE_OG_ENRICH)){
       unique = await enrichOwnImages(unique, { trace, timeLeft });
-    }else{
-      record('own-og-image-enrich', 'deferred-first-response', 0, { action:'enrich-images', reason:'do-not-block-search-render' });
+    } else {
+      trace.push({ name: 'own-og-image-enrich', status: 'deferred', count: 0, mode: 'explicit-action-only' });
     }
 
     const finalTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
@@ -2621,8 +2584,8 @@ function backfillVisuals(items){
 }
 
 async function naverSearch(q, limit, start){
-  const id = process.env.NAVER_API_KEY;
-  const secret = process.env.NAVER_CLIENT_SECRET;
+  const id = envFirst(['NAVER_API_KEY','NAVER_CLIENT_ID','NAVER_SEARCH_CLIENT_ID']);
+  const secret = envFirst(['NAVER_CLIENT_SECRET','NAVER_API_SECRET','NAVER_SEARCH_CLIENT_SECRET']);
   if(!id || !secret) return null;
   const url = 'https://openapi.naver.com/v1/search/webkr.json?query=' + encodeURIComponent(q) + '&display=' + Math.min(limit,100) + '&start=' + start;
   const res = await fetchWithTimeout(url, { headers: { 'X-Naver-Client-Id': id, 'X-Naver-Client-Secret': secret } }, 3000);
@@ -2636,8 +2599,8 @@ async function naverSearch(q, limit, start){
 
 
 async function naverImageSearch(q, limit, start){
-  const id = process.env.NAVER_API_KEY;
-  const secret = process.env.NAVER_CLIENT_SECRET;
+  const id = envFirst(['NAVER_API_KEY','NAVER_CLIENT_ID','NAVER_SEARCH_CLIENT_ID']);
+  const secret = envFirst(['NAVER_CLIENT_SECRET','NAVER_API_SECRET','NAVER_SEARCH_CLIENT_SECRET']);
   if(!id || !secret) return null;
 
   const url = 'https://openapi.naver.com/v1/search/image.json?query=' +
@@ -2694,8 +2657,8 @@ async function naverImageSearch(q, limit, start){
 }
 
 async function naverGenericSearch(endpoint, q, limit, start, source, type){
-  const id = process.env.NAVER_API_KEY;
-  const secret = process.env.NAVER_CLIENT_SECRET;
+  const id = envFirst(['NAVER_API_KEY','NAVER_CLIENT_ID','NAVER_SEARCH_CLIENT_ID']);
+  const secret = envFirst(['NAVER_CLIENT_SECRET','NAVER_API_SECRET','NAVER_SEARCH_CLIENT_SECRET']);
   if(!id || !secret) return null;
 
   const display = Math.max(1, Math.min(limit || 100, endpoint === 'local.json' ? 5 : 100));
@@ -2759,19 +2722,34 @@ async function naverGenericSearch(endpoint, q, limit, start, source, type){
 
 
 async function googleSearch(q, limit, start){
-  const key = process.env.GOOGLE_API_KEY;
-  const cx = process.env.GOOGLE_CSE_ID;
-  if(!key || !cx) return null;
-  const base = 'https://www.googleapis.com/customsearch/v1' +
-    '?key=' + encodeURIComponent(key) +
-    '&cx=' + encodeURIComponent(cx) +
-    '&q=' + encodeURIComponent(q) +
-    '&num=' + Math.min(limit,10) +
-    '&start=' + start +
-    '&gl=us' +
-    '&lr=lang_en|lang_ko';
-  const webRes = await fetchWithTimeout(base, null, 3000).then(r => r.ok ? r.json() : null).catch(() => null);
-  const newsRes = await fetchWithTimeout(base + '&sort=date', null, 3000).then(r => r.ok ? r.json() : null).catch(() => null);
+  const key = envFirst(['GOOGLE_API_KEY','GOOGLE_SEARCH_API_KEY','GOOGLE_CUSTOM_SEARCH_API_KEY','GOOGLE_CLOUD_API_KEY']);
+  const cx = envFirst(['GOOGLE_CSE_ID','GOOGLE_CX','GOOGLE_SEARCH_ENGINE_ID','GOOGLE_CUSTOM_SEARCH_ENGINE_ID','GOOGLE_PROGRAMMABLE_SEARCH_ENGINE_ID']);
+  if(!key || !cx) return { source: 'google', results: [], status: 'key-missing', missing: { apiKey: !key, cx: !cx } };
+
+  function makeUrl(queryText, pageStart){
+    return 'https://www.googleapis.com/customsearch/v1' +
+      '?key=' + encodeURIComponent(key) +
+      '&cx=' + encodeURIComponent(cx) +
+      '&q=' + encodeURIComponent(queryText) +
+      '&num=' + Math.min(limit,10) +
+      '&start=' + (pageStart || 1) +
+      '&hl=ko' +
+      '&gl=kr' +
+      '&safe=off';
+  }
+
+  async function fetchJson(url){
+    try{
+      const r = await fetchWithTimeout(url, null, 3000);
+      if(!r || !r.ok) return { _httpStatus: r && r.status };
+      return await r.json();
+    }catch(e){
+      return { _error: safeString((e && e.message) || e) };
+    }
+  }
+
+  const webRes = await fetchJson(makeUrl(q, start || 1));
+  const newsRes = await fetchJson(makeUrl(q + ' 뉴스 news 최신', 1));
   const mergeItems = (data, type, source) => {
     const items = Array.isArray(data && data.items) ? data.items : [];
     return items.map(it => {
@@ -2782,12 +2760,17 @@ async function googleSearch(q, limit, start){
       return { title: it.title || '', link: it.link || '', url: it.link || '', snippet: it.snippet || '', type, source, thumbnail: img, thumb: img, image: img, payload: { source, thumb: img, image: img } };
     });
   };
-  return { source: 'google', results: mergeItems(webRes, 'web', 'google').concat(mergeItems(newsRes, 'news', 'google_news')) };
+
+  const results = mergeItems(webRes, 'web', 'google').concat(mergeItems(newsRes, 'news', 'google_news'));
+  let status = results.length ? 'ok' : 'empty';
+  if(!results.length && (webRes && webRes._httpStatus)) status = 'http-' + webRes._httpStatus;
+  if(!results.length && (webRes && webRes._error)) status = 'error:' + webRes._error.slice(0, 80);
+  return { source: 'google', results, status };
 }
 
 async function bingSearch(q, limit, offset){
-  const key = process.env.BING_API_KEY;
-  if(!key) return null;
+  const key = envFirst(['BING_API_KEY','BING_SEARCH_API_KEY','AZURE_BING_SEARCH_API_KEY','BING_SUBSCRIPTION_KEY']);
+  if(!key) return { source: 'bing', results: [], status: 'key-missing' };
   const url = 'https://api.bing.microsoft.com/v7.0/search?q=' + encodeURIComponent(q) + '&count=' + Math.min(limit,50) + '&offset=' + (offset || 0);
   const res = await fetchWithTimeout(url, { headers: { 'Ocp-Apim-Subscription-Key': key } }, 3000);
   if(!res.ok) return null;
@@ -2796,8 +2779,8 @@ async function bingSearch(q, limit, offset){
 }
 
 async function youtubeSearch(q, limit){
-  const key = process.env.YOUTUBE_API_KEY;
-  if(!key) return null;
+  const key = envFirst(['YOUTUBE_API_KEY','GOOGLE_YOUTUBE_API_KEY','GOOGLE_API_KEY']);
+  if(!key) return { source: 'youtube', results: [], status: 'key-missing' };
   const url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=' + Math.min(limit,50) + '&q=' + encodeURIComponent(q) + '&key=' + encodeURIComponent(key);
   const res = await fetchWithTimeout(url, null, 3500);
   if(!res.ok) return null;
@@ -2813,20 +2796,28 @@ async function youtubeSearch(q, limit){
 }
 
 async function googleImageSearch(q, limit, start){
-  const key = process.env.GOOGLE_API_KEY;
-  const cx = process.env.GOOGLE_CSE_ID;
-  if(!key || !cx) return null;
+  const key = envFirst(['GOOGLE_API_KEY','GOOGLE_SEARCH_API_KEY','GOOGLE_CUSTOM_SEARCH_API_KEY','GOOGLE_CLOUD_API_KEY']);
+  const cx = envFirst(['GOOGLE_CSE_ID','GOOGLE_CX','GOOGLE_SEARCH_ENGINE_ID','GOOGLE_CUSTOM_SEARCH_ENGINE_ID','GOOGLE_PROGRAMMABLE_SEARCH_ENGINE_ID']);
+  if(!key || !cx) return { source: 'google_image', results: [], status: 'key-missing', missing: { apiKey: !key, cx: !cx } };
   const url = 'https://www.googleapis.com/customsearch/v1' +
     '?key=' + encodeURIComponent(key) +
     '&cx=' + encodeURIComponent(cx) +
     '&q=' + encodeURIComponent(q) +
     '&searchType=image' +
     '&num=' + Math.min(limit,10) +
-    '&start=' + (start || 1);
-  const res = await fetchWithTimeout(url, null, 3500);
-  if(!res.ok) return null;
-  const data = await res.json();
-  return { source: 'google_image', results: (data.items || []).map(it => ({ title: it.title || '', link: it.image && it.image.contextLink ? it.image.contextLink : it.link, url: it.image && it.image.contextLink ? it.image.contextLink : it.link, snippet: it.snippet || '', type: 'image', mediaType: 'image', source: 'google_image', thumbnail: it.link, thumb: it.link, image: it.link, imageUrl: it.link, imageSet: [it.link], originalImage: it.link, fullImage: it.link, viewerImage: it.link, openImageUrl: it.link, contentUrl: it.link, cardImage: it.link, payload: { source: 'google_image', thumb: it.link, image: it.link, originalImage: it.link, contextLink: it.image && it.image.contextLink } })) };
+    '&start=' + (start || 1) +
+    '&hl=ko' +
+    '&gl=kr' +
+    '&safe=off';
+  try{
+    const res = await fetchWithTimeout(url, null, 3500);
+    if(!res || !res.ok) return { source: 'google_image', results: [], status: 'http-' + (res && res.status) };
+    const data = await res.json();
+    const results = (data.items || []).map(it => ({ title: it.title || '', link: it.image && it.image.contextLink ? it.image.contextLink : it.link, url: it.image && it.image.contextLink ? it.image.contextLink : it.link, snippet: it.snippet || '', type: 'image', mediaType: 'image', source: 'google_image', thumbnail: it.link, thumb: it.link, image: it.link, imageUrl: it.link, imageSet: [it.link], originalImage: it.link, fullImage: it.link, viewerImage: it.link, openImageUrl: it.link, contentUrl: it.link, cardImage: it.link, payload: { source: 'google_image', thumb: it.link, image: it.link, originalImage: it.link, contextLink: it.image && it.image.contextLink } }));
+    return { source: 'google_image', results, status: results.length ? 'ok' : 'empty' };
+  }catch(e){
+    return { source: 'google_image', results: [], status: 'error:' + safeString((e && e.message) || e).slice(0, 80) };
+  }
 }
 
 async function applyCorePipeline(query, items){
@@ -2862,6 +2853,8 @@ function classifySearchCategory(it){
   if(mediaType === 'image' || type === 'image' || source.includes('image')) return 'image';
   if(source.includes('news') || type === 'news' || text.includes('뉴스') || text.includes('속보') || text.includes('실시간') || text.includes('보도자료') || text.includes('breaking') || text.includes('latest')) return 'news';
   if(mediaType === 'map' || type === 'map' || source.includes('local') || source.includes('map') || text.includes('지도') || text.includes('길찾기') || text.includes('주소') || text.includes('directions') || text.includes('nearby') || text.includes('transit')) return 'map';
+  if(text.includes('인스타') || host.includes('instagram.') || host.includes('threads.net') || host.includes('tiktok.') || host.includes('facebook.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social')) return 'sns';
+  if(mediaType === 'video' || type === 'video' || source.includes('youtube') || source.includes('video') || host.includes('youtube.com') || host.includes('youtu.be')) return 'video';
   if(source.includes('book') || type === 'book' || text.includes('도서') || text.includes('책 ') || text.includes('서적') || text.includes('출판') || text.includes('저자') || text.includes('book') || text.includes('author')) return 'book';
   if(source.includes('blog')) return 'blog';
   if(source.includes('cafe') || type === 'community') return 'cafe';
@@ -3189,7 +3182,7 @@ function mediaEngineExplicitBlocked(raw, noMedia){
 
 function shouldAttachMediaEngine(raw, noMedia){
   if(mediaEngineExplicitBlocked(raw, noMedia)) return false;
-  return true;
+  return mediaEngineExplicitRequested(raw);
 }
 
 function mediaEngineQueryType(searchType, raw){
@@ -3278,7 +3271,9 @@ async function attachMediaEngineResults(base, event, ctx){
       : (Array.isArray(res && res.results) ? res.results : []);
 
     const converted = mediaItems.map(it => compactMediaHookItem(it, q));
-    const merged = dedupeCanonicalItems([].concat(base.items || [], converted)).slice(0, limit);
+    const currentCount = Array.isArray(base.items) ? base.items.length : 0;
+    const mergeTarget = Math.min(MAX_LIMIT, Math.max(limit, currentCount, MIN_RESULT_TARGET));
+    const merged = dedupeCanonicalItems([].concat(base.items || [], converted)).slice(0, mergeTarget);
 
     const trace = Array.isArray(base.meta && base.meta.trace) ? base.meta.trace.slice() : [];
     trace.push({
@@ -3326,76 +3321,74 @@ async function attachSanmaruAugmentResults(base, event, ctx){
 
   const hookMeta = {
     enabled: false,
-    mode: 'resident-first-augment-preserve-existing-results',
+    mode: 'augment-only-preserve-existing-results',
     status: 'skipped',
-    count: 0,
-    waitedForDeepSanmaru: false
+    count: 0
   };
 
   if(!q || truthy(raw.noSanmaru) || truthy(raw.skipSanmaru) || truthy(raw.disableSanmaru)){
     return Object.assign({}, base, { meta: Object.assign({}, base.meta || {}, { sanmaruAugment: hookMeta }) });
   }
 
-  const currentCount = Array.isArray(base.items) ? base.items.length : 0;
-  const resident = getSanmaruResidentForMaru(q, raw, { searchType: ctx && ctx.searchType, lang: ctx && ctx.lang, reason:'maru-augment' });
-  const residentItems = (resident.items || []).map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru-resident')));
-  let merged = dedupeCanonicalItems([].concat(base.items || [], residentItems));
-  let trace = Array.isArray(base.meta && base.meta.trace) ? base.meta.trace.slice() : [];
-
-  hookMeta.enabled = true;
-  hookMeta.status = residentItems.length ? 'resident-ok' : (resident.meta && resident.meta.status) || 'resident-empty';
-  hookMeta.count = residentItems.length;
-  hookMeta.legacyCountBeforeSanmaru = currentCount;
-  hookMeta.mergedCountAfterResident = merged.length;
-  hookMeta.preservedExistingResults = true;
-  hookMeta.resident = resident.meta || {};
-  trace.push({ name: 'sanmaru-resident-augment', status: hookMeta.status, count: residentItems.length, mode:'no-blocking-external' });
-
-  const waitRequested = truthy(raw.waitSanmaru) || truthy(raw.deepSanmaru) || truthy(raw.blockingSanmaru) || truthy(process.env.MARU_SEARCH_BLOCKING_SANMARU);
-  if(waitRequested){
-    let Sanmaru = null;
-    try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
-    if(Sanmaru && typeof Sanmaru.runSanmaru === 'function'){
-      try{
-        hookMeta.waitedForDeepSanmaru = true;
-        const res = await Sanmaru.runSanmaru(q, {
-          event: event || {}, q, query: q,
-          limit: Math.min(MAX_LIMIT, Math.max(limit, currentCount, 1000)),
-          candidatePool: Math.min(MAX_LIMIT, Math.max(limit, currentCount, 3000)),
-          searchType: ctx && ctx.searchType,
-          lang: ctx && ctx.lang,
-          from: 'maru-search-augment-deep',
-          source: 'maru-search',
-          noMaruSearch: '1', skipMaruSearch: '1', noCollector: '1', skipCollector: '1', noPlanetary: '1', skipPlanetary: '1'
-        });
-        const sanItemsRaw = Array.isArray(res && res.items) ? res.items : (Array.isArray(res && res.results) ? res.results : []);
-        const sanItems = sanItemsRaw.map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru')));
-        merged = dedupeCanonicalItems([].concat(merged, sanItems));
-        hookMeta.deepCount = sanItems.length;
-        hookMeta.status = sanItems.length ? 'resident-plus-deep-ok' : hookMeta.status;
-        trace.push({ name: 'sanmaru-deep-augment', status: sanItems.length ? 'ok' : 'empty', count: sanItems.length, mode:'explicit-wait' });
-      }catch(e){
-        hookMeta.deepError = safeString((e && e.message) || e).slice(0, 200);
-        trace.push({ name: 'sanmaru-deep-augment', status:'soft-failed', count:0, mode:'explicit-wait' });
-      }
-    }
+  let Sanmaru = null;
+  try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
+  if(!Sanmaru || typeof Sanmaru.runSanmaru !== 'function'){
+    hookMeta.status = 'unavailable';
+    return Object.assign({}, base, { meta: Object.assign({}, base.meta || {}, { sanmaruAugment: hookMeta }) });
   }
 
-  const finalTarget = Math.min(MAX_LIMIT, Math.max(limit, currentCount, merged.length, MIN_RESULT_TARGET));
-  const finalItems = merged.slice(0, finalTarget);
-  absorbIntoSanmaruResident(q, finalItems, { searchType: ctx && ctx.searchType, lang: ctx && ctx.lang });
+  try{
+    hookMeta.enabled = true;
+    const currentCount = Array.isArray(base.items) ? base.items.length : 0;
+    const res = await Sanmaru.runSanmaru(q, {
+      event: event || {},
+      q,
+      query: q,
+      limit: Math.min(MAX_LIMIT, Math.max(limit, currentCount, 1000)),
+      candidatePool: Math.min(MAX_LIMIT, Math.max(limit, currentCount, 2000)),
+      searchType: ctx && ctx.searchType,
+      lang: ctx && ctx.lang,
+      from: 'maru-search-augment',
+      source: 'maru-search',
+      // Critical recursion guard: Sanmaru must not call back into maru-search while this augment hook is running.
+      noMaruSearch: '1',
+      skipMaruSearch: '1',
+      noCollector: '1',
+      skipCollector: '1',
+      noPlanetary: '1',
+      skipPlanetary: '1'
+    });
 
-  return Object.assign({}, base, {
-    source: base.source || (residentItems.length ? 'sanmaru-resident' : 'maru-search'),
-    items: finalItems,
-    results: finalItems,
-    meta: Object.assign({}, base.meta || {}, {
-      trace,
-      sanmaruAugment: hookMeta,
-      sanmaruRelation: 'maru-search-asks-resident-sanmaru-first; deep sanmaru is explicit only',
-      legacyWideSearchPreserved: true
-    })
-  });
+    const sanItemsRaw = Array.isArray(res && res.items) ? res.items : (Array.isArray(res && res.results) ? res.results : []);
+    const sanItems = sanItemsRaw.map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru')));
+    const merged = dedupeCanonicalItems([].concat(base.items || [], sanItems));
+    const finalItems = merged.slice(0, Math.min(MAX_LIMIT, Math.max(limit, currentCount, MIN_RESULT_TARGET))); // viewport limit must not shrink Sanmaru candidate pool
+
+    const trace = Array.isArray(base.meta && base.meta.trace) ? base.meta.trace.slice() : [];
+    trace.push({ name: 'sanmaru-augment', status: sanItems.length ? 'ok' : 'empty', count: sanItems.length, mode: 'augment-only' });
+
+    hookMeta.status = sanItems.length ? 'ok' : 'empty';
+    hookMeta.count = sanItems.length;
+    hookMeta.legacyCountBeforeSanmaru = currentCount;
+    hookMeta.mergedCountAfterSanmaru = finalItems.length;
+    hookMeta.preservedExistingResults = true;
+
+    return Object.assign({}, base, {
+      source: base.source || 'maru-search',
+      items: finalItems,
+      results: finalItems,
+      meta: Object.assign({}, base.meta || {}, {
+        trace,
+        sanmaruAugment: hookMeta,
+        legacyWideSearchPreserved: true
+      })
+    });
+  }catch(e){
+    hookMeta.enabled = true;
+    hookMeta.status = 'soft-failed';
+    hookMeta.error = safeString((e && e.message) || e).slice(0, 240);
+    return Object.assign({}, base, { meta: Object.assign({}, base.meta || {}, { sanmaruAugment: hookMeta }) });
+  }
 }
 
 
@@ -3452,22 +3445,13 @@ exports.handler = async function(event){
     if(!q){
       return ok({ status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: null, items: [], results: [], meta: { count: 0, limit } });
     }
-
-    const visibleNeed = clampInt(firstNonEmpty(raw && (raw.perPage || raw.pageSize || raw.visibleCardsPerPage || raw.visibleLimit), 15), 15, 1, 100);
-    const forceProviderRefresh = deep || explicitExternalRequested(raw) || truthy(raw && (raw.refresh || raw.forceRefresh || raw.waitProviders || raw.waitExternal));
-    if(!forceProviderRefresh && !truthy(raw && (raw.noResident || raw.skipResident || raw.disableResident))){
-      const residentPack = getSanmaruResidentForMaru(q, raw || {}, { searchType, lang, reason:'maru-immediate-response' });
-      if((residentPack.items || []).length >= visibleNeed){
-        return ok(buildImmediateResidentResponse(q, raw || {}, residentPack, {
-          residentImmediateThreshold: visibleNeed,
-          note: 'provider refresh was not forced; returned Sanmaru resident supply immediately'
-        }));
-      }
-    }
-
     let base = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType });
     base = await attachMediaEngineResults(base, event, { q, limit, start, lang, searchType, raw, noMedia });
-    base = await attachSanmaruAugmentResults(base, event, { q, limit, start, lang, searchType, raw, noMedia });
+    if(truthy(raw && (raw.waitSanmaru || raw.useSanmaru || raw.sanmaru || raw.deepSanmaru))){
+      base = await attachSanmaruAugmentResults(base, event, { q, limit, start, lang, searchType, raw, noMedia });
+    } else {
+      base = Object.assign({}, base, { meta: Object.assign({}, base.meta || {}, { sanmaruAugment: { enabled: false, status: 'deferred-nonblocking', mode: 'explicit-waitSanmaru-only' } }) });
+    }
     // Search must not trigger heavy settlement/distribution by default.
     // Analytics is opt-in for this endpoint; weekly settlement is handled by revenue/commerce engines.
     const analyticsRequested = truthy(raw && (raw.analytics || raw.track || raw.enableAnalytics)) || truthy(process.env.MARU_SEARCH_ANALYTICS);
@@ -3477,35 +3461,17 @@ exports.handler = async function(event){
     if(!analyticsOff) syncSearchAnalytics(event, q, base.items).catch(() => null);
     base.items = (Array.isArray(base.items) ? base.items : []).map(compactResultItem);
     base.results = base.items;
-    absorbIntoSanmaruResident(q, base.items, { searchType, lang });
-    const fullSectionPack = buildSearchSections(base.items, q, { searchType });
-    const visiblePagePack = buildVisiblePagePack(base.items, q, raw || {});
-    const viewportSections = buildViewportDisplaySections(visiblePagePack.pageItems, q);
-    const sectionPackWithViewport = Object.assign({}, fullSectionPack, {
-      sections: viewportSections.sections,
-      fullSections: fullSectionPack.sections,
-      pageItems: visiblePagePack.pageItems,
-      visiblePagePack,
-      visibleCardsPerPage: visiblePagePack.visibleCardsPerPage,
-      visibleCount: visiblePagePack.visibleCount,
-      page: visiblePagePack.page,
-      totalPages: visiblePagePack.totalPages,
-      hasNextPage: visiblePagePack.hasNextPage,
-      bodyPreserved: true,
-      sectionsPreserved: false,
-      fullSectionsPreserved: true,
-      viewportBackfill: true,
-      doesNotLimitItemsResults: true
-    });
+    const sectionPack = buildSearchSections(base.items, q, { searchType, page: raw && (raw.page || raw.sectionPage || raw.visiblePage), perPage: raw && (raw.perPage || raw.pageSize || raw.visibleLimit || raw.limit) });
     if(!revenueOff) distributeRevenue(event, base.items).catch(() => null);
     return ok({
       status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: base.source,
       items: base.items, results: base.items,
-      sections: viewportSections.sections,
-      pageItems: visiblePagePack.pageItems,
-      visiblePagePack,
-      sectionPack: sectionPackWithViewport,
-      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', preservationPatch: 'A1.5.34-sanmaru-resident-visible15-stable' })
+      sections: sectionPack.sections,
+      pageItems: sectionPack.pageItems,
+      pageSections: sectionPack.pageSections,
+      visiblePagePack: { page: sectionPack.page, perPage: sectionPack.visibleCardsPerPage, visibleCount: sectionPack.visibleCount, totalPages: sectionPack.totalPages, totalVisibleCandidates: sectionPack.totalVisibleCandidates, items: sectionPack.pageItems, sections: sectionPack.pageSections },
+      sectionPack,
+      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: sectionPack.mode, totalSections: sectionPack.totalSections, counts: sectionPack.counts, order: sectionPack.order, visibleCardsPerPage: sectionPack.visibleCardsPerPage, visibleCount: sectionPack.visibleCount, page: sectionPack.page, totalPages: sectionPack.totalPages, hasNextPage: sectionPack.hasNextPage, hiddenItemsExcludedFromVisibleCount: true, doesNotLimitItemsResults: true }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', preservationPatch: 'A1.5.36-maru-only-visible15-provider-restore' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));
