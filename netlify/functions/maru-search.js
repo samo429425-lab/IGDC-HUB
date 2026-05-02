@@ -19,7 +19,7 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.33-original-body-visible-pagepack-hotfix';
+const VERSION = 'A1.5.34-fast-visible-vertical-contract';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -50,7 +50,7 @@ function truthy(v){
 function explicitExternalRequested(qs){
   qs = qs || {};
   const external = String(qs.external == null ? '' : qs.external).trim().toLowerCase();
-  return ['1','true','yes','on','live','deep'].includes(external)
+  return ['1','true','yes','on','live','deep','force'].includes(external)
     || truthy(qs.useExternalSources)
     || truthy(qs.useExternal)
     || truthy(qs.useLive)
@@ -741,11 +741,51 @@ function mediaProfileForItem(it){
   };
 }
 
+
+function frontTypeForItem(it, category, sectionId, mediaType){
+  const raw = safeString(it && it.type).trim().toLowerCase();
+  const source = safeString(it && it.source).trim().toLowerCase();
+  const host = domainOf(firstNonEmpty(it && it.url, it && it.link)).toLowerCase();
+  const cat = safeString(category || '').trim().toLowerCase();
+  const sid = safeString(sectionId || '').trim().toLowerCase();
+  const mt = safeString(mediaType || '').trim().toLowerCase();
+
+  // Preserve strong media/provider types.
+  if(raw && !['web','article','general','site','page'].includes(raw)){
+    if(raw === 'community') return 'cafe';
+    if(raw === 'social') return 'sns';
+    return raw;
+  }
+
+  if(mt === 'image' || cat === 'image' || sid === 'image_gallery' || source.includes('image')) return 'image';
+  if(mt === 'video' || cat === 'video' || sid === 'video_vlog' || source.includes('youtube') || host.includes('youtube.com') || host.includes('youtu.be')) return 'video';
+  if(cat === 'news' || sid === 'news' || source.includes('news')) return 'news';
+  if(cat === 'map' || cat === 'tour' || sid === 'map_local_tour') return cat === 'tour' ? 'tour' : 'map';
+  if(cat === 'blog' || sid === 'blog_review' || source.includes('blog')) return 'blog';
+  if(cat === 'cafe' || cat === 'sns' || sid === 'community_sns' || source.includes('cafe') || source.includes('sns') || source.includes('social')) return cat === 'sns' ? 'sns' : 'cafe';
+  if(cat === 'book') return 'book';
+  if(cat === 'shopping' || sid === 'shopping_product') return 'shopping';
+  if(cat === 'sports') return 'sports';
+  if(cat === 'finance') return 'finance';
+  if(cat === 'webtoon') return 'webtoon';
+  if(cat === 'knowledge' || cat === 'official' || sid === 'knowledge_wiki' || sid === 'official_authority') return 'knowledge';
+  return 'web';
+}
+
+function sectionLabelForId(sectionId){
+  const meta = SEARCH_SECTION_META[sectionId] || SEARCH_SECTION_META.general_web;
+  return meta.label || meta.title || '웹';
+}
+
 function compactResultItem(it){
   it = (it && typeof it === 'object') ? it : {};
 
-  const type = it.type || 'web';
-  const mediaType = it.mediaType || (type === 'image' ? 'image' : (type === 'video' ? 'video' : 'article'));
+  const classifiedCategory = it.searchCategory || it.searchType || it._category || classifySearchCategory(it);
+  const inferredSectionId = it.sectionId || sectionIdForItem(Object.assign({}, it, { searchCategory: classifiedCategory, _category: classifiedCategory }));
+  const rawType = it.type || 'web';
+  const rawMediaType = it.mediaType || (rawType === 'image' ? 'image' : (rawType === 'video' ? 'video' : 'article'));
+  const type = frontTypeForItem(it, classifiedCategory, inferredSectionId, rawMediaType);
+  const mediaType = rawMediaType || (type === 'image' ? 'image' : (type === 'video' ? 'video' : 'article'));
   const profile = mediaProfileForItem(it);
   const ownImages = profile.imageSet || [];
   const ownThumb = profile.thumbnail || '';
@@ -764,9 +804,13 @@ function compactResultItem(it){
     });
   }
 
+  const sectionTitle = it.sectionTitle || (SEARCH_SECTION_META[inferredSectionId] && SEARCH_SECTION_META[inferredSectionId].title) || sectionLabelForId(inferredSectionId);
+  const sectionLabel = it.sectionLabel || sectionLabelForId(inferredSectionId);
+
   return {
     id: safeString(firstNonEmpty(it.id, it.url, it.link, it.title)).trim(),
     type,
+    rawType,
     mediaType,
     title: safeString(it.title).trim(),
     summary: safeString(firstNonEmpty(it.summary, it.snippet, it.description)).trim(),
@@ -808,11 +852,14 @@ function compactResultItem(it){
     score: typeof it.score === 'number' ? it.score : undefined,
     _finalScore: typeof it._finalScore === 'number' ? it._finalScore : undefined,
     _authorityScore: typeof it._authorityScore === 'number' ? it._authorityScore : undefined,
-    searchCategory: it.searchCategory || it.searchType || it._category || classifySearchCategory(it),
-    displayGroup: it.displayGroup || sectionIdForItem(it),
-    sectionId: it.sectionId || sectionIdForItem(it),
-    sectionTitle: it.sectionTitle || (SEARCH_SECTION_META[sectionIdForItem(it)] && SEARCH_SECTION_META[sectionIdForItem(it)].title),
-    _category: it._category || classifySearchCategory(it)
+    searchCategory: classifiedCategory,
+    category: classifiedCategory,
+    vertical: type,
+    displayGroup: it.displayGroup || inferredSectionId,
+    sectionId: inferredSectionId,
+    sectionTitle,
+    sectionLabel,
+    _category: classifiedCategory
   };
 }
 
@@ -1008,9 +1055,60 @@ function buildSearchSections(items, q, opts){
 }
 
 
+
+function balancedSearchStream(items){
+  const list = Array.isArray(items) ? items : [];
+  const buckets = Object.create(null);
+  const fallbackOrder = SEARCH_SECTION_ORDER.concat(['__other']);
+  for(const item of list){
+    const sid = sectionIdForItem(item) || '__other';
+    if(!buckets[sid]) buckets[sid] = [];
+    buckets[sid].push(item);
+  }
+  const out = [];
+  let progressed = true;
+  const batchPerSection = 3;
+  while(progressed && out.length < list.length){
+    progressed = false;
+    for(const sid of fallbackOrder){
+      const bucket = buckets[sid] || [];
+      let n = 0;
+      while(bucket.length && n < batchPerSection){
+        out.push(bucket.shift());
+        progressed = true;
+        n++;
+      }
+    }
+    for(const sid of Object.keys(buckets)){
+      if(fallbackOrder.includes(sid)) continue;
+      const bucket = buckets[sid] || [];
+      let n = 0;
+      while(bucket.length && n < batchPerSection){
+        out.push(bucket.shift());
+        progressed = true;
+        n++;
+      }
+    }
+  }
+  return out.length ? out : list.slice();
+}
+
+function pageSectionsFromVisibleItems(pageItems, q){
+  const pack = buildSearchSections(pageItems, q, {});
+  return (pack.sections || []).map(section => Object.assign({}, section, {
+    total: section.items.length,
+    previewLimit: Math.max(section.items.length, 15),
+    hasMore: false,
+    more: null,
+    collapsedItems: [],
+    hiddenItems: [],
+    collapsedCount: 0
+  }));
+}
+
 function buildVisiblePagePack(items, q, raw){
   raw = raw || {};
-  const list = Array.isArray(items) ? items : [];
+  const list = balancedSearchStream(Array.isArray(items) ? items : []);
   const page = clampInt(firstNonEmpty(raw.page, raw.p, raw.visiblePage, raw.sectionPage), 1, 1, 100000);
   const perPage = clampInt(firstNonEmpty(raw.perPage, raw.pageSize, raw.visibleCardsPerPage, raw.visibleLimit, raw.cardsPerPage), 15, 1, 100);
   const totalItems = list.length;
@@ -1018,6 +1116,7 @@ function buildVisiblePagePack(items, q, raw){
   const safePage = totalPages ? Math.min(page, totalPages) : 1;
   const offset = totalPages ? (safePage - 1) * perPage : 0;
   const pageItems = list.slice(offset, offset + perPage);
+  const pageSections = pageSectionsFromVisibleItems(pageItems, q);
 
   return {
     enabled: true,
@@ -1029,6 +1128,8 @@ function buildVisiblePagePack(items, q, raw){
     visibleCardsPerPage: perPage,
     visibleCount: pageItems.length,
     pageItems,
+    pageSections,
+    visibleSections: pageSections,
     totalItems,
     totalPages,
     hasPrevPage: totalPages ? safePage > 1 : false,
@@ -1956,7 +2057,8 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     // PRESERVE + EXPAND: Search Bank/Index must never stop the broad Maru Search gateway.
     // If the caller did not explicitly block external sources, run the controlled gateway pass.
     // This restores news/blog/cafe/youtube/image/company discovery that disappeared when internal results were considered "enough".
-    const shouldUseExternal = !externalOff;
+    const waitExternal = deep || mode === 'force' || truthy((event && event.queryStringParameters && (event.queryStringParameters.waitExternal || event.queryStringParameters.externalSync || event.queryStringParameters.fullExternal)));
+    const shouldUseExternal = !externalOff && waitExternal;
 
     if(shouldUseExternal){
       // Single maru-search gateway pass. No recursive loops, no repeated fan-out.
@@ -1982,7 +2084,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 
       record('search-link-cards', 'skipped-natural-flow', 0);
     }else{
-      record('external-gateway', externalOff ? 'blocked-by-request' : 'skipped-internal-enough', 0, { internalCount, trigger: externalTriggerMin, mode });
+      record('external-gateway', externalOff ? 'blocked-by-request' : 'deferred-fast-first', 0, { internalCount, trigger: externalTriggerMin, mode, firstResponseDoesNotWaitExternal: true });
     }
 
     const directMapCards = mapCards(q, region);
@@ -2017,7 +2119,12 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     // Controlled card-media autofill:
     // Keep the existing wide search pipeline, but make visible search cards useful by filling
     // each result's own OG / provider image where possible within the remaining response budget.
-    unique = await enrichOwnImages(unique, { trace, timeLeft });
+    const shouldEnrichImagesNow = deep || mode === 'force' || truthy((event && event.queryStringParameters && (event.queryStringParameters.enrichImages || event.queryStringParameters.ogImages || event.queryStringParameters.waitImages))) || truthy(process.env.MARU_SEARCH_ENRICH_IMAGES_DEFAULT);
+    if(shouldEnrichImagesNow){
+      unique = await enrichOwnImages(unique, { trace, timeLeft });
+    }else{
+      record('own-og-image-enrich', 'deferred-fast-first', 0, { firstResponseDoesNotWaitImages: true });
+    }
 
     const finalTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
     const finalItems = unique.slice(0, finalTarget).map(compactResultItem);
@@ -2729,11 +2836,13 @@ function classifySearchCategory(it){
   if(mediaType === 'image' || type === 'image' || source.includes('image')) return 'image';
   if(source.includes('news') || type === 'news' || text.includes('뉴스') || text.includes('속보') || text.includes('실시간') || text.includes('보도자료') || text.includes('breaking') || text.includes('latest')) return 'news';
   if(mediaType === 'map' || type === 'map' || source.includes('local') || source.includes('map') || text.includes('지도') || text.includes('길찾기') || text.includes('주소') || text.includes('directions') || text.includes('nearby') || text.includes('transit')) return 'map';
-  if(source.includes('book') || type === 'book' || text.includes('도서') || text.includes('책 ') || text.includes('서적') || text.includes('출판') || text.includes('저자') || text.includes('book') || text.includes('author')) return 'book';
+  if(text.includes('인스타') || host.includes('instagram.') || host.includes('threads.net') || host.includes('tiktok.') || host.includes('facebook.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social')) return 'sns';
+  if(mediaType === 'video' || type === 'video' || source.includes('youtube') || source.includes('video') || host.includes('youtube.com') || host.includes('youtu.be')) return 'video';
   if(source.includes('blog')) return 'blog';
   if(source.includes('cafe') || type === 'community') return 'cafe';
   if(source.includes('kin') || text.includes('지식') || text.includes('q&a') || text.includes('문답')) return 'knowledge';
   if(source.includes('encyc') || host.includes('wikipedia.org') || host.includes('wikidata.org') || host.includes('namu.wiki') || host.includes('doopedia') || host.includes('britannica')) return 'knowledge';
+  if(source.includes('book') || type === 'book' || text.includes('도서') || text.includes('책 ') || text.includes('서적') || text.includes('출판') || text.includes('저자') || /(^|[^a-z])book([^a-z]|$)/i.test(text) || text.includes('author')) return 'book';
 
   if(
     text.includes('관광') || text.includes('여행') || text.includes('명소') || text.includes('축제') ||
@@ -2747,8 +2856,6 @@ function classifySearchCategory(it){
   if(text.includes('법원') || text.includes('구청') || text.includes('시청') || text.includes('관공서') || text.includes('court') || text.includes('city hall') || text.includes('district office') || text.includes('government office')) return 'map';
   if(text.includes('지하철') || text.includes('지하철역') || text.includes('버스') || text.includes('교통') || text.includes('metro') || text.includes('subway') || text.includes('station') || text.includes('bus route')) return 'map';
 
-  if(text.includes('인스타') || host.includes('instagram.') || host.includes('threads.net') || host.includes('tiktok.') || host.includes('facebook.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social')) return 'sns';
-  if(mediaType === 'video' || type === 'video' || source.includes('youtube') || source.includes('video') || host.includes('youtube.com') || host.includes('youtu.be')) return 'video';
   if(text.includes('쇼핑') || text.includes('가격') || text.includes('구매') || text.includes('shopping') || text.includes('price') || text.includes('product') || type === 'product' || mediaType === 'product') return 'shopping';
   if(text.includes('스포츠') || text.includes('축구') || text.includes('야구') || text.includes('농구') || text.includes('sports')) return 'sports';
   if(text.includes('증권') || text.includes('주식') || text.includes('환율') || text.includes('금융') || text.includes('finance') || text.includes('stock')) return 'finance';
@@ -3056,7 +3163,8 @@ function mediaEngineExplicitBlocked(raw, noMedia){
 
 function shouldAttachMediaEngine(raw, noMedia){
   if(mediaEngineExplicitBlocked(raw, noMedia)) return false;
-  return true;
+  // First search response must not wait for media engines. Attach only when explicitly requested.
+  return truthy(raw && (raw.mediaEngine || raw.useMediaEngine || raw.waitMediaEngine || raw.mediaExternal || raw.mediaEngineExternal));
 }
 
 function mediaEngineQueryType(searchType, raw){
@@ -3201,6 +3309,13 @@ async function attachSanmaruAugmentResults(base, event, ctx){
   if(!q || truthy(raw.noSanmaru) || truthy(raw.skipSanmaru) || truthy(raw.disableSanmaru)){
     return Object.assign({}, base, { meta: Object.assign({}, base.meta || {}, { sanmaruAugment: hookMeta }) });
   }
+  const sanmaruRequested = truthy(raw.sanmaru) || truthy(raw.useSanmaru) || truthy(raw.waitSanmaru) || truthy(raw.sanmaruAugment) || truthy(raw.deep) || String(raw.external || '').toLowerCase() === 'force';
+  if(!sanmaruRequested){
+    hookMeta.enabled = true;
+    hookMeta.status = 'deferred-fast-first';
+    hookMeta.firstResponseDoesNotWaitSanmaru = true;
+    return Object.assign({}, base, { meta: Object.assign({}, base.meta || {}, { sanmaruAugment: hookMeta }) });
+  }
 
   let Sanmaru = null;
   try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
@@ -3327,12 +3442,14 @@ exports.handler = async function(event){
     const analyticsOff = truthy(raw && (raw.noAnalytics || raw.disableAnalytics)) || !analyticsRequested;
     const revenueOff = truthy(raw && (raw.noRevenue || raw.disableRevenue)) || !realtimeRevenueRequested;
     if(!analyticsOff) syncSearchAnalytics(event, q, base.items).catch(() => null);
-    base.items = (Array.isArray(base.items) ? base.items : []).map(compactResultItem);
+    base.items = balancedSearchStream((Array.isArray(base.items) ? base.items : []).map(compactResultItem));
     base.results = base.items;
     const sectionPack = buildSearchSections(base.items, q, { searchType });
     const visiblePagePack = buildVisiblePagePack(base.items, q, raw || {});
     const sectionPackWithViewport = Object.assign({}, sectionPack, {
       pageItems: visiblePagePack.pageItems,
+      pageSections: visiblePagePack.pageSections,
+      visibleSections: visiblePagePack.visibleSections,
       visiblePagePack,
       visibleCardsPerPage: visiblePagePack.visibleCardsPerPage,
       visibleCount: visiblePagePack.visibleCount,
@@ -3349,9 +3466,11 @@ exports.handler = async function(event){
       items: base.items, results: base.items,
       sections: sectionPack.sections,
       pageItems: visiblePagePack.pageItems,
+      pageSections: visiblePagePack.pageSections,
+      visibleSections: visiblePagePack.visibleSections,
       visiblePagePack,
       sectionPack: sectionPackWithViewport,
-      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, bodyPreserved: true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: sectionPack.mode, totalSections: sectionPack.totalSections, counts: sectionPack.counts, order: sectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', preservationPatch: 'A1.5.33-original-body-visible-pagepack-hotfix' })
+      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, bodyPreserved: true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: sectionPack.mode, totalSections: sectionPack.totalSections, counts: sectionPack.counts, order: sectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', preservationPatch: 'A1.5.34-fast-visible-vertical-contract' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));
