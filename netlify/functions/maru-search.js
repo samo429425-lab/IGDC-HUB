@@ -19,7 +19,7 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.34-viewport-vertical-pool-preserve';
+const VERSION = 'A1.5.35-safe-body-zero-card-restore';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -175,40 +175,49 @@ function pickQ(event){
 
 function resolveViewportOptions(raw, requestedLimit){
   raw = raw || {};
-  const visibleCardsPerPage = clampInt(
-    raw.perPage || raw.pageSize || raw.visibleCardsPerPage || raw.visibleLimit || raw.cardsPerPage,
-    DEFAULT_VISIBLE_CARDS_PER_PAGE,
-    1,
-    100
-  );
-  const page = clampInt(raw.page || raw.p, 1, 1, 100000);
   const strictLimit = truthy(raw.strictLimit) || truthy(raw.onlyLimit) || truthy(raw.sliceResults) || truthy(raw.exactLimit);
+  const visibleCardsPerPage = clampInt(firstNonEmpty(raw.perPage, raw.pageSize, raw.visibleCardsPerPage, raw.visibleLimit, raw.cardsPerPage), DEFAULT_VISIBLE_CARDS_PER_PAGE, 1, 100);
+  const page = clampInt(firstNonEmpty(raw.page, raw.p, raw.visiblePage, raw.sectionPage), 1, 1, 100000);
   const explicitCandidate = firstNonEmpty(raw.candidatePool, raw.candidatePoolTarget, raw.poolLimit, raw.dataLimit, raw.maxCandidates, raw.resultLimit);
-  const defaultCandidate = Math.max(requestedLimit || DEFAULT_LIMIT, MIN_RESULT_TARGET, DEFAULT_LIMIT);
+  const defaultCandidate = Math.max(DEFAULT_LIMIT, MIN_RESULT_TARGET, requestedLimit || 0);
   const candidateLimit = strictLimit
     ? clampInt(requestedLimit, DEFAULT_LIMIT, 1, MAX_LIMIT)
     : clampInt(explicitCandidate, defaultCandidate, 1, MAX_LIMIT);
   return {
     page,
+    perPage: visibleCardsPerPage,
     visibleCardsPerPage,
     requestedLimit: clampInt(requestedLimit, DEFAULT_LIMIT, 1, MAX_LIMIT),
     candidateLimit,
     strictLimit,
-    viewportOnly: false,
-    note: 'limit is treated as candidate count only when strictLimit=1; visible cards are controlled by perPage/visibleCardsPerPage'
+    rule: 'candidate-pool-is-not-display-page-size'
   };
 }
 
-function itemIdentityKey(it){
-  return safeString(firstNonEmpty(it && it.url, it && it.link, it && it.openUrl, it && it.id, it && it.title)).toLowerCase();
-}
+function ensureNonEmptySearchBase(base, q, region){
+  base = base && typeof base === 'object' ? base : { items: [], results: [], meta: {} };
+  const items = Array.isArray(base.items) ? base.items : (Array.isArray(base.results) ? base.results : []);
+  if(items.length > 0) return Object.assign({}, base, { items, results: items });
 
-function isRenderableVisibleCard(it){
-  if(!it || typeof it !== 'object') return false;
-  if(truthy(it.hidden) || truthy(it.collapsed) || truthy(it.dropOnly)) return false;
-  const title = safeString(it.title).trim();
-  const url = safeString(firstNonEmpty(it.url, it.link, it.openUrl)).trim();
-  return !!(title || url);
+  const fallback = dedupeCanonicalItems([].concat(
+    mapCards(q, region || 'GLOBAL'),
+    openDiscoverySurfaceCards(q)
+  )).map(compactResultItem);
+
+  const trace = Array.isArray(base.meta && base.meta.trace) ? base.meta.trace.slice() : [];
+  trace.push({ name: 'zero-card-fail-open', status: fallback.length ? 'ok' : 'empty', count: fallback.length, mode: 'preserve-renderable-response-shape' });
+
+  return Object.assign({}, base, {
+    source: base.source || (fallback.length ? 'fail-open-discovery' : null),
+    items: fallback,
+    results: fallback,
+    meta: Object.assign({}, base.meta || {}, {
+      count: fallback.length,
+      trace,
+      zeroCardFailOpen: true,
+      zeroCardFailOpenReason: 'upstream returned no renderable items; returned safe discovery surfaces instead of blank page'
+    })
+  });
 }
 
 function parseAcceptLanguage(header){
@@ -986,14 +995,15 @@ function sectionSortScore(item){
   return base + (hasImage * 0.8) + (hasVideo * 0.6);
 }
 
+function itemIdentityKey(it){ return safeString(firstNonEmpty(it && it.url, it && it.link, it && it.openUrl, it && it.id, it && it.title)).toLowerCase(); }
+
 function buildSearchSections(items, q, opts){
   opts = opts || {};
   const list = Array.isArray(items) ? items : [];
-  const page = clampInt(opts.page, 1, 1, 100000);
-  const visibleCardsPerPage = clampInt(opts.perPage || opts.visibleCardsPerPage, DEFAULT_VISIBLE_CARDS_PER_PAGE, 1, 100);
+  const page = clampInt(firstNonEmpty(opts.page, opts.sectionPage, opts.visiblePage), 1, 1, 100000);
+  const visibleCardsPerPage = clampInt(firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit), DEFAULT_VISIBLE_CARDS_PER_PAGE, 1, 100);
   const buckets = Object.create(null);
   const seenBySection = Object.create(null);
-  const globalSeen = new Set();
 
   for(const raw of list){
     if(!raw || typeof raw !== 'object') continue;
@@ -1002,89 +1012,131 @@ function buildSearchSections(items, q, opts){
     if(!buckets[sectionId]) buckets[sectionId] = [];
     if(!seenBySection[sectionId]) seenBySection[sectionId] = new Set();
 
-    const key = itemIdentityKey(raw);
+    const key = safeString(firstNonEmpty(raw.url, raw.link, raw.openUrl, raw.id, raw.title)).toLowerCase();
     if(!key || seenBySection[sectionId].has(key)) continue;
     seenBySection[sectionId].add(key);
 
-    const card = Object.assign({}, raw, {
+    buckets[sectionId].push(Object.assign({}, raw, {
       sectionId,
       sectionTitle: sectionMeta.title,
       sectionLabel: sectionMeta.label,
       sectionRank: sectionMeta.rank
-    });
-    buckets[sectionId].push(card);
+    }));
   }
 
   const fullSections = SEARCH_SECTION_ORDER.map(sectionId => {
     const meta = SEARCH_SECTION_META[sectionId] || SEARCH_SECTION_META.general_web;
     const all = (buckets[sectionId] || []).slice().sort((a,b) => sectionSortScore(b) - sectionSortScore(a));
-    return { sectionId, meta, all };
-  }).filter(x => x.all.length > 0);
+    const previewLimit = meta.previewLimit || 6;
+    return { sectionId, meta, all, previewLimit };
+  }).filter(sec => sec.all.length > 0);
 
-  const visibleCandidates = [];
-  let rrMoved = true;
-  let rrIndex = 0;
-  while(rrMoved){
-    rrMoved = false;
-    for(const section of fullSections){
-      const it = section.all[rrIndex];
-      if(!it) continue;
-      const key = itemIdentityKey(it);
-      if(!key || globalSeen.has(key)) continue;
-      globalSeen.add(key);
-      if(isRenderableVisibleCard(it)) visibleCandidates.push(it);
-      rrMoved = true;
+  // Legacy sections are preserved exactly as the old front expected.
+  // Do not use this field as the 15-card viewport limiter.
+  const sections = fullSections.map(sec => ({
+    id: sec.sectionId,
+    title: sec.meta.title,
+    label: sec.meta.label,
+    description: sec.meta.description,
+    rank: sec.meta.rank,
+    total: sec.all.length,
+    previewLimit: sec.previewLimit,
+    hasMore: sec.all.length > sec.previewLimit,
+    items: sec.all.slice(0, sec.previewLimit),
+    more: {
+      q: safeString(q || ''),
+      type: sec.sectionId,
+      section: sec.sectionId,
+      perPage: sec.previewLimit,
+      action: 'expand-section'
     }
-    rrIndex += 1;
-  }
-  const offset = (page - 1) * visibleCardsPerPage;
-  const pageItems = visibleCandidates.slice(offset, offset + visibleCardsPerPage);
-  const pageKeys = new Set(pageItems.map(itemIdentityKey).filter(Boolean));
+  }));
 
-  const sections = fullSections.map(({ sectionId, meta, all }) => {
-    const visibleItems = all.filter(it => pageKeys.has(itemIdentityKey(it)));
-    const collapsedItems = all.filter(it => !pageKeys.has(itemIdentityKey(it)));
+  // Viewport page is a separate stream. This prevents the 15-card UI rule from
+  // shrinking items/results or breaking the legacy sections array.
+  const visibleFlow = [];
+  const cursors = Object.create(null);
+  let guard = 0;
+  while(visibleFlow.length < list.length && guard < (list.length + fullSections.length + 10)){
+    guard += 1;
+    let moved = false;
+    for(const sec of fullSections){
+      const idx = cursors[sec.sectionId] || 0;
+      if(idx >= sec.all.length) continue;
+      visibleFlow.push(sec.all[idx]);
+      cursors[sec.sectionId] = idx + 1;
+      moved = true;
+      if(visibleFlow.length >= list.length) break;
+    }
+    if(!moved) break;
+  }
+
+  const totalVisibleCandidates = visibleFlow.length;
+  const totalPages = Math.max(1, Math.ceil(totalVisibleCandidates / visibleCardsPerPage));
+  const safePage = Math.min(page, totalPages);
+  const offset = (safePage - 1) * visibleCardsPerPage;
+  const pageItems = visibleFlow.slice(offset, offset + visibleCardsPerPage);
+  const pageKeys = new Set(pageItems.map(itemIdentityKey).filter(Boolean));
+  const pageBySection = Object.create(null);
+  for(const item of pageItems){
+    const sectionId = item.sectionId || sectionIdForItem(item);
+    if(!pageBySection[sectionId]) pageBySection[sectionId] = [];
+    pageBySection[sectionId].push(item);
+  }
+
+  const pageSections = fullSections.map(sec => {
+    const visibleItems = pageBySection[sec.sectionId] || [];
+    const collapsedItems = sec.all.filter(it => !pageKeys.has(itemIdentityKey(it)));
     return {
-      id: sectionId,
-      title: meta.title,
-      label: meta.label,
-      description: meta.description,
-      rank: meta.rank,
-      total: all.length,
+      id: sec.sectionId,
+      title: sec.meta.title,
+      label: sec.meta.label,
+      description: sec.meta.description,
+      rank: sec.meta.rank,
+      total: sec.all.length,
       visibleCount: visibleItems.length,
-      previewLimit: meta.previewLimit || 6,
-      hasMore: collapsedItems.length > 0,
+      previewLimit: sec.previewLimit,
       items: visibleItems,
-      collapsedItems,
       collapsedCount: collapsedItems.length,
+      hiddenCount: collapsedItems.length,
+      hasMore: collapsedItems.length > 0,
+      collapsedItems: collapsedItems.slice(0, Math.max(sec.previewLimit, visibleCardsPerPage)),
       more: {
         q: safeString(q || ''),
-        type: sectionId,
-        section: sectionId,
-        perPage: meta.previewLimit || 6,
+        type: sec.sectionId,
+        section: sec.sectionId,
+        perPage: sec.previewLimit,
         action: 'expand-section'
       }
     };
-  }).filter(section => section.total > 0 && (section.visibleCount > 0 || opts.includeEmptyVisibleSections));
+  }).filter(sec => sec.visibleCount > 0);
 
   const sectionCounts = {};
-  for(const section of fullSections) sectionCounts[section.sectionId] = section.all.length;
+  for(const sec of fullSections) sectionCounts[sec.sectionId] = sec.all.length;
 
   return {
     enabled: true,
-    mode: 'viewport-paged-expandable-search-sections',
+    mode: 'grouped-expandable-search-sections',
+    viewportMode: 'separate-visible-page-stream-safe',
     order: SEARCH_SECTION_ORDER,
     counts: sectionCounts,
-    totalSections: fullSections.length,
-    page,
+    totalSections: sections.length,
     visibleCardsPerPage,
     visibleCount: pageItems.length,
-    totalVisibleCandidates: visibleCandidates.length,
-    totalPages: Math.max(1, Math.ceil(visibleCandidates.length / visibleCardsPerPage)),
-    hasNextPage: offset + pageItems.length < visibleCandidates.length,
-    hasPrevPage: page > 1,
+    page: safePage,
+    requestedPage: page,
+    totalPages,
+    totalVisibleCandidates,
+    hasPrevPage: safePage > 1,
+    hasNextPage: safePage < totalPages,
+    prevPage: safePage > 1 ? safePage - 1 : null,
+    nextPage: safePage < totalPages ? safePage + 1 : null,
+    legacySectionsPreserved: true,
     doesNotLimitItemsResults: true,
+    hiddenItemsExcludedFromVisibleCount: true,
     pageItems,
+    pageSections,
+    visibleSections: pageSections,
     sections
   };
 }
@@ -1181,34 +1233,24 @@ function transportCards(q){
 function openDiscoverySurfaceCards(q){
   if(!q) return [];
   const enc = encodeURIComponent(q);
-  const g = term => 'https://www.google.com/search?q=' + encodeURIComponent(term);
   const cards = [
-    { title: '[Official] ' + q + ' 공식 홈페이지 / 공공기관', url: g(q + ' 공식 홈페이지 OR site:go.kr OR site:gov official'), source: 'official_gov_discovery', mediaType: 'article', type: 'official', summary: q + ' 공식 홈페이지·정부·공공기관 검색', score: 0.76 },
-    { title: '[Map] ' + q + ' 지도 / 주소 / 길찾기', url: 'https://www.google.com/maps/search/' + enc, source: 'google_maps_discovery', mediaType: 'map', type: 'map', summary: q + ' 지도·주소·길찾기 검색', score: 0.74 },
-    { title: '[Map] ' + q + ' - Naver Map', url: 'https://map.naver.com/p/search/' + enc, source: 'naver_map_discovery', mediaType: 'map', type: 'map', summary: q + ' 네이버 지도·지역 검색', score: 0.735 },
-    { title: '[Knowledge] ' + q + ' 위키 / 백과 / 지식', url: g(q + ' wikipedia encyclopedia wiki 지식백과'), source: 'knowledge_discovery', mediaType: 'article', type: 'knowledge', summary: q + ' 위키·백과·지식 검색', score: 0.72 },
-    { title: '[Knowledge] ' + q + ' - Naver 지식백과', url: 'https://search.naver.com/search.naver?where=kdic&query=' + enc, source: 'naver_knowledge_discovery', mediaType: 'article', type: 'knowledge', summary: q + ' 네이버 지식백과 검색', score: 0.715 },
-    { title: '[News] ' + q + ' - Naver News', url: 'https://search.naver.com/search.naver?where=news&query=' + enc, source: 'naver_news_discovery', mediaType: 'article', type: 'news', summary: q + ' 네이버 뉴스 검색', score: 0.71 },
-    { title: '[News] ' + q + ' - Google News', url: 'https://news.google.com/search?q=' + enc, source: 'google_news_discovery', mediaType: 'article', type: 'news', summary: q + ' 구글 뉴스 검색', score: 0.70 },
-    { title: '[Tour] ' + q + ' 관광 / 명소 / 공식 홍보', url: g(q + ' 관광 명소 공식 홍보 travel tourism'), source: 'tour_discovery', mediaType: 'article', type: 'tour', summary: q + ' 관광·명소·공식 홍보 검색', score: 0.69 },
-    { title: '[Image] ' + q + ' 이미지 / 사진 / 갤러리', url: 'https://www.google.com/search?tbm=isch&q=' + enc, source: 'google_image_discovery', mediaType: 'image', type: 'image', summary: q + ' 이미지·사진·갤러리 검색', score: 0.68 },
-    { title: '[Image] ' + q + ' - Naver Image', url: 'https://search.naver.com/search.naver?where=image&query=' + enc, source: 'naver_image_discovery', mediaType: 'image', type: 'image', summary: q + ' 네이버 이미지 검색', score: 0.675 },
-    { title: '[Video] ' + q + ' - YouTube', url: 'https://www.youtube.com/results?search_query=' + enc, source: 'youtube_discovery', mediaType: 'video', type: 'video', summary: q + ' 유튜브 영상·브이로그 검색', score: 0.67 },
-    { title: '[Vlog] ' + q + ' 브이로그 / 리뷰 영상', url: 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q + ' vlog review'), source: 'youtube_vlog_discovery', mediaType: 'video', type: 'video', summary: q + ' 브이로그·리뷰 영상 검색', score: 0.665 },
-    { title: '[Shorts] ' + q + ' Shorts / Reels', url: 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q + ' shorts reels'), source: 'shorts_reels_discovery', mediaType: 'video', type: 'video', summary: q + ' 쇼츠·릴스 영상 검색', score: 0.66 },
-    { title: '[Blog] ' + q + ' - Naver Blog', url: 'https://search.naver.com/search.naver?where=blog&query=' + enc, source: 'naver_blog_discovery', mediaType: 'article', type: 'blog', summary: q + ' 네이버 블로그 검색', score: 0.65 },
-    { title: '[Cafe] ' + q + ' - Naver Cafe', url: 'https://search.naver.com/search.naver?where=article&query=' + enc, source: 'naver_cafe_discovery', mediaType: 'article', type: 'cafe', summary: q + ' 네이버 카페·커뮤니티 검색', score: 0.645 },
-    { title: '[Q&A] ' + q + ' 지식iN / 질문답변', url: 'https://search.naver.com/search.naver?where=kin&query=' + enc, source: 'naver_kin_discovery', mediaType: 'article', type: 'knowledge', summary: q + ' 지식iN·질문답변 검색', score: 0.64 },
-    { title: '[Book] ' + q + ' 도서 / 책', url: 'https://search.naver.com/search.naver?where=book&query=' + enc, source: 'naver_book_discovery', mediaType: 'article', type: 'book', summary: q + ' 도서·책 검색', score: 0.635 },
-    { title: '[Shopping] ' + q + ' 쇼핑 / 상품', url: 'https://search.shopping.naver.com/search/all?query=' + enc, source: 'naver_shopping_discovery', mediaType: 'product', type: 'shopping', summary: q + ' 쇼핑·상품 검색', score: 0.63 },
-    { title: '[SNS] ' + q + ' - Instagram', url: g(q + ' site:instagram.com'), source: 'instagram_discovery', mediaType: 'article', type: 'sns', summary: q + ' 인스타그램 공개 게시물 검색', score: 0.625 },
-    { title: '[SNS] ' + q + ' - Facebook', url: g(q + ' site:facebook.com'), source: 'facebook_discovery', mediaType: 'article', type: 'sns', summary: q + ' 페이스북 공개 페이지 검색', score: 0.62 },
-    { title: '[SNS] ' + q + ' - TikTok', url: g(q + ' site:tiktok.com'), source: 'tiktok_discovery', mediaType: 'video', type: 'sns', summary: q + ' 틱톡 공개 영상 검색', score: 0.615 },
-    { title: '[SNS] ' + q + ' - X / Twitter', url: g(q + ' site:x.com OR site:twitter.com'), source: 'x_twitter_discovery', mediaType: 'article', type: 'sns', summary: q + ' X/Twitter 공개 게시물 검색', score: 0.61 },
-    { title: '[Community] ' + q + ' 커뮤니티 / 후기', url: g(q + ' 커뮤니티 후기 리뷰 forum community'), source: 'community_discovery', mediaType: 'article', type: 'community', summary: q + ' 커뮤니티·후기·리뷰 검색', score: 0.60 },
-    { title: '[Company] ' + q + ' 기업 / 브랜드 / 홈페이지', url: g(q + ' 회사 기업 브랜드 홈페이지 corporate brand'), source: 'company_official_discovery', mediaType: 'article', type: 'web', summary: q + ' 기업·브랜드·홈페이지 검색', score: 0.59 }
+    { title: '[News] ' + q + ' - Google News', url: 'https://news.google.com/search?q=' + enc, source: 'google_news_discovery', mediaType: 'article', type: 'news', summary: q + ' 구글 뉴스 검색', score: 0.66 },
+    { title: '[News] ' + q + ' - Naver News', url: 'https://search.naver.com/search.naver?where=news&query=' + enc, source: 'naver_news_discovery', mediaType: 'article', type: 'news', summary: q + ' 네이버 뉴스 검색', score: 0.66 },
+    { title: '[Video] ' + q + ' - YouTube', url: 'https://www.youtube.com/results?search_query=' + enc, source: 'youtube_discovery', mediaType: 'video', type: 'video', summary: q + ' 유튜브 영상·브이로그 검색', score: 0.64 },
+    { title: '[Vlog] ' + q + ' 브이로그 / 리뷰 영상', url: 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q + ' vlog review'), source: 'youtube_vlog_discovery', mediaType: 'video', type: 'video', summary: q + ' 브이로그·리뷰 영상 검색', score: 0.63 },
+    { title: '[Shorts] ' + q + ' Shorts / Reels', url: 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q + ' shorts reels'), source: 'shorts_reels_discovery', mediaType: 'video', type: 'video', summary: q + ' 쇼츠·릴스 영상 검색', score: 0.61 },
+    { title: '[SNS] ' + q + ' - Instagram', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:instagram.com'), source: 'instagram_discovery', mediaType: 'article', type: 'sns', summary: q + ' 인스타그램 공개 게시물 검색', score: 0.58 },
+    { title: '[SNS] ' + q + ' - Facebook', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:facebook.com'), source: 'facebook_discovery', mediaType: 'article', type: 'sns', summary: q + ' 페이스북 공개 페이지 검색', score: 0.57 },
+    { title: '[SNS] ' + q + ' - TikTok', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:tiktok.com'), source: 'tiktok_discovery', mediaType: 'video', type: 'sns', summary: q + ' 틱톡 공개 영상 검색', score: 0.57 },
+    { title: '[SNS] ' + q + ' - X / Twitter', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:x.com OR site:twitter.com'), source: 'x_twitter_discovery', mediaType: 'article', type: 'sns', summary: q + ' X/Twitter 공개 게시물 검색', score: 0.56 },
+    { title: '[Company] ' + q + ' 공식 홈페이지 / 기업 사이트', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' 공식 홈페이지 회사 기업 official site'), source: 'company_official_discovery', mediaType: 'article', type: 'web', summary: q + ' 공식 홈페이지·회사·기업 사이트 검색', score: 0.60 },
+    { title: '[Official] ' + q + ' 정부 / 공공 / 기관', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:go.kr OR site:gov official'), source: 'official_gov_discovery', mediaType: 'article', type: 'web', summary: q + ' 정부·공공·기관 공식 정보 검색', score: 0.60 },
+    { title: '[Blog] ' + q + ' - Naver Blog', url: 'https://search.naver.com/search.naver?where=blog&query=' + enc, source: 'naver_blog_discovery', mediaType: 'article', type: 'blog', summary: q + ' 네이버 블로그 검색', score: 0.59 },
+    { title: '[Cafe] ' + q + ' - Naver Cafe', url: 'https://search.naver.com/search.naver?where=article&query=' + enc, source: 'naver_cafe_discovery', mediaType: 'article', type: 'cafe', summary: q + ' 네이버 카페·커뮤니티 검색', score: 0.58 },
+    { title: '[Community] ' + q + ' 커뮤니티 / 후기', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' 커뮤니티 후기 리뷰 forum community'), source: 'community_discovery', mediaType: 'article', type: 'community', summary: q + ' 커뮤니티·후기·리뷰 검색', score: 0.56 },
+    { title: '[Knowledge] ' + q + ' 위키 / 백과 / 지식', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' wikipedia encyclopedia wiki 지식백과'), source: 'knowledge_discovery', mediaType: 'article', type: 'knowledge', summary: q + ' 위키·백과·지식 검색', score: 0.57 }
   ];
-  return cards.map(x => canonicalizeItem(Object.assign({ sourceType: 'discovery-surface', generatedBy: 'maru-search' }, x), q, x.source));
+  return cards.map(x => canonicalizeItem(x, q, x.source));
 }
 
 let SearchBankEngine = null;
@@ -2075,11 +2117,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     // Controlled card-media autofill:
     // Keep the existing wide search pipeline, but make visible search cards useful by filling
     // each result's own OG / provider image where possible within the remaining response budget.
-    if(deep || truthy(((event && event.queryStringParameters) || {}).enrichImages) || truthy(((event && event.queryStringParameters) || {}).imageEnrich)){
-      unique = await enrichOwnImages(unique, { trace, timeLeft });
-    } else {
-      trace.push({ name: 'own-og-image-enrich', status: 'deferred-first-viewport', count: 0, mode: 'call action=enrich-images for visible page cards' });
-    }
+    unique = await enrichOwnImages(unique, { trace, timeLeft });
 
     const finalTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
     const finalItems = unique.slice(0, finalTarget).map(compactResultItem);
@@ -3207,8 +3245,7 @@ async function attachMediaEngineResults(base, event, ctx){
       : (Array.isArray(res && res.results) ? res.results : []);
 
     const converted = mediaItems.map(it => compactMediaHookItem(it, q));
-    const preserveTarget = Math.min(MAX_LIMIT, Math.max(limit, (Array.isArray(base.items) ? base.items.length : 0), MIN_RESULT_TARGET));
-    const merged = dedupeCanonicalItems([].concat(base.items || [], converted)).slice(0, preserveTarget);
+    const merged = dedupeCanonicalItems([].concat(base.items || [], converted)).slice(0, limit);
 
     const trace = Array.isArray(base.meta && base.meta.trace) ? base.meta.trace.slice() : [];
     trace.push({
@@ -3283,10 +3320,6 @@ async function attachSanmaruAugmentResults(base, event, ctx){
       candidatePool: Math.min(MAX_LIMIT, Math.max(limit, currentCount, 2000)),
       searchType: ctx && ctx.searchType,
       lang: ctx && ctx.lang,
-      external: 'off',
-      noExternal: '1',
-      disableExternal: '1',
-      timeoutMs: 1800,
       from: 'maru-search-augment',
       source: 'maru-search',
       // Critical recursion guard: Sanmaru must not call back into maru-search while this augment hook is running.
@@ -3301,7 +3334,7 @@ async function attachSanmaruAugmentResults(base, event, ctx){
     const sanItemsRaw = Array.isArray(res && res.items) ? res.items : (Array.isArray(res && res.results) ? res.results : []);
     const sanItems = sanItemsRaw.map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru')));
     const merged = dedupeCanonicalItems([].concat(base.items || [], sanItems));
-    const finalItems = merged.slice(0, Math.min(MAX_LIMIT, Math.max(limit, currentCount, MIN_RESULT_TARGET)));
+    const finalItems = merged.slice(0, Math.max(limit, currentCount));
 
     const trace = Array.isArray(base.meta && base.meta.trace) ? base.meta.trace.slice() : [];
     trace.push({ name: 'sanmaru-augment', status: sanItems.length ? 'ok' : 'empty', count: sanItems.length, mode: 'augment-only' });
@@ -3384,11 +3417,12 @@ exports.handler = async function(event){
     }
 
     if(!q){
-      return ok({ status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: null, items: [], results: [], meta: { count: 0, limit } });
+      return ok({ status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: null, items: [], results: [], sections: [], sectionPack: { enabled: true, sections: [], pageItems: [], pageSections: [], visibleCount: 0, visibleCardsPerPage: DEFAULT_VISIBLE_CARDS_PER_PAGE, totalPages: 0 }, meta: { count: 0, limit } });
     }
     let base = await orchestrateSearch({ event, q, limit: engineLimit, start, lang, deep, externalOff, externalMode, noMedia, searchType });
     base = await attachMediaEngineResults(base, event, { q, limit: engineLimit, requestedLimit: limit, start, lang, searchType, raw, noMedia });
     base = await attachSanmaruAugmentResults(base, event, { q, limit: engineLimit, requestedLimit: limit, start, lang, searchType, raw, noMedia });
+    base = ensureNonEmptySearchBase(base, q, base.region || detectRuntimeRegion(event, lang, q));
     // Search must not trigger heavy settlement/distribution by default.
     // Analytics is opt-in for this endpoint; weekly settlement is handled by revenue/commerce engines.
     const analyticsRequested = truthy(raw && (raw.analytics || raw.track || raw.enableAnalytics)) || truthy(process.env.MARU_SEARCH_ANALYTICS);
@@ -3404,6 +3438,9 @@ exports.handler = async function(event){
       status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: base.source,
       items: base.items, results: base.items,
       sections: sectionPack.sections,
+      visibleSections: sectionPack.pageSections,
+      pageSections: sectionPack.pageSections,
+      pageItems: sectionPack.pageItems,
       sectionPack,
       meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, requestedLimit: limit, limit: engineLimit, viewport, page: viewport.page, perPage: viewport.visibleCardsPerPage, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: sectionPack.mode, totalSections: sectionPack.totalSections, counts: sectionPack.counts, order: sectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', preservationPatch: 'A1.5.33-quality-original-image-selection' })
     });
@@ -3417,9 +3454,6 @@ async function maruSearchDispatcher(req){
   const res = await exports.handler({ queryStringParameters: {
     q: safeString(req.q || req.query || '').trim(),
     limit: req.limit,
-    page: req.page,
-    perPage: req.perPage || req.pageSize || req.visibleCardsPerPage,
-    candidatePool: req.candidatePool || req.candidatePoolTarget || req.maxCandidates,
     start: req.start,
     lang: req.lang || req.uiLang || req.locale,
     deep: req.deep,
@@ -3456,7 +3490,7 @@ exports.runEngine = async function(event, params){
   return await orchestrateSearch({
     event: event || {},
     q: safeString(params.q || params.query || '').trim(),
-    limit: resolveViewportOptions(params || {}, params.limit || DEFAULT_LIMIT).candidateLimit,
+    limit: params.limit || DEFAULT_LIMIT,
     start: params.start || 1,
     lang: params.lang || params.uiLang || params.locale || null,
     deep: truthy(params.deep) || String(params.external || '').toLowerCase() === 'deep',
