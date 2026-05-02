@@ -19,11 +19,13 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.35-wide-pool-visible15-safe';
+const VERSION = 'A1.5.36-visible-backfill-latency-guard';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
 const DEFAULT_SOFT_TIMEOUT_MS = 10500;
+const DEFAULT_VISIBLE_CARDS_PER_PAGE = 15;
+const FRONT_SECTION_VISIBLE_CARD_CAP = 3;
 
 // MARU gateway policy:
 // - Internal search-bank first.
@@ -39,7 +41,6 @@ const OG_IMAGE_ENRICH_TIMEOUT_MS = 1200;
 const OG_IMAGE_CACHE_TTL_MS = 30 * 60 * 1000;
 const MAX_SEARCH_BANK_PAGES_NORMAL = 14;
 const MAX_SEARCH_BANK_PAGES_DEEP = 30;
-const DEFAULT_VISIBLE_CARDS_PER_PAGE = 15;
 
 function nowMs(){ return Date.now(); }
 
@@ -952,6 +953,7 @@ function buildSearchSections(items, q, opts){
   const list = Array.isArray(items) ? items : [];
   const page = clampInt(opts.page || opts.sectionPage || opts.visiblePage, 1, 1, 100000);
   const visiblePerPage = clampInt(opts.perPage || opts.pageSize || opts.visibleLimit, DEFAULT_VISIBLE_CARDS_PER_PAGE, 1, 60);
+  const sectionVisibleCap = clampInt(opts.sectionVisibleCap || opts.frontSectionVisibleCap, FRONT_SECTION_VISIBLE_CARD_CAP, 1, 10);
   const buckets = Object.create(null);
   const seenBySection = Object.create(null);
 
@@ -980,18 +982,19 @@ function buildSearchSections(items, q, opts){
     return { sectionId, meta, all };
   }).filter(sec => sec.all.length > 0);
 
-  // IMPORTANT:
-  // - items/results remain the wide candidate pool.
-  // - Pagination here is only for cards that are actually visible in the viewport.
-  // - Collapsed/dropdown items are not counted as visible cards.
-  // This prevents "3 cards + 9 hidden = page filled" behavior.
+  // Visible-card stream rule:
+  // - items/results keep the full wide candidate pool.
+  // - The visible page is filled by cards that are actually rendered.
+  // - Folded/dropdown candidates are not allowed to consume the current page quota.
+  // - If one section has too many items, it is chunked into multiple render sections so the front renderer
+  //   cannot collapse 12 items into "3 visible + 9 hidden" and leave the viewport half empty.
   const visibleFlow = [];
   let round = 0;
   const maxRounds = Math.max(1, list.length + 1);
   while(visibleFlow.length < list.length && round < maxRounds){
     let pushed = false;
     for(const sec of fullSections){
-      const quota = Math.max(1, Math.min(sec.meta.previewLimit || 3, 3));
+      const quota = Math.max(1, sectionVisibleCap);
       const from = round * quota;
       const chunk = sec.all.slice(from, from + quota);
       for(const item of chunk){
@@ -1009,51 +1012,90 @@ function buildSearchSections(items, q, opts){
   const offset = (safePage - 1) * visiblePerPage;
   const pageItems = visibleFlow.slice(offset, offset + visiblePerPage);
 
-  const visibleBySection = Object.create(null);
-  for(const item of pageItems){
-    const sid = item.sectionId || sectionIdForItem(item);
-    if(!visibleBySection[sid]) visibleBySection[sid] = [];
-    visibleBySection[sid].push(item);
-  }
+  function makeRenderSections(pageItems){
+    const sections = [];
+    const perSectionIndex = Object.create(null);
+    let current = null;
 
-  const sections = fullSections.map(sec => {
-    const visibleItems = visibleBySection[sec.sectionId] || [];
-    const previewLimit = sec.meta.previewLimit || 6;
-    const hiddenCount = Math.max(0, sec.all.length - visibleItems.length);
-    return {
-      id: sec.sectionId,
-      title: sec.meta.title,
-      label: sec.meta.label,
-      description: sec.meta.description,
-      rank: sec.meta.rank,
-      total: sec.all.length,
-      fullTotal: sec.all.length,
-      previewLimit,
-      visibleCount: visibleItems.length,
-      hiddenCount,
-      hasMore: hiddenCount > 0,
-      items: visibleItems,
-      more: {
-        q: safeString(q || ''),
-        type: sec.sectionId,
-        section: sec.sectionId,
-        perPage: previewLimit,
-        hiddenCount,
-        action: 'expand-section'
+    for(const item of pageItems){
+      const sid = item.sectionId || sectionIdForItem(item);
+      const meta = SEARCH_SECTION_META[sid] || SEARCH_SECTION_META.general_web;
+
+      if(!current || current.sourceSectionId !== sid || current.items.length >= sectionVisibleCap){
+        perSectionIndex[sid] = (perSectionIndex[sid] || 0) + 1;
+        current = {
+          id: sid + '__viewport_' + safePage + '_' + perSectionIndex[sid],
+          sourceSectionId: sid,
+          title: meta.title,
+          label: meta.label,
+          description: meta.description,
+          rank: meta.rank,
+          page: safePage,
+          viewportChunk: perSectionIndex[sid],
+          total: 0,
+          fullTotal: sectionCounts[sid] || 0,
+          previewLimit: sectionVisibleCap,
+          visibleCount: 0,
+          hiddenCount: 0,
+          hasMore: false,
+          items: [],
+          more: {
+            q: safeString(q || ''),
+            type: sid,
+            section: sid,
+            perPage: sectionVisibleCap,
+            hiddenCount: 0,
+            action: 'none-current-viewport-filled'
+          }
+        };
+        sections.push(current);
       }
-    };
-  }).filter(section => section.total > 0 && section.visibleCount > 0);
+
+      current.items.push(item);
+      current.total = current.items.length;
+      current.visibleCount = current.items.length;
+    }
+
+    return sections.filter(section => section.visibleCount > 0);
+  }
 
   const sectionCounts = {};
   for(const sec of fullSections) sectionCounts[sec.sectionId] = sec.all.length;
 
+  const fullSectionSummaries = fullSections.map(sec => ({
+    id: sec.sectionId,
+    sourceSectionId: sec.sectionId,
+    title: sec.meta.title,
+    label: sec.meta.label,
+    description: sec.meta.description,
+    rank: sec.meta.rank,
+    total: sec.all.length,
+    fullTotal: sec.all.length,
+    previewLimit: sec.meta.previewLimit || sectionVisibleCap,
+    visibleCount: Math.min(sec.all.length, sec.meta.previewLimit || sectionVisibleCap),
+    hiddenCount: Math.max(0, sec.all.length - Math.min(sec.all.length, sec.meta.previewLimit || sectionVisibleCap)),
+    hasMore: sec.all.length > (sec.meta.previewLimit || sectionVisibleCap),
+    items: sec.all.slice(0, Math.min(sec.all.length, sec.meta.previewLimit || sectionVisibleCap)),
+    more: {
+      q: safeString(q || ''),
+      type: sec.sectionId,
+      section: sec.sectionId,
+      perPage: sec.meta.previewLimit || sectionVisibleCap,
+      hiddenCount: Math.max(0, sec.all.length - Math.min(sec.all.length, sec.meta.previewLimit || sectionVisibleCap)),
+      action: 'expand-section'
+    }
+  }));
+
+  const pageSections = makeRenderSections(pageItems);
+
   return {
     enabled: true,
-    mode: 'grouped-expandable-search-sections-visible-card-paged',
+    mode: 'visible-card-backfill-paged-sections',
     order: SEARCH_SECTION_ORDER,
     counts: sectionCounts,
     totalSections: fullSections.length,
     visibleCardsPerPage: visiblePerPage,
+    sectionVisibleCardCap: sectionVisibleCap,
     visibleCount: pageItems.length,
     totalVisibleCandidates,
     page: safePage,
@@ -1065,9 +1107,13 @@ function buildSearchSections(items, q, opts){
     nextPage: safePage < totalPages ? safePage + 1 : null,
     hiddenItemsExcludedFromVisibleCount: true,
     doesNotLimitItemsResults: true,
+    backfillFoldedSlots: true,
     pageItems,
-    pageSections: sections,
-    sections
+    pageSections,
+    // For backward compatibility, expose the viewport-safe render sections at sectionPack.sections
+    // and top-level sections. Full expandable source summaries remain available separately.
+    sections: pageSections,
+    fullSections: fullSectionSummaries
   };
 }
 
@@ -1638,7 +1684,7 @@ function addBundle(bundle, fallbackSource, collected, sourceState){
   return items.length;
 }
 
-async function orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType }){
+async function orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType, raw }){
   limit = clampInt(limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
 
   globalThis.__MARU_CACHE = globalThis.__MARU_CACHE || new Map();
@@ -2044,10 +2090,15 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     unique = await applyCorePipeline(q, unique);
     unique = applyServerSideBoosts(unique, { q, lang, searchType: viewType });
 
-    // Controlled card-media autofill:
-    // Keep the existing wide search pipeline, but make visible search cards useful by filling
-    // each result's own OG / provider image where possible within the remaining response budget.
-    unique = await enrichOwnImages(unique, { trace, timeLeft });
+    // Controlled card-media autofill must not block the first search page.
+    // Default search returns the wide candidate list first; render-page image enrichment is available
+    // through action=enrich-images or explicit enrichImages=1/deep=1.
+    const inlineImageEnrich = deep || truthy(raw && (raw.enrichImages || raw.imageEnrich || raw.inlineImages || raw.waitImages));
+    if(inlineImageEnrich){
+      unique = await enrichOwnImages(unique, { trace, timeLeft });
+    } else {
+      trace.push({ name: 'own-og-image-enrich', status: 'deferred-first-response', count: 0, action: 'use action=enrich-images for visible page only' });
+    }
 
     const finalTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
     const finalItems = unique.slice(0, finalTarget).map(compactResultItem);
@@ -3232,6 +3283,14 @@ async function attachSanmaruAugmentResults(base, event, ctx){
     return Object.assign({}, base, { meta: Object.assign({}, base.meta || {}, { sanmaruAugment: hookMeta }) });
   }
 
+  const waitSanmaru = truthy(raw.waitSanmaru) || truthy(raw.forceSanmaru) || truthy(raw.sanmaruForce) || truthy(process.env.MARU_SEARCH_WAIT_SANMARU);
+  if(!waitSanmaru){
+    hookMeta.enabled = true;
+    hookMeta.status = 'deferred-first-response';
+    hookMeta.reason = 'main search response must not wait for Sanmaru augment; call with waitSanmaru=1 for synchronous augment';
+    return Object.assign({}, base, { meta: Object.assign({}, base.meta || {}, { sanmaruAugment: hookMeta }) });
+  }
+
   let Sanmaru = null;
   try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
   if(!Sanmaru || typeof Sanmaru.runSanmaru !== 'function'){
@@ -3347,7 +3406,7 @@ exports.handler = async function(event){
     if(!q){
       return ok({ status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: null, items: [], results: [], meta: { count: 0, limit } });
     }
-    let base = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType });
+    let base = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType, raw });
     base = await attachMediaEngineResults(base, event, { q, limit, start, lang, searchType, raw, noMedia });
     base = await attachSanmaruAugmentResults(base, event, { q, limit, start, lang, searchType, raw, noMedia });
     // Search must not trigger heavy settlement/distribution by default.
@@ -3369,7 +3428,7 @@ exports.handler = async function(event){
       pageSections: sectionPack.pageSections,
       visiblePagePack: { page: sectionPack.page, perPage: sectionPack.visibleCardsPerPage, visibleCount: sectionPack.visibleCount, totalPages: sectionPack.totalPages, totalVisibleCandidates: sectionPack.totalVisibleCandidates, items: sectionPack.pageItems, sections: sectionPack.pageSections },
       sectionPack,
-      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: sectionPack.mode, totalSections: sectionPack.totalSections, counts: sectionPack.counts, order: sectionPack.order, visibleCardsPerPage: sectionPack.visibleCardsPerPage, visibleCount: sectionPack.visibleCount, page: sectionPack.page, totalPages: sectionPack.totalPages, hasNextPage: sectionPack.hasNextPage, hiddenItemsExcludedFromVisibleCount: true, doesNotLimitItemsResults: true }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', preservationPatch: 'A1.5.35-wide-pool-visible15-safe' })
+      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: sectionPack.mode, totalSections: sectionPack.totalSections, counts: sectionPack.counts, order: sectionPack.order, visibleCardsPerPage: sectionPack.visibleCardsPerPage, visibleCount: sectionPack.visibleCount, page: sectionPack.page, totalPages: sectionPack.totalPages, hasNextPage: sectionPack.hasNextPage, hiddenItemsExcludedFromVisibleCount: true, doesNotLimitItemsResults: true }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', preservationPatch: 'A1.5.36-visible-backfill-latency-guard' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));
