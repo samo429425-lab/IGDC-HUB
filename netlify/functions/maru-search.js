@@ -19,7 +19,7 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.36-579-pipeline-safe-v3-collapse-google-youtube';
+const VERSION = 'A1.5.36-579-collapse-pack-youtube-google-safe';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -694,39 +694,8 @@ function youtubeIdFromUrl(url){
 
 function youtubePosterCandidates(videoId, current){
   const id = safeString(videoId).trim();
-  const preferred = firstNonEmpty(current, id ? 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg' : '');
-  return compactImages([preferred]);
-}
-
-function isYouTubeLikeItem(it){
-  const url = safeString(firstNonEmpty(it && it.url, it && it.link, it && it.watchUrl, it && it.videoUrl)).toLowerCase();
-  const source = safeString(it && it.source).toLowerCase();
-  const type = safeString(firstNonEmpty(it && it.type, it && it.mediaType)).toLowerCase();
-  return source.includes('youtube') || url.includes('youtube.com') || url.includes('youtu.be') || type === 'video';
-}
-
-function normalizeYoutubeSingleThumbnailItem(it){
-  if(!it || typeof it !== 'object' || !isYouTubeLikeItem(it)) return it;
-  const videoId = firstNonEmpty(it.videoId, (it.payload && it.payload.videoId), youtubeIdFromUrl(firstNonEmpty(it.url, it.link, it.watchUrl, it.videoUrl)));
-  const preview = it.media && it.media.preview && typeof it.media.preview === 'object' ? it.media.preview : {};
-  const thumb = firstNonEmpty(
-    it.thumbnail, it.thumb, preview.poster, preview.image,
-    videoId ? 'https://i.ytimg.com/vi/' + videoId + '/hqdefault.jpg' : '',
-    it.image, it.originalImage
-  );
-  const watchUrl = firstNonEmpty(it.watchUrl, it.videoUrl, it.url, it.link, videoId ? 'https://www.youtube.com/watch?v=' + videoId : '');
-  const embedUrl = firstNonEmpty(it.embedUrl, videoId ? 'https://www.youtube.com/embed/' + videoId : '');
-  const media = Object.assign({}, (it.media && typeof it.media === 'object') ? it.media : { type:'video' });
-  media.type = 'video';
-  media.preview = Object.assign({}, preview, { poster: thumb, image: thumb, original: thumb, videoUrl: watchUrl, embedUrl });
-  return Object.assign({}, it, {
-    type: 'video', mediaType: 'video',
-    thumbnail: thumb, thumb, image: thumb, imageUrl: thumb,
-    imageSet: [], images: [],
-    originalImage: thumb, fullImage: thumb, imageOriginal: thumb, viewerImage: thumb, openImageUrl: thumb, contentUrl: thumb, cardImage: thumb,
-    videoId: videoId || undefined, videoUrl: watchUrl, watchUrl, embedUrl, openUrl: watchUrl,
-    media
-  });
+  if(id) return compactImages(['https://i.ytimg.com/vi/' + id + '/hqdefault.jpg']);
+  return compactImages([current]);
 }
 
 function mediaProfileForItem(it){
@@ -738,18 +707,21 @@ function mediaProfileForItem(it){
   const videoId = firstNonEmpty(it.videoId, p.videoId, youtubeIdFromUrl(url));
   let images = naturalImagesForItem(it, 6);
 
-  if((sourceText.includes('youtube') || typeText === 'video') && videoId){
-    images = qualitySortImagesForItem(youtubePosterCandidates(videoId, images[0]).concat(images), it).slice(0, 6);
+  const isYoutubeVideo = (sourceText.includes('youtube') || url.includes('youtube.com/watch') || url.includes('youtu.be/')) && videoId;
+  if(isYoutubeVideo){
+    images = youtubePosterCandidates(videoId, images[0]);
+  }else if((sourceText.includes('youtube') || typeText === 'video') && videoId){
+    images = youtubePosterCandidates(videoId, images[0]);
   }
 
-  const explicitOriginals = qualitySortImagesForItem([
+  const explicitOriginals = isYoutubeVideo ? images : qualitySortImagesForItem([
     it.originalImage, it.fullImage, it.imageOriginal, it.viewerImage, it.openImageUrl, it.contentUrl,
     p.originalImage, p.fullImage, p.imageOriginal, p.image, p.imageUrl, p.thumb
   ].concat(images), it);
 
   const original = explicitOriginals[0] || images[0] || '';
-  const bestDisplay = qualitySortImagesForItem([original].concat(images), it)[0] || original || images[0] || '';
-  const imageSet = qualitySortImagesForItem([bestDisplay, original].concat(images), it).slice(0, 6);
+  const bestDisplay = isYoutubeVideo ? original : (qualitySortImagesForItem([original].concat(images), it)[0] || original || images[0] || '');
+  const imageSet = isYoutubeVideo ? [] : qualitySortImagesForItem([bestDisplay, original].concat(images), it).slice(0, 6);
   const thumb = bestDisplay || original || '';
   const videoUrl = videoId ? 'https://www.youtube.com/watch?v=' + videoId : (typeText === 'video' ? url : firstNonEmpty(it.videoUrl, p.videoUrl));
   const embedUrl = videoId ? 'https://www.youtube.com/embed/' + videoId : firstNonEmpty(it.embedUrl, p.embedUrl);
@@ -757,7 +729,7 @@ function mediaProfileForItem(it){
   return {
     thumbnail: thumb,
     image: original || thumb,
-    imageSet: imageSet.length ? imageSet : compactImages([thumb, original]),
+    imageSet,
     originalImage: original || thumb,
     fullImage: original || thumb,
     viewerImage: original || thumb,
@@ -1017,6 +989,9 @@ function buildSearchSections(items, q, opts){
       previewLimit,
       hasMore: all.length > previewLimit,
       items: all.slice(0, previewLimit),
+      allItems: all.slice(0, 120),
+      collapsedItems: all.slice(previewLimit, previewLimit + 80),
+      hiddenItems: all.slice(previewLimit, previewLimit + 80),
       more: {
         q: safeString(q || ''),
         type: sectionId,
@@ -1171,154 +1146,189 @@ function buildViewportDisplaySections(pageItems, q, fullSectionPack){
 }
 
 
-function parseExpandedSectionSet(raw){
+function expandedSectionSet(raw){
   raw = raw || {};
   const values = [];
-  ['expandedSections','expandedSection','openSections','openSection','section','type'].forEach(k => {
+  ['expandedSections','expandedSection','openSections','openSection','showSection','section'].forEach(k => {
     if(raw[k] !== undefined && raw[k] !== null) values.push(raw[k]);
   });
-  const action = safeString(raw.action || '').toLowerCase();
-  if(action !== 'expand-section' && action !== 'expand' && action !== 'open-section'){
-    // Only explicit expandedSections/openSections should expand in normal page mode.
-    values.splice(1);
+  const action = safeString(raw.action || raw.mode || raw.fn).toLowerCase();
+  if(action === 'expand-section' || action === 'expand_section' || action === 'open-section'){
+    if(raw.type) values.push(raw.type);
+    if(raw.sourceSectionId) values.push(raw.sourceSectionId);
   }
   const out = new Set();
-  values.join(',').split(/[|,\s]+/).map(x => safeString(x).trim()).filter(Boolean).forEach(x => out.add(x));
+  values.forEach(v => {
+    if(Array.isArray(v)) v.forEach(x => { const s = safeString(x).trim(); if(s) out.add(s); });
+    else safeString(v).split(',').forEach(x => { const s = x.trim(); if(s) out.add(s); });
+  });
   return out;
 }
 
-function buildCollapseAwareVisiblePagePack(fullSectionPack, allItems, q, raw){
+function sectionVisibleLimitForViewport(sectionId){
+  // 프론트가 섹션 내부를 접을 때 보통 3장만 먼저 보인다.
+  // 서버도 이 기준으로 visible stream을 만들면 접힌 항목이 15장 카운트를 먹지 않는다.
+  return 3;
+}
+
+function sectionCollapsedBlockSize(sectionId){
+  // 한 블록은 3장 노출 + 최대 9장 접힘 = 기존 화면의 "9개 더보기" 패턴과 맞춘다.
+  return 12;
+}
+
+function buildCollapseAwareViewportPack(items, q, raw, fullSectionPack){
   raw = raw || {};
+  const full = fullSectionPack && Array.isArray(fullSectionPack.sections) ? fullSectionPack : buildSearchSections(items, q, {});
+  const expanded = expandedSectionSet(raw);
   const page = clampInt(firstNonEmpty(raw.page, raw.p, raw.visiblePage, raw.sectionPage), 1, 1, 100000);
   const perPage = clampInt(firstNonEmpty(raw.perPage, raw.pageSize, raw.visibleCardsPerPage, raw.visibleLimit, raw.cardsPerPage), 15, 1, 100);
-  const expanded = parseExpandedSectionSet(raw);
-  const rawSections = (fullSectionPack && Array.isArray(fullSectionPack.sections)) ? fullSectionPack.sections : [];
-  const sections = rawSections.map(section => {
-    const id = safeString(section && section.id);
-    const all = [];
-    (Array.isArray(section && section.items) ? section.items : []).forEach(x => all.push(x));
-    (Array.isArray(section && section.collapsedItems) ? section.collapsedItems : []).forEach(x => all.push(x));
-    (Array.isArray(section && section.hiddenItems) ? section.hiddenItems : []).forEach(x => all.push(x));
-    // buildSearchSections historically only exposes preview items. Recover the remaining items from the flat result body.
-    const flat = (Array.isArray(allItems) ? allItems : []).filter(x => sectionIdForItem(x) === id);
-    const seen = new Set(all.map(x => safeString(firstNonEmpty(x && x.url, x && x.link, x && x.id, x && x.title)).toLowerCase()).filter(Boolean));
-    flat.forEach(x => {
-      const key = safeString(firstNonEmpty(x && x.url, x && x.link, x && x.id, x && x.title)).toLowerCase();
-      if(key && !seen.has(key)){ seen.add(key); all.push(x); }
-    });
-    return Object.assign({}, section, { allItems: all.map(normalizeYoutubeSingleThumbnailItem), sourceTotal: all.length || section.total || 0 });
-  }).filter(s => s.allItems && s.allItems.length);
+  const offsetNeed = (page - 1) * perPage;
+  let skippedVisible = 0;
+  let takenVisible = 0;
+  const sections = [];
+  const pageItems = [];
+  const allVisibleStreamCount = { n: 0 };
 
-  const pageSections = [];
-  const visibleStream = [];
-  let consumedVisibleBefore = 0;
-  let sectionSeq = 0;
-  const startVisible = (page - 1) * perPage;
+  function pushDisplaySection(sourceSection, blockIndex, visibleBase, collapsedBase, expandedBlock){
+    const sid = sourceSection.id || 'general_web';
+    const meta = SEARCH_SECTION_META[sid] || SEARCH_SECTION_META.general_web;
+    const blockId = sid + '_collapse_block_' + (blockIndex + 1);
+    const visibleForMode = expandedBlock ? visibleBase.concat(collapsedBase) : visibleBase;
+    if(!visibleForMode.length) return;
 
-  function pushVisibleSection(source, items, collapsed, expandedFlag){
-    if(!items.length) return;
-    const meta = SEARCH_SECTION_META[source.id] || SEARCH_SECTION_META.general_web;
-    const id = source.id + '_viewport_' + (++sectionSeq);
-    const normalizedItems = items.map((rawItem, idx) => Object.assign({}, normalizeYoutubeSingleThumbnailItem(rawItem), {
-      sectionId: id,
-      sourceSectionId: id,
-      originalSectionId: source.id,
-      originalSourceSectionId: source.id,
+    allVisibleStreamCount.n += visibleForMode.length;
+
+    let localStart = 0;
+    if(skippedVisible + visibleForMode.length <= offsetNeed){
+      skippedVisible += visibleForMode.length;
+      return;
+    }
+    if(skippedVisible < offsetNeed){
+      localStart = offsetNeed - skippedVisible;
+      skippedVisible = offsetNeed;
+    }
+    const remain = perPage - takenVisible;
+    if(remain <= 0) return;
+    const slice = visibleForMode.slice(localStart, localStart + remain);
+    if(!slice.length) return;
+
+    const normalizedItems = slice.map((rawItem, idx) => Object.assign({}, rawItem, {
+      sectionId: sid,
+      sourceSectionId: sid,
+      sectionBlockId: blockId,
       sectionTitle: meta.title,
       sectionLabel: meta.label,
       viewportCard: true,
       visibleViewportCard: true,
-      viewportIndex: visibleStream.length + idx
+      viewportIndex: offsetNeed + takenVisible + idx
     }));
-    const normalizedCollapsed = (collapsed || []).map((rawItem, idx) => Object.assign({}, normalizeYoutubeSingleThumbnailItem(rawItem), {
-      sectionId: id,
-      sourceSectionId: id,
-      originalSectionId: source.id,
-      originalSourceSectionId: source.id,
+
+    pageItems.push.apply(pageItems, normalizedItems);
+    takenVisible += normalizedItems.length;
+
+    const collapsedItems = expandedBlock ? [] : collapsedBase.map((rawItem, idx) => Object.assign({}, rawItem, {
+      sectionId: sid,
+      sourceSectionId: sid,
+      sectionBlockId: blockId,
       sectionTitle: meta.title,
       sectionLabel: meta.label,
       collapsedViewportCard: true,
       collapsedIndex: idx
     }));
-    visibleStream.push.apply(visibleStream, normalizedItems);
-    pageSections.push({
-      id, sourceSectionId: id, originalSectionId: source.id, originalSourceSectionId: source.id,
-      title: meta.title, label: meta.label, description: meta.description, rank: meta.rank,
-      total: normalizedItems.length, displayTotal: normalizedItems.length, previewLimit: normalizedItems.length,
-      sourceTotal: source.sourceTotal || source.total || source.allItems.length,
-      hasMore: !expandedFlag && normalizedCollapsed.length > 0,
-      hiddenCount: !expandedFlag ? normalizedCollapsed.length : 0,
-      collapsedCount: !expandedFlag ? normalizedCollapsed.length : 0,
-      sourceHiddenCount: !expandedFlag ? normalizedCollapsed.length : 0,
+
+    sections.push({
+      id: blockId,
+      sourceSectionId: sid,
+      title: meta.title,
+      label: meta.label,
+      description: meta.description,
+      rank: meta.rank,
+      displayTotal: normalizedItems.length,
+      total: normalizedItems.length + collapsedItems.length,
+      sourceTotal: sourceSection.total || ((sourceSection.allItems || sourceSection.items || []).length),
+      previewLimit: normalizedItems.length,
+      hasMore: collapsedItems.length > 0,
+      hiddenCount: collapsedItems.length,
+      collapsedCount: collapsedItems.length,
+      sourceHiddenCount: collapsedItems.length,
+      expanded: !!expandedBlock,
       items: normalizedItems,
-      collapsedItems: !expandedFlag ? normalizedCollapsed : [],
-      hiddenItems: !expandedFlag ? normalizedCollapsed : [],
-      expanded: !!expandedFlag,
-      more: { q: safeString(q || ''), type: source.id, section: source.id, sourceSectionId: source.id, viewportSectionId: id, action:'expand-section', hiddenCount: normalizedCollapsed.length }
+      collapsedItems,
+      hiddenItems: collapsedItems,
+      more: {
+        q: safeString(q || ''),
+        type: sid,
+        section: sid,
+        sourceSectionId: sid,
+        sectionBlockId: blockId,
+        action: 'expand-section',
+        expandedSections: Array.from(new Set([sid, blockId].concat(Array.from(expanded)))).join(','),
+        hiddenCount: collapsedItems.length,
+        note: 'Collapsed cards are excluded from the 15-card viewport; expanding this section recalculates the viewport and pushes later cards to the next page.'
+      }
     });
   }
 
-  // Section-order stream. Each collapsed group exposes preview cards, hides the next window, then continues with later cards.
-  for(const source of sections){
-    const originalId = source.id;
-    const expandedFlag = expanded.has(originalId) || expanded.has(source.label) || expanded.has(source.title);
-    const all = source.allItems || [];
-    const basePreview = clampInt(source.previewLimit, (SEARCH_SECTION_META[originalId] && SEARCH_SECTION_META[originalId].previewLimit) || 6, 1, 50);
-    const preview = expandedFlag ? perPage : Math.max(1, Math.min(6, basePreview));
-    let idx = 0;
-    while(idx < all.length && visibleStream.length < startVisible + perPage){
-      const visible = all.slice(idx, idx + preview);
-      if(!visible.length) break;
-      idx += visible.length;
-      let collapsed = [];
-      if(!expandedFlag){
-        const hideCount = Math.min(Math.max(0, perPage - visible.length), Math.max(0, all.length - idx));
-        collapsed = all.slice(idx, idx + hideCount);
-        idx += collapsed.length;
-      }
-      // Skip visible sections before requested page without emitting them.
-      if(consumedVisibleBefore + visible.length <= startVisible){
-        consumedVisibleBefore += visible.length;
-        continue;
-      }
-      let emitVisible = visible;
-      if(consumedVisibleBefore < startVisible){
-        emitVisible = visible.slice(startVisible - consumedVisibleBefore);
-      }
-      const slots = perPage - visibleStream.length;
-      emitVisible = emitVisible.slice(0, slots);
-      pushVisibleSection(source, emitVisible, collapsed, expandedFlag);
-      consumedVisibleBefore += visible.length;
+  for(const sourceSection of full.sections || []){
+    if(takenVisible >= perPage) break;
+    const sid = sourceSection.id || 'general_web';
+    const all = (Array.isArray(sourceSection.allItems) && sourceSection.allItems.length)
+      ? sourceSection.allItems
+      : (Array.isArray(sourceSection.items) ? sourceSection.items : []);
+    const visibleLimit = sectionVisibleLimitForViewport(sid);
+    const blockSize = Math.max(visibleLimit, sectionCollapsedBlockSize(sid));
+    for(let pos=0, blockIndex=0; pos<all.length && takenVisible < perPage; pos += blockSize, blockIndex++){
+      const blockId = sid + '_collapse_block_' + (blockIndex + 1);
+      const block = all.slice(pos, pos + blockSize);
+      const visibleBase = block.slice(0, visibleLimit);
+      const collapsedBase = block.slice(visibleLimit);
+      const expandedBlock = expanded.has(sid) || expanded.has(blockId);
+      pushDisplaySection(sourceSection, blockIndex, visibleBase, collapsedBase, expandedBlock);
     }
-    if(visibleStream.length >= perPage) break;
   }
 
-  const totalRawItems = Array.isArray(allItems) ? allItems.length : 0;
-  const estimatedVisibleTotal = Math.max(totalRawItems, visibleStream.length);
-  const totalPages = Math.max(estimatedVisibleTotal ? 1 : 0, Math.ceil(estimatedVisibleTotal / perPage));
-  const safePage = totalPages ? Math.min(page, totalPages) : 1;
+  // Count remaining visible stream for totalPages without building a huge response.
+  let visibleTotal = 0;
+  for(const sourceSection of full.sections || []){
+    const sid = sourceSection.id || 'general_web';
+    const all = (Array.isArray(sourceSection.allItems) && sourceSection.allItems.length)
+      ? sourceSection.allItems
+      : (Array.isArray(sourceSection.items) ? sourceSection.items : []);
+    const visibleLimit = sectionVisibleLimitForViewport(sid);
+    const blockSize = Math.max(visibleLimit, sectionCollapsedBlockSize(sid));
+    for(let pos=0, blockIndex=0; pos<all.length; pos += blockSize, blockIndex++){
+      const blockId = sid + '_collapse_block_' + (blockIndex + 1);
+      const block = all.slice(pos, pos + blockSize);
+      const visibleBase = block.slice(0, visibleLimit);
+      const collapsedBase = block.slice(visibleLimit);
+      const expandedBlock = expanded.has(sid) || expanded.has(blockId);
+      visibleTotal += expandedBlock ? (visibleBase.length + collapsedBase.length) : visibleBase.length;
+    }
+  }
+
   return {
     enabled: true,
-    mode: 'collapse-aware-visible-card-backfill-15-pipeline-safe',
+    mode: 'collapse-aware-visible-15-backfill-preserve-pipeline',
     q: safeString(q || ''),
-    page: safePage,
+    page,
     requestedPage: page,
     perPage,
     visibleCardsPerPage: perPage,
-    visibleCount: visibleStream.length,
-    pageItems: visibleStream,
-    pageSections,
-    sections: pageSections,
-    visibleSections: pageSections,
-    displaySections: pageSections,
-    viewportSections: pageSections,
-    totalItems: totalRawItems,
-    totalPages,
-    hasPrevPage: safePage > 1,
-    hasNextPage: safePage < totalPages,
+    visibleCount: pageItems.length,
+    pageItems,
+    sections,
+    visibleSections: sections,
+    displaySections: sections,
+    viewportSections: sections,
+    totalItems: Array.isArray(items) ? items.length : 0,
+    totalVisibleCandidates: visibleTotal,
+    totalPages: Math.max(visibleTotal ? 1 : 0, Math.ceil(visibleTotal / perPage)),
+    hasPrevPage: page > 1,
+    hasNextPage: page < Math.max(visibleTotal ? 1 : 0, Math.ceil(visibleTotal / perPage)),
+    expandedSections: Array.from(expanded),
     bodyPreserved: true,
     doesNotLimitItemsResults: true,
-    collapsedItemsExcludedFromViewport: true
+    principle: 'Folded/collapsed cards do not consume the 15 visible-card viewport. Later visible cards are pulled forward; expanding a section pushes later cards to following pages.'
   };
 }
 
@@ -1358,10 +1368,10 @@ function absorbIntoSanmaruResident(q, items, ctx){
 
 function buildImmediateResidentResponse(q, raw, residentPack, baseMeta){
   const candidateTarget = Math.min(MAX_LIMIT, Math.max(clampInt(raw && (raw.candidatePool || raw.candidatePoolTarget || raw.limit), DEFAULT_LIMIT, 1, MAX_LIMIT), MIN_RESULT_TARGET));
-  const items = dedupeCanonicalItems(residentPack.items || []).slice(0, candidateTarget).map(compactResultItem).map(normalizeYoutubeSingleThumbnailItem);
+  const items = dedupeCanonicalItems(residentPack.items || []).slice(0, candidateTarget).map(compactResultItem);
   const fullSectionPack = buildSearchSections(items, q, { searchType: raw && (raw.type || raw.category || raw.tab || raw.vertical) });
-  const visiblePagePack = buildCollapseAwareVisiblePagePack(fullSectionPack, items, q, raw || {});
-  const viewportSections = { sections: visiblePagePack.pageSections || visiblePagePack.sections || [], visibleSections: visiblePagePack.visibleSections || visiblePagePack.sections || [], displaySections: visiblePagePack.displaySections || visiblePagePack.sections || [], viewportSections: visiblePagePack.viewportSections || visiblePagePack.sections || [], totalSections: (visiblePagePack.sections || []).length, mode: visiblePagePack.mode };
+  const visiblePagePack = buildCollapseAwareViewportPack(items, q, raw || {}, fullSectionPack);
+  const viewportSections = visiblePagePack;
   const sectionPack = Object.assign({}, fullSectionPack, {
     sections: viewportSections.sections,
     fullSections: viewportSections.sections,
@@ -2076,6 +2086,36 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       return count;
     }
 
+    async function pullFromGoogleSocial(){
+      let count = 0;
+      if(timeLeft() <= 1200) { record('google_social', 'skipped-time', 0); return 0; }
+      const siteQueries = [
+        ['instagram', q + ' site:instagram.com'],
+        ['facebook', q + ' site:facebook.com'],
+        ['tiktok', q + ' site:tiktok.com'],
+        ['x_twitter', q + ' (site:x.com OR site:twitter.com)'],
+        ['threads', q + ' site:threads.net']
+      ];
+      const settled = await Promise.allSettled(siteQueries.map(pair =>
+        Containers.web_google.fetch(pair[1], 5, 1)
+          .then(bundle => ({ site: pair[0], bundle }))
+          .catch(() => ({ site: pair[0], bundle: null }))
+      ));
+      for(const item of settled){
+        const pack = item && item.status === 'fulfilled' ? item.value : null;
+        const bundle = pack && pack.bundle;
+        if(bundle && Array.isArray(bundle.results)){
+          bundle.results = bundle.results.map(x => Object.assign({}, x, {
+            type: 'sns', mediaType: x.mediaType || 'article', source: 'google_social_' + (pack.site || 'sns'), provider: 'google-cse-social'
+          }));
+        }
+        const n = addBundle(bundle, 'google_social_' + ((pack && pack.site) || 'sns'), collected, sourceState);
+        count += n;
+      }
+      record('google_social', count ? 'ok' : 'empty', count, { sites: siteQueries.map(x => x[0]) });
+      return count;
+    }
+
     async function pullFromBing(){
       let count = 0;
       let offset = 0;
@@ -2325,6 +2365,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       await Promise.allSettled([
         pullFromNaver(),
         pullFromGoogle(),
+        pullFromGoogleSocial(),
         pullFromBing(),
         pullFromYouTube(),
         pullFromImage()
@@ -2386,7 +2427,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     }
 
     const finalTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
-    const finalItems = unique.slice(0, finalTarget).map(compactResultItem).map(normalizeYoutubeSingleThumbnailItem);
+    const finalItems = unique.slice(0, finalTarget).map(compactResultItem);
 
     const result = {
       source: sourceState.used || (finalItems.length ? 'multi' : null),
@@ -2994,22 +3035,20 @@ async function naverGenericSearch(endpoint, q, limit, start, source, type){
 async function googleSearch(q, limit, start){
   const key = envFirst('GOOGLE_API_KEY','GOOGLE_SEARCH_API_KEY','GOOGLE_CUSTOM_SEARCH_API_KEY','GOOGLE_CLOUD_API_KEY');
   const cx = envFirst('GOOGLE_CSE_ID','GOOGLE_CX','GOOGLE_SEARCH_ENGINE_ID','GOOGLE_CUSTOM_SEARCH_ENGINE_ID','GOOGLE_PROGRAMMABLE_SEARCH_ENGINE_ID');
-  if(!key || !cx) return { source:'google', results: [], meta:{ status:'key-missing' } };
-
-  function cseUrl(query, pageStart, extra){
-    let url = 'https://www.googleapis.com/customsearch/v1' +
-      '?key=' + encodeURIComponent(key) +
-      '&cx=' + encodeURIComponent(cx) +
-      '&q=' + encodeURIComponent(query) +
-      '&num=' + Math.min(limit,10) +
-      '&start=' + (pageStart || 1) +
-      '&hl=ko&gl=kr&safe=off';
-    if(extra) url += extra;
-    return url;
-  }
-
-  async function fetchCse(query, type, source, pageStart, extra){
-    const data = await fetchWithTimeout(cseUrl(query, pageStart, extra), null, 3500).then(r => r.ok ? r.json() : null).catch(() => null);
+  if(!key || !cx) return null;
+  const base = 'https://www.googleapis.com/customsearch/v1' +
+    '?key=' + encodeURIComponent(key) +
+    '&cx=' + encodeURIComponent(cx) +
+    '&q=' + encodeURIComponent(q) +
+    '&num=' + Math.min(limit,10) +
+    '&start=' + start +
+    '&hl=ko' +
+    '&gl=kr' +
+    '&safe=off' +
+    '&filter=0';
+  const webRes = await fetchWithTimeout(base, null, 3000).then(r => r.ok ? r.json() : null).catch(() => null);
+  const newsRes = await fetchWithTimeout(base + '&sort=date', null, 3000).then(r => r.ok ? r.json() : null).catch(() => null);
+  const mergeItems = (data, type, source) => {
     const items = Array.isArray(data && data.items) ? data.items : [];
     return items.map(it => {
       const pagemap = it.pagemap || {};
@@ -3018,25 +3057,10 @@ async function googleSearch(q, limit, start){
       const img = (cseImg && cseImg.src) || (cseThumb && cseThumb.src) || '';
       return { title: it.title || '', link: it.link || '', url: it.link || '', snippet: it.snippet || '', type, source, thumbnail: img, thumb: img, image: img, payload: { source, thumb: img, image: img } };
     });
-  }
-
-  const normal = await fetchCse(q, 'web', 'google', start || 1, '');
-  const news = await fetchCse(q, 'news', 'google_news', start || 1, '&sort=date');
-
-  // Light SNS route through Google CSE. This is provider data, not a static shortcut card.
-  const snsQueries = [
-    ['instagram', q + ' site:instagram.com'],
-    ['facebook', q + ' site:facebook.com'],
-    ['tiktok', q + ' site:tiktok.com'],
-    ['x_twitter', q + ' site:x.com OR site:twitter.com'],
-    ['threads', q + ' site:threads.net']
-  ];
-  const snsSettled = await Promise.allSettled(snsQueries.map(([name, query]) => fetchCse(query, 'sns', 'google_sns_' + name, 1, '')));
-  const sns = [];
-  for(const r of snsSettled){ if(r.status === 'fulfilled' && Array.isArray(r.value)) sns.push.apply(sns, r.value.slice(0, 4)); }
-
-  return { source: 'google', results: normal.concat(news, sns) };
+  };
+  return { source: 'google', results: mergeItems(webRes, 'web', 'google').concat(mergeItems(newsRes, 'news', 'google_news')) };
 }
+
 async function bingSearch(q, limit, offset){
   const key = envFirst('BING_API_KEY','BING_SEARCH_API_KEY','AZURE_BING_SEARCH_API_KEY','BING_SUBSCRIPTION_KEY');
   if(!key) return null;
@@ -3055,24 +3079,16 @@ async function youtubeSearch(q, limit){
   if(!res.ok) return null;
   const data = await res.json();
   const results = (data.items || []).map(it => {
-    const thumbs = it.snippet && it.snippet.thumbnails || {};
+    const thumb = (it.snippet && it.snippet.thumbnails && (it.snippet.thumbnails.high || it.snippet.thumbnails.medium || it.snippet.thumbnails.default) || {}).url || '';
     const videoId = it.id && it.id.videoId;
     const watchUrl = videoId ? 'https://www.youtube.com/watch?v=' + videoId : '';
-    const thumb = (thumbs.high || thumbs.medium || thumbs.default || {}).url || (videoId ? 'https://i.ytimg.com/vi/' + videoId + '/hqdefault.jpg' : '');
-    return normalizeYoutubeSingleThumbnailItem({
-      title: (it.snippet && it.snippet.title) || '',
-      link: watchUrl, url: watchUrl,
-      snippet: (it.snippet && it.snippet.description) || '',
-      type: 'video', mediaType: 'video', source: 'youtube',
-      thumbnail: thumb, thumb, image: thumb, imageUrl: thumb, imageSet: [], images: [],
-      originalImage: thumb, fullImage: thumb, viewerImage: thumb, openImageUrl: thumb, contentUrl: thumb, cardImage: thumb,
-      videoId, videoUrl: watchUrl, watchUrl, embedUrl: videoId ? 'https://www.youtube.com/embed/' + videoId : '', openUrl: watchUrl,
-      media: { type: 'video', preview: { poster: thumb, image: thumb, original: thumb, videoUrl: watchUrl, embedUrl: videoId ? 'https://www.youtube.com/embed/' + videoId : '' } },
-      payload: { source: 'youtube', thumb, originalImage: thumb, videoId, videoUrl: watchUrl }
-    });
+    const maxThumb = videoId ? 'https://i.ytimg.com/vi/' + videoId + '/maxresdefault.jpg' : thumb;
+    const poster = videoId ? 'https://i.ytimg.com/vi/' + videoId + '/hqdefault.jpg' : (thumb || maxThumb || '');
+    return { title: (it.snippet && it.snippet.title) || '', link: watchUrl, url: watchUrl, snippet: (it.snippet && it.snippet.description) || '', type: 'video', mediaType: 'video', source: 'youtube', thumbnail: poster, thumb: poster, image: poster, imageUrl: poster, imageSet: [], originalImage: poster, fullImage: poster, viewerImage: poster, openImageUrl: poster, contentUrl: poster, cardImage: poster, videoId, videoUrl: watchUrl, watchUrl, embedUrl: videoId ? 'https://www.youtube.com/embed/' + videoId : '', openUrl: watchUrl, media: { type: 'video', preview: { poster, original: poster, image: poster, videoUrl: watchUrl, embedUrl: videoId ? 'https://www.youtube.com/embed/' + videoId : '' } }, payload: { source: 'youtube', thumb: poster, originalImage: poster, videoId, videoUrl: watchUrl } };
   });
   return { source: 'youtube', results };
 }
+
 async function googleImageSearch(q, limit, start){
   const key = envFirst('GOOGLE_API_KEY','GOOGLE_SEARCH_API_KEY','GOOGLE_CUSTOM_SEARCH_API_KEY','GOOGLE_CLOUD_API_KEY');
   const cx = envFirst('GOOGLE_CSE_ID','GOOGLE_CX','GOOGLE_SEARCH_ENGINE_ID','GOOGLE_CUSTOM_SEARCH_ENGINE_ID','GOOGLE_PROGRAMMABLE_SEARCH_ENGINE_ID');
@@ -3084,7 +3100,10 @@ async function googleImageSearch(q, limit, start){
     '&searchType=image' +
     '&num=' + Math.min(limit,10) +
     '&start=' + (start || 1) +
-    '&hl=ko&gl=kr&safe=off';
+    '&hl=ko' +
+    '&gl=kr' +
+    '&safe=off' +
+    '&filter=0';
   const res = await fetchWithTimeout(url, null, 3500);
   if(!res.ok) return null;
   const data = await res.json();
@@ -3598,12 +3617,6 @@ async function attachSanmaruAugmentResults(base, event, ctx){
     return Object.assign({}, base, { meta: Object.assign({}, base.meta || {}, { sanmaruAugment: hookMeta }) });
   }
 
-  const useResidentAugment = truthy(raw.useSanmaruAugment) || truthy(raw.mergeSanmaruResident) || truthy(raw.waitSanmaru) || truthy(raw.deepSanmaru) || truthy(raw.blockingSanmaru) || truthy(process.env.MARU_SEARCH_MERGE_SANMARU_RESIDENT);
-  if(!useResidentAugment){
-    try { getSanmaruResidentForMaru(q, raw, { searchType: ctx && ctx.searchType, lang: ctx && ctx.lang, reason:'maru-touch-only' }); } catch(e) {}
-    return Object.assign({}, base, { meta: Object.assign({}, base.meta || {}, { sanmaruAugment: Object.assign({}, hookMeta, { status:'deferred-touch-only', mode:'resident-touch-no-merge', reason:'avoid-stale-cross-query-resident-results' }) }) });
-  }
-
   const currentCount = Array.isArray(base.items) ? base.items.length : 0;
   const resident = getSanmaruResidentForMaru(q, raw, { searchType: ctx && ctx.searchType, lang: ctx && ctx.lang, reason:'maru-augment' });
   const residentItems = (resident.items || []).map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru-resident')));
@@ -3699,7 +3712,7 @@ exports.handler = async function(event){
         timeLeft: () => Math.max(0, 6500 - (nowMs() - started))
       });
 
-      const items = enriched.map(compactResultItem).map(normalizeYoutubeSingleThumbnailItem);
+      const items = enriched.map(compactResultItem);
       return ok({
         status: 'ok',
         engine: 'maru-search',
@@ -3723,13 +3736,13 @@ exports.handler = async function(event){
 
     const visibleNeed = clampInt(firstNonEmpty(raw && (raw.perPage || raw.pageSize || raw.visibleCardsPerPage || raw.visibleLimit), 15), 15, 1, 100);
     const forceProviderRefresh = deep || explicitExternalRequested(raw) || truthy(raw && (raw.refresh || raw.forceRefresh || raw.waitProviders || raw.waitExternal));
-    const allowResidentImmediate = truthy(raw && (raw.useResidentImmediate || raw.fastResident || raw.residentImmediate)) || truthy(process.env.MARU_SEARCH_USE_RESIDENT_IMMEDIATE);
-    if(allowResidentImmediate && !forceProviderRefresh && !truthy(raw && (raw.noResident || raw.skipResident || raw.disableResident))){
+    const residentImmediateRequested = truthy(raw && (raw.useResidentImmediate || raw.residentImmediate || raw.fastResident));
+    if(residentImmediateRequested && !forceProviderRefresh && !truthy(raw && (raw.noResident || raw.skipResident || raw.disableResident))){
       const residentPack = getSanmaruResidentForMaru(q, raw || {}, { searchType, lang, reason:'maru-immediate-response' });
       if((residentPack.items || []).length >= visibleNeed){
         return ok(buildImmediateResidentResponse(q, raw || {}, residentPack, {
           residentImmediateThreshold: visibleNeed,
-          note: 'explicit resident immediate response'
+          note: 'explicit resident immediate requested; default path keeps query-specific maru-search pipeline to avoid stale previous-query results'
         }));
       }
     }
@@ -3744,12 +3757,12 @@ exports.handler = async function(event){
     const analyticsOff = truthy(raw && (raw.noAnalytics || raw.disableAnalytics)) || !analyticsRequested;
     const revenueOff = truthy(raw && (raw.noRevenue || raw.disableRevenue)) || !realtimeRevenueRequested;
     if(!analyticsOff) syncSearchAnalytics(event, q, base.items).catch(() => null);
-    base.items = (Array.isArray(base.items) ? base.items : []).map(compactResultItem).map(normalizeYoutubeSingleThumbnailItem);
+    base.items = (Array.isArray(base.items) ? base.items : []).map(compactResultItem);
     base.results = base.items;
     absorbIntoSanmaruResident(q, base.items, { searchType, lang });
     const fullSectionPack = buildSearchSections(base.items, q, { searchType });
-    const visiblePagePack = buildCollapseAwareVisiblePagePack(fullSectionPack, base.items, q, raw || {});
-    const viewportSections = { sections: visiblePagePack.pageSections || visiblePagePack.sections || [], visibleSections: visiblePagePack.visibleSections || visiblePagePack.sections || [], displaySections: visiblePagePack.displaySections || visiblePagePack.sections || [], viewportSections: visiblePagePack.viewportSections || visiblePagePack.sections || [], totalSections: (visiblePagePack.sections || []).length, mode: visiblePagePack.mode };
+    const visiblePagePack = buildCollapseAwareViewportPack(base.items, q, raw || {}, fullSectionPack);
+    const viewportSections = visiblePagePack;
     const sectionPackWithViewport = Object.assign({}, fullSectionPack, {
       sections: viewportSections.sections,
       fullSections: viewportSections.sections,
@@ -3767,8 +3780,10 @@ exports.handler = async function(event){
       hasNextPage: visiblePagePack.hasNextPage,
       bodyPreserved: true,
       sectionsPreserved: false,
-      fullSectionsPreserved: true,
+      fullSectionsPreserved: false,
+      sourceFullSectionsPreserved: true,
       viewportBackfill: true,
+      collapseAwareBackfill: true,
       doesNotLimitItemsResults: true
     });
     if(!revenueOff) distributeRevenue(event, base.items).catch(() => null);
@@ -3817,7 +3832,15 @@ async function maruSearchDispatcher(req){
     mediaExternal: req.mediaExternal,
     mediaEngineExternal: req.mediaEngineExternal,
     includeImmersive: req.includeImmersive,
-    useImmersiveMedia: req.useImmersiveMedia
+    useImmersiveMedia: req.useImmersiveMedia,
+    action: req.action,
+    expandedSections: req.expandedSections,
+    expandedSection: req.expandedSection,
+    openSections: req.openSections,
+    openSection: req.openSection,
+    useResidentImmediate: req.useResidentImmediate,
+    residentImmediate: req.residentImmediate,
+    fastResident: req.fastResident
   }, headers: req.headers || {} });
   try { return JSON.parse(res.body || '{}'); }
   catch(e){ return { status: 'fail', message: 'BAD_JSON' }; }
