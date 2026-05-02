@@ -19,7 +19,7 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.35-559-visible15-provider-alias-safe';
+const VERSION = 'A1.5.36-570-collapse-aware-visible15-pinset';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -694,14 +694,8 @@ function youtubeIdFromUrl(url){
 
 function youtubePosterCandidates(videoId, current){
   const id = safeString(videoId).trim();
-  const out = [];
-  if(current) out.push(current);
-  if(id){
-    out.push('https://i.ytimg.com/vi/' + id + '/maxresdefault.jpg');
-    out.push('https://i.ytimg.com/vi/' + id + '/hqdefault.jpg');
-    out.push('https://i.ytimg.com/vi/' + id + '/mqdefault.jpg');
-  }
-  return compactImages(out);
+  const preferred = id ? 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg' : safeString(current).trim();
+  return compactImages([preferred || current]).slice(0, 1);
 }
 
 function mediaProfileForItem(it){
@@ -714,7 +708,7 @@ function mediaProfileForItem(it){
   let images = naturalImagesForItem(it, 6);
 
   if((sourceText.includes('youtube') || typeText === 'video') && videoId){
-    images = qualitySortImagesForItem(youtubePosterCandidates(videoId, images[0]).concat(images), it).slice(0, 6);
+    images = youtubePosterCandidates(videoId, images[0]).slice(0, 1);
   }
 
   const explicitOriginals = qualitySortImagesForItem([
@@ -724,7 +718,9 @@ function mediaProfileForItem(it){
 
   const original = explicitOriginals[0] || images[0] || '';
   const bestDisplay = qualitySortImagesForItem([original].concat(images), it)[0] || original || images[0] || '';
-  const imageSet = qualitySortImagesForItem([bestDisplay, original].concat(images), it).slice(0, 6);
+  const imageSet = ((sourceText.includes('youtube') || typeText === 'video') && videoId)
+    ? compactImages([bestDisplay || original || images[0]]).slice(0, 1)
+    : qualitySortImagesForItem([bestDisplay, original].concat(images), it).slice(0, 6);
   const thumb = bestDisplay || original || '';
   const videoUrl = videoId ? 'https://www.youtube.com/watch?v=' + videoId : (typeText === 'video' ? url : firstNonEmpty(it.videoUrl, p.videoUrl));
   const embedUrl = videoId ? 'https://www.youtube.com/embed/' + videoId : firstNonEmpty(it.embedUrl, p.embedUrl);
@@ -982,6 +978,8 @@ function buildSearchSections(items, q, opts){
     const meta = SEARCH_SECTION_META[sectionId] || SEARCH_SECTION_META.general_web;
     const all = (buckets[sectionId] || []).slice().sort((a,b) => sectionSortScore(b) - sectionSortScore(a));
     const previewLimit = meta.previewLimit || 6;
+    const previewItems = all.slice(0, previewLimit);
+    const collapsedItems = all.slice(previewLimit);
     return {
       id: sectionId,
       title: meta.title,
@@ -989,9 +987,15 @@ function buildSearchSections(items, q, opts){
       description: meta.description,
       rank: meta.rank,
       total: all.length,
+      sourceTotal: all.length,
       previewLimit,
-      hasMore: all.length > previewLimit,
-      items: all.slice(0, previewLimit),
+      hasMore: collapsedItems.length > 0,
+      items: previewItems,
+      allItems: all,
+      collapsedItems,
+      hiddenItems: collapsedItems,
+      collapsedCount: collapsedItems.length,
+      hiddenCount: collapsedItems.length,
       more: {
         q: safeString(q || ''),
         type: sectionId,
@@ -1050,98 +1054,213 @@ function buildVisiblePagePack(items, q, raw){
 }
 
 
+
+function parseExpandedSectionSet(raw){
+  raw = raw || {};
+  const set = new Set();
+  function addMany(v){
+    if(v === true) { set.add('all'); return; }
+    const text = safeString(v).trim();
+    if(!text) return;
+    if(['1','true','yes','on','all','*'].includes(text.toLowerCase())) { set.add('all'); return; }
+    text.split(/[\s,|;]+/).map(x => x.trim()).filter(Boolean).forEach(x => set.add(x));
+  }
+  addMany(raw.expandedSections);
+  addMany(raw.openSections);
+  addMany(raw.expandedSection);
+  addMany(raw.openSection);
+  addMany(raw.expandSection);
+  addMany(raw.expanded);
+  addMany(raw.open);
+  addMany(raw.expand);
+  const action = safeString(raw.action || raw.mode || raw.fn).toLowerCase();
+  if(action === 'expand-section' || action === 'expandsection') addMany(raw.section || raw.type || raw.sourceSectionId || raw.sectionId);
+  return set;
+}
+
+function sectionIsExpanded(sectionId, expandedSet){
+  return !!(expandedSet && (expandedSet.has('all') || expandedSet.has('*') || expandedSet.has(sectionId)));
+}
+
+function collapsedVisibleLimit(raw){
+  return clampInt(firstNonEmpty(raw && (raw.sectionPreviewLimit || raw.collapsedVisibleLimit || raw.visiblePerSection), process.env.MARU_COLLAPSED_VISIBLE_LIMIT, 3), 3, 1, 20);
+}
+
+function sectionFullItems(section){
+  if(section && Array.isArray(section.allItems)) return section.allItems;
+  const items = section && Array.isArray(section.items) ? section.items : [];
+  const hidden = section && Array.isArray(section.collapsedItems) ? section.collapsedItems : (section && Array.isArray(section.hiddenItems) ? section.hiddenItems : []);
+  return items.concat(hidden);
+}
+
+function buildSectionAwareVisiblePagePack(fullSectionPack, q, raw){
+  raw = raw || {};
+  const sections = (fullSectionPack && Array.isArray(fullSectionPack.sections)) ? fullSectionPack.sections : [];
+  const page = clampInt(firstNonEmpty(raw.page, raw.p, raw.visiblePage, raw.sectionPage), 1, 1, 100000);
+  const perPage = clampInt(firstNonEmpty(raw.perPage, raw.pageSize, raw.visibleCardsPerPage, raw.visibleLimit, raw.cardsPerPage), 15, 1, 100);
+  const previewLimit = collapsedVisibleLimit(raw);
+  const expandedSet = parseExpandedSectionSet(raw);
+  const stream = [];
+  const sectionState = Object.create(null);
+
+  for(const section of sections){
+    if(!section || !section.id) continue;
+    const sectionId = section.id;
+    const meta = SEARCH_SECTION_META[sectionId] || section || SEARCH_SECTION_META.general_web;
+    const all = sectionFullItems(section);
+    const expanded = sectionIsExpanded(sectionId, expandedSet);
+    const visibleItems = expanded ? all : all.slice(0, previewLimit);
+    const collapsedItems = expanded ? [] : all.slice(previewLimit);
+    sectionState[sectionId] = { section, meta, all, expanded, visibleItems, collapsedItems, visibleLimit: previewLimit };
+    for(let i=0; i<visibleItems.length; i++){
+      const rawItem = visibleItems[i];
+      stream.push(Object.assign({}, rawItem, {
+        sectionId,
+        sourceSectionId: sectionId,
+        sectionTitle: meta.title || section.title,
+        sectionLabel: meta.label || section.label,
+        visibleViewportCard: true,
+        collapsedExcludedFromViewport: !expanded,
+        sectionVisibleIndex: i
+      }));
+    }
+  }
+
+  const totalVisibleItems = stream.length;
+  const totalPages = Math.max(totalVisibleItems ? 1 : 0, Math.ceil(totalVisibleItems / perPage));
+  const safePage = totalPages ? Math.min(page, totalPages) : 1;
+  const offset = totalPages ? (safePage - 1) * perPage : 0;
+  const pageItems = stream.slice(offset, offset + perPage);
+  const pageSectionMap = Object.create(null);
+  const pageSectionOrder = [];
+
+  for(const item of pageItems){
+    const sectionId = safeString(item && (item.sourceSectionId || item.sectionId)) || sectionIdForItem(item);
+    if(!pageSectionMap[sectionId]){
+      pageSectionMap[sectionId] = [];
+      pageSectionOrder.push(sectionId);
+    }
+    pageSectionMap[sectionId].push(item);
+  }
+
+  const pageSections = pageSectionOrder.map((sectionId, idx) => {
+    const state = sectionState[sectionId] || {};
+    const section = state.section || {};
+    const meta = state.meta || SEARCH_SECTION_META[sectionId] || SEARCH_SECTION_META.general_web;
+    const pageVisibleItems = pageSectionMap[sectionId] || [];
+    const hidden = state.expanded ? [] : (state.collapsedItems || []);
+    const sourceTotal = (state.all || []).length || pageVisibleItems.length + hidden.length;
+    const hasMore = hidden.length > 0;
+    return {
+      id: sectionId,
+      sourceSectionId: sectionId,
+      title: meta.title || section.title || sectionId,
+      label: meta.label || section.label || sectionId,
+      description: meta.description || section.description,
+      rank: meta.rank || section.rank || idx,
+      expanded: !!state.expanded,
+      total: pageVisibleItems.length + hidden.length,
+      displayTotal: pageVisibleItems.length,
+      sourceTotal,
+      previewLimit: pageVisibleItems.length,
+      visibleLimit: pageVisibleItems.length,
+      hasMore,
+      collapsedCount: hidden.length,
+      hiddenCount: hidden.length,
+      collapsedItems: hidden,
+      hiddenItems: hidden,
+      items: pageVisibleItems,
+      more: {
+        q: safeString(q || ''),
+        type: sectionId,
+        section: sectionId,
+        sourceSectionId: sectionId,
+        action: hasMore ? 'expand-section' : 'none',
+        hiddenCount: hidden.length,
+        sourceTotal,
+        expanded: !!state.expanded,
+        note: 'Collapsed items are excluded from the 15-card viewport. If this section is expanded, call again with expandedSections=' + sectionId + ' so the viewport is reflowed.'
+      }
+    };
+  });
+
+  return {
+    enabled: true,
+    mode: 'collapse-aware-visible-card-viewport',
+    q: safeString(q || ''),
+    page: safePage,
+    requestedPage: page,
+    perPage,
+    visibleCardsPerPage: perPage,
+    collapsedVisibleLimit: previewLimit,
+    expandedSections: Array.from(expandedSet),
+    visibleCount: pageItems.length,
+    pageItems,
+    pageSections,
+    visibleSections: pageSections,
+    displaySections: pageSections,
+    viewportSections: pageSections,
+    totalItems: totalVisibleItems,
+    totalVisibleItems,
+    totalPages,
+    hasPrevPage: totalPages ? safePage > 1 : false,
+    hasNextPage: totalPages ? safePage < totalPages : false,
+    prevPage: safePage > 1 ? safePage - 1 : null,
+    nextPage: safePage < totalPages ? safePage + 1 : null,
+    bodyPreserved: true,
+    doesNotLimitItemsResults: true,
+    collapsedItemsDoNotConsumeViewport: true,
+    expansionReflowsViewport: true
+  };
+}
+
 function blockingImageEnrichRequested(event){
   const qs = (event && event.queryStringParameters) || {};
   return truthy(qs.enrichImages) || truthy(qs.imageEnrich) || truthy(qs.ogImages) || truthy(qs.waitImages) || truthy(process.env.MARU_SEARCH_BLOCKING_IMAGE_ENRICH);
 }
 
-function buildViewportDisplaySections(pageItems, q, fullSectionPack){
-  const list = Array.isArray(pageItems) ? pageItems : [];
-  const out = [];
-  const fullSections = (fullSectionPack && Array.isArray(fullSectionPack.sections)) ? fullSectionPack.sections : [];
-  const fullById = Object.create(null);
-  for(const section of fullSections){
-    if(section && section.id) fullById[section.id] = section;
+function buildViewportDisplaySections(pagePackOrItems, q, fullSectionPack){
+  if(pagePackOrItems && typeof pagePackOrItems === 'object' && !Array.isArray(pagePackOrItems) && Array.isArray(pagePackOrItems.pageSections)){
+    const sections = pagePackOrItems.pageSections;
+    return {
+      enabled: true,
+      mode: 'collapse-aware-visible-card-sections-backfill-15',
+      visibleCount: pagePackOrItems.visibleCount || (Array.isArray(pagePackOrItems.pageItems) ? pagePackOrItems.pageItems.length : 0),
+      sections,
+      visibleSections: sections,
+      displaySections: sections,
+      viewportSections: sections,
+      totalSections: sections.length,
+      collapsedItemsDoNotConsumeViewport: true,
+      expansionReflowsViewport: true,
+      principle: '접힌 항목은 15장 뷰포트 카운트에서 제외한다. 펼침 요청이 들어오면 visible stream을 다시 계산해서 초과분은 다음 페이지로 밀린다.'
+    };
   }
 
-  const seenBySource = Object.create(null);
-  let sectionSeq = 0;
-  let current = null;
-
-  function flush(){
-    if(!current || !current.items.length) return;
-    const firstId = current.sourceSectionId;
-    const meta = SEARCH_SECTION_META[firstId] || SEARCH_SECTION_META.general_web;
-    const full = fullById[firstId] || null;
-    const sourceTotal = full && typeof full.total === 'number' ? Math.max(full.total, seenBySource[firstId] || 0) : (seenBySource[firstId] || current.items.length);
-    const alreadyVisibleForSource = seenBySource[firstId] || current.items.length;
-    const hiddenCount = Math.max(0, sourceTotal - alreadyVisibleForSource);
-
-    out.push({
-      id: firstId + '_viewport_' + (++sectionSeq),
-      sourceSectionId: firstId,
-      title: meta.title,
-      label: meta.label,
-      description: meta.description,
-      rank: meta.rank,
-      // 실제 화면에는 items.length 장만 보인다. total도 화면 기준으로 둬서 프론트가 다시 접어버리지 않게 한다.
-      displayTotal: current.items.length,
-      total: current.items.length,
-      sourceTotal,
-      previewLimit: current.items.length,
-      hasMore: hiddenCount > 0,
-      collapsedCount: hiddenCount,
-      hiddenCount,
-      items: current.items,
-      more: {
-        q: safeString(q || ''),
-        type: firstId,
-        section: firstId,
-        sourceSectionId: firstId,
-        action: 'expand-section',
-        hiddenCount,
-        sourceTotal,
-        visibleAlready: alreadyVisibleForSource,
-        note: 'Top-level viewport sections contain only currently visible cards; hidden items do not consume the 15-card viewport.'
-      }
-    });
-    current = null;
-  }
-
-  // 같은 source section끼리 최대 3장까지만 묶는다.
-  // 한 source가 12장을 가지고 있어도 3장만 현재 chunk에 들어가고,
-  // 나머지는 뒤 항목이 앞으로 당겨져 15장 뷰포트를 채운다.
-  for(let i=0; i<list.length; i++){
-    const raw = list[i];
-    const sectionId = sectionIdForItem(raw);
-    const meta = SEARCH_SECTION_META[sectionId] || SEARCH_SECTION_META.general_web;
-    if(!current || current.sourceSectionId !== sectionId || current.items.length >= 3){
-      flush();
-      current = { sourceSectionId: sectionId, items: [] };
-    }
-    seenBySource[sectionId] = (seenBySource[sectionId] || 0) + 1;
-    current.items.push(Object.assign({}, raw, {
-      sectionId,
-      sourceSectionId: sectionId,
-      sectionTitle: meta.title,
-      sectionLabel: meta.label,
-      viewportCard: true,
-      viewportIndex: i,
-      visibleViewportCard: true
-    }));
-  }
-  flush();
-
+  const list = Array.isArray(pagePackOrItems) ? pagePackOrItems : [];
+  const fallback = buildVisiblePagePack(list, q, {});
+  const sections = [{
+    id: 'viewport_fallback',
+    sourceSectionId: 'viewport_fallback',
+    title: '검색 결과',
+    label: '검색',
+    total: list.length,
+    displayTotal: list.length,
+    previewLimit: list.length,
+    hasMore: false,
+    collapsedCount: 0,
+    hiddenCount: 0,
+    items: list
+  }];
   return {
     enabled: true,
-    mode: 'viewport-visible-card-sections-backfill-15',
-    visibleCount: list.length,
-    sections: out,
-    visibleSections: out,
-    displaySections: out,
-    viewportSections: out,
-    totalSections: out.length,
-    principle: '접힌 항목은 15장 뷰포트 카운트를 먹지 않으며, 뒤 항목이 앞으로 당겨져 현재 페이지 실제 표시 카드 15장을 채운다.'
+    mode: 'fallback-visible-card-sections',
+    visibleCount: fallback.visibleCount,
+    sections,
+    visibleSections: sections,
+    displaySections: sections,
+    viewportSections: sections,
+    totalSections: sections.length
   };
 }
 
@@ -1182,9 +1301,9 @@ function absorbIntoSanmaruResident(q, items, ctx){
 function buildImmediateResidentResponse(q, raw, residentPack, baseMeta){
   const candidateTarget = Math.min(MAX_LIMIT, Math.max(clampInt(raw && (raw.candidatePool || raw.candidatePoolTarget || raw.limit), DEFAULT_LIMIT, 1, MAX_LIMIT), MIN_RESULT_TARGET));
   const items = dedupeCanonicalItems(residentPack.items || []).slice(0, candidateTarget).map(compactResultItem);
-  const visiblePagePack = buildVisiblePagePack(items, q, raw || {});
   const fullSectionPack = buildSearchSections(items, q, { searchType: raw && (raw.type || raw.category || raw.tab || raw.vertical) });
-  const viewportSections = buildViewportDisplaySections(visiblePagePack.pageItems, q, fullSectionPack);
+  const visiblePagePack = buildSectionAwareVisiblePagePack(fullSectionPack, q, raw || {});
+  const viewportSections = buildViewportDisplaySections(visiblePagePack, q, fullSectionPack);
   const sectionPack = Object.assign({}, fullSectionPack, {
     sections: viewportSections.sections,
     fullSections: fullSectionPack.sections,
@@ -1425,6 +1544,10 @@ const Containers = {
   web_naver_local: { async fetch(q, limit, start){ return naverGenericSearch('local.json', q, Math.min(limit, 5), start, 'naver_local', 'local'); } },
   web_naver_book: { async fetch(q, limit, start){ return naverGenericSearch('book.json', q, limit, start, 'naver_book', 'book'); } },
   web_google: { async fetch(q, limit, start){ return googleSearch(q, limit, start); } },
+  web_google_instagram: { async fetch(q){ return googleSiteSearch(q, 'instagram.com', 'google_instagram', 'sns'); } },
+  web_google_facebook: { async fetch(q){ return googleSiteSearch(q, 'facebook.com', 'google_facebook', 'sns'); } },
+  web_google_tiktok: { async fetch(q){ return googleSiteSearch(q, 'tiktok.com', 'google_tiktok', 'sns'); } },
+  web_google_x: { async fetch(q){ return googleSiteSearch(q, 'x.com', 'google_x_twitter', 'sns'); } },
   web_bing: { async fetch(q, limit, start){ return bingSearch(q, limit, start); } },
   web_youtube: { async fetch(q, limit){ return youtubeSearch(q, limit); } },
   web_image: { async fetch(q, limit, start){ return googleImageSearch(q, limit, start); } },
@@ -2148,7 +2271,22 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         pullFromGoogle(),
         pullFromBing(),
         pullFromYouTube(),
-        pullFromImage()
+        pullFromImage(),
+        (async function pullFromSocialSiteSearch(){
+          let count = 0;
+          const packs = await Promise.allSettled([
+            Containers.web_google_instagram.fetch(q),
+            Containers.web_google_facebook.fetch(q),
+            Containers.web_google_tiktok.fetch(q),
+            Containers.web_google_x.fetch(q)
+          ]);
+          for(const r of packs){
+            const pack = r && r.status === 'fulfilled' ? r.value : null;
+            count += addBundle(pack, pack && pack.source || 'google_social', collected, sourceState);
+          }
+          record('google-social-site-search', count ? 'ok' : 'empty', count);
+          return count;
+        })()
       ]);
 
       const afterPrimaryExternal = collected.length;
@@ -2822,8 +2960,9 @@ async function googleSearch(q, limit, start){
     '&q=' + encodeURIComponent(q) +
     '&num=' + Math.min(limit,10) +
     '&start=' + start +
-    '&gl=us' +
-    '&lr=lang_en|lang_ko';
+    '&hl=ko' +
+    '&gl=kr' +
+    '&safe=off';
   const webRes = await fetchWithTimeout(base, null, 3000).then(r => r.ok ? r.json() : null).catch(() => null);
   const newsRes = await fetchWithTimeout(base + '&sort=date', null, 3000).then(r => r.ok ? r.json() : null).catch(() => null);
   const mergeItems = (data, type, source) => {
@@ -2837,6 +2976,24 @@ async function googleSearch(q, limit, start){
     });
   };
   return { source: 'google', results: mergeItems(webRes, 'web', 'google').concat(mergeItems(newsRes, 'news', 'google_news')) };
+}
+
+
+async function googleSiteSearch(q, site, source, type){
+  const key = envFirst('GOOGLE_API_KEY','GOOGLE_SEARCH_API_KEY','GOOGLE_CUSTOM_SEARCH_API_KEY','GOOGLE_CLOUD_API_KEY');
+  const cx = envFirst('GOOGLE_CSE_ID','GOOGLE_CX','GOOGLE_SEARCH_ENGINE_ID','GOOGLE_CUSTOM_SEARCH_ENGINE_ID','GOOGLE_PROGRAMMABLE_SEARCH_ENGINE_ID');
+  if(!key || !cx || !site) return null;
+  const url = 'https://www.googleapis.com/customsearch/v1' +
+    '?key=' + encodeURIComponent(key) +
+    '&cx=' + encodeURIComponent(cx) +
+    '&q=' + encodeURIComponent(q + ' site:' + site) +
+    '&num=5' +
+    '&hl=ko' +
+    '&gl=kr' +
+    '&safe=off';
+  const data = await fetchWithTimeout(url, null, 2500).then(r => r.ok ? r.json() : null).catch(() => null);
+  const items = Array.isArray(data && data.items) ? data.items : [];
+  return { source, results: items.map(it => ({ title: it.title || '', link: it.link || '', url: it.link || '', snippet: it.snippet || '', type: type || 'sns', mediaType: type === 'video' ? 'video' : 'article', source, provider: source, payload: { source, site } })) };
 }
 
 async function bingSearch(q, limit, offset){
@@ -2857,11 +3014,11 @@ async function youtubeSearch(q, limit){
   if(!res.ok) return null;
   const data = await res.json();
   const results = (data.items || []).map(it => {
-    const thumb = (it.snippet && it.snippet.thumbnails && (it.snippet.thumbnails.high || it.snippet.thumbnails.medium || it.snippet.thumbnails.default) || {}).url || '';
+    const providerThumb = (it.snippet && it.snippet.thumbnails && (it.snippet.thumbnails.high || it.snippet.thumbnails.medium || it.snippet.thumbnails.default) || {}).url || '';
     const videoId = it.id && it.id.videoId;
     const watchUrl = videoId ? 'https://www.youtube.com/watch?v=' + videoId : '';
-    const maxThumb = videoId ? 'https://i.ytimg.com/vi/' + videoId + '/maxresdefault.jpg' : thumb;
-    return { title: (it.snippet && it.snippet.title) || '', link: watchUrl, url: watchUrl, snippet: (it.snippet && it.snippet.description) || '', type: 'video', mediaType: 'video', source: 'youtube', thumbnail: thumb, thumb, image: maxThumb || thumb, imageUrl: maxThumb || thumb, imageSet: compactImages([maxThumb, thumb]), originalImage: maxThumb || thumb, fullImage: maxThumb || thumb, viewerImage: maxThumb || thumb, openImageUrl: maxThumb || thumb, contentUrl: maxThumb || thumb, cardImage: thumb || maxThumb, videoId, videoUrl: watchUrl, watchUrl, embedUrl: videoId ? 'https://www.youtube.com/embed/' + videoId : '', openUrl: watchUrl, media: { type: 'video', preview: { poster: thumb, original: maxThumb || thumb, videoUrl: watchUrl, embedUrl: videoId ? 'https://www.youtube.com/embed/' + videoId : '' } }, payload: { source: 'youtube', thumb, originalImage: maxThumb || thumb, videoId, videoUrl: watchUrl } };
+    const cardThumb = (youtubePosterCandidates(videoId, providerThumb)[0] || providerThumb || '').trim();
+    return { title: (it.snippet && it.snippet.title) || '', link: watchUrl, url: watchUrl, snippet: (it.snippet && it.snippet.description) || '', type: 'video', mediaType: 'video', source: 'youtube', thumbnail: cardThumb, thumb: cardThumb, image: cardThumb, imageUrl: cardThumb, imageSet: compactImages([cardThumb]).slice(0,1), originalImage: cardThumb, fullImage: cardThumb, viewerImage: cardThumb, openImageUrl: cardThumb, contentUrl: cardThumb, cardImage: cardThumb, videoId, videoUrl: watchUrl, watchUrl, embedUrl: videoId ? 'https://www.youtube.com/embed/' + videoId : '', openUrl: watchUrl, media: { type: 'video', preview: { poster: cardThumb, original: cardThumb, image: cardThumb, videoUrl: watchUrl, embedUrl: videoId ? 'https://www.youtube.com/embed/' + videoId : '' } }, payload: { source: 'youtube', thumb: cardThumb, originalImage: cardThumb, videoId, videoUrl: watchUrl } };
   });
   return { source: 'youtube', results };
 }
@@ -2876,7 +3033,10 @@ async function googleImageSearch(q, limit, start){
     '&q=' + encodeURIComponent(q) +
     '&searchType=image' +
     '&num=' + Math.min(limit,10) +
-    '&start=' + (start || 1);
+    '&start=' + (start || 1) +
+    '&hl=ko' +
+    '&gl=kr' +
+    '&safe=off';
   const res = await fetchWithTimeout(url, null, 3500);
   if(!res.ok) return null;
   const data = await res.json();
@@ -3533,8 +3693,8 @@ exports.handler = async function(event){
     base.results = base.items;
     absorbIntoSanmaruResident(q, base.items, { searchType, lang });
     const fullSectionPack = buildSearchSections(base.items, q, { searchType });
-    const visiblePagePack = buildVisiblePagePack(base.items, q, raw || {});
-    const viewportSections = buildViewportDisplaySections(visiblePagePack.pageItems, q, fullSectionPack);
+    const visiblePagePack = buildSectionAwareVisiblePagePack(fullSectionPack, q, raw || {});
+    const viewportSections = buildViewportDisplaySections(visiblePagePack, q, fullSectionPack);
     const sectionPackWithViewport = Object.assign({}, fullSectionPack, {
       sections: viewportSections.sections,
       fullSections: fullSectionPack.sections,
@@ -3565,7 +3725,7 @@ exports.handler = async function(event){
       pageItems: visiblePagePack.pageItems,
       visiblePagePack,
       sectionPack: sectionPackWithViewport,
-      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', preservationPatch: 'A1.5.35-559-visible15-provider-alias-safe' })
+      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', preservationPatch: 'A1.5.36-570-collapse-aware-visible15-pinset' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));
