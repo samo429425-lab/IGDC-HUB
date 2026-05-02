@@ -19,7 +19,7 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.36-570-pinset-collapse-aware-google-sns-youtube-safe';
+const VERSION = 'A1.5.35-559-visible15-provider-alias-safe';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -825,47 +825,6 @@ function compactResultItem(it){
 }
 
 
-function isYoutubeLikeItem(it){
-  const url = safeString(firstNonEmpty(it && it.url, it && it.link, it && it.watchUrl, it && it.videoUrl)).toLowerCase();
-  const source = safeString(it && it.source).toLowerCase();
-  const type = safeString(firstNonEmpty(it && it.type, it && it.mediaType)).toLowerCase();
-  return source.includes('youtube') || url.includes('youtube.com') || url.includes('youtu.be') || type === 'video';
-}
-
-function normalizeSingleVideoThumbnail(it){
-  if(!it || typeof it !== 'object' || !isYoutubeLikeItem(it)) return it;
-  const poster = firstNonEmpty(it.thumbnail, it.thumb, it.cardImage, it.image, it.imageUrl, it.originalImage);
-  if(!poster) return it;
-  const media = (it.media && typeof it.media === 'object') ? Object.assign({}, it.media) : { type: 'video' };
-  media.preview = Object.assign({}, media.preview || {}, {
-    poster,
-    image: poster,
-    original: poster,
-    videoUrl: firstNonEmpty(it.videoUrl, it.watchUrl, media.preview && media.preview.videoUrl),
-    embedUrl: firstNonEmpty(it.embedUrl, media.preview && media.preview.embedUrl)
-  });
-  return Object.assign({}, it, {
-    thumbnail: poster,
-    thumb: poster,
-    image: poster,
-    imageUrl: poster,
-    imageSet: [poster],
-    originalImage: poster,
-    fullImage: poster,
-    imageOriginal: poster,
-    viewerImage: poster,
-    openImageUrl: poster,
-    contentUrl: poster,
-    cardImage: poster,
-    media
-  });
-}
-
-function normalizeSingleVideoThumbnails(items){
-  return (Array.isArray(items) ? items : []).map(normalizeSingleVideoThumbnail);
-}
-
-
 // =========================================================
 // SEARCH RESULT SECTION PACK — FRONT SECTION SUPPLY LAYER
 // ---------------------------------------------------------
@@ -1057,99 +1016,20 @@ function buildSearchSections(items, q, opts){
 }
 
 
-function parseExpandedSectionSet(raw){
-  raw = raw || {};
-  const set = new Set();
-  function add(v){
-    safeString(v).split(/[;,\s]+/).map(x => x.trim()).filter(Boolean).forEach(x => set.add(x));
-  }
-  add(raw.expandedSections);
-  add(raw.openSections);
-  add(raw.expandedSection);
-  add(raw.expandSection);
-  add(raw.openSection);
-  const action = safeString(raw.action || raw.mode || raw.fn).trim().toLowerCase();
-  if(action === 'expand-section' || action === 'expandsection' || action === 'open-section'){
-    add(raw.section || raw.type || raw.sourceSectionId || raw.sectionId);
-  }
-  return set;
-}
-
-function itemIdentityKey(it){
-  return safeString(firstNonEmpty(it && it.url, it && it.link, it && it.openUrl, it && it.id, it && it.title)).toLowerCase();
-}
-
 function buildVisiblePagePack(items, q, raw){
   raw = raw || {};
   const list = Array.isArray(items) ? items : [];
   const page = clampInt(firstNonEmpty(raw.page, raw.p, raw.visiblePage, raw.sectionPage), 1, 1, 100000);
   const perPage = clampInt(firstNonEmpty(raw.perPage, raw.pageSize, raw.visibleCardsPerPage, raw.visibleLimit, raw.cardsPerPage), 15, 1, 100);
-
-  // 접힘은 유지하되, 접힌 묶음은 현재 페이지의 15장 카운트에서 제외한다.
-  // 한 섹션에서 앞쪽 N장은 보이고, 그 다음 collapseBatchSize 묶음만 접힌 묶음으로 빠진다.
-  // 그 뒤의 항목들은 순서대로 앞으로 당겨져 viewport 15장을 채운다.
-  const sectionVisibleLimit = clampInt(firstNonEmpty(raw.sectionVisibleLimit, raw.sectionPreviewLimit, raw.visiblePerSection), 3, 1, 20);
-  const collapseBatchSize = clampInt(firstNonEmpty(raw.collapseBatchSize, raw.collapsedBatchSize, raw.moreBatchSize), 9, 0, 100);
-  const expanded = parseExpandedSectionSet(raw);
-
-  const groups = Object.create(null);
-  const groupOrder = [];
-  for(const it of list){
-    const sid = sectionIdForItem(it);
-    if(!groups[sid]){
-      groups[sid] = [];
-      groupOrder.push(sid);
-    }
-    groups[sid].push(it);
-  }
-
-  const collapsedKeySet = new Set();
-  const collapsedBySection = Object.create(null);
-  const sectionState = Object.create(null);
-
-  for(const sid of groupOrder){
-    const arr = groups[sid] || [];
-    const isExpanded = expanded.has(sid);
-    const collapsedItems = (!isExpanded && collapseBatchSize > 0)
-      ? arr.slice(sectionVisibleLimit, sectionVisibleLimit + collapseBatchSize)
-      : [];
-
-    collapsedBySection[sid] = collapsedItems;
-    sectionState[sid] = {
-      sectionId: sid,
-      total: arr.length,
-      visibleHead: Math.min(sectionVisibleLimit, arr.length),
-      collapsedCount: collapsedItems.length,
-      expanded: isExpanded,
-      collapseBatchSize,
-      sectionVisibleLimit
-    };
-
-    for(const it of collapsedItems){
-      const key = itemIdentityKey(it);
-      if(key) collapsedKeySet.add(key);
-    }
-  }
-
-  const visibleStream = [];
-  for(const it of list){
-    const key = itemIdentityKey(it);
-    if(key && collapsedKeySet.has(key)) continue;
-    visibleStream.push(it);
-  }
-
-  const totalVisibleItems = visibleStream.length;
-  const totalPages = Math.max(totalVisibleItems ? 1 : 0, Math.ceil(totalVisibleItems / perPage));
+  const totalItems = list.length;
+  const totalPages = Math.max(totalItems ? 1 : 0, Math.ceil(totalItems / perPage));
   const safePage = totalPages ? Math.min(page, totalPages) : 1;
   const offset = totalPages ? (safePage - 1) * perPage : 0;
-  const pageItems = visibleStream.slice(offset, offset + perPage);
-
-  const collapsedCounts = {};
-  for(const sid of Object.keys(collapsedBySection)) collapsedCounts[sid] = collapsedBySection[sid].length;
+  const pageItems = list.slice(offset, offset + perPage);
 
   return {
     enabled: true,
-    mode: 'collapse-aware-render-viewport-only-do-not-limit-search-body',
+    mode: 'render-viewport-only-do-not-limit-search-body',
     q: safeString(q || ''),
     page: safePage,
     requestedPage: page,
@@ -1157,32 +1037,25 @@ function buildVisiblePagePack(items, q, raw){
     visibleCardsPerPage: perPage,
     visibleCount: pageItems.length,
     pageItems,
-    totalItems: list.length,
-    totalVisibleItems,
+    totalItems,
     totalPages,
     hasPrevPage: totalPages ? safePage > 1 : false,
     hasNextPage: totalPages ? safePage < totalPages : false,
     prevPage: safePage > 1 ? safePage - 1 : null,
     nextPage: safePage < totalPages ? safePage + 1 : null,
-    collapsedBySection,
-    collapsedCounts,
-    sectionState,
-    expandedSections: Array.from(expanded),
-    sectionVisibleLimit,
-    collapseBatchSize,
     bodyPreserved: true,
     doesNotLimitItemsResults: true,
-    sectionsPreserved: true,
-    principle: 'collapsed items are removed from the 15-card viewport count; following items are pulled forward. Expanded sections re-enter the stream and push later cards to the next page.'
+    sectionsPreserved: true
   };
 }
+
 
 function blockingImageEnrichRequested(event){
   const qs = (event && event.queryStringParameters) || {};
   return truthy(qs.enrichImages) || truthy(qs.imageEnrich) || truthy(qs.ogImages) || truthy(qs.waitImages) || truthy(process.env.MARU_SEARCH_BLOCKING_IMAGE_ENRICH);
 }
 
-function buildViewportDisplaySections(pageItems, q, fullSectionPack, visiblePagePack){
+function buildViewportDisplaySections(pageItems, q, fullSectionPack){
   const list = Array.isArray(pageItems) ? pageItems : [];
   const out = [];
   const fullSections = (fullSectionPack && Array.isArray(fullSectionPack.sections)) ? fullSectionPack.sections : [];
@@ -1191,33 +1064,18 @@ function buildViewportDisplaySections(pageItems, q, fullSectionPack, visiblePage
     if(section && section.id) fullById[section.id] = section;
   }
 
-  const collapsedBySection = (visiblePagePack && visiblePagePack.collapsedBySection) || Object.create(null);
-  const sectionState = (visiblePagePack && visiblePagePack.sectionState) || Object.create(null);
-  const emittedMoreFor = new Set();
+  const seenBySource = Object.create(null);
   let sectionSeq = 0;
   let current = null;
-
-  function makeMorePayload(sectionId){
-    const collapsedItems = Array.isArray(collapsedBySection[sectionId]) ? collapsedBySection[sectionId] : [];
-    const full = fullById[sectionId] || null;
-    const state = sectionState[sectionId] || {};
-    return {
-      hiddenCount: collapsedItems.length,
-      collapsedCount: collapsedItems.length,
-      collapsedItems,
-      sourceTotal: full && typeof full.total === 'number' ? full.total : (state.total || collapsedItems.length),
-      state
-    };
-  }
 
   function flush(){
     if(!current || !current.items.length) return;
     const firstId = current.sourceSectionId;
     const meta = SEARCH_SECTION_META[firstId] || SEARCH_SECTION_META.general_web;
-    const moreInfo = emittedMoreFor.has(firstId)
-      ? { hiddenCount:0, collapsedCount:0, collapsedItems:[], sourceTotal:(sectionState[firstId] && sectionState[firstId].total) || current.items.length, state: sectionState[firstId] || {} }
-      : makeMorePayload(firstId);
-    emittedMoreFor.add(firstId);
+    const full = fullById[firstId] || null;
+    const sourceTotal = full && typeof full.total === 'number' ? Math.max(full.total, seenBySource[firstId] || 0) : (seenBySource[firstId] || current.items.length);
+    const alreadyVisibleForSource = seenBySource[firstId] || current.items.length;
+    const hiddenCount = Math.max(0, sourceTotal - alreadyVisibleForSource);
 
     out.push({
       id: firstId + '_viewport_' + (++sectionSeq),
@@ -1226,17 +1084,14 @@ function buildViewportDisplaySections(pageItems, q, fullSectionPack, visiblePage
       label: meta.label,
       description: meta.description,
       rank: meta.rank,
-      // top-level section.items contains only cards that should currently be visible.
-      // Collapsed items live in collapsedItems and do not consume the 15-card viewport.
+      // 실제 화면에는 items.length 장만 보인다. total도 화면 기준으로 둬서 프론트가 다시 접어버리지 않게 한다.
       displayTotal: current.items.length,
-      total: current.items.length + moreInfo.collapsedCount,
-      sourceTotal: moreInfo.sourceTotal,
+      total: current.items.length,
+      sourceTotal,
       previewLimit: current.items.length,
-      hasMore: moreInfo.collapsedCount > 0,
-      collapsedCount: moreInfo.collapsedCount,
-      hiddenCount: moreInfo.hiddenCount,
-      collapsedItems: moreInfo.collapsedItems,
-      hiddenItems: moreInfo.collapsedItems,
+      hasMore: hiddenCount > 0,
+      collapsedCount: hiddenCount,
+      hiddenCount,
       items: current.items,
       more: {
         q: safeString(q || ''),
@@ -1244,16 +1099,18 @@ function buildViewportDisplaySections(pageItems, q, fullSectionPack, visiblePage
         section: firstId,
         sourceSectionId: firstId,
         action: 'expand-section',
-        hiddenCount: moreInfo.hiddenCount,
-        collapsedCount: moreInfo.collapsedCount,
-        sourceTotal: moreInfo.sourceTotal,
-        expandedSectionsParam: firstId,
-        note: 'Use expandedSections=' + firstId + ' or action=expand-section&section=' + firstId + ' to include collapsed cards in the viewport stream; later cards will be pushed back.'
+        hiddenCount,
+        sourceTotal,
+        visibleAlready: alreadyVisibleForSource,
+        note: 'Top-level viewport sections contain only currently visible cards; hidden items do not consume the 15-card viewport.'
       }
     });
     current = null;
   }
 
+  // 같은 source section끼리 최대 3장까지만 묶는다.
+  // 한 source가 12장을 가지고 있어도 3장만 현재 chunk에 들어가고,
+  // 나머지는 뒤 항목이 앞으로 당겨져 15장 뷰포트를 채운다.
   for(let i=0; i<list.length; i++){
     const raw = list[i];
     const sectionId = sectionIdForItem(raw);
@@ -1262,6 +1119,7 @@ function buildViewportDisplaySections(pageItems, q, fullSectionPack, visiblePage
       flush();
       current = { sourceSectionId: sectionId, items: [] };
     }
+    seenBySource[sectionId] = (seenBySource[sectionId] || 0) + 1;
     current.items.push(Object.assign({}, raw, {
       sectionId,
       sourceSectionId: sectionId,
@@ -1276,14 +1134,14 @@ function buildViewportDisplaySections(pageItems, q, fullSectionPack, visiblePage
 
   return {
     enabled: true,
-    mode: 'collapse-aware-viewport-visible-card-sections-backfill-15',
+    mode: 'viewport-visible-card-sections-backfill-15',
     visibleCount: list.length,
     sections: out,
     visibleSections: out,
     displaySections: out,
     viewportSections: out,
     totalSections: out.length,
-    principle: '접힌 항목은 15장 뷰포트 카운트를 먹지 않고 collapsedItems로만 보관된다. 펼치면 expandedSections로 다시 계산되어 뒤 항목이 다음 페이지로 밀린다.'
+    principle: '접힌 항목은 15장 뷰포트 카운트를 먹지 않으며, 뒤 항목이 앞으로 당겨져 현재 페이지 실제 표시 카드 15장을 채운다.'
   };
 }
 
@@ -1323,10 +1181,10 @@ function absorbIntoSanmaruResident(q, items, ctx){
 
 function buildImmediateResidentResponse(q, raw, residentPack, baseMeta){
   const candidateTarget = Math.min(MAX_LIMIT, Math.max(clampInt(raw && (raw.candidatePool || raw.candidatePoolTarget || raw.limit), DEFAULT_LIMIT, 1, MAX_LIMIT), MIN_RESULT_TARGET));
-  const items = normalizeSingleVideoThumbnails(dedupeCanonicalItems(residentPack.items || []).slice(0, candidateTarget).map(compactResultItem));
+  const items = dedupeCanonicalItems(residentPack.items || []).slice(0, candidateTarget).map(compactResultItem);
   const visiblePagePack = buildVisiblePagePack(items, q, raw || {});
   const fullSectionPack = buildSearchSections(items, q, { searchType: raw && (raw.type || raw.category || raw.tab || raw.vertical) });
-  const viewportSections = buildViewportDisplaySections(visiblePagePack.pageItems, q, fullSectionPack, visiblePagePack);
+  const viewportSections = buildViewportDisplaySections(visiblePagePack.pageItems, q, fullSectionPack);
   const sectionPack = Object.assign({}, fullSectionPack, {
     sections: viewportSections.sections,
     fullSections: fullSectionPack.sections,
@@ -2964,14 +2822,10 @@ async function googleSearch(q, limit, start){
     '&q=' + encodeURIComponent(q) +
     '&num=' + Math.min(limit,10) +
     '&start=' + start +
-    '&hl=ko' +
-    '&gl=kr' +
-    '&safe=off';
+    '&gl=us' +
+    '&lr=lang_en|lang_ko';
   const webRes = await fetchWithTimeout(base, null, 3000).then(r => r.ok ? r.json() : null).catch(() => null);
   const newsRes = await fetchWithTimeout(base + '&sort=date', null, 3000).then(r => r.ok ? r.json() : null).catch(() => null);
-  const socialQ = q + ' site:instagram.com OR site:facebook.com OR site:tiktok.com OR site:x.com OR site:twitter.com';
-  const socialUrl = base.replace('&q=' + encodeURIComponent(q), '&q=' + encodeURIComponent(socialQ));
-  const socialRes = await fetchWithTimeout(socialUrl, null, 3000).then(r => r.ok ? r.json() : null).catch(() => null);
   const mergeItems = (data, type, source) => {
     const items = Array.isArray(data && data.items) ? data.items : [];
     return items.map(it => {
@@ -2982,7 +2836,7 @@ async function googleSearch(q, limit, start){
       return { title: it.title || '', link: it.link || '', url: it.link || '', snippet: it.snippet || '', type, source, thumbnail: img, thumb: img, image: img, payload: { source, thumb: img, image: img } };
     });
   };
-  return { source: 'google', results: mergeItems(webRes, 'web', 'google').concat(mergeItems(newsRes, 'news', 'google_news')).concat(mergeItems(socialRes, 'sns', 'google_social')) };
+  return { source: 'google', results: mergeItems(webRes, 'web', 'google').concat(mergeItems(newsRes, 'news', 'google_news')) };
 }
 
 async function bingSearch(q, limit, offset){
@@ -3006,8 +2860,8 @@ async function youtubeSearch(q, limit){
     const thumb = (it.snippet && it.snippet.thumbnails && (it.snippet.thumbnails.high || it.snippet.thumbnails.medium || it.snippet.thumbnails.default) || {}).url || '';
     const videoId = it.id && it.id.videoId;
     const watchUrl = videoId ? 'https://www.youtube.com/watch?v=' + videoId : '';
-    const poster = thumb;
-    return { title: (it.snippet && it.snippet.title) || '', link: watchUrl, url: watchUrl, snippet: (it.snippet && it.snippet.description) || '', type: 'video', mediaType: 'video', source: 'youtube', thumbnail: poster, thumb: poster, image: poster, imageUrl: poster, imageSet: compactImages([poster]).slice(0,1), originalImage: poster, fullImage: poster, viewerImage: poster, openImageUrl: poster, contentUrl: poster, cardImage: poster, videoId, videoUrl: watchUrl, watchUrl, embedUrl: videoId ? 'https://www.youtube.com/embed/' + videoId : '', openUrl: watchUrl, media: { type: 'video', preview: { poster, image: poster, original: poster, videoUrl: watchUrl, embedUrl: videoId ? 'https://www.youtube.com/embed/' + videoId : '' } }, payload: { source: 'youtube', thumb: poster, originalImage: poster, videoId, videoUrl: watchUrl } };
+    const maxThumb = videoId ? 'https://i.ytimg.com/vi/' + videoId + '/maxresdefault.jpg' : thumb;
+    return { title: (it.snippet && it.snippet.title) || '', link: watchUrl, url: watchUrl, snippet: (it.snippet && it.snippet.description) || '', type: 'video', mediaType: 'video', source: 'youtube', thumbnail: thumb, thumb, image: maxThumb || thumb, imageUrl: maxThumb || thumb, imageSet: compactImages([maxThumb, thumb]), originalImage: maxThumb || thumb, fullImage: maxThumb || thumb, viewerImage: maxThumb || thumb, openImageUrl: maxThumb || thumb, contentUrl: maxThumb || thumb, cardImage: thumb || maxThumb, videoId, videoUrl: watchUrl, watchUrl, embedUrl: videoId ? 'https://www.youtube.com/embed/' + videoId : '', openUrl: watchUrl, media: { type: 'video', preview: { poster: thumb, original: maxThumb || thumb, videoUrl: watchUrl, embedUrl: videoId ? 'https://www.youtube.com/embed/' + videoId : '' } }, payload: { source: 'youtube', thumb, originalImage: maxThumb || thumb, videoId, videoUrl: watchUrl } };
   });
   return { source: 'youtube', results };
 }
@@ -3022,10 +2876,7 @@ async function googleImageSearch(q, limit, start){
     '&q=' + encodeURIComponent(q) +
     '&searchType=image' +
     '&num=' + Math.min(limit,10) +
-    '&start=' + (start || 1) +
-    '&hl=ko' +
-    '&gl=kr' +
-    '&safe=off';
+    '&start=' + (start || 1);
   const res = await fetchWithTimeout(url, null, 3500);
   if(!res.ok) return null;
   const data = await res.json();
@@ -3678,12 +3529,12 @@ exports.handler = async function(event){
     const analyticsOff = truthy(raw && (raw.noAnalytics || raw.disableAnalytics)) || !analyticsRequested;
     const revenueOff = truthy(raw && (raw.noRevenue || raw.disableRevenue)) || !realtimeRevenueRequested;
     if(!analyticsOff) syncSearchAnalytics(event, q, base.items).catch(() => null);
-    base.items = normalizeSingleVideoThumbnails((Array.isArray(base.items) ? base.items : []).map(compactResultItem));
+    base.items = (Array.isArray(base.items) ? base.items : []).map(compactResultItem);
     base.results = base.items;
     absorbIntoSanmaruResident(q, base.items, { searchType, lang });
     const fullSectionPack = buildSearchSections(base.items, q, { searchType });
     const visiblePagePack = buildVisiblePagePack(base.items, q, raw || {});
-    const viewportSections = buildViewportDisplaySections(visiblePagePack.pageItems, q, fullSectionPack, visiblePagePack);
+    const viewportSections = buildViewportDisplaySections(visiblePagePack.pageItems, q, fullSectionPack);
     const sectionPackWithViewport = Object.assign({}, fullSectionPack, {
       sections: viewportSections.sections,
       fullSections: fullSectionPack.sections,
@@ -3714,7 +3565,7 @@ exports.handler = async function(event){
       pageItems: visiblePagePack.pageItems,
       visiblePagePack,
       sectionPack: sectionPackWithViewport,
-      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', preservationPatch: 'A1.5.36-570-pinset-collapse-aware-google-sns-youtube-safe' })
+      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', preservationPatch: 'A1.5.35-559-visible15-provider-alias-safe' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));
