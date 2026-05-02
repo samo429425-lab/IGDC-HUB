@@ -19,7 +19,7 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.36-590-pinned-visible15-google-sns-youtube';
+const VERSION = 'A1.5.37-595-sanmaru-resident-switch';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -1429,11 +1429,19 @@ function getSanmaruResidentForMaru(q, raw, opts){
   try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
   if(!Sanmaru) return { items: [], meta: { status:'unavailable', residentKey } };
   try{
-    if(typeof Sanmaru.ensureResidentBoot === 'function') Sanmaru.ensureResidentBoot({ reason: opts.reason || 'maru-search-touch', q, query: q, residentKey });
+    let switchSnapshot = null;
+    if(typeof Sanmaru.touchResidentSwitch === 'function'){
+      switchSnapshot = Sanmaru.touchResidentSwitch({ reason: opts.reason || 'maru-search-touch', q, query: q, residentKey });
+    } else if(typeof Sanmaru.ensureResidentBoot === 'function') {
+      switchSnapshot = Sanmaru.ensureResidentBoot({ reason: opts.reason || 'maru-search-touch', q, query: q, residentKey });
+    }
     if(typeof Sanmaru.supplyResidentSync === 'function'){
       const res = Sanmaru.supplyResidentSync(q, {
         q,
         query: q,
+        reason: opts.reason || 'maru-search-touch',
+        residentSwitch: true,
+        activateResidentSwitch: true,
         page,
         start: raw.start || page,
         cacheKey: residentKey,
@@ -1456,6 +1464,7 @@ function getSanmaruResidentForMaru(q, raw, opts){
           status: items.length ? 'ok' : (canonical.length ? 'filtered-empty' : 'empty'),
           residentKey,
           queryIsolated: true,
+          residentSwitch: switchSnapshot || (res && res.meta && res.meta.residentSwitch) || null,
           droppedByQueryGuard
         }, res && res.meta || {})
       };
@@ -1475,6 +1484,27 @@ function absorbIntoSanmaruResident(q, items, ctx){
       Sanmaru.absorbResidentItems(items || [], { q, searchType: ctx && ctx.searchType, lang: ctx && ctx.lang, source:'maru-search-result' });
     }
   }catch(e){}
+}
+
+function triggerSanmaruResidentRefresh(q, raw, ctx){
+  try{
+    if(!q || truthy(raw && (raw.noSanmaruRefresh || raw.disableSanmaruRefresh))) return { accepted:false, reason:'disabled' };
+    let Sanmaru = null;
+    try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
+    if(Sanmaru && typeof Sanmaru.triggerDeepRefresh === 'function'){
+      return Sanmaru.triggerDeepRefresh({ q, query:q }, {
+        reason:'maru-search-resident-refresh-signal',
+        searchType: ctx && ctx.searchType,
+        type: ctx && ctx.searchType,
+        lang: ctx && ctx.lang,
+        limit: ctx && ctx.limit,
+        from:'maru-search'
+      });
+    }
+  }catch(e){
+    return { accepted:false, reason:'soft-failed', error:safeString((e && e.message) || e).slice(0,160) };
+  }
+  return { accepted:false, reason:'unavailable' };
 }
 
 function buildImmediateResidentResponse(q, raw, residentPack, baseMeta){
@@ -3902,6 +3932,15 @@ exports.handler = async function(event){
     const { q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType, raw } = picked;
 
     const action = safeString((raw && (raw.action || raw.mode || raw.fn)) || '').trim().toLowerCase();
+    if(action === 'resident-status' || action === 'resident-boot' || action === 'resident-switch' || action === 'provider-health' || action === 'source-registry' || action === 'category-map' || action === 'route-plan' || action === 'deep-refresh'){
+      let Sanmaru = null;
+      try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
+      if(Sanmaru && typeof Sanmaru.handler === 'function'){
+        return await Sanmaru.handler(Object.assign({}, event || {}, { queryStringParameters: Object.assign({}, raw || {}, { action }) }));
+      }
+      return ok({ status:'error', engine:'maru-search', version:VERSION, action, message:'sanmaru unavailable' });
+    }
+
     if(action === 'enrich-images' || action === 'enrichimages' || action === 'image-enrich'){
       const payload = parseEventJsonBody(event || {});
       const incoming = Array.isArray(payload.items) ? payload.items : [];
@@ -3938,13 +3977,17 @@ exports.handler = async function(event){
     const visibleNeed = clampInt(firstNonEmpty(raw && (raw.perPage || raw.pageSize || raw.visibleCardsPerPage || raw.visibleLimit), 15), 15, 1, 100);
     const forceProviderRefresh = deep || explicitExternalRequested(raw) || truthy(raw && (raw.refresh || raw.forceRefresh || raw.waitProviders || raw.waitExternal));
     if(!forceProviderRefresh && !truthy(raw && (raw.noResident || raw.skipResident || raw.disableResident))){
-      const residentPack = getSanmaruResidentForMaru(q, raw || {}, { searchType, lang, reason:'maru-immediate-response' });
+      const residentPack = getSanmaruResidentForMaru(q, raw || {}, { searchType, lang, limit, reason:'maru-immediate-response' });
       if((residentPack.items || []).length >= visibleNeed){
         return ok(buildImmediateResidentResponse(q, raw || {}, residentPack, {
           residentImmediateThreshold: visibleNeed,
           note: 'provider refresh was not forced; returned Sanmaru resident supply immediately'
         }));
       }
+      // The first search after deploy acts as the resident switch. If resident
+      // supply is not enough yet, continue the existing provider pipeline once,
+      // then absorb the result back into Sanmaru for the next request.
+      triggerSanmaruResidentRefresh(q, raw || {}, { searchType, lang, limit });
     }
 
     let base = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType });
@@ -3993,7 +4036,7 @@ exports.handler = async function(event){
       pageItems: visiblePagePack.pageItems,
       visiblePagePack,
       sectionPack: sectionPackWithViewport,
-      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', preservationPatch: 'A1.5.35-559-visible15-provider-alias-safe' })
+      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', preservationPatch: 'A1.5.37-595-sanmaru-resident-switch' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));

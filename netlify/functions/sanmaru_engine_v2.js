@@ -24,7 +24,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
-const VERSION = "sanmaru-engine-v2.4.0-global-resident-category-supply";
+const VERSION = "sanmaru-engine-v2.4.1-resident-switch-hub";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 1000;
@@ -59,11 +59,18 @@ function ensureResidentState(){
       bootedAt:0,
       bootCount:0,
       bootReason:null,
+      active:false,
+      activatedAt:0,
+      activationCount:0,
+      lastTouchAt:0,
+      sessionId:null,
+      warmUntil:0,
       items:[],
       itemMap:new Map(),
       categoryMap:new Map(),
       sourceMap:new Map(),
       queryMap:new Map(),
+      routeMap:new Map(),
       providerHealth:new Map(),
       learnedCategoryAliases:Object.create(null),
       lastError:null
@@ -147,6 +154,11 @@ const MOUNT_REGISTRY = {
     role: "Public YouTube/Instagram/Facebook/TikTok/X/LinkedIn discovery without private scraping",
     enabled: true
   },
+  "instagram": { type:"public-social-search-route", permission:"public-search-or-platform-api-required", role:"Instagram public discovery route through authorized search channels", enabled:true },
+  "facebook": { type:"public-social-search-route", permission:"public-search-or-platform-api-required", role:"Facebook public page/post discovery route through authorized search channels", enabled:true },
+  "tiktok": { type:"public-social-search-route", permission:"public-search-or-platform-api-required", role:"TikTok public video discovery route through authorized search channels", enabled:true },
+  "x-twitter": { type:"public-social-search-route", permission:"public-search-or-platform-api-required", role:"X/Twitter public discovery route through authorized search channels", enabled:true },
+  "threads": { type:"public-social-search-route", permission:"public-search-or-platform-api-required", role:"Threads public discovery route through authorized search channels", enabled:true },
   "corporate-homepage": {
     type: "enterprise-public-web-discovery",
     permission: "public-search-or-contract-api-required",
@@ -268,6 +280,11 @@ const PROVIDER_CAPABILITY_MAP = {
   youtube: ["youtube","video","sns","tourism"],
   "official-web": ["official","government","public_data","tourism"],
   "social-public-web": ["sns","video","youtube","community"],
+  instagram: ["sns","image","tourism"],
+  facebook: ["sns","community","news"],
+  tiktok: ["sns","video","youtube","tourism"],
+  "x-twitter": ["sns","news","community"],
+  threads: ["sns","community"],
   "blog-community": ["blog","cafe","community"],
   academic: ["academic","research_paper","university_library"],
   "research-paper": ["research_paper","academic"],
@@ -395,6 +412,79 @@ function addToMultiMap(map, key, item){
   map.get(key).push(item);
 }
 
+function rebuildResidentProviderHealth(reason){
+  const resident = ensureResidentState();
+  const registry = sourceRegistrySnapshot();
+  const now = nowMs();
+  if(!resident.providerHealth || !(resident.providerHealth instanceof Map)) resident.providerHealth = new Map();
+  for(const [name, meta] of Object.entries(registry)){
+    const prev = resident.providerHealth.get(name) || {};
+    resident.providerHealth.set(name, Object.assign({}, prev, {
+      provider:name,
+      alive: meta.enabled !== false,
+      enabled: meta.enabled !== false,
+      status: meta.enabled === false ? "reserved-or-key-missing" : (prev.status || "active-or-ready"),
+      reason: reason || prev.reason || "resident-map",
+      capabilityCount: Array.isArray(meta.categories) ? meta.categories.length : (meta.capabilityCount || 0),
+      categories: Array.isArray(meta.categories) ? meta.categories.slice() : [],
+      lastSeenAt: now
+    }));
+  }
+  return resident.providerHealth;
+}
+
+function residentCacheKey(q, opts){
+  opts = opts || {};
+  return stableHash([normalizeText(q), normalizeSearchType(opts.searchType || opts.type || "all"), opts.lang || "", opts.page || opts.start || ""].join("|"));
+}
+
+function rememberResidentQueryCache(q, opts, items){
+  const resident = ensureResidentState();
+  const list = Array.isArray(items) ? items : [];
+  if(!q || !list.length) return null;
+  const key = residentCacheKey(q, opts || {});
+  const entry = {
+    t:nowMs(),
+    q,
+    searchType: normalizeSearchType((opts && (opts.searchType || opts.type)) || "all"),
+    lang: (opts && opts.lang) || "",
+    page: (opts && (opts.page || opts.start)) || "",
+    items:list
+  };
+  resident.queryMap.set(key, entry);
+  if(opts && (opts.page || opts.start)){
+    const noPageKey = residentCacheKey(q, Object.assign({}, opts, { page:'', start:'' }));
+    resident.queryMap.set(noPageKey, Object.assign({}, entry, { page:'' }));
+  }
+  if(resident.queryMap.size > 500){
+    const first = resident.queryMap.keys().next().value;
+    resident.queryMap.delete(first);
+  }
+  return key;
+}
+
+function touchResidentSwitch(opts){
+  opts = opts || {};
+  const resident = ensureResidentState();
+  if(!resident.ready) ensureResidentBoot({ reason:opts.reason || "resident-switch" });
+  const now = nowMs();
+  resident.active = true;
+  resident.activatedAt = resident.activatedAt || now;
+  resident.activationCount = (resident.activationCount || 0) + 1;
+  resident.lastTouchAt = now;
+  resident.warmUntil = Math.max(resident.warmUntil || 0, now + clampInt(opts.warmMs || process.env.SANMARU_RESIDENT_WARM_MS, 10 * 60 * 1000, 60 * 1000, 60 * 60 * 1000));
+  resident.sessionId = resident.sessionId || stableHash([process.pid || "pid", resident.bootedAt || now, Math.random()].join("|"));
+  resident.lastSwitchReason = opts.reason || resident.lastSwitchReason || "resident-switch";
+  rebuildResidentProviderHealth(opts.reason || "resident-switch");
+  return residentBootSnapshot();
+}
+
+function providerHealthSnapshot(){
+  const resident = ensureResidentState();
+  if(!resident.providerHealth || !resident.providerHealth.size) rebuildResidentProviderHealth("snapshot");
+  return Array.from(resident.providerHealth.entries()).map(([name, meta]) => Object.assign({ name }, meta)).sort((a,b)=>a.name.localeCompare(b.name));
+}
+
 function absorbResidentItems(items, meta){
   const resident = ensureResidentState();
   const input = Array.isArray(items) ? items : [];
@@ -412,13 +502,12 @@ function absorbResidentItems(items, meta){
     added++;
   }
   if(meta && meta.q && input.length){
-    const qKey = stableHash([normalizeText(meta.q), meta.searchType || "all", meta.lang || ""].join("|"));
-    const ranked = finalRank(meta.q, input, { q:meta.q, searchType:meta.searchType || "all", intents:classifyQueryCategories(meta.q, meta.searchType) }).slice(0, Math.min(MAX_LIMIT, Math.max(1000, input.length)));
-    resident.queryMap.set(qKey, { t:nowMs(), q:meta.q, searchType:meta.searchType || "all", lang:meta.lang || "", items:ranked });
-    if(resident.queryMap.size > 300){
-      const first = resident.queryMap.keys().next().value;
-      resident.queryMap.delete(first);
-    }
+    const canonicalForCache = dedupeItems(input.map(raw => canonicalItem(raw, meta.q, firstNonEmpty(raw && raw.source, raw && raw.provider, raw && raw._residentSourceHint, meta && meta.source, "resident"))));
+    const ranked = dedupeItems(
+      finalRank(meta.q, canonicalForCache, { q:meta.q, searchType:meta.searchType || "all", intents:classifyQueryCategories(meta.q, meta.searchType) })
+        .concat(canonicalForCache)
+    ).slice(0, Math.min(MAX_LIMIT, Math.max(1000, canonicalForCache.length)));
+    rememberResidentQueryCache(meta.q, meta, ranked);
   }
   return { added, total:resident.items.length };
 }
@@ -435,6 +524,8 @@ function ensureResidentBoot(opts){
       resident.categoryMap = new Map();
       resident.sourceMap = new Map();
       resident.queryMap = new Map();
+      resident.routeMap = new Map();
+      resident.providerHealth = new Map();
     }
     const all = [];
     const files = [];
@@ -456,6 +547,7 @@ function ensureResidentBoot(opts){
     resident.lastBootFiles = files;
     resident.lastBootLatency = nowMs() - started;
     resident.lastError = null;
+    rebuildResidentProviderHealth(opts.reason || "resident-boot");
     return Object.assign(residentBootSnapshot(), { bootFiles:files, absorbed });
   }catch(e){
     resident.lastError = responseErrorCode(e);
@@ -472,8 +564,16 @@ function residentBootSnapshot(){
     bootedAt:resident.bootedAt ? new Date(resident.bootedAt).toISOString() : null,
     bootCount:resident.bootCount || 0,
     bootReason:resident.bootReason || null,
+    active:!!resident.active,
+    activatedAt:resident.activatedAt ? new Date(resident.activatedAt).toISOString() : null,
+    activationCount:resident.activationCount || 0,
+    lastTouchAt:resident.lastTouchAt ? new Date(resident.lastTouchAt).toISOString() : null,
+    warmUntil:resident.warmUntil ? new Date(resident.warmUntil).toISOString() : null,
+    sessionId:resident.sessionId || null,
     itemCount:resident.items ? resident.items.length : 0,
     queryCacheSize:resident.queryMap ? resident.queryMap.size : 0,
+    routeCacheSize:resident.routeMap ? resident.routeMap.size : 0,
+    providerHealthCount:resident.providerHealth ? resident.providerHealth.size : 0,
     categoryCounts:Array.from((resident.categoryMap || new Map()).entries()).map(([name, arr]) => ({ name, count:arr.length })).sort((a,b)=>b.count-a.count).slice(0,60),
     sourceCounts:Array.from((resident.sourceMap || new Map()).entries()).map(([name, arr]) => ({ name, count:arr.length })).sort((a,b)=>b.count-a.count).slice(0,60),
     lastBootLatency:resident.lastBootLatency || 0,
@@ -488,8 +588,12 @@ function residentCandidatesSync(q, opts){
   if(!resident.ready) ensureResidentBoot({ reason:"resident-query" });
   const limit = Math.min(MAX_LIMIT, Math.max(clampInt(opts.limit || opts.candidatePoolTarget, DEFAULT_CANDIDATE_POOL_TARGET, 1, MAX_LIMIT), MIN_FAST_TARGET));
   const searchType = normalizeSearchType(opts.searchType || opts.type || "all");
-  const qKey = stableHash([normalizeText(q), searchType, opts.lang || ""].join("|"));
-  const cached = resident.queryMap && resident.queryMap.get(qKey);
+  const qKey = residentCacheKey(q, Object.assign({}, opts, { searchType }));
+  let cached = resident.queryMap && resident.queryMap.get(qKey);
+  if((!cached || !Array.isArray(cached.items) || !cached.items.length) && (opts.page || opts.start)){
+    const fallbackKey = residentCacheKey(q, Object.assign({}, opts, { searchType, page:'', start:'' }));
+    cached = resident.queryMap && resident.queryMap.get(fallbackKey);
+  }
   if(cached && Array.isArray(cached.items) && cached.items.length){
     return cached.items.slice(0, limit);
   }
@@ -510,16 +614,94 @@ function residentCandidatesSync(q, opts){
     }
   }
   const ranked = finalRank(q, pool, { q, searchType, intents:route.categories }).slice(0, limit);
+  rememberResidentQueryCache(q, Object.assign({}, opts, { searchType }), ranked);
   return ranked;
+}
+
+function residentRoutePlanFor(q, opts){
+  const resident = ensureResidentState();
+  const plan = buildRoutePlanForQuery(q, opts || {});
+  if(resident.routeMap){
+    const key = residentCacheKey(q, opts || {});
+    resident.routeMap.set(key, { t:nowMs(), q, plan });
+    if(resident.routeMap.size > 500){
+      const first = resident.routeMap.keys().next().value;
+      resident.routeMap.delete(first);
+    }
+  }
+  return plan;
+}
+
+
+function routeProviderSearchUrl(provider, q){
+  const enc = encodeURIComponent(q || "");
+  const p = s(provider).toLowerCase();
+  if(p.includes("naver")) return "https://search.naver.com/search.naver?query=" + enc;
+  if(p.includes("youtube")) return "https://www.youtube.com/results?search_query=" + enc;
+  if(p.includes("instagram")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:instagram.com");
+  if(p.includes("facebook")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:facebook.com");
+  if(p.includes("tiktok")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:tiktok.com");
+  if(p.includes("twitter") || p.includes("x-")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:x.com OR site:twitter.com");
+  if(p.includes("threads")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:threads.net");
+  if(p.includes("official") || p.includes("government")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " official government");
+  if(p.includes("wiki")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " wikipedia encyclopedia");
+  if(p.includes("academic") || p.includes("research")) return "https://scholar.google.com/scholar?q=" + enc;
+  return "https://www.google.com/search?q=" + enc;
+}
+
+function buildRouteFallbackCards(q, routePlan, opts){
+  opts = opts || {};
+  const plan = routePlan || buildRoutePlanForQuery(q, opts);
+  const routes = Array.isArray(plan && plan.routes) ? plan.routes : [];
+  const out = [];
+  const seen = new Set();
+  for(const r of routes){
+    if(out.length >= clampInt(opts.routeCardLimit, 20, 1, 60)) break;
+    const provider = s(r && r.provider || "web");
+    const category = s(r && r.category || "web");
+    const key = (provider + "|" + category).toLowerCase();
+    if(seen.has(key)) continue;
+    seen.add(key);
+    const item = canonicalItem({
+      id:"sanmaru-route-" + stableHash([q, provider, category].join("|")),
+      title:"[Sanmaru Route] " + q + " · " + provider + " / " + category,
+      summary:"산마루 resident hub가 이미 알고 있는 정보원 경로입니다. 실제 원본 데이터는 마루서치 provider refresh 또는 외부 드라이브/API에서 보강됩니다.",
+      url:routeProviderSearchUrl(provider, q),
+      link:routeProviderSearchUrl(provider, q),
+      source:"sanmaru_route_" + provider,
+      provider,
+      type: category === "youtube" ? "web" : category,
+      mediaType:"article",
+      searchCategory:category,
+      score:0.41,
+      sanmaruRouteCard:true,
+      routePlanProvider:provider,
+      routePlanCategory:category
+    }, q, "sanmaru-route");
+    out.push(item);
+  }
+  return out;
 }
 
 function supplyResidentSync(input, opts){
   opts = opts || {};
   const q = typeof input === "string" ? input : firstNonEmpty(input && input.q, input && input.query, opts.q, opts.query);
   const clean = sanitizeQuery(q);
-  if(!clean.ok) return { status:"ok", engine:ENGINE_NAME, version:VERSION, query:clean.value, items:[], results:[], meta:{ count:0, reason:clean.code, resident:residentBootSnapshot() } };
-  const routePlan = buildRoutePlanForQuery(clean.value, opts);
-  const items = residentCandidatesSync(clean.value, opts).map(x => canonicalItem(x, clean.value, x && x.source));
+  const activation = touchResidentSwitch({ reason:opts.reason || opts.from || "resident-supply", q:clean.value || q, warmMs:opts.warmMs });
+  if(!clean.ok) return { status:"ok", engine:ENGINE_NAME, version:VERSION, query:clean.value, items:[], results:[], meta:{ count:0, reason:clean.code, resident:residentBootSnapshot(), residentSwitch:activation } };
+
+  const routePlan = residentRoutePlanFor(clean.value, opts);
+  const residentItems = residentCandidatesSync(clean.value, opts).map(x => canonicalItem(x, clean.value, x && x.source));
+  const minVisible = clampInt(firstNonEmpty(opts.visibleNeed, opts.perPage, opts.visibleCardsPerPage), 15, 1, 100);
+  const residentState = ensureResidentState();
+  let routeFallbackCards = [];
+  let items = residentItems;
+  if(items.length < minVisible && residentState.items && residentState.items.length > 0 && opts.allowRouteCards !== false && opts.noRouteCards !== true){
+    routeFallbackCards = buildRouteFallbackCards(clean.value, routePlan, opts);
+    items = dedupeItems(items.concat(routeFallbackCards)).slice(0, Math.max(minVisible, items.length));
+  }
+  const cacheKey = rememberResidentQueryCache(clean.value, opts, items) || residentCacheKey(clean.value, opts);
+
   return {
     status:"ok",
     engine:ENGINE_NAME,
@@ -531,14 +713,68 @@ function supplyResidentSync(input, opts){
     routePlan,
     meta:{
       count:items.length,
+      realResidentCount:residentItems.length,
+      routeFallbackCount:routeFallbackCards.length,
+      cacheKey,
       resident:residentBootSnapshot(),
+      residentSwitch:activation,
       routePlan,
+      providerHealth:providerHealthSnapshot(),
       sourceRegistryReady:true,
       categoryBrainReady:true,
-      mode:"resident-supply-sync",
-      doesNotCallExternal:true
+      providerCapabilityReady:true,
+      mode:"resident-switch-supply-sync",
+      doesNotCallExternal:true,
+      note:"Sanmaru is acting as resident routing/index/category/cache hub. Supply does not open external providers; Maru Search may refresh only missing parts."
     }
   };
+}
+
+
+function supplyCategorySync(input, opts){
+  opts = opts || {};
+  const q = typeof input === "string" ? input : firstNonEmpty(input && input.q, input && input.query, opts.q, opts.query);
+  const category = firstNonEmpty(opts.category, opts.type, input && input.category, input && input.type);
+  const searchType = category ? normalizeSearchType(category) : normalizeSearchType(opts.searchType || opts.type || "all");
+  return supplyResidentSync({ q }, Object.assign({}, opts, { searchType, type:searchType, reason:opts.reason || "supply-category" }));
+}
+
+function triggerDeepRefresh(input, opts){
+  opts = opts || {};
+  const q = typeof input === "string" ? input : firstNonEmpty(input && input.q, input && input.query, opts.q, opts.query);
+  const clean = sanitizeQuery(q);
+  if(!clean.ok) return { accepted:false, reason:clean.code, query:clean.value, resident:residentBootSnapshot() };
+  const key = residentCacheKey(clean.value, opts);
+  const inflightKey = "deep-refresh:" + key;
+  const existing = globalState.inflight && globalState.inflight.get(inflightKey);
+  if(existing && existing.expires > nowMs()) return { accepted:true, deduped:true, query:clean.value, cacheKey:key, resident:residentBootSnapshot() };
+
+  touchResidentSwitch({ reason:opts.reason || "deep-refresh-signal", q:clean.value });
+  const task = Promise.resolve().then(() => runSanmaru(clean.value, Object.assign({}, opts, {
+    q:clean.value,
+    query:clean.value,
+    source:"sanmaru-deep-refresh",
+    from:opts.from || "resident-switch",
+    noMaruSearch:"1",
+    skipMaruSearch:"1",
+    noCollector: opts.allowCollector ? undefined : "1",
+    skipCollector: opts.allowCollector ? undefined : "1",
+    noPlanetary:"1",
+    skipPlanetary:"1"
+  }))).then(res => {
+    const items = Array.isArray(res && res.items) ? res.items : (Array.isArray(res && res.results) ? res.results : []);
+    absorbResidentItems(items, { q:clean.value, searchType:opts.searchType || opts.type || "all", lang:opts.lang || "", source:"deep-refresh" });
+    return items.length;
+  }).catch(e => {
+    const resident = ensureResidentState();
+    resident.lastError = responseErrorCode(e);
+    return 0;
+  }).finally(() => {
+    try { globalState.inflight.delete(inflightKey); } catch(e) {}
+  });
+
+  if(globalState.inflight) globalState.inflight.set(inflightKey, { promise:task, t:nowMs(), expires:nowMs() + INFLIGHT_TTL_MS });
+  return { accepted:true, deduped:false, query:clean.value, cacheKey:key, routePlan:residentRoutePlanFor(clean.value, opts), resident:residentBootSnapshot() };
 }
 
 function s(v){ return String(v == null ? "" : v); }
@@ -1647,14 +1883,18 @@ async function handler(event){
   const merged = Object.assign({}, qs, body);
   const action = low(firstNonEmpty(merged.action, merged.mode, merged.fn));
 
-  if(action === "health") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, health:healthSnapshot() });
-  if(action === "resident-boot" || action === "boot" || action === "mount-library") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-boot", resident:ensureResidentBoot({ reason:"manual" }) });
-  if(action === "resident-rebuild" || action === "rebuild-resident") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-rebuild", resident:ensureResidentBoot({ force:true, reason:"manual-rebuild" }) });
-  if(action === "resident-status") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-status", resident:residentBootSnapshot(), health:healthSnapshot() });
-  if(action === "source-registry") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"source-registry", sources:sourceRegistrySnapshot() });
-  if(action === "category-map" || action === "category-brain") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"category-map", categories:categoryMapSnapshot(), aliases:PROVIDER_CATEGORY_ALIASES, capabilities:PROVIDER_CAPABILITY_MAP });
-  if(action === "route-plan") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"route-plan", routePlan:buildRoutePlanForQuery(firstNonEmpty(merged.q, merged.query), { searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale) }) });
-  if(action === "supply" || action === "resident-supply") return ok(supplyResidentSync({ q:firstNonEmpty(merged.q, merged.query) }, { limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget), candidatePoolTarget:firstNonEmpty(merged.candidatePool, merged.candidatePoolTarget), searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale) }));
+  if(action === "health") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, health:healthSnapshot(), resident:residentBootSnapshot() });
+  if(action === "resident-boot" || action === "boot" || action === "mount-library") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-boot", resident:touchResidentSwitch({ reason:firstNonEmpty(merged.reason, "manual-boot-switch"), q:firstNonEmpty(merged.q, merged.query) }) });
+  if(action === "resident-activate" || action === "resident-switch" || action === "warm-ping" || action === "warm") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-switch", resident:touchResidentSwitch({ reason:firstNonEmpty(merged.reason, action), q:firstNonEmpty(merged.q, merged.query) }) });
+  if(action === "resident-rebuild" || action === "rebuild-resident") { const rebuilt = ensureResidentBoot({ force:true, reason:"manual-rebuild" }); return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-rebuild", resident:touchResidentSwitch({ reason:"manual-rebuild-switch" }), rebuilt }); }
+  if(action === "resident-status") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-status", resident:touchResidentSwitch({ reason:"resident-status" }), health:healthSnapshot(), providerHealth:providerHealthSnapshot() });
+  if(action === "provider-health") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"provider-health", providerHealth:providerHealthSnapshot(), resident:residentBootSnapshot() });
+  if(action === "source-registry") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"source-registry", sources:sourceRegistrySnapshot(), resident:residentBootSnapshot() });
+  if(action === "category-map" || action === "category-brain") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"category-map", categories:categoryMapSnapshot(), aliases:PROVIDER_CATEGORY_ALIASES, capabilities:PROVIDER_CAPABILITY_MAP, resident:residentBootSnapshot() });
+  if(action === "route-plan") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"route-plan", routePlan:residentRoutePlanFor(firstNonEmpty(merged.q, merged.query), { searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale) }), resident:touchResidentSwitch({ reason:"route-plan", q:firstNonEmpty(merged.q, merged.query) }) });
+  if(action === "supply" || action === "resident-supply") return ok(supplyResidentSync({ q:firstNonEmpty(merged.q, merged.query) }, { reason:"api-supply", limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget), candidatePoolTarget:firstNonEmpty(merged.candidatePool, merged.candidatePoolTarget), searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), page:firstNonEmpty(merged.page, merged.p, merged.start) }));
+  if(action === "supply-category" || action === "resident-supply-category") return ok(supplyCategorySync({ q:firstNonEmpty(merged.q, merged.query), category:firstNonEmpty(merged.category, merged.type) }, { reason:"api-supply-category", category:firstNonEmpty(merged.category, merged.type), limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget), candidatePoolTarget:firstNonEmpty(merged.candidatePool, merged.candidatePoolTarget), searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), page:firstNonEmpty(merged.page, merged.p, merged.start) }));
+  if(action === "deep-refresh" || action === "resident-refresh") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"deep-refresh", refresh:triggerDeepRefresh({ q:firstNonEmpty(merged.q, merged.query) }, { reason:"api-deep-refresh", searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget) }) });
 
   const res = await runSanmaru({
     event: event || {},
@@ -1696,7 +1936,11 @@ module.exports = {
   buildRoutePlanForQuery,
   ensureResidentBoot,
   residentBootSnapshot,
+  providerHealthSnapshot,
+  touchResidentSwitch,
   supplyResidentSync,
+  supplyCategorySync,
+  triggerDeepRefresh,
   absorbResidentItems
 };
 
@@ -1711,6 +1955,10 @@ exports.categoryMap = categoryMapSnapshot;
 exports.buildRoutePlanForQuery = buildRoutePlanForQuery;
 exports.ensureResidentBoot = ensureResidentBoot;
 exports.residentBootSnapshot = residentBootSnapshot;
+exports.providerHealthSnapshot = providerHealthSnapshot;
+exports.touchResidentSwitch = touchResidentSwitch;
 exports.supplyResidentSync = supplyResidentSync;
+exports.supplyCategorySync = supplyCategorySync;
+exports.triggerDeepRefresh = triggerDeepRefresh;
 exports.absorbResidentItems = absorbResidentItems;
 try { ensureResidentBoot({ reason:"module-load" }); } catch(e) {}
