@@ -19,7 +19,7 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = 'A1.5.36-579-pipeline-safe-pinset';
+const VERSION = 'A1.5.35-559-visible15-provider-alias-safe';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -694,8 +694,14 @@ function youtubeIdFromUrl(url){
 
 function youtubePosterCandidates(videoId, current){
   const id = safeString(videoId).trim();
-  const poster = id ? 'https://i.ytimg.com/vi/' + id + '/maxresdefault.jpg' : safeString(current).trim();
-  return compactImages([poster || current]).slice(0, 1);
+  const out = [];
+  if(current) out.push(current);
+  if(id){
+    out.push('https://i.ytimg.com/vi/' + id + '/maxresdefault.jpg');
+    out.push('https://i.ytimg.com/vi/' + id + '/hqdefault.jpg');
+    out.push('https://i.ytimg.com/vi/' + id + '/mqdefault.jpg');
+  }
+  return compactImages(out);
 }
 
 function mediaProfileForItem(it){
@@ -718,12 +724,8 @@ function mediaProfileForItem(it){
 
   const original = explicitOriginals[0] || images[0] || '';
   const bestDisplay = qualitySortImagesForItem([original].concat(images), it)[0] || original || images[0] || '';
-  let imageSet = qualitySortImagesForItem([bestDisplay, original].concat(images), it).slice(0, 6);
-  if((sourceText.includes('youtube') || typeText === 'video') && videoId){
-    const onePoster = youtubePosterCandidates(videoId, bestDisplay || original || images[0])[0] || bestDisplay || original || '';
-    imageSet = compactImages([onePoster]).slice(0, 1);
-  }
-  const thumb = imageSet[0] || bestDisplay || original || '';
+  const imageSet = qualitySortImagesForItem([bestDisplay, original].concat(images), it).slice(0, 6);
+  const thumb = bestDisplay || original || '';
   const videoUrl = videoId ? 'https://www.youtube.com/watch?v=' + videoId : (typeText === 'video' ? url : firstNonEmpty(it.videoUrl, p.videoUrl));
   const embedUrl = videoId ? 'https://www.youtube.com/embed/' + videoId : firstNonEmpty(it.embedUrl, p.embedUrl);
 
@@ -1082,21 +1084,14 @@ function buildViewportDisplaySections(pageItems, q, fullSectionPack){
       label: meta.label,
       description: meta.description,
       rank: meta.rank,
-      // 실제 화면 카드는 items.length 장이다.
-      // total/sourceTotal은 원본 섹션의 전체 후보 수로 유지해서 접기/더보기 버튼은 살아 있게 하고,
-      // collapsedItems/hiddenItems는 현재 viewport에 넣지 않아 15장 카운트를 먹지 않게 한다.
+      // 실제 화면에는 items.length 장만 보인다. total도 화면 기준으로 둬서 프론트가 다시 접어버리지 않게 한다.
       displayTotal: current.items.length,
-      visibleTotal: current.items.length,
-      total: sourceTotal,
+      total: current.items.length,
       sourceTotal,
       previewLimit: current.items.length,
-      visibleLimit: current.items.length,
       hasMore: hiddenCount > 0,
       collapsedCount: hiddenCount,
       hiddenCount,
-      sourceHiddenCount: hiddenCount,
-      collapsedItems: [],
-      hiddenItems: [],
       items: current.items,
       more: {
         q: safeString(q || ''),
@@ -1192,9 +1187,7 @@ function buildImmediateResidentResponse(q, raw, residentPack, baseMeta){
   const viewportSections = buildViewportDisplaySections(visiblePagePack.pageItems, q, fullSectionPack);
   const sectionPack = Object.assign({}, fullSectionPack, {
     sections: viewportSections.sections,
-    fullSections: viewportSections.sections,
-    sourceFullSections: fullSectionPack.sections,
-    rawFullSections: fullSectionPack.sections,
+    fullSections: fullSectionPack.sections,
     visibleSections: viewportSections.visibleSections || viewportSections.sections,
     displaySections: viewportSections.displaySections || viewportSections.sections,
     viewportSections: viewportSections.viewportSections || viewportSections.sections,
@@ -1432,7 +1425,6 @@ const Containers = {
   web_naver_local: { async fetch(q, limit, start){ return naverGenericSearch('local.json', q, Math.min(limit, 5), start, 'naver_local', 'local'); } },
   web_naver_book: { async fetch(q, limit, start){ return naverGenericSearch('book.json', q, limit, start, 'naver_book', 'book'); } },
   web_google: { async fetch(q, limit, start){ return googleSearch(q, limit, start); } },
-  web_google_social: { async fetch(q, limit, start){ return googleSocialSearch(q, limit, start); } },
   web_bing: { async fetch(q, limit, start){ return bingSearch(q, limit, start); } },
   web_youtube: { async fetch(q, limit){ return youtubeSearch(q, limit); } },
   web_image: { async fetch(q, limit, start){ return googleImageSearch(q, limit, start); } },
@@ -1905,19 +1897,6 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       return count;
     }
 
-    async function pullFromGoogleSocial(){
-      let count = 0;
-      if(timeLeft() <= 1500){
-        record('google_social', 'skipped-time', 0);
-        return 0;
-      }
-      const g = await Containers.web_google_social.fetch(q, 12, 1).catch(() => null);
-      const n = addBundle(g, 'google_social', collected, sourceState);
-      count += n;
-      record('google_social', count ? 'ok' : 'empty', count, { route:'instagram/facebook/tiktok/x/twitter/threads via google cse' });
-      return count;
-    }
-
     async function pullFromBing(){
       let count = 0;
       let offset = 0;
@@ -2167,7 +2146,6 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       await Promise.allSettled([
         pullFromNaver(),
         pullFromGoogle(),
-        pullFromGoogleSocial(),
         pullFromBing(),
         pullFromYouTube(),
         pullFromImage()
@@ -2844,9 +2822,8 @@ async function googleSearch(q, limit, start){
     '&q=' + encodeURIComponent(q) +
     '&num=' + Math.min(limit,10) +
     '&start=' + start +
-    '&hl=ko' +
-    '&gl=kr' +
-    '&safe=off';
+    '&gl=us' +
+    '&lr=lang_en|lang_ko';
   const webRes = await fetchWithTimeout(base, null, 3000).then(r => r.ok ? r.json() : null).catch(() => null);
   const newsRes = await fetchWithTimeout(base + '&sort=date', null, 3000).then(r => r.ok ? r.json() : null).catch(() => null);
   const mergeItems = (data, type, source) => {
@@ -2860,56 +2837,6 @@ async function googleSearch(q, limit, start){
     });
   };
   return { source: 'google', results: mergeItems(webRes, 'web', 'google').concat(mergeItems(newsRes, 'news', 'google_news')) };
-}
-
-async function googleSocialSearch(q, limit, start){
-  const key = envFirst('GOOGLE_API_KEY','GOOGLE_SEARCH_API_KEY','GOOGLE_CUSTOM_SEARCH_API_KEY','GOOGLE_CLOUD_API_KEY');
-  const cx = envFirst('GOOGLE_CSE_ID','GOOGLE_CX','GOOGLE_SEARCH_ENGINE_ID','GOOGLE_CUSTOM_SEARCH_ENGINE_ID','GOOGLE_PROGRAMMABLE_SEARCH_ENGINE_ID');
-  if(!key || !cx) return null;
-  const sites = [
-    ['instagram.com', 'instagram', 'sns'],
-    ['facebook.com', 'facebook', 'sns'],
-    ['tiktok.com', 'tiktok', 'sns'],
-    ['x.com', 'x_twitter', 'sns'],
-    ['twitter.com', 'twitter', 'sns'],
-    ['threads.net', 'threads', 'sns']
-  ];
-  const perSite = Math.max(1, Math.min(3, Math.ceil(Math.min(limit || 12, 12) / sites.length)));
-  const tasks = sites.map(spec => {
-    const site = spec[0], source = spec[1], type = spec[2];
-    const url = 'https://www.googleapis.com/customsearch/v1' +
-      '?key=' + encodeURIComponent(key) +
-      '&cx=' + encodeURIComponent(cx) +
-      '&q=' + encodeURIComponent(q + ' site:' + site) +
-      '&num=' + perSite +
-      '&start=' + (start || 1) +
-      '&hl=ko' +
-      '&gl=kr' +
-      '&safe=off';
-    return fetchWithTimeout(url, null, 2500)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => ({ data, source, type }))
-      .catch(() => ({ data:null, source, type }));
-  });
-  const settled = await Promise.allSettled(tasks);
-  const results = [];
-  for(const s of settled){
-    const pack = s && s.status === 'fulfilled' ? s.value : null;
-    const items = Array.isArray(pack && pack.data && pack.data.items) ? pack.data.items : [];
-    for(const it of items){
-      const pagemap = it.pagemap || {};
-      const cseThumb = Array.isArray(pagemap.cse_thumbnail) ? pagemap.cse_thumbnail[0] : null;
-      const cseImg = Array.isArray(pagemap.cse_image) ? pagemap.cse_image[0] : null;
-      const img = (cseImg && cseImg.src) || (cseThumb && cseThumb.src) || '';
-      results.push({
-        title: it.title || '', link: it.link || '', url: it.link || '', snippet: it.snippet || '',
-        type: pack.type || 'sns', mediaType: 'article', source: pack.source || 'google_social',
-        thumbnail: img, thumb: img, image: img,
-        payload: { source: pack.source || 'google_social', thumb: img, image: img, route: 'google-cse-social-site-search' }
-      });
-    }
-  }
-  return { source: 'google_social', results };
 }
 
 async function bingSearch(q, limit, offset){
@@ -2934,8 +2861,7 @@ async function youtubeSearch(q, limit){
     const videoId = it.id && it.id.videoId;
     const watchUrl = videoId ? 'https://www.youtube.com/watch?v=' + videoId : '';
     const maxThumb = videoId ? 'https://i.ytimg.com/vi/' + videoId + '/maxresdefault.jpg' : thumb;
-    const poster = maxThumb || thumb;
-    return { title: (it.snippet && it.snippet.title) || '', link: watchUrl, url: watchUrl, snippet: (it.snippet && it.snippet.description) || '', type: 'video', mediaType: 'video', source: 'youtube', thumbnail: poster, thumb: poster, image: poster, imageUrl: poster, imageSet: compactImages([poster]).slice(0,1), originalImage: poster, fullImage: poster, viewerImage: poster, openImageUrl: poster, contentUrl: poster, cardImage: poster, videoId, videoUrl: watchUrl, watchUrl, embedUrl: videoId ? 'https://www.youtube.com/embed/' + videoId : '', openUrl: watchUrl, media: { type: 'video', preview: { poster, image: poster, original: poster, videoUrl: watchUrl, embedUrl: videoId ? 'https://www.youtube.com/embed/' + videoId : '' } }, payload: { source: 'youtube', thumb: poster, image: poster, originalImage: poster, videoId, videoUrl: watchUrl } };
+    return { title: (it.snippet && it.snippet.title) || '', link: watchUrl, url: watchUrl, snippet: (it.snippet && it.snippet.description) || '', type: 'video', mediaType: 'video', source: 'youtube', thumbnail: thumb, thumb, image: maxThumb || thumb, imageUrl: maxThumb || thumb, imageSet: compactImages([maxThumb, thumb]), originalImage: maxThumb || thumb, fullImage: maxThumb || thumb, viewerImage: maxThumb || thumb, openImageUrl: maxThumb || thumb, contentUrl: maxThumb || thumb, cardImage: thumb || maxThumb, videoId, videoUrl: watchUrl, watchUrl, embedUrl: videoId ? 'https://www.youtube.com/embed/' + videoId : '', openUrl: watchUrl, media: { type: 'video', preview: { poster: thumb, original: maxThumb || thumb, videoUrl: watchUrl, embedUrl: videoId ? 'https://www.youtube.com/embed/' + videoId : '' } }, payload: { source: 'youtube', thumb, originalImage: maxThumb || thumb, videoId, videoUrl: watchUrl } };
   });
   return { source: 'youtube', results };
 }
@@ -2950,10 +2876,7 @@ async function googleImageSearch(q, limit, start){
     '&q=' + encodeURIComponent(q) +
     '&searchType=image' +
     '&num=' + Math.min(limit,10) +
-    '&start=' + (start || 1) +
-    '&hl=ko' +
-    '&gl=kr' +
-    '&safe=off';
+    '&start=' + (start || 1);
   const res = await fetchWithTimeout(url, null, 3500);
   if(!res.ok) return null;
   const data = await res.json();
@@ -3614,9 +3537,7 @@ exports.handler = async function(event){
     const viewportSections = buildViewportDisplaySections(visiblePagePack.pageItems, q, fullSectionPack);
     const sectionPackWithViewport = Object.assign({}, fullSectionPack, {
       sections: viewportSections.sections,
-      fullSections: viewportSections.sections,
-      sourceFullSections: fullSectionPack.sections,
-      rawFullSections: fullSectionPack.sections,
+      fullSections: fullSectionPack.sections,
       visibleSections: viewportSections.visibleSections || viewportSections.sections,
       displaySections: viewportSections.displaySections || viewportSections.sections,
       viewportSections: viewportSections.viewportSections || viewportSections.sections,
@@ -3644,7 +3565,7 @@ exports.handler = async function(event){
       pageItems: visiblePagePack.pageItems,
       visiblePagePack,
       sectionPack: sectionPackWithViewport,
-      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', preservationPatch: 'A1.5.36-579-pipeline-safe-pinset' })
+      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', preservationPatch: 'A1.5.35-559-visible15-provider-alias-safe' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));
