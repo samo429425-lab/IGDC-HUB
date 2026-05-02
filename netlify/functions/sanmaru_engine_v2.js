@@ -22,12 +22,12 @@
 
 const crypto = require("crypto");
 
-const VERSION = "sanmaru-engine-v2.3.1-no-shrink-discovery-aware";
+const VERSION = "sanmaru-engine-v2.3.2-viewport-pool-preserve";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 10000;
-const DEFAULT_TIMEOUT_MS = 10500;
+const DEFAULT_TIMEOUT_MS = 6500;
 const DEEP_TIMEOUT_MS = 15000;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const INFLIGHT_TTL_MS = 30 * 1000;
@@ -529,6 +529,24 @@ function searchAreaExpansionMode(ctx){
   return "balanced";
 }
 
+
+function resolveCandidatePoolTarget(ctx, raw, qs, limit, wideExpansion){
+  const explicit = firstNonEmpty(
+    ctx.candidatePool,
+    raw.candidatePool,
+    qs.candidatePool,
+    ctx.candidatePoolTarget,
+    raw.candidatePoolTarget,
+    qs.candidatePoolTarget,
+    raw.maxCandidates,
+    qs.maxCandidates,
+    raw.poolLimit,
+    qs.poolLimit
+  );
+  const defaultPool = Math.max(DEFAULT_CANDIDATE_POOL_TARGET, MIN_FAST_TARGET, limit || DEFAULT_LIMIT, wideExpansion ? DEFAULT_CANDIDATE_POOL_TARGET : 0);
+  return clampInt(explicit, defaultPool, 1, MAX_LIMIT);
+}
+
 function withTimeout(promise, ms){
   let timer;
   return Promise.race([
@@ -600,7 +618,7 @@ async function callSearchBankIndex(ctx){
       action: "query",
       q: ctx.q,
       query: ctx.q,
-      limit: Math.min(Math.max(ctx.candidatePoolTarget || ctx.limit || DEFAULT_LIMIT, MIN_FAST_TARGET), MAX_INDEX_FAST_LIMIT),
+      limit: Math.min(ctx.candidatePoolTarget || ctx.limit || DEFAULT_LIMIT, MAX_INDEX_FAST_LIMIT),
       type: ctx.searchType === "all" ? "" : ctx.searchType,
       lang: ctx.lang,
       from: "sanmaru",
@@ -630,7 +648,7 @@ async function callSearchBank(ctx){
     const params = {
       q: ctx.q,
       query: ctx.q,
-      limit: Math.min(Math.max(ctx.candidatePoolTarget || ctx.limit || DEFAULT_LIMIT, MIN_FAST_TARGET), MAX_SEARCH_BANK_FAST_LIMIT),
+      limit: Math.min(ctx.candidatePoolTarget || ctx.limit || DEFAULT_LIMIT, MAX_SEARCH_BANK_FAST_LIMIT),
       type: ctx.searchType === "all" ? "" : ctx.searchType,
       lang: ctx.lang,
       from: "sanmaru",
@@ -770,7 +788,7 @@ async function callOptionalModuleAdapter(ctx, name, modulePath, runParams, timeo
     const params = Object.assign({}, runParams || {}, {
       q: ctx.q,
       query: ctx.q,
-      limit: Math.min(Math.max(ctx.limit || DEFAULT_LIMIT, MIN_FAST_TARGET), 120),
+      limit: Math.min(ctx.limit, 120),
       type: ctx.searchType,
       from: "sanmaru",
       source: "sanmaru",
@@ -853,8 +871,8 @@ async function callMaruSearchWideGateway(ctx){
     const payload = {
       q: ctx.q,
       query: ctx.q,
-      limit: Math.min(Math.max(ctx.candidatePoolTarget || ctx.limit || DEFAULT_LIMIT, MIN_FAST_TARGET), MAX_LIMIT),
-      candidatePool: Math.min(Math.max(ctx.candidatePoolTarget || ctx.limit || DEFAULT_LIMIT, MIN_FAST_TARGET), MAX_LIMIT),
+      limit: Math.min(ctx.candidatePoolTarget || ctx.limit || DEFAULT_LIMIT, MAX_LIMIT),
+      candidatePool: Math.min(ctx.candidatePoolTarget || ctx.limit || DEFAULT_LIMIT, MAX_LIMIT),
       searchExpansion: searchAreaExpansionMode(ctx),
       expansion: searchAreaExpansionMode(ctx),
       page: ctx.page || 1,
@@ -873,6 +891,8 @@ async function callMaruSearchWideGateway(ctx){
       noSanmaru: "1",
       skipSanmaru: "1",
       disableSanmaru: "1",
+      enrichImages: "0",
+      imageEnrich: "0",
       legacyOnly: "1",
       __sanmaruLegacy: "1",
       __fromSanmaru: "1"
@@ -880,9 +900,9 @@ async function callMaruSearchWideGateway(ctx){
 
     let res = null;
     if(typeof mod.runLegacySearch === "function"){
-      res = await withTimeout(mod.runLegacySearch(ctx.event || {}, payload), ctx.deep ? 9000 : 6500);
+      res = await withTimeout(mod.runLegacySearch(ctx.event || {}, payload), ctx.deep ? 9000 : 3600);
     }else if(typeof mod.runEngine === "function"){
-      res = await withTimeout(mod.runEngine(ctx.event || {}, payload), ctx.deep ? 9000 : 6500);
+      res = await withTimeout(mod.runEngine(ctx.event || {}, payload), ctx.deep ? 9000 : 3600);
     }else{
       return { trace: adapterResult("maru-search-wide-gateway", "no-compatible-export", started, []), items: [] };
     }
@@ -988,10 +1008,7 @@ function parseCtx(input, maybeCtx){
     page: clampInt(firstNonEmpty(ctx.page, raw.page, qs.page), 1, 1, 100000),
     perPage: clampInt(firstNonEmpty(ctx.perPage, raw.perPage, qs.perPage), 15, 1, 200),
     start: clampInt(firstNonEmpty(ctx.start, raw.start, qs.start), 1, 1, 1000000),
-    candidatePoolTarget: Math.max(
-      clampInt(firstNonEmpty(ctx.candidatePool, raw.candidatePool, qs.candidatePool, ctx.candidatePoolTarget, raw.candidatePoolTarget, qs.candidatePoolTarget, wideExpansion ? DEFAULT_CANDIDATE_POOL_TARGET : "", ctx.limit, raw.limit, qs.limit), DEFAULT_CANDIDATE_POOL_TARGET, 1, MAX_LIMIT),
-      MIN_FAST_TARGET
-    ),
+    candidatePoolTarget: resolveCandidatePoolTarget(ctx, raw, qs, limit, wideExpansion),
     expansion: expansionRaw || (wideExpansion ? "wide" : "balanced"),
     directExternalAllowed: truthy(ctx.directExternal || raw.directExternal || qs.directExternal || ctx.sanmaruDirectExternal || raw.sanmaruDirectExternal || qs.sanmaruDirectExternal || process.env.SANMARU_DIRECT_EXTERNAL),
     requestId: firstNonEmpty(ctx.requestId, stableHash([clean.value, nowMs(), Math.random()].join("|")))
@@ -1115,6 +1132,9 @@ async function runSanmaru(input, maybeCtx){
           finalTarget,
           page: ctx.page,
           perPage: ctx.perPage,
+          visibleCardsPerPage: ctx.perPage,
+          viewportPageItems: ranked.slice((ctx.page - 1) * ctx.perPage, (ctx.page - 1) * ctx.perPage + ctx.perPage).length,
+          totalPagesAtViewport: Math.max(1, Math.ceil(ranked.length / ctx.perPage)),
           hasMore: ranked.length >= finalTarget,
           principle: "expand-search-area-with-authorized-mounts-never-reduce-platform-spectrum"
         },

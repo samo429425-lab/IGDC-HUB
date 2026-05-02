@@ -17,7 +17,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const VERSION = "search-bank-index-engine-v2.0.0-sanmaru-front-memory";
+const VERSION = "search-bank-index-engine-v2.0.1-query-spacing-category-memory";
 const ENGINE_NAME = "search-bank-index";
 
 const DEFAULT_LIMIT = 1000;
@@ -471,7 +471,8 @@ function facetCounts(items){
 function queryIndex(params){
   const started = nowMs();
   const q = firstNonEmpty(params && params.q, params && params.query);
-  const normalized = normalizeText(q);
+  const queryVariants = queryTextVariants(q);
+  const normalized = normalizeText(queryVariants.join(" "));
   if(!normalized) return { status:"ok", engine:ENGINE_NAME, version:VERSION, query:q, items:[], results:[], meta:{ count:0, reason:"EMPTY_QUERY" } };
 
   const requestedLimit = clampInt(params && params.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
@@ -524,6 +525,7 @@ function queryIndex(params){
     meta:{
       count:pageItems.length,
       requestedLimit,
+      queryVariants,
       page,
       perPage: perPageWasProvided || page > 1 ? perPage : null,
       offset,
