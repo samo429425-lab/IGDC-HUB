@@ -17,7 +17,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const VERSION = "search-bank-index-engine-v2.0.1-wide-query-memory";
+const VERSION = "search-bank-index-engine-v2.0.0-sanmaru-front-memory";
 const ENGINE_NAME = "search-bank-index";
 
 const DEFAULT_LIMIT = 1000;
@@ -221,49 +221,6 @@ function buildSynonyms(item, text){
   if(source.includes("bing") || url.includes("bing")) out.push("bing", "빙");
   return unique(out.map(normalizeText));
 }
-function spacingQueryVariants(q){
-  const raw = compactSpaces(q);
-  if(!raw) return [];
-  const out = [raw];
-  const compact = raw.replace(/\s+/g, "");
-  if(compact && compact !== raw) out.push(compact);
-  const suffixes = ["영상","동영상","이미지","사진","뉴스","지도","맛집","카페","여행","관광","후기","리뷰","쇼핑","가격","책","도서","웹툰","기관","단체","회사","홈페이지","공식","보고서","통계","동향","유튜브","SNS","인스타그램","페이스북","틱톡","쇼츠","릴스","홍보","공공기관"];
-  for(const suffix of suffixes){
-    if(compact.endsWith(suffix) && compact.length > suffix.length + 1){
-      out.push(compact.slice(0, compact.length - suffix.length) + " " + suffix);
-    }
-  }
-  return unique(out).slice(0, 8);
-}
-function semanticQueryTerms(q, type){
-  const n = normalizeText(q);
-  const t = low(type || "all");
-  const ko = /[가-힣]/.test(s(q));
-  const base = [];
-  if(t === "all" || t === "web") base.push(...(ko ? ["공식","홈페이지","뉴스","이미지","영상","지도","블로그","카페","커뮤니티","지식","백과","리뷰"] : ["official","homepage","news","images","video","map","blog","community","knowledge","encyclopedia","reviews"]));
-  if(t === "video" || /영상|동영상|youtube|유튜브/.test(n)) base.push("영상","동영상","유튜브","video","youtube","vlog","shorts");
-  if(t === "image" || /이미지|사진|photo|image/.test(n)) base.push("이미지","사진","포토","image","photo","gallery");
-  if(t === "news" || /뉴스|속보|동향|trend|report/.test(n)) base.push("뉴스","속보","동향","분석","보고서","news","latest","trends","analysis","report");
-  if(t === "tour" || t === "map" || /서울|부산|제주|여행|관광|지도|맛집|카페|위치/.test(n)) base.push("지도","위치","주소","관광","여행","맛집","카페","명소","map","location","travel","tourism","restaurant","cafe","landmark");
-  if(t === "knowledge" || /뜻|백과|지식|연구|논문|자료/.test(n)) base.push("정보","백과","지식","자료","연구","논문","knowledge","encyclopedia","research","paper","data");
-  if(t === "shopping" || /쇼핑|가격|구매|상품/.test(n)) base.push("쇼핑","가격","구매","상품","리뷰","shopping","price","buy","product","reviews");
-  return unique(base.map(normalizeText).filter(Boolean)).slice(0, 40);
-}
-function buildQueryInfo(q, type){
-  const variants = spacingQueryVariants(q);
-  const semantic = semanticQueryTerms(q, type);
-  const tokenSource = variants.concat(semantic).join(" ");
-  const synonyms = unique(buildSynonyms({}, q).concat(semantic));
-  return {
-    normalized: normalizeText(q),
-    joined: compactText(q),
-    tokens: unique(tokensOf(tokenSource).concat(tokensOf(q))).slice(0, 220),
-    synonyms: synonyms.slice(0, 120),
-    variants: variants.map(v => ({ raw:v, normalized:normalizeText(v), joined:compactText(v) })).filter(v => v.normalized),
-    semanticTerms: semantic
-  };
-}
-
 function classify(item, text){
   const t = normalizeText(text);
   const url = normalizeText(firstNonEmpty(item && item.url, item && item.link, item && item.href));
@@ -455,10 +412,6 @@ function scoreIndexedItem(qInfo, item, type){
   if(n === qInfo.normalized) score += 90;
   if(n.includes(qInfo.normalized)) score += 55;
   if(j && qInfo.joined && j.includes(qInfo.joined)) score += 48;
-  for(const v of (qInfo.variants || [])){
-    if(v.normalized && v.normalized !== qInfo.normalized && n.includes(v.normalized)) score += 36;
-    if(v.joined && v.joined !== qInfo.joined && j.includes(v.joined)) score += 30;
-  }
   if(low(item.title).includes(qInfo.normalized)) score += 35;
   for(const t of qInfo.tokens){
     if(!t) continue;
@@ -490,8 +443,7 @@ function collectCandidateIndexes(qInfo, idx, runtime, type){
       if(candidates.size >= Math.min(items.length, MAX_LIMIT * 3)) break;
       const n = items[i].normalizedText || "";
       const j = items[i].joinedText || "";
-      const variantHit = (qInfo.variants || []).some(v => (v.normalized && n.includes(v.normalized)) || (v.joined && j.includes(v.joined)));
-      if(n.includes(qInfo.normalized) || (qInfo.joined && j.includes(qInfo.joined)) || variantHit) candidates.add(i);
+      if(n.includes(qInfo.normalized) || (qInfo.joined && j.includes(qInfo.joined))) candidates.add(i);
     }
   }
   return Array.from(candidates);
@@ -531,7 +483,7 @@ function queryIndex(params){
   const type = low(firstNonEmpty(params && (params.type || params.category || params.tab || params.vertical), "all")) || "all";
   const includeFacets = truthy(params && (params.facets || params.includeFacets || params.debug));
 
-  const qInfo = buildQueryInfo(q, type);
+  const qInfo = { normalized, joined: compactText(q), tokens: tokensOf(q), synonyms: buildSynonyms({}, q) };
   const idx = loadIndex(false);
   const runtime = ensureRuntime(idx);
 
@@ -588,7 +540,6 @@ function queryIndex(params){
       candidatePool: pool.length,
       latency: nowMs() - started,
       fastMemory:true,
-      queryExpansion:{ variants:(qInfo.variants || []).map(v => v.raw).slice(0, 8), semanticTerms:(qInfo.semanticTerms || []).slice(0, 20), spacingInsensitive:true },
       facets
     }
   };
