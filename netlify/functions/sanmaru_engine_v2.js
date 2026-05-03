@@ -988,7 +988,11 @@ function triggerDeepRefresh(input, opts){
     noCollector: opts.allowCollector ? undefined : "1",
     skipCollector: opts.allowCollector ? undefined : "1",
     noPlanetary:"1",
-    skipPlanetary:"1"
+    skipPlanetary:"1",
+    forceWide:"1",
+    waitProviders:"1",
+    deepRefresh:"1",
+    disableInstantSupply:"1"
   }))).then(res => {
     const items = Array.isArray(res && res.items) ? res.items : (Array.isArray(res && res.results) ? res.results : []);
     absorbResidentItems(items, { q:clean.value, searchType:opts.searchType || opts.type || "all", lang:opts.lang || "", source:"deep-refresh" });
@@ -1969,6 +1973,64 @@ async function runSanmaru(input, maybeCtx){
 
   globalState.cache = globalState.cache || new Map();
   globalState.inflight = globalState.inflight || new Map();
+
+  const instantSupplyDisabled = truthy(ctx.disableInstantSupply || ctx.raw.disableInstantSupply || ctx.raw.noInstantSupply || ctx.raw.noInstant || ctx.raw.waitProviders || ctx.raw.waitExternal || ctx.raw.forceWide || ctx.raw.forceProviderRefresh || ctx.raw.deepRefresh || ctx.raw.live);
+  const sanmaruInstantSupply = !instantSupplyDisabled && !ctx.deep && !ctx.externalForced;
+
+  if(sanmaruInstantSupply){
+    ensureResidentBoot({ reason:"runSanmaru-instant-supply" });
+    const supplied = supplyResidentSync({ q:ctx.q, query:ctx.q }, {
+      reason:"runSanmaru-default-instant-supply",
+      limit:ctx.limit,
+      candidatePoolTarget:ctx.candidatePoolTarget,
+      searchType:ctx.searchType,
+      type:ctx.searchType,
+      lang:ctx.lang,
+      page:ctx.page,
+      perPage:ctx.perPage,
+      visibleNeed:ctx.perPage || DEFAULT_VISIBLE_PER_PAGE,
+      allowRouteCards:true,
+      allowOpeningCards:true
+    });
+    let instantItems = Array.isArray(supplied && supplied.items) ? supplied.items : [];
+    const finalTarget = Math.min(MAX_LIMIT, Math.max(ctx.limit, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET));
+    instantItems = finalRank(ctx.q, instantItems, ctx).slice(0, finalTarget).map(it => {
+      const copy = Object.assign({}, it);
+      delete copy._sanmaruSeq;
+      delete copy._sanmaruRejectedReason;
+      return copy;
+    });
+    const result = Object.assign({}, supplied, {
+      source: instantItems.length ? "sanmaru-instant-supply" : null,
+      items: instantItems,
+      results: instantItems,
+      meta: Object.assign({}, supplied.meta || {}, {
+        count: instantItems.length,
+        requestedLimit: ctx.limit,
+        finalTarget,
+        elapsedMs: nowMs() - engineStarted,
+        defaultInstantSupply:true,
+        mode:"sanmaru-instant-resident-index-supply",
+        searchExecutionOwner:"sanmaru",
+        maruSearchRole:"gateway-body-render-only",
+        doesNotCallExternal:true,
+        directExternalAdaptersEnabled:false,
+        routePlan: supplied.routePlan || buildRoutePlanForQuery(ctx.q, { searchType:ctx.searchType, lang:ctx.lang }),
+        logosGuard,
+        health: healthSnapshot(),
+        cache:{ hit:false, key:null, policy:"instant-supply-before-wide-refresh" },
+        external:{ allowed:false, forced:false, deep:false, selected:[], trace:[] },
+        trace:[].concat((supplied.meta && supplied.meta.trace) || [], [{
+          name:"sanmaru-instant-supply",
+          status: instantItems.length ? "ok" : "empty",
+          count: instantItems.length,
+          mode:"resident-index-route-map-no-provider-wait",
+          principle:"query-response-is-served-by-sanmaru-immediately; wide provider refresh is explicit/background-only"
+        }])
+      })
+    });
+    return result;
+  }
 
   const cacheKey = stableHash([ctx.q, ctx.limit, ctx.candidatePoolTarget || "", ctx.page || 1, ctx.perPage || DEFAULT_VISIBLE_PER_PAGE, ctx.searchType, ctx.lang || "", searchAreaExpansionMode(ctx), ctx.deep ? "deep" : "normal", ctx.externalOff ? "off" : (ctx.externalForced ? "force" : "auto"), ctx.noMedia ? "nomedia" : "media"].join("|"));
   const cached = globalState.cache.get(cacheKey);
