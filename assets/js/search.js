@@ -35,7 +35,7 @@ ready(function () {
         
     if (!input || !btn) return;
 
-    const PAGE_SIZE = 25;
+    const PAGE_SIZE = 15;
     const BLOCK_SIZE = 10;
     const FETCH_LIMIT = 1000;
 
@@ -686,8 +686,6 @@ async function fetchSearch(q, type = activeType){
   sp.set('naturalFlow', '1');
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
-  sp.set('forceWide', '1');
-  sp.set('fastFirst', '1');
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
@@ -1038,7 +1036,7 @@ async function fetchSearch(q, type = activeType){
       if (mediaType === 'image' || type === 'image' || mediaType === 'video' || type === 'video' || source.includes('image') || source.includes('youtube')) return 'media';
       if (source.includes('local') || source.includes('map') || text.includes('관광') || text.includes('여행') || text.includes('지도') || text.includes('맛집') || text.includes('공원') || text.includes('landmark') || text.includes('tour')) return 'local_tour';
       if (source.includes('blog') || source.includes('cafe') || text.includes('블로그') || text.includes('카페')) return 'community';
-      if (host.includes('instagram.') || host.includes('facebook.') || host.includes('tiktok.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social') || text.includes('instagram') || text.includes('facebook') || text.includes('페이스북') || text.includes('tiktok') || text.includes('틱톡') || text.includes('threads') || text.includes('twitter') || text.includes('트위터') || text.includes('x / twitter')) return 'social';
+      if (host.includes('instagram.') || host.includes('facebook.') || host.includes('tiktok.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social')) return 'social';
       if (source.includes('encyc') || source.includes('kin') || source.includes('book') || text.includes('지식') || text.includes('도서') || text.includes('책 ')) return 'knowledge';
       if (host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr')) return 'authority';
       return 'web';
@@ -1145,8 +1143,8 @@ async function fetchSearch(q, type = activeType){
         const body = document.createElement('div');
         body.className = 'maru-display-section-body';
 
-        // Do not hide cards inside the current 25-card viewport. The server/client
-        // stream already decided which 25 cards are visible. Hiding again here was
+        // Do not hide cards inside the current 15-card viewport. The server/client
+        // stream already decided which 15 cards are visible. Hiding again here was
         // the reason broad searches looked artificially tiny. Extra news/media/SNS
         // results flow to later pages instead of being dropped.
         groupInfo.items.forEach(it => renderItem(it, body));
@@ -1319,16 +1317,10 @@ async function fetchSearch(q, type = activeType){
       ].filter(Boolean);
 
       return urls.some(u => {
-        const s = String(u || '').trim();
+        const s = String(u || '');
         if (!isYouTubeUrl(s)) return false;
-        // YouTube search/channel/profile URLs are legitimate search results.
-        // Only reject broken watch/embed/shorts video URLs that claim to be a playable video but lack an 11-char id.
-        if (/youtube\.com\/(results|channel|c|user|@)/i.test(s)) return false;
-        if (/youtube\.com\/watch/i.test(s) || /youtu\.be\//i.test(s) || /youtube\.com\/embed/i.test(s) || /youtube\.com\/shorts/i.test(s)) {
-          const id = extractYouTubeIdFromUrl(s);
-          return !isValidYouTubeId(id);
-        }
-        return false;
+        const id = extractYouTubeIdFromUrl(s);
+        return !isValidYouTubeId(id);
       });
     }
 
@@ -1948,16 +1940,6 @@ async function runSearch(q, type = activeType){
     status.textContent = '';
     return;
   }
-
-  // Fresh search must never search inside the previous result set.
-  // Clear the old client-side pool before the server request and rebuild from the new query response only.
-  allItems = [];
-  lastSearchPayload = null;
-  pageImageEnrichCache.clear();
-  itemImageEnrichCache.clear();
-  expandedDisplayGroups.clear();
-  currentBlock = 0;
-  currentPage = 1;
 
   signalSanmaruSearch(qq, activeType, 'run-search');
   status.textContent = `Searching ${getTypeLabel(activeType)} for "${qq}"...`;
