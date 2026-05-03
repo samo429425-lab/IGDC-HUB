@@ -1,5 +1,5 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
-// PATCH: resident-first Sanmaru switch + fast balanced vertical tabs + stable display groups
+// PATCH: Sanmaru route-owned natural flow + page-lazy rendering + balanced vertical tabs
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -682,6 +682,8 @@ async function fetchSearch(q, type = activeType){
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
+  sp.set('routeOwner', 'sanmaru');
+  sp.set('naturalFlow', '1');
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
@@ -1063,21 +1065,25 @@ async function fetchSearch(q, type = activeType){
       const n = parseInt(sample && sample.displayGroupPreviewLimit, 10);
       if (n > 0) return n;
 
+      // These limits are presentation hints only. They must never remove
+      // results from pagination. Broad searches such as 서울/부산/뉴욕 should
+      // keep the full candidate stream and only arrange the first viewport in
+      // a Google/Naver-like balanced order.
       const limits = {
-        authority: 3,
-        news: 4,
-        local_tour: 4,
-        media: 4,
-        social: 3,
-        community: 3,
-        knowledge: 3,
-        shopping: 3,
-        sports: 3,
-        finance: 3,
-        webtoon: 3,
-        web: 15
+        authority: 5,
+        news: 10,
+        local_tour: 5,
+        media: 8,
+        social: 6,
+        community: 6,
+        knowledge: 5,
+        shopping: 5,
+        sports: 5,
+        finance: 5,
+        webtoon: 5,
+        web: 30
       };
-      return limits[group] || 3;
+      return limits[group] || 6;
     }
 
     function shouldUseDisplayGroups(slice){
@@ -1128,7 +1134,8 @@ async function fetchSearch(q, type = activeType){
 
         const meta = document.createElement('div');
         meta.className = 'maru-display-section-meta';
-        meta.textContent = groupInfo.items.some(x => x && x.displayGroupSourceTotal) ? `${groupInfo.items.length}/${Math.max.apply(null, groupInfo.items.map(x => parseInt(x && x.displayGroupSourceTotal, 10) || 0).concat([groupInfo.items.length]))}개` : `${groupInfo.items.length}개`;
+        const sourceTotal = Math.max.apply(null, groupInfo.items.map(x => parseInt(x && x.displayGroupSourceTotal, 10) || 0).concat([groupInfo.items.length]));
+        meta.textContent = sourceTotal > groupInfo.items.length ? `${groupInfo.items.length}/${sourceTotal}개` : `${groupInfo.items.length}개`;
 
         head.appendChild(title);
         head.appendChild(meta);
@@ -1136,38 +1143,11 @@ async function fetchSearch(q, type = activeType){
         const body = document.createElement('div');
         body.className = 'maru-display-section-body';
 
-        const stateKey = `${lastQuery || input.value || ''}::${activeType || 'all'}::${page}::${groupInfo.group}`;
-        const expanded = expandedDisplayGroups.has(stateKey);
-        const limit = Math.max(1, groupInfo.previewLimit || 3);
-
-        groupInfo.items.forEach((it, idx) => {
-          const card = renderItem(it, body);
-          if (!expanded && idx >= limit) {
-            card.style.display = 'none';
-            card.dataset.maruCollapsed = '1';
-          }
-        });
-
-        const sourceTotal = Math.max.apply(null, groupInfo.items.map(x => parseInt(x && x.displayGroupSourceTotal, 10) || 0).concat([groupInfo.items.length]));
-        const hiddenCount = Math.max(0, sourceTotal - limit);
-        if (hiddenCount > 0) {
-          const more = document.createElement('button');
-          more.type = 'button';
-          more.className = 'maru-display-more';
-          more.textContent = expanded ? '접기' : `${groupInfo.label} ${hiddenCount}개 더보기`;
-          more.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-
-            const willExpand = !expandedDisplayGroups.has(stateKey);
-            if (willExpand) expandedDisplayGroups.add(stateKey);
-            else expandedDisplayGroups.delete(stateKey);
-
-            renderPage(page, true);
-            return;
-          });
-          body.appendChild(more);
-        }
+        // Do not hide cards inside the current 15-card viewport. The server/client
+        // stream already decided which 15 cards are visible. Hiding again here was
+        // the reason broad searches looked artificially tiny. Extra news/media/SNS
+        // results flow to later pages instead of being dropped.
+        groupInfo.items.forEach(it => renderItem(it, body));
 
         section.appendChild(head);
         section.appendChild(body);
@@ -1766,24 +1746,76 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (normalizeSearchType(activeType) !== 'all') return sourceItems.slice();
 
       const groups = groupSliceForDisplay(sourceItems);
+      const byGroup = new Map(groups.map(g => [g.group, Object.assign({}, g, { cursor: 0 })]));
+      const used = new Set();
       const stream = [];
-      groups.forEach(groupInfo => {
-        const key = stateKeyForGroup(page, groupInfo.group);
-        const expanded = expandedDisplayGroups.has(key);
-        const limit = Math.max(1, groupInfo.previewLimit || displayGroupPreviewLimit(groupInfo.group, groupInfo.items[0]));
-        const visibleItems = expanded ? groupInfo.items : groupInfo.items.slice(0, limit);
-        visibleItems.forEach((it, idx) => {
-          stream.push(Object.assign({}, it, {
-            displayGroup: groupInfo.group,
-            displayGroupLabel: groupInfo.label,
-            displayGroupVisibleIndex: idx,
-            displayGroupSourceTotal: groupInfo.items.length,
-            displayGroupCollapsedCount: Math.max(0, groupInfo.items.length - visibleItems.length),
-            collapsedAwareViewportCard: true,
-            visibleViewportCard: true
-          }));
-        });
+
+      function itemKey(it){
+        return String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
+      }
+
+      function pushItem(it, groupInfo, idx){
+        const key = itemKey(it);
+        if(key && used.has(key)) return false;
+        if(key) used.add(key);
+        stream.push(Object.assign({}, it, {
+          displayGroup: groupInfo.group,
+          displayGroupLabel: groupInfo.label,
+          displayGroupVisibleIndex: idx,
+          displayGroupSourceTotal: groupInfo.items.length,
+          displayGroupCollapsedCount: 0,
+          collapsedAwareViewportCard: true,
+          visibleViewportCard: true,
+          naturalFlowNoForcedCollapse: true
+        }));
+        return true;
+      }
+
+      // Balanced lead for the first few pages: good official/knowledge/map/news/
+      // image/video/SNS/blog/web results are promoted, but lower-priority results
+      // are not omitted. They continue naturally on later pages.
+      const frontCaps = {
+        authority: 5, knowledge: 5, local_tour: 5, news: 10,
+        media: 8, social: 6, community: 6, shopping: 5,
+        sports: 5, finance: 5, webtoon: 5, web: 30
+      };
+      const lanes = [
+        'authority','knowledge','local_tour','news','web','media','social','community','shopping',
+        'news','web','authority','local_tour','knowledge','media','social','community','web',
+        'news','web','media','community','social','shopping','web'
+      ];
+      const pickedByGroup = Object.create(null);
+      let safety = 0;
+      while(stream.length < Math.min(sourceItems.length, PAGE_SIZE * 4) && safety++ < sourceItems.length * 3){
+        let progressed = false;
+        for(const group of lanes){
+          const g = byGroup.get(group);
+          if(!g || !g.items.length) continue;
+          const cap = frontCaps[group] || 6;
+          pickedByGroup[group] = pickedByGroup[group] || 0;
+          if(pickedByGroup[group] >= cap) continue;
+          while(g.cursor < g.items.length){
+            const idx = g.cursor++;
+            const it = g.items[idx];
+            if(pushItem(it, g, idx)){
+              pickedByGroup[group]++;
+              progressed = true;
+              break;
+            }
+          }
+          if(stream.length >= Math.min(sourceItems.length, PAGE_SIZE * 4)) break;
+        }
+        if(!progressed) break;
+      }
+
+      // Append every remaining result in the original server-ranked order. This is
+      // the key rule: category balancing must never become result suppression.
+      sourceItems.forEach((it, idx) => {
+        const group = displayGroupOfItem(it);
+        const g = byGroup.get(group) || { group, label: displayGroupLabel(group, it), items: sourceItems };
+        pushItem(it, g, idx);
       });
+
       return stream;
     }
 
