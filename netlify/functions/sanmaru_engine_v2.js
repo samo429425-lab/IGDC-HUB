@@ -866,6 +866,13 @@ function supplyResidentSync(input, opts){
   if(!clean.ok) return { status:"ok", engine:ENGINE_NAME, version:VERSION, query:clean.value, items:[], results:[], meta:{ count:0, reason:clean.code, resident:residentBootSnapshot(), residentSwitch:activation } };
 
   const routePlan = residentRoutePlanFor(clean.value, opts);
+  const searchTypeForCache = normalizeSearchType(opts.searchType || opts.type || "all");
+  const exactCacheKey = residentCacheKey(clean.value, Object.assign({}, opts, { searchType:searchTypeForCache }));
+  const noPageCacheKey = residentCacheKey(clean.value, Object.assign({}, opts, { searchType:searchTypeForCache, page:'', start:'' }));
+  const residentStateForCache = ensureResidentState();
+  const exactCacheEntry = residentStateForCache.queryMap && (residentStateForCache.queryMap.get(exactCacheKey) || residentStateForCache.queryMap.get(noPageCacheKey));
+  const queryCacheHit = !!(exactCacheEntry && Array.isArray(exactCacheEntry.items) && exactCacheEntry.items.length);
+  const queryCacheCount = queryCacheHit ? exactCacheEntry.items.length : 0;
   const residentItems = residentCandidatesSync(clean.value, opts).map(x => canonicalItem(x, clean.value, x && x.source));
   const minVisible = clampInt(firstNonEmpty(opts.visibleNeed, opts.perPage, opts.visibleCardsPerPage), DEFAULT_VISIBLE_PER_PAGE, 1, 100);
   let indexItems = [];
@@ -885,15 +892,23 @@ function supplyResidentSync(input, opts){
   }
   const residentState = ensureResidentState();
   let routeFallbackCards = [];
+  let openingFallbackCards = [];
   let items = dedupeItems(residentItems.concat(indexItems));
-  if(items.length < minVisible && opts.allowRouteCards !== false && opts.noRouteCards !== true){
-    routeFallbackCards = buildRouteFallbackCards(clean.value, routePlan, opts);
-    items = dedupeItems(items.concat(routeFallbackCards)).slice(0, Math.max(minVisible, items.length));
+
+  // Sanmaru should always know and expose the major information roads
+  // (Google/Naver/SNS/video/wiki/public-data routes). These cards are low-priority
+  // route/opening signals, not replacements for real provider results. They keep
+  // category trees visible and prevent empty-looking searches while the broad
+  // resident cache is warming.
+  if(opts.allowRouteCards !== false && opts.noRouteCards !== true){
+    routeFallbackCards = buildRouteFallbackCards(clean.value, routePlan, Object.assign({}, opts, { routeCardLimit: clampInt(opts.routeCardLimit, 28, 1, 60) }));
   }
-  if(items.length < minVisible && opts.allowOpeningCards !== false && opts.noOpeningCards !== true){
-    items = dedupeItems(items.concat(buildOpeningFallbackCards(clean.value, opts))).slice(0, minVisible);
+  if(opts.allowOpeningCards !== false && opts.noOpeningCards !== true){
+    openingFallbackCards = buildOpeningFallbackCards(clean.value, Object.assign({}, opts, { openingCardLimit: clampInt(opts.openingCardLimit, 24, 1, 40) }));
   }
-  const cacheKey = rememberResidentQueryCache(clean.value, opts, items) || residentCacheKey(clean.value, opts);
+  items = dedupeItems(items.concat(routeFallbackCards, openingFallbackCards));
+  if(items.length < minVisible) items = items.slice(0, minVisible);
+  const cacheKey = queryCacheHit ? (exactCacheKey || noPageCacheKey) : (rememberResidentQueryCache(clean.value, opts, items) || residentCacheKey(clean.value, opts));
 
   return {
     status:"ok",
@@ -909,6 +924,11 @@ function supplyResidentSync(input, opts){
       realResidentCount:residentItems.length,
       searchBankIndex:indexMeta,
       routeFallbackCount:routeFallbackCards.length,
+      openingFallbackCount:openingFallbackCards.length,
+      queryCacheHit,
+      cachedQueryHit:queryCacheHit,
+      fromQueryCache:queryCacheHit,
+      queryCacheCount,
       cacheKey,
       resident:residentBootSnapshot(),
       residentSwitch:activation,
@@ -927,12 +947,13 @@ function supplyResidentSync(input, opts){
         itemResults:"resident-index-cache-candidate-pool",
         viewport:"page-sized-current-render-window",
         perPage:DEFAULT_VISIBLE_PER_PAGE,
-        noProviderRescanWhenViewportCovered:true,
+        noProviderRescanWhenBroadQueryCacheCovered:true,
+        noProviderRescanWhenViewportCovered:false,
         expansion:"opening-signal-and-mounted-route-map"
       },
       logosGuard: logosEvaluate(logosSignalsForQuery(clean.value, { queryRisk:null }), "resident-supply"),
       openingSignals: openingSignalsSnapshot(),
-      note:"Sanmaru owns routing/provider-health/category/index/cache as the top information CPU. Maru Search is the mounted gateway/body; it formats and expands results without becoming the independent head."
+      note:"Sanmaru owns routing/provider-health/category/index/cache as the top information CPU. Maru Search is the mounted gateway/body. Provider re-scan is skipped only when Sanmaru already has a broad query cache; thin route/index cards never suppress Google/Naver/SNS/category expansion."
     }
   };
 }
