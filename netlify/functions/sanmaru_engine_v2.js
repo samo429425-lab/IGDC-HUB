@@ -1350,14 +1350,9 @@ function isRealYouTubeVideoUrl(url){
 function isPlaceholderItem(it){
   const text = low(itemText(it));
   const url = low(firstNonEmpty(it && it.url, it && it.link));
-  const titleSummary = low([it && it.title, it && it.name, it && it.summary, it && it.description, it && it.section, it && it.page].filter(Boolean).join(" "));
-  const hasRealBody = !!(titleSummary && titleSummary.length >= 2 && !/seed placeholder|movie slot|mediamovie0|placeholder|dummy|sample item|test item|lorem ipsum|untitled/.test(titleSummary));
   if(!text && !url) return true;
-  if(/seed placeholder|movie slot|mediamovie0|placeholder|dummy|sample item|test item|lorem ipsum/.test(text)) return true;
-  if(url.startsWith("javascript:")) return true;
-  // SearchBank/Snapshot contains many real slot items with url="#".
-  // Treat "#" or "/" as non-clickable placeholders only when the item has no real title/summary/body.
-  if((url === "#" || url === "/") && !hasRealBody) return true;
+  if(/seed placeholder|movie slot|mediamovie0|placeholder/.test(text)) return true;
+  if(url === "#" || url === "/" || url.startsWith("javascript:")) return true;
   return false;
 }
 
@@ -1416,53 +1411,13 @@ function dedupeItems(items){
     if(!raw || typeof raw !== "object") continue;
     if(isPlaceholderItem(raw)) continue;
     if(raw._sanmaruRejectedReason) continue;
-    const rawUrl = s(firstNonEmpty(raw.url, raw.link)).trim();
-    const normUrl = low(rawUrl);
-    const placeholderUrl = !rawUrl || rawUrl === "#" || rawUrl === "/" || normUrl === "javascript:void(0)" || normUrl.startsWith("javascript:");
-    const key = low(placeholderUrl
-      ? firstNonEmpty(
-          raw.id,
-          raw.indexId,
-          [raw.title, raw.source, raw.provider, raw.searchCategory, raw.displayGroup, raw.route, raw.page, raw.section, raw.lang, raw.thumbnail, raw.summary].filter(Boolean).join("|")
-        )
-      : rawUrl
-    );
+    const key = low(firstNonEmpty(raw.url, raw.link, raw.id, raw.title));
     if(!key) continue;
     if(seen.has(key)) continue;
     seen.add(key);
     out.push(raw);
   }
   return out;
-}
-
-
-function isLikelyPlaceQuery(query, ctx){
-  const q = low(query).trim();
-  const type = normalizeSearchType(ctx && ctx.searchType);
-  if(type === "map" || type === "tour") return true;
-  if(/지도|주소|위치|근처|시청|구청|도청|군청|관광|여행|맛집|호텔|교통|지하철|버스|map|near|nearby|local|travel|tour|city|province|state|country/.test(q)) return true;
-  if(/^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주|도쿄|오사카|교토|뉴욕|런던|파리|베를린|로마|베이징|상하이|홍콩|싱가포르)$/.test(q)) return true;
-  if(/^[a-z][a-z\s.-]{2,40}$/i.test(query || "") && /seoul|busan|tokyo|osaka|new york|london|paris|berlin|rome|beijing|shanghai|hong kong|singapore/.test(q)) return true;
-  return false;
-}
-
-function placePriorityScore(query, item, ctx){
-  if(!isLikelyPlaceQuery(query, ctx)) return 0;
-  const q = low(query).replace(/\s+/g, "");
-  const title = low(item && item.title).replace(/\s+/g, "");
-  const summary = low(firstNonEmpty(item && item.summary, item && item.snippet, item && item.description));
-  const source = low(firstNonEmpty(item && item.source, item && item.provider));
-  const url = low(firstNonEmpty(item && item.url, item && item.link));
-  const cat = categoryOfItem(item);
-  let boost = 0;
-  if(q && title === q) boost += 14;
-  if(q && title.startsWith(q)) boost += 10;
-  if(q && (title.includes(q + "특별시") || title.includes(q + "광역시") || title.includes(q + "시") || title.includes(q + "도") || title.includes(q + "군") || title.includes(q + "구"))) boost += 12;
-  if(/\.go\.kr|\.gov\b|government|official|시청|구청|도청|군청/.test(url + " " + source + " " + summary)) boost += 9;
-  if(cat === "official") boost += 7;
-  if(cat === "map" || cat === "local" || cat === "tour" || cat === "tourism" || item.displayGroup === "local_tour") boost += 6;
-  if(/naver|google|map|local|tour|visit|travel/.test(source + " " + url)) boost += 4;
-  return boost;
 }
 
 function scoreItem(query, item, ctx){
@@ -1485,7 +1440,6 @@ function scoreItem(query, item, ctx){
   if(cat === "official") score += 1.4;
   if(cat === "news") score += 1.2;
   if(source.includes("placeholder")) score -= 8;
-  score += placePriorityScore(query, item, ctx || {});
   return score;
 }
 
