@@ -17,7 +17,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const VERSION = "search-bank-index-engine-v2.2.0-stable-placeholder-signature";
+const VERSION = "search-bank-index-engine-v2.1.0-sanmaru-fast-memory-secure";
 const ENGINE_NAME = "search-bank-index";
 
 const DEFAULT_LIMIT = 1000;
@@ -169,26 +169,6 @@ function normalizeUrl(url){
     return u.toString();
   }catch(e){ return raw; }
 }
-function isPlaceholderUrl(url){
-  const raw = firstNonEmpty(url, "").trim();
-  const n = raw.toLowerCase();
-  return !raw || raw === "#" || raw === "/" || n === "javascript:void(0)" || n.startsWith("javascript:");
-}
-function stableItemSignature(item, fallbackIndex){
-  item = item || {};
-  const normalizedUrl = normalizeUrl(firstNonEmpty(item.url, item.link, item.href));
-  if(normalizedUrl && !isPlaceholderUrl(normalizedUrl)) return low(normalizedUrl);
-  const fields = [
-    item.indexId, item.id, item.originalId,
-    item.title, item.name, item.label, item.heading,
-    item.source, item.provider, item.route, item.path, item.page, item.section, item._sourceHint,
-    item.lang, item.locale, item.category, item.type, item.searchCategory,
-    item.image, item.thumbnail, item.summary, item.description
-  ].map(x => firstNonEmpty(x)).filter(Boolean);
-  const joined = fields.join("|");
-  if(joined) return low(stableHash(joined) + "|" + joined.slice(0, 120));
-  return "fallback|" + stableHash(String(fallbackIndex == null ? "" : fallbackIndex));
-}
 
 function extractArraysFromObject(obj, depth, out, sourceHint){
   if(!obj || typeof obj !== "object" || depth > 6 || out.length >= MAX_INDEX_ITEMS) return;
@@ -310,28 +290,6 @@ function classify(item, text){
 
   return { displayGroup, displayGroupLabel: label, searchCategory };
 }
-function typeAliases(type){
-  const t = low(type || "all");
-  const map = {
-    all:["all"],
-    map:["map","local","tour","local_tour"],
-    local:["local","map","tour","local_tour"],
-    tour:["tour","map","local","local_tour"],
-    tourism:["tour","map","local","local_tour"],
-    community:["community","blog","cafe"],
-    blog:["blog","community","cafe"],
-    cafe:["cafe","community","blog"],
-    video:["video","media"],
-    image:["image","media"],
-    media:["media","image","video"],
-    knowledge:["knowledge","book","official"],
-    book:["book","knowledge"],
-    official:["official","web"],
-    web:["web","official","knowledge"]
-  };
-  return Array.from(new Set([t].concat(map[t] || []))).filter(Boolean);
-}
-
 function sourceTrust(item){
   const source = low(firstNonEmpty(item && item.source, item && item.provider));
   const url = low(firstNonEmpty(item && item.url, item && item.link, item && item.href));
@@ -358,7 +316,13 @@ function canonicalItem(item, query, fallbackSource){
   const summary = firstNonEmpty(item.summary, item.description, item.snippet, item.content, item.text, "");
   const image = firstNonEmpty(item.thumbnail, item.thumb, item.image, item.poster, item.cover, item.media && item.media.poster);
   const source = firstNonEmpty(item.source, item.provider, fallbackSource, item._sourceHint, "search-bank");
-  const idBase = firstNonEmpty(item.id, item.indexId, url, title + "|" + source);
+  const identityUrl = normalizeUrl(firstNonEmpty(item.url, item.link, item.href, url));
+  const idBase = firstNonEmpty(
+    item.id,
+    item.indexId,
+    identityUrl,
+    [title, source, item.route, item.path, item.page, item.section, item.lang, image, summary].filter(Boolean).join("|")
+  );
   return Object.assign({}, item, {
     id: stableHash(idBase),
     originalId: firstNonEmpty(item.id, item.indexId),
@@ -408,7 +372,13 @@ function buildIndexFromSnapshot(){
   for(let i=0; i<rawItems.length; i++){
     const item = indexItem(rawItems[i], i, "search-bank");
     if(!item){ placeholderFiltered++; continue; }
-    const sig = stableItemSignature(item, i);
+    const sigUrl = normalizeUrl(firstNonEmpty(item.url, item.link));
+    const sig = low(firstNonEmpty(
+      sigUrl,
+      item.originalId,
+      item.indexId,
+      [item.title, item.source, item.provider, item.searchCategory, item.displayGroup, item.route, item.page, item.section, item.lang, item.image, item.summary].filter(Boolean).join("|")
+    ));
     if(!sig || seen.has(sig)) continue;
     seen.add(sig);
     indexed.push(item);
@@ -511,10 +481,8 @@ function collectCandidateIndexes(qInfo, idx, runtime, type){
     addList(runtime.tokenMap.get(token));
   }
   if(type && type !== "all"){
-    for(const alias of typeAliases(type)){
-      addList(runtime.categoryMap.get(alias));
-      addList(runtime.groupMap.get(alias));
-    }
+    addList(runtime.categoryMap.get(type));
+    addList(runtime.groupMap.get(type));
   }
   if(candidates.size < 200){
     const items = Array.isArray(idx.items) ? idx.items : [];
@@ -579,7 +547,7 @@ function queryIndex(params){
     if(!item || isPlaceholder(item)){ placeholderFiltered++; continue; }
     const sc = scoreIndexedItem(qInfo, item, type);
     if(sc <= 0) continue;
-    const sig = stableItemSignature(item);
+    const sig = low(firstNonEmpty(normalizeUrl(item.url), normalizeUrl(item.link), item.title, item.indexId));
     if(seen.has(sig)) continue;
     seen.add(sig);
     ranked.push(Object.assign({}, item, { sanmaruIndexScore: sc }));
@@ -645,7 +613,7 @@ function upsertMemory(payload, kind){
     if(!item) continue;
     const c = canonicalItem(item, q, kind === "promoted" ? "sanmaru-promoted" : "front-data-ingested");
     if(isPlaceholder(c)) continue;
-    const sig = stableItemSignature(c, merged.length);
+    const sig = low(firstNonEmpty(normalizeUrl(c.url), normalizeUrl(c.link), c.title, c.id));
     if(seen.has(sig)) continue;
     seen.add(sig);
     merged.push(Object.assign({}, c, kind === "promoted" ? { _promoted:true, promotedAt: nowIso(), promotedQuery:q } : { _ingested:true, ingestedAt: nowIso(), ingestedQuery:q }));

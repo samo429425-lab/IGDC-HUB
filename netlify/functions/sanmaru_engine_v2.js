@@ -27,10 +27,10 @@ const path = require("path");
 let LogosEngineClass = null;
 try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) { LogosEngineClass = null; }
 
-const VERSION = "sanmaru-engine-v2.6.2-instant-unlimited-route-pool";
+const VERSION = "sanmaru-engine-v2.6.1-engine-upload-lifecycle";
 const ENGINE_NAME = "sanmaru";
 
-const DEFAULT_LIMIT = 3000;
+const DEFAULT_LIMIT = 1000;
 const DEFAULT_VISIBLE_PER_PAGE = 25;
 const MAX_LIMIT = 10000;
 const DEFAULT_TIMEOUT_MS = 10500;
@@ -40,11 +40,11 @@ const INFLIGHT_TTL_MS = 30 * 1000;
 const RATE_WINDOW_MS = 10 * 1000;
 const RATE_MAX = 60;
 const MAX_QUERY_LENGTH = 240;
-const MIN_FAST_TARGET = 2000;
+const MIN_FAST_TARGET = 1000;
 const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
-const DEFAULT_CANDIDATE_POOL_TARGET = 5000;
-const MAX_INDEX_FAST_LIMIT = 5000;
-const MAX_SEARCH_BANK_FAST_LIMIT = 5000;
+const DEFAULT_CANDIDATE_POOL_TARGET = 3000;
+const MAX_INDEX_FAST_LIMIT = 2000;
+const MAX_SEARCH_BANK_FAST_LIMIT = 2000;
 
 const globalState = globalThis.__SANMARU_V2_STATE || (globalThis.__SANMARU_V2_STATE = {
   cache: new Map(),
@@ -354,35 +354,6 @@ const PROVIDER_CATEGORY_ALIASES = {
   academic:{ paper:"research_paper", research:"research_paper", library:"university_library", journal:"academic", citation:"academic" }
 };
 
-function categoryVariants(category){
-  const c = normalizeSearchType(category);
-  const raw = s(category).trim().toLowerCase();
-  const map = {
-    map:["map","map_local","local","tour","tourism","local_tour"],
-    map_local:["map_local","map","local","tour","tourism","local_tour"],
-    tour:["tour","tourism","map","map_local","local_tour","local"],
-    tourism:["tourism","tour","map","map_local","local_tour","local"],
-    local_tour:["local_tour","tour","tourism","map","map_local","local"],
-    community:["community","blog","cafe","sns"],
-    cafe:["cafe","community","blog"],
-    blog:["blog","community","cafe"],
-    media:["media","image","video","youtube"],
-    image:["image","media"],
-    video:["video","youtube","media"],
-    youtube:["youtube","video","media"],
-    official:["official","government","public_data","web"],
-    government:["government","official","public_data"],
-    public_data:["public_data","government","official"],
-    knowledge:["knowledge","wiki","book","academic"],
-    wiki:["wiki","knowledge"],
-    book:["book","knowledge","university_library"],
-    academic:["academic","research_paper","university_library","knowledge"],
-    shopping:["shopping","commerce"],
-    web:["web","official","knowledge"]
-  };
-  return Array.from(new Set([raw, c].concat(map[raw] || [], map[c] || []))).filter(Boolean);
-}
-
 const PROVIDER_CAPABILITY_MAP = {
   "searchbank-index": ["internal_search_bank","official","knowledge","web","news","image","video","blog","cafe","community"],
   "searchbank": ["internal_search_bank","official","knowledge","web","news","image","video","blog","cafe","community"],
@@ -619,11 +590,7 @@ function absorbResidentItems(items, meta){
     if(!key || resident.itemMap.has(key)) continue;
     resident.itemMap.set(key, item);
     resident.items.push(item);
-    const primaryCategory = firstNonEmpty(item.searchCategory, item.type, item.category, categoryOfItem(item), "web");
-    const displayCategory = firstNonEmpty(item.displayGroup, displayGroupForCategory(primaryCategory));
-    for(const catKey of categoryVariants(primaryCategory).concat(categoryVariants(displayCategory))){
-      addToMultiMap(resident.categoryMap, catKey, item);
-    }
+    addToMultiMap(resident.categoryMap, firstNonEmpty(item.searchCategory, item.type, categoryOfItem(item), "web"), item);
     addToMultiMap(resident.sourceMap, firstNonEmpty(item.source, item.provider, "unknown"), item);
     added++;
   }
@@ -771,12 +738,8 @@ function residentCandidatesSync(q, opts){
   const route = buildRoutePlanForQuery(q, { searchType });
   const pool = [];
   for(const cat of route.categories){
-    for(const key of categoryVariants(cat)){
-      const arr = resident.categoryMap && resident.categoryMap.get(key);
-      if(arr && arr.length) pool.push(...arr.slice(0, Math.max(300, Math.ceil(limit / 2))));
-      if(pool.length >= limit * 3) break;
-    }
-    if(pool.length >= limit * 3) break;
+    const arr = resident.categoryMap && resident.categoryMap.get(cat);
+    if(arr && arr.length) pool.push(...arr.slice(0, Math.max(200, Math.ceil(limit / 4))));
   }
   if(pool.length < limit && resident.items && resident.items.length){
     const tokens = tokenize(q);
@@ -826,104 +789,6 @@ function routeProviderSearchUrl(provider, q){
   if(p.includes("wiki")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " wikipedia encyclopedia");
   if(p.includes("academic") || p.includes("research")) return "https://scholar.google.com/scholar?q=" + enc;
   return "https://www.google.com/search?q=" + enc;
-}
-
-function routeProviderPagedSearchUrl(provider, q, category, page){
-  const p = s(provider).toLowerCase();
-  const cat = s(category || "web").toLowerCase();
-  const pageNum = Math.max(1, parseInt(page, 10) || 1);
-  const start = (pageNum - 1) * 10 + 1;
-  const query = [q, cat === "web" || cat === "internal_search_bank" ? "" : cat.replace(/_/g, " ")].filter(Boolean).join(" ");
-  const enc = encodeURIComponent(query);
-  if(p.includes("naver")){
-    const where = cat.includes("news") ? "news" : cat.includes("blog") ? "blog" : cat.includes("cafe") ? "cafe" : cat.includes("image") ? "image" : cat.includes("book") ? "book" : cat.includes("shopping") ? "shopping" : cat.includes("map") || cat.includes("tour") ? "place" : "nexearch";
-    return "https://search.naver.com/search.naver?where=" + where + "&query=" + enc + "&start=" + start;
-  }
-  if(p.includes("youtube")) return "https://www.youtube.com/results?search_query=" + enc + "&sp=CAI%253D";
-  if(p.includes("bing")) return "https://www.bing.com/search?q=" + enc + "&first=" + start;
-  if(p.includes("duckduckgo")) return "https://duckduckgo.com/?q=" + enc + "&s=" + ((pageNum - 1) * 30);
-  if(p.includes("yahoo")) return "https://search.yahoo.com/search?p=" + enc + "&b=" + start;
-  if(p.includes("baidu")) return "https://www.baidu.com/s?wd=" + enc + "&pn=" + ((pageNum - 1) * 10);
-  if(p.includes("yandex")) return "https://yandex.com/search/?text=" + enc + "&p=" + (pageNum - 1);
-  if(p.includes("wiki")) return "https://www.google.com/search?q=" + encodeURIComponent(query + " wikipedia encyclopedia") + "&start=" + (start - 1);
-  if(p.includes("academic") || p.includes("research")) return "https://scholar.google.com/scholar?q=" + enc + "&start=" + (start - 1);
-  if(p.includes("instagram")) return "https://www.google.com/search?q=" + encodeURIComponent(query + " site:instagram.com") + "&start=" + (start - 1);
-  if(p.includes("facebook")) return "https://www.google.com/search?q=" + encodeURIComponent(query + " site:facebook.com") + "&start=" + (start - 1);
-  if(p.includes("tiktok")) return "https://www.google.com/search?q=" + encodeURIComponent(query + " site:tiktok.com") + "&start=" + (start - 1);
-  if(p.includes("twitter") || p.includes("x-")) return "https://www.google.com/search?q=" + encodeURIComponent(query + " site:x.com OR site:twitter.com") + "&start=" + (start - 1);
-  if(p.includes("threads")) return "https://www.google.com/search?q=" + encodeURIComponent(query + " site:threads.net") + "&start=" + (start - 1);
-  if(p.includes("official") || p.includes("government") || cat.includes("official") || cat.includes("government")) return "https://www.google.com/search?q=" + encodeURIComponent(query + " official government") + "&start=" + (start - 1);
-  return "https://www.google.com/search?q=" + enc + "&start=" + (start - 1);
-}
-
-function detectPriorityLocation(q){
-  const t = low(q);
-  if(/서울|seoul/.test(t)) return { key:"seoul", ko:"서울", display:"서울특별시", country:"대한민국", official:"https://www.seoul.go.kr/", tourism:"https://korean.visitseoul.net/" };
-  if(/부산|busan/.test(t)) return { key:"busan", ko:"부산", display:"부산광역시", country:"대한민국", official:"https://www.busan.go.kr/", tourism:"https://www.visitbusan.net/" };
-  if(/제주|jeju/.test(t)) return { key:"jeju", ko:"제주", display:"제주특별자치도", country:"대한민국", official:"https://www.jeju.go.kr/", tourism:"https://www.visitjeju.net/" };
-  if(/인천|incheon/.test(t)) return { key:"incheon", ko:"인천", display:"인천광역시", country:"대한민국", official:"https://www.incheon.go.kr/", tourism:"https://www.incheon.go.kr/culture/" };
-  if(/대구|daegu/.test(t)) return { key:"daegu", ko:"대구", display:"대구광역시", country:"대한민국", official:"https://www.daegu.go.kr/" };
-  if(/대전|daejeon/.test(t)) return { key:"daejeon", ko:"대전", display:"대전광역시", country:"대한민국", official:"https://www.daejeon.go.kr/" };
-  if(/광주|gwangju/.test(t)) return { key:"gwangju", ko:"광주", display:"광주광역시", country:"대한민국", official:"https://www.gwangju.go.kr/" };
-  if(/울산|ulsan/.test(t)) return { key:"ulsan", ko:"울산", display:"울산광역시", country:"대한민국", official:"https://www.ulsan.go.kr/" };
-  return null;
-}
-
-function buildPriorityLocationCards(q, routePlan, opts){
-  const loc = detectPriorityLocation(q);
-  if(!loc) return [];
-  const query = loc.ko || q;
-  const enc = encodeURIComponent(query);
-  const cards = [
-    { id:"sanmaru-location-official-" + loc.key, title:loc.display + " 공식 정보", url:loc.official, source:"sanmaru_location_official", type:"official", searchCategory:"official", summary:loc.display + " 공식 홈페이지와 행정·생활·정책 정보입니다.", score:9.8, sourceTrust:0.96 },
-    { id:"sanmaru-location-map-naver-" + loc.key, title:loc.display + " 지도 / 위치", url:"https://map.naver.com/p/search/" + enc, source:"sanmaru_location_naver_map", type:"map", searchCategory:"map_local", summary:loc.display + " 위치·지도·교통·주변 장소 검색입니다.", score:9.4, sourceTrust:0.88 },
-    { id:"sanmaru-location-map-google-" + loc.key, title:loc.display + " Google Maps", url:"https://www.google.com/maps/search/" + enc, source:"sanmaru_location_google_map", type:"map", searchCategory:"map_local", summary:loc.display + " Google 지도 검색 경로입니다.", score:9.2, sourceTrust:0.86 },
-    { id:"sanmaru-location-tour-" + loc.key, title:loc.display + " 관광 / 방문 정보", url:loc.tourism || routeProviderPagedSearchUrl("google", query + " 관광", "tourism", 1), source:"sanmaru_location_tourism", type:"tour", searchCategory:"tourism", summary:loc.display + " 관광·명소·축제·방문 정보입니다.", score:8.9, sourceTrust:0.84 },
-    { id:"sanmaru-location-news-" + loc.key, title:loc.display + " 뉴스", url:"https://news.google.com/search?q=" + enc, source:"sanmaru_location_news", type:"news", searchCategory:"news", summary:loc.display + " 관련 최신 공개 뉴스 경로입니다.", score:8.2, sourceTrust:0.78 }
-  ];
-  return cards.map(x => canonicalItem(Object.assign({ sanmaruPriorityLocationCard:true, provider:"sanmaru-location" }, x), q, x.source));
-}
-
-function buildProviderExpansionCards(q, routePlan, opts){
-  opts = opts || {};
-  const target = clampInt(firstNonEmpty(opts.providerExpansionTarget, opts.candidatePoolTarget, opts.limit), DEFAULT_CANDIDATE_POOL_TARGET, 1, MAX_LIMIT);
-  const plan = routePlan || buildRoutePlanForQuery(q, opts);
-  const routes = Array.isArray(plan && plan.routes) ? plan.routes : [];
-  const categories = Array.isArray(plan && plan.categories) ? plan.categories : classifyQueryCategories(q, opts.searchType || opts.type);
-  const out = [];
-  const seen = new Set();
-  const providerOrder = routes.length ? routes : categories.flatMap(cat => (SANMARU_CANONICAL_CATEGORIES[cat] && SANMARU_CANONICAL_CATEGORIES[cat].routes || providersForCategory(cat)).map(provider => ({ provider, category:cat, weight:(SANMARU_CANONICAL_CATEGORIES[cat] && SANMARU_CANONICAL_CATEGORIES[cat].weight) || 40 })));
-  const maxPages = clampInt(opts.providerExpansionPages, Math.ceil(target / Math.max(1, providerOrder.length || 1)), 1, 200);
-  for(let page=1; page<=maxPages && out.length<target; page++){
-    for(const r of providerOrder){
-      if(out.length >= target) break;
-      const provider = s(r && r.provider || "google");
-      const category = s(r && r.category || "web");
-      if(provider === "searchbank" || provider === "searchbank-index") continue;
-      const url = routeProviderPagedSearchUrl(provider, q, category, page);
-      const key = low(provider + "|" + category + "|" + page + "|" + url);
-      if(seen.has(key)) continue;
-      seen.add(key);
-      out.push(canonicalItem({
-        id:"sanmaru-provider-candidate-" + stableHash(key),
-        title:"[" + provider + "] " + q + " · " + category + " #" + page,
-        summary:"산마루가 즉시 공급하는 권한 있는 공개 정보 경로 후보입니다. 실제 API·검색·플랫폼 레이어가 열리면 이 후보는 resident/index 결과로 흡수됩니다.",
-        url, link:url,
-        source:"sanmaru_provider_route_" + provider,
-        provider,
-        type:category === "youtube" ? "video" : category,
-        mediaType: category === "video" || category === "youtube" ? "video" : "article",
-        searchCategory:category,
-        routePlanProvider:provider,
-        routePlanCategory:category,
-        routePage:page,
-        score:0.52,
-        sourceTrust:0.58,
-        sanmaruProviderExpansionCard:true
-      }, q, "sanmaru-provider-expansion"));
-    }
-  }
-  return out;
 }
 
 function buildRouteFallbackCards(q, routePlan, opts){
@@ -1028,27 +893,21 @@ function supplyResidentSync(input, opts){
   const residentState = ensureResidentState();
   let routeFallbackCards = [];
   let openingFallbackCards = [];
-  let providerExpansionCards = [];
-  let priorityLocationCards = [];
   let items = dedupeItems(residentItems.concat(indexItems));
 
   // Sanmaru should always know and expose the major information roads
-  // (Google/Naver/SNS/video/wiki/public-data routes). Route/opening cards keep
-  // the first page useful, while provider expansion cards preserve thousands of
-  // lawful mounted candidate roads without waiting for external APIs.
+  // (Google/Naver/SNS/video/wiki/public-data routes). These cards are low-priority
+  // route/opening signals, not replacements for real provider results. They keep
+  // category trees visible and prevent empty-looking searches while the broad
+  // resident cache is warming.
   if(opts.allowRouteCards !== false && opts.noRouteCards !== true){
-    routeFallbackCards = buildRouteFallbackCards(clean.value, routePlan, Object.assign({}, opts, { routeCardLimit: clampInt(opts.routeCardLimit, 40, 1, 100) }));
+    routeFallbackCards = buildRouteFallbackCards(clean.value, routePlan, Object.assign({}, opts, { routeCardLimit: clampInt(opts.routeCardLimit, 28, 1, 60) }));
   }
   if(opts.allowOpeningCards !== false && opts.noOpeningCards !== true){
-    openingFallbackCards = buildOpeningFallbackCards(clean.value, Object.assign({}, opts, { openingCardLimit: clampInt(opts.openingCardLimit, 30, 1, 60) }));
+    openingFallbackCards = buildOpeningFallbackCards(clean.value, Object.assign({}, opts, { openingCardLimit: clampInt(opts.openingCardLimit, 24, 1, 40) }));
   }
-  priorityLocationCards = buildPriorityLocationCards(clean.value, routePlan, opts);
-  const currentBroadCount = dedupeItems(priorityLocationCards.concat(items, routeFallbackCards, openingFallbackCards)).length;
-  const expansionTarget = Math.min(MAX_LIMIT, Math.max(clampInt(firstNonEmpty(opts.providerExpansionTarget, opts.candidatePoolTarget, opts.limit), DEFAULT_CANDIDATE_POOL_TARGET, 1, MAX_LIMIT), MIN_FAST_TARGET));
-  if(opts.noProviderExpansion !== true && opts.disableProviderExpansion !== true && currentBroadCount < expansionTarget){
-    providerExpansionCards = buildProviderExpansionCards(clean.value, routePlan, Object.assign({}, opts, { providerExpansionTarget: expansionTarget - currentBroadCount }));
-  }
-  items = dedupeItems(priorityLocationCards.concat(items, routeFallbackCards, openingFallbackCards, providerExpansionCards)).slice(0, expansionTarget);
+  items = dedupeItems(items.concat(routeFallbackCards, openingFallbackCards));
+  if(items.length < minVisible) items = items.slice(0, minVisible);
   const cacheKey = queryCacheHit ? (exactCacheKey || noPageCacheKey) : (rememberResidentQueryCache(clean.value, opts, items) || residentCacheKey(clean.value, opts));
 
   return {
@@ -1064,11 +923,8 @@ function supplyResidentSync(input, opts){
       count:items.length,
       realResidentCount:residentItems.length,
       searchBankIndex:indexMeta,
-      priorityLocationCount:priorityLocationCards.length,
       routeFallbackCount:routeFallbackCards.length,
       openingFallbackCount:openingFallbackCards.length,
-      providerExpansionCount:providerExpansionCards.length,
-      routeExpansionCandidateCount:providerExpansionCards.length,
       queryCacheHit,
       cachedQueryHit:queryCacheHit,
       fromQueryCache:queryCacheHit,
@@ -1093,7 +949,7 @@ function supplyResidentSync(input, opts){
         perPage:DEFAULT_VISIBLE_PER_PAGE,
         noProviderRescanWhenBroadQueryCacheCovered:true,
         noProviderRescanWhenViewportCovered:false,
-        expansion:"opening-signal-mounted-route-map-and-broad-provider-candidate-roads"
+        expansion:"opening-signal-and-mounted-route-map"
       },
       logosGuard: logosEvaluate(logosSignalsForQuery(clean.value, { queryRisk:null }), "resident-supply"),
       openingSignals: openingSignalsSnapshot(),
@@ -1132,11 +988,7 @@ function triggerDeepRefresh(input, opts){
     noCollector: opts.allowCollector ? undefined : "1",
     skipCollector: opts.allowCollector ? undefined : "1",
     noPlanetary:"1",
-    skipPlanetary:"1",
-    forceWide:"1",
-    waitProviders:"1",
-    deepRefresh:"1",
-    disableInstantSupply:"1"
+    skipPlanetary:"1"
   }))).then(res => {
     const items = Array.isArray(res && res.items) ? res.items : (Array.isArray(res && res.results) ? res.results : []);
     absorbResidentItems(items, { q:clean.value, searchType:opts.searchType || opts.type || "all", lang:opts.lang || "", source:"deep-refresh" });
@@ -1498,9 +1350,14 @@ function isRealYouTubeVideoUrl(url){
 function isPlaceholderItem(it){
   const text = low(itemText(it));
   const url = low(firstNonEmpty(it && it.url, it && it.link));
+  const titleSummary = low([it && it.title, it && it.name, it && it.summary, it && it.description, it && it.section, it && it.page].filter(Boolean).join(" "));
+  const hasRealBody = !!(titleSummary && titleSummary.length >= 2 && !/seed placeholder|movie slot|mediamovie0|placeholder|dummy|sample item|test item|lorem ipsum|untitled/.test(titleSummary));
   if(!text && !url) return true;
-  if(/seed placeholder|movie slot|mediamovie0|placeholder/.test(text)) return true;
-  if(url === "#" || url === "/" || url.startsWith("javascript:")) return true;
+  if(/seed placeholder|movie slot|mediamovie0|placeholder|dummy|sample item|test item|lorem ipsum/.test(text)) return true;
+  if(url.startsWith("javascript:")) return true;
+  // SearchBank/Snapshot contains many real slot items with url="#".
+  // Treat "#" or "/" as non-clickable placeholders only when the item has no real title/summary/body.
+  if((url === "#" || url === "/") && !hasRealBody) return true;
   return false;
 }
 
@@ -1559,13 +1416,53 @@ function dedupeItems(items){
     if(!raw || typeof raw !== "object") continue;
     if(isPlaceholderItem(raw)) continue;
     if(raw._sanmaruRejectedReason) continue;
-    const key = low(firstNonEmpty(raw.url, raw.link, raw.id, raw.title));
+    const rawUrl = s(firstNonEmpty(raw.url, raw.link)).trim();
+    const normUrl = low(rawUrl);
+    const placeholderUrl = !rawUrl || rawUrl === "#" || rawUrl === "/" || normUrl === "javascript:void(0)" || normUrl.startsWith("javascript:");
+    const key = low(placeholderUrl
+      ? firstNonEmpty(
+          raw.id,
+          raw.indexId,
+          [raw.title, raw.source, raw.provider, raw.searchCategory, raw.displayGroup, raw.route, raw.page, raw.section, raw.lang, raw.thumbnail, raw.summary].filter(Boolean).join("|")
+        )
+      : rawUrl
+    );
     if(!key) continue;
     if(seen.has(key)) continue;
     seen.add(key);
     out.push(raw);
   }
   return out;
+}
+
+
+function isLikelyPlaceQuery(query, ctx){
+  const q = low(query).trim();
+  const type = normalizeSearchType(ctx && ctx.searchType);
+  if(type === "map" || type === "tour") return true;
+  if(/지도|주소|위치|근처|시청|구청|도청|군청|관광|여행|맛집|호텔|교통|지하철|버스|map|near|nearby|local|travel|tour|city|province|state|country/.test(q)) return true;
+  if(/^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주|도쿄|오사카|교토|뉴욕|런던|파리|베를린|로마|베이징|상하이|홍콩|싱가포르)$/.test(q)) return true;
+  if(/^[a-z][a-z\s.-]{2,40}$/i.test(query || "") && /seoul|busan|tokyo|osaka|new york|london|paris|berlin|rome|beijing|shanghai|hong kong|singapore/.test(q)) return true;
+  return false;
+}
+
+function placePriorityScore(query, item, ctx){
+  if(!isLikelyPlaceQuery(query, ctx)) return 0;
+  const q = low(query).replace(/\s+/g, "");
+  const title = low(item && item.title).replace(/\s+/g, "");
+  const summary = low(firstNonEmpty(item && item.summary, item && item.snippet, item && item.description));
+  const source = low(firstNonEmpty(item && item.source, item && item.provider));
+  const url = low(firstNonEmpty(item && item.url, item && item.link));
+  const cat = categoryOfItem(item);
+  let boost = 0;
+  if(q && title === q) boost += 14;
+  if(q && title.startsWith(q)) boost += 10;
+  if(q && (title.includes(q + "특별시") || title.includes(q + "광역시") || title.includes(q + "시") || title.includes(q + "도") || title.includes(q + "군") || title.includes(q + "구"))) boost += 12;
+  if(/\.go\.kr|\.gov\b|government|official|시청|구청|도청|군청/.test(url + " " + source + " " + summary)) boost += 9;
+  if(cat === "official") boost += 7;
+  if(cat === "map" || cat === "local" || cat === "tour" || cat === "tourism" || item.displayGroup === "local_tour") boost += 6;
+  if(/naver|google|map|local|tour|visit|travel/.test(source + " " + url)) boost += 4;
+  return boost;
 }
 
 function scoreItem(query, item, ctx){
@@ -1588,6 +1485,7 @@ function scoreItem(query, item, ctx){
   if(cat === "official") score += 1.4;
   if(cat === "news") score += 1.2;
   if(source.includes("placeholder")) score -= 8;
+  score += placePriorityScore(query, item, ctx || {});
   return score;
 }
 
@@ -1872,7 +1770,7 @@ async function callOptionalModuleAdapter(ctx, name, modulePath, runParams, timeo
     const params = Object.assign({}, runParams || {}, {
       q: ctx.q,
       query: ctx.q,
-      limit: Math.min(ctx.candidatePoolTarget || ctx.limit || DEFAULT_LIMIT, 500),
+      limit: Math.min(ctx.limit, 120),
       type: ctx.searchType,
       from: "sanmaru",
       source: "sanmaru",
@@ -2117,64 +2015,6 @@ async function runSanmaru(input, maybeCtx){
 
   globalState.cache = globalState.cache || new Map();
   globalState.inflight = globalState.inflight || new Map();
-
-  const instantSupplyDisabled = truthy(ctx.disableInstantSupply || ctx.raw.disableInstantSupply || ctx.raw.noInstantSupply || ctx.raw.noInstant || ctx.raw.waitProviders || ctx.raw.waitExternal || ctx.raw.forceWide || ctx.raw.forceProviderRefresh || ctx.raw.deepRefresh || ctx.raw.live);
-  const sanmaruInstantSupply = !instantSupplyDisabled && !ctx.deep && !ctx.externalForced;
-
-  if(sanmaruInstantSupply){
-    ensureResidentBoot({ reason:"runSanmaru-instant-supply" });
-    const supplied = supplyResidentSync({ q:ctx.q, query:ctx.q }, {
-      reason:"runSanmaru-default-instant-supply",
-      limit:ctx.limit,
-      candidatePoolTarget:ctx.candidatePoolTarget,
-      searchType:ctx.searchType,
-      type:ctx.searchType,
-      lang:ctx.lang,
-      page:ctx.page,
-      perPage:ctx.perPage,
-      visibleNeed:ctx.perPage || DEFAULT_VISIBLE_PER_PAGE,
-      allowRouteCards:true,
-      allowOpeningCards:true
-    });
-    let instantItems = Array.isArray(supplied && supplied.items) ? supplied.items : [];
-    const finalTarget = Math.min(MAX_LIMIT, Math.max(ctx.limit, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET));
-    instantItems = finalRank(ctx.q, instantItems, ctx).slice(0, finalTarget).map(it => {
-      const copy = Object.assign({}, it);
-      delete copy._sanmaruSeq;
-      delete copy._sanmaruRejectedReason;
-      return copy;
-    });
-    const result = Object.assign({}, supplied, {
-      source: instantItems.length ? "sanmaru-instant-supply" : null,
-      items: instantItems,
-      results: instantItems,
-      meta: Object.assign({}, supplied.meta || {}, {
-        count: instantItems.length,
-        requestedLimit: ctx.limit,
-        finalTarget,
-        elapsedMs: nowMs() - engineStarted,
-        defaultInstantSupply:true,
-        mode:"sanmaru-instant-resident-index-supply",
-        searchExecutionOwner:"sanmaru",
-        maruSearchRole:"gateway-body-render-only",
-        doesNotCallExternal:true,
-        directExternalAdaptersEnabled:false,
-        routePlan: supplied.routePlan || buildRoutePlanForQuery(ctx.q, { searchType:ctx.searchType, lang:ctx.lang }),
-        logosGuard,
-        health: healthSnapshot(),
-        cache:{ hit:false, key:null, policy:"instant-supply-before-wide-refresh" },
-        external:{ allowed:false, forced:false, deep:false, selected:[], trace:[] },
-        trace:[].concat((supplied.meta && supplied.meta.trace) || [], [{
-          name:"sanmaru-instant-supply",
-          status: instantItems.length ? "ok" : "empty",
-          count: instantItems.length,
-          mode:"resident-index-route-map-no-provider-wait",
-          principle:"query-response-is-served-by-sanmaru-immediately; wide provider refresh is explicit/background-only"
-        }])
-      })
-    });
-    return result;
-  }
 
   const cacheKey = stableHash([ctx.q, ctx.limit, ctx.candidatePoolTarget || "", ctx.page || 1, ctx.perPage || DEFAULT_VISIBLE_PER_PAGE, ctx.searchType, ctx.lang || "", searchAreaExpansionMode(ctx), ctx.deep ? "deep" : "normal", ctx.externalOff ? "off" : (ctx.externalForced ? "force" : "auto"), ctx.noMedia ? "nomedia" : "media"].join("|"));
   const cached = globalState.cache.get(cacheKey);
