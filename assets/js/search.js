@@ -87,6 +87,8 @@ ready(function () {
       bootSanmaruOnce(reason || 'search-signal', q, type);
     }
 
+    window.signalSanmaruSearch = signalSanmaruSearch;
+
 const params = new URLSearchParams(location.search);
 const q0 = (params.get('q') || '').trim();
 const from0 = (params.get('from') || '').trim();
@@ -498,6 +500,9 @@ btn.addEventListener('click', (e) => {
     u.searchParams.set('residentFirst', '1');
     u.searchParams.set('sanmaruFirst', '1');
     u.searchParams.set('residentSwitch', '1');
+    u.searchParams.set('instantSupply', '1');
+    u.searchParams.set('sanmaruInstant', '1');
+    u.searchParams.set('noWaitProviders', '1');
 
     const safeReturnUrl = getSafeReturnUrl();
     if (safeReturnUrl) {
@@ -542,6 +547,9 @@ input.addEventListener('keydown', (e) => {
     u.searchParams.set('residentFirst', '1');
     u.searchParams.set('sanmaruFirst', '1');
     u.searchParams.set('residentSwitch', '1');
+    u.searchParams.set('instantSupply', '1');
+    u.searchParams.set('sanmaruInstant', '1');
+    u.searchParams.set('noWaitProviders', '1');
 
     const safeReturnUrl = getSafeReturnUrl();
     if (safeReturnUrl) {
@@ -687,6 +695,10 @@ async function fetchSearch(q, type = activeType){
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
+  sp.set('instantSupply', '1');
+  sp.set('sanmaruInstant', '1');
+  sp.set('noWaitProviders', '1');
+  sp.set('lazyProviderRefresh', '1');
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
   try {
@@ -1990,7 +2002,7 @@ async function runSearch(q, type = activeType){
     const q = input.value.trim();
     if (!q) return;
 
-    signalSanmaruSearch(q, 'all', 'global-search-handoff');
+    if (window.signalSanmaruSearch) window.signalSanmaruSearch(q, 'all', 'global-search-handoff');
 
     const u = new URL('/search.html', location.origin);
     u.searchParams.set('q', q);
@@ -1999,6 +2011,9 @@ async function runSearch(q, type = activeType){
     u.searchParams.set('residentFirst', '1');
     u.searchParams.set('sanmaruFirst', '1');
     u.searchParams.set('residentSwitch', '1');
+    u.searchParams.set('instantSupply', '1');
+    u.searchParams.set('sanmaruInstant', '1');
+    u.searchParams.set('noWaitProviders', '1');
     u.searchParams.set('from', location.pathname + location.search + location.hash);
 
     window.location.href = u.pathname + u.search + u.hash;
