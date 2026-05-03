@@ -27,10 +27,11 @@ const path = require("path");
 let LogosEngineClass = null;
 try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) { LogosEngineClass = null; }
 
-const VERSION = "sanmaru-engine-v2.6.0-top-cpu-route-owner";
+const VERSION = "sanmaru-engine-v2.6.1-engine-upload-lifecycle";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 1000;
+const DEFAULT_VISIBLE_PER_PAGE = 25;
 const MAX_LIMIT = 10000;
 const DEFAULT_TIMEOUT_MS = 10500;
 const DEEP_TIMEOUT_MS = 15000;
@@ -79,7 +80,11 @@ function ensureResidentState(){
       routeMap:new Map(),
       providerHealth:new Map(),
       learnedCategoryAliases:Object.create(null),
-      lastError:null
+      lastError:null,
+      engineIdentity:null,
+      lastLifecycleMode:null,
+      lastHotRefreshAt:0,
+      lastHotRefreshReason:null
     };
   }
   return globalState.resident;
@@ -114,6 +119,43 @@ function sanmaruEnvFirst(){
   return '';
 }
 function sanmaruEnvHas(){ return !!sanmaruEnvFirst.apply(null, arguments); }
+
+
+function sanmaruEngineCodeHash(){
+  try{
+    const file = typeof __filename === "string" ? __filename : "";
+    if(file && fs.existsSync(file)){
+      return crypto.createHash("sha1").update(fs.readFileSync(file, "utf8")).digest("hex").slice(0, 20);
+    }
+  }catch(e){}
+  return crypto.createHash("sha1").update(String(VERSION)).digest("hex").slice(0, 20);
+}
+
+function sanmaruEngineIdentity(){
+  return {
+    engine: ENGINE_NAME,
+    version: VERSION,
+    file: "sanmaru_engine_v2.js",
+    codeHash: sanmaruEngineCodeHash(),
+    lifecycle: "engine-file-upload-reboots-sanmaru; content-data-file-updates-hot-refresh-only"
+  };
+}
+
+function isExplicitSanmaruEngineUpload(opts){
+  opts = opts || {};
+  return !!(
+    opts.engineUpload || opts.sanmaruEngineUpload || opts.sanmaruEngineReupload ||
+    opts.engineUpgrade || opts.versionUpload || opts.codeUpload ||
+    truthy(process.env.SANMARU_ENGINE_UPLOAD_REBOOT)
+  );
+}
+
+function residentEngineCodeChanged(resident, identity){
+  resident = resident || {};
+  identity = identity || sanmaruEngineIdentity();
+  const prev = resident.engineIdentity || {};
+  return !!(resident.ready && prev.codeHash && identity.codeHash && prev.codeHash !== identity.codeHash);
+}
 
 const MOUNT_REGISTRY = {
   "searchbank-index": {
@@ -164,6 +206,10 @@ const MOUNT_REGISTRY = {
     role: "Reserved/active Bing mount; normally routed through Maru Search wide gateway to avoid duplicate API bursts",
     enabled: !!sanmaruEnvHas('BING_API_KEY','BING_SEARCH_API_KEY','AZURE_BING_SEARCH_API_KEY')
   },
+  "duckduckgo": { type:"public-search-route", permission:"public-search", role:"DuckDuckGo public search route mount", enabled:true },
+  "yahoo": { type:"public-search-route", permission:"public-search", role:"Yahoo public search route mount", enabled:true },
+  "baidu": { type:"public-search-route", permission:"public-search", role:"Baidu public search route mount for Chinese web ecosystem discovery", enabled:true },
+  "yandex": { type:"public-search-route", permission:"public-search", role:"Yandex public search route mount for Eurasian web ecosystem discovery", enabled:true },
   "youtube": {
     type: "media-search",
     permission: "api-key-required",
@@ -270,7 +316,7 @@ function mountRegistrySnapshot(){
 // Sanmaru's front gateway/body, not as the decision owner.
 // -----------------------------------------------------------------------------
 const SANMARU_CANONICAL_CATEGORIES = {
-  official:{ label:"공식/권위", weight:98, routes:["official-web","google","naver","bing","searchbank-index","searchbank"] },
+  official:{ label:"공식/권위", weight:98, routes:["official-web","google","naver","bing","duckduckgo","yahoo","searchbank-index","searchbank"] },
   government:{ label:"정부/공공기관", weight:96, routes:["official-web","public-data","google","naver","bing"] },
   public_data:{ label:"공공 데이터", weight:94, routes:["public-data","official-web","google","bing"] },
   map_local:{ label:"지도/주소/지역", weight:92, routes:["naver","google","bing","maru-search-wide-gateway"] },
@@ -295,7 +341,7 @@ const SANMARU_CANONICAL_CATEGORIES = {
   webtoon:{ label:"웹툰", weight:60, routes:["naver","google"] },
   ai_provider:{ label:"AI 정보 공급", weight:58, routes:["ai-gpu"] },
   internal_search_bank:{ label:"내부 기억층", weight:100, routes:["searchbank-index","searchbank"] },
-  web:{ label:"웹", weight:40, routes:["google","naver","bing","searchbank-index","searchbank"] }
+  web:{ label:"웹", weight:40, routes:["google","naver","bing","duckduckgo","yahoo","baidu","yandex","searchbank-index","searchbank"] }
 };
 
 const PROVIDER_CATEGORY_ALIASES = {
@@ -315,6 +361,10 @@ const PROVIDER_CAPABILITY_MAP = {
   naver: ["web","news","blog","cafe","knowledge","book","shopping","image","map_local","tourism"],
   google: ["web","official","knowledge","wiki","news","image","video","map_local","tourism","academic","research_paper","book","sns"],
   bing: ["web","news","image","video","academic","research_paper","official"],
+  duckduckgo: ["web","official","news","knowledge","privacy_web"],
+  yahoo: ["web","news","finance","sports"],
+  baidu: ["web","news","image","video","knowledge"],
+  yandex: ["web","image","video","news","map_local"],
   youtube: ["youtube","video","sns","tourism"],
   "official-web": ["official","government","public_data","tourism"],
   "social-public-web": ["sns","video","youtube","community"],
@@ -558,10 +608,33 @@ function absorbResidentItems(items, meta){
 function ensureResidentBoot(opts){
   opts = opts || {};
   const resident = ensureResidentState();
-  if(resident.ready && !opts.force) return residentBootSnapshot();
+  const identity = sanmaruEngineIdentity();
+  const codeChanged = residentEngineCodeChanged(resident, identity);
+  const explicitEngineUpload = isExplicitSanmaruEngineUpload(opts);
+
+  // 핵심 정책:
+  // - 산마루 엔진 파일 자체가 새로 올라오거나 코드 fingerprint가 바뀐 경우에만 resident를 논리 재부팅한다.
+  // - 관리자 권한은 민감 action 허용 조건일 뿐, 그 자체로 산마루 resident를 초기화하지 않는다.
+  // - 콘텐츠, 프론트, snapshot, promoted, ingested, Search Bank Index 변경은 hot refresh/absorb로 처리한다.
+  const forceEngineReboot = !!(opts.force && (codeChanged || explicitEngineUpload));
+  const hotRefreshOnly = !!(opts.force && !forceEngineReboot);
+
+  if(resident.ready && !forceEngineReboot){
+    if(hotRefreshOnly){
+      resident.lastDeniedForceBootAt = nowMs();
+      resident.lastDeniedForceBootReason = opts.reason || "data-content-hot-refresh-no-engine-reboot";
+      resident.lastHotRefreshAt = nowMs();
+      resident.lastHotRefreshReason = opts.reason || "hot-refresh";
+      resident.lastLifecycleMode = "hot-refresh-no-engine-reboot";
+      rebuildResidentProviderHealth(opts.reason || "hot-refresh-no-engine-reboot");
+    }
+    resident.engineIdentity = resident.engineIdentity || identity;
+    return residentBootSnapshot();
+  }
+
   const started = nowMs();
   try{
-    if(opts.force){
+    if(forceEngineReboot){
       resident.items = [];
       resident.itemMap = new Map();
       resident.categoryMap = new Map();
@@ -569,7 +642,11 @@ function ensureResidentBoot(opts){
       resident.queryMap = new Map();
       resident.routeMap = new Map();
       resident.providerHealth = new Map();
+      resident.lastLifecycleMode = codeChanged ? "engine-code-fingerprint-changed-reboot" : "explicit-sanmaru-engine-upload-reboot";
+    }else{
+      resident.lastLifecycleMode = resident.ready ? "resident-restore" : "cold-start-resident-restore";
     }
+
     const all = [];
     const files = [];
     for(const file of residentFileCandidates()){
@@ -586,16 +663,19 @@ function ensureResidentBoot(opts){
     resident.ready = true;
     resident.bootedAt = nowMs();
     resident.bootCount = (resident.bootCount || 0) + 1;
-    resident.bootReason = opts.reason || (opts.force ? "force" : "auto");
+    resident.bootReason = opts.reason || (forceEngineReboot ? "sanmaru-engine-file-upload" : "resident-restore");
+    resident.engineLifecyclePolicy = "sanmaru-engine-file-upload-reboot-only-data-content-hot-refresh-otherwise";
+    resident.engineIdentity = identity;
     resident.lastBootFiles = files;
     resident.lastBootLatency = nowMs() - started;
     resident.lastError = null;
     rebuildResidentProviderHealth(opts.reason || "resident-boot");
-    return Object.assign(residentBootSnapshot(), { bootFiles:files, absorbed });
+    return Object.assign(residentBootSnapshot(), { bootFiles:files, absorbed, engineIdentity:identity });
   }catch(e){
     resident.lastError = responseErrorCode(e);
     resident.ready = true;
     resident.bootedAt = nowMs();
+    resident.engineIdentity = identity;
     return residentBootSnapshot();
   }
 }
@@ -622,7 +702,15 @@ function residentBootSnapshot(){
     lastBootLatency:resident.lastBootLatency || 0,
     lastBootFiles:resident.lastBootFiles || [],
     lastError:resident.lastError || null,
-    engineLifecycle: "resident-restored-unless-engine-file-upgraded",
+    engineIdentity: resident.engineIdentity || sanmaruEngineIdentity(),
+    currentEngineIdentity: sanmaruEngineIdentity(),
+    lastLifecycleMode: resident.lastLifecycleMode || null,
+    lastHotRefreshAt:resident.lastHotRefreshAt ? new Date(resident.lastHotRefreshAt).toISOString() : null,
+    lastHotRefreshReason:resident.lastHotRefreshReason || null,
+    engineLifecycle: "sanmaru-engine-file-upload-reboot-only-data-content-hot-refresh-otherwise",
+    lifecyclePolicyApplied:true,
+    deniedForceBootAt:resident.lastDeniedForceBootAt ? new Date(resident.lastDeniedForceBootAt).toISOString() : null,
+    deniedForceBootReason:resident.lastDeniedForceBootReason || null,
     topRole: "global-web-ecosystem-information-cpu",
     maruRole: "mounted-gateway-body",
     dataUpdateMode: "hot-ingest-index-refresh-no-engine-reboot",
@@ -688,6 +776,10 @@ function routeProviderSearchUrl(provider, q){
   const p = s(provider).toLowerCase();
   if(p.includes("naver")) return "https://search.naver.com/search.naver?query=" + enc;
   if(p.includes("youtube")) return "https://www.youtube.com/results?search_query=" + enc;
+  if(p.includes("duckduckgo")) return "https://duckduckgo.com/?q=" + enc;
+  if(p.includes("yahoo")) return "https://search.yahoo.com/search?p=" + enc;
+  if(p.includes("baidu")) return "https://www.baidu.com/s?wd=" + enc;
+  if(p.includes("yandex")) return "https://yandex.com/search/?text=" + enc;
   if(p.includes("instagram")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:instagram.com");
   if(p.includes("facebook")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:facebook.com");
   if(p.includes("tiktok")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:tiktok.com");
@@ -745,6 +837,10 @@ function buildOpeningFallbackCards(q, opts){
     ["naver_web", "Naver", "https://search.naver.com/search.naver?query=" + enc, "web"],
     ["naver_news", "Naver News", "https://search.naver.com/search.naver?where=news&query=" + enc, "news"],
     ["naver_blog", "Naver Blog", "https://search.naver.com/search.naver?where=blog&query=" + enc, "blog"],
+    ["duckduckgo", "DuckDuckGo", "https://duckduckgo.com/?q=" + enc, "web"],
+    ["yahoo", "Yahoo", "https://search.yahoo.com/search?p=" + enc, "web"],
+    ["baidu", "Baidu", "https://www.baidu.com/s?wd=" + enc, "web"],
+    ["yandex", "Yandex", "https://yandex.com/search/?text=" + enc, "web"],
     ["instagram", "Instagram public route", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:instagram.com"), "sns"],
     ["facebook", "Facebook public route", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:facebook.com"), "sns"],
     ["tiktok", "TikTok public route", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:tiktok.com"), "sns"],
@@ -771,7 +867,7 @@ function supplyResidentSync(input, opts){
 
   const routePlan = residentRoutePlanFor(clean.value, opts);
   const residentItems = residentCandidatesSync(clean.value, opts).map(x => canonicalItem(x, clean.value, x && x.source));
-  const minVisible = clampInt(firstNonEmpty(opts.visibleNeed, opts.perPage, opts.visibleCardsPerPage), 15, 1, 100);
+  const minVisible = clampInt(firstNonEmpty(opts.visibleNeed, opts.perPage, opts.visibleCardsPerPage), DEFAULT_VISIBLE_PER_PAGE, 1, 100);
   let indexItems = [];
   let indexMeta = { status:"not-called" };
   try{
@@ -822,7 +918,18 @@ function supplyResidentSync(input, opts){
       categoryBrainReady:true,
       providerCapabilityReady:true,
       mode:"resident-switch-supply-sync",
+      visibleCardsPerPage:DEFAULT_VISIBLE_PER_PAGE,
+      lifecyclePolicy:"engine-code-upload-only-reboot-hot-data-refresh-otherwise",
       doesNotCallExternal:true,
+      supplyContract:{
+        owner:"sanmaru-global-web-information-cpu",
+        maruRole:"mounted-gateway-ui-body",
+        itemResults:"resident-index-cache-candidate-pool",
+        viewport:"page-sized-current-render-window",
+        perPage:DEFAULT_VISIBLE_PER_PAGE,
+        noProviderRescanWhenViewportCovered:true,
+        expansion:"opening-signal-and-mounted-route-map"
+      },
       logosGuard: logosEvaluate(logosSignalsForQuery(clean.value, { queryRisk:null }), "resident-supply"),
       openingSignals: openingSignalsSnapshot(),
       note:"Sanmaru owns routing/provider-health/category/index/cache as the top information CPU. Maru Search is the mounted gateway/body; it formats and expands results without becoming the independent head."
@@ -1684,7 +1791,7 @@ async function callMaruSearchWideGateway(ctx){
       searchExpansion: searchAreaExpansionMode(ctx),
       expansion: searchAreaExpansionMode(ctx),
       page: ctx.page || 1,
-      perPage: ctx.perPage || 15,
+      perPage: ctx.perPage || DEFAULT_VISIBLE_PER_PAGE,
       start: ctx.start || 1,
       type: ctx.searchType,
       category: ctx.searchType,
@@ -1812,7 +1919,7 @@ function parseCtx(input, maybeCtx){
     timeoutMs: clampInt(ctx.timeoutMs || raw.timeoutMs || qs.timeoutMs, deep ? DEEP_TIMEOUT_MS : DEFAULT_TIMEOUT_MS, 1500, deep ? 15000 : 12000),
     region: detectRuntimeRegion(event, lang, clean.value),
     page: clampInt(firstNonEmpty(ctx.page, raw.page, qs.page), 1, 1, 100000),
-    perPage: clampInt(firstNonEmpty(ctx.perPage, raw.perPage, qs.perPage), 15, 1, 200),
+    perPage: clampInt(firstNonEmpty(ctx.perPage, raw.perPage, qs.perPage), DEFAULT_VISIBLE_PER_PAGE, 1, 200),
     start: clampInt(firstNonEmpty(ctx.start, raw.start, qs.start), 1, 1, 1000000),
     candidatePoolTarget: clampInt(firstNonEmpty(ctx.candidatePool, raw.candidatePool, qs.candidatePool, ctx.candidatePoolTarget, raw.candidatePoolTarget, qs.candidatePoolTarget, wideExpansion ? DEFAULT_CANDIDATE_POOL_TARGET : "", ctx.limit, raw.limit, qs.limit), DEFAULT_CANDIDATE_POOL_TARGET, 1, MAX_LIMIT),
     expansion: expansionRaw || (wideExpansion ? "wide" : "balanced"),
@@ -1842,7 +1949,7 @@ async function runSanmaru(input, maybeCtx){
   globalState.cache = globalState.cache || new Map();
   globalState.inflight = globalState.inflight || new Map();
 
-  const cacheKey = stableHash([ctx.q, ctx.limit, ctx.candidatePoolTarget || "", ctx.page || 1, ctx.perPage || 15, ctx.searchType, ctx.lang || "", searchAreaExpansionMode(ctx), ctx.deep ? "deep" : "normal", ctx.externalOff ? "off" : (ctx.externalForced ? "force" : "auto"), ctx.noMedia ? "nomedia" : "media"].join("|"));
+  const cacheKey = stableHash([ctx.q, ctx.limit, ctx.candidatePoolTarget || "", ctx.page || 1, ctx.perPage || DEFAULT_VISIBLE_PER_PAGE, ctx.searchType, ctx.lang || "", searchAreaExpansionMode(ctx), ctx.deep ? "deep" : "normal", ctx.externalOff ? "off" : (ctx.externalForced ? "force" : "auto"), ctx.noMedia ? "nomedia" : "media"].join("|"));
   const cached = globalState.cache.get(cacheKey);
   if(cached && nowMs() - cached.t < CACHE_TTL_MS){
     return Object.assign({}, safeJsonClone(cached.v), { meta: Object.assign({}, cached.v.meta || {}, { cache:{ hit:true, key:cacheKey } }) });
@@ -2062,7 +2169,7 @@ function healthSnapshot(){
     openingSignals: openingSignalsSnapshot(),
     logosGuard: logosEvaluate([{ type:"health", intent:"stewardship", truthConfidence:0.95, recoveryOpportunity:true }], "health"),
     securityEvents:(globalState.securityEvents || []).slice(-20),
-    lifecyclePolicy:"engine-code-reboot-only-on-sanmaru-engine-reupload; data/content changes use hot refresh/index rebuild",
+    lifecyclePolicy:"sanmaru-engine-file-upload-reboot-only; other file/data/content changes use hot refresh/index rebuild",
     generatedAt: nowIso()
   };
 }
@@ -2107,7 +2214,7 @@ async function handler(event){
   if(action === "health") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, health:healthSnapshot(), resident:residentBootSnapshot(), security:{ allowed:true, admin:security.admin } });
   if(action === "resident-boot" || action === "boot" || action === "mount-library") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-boot", resident:touchResidentSwitch({ reason:firstNonEmpty(merged.reason, "manual-boot-switch"), q:firstNonEmpty(merged.q, merged.query) }) });
   if(action === "resident-activate" || action === "resident-switch" || action === "warm-ping" || action === "warm") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-switch", resident:touchResidentSwitch({ reason:firstNonEmpty(merged.reason, action), q:firstNonEmpty(merged.q, merged.query) }) });
-  if(action === "resident-rebuild" || action === "rebuild-resident") { const rebuilt = ensureResidentBoot({ force:true, reason:"manual-rebuild" }); return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-rebuild", resident:touchResidentSwitch({ reason:"manual-rebuild-switch" }), rebuilt }); }
+  if(action === "resident-rebuild" || action === "rebuild-resident") { const rebuilt = ensureResidentBoot({ force:true, admin:security.admin, engineUpgrade:truthy(merged.engineUpgrade || merged.upgrade || merged.versionUpload), engineUpload:truthy(merged.engineUpload || merged.sanmaruEngineUpload || merged.sanmaruEngineReupload || merged.codeUpload), reason:"manual-rebuild" }); return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-rebuild", resident:touchResidentSwitch({ reason:"manual-rebuild-switch" }), rebuilt, lifecycleNote:"admin permission does not reset Sanmaru by itself; only Sanmaru engine file upload/code fingerprint change performs engine reboot" }); }
   if(action === "resident-status") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-status", resident:touchResidentSwitch({ reason:"resident-status" }), health:healthSnapshot(), providerHealth:providerHealthSnapshot() });
   if(action === "provider-health") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"provider-health", providerHealth:providerHealthSnapshot(), resident:residentBootSnapshot() });
   if(action === "source-registry") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"source-registry", sources:sourceRegistrySnapshot(), openingSignals:openingSignalsSnapshot(), resident:residentBootSnapshot() });
