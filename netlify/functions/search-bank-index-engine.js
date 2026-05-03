@@ -316,7 +316,13 @@ function canonicalItem(item, query, fallbackSource){
   const summary = firstNonEmpty(item.summary, item.description, item.snippet, item.content, item.text, "");
   const image = firstNonEmpty(item.thumbnail, item.thumb, item.image, item.poster, item.cover, item.media && item.media.poster);
   const source = firstNonEmpty(item.source, item.provider, fallbackSource, item._sourceHint, "search-bank");
-  const idBase = firstNonEmpty(item.id, item.indexId, url, title + "|" + source);
+  const identityUrl = normalizeUrl(firstNonEmpty(item.url, item.link, item.href, url));
+  const idBase = firstNonEmpty(
+    item.id,
+    item.indexId,
+    identityUrl,
+    [title, source, item.route, item.path, item.page, item.section, item.lang, image, summary].filter(Boolean).join("|")
+  );
   return Object.assign({}, item, {
     id: stableHash(idBase),
     originalId: firstNonEmpty(item.id, item.indexId),
@@ -366,7 +372,13 @@ function buildIndexFromSnapshot(){
   for(let i=0; i<rawItems.length; i++){
     const item = indexItem(rawItems[i], i, "search-bank");
     if(!item){ placeholderFiltered++; continue; }
-    const sig = low(firstNonEmpty(item.url, item.link, item.title, item.indexId));
+    const sigUrl = normalizeUrl(firstNonEmpty(item.url, item.link));
+    const sig = low(firstNonEmpty(
+      sigUrl,
+      item.originalId,
+      item.indexId,
+      [item.title, item.source, item.provider, item.searchCategory, item.displayGroup, item.route, item.page, item.section, item.lang, item.image, item.summary].filter(Boolean).join("|")
+    ));
     if(!sig || seen.has(sig)) continue;
     seen.add(sig);
     indexed.push(item);
