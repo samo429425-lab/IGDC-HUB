@@ -35,9 +35,9 @@ ready(function () {
         
     if (!input || !btn) return;
 
-    const PAGE_SIZE = 15;
+    const PAGE_SIZE = 25;
     const BLOCK_SIZE = 10;
-    const FETCH_LIMIT = 1000;
+    const FETCH_LIMIT = 5000;
 
     let allItems = [];
     let currentPage = 1;
@@ -688,6 +688,10 @@ async function fetchSearch(q, type = activeType){
   sp.set('tab', safeType);
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
+  sp.set('candidatePool', String(FETCH_LIMIT));
+  sp.set('candidatePoolTarget', String(FETCH_LIMIT));
+  sp.set('searchExpansion', 'wide');
+  sp.set('expansion', 'wide');
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
   sp.set('routeOwner', 'sanmaru');
