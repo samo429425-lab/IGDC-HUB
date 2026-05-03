@@ -45,6 +45,7 @@ ready(function () {
     let activeType = 'all';
     let lastQuery = '';
     let lastType = 'all';
+    let lastSearchPayload = null;
     const pageImageEnrichCache = new Set();
     const itemImageEnrichCache = new Map();
     const expandedDisplayGroups = new Set();
@@ -397,6 +398,7 @@ function syncSearchFromUrl(run = true) {
     });
   } else if (run && !qp) {
     allItems = [];
+    lastSearchPayload = null;
     results.innerHTML = '';
     clearPager();
     status.textContent = '';
@@ -590,6 +592,23 @@ function normalizeItems(payload){
   return [];
 }
 
+
+function normalizeSearchPayload(payload){
+  const root = unwrap(payload) || payload || {};
+  const items = normalizeItems(root);
+  const pageItems =
+    (root.visiblePagePack && Array.isArray(root.visiblePagePack.pageItems) && root.visiblePagePack.pageItems) ||
+    (Array.isArray(root.pageItems) && root.pageItems) ||
+    (root.sectionPack && Array.isArray(root.sectionPack.pageItems) && root.sectionPack.pageItems) ||
+    [];
+  const viewportSections =
+    (Array.isArray(root.viewportSections) && root.viewportSections) ||
+    (root.sectionPack && Array.isArray(root.sectionPack.viewportSections) && root.sectionPack.viewportSections) ||
+    (Array.isArray(root.displaySections) && root.displaySections) ||
+    [];
+  return { payload: root, items, pageItems, viewportSections };
+}
+
     function safeText(v){
       return String(v || '').toLowerCase();
     }
@@ -670,17 +689,17 @@ async function fetchSearch(q, type = activeType){
 
   try {
     const r = await fetch(url, { cache: 'no-store' });
-    if (!r.ok) return [];
+    if (!r.ok) return { items: [], payload: null, pageItems: [], viewportSections: [] };
 
     const json = await r.json();
-    if (!json) return [];
-    if (json.status === 'error') return [];
-    if (json.status === 'blocked') return [];
+    if (!json) return { items: [], payload: null, pageItems: [], viewportSections: [] };
+    if (json.status === 'error') return { items: [], payload: json, pageItems: [], viewportSections: [] };
+    if (json.status === 'blocked') return { items: [], payload: json, pageItems: [], viewportSections: [] };
 
-    return normalizeItems(json);
+    return normalizeSearchPayload(json);
   } catch (e) {
     console.error('fetchSearch failed:', e);
-    return [];
+    return { items: [], payload: null, pageItems: [], viewportSections: [] };
   }
 }
 
@@ -1109,7 +1128,7 @@ async function fetchSearch(q, type = activeType){
 
         const meta = document.createElement('div');
         meta.className = 'maru-display-section-meta';
-        meta.textContent = `${groupInfo.items.length}개`;
+        meta.textContent = groupInfo.items.some(x => x && x.displayGroupSourceTotal) ? `${groupInfo.items.length}/${Math.max.apply(null, groupInfo.items.map(x => parseInt(x && x.displayGroupSourceTotal, 10) || 0).concat([groupInfo.items.length]))}개` : `${groupInfo.items.length}개`;
 
         head.appendChild(title);
         head.appendChild(meta);
@@ -1129,7 +1148,8 @@ async function fetchSearch(q, type = activeType){
           }
         });
 
-        const hiddenCount = Math.max(0, groupInfo.items.length - limit);
+        const sourceTotal = Math.max.apply(null, groupInfo.items.map(x => parseInt(x && x.displayGroupSourceTotal, 10) || 0).concat([groupInfo.items.length]));
+        const hiddenCount = Math.max(0, sourceTotal - limit);
         if (hiddenCount > 0) {
           const more = document.createElement('button');
           more.type = 'button';
@@ -1143,10 +1163,8 @@ async function fetchSearch(q, type = activeType){
             if (willExpand) expandedDisplayGroups.add(stateKey);
             else expandedDisplayGroups.delete(stateKey);
 
-            Array.from(body.querySelectorAll('[data-maru-collapsed="1"]')).forEach(card => {
-              card.style.display = willExpand ? '' : 'none';
-            });
-            more.textContent = willExpand ? '접기' : `${groupInfo.label} ${hiddenCount}개 더보기`;
+            renderPage(page, true);
+            return;
           });
           body.appendChild(more);
         }
@@ -1737,10 +1755,52 @@ if (it.riskLabel === '⚠️ high-risk') {
     }
 
 
+
+    function stateKeyForGroup(page, group){
+      return `${lastQuery || input.value || ''}::${activeType || 'all'}::${page}::${group}`;
+    }
+
+    function buildClientVisibleStream(page){
+      const sourceItems = Array.isArray(allItems) ? allItems : [];
+      if (!sourceItems.length) return [];
+      if (normalizeSearchType(activeType) !== 'all') return sourceItems.slice();
+
+      const groups = groupSliceForDisplay(sourceItems);
+      const stream = [];
+      groups.forEach(groupInfo => {
+        const key = stateKeyForGroup(page, groupInfo.group);
+        const expanded = expandedDisplayGroups.has(key);
+        const limit = Math.max(1, groupInfo.previewLimit || displayGroupPreviewLimit(groupInfo.group, groupInfo.items[0]));
+        const visibleItems = expanded ? groupInfo.items : groupInfo.items.slice(0, limit);
+        visibleItems.forEach((it, idx) => {
+          stream.push(Object.assign({}, it, {
+            displayGroup: groupInfo.group,
+            displayGroupLabel: groupInfo.label,
+            displayGroupVisibleIndex: idx,
+            displayGroupSourceTotal: groupInfo.items.length,
+            displayGroupCollapsedCount: Math.max(0, groupInfo.items.length - visibleItems.length),
+            collapsedAwareViewportCard: true,
+            visibleViewportCard: true
+          }));
+        });
+      });
+      return stream;
+    }
+
+    function visibleItemsForPage(page){
+      const stream = buildClientVisibleStream(page);
+      const start = (page - 1) * PAGE_SIZE;
+      return stream.slice(start, start + PAGE_SIZE);
+    }
+
+    function visibleItemCountForPager(){
+      return buildClientVisibleStream(currentPage || 1).length;
+    }
+
     function renderPage(page, skipEnrich = false){
       results.innerHTML = '';
+      const slice = visibleItemsForPage(page);
       const start = (page - 1) * PAGE_SIZE;
-      const slice = allItems.slice(start, start + PAGE_SIZE);
 
       if (shouldUseDisplayGroups(slice)) {
         renderGroupedSlice(slice, page);
@@ -1789,7 +1849,7 @@ function updateSearchPageHistory(page, block) {
 }
 
 function drawPager(){
-  const pages = Math.max(1, Math.ceil(allItems.length / PAGE_SIZE));
+  const pages = Math.max(1, Math.ceil(visibleItemCountForPager() / PAGE_SIZE));
   if (pages <= 1) { clearPager(); return; }
 
   const bar = ensurePager();
@@ -1855,7 +1915,9 @@ async function runSearch(q, type = activeType){
   clearPager();
 
   try {
-    const items = await fetchSearch(qq, activeType);
+    const searchPack = await fetchSearch(qq, activeType);
+    lastSearchPayload = searchPack && searchPack.payload || null;
+    const items = Array.isArray(searchPack) ? searchPack : (searchPack && searchPack.items) || [];
     const filteredItems = filterSearchResultItems(items || []);
     allItems = dedupeItems([...(filteredItems || [])]);
 
