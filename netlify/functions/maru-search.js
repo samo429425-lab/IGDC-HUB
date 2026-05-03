@@ -20,7 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.38-595-sanmaru-gateway-secure-viewport';
+const VERSION = 'A1.5.39-595-wide-pipeline-restored-resident-seed';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -4017,24 +4017,35 @@ exports.handler = async function(event){
 
     const visibleNeed = clampInt(firstNonEmpty(raw && (raw.perPage || raw.pageSize || raw.visibleCardsPerPage || raw.visibleLimit), 15), 15, 1, 100);
     const forceProviderRefresh = deep || explicitExternalRequested(raw) || truthy(raw && (raw.refresh || raw.forceRefresh || raw.waitProviders || raw.waitExternal));
-    if(!forceProviderRefresh && !truthy(raw && (raw.noResident || raw.skipResident || raw.disableResident))){
-      const residentPack = getSanmaruResidentForMaru(q, raw || {}, { searchType, lang, limit, reason:'maru-immediate-response' });
-      if((residentPack.items || []).length > 0){
-        triggerSanmaruResidentRefresh(q, raw || {}, { searchType, lang, limit });
-        return ok(buildImmediateResidentResponse(q, raw || {}, residentPack, {
-          residentImmediateThreshold: visibleNeed,
-          note: 'provider refresh was not forced; returned Sanmaru resident supply immediately while Sanmaru refreshes missing routes asynchronously'
-        }));
-      }
-      // The first search after deploy acts as the resident switch. If resident
-      // supply is not enough yet, continue the existing provider pipeline once,
-      // then absorb the result back into Sanmaru for the next request.
+
+    // IMPORTANT: Sanmaru resident is the top-level fast seed layer, not a replacement
+    // for Maru Search's wide gateway body. Earlier resident-immediate returns capped
+    // broad queries such as "서울" and "부산" to one or two pages by returning before
+    // Google/Naver/YouTube/SNS/Search Bank expansion ran. Keep Sanmaru alive and warm,
+    // but never let the resident seed short-circuit the 1000+/5000 candidate pool.
+    let residentSeedPack = null;
+    if(!truthy(raw && (raw.noResident || raw.skipResident || raw.disableResident))){
+      residentSeedPack = getSanmaruResidentForMaru(q, raw || {}, { searchType, lang, limit, reason:'maru-top-resident-seed-preserve-wide-search' });
       triggerSanmaruResidentRefresh(q, raw || {}, { searchType, lang, limit });
     }
 
     let base = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType });
     base = await attachMediaEngineResults(base, event, { q, limit, start, lang, searchType, raw, noMedia });
     base = await attachSanmaruAugmentResults(base, event, { q, limit, start, lang, searchType, raw, noMedia });
+    if(residentSeedPack && Array.isArray(residentSeedPack.items) && residentSeedPack.items.length){
+      const residentSeedItems = residentSeedPack.items.map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru-resident-seed')));
+      const finalSeedTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET, (base.items || []).length, residentSeedItems.length));
+      base.items = dedupeCanonicalItems([].concat(base.items || [], residentSeedItems)).slice(0, finalSeedTarget);
+      base.results = base.items;
+      base.meta = Object.assign({}, base.meta || {}, {
+        sanmaruResidentSeed: Object.assign({}, residentSeedPack.meta || {}, {
+          mergedAsSeed: true,
+          seedCount: residentSeedItems.length,
+          doesNotShortCircuitWideSearch: true,
+          visibleNeed
+        })
+      });
+    }
     // Search must not trigger heavy settlement/distribution by default.
     // Analytics is opt-in for this endpoint; weekly settlement is handled by revenue/commerce engines.
     const analyticsRequested = truthy(raw && (raw.analytics || raw.track || raw.enableAnalytics)) || truthy(process.env.MARU_SEARCH_ANALYTICS);
@@ -4078,7 +4089,7 @@ exports.handler = async function(event){
       pageItems: visiblePagePack.pageItems,
       visiblePagePack,
       sectionPack: sectionPackWithViewport,
-      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', security:{ allowed:true, admin:security.admin, mode:'read-search-open-admin-actions-protected' }, preservationPatch: 'A1.5.38-595-sanmaru-gateway-secure-viewport' })
+      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', security:{ allowed:true, admin:security.admin, mode:'read-search-open-admin-actions-protected' }, preservationPatch: 'A1.5.39-595-wide-pipeline-restored-resident-seed' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));
