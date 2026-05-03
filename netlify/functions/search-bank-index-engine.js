@@ -21,7 +21,7 @@ const VERSION = "search-bank-index-engine-v2.1.0-sanmaru-fast-memory-secure";
 const ENGINE_NAME = "search-bank-index";
 
 const DEFAULT_LIMIT = 1000;
-const DEFAULT_PER_PAGE = 15;
+const DEFAULT_PER_PAGE = 25;
 const MAX_LIMIT = 8000;
 const MAX_PER_PAGE = 200;
 const MAX_INDEX_ITEMS = 200000;
