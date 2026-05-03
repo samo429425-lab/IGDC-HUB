@@ -24,7 +24,10 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
-const VERSION = "sanmaru-engine-v2.4.1-resident-switch-hub";
+let LogosEngineClass = null;
+try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) { LogosEngineClass = null; }
+
+const VERSION = "sanmaru-engine-v2.5.0-top-resident-logos-secure";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 1000;
@@ -49,7 +52,10 @@ const globalState = globalThis.__SANMARU_V2_STATE || (globalThis.__SANMARU_V2_ST
   circuits: Object.create(null),
   memory: new Map(),
   telemetry: [],
-  resident: null
+  resident: null,
+  openingSignals: new Map(),
+  securityEvents: [],
+  logosEngine: null
 });
 
 function ensureResidentState(){
@@ -212,12 +218,16 @@ const MOUNT_REGISTRY = {
 function mountRegistrySnapshot(){
   const out = {};
   for(const [name, meta] of Object.entries(MOUNT_REGISTRY)){
+    const active = !!meta.enabled;
     out[name] = {
       type: meta.type,
       permission: meta.permission,
       role: meta.role,
-      enabled: !!meta.enabled,
-      status: meta.enabled ? "active-or-ready" : "reserved-or-key-missing"
+      enabled: active,
+      openState: active ? "active" : "reserved",
+      status: active ? "active-or-ready" : "reserved-or-key-missing",
+      mountPolicy: "authorized-public-or-owned-channel-only",
+      expansionMode: active ? "mounted" : "opening-signal-wait"
     };
   }
   return out;
@@ -226,10 +236,10 @@ function mountRegistrySnapshot(){
 
 // -----------------------------------------------------------------------------
 // SANMARU GLOBAL RESIDENT HUB
-// This layer does not copy the whole world into this function.  It keeps the
+// This layer does not copy the whole world into this function. It keeps the
 // source map, category brain, health map, resident index/cache and learned query
-// pools ready so Maru Search can ask Sanmaru first instead of re-opening every
-// provider on every keystroke.
+// pools ready as the top resident information CPU. Maru Search is mounted as
+// Sanmaru's front gateway/body, not as the decision owner.
 // -----------------------------------------------------------------------------
 const SANMARU_CANONICAL_CATEGORIES = {
   official:{ label:"공식/권위", weight:98, routes:["official-web","google","naver","bing","searchbank-index","searchbank"] },
@@ -303,10 +313,15 @@ function categoryMapSnapshot(){
 function sourceRegistrySnapshot(){
   const out = mountRegistrySnapshot();
   for(const [name, cats] of Object.entries(PROVIDER_CAPABILITY_MAP)){
-    out[name] = Object.assign({}, out[name] || { enabled:true, status:"active-or-ready" }, {
+    out[name] = Object.assign({}, out[name] || { enabled:true, status:"active-or-ready", openState:"active" }, {
       categories: cats.slice(),
-      capabilityCount: cats.length
+      capabilityCount: cats.length,
+      roleInSanmaru: name === "maru-search-wide-gateway" ? "front-information-road" : (name === "searchbank-index" ? "fast-memory-layer" : "mounted-information-source")
     });
+  }
+  const opening = openingSignalsSnapshot();
+  for(const sig of opening){
+    if(sig && sig.provider && out[sig.provider]) out[sig.provider].openingSignal = sig;
   }
   return out;
 }
@@ -578,7 +593,11 @@ function residentBootSnapshot(){
     sourceCounts:Array.from((resident.sourceMap || new Map()).entries()).map(([name, arr]) => ({ name, count:arr.length })).sort((a,b)=>b.count-a.count).slice(0,60),
     lastBootLatency:resident.lastBootLatency || 0,
     lastBootFiles:resident.lastBootFiles || [],
-    lastError:resident.lastError || null
+    lastError:resident.lastError || null,
+    engineLifecycle: "resident-restored-unless-engine-file-upgraded",
+    openingSignals: openingSignalsSnapshot(),
+    logosGuard: logosEvaluate([{ type:"resident_status", intent:"stewardship", truthConfidence:0.95, recoveryOpportunity:true }], "resident-status"),
+    securityEvents:(globalState.securityEvents || []).slice(-10)
   };
 }
 
@@ -665,9 +684,9 @@ function buildRouteFallbackCards(q, routePlan, opts){
     const item = canonicalItem({
       id:"sanmaru-route-" + stableHash([q, provider, category].join("|")),
       title:"[Sanmaru Route] " + q + " · " + provider + " / " + category,
-      summary:"산마루 resident hub가 이미 알고 있는 정보원 경로입니다. 실제 원본 데이터는 마루서치 provider refresh 또는 외부 드라이브/API에서 보강됩니다.",
-      url:routeProviderSearchUrl(provider, q),
-      link:routeProviderSearchUrl(provider, q),
+      summary:"산마루 최상위 정보 레이어가 이미 알고 있는 정보원 경로입니다. 마루서치는 이 경로를 프론트로 공급하는 게이트웨이이며, 부족분은 열린 provider/API에서 보강됩니다.",
+      url:routeProviderSearchUrl(provider, [q, category].filter(Boolean).join(" ")),
+      link:routeProviderSearchUrl(provider, [q, category].filter(Boolean).join(" ")),
       source:"sanmaru_route_" + provider,
       provider,
       type: category === "youtube" ? "web" : category,
@@ -683,6 +702,35 @@ function buildRouteFallbackCards(q, routePlan, opts){
   return out;
 }
 
+
+function buildOpeningFallbackCards(q, opts){
+  opts = opts || {};
+  const enc = encodeURIComponent(q || "");
+  const specs = [
+    ["google_web", "Google Web", "https://www.google.com/search?q=" + enc, "web"],
+    ["google_news", "Google News", "https://news.google.com/search?q=" + enc, "news"],
+    ["google_image", "Google Images", "https://www.google.com/search?tbm=isch&q=" + enc, "image"],
+    ["youtube", "YouTube", "https://www.youtube.com/results?search_query=" + enc, "video"],
+    ["naver_web", "Naver", "https://search.naver.com/search.naver?query=" + enc, "web"],
+    ["naver_news", "Naver News", "https://search.naver.com/search.naver?where=news&query=" + enc, "news"],
+    ["naver_blog", "Naver Blog", "https://search.naver.com/search.naver?where=blog&query=" + enc, "blog"],
+    ["instagram", "Instagram public route", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:instagram.com"), "sns"],
+    ["facebook", "Facebook public route", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:facebook.com"), "sns"],
+    ["tiktok", "TikTok public route", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:tiktok.com"), "sns"],
+    ["x_twitter", "X/Twitter public route", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:x.com OR site:twitter.com"), "sns"],
+    ["threads", "Threads public route", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:threads.net"), "sns"],
+    ["wiki", "Wiki / knowledge", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " wikipedia encyclopedia"), "knowledge"],
+    ["scholar", "Academic / research", "https://scholar.google.com/scholar?q=" + enc, "academic"],
+    ["public_data", "Public data", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " public data government dataset"), "public_data"]
+  ];
+  return specs.slice(0, clampInt(opts.openingCardLimit, 15, 1, 30)).map(spec => canonicalItem({
+    id:"sanmaru-opening-" + stableHash([q, spec[0]].join("|")),
+    title:"[Sanmaru Opening] " + q + " · " + spec[1],
+    summary:"산마루가 관리하는 열린 정보 통로입니다. 실제 provider/API가 열려 있으면 resident refresh가 결과를 흡수합니다.",
+    url:spec[2], link:spec[2], source:"sanmaru_opening_" + spec[0], provider:spec[0], type:spec[3], searchCategory:spec[3], mediaType: spec[3] === "video" ? "video" : "article", score:0.39, sanmaruOpeningCard:true
+  }, q, "sanmaru-opening"));
+}
+
 function supplyResidentSync(input, opts){
   opts = opts || {};
   const q = typeof input === "string" ? input : firstNonEmpty(input && input.q, input && input.query, opts.q, opts.query);
@@ -693,12 +741,30 @@ function supplyResidentSync(input, opts){
   const routePlan = residentRoutePlanFor(clean.value, opts);
   const residentItems = residentCandidatesSync(clean.value, opts).map(x => canonicalItem(x, clean.value, x && x.source));
   const minVisible = clampInt(firstNonEmpty(opts.visibleNeed, opts.perPage, opts.visibleCardsPerPage), 15, 1, 100);
+  let indexItems = [];
+  let indexMeta = { status:"not-called" };
+  try{
+    let IndexEngine = null;
+    try { IndexEngine = require("./search-bank-index-engine"); } catch(e) { IndexEngine = null; }
+    if(IndexEngine && typeof IndexEngine.query === "function"){
+      const indexRes = IndexEngine.query({ q: clean.value, query: clean.value, type: normalizeSearchType(opts.searchType || opts.type || "all"), limit: Math.max(minVisible, Math.min(MAX_INDEX_FAST_LIMIT, clampInt(opts.limit || opts.candidatePoolTarget, DEFAULT_LIMIT, 1, MAX_LIMIT))) });
+      indexItems = normalizeItemsFromResponse(indexRes).map(x => canonicalItem(x, clean.value, "search-bank-index"));
+      indexMeta = { status: indexItems.length ? "ok" : "empty", count:indexItems.length, engine:indexRes && indexRes.engine, latency:indexRes && indexRes.meta && indexRes.meta.latency };
+    }else{
+      indexMeta = { status:"unavailable" };
+    }
+  }catch(e){
+    indexMeta = { status:responseErrorCode(e) };
+  }
   const residentState = ensureResidentState();
   let routeFallbackCards = [];
-  let items = residentItems;
-  if(items.length < minVisible && residentState.items && residentState.items.length > 0 && opts.allowRouteCards !== false && opts.noRouteCards !== true){
+  let items = dedupeItems(residentItems.concat(indexItems));
+  if(items.length < minVisible && opts.allowRouteCards !== false && opts.noRouteCards !== true){
     routeFallbackCards = buildRouteFallbackCards(clean.value, routePlan, opts);
     items = dedupeItems(items.concat(routeFallbackCards)).slice(0, Math.max(minVisible, items.length));
+  }
+  if(items.length < minVisible && opts.allowOpeningCards !== false && opts.noOpeningCards !== true){
+    items = dedupeItems(items.concat(buildOpeningFallbackCards(clean.value, opts))).slice(0, minVisible);
   }
   const cacheKey = rememberResidentQueryCache(clean.value, opts, items) || residentCacheKey(clean.value, opts);
 
@@ -714,6 +780,7 @@ function supplyResidentSync(input, opts){
     meta:{
       count:items.length,
       realResidentCount:residentItems.length,
+      searchBankIndex:indexMeta,
       routeFallbackCount:routeFallbackCards.length,
       cacheKey,
       resident:residentBootSnapshot(),
@@ -725,7 +792,9 @@ function supplyResidentSync(input, opts){
       providerCapabilityReady:true,
       mode:"resident-switch-supply-sync",
       doesNotCallExternal:true,
-      note:"Sanmaru is acting as resident routing/index/category/cache hub. Supply does not open external providers; Maru Search may refresh only missing parts."
+      logosGuard: logosEvaluate(logosSignalsForQuery(clean.value, { queryRisk:null }), "resident-supply"),
+      openingSignals: openingSignalsSnapshot(),
+      note:"Sanmaru is the top resident routing/index/category/cache CPU. Maru Search is the mounted gateway/body and refreshes only missing parts."
     }
   };
 }
@@ -793,6 +862,108 @@ function clampInt(v, d, min, max){
   return Math.max(min, Math.min(max, x));
 }
 function stableHash(v){ return crypto.createHash("sha1").update(s(v)).digest("hex").slice(0, 16); }
+
+
+function getLogosEngine(){
+  if(!globalState.logosEngine && LogosEngineClass){
+    try { globalState.logosEngine = new LogosEngineClass(); } catch(e) { globalState.logosEngine = null; }
+  }
+  return globalState.logosEngine;
+}
+
+function logosEvaluate(signals, reason){
+  const list = Array.isArray(signals) ? signals : [];
+  const engine = getLogosEngine();
+  if(!engine || !list.length){
+    return { enabled: !!engine, version: engine ? "maru-logos-engine" : "unavailable", direction:"neutral", ethicalScore:1, reason:reason || "no-signals" };
+  }
+  try{
+    const res = engine.run(list);
+    return {
+      enabled:true,
+      version:res && res.version,
+      direction:res && res.strategy && res.strategy.direction || "neutral",
+      ethicalScore:res && res.strategy && res.strategy.ethicalScore,
+      narrativeVector:res && res.strategy && res.strategy.narrativeVector,
+      reason:reason || "logos-guard"
+    };
+  }catch(e){
+    return { enabled:false, direction:"neutral", ethicalScore:1, reason:"logos-error", error:responseErrorCode(e) };
+  }
+}
+
+function logosSignalsForQuery(q, ctx){
+  const text = low(q);
+  const signals = [{ type:"information_request", intent:"search", truthConfidence:0.9, recoveryOpportunity:true }];
+  if(ctx && ctx.queryRisk) signals.push({ type:"manipulation", manipulationRisk:true, truthConfidence:0.35 });
+  if(/폭력|테러|자살|해킹|malware|exploit|credential|token|secret|bypass|침투|탈취/.test(text)){
+    signals.push({ type:"conflict", intent:"harm", manipulationRisk:true, lifeImpact:-1, truthConfidence:0.45 });
+  }
+  return signals;
+}
+
+function requestHeaders(event){ return (event && event.headers) || {}; }
+function requestMethod(event){ return s(event && event.httpMethod || "GET").toUpperCase(); }
+function requestToken(event, params){
+  const h = requestHeaders(event);
+  const auth = firstNonEmpty(h.authorization, h.Authorization);
+  const bearer = auth && /^Bearer\s+(.+)$/i.test(auth) ? auth.replace(/^Bearer\s+/i, "").trim() : "";
+  return firstNonEmpty(
+    params && (params.adminToken || params.token || params.sanmaruAdminToken || params.maruAdminToken),
+    h["x-sanmaru-admin-token"], h["X-Sanmaru-Admin-Token"], h["x-maru-admin-token"], h["X-Maru-Admin-Token"],
+    bearer
+  );
+}
+function adminTokenExpected(){ return firstNonEmpty(process.env.SANMARU_ADMIN_TOKEN, process.env.MARU_ADMIN_TOKEN, process.env.ADMIN_TOKEN); }
+function isAuthorizedAdmin(event, params){
+  const expected = adminTokenExpected();
+  if(!expected) return false;
+  const got = requestToken(event, params);
+  if(!got) return false;
+  try{
+    const a = Buffer.from(s(got));
+    const b = Buffer.from(s(expected));
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  }catch(e){ return false; }
+}
+function adminRequiredAction(action){
+  return ["resident-rebuild","rebuild-resident","deep-refresh","resident-refresh","promote","ingest","upsert","hydrate","build","rebuild","export","download","archive","zip","source-dump","dump"].includes(low(action));
+}
+function suspiciousRequestReason(event, params, action){
+  const joined = low([action, params && params.action, params && params.mode, params && params.fn, params && params.format, params && params.download, params && params.export, params && params.archive, params && params.zip, params && params.source, params && params.path].join(" "));
+  if(/source[-_ ]?dump|download|archive|zip|tar|backup|\.env|secret|token|private[_-]?key|process\.env/.test(joined)) return "suspicious-source-or-secret-access";
+  if(requestMethod(event) === "POST" && adminRequiredAction(action) && !isAuthorizedAdmin(event, params)) return "admin-token-required";
+  if(adminRequiredAction(action) && !isAuthorizedAdmin(event, params)) return "admin-token-required";
+  return "";
+}
+function recordSecurityEvent(event, params, action, reason){
+  const entry = { t:nowIso(), action:action || "", reason:reason || "", ip:clientIp(event), ua:firstNonEmpty(requestHeaders(event)["user-agent"], requestHeaders(event)["User-Agent"]).slice(0,120) };
+  globalState.securityEvents = globalState.securityEvents || [];
+  globalState.securityEvents.push(entry);
+  if(globalState.securityEvents.length > 200) globalState.securityEvents.shift();
+  return entry;
+}
+function guardRequest(event, params, action){
+  const reason = suspiciousRequestReason(event, params || {}, action || "");
+  if(!reason) return { allowed:true, reason:"ok", admin:isAuthorizedAdmin(event, params || {}) };
+  const eventLog = recordSecurityEvent(event, params || {}, action || "", reason);
+  return { allowed:false, status:"blocked", reason, admin:false, event:eventLog, safeMode:"fail-closed-read-only" };
+}
+
+function openingSignalsSnapshot(){
+  const signals = [];
+  function add(provider, state, reason, extra){ signals.push(Object.assign({ provider, state, reason }, extra || {})); }
+  add("google", process.env.GOOGLE_API_KEY && process.env.GOOGLE_CSE_ID ? "active" : "reserved", process.env.GOOGLE_API_KEY ? (process.env.GOOGLE_CSE_ID ? "key-and-cse-present" : "cse-missing") : "key-missing");
+  add("naver", process.env.NAVER_API_KEY && process.env.NAVER_CLIENT_SECRET ? "active" : "reserved", process.env.NAVER_API_KEY ? (process.env.NAVER_CLIENT_SECRET ? "key-and-secret-present" : "secret-missing") : "key-missing");
+  add("bing", process.env.BING_API_KEY ? "active" : "reserved", process.env.BING_API_KEY ? "key-present" : "key-missing");
+  add("youtube", process.env.YOUTUBE_API_KEY ? "active" : "reserved", process.env.YOUTUBE_API_KEY ? "key-present" : "key-missing-or-using-public-route");
+  add("ai-gpu", (process.env.OPENAI_API_KEY || process.env.AI_PROVIDER_KEY || process.env.SANMARU_AI_GPU_ENABLED) ? "active" : "reserved", "provider-env-signal");
+  for(const file of residentFileCandidates()){
+    try{ if(fs.existsSync(file)) add("resident-file", "active", path.basename(file), { path:path.basename(file) }); }catch(e){}
+  }
+  return signals;
+}
+
 function safeJsonClone(v){ try{ return JSON.parse(JSON.stringify(v)); }catch(e){ return v; } }
 function stripHtml(v){ return s(v).replace(/<[^>]*>/g, ""); }
 function compactSpaces(v){ return s(v).replace(/\s+/g, " ").trim(); }
@@ -1558,7 +1729,7 @@ async function maybePromote(ctx, items, meta){
     };
 
     let res = null;
-    if(typeof mod.runEngine === "function") res = await withTimeout(mod.runEngine(ctx.event || {}, payload), 1000);
+    if(typeof mod.runEngine === "function") res = await withTimeout(mod.runEngine(Object.assign({}, ctx.event || {}, { __sanmaruInternal:true }), payload), 1000);
     else if(typeof mod.promote === "function") res = await withTimeout(mod.promote(payload), 1000);
     return { used:true, status:"ok", count:candidates.length, latency: nowMs() - started, indexStatus: s(res && res.status || "unknown") };
   }catch(e){
@@ -1621,6 +1792,11 @@ async function runSanmaru(input, maybeCtx){
 
   if(!ctx.queryOk){
     return { status:"ok", engine:ENGINE_NAME, version:VERSION, query:ctx.q, items:[], results:[], meta:{ count:0, reason:ctx.queryCode || "BAD_QUERY", secure:true } };
+  }
+
+  const logosGuard = logosEvaluate(logosSignalsForQuery(ctx.q, ctx), "runSanmaru");
+  if(ctx.queryRisk && logosGuard && logosGuard.direction === "risk_containment"){
+    return { status:"blocked", engine:ENGINE_NAME, version:VERSION, query:ctx.q, items:[], results:[], meta:{ count:0, reason:"logos-risk-containment", secure:true, logosGuard } };
   }
 
   const ip = clientIp(ctx.event);
@@ -1756,6 +1932,8 @@ async function runSanmaru(input, maybeCtx){
         intents,
         queryRisk: ctx.queryRisk || null,
         secure: true,
+        logosGuard,
+        openingSignals: openingSignalsSnapshot(),
         role: "global-virtual-information-library-mount-engine",
         platformRole: "Sanmaru is the authorized global information library mount layer; Maru Search is the platform information road/gateway",
         mountRegistry: mountRegistrySnapshot(),
@@ -1846,6 +2024,10 @@ function healthSnapshot(){
     resident: residentBootSnapshot(),
     categoryBrainReady: true,
     sourceRegistryCount: Object.keys(sourceRegistrySnapshot()).length,
+    openingSignals: openingSignalsSnapshot(),
+    logosGuard: logosEvaluate([{ type:"health", intent:"stewardship", truthConfidence:0.95, recoveryOpportunity:true }], "health"),
+    securityEvents:(globalState.securityEvents || []).slice(-20),
+    lifecyclePolicy:"engine-code-reboot-only-on-sanmaru-engine-reupload; data/content changes use hot refresh/index rebuild",
     generatedAt: nowIso()
   };
 }
@@ -1882,15 +2064,19 @@ async function handler(event){
   const body = parseBody(event || {});
   const merged = Object.assign({}, qs, body);
   const action = low(firstNonEmpty(merged.action, merged.mode, merged.fn));
+  const security = guardRequest(event || {}, merged, action);
+  if(!security.allowed){
+    return ok({ status:"blocked", engine:ENGINE_NAME, version:VERSION, action, message:"protected Sanmaru action", security, resident:residentBootSnapshot() });
+  }
 
-  if(action === "health") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, health:healthSnapshot(), resident:residentBootSnapshot() });
+  if(action === "health") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, health:healthSnapshot(), resident:residentBootSnapshot(), security:{ allowed:true, admin:security.admin } });
   if(action === "resident-boot" || action === "boot" || action === "mount-library") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-boot", resident:touchResidentSwitch({ reason:firstNonEmpty(merged.reason, "manual-boot-switch"), q:firstNonEmpty(merged.q, merged.query) }) });
   if(action === "resident-activate" || action === "resident-switch" || action === "warm-ping" || action === "warm") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-switch", resident:touchResidentSwitch({ reason:firstNonEmpty(merged.reason, action), q:firstNonEmpty(merged.q, merged.query) }) });
   if(action === "resident-rebuild" || action === "rebuild-resident") { const rebuilt = ensureResidentBoot({ force:true, reason:"manual-rebuild" }); return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-rebuild", resident:touchResidentSwitch({ reason:"manual-rebuild-switch" }), rebuilt }); }
   if(action === "resident-status") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-status", resident:touchResidentSwitch({ reason:"resident-status" }), health:healthSnapshot(), providerHealth:providerHealthSnapshot() });
   if(action === "provider-health") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"provider-health", providerHealth:providerHealthSnapshot(), resident:residentBootSnapshot() });
-  if(action === "source-registry") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"source-registry", sources:sourceRegistrySnapshot(), resident:residentBootSnapshot() });
-  if(action === "category-map" || action === "category-brain") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"category-map", categories:categoryMapSnapshot(), aliases:PROVIDER_CATEGORY_ALIASES, capabilities:PROVIDER_CAPABILITY_MAP, resident:residentBootSnapshot() });
+  if(action === "source-registry") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"source-registry", sources:sourceRegistrySnapshot(), openingSignals:openingSignalsSnapshot(), resident:residentBootSnapshot() });
+  if(action === "category-map" || action === "category-brain") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"category-map", categories:categoryMapSnapshot(), aliases:PROVIDER_CATEGORY_ALIASES, capabilities:PROVIDER_CAPABILITY_MAP, logosGuard:logosEvaluate([{ type:"category_brain", intent:"stewardship", truthConfidence:0.95 }], "category-map"), resident:residentBootSnapshot() });
   if(action === "route-plan") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"route-plan", routePlan:residentRoutePlanFor(firstNonEmpty(merged.q, merged.query), { searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale) }), resident:touchResidentSwitch({ reason:"route-plan", q:firstNonEmpty(merged.q, merged.query) }) });
   if(action === "supply" || action === "resident-supply") return ok(supplyResidentSync({ q:firstNonEmpty(merged.q, merged.query) }, { reason:"api-supply", limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget), candidatePoolTarget:firstNonEmpty(merged.candidatePool, merged.candidatePoolTarget), searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), page:firstNonEmpty(merged.page, merged.p, merged.start) }));
   if(action === "supply-category" || action === "resident-supply-category") return ok(supplyCategorySync({ q:firstNonEmpty(merged.q, merged.query), category:firstNonEmpty(merged.category, merged.type) }, { reason:"api-supply-category", category:firstNonEmpty(merged.category, merged.type), limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget), candidatePoolTarget:firstNonEmpty(merged.candidatePool, merged.candidatePoolTarget), searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), page:firstNonEmpty(merged.page, merged.p, merged.start) }));

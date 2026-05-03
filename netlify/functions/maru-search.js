@@ -18,8 +18,9 @@ try { Core = require('./core'); } catch (e) { Core = null; }
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
-const VERSION = 'A1.5.37-595-sanmaru-resident-switch';
+const VERSION = 'A1.5.38-595-sanmaru-gateway-secure-viewport';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -95,6 +96,38 @@ function envFirst(){
   return '';
 }
 function stripHtml(s){ return safeString(s).replace(/<[^>]*>/g, ''); }
+
+
+function requestHeaders(event){ return (event && event.headers) || {}; }
+function requestMethod(event){ return safeString(event && event.httpMethod || 'GET').toUpperCase(); }
+function requestToken(event, params){
+  const h = requestHeaders(event);
+  const auth = firstNonEmpty(h.authorization, h.Authorization);
+  const bearer = auth && /^Bearer\s+(.+)$/i.test(auth) ? auth.replace(/^Bearer\s+/i, '').trim() : '';
+  return firstNonEmpty(params && (params.adminToken || params.token || params.sanmaruAdminToken || params.maruAdminToken), h['x-sanmaru-admin-token'], h['X-Sanmaru-Admin-Token'], h['x-maru-admin-token'], h['X-Maru-Admin-Token'], bearer);
+}
+function expectedAdminToken(){ return envFirst('SANMARU_ADMIN_TOKEN','MARU_ADMIN_TOKEN','ADMIN_TOKEN'); }
+function isAdminRequest(event, params){
+  const expected = safeString(expectedAdminToken()).trim();
+  if(!expected) return false;
+  const got = safeString(requestToken(event, params || {})).trim();
+  if(!got) return false;
+  try{
+    const a = Buffer.from(got); const b = Buffer.from(expected);
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  }catch(e){ return false; }
+}
+function protectedMaruAction(action){
+  return ['resident-rebuild','rebuild-resident','deep-refresh','resident-refresh','export','download','archive','zip','source-dump','dump'].includes(safeString(action).toLowerCase());
+}
+function guardMaruRequest(event, params, action){
+  const joined = safeString([action, params && params.action, params && params.mode, params && params.fn, params && params.format, params && params.download, params && params.export, params && params.archive, params && params.zip, params && params.path, params && params.source].join(' ')).toLowerCase();
+  const suspicious = /source[-_ ]?dump|download|archive|zip|tar|backup|\.env|secret|token|private[_-]?key|process\.env/.test(joined);
+  if((suspicious || protectedMaruAction(action)) && !isAdminRequest(event, params || {})){
+    return { allowed:false, status:'blocked', reason:suspicious ? 'suspicious-source-or-secret-access' : 'admin-token-required', safeMode:'fail-closed-read-only' };
+  }
+  return { allowed:true, admin:isAdminRequest(event, params || {}) };
+}
 
 function clampInt(v, d, min, max){
   const n = parseInt(v, 10);
@@ -1456,7 +1489,7 @@ function getSanmaruResidentForMaru(q, raw, opts){
       });
       const rawItems = Array.isArray(res && res.items) ? res.items : [];
       const canonical = rawItems.map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru-resident')));
-      const items = canonical.filter(x => residentItemMatchesQuery(x, q));
+      const items = canonical.filter(x => x && (x.sanmaruRouteCard || x.sanmaruOpeningCard || residentItemMatchesQuery(x, q)));
       const droppedByQueryGuard = Math.max(0, canonical.length - items.length);
       return {
         items,
@@ -1509,7 +1542,11 @@ function triggerSanmaruResidentRefresh(q, raw, ctx){
 
 function buildImmediateResidentResponse(q, raw, residentPack, baseMeta){
   const candidateTarget = Math.min(MAX_LIMIT, Math.max(clampInt(raw && (raw.candidatePool || raw.candidatePoolTarget || raw.limit), DEFAULT_LIMIT, 1, MAX_LIMIT), MIN_RESULT_TARGET));
-  const items = dedupeCanonicalItems(residentPack.items || []).slice(0, candidateTarget).map(compactResultItem);
+  const visibleNeed = clampInt(firstNonEmpty(raw && (raw.perPage || raw.pageSize || raw.visibleCardsPerPage || raw.visibleLimit), 15), 15, 1, 100);
+  let items = dedupeCanonicalItems(residentPack.items || []).slice(0, candidateTarget).map(compactResultItem);
+  if(items.length < visibleNeed){
+    items = dedupeCanonicalItems(items.concat(openDiscoverySurfaceCards(q), mapCards(q, 'GLOBAL'), googleLikeSearchLinks(q))).slice(0, Math.max(visibleNeed, items.length)).map(compactResultItem);
+  }
   const fullSectionPack = buildSearchSections(items, q, { searchType: raw && (raw.type || raw.category || raw.tab || raw.vertical) });
   const visiblePagePack = buildCollapseAwareVisiblePagePack(items, q, raw || {}, fullSectionPack);
   const viewportSections = buildViewportDisplaySections(visiblePagePack.pageItems, q, fullSectionPack, visiblePagePack);
@@ -3904,7 +3941,7 @@ async function attachSanmaruAugmentResults(base, event, ctx){
     meta: Object.assign({}, base.meta || {}, {
       trace,
       sanmaruAugment: hookMeta,
-      sanmaruRelation: 'maru-search-asks-resident-sanmaru-first; deep sanmaru is explicit only',
+      sanmaruRelation: 'sanmaru-top-resident-layer-feeds-maru-search-gateway; deep refresh is explicit or asynchronous',
       legacyWideSearchPreserved: true
     })
   });
@@ -3932,6 +3969,10 @@ exports.handler = async function(event){
     const { q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType, raw } = picked;
 
     const action = safeString((raw && (raw.action || raw.mode || raw.fn)) || '').trim().toLowerCase();
+    const security = guardMaruRequest(event || {}, raw || {}, action);
+    if(!security.allowed){
+      return ok({ status:'blocked', engine:'maru-search', version:VERSION, action, message:'protected Maru/Sanmaru gateway action', security });
+    }
     if(action === 'resident-status' || action === 'resident-boot' || action === 'resident-switch' || action === 'provider-health' || action === 'source-registry' || action === 'category-map' || action === 'route-plan' || action === 'deep-refresh'){
       let Sanmaru = null;
       try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
@@ -3978,10 +4019,11 @@ exports.handler = async function(event){
     const forceProviderRefresh = deep || explicitExternalRequested(raw) || truthy(raw && (raw.refresh || raw.forceRefresh || raw.waitProviders || raw.waitExternal));
     if(!forceProviderRefresh && !truthy(raw && (raw.noResident || raw.skipResident || raw.disableResident))){
       const residentPack = getSanmaruResidentForMaru(q, raw || {}, { searchType, lang, limit, reason:'maru-immediate-response' });
-      if((residentPack.items || []).length >= visibleNeed){
+      if((residentPack.items || []).length > 0){
+        triggerSanmaruResidentRefresh(q, raw || {}, { searchType, lang, limit });
         return ok(buildImmediateResidentResponse(q, raw || {}, residentPack, {
           residentImmediateThreshold: visibleNeed,
-          note: 'provider refresh was not forced; returned Sanmaru resident supply immediately'
+          note: 'provider refresh was not forced; returned Sanmaru resident supply immediately while Sanmaru refreshes missing routes asynchronously'
         }));
       }
       // The first search after deploy acts as the resident switch. If resident
@@ -4036,7 +4078,7 @@ exports.handler = async function(event){
       pageItems: visiblePagePack.pageItems,
       visiblePagePack,
       sectionPack: sectionPackWithViewport,
-      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', preservationPatch: 'A1.5.37-595-sanmaru-resident-switch' })
+      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', security:{ allowed:true, admin:security.admin, mode:'read-search-open-admin-actions-protected' }, preservationPatch: 'A1.5.38-595-sanmaru-gateway-secure-viewport' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));

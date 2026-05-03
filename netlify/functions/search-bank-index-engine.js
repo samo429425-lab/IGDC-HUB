@@ -17,7 +17,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const VERSION = "search-bank-index-engine-v2.0.0-sanmaru-front-memory";
+const VERSION = "search-bank-index-engine-v2.1.0-sanmaru-fast-memory-secure";
 const ENGINE_NAME = "search-bank-index";
 
 const DEFAULT_LIMIT = 1000;
@@ -76,6 +76,41 @@ function parseMaybeJson(v, fallback){
   if(!text) return fallback;
   if((text.startsWith("[") && text.endsWith("]")) || (text.startsWith("{") && text.endsWith("}"))) return safeJsonParse(text, fallback);
   return fallback;
+}
+
+
+function requestHeaders(event){ return (event && event.headers) || {}; }
+function requestMethod(event){ return s(event && event.httpMethod || "GET").toUpperCase(); }
+function firstNonEmpty(){
+  for(const v of arguments){ const x = s(v).trim(); if(x) return x; }
+  return "";
+}
+function requestToken(event, params){
+  const h = requestHeaders(event);
+  const auth = firstNonEmpty(h.authorization, h.Authorization);
+  const bearer = auth && /^Bearer\s+(.+)$/i.test(auth) ? auth.replace(/^Bearer\s+/i, "").trim() : "";
+  return firstNonEmpty(params && (params.adminToken || params.token || params.sanmaruAdminToken || params.maruAdminToken), h["x-sanmaru-admin-token"], h["X-Sanmaru-Admin-Token"], bearer);
+}
+function adminTokenExpected(){ return firstNonEmpty(process.env.SANMARU_ADMIN_TOKEN, process.env.MARU_ADMIN_TOKEN, process.env.ADMIN_TOKEN); }
+function isAuthorizedAdmin(event, params){
+  const expected = adminTokenExpected();
+  if(!expected) return false;
+  const got = requestToken(event, params || {});
+  if(!got) return false;
+  try{
+    const a = Buffer.from(s(got)); const b = Buffer.from(s(expected));
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  }catch(e){ return false; }
+}
+function protectedIndexAction(action){ return ["build","rebuild","promote","ingest","upsert","hydrate","export","download","archive","zip","dump","source-dump"].includes(low(action)); }
+function guardIndexRequest(event, params, action){
+  if(event && event.__sanmaruInternal === true) return { allowed:true, admin:true, internal:true };
+  const text = low([action, params && params.format, params && params.download, params && params.export, params && params.archive, params && params.zip, params && params.path].join(" "));
+  const suspicious = /source[-_ ]?dump|download|archive|zip|tar|backup|\.env|secret|token|private[_-]?key|process\.env/.test(text);
+  if((protectedIndexAction(action) || suspicious) && !isAuthorizedAdmin(event, params || {})){
+    return { allowed:false, status:"blocked", reason:suspicious ? "suspicious-source-or-secret-access" : "admin-token-required", safeMode:"fail-closed-read-only" };
+  }
+  return { allowed:true, admin:isAuthorizedAdmin(event, params || {}) };
 }
 
 function candidatePaths(name){
@@ -604,6 +639,8 @@ function health(){
     ingestedCount:loadIngested().length,
     runtimeTokenCount:runtime && runtime.tokenMap ? runtime.tokenMap.size : 0,
     cacheLoaded:!!state.index,
+    securityPolicy:"admin token required for build/rebuild/promote/ingest/export; query remains read-only",
+    rolePolicy:"Sanmaru fast-memory layer; no external API calls",
     generatedAt:nowIso()
   };
 }
@@ -636,7 +673,9 @@ async function runEngine(event, params){
   const qs = (event && event.queryStringParameters) || {};
   const merged = parseCursorIntoParams(Object.assign({}, qs, params || {}));
   const action = low(firstNonEmpty(merged.action, merged.mode, merged.fn, "query"));
-  if(action === "health") return health();
+  const security = guardIndexRequest(event || {}, merged, action);
+  if(!security.allowed) return { status:"blocked", engine:ENGINE_NAME, version:VERSION, action, items:[], results:[], meta:{ count:0, security } };
+  if(action === "health") return Object.assign(health(), { security:{ allowed:true, admin:security.admin } });
   if(action === "build" || action === "rebuild"){
     state.index = buildIndexFromSnapshot();
     state.loadedAt = nowMs();
