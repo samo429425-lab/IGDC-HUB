@@ -35,9 +35,9 @@ ready(function () {
         
     if (!input || !btn) return;
 
-    const PAGE_SIZE = 25;
+    const PAGE_SIZE = 15;
     const BLOCK_SIZE = 10;
-    const FETCH_LIMIT = 3000;
+    const FETCH_LIMIT = 1000;
 
     let allItems = [];
     let currentPage = 1;
@@ -669,41 +669,6 @@ function normalizeSearchPayload(payload){
   return out;
 }
 
-function emptySearchPack(payload){
-  return { items: [], payload: payload || null, pageItems: [], viewportSections: [] };
-}
-
-async function fetchJsonPack(url, label){
-  try {
-    const r = await fetch(url, { cache: 'no-store' });
-    if (!r.ok) return emptySearchPack(null);
-    const json = await r.json();
-    if (!json) return emptySearchPack(null);
-    if (json.status === 'error' || json.status === 'blocked') return emptySearchPack(json);
-    const pack = normalizeSearchPayload(json);
-    pack.fetchLabel = label || '';
-    return pack;
-  } catch (e) {
-    console.error((label || 'search') + ' fetch failed:', e);
-    return emptySearchPack(null);
-  }
-}
-
-function mergeBackgroundSearchPack(pack, q, safeType){
-  if (!pack || !Array.isArray(pack.items) || !pack.items.length) return;
-  const currentQ = (input && input.value || lastQuery || '').trim();
-  if (currentQ !== q || normalizeSearchType(activeType) !== safeType) return;
-
-  const filteredItems = filterSearchResultItems(pack.items || []);
-  const merged = dedupeItems([...(allItems || []), ...(filteredItems || [])]);
-  if (!merged.length || merged.length <= (allItems || []).length) return;
-
-  allItems = merged;
-  lastSearchPayload = pack.payload || lastSearchPayload;
-  renderPage(currentPage || 1, true);
-  status.textContent = `${allItems.length} results for "${q}" · ${getTypeLabel(safeType)} · Sanmaru expanded`;
-}
-
 async function fetchSearch(q, type = activeType){
   const safeType = normalizeSearchType(type);
   signalSanmaruSearch(q, safeType, 'maru-search-fetch');
@@ -715,8 +680,6 @@ async function fetchSearch(q, type = activeType){
   sp.set('tab', safeType);
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
-  sp.set('candidatePool', '5000');
-  sp.set('candidatePoolTarget', '5000');
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
   sp.set('routeOwner', 'sanmaru');
@@ -726,33 +689,20 @@ async function fetchSearch(q, type = activeType){
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
-  const instant = new URLSearchParams();
-  instant.set('action', 'supply');
-  instant.set('q', q);
-  instant.set('limit', String(FETCH_LIMIT));
-  instant.set('candidatePool', '5000');
-  instant.set('candidatePoolTarget', '5000');
-  instant.set('type', safeType);
-  instant.set('tab', safeType);
-  instant.set('perPage', String(PAGE_SIZE));
-  instant.set('visibleCardsPerPage', String(PAGE_SIZE));
-  instant.set('reason', 'search-ui-instant-supply');
-  const instantUrl = `${SANMARU_BOOT_URL}?${instant.toString()}`;
+  try {
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) return { items: [], payload: null, pageItems: [], viewportSections: [] };
 
-  const fullPromise = fetchJsonPack(url, 'maru-search-wide-pipeline');
-  const instantPromise = fetchJsonPack(instantUrl, 'sanmaru-instant-supply');
+    const json = await r.json();
+    if (!json) return { items: [], payload: null, pageItems: [], viewportSections: [] };
+    if (json.status === 'error') return { items: [], payload: json, pageItems: [], viewportSections: [] };
+    if (json.status === 'blocked') return { items: [], payload: json, pageItems: [], viewportSections: [] };
 
-  const timeoutPack = new Promise(resolve => setTimeout(() => resolve(null), 1300));
-  const instantPack = await Promise.race([instantPromise, timeoutPack]);
-
-  if (instantPack && Array.isArray(instantPack.items) && instantPack.items.length) {
-    fullPromise.then(pack => mergeBackgroundSearchPack(pack, q, safeType));
-    return instantPack;
+    return normalizeSearchPayload(json);
+  } catch (e) {
+    console.error('fetchSearch failed:', e);
+    return { items: [], payload: null, pageItems: [], viewportSections: [] };
   }
-
-  const fullPack = await fullPromise;
-  instantPromise.then(pack => mergeBackgroundSearchPack(pack, q, safeType));
-  return fullPack;
 }
 
     function renderSkeleton(count = 6){
