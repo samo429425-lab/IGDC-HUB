@@ -35,7 +35,7 @@ ready(function () {
         
     if (!input || !btn) return;
 
-    const PAGE_SIZE = 15;
+    const PAGE_SIZE = 25;
     const BLOCK_SIZE = 10;
     const FETCH_LIMIT = 1000;
 
@@ -1143,8 +1143,8 @@ async function fetchSearch(q, type = activeType){
         const body = document.createElement('div');
         body.className = 'maru-display-section-body';
 
-        // Do not hide cards inside the current 15-card viewport. The server/client
-        // stream already decided which 15 cards are visible. Hiding again here was
+        // Do not hide cards inside the current 25-card viewport. The server/client
+        // stream already decided which 25 cards are visible. Hiding again here was
         // the reason broad searches looked artificially tiny. Extra news/media/SNS
         // results flow to later pages instead of being dropped.
         groupInfo.items.forEach(it => renderItem(it, body));
