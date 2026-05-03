@@ -20,7 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.39-595-wide-pipeline-restored-resident-seed';
+const VERSION = 'A1.5.41-595-sanmaru-route-ranked-wide';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -87,11 +87,28 @@ function normalizeSearchType(v){
 }
 
 function safeString(v){ return String(v == null ? '' : v); }
+let __MARU_ENV_JSON_CACHE = undefined;
+function envJsonLookup(key){
+  try{
+    if(__MARU_ENV_JSON_CACHE === undefined){
+      __MARU_ENV_JSON_CACHE = null;
+      const raw = (process && process.env && (process.env.MARU_API_KEYS_JSON || process.env.API_KEYS_JSON || process.env.IGDC_API_KEYS_JSON)) || '';
+      if(raw){
+        const text = /^eyJ|^ewog|^[A-Za-z0-9+/=]{80,}$/.test(safeString(raw).trim()) ? Buffer.from(raw, 'base64').toString('utf8') : raw;
+        const parsed = JSON.parse(text);
+        if(parsed && typeof parsed === 'object') __MARU_ENV_JSON_CACHE = parsed;
+      }
+    }
+    return __MARU_ENV_JSON_CACHE && key ? __MARU_ENV_JSON_CACHE[key] : '';
+  }catch(e){ return ''; }
+}
 function envFirst(){
   for(let i=0; i<arguments.length; i++){
     const key = arguments[i];
     const val = key && process && process.env ? process.env[key] : '';
     if(safeString(val).trim()) return val;
+    const jsonVal = envJsonLookup(key);
+    if(safeString(jsonVal).trim()) return jsonVal;
   }
   return '';
 }
@@ -1202,70 +1219,136 @@ function buildSectionBucketsForViewport(items){
   return buckets;
 }
 
+function buildNaturalSearchDisplayStream(items){
+  const sourceItems = Array.isArray(items) ? items : [];
+  const buckets = Object.create(null);
+  const seen = new Set();
+  const stream = [];
+
+  function itemKey(it){
+    return safeString(firstNonEmpty(it && it.url, it && it.link, it && it.openUrl, it && it.id, it && it.title)).toLowerCase();
+  }
+
+  for(const raw of sourceItems){
+    if(!raw || typeof raw !== 'object') continue;
+    const sectionId = sectionIdForItem(raw);
+    if(!buckets[sectionId]) buckets[sectionId] = [];
+    buckets[sectionId].push(raw);
+  }
+
+  for(const sectionId of Object.keys(buckets)){
+    buckets[sectionId] = buckets[sectionId].slice().sort((a,b) => sectionSortScore(b) - sectionSortScore(a));
+  }
+
+  function pushItem(it, sectionId, sectionIndex){
+    if(!it) return false;
+    const key = itemKey(it);
+    if(key && seen.has(key)) return false;
+    if(key) seen.add(key);
+    const meta = SEARCH_SECTION_META[sectionId] || SEARCH_SECTION_META.general_web;
+    stream.push(Object.assign({}, it, {
+      sectionId,
+      sourceSectionId: sectionId,
+      sectionTitle: meta.title,
+      sectionLabel: meta.label,
+      sectionRank: meta.rank,
+      visibleViewportCard: true,
+      collapsedAwareViewportCard: true,
+      naturalFlowNoForcedCollapse: true,
+      sectionExpanded: true,
+      sectionCollapsed: false,
+      sectionVisibleIndex: sectionIndex,
+      sectionVisibleTotal: buckets[sectionId] ? buckets[sectionId].length : 0,
+      sectionSourceTotal: buckets[sectionId] ? buckets[sectionId].length : 0,
+      sectionCollapsedCount: 0
+    }));
+    return true;
+  }
+
+  const cursors = Object.create(null);
+  const picked = Object.create(null);
+  const frontCaps = {
+    official_authority: 5,
+    knowledge_wiki: 5,
+    map_local_tour: 5,
+    news: 10,
+    image_gallery: 8,
+    video_vlog: 8,
+    community_sns: 6,
+    blog_review: 6,
+    shopping_product: 5,
+    company_web: 8,
+    general_web: 30
+  };
+  const lanes = [
+    'official_authority','knowledge_wiki','map_local_tour','news','company_web','general_web','image_gallery','video_vlog','community_sns','blog_review','shopping_product',
+    'news','general_web','official_authority','map_local_tour','knowledge_wiki','image_gallery','video_vlog','community_sns','blog_review','company_web','general_web',
+    'news','image_gallery','video_vlog','blog_review','community_sns','general_web'
+  ];
+  const leadTarget = Math.min(sourceItems.length, 60);
+  let safety = 0;
+  while(stream.length < leadTarget && safety++ < sourceItems.length * 4){
+    let progressed = false;
+    for(const sectionId of lanes){
+      const bucket = buckets[sectionId];
+      if(!bucket || !bucket.length) continue;
+      cursors[sectionId] = cursors[sectionId] || 0;
+      picked[sectionId] = picked[sectionId] || 0;
+      const cap = frontCaps[sectionId] || 6;
+      if(picked[sectionId] >= cap) continue;
+      while(cursors[sectionId] < bucket.length){
+        const idx = cursors[sectionId]++;
+        if(pushItem(bucket[idx], sectionId, idx)){
+          picked[sectionId]++;
+          progressed = true;
+          break;
+        }
+      }
+      if(stream.length >= leadTarget) break;
+    }
+    if(!progressed) break;
+  }
+
+  // After the balanced lead, keep every remaining candidate in the original
+  // server-ranked order. Categories organize the viewport; they must not suppress
+  // images, videos, SNS, news, blogs, or ordinary web results.
+  for(let i=0; i<sourceItems.length; i++){
+    const it = sourceItems[i];
+    const sectionId = sectionIdForItem(it);
+    const idx = (buckets[sectionId] || []).findIndex(x => itemKey(x) === itemKey(it));
+    pushItem(it, sectionId, idx >= 0 ? idx : i);
+  }
+
+  return stream;
+}
+
 function buildCollapseAwareVisiblePagePack(items, q, raw, fullSectionPack){
   raw = raw || {};
   const list = Array.isArray(items) ? items : [];
   const page = clampInt(firstNonEmpty(raw.page, raw.p, raw.visiblePage, raw.sectionPage), 1, 1, 100000);
   const perPage = clampInt(firstNonEmpty(raw.perPage, raw.pageSize, raw.visibleCardsPerPage, raw.visibleLimit, raw.cardsPerPage), 15, 1, 100);
-  const expandedSet = expandedSectionSetFromRaw(raw);
-  const expandAll = truthy(raw.expandAll) || truthy(raw.allExpanded) || truthy(raw.sectionsExpanded);
-  const buckets = buildSectionBucketsForViewport(list);
-  const fullSections = (fullSectionPack && Array.isArray(fullSectionPack.sections)) ? fullSectionPack.sections : [];
-  const fullById = Object.create(null);
-  for(const section of fullSections){
-    if(section && section.id) fullById[section.id] = section;
-  }
 
-  const orderedIds = SEARCH_SECTION_ORDER
-    .filter(id => buckets[id] && buckets[id].length)
-    .concat(Object.keys(buckets).filter(id => SEARCH_SECTION_ORDER.indexOf(id) < 0 && buckets[id] && buckets[id].length));
-
-  const visibleStream = [];
+  const visibleStream = buildNaturalSearchDisplayStream(list);
   const sectionState = Object.create(null);
-  let collapsedExcludedCount = 0;
+  const buckets = buildSectionBucketsForViewport(list);
 
-  for(const sectionId of orderedIds){
+  for(const sectionId of Object.keys(buckets)){
     const meta = SEARCH_SECTION_META[sectionId] || SEARCH_SECTION_META.general_web;
-    const all = (buckets[sectionId] || []).slice().sort((a,b) => sectionSortScore(b) - sectionSortScore(a));
-    const full = fullById[sectionId] || null;
-    const previewLimit = clampInt(firstNonEmpty(raw['previewLimit_' + sectionId], raw.previewLimit, full && full.previewLimit, meta.previewLimit), meta.previewLimit || 6, 1, 100);
-    const expanded = !!(expandAll || expandedSet.has(sectionId));
-    const visibleTotal = expanded ? all.length : Math.min(previewLimit, all.length);
-    const collapsedCount = Math.max(0, all.length - visibleTotal);
-    collapsedExcludedCount += collapsedCount;
-
     sectionState[sectionId] = {
       id: sectionId,
       title: meta.title,
       label: meta.label,
       rank: meta.rank,
-      previewLimit,
-      expanded,
-      collapsed: !expanded,
-      sourceTotal: all.length,
-      visibleTotal,
-      collapsedCount,
-      hiddenCount: collapsedCount,
-      collapsedItemsExcludedFromCount: true
+      previewLimit: SEARCH_SECTION_META[sectionId] && SEARCH_SECTION_META[sectionId].previewLimit || 6,
+      expanded: true,
+      collapsed: false,
+      sourceTotal: buckets[sectionId].length,
+      visibleTotal: buckets[sectionId].length,
+      collapsedCount: 0,
+      hiddenCount: 0,
+      collapsedItemsExcludedFromCount: true,
+      naturalFlowNoForcedCollapse: true
     };
-
-    for(let i=0; i<visibleTotal; i++){
-      visibleStream.push(Object.assign({}, all[i], {
-        sectionId,
-        sourceSectionId: sectionId,
-        sectionTitle: meta.title,
-        sectionLabel: meta.label,
-        sectionRank: meta.rank,
-        visibleViewportCard: true,
-        collapsedAwareViewportCard: true,
-        sectionExpanded: expanded,
-        sectionCollapsed: !expanded,
-        sectionVisibleIndex: i,
-        sectionVisibleTotal: visibleTotal,
-        sectionSourceTotal: all.length,
-        sectionCollapsedCount: collapsedCount
-      }));
-    }
   }
 
   const totalVisibleItems = visibleStream.length;
@@ -1279,7 +1362,7 @@ function buildCollapseAwareVisiblePagePack(items, q, raw, fullSectionPack){
 
   return {
     enabled: true,
-    mode: 'collapse-aware-visible-card-viewport',
+    mode: 'natural-search-flow-balanced-lead-visible-15',
     q: safeString(q || ''),
     page: safePage,
     requestedPage: page,
@@ -1294,15 +1377,16 @@ function buildCollapseAwareVisiblePagePack(items, q, raw, fullSectionPack){
     hasNextPage: totalPages ? safePage < totalPages : false,
     prevPage: safePage > 1 ? safePage - 1 : null,
     nextPage: safePage < totalPages ? safePage + 1 : null,
-    expandedSections: Array.from(expandedSet),
-    allSectionsExpanded: expandAll,
-    collapsedExcludedCount,
+    expandedSections: [],
+    allSectionsExpanded: true,
+    collapsedExcludedCount: 0,
     collapsedItemsExcludedFromCount: true,
     sectionState,
     bodyPreserved: true,
     doesNotLimitItemsResults: true,
     sectionsPreserved: true,
-    principle: 'Only actually visible cards consume the 15-card viewport. Collapsed section items are excluded and later visible cards backfill the page.'
+    naturalFlowNoForcedCollapse: true,
+    principle: 'Categories organize and prioritize the first viewport. They do not suppress broad results; remaining cards flow naturally to later pages.'
   };
 }
 
@@ -1485,7 +1569,11 @@ function getSanmaruResidentForMaru(q, raw, opts){
         candidatePoolTarget: Math.min(MAX_LIMIT, Math.max(clampInt(raw.candidatePool || raw.candidatePoolTarget, DEFAULT_LIMIT, 1, MAX_LIMIT), MIN_RESULT_TARGET)),
         searchType: opts.searchType,
         type: opts.searchType,
-        lang: opts.lang
+        lang: opts.lang,
+        allowRouteCards: false,
+        noRouteCards: true,
+        allowOpeningCards: false,
+        noOpeningCards: true
       });
       const rawItems = Array.isArray(res && res.items) ? res.items : [];
       const canonical = rawItems.map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru-resident')));
@@ -1506,6 +1594,46 @@ function getSanmaruResidentForMaru(q, raw, opts){
   }catch(e){
     return { items: [], meta: { status:'soft-failed', residentKey, error: safeString((e && e.message) || e).slice(0,160) } };
   }
+}
+
+
+function getSanmaruRouteContextForMaru(q, raw, opts){
+  raw = raw || {};
+  opts = opts || {};
+  let Sanmaru = null;
+  try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
+  if(!Sanmaru) return { available:false, routePlan:null, providerHealth:[], meta:{ status:'unavailable' } };
+  try{
+    if(typeof Sanmaru.touchResidentSwitch === 'function') Sanmaru.touchResidentSwitch({ reason:opts.reason || 'maru-route-context', q });
+    else if(typeof Sanmaru.ensureResidentBoot === 'function') Sanmaru.ensureResidentBoot({ reason:opts.reason || 'maru-route-context', q });
+    const searchType = normalizeSearchType(opts.searchType || raw.type || raw.category || raw.tab || raw.vertical);
+    const routePlan = typeof Sanmaru.buildRoutePlanForQuery === 'function'
+      ? Sanmaru.buildRoutePlanForQuery(q, { searchType, type:searchType, lang: opts.lang || raw.lang || raw.uiLang || raw.locale })
+      : null;
+    const providerHealth = typeof Sanmaru.providerHealthSnapshot === 'function' ? Sanmaru.providerHealthSnapshot() : [];
+    const sourceRegistry = typeof Sanmaru.sourceRegistry === 'function' ? Sanmaru.sourceRegistry() : null;
+    return {
+      available:true,
+      routePlan,
+      providerHealth,
+      sourceRegistry,
+      meta:{
+        status:'ok',
+        owner:'sanmaru-top-resident-route-owner',
+        maruRole:'gateway-body-render-contract',
+        searchType,
+        routeCount: Array.isArray(routePlan && routePlan.routes) ? routePlan.routes.length : 0
+      }
+    };
+  }catch(e){
+    return { available:false, routePlan:null, providerHealth:[], meta:{ status:'soft-failed', error:safeString((e && e.message) || e).slice(0,160) } };
+  }
+}
+
+function sanmaruPlannedProvider(routePlan, needle){
+  const n = safeString(needle).toLowerCase();
+  const routes = Array.isArray(routePlan && routePlan.routes) ? routePlan.routes : [];
+  return routes.some(r => safeString(r && r.provider).toLowerCase().includes(n));
 }
 
 
@@ -2131,20 +2259,20 @@ function sourceCaps(opts){
     // Normal mode target: enough for 30~50 front pages when the provider has data.
     // Naver supports 100 per page; 8 pages = up to 800 results in one controlled gateway pass.
     // Fast-first mode: primary web is enough for broad coverage; verticals fill quality.
-    naverPages: deep ? 8 : 5,
+    naverPages: deep ? 10 : 8,
     // Controlled vertical expansion. Runs only inside maru-search gateway, never recursively.
-    naverBlogPages: deep ? 4 : 2,
-    naverNewsPages: deep ? 4 : 3,
-    naverCafePages: deep ? 3 : 2,
+    naverBlogPages: deep ? 5 : 3,
+    naverNewsPages: deep ? 5 : 4,
+    naverCafePages: deep ? 4 : 3,
     naverEncycPages: deep ? 1 : 1,
     naverKinPages: deep ? 1 : 1,
     naverBookPages: deep ? 2 : 1,
     naverLocalPages: 1,
-    googlePages: deep ? 4 : 2,
+    googlePages: deep ? 6 : 4,
     bingPages: deep ? 3 : 2,
-    imagePages: deep ? 3 : 2,
+    imagePages: deep ? 4 : 3,
     naverImagePages: deep ? 4 : 3,
-    youtubeLimit: deep ? 80 : 50,
+    youtubeLimit: deep ? 100 : 60,
     timeoutMs: deep ? 12000 : DEFAULT_SOFT_TIMEOUT_MS
   };
 }
@@ -2157,7 +2285,7 @@ function addBundle(bundle, fallbackSource, collected, sourceState){
   return items.length;
 }
 
-async function orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType }){
+async function orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType, sanmaruRouteContext }){
   limit = clampInt(limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
 
   globalThis.__MARU_CACHE = globalThis.__MARU_CACHE || new Map();
@@ -2182,12 +2310,20 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     const trace = [];
     const region = detectRuntimeRegion(event, lang, q);
     const sourceRoute = sourceOrderForRegion(region);
+    const sanmaruRoutePlan = sanmaruRouteContext && sanmaruRouteContext.routePlan;
+    const sanmaruProviderHealth = sanmaruRouteContext && sanmaruRouteContext.providerHealth;
     const externalTriggerMin = Math.min(
       MAX_LIMIT,
       Math.max(gatewayExternalTriggerCount(), Math.min(limit, MIN_RESULT_TARGET))
     );
 
     function record(name, status, count, extra){ trace.push(Object.assign({ name, status, count: count || 0 }, extra || {})); }
+    record('sanmaru-route-plan', sanmaruRoutePlan ? 'ok' : 'unavailable', Array.isArray(sanmaruRoutePlan && sanmaruRoutePlan.routes) ? sanmaruRoutePlan.routes.length : 0, {
+      owner:'sanmaru-top-resident-cpu',
+      maruRole:'gateway-body-not-independent-crawler',
+      categories: Array.isArray(sanmaruRoutePlan && sanmaruRoutePlan.categories) ? sanmaruRoutePlan.categories.slice(0, 24) : [],
+      providers: Array.isArray(sanmaruRoutePlan && sanmaruRoutePlan.routes) ? sanmaruRoutePlan.routes.map(r => r.provider).filter(Boolean).slice(0, 24) : []
+    });
 
     async function pullFromSearchBank(){
       let count = 0;
@@ -2245,7 +2381,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         count += n;
       }
 
-      record('naver', count ? 'ok' : 'empty', count, { pagesTried: starts.length, mode: 'controlled-batch' });
+      record('naver', count ? 'ok' : 'empty', count, { pagesTried: starts.length, mode: 'controlled-batch', keyPresent: !!naverKeys().id, secretPresent: !!naverKeys().secret, plannedBySanmaru: sanmaruPlannedProvider(sanmaruRoutePlan, 'naver') });
       return count;
     }
 
@@ -2261,10 +2397,14 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         if(!g || !g.results || g.results.length < 10) break;
         pageStart += 10;
       }
+      const gKeys = googleCseKeys();
       record('google', count ? 'ok' : ((lastMeta && lastMeta.status) || 'google empty'), count, Object.assign({
         reason: lastMeta && lastMeta.reason,
         httpStatus: lastMeta && lastMeta.httpStatus,
-        cseParams: lastMeta && lastMeta.cseParams
+        cseParams: lastMeta && lastMeta.cseParams,
+        keyPresent: !!gKeys.key,
+        csePresent: !!gKeys.cx,
+        plannedBySanmaru: sanmaruPlannedProvider(sanmaruRoutePlan, 'google')
       }, lastMeta && lastMeta.detail ? { detail: lastMeta.detail } : {}));
       return count;
     }
@@ -2272,14 +2412,18 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     async function pullFromGoogleSns(){
       let count = 0;
       if(timeLeft() <= 1400) { record('google_sns', 'skipped-time', 0); return 0; }
-      const g = await Containers.web_google_sns.fetch(q, 10, 1).catch(e => ({ source:'google_sns', results: [], meta: { status:'google sns exception', reason: safeString((e && e.message) || e).slice(0, 160) } }));
+      const g = await Containers.web_google_sns.fetch(q, 20, 1).catch(e => ({ source:'google_sns', results: [], meta: { status:'google sns exception', reason: safeString((e && e.message) || e).slice(0, 160) } }));
       const n = addBundle(g, 'google_sns', collected, sourceState);
       count += n;
       const meta = g && g.meta || {};
+      const gsKeys = googleCseKeys();
       record('google_sns', count ? 'ok' : (meta.status || 'google sns empty'), count, {
         reason: meta.reason,
         routes: meta.routes,
-        cseParams: meta.cseParams
+        cseParams: meta.cseParams,
+        keyPresent: !!gsKeys.key,
+        csePresent: !!gsKeys.cx,
+        plannedBySanmaru: sanmaruPlannedProvider(sanmaruRoutePlan, 'google') || sanmaruPlannedProvider(sanmaruRoutePlan, 'social')
       });
       return count;
     }
@@ -3064,10 +3208,19 @@ function backfillVisuals(items){
   });
 }
 
+
+function naverKeys(){
+  return {
+    id: envFirst('NAVER_API_KEY','NAVER_CLIENT_ID','NAVER_SEARCH_CLIENT_ID','NAVER_OPENAPI_CLIENT_ID'),
+    secret: envFirst('NAVER_CLIENT_SECRET','NAVER_API_SECRET','NAVER_SEARCH_CLIENT_SECRET','NAVER_OPENAPI_CLIENT_SECRET')
+  };
+}
+
 async function naverSearch(q, limit, start){
-  const id = envFirst('NAVER_API_KEY','NAVER_CLIENT_ID','NAVER_SEARCH_CLIENT_ID','NAVER_OPENAPI_CLIENT_ID');
-  const secret = envFirst('NAVER_CLIENT_SECRET','NAVER_API_SECRET','NAVER_SEARCH_CLIENT_SECRET','NAVER_OPENAPI_CLIENT_SECRET');
-  if(!id || !secret) return null;
+  const nk = naverKeys();
+  const id = nk.id;
+  const secret = nk.secret;
+  if(!id || !secret) return { source:'naver', results:[], meta:{ status:'naver key missing', reason: !id ? 'NAVER_API_KEY missing' : 'NAVER_CLIENT_SECRET missing' } };
   const url = 'https://openapi.naver.com/v1/search/webkr.json?query=' + encodeURIComponent(q) + '&display=' + Math.min(limit,100) + '&start=' + start;
   const res = await fetchWithTimeout(url, { headers: { 'X-Naver-Client-Id': id, 'X-Naver-Client-Secret': secret } }, 3000);
   if(!res.ok) throw new Error('NAVER_HTTP_' + res.status);
@@ -3080,9 +3233,10 @@ async function naverSearch(q, limit, start){
 
 
 async function naverImageSearch(q, limit, start){
-  const id = envFirst('NAVER_API_KEY','NAVER_CLIENT_ID','NAVER_SEARCH_CLIENT_ID','NAVER_OPENAPI_CLIENT_ID');
-  const secret = envFirst('NAVER_CLIENT_SECRET','NAVER_API_SECRET','NAVER_SEARCH_CLIENT_SECRET','NAVER_OPENAPI_CLIENT_SECRET');
-  if(!id || !secret) return null;
+  const nk = naverKeys();
+  const id = nk.id;
+  const secret = nk.secret;
+  if(!id || !secret) return { source:'naver_image', results:[], meta:{ status:'naver key missing', reason: !id ? 'NAVER_API_KEY missing' : 'NAVER_CLIENT_SECRET missing' } };
 
   const url = 'https://openapi.naver.com/v1/search/image.json?query=' +
     encodeURIComponent(q) +
@@ -3138,9 +3292,10 @@ async function naverImageSearch(q, limit, start){
 }
 
 async function naverGenericSearch(endpoint, q, limit, start, source, type){
-  const id = envFirst('NAVER_API_KEY','NAVER_CLIENT_ID','NAVER_SEARCH_CLIENT_ID','NAVER_OPENAPI_CLIENT_ID');
-  const secret = envFirst('NAVER_CLIENT_SECRET','NAVER_API_SECRET','NAVER_SEARCH_CLIENT_SECRET','NAVER_OPENAPI_CLIENT_SECRET');
-  if(!id || !secret) return null;
+  const nk = naverKeys();
+  const id = nk.id;
+  const secret = nk.secret;
+  if(!id || !secret) return { source, results:[], meta:{ status:'naver key missing', reason: !id ? 'NAVER_API_KEY missing' : 'NAVER_CLIENT_SECRET missing', endpoint } };
 
   const display = Math.max(1, Math.min(limit || 100, endpoint === 'local.json' ? 5 : 100));
   const url = 'https://openapi.naver.com/v1/search/' + endpoint +
@@ -3303,7 +3458,7 @@ async function googleSnsSearch(q, limit, start){
     { name:'threads', query:'site:threads.net ' + q, source:'google_sns_threads', type:'sns', mediaType:'article' }
   ];
 
-  const perRoute = Math.max(1, Math.min(3, Math.ceil(Math.min(limit || 10, 10) / 3)));
+  const perRoute = Math.max(1, Math.min(4, Math.ceil(Math.min(limit || 20, 20) / 5)));
   const settled = await Promise.allSettled(routes.map(route =>
     googleCseRequest(route.query, perRoute, start || 1, {
       source: route.source,
@@ -3323,7 +3478,7 @@ async function googleSnsSearch(q, limit, start){
 
   return {
     source: 'google_sns',
-    results: results.slice(0, Math.min(limit || 10, 15)),
+    results: results.slice(0, Math.min(limit || 20, 20)),
     meta: {
       status: results.length ? 'ok' : 'google sns empty',
       reason: results.length ? undefined : 'No SNS site-search results from Google CSE',
@@ -4023,13 +4178,14 @@ exports.handler = async function(event){
     // broad queries such as "서울" and "부산" to one or two pages by returning before
     // Google/Naver/YouTube/SNS/Search Bank expansion ran. Keep Sanmaru alive and warm,
     // but never let the resident seed short-circuit the 1000+/5000 candidate pool.
+    const sanmaruRouteContext = getSanmaruRouteContextForMaru(q, raw || {}, { searchType, lang, limit, reason:'maru-top-route-owner-context' });
     let residentSeedPack = null;
     if(!truthy(raw && (raw.noResident || raw.skipResident || raw.disableResident))){
       residentSeedPack = getSanmaruResidentForMaru(q, raw || {}, { searchType, lang, limit, reason:'maru-top-resident-seed-preserve-wide-search' });
       triggerSanmaruResidentRefresh(q, raw || {}, { searchType, lang, limit });
     }
 
-    let base = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType });
+    let base = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType, sanmaruRouteContext });
     base = await attachMediaEngineResults(base, event, { q, limit, start, lang, searchType, raw, noMedia });
     base = await attachSanmaruAugmentResults(base, event, { q, limit, start, lang, searchType, raw, noMedia });
     if(residentSeedPack && Array.isArray(residentSeedPack.items) && residentSeedPack.items.length){
@@ -4089,7 +4245,7 @@ exports.handler = async function(event){
       pageItems: visiblePagePack.pageItems,
       visiblePagePack,
       sectionPack: sectionPackWithViewport,
-      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', security:{ allowed:true, admin:security.admin, mode:'read-search-open-admin-actions-protected' }, preservationPatch: 'A1.5.39-595-wide-pipeline-restored-resident-seed' })
+      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', security:{ allowed:true, admin:security.admin, mode:'read-search-open-admin-actions-protected' }, sanmaruTopResident: Object.assign({}, sanmaruRouteContext && sanmaruRouteContext.meta || {}, { routePlan: sanmaruRouteContext && sanmaruRouteContext.routePlan, providerHealth: sanmaruRouteContext && sanmaruRouteContext.providerHealth }), preservationPatch: 'A1.5.41-595-sanmaru-route-ranked-wide' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));

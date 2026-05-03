@@ -27,7 +27,7 @@ const path = require("path");
 let LogosEngineClass = null;
 try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) { LogosEngineClass = null; }
 
-const VERSION = "sanmaru-engine-v2.5.0-top-resident-logos-secure";
+const VERSION = "sanmaru-engine-v2.6.0-top-cpu-route-owner";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 1000;
@@ -87,6 +87,34 @@ function ensureResidentState(){
 ensureResidentState();
 
 
+let __SANMARU_ENV_JSON_CACHE = undefined;
+function sanmaruEnvJsonLookup(key){
+  try{
+    if(__SANMARU_ENV_JSON_CACHE === undefined){
+      __SANMARU_ENV_JSON_CACHE = null;
+      const raw = process && process.env ? (process.env.MARU_API_KEYS_JSON || process.env.API_KEYS_JSON || process.env.IGDC_API_KEYS_JSON || '') : '';
+      if(raw){
+        const trimmed = String(raw).trim();
+        const text = (/^eyJ|^ewog|^[A-Za-z0-9+/=]{80,}$/.test(trimmed)) ? Buffer.from(trimmed, 'base64').toString('utf8') : trimmed;
+        const parsed = JSON.parse(text);
+        if(parsed && typeof parsed === 'object') __SANMARU_ENV_JSON_CACHE = parsed;
+      }
+    }
+    return __SANMARU_ENV_JSON_CACHE && key ? __SANMARU_ENV_JSON_CACHE[key] : '';
+  }catch(e){ return ''; }
+}
+function sanmaruEnvFirst(){
+  for(let i=0; i<arguments.length; i++){
+    const key = arguments[i];
+    const direct = key && process && process.env ? process.env[key] : '';
+    if(String(direct == null ? '' : direct).trim()) return direct;
+    const jsonVal = sanmaruEnvJsonLookup(key);
+    if(String(jsonVal == null ? '' : jsonVal).trim()) return jsonVal;
+  }
+  return '';
+}
+function sanmaruEnvHas(){ return !!sanmaruEnvFirst.apply(null, arguments); }
+
 const MOUNT_REGISTRY = {
   "searchbank-index": {
     type: "fast-memory",
@@ -122,31 +150,31 @@ const MOUNT_REGISTRY = {
     type: "external-search",
     permission: "api-key-required",
     role: "Reserved/active Naver mount; normally routed through Maru Search wide gateway to avoid duplicate API bursts",
-    enabled: !!(process.env.NAVER_API_KEY && process.env.NAVER_CLIENT_SECRET)
+    enabled: !!(sanmaruEnvHas('NAVER_API_KEY','NAVER_CLIENT_ID') && sanmaruEnvHas('NAVER_CLIENT_SECRET','NAVER_API_SECRET'))
   },
   "google": {
     type: "external-search",
     permission: "api-key-required",
     role: "Reserved/active Google CSE mount; normally routed through Maru Search wide gateway to avoid duplicate API bursts",
-    enabled: !!(process.env.GOOGLE_API_KEY && process.env.GOOGLE_CSE_ID)
+    enabled: !!(sanmaruEnvHas('GOOGLE_API_KEY','GOOGLE_SEARCH_API_KEY') && sanmaruEnvHas('GOOGLE_CSE_ID','GOOGLE_CX','GOOGLE_SEARCH_ENGINE_ID'))
   },
   "bing": {
     type: "external-search",
     permission: "api-key-required",
     role: "Reserved/active Bing mount; normally routed through Maru Search wide gateway to avoid duplicate API bursts",
-    enabled: !!process.env.BING_API_KEY
+    enabled: !!sanmaruEnvHas('BING_API_KEY','BING_SEARCH_API_KEY','AZURE_BING_SEARCH_API_KEY')
   },
   "youtube": {
     type: "media-search",
     permission: "api-key-required",
     role: "Reserved/active YouTube media mount; normally routed through Maru Search wide gateway to avoid duplicate API bursts",
-    enabled: !!process.env.YOUTUBE_API_KEY
+    enabled: !!sanmaruEnvHas('YOUTUBE_API_KEY','GOOGLE_API_KEY')
   },
   "ai-gpu": {
     type: "analysis-provider",
     permission: "provider-key-or-local-runtime-required",
     role: "AI/GPU classification, dedupe, summarization and promotion decision layer",
-    enabled: !!(process.env.OPENAI_API_KEY || process.env.AI_PROVIDER_KEY || process.env.SANMARU_AI_GPU_ENABLED)
+    enabled: !!sanmaruEnvHas('OPENAI_API_KEY','AI_PROVIDER_KEY','SANMARU_AI_GPU_ENABLED')
   },
   "official-web": {
     type: "open-web-discovery",
@@ -595,6 +623,9 @@ function residentBootSnapshot(){
     lastBootFiles:resident.lastBootFiles || [],
     lastError:resident.lastError || null,
     engineLifecycle: "resident-restored-unless-engine-file-upgraded",
+    topRole: "global-web-ecosystem-information-cpu",
+    maruRole: "mounted-gateway-body",
+    dataUpdateMode: "hot-ingest-index-refresh-no-engine-reboot",
     openingSignals: openingSignalsSnapshot(),
     logosGuard: logosEvaluate([{ type:"resident_status", intent:"stewardship", truthConfidence:0.95, recoveryOpportunity:true }], "resident-status"),
     securityEvents:(globalState.securityEvents || []).slice(-10)
@@ -794,7 +825,7 @@ function supplyResidentSync(input, opts){
       doesNotCallExternal:true,
       logosGuard: logosEvaluate(logosSignalsForQuery(clean.value, { queryRisk:null }), "resident-supply"),
       openingSignals: openingSignalsSnapshot(),
-      note:"Sanmaru is the top resident routing/index/category/cache CPU. Maru Search is the mounted gateway/body and refreshes only missing parts."
+      note:"Sanmaru owns routing/provider-health/category/index/cache as the top information CPU. Maru Search is the mounted gateway/body; it formats and expands results without becoming the independent head."
     }
   };
 }
@@ -953,11 +984,15 @@ function guardRequest(event, params, action){
 function openingSignalsSnapshot(){
   const signals = [];
   function add(provider, state, reason, extra){ signals.push(Object.assign({ provider, state, reason }, extra || {})); }
-  add("google", process.env.GOOGLE_API_KEY && process.env.GOOGLE_CSE_ID ? "active" : "reserved", process.env.GOOGLE_API_KEY ? (process.env.GOOGLE_CSE_ID ? "key-and-cse-present" : "cse-missing") : "key-missing");
-  add("naver", process.env.NAVER_API_KEY && process.env.NAVER_CLIENT_SECRET ? "active" : "reserved", process.env.NAVER_API_KEY ? (process.env.NAVER_CLIENT_SECRET ? "key-and-secret-present" : "secret-missing") : "key-missing");
-  add("bing", process.env.BING_API_KEY ? "active" : "reserved", process.env.BING_API_KEY ? "key-present" : "key-missing");
-  add("youtube", process.env.YOUTUBE_API_KEY ? "active" : "reserved", process.env.YOUTUBE_API_KEY ? "key-present" : "key-missing-or-using-public-route");
-  add("ai-gpu", (process.env.OPENAI_API_KEY || process.env.AI_PROVIDER_KEY || process.env.SANMARU_AI_GPU_ENABLED) ? "active" : "reserved", "provider-env-signal");
+  const googleKey = sanmaruEnvHas('GOOGLE_API_KEY','GOOGLE_SEARCH_API_KEY');
+  const googleCx = sanmaruEnvHas('GOOGLE_CSE_ID','GOOGLE_CX','GOOGLE_SEARCH_ENGINE_ID');
+  const naverKey = sanmaruEnvHas('NAVER_API_KEY','NAVER_CLIENT_ID');
+  const naverSecret = sanmaruEnvHas('NAVER_CLIENT_SECRET','NAVER_API_SECRET');
+  add("google", googleKey && googleCx ? "active" : "reserved", googleKey ? (googleCx ? "key-and-cse-present" : "cse-missing") : "key-missing", { keyPresent:googleKey, csePresent:googleCx });
+  add("naver", naverKey && naverSecret ? "active" : "reserved", naverKey ? (naverSecret ? "key-and-secret-present" : "secret-missing") : "key-missing", { keyPresent:naverKey, secretPresent:naverSecret });
+  add("bing", sanmaruEnvHas('BING_API_KEY','BING_SEARCH_API_KEY','AZURE_BING_SEARCH_API_KEY') ? "active" : "reserved", sanmaruEnvHas('BING_API_KEY','BING_SEARCH_API_KEY','AZURE_BING_SEARCH_API_KEY') ? "key-present" : "key-missing");
+  add("youtube", sanmaruEnvHas('YOUTUBE_API_KEY') ? "active" : "reserved", sanmaruEnvHas('YOUTUBE_API_KEY') ? "key-present" : "key-missing-or-using-public-route");
+  add("ai-gpu", sanmaruEnvHas('OPENAI_API_KEY','AI_PROVIDER_KEY','SANMARU_AI_GPU_ENABLED') ? "active" : "reserved", "provider-env-signal");
   for(const file of residentFileCandidates()){
     try{ if(fs.existsSync(file)) add("resident-file", "active", path.basename(file), { path:path.basename(file) }); }catch(e){}
   }
