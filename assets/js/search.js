@@ -46,6 +46,7 @@ ready(function () {
     let lastQuery = '';
     let lastType = 'all';
     let lastSearchPayload = null;
+    let activeSearchRunId = 0;
     const pageImageEnrichCache = new Set();
     const itemImageEnrichCache = new Map();
     const expandedDisplayGroups = new Set();
@@ -1931,34 +1932,43 @@ function drawPager(){
 
 async function runSearch(q, type = activeType){
   const qq = (q || '').trim();
+  const runId = ++activeSearchRunId;
   activeType = normalizeSearchType(type);
   updateSearchTabsActive();
+
+  // A search inside search.html is always a new gate opening. Clear the previous
+  // result pool before the server response returns, and ignore older in-flight
+  // responses so an earlier homepage/search-page query cannot overwrite the new one.
+  allItems = [];
+  lastSearchPayload = null;
+  currentBlock = 0;
+  currentPage = 1;
+  pageImageEnrichCache.clear();
+  itemImageEnrichCache.clear();
+  expandedDisplayGroups.clear();
+  clearPager();
+
   if (!qq){
-    allItems = [];
     results.innerHTML = '';
-    clearPager();
     status.textContent = '';
+    lastQuery = '';
+    lastType = activeType;
     return;
   }
 
   signalSanmaruSearch(qq, activeType, 'run-search');
   status.textContent = `Searching ${getTypeLabel(activeType)} for "${qq}"...`;
   renderSkeleton();
-  clearPager();
 
   try {
     const searchPack = await fetchSearch(qq, activeType);
+    if(runId !== activeSearchRunId) return;
+
     lastSearchPayload = searchPack && searchPack.payload || null;
     const items = Array.isArray(searchPack) ? searchPack : (searchPack && searchPack.items) || [];
     const filteredItems = filterSearchResultItems(items || []);
     allItems = dedupeItems([...(filteredItems || [])]);
 
-    pageImageEnrichCache.clear();
-    itemImageEnrichCache.clear();
-    expandedDisplayGroups.clear();
-
-    currentBlock = 0;
-    currentPage = 1;
     lastQuery = qq;
     lastType = activeType;
 
@@ -1972,6 +1982,7 @@ async function runSearch(q, type = activeType){
     status.textContent = `${allItems.length} results for "${qq}" · ${getTypeLabel(activeType)}`;
 
   } catch(e){
+    if(runId !== activeSearchRunId) return;
     console.error(e);
     allItems = [];
     results.innerHTML = '';
