@@ -20,7 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.47-596-sanmaru-open-gate-resident-first';
+const VERSION = 'A1.5.46-595-sanmaru-cpu-direct-page25-sns-google-fix';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_RESULT_TARGET = 500;
@@ -1718,10 +1718,11 @@ function buildImmediateResidentResponse(q, raw, residentPack, baseMeta){
 }
 
 function sanmaruFastLayerEnough(residentPack, requestedLimit, raw){
-  // Sanmaru is the resident information CPU. Maru Search may open the gate
-  // directly from Sanmaru only when Sanmaru already holds a real resident/index
-  // supply large enough to preserve pages and category breadth. Thin route/opening
-  // cards must never short-circuit the normal wide gateway.
+  // Sanmaru is the resident information CPU. Maru Search may skip provider
+  // re-scan ONLY when Sanmaru already holds a broad query cache from a previous
+  // gateway pass. A thin index/page-sized resident answer must never block
+  // Google/Naver/SNS/category construction, because that makes searches look
+  // empty or narrow.
   raw = raw || {};
   const meta = (residentPack && residentPack.meta) || {};
   const total = Array.isArray(residentPack && residentPack.items) ? residentPack.items.length : 0;
@@ -1733,20 +1734,19 @@ function sanmaruFastLayerEnough(residentPack, requestedLimit, raw){
   const routeFallbackCount = Number(meta.routeFallbackCount || 0) || 0;
   const openingFallbackCount = Number(meta.openingFallbackCount || 0) || 0;
   const syntheticCount = routeFallbackCount + openingFallbackCount;
-  const realSupplyCount = Math.max(
-    Number(meta.realSupplyCount || 0) || 0,
-    Number(meta.realIndexCount || 0) || 0,
-    Number(meta.realResidentCount || 0) || 0,
-    queryCacheCount,
-    total - syntheticCount
-  );
+  const realCachedCount = Math.max(queryCacheCount, total - syntheticCount);
+  const minBroadCache = Math.max(viewportNeed, Math.min(250, Math.max(perPage * 4, 100)));
 
-  const requestedFloor = clampInt(firstNonEmpty(raw.sanmaruSupplyMin, raw.openGateMin, raw.instantSupplyMin), 250, 25, 2000);
-  const minBroadCache = Math.max(viewportNeed, Math.min(1000, Math.max(perPage * 8, requestedFloor)));
+  const openGateRequested = truthy(raw.sanmaruFirst || raw.residentFirst || raw.naturalFlow || raw.residentSwitch || raw.instantOnly || raw.cacheOnly) || safeString(raw.routeOwner).toLowerCase() === 'sanmaru';
 
-  if(truthy(raw.fastOnly) || truthy(raw.sanmaruOnly)) return realSupplyCount >= viewportNeed;
-  if(cachedQueryHit && realSupplyCount >= Math.max(viewportNeed, perPage * 4)) return true;
-  return realSupplyCount >= minBroadCache;
+  // Explicit diagnostic/ultra-fast mode can still be requested. For the normal
+  // Maru gate flow, Sanmaru may answer immediately when it already has enough
+  // real resident/index data to fill the requested viewport. A thin synthetic
+  // route/opening-only response is still not allowed to suppress the normal
+  // fallback expansion.
+  if(truthy(raw.fastOnly) || truthy(raw.sanmaruOnly)) return realCachedCount >= viewportNeed;
+  if(openGateRequested && realCachedCount >= viewportNeed) return true;
+  return cachedQueryHit && realCachedCount >= minBroadCache;
 }
 
 function buildSanmaruFastLayerBase(q, residentPack, raw, ctx){
@@ -1773,7 +1773,7 @@ function buildSanmaruFastLayerBase(q, residentPack, raw, ctx){
         count:items.length,
         role:'top-information-cpu-supplied-without-blocking-provider-rescan',
         maruRole:'mounted-gateway-ui-body',
-        reason:'sanmaru-real-resident-index-supply-enough-for-open-gate'
+        reason:'broad-query-cache-enough-in-sanmaru'
       }],
       externalGatewayUsed:false,
       externalSuppressed:false,
@@ -1788,7 +1788,7 @@ function buildSanmaruFastLayerBase(q, residentPack, raw, ctx){
         maruRole:'mounted-gateway-ui-body',
         candidatePool:'preserved-and-paged',
         viewportOnly:'current-page-rendering-window',
-        providerRescan:'skipped-only-when-sanmaru-real-resident-index-supply-covers-open-gate-floor'
+        providerRescan:'skipped-only-when-broad-query-cache-covers-current-page'
       },
       instantSupply:true,
       currentPageOnlyRendered:true,
@@ -4386,10 +4386,8 @@ exports.handler = async function(event){
     }
 
     let base = null;
-    const sanmaruCanServeFromFastLayer = residentSeedPack
-      && sanmaruFastLayerEnough(residentSeedPack, limit, raw || {})
-      && !forceProviderRefresh
-      && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal));
+    const sanmaruOpenGateRequested = truthy(raw && (raw.sanmaruFastOnly || raw.cacheOnly || raw.instantOnly || raw.sanmaruFirst || raw.residentFirst || raw.naturalFlow || raw.residentSwitch)) || safeString(raw && raw.routeOwner).toLowerCase() === 'sanmaru';
+    const sanmaruCanServeFromFastLayer = residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, limit, raw || {}) && sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal));
     if(sanmaruCanServeFromFastLayer){
       base = buildSanmaruFastLayerBase(q, residentSeedPack, Object.assign({}, raw || {}, { limit }), { region:detectRuntimeRegion(event, lang, q) });
       base.meta = Object.assign({}, base.meta || {}, {
@@ -4442,7 +4440,9 @@ exports.handler = async function(event){
         sanmaruResidentSeed: Object.assign({}, residentSeedPack.meta || {}, {
           mergedAsSeed: true,
           seedCount: residentSeedItems.length,
-          doesNotShortCircuitWideSearch: true,
+          doesNotShortCircuitWideSearch: !sanmaruCanServeFromFastLayer,
+          maruRole:'open-gate-reporter-to-sanmaru',
+          sanmaruRole:'data-supplier',
           backgroundResidentRefresh:residentRefreshSignal || null,
           visibleNeed
         })
