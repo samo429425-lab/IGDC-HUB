@@ -17,7 +17,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const VERSION = "search-bank-index-engine-v2.1.0-sanmaru-fast-memory-secure";
+const VERSION = "search-bank-index-engine-v2.1.1-slot-dedupe-secure";
 const ENGINE_NAME = "search-bank-index";
 
 const DEFAULT_LIMIT = 1000;
@@ -168,6 +168,21 @@ function normalizeUrl(url){
     ["utm_source","utm_medium","utm_campaign","utm_term","utm_content","fbclid","gclid"].forEach(k => u.searchParams.delete(k));
     return u.toString();
   }catch(e){ return raw; }
+}
+
+function slotDedupeSignature(item){
+  item = item || {};
+  const sigUrl = normalizeUrl(firstNonEmpty(item.url, item.link));
+  if(sigUrl) return low(sigUrl);
+  return low(firstNonEmpty(
+    item.originalId,
+    item.indexId,
+    item.id,
+    [
+      item.title, item.name, item.source, item.provider, item.searchCategory, item.displayGroup,
+      item.route, item.page, item.section, item.lang, item.locale, item.image, item.thumbnail, item.summary
+    ].filter(Boolean).join("|")
+  ));
 }
 
 function extractArraysFromObject(obj, depth, out, sourceHint){
@@ -372,13 +387,7 @@ function buildIndexFromSnapshot(){
   for(let i=0; i<rawItems.length; i++){
     const item = indexItem(rawItems[i], i, "search-bank");
     if(!item){ placeholderFiltered++; continue; }
-    const sigUrl = normalizeUrl(firstNonEmpty(item.url, item.link));
-    const sig = low(firstNonEmpty(
-      sigUrl,
-      item.originalId,
-      item.indexId,
-      [item.title, item.source, item.provider, item.searchCategory, item.displayGroup, item.route, item.page, item.section, item.lang, item.image, item.summary].filter(Boolean).join("|")
-    ));
+    const sig = slotDedupeSignature(item);
     if(!sig || seen.has(sig)) continue;
     seen.add(sig);
     indexed.push(item);
@@ -547,7 +556,7 @@ function queryIndex(params){
     if(!item || isPlaceholder(item)){ placeholderFiltered++; continue; }
     const sc = scoreIndexedItem(qInfo, item, type);
     if(sc <= 0) continue;
-    const sig = low(firstNonEmpty(normalizeUrl(item.url), normalizeUrl(item.link), item.title, item.indexId));
+    const sig = slotDedupeSignature(item);
     if(seen.has(sig)) continue;
     seen.add(sig);
     ranked.push(Object.assign({}, item, { sanmaruIndexScore: sc }));
@@ -613,7 +622,7 @@ function upsertMemory(payload, kind){
     if(!item) continue;
     const c = canonicalItem(item, q, kind === "promoted" ? "sanmaru-promoted" : "front-data-ingested");
     if(isPlaceholder(c)) continue;
-    const sig = low(firstNonEmpty(normalizeUrl(c.url), normalizeUrl(c.link), c.title, c.id));
+    const sig = slotDedupeSignature(c);
     if(seen.has(sig)) continue;
     seen.add(sig);
     merged.push(Object.assign({}, c, kind === "promoted" ? { _promoted:true, promotedAt: nowIso(), promotedQuery:q } : { _ingested:true, ingestedAt: nowIso(), ingestedQuery:q }));

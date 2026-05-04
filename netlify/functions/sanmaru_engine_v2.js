@@ -27,7 +27,7 @@ const path = require("path");
 let LogosEngineClass = null;
 try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) { LogosEngineClass = null; }
 
-const VERSION = "sanmaru-engine-v2.6.1-engine-upload-lifecycle";
+const VERSION = "sanmaru-engine-v2.6.2-open-gate-resident-bank";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 1000;
@@ -894,6 +894,9 @@ function supplyResidentSync(input, opts){
   let routeFallbackCards = [];
   let openingFallbackCards = [];
   let items = dedupeItems(residentItems.concat(indexItems));
+  const realSupplyCount = items.length;
+  const realResidentCount = residentItems.length;
+  const realIndexCount = indexItems.length;
 
   // Sanmaru should always know and expose the major information roads
   // (Google/Naver/SNS/video/wiki/public-data routes). These cards are low-priority
@@ -921,7 +924,9 @@ function supplyResidentSync(input, opts){
     routePlan,
     meta:{
       count:items.length,
-      realResidentCount:residentItems.length,
+      realSupplyCount,
+      realResidentCount,
+      realIndexCount,
       searchBankIndex:indexMeta,
       routeFallbackCount:routeFallbackCards.length,
       openingFallbackCount:openingFallbackCards.length,
@@ -1354,9 +1359,21 @@ function isRealYouTubeVideoUrl(url){
 function isPlaceholderItem(it){
   const text = low(itemText(it));
   const url = low(firstNonEmpty(it && it.url, it && it.link));
-  if(!text && !url) return true;
-  if(/seed placeholder|movie slot|mediamovie0|placeholder/.test(text)) return true;
-  if(url === "#" || url === "/" || url.startsWith("javascript:")) return true;
+  const title = low(firstNonEmpty(it && it.title, it && it.name));
+  const summary = low(firstNonEmpty(it && it.summary, it && it.description, it && it.snippet, it && it.content));
+  const source = low(firstNonEmpty(it && it.source, it && it.provider));
+  const meaningfulText = [title, summary, source].filter(Boolean).join(" ").trim();
+
+  if(!text && !url && !meaningfulText) return true;
+  if(/seed placeholder|movie slot|mediamovie0|dummy|sample item|test item|lorem ipsum/.test(text)) return true;
+
+  // Search Bank / Snapshot front-slot items often use url="#" before a final
+  // destination is bound. Those are still real platform content candidates when
+  // title/summary/source exists, so Sanmaru must not throw them away only
+  // because the URL is a placeholder. Reject only meaningless placeholder rows.
+  if(url === "#" || url === "/" || url.startsWith("javascript:")){
+    return !meaningfulText || meaningfulText.length < 2;
+  }
   return false;
 }
 
@@ -1408,6 +1425,24 @@ function canonicalItem(raw, query, adapterName){
   return out;
 }
 
+function sanmaruItemDedupeKey(raw){
+  raw = raw || {};
+  const rawUrl = firstNonEmpty(raw.url, raw.link);
+  const urlKey = low(rawUrl);
+  const placeholderUrl = !urlKey || urlKey === "#" || urlKey === "/" || urlKey.startsWith("javascript:");
+  if(!placeholderUrl) return urlKey;
+
+  return low(firstNonEmpty(
+    raw.id,
+    raw.indexId,
+    raw.originalId,
+    [
+      raw.title, raw.name, raw.source, raw.provider, raw.searchCategory, raw.displayGroup,
+      raw.route, raw.page, raw.section, raw.lang, raw.locale, raw.thumbnail, raw.image, raw.summary
+    ].filter(Boolean).join("|")
+  ));
+}
+
 function dedupeItems(items){
   const seen = new Set();
   const out = [];
@@ -1415,7 +1450,7 @@ function dedupeItems(items){
     if(!raw || typeof raw !== "object") continue;
     if(isPlaceholderItem(raw)) continue;
     if(raw._sanmaruRejectedReason) continue;
-    const key = low(firstNonEmpty(raw.url, raw.link, raw.id, raw.title));
+    const key = sanmaruItemDedupeKey(raw);
     if(!key) continue;
     if(seen.has(key)) continue;
     seen.add(key);
