@@ -46,8 +46,6 @@ ready(function () {
     let lastQuery = '';
     let lastType = 'all';
     let lastSearchPayload = null;
-    let activeSearchRunId = 0;
-    let activeSearchAbort = null;
     const pageImageEnrichCache = new Set();
     const itemImageEnrichCache = new Map();
     const expandedDisplayGroups = new Set();
@@ -88,10 +86,6 @@ ready(function () {
     function signalSanmaruSearch(q, type, reason){
       bootSanmaruOnce(reason || 'search-signal', q, type);
     }
-
-    // Expose only a safe warm-up signal for pages that use globalSearchInput.
-    // This does not make search.js a search engine; real searching still goes through maru-search.
-    try { window.signalSanmaruSearch = signalSanmaruSearch; } catch(e) {}
 
 const params = new URLSearchParams(location.search);
 const q0 = (params.get('q') || '').trim();
@@ -476,71 +470,90 @@ if (q0) {
   status.textContent = '';
 }
 
-function resetSearchStateForNewQuery(){
-  allItems = [];
-  lastSearchPayload = null;
-  currentPage = 1;
-  currentBlock = 0;
-  pageImageEnrichCache.clear();
-  itemImageEnrichCache.clear();
-  expandedDisplayGroups.clear();
-  clearPager();
-  if (results) results.innerHTML = '';
-}
+btn.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
 
-function pushFreshSearchUrl(q, type){
-  if (!isSearchPage) return;
-
-  const u = new URL(location.href);
-  u.searchParams.set('q', q);
-  u.searchParams.set('page', '1');
-  u.searchParams.set('block', '0');
-  u.searchParams.delete('type');
-  u.searchParams.set('residentFirst', '1');
-  u.searchParams.set('sanmaruFirst', '1');
-  u.searchParams.set('residentSwitch', '1');
-  u.searchParams.set('freshSearch', '1');
-  u.searchParams.set('resetScope', '1');
-
-  const safeReturnUrl = getSafeReturnUrl();
-  if (safeReturnUrl) {
-    u.searchParams.set('from', safeReturnUrl);
-  }
-
-  history.pushState({ q, type, page: 1, block: 0, freshSearch: true, from: safeReturnUrl || '' }, '', u.toString());
-}
-
-function submitSearchBoxQuery(){
   const q = input.value.trim();
   if (!q) return;
 
   if (isSearchPage) {
-    // search.html 검색창은 이전 결과 안 필터가 아니라 홈 검색창과 동일한 새 검색 진입점이다.
-    // 새 검색은 항상 전체 탭/all에서 시작하고 기존 allItems/page/block 상태를 즉시 초기화한다.
+    const currentQ = (new URLSearchParams(location.search).get('q') || '').trim();
+
+    if (currentQ === q) {
+      runSearch(q, activeType);
+      return;
+    }
+
     const nextType = 'all';
     activeType = nextType;
     updateSearchTabsActive();
-    resetSearchStateForNewQuery();
-    signalSanmaruSearch(q, nextType, 'search-page-fresh-query');
-    pushFreshSearchUrl(q, nextType);
-    runSearch(q, nextType, { fresh: true, source: 'search-box' });
+    signalSanmaruSearch(q, nextType, 'search-page-new-query');
+
+    const u = new URL(location.href);
+    u.searchParams.set('q', q);
+    u.searchParams.set('page', '1');
+    u.searchParams.set('block', '0');
+    u.searchParams.delete('type');
+    u.searchParams.set('residentFirst', '1');
+    u.searchParams.set('sanmaruFirst', '1');
+    u.searchParams.set('residentSwitch', '1');
+
+    const safeReturnUrl = getSafeReturnUrl();
+    if (safeReturnUrl) {
+      u.searchParams.set('from', safeReturnUrl);
+    }
+
+    history.pushState({ q, type: nextType, from: safeReturnUrl || '' }, '', u.toString());
+    runSearch(q, nextType);
     return;
   }
 
   window.location.assign(buildSearchUrl(q));
-}
-
-btn.addEventListener('click', (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  submitSearchBoxQuery();
 });
 
 input.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
+
   e.preventDefault();
   e.stopPropagation();
-  submitSearchBoxQuery();
+
+  const q = input.value.trim();
+  if (!q) return;
+
+  if (isSearchPage) {
+    const currentQ = (new URLSearchParams(location.search).get('q') || '').trim();
+
+    if (currentQ === q) {
+      runSearch(q, activeType);
+      return;
+    }
+
+    const nextType = 'all';
+    activeType = nextType;
+    updateSearchTabsActive();
+    signalSanmaruSearch(q, nextType, 'search-page-new-query');
+
+    const u = new URL(location.href);
+    u.searchParams.set('q', q);
+    u.searchParams.set('page', '1');
+    u.searchParams.set('block', '0');
+    u.searchParams.delete('type');
+    u.searchParams.set('residentFirst', '1');
+    u.searchParams.set('sanmaruFirst', '1');
+    u.searchParams.set('residentSwitch', '1');
+
+    const safeReturnUrl = getSafeReturnUrl();
+    if (safeReturnUrl) {
+      u.searchParams.set('from', safeReturnUrl);
+    }
+
+    history.pushState({ q, type: nextType, from: safeReturnUrl || '' }, '', u.toString());
+    runSearch(q, nextType);
+    return;
+  }
+
+  window.location.assign(buildSearchUrl(q));
 });
 
 function unwrap(x){
@@ -656,7 +669,7 @@ function normalizeSearchPayload(payload){
   return out;
 }
 
-async function fetchSearch(q, type = activeType, opts = {}){
+async function fetchSearch(q, type = activeType){
   const safeType = normalizeSearchType(type);
   signalSanmaruSearch(q, safeType, 'maru-search-fetch');
 
@@ -674,15 +687,10 @@ async function fetchSearch(q, type = activeType, opts = {}){
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
-  if (opts && opts.fresh) {
-    sp.set('freshSearch', '1');
-    sp.set('resetScope', '1');
-    sp.set('searchSession', String(opts.runId || Date.now()));
-  }
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
   try {
-    const r = await fetch(url, { cache: 'no-store', signal: opts && opts.signal ? opts.signal : undefined });
+    const r = await fetch(url, { cache: 'no-store' });
     if (!r.ok) return { items: [], payload: null, pageItems: [], viewportSections: [] };
 
     const json = await r.json();
@@ -1921,43 +1929,25 @@ function drawPager(){
   }
 }
 
-async function runSearch(q, type = activeType, opts = {}){
+async function runSearch(q, type = activeType){
   const qq = (q || '').trim();
-  const runId = ++activeSearchRunId;
-
-  if (activeSearchAbort && typeof activeSearchAbort.abort === 'function') {
-    try { activeSearchAbort.abort(); } catch(e) {}
-  }
-  activeSearchAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-
   activeType = normalizeSearchType(type);
   updateSearchTabsActive();
-
   if (!qq){
-    resetSearchStateForNewQuery();
+    allItems = [];
+    results.innerHTML = '';
+    clearPager();
     status.textContent = '';
     return;
   }
 
-  // 새 검색은 이전 결과 범위 안에서 필터링하지 않는다. 먼저 기존 결과 상태를 비운 뒤 maru-search에 신규 요청한다.
-  resetSearchStateForNewQuery();
-  lastQuery = qq;
-  lastType = activeType;
-
-  signalSanmaruSearch(qq, activeType, opts.fresh ? 'fresh-run-search' : 'run-search');
+  signalSanmaruSearch(qq, activeType, 'run-search');
   status.textContent = `Searching ${getTypeLabel(activeType)} for "${qq}"...`;
   renderSkeleton();
+  clearPager();
 
   try {
-    const searchPack = await fetchSearch(qq, activeType, {
-      fresh: !!opts.fresh,
-      runId,
-      signal: activeSearchAbort && activeSearchAbort.signal
-    });
-
-    // 늦게 도착한 이전 검색 응답은 새 검색 결과를 덮어쓰지 못하게 한다.
-    if (runId !== activeSearchRunId) return;
-
+    const searchPack = await fetchSearch(qq, activeType);
     lastSearchPayload = searchPack && searchPack.payload || null;
     const items = Array.isArray(searchPack) ? searchPack : (searchPack && searchPack.items) || [];
     const filteredItems = filterSearchResultItems(items || []);
@@ -1974,7 +1964,6 @@ async function runSearch(q, type = activeType, opts = {}){
 
     if (!allItems.length) {
       results.innerHTML = '';
-      clearPager();
       status.textContent = `No results for "${qq}"`;
       return;
     }
@@ -1983,10 +1972,10 @@ async function runSearch(q, type = activeType, opts = {}){
     status.textContent = `${allItems.length} results for "${qq}" · ${getTypeLabel(activeType)}`;
 
   } catch(e){
-    if (e && e.name === 'AbortError') return;
-    if (runId !== activeSearchRunId) return;
     console.error(e);
-    resetSearchStateForNewQuery();
+    allItems = [];
+    results.innerHTML = '';
+    clearPager();
     status.textContent = `No results for "${qq}"`;
   }
 }
@@ -2001,9 +1990,7 @@ async function runSearch(q, type = activeType, opts = {}){
     const q = input.value.trim();
     if (!q) return;
 
-    if (typeof window.signalSanmaruSearch === 'function') {
-      window.signalSanmaruSearch(q, 'all', 'global-search-handoff');
-    }
+    signalSanmaruSearch(q, 'all', 'global-search-handoff');
 
     const u = new URL('/search.html', location.origin);
     u.searchParams.set('q', q);
