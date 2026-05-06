@@ -27,7 +27,7 @@ const path = require("path");
 let LogosEngineClass = null;
 try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) { LogosEngineClass = null; }
 
-const VERSION = "sanmaru-engine-v2.7.0-pipeline-os-supply";
+const VERSION = "sanmaru-engine-v2.6.1-engine-upload-lifecycle";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 1000;
@@ -786,7 +786,7 @@ function routeProviderSearchUrl(provider, q){
   if(p.includes("twitter") || p.includes("x-")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:x.com OR site:twitter.com");
   if(p.includes("threads")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:threads.net");
   if(p.includes("official") || p.includes("government")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " official government");
-  if(p.includes("wiki")) return "https://ko.wikipedia.org/w/index.php?search=" + enc;
+  if(p.includes("wiki")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " wikipedia encyclopedia");
   if(p.includes("academic") || p.includes("research")) return "https://scholar.google.com/scholar?q=" + enc;
   return "https://www.google.com/search?q=" + enc;
 }
@@ -846,8 +846,7 @@ function buildOpeningFallbackCards(q, opts){
     ["tiktok", "TikTok public route", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:tiktok.com"), "sns"],
     ["x_twitter", "X/Twitter public route", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:x.com OR site:twitter.com"), "sns"],
     ["threads", "Threads public route", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:threads.net"), "sns"],
-    ["wikipedia", "Wikipedia / knowledge", "https://ko.wikipedia.org/w/index.php?search=" + enc, "knowledge"],
-    ["namuwiki", "Namuwiki / knowledge", "https://namu.wiki/Search?q=" + enc, "knowledge"],
+    ["wiki", "Wiki / knowledge", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " wikipedia encyclopedia"), "knowledge"],
     ["scholar", "Academic / research", "https://scholar.google.com/scholar?q=" + enc, "academic"],
     ["public_data", "Public data", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " public data government dataset"), "public_data"]
   ];
@@ -1544,10 +1543,8 @@ async function fetchJsonAllowlisted(url, options, timeoutMs){
     "openapi.naver.com",
     "www.googleapis.com",
     "api.bing.microsoft.com",
-    "ko.wikipedia.org",
     "en.wikipedia.org",
-    "ja.wikipedia.org",
-    "zh.wikipedia.org"
+    "ko.wikipedia.org"
   ];
   if(!allowed.includes(u.hostname)) throw new Error("blocked_host");
 
@@ -1666,8 +1663,8 @@ async function callSearchBank(ctx){
 }
 
 async function naverGeneric(ctx, endpoint, source, type, display, start){
-  const id = sanmaruEnvFirst('NAVER_API_KEY','NAVER_CLIENT_ID');
-  const secret = sanmaruEnvFirst('NAVER_CLIENT_SECRET','NAVER_API_SECRET');
+  const id = process.env.NAVER_API_KEY;
+  const secret = process.env.NAVER_CLIENT_SECRET;
   if(!id || !secret) return null;
   const url = "https://openapi.naver.com/v1/search/" + endpoint +
     "?query=" + encodeURIComponent(ctx.q) +
@@ -1698,8 +1695,8 @@ async function naverGeneric(ctx, endpoint, source, type, display, start){
 }
 
 async function naverImage(ctx){
-  const id = sanmaruEnvFirst('NAVER_API_KEY','NAVER_CLIENT_ID');
-  const secret = sanmaruEnvFirst('NAVER_CLIENT_SECRET','NAVER_API_SECRET');
+  const id = process.env.NAVER_API_KEY;
+  const secret = process.env.NAVER_CLIENT_SECRET;
   if(!id || !secret) return null;
   const url = "https://openapi.naver.com/v1/search/image.json?query=" + encodeURIComponent(ctx.q) + "&display=" + Math.min(ctx.deep ? 60 : 30, 100) + "&start=1&sort=sim";
   const data = await fetchJsonAllowlisted(url, { headers: { "X-Naver-Client-Id": id, "X-Naver-Client-Secret": secret } }, 3000);
@@ -1711,8 +1708,8 @@ async function naverImage(ctx){
 }
 
 async function googleWeb(ctx){
-  const key = sanmaruEnvFirst('GOOGLE_API_KEY','GOOGLE_SEARCH_API_KEY');
-  const cx = sanmaruEnvFirst('GOOGLE_CSE_ID','GOOGLE_CX','GOOGLE_SEARCH_ENGINE_ID');
+  const key = process.env.GOOGLE_API_KEY;
+  const cx = process.env.GOOGLE_CSE_ID;
   if(!key || !cx) return null;
   const url = "https://www.googleapis.com/customsearch/v1?key=" + encodeURIComponent(key) + "&cx=" + encodeURIComponent(cx) + "&q=" + encodeURIComponent(ctx.q) + "&num=" + Math.min(ctx.deep ? 10 : 6, 10) + "&start=1&gl=us";
   const data = await fetchJsonAllowlisted(url, null, 3200);
@@ -1726,8 +1723,8 @@ async function googleWeb(ctx){
 }
 
 async function googleImage(ctx){
-  const key = sanmaruEnvFirst('GOOGLE_API_KEY','GOOGLE_SEARCH_API_KEY');
-  const cx = sanmaruEnvFirst('GOOGLE_CSE_ID','GOOGLE_CX','GOOGLE_SEARCH_ENGINE_ID');
+  const key = process.env.GOOGLE_API_KEY;
+  const cx = process.env.GOOGLE_CSE_ID;
   if(!key || !cx) return null;
   const url = "https://www.googleapis.com/customsearch/v1?key=" + encodeURIComponent(key) + "&cx=" + encodeURIComponent(cx) + "&q=" + encodeURIComponent(ctx.q) + "&searchType=image&num=" + Math.min(ctx.deep ? 10 : 6, 10) + "&start=1";
   const data = await fetchJsonAllowlisted(url, null, 3200);
@@ -1738,7 +1735,7 @@ async function googleImage(ctx){
 }
 
 async function bingWeb(ctx){
-  const key = sanmaruEnvFirst('BING_API_KEY','BING_SEARCH_API_KEY','AZURE_BING_SEARCH_API_KEY');
+  const key = process.env.BING_API_KEY;
   if(!key) return null;
   const url = "https://api.bing.microsoft.com/v7.0/search?q=" + encodeURIComponent(ctx.q) + "&count=" + Math.min(ctx.deep ? 40 : 20, 50) + "&offset=0";
   const data = await fetchJsonAllowlisted(url, { headers: { "Ocp-Apim-Subscription-Key": key } }, 3200);
@@ -1746,7 +1743,7 @@ async function bingWeb(ctx){
 }
 
 async function youtube(ctx){
-  const key = sanmaruEnvFirst('YOUTUBE_API_KEY','GOOGLE_API_KEY');
+  const key = process.env.YOUTUBE_API_KEY;
   if(!key) return null;
   const url = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=" + Math.min(ctx.deep ? 35 : 18, 50) + "&q=" + encodeURIComponent(ctx.q) + "&key=" + encodeURIComponent(key);
   const data = await fetchJsonAllowlisted(url, null, 3600);
@@ -1761,11 +1758,89 @@ async function youtube(ctx){
   }).filter(Boolean);
 }
 
+
+async function wikipediaSearch(ctx){
+  const lang = /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(s(ctx.q)) ? "ko" : "en";
+  const host = lang === "ko" ? "ko.wikipedia.org" : "en.wikipedia.org";
+  const url = "https://" + host + "/w/api.php?action=query&list=search&format=json&origin=*&srlimit=" + Math.min(ctx.deep ? 20 : 10, 20) + "&srsearch=" + encodeURIComponent(ctx.q);
+  const data = await fetchJsonAllowlisted(url, null, 2600);
+  const rows = data && data.query && Array.isArray(data.query.search) ? data.query.search : [];
+  return rows.map(row => {
+    const title = stripHtml(row.title || ctx.q);
+    const pageUrl = "https://" + host + "/wiki/" + encodeURIComponent(title.replace(/\s+/g, "_"));
+    return canonicalItem({
+      title,
+      url: pageUrl,
+      link: pageUrl,
+      summary: stripHtml(row.snippet || ""),
+      snippet: stripHtml(row.snippet || ""),
+      type:"knowledge",
+      mediaType:"article",
+      source: lang === "ko" ? "wikipedia_ko" : "wikipedia_en",
+      provider:"wikipedia",
+      sourceTrust:0.78,
+      payload:{ source:"wikipedia", lang, pageid: row.pageid }
+    }, ctx.q, "wikipedia");
+  });
+}
+
+function buildPublicKnowledgePortalCards(q, ctx){
+  const enc = encodeURIComponent(q || "");
+  const g = (suffix) => "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " " + suffix);
+  const cards = [
+    ["official-google", "공식/권위", g("official site government"), "official", 0.58],
+    ["government-google", "정부/공공", g("government public office"), "official", 0.57],
+    ["google-maps", "Google Maps", "https://www.google.com/maps/search/" + enc, "map", 0.56],
+    ["naver-map", "Naver Map", "https://map.naver.com/p/search/" + enc, "map", 0.56],
+    ["wikipedia-ko", "위키백과", "https://ko.wikipedia.org/w/index.php?search=" + enc, "knowledge", 0.55],
+    ["wikipedia-en", "Wikipedia", "https://en.wikipedia.org/w/index.php?search=" + enc, "knowledge", 0.54],
+    ["namuwiki", "나무위키", "https://namu.wiki/Search?q=" + enc, "knowledge", 0.50],
+    ["google-news", "Google News", "https://news.google.com/search?q=" + enc, "news", 0.52],
+    ["naver-news", "Naver News", "https://search.naver.com/search.naver?where=news&query=" + enc, "news", 0.52],
+    ["bing-news", "Bing News", "https://www.bing.com/news/search?q=" + enc, "news", 0.48],
+    ["youtube", "YouTube", "https://www.youtube.com/results?search_query=" + enc, "video", 0.50],
+    ["google-video", "Google Video", g("video youtube"), "video", 0.47],
+    ["google-image", "Google Images", "https://www.google.com/search?tbm=isch&q=" + enc, "image", 0.49],
+    ["naver-image", "Naver Image", "https://search.naver.com/search.naver?where=image&query=" + enc, "image", 0.49],
+    ["bing-image", "Bing Images", "https://www.bing.com/images/search?q=" + enc, "image", 0.47],
+    ["naver-blog", "Naver Blog", "https://search.naver.com/search.naver?where=blog&query=" + enc, "blog", 0.48],
+    ["naver-cafe", "Naver Cafe", "https://search.naver.com/search.naver?where=article&query=" + enc, "cafe", 0.47],
+    ["google-blog", "Blog/Web", g("blog review"), "blog", 0.45],
+    ["instagram", "Instagram", g("site:instagram.com"), "sns", 0.44],
+    ["facebook", "Facebook", g("site:facebook.com"), "sns", 0.44],
+    ["tiktok", "TikTok", g("site:tiktok.com"), "sns", 0.44],
+    ["x-twitter", "X/Twitter", g("site:x.com OR site:twitter.com"), "sns", 0.43],
+    ["threads", "Threads", g("site:threads.net"), "sns", 0.42],
+    ["linkedin", "LinkedIn", g("site:linkedin.com"), "sns", 0.41],
+    ["naver-total", "Naver 통합검색", "https://search.naver.com/search.naver?query=" + enc, "web", 0.48],
+    ["google-total", "Google 통합검색", "https://www.google.com/search?q=" + enc, "web", 0.48],
+    ["bing-total", "Bing 검색", "https://www.bing.com/search?q=" + enc, "web", 0.46],
+    ["duckduckgo", "DuckDuckGo", "https://duckduckgo.com/?q=" + enc, "web", 0.42],
+    ["yahoo", "Yahoo", "https://search.yahoo.com/search?p=" + enc, "web", 0.41],
+    ["academic", "학술/논문", "https://scholar.google.com/scholar?q=" + enc, "academic", 0.42],
+    ["books", "도서", g("book isbn library"), "book", 0.41],
+    ["shopping", "상품/쇼핑", "https://search.shopping.naver.com/search/all?query=" + enc, "shopping", 0.40],
+    ["tour", "관광/여행", g("tour travel attraction official"), "tour", 0.42],
+    ["restaurant", "맛집/지역", g("restaurant local review"), "map", 0.40],
+    ["public-data", "공공데이터", g("public data dataset government"), "public_data", 0.40]
+  ];
+  return cards.map(spec => canonicalItem({
+    id:"sanmaru-pipeline-portal-" + stableHash([q, spec[0]].join("|")),
+    title:"[Pipeline] " + q + " · " + spec[1],
+    summary:"산마루 Pipeline OS가 즉시 열 수 있는 공개/허가 정보 통로입니다.",
+    url:spec[2], link:spec[2], source:"sanmaru_pipeline_" + spec[0], provider:spec[0], type:spec[3], searchCategory:spec[3], mediaType:"article", score:spec[4], sanmaruPipelinePortal:true
+  }, q, "sanmaru-pipeline-portal"));
+}
+
+
 async function callOptionalModuleAdapter(ctx, name, modulePath, runParams, timeoutMs){
   const started = nowMs();
   try{
     const raw = ctx.raw || {};
-    const disabledByRequest = truthy(raw["skip" + name]) || truthy(raw["disable" + name]) || truthy(raw["no" + name]);
+    const lowerName = low(name);
+    const disabledByRequest = truthy(raw["skip" + name]) || truthy(raw["disable" + name]) || truthy(raw["no" + name]) ||
+      truthy(raw["skip" + lowerName]) || truthy(raw["disable" + lowerName]) || truthy(raw["no" + lowerName]) ||
+      truthy(raw["skip" + name.charAt(0).toUpperCase() + name.slice(1)]) || truthy(raw["disable" + name.charAt(0).toUpperCase() + name.slice(1)]) || truthy(raw["no" + name.charAt(0).toUpperCase() + name.slice(1)]);
     if(disabledByRequest){
       return { trace: adapterResult(name, "disabled-by-request", started, []), items: [] };
     }
@@ -1800,41 +1875,6 @@ async function callOptionalModuleAdapter(ctx, name, modulePath, runParams, timeo
   }
 }
 
-function hasDirectPipelineEnv(){
-  return !!(
-    (sanmaruEnvHas('NAVER_API_KEY','NAVER_CLIENT_ID') && sanmaruEnvHas('NAVER_CLIENT_SECRET','NAVER_API_SECRET')) ||
-    (sanmaruEnvHas('GOOGLE_API_KEY','GOOGLE_SEARCH_API_KEY') && sanmaruEnvHas('GOOGLE_CSE_ID','GOOGLE_CX','GOOGLE_SEARCH_ENGINE_ID')) ||
-    sanmaruEnvHas('BING_API_KEY','BING_SEARCH_API_KEY','AZURE_BING_SEARCH_API_KEY') ||
-    sanmaruEnvHas('YOUTUBE_API_KEY','GOOGLE_API_KEY')
-  );
-}
-
-async function wikipediaSearch(ctx){
-  const q = s(ctx && ctx.q).trim();
-  if(!q) return [];
-  const lang = /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(q) ? 'ko' : (s(ctx.lang).toLowerCase().startsWith('ja') ? 'ja' : (s(ctx.lang).toLowerCase().startsWith('zh') ? 'zh' : 'en'));
-  const host = lang + '.wikipedia.org';
-  const url = 'https://' + host + '/w/api.php?action=query&list=search&srsearch=' + encodeURIComponent(q) + '&format=json&srlimit=' + Math.min(ctx.deep ? 20 : 10, 20);
-  const data = await fetchJsonAllowlisted(url, null, 2600);
-  const rows = data && data.query && Array.isArray(data.query.search) ? data.query.search : [];
-  return rows.map(row => {
-    const title = stripHtml(row.title || q);
-    const pageUrl = 'https://' + host + '/wiki/' + encodeURIComponent(title.replace(/ /g, '_'));
-    return canonicalItem({
-      title,
-      url: pageUrl,
-      link: pageUrl,
-      summary: stripHtml(row.snippet || ''),
-      snippet: stripHtml(row.snippet || ''),
-      type:'knowledge',
-      mediaType:'article',
-      source:'wikipedia',
-      provider:'wikipedia',
-      payload:{ source:'wikipedia', pageid:row.pageid, wordcount:row.wordcount, timestamp:row.timestamp }
-    }, q, 'wikipedia');
-  });
-}
-
 const ADAPTERS = [
   { name:"naver-web", timeoutMs:3200, match:ctx => ctx.externalAllowed, access:ctx => naverGeneric(ctx, "webkr.json", "naver", "web", ctx.deep ? 100 : 100, 1) },
   { name:"naver-news", timeoutMs:3200, match:ctx => ctx.externalAllowed, access:ctx => naverGeneric(ctx, "news.json", "naver_news", "news", ctx.deep ? 100 : 80, 1) },
@@ -1842,11 +1882,11 @@ const ADAPTERS = [
   { name:"naver-cafe", timeoutMs:3200, match:ctx => ctx.externalAllowed, access:ctx => naverGeneric(ctx, "cafearticle.json", "naver_cafe", "cafe", ctx.deep ? 100 : 60, 1) },
   { name:"naver-local", timeoutMs:3000, match:ctx => ctx.externalAllowed, access:ctx => naverGeneric(ctx, "local.json", "naver_local", "local", 5, 1) },
   { name:"naver-book", timeoutMs:3200, match:ctx => ctx.externalAllowed, access:ctx => naverGeneric(ctx, "book.json", "naver_book", "book", ctx.deep ? 100 : 60, 1) },
-  { name:"wikipedia", timeoutMs:2800, match:ctx => ctx.externalAllowed, access:ctx => wikipediaSearch(ctx) },
   { name:"naver-image", timeoutMs:3200, match:ctx => ctx.externalAllowed && !ctx.noMedia, access:ctx => naverImage(ctx) },
   { name:"google-web", timeoutMs:3400, match:ctx => ctx.externalAllowed, access:ctx => googleWeb(ctx) },
   { name:"google-image", timeoutMs:3400, match:ctx => ctx.externalAllowed && !ctx.noMedia, access:ctx => googleImage(ctx) },
   { name:"bing-web", timeoutMs:3400, match:ctx => ctx.externalAllowed, access:ctx => bingWeb(ctx) },
+  { name:"wikipedia", timeoutMs:2800, match:ctx => ctx.externalAllowed, access:ctx => wikipediaSearch(ctx) },
   { name:"youtube", timeoutMs:3800, match:ctx => ctx.externalAllowed && !ctx.noMedia, access:ctx => youtube(ctx) },
 ];
 
@@ -2031,11 +2071,7 @@ function parseCtx(input, maybeCtx){
     start: clampInt(firstNonEmpty(ctx.start, raw.start, qs.start), 1, 1, 1000000),
     candidatePoolTarget: clampInt(firstNonEmpty(ctx.candidatePool, raw.candidatePool, qs.candidatePool, ctx.candidatePoolTarget, raw.candidatePoolTarget, qs.candidatePoolTarget, wideExpansion ? DEFAULT_CANDIDATE_POOL_TARGET : "", ctx.limit, raw.limit, qs.limit), DEFAULT_CANDIDATE_POOL_TARGET, 1, MAX_LIMIT),
     expansion: expansionRaw || (wideExpansion ? "wide" : "balanced"),
-    directExternalAllowed: !externalOff && !truthy(ctx.noDirectExternal || raw.noDirectExternal || qs.noDirectExternal || ctx.disableDirectExternal || raw.disableDirectExternal || qs.disableDirectExternal || process.env.SANMARU_DISABLE_DIRECT_EXTERNAL) && (
-      truthy(ctx.directExternal || raw.directExternal || qs.directExternal || ctx.sanmaruDirectExternal || raw.sanmaruDirectExternal || qs.sanmaruDirectExternal || process.env.SANMARU_DIRECT_EXTERNAL) ||
-      truthy(ctx.pipelineOS || raw.pipelineOS || qs.pipelineOS || ctx.openGate || raw.openGate || qs.openGate) ||
-      hasDirectPipelineEnv()
-    ),
+    directExternalAllowed: truthy(ctx.directExternal || raw.directExternal || qs.directExternal || ctx.sanmaruDirectExternal || raw.sanmaruDirectExternal || qs.sanmaruDirectExternal || ctx.pipelineOS || raw.pipelineOS || qs.pipelineOS || ctx.pipelineSupply || raw.pipelineSupply || qs.pipelineSupply || ctx.openGate || raw.openGate || qs.openGate || process.env.SANMARU_DIRECT_EXTERNAL),
     requestId: firstNonEmpty(ctx.requestId, stableHash([clean.value, nowMs(), Math.random()].join("|")))
   });
 }
@@ -2061,7 +2097,7 @@ async function runSanmaru(input, maybeCtx){
   globalState.cache = globalState.cache || new Map();
   globalState.inflight = globalState.inflight || new Map();
 
-  const instantSupplyDisabled = truthy(ctx.disableInstantSupply || ctx.raw.disableInstantSupply || ctx.raw.noInstantSupply || ctx.raw.noInstant || ctx.raw.waitProviders || ctx.raw.waitExternal || ctx.raw.forceProviderRefresh || ctx.raw.deepRefresh || ctx.raw.live);
+  const instantSupplyDisabled = truthy(ctx.disableInstantSupply || ctx.raw.disableInstantSupply || ctx.raw.noInstantSupply || ctx.raw.noInstant || ctx.raw.waitProviders || ctx.raw.waitExternal || ctx.raw.forceWide || ctx.raw.forceProviderRefresh || ctx.raw.deepRefresh || ctx.raw.live || ctx.pipelineOS || ctx.raw.pipelineOS || ctx.openGate || ctx.raw.openGate || ctx.pipelineSupply || ctx.raw.pipelineSupply);
   const sanmaruInstantSupply = !instantSupplyDisabled && !ctx.deep && !ctx.externalForced;
 
   if(sanmaruInstantSupply){
@@ -2087,44 +2123,36 @@ async function runSanmaru(input, maybeCtx){
       delete copy._sanmaruRejectedReason;
       return copy;
     });
-    const realInstantCount = instantItems.filter(it => it && !it.sanmaruRouteCard && !it.sanmaruOpeningCard).length;
-    const minImmediateReal = Math.max(Math.min(ctx.perPage || DEFAULT_VISIBLE_PER_PAGE, 25), 12);
-    if(realInstantCount >= minImmediateReal || truthy(ctx.raw.instantOnly || ctx.raw.cacheOnly || ctx.raw.sanmaruFastOnly)){
-      const result = Object.assign({}, supplied, {
-        source: instantItems.length ? "sanmaru-instant-supply" : null,
-        items: instantItems,
-        results: instantItems,
-        meta: Object.assign({}, supplied.meta || {}, {
+    const result = Object.assign({}, supplied, {
+      source: instantItems.length ? "sanmaru-instant-supply" : null,
+      items: instantItems,
+      results: instantItems,
+      meta: Object.assign({}, supplied.meta || {}, {
+        count: instantItems.length,
+        requestedLimit: ctx.limit,
+        finalTarget,
+        elapsedMs: nowMs() - engineStarted,
+        defaultInstantSupply:true,
+        mode:"sanmaru-instant-resident-index-supply",
+        searchExecutionOwner:"sanmaru",
+        maruSearchRole:"gateway-body-render-only",
+        doesNotCallExternal:true,
+        directExternalAdaptersEnabled:false,
+        routePlan: supplied.routePlan || buildRoutePlanForQuery(ctx.q, { searchType:ctx.searchType, lang:ctx.lang }),
+        logosGuard,
+        health: healthSnapshot(),
+        cache:{ hit:false, key:null, policy:"instant-supply-before-wide-refresh" },
+        external:{ allowed:false, forced:false, deep:false, selected:[], trace:[] },
+        trace:[].concat((supplied.meta && supplied.meta.trace) || [], [{
+          name:"sanmaru-instant-supply",
+          status: instantItems.length ? "ok" : "empty",
           count: instantItems.length,
-          realInstantCount,
-          requestedLimit: ctx.limit,
-          finalTarget,
-          elapsedMs: nowMs() - engineStarted,
-          defaultInstantSupply:true,
-          mode:"sanmaru-instant-resident-index-supply",
-          searchExecutionOwner:"sanmaru",
-          maruSearchRole:"gateway-body-render-only",
-          doesNotCallExternal:true,
-          directExternalAdaptersEnabled:false,
-          routePlan: supplied.routePlan || buildRoutePlanForQuery(ctx.q, { searchType:ctx.searchType, lang:ctx.lang }),
-          logosGuard,
-          health: healthSnapshot(),
-          cache:{ hit:false, key:null, policy:"instant-supply-before-pipeline-refresh" },
-          external:{ allowed:false, forced:false, deep:false, selected:[], trace:[] },
-          trace:[].concat((supplied.meta && supplied.meta.trace) || [], [{
-            name:"sanmaru-instant-supply",
-            status: instantItems.length ? "ok" : "empty",
-            count: instantItems.length,
-            realCount: realInstantCount,
-            mode:"resident-index-route-map-no-provider-wait",
-            principle:"query-response-is-served-by-sanmaru-immediately-when-real-resident-data-covers-the-view; otherwise Sanmaru opens its own provider pipelines, not Maru Search rescan"
-          }])
-        })
-      });
-      return result;
-    }
-    ctx.instantSeedItems = instantItems;
-    ctx.instantSeedMeta = supplied.meta || {};
+          mode:"resident-index-route-map-no-provider-wait",
+          principle:"query-response-is-served-by-sanmaru-immediately; wide provider refresh is explicit/background-only"
+        }])
+      })
+    });
+    return result;
   }
 
   const cacheKey = stableHash([ctx.q, ctx.limit, ctx.candidatePoolTarget || "", ctx.page || 1, ctx.perPage || DEFAULT_VISIBLE_PER_PAGE, ctx.searchType, ctx.lang || "", searchAreaExpansionMode(ctx), ctx.deep ? "deep" : "normal", ctx.externalOff ? "off" : (ctx.externalForced ? "force" : "auto"), ctx.noMedia ? "nomedia" : "media"].join("|"));
@@ -2140,12 +2168,13 @@ async function runSanmaru(input, maybeCtx){
     ensureResidentBoot({ reason:"runSanmaru" });
     const trace = [];
     const items = [];
-    if(Array.isArray(ctx.instantSeedItems) && ctx.instantSeedItems.length){
-      items.push(...ctx.instantSeedItems);
-      trace.push(adapterResult("sanmaru-instant-seed", "seeded", engineStarted, ctx.instantSeedItems, { mode:"resident/index seed before provider pipelines" }));
-    }
     const routePlan = buildRoutePlanForQuery(ctx.q, { searchType:ctx.searchType, lang:ctx.lang });
     const residentFirst = residentCandidatesSync(ctx.q, { limit:ctx.candidatePoolTarget || ctx.limit, candidatePoolTarget:ctx.candidatePoolTarget, searchType:ctx.searchType, lang:ctx.lang });
+    const pipelinePortalCards = buildPublicKnowledgePortalCards(ctx.q, ctx);
+    if(pipelinePortalCards.length){
+      items.push(...pipelinePortalCards);
+      trace.push(adapterResult("sanmaru-pipeline-portals", "ok", engineStarted, pipelinePortalCards, { mode:"instant-open-information-pipelines", role:"pipeline-os-not-search-engine" }));
+    }
     if(residentFirst.length){
       items.push(...residentFirst);
       trace.push(adapterResult("sanmaru-resident-library", "ok", engineStarted, residentFirst, { mode:"resident-first-no-external", routeCategories:routePlan.categories }));
@@ -2184,26 +2213,16 @@ async function runSanmaru(input, maybeCtx){
       trace.push({
         name:"direct-external-adapters",
         status: ctx.externalAllowed
-          ? (ctx.directExternalAllowed ? "no-selected-adapters" : "direct-pipeline-disabled")
+          ? (ctx.directExternalAllowed ? "no-selected-adapters" : "covered-by-maru-search-wide-gateway")
           : "blocked-by-request",
         count:0,
-        mode:"sanmaru-pipeline-os-prefers-direct-provider-pipes"
+        mode:"single-controlled-platform-gateway-by-default"
       });
     }
 
-    const rawFlags = ctx.raw || {};
-    const needLegacyWideGateway = truthy(rawFlags.forceWide || rawFlags.waitProviders || rawFlags.waitExternal || rawFlags.useMaruWideGateway || rawFlags.legacyWideGateway) || (!selected.length && ctx.externalAllowed);
-    if(needLegacyWideGateway){
-      mountTasks.push(callMaruSearchWideGateway(ctx));
-    }else{
-      trace.push({ name:"maru-search-wide-gateway", status:"not-called-sanmaru-pipeline-os-primary", count:0, mode:"Maru Search reports open gate; Sanmaru opens provider pipelines directly" });
-    }
-    if(truthy(rawFlags.useCollector || rawFlags.collector || rawFlags.deepCollector)){
-      mountTasks.push(callOptionalModuleAdapter(ctx, "collector", "./collector", { useCollector:"1" }, ctx.deep ? 4200 : 3000));
-    }
-    if(truthy(rawFlags.usePlanetary || rawFlags.planetary || rawFlags.federation)){
-      mountTasks.push(callOptionalModuleAdapter(ctx, "planetary", "./planetary-data-connector", { usePlanetary:true, federation:"on" }, ctx.deep ? 4600 : 3200));
-    }
+    mountTasks.push(callMaruSearchWideGateway(ctx));
+    mountTasks.push(callOptionalModuleAdapter(ctx, "collector", "./collector", { useCollector:"1" }, ctx.deep ? 4200 : 3000));
+    mountTasks.push(callOptionalModuleAdapter(ctx, "planetary", "./planetary-data-connector", { usePlanetary:true, federation:"on" }, ctx.deep ? 4600 : 3200));
 
     const settled = await Promise.allSettled(mountTasks);
     for(const r of settled){
@@ -2269,7 +2288,12 @@ async function runSanmaru(input, maybeCtx){
         logosGuard,
         openingSignals: openingSignalsSnapshot(),
         role: "global-virtual-information-library-mount-engine",
-        platformRole: "Sanmaru is the authorized global information library mount layer; Maru Search is the platform information road/gateway",
+        pipelineOS: {
+          enabled: true,
+          mode: ctx.directExternalAllowed ? "open-pipeline-supply" : "resident-index-supply",
+          principle: "Sanmaru opens authorized information pipelines; it does not behave as a separate crawler/search-engine."
+        },
+        platformRole: "Sanmaru is the authorized global information pipeline OS; Maru Search is the gatekeeper/gateway",
         mountRegistry: mountRegistrySnapshot(),
         cache:{ hit:false, key:cacheKey },
         searchBankIndex:{ used:true, status:indexRes.trace.status, count:indexRes.trace.count, latency:indexRes.trace.latency },
@@ -2413,6 +2437,10 @@ async function handler(event){
   if(action === "category-map" || action === "category-brain") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"category-map", categories:categoryMapSnapshot(), aliases:PROVIDER_CATEGORY_ALIASES, capabilities:PROVIDER_CAPABILITY_MAP, logosGuard:logosEvaluate([{ type:"category_brain", intent:"stewardship", truthConfidence:0.95 }], "category-map"), resident:residentBootSnapshot() });
   if(action === "route-plan") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"route-plan", routePlan:residentRoutePlanFor(firstNonEmpty(merged.q, merged.query), { searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale) }), resident:touchResidentSwitch({ reason:"route-plan", q:firstNonEmpty(merged.q, merged.query) }) });
   if(action === "supply" || action === "resident-supply") return ok(supplyResidentSync({ q:firstNonEmpty(merged.q, merged.query) }, { reason:"api-supply", limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget), candidatePoolTarget:firstNonEmpty(merged.candidatePool, merged.candidatePoolTarget), searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), page:firstNonEmpty(merged.page, merged.p, merged.start) }));
+  if(action === "pipeline-supply" || action === "open-gate" || action === "pipeline-os") {
+    const res = await runSanmaru({ event:event || {}, raw:Object.assign({}, merged, { pipelineOS:"1", openGate:"1", directExternal:"1", external:"force", noMaruSearch:"1", skipMaruSearch:"1", noCollector:"1", skipCollector:"1", noPlanetary:"1", skipPlanetary:"1" }), q:firstNonEmpty(merged.q, merged.query), limit:merged.limit, type:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), candidatePool:firstNonEmpty(merged.candidatePool, merged.candidatePoolTarget), external:"force", directExternal:"1", pipelineOS:"1", openGate:"1" });
+    return ok(res);
+  }
   if(action === "supply-category" || action === "resident-supply-category") return ok(supplyCategorySync({ q:firstNonEmpty(merged.q, merged.query), category:firstNonEmpty(merged.category, merged.type) }, { reason:"api-supply-category", category:firstNonEmpty(merged.category, merged.type), limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget), candidatePoolTarget:firstNonEmpty(merged.candidatePool, merged.candidatePoolTarget), searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), page:firstNonEmpty(merged.page, merged.p, merged.start) }));
   if(action === "deep-refresh" || action === "resident-refresh") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"deep-refresh", refresh:triggerDeepRefresh({ q:firstNonEmpty(merged.q, merged.query) }, { reason:"api-deep-refresh", searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget) }) });
 
