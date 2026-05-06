@@ -2274,6 +2274,314 @@ async function runSanmaru(input, maybeCtx){
   }
 }
 
+
+/* =========================================================
+   SANMARU FRONT CONTENT SUPPLY LAYER v1
+   ---------------------------------------------------------
+   Purpose:
+   - Search UI is not the only requester.
+   - Search Bank Engine / Snapshot builder / Global Insight can open a supply gate.
+   - Sanmaru translates page/section/slot needs into authorized pipelines and returns
+     SearchBank-ready real content cards.
+   - No test/sample data is created. Route/opening cards are excluded by default.
+========================================================= */
+
+const FRONT_SUPPLY_PROFILE_MAP = {
+  home:          { type:"web",      query:"global useful content official news media", category:"web" },
+  network:       { type:"shopping", query:"global product brand marketplace official site", category:"shopping" },
+  networkhub:    { type:"shopping", query:"global product brand marketplace official site", category:"shopping" },
+  distribution:  { type:"shopping", query:"recommended products shopping commerce", category:"shopping" },
+  distributionhub:{type:"shopping", query:"recommended products shopping commerce", category:"shopping" },
+  social:        { type:"sns",      query:"social media public posts creators video trends", category:"sns" },
+  socialnetwork: { type:"sns",      query:"social media public posts creators video trends", category:"sns" },
+  media:         { type:"video",    query:"latest video media entertainment content", category:"video" },
+  mediahub:      { type:"video",    query:"latest video media entertainment content", category:"video" },
+  tour:          { type:"tour",     query:"travel tourism city attraction official guide", category:"tourism" },
+  tourism:       { type:"tour",     query:"travel tourism city attraction official guide", category:"tourism" },
+  donation:      { type:"news",     query:"global NGO charity donation public welfare news", category:"news" },
+  insight:       { type:"knowledge",query:"global insight analysis official public data", category:"knowledge" },
+  "global-insight": { type:"knowledge", query:"global insight analysis official public data", category:"knowledge" },
+  academic:      { type:"academic", query:"academic research paper library publication", category:"academic" },
+  literature:    { type:"book",     query:"literature books author publication", category:"book" }
+};
+
+const FRONT_SUPPLY_SECTION_ALIASES = {
+  recommend:"recommended products", recommendation:"recommended products", recommended:"recommended products",
+  sponsor:"sponsored products official brand", trending:"trending popular content", popular:"trending popular content",
+  new:"new arrivals latest", latest:"latest content", movie:"latest movie video", movies:"latest movies",
+  drama:"latest drama video", music:"music video", shorts:"shorts video", youtube:"youtube video",
+  instagram:"instagram public content", tiktok:"tiktok public video", facebook:"facebook public page",
+  x:"x twitter public posts", twitter:"x twitter public posts", wechat:"wechat public information", weibo:"weibo public information",
+  pinterest:"pinterest public images", reddit:"reddit public community", ngo:"ngo charity donation", mission:"mission charity",
+  volunteer:"volunteer public welfare", relief:"relief aid charity", education:"education public welfare", environment:"environment public welfare",
+  news:"news official reports", globalnews:"global news", map:"map local official place", local:"local map official place",
+  travel:"travel tourism", tour:"travel tourism", hotel:"hotel travel", food:"restaurant local food"
+};
+
+function frontSupplyKey(v){ return normalizeText(v).replace(/\s+/g, "").slice(0, 120); }
+
+function normalizeFrontPageName(v){
+  const raw = low(v).replace(/[\s_]+/g, "-");
+  const map = {
+    "network-hub":"networkhub", "market-hub":"networkhub", "distribution-hub":"distributionhub", "media-hub":"mediahub",
+    "social-network":"socialnetwork", "maru-global-insight":"global-insight", "literature-academic":"academic"
+  };
+  return map[raw] || raw || "home";
+}
+
+function inferFrontSupplyProfile(input, opts){
+  input = input || {}; opts = opts || {};
+  const rawPage = firstNonEmpty(input.page, input.frontPage, input.psomPage, input.targetPage, input.hub, opts.page, opts.frontPage, opts.psomPage, opts.targetPage, opts.hub);
+  const page = normalizeFrontPageName(rawPage || "home");
+  const section = firstNonEmpty(input.section, input.slot, input.psomKey, input.psom_key, input.area, input.block, opts.section, opts.slot, opts.psomKey, opts.psom_key, opts.area, opts.block);
+  const sectionKey = frontSupplyKey(section);
+  const base = FRONT_SUPPLY_PROFILE_MAP[page] || FRONT_SUPPLY_PROFILE_MAP.home;
+  let type = normalizeSearchType(firstNonEmpty(input.type, input.category, input.contentType, input.kind, opts.type, opts.category, opts.contentType, opts.kind, base.type));
+  const sectionText = normalizeText(section);
+  if(/movie|drama|video|youtube|shorts|music|media|영상|동영상|영화|드라마|뮤비/.test(sectionText)) type = "video";
+  else if(/image|photo|picture|pinterest|gallery|이미지|사진|갤러리/.test(sectionText)) type = "image";
+  else if(/product|shop|commerce|sponsor|recommend|상품|쇼핑|스폰서|추천/.test(sectionText)) type = "shopping";
+  else if(/tour|travel|hotel|food|map|local|관광|여행|지도|주소|맛집|호텔/.test(sectionText)) type = /map|local|지도|주소/.test(sectionText) ? "map" : "tour";
+  else if(/sns|social|instagram|tiktok|facebook|twitter|reddit|weibo|wechat|소셜|인스타|틱톡|페이스북/.test(sectionText)) type = "sns";
+  else if(/news|ngo|donation|relief|environment|education|뉴스|후원|기부|환경|교육/.test(sectionText)) type = "news";
+  else if(/book|literature|academic|paper|research|도서|문학|학술|논문/.test(sectionText)) type = /book|literature|도서|문학/.test(sectionText) ? "book" : "academic";
+
+  const topic = firstNonEmpty(input.topic, input.keyword, input.theme, input.q, input.query, opts.topic, opts.keyword, opts.theme, opts.q, opts.query);
+  const locale = firstNonEmpty(input.lang, input.uiLang, input.locale, opts.lang, opts.uiLang, opts.locale);
+  const region = firstNonEmpty(input.region, input.country, opts.region, opts.country);
+  const sectionAlias = FRONT_SUPPLY_SECTION_ALIASES[sectionKey] || sectionText;
+  const primaryQuery = compactSpaces([topic, sectionAlias, base.query, region].filter(Boolean).join(" ")) || base.query;
+
+  return {
+    page,
+    section:s(section || ""),
+    sectionKey,
+    type,
+    searchType:type,
+    category: type === "map" ? "map_local" : (type === "tour" ? "tourism" : type),
+    query:primaryQuery,
+    explicitTopic:topic,
+    lang:locale,
+    region,
+    target: firstNonEmpty(input.target, input.destination, opts.target, opts.destination, "search-bank"),
+    slotCount: clampInt(firstNonEmpty(input.count, input.slots, input.slotCount, input.limit, opts.count, opts.slots, opts.slotCount, opts.limit), 100, 1, MAX_LIMIT),
+    perSection: clampInt(firstNonEmpty(input.perSection, opts.perSection), 20, 1, 200)
+  };
+}
+
+function frontSupplyQueryVariants(profile){
+  const q = compactSpaces(profile.query || "");
+  const variants = [q];
+  const page = profile.page;
+  const sec = profile.section || "";
+  const langBoost = profile.lang ? " " + profile.lang : "";
+  if(profile.type === "shopping") variants.push(compactSpaces([sec, "best products official shopping price", profile.region].join(" ")));
+  if(profile.type === "video") variants.push(compactSpaces([sec, "youtube video official trailer media latest", profile.region].join(" ")));
+  if(profile.type === "image") variants.push(compactSpaces([sec, "high quality image photo gallery", profile.region].join(" ")));
+  if(profile.type === "tour" || profile.type === "map") variants.push(compactSpaces([sec, "official tourism map address attraction", profile.region].join(" ")));
+  if(profile.type === "sns") variants.push(compactSpaces([sec, "public social media creator post video", profile.region].join(" ")));
+  if(profile.type === "news") variants.push(compactSpaces([sec, "official news public report global", profile.region].join(" ")));
+  if(profile.type === "book" || profile.type === "academic") variants.push(compactSpaces([sec, "research library paper book official", profile.region].join(" ")));
+  variants.push(compactSpaces([page, sec, profile.type, "official" + langBoost].join(" ")));
+  return Array.from(new Set(variants.filter(Boolean))).slice(0, 4);
+}
+
+function frontSupplyGraphType(profile){
+  if(["shopping"].includes(profile.type)) return "commerce";
+  if(["video","image","sns"].includes(profile.type)) return "media";
+  if(["tour","map"].includes(profile.type)) return "region";
+  if(profile.page === "global-insight" || profile.page === "insight") return "insight";
+  return "knowledge";
+}
+
+function normalizeFrontSupplyItem(raw, profile, idx){
+  const item = canonicalItem(raw, profile.query, firstNonEmpty(raw && raw.source, raw && raw.provider, "sanmaru-front-supply"));
+  const id = firstNonEmpty(item.id, item.url, item.title, stableHash([profile.page, profile.sectionKey, idx, item.title, item.source].join("|")));
+  return Object.assign({}, item, {
+    id,
+    sanmaruFrontSupply:true,
+    supplyTarget:profile.target,
+    page: firstNonEmpty(item.page, profile.page),
+    section: firstNonEmpty(item.section, profile.section),
+    psom_key: firstNonEmpty(item.psom_key, item.psomKey, profile.sectionKey),
+    searchCategory: firstNonEmpty(item.searchCategory, profile.category, profile.type),
+    type: firstNonEmpty(item.type, profile.type),
+    contentType: profile.type,
+    bind:Object.assign({}, item.bind || {}, {
+      page:profile.page,
+      section:profile.section,
+      psom_key:profile.sectionKey,
+      target:profile.target,
+      graphType:frontSupplyGraphType(profile)
+    }),
+    meta:Object.assign({}, item.meta || {}, {
+      suppliedBy:"sanmaru",
+      supplyMode:"front-content-supply",
+      frontPage:profile.page,
+      frontSection:profile.section,
+      graphType:frontSupplyGraphType(profile)
+    })
+  });
+}
+
+function rankFrontSupplyItems(items, profile){
+  const seen = new Set();
+  const out = [];
+  for(const raw of Array.isArray(items) ? items : []){
+    if(!raw || typeof raw !== "object") continue;
+    if(raw.sanmaruRouteCard || raw.sanmaruOpeningCard || raw.sanmaruEmergencyDiscovery) continue;
+    const item = normalizeFrontSupplyItem(raw, profile, out.length);
+    const key = low(firstNonEmpty(item.url && item.url !== "#" ? item.url : "", item.id, [item.title,item.source,item.page,item.section,item.image,item.thumbnail].join("|")));
+    if(!key || seen.has(key)) continue;
+    seen.add(key);
+    let boost = 0;
+    const text = normalizeText([item.title,item.summary,item.description,item.source,item.type,item.searchCategory].join(" "));
+    if(profile.type && text.includes(normalizeText(profile.type))) boost += 1.2;
+    if(profile.section && text.includes(normalizeText(profile.section))) boost += 1.0;
+    if(item.thumbnail || item.image) boost += 0.4;
+    if(item.url && item.url !== "#") boost += 0.3;
+    if(/official|gov|go\.kr|공식|정부|기관/.test(text)) boost += 0.4;
+    out.push(Object.assign({}, item, { sanmaruSupplyScore:(item.sanmaruScore || item.score || 0) + boost }));
+  }
+  return out.sort((a,b)=> (b.sanmaruSupplyScore || 0) - (a.sanmaruSupplyScore || 0));
+}
+
+async function maybeWriteBackFrontSupply(profile, items, opts){
+  opts = opts || {};
+  if(!truthy(opts.writeBack || opts.sync || opts.commit || opts.toGraph || opts.searchBankSync)) return { used:false, status:"disabled", count:0 };
+  const started = nowMs();
+  try{
+    let mod = null;
+    try{ mod = require("./maru-searchbank-sync"); }catch(e){ mod = null; }
+    if(!mod || typeof mod.handler !== "function") return { used:true, status:"unavailable", count:0, latency:nowMs()-started };
+    let count = 0;
+    const graphType = frontSupplyGraphType(profile);
+    const subset = (Array.isArray(items) ? items : []).slice(0, clampInt(opts.writeBackLimit, 40, 1, 100));
+    for(const it of subset){
+      const payload = Object.assign({}, it, { type:graphType, topic:profile.sectionKey || profile.page, region:profile.region || undefined });
+      await withTimeout(mod.handler({ httpMethod:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(payload) }), 1200).catch(()=>null);
+      count++;
+    }
+    return { used:true, status:"ok", graph:graphType, count, latency:nowMs()-started };
+  }catch(e){ return { used:true, status:responseErrorCode(e), count:0, latency:nowMs()-started }; }
+}
+
+async function supplyFrontContent(input, opts){
+  const raw = Object.assign({}, input || {}, opts || {});
+  const started = nowMs();
+  const profile = inferFrontSupplyProfile(raw, opts || {});
+  const targetCount = profile.slotCount;
+  const queries = frontSupplyQueryVariants(profile);
+  const all = [];
+  const trace = [];
+
+  touchResidentSwitch({ reason:"front-content-supply", q:profile.query });
+
+  for(const query of queries){
+    const resident = supplyResidentSync({ q:query, query }, {
+      reason:"front-content-supply-resident",
+      limit:Math.max(targetCount, DEFAULT_LIMIT),
+      candidatePoolTarget:Math.max(targetCount * 3, DEFAULT_CANDIDATE_POOL_TARGET),
+      searchType:profile.searchType,
+      type:profile.searchType,
+      lang:profile.lang,
+      allowRouteCards:false,
+      noRouteCards:true,
+      allowOpeningCards:false,
+      noOpeningCards:true
+    });
+    const items = normalizeItemsFromResponse(resident);
+    all.push(...items);
+    trace.push({ name:"resident-front-supply", query, status:items.length ? "ok" : "empty", count:items.length });
+  }
+
+  let ranked = rankFrontSupplyItems(all, profile);
+  const forceRefresh = truthy(raw.forceRefresh || raw.refresh || raw.live || raw.useExternal || raw.deep || raw.needFresh);
+  const minimumNeed = Math.min(targetCount, Math.max(20, Math.ceil(targetCount * 0.35)));
+
+  if(forceRefresh || ranked.length < minimumNeed){
+    const runTasks = queries.slice(0, forceRefresh ? 4 : 2).map(query => runSanmaru({
+      q:query,
+      query,
+      raw:{
+        from:"front-content-supply",
+        page:profile.page,
+        section:profile.section,
+        target:profile.target,
+        disableInstantSupply:"1",
+        external:firstNonEmpty(raw.external, forceRefresh ? "force" : "auto"),
+        searchExpansion:"wide",
+        noAnalytics:"1",
+        noRevenue:"1"
+      },
+      type:profile.searchType,
+      searchType:profile.searchType,
+      lang:profile.lang,
+      limit:Math.max(targetCount, DEFAULT_LIMIT),
+      candidatePoolTarget:Math.min(MAX_LIMIT, Math.max(targetCount * 4, DEFAULT_CANDIDATE_POOL_TARGET)),
+      expansion:"wide",
+      directExternal:truthy(raw.directExternal || raw.sanmaruDirectExternal || process.env.SANMARU_DIRECT_EXTERNAL),
+      timeoutMs: forceRefresh ? DEEP_TIMEOUT_MS : DEFAULT_TIMEOUT_MS
+    }).catch(e => ({ status:"error", items:[], results:[], meta:{ error:responseErrorCode(e) } })));
+    const settled = await Promise.allSettled(runTasks);
+    for(let i=0;i<settled.length;i++){
+      const val = settled[i].status === "fulfilled" ? settled[i].value : null;
+      const items = normalizeItemsFromResponse(val);
+      all.push(...items);
+      trace.push({ name:"pipeline-front-supply", query:queries[i], status:items.length ? "ok" : (val && val.status || "empty"), count:items.length, error:val && val.meta && val.meta.error });
+    }
+    ranked = rankFrontSupplyItems(all, profile);
+  }
+
+  const finalItems = ranked.slice(0, targetCount);
+  absorbResidentItems(finalItems, { q:profile.query, searchType:profile.searchType, lang:profile.lang, source:"front-content-supply" });
+  const writeBack = await maybeWriteBackFrontSupply(profile, finalItems, raw);
+
+  return {
+    status:"ok",
+    engine:ENGINE_NAME,
+    version:VERSION,
+    action:"front-content-supply",
+    query:profile.query,
+    source:finalItems.length ? "sanmaru-front-supply" : null,
+    page:profile.page,
+    section:profile.section,
+    target:profile.target,
+    type:profile.type,
+    contentType:profile.type,
+    items:finalItems,
+    results:finalItems,
+    cards:finalItems,
+    supplyPackage:{
+      target:profile.target,
+      page:profile.page,
+      section:profile.section,
+      psom_key:profile.sectionKey,
+      graphType:frontSupplyGraphType(profile),
+      snapshotReady:true,
+      searchBankReady:true,
+      count:finalItems.length,
+      items:finalItems
+    },
+    meta:{
+      count:finalItems.length,
+      requestedCount:targetCount,
+      candidateCount:ranked.length,
+      queries,
+      profile,
+      routePlan:buildRoutePlanForQuery(profile.query, { searchType:profile.searchType, lang:profile.lang }),
+      sourceDiversity:sourceDiversity(finalItems),
+      categoryDiversity:categoryDiversity(finalItems),
+      writeBack,
+      resident:residentBootSnapshot(),
+      providerHealth:providerHealthSnapshot(),
+      elapsedMs:nowMs()-started,
+      principle:"Sanmaru supplies front-page/SearchBank/Insight content packages; Maru Search only opens the gate and forwards the request.",
+      trace
+    }
+  };
+}
+
 function healthSnapshot(){
   const circuits = {};
   for(const [k,v] of Object.entries(globalState.circuits || {})){
@@ -2347,6 +2655,7 @@ async function handler(event){
   if(action === "route-plan") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"route-plan", routePlan:residentRoutePlanFor(firstNonEmpty(merged.q, merged.query), { searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale) }), resident:touchResidentSwitch({ reason:"route-plan", q:firstNonEmpty(merged.q, merged.query) }) });
   if(action === "supply" || action === "resident-supply") return ok(supplyResidentSync({ q:firstNonEmpty(merged.q, merged.query) }, { reason:"api-supply", limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget), candidatePoolTarget:firstNonEmpty(merged.candidatePool, merged.candidatePoolTarget), searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), page:firstNonEmpty(merged.page, merged.p, merged.start) }));
   if(action === "supply-category" || action === "resident-supply-category") return ok(supplyCategorySync({ q:firstNonEmpty(merged.q, merged.query), category:firstNonEmpty(merged.category, merged.type) }, { reason:"api-supply-category", category:firstNonEmpty(merged.category, merged.type), limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget), candidatePoolTarget:firstNonEmpty(merged.candidatePool, merged.candidatePoolTarget), searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), page:firstNonEmpty(merged.page, merged.p, merged.start) }));
+  if(["front-supply","content-supply","slot-supply","snapshot-supply","searchbank-supply","insight-supply"].includes(action)) return ok(await supplyFrontContent(merged, { reason:"api-front-content-supply" }));
   if(action === "deep-refresh" || action === "resident-refresh") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"deep-refresh", refresh:triggerDeepRefresh({ q:firstNonEmpty(merged.q, merged.query) }, { reason:"api-deep-refresh", searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget) }) });
 
   const res = await runSanmaru({
@@ -2393,6 +2702,7 @@ module.exports = {
   touchResidentSwitch,
   supplyResidentSync,
   supplyCategorySync,
+  supplyFrontContent,
   triggerDeepRefresh,
   absorbResidentItems
 };
@@ -2412,6 +2722,7 @@ exports.providerHealthSnapshot = providerHealthSnapshot;
 exports.touchResidentSwitch = touchResidentSwitch;
 exports.supplyResidentSync = supplyResidentSync;
 exports.supplyCategorySync = supplyCategorySync;
+exports.supplyFrontContent = supplyFrontContent;
 exports.triggerDeepRefresh = triggerDeepRefresh;
 exports.absorbResidentItems = absorbResidentItems;
 try { ensureResidentBoot({ reason:"module-load" }); } catch(e) {}
