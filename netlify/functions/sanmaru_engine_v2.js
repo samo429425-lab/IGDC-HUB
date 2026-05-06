@@ -27,7 +27,7 @@ const path = require("path");
 let LogosEngineClass = null;
 try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) { LogosEngineClass = null; }
 
-const VERSION = "sanmaru-engine-v2.6.1-engine-upload-lifecycle";
+const VERSION = "sanmaru-engine-v2.7.0-global-pipeline-os";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 1000;
@@ -79,6 +79,16 @@ function ensureResidentState(){
       queryMap:new Map(),
       routeMap:new Map(),
       providerHealth:new Map(),
+      pipelineRegistry:new Map(),
+      pipelineHealth:new Map(),
+      geoRouteMatrix:null,
+      languageMatrix:null,
+      sourceTrustMatrix:null,
+      frontSlotProfiles:null,
+      supplyModeMap:null,
+      globalPipelineReady:false,
+      globalPipelineBootedAt:0,
+      globalPipelineVersion:null,
       learnedCategoryAliases:Object.create(null),
       lastError:null,
       engineIdentity:null,
@@ -380,6 +390,297 @@ const PROVIDER_CAPABILITY_MAP = {
   "wiki-knowledge": ["wiki","knowledge"]
 };
 
+
+
+/* =========================================================
+   SANMARU GLOBAL PIPELINE OS v2.7
+   ---------------------------------------------------------
+   Lightweight resident control layer. It does not store the
+   whole web. It keeps language/geo/category/source routes,
+   trust rules, front-slot supply profiles and health signals
+   ready so Maru Search can open the gate and receive a supply
+   package immediately.
+========================================================= */
+
+const SANMARU_GLOBAL_LANGUAGE_MATRIX = {
+  ko:{ name:"Korean", native:"한국어", dir:"ltr", regionHints:["KR"], routeBias:["naver","google","official-web","public-data"] },
+  en:{ name:"English", native:"English", dir:"ltr", regionHints:["US","GB","CA","AU","GLOBAL"], routeBias:["google","bing","duckduckgo","official-web"] },
+  zh:{ name:"Chinese Simplified", native:"中文", dir:"ltr", regionHints:["CN","SG"], routeBias:["baidu","google","bing","official-web"] },
+  zht:{ name:"Chinese Traditional", native:"繁體中文", dir:"ltr", regionHints:["TW","HK","MO"], routeBias:["google","bing","baidu","official-web"] },
+  ja:{ name:"Japanese", native:"日本語", dir:"ltr", regionHints:["JP"], routeBias:["google","yahoo","bing","official-web"] },
+  es:{ name:"Spanish", native:"Español", dir:"ltr", regionHints:["ES","MX","AR","CO","CL","PE"], routeBias:["google","bing","official-web"] },
+  fr:{ name:"French", native:"Français", dir:"ltr", regionHints:["FR","CA","BE","CH","CI","SN"], routeBias:["google","bing","official-web"] },
+  de:{ name:"German", native:"Deutsch", dir:"ltr", regionHints:["DE","AT","CH"], routeBias:["google","bing","official-web"] },
+  ru:{ name:"Russian", native:"Русский", dir:"ltr", regionHints:["RU","KZ","BY"], routeBias:["yandex","google","bing","official-web"] },
+  pt:{ name:"Portuguese", native:"Português", dir:"ltr", regionHints:["BR","PT","AO","MZ"], routeBias:["google","bing","official-web"] },
+  it:{ name:"Italian", native:"Italiano", dir:"ltr", regionHints:["IT","CH"], routeBias:["google","bing","official-web"] },
+  ar:{ name:"Arabic", native:"العربية", dir:"rtl", regionHints:["SA","AE","EG","MA","DZ","QA","KW"], routeBias:["google","bing","official-web"] },
+  vi:{ name:"Vietnamese", native:"Tiếng Việt", dir:"ltr", regionHints:["VN"], routeBias:["google","bing","official-web"] },
+  th:{ name:"Thai", native:"ไทย", dir:"ltr", regionHints:["TH"], routeBias:["google","bing","official-web"] },
+  id:{ name:"Indonesian", native:"Bahasa Indonesia", dir:"ltr", regionHints:["ID"], routeBias:["google","bing","official-web"] },
+  hi:{ name:"Hindi", native:"हिन्दी", dir:"ltr", regionHints:["IN"], routeBias:["google","bing","official-web"] },
+  tr:{ name:"Turkish", native:"Türkçe", dir:"ltr", regionHints:["TR"], routeBias:["google","bing","official-web"] },
+  fa:{ name:"Persian", native:"فارسی", dir:"rtl", regionHints:["IR","AF"], routeBias:["google","bing","official-web"] },
+  bn:{ name:"Bengali", native:"বাংলা", dir:"ltr", regionHints:["BD","IN"], routeBias:["google","bing","official-web"] },
+  ur:{ name:"Urdu", native:"اردو", dir:"rtl", regionHints:["PK","IN"], routeBias:["google","bing","official-web"] },
+  sw:{ name:"Swahili", native:"Kiswahili", dir:"ltr", regionHints:["KE","TZ","UG"], routeBias:["google","bing","official-web"] },
+  ta:{ name:"Tamil", native:"தமிழ்", dir:"ltr", regionHints:["IN","LK","SG","MY"], routeBias:["google","bing","official-web"] },
+  hu:{ name:"Hungarian", native:"Magyar", dir:"ltr", regionHints:["HU"], routeBias:["google","bing","official-web"] },
+  ms:{ name:"Malay", native:"Bahasa Melayu", dir:"ltr", regionHints:["MY","BN","SG"], routeBias:["google","bing","official-web"] },
+  nl:{ name:"Dutch", native:"Nederlands", dir:"ltr", regionHints:["NL","BE"], routeBias:["google","bing","official-web"] },
+  pl:{ name:"Polish", native:"Polski", dir:"ltr", regionHints:["PL"], routeBias:["google","bing","official-web"] },
+  sv:{ name:"Swedish", native:"Svenska", dir:"ltr", regionHints:["SE","FI"], routeBias:["google","bing","official-web"] },
+  tl:{ name:"Filipino", native:"Filipino", dir:"ltr", regionHints:["PH"], routeBias:["google","bing","official-web"] },
+  uk:{ name:"Ukrainian", native:"Українська", dir:"ltr", regionHints:["UA"], routeBias:["google","bing","official-web"] },
+  uz:{ name:"Uzbek", native:"Oʻzbekcha", dir:"ltr", regionHints:["UZ"], routeBias:["google","yandex","bing","official-web"] }
+};
+
+const SANMARU_REGION_FAMILY_BY_COUNTRY = {
+  KR:"EAST_ASIA", JP:"EAST_ASIA", CN:"EAST_ASIA", TW:"EAST_ASIA", HK:"EAST_ASIA", MO:"EAST_ASIA", MN:"EAST_ASIA",
+  US:"NORTH_AMERICA", CA:"NORTH_AMERICA", MX:"NORTH_AMERICA",
+  GB:"EUROPE", IE:"EUROPE", FR:"EUROPE", DE:"EUROPE", IT:"EUROPE", ES:"EUROPE", PT:"EUROPE", NL:"EUROPE", BE:"EUROPE", CH:"EUROPE", AT:"EUROPE", PL:"EUROPE", SE:"EUROPE", NO:"EUROPE", FI:"EUROPE", DK:"EUROPE", HU:"EUROPE", UA:"EUROPE", RU:"EURASIA", BY:"EURASIA", KZ:"EURASIA", UZ:"EURASIA",
+  VN:"SOUTHEAST_ASIA", TH:"SOUTHEAST_ASIA", ID:"SOUTHEAST_ASIA", MY:"SOUTHEAST_ASIA", SG:"SOUTHEAST_ASIA", PH:"SOUTHEAST_ASIA", BN:"SOUTHEAST_ASIA", KH:"SOUTHEAST_ASIA", LA:"SOUTHEAST_ASIA", MM:"SOUTHEAST_ASIA",
+  IN:"SOUTH_ASIA", PK:"SOUTH_ASIA", BD:"SOUTH_ASIA", LK:"SOUTH_ASIA", NP:"SOUTH_ASIA",
+  SA:"MIDDLE_EAST", AE:"MIDDLE_EAST", QA:"MIDDLE_EAST", KW:"MIDDLE_EAST", IR:"MIDDLE_EAST", TR:"MIDDLE_EAST", IL:"MIDDLE_EAST", JO:"MIDDLE_EAST",
+  EG:"AFRICA", MA:"AFRICA", DZ:"AFRICA", NG:"AFRICA", ZA:"AFRICA", KE:"AFRICA", TZ:"AFRICA", UG:"AFRICA", CI:"AFRICA", SN:"AFRICA", GH:"AFRICA", ET:"AFRICA",
+  BR:"LATIN_AMERICA", AR:"LATIN_AMERICA", CL:"LATIN_AMERICA", CO:"LATIN_AMERICA", PE:"LATIN_AMERICA", VE:"LATIN_AMERICA",
+  AU:"OCEANIA", NZ:"OCEANIA"
+};
+
+const SANMARU_REGION_ROUTE_BIAS = {
+  EAST_ASIA:["official-web","public-data","naver","google","wiki-knowledge","youtube","social-public-web"],
+  NORTH_AMERICA:["official-web","public-data","google","bing","duckduckgo","wiki-knowledge","youtube","social-public-web"],
+  EUROPE:["official-web","public-data","google","bing","duckduckgo","wiki-knowledge","youtube","social-public-web"],
+  EURASIA:["official-web","public-data","yandex","google","bing","wiki-knowledge","youtube"],
+  SOUTHEAST_ASIA:["official-web","public-data","google","bing","youtube","social-public-web","corporate-homepage"],
+  SOUTH_ASIA:["official-web","public-data","google","bing","youtube","social-public-web","corporate-homepage"],
+  MIDDLE_EAST:["official-web","public-data","google","bing","youtube","social-public-web"],
+  AFRICA:["official-web","public-data","google","bing","youtube","social-public-web","corporate-homepage"],
+  LATIN_AMERICA:["official-web","public-data","google","bing","youtube","social-public-web","corporate-homepage"],
+  OCEANIA:["official-web","public-data","google","bing","youtube","social-public-web"],
+  GLOBAL:["official-web","public-data","google","bing","duckduckgo","wiki-knowledge","youtube","social-public-web"]
+};
+
+const SANMARU_GLOBAL_SOURCE_PIPELINES = {
+  authority:{ label:"official/public authority", priority:100, categories:["official","government","public_data","map_local"], providers:["official-web","public-data","google","naver","bing"], trust:0.98 },
+  knowledge:{ label:"wiki/encyclopedia/knowledge", priority:92, categories:["knowledge","wiki"], providers:["wiki-knowledge","google","bing","searchbank-index"], trust:0.90 },
+  news:{ label:"major/regional/specialized news", priority:86, categories:["news"], providers:["google","naver","bing","yahoo","maru-search-wide-gateway"], trust:0.82 },
+  local_supplier:{ label:"local producers/cooperatives/factories/small distribution", priority:84, categories:["shopping","web","map_local","tourism"], providers:["official-web","corporate-homepage","public-data","google","naver","bing","blog-community"], trust:0.78 },
+  product_slot:{ label:"front product slot supply", priority:82, categories:["shopping","commerce","web"], providers:["corporate-homepage","official-web","naver","google","bing","searchbank"], trust:0.76 },
+  media_content:{ label:"media/video/content", priority:80, categories:["video","youtube","image","sns"], providers:["youtube","google","naver","social-public-web","maru-search-wide-gateway"], trust:0.74 },
+  tourism_local:{ label:"tourism/culture/local guide", priority:78, categories:["tourism","map_local","image","video","blog"], providers:["official-web","public-data","naver","google","youtube","social-public-web"], trust:0.77 },
+  social_public:{ label:"public social surface", priority:66, categories:["sns","community","video","image"], providers:["social-public-web","instagram","facebook","tiktok","x-twitter","threads","google","bing"], trust:0.64 },
+  academic_research:{ label:"academic/research/library", priority:74, categories:["academic","research_paper","university_library","book"], providers:["academic","research-paper","university-library","google","bing"], trust:0.80 },
+  searchbank_memory:{ label:"owned fast memory", priority:96, categories:["internal_search_bank","web","news","image","video"], providers:["searchbank-index","searchbank"], trust:0.88 }
+};
+
+const SANMARU_SOURCE_TRUST_MATRIX = [
+  { name:"official-government", score:0.99, patterns:[".go.kr",".gov",".gov.","gov.uk","go.jp","europa.eu","who.int","un.org","oecd.org","worldbank.org"] },
+  { name:"public-data", score:0.96, patterns:["data.go.kr","data.gov","opendata","open-data","publicdata","공공데이터"] },
+  { name:"official-site", score:0.92, patterns:["official","공식","시청","구청","군청","도청","정부","기관","청사"] },
+  { name:"encyclopedia", score:0.88, patterns:["wikipedia.org","britannica.com","namu.wiki","encyclopedia","백과","위키"] },
+  { name:"major-news", score:0.80, patterns:["news.google","news.naver","reuters.com","apnews.com","bbc.","cnn.com","nytimes.com","wsj.com","yna.co.kr","kbs.co.kr","mbc.co.kr","sbs.co.kr"] },
+  { name:"local-supplier", score:0.76, patterns:["농협","수협","협동조합","생산자","공장","제조","도매","유통","market","factory","manufacturer","cooperative","producer"] },
+  { name:"searchbank", score:0.86, patterns:["search-bank-index","searchbank-index","search-bank","searchbank"] },
+  { name:"media", score:0.72, patterns:["youtube","video","image","naver_image","google_image"] },
+  { name:"social-public", score:0.62, patterns:["instagram","facebook","tiktok","twitter","x.com","threads","reddit","pinterest"] }
+];
+
+const SANMARU_SUPPLY_MODE_MAP = {
+  "search-supply":{ owner:"maru-search", target:"search-ui", defaultType:"all", policy:"instant-resident-first-background-refresh" },
+  "front-supply":{ owner:"front-page", target:"front-slot", defaultType:"web", policy:"slot-profile-priority" },
+  "content-supply":{ owner:"content-engine", target:"content-slot", defaultType:"video", policy:"media-content-priority" },
+  "insight-supply":{ owner:"maru-global-insight", target:"insight-card", defaultType:"knowledge", policy:"authority-knowledge-news-priority" },
+  "snapshot-supply":{ owner:"search-bank", target:"snapshot-candidate", defaultType:"web", policy:"searchbank-ready-card-package" }
+};
+
+function normalizeSanmaruLanguageCode(v){
+  const raw = low(v).replace("_","-");
+  if(!raw) return "ko";
+  if(raw === "zh-hant" || raw === "zh-tw" || raw === "zh-hk" || raw === "zh-mo") return "zht";
+  if(raw === "zh-hans" || raw === "zh-cn" || raw === "zh-sg") return "zh";
+  const base = raw.split("-")[0];
+  if(base === "fil") return "tl";
+  return SANMARU_GLOBAL_LANGUAGE_MATRIX[base] ? base : (SANMARU_GLOBAL_LANGUAGE_MATRIX[raw] ? raw : "en");
+}
+
+function normalizeCountryCode(v){
+  const code = s(v).trim().toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2);
+  return code || "GLOBAL";
+}
+
+function regionFamilyForCountry(country){
+  const c = normalizeCountryCode(country);
+  return SANMARU_REGION_FAMILY_BY_COUNTRY[c] || (c === "GLOBAL" ? "GLOBAL" : "GLOBAL");
+}
+
+function detectSanmaruGeoContext(event, lang, q, opts){
+  opts = opts || {};
+  const headers = (event && event.headers) || {};
+  const qs = (event && event.queryStringParameters) || {};
+  const forcedCountry = normalizeCountryCode(firstNonEmpty(opts.country, opts.region, qs.country, qs.region, qs.geo, headers["x-country"], headers["cf-ipcountry"], headers["x-vercel-ip-country"]));
+  const language = normalizeSanmaruLanguageCode(firstNonEmpty(lang, opts.lang, qs.lang, qs.uiLang, qs.locale, headers["accept-language"], headers["Accept-Language"]));
+  const langMeta = SANMARU_GLOBAL_LANGUAGE_MATRIX[language] || SANMARU_GLOBAL_LANGUAGE_MATRIX.en;
+  let country = forcedCountry;
+  if(country === "GLOBAL" && langMeta.regionHints && langMeta.regionHints.length) country = langMeta.regionHints[0];
+  if(country === "KR" || /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(s(q))) country = "KR";
+  else if(country === "JP" || /[ぁ-ゟ゠-ヿ]/.test(s(q))) country = "JP";
+  else if(country === "CN" || /[一-龥]/.test(s(q))) country = country === "TW" || country === "HK" || country === "MO" ? country : "CN";
+  const regionFamily = regionFamilyForCountry(country);
+  const regionBias = SANMARU_REGION_ROUTE_BIAS[regionFamily] || SANMARU_REGION_ROUTE_BIAS.GLOBAL;
+  return {
+    country,
+    region: country,
+    regionFamily,
+    language,
+    dir:langMeta.dir || "ltr",
+    isRTL:(langMeta.dir || "ltr") === "rtl",
+    languageRouteBias:langMeta.routeBias || [],
+    regionRouteBias:regionBias,
+    generatedAt:nowIso()
+  };
+}
+
+function clonePlain(v){ return safeJsonClone(v); }
+
+function buildFrontSlotSupplyProfileMatrix(){
+  const base = (typeof FRONT_SUPPLY_PROFILE_MAP !== "undefined" && FRONT_SUPPLY_PROFILE_MAP) ? FRONT_SUPPLY_PROFILE_MAP : {};
+  const out = {};
+  const defaults = {
+    home:{ supplyMode:"front-supply", preferredPipelines:["authority","news","knowledge","media_content"], slotPolicy:"official-news-content-mixed" },
+    network:{ supplyMode:"front-supply", preferredPipelines:["product_slot","local_supplier","authority"], slotPolicy:"supplier-product-official-first" },
+    networkhub:{ supplyMode:"front-supply", preferredPipelines:["product_slot","local_supplier","authority"], slotPolicy:"supplier-product-official-first" },
+    distribution:{ supplyMode:"front-supply", preferredPipelines:["local_supplier","product_slot","authority"], slotPolicy:"local-producer-supplier-product" },
+    distributionhub:{ supplyMode:"front-supply", preferredPipelines:["local_supplier","product_slot","authority"], slotPolicy:"local-producer-supplier-product" },
+    media:{ supplyMode:"content-supply", preferredPipelines:["media_content","news","social_public"], slotPolicy:"video-media-content" },
+    mediahub:{ supplyMode:"content-supply", preferredPipelines:["media_content","news","social_public"], slotPolicy:"video-media-content" },
+    social:{ supplyMode:"content-supply", preferredPipelines:["social_public","media_content","news"], slotPolicy:"public-social-content" },
+    socialnetwork:{ supplyMode:"content-supply", preferredPipelines:["social_public","media_content","news"], slotPolicy:"public-social-content" },
+    tour:{ supplyMode:"front-supply", preferredPipelines:["authority","tourism_local","media_content","local_supplier"], slotPolicy:"official-tourism-local" },
+    donation:{ supplyMode:"front-supply", preferredPipelines:["authority","news","public_data","knowledge"], slotPolicy:"ngo-public-welfare-news" },
+    insight:{ supplyMode:"insight-supply", preferredPipelines:["authority","knowledge","news","academic_research"], slotPolicy:"authority-knowledge-insight" },
+    academic:{ supplyMode:"front-supply", preferredPipelines:["academic_research","knowledge","authority"], slotPolicy:"academic-library-paper" }
+  };
+  const keys = Array.from(new Set(Object.keys(defaults).concat(Object.keys(base))));
+  for(const key of keys){
+    out[key] = Object.assign({ page:key }, defaults[key] || {}, base[key] || {}, {
+      psomReady:true,
+      searchBankReady:true,
+      maruSearchGateway:"open-gate-only",
+      sanmaruRole:"pipeline-os-supply-owner"
+    });
+  }
+  return out;
+}
+
+function buildSanmaruGeoLanguageRouteMatrix(reason){
+  const languages = {};
+  for(const [code, meta] of Object.entries(SANMARU_GLOBAL_LANGUAGE_MATRIX)){
+    languages[code] = Object.assign({ code, supported:true }, meta);
+  }
+  const geoFamilies = {};
+  for(const [family, bias] of Object.entries(SANMARU_REGION_ROUTE_BIAS)){
+    geoFamilies[family] = { regionFamily:family, routeBias:bias.slice(), pipelinePolicy:"authority-public-data-first-then-category" };
+  }
+  return { languages, geoFamilies, countryRegionFamilies:Object.assign({}, SANMARU_REGION_FAMILY_BY_COUNTRY), reason:reason || "boot", generatedAt:nowIso() };
+}
+
+function ensureGlobalPipelineOS(reason){
+  const resident = ensureResidentState();
+  const need = !resident.globalPipelineReady || resident.globalPipelineVersion !== VERSION || !resident.pipelineRegistry || !resident.pipelineRegistry.size;
+  if(!need) return globalPipelineSnapshot();
+
+  resident.pipelineRegistry = new Map();
+  resident.pipelineHealth = new Map();
+  for(const [name, meta] of Object.entries(SANMARU_GLOBAL_SOURCE_PIPELINES)){
+    resident.pipelineRegistry.set(name, Object.assign({ name, status:"ready", bootedAt:nowIso() }, meta));
+    resident.pipelineHealth.set(name, { name, status:"ready", priority:meta.priority, trust:meta.trust, lastCheckAt:nowIso(), reason:reason || "global-pipeline-boot" });
+  }
+  resident.geoRouteMatrix = buildSanmaruGeoLanguageRouteMatrix(reason);
+  resident.languageMatrix = clonePlain(SANMARU_GLOBAL_LANGUAGE_MATRIX);
+  resident.sourceTrustMatrix = clonePlain(SANMARU_SOURCE_TRUST_MATRIX);
+  resident.frontSlotProfiles = buildFrontSlotSupplyProfileMatrix();
+  resident.supplyModeMap = clonePlain(SANMARU_SUPPLY_MODE_MAP);
+  resident.globalPipelineReady = true;
+  resident.globalPipelineBootedAt = nowMs();
+  resident.globalPipelineVersion = VERSION;
+  return globalPipelineSnapshot();
+}
+
+function globalPipelineSnapshot(){
+  const resident = ensureResidentState();
+  const pipelines = [];
+  if(resident.pipelineRegistry && typeof resident.pipelineRegistry.forEach === "function"){
+    resident.pipelineRegistry.forEach((v,k) => pipelines.push(Object.assign({ name:k }, v)));
+  }
+  return {
+    ready:!!resident.globalPipelineReady,
+    version:resident.globalPipelineVersion || VERSION,
+    bootedAt:resident.globalPipelineBootedAt ? new Date(resident.globalPipelineBootedAt).toISOString() : null,
+    languageCount:resident.languageMatrix ? Object.keys(resident.languageMatrix).length : Object.keys(SANMARU_GLOBAL_LANGUAGE_MATRIX).length,
+    pipelineCount:pipelines.length,
+    frontProfileCount:resident.frontSlotProfiles ? Object.keys(resident.frontSlotProfiles).length : 0,
+    geoFamilyCount:resident.geoRouteMatrix && resident.geoRouteMatrix.geoFamilies ? Object.keys(resident.geoRouteMatrix.geoFamilies).length : 0,
+    modeCount:resident.supplyModeMap ? Object.keys(resident.supplyModeMap).length : 0,
+    role:"lightweight-global-information-pipeline-os",
+    storagePolicy:"route-cache-index-resident-only-no-world-data-bulk-storage",
+    pipelines:pipelines.sort((a,b)=>(b.priority||0)-(a.priority||0)).slice(0,30)
+  };
+}
+
+function sourceTrustMatrixScoreForItem(item){
+  const text = low([item && item.source, item && item.provider, item && item.url, item && item.link, item && item.title, item && item.summary, item && item.description].join(" "));
+  if(!text.trim()) return null;
+  let best = null;
+  for(const row of SANMARU_SOURCE_TRUST_MATRIX){
+    if((row.patterns || []).some(p => text.includes(low(p)))) best = Math.max(best == null ? 0 : best, Number(row.score) || 0);
+  }
+  return best;
+}
+
+function authorityPipelineBoost(item, ctx){
+  const trust = sourceTrustMatrixScoreForItem(item);
+  const cat = categoryOfItem(item);
+  const text = low([item && item.title, item && item.summary, item && item.url, item && item.source].join(" "));
+  let boost = 0;
+  if(trust != null) boost += trust * 2.5;
+  if(cat === "official") boost += 2.2;
+  if(/\.go\.kr|\.gov|gov\.|official|공식|정부|공공|기관|시청|구청|군청|도청/.test(text)) boost += 1.6;
+  if(/wikipedia\.org|namu\.wiki|britannica|백과|위키/.test(text)) boost += 1.0;
+  if(/농협|수협|협동조합|생산자|제조|공장|유통|factory|manufacturer|producer|cooperative/.test(text)) boost += 0.9;
+  if(ctx && ctx.geoContext && ctx.geoContext.country === "KR" && /\.kr|한국|대한민국|농협|수협|서울|부산|제주/.test(text)) boost += 0.6;
+  return boost;
+}
+
+function pipelinePlanForCategories(categories, opts){
+  ensureGlobalPipelineOS("route-plan");
+  const cats = Array.isArray(categories) ? categories : [];
+  const resident = ensureResidentState();
+  const out = [];
+  const seen = new Set();
+  const geo = detectSanmaruGeoContext(opts && opts.event, opts && opts.lang, opts && opts.q, opts || {});
+  const bias = [].concat(geo.regionRouteBias || [], geo.languageRouteBias || []);
+  for(const [name, meta] of Object.entries(SANMARU_GLOBAL_SOURCE_PIPELINES)){
+    const match = (meta.categories || []).some(c => cats.includes(c) || (c === "commerce" && cats.includes("shopping")));
+    const biased = (meta.providers || []).some(p => bias.includes(p));
+    if(!match && !biased && name !== "searchbank_memory") continue;
+    if(seen.has(name)) continue;
+    seen.add(name);
+    out.push({ name, label:meta.label, priority:meta.priority + (biased ? 4 : 0), categories:meta.categories, providers:meta.providers, trust:meta.trust, matched:match, geoBiased:biased });
+  }
+  return out.sort((a,b)=>(b.priority||0)-(a.priority||0));
+}
+
+function inferSupplyModeFromInput(input, opts){
+  const raw = Object.assign({}, input || {}, opts || {});
+  const action = low(firstNonEmpty(raw.action, raw.mode, raw.fn, raw.supplyMode));
+  if(["front-supply","slot-supply"].includes(action)) return "front-supply";
+  if(["content-supply"].includes(action)) return "content-supply";
+  if(["insight-supply"].includes(action)) return "insight-supply";
+  if(["snapshot-supply","searchbank-supply"].includes(action)) return "snapshot-supply";
+  return "search-supply";
+}
+
 function categoryMapSnapshot(){
   const out = {};
   for(const [id, meta] of Object.entries(SANMARU_CANONICAL_CATEGORIES)){
@@ -440,19 +741,56 @@ function classifyQueryCategories(q, explicitType){
 
 function buildRoutePlanForQuery(q, opts){
   opts = opts || {};
+  ensureGlobalPipelineOS("route-plan");
   const categories = classifyQueryCategories(q, opts.searchType || opts.type);
+  const geoContext = detectSanmaruGeoContext(opts.event, opts.lang, q, opts);
+  const pipelines = pipelinePlanForCategories(categories, Object.assign({}, opts, { q, geoContext }));
   const routes = [];
   const seen = new Set();
+  const registry = sourceRegistrySnapshot();
+  const preferredProviders = [];
+  pipelines.forEach(p => preferredProviders.push.apply(preferredProviders, p.providers || []));
+  preferredProviders.push.apply(preferredProviders, geoContext.regionRouteBias || []);
+  preferredProviders.push.apply(preferredProviders, geoContext.languageRouteBias || []);
+
+  function addRoute(provider, category, weight, reason){
+    if(!provider) return;
+    const key = String(provider + "|" + category).toLowerCase();
+    if(seen.has(key)) return;
+    seen.add(key);
+    routes.push({
+      provider,
+      category:category || "web",
+      weight:weight || 0,
+      reason:reason || "category-route",
+      enabled: registry[provider] ? registry[provider].enabled !== false : true,
+      geoRegion:geoContext.region,
+      regionFamily:geoContext.regionFamily,
+      language:geoContext.language
+    });
+  }
+
+  preferredProviders.forEach((provider, idx) => addRoute(provider, "geo-language", 105 - idx, "geo-language-pipeline-bias"));
   for(const cat of categories){
     const meta = SANMARU_CANONICAL_CATEGORIES[cat] || SANMARU_CANONICAL_CATEGORIES.web;
     for(const provider of (meta.routes || providersForCategory(cat))){
-      if(!provider || seen.has(provider)) continue;
-      seen.add(provider);
-      routes.push({ provider, category:cat, weight:meta.weight || 0, enabled: sourceRegistrySnapshot()[provider] ? sourceRegistrySnapshot()[provider].enabled !== false : true });
+      addRoute(provider, cat, meta.weight || 0, "category-brain-route");
     }
   }
   routes.sort((a,b) => (b.weight - a.weight) || a.provider.localeCompare(b.provider));
-  return { query:s(q), categories, routes, generatedAt:nowIso(), categoryBrainVersion:VERSION };
+  return {
+    query:s(q),
+    categories,
+    routes,
+    pipelines,
+    geoContext,
+    languageMatrixReady:true,
+    globalPipelineOS:globalPipelineSnapshot(),
+    authorityOrder:["authority","knowledge","news","local_supplier","product_slot","media_content","social_public"],
+    generatedAt:nowIso(),
+    categoryBrainVersion:VERSION,
+    routePrinciple:"authority-public-data-first-then-category-and-front-slot-supply"
+  };
 }
 
 function residentFileCandidates(){
@@ -626,7 +964,10 @@ function ensureResidentBoot(opts){
       resident.lastHotRefreshAt = nowMs();
       resident.lastHotRefreshReason = opts.reason || "hot-refresh";
       resident.lastLifecycleMode = "hot-refresh-no-engine-reboot";
+      ensureGlobalPipelineOS(opts.reason || "hot-refresh-no-engine-reboot");
       rebuildResidentProviderHealth(opts.reason || "hot-refresh-no-engine-reboot");
+    }else{
+      ensureGlobalPipelineOS(opts.reason || "resident-ready-touch");
     }
     resident.engineIdentity = resident.engineIdentity || identity;
     return residentBootSnapshot();
@@ -642,11 +983,22 @@ function ensureResidentBoot(opts){
       resident.queryMap = new Map();
       resident.routeMap = new Map();
       resident.providerHealth = new Map();
+      resident.pipelineRegistry = new Map();
+      resident.pipelineHealth = new Map();
+      resident.geoRouteMatrix = null;
+      resident.languageMatrix = null;
+      resident.sourceTrustMatrix = null;
+      resident.frontSlotProfiles = null;
+      resident.supplyModeMap = null;
+      resident.globalPipelineReady = false;
+      resident.globalPipelineBootedAt = 0;
+      resident.globalPipelineVersion = null;
       resident.lastLifecycleMode = codeChanged ? "engine-code-fingerprint-changed-reboot" : "explicit-sanmaru-engine-upload-reboot";
     }else{
       resident.lastLifecycleMode = resident.ready ? "resident-restore" : "cold-start-resident-restore";
     }
 
+    const pipelineOS = ensureGlobalPipelineOS(opts.reason || "resident-boot-global-pipeline-os");
     const all = [];
     const files = [];
     for(const file of residentFileCandidates()){
@@ -670,7 +1022,7 @@ function ensureResidentBoot(opts){
     resident.lastBootLatency = nowMs() - started;
     resident.lastError = null;
     rebuildResidentProviderHealth(opts.reason || "resident-boot");
-    return Object.assign(residentBootSnapshot(), { bootFiles:files, absorbed, engineIdentity:identity });
+    return Object.assign(residentBootSnapshot(), { bootFiles:files, absorbed, engineIdentity:identity, globalPipelineOS:pipelineOS });
   }catch(e){
     resident.lastError = responseErrorCode(e);
     resident.ready = true;
@@ -697,6 +1049,10 @@ function residentBootSnapshot(){
     queryCacheSize:resident.queryMap ? resident.queryMap.size : 0,
     routeCacheSize:resident.routeMap ? resident.routeMap.size : 0,
     providerHealthCount:resident.providerHealth ? resident.providerHealth.size : 0,
+    pipelineOS:globalPipelineSnapshot(),
+    pipelineHealthCount:resident.pipelineHealth ? resident.pipelineHealth.size : 0,
+    languageCount:resident.languageMatrix ? Object.keys(resident.languageMatrix).length : 0,
+    frontSlotProfileCount:resident.frontSlotProfiles ? Object.keys(resident.frontSlotProfiles).length : 0,
     categoryCounts:Array.from((resident.categoryMap || new Map()).entries()).map(([name, arr]) => ({ name, count:arr.length })).sort((a,b)=>b.count-a.count).slice(0,60),
     sourceCounts:Array.from((resident.sourceMap || new Map()).entries()).map(([name, arr]) => ({ name, count:arr.length })).sort((a,b)=>b.count-a.count).slice(0,60),
     lastBootLatency:resident.lastBootLatency || 0,
@@ -713,6 +1069,8 @@ function residentBootSnapshot(){
     deniedForceBootReason:resident.lastDeniedForceBootReason || null,
     topRole: "global-web-ecosystem-information-cpu",
     maruRole: "mounted-gateway-body",
+    pipelineRole:"information-ocean-librarian-control-tower-ai-os",
+    storagePolicy:"lightweight-resident-cache-route-index-no-bulk-world-data-storage",
     dataUpdateMode: "hot-ingest-index-refresh-no-engine-reboot",
     openingSignals: openingSignalsSnapshot(),
     logosGuard: logosEvaluate([{ type:"resident_status", intent:"stewardship", truthConfidence:0.95, recoveryOpportunity:true }], "resident-status"),
@@ -934,6 +1292,9 @@ function supplyResidentSync(input, opts){
       residentSwitch:activation,
       routePlan,
       providerHealth:providerHealthSnapshot(),
+      globalPipelineOS:globalPipelineSnapshot(),
+      geoContext:routePlan && routePlan.geoContext,
+      supplyMode:inferSupplyModeFromInput(input, opts),
       sourceRegistryReady:true,
       categoryBrainReady:true,
       providerCapabilityReady:true,
@@ -1300,6 +1661,8 @@ function categoryOfItem(item){
 
 function sourceTrust(source){
   const x = low(source);
+  const matrixScore = sourceTrustMatrixScoreForItem({ source:x, url:x, title:x });
+  if(matrixScore != null) return matrixScore;
   if(x.includes("search-bank-index")) return 0.84;
   if(x.includes("search-bank")) return 0.78;
   if(x.includes("naver_news") || x.includes("google_news")) return 0.74;
@@ -1478,6 +1841,7 @@ function scoreItem(query, item, ctx){
   if(joinedQ && joined.includes(joinedQ)) score += 3;
   if(qn && normalizeText(item.title).includes(qn)) score += 5;
   score += (item.sourceTrust || sourceTrust(source)) * 5;
+  score += authorityPipelineBoost(item, ctx);
   if(source.includes("search-bank-index")) score += 2.5;
   if(source.includes("search-bank")) score += 1.8;
   if(cat === normalizeSearchType(ctx.searchType)) score += 2;
@@ -1542,9 +1906,7 @@ async function fetchJsonAllowlisted(url, options, timeoutMs){
   const allowed = [
     "openapi.naver.com",
     "www.googleapis.com",
-    "api.bing.microsoft.com",
-    "en.wikipedia.org",
-    "ko.wikipedia.org"
+    "api.bing.microsoft.com"
   ];
   if(!allowed.includes(u.hostname)) throw new Error("blocked_host");
 
@@ -1758,89 +2120,11 @@ async function youtube(ctx){
   }).filter(Boolean);
 }
 
-
-async function wikipediaSearch(ctx){
-  const lang = /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(s(ctx.q)) ? "ko" : "en";
-  const host = lang === "ko" ? "ko.wikipedia.org" : "en.wikipedia.org";
-  const url = "https://" + host + "/w/api.php?action=query&list=search&format=json&origin=*&srlimit=" + Math.min(ctx.deep ? 20 : 10, 20) + "&srsearch=" + encodeURIComponent(ctx.q);
-  const data = await fetchJsonAllowlisted(url, null, 2600);
-  const rows = data && data.query && Array.isArray(data.query.search) ? data.query.search : [];
-  return rows.map(row => {
-    const title = stripHtml(row.title || ctx.q);
-    const pageUrl = "https://" + host + "/wiki/" + encodeURIComponent(title.replace(/\s+/g, "_"));
-    return canonicalItem({
-      title,
-      url: pageUrl,
-      link: pageUrl,
-      summary: stripHtml(row.snippet || ""),
-      snippet: stripHtml(row.snippet || ""),
-      type:"knowledge",
-      mediaType:"article",
-      source: lang === "ko" ? "wikipedia_ko" : "wikipedia_en",
-      provider:"wikipedia",
-      sourceTrust:0.78,
-      payload:{ source:"wikipedia", lang, pageid: row.pageid }
-    }, ctx.q, "wikipedia");
-  });
-}
-
-function buildPublicKnowledgePortalCards(q, ctx){
-  const enc = encodeURIComponent(q || "");
-  const g = (suffix) => "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " " + suffix);
-  const cards = [
-    ["official-google", "공식/권위", g("official site government"), "official", 0.58],
-    ["government-google", "정부/공공", g("government public office"), "official", 0.57],
-    ["google-maps", "Google Maps", "https://www.google.com/maps/search/" + enc, "map", 0.56],
-    ["naver-map", "Naver Map", "https://map.naver.com/p/search/" + enc, "map", 0.56],
-    ["wikipedia-ko", "위키백과", "https://ko.wikipedia.org/w/index.php?search=" + enc, "knowledge", 0.55],
-    ["wikipedia-en", "Wikipedia", "https://en.wikipedia.org/w/index.php?search=" + enc, "knowledge", 0.54],
-    ["namuwiki", "나무위키", "https://namu.wiki/Search?q=" + enc, "knowledge", 0.50],
-    ["google-news", "Google News", "https://news.google.com/search?q=" + enc, "news", 0.52],
-    ["naver-news", "Naver News", "https://search.naver.com/search.naver?where=news&query=" + enc, "news", 0.52],
-    ["bing-news", "Bing News", "https://www.bing.com/news/search?q=" + enc, "news", 0.48],
-    ["youtube", "YouTube", "https://www.youtube.com/results?search_query=" + enc, "video", 0.50],
-    ["google-video", "Google Video", g("video youtube"), "video", 0.47],
-    ["google-image", "Google Images", "https://www.google.com/search?tbm=isch&q=" + enc, "image", 0.49],
-    ["naver-image", "Naver Image", "https://search.naver.com/search.naver?where=image&query=" + enc, "image", 0.49],
-    ["bing-image", "Bing Images", "https://www.bing.com/images/search?q=" + enc, "image", 0.47],
-    ["naver-blog", "Naver Blog", "https://search.naver.com/search.naver?where=blog&query=" + enc, "blog", 0.48],
-    ["naver-cafe", "Naver Cafe", "https://search.naver.com/search.naver?where=article&query=" + enc, "cafe", 0.47],
-    ["google-blog", "Blog/Web", g("blog review"), "blog", 0.45],
-    ["instagram", "Instagram", g("site:instagram.com"), "sns", 0.44],
-    ["facebook", "Facebook", g("site:facebook.com"), "sns", 0.44],
-    ["tiktok", "TikTok", g("site:tiktok.com"), "sns", 0.44],
-    ["x-twitter", "X/Twitter", g("site:x.com OR site:twitter.com"), "sns", 0.43],
-    ["threads", "Threads", g("site:threads.net"), "sns", 0.42],
-    ["linkedin", "LinkedIn", g("site:linkedin.com"), "sns", 0.41],
-    ["naver-total", "Naver 통합검색", "https://search.naver.com/search.naver?query=" + enc, "web", 0.48],
-    ["google-total", "Google 통합검색", "https://www.google.com/search?q=" + enc, "web", 0.48],
-    ["bing-total", "Bing 검색", "https://www.bing.com/search?q=" + enc, "web", 0.46],
-    ["duckduckgo", "DuckDuckGo", "https://duckduckgo.com/?q=" + enc, "web", 0.42],
-    ["yahoo", "Yahoo", "https://search.yahoo.com/search?p=" + enc, "web", 0.41],
-    ["academic", "학술/논문", "https://scholar.google.com/scholar?q=" + enc, "academic", 0.42],
-    ["books", "도서", g("book isbn library"), "book", 0.41],
-    ["shopping", "상품/쇼핑", "https://search.shopping.naver.com/search/all?query=" + enc, "shopping", 0.40],
-    ["tour", "관광/여행", g("tour travel attraction official"), "tour", 0.42],
-    ["restaurant", "맛집/지역", g("restaurant local review"), "map", 0.40],
-    ["public-data", "공공데이터", g("public data dataset government"), "public_data", 0.40]
-  ];
-  return cards.map(spec => canonicalItem({
-    id:"sanmaru-pipeline-portal-" + stableHash([q, spec[0]].join("|")),
-    title:"[Pipeline] " + q + " · " + spec[1],
-    summary:"산마루 Pipeline OS가 즉시 열 수 있는 공개/허가 정보 통로입니다.",
-    url:spec[2], link:spec[2], source:"sanmaru_pipeline_" + spec[0], provider:spec[0], type:spec[3], searchCategory:spec[3], mediaType:"article", score:spec[4], sanmaruPipelinePortal:true
-  }, q, "sanmaru-pipeline-portal"));
-}
-
-
 async function callOptionalModuleAdapter(ctx, name, modulePath, runParams, timeoutMs){
   const started = nowMs();
   try{
     const raw = ctx.raw || {};
-    const lowerName = low(name);
-    const disabledByRequest = truthy(raw["skip" + name]) || truthy(raw["disable" + name]) || truthy(raw["no" + name]) ||
-      truthy(raw["skip" + lowerName]) || truthy(raw["disable" + lowerName]) || truthy(raw["no" + lowerName]) ||
-      truthy(raw["skip" + name.charAt(0).toUpperCase() + name.slice(1)]) || truthy(raw["disable" + name.charAt(0).toUpperCase() + name.slice(1)]) || truthy(raw["no" + name.charAt(0).toUpperCase() + name.slice(1)]);
+    const disabledByRequest = truthy(raw["skip" + name]) || truthy(raw["disable" + name]) || truthy(raw["no" + name]);
     if(disabledByRequest){
       return { trace: adapterResult(name, "disabled-by-request", started, []), items: [] };
     }
@@ -1886,7 +2170,6 @@ const ADAPTERS = [
   { name:"google-web", timeoutMs:3400, match:ctx => ctx.externalAllowed, access:ctx => googleWeb(ctx) },
   { name:"google-image", timeoutMs:3400, match:ctx => ctx.externalAllowed && !ctx.noMedia, access:ctx => googleImage(ctx) },
   { name:"bing-web", timeoutMs:3400, match:ctx => ctx.externalAllowed, access:ctx => bingWeb(ctx) },
-  { name:"wikipedia", timeoutMs:2800, match:ctx => ctx.externalAllowed, access:ctx => wikipediaSearch(ctx) },
   { name:"youtube", timeoutMs:3800, match:ctx => ctx.externalAllowed && !ctx.noMedia, access:ctx => youtube(ctx) },
 ];
 
@@ -2066,12 +2349,13 @@ function parseCtx(input, maybeCtx){
     externalAllowed: !externalOff,
     timeoutMs: clampInt(ctx.timeoutMs || raw.timeoutMs || qs.timeoutMs, deep ? DEEP_TIMEOUT_MS : DEFAULT_TIMEOUT_MS, 1500, deep ? 15000 : 12000),
     region: detectRuntimeRegion(event, lang, clean.value),
+    geoContext: detectSanmaruGeoContext(event, lang, clean.value, raw),
     page: clampInt(firstNonEmpty(ctx.page, raw.page, qs.page), 1, 1, 100000),
     perPage: clampInt(firstNonEmpty(ctx.perPage, raw.perPage, qs.perPage), DEFAULT_VISIBLE_PER_PAGE, 1, 200),
     start: clampInt(firstNonEmpty(ctx.start, raw.start, qs.start), 1, 1, 1000000),
     candidatePoolTarget: clampInt(firstNonEmpty(ctx.candidatePool, raw.candidatePool, qs.candidatePool, ctx.candidatePoolTarget, raw.candidatePoolTarget, qs.candidatePoolTarget, wideExpansion ? DEFAULT_CANDIDATE_POOL_TARGET : "", ctx.limit, raw.limit, qs.limit), DEFAULT_CANDIDATE_POOL_TARGET, 1, MAX_LIMIT),
     expansion: expansionRaw || (wideExpansion ? "wide" : "balanced"),
-    directExternalAllowed: truthy(ctx.directExternal || raw.directExternal || qs.directExternal || ctx.sanmaruDirectExternal || raw.sanmaruDirectExternal || qs.sanmaruDirectExternal || ctx.pipelineOS || raw.pipelineOS || qs.pipelineOS || ctx.pipelineSupply || raw.pipelineSupply || qs.pipelineSupply || ctx.openGate || raw.openGate || qs.openGate || process.env.SANMARU_DIRECT_EXTERNAL),
+    directExternalAllowed: truthy(ctx.directExternal || raw.directExternal || qs.directExternal || ctx.sanmaruDirectExternal || raw.sanmaruDirectExternal || qs.sanmaruDirectExternal || process.env.SANMARU_DIRECT_EXTERNAL),
     requestId: firstNonEmpty(ctx.requestId, stableHash([clean.value, nowMs(), Math.random()].join("|")))
   });
 }
@@ -2097,7 +2381,7 @@ async function runSanmaru(input, maybeCtx){
   globalState.cache = globalState.cache || new Map();
   globalState.inflight = globalState.inflight || new Map();
 
-  const instantSupplyDisabled = truthy(ctx.disableInstantSupply || ctx.raw.disableInstantSupply || ctx.raw.noInstantSupply || ctx.raw.noInstant || ctx.raw.waitProviders || ctx.raw.waitExternal || ctx.raw.forceWide || ctx.raw.forceProviderRefresh || ctx.raw.deepRefresh || ctx.raw.live || ctx.pipelineOS || ctx.raw.pipelineOS || ctx.openGate || ctx.raw.openGate || ctx.pipelineSupply || ctx.raw.pipelineSupply);
+  const instantSupplyDisabled = truthy(ctx.disableInstantSupply || ctx.raw.disableInstantSupply || ctx.raw.noInstantSupply || ctx.raw.noInstant || ctx.raw.waitProviders || ctx.raw.waitExternal || ctx.raw.forceWide || ctx.raw.forceProviderRefresh || ctx.raw.deepRefresh || ctx.raw.live);
   const sanmaruInstantSupply = !instantSupplyDisabled && !ctx.deep && !ctx.externalForced;
 
   if(sanmaruInstantSupply){
@@ -2138,7 +2422,10 @@ async function runSanmaru(input, maybeCtx){
         maruSearchRole:"gateway-body-render-only",
         doesNotCallExternal:true,
         directExternalAdaptersEnabled:false,
-        routePlan: supplied.routePlan || buildRoutePlanForQuery(ctx.q, { searchType:ctx.searchType, lang:ctx.lang }),
+        routePlan: supplied.routePlan || buildRoutePlanForQuery(ctx.q, { searchType:ctx.searchType, lang:ctx.lang, event:ctx.event, region:ctx.region }),
+        geoContext:ctx.geoContext,
+        globalPipelineOS:globalPipelineSnapshot(),
+        supplyMode:inferSupplyModeFromInput(ctx.raw, ctx),
         logosGuard,
         health: healthSnapshot(),
         cache:{ hit:false, key:null, policy:"instant-supply-before-wide-refresh" },
@@ -2168,13 +2455,8 @@ async function runSanmaru(input, maybeCtx){
     ensureResidentBoot({ reason:"runSanmaru" });
     const trace = [];
     const items = [];
-    const routePlan = buildRoutePlanForQuery(ctx.q, { searchType:ctx.searchType, lang:ctx.lang });
+    const routePlan = buildRoutePlanForQuery(ctx.q, { searchType:ctx.searchType, lang:ctx.lang, event:ctx.event, region:ctx.region, country:ctx.region });
     const residentFirst = residentCandidatesSync(ctx.q, { limit:ctx.candidatePoolTarget || ctx.limit, candidatePoolTarget:ctx.candidatePoolTarget, searchType:ctx.searchType, lang:ctx.lang });
-    const pipelinePortalCards = buildPublicKnowledgePortalCards(ctx.q, ctx);
-    if(pipelinePortalCards.length){
-      items.push(...pipelinePortalCards);
-      trace.push(adapterResult("sanmaru-pipeline-portals", "ok", engineStarted, pipelinePortalCards, { mode:"instant-open-information-pipelines", role:"pipeline-os-not-search-engine" }));
-    }
     if(residentFirst.length){
       items.push(...residentFirst);
       trace.push(adapterResult("sanmaru-resident-library", "ok", engineStarted, residentFirst, { mode:"resident-first-no-external", routeCategories:routePlan.categories }));
@@ -2267,7 +2549,7 @@ async function runSanmaru(input, maybeCtx){
         sourceDiversity: sourceDiversity(ranked),
         categoryDiversity: categoryDiversity(ranked),
         resident: residentBootSnapshot(),
-        routePlan: ctx.routePlan || buildRoutePlanForQuery(ctx.q, { searchType:ctx.searchType, lang:ctx.lang }),
+        routePlan: ctx.routePlan || buildRoutePlanForQuery(ctx.q, { searchType:ctx.searchType, lang:ctx.lang, event:ctx.event, region:ctx.region, country:ctx.region }),
         residentAbsorb,
         searchAreaExpansion: {
           mode: searchAreaExpansionMode(ctx),
@@ -2288,12 +2570,7 @@ async function runSanmaru(input, maybeCtx){
         logosGuard,
         openingSignals: openingSignalsSnapshot(),
         role: "global-virtual-information-library-mount-engine",
-        pipelineOS: {
-          enabled: true,
-          mode: ctx.directExternalAllowed ? "open-pipeline-supply" : "resident-index-supply",
-          principle: "Sanmaru opens authorized information pipelines; it does not behave as a separate crawler/search-engine."
-        },
-        platformRole: "Sanmaru is the authorized global information pipeline OS; Maru Search is the gatekeeper/gateway",
+        platformRole: "Sanmaru is the authorized global information library mount layer; Maru Search is the platform information road/gateway",
         mountRegistry: mountRegistrySnapshot(),
         cache:{ hit:false, key:cacheKey },
         searchBankIndex:{ used:true, status:indexRes.trace.status, count:indexRes.trace.count, latency:indexRes.trace.latency },
@@ -2337,7 +2614,7 @@ async function runSanmaru(input, maybeCtx){
           timeoutGuard:true,
           originalError: responseErrorCode(e),
           resident: residentBootSnapshot(),
-          routePlan: buildRoutePlanForQuery(ctx.q, { searchType:ctx.searchType, lang:ctx.lang }),
+          routePlan: buildRoutePlanForQuery(ctx.q, { searchType:ctx.searchType, lang:ctx.lang, event:ctx.event, region:ctx.region, country:ctx.region }),
           health: healthSnapshot()
         }
       };
@@ -2365,6 +2642,319 @@ async function runSanmaru(input, maybeCtx){
   }
 }
 
+
+/* =========================================================
+   SANMARU FRONT CONTENT SUPPLY LAYER v1
+   ---------------------------------------------------------
+   Purpose:
+   - Search UI is not the only requester.
+   - Search Bank Engine / Snapshot builder / Global Insight can open a supply gate.
+   - Sanmaru translates page/section/slot needs into authorized pipelines and returns
+     SearchBank-ready real content cards.
+   - No test/sample data is created. Route/opening cards are excluded by default.
+========================================================= */
+
+const FRONT_SUPPLY_PROFILE_MAP = {
+  home:          { type:"web",      query:"global useful content official news media", category:"web" },
+  network:       { type:"shopping", query:"global product brand marketplace official site", category:"shopping" },
+  networkhub:    { type:"shopping", query:"global product brand marketplace official site", category:"shopping" },
+  distribution:  { type:"shopping", query:"recommended products shopping commerce", category:"shopping" },
+  distributionhub:{type:"shopping", query:"recommended products shopping commerce", category:"shopping" },
+  social:        { type:"sns",      query:"social media public posts creators video trends", category:"sns" },
+  socialnetwork: { type:"sns",      query:"social media public posts creators video trends", category:"sns" },
+  media:         { type:"video",    query:"latest video media entertainment content", category:"video" },
+  mediahub:      { type:"video",    query:"latest video media entertainment content", category:"video" },
+  tour:          { type:"tour",     query:"travel tourism city attraction official guide", category:"tourism" },
+  tourism:       { type:"tour",     query:"travel tourism city attraction official guide", category:"tourism" },
+  donation:      { type:"news",     query:"global NGO charity donation public welfare news", category:"news" },
+  insight:       { type:"knowledge",query:"global insight analysis official public data", category:"knowledge" },
+  "global-insight": { type:"knowledge", query:"global insight analysis official public data", category:"knowledge" },
+  academic:      { type:"academic", query:"academic research paper library publication", category:"academic" },
+  literature:    { type:"book",     query:"literature books author publication", category:"book" }
+};
+
+const FRONT_SUPPLY_SECTION_ALIASES = {
+  recommend:"recommended products", recommendation:"recommended products", recommended:"recommended products",
+  sponsor:"sponsored products official brand", trending:"trending popular content", popular:"trending popular content",
+  new:"new arrivals latest", latest:"latest content", movie:"latest movie video", movies:"latest movies",
+  drama:"latest drama video", music:"music video", shorts:"shorts video", youtube:"youtube video",
+  instagram:"instagram public content", tiktok:"tiktok public video", facebook:"facebook public page",
+  x:"x twitter public posts", twitter:"x twitter public posts", wechat:"wechat public information", weibo:"weibo public information",
+  pinterest:"pinterest public images", reddit:"reddit public community", ngo:"ngo charity donation", mission:"mission charity",
+  volunteer:"volunteer public welfare", relief:"relief aid charity", education:"education public welfare", environment:"environment public welfare",
+  news:"news official reports", globalnews:"global news", map:"map local official place", local:"local map official place",
+  travel:"travel tourism", tour:"travel tourism", hotel:"hotel travel", food:"restaurant local food"
+};
+
+function frontSupplyKey(v){ return normalizeText(v).replace(/\s+/g, "").slice(0, 120); }
+
+function normalizeFrontPageName(v){
+  const raw = low(v).replace(/[\s_]+/g, "-");
+  const map = {
+    "network-hub":"networkhub", "market-hub":"networkhub", "distribution-hub":"distributionhub", "media-hub":"mediahub",
+    "social-network":"socialnetwork", "maru-global-insight":"global-insight", "literature-academic":"academic"
+  };
+  return map[raw] || raw || "home";
+}
+
+function inferFrontSupplyProfile(input, opts){
+  input = input || {}; opts = opts || {};
+  const rawPage = firstNonEmpty(input.page, input.frontPage, input.psomPage, input.targetPage, input.hub, opts.page, opts.frontPage, opts.psomPage, opts.targetPage, opts.hub);
+  const page = normalizeFrontPageName(rawPage || "home");
+  const section = firstNonEmpty(input.section, input.slot, input.psomKey, input.psom_key, input.area, input.block, opts.section, opts.slot, opts.psomKey, opts.psom_key, opts.area, opts.block);
+  const sectionKey = frontSupplyKey(section);
+  const base = FRONT_SUPPLY_PROFILE_MAP[page] || FRONT_SUPPLY_PROFILE_MAP.home;
+  let type = normalizeSearchType(firstNonEmpty(input.type, input.category, input.contentType, input.kind, opts.type, opts.category, opts.contentType, opts.kind, base.type));
+  const sectionText = normalizeText(section);
+  if(/movie|drama|video|youtube|shorts|music|media|영상|동영상|영화|드라마|뮤비/.test(sectionText)) type = "video";
+  else if(/image|photo|picture|pinterest|gallery|이미지|사진|갤러리/.test(sectionText)) type = "image";
+  else if(/product|shop|commerce|sponsor|recommend|상품|쇼핑|스폰서|추천/.test(sectionText)) type = "shopping";
+  else if(/tour|travel|hotel|food|map|local|관광|여행|지도|주소|맛집|호텔/.test(sectionText)) type = /map|local|지도|주소/.test(sectionText) ? "map" : "tour";
+  else if(/sns|social|instagram|tiktok|facebook|twitter|reddit|weibo|wechat|소셜|인스타|틱톡|페이스북/.test(sectionText)) type = "sns";
+  else if(/news|ngo|donation|relief|environment|education|뉴스|후원|기부|환경|교육/.test(sectionText)) type = "news";
+  else if(/book|literature|academic|paper|research|도서|문학|학술|논문/.test(sectionText)) type = /book|literature|도서|문학/.test(sectionText) ? "book" : "academic";
+
+  const topic = firstNonEmpty(input.topic, input.keyword, input.theme, input.q, input.query, opts.topic, opts.keyword, opts.theme, opts.q, opts.query);
+  const locale = firstNonEmpty(input.lang, input.uiLang, input.locale, opts.lang, opts.uiLang, opts.locale);
+  const region = firstNonEmpty(input.region, input.country, opts.region, opts.country);
+  const sectionAlias = FRONT_SUPPLY_SECTION_ALIASES[sectionKey] || sectionText;
+  const primaryQuery = compactSpaces([topic, sectionAlias, base.query, region].filter(Boolean).join(" ")) || base.query;
+
+  return {
+    page,
+    section:s(section || ""),
+    sectionKey,
+    type,
+    searchType:type,
+    category: type === "map" ? "map_local" : (type === "tour" ? "tourism" : type),
+    query:primaryQuery,
+    explicitTopic:topic,
+    lang:locale,
+    region,
+    target: firstNonEmpty(input.target, input.destination, opts.target, opts.destination, "search-bank"),
+    slotCount: clampInt(firstNonEmpty(input.count, input.slots, input.slotCount, input.limit, opts.count, opts.slots, opts.slotCount, opts.limit), 100, 1, MAX_LIMIT),
+    perSection: clampInt(firstNonEmpty(input.perSection, opts.perSection), 20, 1, 200)
+  };
+}
+
+function frontSupplyQueryVariants(profile){
+  const q = compactSpaces(profile.query || "");
+  const variants = [q];
+  const page = profile.page;
+  const sec = profile.section || "";
+  const langBoost = profile.lang ? " " + profile.lang : "";
+  if(profile.type === "shopping") variants.push(compactSpaces([sec, "best products official shopping price", profile.region].join(" ")));
+  if(profile.type === "video") variants.push(compactSpaces([sec, "youtube video official trailer media latest", profile.region].join(" ")));
+  if(profile.type === "image") variants.push(compactSpaces([sec, "high quality image photo gallery", profile.region].join(" ")));
+  if(profile.type === "tour" || profile.type === "map") variants.push(compactSpaces([sec, "official tourism map address attraction", profile.region].join(" ")));
+  if(profile.type === "sns") variants.push(compactSpaces([sec, "public social media creator post video", profile.region].join(" ")));
+  if(profile.type === "news") variants.push(compactSpaces([sec, "official news public report global", profile.region].join(" ")));
+  if(profile.type === "book" || profile.type === "academic") variants.push(compactSpaces([sec, "research library paper book official", profile.region].join(" ")));
+  variants.push(compactSpaces([page, sec, profile.type, "official" + langBoost].join(" ")));
+  return Array.from(new Set(variants.filter(Boolean))).slice(0, 4);
+}
+
+function frontSupplyGraphType(profile){
+  if(["shopping"].includes(profile.type)) return "commerce";
+  if(["video","image","sns"].includes(profile.type)) return "media";
+  if(["tour","map"].includes(profile.type)) return "region";
+  if(profile.page === "global-insight" || profile.page === "insight") return "insight";
+  return "knowledge";
+}
+
+function normalizeFrontSupplyItem(raw, profile, idx){
+  const item = canonicalItem(raw, profile.query, firstNonEmpty(raw && raw.source, raw && raw.provider, "sanmaru-front-supply"));
+  const id = firstNonEmpty(item.id, item.url, item.title, stableHash([profile.page, profile.sectionKey, idx, item.title, item.source].join("|")));
+  return Object.assign({}, item, {
+    id,
+    sanmaruFrontSupply:true,
+    supplyTarget:profile.target,
+    page: firstNonEmpty(item.page, profile.page),
+    section: firstNonEmpty(item.section, profile.section),
+    psom_key: firstNonEmpty(item.psom_key, item.psomKey, profile.sectionKey),
+    searchCategory: firstNonEmpty(item.searchCategory, profile.category, profile.type),
+    type: firstNonEmpty(item.type, profile.type),
+    contentType: profile.type,
+    bind:Object.assign({}, item.bind || {}, {
+      page:profile.page,
+      section:profile.section,
+      psom_key:profile.sectionKey,
+      target:profile.target,
+      graphType:frontSupplyGraphType(profile)
+    }),
+    meta:Object.assign({}, item.meta || {}, {
+      suppliedBy:"sanmaru",
+      supplyMode:"front-content-supply",
+      frontPage:profile.page,
+      frontSection:profile.section,
+      graphType:frontSupplyGraphType(profile)
+    })
+  });
+}
+
+function rankFrontSupplyItems(items, profile){
+  const seen = new Set();
+  const out = [];
+  for(const raw of Array.isArray(items) ? items : []){
+    if(!raw || typeof raw !== "object") continue;
+    if(raw.sanmaruRouteCard || raw.sanmaruOpeningCard || raw.sanmaruEmergencyDiscovery) continue;
+    const item = normalizeFrontSupplyItem(raw, profile, out.length);
+    const key = low(firstNonEmpty(item.url && item.url !== "#" ? item.url : "", item.id, [item.title,item.source,item.page,item.section,item.image,item.thumbnail].join("|")));
+    if(!key || seen.has(key)) continue;
+    seen.add(key);
+    let boost = 0;
+    const text = normalizeText([item.title,item.summary,item.description,item.source,item.type,item.searchCategory].join(" "));
+    if(profile.type && text.includes(normalizeText(profile.type))) boost += 1.2;
+    if(profile.section && text.includes(normalizeText(profile.section))) boost += 1.0;
+    if(item.thumbnail || item.image) boost += 0.4;
+    if(item.url && item.url !== "#") boost += 0.3;
+    if(/official|gov|go\.kr|공식|정부|기관/.test(text)) boost += 0.4;
+    out.push(Object.assign({}, item, { sanmaruSupplyScore:(item.sanmaruScore || item.score || 0) + boost }));
+  }
+  return out.sort((a,b)=> (b.sanmaruSupplyScore || 0) - (a.sanmaruSupplyScore || 0));
+}
+
+async function maybeWriteBackFrontSupply(profile, items, opts){
+  opts = opts || {};
+  if(!truthy(opts.writeBack || opts.sync || opts.commit || opts.toGraph || opts.searchBankSync)) return { used:false, status:"disabled", count:0 };
+  const started = nowMs();
+  try{
+    let mod = null;
+    try{ mod = require("./maru-searchbank-sync"); }catch(e){ mod = null; }
+    if(!mod || typeof mod.handler !== "function") return { used:true, status:"unavailable", count:0, latency:nowMs()-started };
+    let count = 0;
+    const graphType = frontSupplyGraphType(profile);
+    const subset = (Array.isArray(items) ? items : []).slice(0, clampInt(opts.writeBackLimit, 40, 1, 100));
+    for(const it of subset){
+      const payload = Object.assign({}, it, { type:graphType, topic:profile.sectionKey || profile.page, region:profile.region || undefined });
+      await withTimeout(mod.handler({ httpMethod:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(payload) }), 1200).catch(()=>null);
+      count++;
+    }
+    return { used:true, status:"ok", graph:graphType, count, latency:nowMs()-started };
+  }catch(e){ return { used:true, status:responseErrorCode(e), count:0, latency:nowMs()-started }; }
+}
+
+async function supplyFrontContent(input, opts){
+  const raw = Object.assign({}, input || {}, opts || {});
+  const started = nowMs();
+  ensureGlobalPipelineOS("front-content-supply");
+  const profile = inferFrontSupplyProfile(raw, opts || {});
+  const targetCount = profile.slotCount;
+  const frontSlotProfiles = ensureResidentState().frontSlotProfiles || buildFrontSlotSupplyProfileMatrix();
+  const frontSlotPolicy = frontSlotProfiles[profile.page] || frontSlotProfiles[normalizeFrontPageName(profile.page)] || null;
+  const queries = frontSupplyQueryVariants(profile);
+  const all = [];
+  const trace = [];
+
+  touchResidentSwitch({ reason:"front-content-supply", q:profile.query });
+
+  for(const query of queries){
+    const resident = supplyResidentSync({ q:query, query }, {
+      reason:"front-content-supply-resident",
+      limit:Math.max(targetCount, DEFAULT_LIMIT),
+      candidatePoolTarget:Math.max(targetCount * 3, DEFAULT_CANDIDATE_POOL_TARGET),
+      searchType:profile.searchType,
+      type:profile.searchType,
+      lang:profile.lang,
+      allowRouteCards:false,
+      noRouteCards:true,
+      allowOpeningCards:false,
+      noOpeningCards:true
+    });
+    const items = normalizeItemsFromResponse(resident);
+    all.push(...items);
+    trace.push({ name:"resident-front-supply", query, status:items.length ? "ok" : "empty", count:items.length });
+  }
+
+  let ranked = rankFrontSupplyItems(all, profile);
+  const forceRefresh = truthy(raw.forceRefresh || raw.refresh || raw.live || raw.useExternal || raw.deep || raw.needFresh);
+  const minimumNeed = Math.min(targetCount, Math.max(20, Math.ceil(targetCount * 0.35)));
+
+  if(forceRefresh || ranked.length < minimumNeed){
+    const runTasks = queries.slice(0, forceRefresh ? 4 : 2).map(query => runSanmaru({
+      q:query,
+      query,
+      raw:{
+        from:"front-content-supply",
+        page:profile.page,
+        section:profile.section,
+        target:profile.target,
+        disableInstantSupply:"1",
+        external:firstNonEmpty(raw.external, forceRefresh ? "force" : "auto"),
+        searchExpansion:"wide",
+        noAnalytics:"1",
+        noRevenue:"1"
+      },
+      type:profile.searchType,
+      searchType:profile.searchType,
+      lang:profile.lang,
+      limit:Math.max(targetCount, DEFAULT_LIMIT),
+      candidatePoolTarget:Math.min(MAX_LIMIT, Math.max(targetCount * 4, DEFAULT_CANDIDATE_POOL_TARGET)),
+      expansion:"wide",
+      directExternal:truthy(raw.directExternal || raw.sanmaruDirectExternal || process.env.SANMARU_DIRECT_EXTERNAL),
+      timeoutMs: forceRefresh ? DEEP_TIMEOUT_MS : DEFAULT_TIMEOUT_MS
+    }).catch(e => ({ status:"error", items:[], results:[], meta:{ error:responseErrorCode(e) } })));
+    const settled = await Promise.allSettled(runTasks);
+    for(let i=0;i<settled.length;i++){
+      const val = settled[i].status === "fulfilled" ? settled[i].value : null;
+      const items = normalizeItemsFromResponse(val);
+      all.push(...items);
+      trace.push({ name:"pipeline-front-supply", query:queries[i], status:items.length ? "ok" : (val && val.status || "empty"), count:items.length, error:val && val.meta && val.meta.error });
+    }
+    ranked = rankFrontSupplyItems(all, profile);
+  }
+
+  const finalItems = ranked.slice(0, targetCount);
+  absorbResidentItems(finalItems, { q:profile.query, searchType:profile.searchType, lang:profile.lang, source:"front-content-supply" });
+  const writeBack = await maybeWriteBackFrontSupply(profile, finalItems, raw);
+
+  return {
+    status:"ok",
+    engine:ENGINE_NAME,
+    version:VERSION,
+    action:"front-content-supply",
+    query:profile.query,
+    source:finalItems.length ? "sanmaru-front-supply" : null,
+    page:profile.page,
+    section:profile.section,
+    target:profile.target,
+    type:profile.type,
+    contentType:profile.type,
+    items:finalItems,
+    results:finalItems,
+    cards:finalItems,
+    supplyPackage:{
+      target:profile.target,
+      page:profile.page,
+      section:profile.section,
+      psom_key:profile.sectionKey,
+      graphType:frontSupplyGraphType(profile),
+      snapshotReady:true,
+      searchBankReady:true,
+      count:finalItems.length,
+      items:finalItems
+    },
+    meta:{
+      count:finalItems.length,
+      requestedCount:targetCount,
+      candidateCount:ranked.length,
+      queries,
+      profile,
+      frontSlotPolicy,
+      routePlan:buildRoutePlanForQuery(profile.query, { searchType:profile.searchType, lang:profile.lang, region:profile.region }),
+      globalPipelineOS:globalPipelineSnapshot(),
+      sourceDiversity:sourceDiversity(finalItems),
+      categoryDiversity:categoryDiversity(finalItems),
+      writeBack,
+      resident:residentBootSnapshot(),
+      providerHealth:providerHealthSnapshot(),
+      elapsedMs:nowMs()-started,
+      principle:"Sanmaru supplies front-page/SearchBank/Insight content packages; Maru Search only opens the gate and forwards the request.",
+      trace
+    }
+  };
+}
+
 function healthSnapshot(){
   const circuits = {};
   for(const [k,v] of Object.entries(globalState.circuits || {})){
@@ -2378,6 +2968,7 @@ function healthSnapshot(){
     memorySize: globalState.memory ? globalState.memory.size : 0,
     circuits,
     mountRegistry: mountRegistrySnapshot(),
+    globalPipelineOS: globalPipelineSnapshot(),
     adapters: ["searchbank-index","searchbank","maru-search-wide-gateway"].concat(ADAPTERS.map(x => x.name), ["collector","planetary","ai-gpu"]),
     resident: residentBootSnapshot(),
     categoryBrainReady: true,
@@ -2434,14 +3025,12 @@ async function handler(event){
   if(action === "resident-status") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-status", resident:touchResidentSwitch({ reason:"resident-status" }), health:healthSnapshot(), providerHealth:providerHealthSnapshot() });
   if(action === "provider-health") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"provider-health", providerHealth:providerHealthSnapshot(), resident:residentBootSnapshot() });
   if(action === "source-registry") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"source-registry", sources:sourceRegistrySnapshot(), openingSignals:openingSignalsSnapshot(), resident:residentBootSnapshot() });
+  if(action === "global-pipeline" || action === "pipeline-os" || action === "language-matrix" || action === "geo-route-matrix") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"global-pipeline", pipelineOS:ensureGlobalPipelineOS("api-global-pipeline"), languageMatrix:ensureResidentState().languageMatrix, geoRouteMatrix:ensureResidentState().geoRouteMatrix, frontSlotProfiles:ensureResidentState().frontSlotProfiles, supplyModeMap:ensureResidentState().supplyModeMap, resident:residentBootSnapshot() });
   if(action === "category-map" || action === "category-brain") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"category-map", categories:categoryMapSnapshot(), aliases:PROVIDER_CATEGORY_ALIASES, capabilities:PROVIDER_CAPABILITY_MAP, logosGuard:logosEvaluate([{ type:"category_brain", intent:"stewardship", truthConfidence:0.95 }], "category-map"), resident:residentBootSnapshot() });
   if(action === "route-plan") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"route-plan", routePlan:residentRoutePlanFor(firstNonEmpty(merged.q, merged.query), { searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale) }), resident:touchResidentSwitch({ reason:"route-plan", q:firstNonEmpty(merged.q, merged.query) }) });
   if(action === "supply" || action === "resident-supply") return ok(supplyResidentSync({ q:firstNonEmpty(merged.q, merged.query) }, { reason:"api-supply", limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget), candidatePoolTarget:firstNonEmpty(merged.candidatePool, merged.candidatePoolTarget), searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), page:firstNonEmpty(merged.page, merged.p, merged.start) }));
-  if(action === "pipeline-supply" || action === "open-gate" || action === "pipeline-os") {
-    const res = await runSanmaru({ event:event || {}, raw:Object.assign({}, merged, { pipelineOS:"1", openGate:"1", directExternal:"1", external:"force", noMaruSearch:"1", skipMaruSearch:"1", noCollector:"1", skipCollector:"1", noPlanetary:"1", skipPlanetary:"1" }), q:firstNonEmpty(merged.q, merged.query), limit:merged.limit, type:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), candidatePool:firstNonEmpty(merged.candidatePool, merged.candidatePoolTarget), external:"force", directExternal:"1", pipelineOS:"1", openGate:"1" });
-    return ok(res);
-  }
   if(action === "supply-category" || action === "resident-supply-category") return ok(supplyCategorySync({ q:firstNonEmpty(merged.q, merged.query), category:firstNonEmpty(merged.category, merged.type) }, { reason:"api-supply-category", category:firstNonEmpty(merged.category, merged.type), limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget), candidatePoolTarget:firstNonEmpty(merged.candidatePool, merged.candidatePoolTarget), searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), page:firstNonEmpty(merged.page, merged.p, merged.start) }));
+  if(["front-supply","content-supply","slot-supply","snapshot-supply","searchbank-supply","insight-supply"].includes(action)) return ok(await supplyFrontContent(merged, { reason:"api-front-content-supply" }));
   if(action === "deep-refresh" || action === "resident-refresh") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"deep-refresh", refresh:triggerDeepRefresh({ q:firstNonEmpty(merged.q, merged.query) }, { reason:"api-deep-refresh", searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget) }) });
 
   const res = await runSanmaru({
@@ -2485,9 +3074,13 @@ module.exports = {
   ensureResidentBoot,
   residentBootSnapshot,
   providerHealthSnapshot,
+  globalPipelineSnapshot,
+  ensureGlobalPipelineOS,
+  detectSanmaruGeoContext,
   touchResidentSwitch,
   supplyResidentSync,
   supplyCategorySync,
+  supplyFrontContent,
   triggerDeepRefresh,
   absorbResidentItems
 };
@@ -2504,9 +3097,13 @@ exports.buildRoutePlanForQuery = buildRoutePlanForQuery;
 exports.ensureResidentBoot = ensureResidentBoot;
 exports.residentBootSnapshot = residentBootSnapshot;
 exports.providerHealthSnapshot = providerHealthSnapshot;
+exports.globalPipelineSnapshot = globalPipelineSnapshot;
+exports.ensureGlobalPipelineOS = ensureGlobalPipelineOS;
+exports.detectSanmaruGeoContext = detectSanmaruGeoContext;
 exports.touchResidentSwitch = touchResidentSwitch;
 exports.supplyResidentSync = supplyResidentSync;
 exports.supplyCategorySync = supplyCategorySync;
+exports.supplyFrontContent = supplyFrontContent;
 exports.triggerDeepRefresh = triggerDeepRefresh;
 exports.absorbResidentItems = absorbResidentItems;
 try { ensureResidentBoot({ reason:"module-load" }); } catch(e) {}
