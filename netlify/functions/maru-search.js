@@ -20,11 +20,11 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.47-sanmaru-provider-lane-gateway';
-const DEFAULT_LIMIT = 3000;
-const MAX_LIMIT = 12000;
-const MIN_RESULT_TARGET = 1500;
-const DEFAULT_SOFT_TIMEOUT_MS = 12000;
+const VERSION = 'A1.5.46-595-sanmaru-cpu-direct-page25-sns-google-fix';
+const DEFAULT_LIMIT = 1000;
+const MAX_LIMIT = 5000;
+const MIN_RESULT_TARGET = 500;
+const DEFAULT_SOFT_TIMEOUT_MS = 6500;
 
 // MARU gateway policy:
 // - Internal search-bank first.
@@ -33,13 +33,13 @@ const DEFAULT_SOFT_TIMEOUT_MS = 12000;
 // - Same query calls are cached and in-flight de-duplicated to prevent recursive / repeated bursts.
 const MARU_GATEWAY_CACHE_TTL_MS = 5 * 60 * 1000;
 const MARU_INFLIGHT_TTL_MS = 30 * 1000;
-const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
+const DEFAULT_EXTERNAL_TRIGGER_MIN = 60;
 const OG_IMAGE_ENRICH_LIMIT = 36;
 const OG_IMAGE_ENRICH_CONCURRENCY = 6;
 const OG_IMAGE_ENRICH_TIMEOUT_MS = 1200;
 const OG_IMAGE_CACHE_TTL_MS = 30 * 60 * 1000;
-const MAX_SEARCH_BANK_PAGES_NORMAL = 30;
-const MAX_SEARCH_BANK_PAGES_DEEP = 60;
+const MAX_SEARCH_BANK_PAGES_NORMAL = 14;
+const MAX_SEARCH_BANK_PAGES_DEEP = 30;
 
 function nowMs(){ return Date.now(); }
 
@@ -2390,23 +2390,24 @@ function hasAnyLooseTerm(text, terms){
 function sourceCaps(opts){
   const deep = !!opts.deep;
   return {
-    searchBankPages: deep ? MAX_SEARCH_BANK_PAGES_DEEP : MAX_SEARCH_BANK_PAGES_NORMAL,
-    // Provider-lane gateway contract: Maru Search opens the road once, Sanmaru
-    // owns the route plan, and each provider lane contributes its own native/API results.
-    naverPages: deep ? 12 : 10,
-    naverBlogPages: deep ? 8 : 6,
-    naverNewsPages: deep ? 8 : 6,
-    naverCafePages: deep ? 8 : 6,
-    naverEncycPages: deep ? 4 : 3,
-    naverKinPages: deep ? 4 : 3,
-    naverBookPages: deep ? 5 : 4,
-    naverLocalPages: deep ? 3 : 2,
-    googlePages: deep ? 10 : 8,
-    bingPages: deep ? 8 : 6,
-    imagePages: deep ? 8 : 6,
-    naverImagePages: deep ? 8 : 6,
-    youtubeLimit: deep ? 150 : 120,
-    timeoutMs: deep ? 18000 : DEFAULT_SOFT_TIMEOUT_MS
+    searchBankPages: deep ? MAX_SEARCH_BANK_PAGES_DEEP : Math.min(MAX_SEARCH_BANK_PAGES_NORMAL, 8),
+    // Fast first search contract: page 1 must not wait 30~50 seconds.
+    // Normal mode opens every major road once, with enough breadth for pagination,
+    // then Sanmaru absorbs the results for instant follow-up supply.
+    naverPages: deep ? 10 : 4,
+    naverBlogPages: deep ? 5 : 2,
+    naverNewsPages: deep ? 5 : 2,
+    naverCafePages: deep ? 4 : 2,
+    naverEncycPages: deep ? 1 : 1,
+    naverKinPages: deep ? 1 : 1,
+    naverBookPages: deep ? 2 : 1,
+    naverLocalPages: 1,
+    googlePages: deep ? 6 : 1,
+    bingPages: deep ? 3 : 1,
+    imagePages: deep ? 4 : 1,
+    naverImagePages: deep ? 4 : 1,
+    youtubeLimit: deep ? 100 : 25,
+    timeoutMs: deep ? 12000 : DEFAULT_SOFT_TIMEOUT_MS
   };
 }
 
@@ -4216,56 +4217,6 @@ async function attachMediaEngineResults(base, event, ctx){
 
 
 
-
-async function attachSanmaruProviderLaneResults(base, event, ctx){
-  base = base && typeof base === 'object' ? base : { items: [], results: [], meta: {} };
-  const raw = (ctx && ctx.raw) || {};
-  const q = safeString(ctx && ctx.q).trim();
-  const limit = clampInt(ctx && ctx.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
-  if(!q || truthy(raw.noSanmaru) || truthy(raw.skipSanmaru) || truthy(raw.disableSanmaru)) return base;
-  let Sanmaru = null;
-  try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
-  if(!Sanmaru || typeof Sanmaru.runSanmaru !== 'function') return base;
-  const trace = Array.isArray(base.meta && base.meta.trace) ? base.meta.trace.slice() : [];
-  try{
-    const target = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET, ctx && ctx.currentCount || 0, 3000));
-    const res = await Sanmaru.runSanmaru(q, {
-      event:event || {}, q, query:q,
-      limit:target,
-      candidatePool:Math.min(MAX_LIMIT, Math.max(target * 2, 6000)),
-      searchType: ctx && ctx.searchType,
-      lang: ctx && ctx.lang,
-      from:'maru-search-provider-lane-gate',
-      source:'maru-search',
-      external:'force',
-      directExternal:'1',
-      sanmaruProviderLanes:'1',
-      waitProviders:'1',
-      disableInstantSupply:'1',
-      noAnalytics:'1',
-      noRevenue:'1'
-    });
-    const sanItems = (Array.isArray(res && res.items) ? res.items : (Array.isArray(res && res.results) ? res.results : []))
-      .map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru-provider-lane')));
-    const merged = dedupeCanonicalItems([].concat(base.items || [], sanItems)).slice(0, Math.min(MAX_LIMIT, Math.max(target, sanItems.length, (base.items || []).length)));
-    trace.push({ name:'sanmaru-provider-lane-gate', status:sanItems.length ? 'ok' : 'empty', count:sanItems.length, mode:'provider-lane-os-wide-gate' });
-    absorbIntoSanmaruResident(q, merged, { searchType: ctx && ctx.searchType, lang: ctx && ctx.lang });
-    return Object.assign({}, base, {
-      source: base.source || (sanItems.length ? 'sanmaru-provider-lane' : base.source),
-      items: merged,
-      results: merged,
-      meta: Object.assign({}, base.meta || {}, {
-        count: merged.length,
-        sanmaruProviderLaneGate:{ status:sanItems.length ? 'ok' : 'empty', count:sanItems.length, target, elapsedMs:res && res.meta && res.meta.elapsedMs, providerLaneOs:res && res.meta && res.meta.providerLaneOs },
-        trace
-      })
-    });
-  }catch(e){
-    trace.push({ name:'sanmaru-provider-lane-gate', status:'soft-failed', count:0, error:safeString((e && e.message) || e).slice(0,160) });
-    return Object.assign({}, base, { meta:Object.assign({}, base.meta || {}, { trace, sanmaruProviderLaneGate:{ status:'soft-failed' } }) });
-  }
-}
-
 async function attachSanmaruAugmentResults(base, event, ctx){
   base = base && typeof base === 'object' ? base : { items: [], results: [], meta: {} };
   const raw = (ctx && ctx.raw) || {};
@@ -4314,11 +4265,7 @@ async function attachSanmaruAugmentResults(base, event, ctx){
           lang: ctx && ctx.lang,
           from: 'maru-search-augment-deep',
           source: 'maru-search',
-          external: 'force',
-          directExternal: '1',
-          sanmaruProviderLanes: '1',
-          waitProviders: '1',
-          disableInstantSupply: '1'
+          noMaruSearch: '1', skipMaruSearch: '1', noCollector: '1', skipCollector: '1', noPlanetary: '1', skipPlanetary: '1'
         });
         const sanItemsRaw = Array.isArray(res && res.items) ? res.items : (Array.isArray(res && res.results) ? res.results : []);
         const sanItems = sanItemsRaw.map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru')));
@@ -4376,7 +4323,7 @@ exports.handler = async function(event){
     if(!security.allowed){
       return ok({ status:'blocked', engine:'maru-search', version:VERSION, action, message:'protected Maru/Sanmaru gateway action', security });
     }
-    if(action === 'resident-status' || action === 'resident-boot' || action === 'resident-switch' || action === 'provider-health' || action === 'source-registry' || action === 'category-map' || action === 'route-plan' || action === 'deep-refresh' || ['front-supply','content-supply','slot-supply','snapshot-supply','searchbank-supply','insight-supply'].includes(action)){
+    if(action === 'resident-status' || action === 'resident-boot' || action === 'resident-switch' || action === 'provider-health' || action === 'source-registry' || action === 'category-map' || action === 'route-plan' || action === 'deep-refresh'){
       let Sanmaru = null;
       try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
       if(Sanmaru && typeof Sanmaru.handler === 'function'){
@@ -4457,9 +4404,6 @@ exports.handler = async function(event){
         base = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType, sanmaruRouteContext });
         base = await attachMediaEngineResults(base, event, { q, limit, start, lang, searchType, raw, noMedia });
         base = await attachSanmaruAugmentResults(base, event, { q, limit, start, lang, searchType, raw, noMedia });
-        if((base.items || []).length < Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET)) && !truthy(raw.noSanmaruDeepGate)){
-          base = await attachSanmaruProviderLaneResults(base, event, { q, limit, start, lang, searchType, raw, noMedia, currentCount:(base.items || []).length });
-        }
       }catch(e){
         base = buildSanmaruFastLayerBase(q, residentSeedPack || { items: [], meta:{} }, Object.assign({}, raw || {}, { limit }), { region:detectRuntimeRegion(event, lang, q) });
         base.meta = Object.assign({}, base.meta || {}, {
