@@ -20,11 +20,11 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.47-596-sanmaru-global-pipeline-gateway';
-const DEFAULT_LIMIT = 1000;
-const MAX_LIMIT = 5000;
-const MIN_RESULT_TARGET = 500;
-const DEFAULT_SOFT_TIMEOUT_MS = 6500;
+const VERSION = 'A1.5.47-sanmaru-provider-lane-gateway';
+const DEFAULT_LIMIT = 3000;
+const MAX_LIMIT = 12000;
+const MIN_RESULT_TARGET = 1500;
+const DEFAULT_SOFT_TIMEOUT_MS = 12000;
 
 // MARU gateway policy:
 // - Internal search-bank first.
@@ -33,13 +33,13 @@ const DEFAULT_SOFT_TIMEOUT_MS = 6500;
 // - Same query calls are cached and in-flight de-duplicated to prevent recursive / repeated bursts.
 const MARU_GATEWAY_CACHE_TTL_MS = 5 * 60 * 1000;
 const MARU_INFLIGHT_TTL_MS = 30 * 1000;
-const DEFAULT_EXTERNAL_TRIGGER_MIN = 60;
+const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
 const OG_IMAGE_ENRICH_LIMIT = 36;
 const OG_IMAGE_ENRICH_CONCURRENCY = 6;
 const OG_IMAGE_ENRICH_TIMEOUT_MS = 1200;
 const OG_IMAGE_CACHE_TTL_MS = 30 * 60 * 1000;
-const MAX_SEARCH_BANK_PAGES_NORMAL = 14;
-const MAX_SEARCH_BANK_PAGES_DEEP = 30;
+const MAX_SEARCH_BANK_PAGES_NORMAL = 30;
+const MAX_SEARCH_BANK_PAGES_DEEP = 60;
 
 function nowMs(){ return Date.now(); }
 
@@ -1597,71 +1597,6 @@ function getSanmaruResidentForMaru(q, raw, opts){
 }
 
 
-
-async function openSanmaruSupplyGateForMaru(q, raw, opts){
-  raw = raw || {};
-  opts = opts || {};
-  const started = nowMs();
-  let Sanmaru = null;
-  try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
-  if(!Sanmaru || typeof Sanmaru.runSanmaru !== 'function'){
-    return { items: [], meta: { status:'unavailable', elapsedMs:nowMs()-started } };
-  }
-  try{
-    if(typeof Sanmaru.ensureGlobalPipelineOS === 'function') Sanmaru.ensureGlobalPipelineOS('maru-search-open-gate');
-    if(typeof Sanmaru.touchResidentSwitch === 'function') Sanmaru.touchResidentSwitch({ reason:'maru-search-open-gate', q, query:q });
-    const searchType = normalizeSearchType(opts.searchType || raw.type || raw.category || raw.tab || raw.vertical || 'all');
-    const res = await Sanmaru.runSanmaru({
-      event: Object.assign({}, opts.event || {}, { __maruSearchGate:true }),
-      raw: Object.assign({}, raw, {
-        from:'maru-search-open-gate',
-        requester:'maru-search',
-        routeOwner:'sanmaru',
-        noMaruSearch:'1',
-        skipMaruSearch:'1',
-        noCollector:'1',
-        skipCollector:'1',
-        noPlanetary:'1',
-        skipPlanetary:'1',
-        external:'auto'
-      }),
-      q, query:q,
-      limit: Math.min(MAX_LIMIT, Math.max(clampInt(raw.limit, DEFAULT_LIMIT, 1, MAX_LIMIT), MIN_RESULT_TARGET)),
-      candidatePool: Math.min(MAX_LIMIT, Math.max(clampInt(raw.candidatePool || raw.candidatePoolTarget, DEFAULT_LIMIT, 1, MAX_LIMIT), MIN_RESULT_TARGET)),
-      searchType,
-      type:searchType,
-      lang: opts.lang || raw.lang || raw.uiLang || raw.locale,
-      source:'maru-search-gateway',
-      from:'maru-search-open-gate',
-      disableInstantSupply:false,
-      directExternal:false,
-      noExternal: truthy(raw.noExternal || raw.disableExternal),
-      timeoutMs: 1800
-    });
-    const rawItems = Array.isArray(res && res.items) ? res.items : (Array.isArray(res && res.results) ? res.results : []);
-    const items = rawItems.map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru-open-gate')));
-    return {
-      items,
-      meta: {
-        status: items.length ? 'ok' : 'empty',
-        elapsedMs:nowMs()-started,
-        count:items.length,
-        sanmaruVersion:res && res.version,
-        mode:'maru-search-opened-sanmaru-supply-gate',
-        maruRole:'gatekeeper-only',
-        sanmaruRole:'global-pipeline-os-supply-owner',
-        globalPipelineOS:res && res.meta && res.meta.globalPipelineOS,
-        routePlan:res && res.meta && res.meta.routePlan,
-        geoContext:res && res.meta && res.meta.geoContext,
-        resident:res && res.meta && res.meta.resident,
-        source:res && res.source
-      }
-    };
-  }catch(e){
-    return { items: [], meta: { status:'soft-failed', elapsedMs:nowMs()-started, error:safeString((e && e.message) || e).slice(0,160) } };
-  }
-}
-
 function getSanmaruRouteContextForMaru(q, raw, opts){
   raw = raw || {};
   opts = opts || {};
@@ -2455,24 +2390,23 @@ function hasAnyLooseTerm(text, terms){
 function sourceCaps(opts){
   const deep = !!opts.deep;
   return {
-    searchBankPages: deep ? MAX_SEARCH_BANK_PAGES_DEEP : Math.min(MAX_SEARCH_BANK_PAGES_NORMAL, 8),
-    // Fast first search contract: page 1 must not wait 30~50 seconds.
-    // Normal mode opens every major road once, with enough breadth for pagination,
-    // then Sanmaru absorbs the results for instant follow-up supply.
-    naverPages: deep ? 10 : 4,
-    naverBlogPages: deep ? 5 : 2,
-    naverNewsPages: deep ? 5 : 2,
-    naverCafePages: deep ? 4 : 2,
-    naverEncycPages: deep ? 1 : 1,
-    naverKinPages: deep ? 1 : 1,
-    naverBookPages: deep ? 2 : 1,
-    naverLocalPages: 1,
-    googlePages: deep ? 6 : 1,
-    bingPages: deep ? 3 : 1,
-    imagePages: deep ? 4 : 1,
-    naverImagePages: deep ? 4 : 1,
-    youtubeLimit: deep ? 100 : 25,
-    timeoutMs: deep ? 12000 : DEFAULT_SOFT_TIMEOUT_MS
+    searchBankPages: deep ? MAX_SEARCH_BANK_PAGES_DEEP : MAX_SEARCH_BANK_PAGES_NORMAL,
+    // Provider-lane gateway contract: Maru Search opens the road once, Sanmaru
+    // owns the route plan, and each provider lane contributes its own native/API results.
+    naverPages: deep ? 12 : 10,
+    naverBlogPages: deep ? 8 : 6,
+    naverNewsPages: deep ? 8 : 6,
+    naverCafePages: deep ? 8 : 6,
+    naverEncycPages: deep ? 4 : 3,
+    naverKinPages: deep ? 4 : 3,
+    naverBookPages: deep ? 5 : 4,
+    naverLocalPages: deep ? 3 : 2,
+    googlePages: deep ? 10 : 8,
+    bingPages: deep ? 8 : 6,
+    imagePages: deep ? 8 : 6,
+    naverImagePages: deep ? 8 : 6,
+    youtubeLimit: deep ? 150 : 120,
+    timeoutMs: deep ? 18000 : DEFAULT_SOFT_TIMEOUT_MS
   };
 }
 
@@ -4282,6 +4216,56 @@ async function attachMediaEngineResults(base, event, ctx){
 
 
 
+
+async function attachSanmaruProviderLaneResults(base, event, ctx){
+  base = base && typeof base === 'object' ? base : { items: [], results: [], meta: {} };
+  const raw = (ctx && ctx.raw) || {};
+  const q = safeString(ctx && ctx.q).trim();
+  const limit = clampInt(ctx && ctx.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
+  if(!q || truthy(raw.noSanmaru) || truthy(raw.skipSanmaru) || truthy(raw.disableSanmaru)) return base;
+  let Sanmaru = null;
+  try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
+  if(!Sanmaru || typeof Sanmaru.runSanmaru !== 'function') return base;
+  const trace = Array.isArray(base.meta && base.meta.trace) ? base.meta.trace.slice() : [];
+  try{
+    const target = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET, ctx && ctx.currentCount || 0, 3000));
+    const res = await Sanmaru.runSanmaru(q, {
+      event:event || {}, q, query:q,
+      limit:target,
+      candidatePool:Math.min(MAX_LIMIT, Math.max(target * 2, 6000)),
+      searchType: ctx && ctx.searchType,
+      lang: ctx && ctx.lang,
+      from:'maru-search-provider-lane-gate',
+      source:'maru-search',
+      external:'force',
+      directExternal:'1',
+      sanmaruProviderLanes:'1',
+      waitProviders:'1',
+      disableInstantSupply:'1',
+      noAnalytics:'1',
+      noRevenue:'1'
+    });
+    const sanItems = (Array.isArray(res && res.items) ? res.items : (Array.isArray(res && res.results) ? res.results : []))
+      .map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru-provider-lane')));
+    const merged = dedupeCanonicalItems([].concat(base.items || [], sanItems)).slice(0, Math.min(MAX_LIMIT, Math.max(target, sanItems.length, (base.items || []).length)));
+    trace.push({ name:'sanmaru-provider-lane-gate', status:sanItems.length ? 'ok' : 'empty', count:sanItems.length, mode:'provider-lane-os-wide-gate' });
+    absorbIntoSanmaruResident(q, merged, { searchType: ctx && ctx.searchType, lang: ctx && ctx.lang });
+    return Object.assign({}, base, {
+      source: base.source || (sanItems.length ? 'sanmaru-provider-lane' : base.source),
+      items: merged,
+      results: merged,
+      meta: Object.assign({}, base.meta || {}, {
+        count: merged.length,
+        sanmaruProviderLaneGate:{ status:sanItems.length ? 'ok' : 'empty', count:sanItems.length, target, elapsedMs:res && res.meta && res.meta.elapsedMs, providerLaneOs:res && res.meta && res.meta.providerLaneOs },
+        trace
+      })
+    });
+  }catch(e){
+    trace.push({ name:'sanmaru-provider-lane-gate', status:'soft-failed', count:0, error:safeString((e && e.message) || e).slice(0,160) });
+    return Object.assign({}, base, { meta:Object.assign({}, base.meta || {}, { trace, sanmaruProviderLaneGate:{ status:'soft-failed' } }) });
+  }
+}
+
 async function attachSanmaruAugmentResults(base, event, ctx){
   base = base && typeof base === 'object' ? base : { items: [], results: [], meta: {} };
   const raw = (ctx && ctx.raw) || {};
@@ -4330,7 +4314,11 @@ async function attachSanmaruAugmentResults(base, event, ctx){
           lang: ctx && ctx.lang,
           from: 'maru-search-augment-deep',
           source: 'maru-search',
-          noMaruSearch: '1', skipMaruSearch: '1', noCollector: '1', skipCollector: '1', noPlanetary: '1', skipPlanetary: '1'
+          external: 'force',
+          directExternal: '1',
+          sanmaruProviderLanes: '1',
+          waitProviders: '1',
+          disableInstantSupply: '1'
         });
         const sanItemsRaw = Array.isArray(res && res.items) ? res.items : (Array.isArray(res && res.results) ? res.results : []);
         const sanItems = sanItemsRaw.map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru')));
@@ -4388,7 +4376,7 @@ exports.handler = async function(event){
     if(!security.allowed){
       return ok({ status:'blocked', engine:'maru-search', version:VERSION, action, message:'protected Maru/Sanmaru gateway action', security });
     }
-    if(action === 'resident-status' || action === 'resident-boot' || action === 'resident-switch' || action === 'provider-health' || action === 'source-registry' || action === 'category-map' || action === 'route-plan' || action === 'global-pipeline' || action === 'pipeline-os' || action === 'language-matrix' || action === 'geo-route-matrix' || action === 'deep-refresh' || ['front-supply','content-supply','slot-supply','snapshot-supply','searchbank-supply','insight-supply'].includes(action)){
+    if(action === 'resident-status' || action === 'resident-boot' || action === 'resident-switch' || action === 'provider-health' || action === 'source-registry' || action === 'category-map' || action === 'route-plan' || action === 'deep-refresh' || ['front-supply','content-supply','slot-supply','snapshot-supply','searchbank-supply','insight-supply'].includes(action)){
       let Sanmaru = null;
       try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
       if(Sanmaru && typeof Sanmaru.handler === 'function'){
@@ -4443,21 +4431,11 @@ exports.handler = async function(event){
     // into Sanmaru. items/results are never capped to the viewport; only
     // visiblePagePack.pageItems is page-sized.
     const sanmaruRouteContext = getSanmaruRouteContextForMaru(q, raw || {}, { searchType, lang, limit, reason:'maru-top-route-owner-context' });
-    const sanmaruGateSupply = await openSanmaruSupplyGateForMaru(q, raw || {}, { event, searchType, lang, limit });
     let residentSeedPack = null;
     let residentRefreshSignal = null;
     if(!truthy(raw && (raw.noResident || raw.skipResident || raw.disableResident))){
       residentSeedPack = getSanmaruResidentForMaru(q, raw || {}, { searchType, lang, limit, reason:'maru-top-resident-seed-preserve-wide-search' });
       residentRefreshSignal = triggerSanmaruResidentRefresh(q, raw || {}, { searchType, lang, limit });
-    }
-    if(sanmaruGateSupply && Array.isArray(sanmaruGateSupply.items) && sanmaruGateSupply.items.length){
-      residentSeedPack = residentSeedPack || { items: [], meta: {} };
-      residentSeedPack.items = dedupeCanonicalItems([].concat(residentSeedPack.items || [], sanmaruGateSupply.items));
-      residentSeedPack.meta = Object.assign({}, residentSeedPack.meta || {}, {
-        openGateSupply:sanmaruGateSupply.meta || {},
-        maruSearchGatewayRole:'opens-sanmaru-dam-gate-and-forwards-supply-package',
-        sanmaruPipelineOwner:true
-      });
     }
 
     let base = null;
@@ -4479,6 +4457,9 @@ exports.handler = async function(event){
         base = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType, sanmaruRouteContext });
         base = await attachMediaEngineResults(base, event, { q, limit, start, lang, searchType, raw, noMedia });
         base = await attachSanmaruAugmentResults(base, event, { q, limit, start, lang, searchType, raw, noMedia });
+        if((base.items || []).length < Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET)) && !truthy(raw.noSanmaruDeepGate)){
+          base = await attachSanmaruProviderLaneResults(base, event, { q, limit, start, lang, searchType, raw, noMedia, currentCount:(base.items || []).length });
+        }
       }catch(e){
         base = buildSanmaruFastLayerBase(q, residentSeedPack || { items: [], meta:{} }, Object.assign({}, raw || {}, { limit }), { region:detectRuntimeRegion(event, lang, q) });
         base.meta = Object.assign({}, base.meta || {}, {
@@ -4575,7 +4556,7 @@ exports.handler = async function(event){
       pageItems: visiblePagePack.pageItems,
       visiblePagePack,
       sectionPack: sectionPackWithViewport,
-      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', security:{ allowed:true, admin:security.admin, mode:'read-search-open-admin-actions-protected' }, sanmaruTopResident: Object.assign({}, sanmaruRouteContext && sanmaruRouteContext.meta || {}, { routePlan: sanmaruRouteContext && sanmaruRouteContext.routePlan, providerHealth: sanmaruRouteContext && sanmaruRouteContext.providerHealth }), sanmaruOpenGateSupply: sanmaruGateSupply && sanmaruGateSupply.meta || null, searchContract:{ owner:'sanmaru-global-web-information-cpu', maruRole:'mounted-gateway-ui-body', itemResults:'full-candidate-pool-not-viewport-limited', viewport:'page-sized-current-render-window', perPage:visiblePagePack.perPage, providerRescanPolicy:'sanmaru-global-pipeline-os-first; wide gateway remains fallback/refresh path only' }, preservationPatch: 'A1.5.47-596-sanmaru-global-pipeline-gateway' })
+      meta: Object.assign({}, base.meta || {}, { count: (base.items || []).length, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', security:{ allowed:true, admin:security.admin, mode:'read-search-open-admin-actions-protected' }, sanmaruTopResident: Object.assign({}, sanmaruRouteContext && sanmaruRouteContext.meta || {}, { routePlan: sanmaruRouteContext && sanmaruRouteContext.routePlan, providerHealth: sanmaruRouteContext && sanmaruRouteContext.providerHealth }), searchContract:{ owner:'sanmaru-global-web-information-cpu', maruRole:'mounted-gateway-ui-body', itemResults:'full-candidate-pool-not-viewport-limited', viewport:'page-sized-current-render-window', perPage:visiblePagePack.perPage, providerRescanPolicy:'skip-only-when-sanmaru-holds-broad-query-cache; otherwise preserve-google-naver-sns-wide-gateway' }, preservationPatch: 'A1.5.46-595-direct-page25-sns-google-category-fix' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));
