@@ -21,10 +21,10 @@ const path = require('path');
 const crypto = require('crypto');
 
 const VERSION = 'A1.5.46-595-sanmaru-cpu-direct-page25-sns-google-fix';
-const DEFAULT_LIMIT = 1000;
-const MAX_LIMIT = 5000;
-const MIN_RESULT_TARGET = 500;
-const DEFAULT_SOFT_TIMEOUT_MS = 6500;
+const DEFAULT_LIMIT = 2000;
+const MAX_LIMIT = 12000;
+const MIN_RESULT_TARGET = 1500;
+const DEFAULT_SOFT_TIMEOUT_MS = 10500;
 
 // MARU gateway policy:
 // - Internal search-bank first.
@@ -33,13 +33,13 @@ const DEFAULT_SOFT_TIMEOUT_MS = 6500;
 // - Same query calls are cached and in-flight de-duplicated to prevent recursive / repeated bursts.
 const MARU_GATEWAY_CACHE_TTL_MS = 5 * 60 * 1000;
 const MARU_INFLIGHT_TTL_MS = 30 * 1000;
-const DEFAULT_EXTERNAL_TRIGGER_MIN = 60;
+const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
 const OG_IMAGE_ENRICH_LIMIT = 36;
 const OG_IMAGE_ENRICH_CONCURRENCY = 6;
 const OG_IMAGE_ENRICH_TIMEOUT_MS = 1200;
 const OG_IMAGE_CACHE_TTL_MS = 30 * 60 * 1000;
-const MAX_SEARCH_BANK_PAGES_NORMAL = 14;
-const MAX_SEARCH_BANK_PAGES_DEEP = 30;
+const MAX_SEARCH_BANK_PAGES_NORMAL = 30;
+const MAX_SEARCH_BANK_PAGES_DEEP = 60;
 
 function nowMs(){ return Date.now(); }
 
@@ -2390,24 +2390,24 @@ function hasAnyLooseTerm(text, terms){
 function sourceCaps(opts){
   const deep = !!opts.deep;
   return {
-    searchBankPages: deep ? MAX_SEARCH_BANK_PAGES_DEEP : Math.min(MAX_SEARCH_BANK_PAGES_NORMAL, 8),
-    // Fast first search contract: page 1 must not wait 30~50 seconds.
-    // Normal mode opens every major road once, with enough breadth for pagination,
-    // then Sanmaru absorbs the results for instant follow-up supply.
-    naverPages: deep ? 10 : 4,
-    naverBlogPages: deep ? 5 : 2,
-    naverNewsPages: deep ? 5 : 2,
-    naverCafePages: deep ? 4 : 2,
-    naverEncycPages: deep ? 1 : 1,
-    naverKinPages: deep ? 1 : 1,
-    naverBookPages: deep ? 2 : 1,
-    naverLocalPages: 1,
-    googlePages: deep ? 6 : 1,
-    bingPages: deep ? 3 : 1,
-    imagePages: deep ? 4 : 1,
-    naverImagePages: deep ? 4 : 1,
-    youtubeLimit: deep ? 100 : 25,
-    timeoutMs: deep ? 12000 : DEFAULT_SOFT_TIMEOUT_MS
+    searchBankPages: deep ? MAX_SEARCH_BANK_PAGES_DEEP : MAX_SEARCH_BANK_PAGES_NORMAL,
+    // Sanmaru/Maru Search must not choke the information road at the gateway.
+    // Normal mode stays bounded, but opens the major provider lanes broadly enough
+    // to avoid the old few-hundred-result ceiling. Deep mode is still the wider pass.
+    naverPages: deep ? 10 : 10,
+    naverBlogPages: deep ? 8 : 6,
+    naverNewsPages: deep ? 8 : 6,
+    naverCafePages: deep ? 8 : 6,
+    naverEncycPages: deep ? 3 : 2,
+    naverKinPages: deep ? 3 : 2,
+    naverBookPages: deep ? 4 : 2,
+    naverLocalPages: deep ? 3 : 2,
+    googlePages: deep ? 9 : 6,
+    bingPages: deep ? 6 : 4,
+    imagePages: deep ? 6 : 4,
+    naverImagePages: deep ? 6 : 4,
+    youtubeLimit: deep ? 180 : 120,
+    timeoutMs: deep ? 15000 : DEFAULT_SOFT_TIMEOUT_MS
   };
 }
 
@@ -2824,7 +2824,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       ]);
 
       const afterPrimaryExternal = collected.length;
-      const naturalExpansionTarget = Math.min(Math.max(limit, MIN_RESULT_TARGET), 700);
+      const naturalExpansionTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
       if(timeLeft() > 1200){
         await pullFromNaverVerticals();
       } else {

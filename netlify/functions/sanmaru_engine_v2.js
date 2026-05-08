@@ -30,9 +30,9 @@ try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) 
 const VERSION = "sanmaru-engine-v2.6.1-engine-upload-lifecycle";
 const ENGINE_NAME = "sanmaru";
 
-const DEFAULT_LIMIT = 1000;
+const DEFAULT_LIMIT = 2000;
 const DEFAULT_VISIBLE_PER_PAGE = 25;
-const MAX_LIMIT = 10000;
+const MAX_LIMIT = 12000;
 const DEFAULT_TIMEOUT_MS = 10500;
 const DEEP_TIMEOUT_MS = 15000;
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -42,9 +42,9 @@ const RATE_MAX = 60;
 const MAX_QUERY_LENGTH = 240;
 const MIN_FAST_TARGET = 1000;
 const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
-const DEFAULT_CANDIDATE_POOL_TARGET = 3000;
-const MAX_INDEX_FAST_LIMIT = 2000;
-const MAX_SEARCH_BANK_FAST_LIMIT = 2000;
+const DEFAULT_CANDIDATE_POOL_TARGET = 10000;
+const MAX_INDEX_FAST_LIMIT = 8000;
+const MAX_SEARCH_BANK_FAST_LIMIT = 8000;
 
 const globalState = globalThis.__SANMARU_V2_STATE || (globalThis.__SANMARU_V2_STATE = {
   cache: new Map(),
@@ -379,6 +379,52 @@ const PROVIDER_CAPABILITY_MAP = {
   "university-library": ["university_library","academic","book"],
   "wiki-knowledge": ["wiki","knowledge"]
 };
+
+// -----------------------------------------------------------------------------
+// SANMARU PROVIDER LANE OS POLICY (non-invasive)
+// This is a policy/diagnostic layer only. It does not replace existing adapters,
+// exports, handler shape, resident maps, Search Bank bridge, or Maru Search flow.
+// The goal is to keep Sanmaru as the global pipeline OS: route/health/trust/mount
+// manager first, direct crawler only where an authorized provider lane is open.
+// -----------------------------------------------------------------------------
+const SANMARU_SUPPORTED_LANGUAGE_MATRIX = [
+  "ko","en","zh","zht","ja","es","fr","de","ru","pt","it","ar","vi","th","id",
+  "hi","tr","fa","bn","ur","sw","ta","hu","ms","nl","pl","sv","tl","uk","uz"
+];
+
+const SANMARU_PROVIDER_LANE_POLICY = {
+  role:"global-information-pipeline-os",
+  maruSearchRole:"gate-opener-and-delivery-road",
+  dataStoragePolicy:"lightweight-resident-cache-index-route-map-only",
+  directSearchPolicy:"provider-native-api-or-authorized-public-route-only",
+  responsePolicy:"resident-first-provider-lane-open-when-not-explicitly-blocked",
+  futureMountPolicy:"reserved-mount-promotes-to-active-when-key-permission-contract-or-runtime-opens",
+  defaultRanking:["official","government","public_data","knowledge","wiki","news","map_local","tourism","shopping","sns","blog","cafe","community","image","video","web"],
+  pipelineStates:["active","reserved","blocked","discovery","future"]
+};
+
+function sanmaruProviderLaneSnapshot(){
+  const registry = sourceRegistrySnapshot();
+  const active=[]; const reserved=[]; const discovery=[]; const blocked=[];
+  for(const [name, meta] of Object.entries(registry || {})){
+    const row = { provider:name, enabled:meta.enabled !== false, status:meta.status || (meta.enabled === false ? "reserved" : "active"), categories:meta.categories || [], role:meta.role || meta.roleInSanmaru || "mounted-information-source" };
+    if(row.enabled) active.push(row);
+    else reserved.push(row);
+  }
+  for(const name of ["local-supplier","regional-cooperative","fishery-cooperative","small-factory","small-merchant","municipal-open-data","licensed-db","gpu-ai-worker"]){
+    if(!registry[name]) discovery.push({ provider:name, enabled:false, status:"discovery-or-future-mount", categories:[], role:"future autonomous extension lane" });
+  }
+  return {
+    policy:SANMARU_PROVIDER_LANE_POLICY,
+    languages:SANMARU_SUPPORTED_LANGUAGE_MATRIX.slice(),
+    active,
+    reserved,
+    blocked,
+    discovery,
+    generatedAt:nowIso()
+  };
+}
+
 
 function categoryMapSnapshot(){
   const out = {};
@@ -2390,6 +2436,7 @@ module.exports = {
   ensureResidentBoot,
   residentBootSnapshot,
   providerHealthSnapshot,
+  sanmaruProviderLaneSnapshot,
   touchResidentSwitch,
   supplyResidentSync,
   supplyCategorySync,
@@ -2409,6 +2456,7 @@ exports.buildRoutePlanForQuery = buildRoutePlanForQuery;
 exports.ensureResidentBoot = ensureResidentBoot;
 exports.residentBootSnapshot = residentBootSnapshot;
 exports.providerHealthSnapshot = providerHealthSnapshot;
+exports.sanmaruProviderLaneSnapshot = sanmaruProviderLaneSnapshot;
 exports.touchResidentSwitch = touchResidentSwitch;
 exports.supplyResidentSync = supplyResidentSync;
 exports.supplyCategorySync = supplyCategorySync;
