@@ -30,9 +30,9 @@ try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) 
 const VERSION = "sanmaru-engine-v2.6.1-engine-upload-lifecycle";
 const ENGINE_NAME = "sanmaru";
 
-const DEFAULT_LIMIT = 1000;
+const DEFAULT_LIMIT = 2000;
 const DEFAULT_VISIBLE_PER_PAGE = 25;
-const MAX_LIMIT = 10000;
+const MAX_LIMIT = 12000;
 const DEFAULT_TIMEOUT_MS = 10500;
 const DEEP_TIMEOUT_MS = 15000;
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -42,9 +42,9 @@ const RATE_MAX = 60;
 const MAX_QUERY_LENGTH = 240;
 const MIN_FAST_TARGET = 1000;
 const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
-const DEFAULT_CANDIDATE_POOL_TARGET = 3000;
-const MAX_INDEX_FAST_LIMIT = 2000;
-const MAX_SEARCH_BANK_FAST_LIMIT = 2000;
+const DEFAULT_CANDIDATE_POOL_TARGET = 10000;
+const MAX_INDEX_FAST_LIMIT = 8000;
+const MAX_SEARCH_BANK_FAST_LIMIT = 8000;
 
 const globalState = globalThis.__SANMARU_V2_STATE || (globalThis.__SANMARU_V2_STATE = {
   cache: new Map(),
@@ -379,6 +379,52 @@ const PROVIDER_CAPABILITY_MAP = {
   "university-library": ["university_library","academic","book"],
   "wiki-knowledge": ["wiki","knowledge"]
 };
+
+// -----------------------------------------------------------------------------
+// SANMARU PROVIDER LANE OS POLICY (non-invasive)
+// This is a policy/diagnostic layer only. It does not replace existing adapters,
+// exports, handler shape, resident maps, Search Bank bridge, or Maru Search flow.
+// The goal is to keep Sanmaru as the global pipeline OS: route/health/trust/mount
+// manager first, direct crawler only where an authorized provider lane is open.
+// -----------------------------------------------------------------------------
+const SANMARU_SUPPORTED_LANGUAGE_MATRIX = [
+  "ko","en","zh","zht","ja","es","fr","de","ru","pt","it","ar","vi","th","id",
+  "hi","tr","fa","bn","ur","sw","ta","hu","ms","nl","pl","sv","tl","uk","uz"
+];
+
+const SANMARU_PROVIDER_LANE_POLICY = {
+  role:"global-information-pipeline-os",
+  maruSearchRole:"gate-opener-and-delivery-road",
+  dataStoragePolicy:"lightweight-resident-cache-index-route-map-only",
+  directSearchPolicy:"provider-native-api-or-authorized-public-route-only",
+  responsePolicy:"resident-first-provider-lane-open-when-not-explicitly-blocked",
+  futureMountPolicy:"reserved-mount-promotes-to-active-when-key-permission-contract-or-runtime-opens",
+  defaultRanking:["official","government","public_data","knowledge","wiki","news","map_local","tourism","shopping","sns","blog","cafe","community","image","video","web"],
+  pipelineStates:["active","reserved","blocked","discovery","future"]
+};
+
+function sanmaruProviderLaneSnapshot(){
+  const registry = sourceRegistrySnapshot();
+  const active=[]; const reserved=[]; const discovery=[]; const blocked=[];
+  for(const [name, meta] of Object.entries(registry || {})){
+    const row = { provider:name, enabled:meta.enabled !== false, status:meta.status || (meta.enabled === false ? "reserved" : "active"), categories:meta.categories || [], role:meta.role || meta.roleInSanmaru || "mounted-information-source" };
+    if(row.enabled) active.push(row);
+    else reserved.push(row);
+  }
+  for(const name of ["local-supplier","regional-cooperative","fishery-cooperative","small-factory","small-merchant","municipal-open-data","licensed-db","gpu-ai-worker"]){
+    if(!registry[name]) discovery.push({ provider:name, enabled:false, status:"discovery-or-future-mount", categories:[], role:"future autonomous extension lane" });
+  }
+  return {
+    policy:SANMARU_PROVIDER_LANE_POLICY,
+    languages:SANMARU_SUPPORTED_LANGUAGE_MATRIX.slice(),
+    active,
+    reserved,
+    blocked,
+    discovery,
+    generatedAt:nowIso()
+  };
+}
+
 
 function categoryMapSnapshot(){
   const out = {};
@@ -771,128 +817,6 @@ function residentRoutePlanFor(q, opts){
 }
 
 
-
-const SANMARU_FRONT_SLOT_PROFILES = {
-  home: {
-    page:'home', defaultType:'content', slotCount:48,
-    sections:{ main:'global official local news culture commerce media', rightTop:'public official sponsor commerce', rightMiddle:'news media insight', rightBottom:'tour culture donation' }
-  },
-  network: { page:'network', defaultType:'commerce', slotCount:100, sections:{ rightPanel:'public supplier company cooperative local business factory small merchant product' } },
-  distribution: { page:'distribution', defaultType:'product', slotCount:120, sections:{ recommend:'local product supplier cooperative manufacturer', sponsor:'sponsor commerce supplier', trending:'popular product local market', new:'new product small merchant factory', special:'special product regional supplier', etc:'commerce product public supplier' } },
-  media: { page:'media', defaultType:'media', slotCount:120, sections:{ trending:'video media entertainment news', movie:'movie film official trailer', drama:'drama series media', documentary:'documentary knowledge public media', shorts:'shorts youtube video sns' } },
-  tour: { page:'tour', defaultType:'tour', slotCount:100, sections:{ main:'official tourism local attraction festival hotel restaurant transport', rightPanel:'tour travel local official culture' } },
-  social: { page:'social', defaultType:'sns', slotCount:120, sections:{ youtube:'youtube video', instagram:'instagram sns photo', tiktok:'tiktok shorts video', facebook:'facebook public page', x:'twitter x public post', reddit:'reddit community', rightPanel:'sns trend community media' } },
-  donation: { page:'donation', defaultType:'news', slotCount:100, sections:{ globalNews:'ngo donation relief public news', ngo:'ngo official charity', mission:'mission volunteer', environment:'environment public campaign', education:'education support charity' } },
-  insight: { page:'maru-global-insight', defaultType:'insight', slotCount:80, sections:{ global:'global news public data official insight economy society culture technology' } }
-};
-
-function authorityProfile(q, opts){
-  const text = s(q).trim();
-  const hasHangul = /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(text);
-  const publicIntent = /시청|구청|군청|도청|읍사무소|면사무소|동주민센터|주민센터|정부|공공|공식|기관|청사|주소|위치|민원|행정|관광청|문화재청|교육청|보건소|경찰서|소방서|우체국|지자체|municipal|city hall|county|district office|government|official|public office|embassy|ministry|agency/.test(text);
-  const geoIntent = /(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주|수원|고양|용인|성남|창원|청주|전주|천안|안산|안양|포항|김해|평택|시흥|파주|의정부|김포|한국|대한민국|일본|중국|미국|영국|프랑스|독일|베트남|태국|city|province|state|country|korea|japan|china|usa|united states|uk|france|germany|vietnam|thailand)/i.test(text);
-  return { query:text, region:s(opts && opts.region || '').toUpperCase() || (hasHangul ? 'KR' : 'GLOBAL'), publicIntent, geoIntent, shouldShow: publicIntent || geoIntent || hasHangul };
-}
-
-function knownAuthorityCards(q, profile){
-  const specs = [
-    [/서울|서울시|서울특별시/i, '서울특별시 공식 홈페이지', 'https://www.seoul.go.kr/', '서울특별시 공식 행정·정책·민원 정보'],
-    [/부산|부산시|부산광역시/i, '부산광역시 공식 홈페이지', 'https://www.busan.go.kr/', '부산광역시 공식 행정·정책·민원 정보'],
-    [/대구|대구시|대구광역시/i, '대구광역시 공식 홈페이지', 'https://www.daegu.go.kr/', '대구광역시 공식 행정·정책·민원 정보'],
-    [/인천|인천시|인천광역시/i, '인천광역시 공식 홈페이지', 'https://www.incheon.go.kr/', '인천광역시 공식 행정·정책·민원 정보'],
-    [/광주광역시|광주시/i, '광주광역시 공식 홈페이지', 'https://www.gwangju.go.kr/', '광주광역시 공식 행정·정책·민원 정보'],
-    [/대전|대전시|대전광역시/i, '대전광역시 공식 홈페이지', 'https://www.daejeon.go.kr/', '대전광역시 공식 행정·정책·민원 정보'],
-    [/울산|울산시|울산광역시/i, '울산광역시 공식 홈페이지', 'https://www.ulsan.go.kr/', '울산광역시 공식 행정·정책·민원 정보'],
-    [/세종|세종시|세종특별자치시/i, '세종특별자치시 공식 홈페이지', 'https://www.sejong.go.kr/', '세종특별자치시 공식 행정·정책·민원 정보'],
-    [/제주|제주도|제주특별자치도/i, '제주특별자치도 공식 홈페이지', 'https://www.jeju.go.kr/', '제주특별자치도 공식 행정·관광·민원 정보'],
-    [/대한민국|한국|korea/i, '대한민국 정책브리핑 / 공식 정부 정보', 'https://www.korea.kr/', '대한민국 정부 정책·공식 발표·공공정보']
-  ];
-  const out=[];
-  for(const [re,title,url,summary] of specs){
-    if(re.test(q)) out.push(canonicalItem({ title:'[공식 상단] '+title, summary, url, link:url, source:'authority_direct_official', provider:'official-authority', type:'official', searchCategory:'official', mediaType:'article', sourceTrust:0.98, score:99.5, authorityTopAnswer:true, pinnedTop:true }, q, 'authority-direct'));
-  }
-  return out;
-}
-
-function buildAuthorityTopAnswerCards(q, opts){
-  const clean = sanitizeQuery(q);
-  if(!clean.ok) return [];
-  const profile = authorityProfile(clean.value, opts || {});
-  if(!profile.shouldShow) return [];
-  const enc = encodeURIComponent(clean.value);
-  const kr = profile.region === 'KR' || /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(clean.value);
-  const cards = knownAuthorityCards(clean.value, profile);
-  cards.push(
-    canonicalItem({ title:'[공식 상단] '+clean.value+' 공식기관 / 공공기관', summary:clean.value+' 관련 공식기관·정부·지자체 우선 경로', url:'https://www.google.com/search?q='+encodeURIComponent(clean.value+' 공식 홈페이지 정부 공공기관 지자체 site:go.kr OR site:gov'), link:'https://www.google.com/search?q='+encodeURIComponent(clean.value+' 공식 홈페이지 정부 공공기관 지자체 site:go.kr OR site:gov'), source:'authority_google_official', provider:'google-official-route', type:'official', searchCategory:'official', mediaType:'article', sourceTrust:0.96, score:98.5, authorityTopAnswer:true, pinnedTop:true }, clean.value, 'authority-google-official'),
-    canonicalItem({ title:'[공식 상단] '+clean.value+' 네이버 공식/지역 정보', summary:clean.value+' 관련 네이버 공식·공공·지역 검색 경로', url:'https://search.naver.com/search.naver?query='+encodeURIComponent(clean.value+' 공식 홈페이지 지자체 공공기관'), link:'https://search.naver.com/search.naver?query='+encodeURIComponent(clean.value+' 공식 홈페이지 지자체 공공기관'), source:'authority_naver_official', provider:'naver-official-route', type:'official', searchCategory:'official', mediaType:'article', sourceTrust:0.94, score:97.8, authorityTopAnswer:true, pinnedTop:true }, clean.value, 'authority-naver-official'),
-    canonicalItem({ title:'[공식 상단] '+clean.value+' 위키/백과 기본 정보', summary:clean.value+' 관련 위키·백과·기초 지식 경로', url:'https://www.google.com/search?q='+encodeURIComponent(clean.value+' wikipedia encyclopedia wiki 나무위키 백과'), link:'https://www.google.com/search?q='+encodeURIComponent(clean.value+' wikipedia encyclopedia wiki 나무위키 백과'), source:'authority_knowledge_wiki', provider:'wiki-knowledge-route', type:'knowledge', searchCategory:'knowledge', mediaType:'article', sourceTrust:0.86, score:94.2, authorityTopAnswer:true, pinnedTop:true }, clean.value, 'authority-wiki'),
-    canonicalItem({ title:'[공식 상단] '+clean.value+' 지도/위치', summary:clean.value+' 위치·지도·지역 정보', url:(kr ? 'https://map.naver.com/p/search/' : 'https://www.google.com/maps/search/') + enc, link:(kr ? 'https://map.naver.com/p/search/' : 'https://www.google.com/maps/search/') + enc, source:kr ? 'authority_naver_map' : 'authority_google_map', provider:kr ? 'naver-map-authority' : 'google-map-authority', type:'map', searchCategory:'map', mediaType:'map', sourceTrust:0.88, score:92.0, authorityTopAnswer:true, pinnedTop:true }, clean.value, 'authority-map')
-  );
-  return dedupeItems(cards).slice(0, 6);
-}
-
-function prependAuthorityTopAnswers(items, q, opts){
-  const authority = buildAuthorityTopAnswerCards(q, opts || {});
-  const merged = dedupeItems([].concat(authority, Array.isArray(items) ? items : []));
-  merged.sort((a,b)=>{
-    const ap = a && a.authorityTopAnswer ? 1 : 0;
-    const bp = b && b.authorityTopAnswer ? 1 : 0;
-    if(ap !== bp) return bp - ap;
-    return (Number(b && (b.score || b.sanmaruScore)) || 0) - (Number(a && (a.score || a.sanmaruScore)) || 0);
-  });
-  return merged;
-}
-
-function inferFrontSlotProfile(raw, opts){
-  raw = Object.assign({}, raw || {}, opts || {});
-  const page = low(firstNonEmpty(raw.page, raw.route, raw.targetPage, raw.frontPage, 'home')).replace(/\.html$/, '').replace(/_/g, '-');
-  const sectionKey = firstNonEmpty(raw.sectionKey, raw.psom_key, raw.psomKey, raw.section, raw.slot, raw.target, 'main');
-  const pageKey = page.includes('distribution') ? 'distribution' : page.includes('media') ? 'media' : page.includes('tour') ? 'tour' : page.includes('donation') ? 'donation' : page.includes('social') ? 'social' : page.includes('network') ? 'network' : page.includes('insight') ? 'insight' : 'home';
-  const pageProfile = SANMARU_FRONT_SLOT_PROFILES[pageKey] || SANMARU_FRONT_SLOT_PROFILES.home;
-  const sectionText = firstNonEmpty(pageProfile.sections && (pageProfile.sections[sectionKey] || pageProfile.sections[low(sectionKey)]), sectionKey, pageProfile.defaultType, raw.query, raw.q);
-  const query = firstNonEmpty(raw.q, raw.query, [pageKey, sectionText, raw.lang || '', raw.region || ''].filter(Boolean).join(' '));
-  const type = normalizeSearchType(firstNonEmpty(raw.type, raw.category, raw.searchType, pageProfile.defaultType));
-  const slotCount = Math.min(MAX_LIMIT, Math.max(1, parseInt(firstNonEmpty(raw.slotCount, raw.count, raw.limit, pageProfile.slotCount, 40), 10) || 40));
-  return { page:pageKey, section:s(sectionKey), sectionKey:s(sectionKey), query, type, searchType:type, lang:firstNonEmpty(raw.lang, raw.uiLang, raw.locale), region:firstNonEmpty(raw.region, raw.country), slotCount, target:firstNonEmpty(raw.target, pageKey+':'+sectionKey) };
-}
-
-function frontSlotQueryVariants(profile){
-  const base = [profile.query, [profile.page, profile.section, profile.type].join(' '), [profile.section, profile.type, profile.region, profile.lang].filter(Boolean).join(' ')];
-  if(profile.type === 'product' || profile.page === 'distribution') base.push(profile.query + ' supplier manufacturer cooperative local product');
-  if(profile.type === 'tour' || profile.page === 'tour') base.push(profile.query + ' official tourism attraction festival local');
-  if(profile.type === 'media' || profile.page === 'media') base.push(profile.query + ' video media official trailer news');
-  if(profile.type === 'sns' || profile.page === 'social') base.push(profile.query + ' public social youtube instagram tiktok');
-  return Array.from(new Set(base.map(x => compactSpaces(x)).filter(Boolean))).slice(0, 5);
-}
-
-function normalizeFrontSlotItem(raw, profile, idx){
-  const item = canonicalItem(raw, profile.query, firstNonEmpty(raw && raw.source, raw && raw.provider, 'sanmaru-front-slot'));
-  return Object.assign({}, item, { sanmaruFrontSupply:true, page:profile.page, section:profile.section, psom_key:profile.sectionKey, supplyTarget:profile.target, searchCategory:firstNonEmpty(item.searchCategory, profile.type), contentType:profile.type, bind:Object.assign({}, item.bind || {}, { page:profile.page, section:profile.section, psom_key:profile.sectionKey, target:profile.target }), score:(Number(item.score || item.sanmaruScore) || 0) + (idx < 10 ? 0.5 : 0) });
-}
-
-function rankFrontSlotItems(items, profile){
-  const ranked = prependAuthorityTopAnswers(Array.isArray(items) ? items : [], profile.query, { region:profile.region, searchType:profile.searchType }).map((it, idx) => normalizeFrontSlotItem(it, profile, idx));
-  return finalRank(profile.query, ranked, { searchType:profile.searchType, intents:[profile.searchType, profile.page, profile.section] });
-}
-
-function supplyFrontSlotPackage(input, opts){
-  const started = nowMs();
-  const profile = inferFrontSlotProfile(input, opts || {});
-  touchResidentSwitch({ reason:'front-slot-supply', q:profile.query });
-  const queries = frontSlotQueryVariants(profile);
-  const all = [];
-  const trace = [];
-  for(const query of queries){
-    const res = supplyResidentSync({ q:query, query }, { reason:'front-slot-supply-resident', limit:Math.max(profile.slotCount, DEFAULT_LIMIT), candidatePoolTarget:Math.max(profile.slotCount * 3, DEFAULT_CANDIDATE_POOL_TARGET), searchType:profile.searchType, type:profile.searchType, lang:profile.lang, page:1, allowRouteCards:false, noRouteCards:true, allowOpeningCards:false, noOpeningCards:true });
-    const items = Array.isArray(res && res.items) ? res.items : [];
-    all.push(...items);
-    trace.push({ name:'front-slot-resident', query, status:items.length ? 'ok' : 'empty', count:items.length });
-  }
-  const ranked = rankFrontSlotItems(all, profile).slice(0, profile.slotCount);
-  absorbResidentItems(ranked, { q:profile.query, searchType:profile.searchType, lang:profile.lang, source:'front-slot-supply' });
-  return { status:'ok', engine:ENGINE_NAME, version:VERSION, action:'front-supply', query:profile.query, source:ranked.length ? 'sanmaru-front-slot-supply' : null, page:profile.page, section:profile.section, target:profile.target, type:profile.type, items:ranked, results:ranked, cards:ranked, supplyPackage:{ target:profile.target, page:profile.page, section:profile.section, psom_key:profile.sectionKey, snapshotReady:true, searchBankReady:true, count:ranked.length, items:ranked }, meta:{ count:ranked.length, requestedCount:profile.slotCount, candidateCount:all.length, profile, queries, resident:residentBootSnapshot(), routePlan:buildRoutePlanForQuery(profile.query, { searchType:profile.searchType, lang:profile.lang }), elapsedMs:nowMs()-started, immediate:true, principle:'Front slot supply is served from Sanmaru resident/SearchBank memory first; provider refresh is separate/background.', trace } };
-}
-
 function routeProviderSearchUrl(provider, q){
   const enc = encodeURIComponent(q || "");
   const p = s(provider).toLowerCase();
@@ -1028,8 +952,7 @@ function supplyResidentSync(input, opts){
   if(opts.allowOpeningCards !== false && opts.noOpeningCards !== true){
     openingFallbackCards = buildOpeningFallbackCards(clean.value, Object.assign({}, opts, { openingCardLimit: clampInt(opts.openingCardLimit, 24, 1, 40) }));
   }
-  items = prependAuthorityTopAnswers(items.concat(routeFallbackCards, openingFallbackCards), clean.value, { region:opts.region, searchType:opts.searchType || opts.type });
-  items = dedupeItems(items);
+  items = dedupeItems(items.concat(routeFallbackCards, openingFallbackCards));
   if(items.length < minVisible) items = items.slice(0, minVisible);
   const cacheKey = queryCacheHit ? (exactCacheKey || noPageCacheKey) : (rememberResidentQueryCache(clean.value, opts, items) || residentCacheKey(clean.value, opts));
 
@@ -2158,7 +2081,6 @@ async function runSanmaru(input, maybeCtx){
       allowOpeningCards:true
     });
     let instantItems = Array.isArray(supplied && supplied.items) ? supplied.items : [];
-    instantItems = prependAuthorityTopAnswers(instantItems, ctx.q, { region:ctx.region, searchType:ctx.searchType });
     const finalTarget = Math.min(MAX_LIMIT, Math.max(ctx.limit, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET));
     instantItems = finalRank(ctx.q, instantItems, ctx).slice(0, finalTarget).map(it => {
       const copy = Object.assign({}, it);
@@ -2471,7 +2393,6 @@ async function handler(event){
   if(action === "route-plan") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"route-plan", routePlan:residentRoutePlanFor(firstNonEmpty(merged.q, merged.query), { searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale) }), resident:touchResidentSwitch({ reason:"route-plan", q:firstNonEmpty(merged.q, merged.query) }) });
   if(action === "supply" || action === "resident-supply") return ok(supplyResidentSync({ q:firstNonEmpty(merged.q, merged.query) }, { reason:"api-supply", limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget), candidatePoolTarget:firstNonEmpty(merged.candidatePool, merged.candidatePoolTarget), searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), page:firstNonEmpty(merged.page, merged.p, merged.start) }));
   if(action === "supply-category" || action === "resident-supply-category") return ok(supplyCategorySync({ q:firstNonEmpty(merged.q, merged.query), category:firstNonEmpty(merged.category, merged.type) }, { reason:"api-supply-category", category:firstNonEmpty(merged.category, merged.type), limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget), candidatePoolTarget:firstNonEmpty(merged.candidatePool, merged.candidatePoolTarget), searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), page:firstNonEmpty(merged.page, merged.p, merged.start) }));
-  if(['front-supply','content-supply','slot-supply','snapshot-supply','searchbank-supply','insight-supply'].includes(action)) return ok(supplyFrontSlotPackage(merged, { reason:action }));
   if(action === "deep-refresh" || action === "resident-refresh") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"deep-refresh", refresh:triggerDeepRefresh({ q:firstNonEmpty(merged.q, merged.query) }, { reason:"api-deep-refresh", searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget) }) });
 
   const res = await runSanmaru({
@@ -2515,12 +2436,11 @@ module.exports = {
   ensureResidentBoot,
   residentBootSnapshot,
   providerHealthSnapshot,
+  sanmaruProviderLaneSnapshot,
   touchResidentSwitch,
   supplyResidentSync,
   supplyCategorySync,
   triggerDeepRefresh,
-  supplyFrontSlotPackage,
-  buildAuthorityTopAnswerCards,
   absorbResidentItems
 };
 
@@ -2536,11 +2456,10 @@ exports.buildRoutePlanForQuery = buildRoutePlanForQuery;
 exports.ensureResidentBoot = ensureResidentBoot;
 exports.residentBootSnapshot = residentBootSnapshot;
 exports.providerHealthSnapshot = providerHealthSnapshot;
+exports.sanmaruProviderLaneSnapshot = sanmaruProviderLaneSnapshot;
 exports.touchResidentSwitch = touchResidentSwitch;
 exports.supplyResidentSync = supplyResidentSync;
 exports.supplyCategorySync = supplyCategorySync;
 exports.triggerDeepRefresh = triggerDeepRefresh;
-exports.supplyFrontSlotPackage = supplyFrontSlotPackage;
-exports.buildAuthorityTopAnswerCards = buildAuthorityTopAnswerCards;
 exports.absorbResidentItems = absorbResidentItems;
 try { ensureResidentBoot({ reason:"module-load" }); } catch(e) {}
