@@ -21,10 +21,10 @@ const path = require('path');
 const crypto = require('crypto');
 
 const VERSION = 'A1.5.46-595-sanmaru-cpu-direct-page25-sns-google-fix';
-const DEFAULT_LIMIT = 2000;
-const MAX_LIMIT = 12000;
-const MIN_RESULT_TARGET = 1500;
-const DEFAULT_SOFT_TIMEOUT_MS = 10500;
+const DEFAULT_LIMIT = 1000;
+const MAX_LIMIT = 5000;
+const MIN_RESULT_TARGET = 500;
+const DEFAULT_SOFT_TIMEOUT_MS = 6500;
 
 // MARU gateway policy:
 // - Internal search-bank first.
@@ -33,13 +33,13 @@ const DEFAULT_SOFT_TIMEOUT_MS = 10500;
 // - Same query calls are cached and in-flight de-duplicated to prevent recursive / repeated bursts.
 const MARU_GATEWAY_CACHE_TTL_MS = 5 * 60 * 1000;
 const MARU_INFLIGHT_TTL_MS = 30 * 1000;
-const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
+const DEFAULT_EXTERNAL_TRIGGER_MIN = 60;
 const OG_IMAGE_ENRICH_LIMIT = 36;
 const OG_IMAGE_ENRICH_CONCURRENCY = 6;
 const OG_IMAGE_ENRICH_TIMEOUT_MS = 1200;
 const OG_IMAGE_CACHE_TTL_MS = 30 * 60 * 1000;
-const MAX_SEARCH_BANK_PAGES_NORMAL = 30;
-const MAX_SEARCH_BANK_PAGES_DEEP = 60;
+const MAX_SEARCH_BANK_PAGES_NORMAL = 14;
+const MAX_SEARCH_BANK_PAGES_DEEP = 30;
 
 function nowMs(){ return Date.now(); }
 
@@ -1672,8 +1672,9 @@ function buildImmediateResidentResponse(q, raw, residentPack, baseMeta){
   const candidateTarget = Math.min(MAX_LIMIT, Math.max(clampInt(raw && (raw.candidatePool || raw.candidatePoolTarget || raw.limit), DEFAULT_LIMIT, 1, MAX_LIMIT), MIN_RESULT_TARGET));
   const visibleNeed = clampInt(firstNonEmpty(raw && (raw.perPage || raw.pageSize || raw.visibleCardsPerPage || raw.visibleLimit), 25), 25, 1, 100);
   let items = dedupeCanonicalItems(residentPack.items || []).slice(0, candidateTarget).map(compactResultItem);
+  items = prependAuthorityTopAnswers(items, q, { region:'GLOBAL', searchType:raw && (raw.type || raw.category || raw.tab || raw.vertical) }).slice(0, candidateTarget).map(compactResultItem);
   if(items.length < visibleNeed){
-    items = dedupeCanonicalItems(items.concat(openDiscoverySurfaceCards(q), mapCards(q, 'GLOBAL'), googleLikeSearchLinks(q))).slice(0, Math.max(visibleNeed, items.length)).map(compactResultItem);
+    items = prependAuthorityTopAnswers(dedupeCanonicalItems(items.concat(openDiscoverySurfaceCards(q), mapCards(q, 'GLOBAL'), googleLikeSearchLinks(q))), q, { region:'GLOBAL', searchType:raw && (raw.type || raw.category || raw.tab || raw.vertical) }).slice(0, Math.max(visibleNeed, items.length)).map(compactResultItem);
   }
   const fullSectionPack = buildSearchSections(items, q, { searchType: raw && (raw.type || raw.category || raw.tab || raw.vertical) });
   const visiblePagePack = buildCollapseAwareVisiblePagePack(items, q, raw || {}, fullSectionPack);
@@ -1895,6 +1896,83 @@ function mapCards(q, region){
     { title: '[Map] ' + q + ' - Naver Map', url: 'https://map.naver.com/p/search/' + enc, source: 'naver_map', mediaType: 'map', type: 'map', summary: q + ' 네이버 지도 검색', score: 0.71 }
   ];
   return cards.map(x => canonicalizeItem(x, q, x.source));
+}
+
+
+function authorityQueryProfile(q, region){
+  const text = safeString(q).trim();
+  const lowText = text.toLowerCase();
+  const hasHangul = /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(text);
+  const publicIntent = /시청|구청|군청|도청|읍사무소|면사무소|동주민센터|주민센터|정부|공공|공식|기관|청사|주소|위치|민원|행정|관광청|문화재청|교육청|보건소|경찰서|소방서|우체국|지자체|municipal|city hall|county|district office|government|official|public office|embassy|ministry|agency/.test(text);
+  const geoIntent = /(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주|수원|고양|용인|성남|창원|청주|전주|천안|안산|안양|포항|김해|평택|시흥|파주|의정부|김포|광주광역시|화성|한국|대한민국|일본|중국|미국|영국|프랑스|독일|베트남|태국|인도네시아|필리핀|city|province|state|country|korea|japan|china|usa|united states|uk|france|germany|vietnam|thailand|indonesia|philippines)/i.test(text);
+  const searchType = normalizeSearchType(region && region.searchType || 'all');
+  const shouldShow = publicIntent || geoIntent || hasHangul || ['map','tour','knowledge','news','all','web'].includes(searchType);
+  return {
+    query:text,
+    region:safeString(region && region.region || region || '').toUpperCase() || (hasHangul ? 'KR' : 'GLOBAL'),
+    publicIntent,
+    geoIntent,
+    shouldShow
+  };
+}
+
+function knownAuthorityDirectCards(q, profile){
+  const text = safeString(q).trim();
+  const compact = text.replace(/\s+/g, '');
+  const map = [
+    [/서울|서울시|서울특별시/i, ['서울특별시 공식 홈페이지', 'https://www.seoul.go.kr/', '서울특별시 공식 행정·정책·민원 정보입니다.']],
+    [/부산|부산시|부산광역시/i, ['부산광역시 공식 홈페이지', 'https://www.busan.go.kr/', '부산광역시 공식 행정·정책·민원 정보입니다.']],
+    [/대구|대구시|대구광역시/i, ['대구광역시 공식 홈페이지', 'https://www.daegu.go.kr/', '대구광역시 공식 행정·정책·민원 정보입니다.']],
+    [/인천|인천시|인천광역시/i, ['인천광역시 공식 홈페이지', 'https://www.incheon.go.kr/', '인천광역시 공식 행정·정책·민원 정보입니다.']],
+    [/광주광역시|광주시/i, ['광주광역시 공식 홈페이지', 'https://www.gwangju.go.kr/', '광주광역시 공식 행정·정책·민원 정보입니다.']],
+    [/대전|대전시|대전광역시/i, ['대전광역시 공식 홈페이지', 'https://www.daejeon.go.kr/', '대전광역시 공식 행정·정책·민원 정보입니다.']],
+    [/울산|울산시|울산광역시/i, ['울산광역시 공식 홈페이지', 'https://www.ulsan.go.kr/', '울산광역시 공식 행정·정책·민원 정보입니다.']],
+    [/세종|세종시|세종특별자치시/i, ['세종특별자치시 공식 홈페이지', 'https://www.sejong.go.kr/', '세종특별자치시 공식 행정·정책·민원 정보입니다.']],
+    [/제주|제주도|제주특별자치도/i, ['제주특별자치도 공식 홈페이지', 'https://www.jeju.go.kr/', '제주특별자치도 공식 행정·관광·민원 정보입니다.']],
+    [/대한민국|한국|korea/i, ['대한민국 정책브리핑 / 공식 정부 정보', 'https://www.korea.kr/', '대한민국 정부 정책·공식 발표·공공정보입니다.']]
+  ];
+  const out = [];
+  for(const [re, spec] of map){
+    if(re.test(text) || re.test(compact)){
+      out.push({
+        title:'[공식 상단] ' + spec[0],
+        summary:spec[2],
+        url:spec[1], link:spec[1], source:'authority_direct_official', provider:'official-authority', type:'official', searchCategory:'official', mediaType:'article', sourceTrust:0.98, score:99.5, authorityTopAnswer:true, pinnedTop:true
+      });
+    }
+  }
+  return out.map(x => canonicalizeItem(x, q, x.source));
+}
+
+function authorityTopAnswerCards(q, ctx){
+  if(!q) return [];
+  const profile = authorityQueryProfile(q, ctx || {});
+  if(!profile.shouldShow) return [];
+  const enc = encodeURIComponent(q);
+  const cards = [];
+  cards.push(...knownAuthorityDirectCards(q, profile));
+  const kr = profile.region === 'KR' || /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(q);
+  const officialQuery = kr ? (q + ' 공식 홈페이지 정부 공공기관 지자체') : (q + ' official government public authority');
+  cards.push(
+    { title:'[공식 상단] ' + q + ' 공식기관 / 공공기관', url:'https://www.google.com/search?q=' + encodeURIComponent(officialQuery + ' site:go.kr OR site:gov'), source:'authority_google_official', provider:'google-official-route', type:'official', searchCategory:'official', mediaType:'article', summary:q + ' 관련 공식기관·정부·지자체 우선 검색 경로입니다.', sourceTrust:0.96, score:98.5, authorityTopAnswer:true, pinnedTop:true },
+    { title:'[공식 상단] ' + q + ' 네이버 공식/지자체 검색', url:'https://search.naver.com/search.naver?query=' + encodeURIComponent(q + ' 공식 홈페이지 지자체 공공기관'), source:'authority_naver_official', provider:'naver-official-route', type:'official', searchCategory:'official', mediaType:'article', summary:q + ' 관련 네이버 공식·공공·지역 정보 검색 경로입니다.', sourceTrust:0.94, score:97.8, authorityTopAnswer:true, pinnedTop:true },
+    { title:'[공식 상단] ' + q + ' 위키/백과 기본 정보', url:'https://www.google.com/search?q=' + encodeURIComponent(q + ' wikipedia encyclopedia wiki 나무위키 백과'), source:'authority_knowledge_wiki', provider:'wiki-knowledge-route', type:'knowledge', searchCategory:'knowledge', mediaType:'article', summary:q + ' 관련 위키·백과·기초지식 경로입니다. 공식기관 다음 순위로 배치됩니다.', sourceTrust:0.86, score:94.2, authorityTopAnswer:true, pinnedTop:true },
+    { title:'[공식 상단] ' + q + ' 지도/위치', url:(kr ? 'https://map.naver.com/p/search/' : 'https://www.google.com/maps/search/') + enc, source: kr ? 'authority_naver_map' : 'authority_google_map', provider: kr ? 'naver-map-authority' : 'google-map-authority', type:'map', searchCategory:'map', mediaType:'map', summary:q + ' 위치·지도·지역 정보입니다.', sourceTrust:0.88, score:92.0, authorityTopAnswer:true, pinnedTop:true }
+  );
+  return dedupeCanonicalItems(cards.map(x => canonicalizeItem(x, q, x.source))).slice(0, 6);
+}
+
+function prependAuthorityTopAnswers(items, q, ctx){
+  const authority = authorityTopAnswerCards(q, ctx || {});
+  if(!authority.length) return Array.isArray(items) ? items : [];
+  const merged = dedupeCanonicalItems([].concat(authority, Array.isArray(items) ? items : []));
+  merged.sort((a,b) => {
+    const ap = a && a.authorityTopAnswer ? 1 : 0;
+    const bp = b && b.authorityTopAnswer ? 1 : 0;
+    if(ap !== bp) return bp - ap;
+    return (Number(b && (b.score || b.sanmaruScore)) || 0) - (Number(a && (a.score || a.sanmaruScore)) || 0);
+  });
+  return merged;
 }
 
 
@@ -2390,24 +2468,24 @@ function hasAnyLooseTerm(text, terms){
 function sourceCaps(opts){
   const deep = !!opts.deep;
   return {
-    searchBankPages: deep ? MAX_SEARCH_BANK_PAGES_DEEP : MAX_SEARCH_BANK_PAGES_NORMAL,
-    // Sanmaru/Maru Search must not choke the information road at the gateway.
-    // Normal mode stays bounded, but opens the major provider lanes broadly enough
-    // to avoid the old few-hundred-result ceiling. Deep mode is still the wider pass.
-    naverPages: deep ? 10 : 10,
-    naverBlogPages: deep ? 8 : 6,
-    naverNewsPages: deep ? 8 : 6,
-    naverCafePages: deep ? 8 : 6,
-    naverEncycPages: deep ? 3 : 2,
-    naverKinPages: deep ? 3 : 2,
-    naverBookPages: deep ? 4 : 2,
-    naverLocalPages: deep ? 3 : 2,
-    googlePages: deep ? 9 : 6,
-    bingPages: deep ? 6 : 4,
-    imagePages: deep ? 6 : 4,
-    naverImagePages: deep ? 6 : 4,
-    youtubeLimit: deep ? 180 : 120,
-    timeoutMs: deep ? 15000 : DEFAULT_SOFT_TIMEOUT_MS
+    searchBankPages: deep ? MAX_SEARCH_BANK_PAGES_DEEP : Math.min(MAX_SEARCH_BANK_PAGES_NORMAL, 8),
+    // Fast first search contract: page 1 must not wait 30~50 seconds.
+    // Normal mode opens every major road once, with enough breadth for pagination,
+    // then Sanmaru absorbs the results for instant follow-up supply.
+    naverPages: deep ? 10 : 4,
+    naverBlogPages: deep ? 5 : 2,
+    naverNewsPages: deep ? 5 : 2,
+    naverCafePages: deep ? 4 : 2,
+    naverEncycPages: deep ? 1 : 1,
+    naverKinPages: deep ? 1 : 1,
+    naverBookPages: deep ? 2 : 1,
+    naverLocalPages: 1,
+    googlePages: deep ? 6 : 1,
+    bingPages: deep ? 3 : 1,
+    imagePages: deep ? 4 : 1,
+    naverImagePages: deep ? 4 : 1,
+    youtubeLimit: deep ? 100 : 25,
+    timeoutMs: deep ? 12000 : DEFAULT_SOFT_TIMEOUT_MS
   };
 }
 
@@ -2824,7 +2902,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       ]);
 
       const afterPrimaryExternal = collected.length;
-      const naturalExpansionTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
+      const naturalExpansionTarget = Math.min(Math.max(limit, MIN_RESULT_TARGET), 700);
       if(timeLeft() > 1200){
         await pullFromNaverVerticals();
       } else {
@@ -4323,7 +4401,7 @@ exports.handler = async function(event){
     if(!security.allowed){
       return ok({ status:'blocked', engine:'maru-search', version:VERSION, action, message:'protected Maru/Sanmaru gateway action', security });
     }
-    if(action === 'resident-status' || action === 'resident-boot' || action === 'resident-switch' || action === 'provider-health' || action === 'source-registry' || action === 'category-map' || action === 'route-plan' || action === 'deep-refresh'){
+    if(action === 'resident-status' || action === 'resident-boot' || action === 'resident-switch' || action === 'provider-health' || action === 'source-registry' || action === 'category-map' || action === 'route-plan' || action === 'deep-refresh' || ['front-supply','content-supply','slot-supply','snapshot-supply','searchbank-supply','insight-supply'].includes(action)){
       let Sanmaru = null;
       try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
       if(Sanmaru && typeof Sanmaru.handler === 'function'){
@@ -4386,8 +4464,11 @@ exports.handler = async function(event){
     }
 
     let base = null;
-    const sanmaruOpenGateRequested = truthy(raw && (raw.sanmaruFastOnly || raw.cacheOnly || raw.instantOnly || raw.sanmaruFirst || raw.residentFirst || raw.naturalFlow || raw.residentSwitch)) || safeString(raw && raw.routeOwner).toLowerCase() === 'sanmaru';
-    const sanmaruCanServeFromFastLayer = residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, limit, raw || {}) && sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal));
+    const explicitBlockingWide = truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal || raw.blockingSearch || raw.blockingProviders));
+    const sanmaruOpenGateRequested = !forceProviderRefresh && !explicitBlockingWide && !truthy(raw && (raw.disableInstantAnswer || raw.noInstantAnswer))
+      ? true
+      : (truthy(raw && (raw.sanmaruFastOnly || raw.cacheOnly || raw.instantOnly || raw.sanmaruFirst || raw.residentFirst || raw.naturalFlow || raw.residentSwitch)) || safeString(raw && raw.routeOwner).toLowerCase() === 'sanmaru');
+    const sanmaruCanServeFromFastLayer = residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, limit, raw || {}) && sanmaruOpenGateRequested && !forceProviderRefresh && !explicitBlockingWide;
     if(sanmaruCanServeFromFastLayer){
       base = buildSanmaruFastLayerBase(q, residentSeedPack, Object.assign({}, raw || {}, { limit }), { region:detectRuntimeRegion(event, lang, q) });
       base.meta = Object.assign({}, base.meta || {}, {
@@ -4398,6 +4479,14 @@ exports.handler = async function(event){
           visibleNeed,
           principle:'Sanmaru already holds the mounted web information layer; Maru Search only formats and pages it.'
         })
+      });
+    }else if(sanmaruOpenGateRequested && !forceProviderRefresh && !explicitBlockingWide){
+      base = buildImmediateResidentResponse(q, Object.assign({}, raw || {}, { limit }), residentSeedPack || { items: [], meta:{} }, {
+        immediateAnswer:true,
+        immediateAnswerMode:'sanmaru-resident-authority-top-answer-first',
+        sanmaruResidentSeed:residentSeedPack && residentSeedPack.meta || {},
+        backgroundResidentRefresh:residentRefreshSignal || null,
+        principle:'Search returns immediately from Sanmaru resident/authority layer; provider refresh is asynchronous unless explicitly requested.'
       });
     }else{
       try{
@@ -4416,6 +4505,7 @@ exports.handler = async function(event){
     if(!base || !Array.isArray(base.items)) base = Object.assign({ source:null, route:[], sourceRoute:[], region:detectRuntimeRegion(event, lang, q), items:[], results:[], meta:{ trace:[] } }, base || {});
     if((base.items || []).length < Math.min(visibleNeed, 25)){
       const fallbackCards = [].concat(
+        authorityTopAnswerCards(q, { region:detectRuntimeRegion(event, lang, q), searchType }),
         (residentSeedPack && Array.isArray(residentSeedPack.items) ? residentSeedPack.items : []),
         mapCards(q, detectRuntimeRegion(event, lang, q)),
         openDiscoverySurfaceCards(q),
@@ -4464,7 +4554,7 @@ exports.handler = async function(event){
     const analyticsOff = truthy(raw && (raw.noAnalytics || raw.disableAnalytics)) || !analyticsRequested;
     const revenueOff = truthy(raw && (raw.noRevenue || raw.disableRevenue)) || !realtimeRevenueRequested;
     if(!analyticsOff) syncSearchAnalytics(event, q, base.items).catch(() => null);
-    base.items = (Array.isArray(base.items) ? base.items : []).map(compactResultItem);
+    base.items = prependAuthorityTopAnswers(Array.isArray(base.items) ? base.items : [], q, { region:detectRuntimeRegion(event, lang, q), searchType }).map(compactResultItem);
     base.results = base.items;
     absorbIntoSanmaruResident(q, base.items, { searchType, lang });
     const fullSectionPack = buildSearchSections(base.items, q, { searchType });
@@ -4534,6 +4624,12 @@ async function maruSearchDispatcher(req){
     mediaEngineLimit: req.mediaEngineLimit,
     mediaExternal: req.mediaExternal,
     mediaEngineExternal: req.mediaEngineExternal,
+    action: req.action || req.mode || req.fn,
+    page: req.page,
+    section: req.section,
+    sectionKey: req.sectionKey || req.psom_key || req.psomKey,
+    slotCount: req.slotCount || req.count || req.limit,
+    target: req.target,
     includeImmersive: req.includeImmersive,
     useImmersiveMedia: req.useImmersiveMedia
   }, headers: req.headers || {} });
