@@ -484,7 +484,6 @@ btn.addEventListener('click', (e) => {
       const nextType = 'all';
       activeType = nextType;
       updateSearchTabsActive();
-
       const u = new URL(location.href);
       u.searchParams.set('q', q);
       u.searchParams.set('page', '1');
@@ -493,8 +492,7 @@ btn.addEventListener('click', (e) => {
       u.searchParams.set('residentFirst', '1');
       u.searchParams.set('sanmaruFirst', '1');
       u.searchParams.set('residentSwitch', '1');
-
-      history.pushState({ q, type: nextType, from: getSafeReturnUrl() || '' }, '', u.toString());
+      history.pushState({ q, type: nextType, page: 1, block: 0 }, '', u.toString());
       runSearch(q, nextType);
       return;
     }
@@ -542,7 +540,6 @@ input.addEventListener('keydown', (e) => {
       const nextType = 'all';
       activeType = nextType;
       updateSearchTabsActive();
-
       const u = new URL(location.href);
       u.searchParams.set('q', q);
       u.searchParams.set('page', '1');
@@ -551,8 +548,7 @@ input.addEventListener('keydown', (e) => {
       u.searchParams.set('residentFirst', '1');
       u.searchParams.set('sanmaruFirst', '1');
       u.searchParams.set('residentSwitch', '1');
-
-      history.pushState({ q, type: nextType, from: getSafeReturnUrl() || '' }, '', u.toString());
+      history.pushState({ q, type: nextType, page: 1, block: 0 }, '', u.toString());
       runSearch(q, nextType);
       return;
     }
@@ -697,77 +693,6 @@ function normalizeSearchPayload(payload){
   return out;
 }
 
-
-async function fetchSanmaruInstant(q, type = 'all'){
-  const safeType = normalizeSearchType(type || 'all');
-  const sp = new URLSearchParams();
-  sp.set('action', 'instant-supply');
-  sp.set('q', q);
-  sp.set('query', q);
-  sp.set('type', safeType);
-  sp.set('tab', safeType);
-  sp.set('perPage', String(PAGE_SIZE));
-  sp.set('visibleCardsPerPage', String(PAGE_SIZE));
-  sp.set('limit', String(Math.max(PAGE_SIZE * 4, 60)));
-  sp.set('candidatePoolTarget', String(Math.max(PAGE_SIZE * 6, 120)));
-  sp.set('residentFirst', '1');
-  sp.set('sanmaruFirst', '1');
-  sp.set('residentSwitch', '1');
-  sp.set('routeOwner', 'sanmaru');
-  sp.set('naturalFlow', '1');
-  sp.set('handoff', isSearchPage ? 'search-html-instant' : 'home-instant');
-
-  const url = `/.netlify/functions/sanmaru_engine_v2?${sp.toString()}`;
-
-  try {
-    const r = await fetch(url, { cache: 'no-store' });
-    if (!r.ok) return { items: [], payload: null, pageItems: [], viewportSections: [], instant: true };
-    const json = await r.json();
-    if (!json || json.status === 'error' || json.status === 'blocked') {
-      return { items: [], payload: json || null, pageItems: [], viewportSections: [], instant: true };
-    }
-    const pack = normalizeSearchPayload(json);
-    pack.instant = true;
-    return pack;
-  } catch (e) {
-    console.warn('fetchSanmaruInstant failed:', e);
-    return { items: [], payload: null, pageItems: [], viewportSections: [], instant: true };
-  }
-}
-
-function withTimeout(promise, ms, fallback){
-  let timer = null;
-  return Promise.race([
-    Promise.resolve(promise),
-    new Promise(resolve => {
-      timer = setTimeout(() => resolve(fallback), ms);
-    })
-  ]).finally(() => {
-    if (timer) clearTimeout(timer);
-  });
-}
-
-function applySearchItemsToView(q, type, items, payload, options){
-  options = options || {};
-  const filteredItems = filterSearchResultItems(items || []);
-  allItems = dedupeItems([...(filteredItems || [])]);
-
-  if (payload) lastSearchPayload = payload;
-  currentBlock = 0;
-  currentPage = 1;
-  lastQuery = q;
-  lastType = normalizeSearchType(type || 'all');
-
-  if (!allItems.length) return false;
-
-  renderPage(1);
-  const label = getTypeLabel(lastType);
-  const suffix = options.instant ? ' · first paint' : '';
-  status.textContent = `${allItems.length} results for "${q}" · ${label}${suffix}`;
-  return true;
-}
-
-
 async function fetchSearch(q, type = activeType){
   const safeType = normalizeSearchType(type);
   signalSanmaruSearch(q, safeType, 'maru-search-fetch');
@@ -800,6 +725,35 @@ async function fetchSearch(q, type = activeType){
     return normalizeSearchPayload(json);
   } catch (e) {
     console.error('fetchSearch failed:', e);
+    return { items: [], payload: null, pageItems: [], viewportSections: [] };
+  }
+}
+
+async function fetchInstantSearchPack(q, type = activeType){
+  const safeType = normalizeSearchType(type);
+  const sp = new URLSearchParams();
+  sp.set('action', 'instant-supply');
+  sp.set('q', q);
+  sp.set('query', q);
+  sp.set('type', safeType);
+  sp.set('tab', safeType);
+  sp.set('limit', '120');
+  sp.set('candidatePoolTarget', '120');
+  sp.set('perPage', String(PAGE_SIZE));
+  sp.set('visibleCardsPerPage', String(PAGE_SIZE));
+  sp.set('providerPassthrough', '1');
+  sp.set('residentFirst', '1');
+  sp.set('sanmaruFirst', '1');
+  sp.set('reason', 'search-ui-first-paint');
+
+  try {
+    const r = await fetch(`${SANMARU_BOOT_URL}?${sp.toString()}`, { cache: 'no-store' });
+    if (!r.ok) return { items: [], payload: null, pageItems: [], viewportSections: [] };
+    const json = await r.json();
+    if (!json || json.status === 'error' || json.status === 'blocked') return { items: [], payload: json || null, pageItems: [], viewportSections: [] };
+    return normalizeSearchPayload(json);
+  } catch (e) {
+    console.warn('fetchInstantSearchPack failed:', e);
     return { items: [], payload: null, pageItems: [], viewportSections: [] };
   }
 }
@@ -2030,7 +1984,7 @@ function drawPager(){
 
 async function runSearch(q, type = activeType){
   const qq = (q || '').trim();
-  activeType = normalizeSearchType(type || 'all');
+  activeType = normalizeSearchType(type);
   updateSearchTabsActive();
   if (!qq){
     allItems = [];
@@ -2040,58 +1994,73 @@ async function runSearch(q, type = activeType){
     return;
   }
 
+  runSearch._seq = (runSearch._seq || 0) + 1;
+  const seq = runSearch._seq;
+  let firstPaintItems = [];
+
   signalSanmaruSearch(qq, activeType, 'run-search');
-  status.textContent = `Preparing ${getTypeLabel(activeType)} results for "${qq}"...`;
+  status.textContent = `Searching ${getTypeLabel(activeType)} for "${qq}"...`;
   renderSkeleton();
   clearPager();
 
-  pageImageEnrichCache.clear();
-  itemImageEnrichCache.clear();
-  expandedDisplayGroups.clear();
-
-  const instantPromise = fetchSanmaruInstant(qq, activeType);
-  const fullPromise = fetchSearch(qq, activeType);
-
-  let instantItems = [];
-  let instantPayload = null;
-  let firstPaintDone = false;
-
-  try {
-    const instantPack = await withTimeout(instantPromise, 1400, null);
-    if (instantPack) {
-      instantPayload = instantPack.payload || null;
-      instantItems = Array.isArray(instantPack) ? instantPack : (instantPack.items || []);
-      if (instantItems.length) {
-        firstPaintDone = applySearchItemsToView(qq, activeType, instantItems, instantPayload, { instant: true });
-      }
+  const instantPromise = fetchInstantSearchPack(qq, activeType).then((pack) => {
+    if (runSearch._seq !== seq) return [];
+    const rawItems = Array.isArray(pack) ? pack : (pack && pack.items) || [];
+    const quickItems = dedupeItems(filterSearchResultItems(rawItems || []));
+    firstPaintItems = quickItems;
+    if (quickItems.length) {
+      allItems = quickItems;
+      lastSearchPayload = pack && pack.payload || lastSearchPayload;
+      currentBlock = 0;
+      currentPage = 1;
+      lastQuery = qq;
+      lastType = activeType;
+      pageImageEnrichCache.clear();
+      itemImageEnrichCache.clear();
+      expandedDisplayGroups.clear();
+      renderPage(1, true);
+      status.textContent = `${quickItems.length} quick provider/authority results for "${qq}" · full search continues...`;
     }
-  } catch (e) {
-    console.warn('instant first paint skipped:', e);
-  }
+    return quickItems;
+  }).catch(() => []);
 
   try {
-    const searchPack = await fullPromise;
-    const fullPayload = searchPack && searchPack.payload || null;
-    const fullItems = Array.isArray(searchPack) ? searchPack : (searchPack && searchPack.items) || [];
+    const searchPack = await fetchSearch(qq, activeType);
+    if (runSearch._seq !== seq) return;
 
-    const mergedItems = dedupeItems([...(instantItems || []), ...(fullItems || [])]);
-    lastSearchPayload = fullPayload || instantPayload || null;
+    // Make sure the fast path has settled, but do not block final rendering on it.
+    try { await Promise.race([instantPromise, Promise.resolve([])]); } catch(e) {}
 
-    if (!mergedItems.length) {
-      allItems = [];
+    lastSearchPayload = searchPack && searchPack.payload || null;
+    const items = Array.isArray(searchPack) ? searchPack : (searchPack && searchPack.items) || [];
+    const filteredItems = filterSearchResultItems(items || []);
+    const mergedItems = dedupeItems([...(firstPaintItems || []), ...(filteredItems || [])]);
+    allItems = mergedItems;
+
+    pageImageEnrichCache.clear();
+    itemImageEnrichCache.clear();
+    expandedDisplayGroups.clear();
+
+    currentBlock = 0;
+    currentPage = 1;
+    lastQuery = qq;
+    lastType = activeType;
+
+    if (!allItems.length) {
       results.innerHTML = '';
-      clearPager();
       status.textContent = `No results for "${qq}"`;
       return;
     }
 
-    applySearchItemsToView(qq, activeType, mergedItems, lastSearchPayload, { instant: false });
+    renderPage(1);
     status.textContent = `${allItems.length} results for "${qq}" · ${getTypeLabel(activeType)}`;
 
   } catch(e){
     console.error(e);
-    if (firstPaintDone && allItems.length) {
-      status.textContent = `${allItems.length} first results for "${qq}" · full search still unavailable`;
+    if (firstPaintItems && firstPaintItems.length) {
+      allItems = firstPaintItems;
+      renderPage(1, true);
+      status.textContent = `${firstPaintItems.length} quick provider/authority results for "${qq}" · full search delayed`;
       return;
     }
     allItems = [];
