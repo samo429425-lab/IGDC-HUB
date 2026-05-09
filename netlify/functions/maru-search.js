@@ -1890,11 +1890,17 @@ function googleLikeSearchLinks(q){
 function mapCards(q, region){
   if(!q) return [];
   const enc = encodeURIComponent(q);
+  const localIntent = /(맛집|식당|음식점|카페|커피|restaurant|cafe|coffee|food|near me|주변|근처|여행|관광|호텔|숙소|시장|명소|지도|주소|위치)/i.test(safeString(q));
   const cards = [
-    { title: '[Map] ' + q + ' - Google Maps', url: 'https://www.google.com/maps/search/' + enc, source: 'google_maps', mediaType: 'map', type: 'map', summary: q + ' 지도 검색', score: 0.72 },
-    { title: '[Map] ' + q + ' - Naver Map', url: 'https://map.naver.com/p/search/' + enc, source: 'naver_map', mediaType: 'map', type: 'map', summary: q + ' 네이버 지도 검색', score: 0.71 }
+    { title: '[Map] ' + q + ' - Google Maps', url: 'https://www.google.com/maps/search/' + enc, source: 'google_maps', mediaType: 'map', type: 'map', summary: q + ' 지도 검색', score: 0.92, displayGroup:'local_tour', displayGroupLabel:'지도/지역' },
+    { title: '[Map] ' + q + ' - Naver Map', url: 'https://map.naver.com/p/search/' + enc, source: 'naver_map', mediaType: 'map', type: 'map', summary: q + ' 네이버 지도 검색', score: 0.91, displayGroup:'local_tour', displayGroupLabel:'지도/지역' },
+    { title: '[Local Photos] ' + q + ' 사진 / 스냅샷', url: 'https://www.google.com/search?tbm=isch&q=' + enc, source: 'google_local_images', mediaType: 'image', type: 'image', summary: q + ' 지역 사진·스냅샷 검색', score: 0.84, displayGroup:'media', displayGroupLabel:'이미지/영상' },
+    { title: '[Naver Image] ' + q + ' 사진', url: 'https://search.naver.com/search.naver?where=image&query=' + enc, source: 'naver_local_images', mediaType: 'image', type: 'image', summary: q + ' 네이버 이미지 검색', score: 0.83, displayGroup:'media', displayGroupLabel:'이미지/영상' },
+    { title: '[Video] ' + q + ' 영상 / 리뷰', url: 'https://www.youtube.com/results?search_query=' + enc, source: 'youtube_local_video', mediaType: 'video', type: 'video', summary: q + ' 지역 영상·리뷰 검색', score: 0.82, displayGroup:'media', displayGroupLabel:'이미지/영상' },
+    { title: '[Blog Review] ' + q + ' 블로그 후기', url: 'https://search.naver.com/search.naver?where=blog&query=' + enc, source: 'naver_local_blog', mediaType: 'article', type: 'blog', summary: q + ' 블로그 후기·리뷰 검색', score: 0.80, displayGroup:'community', displayGroupLabel:'블로그/카페/커뮤니티' }
   ];
-  return cards.map(x => canonicalizeItem(x, q, x.source));
+  const selected = localIntent ? cards : cards.slice(0, 2);
+  return selected.map(x => canonicalizeItem(x, q, x.source));
 }
 
 
@@ -2108,6 +2114,11 @@ function detectQueryIntentCluster(q){
     '목록','리스트','단체','기관','협회','재단','업체','회사','directory','list','database',
     'association','foundation','companies','organizations','institutions'
   ])) return 'directory';
+
+  if(hasAnyLooseTerm(text, [
+    '맛집','식당','음식점','카페','커피','근처','주변','지도','주소','위치','명소','여행','관광','호텔','숙소',
+    'restaurant','restaurants','cafe','cafes','coffee','near me','nearby','map','address','location','travel','tourism','hotel'
+  ])) return 'local';
 
   return 'general';
 }
@@ -2347,13 +2358,16 @@ function expandedSearchQueries(q, searchType){
   if(!base) return [];
   const t = normalizeSearchType(searchType);
   const profile = queryScriptProfile(base);
+  const cluster = detectQueryIntentCluster(base);
 
-  // all 검색은 속도 유지를 위해 확장하지 않고,
-  // 선택 탭에서만 전 세계/다국어 맥락 확장을 연다.
-  if(t === 'all') return [base];
-
-  const terms = semanticExpansionTerms(t, profile);
+  // 전체검색도 결과가 몇백 개에서 막히지 않도록, 강한 지역/디렉터리/동향 의도는
+  // provider passthrough와 병렬 보강 검색에 한해 가볍게 확장한다.
+  const expansionType = (t === 'all' && cluster !== 'general') ? (cluster === 'local' ? 'map' : 'web') : t;
+  const terms = semanticExpansionTerms(expansionType, profile, base);
   const variants = [base];
+  const maxVariants = t === 'all' ? (cluster === 'general' ? 1 : 8) : 12;
+
+  if(maxVariants <= 1) return variants;
 
   for(const term of terms){
     const tt = safeString(term).trim();
@@ -2364,9 +2378,10 @@ function expandedSearchQueries(q, searchType){
     // 같은 단어 반복 방지: "맛집 맛집", "webtoon webtoon" 같은 확장 제거
     if(lowBase === lowTerm || lowBase.includes(lowTerm)) continue;
     variants.push(base + ' ' + tt);
+    if(variants.length >= maxVariants) break;
   }
 
-  return uniqueCompactStrings(variants, 12);
+  return uniqueCompactStrings(variants, maxVariants);
 }
 
 function itemLooseText(it){
@@ -2395,18 +2410,18 @@ function sourceCaps(opts){
     // Normal mode stays bounded, but opens the major provider lanes broadly enough
     // to avoid the old few-hundred-result ceiling. Deep mode is still the wider pass.
     naverPages: deep ? 10 : 10,
-    naverBlogPages: deep ? 8 : 6,
-    naverNewsPages: deep ? 8 : 6,
-    naverCafePages: deep ? 8 : 6,
-    naverEncycPages: deep ? 3 : 2,
-    naverKinPages: deep ? 3 : 2,
-    naverBookPages: deep ? 4 : 2,
-    naverLocalPages: deep ? 3 : 2,
-    googlePages: deep ? 9 : 6,
-    bingPages: deep ? 6 : 4,
-    imagePages: deep ? 6 : 4,
-    naverImagePages: deep ? 6 : 4,
-    youtubeLimit: deep ? 180 : 120,
+    naverBlogPages: deep ? 10 : 8,
+    naverNewsPages: deep ? 10 : 8,
+    naverCafePages: deep ? 10 : 8,
+    naverEncycPages: deep ? 5 : 3,
+    naverKinPages: deep ? 5 : 3,
+    naverBookPages: deep ? 5 : 3,
+    naverLocalPages: deep ? 5 : 4,
+    googlePages: deep ? 10 : 9,
+    bingPages: deep ? 10 : 8,
+    imagePages: deep ? 8 : 6,
+    naverImagePages: deep ? 8 : 6,
+    youtubeLimit: deep ? 220 : 180,
     timeoutMs: deep ? 15000 : DEFAULT_SOFT_TIMEOUT_MS
   };
 }
@@ -2463,7 +2478,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       const target = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
       const pageSize = 100;
       const maxPages = Math.min(caps.searchBankPages, Math.ceil(target / pageSize) + 3);
-      const firstWindow = Math.min(maxPages, deep ? 18 : 12);
+      const firstWindow = Math.min(maxPages, deep ? 36 : 24);
       const offsets = [];
       for(let i=0; i<firstWindow; i++) offsets.push(i * pageSize);
 
@@ -2712,7 +2727,6 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 
 
     async function pullFromIntentExpansion(){
-      if(viewType === 'all') return 0;
       if(timeLeft() <= 1300) {
         record('intent-expansion', 'skipped-time', 0, { searchType: viewType });
         return 0;
@@ -2823,10 +2837,10 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 
       for(const queryText of variants){
         for(const spec of selected){
-          if(tasks.length >= (detectQueryIntentCluster(q) !== 'general' ? 30 : 24)) break;
+          if(tasks.length >= (detectQueryIntentCluster(q) !== 'general' ? 42 : 30)) break;
           tasks.push(one(spec[0], spec[1], queryText, spec[2], 1));
         }
-        if(tasks.length >= (detectQueryIntentCluster(q) !== 'general' ? 30 : 24)) break;
+        if(tasks.length >= (detectQueryIntentCluster(q) !== 'general' ? 42 : 30)) break;
       }
 
       await Promise.allSettled(tasks);
@@ -2834,7 +2848,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         searchType: viewType,
         queries: variants,
         tasks: tasks.length,
-        expansionBudget: detectQueryIntentCluster(q) !== 'general' ? 30 : 24,
+        expansionBudget: detectQueryIntentCluster(q) !== 'general' ? 42 : 30,
         mode: 'informal-controlled'
       });
       return total;
@@ -2867,7 +2881,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
           record('naver_verticals', 'skipped-time', 0, { afterPrimaryExternal, naturalExpansionTarget });
         }
 
-        if((viewType !== 'all' || detectQueryIntentCluster(q) !== 'general') && timeLeft() > 1300){
+        if((viewType !== 'all' || detectQueryIntentCluster(q) !== 'general' || collected.length < Math.min(naturalExpansionTarget, 1200)) && timeLeft() > 1300){
           await pullFromIntentExpansion();
         }
 
@@ -3656,7 +3670,7 @@ async function googleSnsSearch(q, limit, start){
     { name:'threads', query:'site:threads.net ' + q, source:'google_sns_threads', type:'sns', mediaType:'article' }
   ];
 
-  const perRoute = Math.max(1, Math.min(4, Math.ceil(Math.min(limit || 20, 20) / 5)));
+  const perRoute = Math.max(1, Math.min(10, Math.ceil(Math.min(limit || 50, 50) / 5)));
   const settled = await Promise.allSettled(routes.map(route =>
     googleCseRequest(route.query, perRoute, start || 1, {
       source: route.source,
@@ -3674,7 +3688,7 @@ async function googleSnsSearch(q, limit, start){
     routeMeta.push({ route: pack && pack.route || 'unknown', status: pack && pack.meta && pack.meta.status || (s && s.status) || 'unknown', count: pack && pack.results ? pack.results.length : 0 });
   }
 
-  const finalResults = results.length ? results.slice(0, Math.min(limit || 20, 20)) : publicPlatformResultCards(q).filter(x => classifySearchCategory(x) === 'sns').slice(0, Math.min(limit || 20, 20));
+  const finalResults = results.length ? results.slice(0, Math.min(limit || 50, 50)) : publicPlatformResultCards(q).filter(x => classifySearchCategory(x) === 'sns').slice(0, Math.min(limit || 50, 50));
   return {
     source: 'google_sns',
     results: finalResults,

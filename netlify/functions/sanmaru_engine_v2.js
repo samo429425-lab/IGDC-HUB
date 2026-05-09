@@ -2700,6 +2700,10 @@ function sanmaruProviderPassthroughCards(q, opts){
     ["provider-google-news", "Google 뉴스", "https://news.google.com/search?q=" + enc, "google-news", "news", 0.992],
     ["provider-google-video", "Google 영상", "https://www.google.com/search?tbm=vid&q=" + enc, "google-video", "video", 0.986],
     ["provider-google-image", "Google 이미지", "https://www.google.com/search?tbm=isch&q=" + enc, "google-image", "image", 0.982],
+    ["provider-google-maps", "Google Maps / 지도", "https://www.google.com/maps/search/" + enc, "google-maps", "local", 0.981],
+    ["provider-naver-map", "Naver Map / 지도", "https://map.naver.com/p/search/" + enc, "naver-map", "local", 0.981],
+    ["provider-local-photo", "지역 사진 / 스냅샷", "https://www.google.com/search?tbm=isch&q=" + enc, "local-photo", "image", 0.980],
+    ["provider-local-video", "지역 영상 / 리뷰", "https://www.youtube.com/results?search_query=" + enc, "local-video", "video", 0.979],
     ["provider-naver-all", "Naver 통합 검색", "https://search.naver.com/search.naver?query=" + enc, "naver", "web", 0.996],
     ["provider-naver-news", "Naver 뉴스", "https://search.naver.com/search.naver?where=news&query=" + enc, "naver-news", "news", 0.991],
     ["provider-naver-blog", "Naver 블로그", "https://search.naver.com/search.naver?where=blog&query=" + enc, "naver-blog", "blog", 0.989],
@@ -2716,7 +2720,7 @@ function sanmaruProviderPassthroughCards(q, opts){
   ];
 
   const typeRank = {
-    all: new Set(["web","official","news","blog","video","image","knowledge","sns","community"]),
+    all: new Set(["web","official","news","blog","video","image","local","knowledge","sns","community"]),
     web: new Set(["web","official","knowledge"]),
     news: new Set(["news","official","web"]),
     blog: new Set(["blog","web","community"]),
@@ -2727,8 +2731,8 @@ function sanmaruProviderPassthroughCards(q, opts){
     image: new Set(["image","web"]),
     sns: new Set(["sns","video","web"]),
     knowledge: new Set(["knowledge","official","web"]),
-    map: new Set(["official","web","news"]),
-    tour: new Set(["official","web","video","blog","image"]),
+    map: new Set(["local","official","web","image","video","news"]),
+    tour: new Set(["local","official","web","video","blog","image"]),
     shopping: new Set(["web","blog","community"])
   };
   const preferred = typeRank[type] || typeRank.all;
