@@ -91,47 +91,30 @@ async function tieredFetch({ liveProvider, cacheProvider, snapshotProvider }) {
 }
 
 /**
- * fastTieredFetch(resident/cache/snapshot first)
- * - For SANMARU instant OS paths, do not wait for live/provider calls.
- * - liveProvider is optional and can be run by the caller after first render.
+ * fastTieredFetch()
+ * - 즉답 OS 경로 전용.
+ * - liveProvider를 먼저 기다리지 않고 resident/authority/cache/snapshot을 먼저 반환한다.
+ * - liveProvider는 호출자가 후속 보강으로 별도 실행한다.
  */
-async function fastTieredFetch({ residentProvider, authorityProvider, cacheProvider, snapshotProvider, liveProvider, waitLive = false }) {
-  if (typeof residentProvider === "function") {
+async function fastTieredFetch({ residentProvider, authorityProvider, cacheProvider, snapshotProvider, liveProvider }) {
+  const tiers = [
+    ["resident", residentProvider],
+    ["authority", authorityProvider],
+    ["cache", cacheProvider],
+    ["snapshot", snapshotProvider]
+  ];
+
+  for (const [name, provider] of tiers) {
+    if (typeof provider !== "function") continue;
     try {
-      const data = await residentProvider();
-      if (data && Array.isArray(data.items) && data.items.length) return { served_from: "resident", data };
+      const data = await provider();
+      if (data && Array.isArray(data.items)) {
+        return { served_from: name, data, live_pending: typeof liveProvider === "function" };
+      }
     } catch (e) {}
   }
 
-  if (typeof authorityProvider === "function") {
-    try {
-      const data = await authorityProvider();
-      if (data && Array.isArray(data.items) && data.items.length) return { served_from: "authority", data };
-    } catch (e) {}
-  }
-
-  if (typeof cacheProvider === "function") {
-    try {
-      const data = await cacheProvider();
-      if (data && Array.isArray(data.items) && data.items.length) return { served_from: "cache", data };
-    } catch (e) {}
-  }
-
-  if (typeof snapshotProvider === "function") {
-    try {
-      const data = await snapshotProvider();
-      if (data && Array.isArray(data.items)) return { served_from: "snapshot", data };
-    } catch (e) {}
-  }
-
-  if (waitLive && typeof liveProvider === "function") {
-    try {
-      const data = await liveProvider();
-      if (data && Array.isArray(data.items)) return { served_from: "live", data };
-    } catch (e) {}
-  }
-
-  return { served_from: "empty", data: { items: [] } };
+  return { served_from: "empty", data: { items: [] }, live_pending: typeof liveProvider === "function" };
 }
 
 module.exports = {
@@ -148,6 +131,10 @@ module.exports = {
 /* ===== MARU CORE EXTENSION LAYER (SANMARU READY) ===== */
 const CORE = module.exports || {};
 
+
+
+/* ===== FAST TIERED FETCH BRIDGE ===== */
+CORE.fastTieredFetch = fastTieredFetch;
 
 /* ===== ENGINE REGISTRY ===== */
 CORE.engineRegistry = {
