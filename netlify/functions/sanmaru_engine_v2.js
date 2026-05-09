@@ -79,10 +79,6 @@ function ensureResidentState(){
       queryMap:new Map(),
       routeMap:new Map(),
       providerHealth:new Map(),
-      osControlMap:new Map(),
-      frontSlotMap:new Map(),
-      authorityTopMap:new Map(),
-      backgroundTasks:new Map(),
       learnedCategoryAliases:Object.create(null),
       lastError:null,
       engineIdentity:null,
@@ -91,7 +87,16 @@ function ensureResidentState(){
       lastHotRefreshReason:null
     };
   }
-  return globalState.resident;
+  const resident = globalState.resident;
+  // SANMARU resident OS state: keep these maps stable across Netlify warm invocations
+  // and make them directly portable to a VPS/daemon resident process later.
+  if(!resident.frontSlotProfiles) resident.frontSlotProfiles = Object.create(null);
+  if(!resident.providerLayerMatrix) resident.providerLayerMatrix = Object.create(null);
+  if(!resident.authorityTopIndex) resident.authorityTopIndex = Object.create(null);
+  if(!resident.supplyLayerHealth) resident.supplyLayerHealth = Object.create(null);
+  if(!Array.isArray(resident.refreshBacklog)) resident.refreshBacklog = [];
+  if(!resident.osRuntime) resident.osRuntime = { mode:'netlify-logical-resident', futureMode:'vps-persistent-daemon', daemonReady:false };
+  return resident;
 }
 ensureResidentState();
 
@@ -720,7 +725,10 @@ function ensureResidentBoot(opts){
     resident.lastBootLatency = nowMs() - started;
     resident.lastError = null;
     rebuildResidentProviderHealth(opts.reason || "resident-boot");
-    return Object.assign(residentBootSnapshot(), { bootFiles:files, absorbed, engineIdentity:identity });
+    resident.frontSlotProfiles = buildFrontSlotSupplyProfiles();
+    resident.providerLayerMatrix = buildProviderLayerMatrix();
+    resident.supplyLayerHealth = Object.assign({}, resident.supplyLayerHealth || {}, { bootReady:true, frontSlotLayer:true, providerLayer:true, authorityLayer:true, searchBankLayer:true, lastBootAt:nowIso() });
+    return Object.assign(residentBootSnapshot(), { bootFiles:files, absorbed, engineIdentity:identity, os:buildSanmaruOsSnapshot() });
   }catch(e){
     resident.lastError = responseErrorCode(e);
     resident.ready = true;
@@ -747,10 +755,6 @@ function residentBootSnapshot(){
     queryCacheSize:resident.queryMap ? resident.queryMap.size : 0,
     routeCacheSize:resident.routeMap ? resident.routeMap.size : 0,
     providerHealthCount:resident.providerHealth ? resident.providerHealth.size : 0,
-    osControlLayerReady:true,
-    frontSlotLayerCount:resident.frontSlotMap ? resident.frontSlotMap.size : 0,
-    authorityTopLayerCount:resident.authorityTopMap ? resident.authorityTopMap.size : 0,
-    backgroundTaskCount:resident.backgroundTasks ? resident.backgroundTasks.size : 0,
     categoryCounts:Array.from((resident.categoryMap || new Map()).entries()).map(([name, arr]) => ({ name, count:arr.length })).sort((a,b)=>b.count-a.count).slice(0,60),
     sourceCounts:Array.from((resident.sourceMap || new Map()).entries()).map(([name, arr]) => ({ name, count:arr.length })).sort((a,b)=>b.count-a.count).slice(0,60),
     lastBootLatency:resident.lastBootLatency || 0,
@@ -767,6 +771,10 @@ function residentBootSnapshot(){
     deniedForceBootReason:resident.lastDeniedForceBootReason || null,
     topRole: "global-web-ecosystem-information-cpu",
     maruRole: "mounted-gateway-body",
+    osRuntime: resident.osRuntime || { mode:"netlify-logical-resident", futureMode:"vps-persistent-daemon" },
+    frontSlotProfileCount: resident.frontSlotProfiles ? Object.keys(resident.frontSlotProfiles).length : 0,
+    providerLayerCount: resident.providerLayerMatrix ? Object.keys(resident.providerLayerMatrix).length : 0,
+    refreshBacklogSize: Array.isArray(resident.refreshBacklog) ? resident.refreshBacklog.length : 0,
     dataUpdateMode: "hot-ingest-index-refresh-no-engine-reboot",
     openingSignals: openingSignalsSnapshot(),
     logosGuard: logosEvaluate([{ type:"resident_status", intent:"stewardship", truthConfidence:0.95, recoveryOpportunity:true }], "resident-status"),
@@ -913,169 +921,352 @@ function buildOpeningFallbackCards(q, opts){
 }
 
 
-const SANMARU_FRONT_SLOT_PROFILE = {
-  home:{ sections:["hero","main","right-top","right-middle","right-bottom"], minItems:40, categories:["official","news","media","distribution","tourism"] },
-  network:{ sections:["network-right","networkhub","market"], minItems:30, categories:["official","shopping","corporate","distribution"] },
-  distribution:{ sections:["today-recommend","sponsor","popular","new-products","special-products","etc-products"], minItems:120, categories:["shopping","local_supplier","commerce","distribution"] },
-  media:{ sections:["trending","movie","drama","mystery","romance","entertainment","documentary","animation","music-video","shorts"], minItems:160, categories:["video","youtube","media","news"] },
-  social:{ sections:["youtube","instagram","tiktok","facebook","wechat","weibo","pinterest","reddit","twitter"], minItems:120, categories:["sns","video","community"] },
-  tour:{ sections:["tour-right","tourism","festival","local"], minItems:80, categories:["tourism","map_local","official","blog"] },
-  donation:{ sections:["global-news","ngo","mission","volunteer","relief","education","environment","etc"], minItems:100, categories:["news","public_data","official","ngo"] },
-  "global-insight":{ sections:["region","country","issue","authority","news"], minItems:80, categories:["official","government","news","public_data","knowledge"] }
+// -----------------------------------------------------------------------------
+// SANMARU RESIDENT OS SUPPLY LAYER
+// - Netlify: logical resident OS backed by globalThis + Search Bank/Snapshot cache.
+// - VPS/DigitalOcean: the same API shape can be promoted to a persistent daemon.
+// - This layer must never replace Maru Search's wide provider merger; it supplies
+//   the resident/authority/front-slot foundation that the gateway can use instantly.
+// -----------------------------------------------------------------------------
+const SANMARU_FRONT_SLOT_CHANNELS = {
+  home: { minItems: 48, priority: 100, categories:["official","news","media","commerce","tourism","donation","sns"], providerLanes:["searchbank","searchbank-index","maru-search-wide-gateway","google","naver","youtube","official-web"] },
+  network: { minItems: 36, priority: 96, categories:["official","commerce","sns","community"], providerLanes:["searchbank","google","naver","social-public-web","corporate-homepage"] },
+  distribution: { minItems: 80, priority: 98, categories:["shopping","commerce","local_supplier","manufacturer","distribution"], providerLanes:["searchbank","naver","google","bing","corporate-homepage","public-data"] },
+  media: { minItems: 80, priority: 94, categories:["video","youtube","image","news","sns"], providerLanes:["searchbank","youtube","google","naver","social-public-web"] },
+  social: { minItems: 72, priority: 92, categories:["sns","video","community","creator"], providerLanes:["social-public-web","google","youtube","instagram","facebook","tiktok","x-twitter","threads"] },
+  tour: { minItems: 64, priority: 90, categories:["tourism","map_local","official","image","video"], providerLanes:["official-web","public-data","google","naver","youtube"] },
+  donation: { minItems: 64, priority: 90, categories:["donation","ngo","mission","news","official"], providerLanes:["searchbank","official-web","google","naver","news","public-data"] },
+  "global-insight": { minItems: 96, priority: 88, categories:["news","official","public_data","knowledge","sns","ai_provider"], providerLanes:["searchbank","google","bing","naver","public-data","wiki-knowledge","ai-gpu"] },
+  "literature-academic": { minItems: 48, priority: 84, categories:["academic","research_paper","book","knowledge"], providerLanes:["searchbank","academic","research-paper","university-library","google","bing"] }
 };
 
-const SANMARU_AUTHORITY_DIRECTS = [
-  { keys:["대한민국","한국","korea","south korea"], title:"대한민국 공식 정보", url:"https://www.korea.kr", source:"authority_korea", category:"government" },
-  { keys:["서울","서울시","서울특별시","seoul"], title:"서울특별시 공식 정보", url:"https://www.seoul.go.kr", source:"authority_seoul", category:"government" },
-  { keys:["부산","부산시","부산광역시","busan"], title:"부산광역시 공식 정보", url:"https://www.busan.go.kr", source:"authority_busan", category:"government" },
-  { keys:["대구","대구시","대구광역시","daegu"], title:"대구광역시 공식 정보", url:"https://www.daegu.go.kr", source:"authority_daegu", category:"government" },
-  { keys:["인천","인천시","인천광역시","incheon"], title:"인천광역시 공식 정보", url:"https://www.incheon.go.kr", source:"authority_incheon", category:"government" },
-  { keys:["광주","광주시","광주광역시","gwangju"], title:"광주광역시 공식 정보", url:"https://www.gwangju.go.kr", source:"authority_gwangju", category:"government" },
-  { keys:["대전","대전시","대전광역시","daejeon"], title:"대전광역시 공식 정보", url:"https://www.daejeon.go.kr", source:"authority_daejeon", category:"government" },
-  { keys:["울산","울산시","울산광역시","ulsan"], title:"울산광역시 공식 정보", url:"https://www.ulsan.go.kr", source:"authority_ulsan", category:"government" },
-  { keys:["세종","세종시","세종특별자치시","sejong"], title:"세종특별자치시 공식 정보", url:"https://www.sejong.go.kr", source:"authority_sejong", category:"government" },
-  { keys:["제주","제주도","제주특별자치도","jeju"], title:"제주특별자치도 공식 정보", url:"https://www.jeju.go.kr", source:"authority_jeju", category:"government" }
+function normalizeSupplyChannel(v){
+  const raw = low(v || "");
+  if(!raw) return "home";
+  if(raw.includes("distribution") || raw.includes("commerce") || raw.includes("market")) return "distribution";
+  if(raw.includes("media") || raw.includes("movie") || raw.includes("video")) return "media";
+  if(raw.includes("social") || raw.includes("sns")) return "social";
+  if(raw.includes("tour") || raw.includes("travel")) return "tour";
+  if(raw.includes("donation") || raw.includes("ngo") || raw.includes("mission")) return "donation";
+  if(raw.includes("network")) return "network";
+  if(raw.includes("insight")) return "global-insight";
+  if(raw.includes("literature") || raw.includes("academic")) return "literature-academic";
+  if(SANMARU_FRONT_SLOT_CHANNELS[raw]) return raw;
+  return raw;
+}
+
+function buildFrontSlotSupplyProfiles(){
+  const out = Object.create(null);
+  for(const [channel, profile] of Object.entries(SANMARU_FRONT_SLOT_CHANNELS)){
+    out[channel] = Object.assign({ channel, role:"front-slot-resident-supply-profile", residentRequired:true, autoFill:true }, profile);
+  }
+  return out;
+}
+
+function buildProviderLayerMatrix(){
+  const registry = sourceRegistrySnapshot();
+  const out = Object.create(null);
+  for(const [name, meta] of Object.entries(registry)){
+    out[name] = {
+      provider:name,
+      enabled: meta.enabled !== false,
+      openState: meta.enabled === false ? "reserved" : "active",
+      permission: meta.permission || "public-or-authorized",
+      type: meta.type || "provider-lane",
+      categories: Array.isArray(meta.categories) ? meta.categories.slice() : (PROVIDER_CAPABILITY_MAP[name] || []).slice(),
+      role: meta.role || meta.roleInSanmaru || "mounted-information-lane",
+      supplyMeaning:"pipeline-connected-means-immediately-routeable-not-locally-owned-copy"
+    };
+  }
+  for(const reserved of [
+    ["china-public-web", ["web","news","video","knowledge"], "reserved-public-or-authorized-china-web-lane"],
+    ["regional-supplier-web", ["distribution","shopping","local_supplier","manufacturer"], "regional supplier/producer public homepage lane"],
+    ["gpu-ai-worker", ["ai_provider","ranking","summarization","classification"], "future VPS/GPU worker lane"],
+    ["vps-sanmaru-daemon", ["resident","refresh","front-supply","provider-watch"], "future DigitalOcean persistent daemon lane"]
+  ]){
+    if(!out[reserved[0]]) out[reserved[0]] = { provider:reserved[0], enabled:false, openState:"reserved", permission:"future-key-contract-or-runtime-required", type:"reserved-future-lane", categories:reserved[1], role:reserved[2], supplyMeaning:"auto-mount-when-key-contract-or-runtime-opens" };
+  }
+  return out;
+}
+
+const SANMARU_AUTHORITY_HINTS = [
+  { keys:["대한민국","한국 정부","정부24","korea government"], title:"대한민국 정부 공식 정보", url:"https://www.gov.kr", source:"authority_gov_kr", type:"government" },
+  { keys:["대한민국 정책","korea.kr"], title:"대한민국 정책브리핑", url:"https://www.korea.kr", source:"authority_korea_policy", type:"government" },
+  { keys:["서울","서울시","서울특별시","seoul"], title:"서울특별시 공식 홈페이지", url:"https://www.seoul.go.kr", source:"authority_seoul_go_kr", type:"government" },
+  { keys:["부산","부산시","부산광역시","busan"], title:"부산광역시 공식 홈페이지", url:"https://www.busan.go.kr", source:"authority_busan_go_kr", type:"government" },
+  { keys:["대구","대구시","대구광역시","daegu"], title:"대구광역시 공식 홈페이지", url:"https://www.daegu.go.kr", source:"authority_daegu_go_kr", type:"government" },
+  { keys:["인천","인천시","인천광역시","incheon"], title:"인천광역시 공식 홈페이지", url:"https://www.incheon.go.kr", source:"authority_incheon_go_kr", type:"government" },
+  { keys:["광주","광주시","광주광역시","gwangju"], title:"광주광역시 공식 홈페이지", url:"https://www.gwangju.go.kr", source:"authority_gwangju_go_kr", type:"government" },
+  { keys:["대전","대전시","대전광역시","daejeon"], title:"대전광역시 공식 홈페이지", url:"https://www.daejeon.go.kr", source:"authority_daejeon_go_kr", type:"government" },
+  { keys:["울산","울산시","울산광역시","ulsan"], title:"울산광역시 공식 홈페이지", url:"https://www.ulsan.go.kr", source:"authority_ulsan_go_kr", type:"government" },
+  { keys:["세종","세종시","세종특별자치시","sejong"], title:"세종특별자치시 공식 홈페이지", url:"https://www.sejong.go.kr", source:"authority_sejong_go_kr", type:"government" },
+  { keys:["제주","제주도","제주특별자치도","jeju"], title:"제주특별자치도 공식 홈페이지", url:"https://www.jeju.go.kr", source:"authority_jeju_go_kr", type:"government" },
+  { keys:["경주","경주시","gyeongju"], title:"경주시 공식 홈페이지", url:"https://www.gyeongju.go.kr", source:"authority_gyeongju_go_kr", type:"government" }
 ];
 
-function buildAuthorityTopCards(q, opts){
+function isAuthorityQuery(q){
+  const text = low(q);
+  return /시청|구청|군청|도청|정부|공공|공식|기관|청사|지자체|국가|도시|official|government|public|city|municipal/.test(text) || SANMARU_AUTHORITY_HINTS.some(h => h.keys.some(k => text.includes(low(k))));
+}
+
+function buildAuthorityTopAnswerCards(q, opts){
   opts = opts || {};
-  const text = normalizeText(q);
-  const out = [];
-  const seen = new Set();
-  for(const row of SANMARU_AUTHORITY_DIRECTS){
-    const hit = (row.keys || []).some(k => text.includes(normalizeText(k)) || normalizeText(k).includes(text));
-    if(!hit) continue;
-    const key = row.url;
-    if(seen.has(key)) continue;
-    seen.add(key);
-    out.push(canonicalItem({
-      id:"sanmaru-authority-" + stableHash([q, row.source].join("|")),
-      title:row.title,
-      summary:"산마루 Authority Top Layer가 공식/공공기관 정보를 최상단에 고정 공급합니다. 일반 provider 검색은 이 카드 때문에 차단되지 않습니다.",
-      url:row.url,
-      link:row.url,
-      source:row.source,
-      provider:"authority-top",
-      type:row.category || "government",
-      searchCategory:row.category || "government",
-      mediaType:"article",
-      score:1.35,
-      sourceTrust:1,
-      sanmaruAuthorityTop:true,
-      authorityTop:true
-    }, q, "sanmaru-authority-top"));
+  const text = low(q);
+  if(!text) return [];
+  const matches = [];
+  for(const hint of SANMARU_AUTHORITY_HINTS){
+    if(hint.keys.some(k => text.includes(low(k)))) matches.push(hint);
   }
-  if(!out.length && /(시청|구청|군청|도청|공식|정부|공공|official|government|city hall|public)/i.test(s(q))){
-    const enc = encodeURIComponent([q, "공식 사이트 OR government official"].filter(Boolean).join(" "));
-    out.push(canonicalItem({
-      id:"sanmaru-authority-search-" + stableHash(q),
-      title:"공식/공공기관 우선 검색 · " + q,
-      summary:"직접 등록된 공식 URL이 없을 때 산마루가 공식기관/공공기관 우선 provider route를 최상단에 제공합니다.",
-      url:"https://www.google.com/search?q=" + enc,
-      link:"https://www.google.com/search?q=" + enc,
-      source:"authority_top_discovery",
-      provider:"authority-top",
-      type:"government",
-      searchCategory:"government",
-      mediaType:"article",
-      score:1.08,
-      sourceTrust:0.92,
-      sanmaruAuthorityTop:true,
-      authorityTop:true
-    }, q, "sanmaru-authority-top"));
+  if(!matches.length && isAuthorityQuery(q)){
+    const enc = encodeURIComponent(q + " official government public institution");
+    matches.push({ title:q + " 공식/공공 정보 우선 검색", url:"https://www.google.com/search?q=" + enc, source:"authority_official_discovery", type:"official" });
   }
-  return out.slice(0, clampInt(opts.authorityLimit, 3, 0, 8));
+  return matches.slice(0, clampInt(opts.authorityLimit, 3, 1, 6)).map((hint, idx) => canonicalItem({
+    id:"sanmaru-authority-top-" + stableHash([q, hint.url, idx].join("|")),
+    title:hint.title,
+    summary:"산마루 Authority Top Layer가 공식기관·공공기관·지자체·국가성 정보로 우선 배치한 상단 카드입니다.",
+    url:hint.url,
+    link:hint.url,
+    source:hint.source || "sanmaru_authority_top",
+    provider:"authority-top-layer",
+    type:hint.type || "official",
+    mediaType:"article",
+    searchCategory:"official",
+    score:1.35,
+    authorityTopAnswer:true,
+    sanmaruAuthorityTop:true,
+    trustTier:"official-first"
+  }, q, "sanmaru-authority-top"));
 }
 
-function ensureSanmaruOsControlLayer(reason){
+function buildSanmaruOsSnapshot(){
   const resident = ensureResidentState();
-  if(!resident.osControlMap || !(resident.osControlMap instanceof Map)) resident.osControlMap = new Map();
-  if(!resident.frontSlotMap || !(resident.frontSlotMap instanceof Map)) resident.frontSlotMap = new Map();
-  if(!resident.authorityTopMap || !(resident.authorityTopMap instanceof Map)) resident.authorityTopMap = new Map();
-  if(!resident.backgroundTasks || !(resident.backgroundTasks instanceof Map)) resident.backgroundTasks = new Map();
-  const now = nowMs();
-  resident.osControlMap.set("sanmaru-os", {
-    ready:true,
-    reason:reason || "os-control-layer",
-    updatedAt:now,
-    topology:"sanmaru-top-os-maru-search-gateway-core-internal-pipeline",
-    netlifyMode:"logical-resident-os-globalThis-snapshot-cache",
-    vpsMode:"persistent-daemon-background-worker-ready",
-    supplyPolicy:"immediate-first-package-provider-refresh-after-response",
-    owner:"sanmaru-global-information-os"
+  resident.frontSlotProfiles = resident.frontSlotProfiles && Object.keys(resident.frontSlotProfiles).length ? resident.frontSlotProfiles : buildFrontSlotSupplyProfiles();
+  resident.providerLayerMatrix = resident.providerLayerMatrix && Object.keys(resident.providerLayerMatrix).length ? resident.providerLayerMatrix : buildProviderLayerMatrix();
+  resident.supplyLayerHealth = Object.assign({}, resident.supplyLayerHealth || {}, {
+    frontSlotLayer:true,
+    authorityLayer:true,
+    providerLayer:true,
+    searchBankLayer:true,
+    netlifyLogicalResident:true,
+    vpsDaemonReadyShape:true,
+    lastSnapshotAt:nowIso()
   });
-  for(const [page, profile] of Object.entries(SANMARU_FRONT_SLOT_PROFILE)){
-    resident.frontSlotMap.set(page, Object.assign({ page, updatedAt:now, status:"resident-profile-ready" }, profile));
-  }
-  return sanmaruOsStatusSnapshot();
-}
-
-function sanmaruOsStatusSnapshot(){
-  const resident = ensureResidentState();
-  ensureResidentBoot({ reason:"os-status-snapshot" });
-  rebuildResidentProviderHealth("os-status-snapshot");
   return {
-    ready:true,
-    engine:ENGINE_NAME,
-    version:VERSION,
-    role:"global-information-os-top-controller",
-    maruSearchRole:"external-gateway-and-request-reporter",
-    coreRole:"internal-normalize-bus-and-fast-tier-pipeline",
-    informationSupplyPolicy:"instant-authority-resident-cache-snapshot-first-provider-refresh-background",
-    frontSlotProfiles:Array.from((resident.frontSlotMap || new Map()).values()),
-    providerLayer:sanmaruProviderLaneSnapshot(),
+    mode:"sanmaru-resident-information-os",
+    deploymentMode:"netlify-logical-resident-now-vps-daemon-ready",
     resident:residentBootSnapshot(),
-    providerHealth:providerHealthSnapshot(),
-    generatedAt:nowIso()
+    frontSlotProfiles:resident.frontSlotProfiles,
+    providerLayerMatrix:resident.providerLayerMatrix,
+    supplyLayerHealth:resident.supplyLayerHealth,
+    refreshBacklogSize:Array.isArray(resident.refreshBacklog) ? resident.refreshBacklog.length : 0,
+    contract:"Sanmaru keeps route/cache/index/provider-state/front-slot profiles ready; it does not locally own every raw global database copy."
   };
 }
 
-function triggerSanmaruBackgroundRefresh(input, opts){
-  opts = opts || {};
-  const q = typeof input === "string" ? input : firstNonEmpty(input && input.q, input && input.query, opts.q, opts.query);
-  const clean = sanitizeQuery(q);
-  if(!clean.ok) return { accepted:false, reason:clean.code };
-  const resident = ensureResidentState();
-  if(!resident.backgroundTasks || !(resident.backgroundTasks instanceof Map)) resident.backgroundTasks = new Map();
-  const key = "bg-refresh:" + residentCacheKey(clean.value, opts);
-  const existing = resident.backgroundTasks.get(key);
-  if(existing && existing.expires > nowMs()) return { accepted:true, deduped:true, key, query:clean.value };
-  resident.backgroundTasks.set(key, { t:nowMs(), expires:nowMs() + INFLIGHT_TTL_MS, q:clean.value, status:"scheduled" });
-  setTimeout(() => {
-    try{
-      const entry = resident.backgroundTasks.get(key) || {};
-      resident.backgroundTasks.set(key, Object.assign({}, entry, { status:"running", startedAt:nowMs() }));
-      Promise.resolve(runSanmaru(clean.value, Object.assign({}, opts, { disableInstantSupply:true, forceProviderRefresh:true, reason:"background-refresh" })))
-        .then(res => {
-          const items = normalizeItemsFromResponse(res);
-          absorbResidentItems(items, { q:clean.value, searchType:opts.searchType || opts.type, lang:opts.lang, source:"background-refresh" });
-          resident.backgroundTasks.set(key, Object.assign({}, resident.backgroundTasks.get(key) || {}, { status:"done", count:items.length, doneAt:nowMs() }));
-        })
-        .catch(e => resident.backgroundTasks.set(key, Object.assign({}, resident.backgroundTasks.get(key) || {}, { status:"failed", error:responseErrorCode(e), doneAt:nowMs() })));
-    }catch(e){}
-  }, 0);
-  return { accepted:true, deduped:false, key, query:clean.value, mode:"after-response-provider-refresh" };
+function frontSupplyQuery(params, profile){
+  params = params || {};
+  const channel = normalizeSupplyChannel(firstNonEmpty(params.channel, params.page, params.route, params.section, params.psom_key));
+  const region = firstNonEmpty(params.region, params.country, params.geo, "global");
+  const section = firstNonEmpty(params.section, params.psom_key, "");
+  const base = firstNonEmpty(params.q, params.query, params.keyword, "");
+  if(base) return base;
+  if(channel === "distribution") return [region, section, "supplier manufacturer product distribution official"].filter(Boolean).join(" ");
+  if(channel === "media") return [region, section, "video media content youtube"].filter(Boolean).join(" ");
+  if(channel === "social") return [region, section, "social creator public feed video"].filter(Boolean).join(" ");
+  if(channel === "tour") return [region, section, "tourism travel attraction official"].filter(Boolean).join(" ");
+  if(channel === "donation") return [region, section, "NGO charity relief mission official"].filter(Boolean).join(" ");
+  if(channel === "global-insight") return [region, section, "news public data insight issue"].filter(Boolean).join(" ");
+  return [region, section, channel, "official news content"].filter(Boolean).join(" ");
 }
 
-function supplyFrontSlotSync(input, opts){
+async function supplyFrontSlotsFromSanmaru(event, params, action){
+  params = params || {};
+  const started = nowMs();
+  ensureResidentBoot({ reason:action || "front-supply" });
+  const resident = ensureResidentState();
+  resident.frontSlotProfiles = buildFrontSlotSupplyProfiles();
+  resident.providerLayerMatrix = buildProviderLayerMatrix();
+  const channel = normalizeSupplyChannel(firstNonEmpty(params.channel, params.page, params.route, params.section, params.psom_key, "home"));
+  const profile = resident.frontSlotProfiles[channel] || { channel, minItems:40, categories:["web"], providerLanes:["searchbank","google","naver"] };
+  const limit = clampInt(firstNonEmpty(params.limit, params.minItems, profile.minItems), profile.minItems || 40, 1, MAX_LIMIT);
+  const q = frontSupplyQuery(Object.assign({}, params, { channel }), profile);
+  const opts = { reason:action || "front-supply", searchType:firstNonEmpty(params.type, params.category, channel), type:firstNonEmpty(params.type, params.category, channel), lang:firstNonEmpty(params.lang, params.uiLang, params.locale), limit, candidatePoolTarget:Math.max(limit, profile.minItems || 40), allowRouteCards:false, allowOpeningCards:false };
+  const residentPack = supplyResidentSync({ q }, opts);
+  let items = Array.isArray(residentPack.items) ? residentPack.items.slice() : [];
+  let bankTrace = { status:"not-called", count:0 };
+  try{
+    let Bank = null;
+    try { Bank = require("./search-bank-engine"); } catch(e) { Bank = null; }
+    if(Bank && typeof Bank.runEngine === "function"){
+      const res = await withTimeout(Bank.runEngine(event || {}, Object.assign({}, params, { q, query:q, channel, page:channel, section:params.section, psom_key:params.psom_key || params.section, autoFill:"1", frontFill:"1", minItems:limit, limit, external:"off", noExternal:"1", skipSanmaru:"1", noSanmaru:"1", from:"sanmaru-front-supply" })), 3200);
+      const bankItems = normalizeItemsFromResponse(res).map(x => canonicalItem(x, q, "search-bank-front-supply"));
+      bankTrace = { status:bankItems.length ? "ok" : "empty", count:bankItems.length };
+      items = items.concat(bankItems);
+    }else bankTrace = { status:"unavailable", count:0 };
+  }catch(e){ bankTrace = { status:responseErrorCode(e), count:0 }; }
+  const authority = buildAuthorityTopAnswerCards(q, { authorityLimit:3 });
+  let ranked = finalRank(q, dedupeItems(authority.concat(items)), { q, searchType:channel, intents:[channel].concat(profile.categories || []) }).slice(0, limit);
+  const deficient = ranked.length < Math.min(limit, profile.minItems || limit);
+  if(deficient){
+    const backlogItem = { t:nowMs(), action:action || "front-supply", channel, q, lacking:Math.max(0, (profile.minItems || limit) - ranked.length), providerLanes:profile.providerLanes || [] };
+    resident.refreshBacklog.push(backlogItem);
+    if(resident.refreshBacklog.length > 500) resident.refreshBacklog.splice(0, resident.refreshBacklog.length - 500);
+  }
+  absorbResidentItems(ranked, { q, searchType:channel, lang:opts.lang, source:"front-slot-supply" });
+  return {
+    status:"ok",
+    engine:ENGINE_NAME,
+    version:VERSION,
+    action:action || "front-supply",
+    channel,
+    query:q,
+    source:ranked.length ? "sanmaru-front-slot-resident-layer" : null,
+    items:ranked,
+    results:ranked,
+    supplyPackage:{ channel, profile, deficient, providerLanes:profile.providerLanes || [], categories:profile.categories || [], mode:"front-slot-resident-supply" },
+    meta:{ count:ranked.length, requestedLimit:limit, profileMinItems:profile.minItems || null, deficient, elapsedMs:nowMs()-started, searchBank:bankTrace, resident:residentBootSnapshot(), providerLayerReady:true, frontSlotLayerReady:true, os:buildSanmaruOsSnapshot() }
+  };
+}
+
+async function supplyInsightFromSanmaru(event, params, action){
+  params = params || {};
+  const q = firstNonEmpty(params.q, params.query, params.issue, params.topic, params.region, params.country, "global insight");
+  const res = await supplyFrontSlotsFromSanmaru(event, Object.assign({}, params, { q, channel:"global-insight", type:firstNonEmpty(params.type, params.category, "news") }), action || "insight-supply");
+  res.action = action || "insight-supply";
+  res.supplyPackage = Object.assign({}, res.supplyPackage || {}, { mode:"global-insight-supply", issue:q });
+  return res;
+}
+
+
+// -----------------------------------------------------------------------------
+// SANMARU INSTANT INFORMATION OS PACKAGE
+// This is the non-blocking layer. It must not call live providers and must not
+// replace Maru Search's existing wide/provider merger. It gives the UI/gateway
+// an immediate first supply package from resident/cache/snapshot/authority/route
+// layers while wider Google/Naver/News/SNS/TV/provider work continues elsewhere.
+// -----------------------------------------------------------------------------
+const SANMARU_VIDEO_TV_PROVIDER_LANES = [
+  { provider:"youtube", label:"YouTube", url:function(q){ return "https://www.youtube.com/results?search_query=" + encodeURIComponent(q || ""); }, category:"video" },
+  { provider:"naver-tv", label:"Naver TV", url:function(q){ return "https://tv.naver.com/search?query=" + encodeURIComponent(q || ""); }, category:"video" },
+  { provider:"kakao-tv", label:"Kakao TV", url:function(q){ return "https://search.daum.net/search?w=tot&q=" + encodeURIComponent((q || "") + " 카카오TV"); }, category:"video" },
+  { provider:"google-video", label:"Google Video", url:function(q){ return "https://www.google.com/search?tbm=vid&q=" + encodeURIComponent(q || ""); }, category:"video" },
+  { provider:"vimeo", label:"Vimeo", url:function(q){ return "https://vimeo.com/search?q=" + encodeURIComponent(q || ""); }, category:"video" },
+  { provider:"dailymotion", label:"Dailymotion", url:function(q){ return "https://www.dailymotion.com/search/" + encodeURIComponent(q || ""); }, category:"video" },
+  { provider:"tiktok-video", label:"TikTok Video", url:function(q){ return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:tiktok.com"); }, category:"sns" },
+  { provider:"twitch", label:"Twitch", url:function(q){ return "https://www.twitch.tv/search?term=" + encodeURIComponent(q || ""); }, category:"video" }
+];
+
+function buildProviderLaneCardsForInstant(q, opts){
   opts = opts || {};
-  const page = low(firstNonEmpty(opts.page, opts.hub, input && input.page, input && input.hub, "home")) || "home";
-  const section = low(firstNonEmpty(opts.section, opts.slot, input && input.section, input && input.slot, ""));
-  const profile = SANMARU_FRONT_SLOT_PROFILE[page] || SANMARU_FRONT_SLOT_PROFILE.home;
-  const q = firstNonEmpty(input && input.q, input && input.query, opts.q, opts.query, [page, section, (profile.categories || []).join(" ")].filter(Boolean).join(" "));
-  const supply = supplyResidentSync({ q }, Object.assign({}, opts, {
-    reason:opts.reason || "front-slot-supply",
-    page,
-    section,
-    limit:opts.limit || profile.minItems || DEFAULT_LIMIT,
-    candidatePoolTarget:opts.candidatePoolTarget || Math.max(profile.minItems || DEFAULT_LIMIT, DEFAULT_CANDIDATE_POOL_TARGET),
-    searchType:opts.searchType || opts.type || (profile.categories && profile.categories[0]) || "all",
-    authorityLimit:opts.authorityLimit || 2
+  const routePlan = opts.routePlan || buildRoutePlanForQuery(q, opts);
+  const routeCards = buildRouteFallbackCards(q, routePlan, Object.assign({}, opts, { routeCardLimit:clampInt(opts.routeCardLimit, 28, 1, 80) }));
+  const openingCards = buildOpeningFallbackCards(q, Object.assign({}, opts, { openingCardLimit:clampInt(opts.openingCardLimit, 24, 1, 60) }));
+  const tvCards = SANMARU_VIDEO_TV_PROVIDER_LANES.map((lane, idx) => canonicalItem({
+    id:"sanmaru-tv-lane-" + stableHash([q, lane.provider, idx].join("|")),
+    title:"[Sanmaru TV/Video Lane] " + q + " · " + lane.label,
+    summary:"산마루가 상시 관리하는 영상/TV 공개 정보 통로입니다. 실제 API 또는 공개 검색 공급이 열리면 resident refresh가 결과를 흡수합니다.",
+    url:lane.url(q),
+    link:lane.url(q),
+    source:"sanmaru_tv_lane_" + lane.provider,
+    provider:lane.provider,
+    type:lane.category,
+    searchCategory:lane.category,
+    mediaType:"video",
+    score:0.38,
+    sanmaruProviderLane:true,
+    sanmaruVideoTvLane:true
+  }, q, "sanmaru-tv-provider-lane"));
+  return dedupeItems(routeCards.concat(openingCards, tvCards));
+}
+
+function buildSanmaruInstantSupplyPackage(input, opts){
+  opts = opts || {};
+  const q = typeof input === "string" ? input : firstNonEmpty(input && input.q, input && input.query, opts.q, opts.query, "");
+  const clean = sanitizeQuery(q);
+  const started = nowMs();
+  const resident = touchResidentSwitch({ reason:opts.reason || "instant-supply", q:clean.value || q, warmMs:opts.warmMs });
+  if(!clean.ok){
+    return { status:"ok", engine:ENGINE_NAME, version:VERSION, action:opts.action || "instant-supply", query:clean.value, items:[], results:[], meta:{ count:0, reason:clean.code, elapsedMs:nowMs()-started, resident } };
+  }
+
+  const limit = clampInt(opts.limit || opts.candidatePoolTarget, DEFAULT_LIMIT, 1, MAX_LIMIT);
+  const searchType = normalizeSearchType(opts.searchType || opts.type || opts.category || "all");
+  const routePlan = residentRoutePlanFor(clean.value, Object.assign({}, opts, { searchType, type:searchType }));
+  const base = supplyResidentSync({ q:clean.value }, Object.assign({}, opts, {
+    reason:opts.reason || "instant-resident-base",
+    searchType,
+    type:searchType,
+    limit,
+    candidatePoolTarget:Math.max(limit, DEFAULT_CANDIDATE_POOL_TARGET),
+    allowRouteCards:true,
+    allowOpeningCards:true,
+    routeCardLimit:clampInt(opts.routeCardLimit, 36, 1, 80),
+    openingCardLimit:clampInt(opts.openingCardLimit, 30, 1, 80)
   }));
-  supply.action = "front-supply";
-  supply.frontSupply = { page, section, profile, ready:true, role:"sanmaru-front-slot-resident-layer" };
-  supply.meta = Object.assign({}, supply.meta || {}, { frontSupply:supply.frontSupply, supplyPriority:"front-slot-first" });
-  return supply;
+  const baseItems = normalizeItemsFromResponse(base).map(x => canonicalItem(x, clean.value, firstNonEmpty(x && x.source, x && x.provider, "sanmaru-instant-base")));
+  const authority = buildAuthorityTopAnswerCards(clean.value, Object.assign({}, opts, { authorityLimit:clampInt(opts.authorityLimit, 4, 1, 8) }));
+  const providerLaneCards = buildProviderLaneCardsForInstant(clean.value, Object.assign({}, opts, { routePlan }));
+  const items = finalRank(clean.value, dedupeItems(authority.concat(baseItems, providerLaneCards)), { q:clean.value, searchType, intents:classifyQueryCategories(clean.value, searchType) }).slice(0, limit);
+  rememberResidentQueryCache(clean.value, Object.assign({}, opts, { searchType, type:searchType, page:"" }), items);
+
+  return {
+    status:"ok",
+    engine:ENGINE_NAME,
+    version:VERSION,
+    action:opts.action || "instant-supply",
+    query:clean.value,
+    source:"sanmaru-instant-information-os",
+    items,
+    results:items,
+    supplyPackage:{
+      mode:"instant-first-supply",
+      owner:"sanmaru-global-information-os",
+      maruRole:"gateway-that-returns-or-appends-this-package",
+      blockingProviderSearch:false,
+      providerRefreshPolicy:"background-or-explicit-only",
+      routePlan,
+      providerLayer:buildProviderLayerMatrix(),
+      videoTvProviderLanes:SANMARU_VIDEO_TV_PROVIDER_LANES.map(x => ({ provider:x.provider, label:x.label, category:x.category }))
+    },
+    meta:{
+      count:items.length,
+      elapsedMs:nowMs()-started,
+      authorityTopCount:authority.length,
+      providerLaneCardCount:providerLaneCards.length,
+      baseResidentCount:baseItems.length,
+      searchType,
+      immediate:true,
+      doesNotCallExternal:true,
+      doesNotShortCircuitWideSearch:true,
+      resident:residentBootSnapshot(),
+      os:buildSanmaruOsSnapshot(),
+      routePlan,
+      providerHealth:providerHealthSnapshot(),
+      note:"This instant package is the first Sanmaru OS layer. It must be returned/appended before live Google/Naver/News/SNS/TV provider work completes. It never reduces Maru Search's full wide result path."
+    }
+  };
+}
+
+function buildAuthorityTopPackage(input, opts){
+  opts = opts || {};
+  const q = typeof input === "string" ? input : firstNonEmpty(input && input.q, input && input.query, opts.q, opts.query, "");
+  const clean = sanitizeQuery(q);
+  const started = nowMs();
+  touchResidentSwitch({ reason:opts.reason || "authority-top", q:clean.value || q });
+  const items = clean.ok ? buildAuthorityTopAnswerCards(clean.value, Object.assign({}, opts, { authorityLimit:clampInt(opts.limit || opts.authorityLimit, 6, 1, 12) })) : [];
+  return { status:"ok", engine:ENGINE_NAME, version:VERSION, action:"authority-top", query:clean.value, items, results:items, meta:{ count:items.length, elapsedMs:nowMs()-started, immediate:true, doesNotCallExternal:true, resident:residentBootSnapshot() } };
+}
+
+function buildProviderLayerPackage(input, opts){
+  opts = opts || {};
+  const q = typeof input === "string" ? input : firstNonEmpty(input && input.q, input && input.query, opts.q, opts.query, "");
+  const clean = sanitizeQuery(q || "provider layer");
+  const started = nowMs();
+  touchResidentSwitch({ reason:opts.reason || "provider-layer", q:clean.value || q });
+  const routePlan = clean.ok ? residentRoutePlanFor(clean.value, opts) : null;
+  const cards = clean.ok ? buildProviderLaneCardsForInstant(clean.value, Object.assign({}, opts, { routePlan, routeCardLimit:50, openingCardLimit:40 })) : [];
+  return { status:"ok", engine:ENGINE_NAME, version:VERSION, action:"provider-layer", query:clean.value, items:cards, results:cards, providerLayer:buildProviderLayerMatrix(), routePlan, meta:{ count:cards.length, elapsedMs:nowMs()-started, immediate:true, doesNotCallExternal:true, resident:residentBootSnapshot() } };
 }
 
 function supplyResidentSync(input, opts){
@@ -1085,9 +1276,7 @@ function supplyResidentSync(input, opts){
   const activation = touchResidentSwitch({ reason:opts.reason || opts.from || "resident-supply", q:clean.value || q, warmMs:opts.warmMs });
   if(!clean.ok) return { status:"ok", engine:ENGINE_NAME, version:VERSION, query:clean.value, items:[], results:[], meta:{ count:0, reason:clean.code, resident:residentBootSnapshot(), residentSwitch:activation } };
 
-  ensureSanmaruOsControlLayer(opts.reason || "resident-supply");
   const routePlan = residentRoutePlanFor(clean.value, opts);
-  const authorityTopCards = buildAuthorityTopCards(clean.value, opts);
   const searchTypeForCache = normalizeSearchType(opts.searchType || opts.type || "all");
   const exactCacheKey = residentCacheKey(clean.value, Object.assign({}, opts, { searchType:searchTypeForCache }));
   const noPageCacheKey = residentCacheKey(clean.value, Object.assign({}, opts, { searchType:searchTypeForCache, page:'', start:'' }));
@@ -1115,6 +1304,7 @@ function supplyResidentSync(input, opts){
   const residentState = ensureResidentState();
   let routeFallbackCards = [];
   let openingFallbackCards = [];
+  const authorityTopCards = buildAuthorityTopAnswerCards(clean.value, opts);
   let items = dedupeItems(authorityTopCards.concat(residentItems, indexItems));
 
   // Sanmaru should always know and expose the major information roads
@@ -1143,9 +1333,9 @@ function supplyResidentSync(input, opts){
     routePlan,
     meta:{
       count:items.length,
-      authorityTopCount:authorityTopCards.length,
       realResidentCount:residentItems.length,
       searchBankIndex:indexMeta,
+      authorityTopCount:authorityTopCards.length,
       routeFallbackCount:routeFallbackCards.length,
       openingFallbackCount:openingFallbackCards.length,
       queryCacheHit,
@@ -2564,15 +2754,18 @@ async function handler(event){
   if(action === "resident-activate" || action === "resident-switch" || action === "warm-ping" || action === "warm") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-switch", resident:touchResidentSwitch({ reason:firstNonEmpty(merged.reason, action), q:firstNonEmpty(merged.q, merged.query) }) });
   if(action === "resident-rebuild" || action === "rebuild-resident") { const rebuilt = ensureResidentBoot({ force:true, admin:security.admin, engineUpgrade:truthy(merged.engineUpgrade || merged.upgrade || merged.versionUpload), engineUpload:truthy(merged.engineUpload || merged.sanmaruEngineUpload || merged.sanmaruEngineReupload || merged.codeUpload), reason:"manual-rebuild" }); return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-rebuild", resident:touchResidentSwitch({ reason:"manual-rebuild-switch" }), rebuilt, lifecycleNote:"admin permission does not reset Sanmaru by itself; only Sanmaru engine file upload/code fingerprint change performs engine reboot" }); }
   if(action === "resident-status") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-status", resident:touchResidentSwitch({ reason:"resident-status" }), health:healthSnapshot(), providerHealth:providerHealthSnapshot() });
-  if(action === "os-status" || action === "sanmaru-os" || action === "resident-os") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"os-status", os:sanmaruOsStatusSnapshot() });
-  if(action === "front-supply" || action === "slot-supply" || action === "content-supply" || action === "snapshot-supply" || action === "searchbank-supply" || action === "insight-supply" || action === "global-insight" || action === "issue-supply") return ok(supplyFrontSlotSync({ q:firstNonEmpty(merged.q, merged.query), page:firstNonEmpty(merged.page, merged.hub), section:firstNonEmpty(merged.section, merged.slot) }, { reason:action, page:firstNonEmpty(merged.page, merged.hub), section:firstNonEmpty(merged.section, merged.slot), limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget), candidatePoolTarget:firstNonEmpty(merged.candidatePool, merged.candidatePoolTarget), searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale) }));
-  if(action === "background-refresh" || action === "refresh-after-response") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"background-refresh", refresh:triggerSanmaruBackgroundRefresh({ q:firstNonEmpty(merged.q, merged.query) }, { reason:action, searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget) }) });
   if(action === "provider-health") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"provider-health", providerHealth:providerHealthSnapshot(), resident:residentBootSnapshot() });
   if(action === "source-registry") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"source-registry", sources:sourceRegistrySnapshot(), openingSignals:openingSignalsSnapshot(), resident:residentBootSnapshot() });
   if(action === "category-map" || action === "category-brain") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"category-map", categories:categoryMapSnapshot(), aliases:PROVIDER_CATEGORY_ALIASES, capabilities:PROVIDER_CAPABILITY_MAP, logosGuard:logosEvaluate([{ type:"category_brain", intent:"stewardship", truthConfidence:0.95 }], "category-map"), resident:residentBootSnapshot() });
   if(action === "route-plan") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"route-plan", routePlan:residentRoutePlanFor(firstNonEmpty(merged.q, merged.query), { searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale) }), resident:touchResidentSwitch({ reason:"route-plan", q:firstNonEmpty(merged.q, merged.query) }) });
   if(action === "supply" || action === "resident-supply") return ok(supplyResidentSync({ q:firstNonEmpty(merged.q, merged.query) }, { reason:"api-supply", limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget), candidatePoolTarget:firstNonEmpty(merged.candidatePool, merged.candidatePoolTarget), searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), page:firstNonEmpty(merged.page, merged.p, merged.start) }));
   if(action === "supply-category" || action === "resident-supply-category") return ok(supplyCategorySync({ q:firstNonEmpty(merged.q, merged.query), category:firstNonEmpty(merged.category, merged.type) }, { reason:"api-supply-category", category:firstNonEmpty(merged.category, merged.type), limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget), candidatePoolTarget:firstNonEmpty(merged.candidatePool, merged.candidatePoolTarget), searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), page:firstNonEmpty(merged.page, merged.p, merged.start) }));
+  if(action === "front-supply" || action === "content-supply" || action === "slot-supply" || action === "snapshot-supply" || action === "searchbank-supply") return ok(await supplyFrontSlotsFromSanmaru(event || {}, merged, action));
+  if(action === "insight-supply" || action === "global-insight-supply" || action === "issue-supply") return ok(await supplyInsightFromSanmaru(event || {}, merged, action));
+  if(action === "instant-supply" || action === "instant-search" || action === "instant-os" || action === "fast-supply") return ok(buildSanmaruInstantSupplyPackage({ q:firstNonEmpty(merged.q, merged.query) }, Object.assign({}, merged, { action, reason:action })));
+  if(action === "authority-top" || action === "official-top" || action === "public-top") return ok(buildAuthorityTopPackage({ q:firstNonEmpty(merged.q, merged.query) }, Object.assign({}, merged, { reason:action })));
+  if(action === "provider-layer" || action === "provider-lanes" || action === "information-layer") return ok(buildProviderLayerPackage({ q:firstNonEmpty(merged.q, merged.query) }, Object.assign({}, merged, { reason:action })));
+  if(action === "os-status" || action === "resident-os" || action === "supply-os") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-os", os:buildSanmaruOsSnapshot(), resident:touchResidentSwitch({ reason:"resident-os-status", q:firstNonEmpty(merged.q, merged.query) }) });
   if(action === "deep-refresh" || action === "resident-refresh") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"deep-refresh", refresh:triggerDeepRefresh({ q:firstNonEmpty(merged.q, merged.query) }, { reason:"api-deep-refresh", searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), limit:firstNonEmpty(merged.limit, merged.candidatePool, merged.candidatePoolTarget) }) });
 
   const res = await runSanmaru({
@@ -2617,16 +2810,18 @@ module.exports = {
   residentBootSnapshot,
   providerHealthSnapshot,
   sanmaruProviderLaneSnapshot,
-  sanmaruOsStatusSnapshot,
-  ensureSanmaruOsControlLayer,
-  buildAuthorityTopCards,
-  supplyFrontSlotSync,
-  triggerSanmaruBackgroundRefresh,
   touchResidentSwitch,
   supplyResidentSync,
   supplyCategorySync,
   triggerDeepRefresh,
-  absorbResidentItems
+  absorbResidentItems,
+  buildSanmaruOsSnapshot,
+  supplyFrontSlotsFromSanmaru,
+  supplyInsightFromSanmaru,
+  buildSanmaruInstantSupplyPackage,
+  buildAuthorityTopPackage,
+  buildProviderLayerPackage,
+  buildAuthorityTopAnswerCards
 };
 
 exports.version = VERSION;
@@ -2642,14 +2837,16 @@ exports.ensureResidentBoot = ensureResidentBoot;
 exports.residentBootSnapshot = residentBootSnapshot;
 exports.providerHealthSnapshot = providerHealthSnapshot;
 exports.sanmaruProviderLaneSnapshot = sanmaruProviderLaneSnapshot;
-exports.sanmaruOsStatusSnapshot = sanmaruOsStatusSnapshot;
-exports.ensureSanmaruOsControlLayer = ensureSanmaruOsControlLayer;
-exports.buildAuthorityTopCards = buildAuthorityTopCards;
-exports.supplyFrontSlotSync = supplyFrontSlotSync;
-exports.triggerSanmaruBackgroundRefresh = triggerSanmaruBackgroundRefresh;
 exports.touchResidentSwitch = touchResidentSwitch;
 exports.supplyResidentSync = supplyResidentSync;
 exports.supplyCategorySync = supplyCategorySync;
+exports.buildSanmaruInstantSupplyPackage = buildSanmaruInstantSupplyPackage;
+exports.buildAuthorityTopPackage = buildAuthorityTopPackage;
+exports.buildProviderLayerPackage = buildProviderLayerPackage;
 exports.triggerDeepRefresh = triggerDeepRefresh;
 exports.absorbResidentItems = absorbResidentItems;
-try { ensureResidentBoot({ reason:"module-load" }); ensureSanmaruOsControlLayer("module-load"); } catch(e) {}
+exports.buildSanmaruOsSnapshot = buildSanmaruOsSnapshot;
+exports.supplyFrontSlotsFromSanmaru = supplyFrontSlotsFromSanmaru;
+exports.supplyInsightFromSanmaru = supplyInsightFromSanmaru;
+exports.buildAuthorityTopAnswerCards = buildAuthorityTopAnswerCards;
+try { ensureResidentBoot({ reason:"module-load" }); } catch(e) {}

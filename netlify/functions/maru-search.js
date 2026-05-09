@@ -4323,7 +4323,7 @@ exports.handler = async function(event){
     if(!security.allowed){
       return ok({ status:'blocked', engine:'maru-search', version:VERSION, action, message:'protected Maru/Sanmaru gateway action', security });
     }
-    if(action === 'resident-status' || action === 'resident-boot' || action === 'resident-switch' || action === 'provider-health' || action === 'source-registry' || action === 'category-map' || action === 'route-plan' || action === 'deep-refresh' || action === 'os-status' || action === 'sanmaru-os' || action === 'resident-os' || action === 'front-supply' || action === 'slot-supply' || action === 'content-supply' || action === 'snapshot-supply' || action === 'searchbank-supply' || action === 'insight-supply' || action === 'global-insight' || action === 'issue-supply' || action === 'background-refresh' || action === 'refresh-after-response'){
+    if(action === 'resident-status' || action === 'resident-boot' || action === 'resident-switch' || action === 'provider-health' || action === 'source-registry' || action === 'category-map' || action === 'route-plan' || action === 'deep-refresh' || action === 'front-supply' || action === 'content-supply' || action === 'slot-supply' || action === 'snapshot-supply' || action === 'searchbank-supply' || action === 'insight-supply' || action === 'global-insight-supply' || action === 'issue-supply' || action === 'instant-supply' || action === 'instant-search' || action === 'instant-os' || action === 'fast-supply' || action === 'authority-top' || action === 'official-top' || action === 'public-top' || action === 'provider-layer' || action === 'provider-lanes' || action === 'information-layer' || action === 'os-status' || action === 'resident-os' || action === 'supply-os'){
       let Sanmaru = null;
       try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
       if(Sanmaru && typeof Sanmaru.handler === 'function'){
@@ -4387,15 +4387,12 @@ exports.handler = async function(event){
 
     let base = null;
     const sanmaruOpenGateRequested = truthy(raw && (raw.sanmaruFastOnly || raw.cacheOnly || raw.instantOnly || raw.sanmaruFirst || raw.residentFirst || raw.naturalFlow || raw.residentSwitch)) || safeString(raw && raw.routeOwner).toLowerCase() === 'sanmaru';
-    const sanmaruFastDefault = !truthy(raw && raw.disableSanmaruFastDefault) && safeString(process.env.MARU_SANMARU_FAST_DEFAULT || '1') !== '0';
-    const sanmaruCanServeFromFastLayer = residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, limit, raw || {}) && (sanmaruOpenGateRequested || sanmaruFastDefault) && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal));
+    const sanmaruCanServeFromFastLayer = residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, limit, raw || {}) && sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal));
     if(sanmaruCanServeFromFastLayer){
       base = buildSanmaruFastLayerBase(q, residentSeedPack, Object.assign({}, raw || {}, { limit }), { region:detectRuntimeRegion(event, lang, q) });
       base.meta = Object.assign({}, base.meta || {}, {
         sanmaruResidentSeed: Object.assign({}, residentSeedPack.meta || {}, {
           servedAsTopCpuFastLayer:true,
-          fastDefaultEnabled:sanmaruFastDefault,
-          openGateRequested:sanmaruOpenGateRequested,
           wideGatewaySkippedBecauseResidentIndexCacheEnough:true,
           backgroundResidentRefresh:residentRefreshSignal || null,
           visibleNeed,
