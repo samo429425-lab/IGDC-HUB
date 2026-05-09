@@ -91,30 +91,37 @@ async function tieredFetch({ liveProvider, cacheProvider, snapshotProvider }) {
 }
 
 /**
- * fastTieredFetch()
- * - 즉답 OS 경로 전용.
- * - liveProvider를 먼저 기다리지 않고 resident/authority/cache/snapshot을 먼저 반환한다.
- * - liveProvider는 호출자가 후속 보강으로 별도 실행한다.
+ * fastTieredFetch(resident/cache/snapshot/live)
+ * - For Sanmaru first-paint flows, never wait for live before returning a
+ *   usable response. Live/provider enrichment must be called by the caller in
+ *   parallel or after first render.
  */
 async function fastTieredFetch({ residentProvider, authorityProvider, cacheProvider, snapshotProvider, liveProvider }) {
-  const tiers = [
+  const lanes = [
     ["resident", residentProvider],
     ["authority", authorityProvider],
     ["cache", cacheProvider],
     ["snapshot", snapshotProvider]
   ];
 
-  for (const [name, provider] of tiers) {
-    if (typeof provider !== "function") continue;
+  for (const [name, fn] of lanes) {
+    if (typeof fn !== "function") continue;
     try {
-      const data = await provider();
-      if (data && Array.isArray(data.items)) {
-        return { served_from: name, data, live_pending: typeof liveProvider === "function" };
+      const data = await fn();
+      if (data && Array.isArray(data.items) && data.items.length) {
+        return { served_from: name, data, first_paint: true, live_deferred: typeof liveProvider === "function" };
       }
     } catch (e) {}
   }
 
-  return { served_from: "empty", data: { items: [] }, live_pending: typeof liveProvider === "function" };
+  if (typeof liveProvider === "function") {
+    try {
+      const data = await liveProvider();
+      if (data && Array.isArray(data.items)) return { served_from: "live", data, first_paint: false };
+    } catch (e) {}
+  }
+
+  return { served_from: "empty", data: { items: [] }, first_paint: true };
 }
 
 module.exports = {
@@ -131,10 +138,6 @@ module.exports = {
 /* ===== MARU CORE EXTENSION LAYER (SANMARU READY) ===== */
 const CORE = module.exports || {};
 
-
-
-/* ===== FAST TIERED FETCH BRIDGE ===== */
-CORE.fastTieredFetch = fastTieredFetch;
 
 /* ===== ENGINE REGISTRY ===== */
 CORE.engineRegistry = {
