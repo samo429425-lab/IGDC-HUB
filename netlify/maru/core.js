@@ -70,58 +70,54 @@ function normalizeResult(res) {
  *  - cacheProvider(): cache (optional)
  *  - snapshotProvider(): snapshot (required)
  */
-async function tieredFetch({ liveProvider, cacheProvider, snapshotProvider, residentProvider, authorityProvider, preferFast = true, backgroundRefresh = true, onBackground }) {
-  // SANMARU-ready policy:
-  // - For platform/search UI, never wait for live/provider first unless explicitly requested.
-  // - Return resident/authority/cache/snapshot immediately, then let live refresh happen behind the response.
-  // - Set preferFast=false only for admin/diagnostic workflows that intentionally need live-first behavior.
-  if (preferFast !== false) {
-    const fastProviders = [
-      ["resident", residentProvider],
-      ["authority", authorityProvider],
-      ["cache", cacheProvider],
-      ["snapshot", snapshotProvider]
-    ];
-    for (const [name, provider] of fastProviders) {
-      if (typeof provider !== "function") continue;
-      try {
-        const data = await provider();
-        if (data && Array.isArray(data.items)) {
-          if (backgroundRefresh !== false && typeof liveProvider === "function") {
-            Promise.resolve()
-              .then(() => liveProvider())
-              .then((live) => {
-                if (typeof onBackground === "function") onBackground(null, live, { served_from: "live-background" });
-              })
-              .catch((err) => {
-                if (typeof onBackground === "function") onBackground(err, null, { served_from: "live-background" });
-              });
-          }
-          return { served_from: name, data, background_refresh_started: typeof liveProvider === "function" && backgroundRefresh !== false };
-        }
-      } catch (e) {}
-    }
-  }
-
-  // Explicit live-first fallback for workflows that still require it.
+async function tieredFetch({ liveProvider, cacheProvider, snapshotProvider }) {
+  // live
   if (typeof liveProvider === "function") {
     try {
       const data = await liveProvider();
       if (data && Array.isArray(data.items)) return { served_from: "live", data };
     } catch (e) {}
   }
+  // cache
   if (typeof cacheProvider === "function") {
     try {
       const data = await cacheProvider();
       if (data && Array.isArray(data.items)) return { served_from: "cache", data };
     } catch (e) {}
   }
-  const data = typeof snapshotProvider === "function" ? await snapshotProvider() : { items: [] };
+  // snapshot (must exist)
+  const data = await snapshotProvider();
   return { served_from: "snapshot", data };
 }
 
-async function fastTieredFetch(args) {
-  return tieredFetch(Object.assign({}, args || {}, { preferFast: true }));
+async function fastTieredFetch({ residentProvider, authorityProvider, cacheProvider, snapshotProvider, liveProvider, background }) {
+  // Fast path for Sanmaru OS: return resident/authority/cache/snapshot first.
+  // liveProvider is intentionally not awaited unless no fast layer exists.
+  const attempts = [
+    ["resident", residentProvider],
+    ["authority", authorityProvider],
+    ["cache", cacheProvider],
+    ["snapshot", snapshotProvider],
+  ];
+  for (const [name, fn] of attempts) {
+    if (typeof fn !== "function") continue;
+    try {
+      const data = await fn();
+      if (data && Array.isArray(data.items)) {
+        if (background !== false && typeof liveProvider === "function") {
+          Promise.resolve().then(() => liveProvider()).catch(() => null);
+        }
+        return { served_from: name, data, live_deferred: typeof liveProvider === "function" };
+      }
+    } catch (e) {}
+  }
+  if (typeof liveProvider === "function") {
+    try {
+      const data = await liveProvider();
+      if (data && Array.isArray(data.items)) return { served_from: "live", data, live_deferred: false };
+    } catch (e) {}
+  }
+  return { served_from: "empty", data: { items: [] }, live_deferred: false };
 }
 
 module.exports = {
@@ -138,8 +134,6 @@ module.exports = {
 /* ===== MARU CORE EXTENSION LAYER (SANMARU READY) ===== */
 const CORE = module.exports || {};
 
-CORE.fastTieredFetch = fastTieredFetch;
-CORE.tieredFetch = tieredFetch;
 
 /* ===== ENGINE REGISTRY ===== */
 CORE.engineRegistry = {
