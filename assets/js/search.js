@@ -46,7 +46,7 @@ ready(function () {
     let lastQuery = '';
     let lastType = 'all';
     let lastSearchPayload = null;
-    let searchRequestSeq = 0;
+    let activeSearchRunId = 0;
     const pageImageEnrichCache = new Set();
     const itemImageEnrichCache = new Map();
     const expandedDisplayGroups = new Set();
@@ -88,7 +88,9 @@ ready(function () {
       bootSanmaruOnce(reason || 'search-signal', q, type);
     }
 
-    try { window.signalSanmaruSearch = signalSanmaruSearch; } catch(e) {}
+    // Expose a safe bridge for the separate global-search footer block.
+    // This does not change search routing; it only warms Sanmaru without throwing.
+    window.__maruSignalSanmaruSearch = signalSanmaruSearch;
 
 const params = new URLSearchParams(location.search);
 const q0 = (params.get('q') || '').trim();
@@ -331,8 +333,6 @@ function buildSearchUrl(q) {
   u.searchParams.set('q', cleanQ);
   u.searchParams.set('page', '1');
   u.searchParams.set('block', '0');
-  u.searchParams.set('fresh', String(Date.now()));
-  u.searchParams.set('scope', 'global');
 
   // A fresh query from the homepage/search box must not inherit the previous
   // tab such as type=video. Search page tabs may be clicked after the new
@@ -482,10 +482,33 @@ btn.addEventListener('click', (e) => {
   const q = input.value.trim();
   if (!q) return;
 
-  // Search page search box and home search box must be the same fresh-entry gate.
-  // Do not search inside the existing allItems/result pool. Always reload
-  // /search.html with a fresh query so the page starts from a clean state
-  // and maru-search receives a new global request.
+  if (isSearchPage) {
+    // Search-page top search box is always the main/global search gate.
+    // It must never act as a within-results/category sub-search.
+    const nextType = 'all';
+    activeType = nextType;
+    updateSearchTabsActive();
+    signalSanmaruSearch(q, nextType, 'search-page-new-query');
+
+    const u = new URL(location.href);
+    u.searchParams.set('q', q);
+    u.searchParams.set('page', '1');
+    u.searchParams.set('block', '0');
+    u.searchParams.delete('type');
+    u.searchParams.set('residentFirst', '1');
+    u.searchParams.set('sanmaruFirst', '1');
+    u.searchParams.set('residentSwitch', '1');
+
+    const safeReturnUrl = getSafeReturnUrl();
+    if (safeReturnUrl) {
+      u.searchParams.set('from', safeReturnUrl);
+    }
+
+    history.pushState({ q, type: nextType, from: safeReturnUrl || '' }, '', u.toString());
+    runSearch(q, nextType);
+    return;
+  }
+
   window.location.assign(buildSearchUrl(q));
 });
 
@@ -498,7 +521,33 @@ input.addEventListener('keydown', (e) => {
   const q = input.value.trim();
   if (!q) return;
 
-  // Same as the button path: every Enter submit is a fresh global search.
+  if (isSearchPage) {
+    // Search-page top search box is always the main/global search gate.
+    // It must never act as a within-results/category sub-search.
+    const nextType = 'all';
+    activeType = nextType;
+    updateSearchTabsActive();
+    signalSanmaruSearch(q, nextType, 'search-page-new-query');
+
+    const u = new URL(location.href);
+    u.searchParams.set('q', q);
+    u.searchParams.set('page', '1');
+    u.searchParams.set('block', '0');
+    u.searchParams.delete('type');
+    u.searchParams.set('residentFirst', '1');
+    u.searchParams.set('sanmaruFirst', '1');
+    u.searchParams.set('residentSwitch', '1');
+
+    const safeReturnUrl = getSafeReturnUrl();
+    if (safeReturnUrl) {
+      u.searchParams.set('from', safeReturnUrl);
+    }
+
+    history.pushState({ q, type: nextType, from: safeReturnUrl || '' }, '', u.toString());
+    runSearch(q, nextType);
+    return;
+  }
+
   window.location.assign(buildSearchUrl(q));
 });
 
@@ -624,11 +673,6 @@ async function fetchSearch(q, type = activeType){
   sp.set('limit', String(FETCH_LIMIT));
   sp.set('type', safeType);
   sp.set('tab', safeType);
-  const urlParamsForFresh = new URLSearchParams(location.search);
-  const freshToken = urlParamsForFresh.get('fresh') || urlParamsForFresh.get('sid') || '';
-  if (freshToken) sp.set('fresh', freshToken);
-  sp.set('scope', 'global');
-  sp.set('freshSearch', '1');
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
   sp.set('residentFirst', '1');
@@ -652,6 +696,38 @@ async function fetchSearch(q, type = activeType){
     return normalizeSearchPayload(json);
   } catch (e) {
     console.error('fetchSearch failed:', e);
+    return { items: [], payload: null, pageItems: [], viewportSections: [] };
+  }
+}
+
+
+async function fetchInstantSearch(q, type = activeType){
+  const safeType = normalizeSearchType(type);
+  const sp = new URLSearchParams();
+  sp.set('action', 'instant-supply');
+  sp.set('q', q);
+  sp.set('type', safeType);
+  sp.set('tab', safeType);
+  sp.set('limit', String(Math.min(FETCH_LIMIT, 240)));
+  sp.set('perPage', String(PAGE_SIZE));
+  sp.set('visibleCardsPerPage', String(PAGE_SIZE));
+  sp.set('residentFirst', '1');
+  sp.set('sanmaruFirst', '1');
+  sp.set('residentSwitch', '1');
+  sp.set('routeOwner', 'sanmaru');
+  sp.set('naturalFlow', '1');
+  sp.set('handoff', isSearchPage ? 'search-html-instant' : 'home-instant');
+
+  const url = `/.netlify/functions/maru-search?${sp.toString()}`;
+  try {
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) return { items: [], payload: null, pageItems: [], viewportSections: [] };
+    const json = await r.json();
+    if (!json || json.status === 'error' || json.status === 'blocked') {
+      return { items: [], payload: json || null, pageItems: [], viewportSections: [] };
+    }
+    return normalizeSearchPayload(json);
+  } catch(e) {
     return { items: [], payload: null, pageItems: [], viewportSections: [] };
   }
 }
@@ -1882,11 +1958,12 @@ function drawPager(){
 
 async function runSearch(q, type = activeType){
   const qq = (q || '').trim();
-  const requestId = ++searchRequestSeq;
+  const runId = ++activeSearchRunId;
   activeType = normalizeSearchType(type);
   updateSearchTabsActive();
   if (!qq){
     allItems = [];
+    lastSearchPayload = null;
     results.innerHTML = '';
     clearPager();
     status.textContent = '';
@@ -1898,13 +1975,40 @@ async function runSearch(q, type = activeType){
   renderSkeleton();
   clearPager();
 
+  let instantItems = [];
+  let fullSearchArrived = false;
+
+  const instantPromise = fetchInstantSearch(qq, activeType).then((instantPack) => {
+    if (runId !== activeSearchRunId || fullSearchArrived) return [];
+    const rawInstant = (instantPack && instantPack.items) || [];
+    const filteredInstant = filterSearchResultItems(rawInstant || []);
+    instantItems = dedupeItems(filteredInstant || []);
+    if (instantItems.length) {
+      allItems = instantItems.slice();
+      lastSearchPayload = (instantPack && instantPack.payload) || lastSearchPayload || null;
+      currentBlock = 0;
+      currentPage = 1;
+      lastQuery = qq;
+      lastType = activeType;
+      pageImageEnrichCache.clear();
+      itemImageEnrichCache.clear();
+      expandedDisplayGroups.clear();
+      renderPage(1);
+      status.textContent = `${instantItems.length}+ quick results for "${qq}" · loading full search...`;
+    }
+    return instantItems;
+  }).catch(() => []);
+
   try {
     const searchPack = await fetchSearch(qq, activeType);
-    if (requestId !== searchRequestSeq) return;
-    lastSearchPayload = searchPack && searchPack.payload || null;
+    fullSearchArrived = true;
+    if (runId !== activeSearchRunId) return;
+
+    lastSearchPayload = searchPack && searchPack.payload || lastSearchPayload || null;
     const items = Array.isArray(searchPack) ? searchPack : (searchPack && searchPack.items) || [];
     const filteredItems = filterSearchResultItems(items || []);
-    allItems = dedupeItems([...(filteredItems || [])]);
+    const merged = dedupeItems([...(instantItems || []), ...(filteredItems || [])]);
+    allItems = merged;
 
     pageImageEnrichCache.clear();
     itemImageEnrichCache.clear();
@@ -1916,7 +2020,15 @@ async function runSearch(q, type = activeType){
     lastType = activeType;
 
     if (!allItems.length) {
+      // Give the instant request one last chance if full search returned empty quickly.
+      const lateInstant = await instantPromise.catch(() => []);
+      if (runId !== activeSearchRunId) return;
+      allItems = dedupeItems(lateInstant || []);
+    }
+
+    if (!allItems.length) {
       results.innerHTML = '';
+      clearPager();
       status.textContent = `No results for "${qq}"`;
       return;
     }
@@ -1926,7 +2038,19 @@ async function runSearch(q, type = activeType){
 
   } catch(e){
     console.error(e);
-    if (requestId !== searchRequestSeq) return;
+    fullSearchArrived = true;
+    if (runId !== activeSearchRunId) return;
+    const lateInstant = await instantPromise.catch(() => []);
+    allItems = dedupeItems(lateInstant || []);
+    if (allItems.length) {
+      currentBlock = 0;
+      currentPage = 1;
+      lastQuery = qq;
+      lastType = activeType;
+      renderPage(1);
+      status.textContent = `${allItems.length} quick results for "${qq}" · full search failed`;
+      return;
+    }
     allItems = [];
     results.innerHTML = '';
     clearPager();
@@ -1945,15 +2069,15 @@ async function runSearch(q, type = activeType){
     if (!q) return;
 
     try {
-      if (window.signalSanmaruSearch) window.signalSanmaruSearch(q, 'all', 'global-search-handoff');
-    } catch(e) {}
+      if (typeof window.__maruSignalSanmaruSearch === 'function') {
+        window.__maruSignalSanmaruSearch(q, 'all', 'global-search-handoff');
+      }
+    } catch (e) {}
 
     const u = new URL('/search.html', location.origin);
     u.searchParams.set('q', q);
     u.searchParams.set('page', '1');
     u.searchParams.set('block', '0');
-    u.searchParams.set('fresh', String(Date.now()));
-    u.searchParams.set('scope', 'global');
     u.searchParams.set('residentFirst', '1');
     u.searchParams.set('sanmaruFirst', '1');
     u.searchParams.set('residentSwitch', '1');
