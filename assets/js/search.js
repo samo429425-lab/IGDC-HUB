@@ -37,7 +37,7 @@ ready(function () {
 
     const PAGE_SIZE = 15;
     const BLOCK_SIZE = 10;
-    const FETCH_LIMIT = 1000;
+    const FETCH_LIMIT = 5000;
 
     let allItems = [];
     let currentPage = 1;
@@ -737,8 +737,9 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('query', q);
   sp.set('type', safeType);
   sp.set('tab', safeType);
-  sp.set('limit', '120');
-  sp.set('candidatePoolTarget', '120');
+  sp.set('limit', '900');
+  sp.set('candidatePool', '3000');
+  sp.set('candidatePoolTarget', '3000');
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
   sp.set('providerPassthrough', '1');
