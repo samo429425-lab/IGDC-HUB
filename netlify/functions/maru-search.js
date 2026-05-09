@@ -1718,39 +1718,52 @@ function buildImmediateResidentResponse(q, raw, residentPack, baseMeta){
 }
 
 function sanmaruFastLayerEnough(residentPack, requestedLimit, raw){
-  // Sanmaru fast layer is allowed to paint the first screen quickly, but it must
-  // not stop the normal Google/Naver/Bing/Blog/News/SNS provider expansion.
-  // Only explicit *fast-only* modes may return Sanmaru by itself. Normal gate
-  // signals such as residentFirst/sanmaruFirst/naturalFlow are first-paint hints,
-  // not permission to end the full search at a thin 1-page resident/cache answer.
+  // Sanmaru fast layer is a FIRST-PAINT layer, not the final search ceiling.
+  // Normal search.js calls send residentFirst/sanmaruFirst/naturalFlow so the
+  // page can render immediately. Those signals must never suppress the wide
+  // Google/Naver/Bing/Blog/News/SNS provider expansion. Provider expansion may
+  // be skipped only when the caller explicitly asks for fast/cache-only mode,
+  // or when Sanmaru already holds a broad, real query cache large enough to
+  // satisfy the requested full result target.
   raw = raw || {};
   const meta = (residentPack && residentPack.meta) || {};
   const total = Array.isArray(residentPack && residentPack.items) ? residentPack.items.length : 0;
   const page = clampInt(firstNonEmpty(raw.page, raw.p, raw.visiblePage, raw.sectionPage), 1, 1, 100000);
   const perPage = clampInt(firstNonEmpty(raw.perPage, raw.pageSize, raw.visibleCardsPerPage, raw.visibleLimit, raw.cardsPerPage), 25, 1, 100);
   const viewportNeed = Math.max(perPage, page * perPage);
+  const requested = clampInt(requestedLimit || raw.limit || raw.max || raw.count, DEFAULT_LIMIT, 1, MAX_LIMIT);
   const cachedQueryHit = !!(meta.queryCacheHit || meta.cachedQueryHit || meta.fromQueryCache);
   const queryCacheCount = Number(meta.queryCacheCount || meta.cachedQueryCount || 0) || 0;
   const routeFallbackCount = Number(meta.routeFallbackCount || 0) || 0;
   const openingFallbackCount = Number(meta.openingFallbackCount || 0) || 0;
   const syntheticCount = routeFallbackCount + openingFallbackCount;
   const realCachedCount = Math.max(queryCacheCount, total - syntheticCount);
-  const requested = clampInt(requestedLimit || (raw && raw.limit), DEFAULT_LIMIT, 1, MAX_LIMIT);
-  const minBroadCache = Math.max(viewportNeed, perPage * 20, Math.min(requested, 3000), MIN_RESULT_TARGET);
 
-  const explicitFastOnly = truthy(raw.fastOnly || raw.sanmaruOnly || raw.instantOnly || raw.cacheOnly || raw.sanmaruFastOnly);
-  const normalGateFirstPaint = truthy(raw.sanmaruFirst || raw.residentFirst || raw.naturalFlow || raw.residentSwitch) || safeString(raw.routeOwner).toLowerCase() === 'sanmaru';
+  const explicitFastOnly = !!(
+    truthy(raw.fastOnly) ||
+    truthy(raw.sanmaruOnly) ||
+    truthy(raw.sanmaruFastOnly) ||
+    truthy(raw.cacheOnly) ||
+    truthy(raw.instantOnly)
+  );
 
-  if(explicitFastOnly) return realCachedCount >= viewportNeed;
+  // Explicit first-paint/cache-only calls may return from Sanmaru alone.
+  // This path is for instant-supply/diagnostic flows, not for normal full search.
+  if(explicitFastOnly){
+    return realCachedCount >= viewportNeed;
+  }
 
-  // Normal Sanmaru-first flows must keep provider expansion alive unless Sanmaru
-  // already has a genuinely broad query cache. This prevents the 200~250 result
-  // ceiling while preserving instant first-paint behavior elsewhere.
-  if(normalGateFirstPaint) return cachedQueryHit && realCachedCount >= minBroadCache;
+  // Normal residentFirst/sanmaruFirst/naturalFlow/routeOwner=sanmaru calls must
+  // continue into wide/provider expansion unless Sanmaru has a genuinely broad
+  // query cache. A 200~300 item resident pack is not enough for broad terms like
+  // 서울/부산, so it must not short-circuit full search.
+  const broadNeed = Math.min(MAX_LIMIT, Math.max(MIN_RESULT_TARGET, requested, 1500));
+  if(cachedQueryHit && realCachedCount >= broadNeed){
+    return true;
+  }
 
-  return cachedQueryHit && realCachedCount >= minBroadCache;
+  return false;
 }
-
 function buildSanmaruFastLayerBase(q, residentPack, raw, ctx){
   const requestedLimit = Math.min(MAX_LIMIT, Math.max(clampInt(raw && raw.limit, DEFAULT_LIMIT, 1, MAX_LIMIT), MIN_RESULT_TARGET));
   const items = dedupeCanonicalItems((residentPack && residentPack.items || [])
