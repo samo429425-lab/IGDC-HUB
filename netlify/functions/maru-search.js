@@ -2840,36 +2840,45 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       return total;
     }
 
-    const internalCount = await pullFromSearchBank();
-    // PRESERVE + EXPAND: Search Bank/Index must never stop the broad Maru Search gateway.
-    // If the caller did not explicitly block external sources, run the controlled gateway pass.
-    // This restores news/blog/cafe/youtube/image/company discovery that disappeared when internal results were considered "enough".
+    // Run the Search Bank memory layer and the provider gateway in parallel.
+    // This preserves result quantity while removing the old wait pattern:
+    // SearchBank pages first → providers later. Provider lanes can now start
+    // immediately, like Google/Naver/Bing/YouTube being plugged into the page.
+    const searchBankPromise = pullFromSearchBank();
     const shouldUseExternal = !externalOff;
 
+    let externalPromise = Promise.resolve(0);
     if(shouldUseExternal){
-      // Single maru-search gateway pass. No recursive loops, no repeated fan-out.
-      await Promise.allSettled([
-        pullFromNaver(),
-        pullFromGoogle(),
-        pullFromGoogleSns(),
-        pullFromBing(),
-        pullFromYouTube(),
-        pullFromImage()
-      ]);
+      externalPromise = (async () => {
+        await Promise.allSettled([
+          pullFromNaver(),
+          pullFromGoogle(),
+          pullFromGoogleSns(),
+          pullFromBing(),
+          pullFromYouTube(),
+          pullFromImage()
+        ]);
 
-      const afterPrimaryExternal = collected.length;
-      const naturalExpansionTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
-      if(timeLeft() > 1200){
-        await pullFromNaverVerticals();
-      } else {
-        record('naver_verticals', 'skipped-time', 0, { afterPrimaryExternal, naturalExpansionTarget });
-      }
+        const afterPrimaryExternal = collected.length;
+        const naturalExpansionTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
+        if(timeLeft() > 1200){
+          await pullFromNaverVerticals();
+        } else {
+          record('naver_verticals', 'skipped-time', 0, { afterPrimaryExternal, naturalExpansionTarget });
+        }
 
-      if((viewType !== 'all' || detectQueryIntentCluster(q) !== 'general') && timeLeft() > 1300){
-        await pullFromIntentExpansion();
-      }
+        if((viewType !== 'all' || detectQueryIntentCluster(q) !== 'general') && timeLeft() > 1300){
+          await pullFromIntentExpansion();
+        }
 
-      record('search-link-cards', 'skipped-natural-flow', 0);
+        record('search-link-cards', 'skipped-natural-flow', 0);
+        return collected.length - afterPrimaryExternal;
+      })();
+    }
+
+    const internalCount = await searchBankPromise;
+    if(shouldUseExternal){
+      await externalPromise;
     }else{
       record('external-gateway', externalOff ? 'blocked-by-request' : 'skipped-internal-enough', 0, { internalCount, trigger: externalTriggerMin, mode });
     }
