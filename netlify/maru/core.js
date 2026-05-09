@@ -90,34 +90,48 @@ async function tieredFetch({ liveProvider, cacheProvider, snapshotProvider }) {
   return { served_from: "snapshot", data };
 }
 
-async function fastTieredFetch({ residentProvider, authorityProvider, cacheProvider, snapshotProvider, liveProvider, background }) {
-  // Fast path for Sanmaru OS: return resident/authority/cache/snapshot first.
-  // liveProvider is intentionally not awaited unless no fast layer exists.
-  const attempts = [
-    ["resident", residentProvider],
-    ["authority", authorityProvider],
-    ["cache", cacheProvider],
-    ["snapshot", snapshotProvider],
-  ];
-  for (const [name, fn] of attempts) {
-    if (typeof fn !== "function") continue;
+/**
+ * fastTieredFetch(resident/cache/snapshot first)
+ * - For SANMARU instant OS paths, do not wait for live/provider calls.
+ * - liveProvider is optional and can be run by the caller after first render.
+ */
+async function fastTieredFetch({ residentProvider, authorityProvider, cacheProvider, snapshotProvider, liveProvider, waitLive = false }) {
+  if (typeof residentProvider === "function") {
     try {
-      const data = await fn();
-      if (data && Array.isArray(data.items)) {
-        if (background !== false && typeof liveProvider === "function") {
-          Promise.resolve().then(() => liveProvider()).catch(() => null);
-        }
-        return { served_from: name, data, live_deferred: typeof liveProvider === "function" };
-      }
+      const data = await residentProvider();
+      if (data && Array.isArray(data.items) && data.items.length) return { served_from: "resident", data };
     } catch (e) {}
   }
-  if (typeof liveProvider === "function") {
+
+  if (typeof authorityProvider === "function") {
+    try {
+      const data = await authorityProvider();
+      if (data && Array.isArray(data.items) && data.items.length) return { served_from: "authority", data };
+    } catch (e) {}
+  }
+
+  if (typeof cacheProvider === "function") {
+    try {
+      const data = await cacheProvider();
+      if (data && Array.isArray(data.items) && data.items.length) return { served_from: "cache", data };
+    } catch (e) {}
+  }
+
+  if (typeof snapshotProvider === "function") {
+    try {
+      const data = await snapshotProvider();
+      if (data && Array.isArray(data.items)) return { served_from: "snapshot", data };
+    } catch (e) {}
+  }
+
+  if (waitLive && typeof liveProvider === "function") {
     try {
       const data = await liveProvider();
-      if (data && Array.isArray(data.items)) return { served_from: "live", data, live_deferred: false };
+      if (data && Array.isArray(data.items)) return { served_from: "live", data };
     } catch (e) {}
   }
-  return { served_from: "empty", data: { items: [] }, live_deferred: false };
+
+  return { served_from: "empty", data: { items: [] } };
 }
 
 module.exports = {
