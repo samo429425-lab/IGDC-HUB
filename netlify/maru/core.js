@@ -70,24 +70,58 @@ function normalizeResult(res) {
  *  - cacheProvider(): cache (optional)
  *  - snapshotProvider(): snapshot (required)
  */
-async function tieredFetch({ liveProvider, cacheProvider, snapshotProvider }) {
-  // live
+async function tieredFetch({ liveProvider, cacheProvider, snapshotProvider, residentProvider, authorityProvider, preferFast = true, backgroundRefresh = true, onBackground }) {
+  // SANMARU-ready policy:
+  // - For platform/search UI, never wait for live/provider first unless explicitly requested.
+  // - Return resident/authority/cache/snapshot immediately, then let live refresh happen behind the response.
+  // - Set preferFast=false only for admin/diagnostic workflows that intentionally need live-first behavior.
+  if (preferFast !== false) {
+    const fastProviders = [
+      ["resident", residentProvider],
+      ["authority", authorityProvider],
+      ["cache", cacheProvider],
+      ["snapshot", snapshotProvider]
+    ];
+    for (const [name, provider] of fastProviders) {
+      if (typeof provider !== "function") continue;
+      try {
+        const data = await provider();
+        if (data && Array.isArray(data.items)) {
+          if (backgroundRefresh !== false && typeof liveProvider === "function") {
+            Promise.resolve()
+              .then(() => liveProvider())
+              .then((live) => {
+                if (typeof onBackground === "function") onBackground(null, live, { served_from: "live-background" });
+              })
+              .catch((err) => {
+                if (typeof onBackground === "function") onBackground(err, null, { served_from: "live-background" });
+              });
+          }
+          return { served_from: name, data, background_refresh_started: typeof liveProvider === "function" && backgroundRefresh !== false };
+        }
+      } catch (e) {}
+    }
+  }
+
+  // Explicit live-first fallback for workflows that still require it.
   if (typeof liveProvider === "function") {
     try {
       const data = await liveProvider();
       if (data && Array.isArray(data.items)) return { served_from: "live", data };
     } catch (e) {}
   }
-  // cache
   if (typeof cacheProvider === "function") {
     try {
       const data = await cacheProvider();
       if (data && Array.isArray(data.items)) return { served_from: "cache", data };
     } catch (e) {}
   }
-  // snapshot (must exist)
-  const data = await snapshotProvider();
+  const data = typeof snapshotProvider === "function" ? await snapshotProvider() : { items: [] };
   return { served_from: "snapshot", data };
+}
+
+async function fastTieredFetch(args) {
+  return tieredFetch(Object.assign({}, args || {}, { preferFast: true }));
 }
 
 module.exports = {
@@ -98,11 +132,14 @@ module.exports = {
   scoreItem,
   normalizeResult,
   tieredFetch,
+  fastTieredFetch,
 };
 
 /* ===== MARU CORE EXTENSION LAYER (SANMARU READY) ===== */
 const CORE = module.exports || {};
 
+CORE.fastTieredFetch = fastTieredFetch;
+CORE.tieredFetch = tieredFetch;
 
 /* ===== ENGINE REGISTRY ===== */
 CORE.engineRegistry = {
