@@ -236,33 +236,99 @@ function parseAcceptLanguage(header){
     .filter(Boolean);
 }
 
+function normalizeCountryCodeForMaru(v){
+  const s = safeString(v).trim().toUpperCase();
+  if(!s) return '';
+  const alias = { USA:'US', UK:'GB', KOR:'KR', ROK:'KR', JPN:'JP', CHN:'CN', VNM:'VN', DEU:'DE', FRA:'FR', ESP:'ES', BRA:'BR', RUS:'RU', TUR:'TR', ARE:'AE', SAU:'SA', AUS:'AU', CAN:'CA' };
+  return alias[s] || s.slice(0, 2);
+}
+
+function detectExplicitCountryFromQueryForMaru(q){
+  const text = safeString(q);
+  const specs = [
+    [/대한민국|한국|서울|부산|인천|대구|대전|광주|울산|세종|제주|korea|seoul|busan|incheon|daegu|daejeon|gwangju|ulsan|jeju/i, 'KR'],
+    [/미국|usa|united states|america|new york|los angeles|washington|california|texas|florida/i, 'US'],
+    [/일본|japan|tokyo|osaka|kyoto|hokkaido/i, 'JP'],
+    [/중국|china|beijing|shanghai|guangzhou|shenzhen/i, 'CN'],
+    [/베트남|vietnam|hanoi|ho chi minh|danang/i, 'VN'],
+    [/영국|uk|united kingdom|london/i, 'GB'],
+    [/독일|germany|berlin/i, 'DE'],
+    [/프랑스|france|paris/i, 'FR'],
+    [/러시아|russia|moscow/i, 'RU']
+  ];
+  for(const [rx, code] of specs){ try{ if(rx.test(text)) return code; }catch(e){} }
+  return '';
+}
+
+function countryFromLangForMaru(lang){
+  const l = safeString(lang).toLowerCase();
+  if(l.startsWith('ko')) return 'KR';
+  if(l.startsWith('ja')) return 'JP';
+  if(l.startsWith('zh')) return 'CN';
+  if(l.startsWith('vi')) return 'VN';
+  if(l.startsWith('id')) return 'ID';
+  if(l.startsWith('th')) return 'TH';
+  if(l.startsWith('hi')) return 'IN';
+  if(l.startsWith('de')) return 'DE';
+  if(l.startsWith('fr')) return 'FR';
+  if(l.startsWith('es')) return 'ES';
+  if(l.startsWith('pt-br')) return 'BR';
+  if(l.startsWith('pt')) return 'PT';
+  if(l.startsWith('ru')) return 'RU';
+  if(l.startsWith('tr')) return 'TR';
+  if(l.startsWith('en-gb')) return 'GB';
+  if(l.startsWith('en-au')) return 'AU';
+  if(l.startsWith('en-ca')) return 'CA';
+  if(l.startsWith('en')) return 'US';
+  return '';
+}
+
 function detectRuntimeRegion(event, lang, q){
   try{
     const qs = (event && event.queryStringParameters) || {};
-    const forcedRegion = safeString(qs.region || qs.geo || '').trim().toUpperCase();
-    const forcedCountry = safeString(qs.country || '').trim().toUpperCase();
+    const forcedRegion = normalizeCountryCodeForMaru(qs.region || qs.geo || '');
+    const forcedCountry = normalizeCountryCodeForMaru(qs.country || '');
     if(forcedRegion) return forcedRegion;
-    if(forcedCountry === 'KR') return 'KR';
-    if(forcedCountry === 'US') return 'US';
+    if(forcedCountry) return forcedCountry;
 
     const headers = (event && event.headers) || {};
-    const xfCountry = safeString(headers['x-country'] || headers['cf-ipcountry'] || headers['x-vercel-ip-country'] || '').trim().toUpperCase();
-    if(xfCountry === 'KR') return 'KR';
-    if(xfCountry === 'US') return 'US';
+    const xfCountry = normalizeCountryCodeForMaru(firstNonEmpty(
+      headers['x-country'], headers['X-Country'],
+      headers['cf-ipcountry'], headers['CF-IPCountry'],
+      headers['x-vercel-ip-country'], headers['X-Vercel-IP-Country'],
+      headers['cloudfront-viewer-country'], headers['CloudFront-Viewer-Country'],
+      headers['x-appengine-country'], headers['X-AppEngine-Country'],
+      headers['x-geo-country'], headers['X-Geo-Country'],
+      headers['x-client-country'], headers['X-Client-Country'],
+      headers['x-forwarded-country'], headers['X-Forwarded-Country']
+    ));
+    if(xfCountry) return xfCountry;
+
+    const explicit = detectExplicitCountryFromQueryForMaru(q);
+    if(explicit) return explicit;
 
     const langs = [safeString(lang).toLowerCase()].concat(parseAcceptLanguage(headers['accept-language'] || headers['Accept-Language'] || '')).filter(Boolean);
-    if(langs.some(x => x.startsWith('ko'))) return 'KR';
-    if(langs.some(x => x.startsWith('en-us'))) return 'US';
-    if(langs.some(x => x.startsWith('en'))) return 'US';
+    for(const l of langs){
+      const c = countryFromLangForMaru(l);
+      if(c) return c;
+    }
     if(/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(safeString(q))) return 'KR';
     return 'GLOBAL';
   }catch(e){ return 'GLOBAL'; }
 }
 
 function sourceOrderForRegion(region){
-  const r = safeString(region).toUpperCase();
-  if(r === 'KR') return ['search_bank','web_naver','web_google','web_google_sns','web_youtube','web_bing','web_image','maps'];
-  return ['search_bank','web_google','web_google_sns','web_youtube','web_bing','web_naver','web_image','maps'];
+  const r = normalizeCountryCodeForMaru(region || 'GLOBAL') || 'GLOBAL';
+  const map = {
+    KR: ['search_bank','web_naver','web_google','web_google_sns','web_youtube','web_bing','web_image','maps'],
+    US: ['search_bank','web_google','web_bing','web_youtube','web_google_sns','web_naver','web_image','maps'],
+    JP: ['search_bank','web_google','web_bing','web_youtube','web_google_sns','web_naver','web_image','maps'],
+    CN: ['search_bank','web_baidu','web_bing','web_google','web_youtube','web_google_sns','web_image','maps'],
+    VN: ['search_bank','web_google','web_bing','web_youtube','web_google_sns','web_naver','web_image','maps'],
+    RU: ['search_bank','web_yandex','web_google','web_bing','web_youtube','web_google_sns','web_image','maps'],
+    GLOBAL: ['search_bank','web_google','web_bing','web_youtube','web_google_sns','web_naver','web_image','maps']
+  };
+  return (map[r] || map.GLOBAL).slice();
 }
 
 function domainOf(url){
@@ -1570,6 +1636,9 @@ function getSanmaruResidentForMaru(q, raw, opts){
         searchType: opts.searchType,
         type: opts.searchType,
         lang: opts.lang,
+        country: firstNonEmpty(opts.country, opts.region, raw.country, raw.region, raw.geo),
+        region: firstNonEmpty(opts.region, opts.country, raw.region, raw.country, raw.geo),
+        runtimeRegion: firstNonEmpty(opts.region, opts.country, raw.region, raw.country, raw.geo),
         allowRouteCards: false,
         noRouteCards: true,
         allowOpeningCards: false,
@@ -1608,7 +1677,7 @@ function getSanmaruRouteContextForMaru(q, raw, opts){
     else if(typeof Sanmaru.ensureResidentBoot === 'function') Sanmaru.ensureResidentBoot({ reason:opts.reason || 'maru-route-context', q });
     const searchType = normalizeSearchType(opts.searchType || raw.type || raw.category || raw.tab || raw.vertical);
     const routePlan = typeof Sanmaru.buildRoutePlanForQuery === 'function'
-      ? Sanmaru.buildRoutePlanForQuery(q, { searchType, type:searchType, lang: opts.lang || raw.lang || raw.uiLang || raw.locale })
+      ? Sanmaru.buildRoutePlanForQuery(q, { searchType, type:searchType, lang: opts.lang || raw.lang || raw.uiLang || raw.locale, country:firstNonEmpty(opts.country, opts.region, raw.country, raw.region, raw.geo), region:firstNonEmpty(opts.region, opts.country, raw.region, raw.country, raw.geo), runtimeRegion:firstNonEmpty(opts.region, opts.country, raw.region, raw.country, raw.geo) })
       : null;
     const providerHealth = typeof Sanmaru.providerHealthSnapshot === 'function' ? Sanmaru.providerHealthSnapshot() : [];
     const sourceRegistry = typeof Sanmaru.sourceRegistry === 'function' ? Sanmaru.sourceRegistry() : null;
@@ -2456,7 +2525,8 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       owner:'sanmaru-top-resident-cpu',
       maruRole:'gateway-body-not-independent-crawler',
       categories: Array.isArray(sanmaruRoutePlan && sanmaruRoutePlan.categories) ? sanmaruRoutePlan.categories.slice(0, 24) : [],
-      providers: Array.isArray(sanmaruRoutePlan && sanmaruRoutePlan.routes) ? sanmaruRoutePlan.routes.map(r => r.provider).filter(Boolean).slice(0, 24) : []
+      providers: Array.isArray(sanmaruRoutePlan && sanmaruRoutePlan.routes) ? sanmaruRoutePlan.routes.map(r => r.provider).filter(Boolean).slice(0, 24) : [],
+      geoRoute: sanmaruRoutePlan && sanmaruRoutePlan.geoRoute || null
     });
 
     async function pullFromSearchBank(){
@@ -4323,7 +4393,7 @@ exports.handler = async function(event){
     if(!security.allowed){
       return ok({ status:'blocked', engine:'maru-search', version:VERSION, action, message:'protected Maru/Sanmaru gateway action', security });
     }
-    if(action === 'resident-status' || action === 'resident-boot' || action === 'resident-switch' || action === 'provider-health' || action === 'source-registry' || action === 'category-map' || action === 'route-plan' || action === 'deep-refresh' || action === 'front-supply' || action === 'content-supply' || action === 'slot-supply' || action === 'snapshot-supply' || action === 'searchbank-supply' || action === 'insight-supply' || action === 'global-insight-supply' || action === 'issue-supply' || action === 'instant-supply' || action === 'instant-search' || action === 'instant-os' || action === 'fast-supply' || action === 'authority-top' || action === 'official-top' || action === 'public-top' || action === 'provider-layer' || action === 'provider-lanes' || action === 'information-layer' || action === 'os-status' || action === 'resident-os' || action === 'supply-os'){
+    if(action === 'resident-status' || action === 'resident-boot' || action === 'resident-switch' || action === 'provider-health' || action === 'source-registry' || action === 'category-map' || action === 'route-plan' || action === 'geo-route' || action === 'ip-route' || action === 'country-route' || action === 'deep-refresh'){
       let Sanmaru = null;
       try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
       if(Sanmaru && typeof Sanmaru.handler === 'function'){
@@ -4377,12 +4447,13 @@ exports.handler = async function(event){
     // performs Sanmaru-planned gateway expansion and absorbs the results back
     // into Sanmaru. items/results are never capped to the viewport; only
     // visiblePagePack.pageItems is page-sized.
-    const sanmaruRouteContext = getSanmaruRouteContextForMaru(q, raw || {}, { searchType, lang, limit, reason:'maru-top-route-owner-context' });
+    const maruRuntimeRegion = detectRuntimeRegion(event, lang, q);
+    const sanmaruRouteContext = getSanmaruRouteContextForMaru(q, raw || {}, { searchType, lang, limit, country:maruRuntimeRegion, region:maruRuntimeRegion, runtimeRegion:maruRuntimeRegion, reason:'maru-top-route-owner-context' });
     let residentSeedPack = null;
     let residentRefreshSignal = null;
     if(!truthy(raw && (raw.noResident || raw.skipResident || raw.disableResident))){
-      residentSeedPack = getSanmaruResidentForMaru(q, raw || {}, { searchType, lang, limit, reason:'maru-top-resident-seed-preserve-wide-search' });
-      residentRefreshSignal = triggerSanmaruResidentRefresh(q, raw || {}, { searchType, lang, limit });
+      residentSeedPack = getSanmaruResidentForMaru(q, raw || {}, { searchType, lang, limit, country:maruRuntimeRegion, region:maruRuntimeRegion, runtimeRegion:maruRuntimeRegion, reason:'maru-top-resident-seed-preserve-wide-search' });
+      residentRefreshSignal = triggerSanmaruResidentRefresh(q, raw || {}, { searchType, lang, limit, country:maruRuntimeRegion, region:maruRuntimeRegion, runtimeRegion:maruRuntimeRegion });
     }
 
     let base = null;
