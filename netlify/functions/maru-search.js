@@ -1718,11 +1718,11 @@ function buildImmediateResidentResponse(q, raw, residentPack, baseMeta){
 }
 
 function sanmaruFastLayerEnough(residentPack, requestedLimit, raw){
-  // Sanmaru is the resident information CPU. Maru Search may skip provider
-  // re-scan ONLY when Sanmaru already holds a broad query cache from a previous
-  // gateway pass. A thin index/page-sized resident answer must never block
-  // Google/Naver/SNS/category construction, because that makes searches look
-  // empty or narrow.
+  // Sanmaru fast layer is allowed to paint the first screen quickly, but it must
+  // not stop the normal Google/Naver/Bing/Blog/News/SNS provider expansion.
+  // Only explicit *fast-only* modes may return Sanmaru by itself. Normal gate
+  // signals such as residentFirst/sanmaruFirst/naturalFlow are first-paint hints,
+  // not permission to end the full search at a thin 1-page resident/cache answer.
   raw = raw || {};
   const meta = (residentPack && residentPack.meta) || {};
   const total = Array.isArray(residentPack && residentPack.items) ? residentPack.items.length : 0;
@@ -1735,17 +1735,19 @@ function sanmaruFastLayerEnough(residentPack, requestedLimit, raw){
   const openingFallbackCount = Number(meta.openingFallbackCount || 0) || 0;
   const syntheticCount = routeFallbackCount + openingFallbackCount;
   const realCachedCount = Math.max(queryCacheCount, total - syntheticCount);
-  const minBroadCache = Math.max(viewportNeed, Math.min(250, Math.max(perPage * 4, 100)));
+  const requested = clampInt(requestedLimit || (raw && raw.limit), DEFAULT_LIMIT, 1, MAX_LIMIT);
+  const minBroadCache = Math.max(viewportNeed, perPage * 20, Math.min(requested, 3000), MIN_RESULT_TARGET);
 
-  const openGateRequested = truthy(raw.sanmaruFirst || raw.residentFirst || raw.naturalFlow || raw.residentSwitch || raw.instantOnly || raw.cacheOnly) || safeString(raw.routeOwner).toLowerCase() === 'sanmaru';
+  const explicitFastOnly = truthy(raw.fastOnly || raw.sanmaruOnly || raw.instantOnly || raw.cacheOnly || raw.sanmaruFastOnly);
+  const normalGateFirstPaint = truthy(raw.sanmaruFirst || raw.residentFirst || raw.naturalFlow || raw.residentSwitch) || safeString(raw.routeOwner).toLowerCase() === 'sanmaru';
 
-  // Explicit diagnostic/ultra-fast mode can still be requested. For the normal
-  // Maru gate flow, Sanmaru may answer immediately when it already has enough
-  // real resident/index data to fill the requested viewport. A thin synthetic
-  // route/opening-only response is still not allowed to suppress the normal
-  // fallback expansion.
-  if(truthy(raw.fastOnly) || truthy(raw.sanmaruOnly)) return realCachedCount >= viewportNeed;
-  if(openGateRequested && realCachedCount >= viewportNeed) return true;
+  if(explicitFastOnly) return realCachedCount >= viewportNeed;
+
+  // Normal Sanmaru-first flows must keep provider expansion alive unless Sanmaru
+  // already has a genuinely broad query cache. This prevents the 200~250 result
+  // ceiling while preserving instant first-paint behavior elsewhere.
+  if(normalGateFirstPaint) return cachedQueryHit && realCachedCount >= minBroadCache;
+
   return cachedQueryHit && realCachedCount >= minBroadCache;
 }
 
