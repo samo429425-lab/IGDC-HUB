@@ -2460,25 +2460,45 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     });
 
     async function pullFromSearchBank(){
-      let count = 0;
-      let offset = 0;
-      const pageSigs = new Set();
       const target = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
-      const maxPages = Math.min(caps.searchBankPages, Math.ceil(target / 100) + 3);
-      for(let i=0; i<maxPages && timeLeft() > 900; i++){
-        const b = await Containers.search_bank.fetch(q, 100, offset, event).catch(() => null);
-        if(!b || !b.results || !b.results.length) break;
+      const pageSize = 100;
+      const maxPages = Math.min(caps.searchBankPages, Math.ceil(target / pageSize) + 3);
+      const firstWindow = Math.min(maxPages, deep ? 18 : 12);
+      const offsets = [];
+      for(let i=0; i<firstWindow; i++) offsets.push(i * pageSize);
+
+      let count = 0;
+      const pageSigs = new Set();
+
+      const settled = await Promise.allSettled(offsets.map(offset =>
+        Containers.search_bank.fetch(q, pageSize, offset, event)
+          .then(bundle => ({ offset, bundle }))
+          .catch(() => ({ offset, bundle:null }))
+      ));
+
+      const ordered = settled
+        .map(x => x && x.status === 'fulfilled' ? x.value : null)
+        .filter(Boolean)
+        .sort((a,b) => (a.offset || 0) - (b.offset || 0));
+
+      for(const pack of ordered){
+        const b = pack && pack.bundle;
+        if(!b || !b.results || !b.results.length) continue;
         const sig = b.results.slice(0, 3).map(x => safeString(x && (x.id || x.url || x.link || x.title))).join('|') + '::' +
           b.results.slice(-3).map(x => safeString(x && (x.id || x.url || x.link || x.title))).join('|');
-        if(sig && pageSigs.has(sig)) { record('search-bank', 'duplicate-page-break', count, { offset }); break; }
+        if(sig && pageSigs.has(sig)) continue;
         pageSigs.add(sig);
-        const n = addBundle(b, 'search-bank', collected, sourceState);
-        count += n;
-        if(b.results.length < 100) break;
-        offset += 100;
+        count += addBundle(b, 'search-bank', collected, sourceState);
         if(count >= target) break;
       }
-      record('search-bank', count ? 'ok' : 'empty', count);
+
+      record('search-bank', count ? 'ok' : 'empty', count, {
+        mode:'parallel-first-window',
+        pagesTried: offsets.length,
+        maxPagesConfigured: maxPages,
+        role:'fast-memory-first-without-sequential-page-wait'
+      });
+
       if(!count){
         const snap = await Containers.snapshot.fetch(q, Math.max(limit, MIN_RESULT_TARGET)).catch(() => null);
         const n = addBundle(snap, 'snapshot-local', collected, sourceState);
@@ -2521,23 +2541,34 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 
     async function pullFromGoogle(){
       let count = 0;
-      let pageStart = start || 1;
-      let lastMeta = null;
-      for(let i=0; i<caps.googlePages && pageStart <= 91 && timeLeft() > 1500; i++){
-        const g = await Containers.web_google.fetch(q, 10, pageStart).catch(e => ({ source:'google', results: [], meta: { status:'google exception', reason: safeString((e && e.message) || e).slice(0, 160) } }));
-        lastMeta = g && g.meta || lastMeta;
-        const n = addBundle(g, 'google', collected, sourceState);
-        count += n;
-        if(!g || !g.results || g.results.length < 10) break;
-        pageStart += 10;
+      const firstStart = start || 1;
+      const starts = [];
+      for(let i=0; i<caps.googlePages; i++){
+        const pageStart = firstStart + (i * 10);
+        if(pageStart > 91) break;
+        starts.push(pageStart);
       }
       const gKeys = googleCseKeys();
+      const settled = await Promise.allSettled(starts.map(pageStart =>
+        Containers.web_google.fetch(q, 10, pageStart)
+          .then(bundle => ({ pageStart, bundle }))
+          .catch(e => ({ pageStart, bundle:{ source:'google', results: [], meta:{ status:'google exception', reason:safeString((e && e.message) || e).slice(0,160) } } }))
+      ));
+      let lastMeta = null;
+      for(const item of settled){
+        const pack = item && item.status === 'fulfilled' ? item.value : null;
+        const g = pack && pack.bundle;
+        lastMeta = g && g.meta || lastMeta;
+        count += addBundle(g, 'google', collected, sourceState);
+      }
       record('google', count ? 'ok' : ((lastMeta && lastMeta.status) || 'google empty'), count, Object.assign({
         reason: lastMeta && lastMeta.reason,
         httpStatus: lastMeta && lastMeta.httpStatus,
         cseParams: lastMeta && lastMeta.cseParams,
         keyPresent: !!gKeys.key,
         csePresent: !!gKeys.cx,
+        pagesTried: starts.length,
+        mode:'parallel-google-window',
         plannedBySanmaru: sanmaruPlannedProvider(sanmaruRoutePlan, 'google')
       }, lastMeta && lastMeta.detail ? { detail: lastMeta.detail } : {}));
       return count;
@@ -2565,15 +2596,18 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 
     async function pullFromBing(){
       let count = 0;
-      let offset = 0;
-      for(let i=0; i<caps.bingPages && offset <= 450 && timeLeft() > 1200; i++){
-        const b = await Containers.web_bing.fetch(q, 50, offset).catch(() => null);
-        const n = addBundle(b, 'bing', collected, sourceState);
-        count += n;
-        if(!b || !b.results || b.results.length < 50) break;
-        offset += 50;
+      const offsets = [];
+      for(let i=0; i<caps.bingPages && (i * 50) <= 450; i++) offsets.push(i * 50);
+      const settled = await Promise.allSettled(offsets.map(offset =>
+        Containers.web_bing.fetch(q, 50, offset)
+          .then(bundle => ({ offset, bundle }))
+          .catch(() => ({ offset, bundle:null }))
+      ));
+      for(const item of settled){
+        const pack = item && item.status === 'fulfilled' ? item.value : null;
+        count += addBundle(pack && pack.bundle, 'bing', collected, sourceState);
       }
-      record('bing', count ? 'ok' : 'empty', count);
+      record('bing', count ? 'ok' : 'empty', count, { pagesTried: offsets.length, mode:'parallel-bing-window' });
       return count;
     }
 
@@ -4323,7 +4357,7 @@ exports.handler = async function(event){
     if(!security.allowed){
       return ok({ status:'blocked', engine:'maru-search', version:VERSION, action, message:'protected Maru/Sanmaru gateway action', security });
     }
-    if(action === 'resident-status' || action === 'resident-boot' || action === 'resident-switch' || action === 'provider-health' || action === 'source-registry' || action === 'category-map' || action === 'route-plan' || action === 'deep-refresh'){
+    if(action === 'resident-status' || action === 'resident-boot' || action === 'resident-switch' || action === 'provider-health' || action === 'source-registry' || action === 'category-map' || action === 'route-plan' || action === 'geo-route' || action === 'ip-route' || action === 'country-route' || action === 'search-skeleton' || action === 'category-lanes' || action === 'naver-google-style' || action === 'instant-supply' || action === 'instant-search' || action === 'instant-os' || action === 'first-supply' || action === 'authority-top' || action === 'provider-layer' || action === 'front-supply' || action === 'slot-supply' || action === 'content-supply' || action === 'snapshot-supply' || action === 'searchbank-supply' || action === 'insight-supply' || action === 'global-insight' || action === 'issue-supply' || action === 'deep-refresh'){
       let Sanmaru = null;
       try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
       if(Sanmaru && typeof Sanmaru.handler === 'function'){

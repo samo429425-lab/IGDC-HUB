@@ -2678,6 +2678,130 @@ function parseBody(event){
   }catch(e){ return {}; }
 }
 
+
+// -----------------------------------------------------------------------------
+// SANMARU INSTANT OS SUPPLY LAYER
+// This is a non-blocking first-supply package. It never replaces the full Maru
+// Search provider pass; it gives the front/search/gateway enough structured
+// authority/resident/route data to render immediately while wide providers keep
+// working through Maru Search or later refresh.
+// -----------------------------------------------------------------------------
+function buildSanmaruInstantOsPackage(q, opts){
+  opts = opts || {};
+  q = firstNonEmpty(q, opts.q, opts.query);
+  const started = nowMs();
+  ensureResidentBoot({ reason: opts.reason || "instant-os-supply" });
+
+  const lang = firstNonEmpty(opts.lang, opts.uiLang, opts.locale);
+  const searchType = firstNonEmpty(opts.searchType, opts.type, opts.category, opts.tab, opts.vertical, "all");
+  const country = firstNonEmpty(opts.country, opts.region, opts.geo, opts.runtimeRegion);
+  const effectiveCountry = firstNonEmpty(country, "GLOBAL");
+
+  const supplied = supplyResidentSync({ q, query:q }, {
+    reason: opts.reason || "instant-os-supply",
+    limit: firstNonEmpty(opts.limit, opts.candidatePool, opts.candidatePoolTarget, DEFAULT_LIMIT),
+    candidatePoolTarget: firstNonEmpty(opts.candidatePool, opts.candidatePoolTarget, DEFAULT_CANDIDATE_POOL_TARGET),
+    searchType,
+    type: searchType,
+    lang,
+    page: firstNonEmpty(opts.page, opts.p, opts.start, 1),
+    perPage: firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit, DEFAULT_VISIBLE_PER_PAGE),
+    visibleNeed: firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit, DEFAULT_VISIBLE_PER_PAGE),
+    allowRouteCards: true,
+    allowOpeningCards: true,
+    country: effectiveCountry
+  });
+
+  let items = Array.isArray(supplied && supplied.items) ? supplied.items.slice() : [];
+  const ctx = {
+    q,
+    searchType,
+    type: searchType,
+    lang,
+    region: effectiveCountry,
+    candidatePoolTarget: clampInt(firstNonEmpty(opts.candidatePool, opts.candidatePoolTarget), DEFAULT_CANDIDATE_POOL_TARGET, 1, MAX_LIMIT),
+    limit: clampInt(firstNonEmpty(opts.limit), DEFAULT_LIMIT, 1, MAX_LIMIT)
+  };
+  const finalTarget = Math.min(MAX_LIMIT, Math.max(ctx.limit, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET));
+  items = finalRank(q, items, ctx).slice(0, finalTarget).map(it => {
+    const copy = Object.assign({}, it);
+    delete copy._sanmaruSeq;
+    delete copy._sanmaruRejectedReason;
+    return copy;
+  });
+
+  const geoRoute = (typeof buildGeoRouteContext === "function")
+    ? buildGeoRouteContext(q, { lang, country: effectiveCountry })
+    : { effectiveCountry, country: effectiveCountry };
+  const cats = classifyQueryCategories(q, searchType);
+  const routePlan = buildRoutePlanForQuery(q, { searchType, type:searchType, lang, country:effectiveCountry, runtimeRegion:effectiveCountry });
+  const categoryLanePlan = (typeof buildCategoryLanePlan === "function")
+    ? buildCategoryLanePlan(q, cats, geoRoute)
+    : { lanes: cats };
+  const searchSkeleton = (typeof buildSearchSkeletonPolicy === "function")
+    ? buildSearchSkeletonPolicy(q, geoRoute)
+    : { style:"google-naver-hybrid-progressive-render", pagination:{ initialPage:1, renderMode:"current-page-first" } };
+
+  return {
+    status: "ok",
+    engine: ENGINE_NAME,
+    version: VERSION,
+    action: "instant-os-supply",
+    query: q,
+    source: items.length ? "sanmaru-instant-os" : "sanmaru-instant-os-empty",
+    items,
+    results: items,
+    geoRoute,
+    routePlan,
+    categoryLanePlan,
+    searchSkeleton,
+    providerLayer: {
+      mode: "provider-lane-map-only-no-provider-wait",
+      providerHealth: providerHealthSnapshot(),
+      sourceRegistry: sourceRegistrySnapshot(),
+      mountRegistry: mountRegistrySnapshot()
+    },
+    meta: Object.assign({}, supplied && supplied.meta || {}, {
+      count: items.length,
+      elapsedMs: nowMs() - started,
+      instantSupply: true,
+      responseMode: "first-supply-package",
+      doesNotBlockOnProviders: true,
+      doesNotReplaceFullSearch: true,
+      fullSearchPolicy: "maru-search-wide-provider-pass-continues-or-can-be-called-after-first-render",
+      searchExecutionOwner: "sanmaru-global-information-os",
+      maruSearchRole: "gateway-body-and-render-channel",
+      coreRole: "normalize-bus-only",
+      principle: "resident-cache-snapshot-authority-route-first; live-provider-refresh-after-first-render",
+      lanes: Array.isArray(categoryLanePlan && categoryLanePlan.lanes) ? categoryLanePlan.lanes : undefined,
+      trace: [].concat((supplied && supplied.meta && supplied.meta.trace) || [], [{
+        name: "sanmaru-instant-os-supply",
+        status: items.length ? "ok" : "empty",
+        count: items.length,
+        mode: "no-provider-wait",
+        currentPageFirst: true,
+        keepFullProviderSearchRunning: true
+      }])
+    })
+  };
+}
+
+function buildSanmaruFrontSupplyPackage(q, opts){
+  opts = opts || {};
+  const pack = buildSanmaruInstantOsPackage(q || firstNonEmpty(opts.q, opts.query, opts.section, opts.page, "front"), Object.assign({}, opts, { reason: opts.reason || "front-slot-supply" }));
+  pack.action = "front-supply";
+  pack.source = pack.items && pack.items.length ? "sanmaru-front-slot-resident-supply" : "sanmaru-front-slot-route-supply";
+  pack.meta = Object.assign({}, pack.meta || {}, {
+    frontSupply: true,
+    slotSupply: true,
+    page: firstNonEmpty(opts.page, opts.targetPage, opts.hub, ""),
+    section: firstNonEmpty(opts.section, opts.slot, opts.psom_key, opts.category, ""),
+    policy: "front-slot-resident-first-no-provider-wait"
+  });
+  return pack;
+}
+
+
 async function handler(event){
   if(event && event.httpMethod === "OPTIONS") return ok({ status:"ok" });
   const qs = (event && event.queryStringParameters) || {};
@@ -2697,6 +2821,16 @@ async function handler(event){
   if(action === "provider-health") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"provider-health", providerHealth:providerHealthSnapshot(), resident:residentBootSnapshot() });
   if(action === "source-registry") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"source-registry", sources:sourceRegistrySnapshot(), openingSignals:openingSignalsSnapshot(), resident:residentBootSnapshot() });
   if(action === "category-map" || action === "category-brain") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"category-map", categories:categoryMapSnapshot(), aliases:PROVIDER_CATEGORY_ALIASES, capabilities:PROVIDER_CAPABILITY_MAP, logosGuard:logosEvaluate([{ type:"category_brain", intent:"stewardship", truthConfidence:0.95 }], "category-map"), resident:residentBootSnapshot() });
+  if(action === "instant-supply" || action === "instant-search" || action === "instant-os" || action === "first-supply" || action === "authority-top" || action === "provider-layer") {
+    const qx = firstNonEmpty(merged.q, merged.query);
+    const country = firstNonEmpty(merged.country, merged.region, merged.geo, detectRuntimeRegion(event || {}, firstNonEmpty(merged.lang, merged.uiLang, merged.locale), qx));
+    return ok(buildSanmaruInstantOsPackage(qx, Object.assign({}, merged, { country, reason:action || "instant-os" })));
+  }
+  if(action === "front-supply" || action === "slot-supply" || action === "content-supply" || action === "snapshot-supply" || action === "searchbank-supply" || action === "insight-supply" || action === "global-insight" || action === "issue-supply") {
+    const qx = firstNonEmpty(merged.q, merged.query, merged.section, merged.slot, merged.page, merged.targetPage, action);
+    const country = firstNonEmpty(merged.country, merged.region, merged.geo, detectRuntimeRegion(event || {}, firstNonEmpty(merged.lang, merged.uiLang, merged.locale), qx));
+    return ok(buildSanmaruFrontSupplyPackage(qx, Object.assign({}, merged, { country, reason:action })));
+  }
   if(action === "geo-route" || action === "ip-route" || action === "country-route") return ok(Object.assign({ action:"geo-route" }, geoIpRouteMatrixSnapshot(firstNonEmpty(merged.q, merged.query), { lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), country:firstNonEmpty(merged.country, merged.region, merged.geo, detectRuntimeRegion(event || {}, firstNonEmpty(merged.lang, merged.uiLang, merged.locale), firstNonEmpty(merged.q, merged.query))) }), { resident:touchResidentSwitch({ reason:"geo-route", q:firstNonEmpty(merged.q, merged.query) }) }));
   if(action === "route-plan") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"route-plan", routePlan:residentRoutePlanFor(firstNonEmpty(merged.q, merged.query), { searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), country:firstNonEmpty(merged.country, merged.region, merged.geo, detectRuntimeRegion(event || {}, firstNonEmpty(merged.lang, merged.uiLang, merged.locale), firstNonEmpty(merged.q, merged.query))) }), resident:touchResidentSwitch({ reason:"route-plan", q:firstNonEmpty(merged.q, merged.query) }) });
   if(action === "search-skeleton" || action === "category-lanes" || action === "naver-google-style") {
@@ -2756,7 +2890,9 @@ module.exports = {
   supplyResidentSync,
   supplyCategorySync,
   triggerDeepRefresh,
-  absorbResidentItems
+  absorbResidentItems,
+  buildSanmaruInstantOsPackage,
+  buildSanmaruFrontSupplyPackage
 };
 
 exports.version = VERSION;
@@ -2778,4 +2914,6 @@ exports.supplyResidentSync = supplyResidentSync;
 exports.supplyCategorySync = supplyCategorySync;
 exports.triggerDeepRefresh = triggerDeepRefresh;
 exports.absorbResidentItems = absorbResidentItems;
+exports.buildSanmaruInstantOsPackage = buildSanmaruInstantOsPackage;
+exports.buildSanmaruFrontSupplyPackage = buildSanmaruFrontSupplyPackage;
 try { ensureResidentBoot({ reason:"module-load" }); } catch(e) {}
