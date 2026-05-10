@@ -1718,52 +1718,37 @@ function buildImmediateResidentResponse(q, raw, residentPack, baseMeta){
 }
 
 function sanmaruFastLayerEnough(residentPack, requestedLimit, raw){
-  // Sanmaru fast layer is a FIRST-PAINT layer, not the final search ceiling.
-  // Normal search.js calls send residentFirst/sanmaruFirst/naturalFlow so the
-  // page can render immediately. Those signals must never suppress the wide
-  // Google/Naver/Bing/Blog/News/SNS provider expansion. Provider expansion may
-  // be skipped only when the caller explicitly asks for fast/cache-only mode,
-  // or when Sanmaru already holds a broad, real query cache large enough to
-  // satisfy the requested full result target.
+  // Sanmaru is the resident information CPU. Maru Search may skip provider
+  // re-scan ONLY when Sanmaru already holds a broad query cache from a previous
+  // gateway pass. A thin index/page-sized resident answer must never block
+  // Google/Naver/SNS/category construction, because that makes searches look
+  // empty or narrow.
   raw = raw || {};
   const meta = (residentPack && residentPack.meta) || {};
   const total = Array.isArray(residentPack && residentPack.items) ? residentPack.items.length : 0;
   const page = clampInt(firstNonEmpty(raw.page, raw.p, raw.visiblePage, raw.sectionPage), 1, 1, 100000);
   const perPage = clampInt(firstNonEmpty(raw.perPage, raw.pageSize, raw.visibleCardsPerPage, raw.visibleLimit, raw.cardsPerPage), 25, 1, 100);
   const viewportNeed = Math.max(perPage, page * perPage);
-  const requested = clampInt(requestedLimit || raw.limit || raw.max || raw.count, DEFAULT_LIMIT, 1, MAX_LIMIT);
   const cachedQueryHit = !!(meta.queryCacheHit || meta.cachedQueryHit || meta.fromQueryCache);
   const queryCacheCount = Number(meta.queryCacheCount || meta.cachedQueryCount || 0) || 0;
   const routeFallbackCount = Number(meta.routeFallbackCount || 0) || 0;
   const openingFallbackCount = Number(meta.openingFallbackCount || 0) || 0;
   const syntheticCount = routeFallbackCount + openingFallbackCount;
   const realCachedCount = Math.max(queryCacheCount, total - syntheticCount);
+  const minBroadCache = Math.max(viewportNeed, Math.min(250, Math.max(perPage * 4, 100)));
 
-  const explicitFastOnly = !!(
-    truthy(raw.fastOnly) ||
-    truthy(raw.sanmaruOnly) ||
-    truthy(raw.sanmaruFastOnly) ||
-    truthy(raw.cacheOnly) ||
-    truthy(raw.instantOnly)
-  );
+  const openGateRequested = truthy(raw.sanmaruFirst || raw.residentFirst || raw.naturalFlow || raw.residentSwitch || raw.instantOnly || raw.cacheOnly) || safeString(raw.routeOwner).toLowerCase() === 'sanmaru';
 
-  // Explicit first-paint/cache-only calls may return from Sanmaru alone.
-  // This path is for instant-supply/diagnostic flows, not for normal full search.
-  if(explicitFastOnly){
-    return realCachedCount >= viewportNeed;
-  }
-
-  // Normal residentFirst/sanmaruFirst/naturalFlow/routeOwner=sanmaru calls must
-  // continue into wide/provider expansion unless Sanmaru has a genuinely broad
-  // query cache. A 200~300 item resident pack is not enough for broad terms like
-  // 서울/부산, so it must not short-circuit full search.
-  const broadNeed = Math.min(MAX_LIMIT, Math.max(MIN_RESULT_TARGET, requested, 1500));
-  if(cachedQueryHit && realCachedCount >= broadNeed){
-    return true;
-  }
-
-  return false;
+  // Explicit diagnostic/ultra-fast mode can still be requested. For the normal
+  // Maru gate flow, Sanmaru may answer immediately when it already has enough
+  // real resident/index data to fill the requested viewport. A thin synthetic
+  // route/opening-only response is still not allowed to suppress the normal
+  // fallback expansion.
+  if(truthy(raw.fastOnly) || truthy(raw.sanmaruOnly)) return realCachedCount >= viewportNeed;
+  if(openGateRequested && realCachedCount >= viewportNeed) return true;
+  return cachedQueryHit && realCachedCount >= minBroadCache;
 }
+
 function buildSanmaruFastLayerBase(q, residentPack, raw, ctx){
   const requestedLimit = Math.min(MAX_LIMIT, Math.max(clampInt(raw && raw.limit, DEFAULT_LIMIT, 1, MAX_LIMIT), MIN_RESULT_TARGET));
   const items = dedupeCanonicalItems((residentPack && residentPack.items || [])
@@ -1905,17 +1890,11 @@ function googleLikeSearchLinks(q){
 function mapCards(q, region){
   if(!q) return [];
   const enc = encodeURIComponent(q);
-  const localIntent = /(맛집|식당|음식점|카페|커피|restaurant|cafe|coffee|food|near me|주변|근처|여행|관광|호텔|숙소|시장|명소|지도|주소|위치)/i.test(safeString(q));
   const cards = [
-    { title: '[Map] ' + q + ' - Google Maps', url: 'https://www.google.com/maps/search/' + enc, source: 'google_maps', mediaType: 'map', type: 'map', summary: q + ' 지도 검색', score: 0.92, displayGroup:'local_tour', displayGroupLabel:'지도/지역' },
-    { title: '[Map] ' + q + ' - Naver Map', url: 'https://map.naver.com/p/search/' + enc, source: 'naver_map', mediaType: 'map', type: 'map', summary: q + ' 네이버 지도 검색', score: 0.91, displayGroup:'local_tour', displayGroupLabel:'지도/지역' },
-    { title: '[Local Photos] ' + q + ' 사진 / 스냅샷', url: 'https://www.google.com/search?tbm=isch&q=' + enc, source: 'google_local_images', mediaType: 'image', type: 'image', summary: q + ' 지역 사진·스냅샷 검색', score: 0.84, displayGroup:'media', displayGroupLabel:'이미지/영상' },
-    { title: '[Naver Image] ' + q + ' 사진', url: 'https://search.naver.com/search.naver?where=image&query=' + enc, source: 'naver_local_images', mediaType: 'image', type: 'image', summary: q + ' 네이버 이미지 검색', score: 0.83, displayGroup:'media', displayGroupLabel:'이미지/영상' },
-    { title: '[Video] ' + q + ' 영상 / 리뷰', url: 'https://www.youtube.com/results?search_query=' + enc, source: 'youtube_local_video', mediaType: 'video', type: 'video', summary: q + ' 지역 영상·리뷰 검색', score: 0.82, displayGroup:'media', displayGroupLabel:'이미지/영상' },
-    { title: '[Blog Review] ' + q + ' 블로그 후기', url: 'https://search.naver.com/search.naver?where=blog&query=' + enc, source: 'naver_local_blog', mediaType: 'article', type: 'blog', summary: q + ' 블로그 후기·리뷰 검색', score: 0.80, displayGroup:'community', displayGroupLabel:'블로그/카페/커뮤니티' }
+    { title: '[Map] ' + q + ' - Google Maps', url: 'https://www.google.com/maps/search/' + enc, source: 'google_maps', mediaType: 'map', type: 'map', summary: q + ' 지도 검색', score: 0.72 },
+    { title: '[Map] ' + q + ' - Naver Map', url: 'https://map.naver.com/p/search/' + enc, source: 'naver_map', mediaType: 'map', type: 'map', summary: q + ' 네이버 지도 검색', score: 0.71 }
   ];
-  const selected = localIntent ? cards : cards.slice(0, 2);
-  return selected.map(x => canonicalizeItem(x, q, x.source));
+  return cards.map(x => canonicalizeItem(x, q, x.source));
 }
 
 
@@ -2129,11 +2108,6 @@ function detectQueryIntentCluster(q){
     '목록','리스트','단체','기관','협회','재단','업체','회사','directory','list','database',
     'association','foundation','companies','organizations','institutions'
   ])) return 'directory';
-
-  if(hasAnyLooseTerm(text, [
-    '맛집','식당','음식점','카페','커피','근처','주변','지도','주소','위치','명소','여행','관광','호텔','숙소',
-    'restaurant','restaurants','cafe','cafes','coffee','near me','nearby','map','address','location','travel','tourism','hotel'
-  ])) return 'local';
 
   return 'general';
 }
@@ -2373,16 +2347,13 @@ function expandedSearchQueries(q, searchType){
   if(!base) return [];
   const t = normalizeSearchType(searchType);
   const profile = queryScriptProfile(base);
-  const cluster = detectQueryIntentCluster(base);
 
-  // 전체검색도 결과가 몇백 개에서 막히지 않도록, 강한 지역/디렉터리/동향 의도는
-  // provider passthrough와 병렬 보강 검색에 한해 가볍게 확장한다.
-  const expansionType = (t === 'all' && cluster !== 'general') ? (cluster === 'local' ? 'map' : 'web') : t;
-  const terms = semanticExpansionTerms(expansionType, profile, base);
+  // all 검색은 속도 유지를 위해 확장하지 않고,
+  // 선택 탭에서만 전 세계/다국어 맥락 확장을 연다.
+  if(t === 'all') return [base];
+
+  const terms = semanticExpansionTerms(t, profile);
   const variants = [base];
-  const maxVariants = t === 'all' ? (cluster === 'general' ? 1 : 8) : 12;
-
-  if(maxVariants <= 1) return variants;
 
   for(const term of terms){
     const tt = safeString(term).trim();
@@ -2393,10 +2364,9 @@ function expandedSearchQueries(q, searchType){
     // 같은 단어 반복 방지: "맛집 맛집", "webtoon webtoon" 같은 확장 제거
     if(lowBase === lowTerm || lowBase.includes(lowTerm)) continue;
     variants.push(base + ' ' + tt);
-    if(variants.length >= maxVariants) break;
   }
 
-  return uniqueCompactStrings(variants, maxVariants);
+  return uniqueCompactStrings(variants, 12);
 }
 
 function itemLooseText(it){
@@ -2425,18 +2395,18 @@ function sourceCaps(opts){
     // Normal mode stays bounded, but opens the major provider lanes broadly enough
     // to avoid the old few-hundred-result ceiling. Deep mode is still the wider pass.
     naverPages: deep ? 10 : 10,
-    naverBlogPages: deep ? 10 : 8,
-    naverNewsPages: deep ? 10 : 8,
-    naverCafePages: deep ? 10 : 8,
-    naverEncycPages: deep ? 5 : 3,
-    naverKinPages: deep ? 5 : 3,
-    naverBookPages: deep ? 5 : 3,
-    naverLocalPages: deep ? 5 : 4,
-    googlePages: deep ? 10 : 9,
-    bingPages: deep ? 10 : 8,
-    imagePages: deep ? 8 : 6,
-    naverImagePages: deep ? 8 : 6,
-    youtubeLimit: deep ? 220 : 180,
+    naverBlogPages: deep ? 8 : 6,
+    naverNewsPages: deep ? 8 : 6,
+    naverCafePages: deep ? 8 : 6,
+    naverEncycPages: deep ? 3 : 2,
+    naverKinPages: deep ? 3 : 2,
+    naverBookPages: deep ? 4 : 2,
+    naverLocalPages: deep ? 3 : 2,
+    googlePages: deep ? 9 : 6,
+    bingPages: deep ? 6 : 4,
+    imagePages: deep ? 6 : 4,
+    naverImagePages: deep ? 6 : 4,
+    youtubeLimit: deep ? 180 : 120,
     timeoutMs: deep ? 15000 : DEFAULT_SOFT_TIMEOUT_MS
   };
 }
@@ -2493,7 +2463,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       const target = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
       const pageSize = 100;
       const maxPages = Math.min(caps.searchBankPages, Math.ceil(target / pageSize) + 3);
-      const firstWindow = Math.min(maxPages, deep ? 36 : 24);
+      const firstWindow = Math.min(maxPages, deep ? 18 : 12);
       const offsets = [];
       for(let i=0; i<firstWindow; i++) offsets.push(i * pageSize);
 
@@ -2742,6 +2712,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 
 
     async function pullFromIntentExpansion(){
+      if(viewType === 'all') return 0;
       if(timeLeft() <= 1300) {
         record('intent-expansion', 'skipped-time', 0, { searchType: viewType });
         return 0;
@@ -2852,10 +2823,10 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 
       for(const queryText of variants){
         for(const spec of selected){
-          if(tasks.length >= (detectQueryIntentCluster(q) !== 'general' ? 42 : 30)) break;
+          if(tasks.length >= (detectQueryIntentCluster(q) !== 'general' ? 30 : 24)) break;
           tasks.push(one(spec[0], spec[1], queryText, spec[2], 1));
         }
-        if(tasks.length >= (detectQueryIntentCluster(q) !== 'general' ? 42 : 30)) break;
+        if(tasks.length >= (detectQueryIntentCluster(q) !== 'general' ? 30 : 24)) break;
       }
 
       await Promise.allSettled(tasks);
@@ -2863,51 +2834,42 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         searchType: viewType,
         queries: variants,
         tasks: tasks.length,
-        expansionBudget: detectQueryIntentCluster(q) !== 'general' ? 42 : 30,
+        expansionBudget: detectQueryIntentCluster(q) !== 'general' ? 30 : 24,
         mode: 'informal-controlled'
       });
       return total;
     }
 
-    // Run the Search Bank memory layer and the provider gateway in parallel.
-    // This preserves result quantity while removing the old wait pattern:
-    // SearchBank pages first → providers later. Provider lanes can now start
-    // immediately, like Google/Naver/Bing/YouTube being plugged into the page.
-    const searchBankPromise = pullFromSearchBank();
+    const internalCount = await pullFromSearchBank();
+    // PRESERVE + EXPAND: Search Bank/Index must never stop the broad Maru Search gateway.
+    // If the caller did not explicitly block external sources, run the controlled gateway pass.
+    // This restores news/blog/cafe/youtube/image/company discovery that disappeared when internal results were considered "enough".
     const shouldUseExternal = !externalOff;
 
-    let externalPromise = Promise.resolve(0);
     if(shouldUseExternal){
-      externalPromise = (async () => {
-        await Promise.allSettled([
-          pullFromNaver(),
-          pullFromGoogle(),
-          pullFromGoogleSns(),
-          pullFromBing(),
-          pullFromYouTube(),
-          pullFromImage()
-        ]);
+      // Single maru-search gateway pass. No recursive loops, no repeated fan-out.
+      await Promise.allSettled([
+        pullFromNaver(),
+        pullFromGoogle(),
+        pullFromGoogleSns(),
+        pullFromBing(),
+        pullFromYouTube(),
+        pullFromImage()
+      ]);
 
-        const afterPrimaryExternal = collected.length;
-        const naturalExpansionTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
-        if(timeLeft() > 1200){
-          await pullFromNaverVerticals();
-        } else {
-          record('naver_verticals', 'skipped-time', 0, { afterPrimaryExternal, naturalExpansionTarget });
-        }
+      const afterPrimaryExternal = collected.length;
+      const naturalExpansionTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
+      if(timeLeft() > 1200){
+        await pullFromNaverVerticals();
+      } else {
+        record('naver_verticals', 'skipped-time', 0, { afterPrimaryExternal, naturalExpansionTarget });
+      }
 
-        if((viewType !== 'all' || detectQueryIntentCluster(q) !== 'general' || collected.length < Math.min(naturalExpansionTarget, 1200)) && timeLeft() > 1300){
-          await pullFromIntentExpansion();
-        }
+      if((viewType !== 'all' || detectQueryIntentCluster(q) !== 'general') && timeLeft() > 1300){
+        await pullFromIntentExpansion();
+      }
 
-        record('search-link-cards', 'skipped-natural-flow', 0);
-        return collected.length - afterPrimaryExternal;
-      })();
-    }
-
-    const internalCount = await searchBankPromise;
-    if(shouldUseExternal){
-      await externalPromise;
+      record('search-link-cards', 'skipped-natural-flow', 0);
     }else{
       record('external-gateway', externalOff ? 'blocked-by-request' : 'skipped-internal-enough', 0, { internalCount, trigger: externalTriggerMin, mode });
     }
@@ -3685,7 +3647,7 @@ async function googleSnsSearch(q, limit, start){
     { name:'threads', query:'site:threads.net ' + q, source:'google_sns_threads', type:'sns', mediaType:'article' }
   ];
 
-  const perRoute = Math.max(1, Math.min(10, Math.ceil(Math.min(limit || 50, 50) / 5)));
+  const perRoute = Math.max(1, Math.min(4, Math.ceil(Math.min(limit || 20, 20) / 5)));
   const settled = await Promise.allSettled(routes.map(route =>
     googleCseRequest(route.query, perRoute, start || 1, {
       source: route.source,
@@ -3703,7 +3665,7 @@ async function googleSnsSearch(q, limit, start){
     routeMeta.push({ route: pack && pack.route || 'unknown', status: pack && pack.meta && pack.meta.status || (s && s.status) || 'unknown', count: pack && pack.results ? pack.results.length : 0 });
   }
 
-  const finalResults = results.length ? results.slice(0, Math.min(limit || 50, 50)) : publicPlatformResultCards(q).filter(x => classifySearchCategory(x) === 'sns').slice(0, Math.min(limit || 50, 50));
+  const finalResults = results.length ? results.slice(0, Math.min(limit || 20, 20)) : publicPlatformResultCards(q).filter(x => classifySearchCategory(x) === 'sns').slice(0, Math.min(limit || 20, 20));
   return {
     source: 'google_sns',
     results: finalResults,

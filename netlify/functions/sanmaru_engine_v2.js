@@ -2679,95 +2679,6 @@ function parseBody(event){
 }
 
 
-
-// -----------------------------------------------------------------------------
-// SANMARU PROVIDER PASSTHROUGH FIRST-PAINT LAYER
-// These cards are immediate provider lanes, not final search results. They let
-// the UI paint Google/Naver/Bing/YouTube/SNS/Wiki roads instantly while the full
-// Maru Search + Sanmaru OS expansion continues in parallel.
-// -----------------------------------------------------------------------------
-function sanmaruProviderPassthroughCards(q, opts){
-  opts = opts || {};
-  q = firstNonEmpty(q, opts.q, opts.query);
-  const query = s(q).trim();
-  if(!query) return [];
-  const enc = encodeURIComponent(query);
-  const country = firstNonEmpty(opts.country, opts.region, opts.geo, opts.runtimeRegion, "GLOBAL");
-  const type = s(firstNonEmpty(opts.searchType, opts.type, opts.category, opts.tab, opts.vertical, "all")).toLowerCase();
-
-  const rows = [
-    ["provider-google-web", "Google 통합 검색", "https://www.google.com/search?q=" + enc, "google", "web", 0.997],
-    ["provider-google-news", "Google 뉴스", "https://news.google.com/search?q=" + enc, "google-news", "news", 0.992],
-    ["provider-google-video", "Google 영상", "https://www.google.com/search?tbm=vid&q=" + enc, "google-video", "video", 0.986],
-    ["provider-google-image", "Google 이미지", "https://www.google.com/search?tbm=isch&q=" + enc, "google-image", "image", 0.982],
-    ["provider-google-maps", "Google Maps / 지도", "https://www.google.com/maps/search/" + enc, "google-maps", "local", 0.981],
-    ["provider-naver-map", "Naver Map / 지도", "https://map.naver.com/p/search/" + enc, "naver-map", "local", 0.981],
-    ["provider-local-photo", "지역 사진 / 스냅샷", "https://www.google.com/search?tbm=isch&q=" + enc, "local-photo", "image", 0.980],
-    ["provider-local-video", "지역 영상 / 리뷰", "https://www.youtube.com/results?search_query=" + enc, "local-video", "video", 0.979],
-    ["provider-naver-all", "Naver 통합 검색", "https://search.naver.com/search.naver?query=" + enc, "naver", "web", 0.996],
-    ["provider-naver-news", "Naver 뉴스", "https://search.naver.com/search.naver?where=news&query=" + enc, "naver-news", "news", 0.991],
-    ["provider-naver-blog", "Naver 블로그", "https://search.naver.com/search.naver?where=blog&query=" + enc, "naver-blog", "blog", 0.989],
-    ["provider-naver-cafe", "Naver 카페", "https://search.naver.com/search.naver?where=article&query=" + enc, "naver-cafe", "community", 0.984],
-    ["provider-bing-web", "Bing 통합 검색", "https://www.bing.com/search?q=" + enc, "bing", "web", 0.990],
-    ["provider-youtube", "YouTube 영상", "https://www.youtube.com/results?search_query=" + enc, "youtube", "video", 0.987],
-    ["provider-wikipedia", "Wikipedia / 백과", "https://www.google.com/search?q=" + encodeURIComponent(query + " wikipedia encyclopedia"), "wikipedia", "knowledge", 0.978],
-    ["provider-namuwiki", "나무위키 / 지식", "https://www.google.com/search?q=" + encodeURIComponent(query + " 나무위키"), "namuwiki", "knowledge", 0.973],
-    ["provider-instagram", "Instagram 공개 검색", "https://www.google.com/search?q=" + encodeURIComponent("site:instagram.com " + query), "instagram", "sns", 0.968],
-    ["provider-facebook", "Facebook 공개 검색", "https://www.google.com/search?q=" + encodeURIComponent("site:facebook.com " + query), "facebook", "sns", 0.966],
-    ["provider-x-twitter", "X/Twitter 공개 검색", "https://www.google.com/search?q=" + encodeURIComponent("(site:x.com OR site:twitter.com) " + query), "x-twitter", "sns", 0.965],
-    ["provider-tiktok", "TikTok 공개 검색", "https://www.google.com/search?q=" + encodeURIComponent("site:tiktok.com " + query), "tiktok", "sns", 0.964],
-    ["provider-public-data", "공공 데이터 / 공식 자료", "https://www.google.com/search?q=" + encodeURIComponent(query + " public data government official dataset 공공데이터 공식"), "public-data", "official", 0.980]
-  ];
-
-  const typeRank = {
-    all: new Set(["web","official","news","blog","video","image","local","knowledge","sns","community"]),
-    web: new Set(["web","official","knowledge"]),
-    news: new Set(["news","official","web"]),
-    blog: new Set(["blog","web","community"]),
-    cafe: new Set(["community","blog","web"]),
-    community: new Set(["community","blog","sns","web"]),
-    video: new Set(["video","sns","web"]),
-    youtube: new Set(["video","sns","web"]),
-    image: new Set(["image","web"]),
-    sns: new Set(["sns","video","web"]),
-    knowledge: new Set(["knowledge","official","web"]),
-    map: new Set(["local","official","web","image","video","news"]),
-    tour: new Set(["local","official","web","video","blog","image"]),
-    shopping: new Set(["web","blog","community"])
-  };
-  const preferred = typeRank[type] || typeRank.all;
-
-  return rows
-    .map((r, idx) => {
-      const lane = r[4];
-      const boost = preferred.has(lane) ? 0.08 : 0;
-      return {
-        id: "sanmaru-pass-" + stableHash([query, r[0], country].join("|")),
-        title: query + " · " + r[1],
-        summary: "산마루 provider passthrough: " + r[1] + " 자체 검색망으로 즉시 연결되는 1차 공급 카드입니다. 전체 MARU 검색 결과는 뒤에서 병합됩니다.",
-        description: "Provider passthrough first-paint card",
-        url: r[2],
-        link: r[2],
-        source: r[3],
-        provider: r[3],
-        type: lane,
-        mediaType: lane === "video" ? "video" : (lane === "image" ? "image" : "article"),
-        category: lane,
-        lane,
-        country,
-        generatedBy: "sanmaru-provider-passthrough",
-        sourceType: "provider-passthrough-first-paint",
-        sanmaruFirstPaint: true,
-        passthrough: true,
-        placeholder: false,
-        score: r[5] + boost - (idx * 0.001),
-        tags: ["sanmaru", "provider-passthrough", lane, r[3], country].filter(Boolean),
-        payload: { providerLane:r[3], providerUrl:r[2], country, firstPaint:true, fullSearchContinues:true }
-      };
-    })
-    .sort((a,b) => (b.score - a.score));
-}
-
 // -----------------------------------------------------------------------------
 // SANMARU INSTANT OS SUPPLY LAYER
 // This is a non-blocking first-supply package. It never replaces the full Maru
@@ -2802,12 +2713,6 @@ function buildSanmaruInstantOsPackage(q, opts){
   });
 
   let items = Array.isArray(supplied && supplied.items) ? supplied.items.slice() : [];
-  const providerPassthroughItems = sanmaruProviderPassthroughCards(q, Object.assign({}, opts, { country: effectiveCountry, searchType }));
-  // Provider passthrough cards are first-paint roads. They must never replace the
-  // full Maru Search result set; they only make the page usable immediately.
-  if(providerPassthroughItems.length){
-    items = providerPassthroughItems.concat(items);
-  }
   const ctx = {
     q,
     searchType,
@@ -2858,7 +2763,6 @@ function buildSanmaruInstantOsPackage(q, opts){
     },
     meta: Object.assign({}, supplied && supplied.meta || {}, {
       count: items.length,
-      providerPassthroughCount: providerPassthroughItems.length,
       elapsedMs: nowMs() - started,
       instantSupply: true,
       responseMode: "first-supply-package",
@@ -2874,8 +2778,7 @@ function buildSanmaruInstantOsPackage(q, opts){
         name: "sanmaru-instant-os-supply",
         status: items.length ? "ok" : "empty",
         count: items.length,
-        providerPassthroughCount: providerPassthroughItems.length,
-        mode: "provider-passthrough-plus-resident-no-provider-wait",
+        mode: "no-provider-wait",
         currentPageFirst: true,
         keepFullProviderSearchRunning: true
       }])
