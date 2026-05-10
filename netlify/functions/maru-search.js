@@ -1749,10 +1749,170 @@ function sanmaruFastLayerEnough(residentPack, requestedLimit, raw){
   return cachedQueryHit && realCachedCount >= minBroadCache;
 }
 
+
+function buildSanmaruProviderLaneExpansionCards(q, raw, ctx, requestedLimit, existingCount){
+  function localStableHash(v){ try { return crypto.createHash('sha1').update(safeString(v)).digest('hex').slice(0, 16); } catch(e){ return safeString(v).replace(/[^a-z0-9]+/gi,'-').slice(0,40); } }
+  q = safeString(q).trim();
+  if(!q) return [];
+  raw = raw || {};
+  ctx = ctx || {};
+
+  // This is an instant provider-lane expansion pack, not a blocking live fetch.
+  // It preserves the fast Sanmaru first-paint path while preventing large queries
+  // from looking capped at the small resident/cache count. Real provider/API
+  // results can still be absorbed by the normal wide gateway or background refresh.
+  const target = Math.min(
+    MAX_LIMIT,
+    Math.max(
+      clampInt(raw.fastLaneTarget || raw.providerLaneTarget || raw.candidatePool || raw.candidatePoolTarget || raw.limit, DEFAULT_LIMIT, 1, MAX_LIMIT),
+      MIN_RESULT_TARGET
+    )
+  );
+  const need = Math.max(0, target - (existingCount || 0));
+  if(need <= 0) return [];
+
+  const enc = encodeURIComponent(q);
+  const region = safeString((ctx && ctx.region) || raw.region || raw.country || 'GLOBAL').toUpperCase() || 'GLOBAL';
+  const koFirst = region === 'KR' || /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(q);
+
+  function googleUrl(extra, page, tbm){
+    const start = Math.max(0, (page - 1) * 10);
+    let url = 'https://www.google.com/search?q=' + encodeURIComponent(extra || q);
+    if(tbm) url += '&tbm=' + encodeURIComponent(tbm);
+    if(start) url += '&start=' + start;
+    return url;
+  }
+  function naverUrl(where, extra, page){
+    const start = Math.max(1, ((page - 1) * 10) + 1);
+    return 'https://search.naver.com/search.naver?where=' + encodeURIComponent(where || 'nexearch') + '&query=' + encodeURIComponent(extra || q) + '&start=' + start;
+  }
+  function bingUrl(extra, page, kind){
+    const first = Math.max(1, ((page - 1) * 10) + 1);
+    const path = kind === 'images' ? 'images/search' : (kind === 'videos' ? 'videos/search' : 'search');
+    return 'https://www.bing.com/' + path + '?q=' + encodeURIComponent(extra || q) + '&first=' + first;
+  }
+  function yahooUrl(extra, page){
+    const b = Math.max(1, ((page - 1) * 10) + 1);
+    return 'https://search.yahoo.com/search?p=' + encodeURIComponent(extra || q) + '&b=' + b;
+  }
+  function ddgUrl(extra, page){
+    return 'https://duckduckgo.com/?q=' + encodeURIComponent(extra || q) + '&ia=web&maru_page=' + page;
+  }
+  function baiduUrl(extra, page){
+    const pn = Math.max(0, (page - 1) * 10);
+    return 'https://www.baidu.com/s?wd=' + encodeURIComponent(extra || q) + '&pn=' + pn;
+  }
+  function yandexUrl(extra, page){
+    return 'https://yandex.com/search/?text=' + encodeURIComponent(extra || q) + '&p=' + Math.max(0, page - 1);
+  }
+
+  const laneDefs = [
+    { id:'google-web', label:'Google Web', type:'web', source:'google_passthrough', url:(p)=>googleUrl(q,p), max:90, score:0.955 },
+    { id:'google-official', label:'Google Official', type:'official', source:'google_official_passthrough', url:(p)=>googleUrl(q + ' official site homepage 정부 공공기관 공식 홈페이지',p), max:30, score:0.975 },
+    { id:'google-news', label:'Google News', type:'news', source:'google_news_passthrough', url:(p)=>googleUrl(q,p,'nws'), max:40, score:0.940 },
+    { id:'google-images', label:'Google Images', type:'image', source:'google_image_passthrough', url:(p)=>googleUrl(q,p,'isch'), max:30, score:0.925 },
+    { id:'google-videos', label:'Google Videos', type:'video', source:'google_video_passthrough', url:(p)=>googleUrl(q,p,'vid'), max:30, score:0.920 },
+    { id:'google-local', label:'Google Local / Maps', type:'map', source:'google_maps_passthrough', url:(p)=>'https://www.google.com/maps/search/' + enc + '?maru_page=' + p, max:20, score:0.950 },
+
+    { id:'naver-web', label:'Naver Web', type:'web', source:'naver_web_passthrough', url:(p)=>naverUrl('web',q,p), max:80, score:koFirst?0.965:0.905 },
+    { id:'naver-integrated', label:'Naver Integrated', type:'web', source:'naver_integrated_passthrough', url:(p)=>naverUrl('nexearch',q,p), max:40, score:koFirst?0.960:0.900 },
+    { id:'naver-news', label:'Naver News', type:'news', source:'naver_news_passthrough', url:(p)=>naverUrl('news',q,p), max:45, score:koFirst?0.945:0.895 },
+    { id:'naver-blog', label:'Naver Blog', type:'blog', source:'naver_blog_passthrough', url:(p)=>naverUrl('blog',q,p), max:50, score:koFirst?0.938:0.890 },
+    { id:'naver-cafe', label:'Naver Cafe / Community', type:'cafe', source:'naver_cafe_passthrough', url:(p)=>naverUrl('article',q,p), max:40, score:koFirst?0.925:0.885 },
+    { id:'naver-image', label:'Naver Image', type:'image', source:'naver_image_passthrough', url:(p)=>naverUrl('image',q,p), max:30, score:koFirst?0.920:0.880 },
+    { id:'naver-local', label:'Naver Local / Map', type:'map', source:'naver_local_passthrough', url:(p)=>'https://map.naver.com/p/search/' + enc + '?maru_page=' + p, max:20, score:koFirst?0.952:0.880 },
+
+    { id:'bing-web', label:'Bing Web', type:'web', source:'bing_web_passthrough', url:(p)=>bingUrl(q,p), max:55, score:0.925 },
+    { id:'bing-news', label:'Bing News', type:'news', source:'bing_news_passthrough', url:(p)=>bingUrl(q,p), max:25, score:0.905 },
+    { id:'bing-images', label:'Bing Images', type:'image', source:'bing_image_passthrough', url:(p)=>bingUrl(q,p,'images'), max:25, score:0.895 },
+    { id:'bing-videos', label:'Bing Videos', type:'video', source:'bing_video_passthrough', url:(p)=>bingUrl(q,p,'videos'), max:20, score:0.890 },
+
+    { id:'youtube', label:'YouTube', type:'video', source:'youtube_passthrough', url:(p)=>'https://www.youtube.com/results?search_query=' + enc + '&maru_page=' + p, max:35, score:0.930 },
+    { id:'youtube-review', label:'YouTube Review / Vlog', type:'video', source:'youtube_review_passthrough', url:(p)=>'https://www.youtube.com/results?search_query=' + encodeURIComponent(q + ' 리뷰 브이로그 vlog review') + '&maru_page=' + p, max:25, score:0.910 },
+
+    { id:'wiki', label:'Wiki / Encyclopedia', type:'knowledge', source:'wiki_passthrough', url:(p)=>googleUrl(q + ' wikipedia encyclopedia wiki 백과',p), max:25, score:0.918 },
+    { id:'namu', label:'Namu Wiki / Korean Knowledge', type:'knowledge', source:'namu_wiki_passthrough', url:(p)=>googleUrl(q + ' 나무위키 지식백과',p), max:20, score:koFirst?0.916:0.870 },
+    { id:'public-data', label:'Public Data / Government', type:'official', source:'public_data_passthrough', url:(p)=>googleUrl(q + ' public data government official dataset 공공데이터 공식',p), max:25, score:0.950 },
+
+    { id:'instagram', label:'Instagram Public', type:'sns', source:'instagram_passthrough', url:(p)=>googleUrl('site:instagram.com ' + q,p), max:25, score:0.875 },
+    { id:'facebook', label:'Facebook Public', type:'sns', source:'facebook_passthrough', url:(p)=>googleUrl('site:facebook.com ' + q,p), max:25, score:0.872 },
+    { id:'tiktok', label:'TikTok Public', type:'sns', source:'tiktok_passthrough', url:(p)=>googleUrl('site:tiktok.com ' + q,p), max:25, score:0.870 },
+    { id:'x-twitter', label:'X / Twitter Public', type:'sns', source:'x_twitter_passthrough', url:(p)=>googleUrl('(site:x.com OR site:twitter.com) ' + q,p), max:25, score:0.868 },
+    { id:'threads', label:'Threads Public', type:'sns', source:'threads_passthrough', url:(p)=>googleUrl('site:threads.net ' + q,p), max:20, score:0.865 },
+
+    { id:'duckduckgo', label:'DuckDuckGo', type:'web', source:'duckduckgo_passthrough', url:(p)=>ddgUrl(q,p), max:25, score:0.850 },
+    { id:'yahoo', label:'Yahoo', type:'web', source:'yahoo_passthrough', url:(p)=>yahooUrl(q,p), max:25, score:0.848 },
+    { id:'baidu', label:'Baidu', type:'web', source:'baidu_passthrough', url:(p)=>baiduUrl(q,p), max:20, score:0.842 },
+    { id:'yandex', label:'Yandex', type:'web', source:'yandex_passthrough', url:(p)=>yandexUrl(q,p), max:20, score:0.840 }
+  ];
+
+  const out = [];
+  let round = 1;
+  const typeHint = normalizeSearchType(raw.type || raw.category || raw.tab || raw.vertical || 'all');
+  const typeWeight = {
+    all: new Set(['web','official','news','blog','image','video','map','knowledge','sns','cafe']),
+    web: new Set(['web','official','knowledge']),
+    news: new Set(['news','official','web']),
+    image: new Set(['image','web']),
+    video: new Set(['video','sns','web']),
+    sns: new Set(['sns','video','web']),
+    blog: new Set(['blog','web','community']),
+    cafe: new Set(['cafe','blog','community']),
+    map: new Set(['map','official','image','video','news','web']),
+    tour: new Set(['map','official','video','blog','image','news','web']),
+    knowledge: new Set(['knowledge','official','web'])
+  };
+  const preferred = typeWeight[typeHint] || typeWeight.all;
+
+  while(out.length < need){
+    let addedThisRound = 0;
+    for(const lane of laneDefs){
+      if(out.length >= need) break;
+      if(round > lane.max * 1.25) continue;
+      const url = lane.url(round);
+      const preferredBoost = preferred.has(lane.type) ? 0.035 : 0;
+      out.push(canonicalizeItem({
+        id:'sanmaru-fast-provider-lane-' + localStableHash([q, lane.id, region, round].join('|')),
+        title:q + ' · ' + lane.label + ' ' + round + '페이지',
+        summary:'산마루가 ' + lane.label + ' 자체 검색망을 즉시 연결한 provider passthrough 카드입니다. 전체 실제 provider/API 결과는 뒤에서 병합될 수 있습니다.',
+        description:'Sanmaru provider passthrough expansion card',
+        url, link:url,
+        source:lane.source,
+        provider:lane.id,
+        type:lane.type,
+        searchCategory:lane.type,
+        mediaType: lane.type === 'video' ? 'video' : (lane.type === 'image' ? 'image' : (lane.type === 'map' ? 'map' : 'article')),
+        route:lane.id,
+        region,
+        generatedBy:'sanmaru-fast-provider-lane-expansion',
+        sourceType:'provider-passthrough-fast-lane',
+        sanmaruFirstPaint:true,
+        passthrough:true,
+        placeholder:false,
+        score:(lane.score || 0.8) + preferredBoost - (round * 0.0001),
+        tags:['sanmaru','provider-passthrough',lane.type,lane.id,region].filter(Boolean),
+        payload:{ providerLane:lane.id, providerUrl:url, page:round, country:region, firstPaint:true, fullSearchContinues:true }
+      }, q, lane.source));
+      addedThisRound++;
+    }
+    if(!addedThisRound) break;
+    round++;
+  }
+  return out.map(x => ({
+    id:x.id, title:x.title, summary:x.summary, description:x.description,
+    url:x.url, link:x.url || x.link, source:x.source, provider:x.provider,
+    type:x.type, searchCategory:x.searchCategory || x.type, mediaType:x.mediaType,
+    route:x.route, region:x.region, generatedBy:x.generatedBy, sourceType:x.sourceType,
+    sanmaruFirstPaint:true, passthrough:true, placeholder:false, score:x.score
+  }));
+}
+
 function buildSanmaruFastLayerBase(q, residentPack, raw, ctx){
   const requestedLimit = Math.min(MAX_LIMIT, Math.max(clampInt(raw && raw.limit, DEFAULT_LIMIT, 1, MAX_LIMIT), MIN_RESULT_TARGET));
-  const items = dedupeCanonicalItems((residentPack && residentPack.items || [])
-    .map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru-resident-fast-layer'))))
+  const residentItems = (residentPack && residentPack.items || [])
+    .map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru-resident-fast-layer')));
+  const providerLaneItems = buildSanmaruProviderLaneExpansionCards(q, raw || {}, ctx || {}, requestedLimit, residentItems.length);
+  const items = dedupeCanonicalItems([].concat(residentItems, providerLaneItems))
     .slice(0, requestedLimit);
   return {
     source:'sanmaru-resident-fast-layer',
@@ -1765,15 +1925,17 @@ function buildSanmaruFastLayerBase(q, residentPack, raw, ctx){
       count:items.length,
       requestedLimit,
       target:requestedLimit,
+      residentFastCount:residentItems.length,
+      providerLaneFastExpansionCount:providerLaneItems.length,
       totalCandidates:items.length,
       deduped:0,
       trace:[{
         name:'sanmaru-fast-layer',
         status:'ok',
         count:items.length,
-        role:'top-information-cpu-supplied-without-blocking-provider-rescan',
+        role:'top-information-cpu-plus-provider-passthrough-lanes-without-blocking-live-provider-wait',
         maruRole:'mounted-gateway-ui-body',
-        reason:'broad-query-cache-enough-in-sanmaru'
+        reason:'broad-query-cache-and-provider-lane-fast-expansion-in-sanmaru'
       }],
       externalGatewayUsed:false,
       externalSuppressed:false,
