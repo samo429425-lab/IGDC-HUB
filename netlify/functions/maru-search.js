@@ -1053,12 +1053,12 @@ function sectionIdForItem(it){
 
   if(category === 'official' || host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr') || /공식|관공서|시청|구청|정부|공공기관|official|government office/.test(text)) return 'official_authority';
   if(category === 'map' || category === 'tour' || mediaType === 'map' || type === 'map' || /지도|주소|위치|길찾기|관광|여행|맛집|명소|랜드마크|박물관|미술관|축제|교통|지하철|map|nearby|travel|tour|restaurant|landmark|attraction/.test(text)) return 'map_local_tour';
+  if(category === 'cafe' || category === 'sns' || type === 'sns' || mediaType === 'sns' || source.includes('cafe') || source.includes('sns') || source.includes('social') || host.includes('instagram') || host.includes('facebook') || host.includes('tiktok') || host.includes('twitter') || host.includes('x.com') || host.includes('threads.net') || /카페|커뮤니티|인스타|페이스북|틱톡|트위터|SNS|community|forum|instagram|facebook|tiktok/.test(text)) return 'community_sns';
   if(category === 'knowledge' || category === 'book' || host.includes('wikipedia') || host.includes('wikidata') || host.includes('britannica') || host.includes('namu.wiki') || /위키|백과|지식|논문|연구|자료|encyclopedia|knowledge|research|paper/.test(text)) return 'knowledge_wiki';
   if(category === 'news' || source.includes('news') || /뉴스|속보|보도|신문|latest|breaking|press/.test(text)) return 'news';
   if(category === 'video' || mediaType === 'video' || type === 'video' || source.includes('youtube') || host.includes('youtube') || host.includes('youtu.be') || /동영상|영상|유튜브|브이로그|쇼츠|릴스|vlog|video|shorts|reels/.test(text)) return 'video_vlog';
   if(category === 'image' || mediaType === 'image' || type === 'image' || source.includes('image') || /이미지|사진|갤러리|포토|스냅샷|photo|image|gallery/.test(text)) return 'image_gallery';
   if(category === 'blog' || source.includes('blog') || host.includes('blog') || /블로그|후기|리뷰|방문기|blog|review/.test(text)) return 'blog_review';
-  if(category === 'cafe' || category === 'sns' || source.includes('cafe') || source.includes('sns') || source.includes('social') || host.includes('instagram') || host.includes('facebook') || host.includes('tiktok') || host.includes('twitter') || host.includes('x.com') || host.includes('threads.net') || /카페|커뮤니티|인스타|페이스북|틱톡|트위터|SNS|community|forum|instagram|facebook|tiktok/.test(text)) return 'community_sns';
   if(category === 'shopping' || mediaType === 'product' || type === 'product' || /쇼핑|상품|가격|구매|판매|광고|프로모션|shopping|product|price|buy|sale|ad\b/.test(text)) return 'shopping_product';
   if(/회사|기업|브랜드|홈페이지|공식 사이트|company|corporate|brand|homepage|official site/.test(text)) return 'company_web';
   return 'general_web';
@@ -1269,9 +1269,9 @@ function buildNaturalSearchDisplayStream(items){
   const cursors = Object.create(null);
   const picked = Object.create(null);
   const frontCaps = {
-    official_authority: 5,
-    knowledge_wiki: 5,
-    map_local_tour: 5,
+    official_authority: 6,
+    knowledge_wiki: 8,
+    map_local_tour: 6,
     news: 10,
     image_gallery: 8,
     video_vlog: 8,
@@ -1282,8 +1282,9 @@ function buildNaturalSearchDisplayStream(items){
     general_web: 30
   };
   const lanes = [
-    'official_authority','knowledge_wiki','map_local_tour','news','company_web','general_web','image_gallery','video_vlog','community_sns','blog_review','shopping_product',
-    'news','general_web','official_authority','map_local_tour','knowledge_wiki','image_gallery','video_vlog','community_sns','blog_review','company_web','general_web',
+    // Naver-like first paint: official/authority first, then encyclopedia/knowledge, then map/local, then news.
+    'official_authority','knowledge_wiki','knowledge_wiki','knowledge_wiki','map_local_tour','news','company_web','general_web','image_gallery','video_vlog','community_sns','blog_review','shopping_product',
+    'official_authority','knowledge_wiki','map_local_tour','news','general_web','image_gallery','video_vlog','community_sns','blog_review','company_web','general_web',
     'news','image_gallery','video_vlog','blog_review','community_sns','general_web'
   ];
   const leadTarget = Math.min(sourceItems.length, 60);
@@ -1779,6 +1780,46 @@ function sanmaruFastLayerEnough(residentPack, requestedLimit, raw){
 }
 
 
+
+function buildKoreaLocalAuthorityCardsForSearch(q, region){
+  q = safeString(q || '').trim();
+  if(!q) return [];
+  const rows = [
+    ['서울','서울특별시청 공식 홈페이지','https://www.seoul.go.kr','official',1.090],
+    ['서울','서울 열린데이터광장','https://data.seoul.go.kr','official',1.084],
+    ['서울','서울관광재단 / Visit Seoul','https://english.visitseoul.net','map',1.078],
+    ['부산','부산광역시청 공식 홈페이지','https://www.busan.go.kr','official',1.090],
+    ['부산','부산 공공데이터 / 행정정보','https://www.busan.go.kr/data','official',1.084],
+    ['부산','부산관광공사 / Visit Busan','https://www.visitbusan.net','map',1.078],
+    ['대구','대구광역시청 공식 홈페이지','https://www.daegu.go.kr','official',1.090],
+    ['대구','대구 공공데이터 / 행정정보','https://www.daegu.go.kr/index.do?menu_id=00936532','official',1.084],
+    ['대구','대구문화예술진흥원 관광 정보','https://tour.daegu.go.kr','map',1.078],
+    ['인천','인천광역시청 공식 홈페이지','https://www.incheon.go.kr','official',1.090],
+    ['광주','광주광역시청 공식 홈페이지','https://www.gwangju.go.kr','official',1.090],
+    ['대전','대전광역시청 공식 홈페이지','https://www.daejeon.go.kr','official',1.090],
+    ['울산','울산광역시청 공식 홈페이지','https://www.ulsan.go.kr','official',1.090],
+    ['세종','세종특별자치시 공식 홈페이지','https://www.sejong.go.kr','official',1.090],
+    ['제주','제주특별자치도청 공식 홈페이지','https://www.jeju.go.kr','official',1.090]
+  ];
+  return rows.filter(r => q.indexOf(r[0]) >= 0).map((r, idx) => canonicalizeItem({
+    id:'maru-local-authority-' + safeString([q,r[0],r[1]].join('|')).replace(/[^a-z0-9가-힣]+/gi,'-').slice(0,80),
+    title:r[1],
+    summary:q + ' 관련 공식/공공 정보입니다.',
+    description:q + ' 공식 기관 정보',
+    url:r[2], link:r[2],
+    source:'local_authority', provider:'local-authority',
+    type:r[3], searchCategory:r[3], mediaType:'article', route:'local-authority',
+    region:region || 'KR', generatedBy:'maru-local-authority-first-rank', sourceType:'official-authority',
+    sanmaruFirstPaint:true, passthrough:false, placeholder:false,
+    score:30 + r[4] - idx * 0.0001,
+    _finalScore:30 + r[4] - idx * 0.0001,
+    _authorityScore:30 + r[4] - idx * 0.0001,
+    searchCategory:r[3],
+    _category:r[3],
+    tags:['official','authority','public',r[0]].filter(Boolean)
+  }, q, 'local_authority'));
+}
+
 function buildSanmaruProviderLaneExpansionCards(q, raw, ctx, requestedLimit, existingCount){
   function localStableHash(v){ try { return crypto.createHash('sha1').update(safeString(v)).digest('hex').slice(0, 16); } catch(e){ return safeString(v).replace(/[^a-z0-9]+/gi,'-').slice(0,40); } }
   q = safeString(q).trim();
@@ -1838,6 +1879,9 @@ function buildSanmaruProviderLaneExpansionCards(q, raw, ctx, requestedLimit, exi
   const laneDefs = [
     { id:'google-web', label:'Google Web', type:'web', source:'google_passthrough', url:(p)=>googleUrl(q,p), max:90, score:0.955 },
     { id:'google-official', label:'Google Official', type:'official', source:'google_official_passthrough', url:(p)=>googleUrl(q + ' official site homepage 정부 공공기관 공식 홈페이지',p), max:30, score:0.975 },
+    { id:'wiki', label:'Wikipedia / Encyclopedia', type:'knowledge', source:'wiki_passthrough', url:(p)=>googleUrl(q + ' wikipedia encyclopedia wiki 백과',p), max:35, score:koFirst?0.972:0.968 },
+    { id:'namu', label:'Namu Wiki / Korean Knowledge', type:'knowledge', source:'namu_wiki_passthrough', url:(p)=>googleUrl(q + ' 나무위키 지식백과',p), max:30, score:koFirst?0.970:0.930 },
+    { id:'naver-encyclopedia', label:'Naver 지식백과', type:'knowledge', source:'naver_encyclopedia_passthrough', url:(p)=>naverUrl('kdic',q,p), max:35, score:koFirst?0.969:0.925 },
     { id:'google-news', label:'Google News', type:'news', source:'google_news_passthrough', url:(p)=>googleUrl(q,p,'nws'), max:40, score:0.940 },
     { id:'google-images', label:'Google Images', type:'image', source:'google_image_passthrough', url:(p)=>googleUrl(q,p,'isch'), max:30, score:0.925 },
     { id:'google-videos', label:'Google Videos', type:'video', source:'google_video_passthrough', url:(p)=>googleUrl(q,p,'vid'), max:30, score:0.920 },
@@ -1859,8 +1903,6 @@ function buildSanmaruProviderLaneExpansionCards(q, raw, ctx, requestedLimit, exi
     { id:'youtube', label:'YouTube', type:'video', source:'youtube_passthrough', url:(p)=>'https://www.youtube.com/results?search_query=' + enc + '&maru_page=' + p, max:35, score:0.930 },
     { id:'youtube-review', label:'YouTube Review / Vlog', type:'video', source:'youtube_review_passthrough', url:(p)=>'https://www.youtube.com/results?search_query=' + encodeURIComponent(q + ' 리뷰 브이로그 vlog review') + '&maru_page=' + p, max:25, score:0.910 },
 
-    { id:'wiki', label:'Wiki / Encyclopedia', type:'knowledge', source:'wiki_passthrough', url:(p)=>googleUrl(q + ' wikipedia encyclopedia wiki 백과',p), max:25, score:0.918 },
-    { id:'namu', label:'Namu Wiki / Korean Knowledge', type:'knowledge', source:'namu_wiki_passthrough', url:(p)=>googleUrl(q + ' 나무위키 지식백과',p), max:20, score:koFirst?0.916:0.870 },
     { id:'public-data', label:'Public Data / Government', type:'official', source:'public_data_passthrough', url:(p)=>googleUrl(q + ' public data government official dataset 공공데이터 공식',p), max:25, score:0.950 },
 
     { id:'instagram', label:'Instagram Public', type:'sns', source:'instagram_passthrough', url:(p)=>googleUrl('site:instagram.com ' + q,p), max:25, score:0.875 },
@@ -1875,7 +1917,55 @@ function buildSanmaruProviderLaneExpansionCards(q, raw, ctx, requestedLimit, exi
     { id:'yandex', label:'Yandex', type:'web', source:'yandex_passthrough', url:(p)=>yandexUrl(q,p), max:20, score:0.840 }
   ];
 
-  const out = [];
+
+
+  const maruQualitySourceLanes = [
+    ['yonhap-news','연합뉴스 지역뉴스','news','yonhap_search','https://www.google.com/search?q=', 'site:yna.co.kr ',0.944],
+    ['kbs-news','KBS 뉴스','news','kbs_search','https://www.google.com/search?q=', 'site:kbs.co.kr/news ',0.940],
+    ['mbc-news','MBC 뉴스','news','mbc_search','https://www.google.com/search?q=', 'site:imnews.imbc.com ',0.936],
+    ['sbs-news','SBS 뉴스','news','sbs_search','https://www.google.com/search?q=', 'site:news.sbs.co.kr ',0.934],
+    ['ytn-news','YTN 뉴스','news','ytn_search','https://www.google.com/search?q=', 'site:ytn.co.kr ',0.932],
+    ['jtbc-news','JTBC 뉴스','news','jtbc_search','https://www.google.com/search?q=', 'site:news.jtbc.co.kr ',0.930],
+    ['tvchosun-news','TV조선 뉴스','news','tvchosun_search','https://www.google.com/search?q=', 'site:news.tvchosun.com ',0.928],
+    ['channel-a-news','채널A 뉴스','news','channela_search','https://www.google.com/search?q=', 'site:ichannela.com/news ',0.926],
+    ['joongang-news','중앙일보','news','joongang_search','https://www.google.com/search?q=', 'site:joongang.co.kr ',0.925],
+    ['chosun-news','조선일보','news','chosun_search','https://www.google.com/search?q=', 'site:chosun.com ',0.924],
+    ['donga-news','동아일보','news','donga_search','https://www.google.com/search?q=', 'site:donga.com ',0.923],
+    ['hani-news','한겨레','news','hani_search','https://www.google.com/search?q=', 'site:hani.co.kr ',0.922],
+    ['khan-news','경향신문','news','khan_search','https://www.google.com/search?q=', 'site:khan.co.kr ',0.921],
+    ['mk-news','매일경제','news','mk_search','https://www.google.com/search?q=', 'site:mk.co.kr ',0.920],
+    ['hankyung-news','한국경제','news','hankyung_search','https://www.google.com/search?q=', 'site:hankyung.com ',0.919],
+    ['newsis-news','뉴시스','news','newsis_search','https://www.google.com/search?q=', 'site:newsis.com ',0.918],
+    ['nocut-news','노컷뉴스','news','nocut_search','https://www.google.com/search?q=', 'site:nocutnews.co.kr ',0.917],
+    ['ohmy-news','오마이뉴스','news','ohmy_search','https://www.google.com/search?q=', 'site:ohmynews.com ',0.916],
+    ['local-gov','지방자치단체 공식정보','official','local_gov_search','https://www.google.com/search?q=', 'site:go.kr ',0.955],
+    ['public-data-kr','공공데이터포털','official','public_data_kr_search','https://www.google.com/search?q=', 'site:data.go.kr ',0.952],
+    ['visitkorea','한국관광공사 관광정보','map','visitkorea_search','https://www.google.com/search?q=', 'site:visitkorea.or.kr ',0.948],
+    ['culture-portal','문화포털','knowledge','culture_portal_search','https://www.google.com/search?q=', 'site:culture.go.kr ',0.930],
+    ['korea-policy','대한민국 정책브리핑','official','korea_policy_search','https://www.google.com/search?q=', 'site:korea.kr ',0.946],
+    ['naver-blog-local','네이버 블로그 후기','blog','naver_blog_local_search','https://search.naver.com/search.naver?where=blog&query=', '',0.914],
+    ['naver-cafe-local','네이버 카페 커뮤니티','cafe','naver_cafe_local_search','https://search.naver.com/search.naver?where=article&query=', '',0.912],
+    ['youtube-local','YouTube 현장 영상','video','youtube_local_search','https://www.youtube.com/results?search_query=', '',0.918],
+    ['google-map-local','Google 지도 장소','map','google_map_local_search','https://www.google.com/maps/search/', '',0.936],
+    ['naver-map-local','Naver 지도 장소','map','naver_map_local_search','https://map.naver.com/p/search/', '',0.938]
+  ];
+  for (const x of maruQualitySourceLanes) {
+    laneDefs.push({
+      id:x[0], label:x[1], type:x[2], source:x[3], max:80, score:x[6],
+      url:(p)=>{
+        const pageOffset = Math.max(0, (p - 1) * 10);
+        const queryText = (x[5] || '') + q;
+        if(x[0] === 'naver-blog-local') return x[4] + encodeURIComponent(q) + '&start=' + Math.max(1, pageOffset + 1);
+        if(x[0] === 'naver-cafe-local') return x[4] + encodeURIComponent(q) + '&start=' + Math.max(1, pageOffset + 1);
+        if(x[0] === 'youtube-local') return x[4] + encodeURIComponent(q);
+        if(x[0] === 'google-map-local' || x[0] === 'naver-map-local') return x[4] + encodeURIComponent(q);
+        return x[4] + encodeURIComponent(queryText) + '&start=' + pageOffset;
+      }
+    });
+  }
+  const maruTopicLabels = ['공식정보','최신소식','정책·행정','관광·문화','교통·지도','지역경제','행사·축제','현장후기','영상자료','커뮤니티'];
+
+  const out = buildKoreaLocalAuthorityCardsForSearch(q, region);
   let round = 1;
   const typeHint = normalizeSearchType(raw.type || raw.category || raw.tab || raw.vertical || 'all');
   const typeWeight = {
@@ -1902,9 +1992,9 @@ function buildSanmaruProviderLaneExpansionCards(q, raw, ctx, requestedLimit, exi
       const preferredBoost = preferred.has(lane.type) ? 0.035 : 0;
       out.push(canonicalizeItem({
         id:'sanmaru-fast-provider-lane-' + localStableHash([q, lane.id, region, round].join('|')),
-        title:q + ' · ' + lane.label + ' ' + round + '페이지',
-        summary:'산마루가 ' + lane.label + ' 자체 검색망을 즉시 연결한 provider passthrough 카드입니다. 전체 실제 provider/API 결과는 뒤에서 병합될 수 있습니다.',
-        description:'Sanmaru provider passthrough expansion card',
+        title:q + ' · ' + lane.label + (round > 1 ? ' · ' + maruTopicLabels[(round - 1) % maruTopicLabels.length] : ''),
+        summary:q + ' 관련 ' + lane.label + '의 최신 공개 자료와 검색 결과입니다.',
+        description:q + ' 관련 공개 자료',
         url, link:url,
         source:lane.source,
         provider:lane.id,
@@ -2037,6 +2127,9 @@ function sanmaruEmergencyDiscoveryCards(q){
   const enc = encodeURIComponent(q);
   const specs = [
     ['google_web','Google Web','https://www.google.com/search?q=' + enc,'web'],
+    ['wikipedia','Wikipedia / encyclopedia','https://www.google.com/search?q=' + encodeURIComponent(q + ' wikipedia encyclopedia'),'knowledge'],
+    ['namu_wiki','Namu Wiki / Korean knowledge','https://www.google.com/search?q=' + encodeURIComponent(q + ' 나무위키 백과'),'knowledge'],
+    ['naver_encyclopedia','Naver 지식백과','https://search.naver.com/search.naver?where=kdic&query=' + enc,'knowledge'],
     ['google_news','Google News','https://news.google.com/search?q=' + enc,'news'],
     ['google_images','Google Images','https://www.google.com/search?tbm=isch&q=' + enc,'image'],
     ['google_videos','Google Video','https://www.google.com/search?tbm=vid&q=' + enc,'video'],
@@ -2071,7 +2164,10 @@ function sanmaruEmergencyDiscoveryCards(q){
 function googleLikeSearchLinks(q){
   const enc = encodeURIComponent(q);
   return [
-    { title: '[News] ' + q, url: 'https://www.google.com/search?tbm=nws&q=' + enc, source: 'news', sourceType: 'search-link', provider: 'google-news-search-link', placeholder: true, generatedBy: 'maru-search', mediaType: 'article', score: 0.7 },
+    { title: '[Knowledge] ' + q + ' - Wikipedia / 백과', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' wikipedia encyclopedia 백과'), source: 'wikipedia_search_link', sourceType: 'search-link', provider: 'wikipedia-search-link', placeholder: true, generatedBy: 'maru-search', mediaType: 'article', type:'knowledge', searchCategory:'knowledge', score: 0.74 },
+    { title: '[Knowledge] ' + q + ' - 나무위키 / 지식', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' 나무위키 지식백과'), source: 'namuwiki_search_link', sourceType: 'search-link', provider: 'namuwiki-search-link', placeholder: true, generatedBy: 'maru-search', mediaType: 'article', type:'knowledge', searchCategory:'knowledge', score: 0.735 },
+    { title: '[Knowledge] ' + q + ' - 네이버 지식백과', url: 'https://search.naver.com/search.naver?where=kdic&query=' + enc, source: 'naver_encyclopedia_search_link', sourceType: 'search-link', provider: 'naver-encyclopedia-search-link', placeholder: true, generatedBy: 'maru-search', mediaType: 'article', type:'knowledge', searchCategory:'knowledge', score: 0.733 },
+    { title: '[News] ' + q, url: 'https://www.google.com/search?tbm=nws&q=' + enc, source: 'news', sourceType: 'search-link', provider: 'google-news-search-link', placeholder: true, generatedBy: 'maru-search', mediaType: 'article', type:'news', searchCategory:'news', score: 0.7 },
     { title: '[Images] ' + q, url: 'https://www.google.com/search?tbm=isch&q=' + enc, source: 'images', sourceType: 'search-link', provider: 'google-image-search-link', placeholder: true, generatedBy: 'maru-search', mediaType: 'image', score: 0.68 },
     { title: '[Videos] ' + q, url: 'https://www.youtube.com/results?search_query=' + enc, source: 'youtube', sourceType: 'search-link', provider: 'youtube-search-link', placeholder: true, generatedBy: 'maru-search', mediaType: 'video', score: 0.66 },
     { title: '[Shopping] ' + q, url: 'https://www.google.com/search?tbm=shop&q=' + enc, source: 'shopping', sourceType: 'search-link', provider: 'google-shopping-search-link', placeholder: true, generatedBy: 'maru-search', mediaType: 'product', score: 0.6 }
@@ -2120,6 +2216,9 @@ function openDiscoverySurfaceCards(q){
   if(!q) return [];
   const enc = encodeURIComponent(q);
   const cards = [
+    { title: '[Knowledge] ' + q + ' - Wikipedia / 백과', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' wikipedia encyclopedia 백과'), source: 'wikipedia_discovery', mediaType: 'article', type: 'knowledge', searchCategory:'knowledge', summary: q + ' 위키백과·백과사전 검색', score: 0.72 },
+    { title: '[Knowledge] ' + q + ' - 나무위키 / 지식', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' 나무위키 지식백과'), source: 'namuwiki_discovery', mediaType: 'article', type: 'knowledge', searchCategory:'knowledge', summary: q + ' 나무위키·지식백과 검색', score: 0.718 },
+    { title: '[Knowledge] ' + q + ' - 네이버 지식백과', url: 'https://search.naver.com/search.naver?where=kdic&query=' + enc, source: 'naver_encyclopedia_discovery', mediaType: 'article', type: 'knowledge', searchCategory:'knowledge', summary: q + ' 네이버 지식백과 검색', score: 0.716 },
     { title: '[News] ' + q + ' - Google News', url: 'https://news.google.com/search?q=' + enc, source: 'google_news_discovery', mediaType: 'article', type: 'news', summary: q + ' 구글 뉴스 검색', score: 0.66 },
     { title: '[News] ' + q + ' - Naver News', url: 'https://search.naver.com/search.naver?where=news&query=' + enc, source: 'naver_news_discovery', mediaType: 'article', type: 'news', summary: q + ' 네이버 뉴스 검색', score: 0.66 },
     { title: '[Video] ' + q + ' - YouTube', url: 'https://www.youtube.com/results?search_query=' + enc, source: 'youtube_discovery', mediaType: 'video', type: 'video', summary: q + ' 유튜브 영상·브이로그 검색', score: 0.64 },
@@ -4673,7 +4772,8 @@ exports.handler = async function(event){
         })
       });
     }
-    const providerLaneTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
+    const requestedPageForWindow = clampInt(firstNonEmpty(raw && (raw.page || raw.p || raw.visiblePage || raw.sectionPage), 1), 1, 1, MARU_SEARCH_MAX_PAGER_PAGES);
+    const providerLaneTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET, visibleNeed * 12, requestedPageForWindow * visibleNeed));
     if(sanmaruOpenGateRequested && (base.items || []).length < providerLaneTarget && !forceProviderRefresh){
       const laneItems = buildSanmaruProviderLaneExpansionCards(q, Object.assign({}, raw || {}, { limit: providerLaneTarget }), { region:detectRuntimeRegion(event, lang, q) }, providerLaneTarget, (base.items || []).length);
       base.items = dedupeCanonicalItems([].concat(base.items || [], laneItems)).slice(0, providerLaneTarget);
@@ -4702,6 +4802,10 @@ exports.handler = async function(event){
     const analyticsOff = truthy(raw && (raw.noAnalytics || raw.disableAnalytics)) || !analyticsRequested;
     const revenueOff = truthy(raw && (raw.noRevenue || raw.disableRevenue)) || !realtimeRevenueRequested;
     if(!analyticsOff) syncSearchAnalytics(event, q, base.items).catch(() => null);
+    const maruLocalAuthorityCards = buildKoreaLocalAuthorityCardsForSearch(q, base.region || base.route || 'KR');
+    if(maruLocalAuthorityCards.length){
+      base.items = dedupeCanonicalItems([].concat(maruLocalAuthorityCards, base.items || []));
+    }
     base.items = (Array.isArray(base.items) ? base.items : []).map(compactResultItem);
     base.results = base.items;
     absorbIntoSanmaruResident(q, base.items, { searchType, lang });
