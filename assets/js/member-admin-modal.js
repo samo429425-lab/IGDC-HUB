@@ -1,72 +1,519 @@
-/**
- * IGDC Member Admin Modal
- * 정본 교체용 (index 의존 제거 / 단일 책임)
- * - 트리거: .js-seller-modal-trigger 또는 #mo-btn
- * - 권한 판단: IGDC_ROLE_PERM + getUserRole
- * - index.html 수정 불필요
- */
+/* IGDC Member/Admin Modal v2.0
+   6번 권한별 서비스 패널 + 7번 안정 트리거/호환 구조 통합본.
+   - Trigger: #mo-btn, [data-member-modal="open"], .js-member-admin-modal-trigger, .js-seller-modal-trigger
+   - Legacy compatibility: openModal('apply'), injectModal(), openMemberAdminModal()
+   - Admin member list: server-only API endpoint required. Never exposes Auth0 M2M secret in browser.
+   - Default API: /.netlify/functions/member-admin
+*/
 (function () {
   'use strict';
 
-  if (!window.IGDC_ROLE_PERM || !window.getUserRole) {
-    console.error('[IGDC] Role engine missing');
-    return;
+  if (window.IGDCMemberAdminModal && window.IGDCMemberAdminModal.__version) return;
+
+  var VERSION = '2.0.0';
+  var DEFAULT_API = '/.netlify/functions/member-admin';
+  var ROOT_ID = 'igdc-member-admin-root';
+  var STYLE_ID = 'igdc-member-admin-style-v2';
+
+  var STATE = {
+    opened: false,
+    tab: 'member-home',
+    me: null,
+    members: [],
+    notices: [],
+    questions: [],
+    loading: false,
+    error: '',
+    query: '',
+    page: 0,
+    total: 0,
+    lastFocus: null
+  };
+
+  var ROLE_LEVEL = {
+    guest: 0,
+    member: 1,
+    standard: 2,
+    premium: 3,
+    special: 4,
+    commerce: 5,
+    partner: 6,
+    manager: 10,
+    admin: 20,
+    owner: 30,
+    super_admin: 40
+  };
+
+  var LABELS = {
+    ko: {
+      title: '🔒 회원전용',
+      desc: '로그인 권한에 따라 회원 서비스와 관리자 관리 기능이 열립니다.',
+      login: 'OS-Login',
+      close: '닫기',
+      refresh: '새로고침',
+      openPage: '전용 페이지 열기',
+      memberPage: '회원 페이지',
+      adminPage: '관리 페이지',
+      loading: '불러오는 중입니다.',
+      noAccess: '관리자 권한이 필요한 영역입니다.',
+      apiMissing: '회원 관리 API가 연결되지 않았습니다.',
+      searchPlaceholder: '이름, 이메일, user_id 검색',
+      tabs: {
+        memberHome: '회원 홈',
+        submit: '서류 제출',
+        question: '질문/문의',
+        notice: '공지사항',
+        adminMembers: '회원 목록',
+        adminQueue: '승급/검토',
+        adminNotice: '답글/공지 관리'
+      }
+    },
+    en: {
+      title: '🔒 Members Only',
+      desc: 'Member services and admin tools open according to the signed-in role.',
+      login: 'OS-Login',
+      close: 'Close',
+      refresh: 'Refresh',
+      openPage: 'Open private page',
+      memberPage: 'Member page',
+      adminPage: 'Admin page',
+      loading: 'Loading.',
+      noAccess: 'Admin permission is required.',
+      apiMissing: 'Member admin API is not connected.',
+      searchPlaceholder: 'Search name, email, or user_id',
+      tabs: {
+        memberHome: 'Member Home',
+        submit: 'Documents',
+        question: 'Questions',
+        notice: 'Notices',
+        adminMembers: 'Members',
+        adminQueue: 'Review',
+        adminNotice: 'Replies/Notices'
+      }
+    }
+  };
+
+  function cfg() {
+    return window.IGDC_MEMBER_ADMIN_CONFIG || {};
   }
-
-  let modal = null;
-
-  const role = () => window.getUserRole();
-  const has = (perm) =>
-    window.IGDC_ROLE_PERM.hasPermission(
-      role(),
-      window.IGDC_ROLE_PERM.PERMISSIONS[perm]
-    );
-
-  function buildModal() {
-    return `
-<div id="igdc-member-modal" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:none">
-  <div style="width:90%;max-width:1100px;height:80%;margin:5% auto;background:#111;color:#fff;display:flex">
-    <div style="width:40%;padding:20px;border-right:1px solid #333">
-      <h3>회원 서비스</h3>
-      ${has('APPLY_STANDARD') ? `<button data-act="apply-standard">스탠다드 신청</button>` : ``}
-      ${has('APPLY_PREMIUM') ? `<button data-act="apply-premium">프리미엄 결제</button>` : ``}
-      ${has('APPLY_COMMERCE') ? `<button data-act="apply-commerce">커머스 신청</button>` : ``}
-    </div>
-    <div style="flex:1;padding:20px">
-      <h3>공지사항</h3>
-      <div>공지 목록</div>
-      ${has('WRITE_NOTICE') ? `<textarea></textarea><button data-act="write-notice">등록</button>` : ``}
-      ${has('APPROVE_MEMBERS') ? `<h3>검토</h3><div>검토 큐</div>` : ``}
-    </div>
-  </div>
-</div>`;
+  function apiBase() {
+    return String(cfg().apiBase || DEFAULT_API);
   }
-
-  function init() {
-    if (modal) return;
-    document.body.insertAdjacentHTML('beforeend', buildModal());
-    modal = document.getElementById('igdc-member-modal');
-    modal.addEventListener('click', function (e) {
-      if (e.target === modal) close();
+  function lang() {
+    try {
+      var v = (document.documentElement.getAttribute('lang') || localStorage.getItem('igdc_lang') || navigator.language || 'en').toLowerCase();
+      if (v.indexOf('ko') === 0) return 'ko';
+    } catch (e) {}
+    return 'en';
+  }
+  function t() { return LABELS[lang()] || LABELS.en; }
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>'"]/g, function (c) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c];
     });
   }
-
-  function open() {
-    init();
-    modal.style.display = 'block';
+  function safeJsonParse(v, fallback) {
+    try { return JSON.parse(v); } catch (e) { return fallback; }
   }
-
+  function normalizeRole(v) { return String(v || '').trim().toLowerCase().replace(/\s+/g, '_'); }
+  function unique(arr) {
+    var map = {};
+    return (arr || []).map(normalizeRole).filter(function (x) {
+      if (!x || map[x]) return false;
+      map[x] = true;
+      return true;
+    });
+  }
+  function roleLevel(role) { return ROLE_LEVEL[normalizeRole(role)] || 0; }
+  function highestRole(roles) {
+    roles = unique(roles);
+    if (!roles.length) return 'guest';
+    return roles.sort(function (a,b) { return roleLevel(b) - roleLevel(a); })[0];
+  }
+  function canAdmin(roles) {
+    roles = unique(roles);
+    return roles.some(function (r) { return roleLevel(r) >= ROLE_LEVEL.manager || r.indexOf('admin') >= 0 || r.indexOf('owner') >= 0; });
+  }
+  function roleEngineRole() {
+    try { if (typeof window.getUserRole === 'function') return window.getUserRole(); } catch (e) {}
+    return '';
+  }
+  function roleEngineHas(perm) {
+    try {
+      if (!window.IGDC_ROLE_PERM || typeof window.IGDC_ROLE_PERM.hasPermission !== 'function') return false;
+      return window.IGDC_ROLE_PERM.hasPermission(roleEngineRole(), window.IGDC_ROLE_PERM.PERMISSIONS[perm]);
+    } catch (e) { return false; }
+  }
+  function readRoles() {
+    var roles = [];
+    try { if (window.__IGDC_ROLE) roles.push(window.__IGDC_ROLE); } catch (e) {}
+    try { if (roleEngineRole()) roles.push(roleEngineRole()); } catch (e) {}
+    try {
+      var stored = localStorage.getItem('igdc_role') || localStorage.getItem('igdc_roles');
+      if (stored) roles = roles.concat(stored.indexOf('[') === 0 ? safeJsonParse(stored, []) : stored.split(','));
+    } catch (e) {}
+    try {
+      if (window.osAuth && typeof window.osAuth.getIdTokenPayload === 'function') {
+        var p = window.osAuth.getIdTokenPayload() || {};
+        var keys = [cfg().rolesClaim, 'https://igdcglobal.com/roles', 'https://example.com/roles', 'https://osu/roles', 'roles', 'role', 'permissions'];
+        keys.forEach(function (k) {
+          if (!k) return;
+          var v = p[k];
+          if (Array.isArray(v)) roles = roles.concat(v);
+          else if (typeof v === 'string') roles = roles.concat(v.split(','));
+        });
+      }
+    } catch (e) {}
+    return unique(roles);
+  }
+  function isLoggedIn() {
+    try { if (window.osAuth && typeof window.osAuth.isAuthenticated === 'function') return !!window.osAuth.isAuthenticated(); } catch (e) {}
+    var roles = readRoles();
+    return roles.length > 0 && roles.indexOf('guest') === -1;
+  }
+  function idToken() {
+    try {
+      if (window.osAuth && typeof window.osAuth.getIdToken === 'function') return window.osAuth.getIdToken();
+      if (window.osAuth && typeof window.osAuth.getIdTokenClaims === 'function') {
+        var c = window.osAuth.getIdTokenClaims();
+        return c && (c.__raw || c.raw || c.id_token || '');
+      }
+    } catch (e) {}
+    try { return localStorage.getItem('igdc_id_token') || localStorage.getItem('id_token') || ''; } catch (e) {}
+    return '';
+  }
+  function userProfile() {
+    var p = {};
+    try { if (window.osAuth && typeof window.osAuth.getUser === 'function') p = window.osAuth.getUser() || {}; } catch (e) {}
+    try { if (!p.email && window.osAuth && typeof window.osAuth.getIdTokenPayload === 'function') p = window.osAuth.getIdTokenPayload() || p; } catch (e) {}
+    var roles = readRoles();
+    return {
+      name: p.name || p.nickname || p.email || 'Member',
+      email: p.email || '',
+      user_id: p.sub || p.user_id || '',
+      roles: roles,
+      role: highestRole(roles),
+      admin: canAdmin(roles)
+    };
+  }
+  function openLogin() {
+    var btn = document.getElementById('osLoginBtn') || document.querySelector('[data-os-login], .os-login, [data-login]');
+    if (btn) { btn.click(); return; }
+    try { document.dispatchEvent(new CustomEvent('igdc:login-request')); } catch (e) {}
+  }
+  function targetPage() {
+    return canAdmin(readRoles()) ? (cfg().adminPage || 'admin.html') : (cfg().memberPage || 'member.html');
+  }
+  function openTarget() {
+    var url = targetPage();
+    var frame = document.getElementById('mainFrame') || document.querySelector('iframe[name="mainFrame"]');
+    if (frame) frame.src = url;
+    else window.location.href = url;
+  }
+  function headers() {
+    var h = {'Content-Type':'application/json'};
+    var tok = idToken();
+    if (tok) h.Authorization = 'Bearer ' + tok;
+    return h;
+  }
+  function apiGet(params) {
+    var q = new URLSearchParams(params || {}).toString();
+    return fetch(apiBase() + (q ? '?' + q : ''), {method:'GET', credentials:'include', headers:headers()}).then(readJson);
+  }
+  function apiPost(action, body) {
+    body = body || {};
+    body.action = action;
+    return fetch(apiBase(), {method:'POST', credentials:'include', headers:headers(), body:JSON.stringify(body)}).then(readJson);
+  }
+  function readJson(res) {
+    return res.text().then(function (txt) {
+      var data = txt ? safeJsonParse(txt, {ok:false, error:txt}) : {};
+      if (!res.ok || data.ok === false) throw new Error(data.error || data.message || ('HTTP ' + res.status));
+      return data;
+    });
+  }
+  function ensureStyle() {
+    if (document.getElementById(STYLE_ID)) return;
+    var style = document.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = ''+
+      '#'+ROOT_ID+'{position:fixed;inset:0;z-index:2147483645;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#111}'+
+      '#'+ROOT_ID+'[hidden]{display:none!important}'+
+      '#'+ROOT_ID+' .igdc-ma-mask{position:absolute;inset:0;background:rgba(0,0,0,.52)}'+
+      '#'+ROOT_ID+' .igdc-ma-modal{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(1180px,94vw);height:min(760px,88vh);background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.34);display:flex;overflow:hidden}'+
+      '#'+ROOT_ID+' .igdc-ma-side{width:248px;background:#0b2440;color:#fff;padding:18px;display:flex;flex-direction:column;gap:10px}'+
+      '#'+ROOT_ID+' .igdc-ma-side h3{font-size:19px;margin:0 0 4px;color:#fff}'+
+      '#'+ROOT_ID+' .igdc-ma-side p{font-size:12px;line-height:1.45;margin:0 0 10px;color:#cfe3f7}'+
+      '#'+ROOT_ID+' .igdc-ma-tab{display:block;width:100%;text-align:left;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.07);color:#fff;border-radius:10px;padding:10px;cursor:pointer;font-weight:700}'+
+      '#'+ROOT_ID+' .igdc-ma-tab.active{background:#fff;color:#0b2440}'+
+      '#'+ROOT_ID+' .igdc-ma-body{flex:1;min-width:0;display:flex;flex-direction:column;background:#f6f8fb}'+
+      '#'+ROOT_ID+' .igdc-ma-top{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#fff;border-bottom:1px solid #e5e8ee;padding:14px 18px}'+
+      '#'+ROOT_ID+' .igdc-ma-top h2{font-size:20px;margin:0;color:#0b3f74}'+
+      '#'+ROOT_ID+' .igdc-ma-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}'+
+      '#'+ROOT_ID+' button{border:1px solid #d0d7de;border-radius:9px;padding:8px 11px;background:#fff;cursor:pointer;font-weight:700}'+
+      '#'+ROOT_ID+' button.primary{background:#0b74de;color:#fff;border-color:#0b74de}'+
+      '#'+ROOT_ID+' button.danger{background:#b42318;color:#fff;border-color:#b42318}'+
+      '#'+ROOT_ID+' button:disabled{opacity:.5;cursor:not-allowed}'+
+      '#'+ROOT_ID+' .igdc-ma-content{padding:16px 18px;overflow:auto;flex:1}'+
+      '#'+ROOT_ID+' .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}'+
+      '#'+ROOT_ID+' .card{background:#fff;border:1px solid #e5e8ee;border-radius:14px;padding:14px;box-shadow:0 4px 18px rgba(15,23,42,.04)}'+
+      '#'+ROOT_ID+' .card h4{margin:0 0 8px;font-size:15px;color:#0b3f74}'+
+      '#'+ROOT_ID+' .muted{color:#667085;font-size:13px;line-height:1.45}'+
+      '#'+ROOT_ID+' .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}'+
+      '#'+ROOT_ID+' input,#'+ROOT_ID+' select,#'+ROOT_ID+' textarea{border:1px solid #d0d7de;border-radius:9px;padding:9px;width:100%;box-sizing:border-box;background:#fff}'+
+      '#'+ROOT_ID+' textarea{min-height:110px;resize:vertical}'+
+      '#'+ROOT_ID+' table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden}'+
+      '#'+ROOT_ID+' th,#'+ROOT_ID+' td{border-bottom:1px solid #edf0f5;padding:10px;text-align:left;font-size:13px;vertical-align:top}'+
+      '#'+ROOT_ID+' th{background:#eef4fb;color:#0b3f74;font-size:12px}'+
+      '#'+ROOT_ID+' .badge{display:inline-block;border-radius:999px;background:#eef4fb;color:#0b3f74;padding:3px 8px;margin:2px;font-size:12px;font-weight:700}'+
+      '#'+ROOT_ID+' .error{background:#fff1f0;color:#b42318;border:1px solid #ffccc7;border-radius:10px;padding:10px;margin-bottom:10px}'+
+      '#'+ROOT_ID+' .ok{background:#ecfdf3;color:#027a48;border:1px solid #abefc6;border-radius:10px;padding:10px;margin-bottom:10px}'+
+      '@media(max-width:760px){#'+ROOT_ID+' .igdc-ma-modal{width:96vw;height:92vh;flex-direction:column}#'+ROOT_ID+' .igdc-ma-side{width:auto;max-height:210px;overflow:auto}#'+ROOT_ID+' .grid{grid-template-columns:1fr}#'+ROOT_ID+' th:nth-child(1),#'+ROOT_ID+' td:nth-child(1){display:none}}';
+    document.head.appendChild(style);
+  }
+  function root() {
+    ensureStyle();
+    var el = document.getElementById(ROOT_ID);
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = ROOT_ID;
+    el.hidden = true;
+    el.innerHTML = '<div class="igdc-ma-mask" data-close></div><section class="igdc-ma-modal" role="dialog" aria-modal="true" aria-labelledby="igdc-member-admin-title"></section>';
+    document.body.appendChild(el);
+    el.addEventListener('click', handleClick);
+    el.addEventListener('change', handleChange);
+    el.addEventListener('submit', handleSubmit);
+    return el;
+  }
+  function setTab(tab) {
+    STATE.tab = tab;
+    render();
+    if (tab === 'admin-members') loadMembers();
+  }
+  function setError(msg) { STATE.error = msg || ''; render(); }
+  function render() {
+    var el = root();
+    var modal = el.querySelector('.igdc-ma-modal');
+    var me = STATE.me || userProfile();
+    var labels = t();
+    var admin = !!me.admin;
+    modal.innerHTML = sideHtml(labels, me, admin) + bodyHtml(labels, me, admin);
+  }
+  function sideHtml(labels, me, admin) {
+    function tab(id, text, adminOnly) {
+      if (adminOnly && !admin) return '';
+      return '<button type="button" class="igdc-ma-tab '+(STATE.tab===id?'active':'')+'" data-tab="'+id+'">'+esc(text)+'</button>';
+    }
+    return '<aside class="igdc-ma-side">'+
+      '<h3 id="igdc-member-admin-title">'+esc(labels.title)+'</h3>'+
+      '<p>'+esc(labels.desc)+'</p>'+
+      '<p><b>'+esc(me.name)+'</b><br>'+esc(me.email || me.user_id || '')+'<br><span class="badge">'+esc(me.role || 'guest')+'</span></p>'+
+      tab('member-home', labels.tabs.memberHome) +
+      tab('submit', labels.tabs.submit) +
+      tab('question', labels.tabs.question) +
+      tab('notice', labels.tabs.notice) +
+      tab('admin-members', labels.tabs.adminMembers, true) +
+      tab('admin-queue', labels.tabs.adminQueue, true) +
+      tab('admin-notice', labels.tabs.adminNotice, true) +
+    '</aside>';
+  }
+  function bodyHtml(labels, me, admin) {
+    return '<main class="igdc-ma-body">'+
+      '<div class="igdc-ma-top"><div><h2>'+esc(titleForTab(labels))+'</h2><div class="muted">IGDC Member/Admin Modal v'+VERSION+'</div></div>'+
+      '<div class="igdc-ma-actions">'+
+        (!isLoggedIn()?'<button type="button" class="primary" data-action="login">'+esc(labels.login)+'</button>':'')+
+        '<button type="button" data-action="open-page">'+esc(admin?labels.adminPage:labels.memberPage)+'</button>'+
+        '<button type="button" data-close>'+esc(labels.close)+'</button>'+
+      '</div></div>'+
+      '<div class="igdc-ma-content">'+
+        (STATE.error ? '<div class="error">'+esc(STATE.error)+'</div>' : '')+
+        renderTab(labels, me, admin)+
+      '</div></main>';
+  }
+  function titleForTab(labels) {
+    var m = labels.tabs;
+    return ({'member-home':m.memberHome,'submit':m.submit,'question':m.question,'notice':m.notice,'admin-members':m.adminMembers,'admin-queue':m.adminQueue,'admin-notice':m.adminNotice})[STATE.tab] || m.memberHome;
+  }
+  function renderTab(labels, me, admin) {
+    if (STATE.tab.indexOf('admin-') === 0 && !admin) return '<div class="card"><h4>'+esc(labels.noAccess)+'</h4></div>';
+    if (STATE.tab === 'member-home') return memberHomeHtml(me);
+    if (STATE.tab === 'submit') return submitHtml();
+    if (STATE.tab === 'question') return questionHtml(admin);
+    if (STATE.tab === 'notice') return noticeHtml(admin);
+    if (STATE.tab === 'admin-members') return adminMembersHtml(labels);
+    if (STATE.tab === 'admin-queue') return adminQueueHtml();
+    if (STATE.tab === 'admin-notice') return adminNoticeHtml();
+    return '';
+  }
+  function memberHomeHtml(me) {
+    var canStandard = roleEngineHas('APPLY_STANDARD') || roleLevel(me.role) >= 1;
+    var canPremium = roleEngineHas('APPLY_PREMIUM') || roleLevel(me.role) >= 2;
+    var canCommerce = roleEngineHas('APPLY_COMMERCE') || roleLevel(me.role) >= 3;
+    return '<div class="grid">'+
+      '<div class="card"><h4>회원 상태</h4><div class="muted">현재 역할: <b>'+esc(me.role)+'</b><br>일반 회원은 미디어 콘텐츠 구매/열람 중심으로 사용합니다.</div></div>'+
+      '<div class="card"><h4>프리미엄/스페셜 회원</h4><div class="muted">주소·구매 정보 연동이 필요한 회원 등급입니다. 서버 승인 및 M2M 검토 후 승급됩니다.</div><br><button '+(!canPremium?'disabled':'')+' data-action="request-upgrade" data-role="premium">프리미엄 신청</button></div>'+
+      '<div class="card"><h4>커머스/상위 권한</h4><div class="muted">상품·커머스·상위 롤은 관리자 검토 후 부여합니다.</div><br><button '+(!canCommerce?'disabled':'')+' data-action="request-upgrade" data-role="commerce">커머스 신청</button></div>'+
+      '<div class="card"><h4>스탠다드 신청</h4><div class="muted">기본 회원 서비스 확장 신청입니다.</div><br><button '+(!canStandard?'disabled':'')+' data-action="request-upgrade" data-role="standard">스탠다드 신청</button></div>'+
+      '<div class="card"><h4>회원 페이지</h4><div class="muted">전용 문서, 문의, 제출 상태를 확인합니다.</div><br><button class="primary" data-action="open-page">회원 페이지 열기</button></div>'+
+      '<div class="card"><h4>로그인</h4><div class="muted">OS-Login 연결이 필요할 경우 로그인 버튼을 사용합니다.</div><br><button data-action="login">OS-Login</button></div>'+
+    '</div>';
+  }
+  function submitHtml() {
+    return '<form class="card" data-form="document-submit"><h4>서류 제출</h4><div class="muted">회원 서류/검토 자료를 제출합니다. 실제 저장은 서버 API 또는 기존 제출 엔진과 연결됩니다.</div><br>'+ 
+      '<label>제목<input name="title" required placeholder="제출 제목"></label><br><br>'+ 
+      '<label>내용<textarea name="body" required placeholder="제출 내용"></textarea></label><br><br>'+ 
+      '<button class="primary" type="submit">제출</button></form>';
+  }
+  function questionHtml(admin) {
+    return '<form class="card" data-form="question-submit"><h4>질문/문의</h4><div class="muted">일반 회원은 질문을 등록할 수 있고, 답글은 관리자 권한에서 활성화됩니다.</div><br>'+ 
+      '<label>질문 제목<input name="title" required placeholder="질문 제목"></label><br><br>'+ 
+      '<label>질문 내용<textarea name="body" required placeholder="질문 내용"></textarea></label><br><br>'+ 
+      '<button class="primary" type="submit">질문 등록</button> '+(admin?'<button type="button" data-tab="admin-notice">답글 관리 열기</button>':'')+'</form>';
+  }
+  function noticeHtml(admin) {
+    return '<div class="card"><h4>공지사항</h4><div class="muted">공지 목록은 서버 API 연결 시 자동으로 표시됩니다.</div>'+ 
+      (admin?'<br><button data-tab="admin-notice">공지 작성/답글 관리</button>':'')+'</div>';
+  }
+  function rolesForSelect(current) {
+    var roles = (cfg().roleOptions || ['member','standard','premium','special','commerce','partner','manager','admin','owner','super_admin']);
+    return roles.map(function (r) { return '<option value="'+esc(r)+'" '+(normalizeRole(current)===normalizeRole(r)?'selected':'')+'>'+esc(r)+'</option>'; }).join('');
+  }
+  function adminMembersHtml(labels) {
+    var rows = STATE.members.map(function (m) {
+      var roles = unique(m.roles || (m.app_metadata && m.app_metadata.roles) || []);
+      var role = highestRole(roles);
+      return '<tr data-user-id="'+esc(m.user_id || m.id || '')+'">'+
+        '<td>'+esc(m.user_id || '')+'</td>'+ 
+        '<td><b>'+esc(m.name || m.nickname || '')+'</b><br><span class="muted">'+esc(m.email || '')+'</span></td>'+ 
+        '<td>'+roles.map(function (r) { return '<span class="badge">'+esc(r)+'</span>'; }).join('')+'</td>'+ 
+        '<td><select data-role-select>'+rolesForSelect(role)+'</select></td>'+ 
+        '<td class="row"><button data-action="save-role">승급/변경</button><button data-action="block-user" class="danger">퇴출/차단</button></td>'+ 
+      '</tr>';
+    }).join('');
+    return '<div class="card"><div class="row" style="justify-content:space-between"><h4>OS0/Auth0 회원 목록</h4><button data-action="reload-members">'+esc(labels.refresh)+'</button></div>'+ 
+      '<div class="row"><input id="igdc-member-search" value="'+esc(STATE.query)+'" placeholder="'+esc(labels.searchPlaceholder)+'"><button data-action="search-members">검색</button></div><br>'+ 
+      (STATE.loading?'<div class="muted">'+esc(labels.loading)+'</div>':'')+
+      '<table><thead><tr><th>User ID</th><th>회원</th><th>현재 롤</th><th>변경 롤</th><th>관리</th></tr></thead><tbody>'+(rows || '<tr><td colspan="5" class="muted">회원 목록이 없거나 API 연결 대기 중입니다.</td></tr>')+'</tbody></table>'+ 
+      '<br><div class="muted">총 '+esc(STATE.total || STATE.members.length)+'명 / 페이지 '+esc(STATE.page + 1)+'</div></div>';
+  }
+  function adminQueueHtml() {
+    return '<div class="card"><h4>승급/검토 큐</h4><div class="muted">일반→프리미엄/스페셜/커머스 및 상위 20단계 롤 검토 요청을 관리하는 영역입니다. 서버 API의 review queue 연결 시 자동 표시됩니다.</div><br><button data-action="reload-review-queue">검토 큐 새로고침</button></div>';
+  }
+  function adminNoticeHtml() {
+    return '<form class="card" data-form="admin-reply"><h4>답글/공지 관리</h4><div class="muted">관리자 권한에서만 답글 작성·공지 등록 버튼이 활성화됩니다.</div><br>'+ 
+      '<label>대상/제목<input name="title" required placeholder="공지 제목 또는 답글 대상"></label><br><br>'+ 
+      '<label>내용<textarea name="body" required placeholder="공지 또는 답글 내용"></textarea></label><br><br>'+ 
+      '<button class="primary" type="submit">등록</button></form>';
+  }
+  function handleClick(ev) {
+    var closeBtn = ev.target.closest('[data-close]');
+    if (closeBtn) { ev.preventDefault(); close(); return; }
+    var tab = ev.target.closest('[data-tab]');
+    if (tab) { ev.preventDefault(); setTab(tab.getAttribute('data-tab')); return; }
+    var action = ev.target.closest('[data-action]');
+    if (!action) return;
+    ev.preventDefault();
+    var act = action.getAttribute('data-action');
+    if (act === 'login') openLogin();
+    else if (act === 'open-page') openTarget();
+    else if (act === 'reload-members') loadMembers();
+    else if (act === 'search-members') { var s = document.getElementById('igdc-member-search'); STATE.query = s ? s.value : ''; STATE.page = 0; loadMembers(); }
+    else if (act === 'save-role') saveRole(action.closest('tr'));
+    else if (act === 'block-user') blockUser(action.closest('tr'));
+    else if (act === 'request-upgrade') requestUpgrade(action.getAttribute('data-role'));
+    else if (act === 'reload-review-queue') setError('검토 큐 API 연결이 필요합니다.');
+  }
+  function handleChange(ev) {
+    if (ev.target && ev.target.id === 'igdc-member-search') STATE.query = ev.target.value;
+  }
+  function formDataObj(form) {
+    var fd = new FormData(form), o = {};
+    fd.forEach(function (v,k) { o[k] = v; });
+    return o;
+  }
+  function handleSubmit(ev) {
+    var form = ev.target.closest('form[data-form]');
+    if (!form) return;
+    ev.preventDefault();
+    var type = form.getAttribute('data-form');
+    var body = formDataObj(form);
+    var action = type === 'document-submit' ? 'submit-document' : type === 'question-submit' ? 'submit-question' : 'admin-reply';
+    apiPost(action, body).then(function () { setError(''); alert('등록되었습니다.'); form.reset(); }).catch(function (e) { setError(e.message); });
+  }
+  function loadMe() {
+    STATE.me = userProfile();
+    return apiGet({action:'me'}).then(function (data) {
+      if (data && data.me) STATE.me = Object.assign({}, STATE.me, data.me, {admin: data.me.admin != null ? data.me.admin : STATE.me.admin});
+    }).catch(function () {});
+  }
+  function loadMembers() {
+    if (!canAdmin(readRoles()) && !(STATE.me && STATE.me.admin)) return;
+    STATE.loading = true; STATE.error = ''; render();
+    apiGet({action:'members', q:STATE.query || '', page:STATE.page || 0, per_page:cfg().perPage || 50}).then(function (data) {
+      STATE.members = data.users || data.members || [];
+      STATE.total = data.total || STATE.members.length;
+      STATE.loading = false;
+      render();
+    }).catch(function (e) {
+      STATE.loading = false;
+      STATE.error = e.message || t().apiMissing;
+      render();
+    });
+  }
+  function saveRole(row) {
+    if (!row) return;
+    var userId = row.getAttribute('data-user-id');
+    var sel = row.querySelector('[data-role-select]');
+    var role = sel && sel.value;
+    if (!userId || !role) return;
+    if (!confirm('회원 롤을 '+role+' 로 변경할까요?')) return;
+    apiPost('update-role', {user_id:userId, role:role}).then(loadMembers).catch(function (e) { setError(e.message); });
+  }
+  function blockUser(row) {
+    if (!row) return;
+    var userId = row.getAttribute('data-user-id');
+    if (!userId) return;
+    if (!confirm('이 회원을 차단/퇴출 처리할까요?')) return;
+    apiPost('block-user', {user_id:userId, blocked:true}).then(loadMembers).catch(function (e) { setError(e.message); });
+  }
+  function requestUpgrade(role) {
+    apiPost('request-upgrade', {role:role}).then(function () { alert('신청되었습니다.'); }).catch(function (e) { setError(e.message); });
+  }
+  function open(preferredTab) {
+    STATE.lastFocus = document.activeElement;
+    STATE.opened = true;
+    STATE.tab = preferredTab || 'member-home';
+    var el = root();
+    el.hidden = false;
+    loadMe().then(function () { render(); if (STATE.tab === 'admin-members') loadMembers(); });
+    render();
+    try { el.querySelector('button').focus(); } catch (e) {}
+  }
   function close() {
-    if (modal) modal.style.display = 'none';
+    var el = document.getElementById(ROOT_ID);
+    if (el) el.hidden = true;
+    STATE.opened = false;
+    try { if (STATE.lastFocus && STATE.lastFocus.focus) STATE.lastFocus.focus(); } catch (e) {}
+  }
+  function bindTrigger() {
+    if (bindTrigger.done) return;
+    bindTrigger.done = true;
+    document.addEventListener('click', function (ev) {
+      var target = ev.target && ev.target.closest && ev.target.closest('#mo-btn,[data-member-modal="open"],.js-member-admin-modal-trigger,.js-seller-modal-trigger');
+      if (!target) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      open('member-home');
+    }, true);
+    document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') close(); });
   }
 
+  window.IGDCMemberAdminModal = { __version: VERSION, open: open, close: close, loadMembers: loadMembers, targetPage: targetPage, isLoggedIn: isLoggedIn };
   window.openMemberAdminModal = open;
   window.closeMemberAdminModal = close;
+  if (typeof window.openModal !== 'function') window.openModal = function () { open('member-home'); };
+  if (typeof window.injectModal !== 'function') window.injectModal = function () { open('member-home'); };
 
-  document.addEventListener('click', function (e) {
-    const trigger = e.target.closest('.js-seller-modal-trigger, #mo-btn');
-    if (!trigger) return;
-    e.preventDefault();
-    open();
-  });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindTrigger, {once:true});
+  else bindTrigger();
 })();
