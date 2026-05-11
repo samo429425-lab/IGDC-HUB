@@ -484,6 +484,161 @@
 
 <link rel="stylesheet" href="/assets/css/common.css">
 
+
+<style id="igdc-admin-responsive-stability-fix-v1">
+/* === IGDC Admin responsive stability fix v1 ===
+   목적: 관리자 페이지가 글자 크기/브라우저 폭 변화 시 화면 밖으로 숨지 않고
+   좌측 메뉴·본문·우측 관리창이 함께 줄고/감기도록 정리합니다.
+   기능 스크립트는 건드리지 않고 레이아웃 CSS만 보강합니다.
+*/
+html, body {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box !important;
+}
+*, *::before, *::after {
+  box-sizing: border-box !important;
+}
+.container {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  overflow: visible !important;
+}
+.sidebar {
+  flex: 0 1 clamp(156px, 13vw, 210px) !important;
+  width: clamp(156px, 13vw, 210px) !important;
+  min-width: 156px !important;
+  max-width: 210px !important;
+  padding-top: clamp(20px, 4vw, 60px) !important;
+  overflow-wrap: anywhere !important;
+}
+.sidebar a {
+  margin: 5px clamp(6px, 0.8vw, 12px) !important;
+  padding: clamp(9px, 0.75vw, 12px) clamp(10px, 1vw, 18px) !important;
+  font-size: clamp(0.82rem, 0.45vw + 0.62rem, 1rem) !important;
+  line-height: 1.32 !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+.main-content {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  width: auto !important;
+  margin: clamp(12px, 1.7vw, 30px) !important;
+  padding: clamp(18px, 2vw, 40px) clamp(14px, 1.8vw, 30px) !important;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+}
+#igdc-header-flex {
+  min-width: 0 !important;
+  flex-wrap: wrap !important;
+}
+#igdc-header-flex .titles {
+  min-width: 0 !important;
+}
+#igdc-header-flex .titles h1,
+#igdc-header-flex .titles h2 {
+  overflow-wrap: anywhere !important;
+}
+.income-table {
+  width: 100% !important;
+  table-layout: fixed !important;
+  border-collapse: collapse !important;
+}
+.income-table td, .income-table th {
+  padding: clamp(6px, 0.8vw, 12px) !important;
+  font-size: clamp(0.78rem, 0.35vw + 0.62rem, 1rem) !important;
+  line-height: 1.35 !important;
+  word-break: keep-all !important;
+  overflow-wrap: anywhere !important;
+}
+#igdc-accounts-section,
+#igdc-core-link {
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+#igdc-accounts-section > div:last-child {
+  flex-wrap: wrap !important;
+  max-width: 100% !important;
+}
+.igdc-site-control {
+  flex: 0 1 clamp(240px, 22vw, 320px) !important;
+  width: clamp(240px, 22vw, 320px) !important;
+  min-width: 220px !important;
+  max-width: 320px !important;
+  overflow-wrap: anywhere !important;
+}
+.igdc-sc-card,
+.igdc-sc-ai,
+.igdc-sc-ai-textarea {
+  max-width: 100% !important;
+}
+.igdc-sc-ai-actions {
+  flex-wrap: wrap !important;
+}
+.igdc-sc-ai-actions button {
+  min-width: 0 !important;
+}
+/* iframe 안에서 폭이 줄어드는 경우: 우측 관리창은 아래로 내려가게 해서 본문을 가리지 않음 */
+@media (max-width: 1180px) {
+  .container {
+    flex-wrap: wrap !important;
+  }
+  .sidebar {
+    flex-basis: clamp(150px, 18vw, 190px) !important;
+    width: clamp(150px, 18vw, 190px) !important;
+    min-width: 150px !important;
+  }
+  .main-content {
+    flex: 1 1 calc(100% - 190px) !important;
+  }
+  .igdc-site-control {
+    order: 3 !important;
+    flex: 1 1 100% !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    border-left: 0 !important;
+    border-top: 1px solid #f2e1c5 !important;
+  }
+}
+@media (max-width: 760px) {
+  .container {
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+  }
+  .sidebar {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    flex: 0 0 auto !important;
+    padding: 10px !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+  }
+  .sidebar a {
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+  }
+  .main-content {
+    width: auto !important;
+    margin: 10px !important;
+    padding: 16px 12px !important;
+  }
+  .igdc-site-control {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+}
+</style>
+
 </head>
 <body>
 <script>(function(){document.addEventListener("DOMContentLoaded",function(){document.documentElement.classList.remove("prelayout");var s=document.getElementById("prelayout-guard"); if(s&&s.parentNode){s.parentNode.removeChild(s);}});})();</script>
