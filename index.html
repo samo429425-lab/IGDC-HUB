@@ -1329,10 +1329,10 @@ window.addEventListener('DOMContentLoaded', function() {
 })();
 </script>
 
-<!-- IGDC OS Login Provider Patch v2.5.1: clean provider chooser + Naver reauth guard -->
+<!-- IGDC OS Login Provider Patch v2.5.2: provider chooser visual polish + Naver reauth guard -->
 <style id="igdc-provider-login-style">
 #igdc-provider-login-mask{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:2147483644;display:none}
-#igdc-provider-login-modal{position:fixed;left:50%;top:48%;transform:translate(-50%,-50%);width:min(450px,94vw);background:#fff;color:#1f2937;border-radius:0;box-shadow:0 18px 46px rgba(0,0,0,.26);z-index:2147483645;padding:28px 30px 24px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;display:none}
+#igdc-provider-login-modal{position:fixed;left:50%;top:48%;transform:translate(-50%,-50%);width:min(405px,90vw);background:#fff;color:#1f2937;border-radius:0;box-shadow:0 18px 46px rgba(0,0,0,.26);z-index:2147483645;padding:28px 30px 24px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;display:none}
 #igdc-provider-login-modal .igdc-login-mark{width:44px;height:44px;margin:0 auto 10px;border-radius:12px;background:#111827;color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;letter-spacing:-.03em}
 #igdc-provider-login-modal h3{margin:0 0 8px;font-size:28px;line-height:1.15;text-align:center;color:#1f2937;font-weight:500}
 #igdc-provider-login-modal p{margin:0 0 18px;font-size:15px;line-height:1.38;color:#374151;text-align:center}
@@ -1341,8 +1341,8 @@ window.addEventListener('DOMContentLoaded', function() {
 #igdc-provider-login-modal .igdc-email-continue{width:100%;height:52px;border:1px solid #0f62d8;border-radius:4px;background:#0f62d8;color:#fff;cursor:pointer;font-weight:700;font-size:17px;text-align:center;margin:0 0 16px}
 #igdc-provider-login-modal .igdc-login-or{display:flex;align-items:center;gap:14px;margin:0 0 14px;color:#333;font-size:14px;justify-content:center}
 #igdc-provider-login-modal .igdc-login-or:before,#igdc-provider-login-modal .igdc-login-or:after{content:"";height:1px;background:#d1d5db;flex:1}
-#igdc-provider-login-modal .igdc-provider-grid{display:grid;grid-template-columns:1fr;gap:10px}
-#igdc-provider-login-modal button[data-provider]{width:100%;height:50px;border:1px solid #9ca3af;border-radius:4px;padding:0 16px;background:#fff;color:#26323f;cursor:pointer;font-weight:500;font-size:18px;text-align:left;display:flex;align-items:center;justify-content:flex-start;gap:14px}
+#igdc-provider-login-modal .igdc-provider-grid{display:grid;grid-template-columns:1fr;gap:9px}
+#igdc-provider-login-modal button[data-provider]{width:100%;height:52px;border:1px solid #9ca3af;border-radius:4px;padding:0 16px;background:#fff;color:#26323f;cursor:pointer;font-weight:500;font-size:18px;text-align:left;display:flex;align-items:center;justify-content:flex-start;gap:14px}
 #igdc-provider-login-modal button[data-provider]:hover{background:#f6f8fa}
 #igdc-provider-login-modal .igdc-provider-icon{width:28px;min-width:28px;display:inline-flex;align-items:center;justify-content:center;font-size:22px;font-weight:800}
 #igdc-provider-login-modal button[data-provider="naver"] .igdc-provider-icon{color:#03c75a}
@@ -1351,11 +1351,11 @@ window.addEventListener('DOMContentLoaded', function() {
 #igdc-provider-login-modal .igdc-provider-cancel{margin-top:12px;width:100%;height:42px;border:1px solid #d0d7de;border-radius:4px;background:#fff;font-weight:600;color:#555;cursor:pointer}
 @media(max-width:480px){#igdc-provider-login-modal{padding:24px 18px 20px}#igdc-provider-login-modal h3{font-size:24px}#igdc-provider-login-modal button[data-provider]{font-size:16px}}
 </style>
-<script id="igdc-oslogin-provider-patch-v251">
+<script id="igdc-oslogin-provider-patch-v252">
 (function(){
   'use strict';
-  if (window.__IGDC_OSLOGIN_PROVIDER_PATCH_V251__) return;
-  window.__IGDC_OSLOGIN_PROVIDER_PATCH_V251__ = true;
+  if (window.__IGDC_OSLOGIN_PROVIDER_PATCH_V252__) return;
+  window.__IGDC_OSLOGIN_PROVIDER_PATCH_V252__ = true;
 
   var AUTH0_DOMAIN = 'login.igdcglobal.com';
   var CLIENT_ID = '4JeT1Fdy' + 'DZaN7nEO' + 'DVsKe2Sx8' + 'kKMWagj';
