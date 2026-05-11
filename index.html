@@ -682,7 +682,7 @@ nav{transition:transform .1s ease;}
 <link href="edge-autohide-mobile.css" rel="stylesheet"/>
 <style id="iframe-stable">
  iframe#mainFrame{min-height:0;height:calc(100dvh - var(--igdc-head-h,0px) - var(--igdc-nav-h,48px) + 85px) !important;display:block}</style>
-<style>a.js-seller-modal-trigger:hover { background-color:#FFFFFA; } </style>
+<style>#mo-btn:hover { background-color:#FFFFFA; } </style>
 <script>(function(){try{var s=(localStorage.getItem('igdc_lang')||'').toLowerCase();if(s){document.documentElement.setAttribute('lang',s);window.IGTC_CURRENT_LANG=s;}}catch(e){}})();</script>
 <script>(function(){try{var r=(localStorage.getItem('igdc_role')||'').toLowerCase();if(!r&&window.osAuth&&osAuth.getIdTokenPayload){var c=osAuth.getIdTokenPayload()||{};var roles=(c['https://example.com/roles']||[]).map(String);if(roles.indexOf('admin')>-1)r='admin';}if(r){window.__IGDC_ROLE=r;document.documentElement.dataset.role=r;}}catch(e){}document.addEventListener('osauth:ready',function(){try{var r2=(window.__IGDC_ROLE||'').toLowerCase();if(!r2&&window.osAuth&&osAuth.getIdTokenPayload){var c=osAuth.getIdTokenPayload()||{};var roles=(c['https://example.com/roles']||[]).map(String);if(roles.indexOf('admin')>-1){window.__IGDC_ROLE='admin';document.documentElement.dataset.role='admin';}}}catch(e){}});})();</script>
 <script src="/igtc-language-role-bridge.min.js"></script>
@@ -789,7 +789,7 @@ nav{transition:transform .1s ease;}
 <option value="uz">Oʻzbekcha</option>
 </select>
 <div id="mo-wrap" style="position:absolute; z-index:1000; text-align:center;">
-<a class="js-seller-modal-trigger" href="#" id="mo-btn" style="color:#FFD700; text-decoration:none; font-weight:600;">🔒 회원전용</a>
+<a class="js-member-admin-modal-trigger" href="#" id="mo-btn" data-member-modal="open" style="color:#FFD700; text-decoration:none; font-weight:600;">🔒 회원전용</a>
 </div>
 </header>
 <nav>
@@ -1330,38 +1330,48 @@ window.addEventListener('DOMContentLoaded', function() {
 </script>
 <!-- Auth0 + Role/Donation unified bridge (popup) -->
 <script src="/assets/js/auth-bridge.v2.js"></script>
-<script>
-// === 7 Role Upgrade ===
-// Define roles: admin, director, siteAdmin, special, commerceAdmin, member, guest
-function getUserRole(tokens) {
-  if (!tokens) return "guest";
-  // tokens.roles can be array or string
-  var roles = [];
-  try {
-    roles = (tokens.roles || tokens.role || "").toString().split(",");
-  } catch(e) {}
-  if (roles.includes("admin")) return "admin";
-  if (roles.includes("director")) return "director";
-  if (roles.includes("siteAdmin")) return "siteAdmin";
-  if (roles.includes("special")) return "special";
-  if (roles.includes("commerceAdmin")) return "commerceAdmin";
-  if (roles.includes("member")) return "member";
-  return "guest";
-}
+<script id="igdc-role-upgrade-v2">
+(function(){
+  "use strict";
+  // === 7 Role Upgrade ===
+  // Define roles: admin, director, siteAdmin, special, commerceAdmin, member, guest
+  function getUserRole(tokens) {
+    if (!tokens) return "guest";
+    var roles = [];
+    try {
+      if (Array.isArray(tokens.roles)) roles = tokens.roles;
+      else roles = String(tokens.roles || tokens.role || "").split(",");
+      roles = roles.map(function(v){ return String(v || "").trim(); }).filter(Boolean);
+    } catch(e) {}
+    if (roles.includes("admin")) return "admin";
+    if (roles.includes("director")) return "director";
+    if (roles.includes("siteAdmin")) return "siteAdmin";
+    if (roles.includes("special")) return "special";
+    if (roles.includes("commerceAdmin")) return "commerceAdmin";
+    if (roles.includes("member")) return "member";
+    return "guest";
+  }
 
-// Example usage: toggle UI elements
+  function applyRoleUI(role) {
+    try{
+      var r = String(role || window.__IGDC_ROLE || localStorage.getItem("igdc_role") || "guest").trim().toLowerCase();
+      document.querySelectorAll("[data-role]").forEach(function(el){
+        var needRaw = el.getAttribute("data-role") || "";
+        var allowed = needRaw.split(",").map(function(s){return String(s||"").trim().toLowerCase();}).filter(Boolean);
+        if (allowed.length===0 || allowed.indexOf(r)!==-1 || r==="admin" || r==="owner"){
+          el.style.display="";
+        } else {
+          el.style.display="none";
+        }
+      });
+    }catch(e){}
+  }
 
-function applyRoleUI(role) {
-  try{
-    document.querySelectorAll("[data-role]").forEach(function(el){
-      var needRaw = el.getAttribute("data-role") || "";
-      var allowed = needRaw.split(",").map(function(s){return String(s||"").trim().toLowerCase();}).filter(Boolean);
-      var r = String(role||"guest").trim().toLowerCase();
-      if (allowed.length===0 || allowed.indexOf(r)!==-1 || r==="admin"){ el.style.display=""; } else { el.style.display="none"; }
-    });
-  }catch(e){}
-}
-)();
+  window.IGDC_getUserRole = window.IGDC_getUserRole || getUserRole;
+  window.IGDC_applyRoleUI = window.IGDC_applyRoleUI || applyRoleUI;
+  document.addEventListener("DOMContentLoaded", function(){ applyRoleUI(window.__IGDC_ROLE || "guest"); });
+  document.addEventListener("osauth:ready", function(){ applyRoleUI(window.__IGDC_ROLE || "guest"); });
+})();
 </script>
 <script src="/osauth-index-listener-safe.min.js"></script>
 <!-- Auth/UI add-ons v2 (non-invasive) -->
@@ -2016,7 +2026,7 @@ function applyRoleUI(role) {
     const out = [];
     try{ const htmlLang = (document.documentElement && document.documentElement.lang) || ""; if (htmlLang) out.push(htmlLang); }catch(_){}
     try{ if (navigator && navigator.language) out.push(navigator.language); }catch(_){}
-    try{ if (navigator && Array.isArray(/* removed */)) out.push(./* removed */); }catch(_){}
+    try{ if (navigator && navigator.languages && Array.isArray(navigator.languages)) out.push.apply(out, navigator.languages); }catch(_){}
     return out.map(s=>String(s).toLowerCase());
   }
   function mapLangToCurrency(code){
@@ -2124,7 +2134,7 @@ document.addEventListener("osauth:ready", applyAdminGate);
     const lang = (document.documentElement && document.documentElement.lang) || "en";
 
     const amount = Number(payload && payload.amount || 0);
-    let currency = String((payload && payload.currency) || (__DEFAULT_CCY||\"USD\")).toUpperCase().slice(0,4);
+    let currency = String((payload && payload.currency) || (__DEFAULT_CCY||"USD")).toUpperCase().slice(0,4);
     const memo = String((payload && payload.memo) || "Donation").slice(0,140);
     const meta = Object.assign({}, payload && payload.meta || {});
 
@@ -2504,8 +2514,6 @@ function setActive(i){
 })();
 </script>
 <script src="edge-autohide-mobile.js"></script>
-<script src="assets/js/seller-modal.addon.js"></script>
-<script src="assets/js/member-admin-modal.js"></script>
 <!-- IGDC scroll/nav/header minimal shim v9 (header push-down; parent scroll off; nav baseline) -->
 <style id="igdc-scroll-shim-style">
   /* Header: visual hide; when hidden, remove space and ignore pointer events */
@@ -2542,9 +2550,9 @@ function setActive(i){
 
   /* Child scroll area = viewport minus nav + header */
  #mainFrame {
-    display:block; width:100%;    
+    display:block;
+    width:100%;
     border:0;
-  #mainFrame{display:block;width:100%;border:0;}
   }
 </style>
 <script id="igdc-scroll-shim-js">
@@ -2685,8 +2693,8 @@ function setActive(i){
   }catch(e){}
 })();
 </script>
-<script src="assets/js/seller-modal.addon.js"></script>
-<script src="assets/js/member-admin-modal.js"></script>
+<script defer src="/assets/js/seller-modal.addon.js"></script>
+<script defer src="/assets/js/member-admin-modal.js"></script>
 <script src="/CoreLogic/modules/thumbnail-feed/thumbnail-loader.min.js"></script>
 <!-- ABSOLUTE-KEY NAV FIX V3 BEGIN -->
 <style>
@@ -2750,6 +2758,12 @@ var MAP={ko:'🔒 회원전용',en:'🔒 Members Only',zh:'🔒 会员专用',zh
     if(a){
       a.addEventListener('click', function(ev){
         ev.preventDefault();
+        try{
+          if (window.IGDCMemberAdminModal && typeof window.IGDCMemberAdminModal.open === 'function'){
+            window.IGDCMemberAdminModal.open('apply');
+            return;
+          }
+        }catch(e){}
         try{ if (typeof openModal==='function'){ openModal('apply'); return; } }catch(e){}
         try{ if (typeof injectModal==='function'){ injectModal(); return; } }catch(e){}
       });
@@ -3344,7 +3358,6 @@ function normLang(l){
   };
 </script>
 
-<script src="/assets/js/member-admin-modal.js"></script>
 
 </body>
 
