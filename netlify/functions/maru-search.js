@@ -455,6 +455,10 @@ function isHardRejectImageUrl(imageUrl){
   // but reject obvious logo/icon SVG paths.
   if(/\.(svg)(\?|#|$)/i.test(s) && /(logo|symbol|icon|emblem|brand|ci|bi)/i.test(s)) return true;
 
+  // Keep favicons small in the link row, but never promote brand logos as card snapshots.
+  if(/(^|[\/_\-.])(logo|logotype|brand|symbol|emblem|ci|bi)([\/_\-.]|$)/i.test(s)) return true;
+  if(/(naver|google|youtube|tiktok|facebook|instagram|twitter|x)[^?#]*(logo|brand|symbol|favicon)/i.test(s)) return true;
+
   return false;
 }
 
@@ -1990,11 +1994,25 @@ function buildSanmaruProviderLaneExpansionCards(q, raw, ctx, requestedLimit, exi
       if(round > lane.max * 1.25) continue;
       const url = lane.url(round);
       const preferredBoost = preferred.has(lane.type) ? 0.035 : 0;
+      const topicLabel = maruTopicLabels[(round - 1) % maruTopicLabels.length];
+      const titleSuffix = round > 1 ? ' · ' + topicLabel : '';
+      const cleanTitle = q + ' · ' + lane.label + titleSuffix;
+      const cleanSummary = lane.type === 'news'
+        ? q + ' 관련 최신 기사와 주요 보도 검색 결과입니다.'
+        : lane.type === 'knowledge'
+          ? q + ' 관련 백과·지식·참고 자료 검색 결과입니다.'
+          : lane.type === 'image'
+            ? q + ' 관련 사진·이미지·시각 자료 검색 결과입니다.'
+            : lane.type === 'video'
+              ? q + ' 관련 영상·현장 콘텐츠 검색 결과입니다.'
+              : lane.type === 'map'
+                ? q + ' 관련 지도·장소·지역 정보 검색 결과입니다.'
+                : q + ' 관련 공개 웹 검색 결과입니다.';
       out.push(canonicalizeItem({
         id:'sanmaru-fast-provider-lane-' + localStableHash([q, lane.id, region, round].join('|')),
-        title:q + ' · ' + lane.label + (round > 1 ? ' · ' + maruTopicLabels[(round - 1) % maruTopicLabels.length] : ''),
-        summary:q + ' 관련 ' + lane.label + '의 최신 공개 자료와 검색 결과입니다.',
-        description:q + ' 관련 공개 자료',
+        title:cleanTitle,
+        summary:cleanSummary,
+        description:cleanSummary,
         url, link:url,
         source:lane.source,
         provider:lane.id,
@@ -2004,13 +2022,13 @@ function buildSanmaruProviderLaneExpansionCards(q, raw, ctx, requestedLimit, exi
         route:lane.id,
         region,
         generatedBy:'sanmaru-fast-provider-lane-expansion',
-        sourceType:'provider-passthrough-fast-lane',
+        sourceType:'provider-lane-window',
         sanmaruFirstPaint:true,
         passthrough:true,
         placeholder:false,
         score:(lane.score || 0.8) + preferredBoost - (round * 0.0001),
-        tags:['sanmaru','provider-passthrough',lane.type,lane.id,region].filter(Boolean),
-        payload:{ providerLane:lane.id, providerUrl:url, page:round, country:region, firstPaint:true, fullSearchContinues:true }
+        tags:['provider-window',lane.type,lane.id,region].filter(Boolean),
+        payload:{ providerLane:lane.id, providerUrl:url, pageWindow:round, country:region, firstPaint:true }
       }, q, lane.source));
       addedThisRound++;
     }
@@ -2021,6 +2039,7 @@ function buildSanmaruProviderLaneExpansionCards(q, raw, ctx, requestedLimit, exi
     id:x.id, title:x.title, summary:x.summary, description:x.description,
     url:x.url, link:x.url || x.link, source:x.source, provider:x.provider,
     type:x.type, searchCategory:x.searchCategory || x.type, mediaType:x.mediaType,
+    thumbnail:x.thumbnail || x.thumb || x.image || '', thumb:x.thumb || x.thumbnail || x.image || '', image:x.image || x.thumbnail || x.thumb || '', imageSet:Array.isArray(x.imageSet) ? x.imageSet : [],
     route:x.route, region:x.region, generatedBy:x.generatedBy, sourceType:x.sourceType,
     sanmaruFirstPaint:true, passthrough:true, placeholder:false, score:x.score
   }));
@@ -4784,6 +4803,34 @@ exports.handler = async function(event){
         candidatePoolPreserved:true,
         currentHttpResponsePaged:true,
         trace:[].concat(base.meta && base.meta.trace || [], [{ name:'sanmaru-provider-lane-paged-expansion', status:laneItems.length ? 'ok' : 'empty', count:laneItems.length, responsePolicy:'preload-window-plus-page-slice' }])
+      });
+    }
+
+    // Page-window guarantee:
+    // The browser may jump directly to page 13, 50, 150, etc.  The response body
+    // must contain enough ranked candidates to slice that requested page, not only
+    // the first 10~12 preload pages.  This is still a light metadata/provider-lane
+    // expansion and does not render all candidates on the client.
+    const requestedPageForWindowGuarantee = clampInt(firstNonEmpty(raw && (raw.page || raw.p || raw.visiblePage || raw.sectionPage), 1), 1, 1, MARU_SEARCH_MAX_PAGER_PAGES);
+    const pageWindowCandidateNeed = Math.min(
+      MAX_LIMIT,
+      Math.max(visibleNeed * 12, requestedPageForWindowGuarantee * visibleNeed + visibleNeed)
+    );
+    if((base.items || []).length < pageWindowCandidateNeed){
+      const guaranteedLaneItems = buildSanmaruProviderLaneExpansionCards(
+        q,
+        Object.assign({}, raw || {}, { limit: pageWindowCandidateNeed, providerLaneTarget: pageWindowCandidateNeed }),
+        { region: detectRuntimeRegion(event, lang, q) },
+        pageWindowCandidateNeed,
+        (base.items || []).length
+      );
+      base.items = dedupeCanonicalItems([].concat(base.items || [], guaranteedLaneItems)).slice(0, pageWindowCandidateNeed);
+      base.results = base.items;
+      base.meta = Object.assign({}, base.meta || {}, {
+        pageWindowGuaranteed:true,
+        pageWindowCandidateNeed,
+        pageWindowGuaranteedCount: guaranteedLaneItems.length,
+        trace:[].concat(base.meta && base.meta.trace || [], [{ name:'page-window-guarantee', status:guaranteedLaneItems.length ? 'ok' : 'covered', count:guaranteedLaneItems.length, requestedPage:requestedPageForWindowGuarantee }])
       });
     }
     // Make provider/category diagnostics explicit even when Sanmaru cache serves fast.

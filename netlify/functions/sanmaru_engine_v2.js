@@ -2833,11 +2833,24 @@ function sanmaruProviderPassthroughCards(q, opts){
       const lane = r[4];
       const boost = preferred.has(lane) ? 0.08 : 0;
       const url = typeof r[2] === "function" ? r[2](round) : r[2];
+      const topicLabel = maruTopicLabels[(round - 1) % maruTopicLabels.length];
+      const cleanTitle = query + " · " + r[1] + (round > 1 ? " · " + topicLabel : "");
+      const cleanSummary = lane === "news"
+        ? query + " 관련 최신 기사와 주요 보도 검색 결과입니다."
+        : lane === "knowledge"
+          ? query + " 관련 백과·지식·참고 자료 검색 결과입니다."
+          : lane === "image"
+            ? query + " 관련 사진·이미지·시각 자료 검색 결과입니다."
+            : lane === "video"
+              ? query + " 관련 영상·현장 콘텐츠 검색 결과입니다."
+              : lane === "local"
+                ? query + " 관련 지도·장소·지역 정보 검색 결과입니다."
+                : query + " 관련 공개 웹 검색 결과입니다.";
       out.push({
         id: "sanmaru-pass-" + stableHash([query, r[0], country, round].join("|")),
-        title: query + " · " + r[1] + (round > 1 ? " · " + maruTopicLabels[(round - 1) % maruTopicLabels.length] : ""),
-        summary: query + " 관련 " + r[1] + "의 최신 공개 자료와 검색 결과입니다.",
-        description: query + " 관련 공개 자료",
+        title: cleanTitle,
+        summary: cleanSummary,
+        description: cleanSummary,
         url, link: url,
         source: r[3],
         provider: r[3],
@@ -2847,13 +2860,13 @@ function sanmaruProviderPassthroughCards(q, opts){
         lane,
         country,
         generatedBy: "sanmaru-provider-passthrough-paged-window",
-        sourceType: "provider-passthrough-page-window",
+        sourceType: "provider-page-window",
         sanmaruFirstPaint: round === 1,
         passthrough: true,
         placeholder: false,
         score: r[5] + boost - (round * 0.0001) - (idx * 0.00001),
-        tags: ["sanmaru", "provider-passthrough", lane, r[3], country].filter(Boolean),
-        payload: { providerLane:r[3], providerUrl:url, country, providerPage:round, firstPaint:round === 1, fullSearchContinues:true }
+        tags: ["provider-window", lane, r[3], country].filter(Boolean),
+        payload: { providerLane:r[3], providerUrl:url, country, pageWindow:round, firstPaint:round === 1 }
       });
     }
     round++;
