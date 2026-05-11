@@ -1,4 +1,4 @@
-/* IGDC Member/Admin Modal v2.4.0
+/* IGDC Member/Admin Modal v2.4.1
    6번 권한별 서비스 패널 + 7번 안정 트리거/호환 구조 통합본.
    - Trigger: #mo-btn, [data-member-modal="open"], .js-member-admin-modal-trigger, .js-seller-modal-trigger
    - Legacy compatibility: openModal('apply'), injectModal(), openMemberAdminModal()
@@ -10,7 +10,7 @@
 
   if (window.IGDCMemberAdminModal && window.IGDCMemberAdminModal.__version) return;
 
-  var VERSION = '2.4.0';
+  var VERSION = '2.4.1';
   var DEFAULT_API = '/.netlify/functions/member-admin';
   var ROOT_ID = 'igdc-member-admin-root';
   var STYLE_ID = 'igdc-member-admin-style-v2';
@@ -58,7 +58,8 @@
     site_manager_tour_om: 10,
     site_manager_tour_op: 11,
     site_manager_tour: 12,
-    coordinator_director: 14,
+    coordinator_director: 13,
+    site_manager_director: 14,
     director: 15,
     admin: 20,
     owner: 30
@@ -84,7 +85,7 @@
         submit: '서류 제출',
         question: '질문/문의',
         notice: '공지사항',
-        adminMembers: '회원 목록',
+        adminMembers: '회원 목록/승급 검토',
         adminQueue: '승급/검토',
         adminNotice: '답글/공지 관리'
       }
@@ -108,7 +109,7 @@
         submit: 'Documents',
         question: 'Questions',
         notice: 'Notices',
-        adminMembers: 'Members',
+        adminMembers: 'Members/Review',
         adminQueue: 'Review',
         adminNotice: 'Replies/Notices'
       }
@@ -178,9 +179,33 @@
     if (!roles.length) return 'guest';
     return roles.sort(function (a,b) { return roleLevel(b) - roleLevel(a); })[0];
   }
+  function isManagerRole(role) {
+    role = normalizeRole(role);
+    return role === 'owner' || role === 'admin' || role === 'director' || role === 'site_manager_director';
+  }
   function canAdmin(roles) {
     roles = unique(roles);
-    return roles.some(function (r) { return roleLevel(r) >= 10 || r.indexOf('admin') >= 0 || r.indexOf('owner') >= 0; });
+    return roles.some(isManagerRole);
+  }
+  function managerRole(roles) {
+    roles = unique(roles).filter(isManagerRole);
+    return highestRole(roles);
+  }
+  function canViewOrManageRole(myRoles, targetRoles) {
+    var mine = managerRole(myRoles);
+    if (!isManagerRole(mine)) return false;
+    var target = highestRole(targetRoles || []);
+    if (mine === 'owner') return true;
+    if (mine === 'admin') return target !== 'owner';
+    return roleLevel(target) < roleLevel(mine);
+  }
+  function canAssignRole(myRoles, targetRole) {
+    var mine = managerRole(myRoles);
+    targetRole = normalizeRole(targetRole);
+    if (!isManagerRole(mine)) return false;
+    if (mine === 'owner') return true;
+    if (mine === 'admin') return targetRole !== 'owner';
+    return roleLevel(targetRole) < roleLevel(mine);
   }
   function roleEngineRole() {
     try { if (typeof window.getUserRole === 'function') return window.getUserRole(); } catch (e) {}
@@ -438,7 +463,6 @@
       tab('question', labels.tabs.question) +
       tab('notice', labels.tabs.notice) +
       tab('admin-members', labels.tabs.adminMembers, true) +
-      tab('admin-queue', labels.tabs.adminQueue, true) +
       tab('admin-notice', labels.tabs.adminNotice, true) +
     '</aside>';
   }
@@ -457,7 +481,7 @@
   }
   function titleForTab(labels) {
     var m = labels.tabs;
-    return ({'member-home':m.memberHome,'submit':m.submit,'question':m.question,'notice':m.notice,'admin-members':m.adminMembers,'admin-queue':m.adminQueue,'admin-notice':m.adminNotice})[STATE.tab] || m.memberHome;
+    return ({'member-home':m.memberHome,'submit':m.submit,'question':m.question,'notice':m.notice,'admin-members':m.adminMembers,'admin-queue':m.adminMembers,'admin-notice':m.adminNotice})[STATE.tab] || m.memberHome;
   }
   function renderTab(labels, me, admin) {
     if (STATE.tab.indexOf('admin-') === 0 && !admin) return '<div class="card"><h4>'+esc(labels.noAccess)+'</h4></div>';
@@ -466,7 +490,6 @@
     if (STATE.tab === 'question') return questionHtml(admin);
     if (STATE.tab === 'notice') return noticeHtml(admin);
     if (STATE.tab === 'admin-members') return adminMembersHtml(labels);
-    if (STATE.tab === 'admin-queue') return adminQueueHtml();
     if (STATE.tab === 'admin-notice') return adminNoticeHtml();
     return '';
   }
@@ -532,32 +555,44 @@
       'site_manager.donation.op',
       'site_manager.donation',
       'coordinator_director',
+      'site_manager_director',
       'director',
       'admin',
       'owner'
     ]);
-    return roles.map(function (r) { return '<option value="'+esc(r)+'" '+(normalizeRole(current)===normalizeRole(r)?'selected':'')+'>'+esc(r)+'</option>'; }).join('');
+    var myRoles = (STATE.me && STATE.me.roles) || readRoles();
+    var filtered = roles.filter(function (r) { return canAssignRole(myRoles, r); });
+    if (current && filtered.map(normalizeRole).indexOf(normalizeRole(current)) < 0 && canAssignRole(myRoles, current)) filtered.unshift(current);
+    return filtered.map(function (r) { return '<option value="'+esc(r)+'" '+(normalizeRole(current)===normalizeRole(r)?'selected':'')+'>'+esc(r)+'</option>'; }).join('');
   }
   function adminMembersHtml(labels) {
-    var rows = STATE.members.map(function (m) {
+    var myRoles = (STATE.me && STATE.me.roles) || readRoles();
+    var visibleMembers = (STATE.members || []).filter(function (m) {
+      var roles = unique(m.roles || (m.app_metadata && m.app_metadata.roles) || []);
+      return canViewOrManageRole(myRoles, roles);
+    });
+    var rows = visibleMembers.map(function (m) {
       var roles = unique(m.roles || (m.app_metadata && m.app_metadata.roles) || []);
       var role = highestRole(roles);
+      var canManage = canViewOrManageRole(myRoles, roles);
+      var options = rolesForSelect(role);
       return '<div class="igdc-ma-member-row" data-user-id="'+esc(m.user_id || m.id || '')+'">'+
         '<div class="igdc-ma-member-id">'+esc(m.user_id || '')+'</div>'+ 
         '<div class="igdc-ma-member-name"><b>'+esc(m.name || m.nickname || '')+'</b><br><span class="muted">'+esc(m.email || '')+'</span></div>'+ 
         '<div>'+roles.map(function (r) { return '<span class="badge">'+esc(r)+'</span>'; }).join('')+'</div>'+ 
-        '<div><select data-role-select>'+rolesForSelect(role)+'</select></div>'+ 
-        '<div class="igdc-ma-member-actions"><button data-action="save-role">변경</button><button data-action="block-user" class="danger">차단</button></div>'+ 
+        '<div>'+(canManage && options ? '<select data-role-select>'+options+'</select>' : '<span class="muted">권한 없음</span>')+'</div>'+ 
+        '<div class="igdc-ma-member-actions">'+(canManage && options ? '<button data-action="save-role">변경</button><button data-action="block-user" class="danger">차단</button>' : '')+'</div>'+ 
       '</div>';
     }).join('');
-    return '<div class="card igdc-ma-member-card"><div class="row" style="justify-content:space-between"><h4>OS0/Auth0 회원 목록</h4><button data-action="reload-members">'+esc(labels.refresh)+'</button></div>'+ 
+    return '<div class="card igdc-ma-member-card"><div class="row" style="justify-content:space-between"><h4>OS0/Auth0 회원 목록 / 승급 검토</h4><button data-action="reload-members">'+esc(labels.refresh)+'</button></div>'+ 
+      '<div class="muted" style="margin-bottom:8px">현재 롤 확인, 변경 롤 선택, 승급 검토, 차단 관리를 이 목록에서 함께 처리합니다. owner만 owner를 볼 수 있고, admin은 owner를 볼 수 없습니다. director/site_manager_director는 자기보다 아래 롤만 관리합니다.</div>'+
       '<div class="row igdc-ma-member-tools"><input id="igdc-member-search" value="'+esc(STATE.query)+'" placeholder="'+esc(labels.searchPlaceholder)+'"><button data-action="search-members">검색</button></div>'+ 
       (STATE.loading?'<div class="muted">'+esc(labels.loading)+'</div>':'')+
       '<div class="igdc-ma-member-list">'+
-        '<div class="igdc-ma-member-head"><div>User ID</div><div>회원</div><div>현재 롤</div><div>변경 롤</div><div>관리</div></div>'+
-        (rows || '<div class="igdc-ma-member-row"><div class="muted" style="grid-column:1/-1">회원 목록이 없거나 API 연결 대기 중입니다.</div></div>')+
+        '<div class="igdc-ma-member-head"><div>User ID</div><div>회원</div><div>현재 롤</div><div>변경 롤/승급 검토</div><div>관리</div></div>'+
+        (rows || '<div class="igdc-ma-member-row"><div class="muted" style="grid-column:1/-1">관리 권한으로 볼 수 있는 회원이 없거나 API 연결 대기 중입니다.</div></div>')+
       '</div>'+ 
-      '<div class="muted" style="margin-top:8px">총 '+esc(STATE.total || STATE.members.length)+'명 / 페이지 '+esc(STATE.page + 1)+'</div></div>';
+      '<div class="muted" style="margin-top:8px">표시 '+esc(visibleMembers.length)+'명 / 서버 조회 '+esc(STATE.total || STATE.members.length)+'명 / 페이지 '+esc(STATE.page + 1)+'</div></div>';
   }
   function adminQueueHtml() {
     return '<div class="card"><h4>승급/검토 큐</h4><div class="muted">일반→프리미엄/스페셜/커머스 및 상위 20단계 롤 검토 요청을 관리하는 영역입니다. 서버 API의 review queue 연결 시 자동 표시됩니다.</div><br><button data-action="reload-review-queue">검토 큐 새로고침</button></div>';
@@ -584,7 +619,7 @@
     else if (act === 'save-role') saveRole(action.closest('[data-user-id]'));
     else if (act === 'block-user') blockUser(action.closest('[data-user-id]'));
     else if (act === 'request-upgrade') requestUpgrade(action.getAttribute('data-role'));
-    else if (act === 'reload-review-queue') setError('검토 큐 API 연결이 필요합니다.');
+    else if (act === 'reload-review-queue') { STATE.tab = 'admin-members'; loadMembers(); }
   }
   function handleChange(ev) {
     if (ev.target && ev.target.id === 'igdc-member-search') STATE.query = ev.target.value;
@@ -637,6 +672,7 @@
     var sel = row.querySelector('[data-role-select]');
     var role = sel && sel.value;
     if (!userId || !role) return;
+    if (!canAssignRole((STATE.me && STATE.me.roles) || readRoles(), role)) { setError('현재 권한으로는 해당 롤로 변경할 수 없습니다.'); return; }
     if (!confirm('회원 롤을 '+role+' 로 변경할까요?')) return;
     apiPost('update-role', {user_id:userId, role:role}).then(loadMembers).catch(function (e) { setError(e.message); });
   }
