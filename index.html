@@ -1273,9 +1273,7 @@ window.addEventListener('DOMContentLoaded', function() {
       state: state,
       nonce: nonce,
       prompt: "login",
-      max_age: "0",
-      // NAVER re-auth guard: Auth0 may use this only when the upstream connection supports/passes it.
-      auth_type: "reauthenticate"
+      max_age: "0"
     });
     const authz = "https://" + AUTH0_DOMAIN + "/authorize?" + params.toString();
     location.href = authz;
@@ -1329,7 +1327,7 @@ window.addEventListener('DOMContentLoaded', function() {
 })();
 </script>
 
-<!-- IGDC OS Login Provider Patch v2.5.3: provider chooser visual polish + safe logout/naver reauth -->
+<!-- IGDC OS Login Provider Patch v2.5.4: provider chooser visual polish + safe logout/naver reauth -->
 <style id="igdc-provider-login-style">
 #igdc-provider-login-mask{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:2147483644;display:none}
 #igdc-provider-login-modal{position:fixed;left:50%;top:48%;transform:translate(-50%,-50%);width:min(405px,90vw);background:#fff;color:#1f2937;border-radius:0;box-shadow:0 18px 46px rgba(0,0,0,.26);z-index:2147483645;padding:28px 30px 24px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;display:none}
@@ -1351,11 +1349,11 @@ window.addEventListener('DOMContentLoaded', function() {
 #igdc-provider-login-modal .igdc-provider-cancel{margin-top:12px;width:100%;height:42px;border:1px solid #d0d7de;border-radius:4px;background:#fff;font-weight:600;color:#555;cursor:pointer}
 @media(max-width:480px){#igdc-provider-login-modal{padding:24px 18px 20px}#igdc-provider-login-modal h3{font-size:24px}#igdc-provider-login-modal button[data-provider]{font-size:16px}}
 </style>
-<script id="igdc-oslogin-provider-patch-v253">
+<script id="igdc-oslogin-provider-patch-v254">
 (function(){
   'use strict';
-  if (window.__IGDC_OSLOGIN_PROVIDER_PATCH_V253__) return;
-  window.__IGDC_OSLOGIN_PROVIDER_PATCH_V253__ = true;
+  if (window.__IGDC_OSLOGIN_PROVIDER_PATCH_V254__) return;
+  window.__IGDC_OSLOGIN_PROVIDER_PATCH_V254__ = true;
 
   var AUTH0_DOMAIN = 'login.igdcglobal.com';
   var CLIENT_ID = '4JeT1Fdy' + 'DZaN7nEO' + 'DVsKe2Sx8' + 'kKMWagj';
@@ -1435,13 +1433,26 @@ window.addEventListener('DOMContentLoaded', function() {
       state:state,
       nonce:nonce
     });
-    if(cfg && cfg.connection) params.set('connection', cfg.connection);
+    /*
+      Social provider routing rule:
+      - Google/Facebook/Apple may use direct Auth0 connection routing.
+      - Naver is routed through Auth0 Universal Login instead of forcing a direct upstream connection.
+        This restores the stable Auth0/Naver pipeline and prevents silent guest fallback.
+      - WeChat must be enabled as an Auth0 connection before direct routing is safe; until then,
+        route through Universal Login so it never falls back to guest silently.
+    */
+    var directConnectionAllowed = providerKey && providerKey !== 'naver' && providerKey !== 'wechat';
+    if(cfg && cfg.connection && directConnectionAllowed) params.set('connection', cfg.connection);
     if(loginHint) params.set('login_hint', loginHint);
     if(providerKey === 'naver'){
-      // Keep only standard Auth0/OIDC re-auth parameters.
-      // Non-standard upstream parameters can trigger unstable provider callback behavior.
       params.set('prompt','login');
       params.set('max_age','0');
+      params.set('screen_hint','login');
+      try{ sessionStorage.setItem('igdc.requested.provider', 'naver'); }catch(e){}
+    }else if(providerKey === 'wechat'){
+      params.set('prompt','login');
+      params.set('screen_hint','login');
+      try{ sessionStorage.setItem('igdc.requested.provider', 'wechat'); }catch(e){}
     }else if(providerKey === 'apple'){
       params.set('prompt','login');
     }
@@ -1524,7 +1535,7 @@ window.addEventListener('DOMContentLoaded', function() {
   document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeChooser(); });
 })();
 </script>
-<!-- END IGDC OS Login Provider Patch v2.5.3 -->
+<!-- END IGDC OS Login Provider Patch v2.5.4 -->
 
 <!-- Auth0 SPA SDK -->
 <script src="https://cdn.jsdelivr.net/npm/@auth0/auth0-spa-js@2.1.3/dist/auth0-spa-js.production.js"></script>
