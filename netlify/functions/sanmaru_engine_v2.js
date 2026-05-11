@@ -1171,6 +1171,163 @@ function buildRouteFallbackCards(q, routePlan, opts){
 }
 
 
+
+function sanmaruOsLaneSearchUrl(spec, q, page, country){
+  const enc = encodeURIComponent(q || "");
+  const countryCode = normalizeCountryCode(country) || "GLOBAL";
+  const start10 = Math.max(0, (page - 1) * 10);
+  const start1 = start10 + 1;
+  const provider = s(spec.provider).toLowerCase();
+  const lane = s(spec.lane || spec.category || "web").toLowerCase();
+  const topic = s(spec.topic || spec.label || "");
+  const composed = [q, topic].filter(Boolean).join(" ");
+  const composedEnc = encodeURIComponent(composed);
+  const site = s(spec.site || "");
+
+  if(provider === "naver"){
+    const whereMap = { web:"web", news:"news", blog:"blog", cafe:"article", image:"image", video:"video", local:"place", map:"place", shopping:"shopping", knowledge:"kin", book:"book" };
+    const where = whereMap[lane] || "web";
+    return "https://search.naver.com/search.naver?where=" + encodeURIComponent(where) + "&query=" + composedEnc + "&start=" + start1;
+  }
+  if(provider === "google"){
+    if(lane === "news") return "https://news.google.com/search?q=" + composedEnc + "&ceid=" + encodeURIComponent(countryCode === "KR" ? "KR:ko" : "US:en");
+    if(lane === "image") return "https://www.google.com/search?tbm=isch&q=" + composedEnc + "&start=" + start10;
+    if(lane === "video") return "https://www.google.com/search?tbm=vid&q=" + composedEnc + "&start=" + start10;
+    if(lane === "local" || lane === "map") return "https://www.google.com/maps/search/" + composedEnc;
+    if(site) return "https://www.google.com/search?q=" + encodeURIComponent(composed + " site:" + site) + "&start=" + start10;
+    return "https://www.google.com/search?q=" + composedEnc + "&start=" + start10;
+  }
+  if(provider === "bing"){
+    const first = Math.max(1, start1);
+    if(lane === "news") return "https://www.bing.com/news/search?q=" + composedEnc + "&first=" + first;
+    if(lane === "image") return "https://www.bing.com/images/search?q=" + composedEnc + "&first=" + first;
+    if(lane === "video") return "https://www.bing.com/videos/search?q=" + composedEnc + "&first=" + first;
+    if(lane === "local" || lane === "map") return "https://www.bing.com/maps?q=" + composedEnc;
+    return "https://www.bing.com/search?q=" + composedEnc + "&first=" + first;
+  }
+  if(provider === "youtube") return "https://www.youtube.com/results?search_query=" + composedEnc + (page > 1 ? "&page=" + page : "");
+  if(provider === "duckduckgo") return "https://duckduckgo.com/?q=" + composedEnc;
+  if(provider === "yahoo") return "https://search.yahoo.com/search?p=" + composedEnc + "&b=" + start1;
+  if(provider === "baidu") return "https://www.baidu.com/s?wd=" + composedEnc + "&pn=" + start10;
+  if(provider === "yandex") return "https://yandex.com/search/?text=" + composedEnc + "&p=" + Math.max(0, page - 1);
+  if(provider === "wiki") return "https://www.google.com/search?q=" + encodeURIComponent(composed + " wikipedia encyclopedia") + "&start=" + start10;
+  if(provider === "public-data") return "https://www.google.com/search?q=" + encodeURIComponent(composed + " government public data official dataset") + "&start=" + start10;
+  if(provider === "academic") return "https://scholar.google.com/scholar?q=" + composedEnc + "&start=" + start10;
+  if(provider === "instagram") return "https://www.google.com/search?q=" + encodeURIComponent(composed + " site:instagram.com") + "&start=" + start10;
+  if(provider === "facebook") return "https://www.google.com/search?q=" + encodeURIComponent(composed + " site:facebook.com") + "&start=" + start10;
+  if(provider === "tiktok") return "https://www.google.com/search?q=" + encodeURIComponent(composed + " site:tiktok.com") + "&start=" + start10;
+  if(provider === "x-twitter") return "https://www.google.com/search?q=" + encodeURIComponent(composed + " site:x.com OR site:twitter.com") + "&start=" + start10;
+  if(provider === "threads") return "https://www.google.com/search?q=" + encodeURIComponent(composed + " site:threads.net") + "&start=" + start10;
+  return routeProviderSearchUrl(provider, composed);
+}
+
+function sanmaruOsLaneSpecs(q, opts){
+  opts = opts || {};
+  const country = normalizeCountryCode(firstNonEmpty(opts.country, opts.region, opts.geo, opts.runtimeRegion)) || "GLOBAL";
+  const searchType = normalizeSearchType(opts.searchType || opts.type || "all");
+  const geo = (typeof buildGeoRouteContext === "function") ? buildGeoRouteContext(q, { country, lang:opts.lang }) : { effectiveCountry:country };
+  const cats = classifyQueryCategories(q, searchType);
+  const lanePlan = (typeof buildCategoryLanePlan === "function") ? buildCategoryLanePlan(q, cats, geo) : { lanes:[] };
+  const preferredLanes = new Set((Array.isArray(lanePlan && lanePlan.lanes) ? lanePlan.lanes.map(x => s(x.lane || x.name || x)) : []).concat(cats || []).concat([searchType, "web", "official", "news", "blog", "video", "image", "local", "knowledge", "sns"]));
+
+  const base = [
+    { provider:"google", lane:"web", label:"Google Web", topic:"" },
+    { provider:"google", lane:"official", label:"Google Official", topic:"official site" },
+    { provider:"google", lane:"news", label:"Google News", topic:"news" },
+    { provider:"google", lane:"image", label:"Google Images", topic:"photo image" },
+    { provider:"google", lane:"video", label:"Google Video", topic:"video" },
+    { provider:"google", lane:"local", label:"Google Maps/Local", topic:"map local" },
+    { provider:"naver", lane:"web", label:"Naver Web", topic:"" },
+    { provider:"naver", lane:"news", label:"Naver News", topic:"뉴스" },
+    { provider:"naver", lane:"blog", label:"Naver Blog", topic:"블로그 후기 정보" },
+    { provider:"naver", lane:"cafe", label:"Naver Cafe/Community", topic:"카페 커뮤니티" },
+    { provider:"naver", lane:"image", label:"Naver Image", topic:"이미지 사진" },
+    { provider:"naver", lane:"video", label:"Naver Video", topic:"영상" },
+    { provider:"naver", lane:"local", label:"Naver Local/Map", topic:"지도 지역" },
+    { provider:"bing", lane:"web", label:"Bing Web", topic:"" },
+    { provider:"bing", lane:"news", label:"Bing News", topic:"news" },
+    { provider:"bing", lane:"image", label:"Bing Images", topic:"image" },
+    { provider:"bing", lane:"video", label:"Bing Video", topic:"video" },
+    { provider:"youtube", lane:"video", label:"YouTube", topic:"" },
+    { provider:"wiki", lane:"knowledge", label:"Wiki / Encyclopedia", topic:"wikipedia encyclopedia" },
+    { provider:"public-data", lane:"official", label:"Public Data / Government", topic:"official public data government" },
+    { provider:"academic", lane:"academic", label:"Academic / Scholar", topic:"research paper academic" },
+    { provider:"duckduckgo", lane:"web", label:"DuckDuckGo", topic:"" },
+    { provider:"yahoo", lane:"web", label:"Yahoo", topic:"" },
+    { provider:"instagram", lane:"sns", label:"Instagram Public", topic:"" },
+    { provider:"facebook", lane:"sns", label:"Facebook Public", topic:"" },
+    { provider:"tiktok", lane:"sns", label:"TikTok Public", topic:"" },
+    { provider:"x-twitter", lane:"sns", label:"X/Twitter Public", topic:"" },
+    { provider:"threads", lane:"sns", label:"Threads Public", topic:"" }
+  ];
+
+  const localWords = /맛집|음식|식당|카페|커피|호텔|숙소|관광|여행|병원|학교|시장|농협|수협|공장|업체|상점|매장|restaurant|cafe|coffee|hotel|tour|travel|local|map|busan|seoul|서울|부산|대구|인천|광주|대전|울산|제주/.test(String(q || "").toLowerCase());
+  const countryPriority = SANMARU_COUNTRY_PROVIDER_PRIORITY[country] || SANMARU_COUNTRY_PROVIDER_PRIORITY.GLOBAL || [];
+  const boostProvider = new Set(countryPriority);
+
+  return base.map((spec, idx) => {
+    const lane = spec.lane;
+    const p = spec.provider;
+    let score = 0.72 - idx * 0.002;
+    if(preferredLanes.has(lane) || preferredLanes.has(spec.provider)) score += 0.08;
+    if(boostProvider.has(p) || boostProvider.has(p === "google" ? "google" : p)) score += 0.05;
+    if(localWords && (lane === "local" || lane === "image" || lane === "video" || lane === "blog")) score += 0.09;
+    if(country === "KR" && p === "naver") score += 0.07;
+    if(country !== "KR" && (p === "google" || p === "bing")) score += 0.04;
+    return Object.assign({}, spec, { score, country });
+  }).sort((a,b) => b.score - a.score);
+}
+
+function buildSanmaruResidentOsSupplyCards(q, opts){
+  opts = opts || {};
+  const cleanQ = firstNonEmpty(q, opts.q, opts.query);
+  if(!cleanQ) return [];
+  const country = normalizeCountryCode(firstNonEmpty(opts.country, opts.region, opts.geo, opts.runtimeRegion)) || "GLOBAL";
+  const searchType = normalizeSearchType(opts.searchType || opts.type || "all");
+  const target = clampInt(firstNonEmpty(opts.osSupplyTarget, opts.providerLaneTarget, opts.candidatePoolTarget, opts.limit), DEFAULT_CANDIDATE_POOL_TARGET, 100, MAX_LIMIT);
+  const pageWindow = clampInt(firstNonEmpty(opts.osProviderPages, opts.providerPages), Math.ceil(target / 28), 4, 220);
+  const specs = sanmaruOsLaneSpecs(cleanQ, Object.assign({}, opts, { country, searchType }));
+  const out = [];
+  const seen = new Set();
+  for(let page=1; page<=pageWindow && out.length<target; page++){
+    for(const spec of specs){
+      if(out.length >= target) break;
+      const url = sanmaruOsLaneSearchUrl(spec, cleanQ, page, country);
+      const key = [spec.provider, spec.lane, page, url].join("|").toLowerCase();
+      if(seen.has(key)) continue;
+      seen.add(key);
+      const lane = spec.lane || "web";
+      const titlePrefix = page === 1 ? "[Sanmaru OS] " : "[Sanmaru OS p" + page + "] ";
+      out.push(canonicalItem({
+        id:"sanmaru-oslane-" + stableHash([cleanQ, country, spec.provider, lane, page, spec.topic || ""].join("|")),
+        title:titlePrefix + cleanQ + " · " + spec.label,
+        summary:"산마루 상주 정보 OS가 " + spec.label + " 레이어를 즉시 열어 둔 공급 카드입니다. 실제 provider/API 결과와 Search Bank 보강은 같은 검색 흐름에서 계속 병합됩니다.",
+        description:"Sanmaru resident information OS provider-lane supply card",
+        url,
+        link:url,
+        source:"sanmaru_os_" + spec.provider,
+        provider:spec.provider,
+        type: lane === "official" ? "web" : lane,
+        mediaType: lane === "video" ? "video" : (lane === "image" ? "image" : "article"),
+        category: lane,
+        lane,
+        searchCategory: lane,
+        country,
+        pageHint: page,
+        sourceType:"sanmaru-resident-os-provider-lane",
+        sanmaruResidentOs:true,
+        sanmaruFirstPaint:true,
+        fullSearchContinues:true,
+        passthrough:true,
+        score: (spec.score || 0.7) - (page * 0.0005),
+        tags:["sanmaru-os", spec.provider, lane, country, searchType].filter(Boolean),
+        payload:{ providerLane:spec.provider, lane, country, page, osSupply:true, fullSearchContinues:true }
+      }, cleanQ, "sanmaru-os-" + spec.provider));
+    }
+  }
+  return out;
+}
+
 function buildOpeningFallbackCards(q, opts){
   opts = opts || {};
   const enc = encodeURIComponent(q || "");
@@ -1238,6 +1395,7 @@ function supplyResidentSync(input, opts){
   const residentState = ensureResidentState();
   let routeFallbackCards = [];
   let openingFallbackCards = [];
+  let osSupplyCards = [];
   let items = dedupeItems(residentItems.concat(indexItems));
 
   // Sanmaru should always know and expose the major information roads
@@ -1251,7 +1409,14 @@ function supplyResidentSync(input, opts){
   if(opts.allowOpeningCards !== false && opts.noOpeningCards !== true){
     openingFallbackCards = buildOpeningFallbackCards(clean.value, Object.assign({}, opts, { openingCardLimit: clampInt(opts.openingCardLimit, 24, 1, 40) }));
   }
-  items = dedupeItems(items.concat(routeFallbackCards, openingFallbackCards));
+  if(opts.allowOsSupplyCards !== false && opts.noOsSupplyCards !== true){
+    osSupplyCards = buildSanmaruResidentOsSupplyCards(clean.value, Object.assign({}, opts, {
+      country:firstNonEmpty(opts.country, opts.region, opts.geo, opts.runtimeRegion),
+      searchType:searchTypeForCache,
+      osSupplyTarget:clampInt(firstNonEmpty(opts.osSupplyTarget, opts.providerLaneTarget, opts.candidatePoolTarget, opts.limit), DEFAULT_CANDIDATE_POOL_TARGET, 100, MAX_LIMIT)
+    }));
+  }
+  items = dedupeItems(items.concat(routeFallbackCards, openingFallbackCards, osSupplyCards));
   if(items.length < minVisible) items = items.slice(0, minVisible);
   const cacheKey = queryCacheHit ? (exactCacheKey || noPageCacheKey) : (rememberResidentQueryCache(clean.value, opts, items) || residentCacheKey(clean.value, opts));
 
@@ -1270,6 +1435,8 @@ function supplyResidentSync(input, opts){
       searchBankIndex:indexMeta,
       routeFallbackCount:routeFallbackCards.length,
       openingFallbackCount:openingFallbackCards.length,
+      osSupplyCount:osSupplyCards.length,
+      residentOsSupply:true,
       queryCacheHit,
       cachedQueryHit:queryCacheHit,
       fromQueryCache:queryCacheHit,
@@ -1294,7 +1461,8 @@ function supplyResidentSync(input, opts){
         perPage:DEFAULT_VISIBLE_PER_PAGE,
         noProviderRescanWhenBroadQueryCacheCovered:true,
         noProviderRescanWhenViewportCovered:false,
-        expansion:"opening-signal-and-mounted-route-map"
+        expansion:"opening-signal-mounted-route-map-and-resident-os-provider-lane",
+        osSupplyCards:"provider-lane-index-cards-prebuilt-by-sanmaru-resident-os"
       },
       logosGuard: logosEvaluate(logosSignalsForQuery(clean.value, { queryRisk:null }), "resident-supply"),
       openingSignals: openingSignalsSnapshot(),
@@ -2892,7 +3060,8 @@ module.exports = {
   triggerDeepRefresh,
   absorbResidentItems,
   buildSanmaruInstantOsPackage,
-  buildSanmaruFrontSupplyPackage
+  buildSanmaruFrontSupplyPackage,
+  buildSanmaruResidentOsSupplyCards
 };
 
 exports.version = VERSION;
@@ -2916,4 +3085,5 @@ exports.triggerDeepRefresh = triggerDeepRefresh;
 exports.absorbResidentItems = absorbResidentItems;
 exports.buildSanmaruInstantOsPackage = buildSanmaruInstantOsPackage;
 exports.buildSanmaruFrontSupplyPackage = buildSanmaruFrontSupplyPackage;
+exports.buildSanmaruResidentOsSupplyCards = buildSanmaruResidentOsSupplyCards;
 try { ensureResidentBoot({ reason:"module-load" }); } catch(e) {}
