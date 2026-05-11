@@ -400,7 +400,7 @@ function syncSearchFromUrl(run = true) {
     runSearch(qp, activeType).then(() => {
       currentPage = pageParam;
       currentBlock = blockParam;
-      renderPage(currentPage);
+      loadServerPageAndRender(currentPage);
     });
   } else if (run && !qp) {
     allItems = [];
@@ -450,7 +450,7 @@ window.addEventListener('popstate', (e) => {
     runSearch(q, nextType).then(() => {
       currentPage = page;
       currentBlock = block;
-      renderPage(currentPage);
+      loadServerPageAndRender(currentPage);
     });
     return;
   }
@@ -458,7 +458,7 @@ window.addEventListener('popstate', (e) => {
   // 5️⃣ 바로 페이지 복원
   currentPage = page;
   currentBlock = block;
-  renderPage(currentPage);
+  loadServerPageAndRender(currentPage);
 });
 
 if (q0) {
