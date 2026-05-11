@@ -2714,29 +2714,30 @@ function sanmaruProviderPassthroughCards(q, opts){
   const enc = encodeURIComponent(query);
   const country = firstNonEmpty(opts.country, opts.region, opts.geo, opts.runtimeRegion, "GLOBAL");
   const type = s(firstNonEmpty(opts.searchType, opts.type, opts.category, opts.tab, opts.vertical, "all")).toLowerCase();
+  const requestedNeed = clampInt(firstNonEmpty(opts.need, opts.target, opts.limit, opts.candidatePoolTarget, 300), 300, 1, MAX_LIMIT);
 
   const rows = [
-    ["provider-google-web", "Google 통합 검색", "https://www.google.com/search?q=" + enc, "google", "web", 0.997],
-    ["provider-google-news", "Google 뉴스", "https://news.google.com/search?q=" + enc, "google-news", "news", 0.992],
-    ["provider-google-video", "Google 영상", "https://www.google.com/search?tbm=vid&q=" + enc, "google-video", "video", 0.986],
-    ["provider-google-image", "Google 이미지", "https://www.google.com/search?tbm=isch&q=" + enc, "google-image", "image", 0.982],
-    ["provider-google-maps", "Google Maps / 지도", "https://www.google.com/maps/search/" + enc, "google-maps", "local", 0.981],
-    ["provider-naver-map", "Naver Map / 지도", "https://map.naver.com/p/search/" + enc, "naver-map", "local", 0.981],
-    ["provider-local-photo", "지역 사진 / 스냅샷", "https://www.google.com/search?tbm=isch&q=" + enc, "local-photo", "image", 0.980],
-    ["provider-local-video", "지역 영상 / 리뷰", "https://www.youtube.com/results?search_query=" + enc, "local-video", "video", 0.979],
-    ["provider-naver-all", "Naver 통합 검색", "https://search.naver.com/search.naver?query=" + enc, "naver", "web", 0.996],
-    ["provider-naver-news", "Naver 뉴스", "https://search.naver.com/search.naver?where=news&query=" + enc, "naver-news", "news", 0.991],
-    ["provider-naver-blog", "Naver 블로그", "https://search.naver.com/search.naver?where=blog&query=" + enc, "naver-blog", "blog", 0.989],
-    ["provider-naver-cafe", "Naver 카페", "https://search.naver.com/search.naver?where=article&query=" + enc, "naver-cafe", "community", 0.984],
-    ["provider-bing-web", "Bing 통합 검색", "https://www.bing.com/search?q=" + enc, "bing", "web", 0.990],
-    ["provider-youtube", "YouTube 영상", "https://www.youtube.com/results?search_query=" + enc, "youtube", "video", 0.987],
-    ["provider-wikipedia", "Wikipedia / 백과", "https://www.google.com/search?q=" + encodeURIComponent(query + " wikipedia encyclopedia"), "wikipedia", "knowledge", 0.978],
-    ["provider-namuwiki", "나무위키 / 지식", "https://www.google.com/search?q=" + encodeURIComponent(query + " 나무위키"), "namuwiki", "knowledge", 0.973],
-    ["provider-instagram", "Instagram 공개 검색", "https://www.google.com/search?q=" + encodeURIComponent("site:instagram.com " + query), "instagram", "sns", 0.968],
-    ["provider-facebook", "Facebook 공개 검색", "https://www.google.com/search?q=" + encodeURIComponent("site:facebook.com " + query), "facebook", "sns", 0.966],
-    ["provider-x-twitter", "X/Twitter 공개 검색", "https://www.google.com/search?q=" + encodeURIComponent("(site:x.com OR site:twitter.com) " + query), "x-twitter", "sns", 0.965],
-    ["provider-tiktok", "TikTok 공개 검색", "https://www.google.com/search?q=" + encodeURIComponent("site:tiktok.com " + query), "tiktok", "sns", 0.964],
-    ["provider-public-data", "공공 데이터 / 공식 자료", "https://www.google.com/search?q=" + encodeURIComponent(query + " public data government official dataset 공공데이터 공식"), "public-data", "official", 0.980]
+    ["provider-google-web", "Google 통합 검색", (page)=>"https://www.google.com/search?q=" + enc + "&start=" + Math.max(0, (page - 1) * 10), "google", "web", 0.997],
+    ["provider-google-news", "Google 뉴스", (page)=>"https://news.google.com/search?q=" + enc + "&maru_page=" + page, "google-news", "news", 0.992],
+    ["provider-google-video", "Google 영상", (page)=>"https://www.google.com/search?tbm=vid&q=" + enc + "&start=" + Math.max(0, (page - 1) * 10), "google-video", "video", 0.986],
+    ["provider-google-image", "Google 이미지", (page)=>"https://www.google.com/search?tbm=isch&q=" + enc + "&maru_page=" + page, "google-image", "image", 0.982],
+    ["provider-google-maps", "Google Maps / 지도", (page)=>"https://www.google.com/maps/search/" + enc + "?maru_page=" + page, "google-maps", "local", 0.981],
+    ["provider-naver-map", "Naver Map / 지도", (page)=>"https://map.naver.com/p/search/" + enc + "?maru_page=" + page, "naver-map", "local", 0.981],
+    ["provider-local-photo", "지역 사진 / 스냅샷", (page)=>"https://www.google.com/search?tbm=isch&q=" + enc + "&maru_page=" + page, "local-photo", "image", 0.980],
+    ["provider-local-video", "지역 영상 / 리뷰", (page)=>"https://www.youtube.com/results?search_query=" + enc + "&maru_page=" + page, "local-video", "video", 0.979],
+    ["provider-naver-all", "Naver 통합 검색", (page)=>"https://search.naver.com/search.naver?query=" + enc + "&start=" + Math.max(1, ((page - 1) * 10) + 1), "naver", "web", 0.996],
+    ["provider-naver-news", "Naver 뉴스", (page)=>"https://search.naver.com/search.naver?where=news&query=" + enc + "&start=" + Math.max(1, ((page - 1) * 10) + 1), "naver-news", "news", 0.991],
+    ["provider-naver-blog", "Naver 블로그", (page)=>"https://search.naver.com/search.naver?where=blog&query=" + enc + "&start=" + Math.max(1, ((page - 1) * 10) + 1), "naver-blog", "blog", 0.989],
+    ["provider-naver-cafe", "Naver 카페", (page)=>"https://search.naver.com/search.naver?where=article&query=" + enc + "&start=" + Math.max(1, ((page - 1) * 10) + 1), "naver-cafe", "community", 0.984],
+    ["provider-bing-web", "Bing 통합 검색", (page)=>"https://www.bing.com/search?q=" + enc + "&first=" + Math.max(1, ((page - 1) * 10) + 1), "bing", "web", 0.990],
+    ["provider-youtube", "YouTube 영상", (page)=>"https://www.youtube.com/results?search_query=" + enc + "&maru_page=" + page, "youtube", "video", 0.987],
+    ["provider-wikipedia", "Wikipedia / 백과", (page)=>"https://www.google.com/search?q=" + encodeURIComponent(query + " wikipedia encyclopedia") + "&start=" + Math.max(0, (page - 1) * 10), "wikipedia", "knowledge", 0.978],
+    ["provider-namuwiki", "나무위키 / 지식", (page)=>"https://www.google.com/search?q=" + encodeURIComponent(query + " 나무위키") + "&start=" + Math.max(0, (page - 1) * 10), "namuwiki", "knowledge", 0.973],
+    ["provider-instagram", "Instagram 공개 검색", (page)=>"https://www.google.com/search?q=" + encodeURIComponent("site:instagram.com " + query) + "&start=" + Math.max(0, (page - 1) * 10), "instagram", "sns", 0.968],
+    ["provider-facebook", "Facebook 공개 검색", (page)=>"https://www.google.com/search?q=" + encodeURIComponent("site:facebook.com " + query) + "&start=" + Math.max(0, (page - 1) * 10), "facebook", "sns", 0.966],
+    ["provider-x-twitter", "X/Twitter 공개 검색", (page)=>"https://www.google.com/search?q=" + encodeURIComponent("(site:x.com OR site:twitter.com) " + query) + "&start=" + Math.max(0, (page - 1) * 10), "x-twitter", "sns", 0.965],
+    ["provider-tiktok", "TikTok 공개 검색", (page)=>"https://www.google.com/search?q=" + encodeURIComponent("site:tiktok.com " + query) + "&start=" + Math.max(0, (page - 1) * 10), "tiktok", "sns", 0.964],
+    ["provider-public-data", "공공 데이터 / 공식 자료", (page)=>"https://www.google.com/search?q=" + encodeURIComponent(query + " public data government official dataset 공공데이터 공식") + "&start=" + Math.max(0, (page - 1) * 10), "public-data", "official", 0.980]
   ];
 
   const typeRank = {
@@ -2756,18 +2757,20 @@ function sanmaruProviderPassthroughCards(q, opts){
     shopping: new Set(["web","blog","community"])
   };
   const preferred = typeRank[type] || typeRank.all;
-
-  return rows
-    .map((r, idx) => {
+  const out = [];
+  let round = 1;
+  while(out.length < requestedNeed && round <= SANMARU_MAX_PAGER_PAGES){
+    for(let idx = 0; idx < rows.length && out.length < requestedNeed; idx++){
+      const r = rows[idx];
       const lane = r[4];
       const boost = preferred.has(lane) ? 0.08 : 0;
-      return {
-        id: "sanmaru-pass-" + stableHash([query, r[0], country].join("|")),
-        title: query + " · " + r[1],
-        summary: "산마루 provider passthrough: " + r[1] + " 자체 검색망으로 즉시 연결되는 1차 공급 카드입니다. 전체 MARU 검색 결과는 뒤에서 병합됩니다.",
-        description: "Provider passthrough first-paint card",
-        url: r[2],
-        link: r[2],
+      const url = typeof r[2] === "function" ? r[2](round) : r[2];
+      out.push({
+        id: "sanmaru-pass-" + stableHash([query, r[0], country, round].join("|")),
+        title: query + " · " + r[1] + (round > 1 ? " " + round + "페이지" : ""),
+        summary: "산마루 provider passthrough: " + r[1] + " 자체 검색망으로 즉시 연결되는 공급 카드입니다. 클릭된 페이지 위치에 맞춰 현재 화면 25개만 내려줍니다.",
+        description: "Provider passthrough paged supply card",
+        url, link: url,
         source: r[3],
         provider: r[3],
         type: lane,
@@ -2775,17 +2778,19 @@ function sanmaruProviderPassthroughCards(q, opts){
         category: lane,
         lane,
         country,
-        generatedBy: "sanmaru-provider-passthrough",
-        sourceType: "provider-passthrough-first-paint",
-        sanmaruFirstPaint: true,
+        generatedBy: "sanmaru-provider-passthrough-paged-window",
+        sourceType: "provider-passthrough-page-window",
+        sanmaruFirstPaint: round === 1,
         passthrough: true,
         placeholder: false,
-        score: r[5] + boost - (idx * 0.001),
+        score: r[5] + boost - (round * 0.0001) - (idx * 0.00001),
         tags: ["sanmaru", "provider-passthrough", lane, r[3], country].filter(Boolean),
-        payload: { providerLane:r[3], providerUrl:r[2], country, firstPaint:true, fullSearchContinues:true }
-      };
-    })
-    .sort((a,b) => (b.score - a.score));
+        payload: { providerLane:r[3], providerUrl:url, country, providerPage:round, firstPaint:round === 1, fullSearchContinues:true }
+      });
+    }
+    round++;
+  }
+  return out.sort((a,b) => (b.score - a.score));
 }
 
 // -----------------------------------------------------------------------------
@@ -2857,6 +2862,32 @@ function buildSanmaruInstantOsPackage(q, opts){
     ? buildSearchSkeletonPolicy(q, geoRoute)
     : { style:"google-naver-hybrid-progressive-render", pagination:{ initialPage:1, renderMode:"current-page-first" } };
 
+  const perPage = clampInt(firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit), DEFAULT_VISIBLE_PER_PAGE, 1, 100);
+  const requestedPage = clampInt(firstNonEmpty(opts.page, opts.p, opts.start, 1), 1, 1, 100000);
+  const reportedTotalCandidates = Math.max(
+    Number(supplied && supplied.meta && (supplied.meta.totalCandidates || supplied.meta.fullCandidateCount)) || 0,
+    items.length
+  );
+  const reportedTotalPages = reportedTotalCandidates
+    ? Math.min(SANMARU_MAX_PAGER_PAGES, Math.max(1, Math.ceil(reportedTotalCandidates / perPage)))
+    : 0;
+  const pageItems = items.slice((requestedPage - 1) * perPage, requestedPage * perPage);
+  const visiblePagePack = {
+    page: requestedPage,
+    perPage,
+    visibleCardsPerPage: perPage,
+    visibleCount: pageItems.length,
+    pageItems,
+    totalItems: reportedTotalCandidates,
+    totalVisibleItems: reportedTotalCandidates,
+    totalCandidates: reportedTotalCandidates,
+    fullCandidateCount: reportedTotalCandidates,
+    totalPages: reportedTotalPages,
+    hasNextPage: requestedPage < reportedTotalPages,
+    nextPage: requestedPage < reportedTotalPages ? requestedPage + 1 : null,
+    responseMode: "instant-preload-window-current-page-render"
+  };
+
   return {
     status: "ok",
     engine: ENGINE_NAME,
@@ -2866,6 +2897,12 @@ function buildSanmaruInstantOsPackage(q, opts){
     source: items.length ? "sanmaru-instant-os" : "sanmaru-instant-os-empty",
     items,
     results: items,
+    pageItems,
+    visiblePagePack,
+    totalCandidates: reportedTotalCandidates,
+    fullCandidateCount: reportedTotalCandidates,
+    totalItems: reportedTotalCandidates,
+    totalPages: reportedTotalPages,
     geoRoute,
     routePlan,
     categoryLanePlan,
@@ -2878,6 +2915,15 @@ function buildSanmaruInstantOsPackage(q, opts){
     },
     meta: Object.assign({}, supplied && supplied.meta || {}, {
       count: items.length,
+      totalCandidates: reportedTotalCandidates,
+      fullCandidateCount: reportedTotalCandidates,
+      totalItems: reportedTotalCandidates,
+      totalPages: reportedTotalPages,
+      page: requestedPage,
+      perPage,
+      visibleCount: pageItems.length,
+      responseWindowCount: items.length,
+      initialResponseWindow: Math.min(items.length, Math.max(perPage, Math.min(perPage * 12, 300))),
       providerPassthroughCount: providerPassthroughItems.length,
       elapsedMs: nowMs() - started,
       instantSupply: true,
