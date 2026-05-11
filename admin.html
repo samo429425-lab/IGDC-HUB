@@ -484,105 +484,6 @@
 
 <link rel="stylesheet" href="/assets/css/common.css">
 
-
-<style id="igdc-admin-balanced-viewport-v4">
-/* IGDC Admin balanced viewport fix v4
-   - layout only, no feature scripts touched
-   - keep sidebar/main/right panel in one balanced row
-   - never shrink sidebar to icon-strip or crush the income table
-   - when viewport/zoom is too small, keep natural horizontal overflow instead of leaving blank gaps
-*/
-html, body {
-  width: 100%;
-  min-width: 0;
-  overflow-x: auto;
-}
-body { box-sizing: border-box; }
-body *, body *::before, body *::after { box-sizing: border-box; }
-
-.container {
-  display: flex !important;
-  flex-direction: row !important;
-  flex-wrap: nowrap !important;
-  align-items: stretch !important;
-  justify-content: flex-start !important;
-  width: 100% !important;
-  min-width: 1180px !important;
-  max-width: none !important;
-  margin: 0 !important;
-  overflow: visible !important;
-}
-
-.sidebar {
-  flex: 0 0 210px !important;
-  width: 210px !important;
-  min-width: 210px !important;
-  max-width: 210px !important;
-  overflow: visible !important;
-}
-
-.main-content {
-  flex: 1 1 auto !important;
-  width: auto !important;
-  min-width: 720px !important;
-  max-width: none !important;
-  margin: 30px 20px !important;
-  padding: clamp(24px, 2.3vw, 40px) clamp(22px, 2vw, 30px) !important;
-  overflow-x: auto !important;
-  overflow-y: visible !important;
-  text-align: left !important;
-}
-
-.igdc-site-control {
-  flex: 0 0 320px !important;
-  width: 320px !important;
-  min-width: 320px !important;
-  max-width: 320px !important;
-  align-self: stretch !important;
-  overflow: auto !important;
-}
-
-#igdc-header-flex {
-  display: flex !important;
-  flex-wrap: nowrap !important;
-  align-items: flex-start !important;
-  justify-content: space-between !important;
-  gap: 16px !important;
-}
-#igdc-header-flex .titles { min-width: 0 !important; }
-#igdc-header-flex .titles h1,
-#igdc-header-flex .titles h2 {
-  word-break: keep-all !important;
-  overflow-wrap: normal !important;
-}
-#igdc-qna-launch { flex: 0 0 auto !important; }
-
-.income-table {
-  width: 100% !important;
-  min-width: 700px !important;
-  table-layout: auto !important;
-  border-collapse: collapse !important;
-}
-.income-table th,
-.income-table td {
-  white-space: nowrap !important;
-  word-break: keep-all !important;
-  padding: clamp(8px, 0.85vw, 12px) !important;
-  font-size: clamp(13px, 0.95vw, 16px) !important;
-  line-height: 1.35 !important;
-}
-
-/* account section should scroll internally instead of forcing the whole center block to collapse */
-#igdc-accounts-section { overflow-x: auto !important; }
-
-@media (max-width: 1180px) {
-  .container {
-    width: 1180px !important;
-    min-width: 1180px !important;
-  }
-}
-</style>
-
 </head>
 <body>
 <script>(function(){document.addEventListener("DOMContentLoaded",function(){document.documentElement.classList.remove("prelayout");var s=document.getElementById("prelayout-guard"); if(s&&s.parentNode){s.parentNode.removeChild(s);}});})();</script>
@@ -2356,6 +2257,50 @@ setTimeout(async function(){
   .igdc-srccell-time{font-size:12px;color:#666;line-height:1.1;}
   .igdc-srccell-tag{font-weight:700;color:#333;line-height:1.1;}
 </style>
+<script id="sidebar-shrink-guard">(function(){
+  const sidebar = document.querySelector('.sidebar');
+  const main    = document.querySelector('.main-content');
+  if(!sidebar || !main) return;
+
+  const baseSidebar = 210;
+  const minSidebar  = 50; // 최저 50px
+  let last = -1;
+
+  // 고정 한 번만 설정: 매 리사이즈마다 min/max를 재설정하지 않음(레이아웃 튐 방지)
+  sidebar.style.minWidth = minSidebar + "px";
+  sidebar.style.maxWidth = baseSidebar + "px";
+
+  function clamp(v,min,max){ return Math.max(min, Math.min(max,v)); }
+
+  function computeTarget(){
+    const vw    = Math.max(document.documentElement.clientWidth, window.innerWidth||0);
+    const mainW = main.getBoundingClientRect().width;
+    const ratio = mainW / vw; // 메인창 비율
+    if (ratio <= 0.40){ // 40% 이하부터 선형 축소 (0.30에서 최소치 도달)
+      const t = clamp((0.40 - ratio) / (0.40 - 0.30), 0, 1);
+      return Math.round(baseSidebar - t*(baseSidebar - minSidebar));
+    }
+    return baseSidebar;
+  }
+
+  let rafId = 0;
+  function apply(){
+    const target = computeTarget();
+    if (target !== last){
+      sidebar.style.width = target + "px";
+      last = target;
+    }
+    rafId = 0;
+  }
+
+  function schedule(){ if(!rafId) rafId = window.requestAnimationFrame(apply); }
+
+  window.addEventListener('resize', schedule, {passive:true});
+  window.addEventListener('orientationchange', schedule);
+  // 초기 적용
+  apply();
+})();
+</script>
 <script>
 // Fallback: 버튼 클릭 시 백엔드가 주입되었으면 해당 로직 실행, 아니면 안전 안내
 
