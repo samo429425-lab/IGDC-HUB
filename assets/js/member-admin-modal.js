@@ -10,7 +10,7 @@
 
   if (window.IGDCMemberAdminModal && window.IGDCMemberAdminModal.__version) return;
 
-  var VERSION = '2.4.1';
+  var VERSION = '2.4.2';
   var DEFAULT_API = '/.netlify/functions/member-admin';
   var ROOT_ID = 'igdc-member-admin-root';
   var STYLE_ID = 'igdc-member-admin-style-v2';
@@ -22,6 +22,8 @@
     members: [],
     notices: [],
     questions: [],
+    reviewDocs: [],
+    loadingReview: false,
     loading: false,
     error: '',
     query: '',
@@ -85,8 +87,8 @@
         submit: '서류 제출',
         question: '질문/문의',
         notice: '공지사항',
-        adminMembers: '회원 목록/승급 검토',
-        adminQueue: '승급/검토',
+        adminMembers: '회원 목록',
+        adminQueue: '승급 검토',
         adminNotice: '답글/공지 관리'
       }
     },
@@ -109,8 +111,8 @@
         submit: 'Documents',
         question: 'Questions',
         notice: 'Notices',
-        adminMembers: 'Members/Review',
-        adminQueue: 'Review',
+        adminMembers: 'Members',
+        adminQueue: 'Review Documents',
         adminNotice: 'Replies/Notices'
       }
     }
@@ -414,7 +416,13 @@
       '#'+ROOT_ID+' .igdc-ma-member-name .muted{font-size:12px!important;line-height:1.18!important}'+
       '#'+ROOT_ID+' .igdc-ma-member-actions{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-start}'+
       '#'+ROOT_ID+' .igdc-ma-member-actions button{padding:4px 7px!important;font-size:11.5px!important;border-radius:6px!important;line-height:1.15!important}'+
-      '#'+ROOT_ID+' .igdc-ma-member-row select{padding:4px 7px!important;font-size:11.5px!important;border-radius:6px!important;height:30px!important;line-height:1.15!important}'+
+      '#'+ROOT_ID+' .igdc-ma-member-row select{padding:4px 7px!important;font-size:11.5px!important;border-radius:6px!important;height:30px!important;line-height:1.15!important}'+      '#'+ROOT_ID+' .igdc-ma-review-list{border:1px solid #e5e8ee;border-radius:12px;overflow:hidden;background:#fff;display:block!important}'+
+      '#'+ROOT_ID+' .igdc-ma-review-head,#'+ROOT_ID+' .igdc-ma-review-row{display:grid!important;grid-template-columns:minmax(210px,1.2fr) minmax(170px,1fr) minmax(130px,.75fr) minmax(130px,.75fr) minmax(190px,1fr)!important;align-items:center!important;gap:6px!important}'+
+      '#'+ROOT_ID+' .igdc-ma-review-head{background:#eef4fb;color:#0b3f74;font-size:12px;font-weight:800;padding:7px 10px!important;min-height:30px!important;line-height:1.2!important}'+
+      '#'+ROOT_ID+' .igdc-ma-review-row{padding:6px 10px!important;border-top:1px solid #edf0f5!important;min-height:36px!important;margin:0!important;line-height:1.2!important}'+
+      '#'+ROOT_ID+' .igdc-ma-review-row>*{margin:0!important;padding-top:0!important;padding-bottom:0!important;min-height:0!important}'+
+      '#'+ROOT_ID+' .igdc-ma-review-row:hover{background:#f8fafc}'+
+
       '#'+ROOT_ID+' .badge{display:inline-block;border-radius:999px;background:#eef4fb;color:#0b3f74;padding:2px 7px;margin:1px 2px;font-size:11px;font-weight:700}'+
       '#'+ROOT_ID+' .error{background:#fff1f0;color:#b42318;border:1px solid #ffccc7;border-radius:10px;padding:10px;margin-bottom:10px}'+
       '#'+ROOT_ID+' .ok{background:#ecfdf3;color:#027a48;border:1px solid #abefc6;border-radius:10px;padding:10px;margin-bottom:10px}'+
@@ -439,6 +447,7 @@
     STATE.tab = tab;
     render();
     if (tab === 'admin-members') loadMembers();
+    if (tab === 'admin-queue') loadReviewDocs();
   }
   function setError(msg) { STATE.error = msg || ''; render(); }
   function render() {
@@ -463,6 +472,7 @@
       tab('question', labels.tabs.question) +
       tab('notice', labels.tabs.notice) +
       tab('admin-members', labels.tabs.adminMembers, true) +
+      tab('admin-queue', labels.tabs.adminQueue, true) +
       tab('admin-notice', labels.tabs.adminNotice, true) +
     '</aside>';
   }
@@ -481,7 +491,7 @@
   }
   function titleForTab(labels) {
     var m = labels.tabs;
-    return ({'member-home':m.memberHome,'submit':m.submit,'question':m.question,'notice':m.notice,'admin-members':m.adminMembers,'admin-queue':m.adminMembers,'admin-notice':m.adminNotice})[STATE.tab] || m.memberHome;
+    return ({'member-home':m.memberHome,'submit':m.submit,'question':m.question,'notice':m.notice,'admin-members':m.adminMembers,'admin-queue':m.adminQueue,'admin-notice':m.adminNotice})[STATE.tab] || m.memberHome;
   }
   function renderTab(labels, me, admin) {
     if (STATE.tab.indexOf('admin-') === 0 && !admin) return '<div class="card"><h4>'+esc(labels.noAccess)+'</h4></div>';
@@ -490,6 +500,7 @@
     if (STATE.tab === 'question') return questionHtml(admin);
     if (STATE.tab === 'notice') return noticeHtml(admin);
     if (STATE.tab === 'admin-members') return adminMembersHtml(labels);
+    if (STATE.tab === 'admin-queue') return adminQueueHtml(labels);
     if (STATE.tab === 'admin-notice') return adminNoticeHtml();
     return '';
   }
@@ -503,7 +514,7 @@
       '<div class="card"><h4>커머스/상위 권한</h4><div class="muted">상품·커머스·상위 롤은 관리자 검토 후 부여합니다.</div><br><button '+(!canCommerce?'disabled':'')+' data-action="request-upgrade" data-role="commerce">커머스 신청</button></div>'+
       '<div class="card"><h4>스탠다드 신청</h4><div class="muted">기본 회원 서비스 확장 신청입니다.</div><br><button '+(!canStandard?'disabled':'')+' data-action="request-upgrade" data-role="standard">스탠다드 신청</button></div>'+
       '<div class="card"><h4>회원 페이지</h4><div class="muted">전용 문서, 문의, 제출 상태를 확인합니다.</div><br><button class="primary" data-action="open-page">회원 페이지 열기</button></div>'+
-      (me.admin ? '<div class="card"><h4>관리자 회원 목록</h4><div class="muted">owner/admin 권한으로 OS0/Auth0 회원 목록을 불러오고 롤을 관리합니다.</div><br><button class="primary" data-tab="admin-members">회원 목록 열기</button></div>' : '')+
+      (me.admin ? '<div class="card"><h4>관리자 회원 목록</h4><div class="muted">owner/admin 권한으로 OS0/Auth0 회원 목록을 불러오고 롤을 관리합니다.</div><br><button class="primary" data-tab="admin-members">회원 목록 열기</button> <button data-tab="admin-queue">승급 검토 열기</button></div>' : '')+
       (hasPlatformRole()
         ? '<div class="card"><h4>로그인 상태</h4><div class="muted">사이트 역할 표시: <b>'+esc(me.role || 'member')+'</b><br>'+(hasValidToken()?'Auth0 ID 토큰이 정상 연결되어 있습니다.':'역할 표시는 있으나 Auth0 ID 토큰이 없거나 만료되었습니다. 회원 목록 조회는 세션 갱신 후 가능합니다.')+'</div>'+(hasValidToken()?'':'<br><button data-action="login">세션 갱신</button>')+'</div>'
         : '<div class="card"><h4>로그인</h4><div class="muted">회원전용 영역은 로그인 후 사용할 수 있습니다.</div><br><button data-action="login">OS-Login</button></div>')+
@@ -584,8 +595,8 @@
         '<div class="igdc-ma-member-actions">'+(canManage && options ? '<button data-action="save-role">변경</button><button data-action="block-user" class="danger">차단</button>' : '')+'</div>'+ 
       '</div>';
     }).join('');
-    return '<div class="card igdc-ma-member-card"><div class="row" style="justify-content:space-between"><h4>OS0/Auth0 회원 목록 / 승급 검토</h4><button data-action="reload-members">'+esc(labels.refresh)+'</button></div>'+ 
-      '<div class="muted" style="margin-bottom:8px">현재 롤 확인, 변경 롤 선택, 승급 검토, 차단 관리를 이 목록에서 함께 처리합니다. owner만 owner를 볼 수 있고, admin은 owner를 볼 수 없습니다. director/site_manager_director는 자기보다 아래 롤만 관리합니다.</div>'+
+    return '<div class="card igdc-ma-member-card"><div class="row" style="justify-content:space-between"><h4>OS0/Auth0 회원 목록</h4><button data-action="reload-members">'+esc(labels.refresh)+'</button></div>'+ 
+      '<div class="muted" style="margin-bottom:8px">현재 롤 확인, 변경 롤 선택, 차단 관리를 이 목록에서 처리합니다. owner만 owner를 볼 수 있고, admin은 owner를 볼 수 없습니다. director/site_manager_director는 자기보다 아래 롤만 관리합니다.</div>'+
       '<div class="row igdc-ma-member-tools"><input id="igdc-member-search" value="'+esc(STATE.query)+'" placeholder="'+esc(labels.searchPlaceholder)+'"><button data-action="search-members">검색</button></div>'+ 
       (STATE.loading?'<div class="muted">'+esc(labels.loading)+'</div>':'')+
       '<div class="igdc-ma-member-list">'+
@@ -594,8 +605,60 @@
       '</div>'+ 
       '<div class="muted" style="margin-top:8px">표시 '+esc(visibleMembers.length)+'명 / 서버 조회 '+esc(STATE.total || STATE.members.length)+'명 / 페이지 '+esc(STATE.page + 1)+'</div></div>';
   }
-  function adminQueueHtml() {
-    return '<div class="card"><h4>승급/검토 큐</h4><div class="muted">일반→프리미엄/스페셜/커머스 및 상위 20단계 롤 검토 요청을 관리하는 영역입니다. 서버 API의 review queue 연결 시 자동 표시됩니다.</div><br><button data-action="reload-review-queue">검토 큐 새로고침</button></div>';
+  function docRoles(doc) {
+    return unique(
+      doc.roles ||
+      doc.user_roles ||
+      doc.submitter_roles ||
+      doc.current_roles ||
+      (doc.user && doc.user.roles) ||
+      (doc.app_metadata && doc.app_metadata.roles) ||
+      []
+    );
+  }
+  function docTargetRole(doc) {
+    return normalizeRole(doc.target_role || doc.requested_role || doc.apply_role || doc.role || '');
+  }
+  function canReviewDoc(myRoles, doc) {
+    var roles = docRoles(doc);
+    var target = docTargetRole(doc);
+    if (roles.length && !canViewOrManageRole(myRoles, roles)) return false;
+    if (target && !canAssignRole(myRoles, target)) return false;
+    return true;
+  }
+  function adminQueueHtml(labels) {
+    var myRoles = (STATE.me && STATE.me.roles) || readRoles();
+    var docs = (STATE.reviewDocs || []).filter(function (d) { return canReviewDoc(myRoles, d); });
+    var rows = docs.map(function (d) {
+      var id = d.id || d.document_id || d.review_id || d.submission_id || '';
+      var user = d.user || {};
+      var email = d.email || user.email || d.user_email || '';
+      var name = d.name || user.name || user.nickname || d.user_name || '';
+      var title = d.title || d.subject || d.type || '제출 서류';
+      var target = d.target_role || d.requested_role || d.apply_role || '';
+      var status = d.status || d.review_status || 'pending';
+      var date = d.created_at || d.updated_at || d.date || '';
+      var fileUrl = d.file_url || d.url || d.download_url || d.attachment_url || '';
+      return '<div class="igdc-ma-review-row" data-review-id="'+esc(id)+'">'+
+        '<div><b>'+esc(title)+'</b><br><span class="muted">'+esc(name || email || d.user_id || '')+'</span></div>'+ 
+        '<div>'+esc(email || d.user_id || '')+'</div>'+ 
+        '<div>'+esc(target || '-')+'</div>'+ 
+        '<div><span class="badge">'+esc(status)+'</span><br><span class="muted">'+esc(date)+'</span></div>'+ 
+        '<div class="igdc-ma-member-actions">'+
+          (fileUrl ? '<button data-action="open-review-doc" data-url="'+esc(fileUrl)+'">열람</button>' : '<button data-action="open-review-doc">상세</button>')+
+          '<button data-action="approve-review-doc" class="primary">승인</button>'+
+          '<button data-action="reject-review-doc" class="danger">반려</button>'+
+        '</div>'+ 
+      '</div>';
+    }).join('');
+    return '<div class="card igdc-ma-member-card"><div class="row" style="justify-content:space-between"><h4>승급 검토</h4><button data-action="reload-review-queue">새로고침</button></div>'+ 
+      '<div class="muted" style="margin-bottom:8px">회원이 제출한 서류와 승급·권한 신청 자료를 검토하는 영역입니다. owner는 전체, admin은 owner 제외, director/site_manager_director는 자기보다 아래 롤의 제출 자료만 볼 수 있습니다.</div>'+ 
+      (STATE.loadingReview ? '<div class="muted">불러오는 중입니다.</div>' : '')+
+      '<div class="igdc-ma-review-list">'+
+        '<div class="igdc-ma-review-head"><div>제출 서류</div><div>회원</div><div>요청 롤</div><div>상태</div><div>검토</div></div>'+ 
+        (rows || '<div class="igdc-ma-review-row"><div class="muted" style="grid-column:1/-1">현재 권한으로 볼 수 있는 제출 서류가 없거나, 서류 검토 API 연결 대기 중입니다.</div></div>')+
+      '</div>'+ 
+      '<div class="muted" style="margin-top:8px">표시 '+esc(docs.length)+'건 / 서버 조회 '+esc((STATE.reviewDocs || []).length)+'건</div></div>';
   }
   function adminNoticeHtml() {
     return '<form class="card" data-form="admin-reply"><h4>답글/공지 관리</h4><div class="muted">관리자 권한에서만 답글 작성·공지 등록 버튼이 활성화됩니다.</div><br>'+ 
@@ -619,7 +682,10 @@
     else if (act === 'save-role') saveRole(action.closest('[data-user-id]'));
     else if (act === 'block-user') blockUser(action.closest('[data-user-id]'));
     else if (act === 'request-upgrade') requestUpgrade(action.getAttribute('data-role'));
-    else if (act === 'reload-review-queue') { STATE.tab = 'admin-members'; loadMembers(); }
+    else if (act === 'reload-review-queue') loadReviewDocs();
+    else if (act === 'open-review-doc') openReviewDoc(action.closest('[data-review-id]'), action.getAttribute('data-url'));
+    else if (act === 'approve-review-doc') reviewDoc(action.closest('[data-review-id]'), 'approve');
+    else if (act === 'reject-review-doc') reviewDoc(action.closest('[data-review-id]'), 'reject');
   }
   function handleChange(ev) {
     if (ev.target && ev.target.id === 'igdc-member-search') STATE.query = ev.target.value;
@@ -637,6 +703,48 @@
     var body = formDataObj(form);
     var action = type === 'document-submit' ? 'submit-document' : type === 'question-submit' ? 'submit-question' : 'admin-reply';
     apiPost(action, body).then(function () { setError(''); alert('등록되었습니다.'); form.reset(); }).catch(function (e) { setError(e.message); });
+  }
+  function loadReviewDocs() {
+    if (!canAdmin(readRoles()) && !(STATE.me && STATE.me.admin)) return;
+    if (!hasValidToken()) {
+      STATE.loadingReview = false;
+      STATE.reviewDocs = [];
+      STATE.error = '사이트 역할은 확인되지만 Auth0 ID 토큰이 모달/API에 연결되지 않았습니다. 상단의 세션 갱신 후 승급 검토를 다시 열어야 합니다.';
+      render();
+      return;
+    }
+    STATE.loadingReview = true; STATE.error = ''; render();
+    apiGet({action:'review-documents', page:0, per_page:cfg().reviewPerPage || 100}).then(function (data) {
+      STATE.reviewDocs = data.documents || data.docs || data.items || data.queue || data.submissions || [];
+      STATE.loadingReview = false;
+      render();
+    }).catch(function (e) {
+      STATE.loadingReview = false;
+      STATE.reviewDocs = [];
+      STATE.error = e.message || '서류 검토 API 연결이 필요합니다.';
+      render();
+    });
+  }
+  function findReviewDoc(row) {
+    if (!row) return null;
+    var id = row.getAttribute('data-review-id');
+    return (STATE.reviewDocs || []).filter(function (d) {
+      return String(d.id || d.document_id || d.review_id || d.submission_id || '') === String(id || '');
+    })[0] || null;
+  }
+  function openReviewDoc(row, url) {
+    var doc = findReviewDoc(row) || {};
+    var fileUrl = url || doc.file_url || doc.url || doc.download_url || doc.attachment_url || '';
+    if (fileUrl) { window.open(fileUrl, '_blank', 'noopener'); return; }
+    alert((doc.title || '제출 서류') + '\n\n' + (doc.body || doc.memo || doc.description || '열람 가능한 첨부 URL이 없습니다.'));
+  }
+  function reviewDoc(row, decision) {
+    var doc = findReviewDoc(row);
+    if (!doc) return;
+    var id = doc.id || doc.document_id || doc.review_id || doc.submission_id;
+    if (!id) return;
+    if (!confirm((decision === 'approve' ? '승인' : '반려') + ' 처리할까요?')) return;
+    apiPost('review-document', {id:id, decision:decision}).then(loadReviewDocs).catch(function (e) { setError(e.message); });
   }
   function loadMe() {
     STATE.me = userProfile();
@@ -693,7 +801,7 @@
     STATE.tab = preferredTab || 'member-home';
     var el = root();
     el.hidden = false;
-    loadMe().then(function () { render(); if (STATE.tab === 'admin-members') loadMembers(); });
+    loadMe().then(function () { render(); if (STATE.tab === 'admin-members') loadMembers(); if (STATE.tab === 'admin-queue') loadReviewDocs(); });
     render();
     try { el.querySelector('button').focus(); } catch (e) {}
   }
