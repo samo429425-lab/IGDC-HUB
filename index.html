@@ -1328,6 +1328,178 @@ window.addEventListener('DOMContentLoaded', function() {
   });
 })();
 </script>
+
+<!-- IGDC OS Login Provider Patch v2.5: provider chooser + Naver reauth guard -->
+<style id="igdc-provider-login-style">
+#igdc-provider-login-mask{position:fixed;inset:0;background:rgba(0,0,0,.46);z-index:2147483644;display:none}
+#igdc-provider-login-modal{position:fixed;left:50%;top:46%;transform:translate(-50%,-50%);width:min(420px,92vw);background:#fff;color:#111;border-radius:14px;box-shadow:0 16px 42px rgba(0,0,0,.28);z-index:2147483645;padding:18px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;display:none}
+#igdc-provider-login-modal h3{margin:0 0 8px;font-size:18px;color:#0b3f74}
+#igdc-provider-login-modal p{margin:0 0 12px;font-size:13px;line-height:1.5;color:#333}
+#igdc-provider-login-modal .igdc-provider-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#igdc-provider-login-modal button{border:1px solid #d0d7de;border-radius:9px;padding:9px 10px;background:#fff;color:#111;cursor:pointer;font-weight:700;font-size:13px;text-align:center}
+#igdc-provider-login-modal button:hover{background:#f6f8fa}
+#igdc-provider-login-modal button[data-provider="naver"]{border-color:#03c75a;color:#04843e}
+#igdc-provider-login-modal button[data-provider="apple"]{border-color:#111;color:#111}
+#igdc-provider-login-modal button[data-provider="wechat"]{border-color:#1aad19;color:#148414}
+#igdc-provider-login-modal .igdc-provider-cancel{margin-top:10px;width:100%;font-weight:600;color:#555}
+@media(max-width:480px){#igdc-provider-login-modal .igdc-provider-grid{grid-template-columns:1fr}}
+</style>
+<script id="igdc-oslogin-provider-patch-v25">
+(function(){
+  'use strict';
+  if (window.__IGDC_OSLOGIN_PROVIDER_PATCH_V25__) return;
+  window.__IGDC_OSLOGIN_PROVIDER_PATCH_V25__ = true;
+
+  var AUTH0_DOMAIN = 'login.igdcglobal.com';
+  var CLIENT_ID = '4JeT1Fdy' + 'DZaN7nEO' + 'DVsKe2Sx8' + 'kKMWagj';
+  var REDIRECT_URI = window.location.origin + '/callback.html';
+  var SCOPE = 'openid profile email';
+  var TOKENS_KEY = 'osauth.tokens.v2';
+  var PKCE_KEY = 'osauth.pkce.v1';
+  var LAST_PROVIDER_KEY = 'igdc.last.login.provider';
+  var NAVER_FORCE_KEY = 'igdc.naver.force_reauth_after_logout';
+
+  var PROVIDERS = {
+    google:   { label:'Google',   connection:'google-oauth2' },
+    facebook: { label:'Facebook', connection:'facebook' },
+    naver:    { label:'Naver',    connection:'naver' },
+    apple:    { label:'Apple',    connection:'apple' },
+    wechat:   { label:'WeChat',   connection:'wechat' }
+  };
+
+  function save(name,obj){ try{ localStorage.setItem(name, JSON.stringify(obj)); }catch(e){} }
+  function load(name){ try{ return JSON.parse(localStorage.getItem(name)||'null'); }catch(e){ return null; } }
+  function del(name){ try{ localStorage.removeItem(name); }catch(e){} }
+  function b64url(buf){ return btoa(String.fromCharCode.apply(null,new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+  async function sha256(input){ var data=new TextEncoder().encode(input); var hash=await crypto.subtle.digest('SHA-256',data); return b64url(hash); }
+  function randString(len){ var arr=new Uint8Array(len); crypto.getRandomValues(arr); var tbl='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~'; var s=''; for(var i=0;i<len;i++) s+=tbl[arr[i]%tbl.length]; return s; }
+  function getPayload(){
+    try{
+      var t=load(TOKENS_KEY); var id=t && t.id_token; if(!id) return null;
+      var p=id.split('.'); if(p.length<2) return null;
+      return JSON.parse(atob(p[1].replace(/-/g,'+').replace(/_/g,'/')));
+    }catch(e){ return null; }
+  }
+  function providerFromPayload(){
+    var p=getPayload()||{}; var sub=String(p.sub||'').toLowerCase();
+    if(sub.indexOf('naver')>=0) return 'naver';
+    if(sub.indexOf('google')>=0) return 'google';
+    if(sub.indexOf('facebook')>=0) return 'facebook';
+    if(sub.indexOf('apple')>=0) return 'apple';
+    if(sub.indexOf('wechat')>=0 || sub.indexOf('weixin')>=0) return 'wechat';
+    return localStorage.getItem(LAST_PROVIDER_KEY)||'';
+  }
+  function normalizedReturnTo(to){
+    try{
+      if(!to || to === '/logout') return window.location.origin + '/index.html';
+      if(/^https?:\/\//i.test(to)) return to;
+      return window.location.origin + (to.charAt(0)==='/' ? to : ('/'+to));
+    }catch(e){ return window.location.origin + '/index.html'; }
+  }
+  function clearLocalAuth(){
+    del(TOKENS_KEY); del(PKCE_KEY);
+    try{ sessionStorage.removeItem(TOKENS_KEY); sessionStorage.removeItem(PKCE_KEY); }catch(e){}
+  }
+  function osLogout(to){
+    var provider = providerFromPayload();
+    if(provider) try{ localStorage.setItem(LAST_PROVIDER_KEY, provider); }catch(e){}
+    if(provider === 'naver') try{ localStorage.setItem(NAVER_FORCE_KEY, String(Date.now())); }catch(e){}
+    clearLocalAuth();
+    var returnTo = normalizedReturnTo(to);
+    var url = 'https://' + AUTH0_DOMAIN + '/v2/logout?' + new URLSearchParams({
+      client_id: CLIENT_ID,
+      returnTo: returnTo,
+      federated: ''
+    }).toString();
+    window.location.href = url;
+  }
+  async function authorize(providerKey){
+    var cfg = providerKey ? PROVIDERS[providerKey] : null;
+    var state='st_'+randString(24), nonce='nn_'+randString(24), code_verifier=randString(64);
+    var code_challenge=await sha256(code_verifier);
+    save(PKCE_KEY,{state:state,nonce:nonce,code_verifier:code_verifier,time:Date.now(),provider:providerKey||''});
+    if(providerKey) try{ localStorage.setItem(LAST_PROVIDER_KEY, providerKey); }catch(e){}
+    var params = new URLSearchParams({
+      response_type:'code',
+      code_challenge_method:'S256',
+      code_challenge:code_challenge,
+      client_id:CLIENT_ID,
+      redirect_uri:REDIRECT_URI,
+      scope:SCOPE,
+      state:state,
+      nonce:nonce
+    });
+    if(cfg && cfg.connection) params.set('connection', cfg.connection);
+    if(providerKey === 'naver'){
+      params.set('prompt','login');
+      params.set('max_age','0');
+      params.set('auth_type','reauthenticate');
+      params.set('force_reauth','1');
+      try{ params.set('naver_reauth', localStorage.getItem(NAVER_FORCE_KEY) || String(Date.now())); }catch(e){}
+    }else if(providerKey === 'apple'){
+      params.set('prompt','login');
+    }
+    window.location.href = 'https://' + AUTH0_DOMAIN + '/authorize?' + params.toString();
+  }
+  function closeChooser(){
+    var m=document.getElementById('igdc-provider-login-mask');
+    var b=document.getElementById('igdc-provider-login-modal');
+    if(m) m.style.display='none'; if(b) b.style.display='none';
+  }
+  function ensureChooser(){
+    var modal=document.getElementById('igdc-provider-login-modal');
+    if(modal) return modal;
+    var mask=document.createElement('div'); mask.id='igdc-provider-login-mask';
+    modal=document.createElement('section'); modal.id='igdc-provider-login-modal';
+    modal.setAttribute('role','dialog'); modal.setAttribute('aria-modal','true');
+    modal.innerHTML = ''+
+      '<h3>OS-Login</h3>'+
+      '<p>로그인 방식을 선택하세요. 네이버는 로그아웃 후 재접속 시 재인증을 요청합니다.</p>'+
+      '<div class="igdc-provider-grid">'+
+        '<button type="button" data-provider="google">Google</button>'+
+        '<button type="button" data-provider="facebook">Facebook</button>'+
+        '<button type="button" data-provider="naver">Naver</button>'+
+        '<button type="button" data-provider="apple">Apple</button>'+
+        '<button type="button" data-provider="wechat">WeChat</button>'+
+      '</div>'+
+      '<button type="button" class="igdc-provider-cancel" data-provider-cancel>닫기</button>';
+    document.body.appendChild(mask); document.body.appendChild(modal);
+    mask.addEventListener('click', closeChooser);
+    modal.addEventListener('click', function(e){
+      var cancel=e.target.closest('[data-provider-cancel]'); if(cancel){ closeChooser(); return; }
+      var btn=e.target.closest('[data-provider]'); if(!btn) return;
+      var p=btn.getAttribute('data-provider'); closeChooser(); authorize(p);
+    });
+    return modal;
+  }
+  function openChooser(){
+    var mask=document.getElementById('igdc-provider-login-mask') || null;
+    var modal=ensureChooser(); mask=document.getElementById('igdc-provider-login-mask');
+    if(mask) mask.style.display='block'; if(modal) modal.style.display='block';
+  }
+
+  window.osLogin = function(providerKey){
+    if(providerKey && PROVIDERS[providerKey]) return authorize(providerKey);
+    openChooser();
+  };
+  if(!window.osAuth) window.osAuth = {};
+  var oldPayload = window.osAuth.getIdTokenPayload;
+  window.osAuth.getIdTokenPayload = oldPayload || getPayload;
+  window.osAuth.logout = osLogout;
+  window.osLogout = osLogout;
+
+  document.addEventListener('click', function(e){
+    var btn=e.target && e.target.closest ? e.target.closest('#osLoginBtn') : null;
+    if(!btn) return;
+    if(window.osAuth && typeof window.osAuth.isAuthenticated === 'function' && window.osAuth.isAuthenticated()) return;
+    e.preventDefault(); e.stopPropagation();
+    openChooser();
+  }, true);
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeChooser(); });
+})();
+</script>
+<!-- END IGDC OS Login Provider Patch v2.5 -->
+
 <!-- Auth0 SPA SDK -->
 <script src="https://cdn.jsdelivr.net/npm/@auth0/auth0-spa-js@2.1.3/dist/auth0-spa-js.production.js"></script>
 <script id="auth0-igdc-init">
