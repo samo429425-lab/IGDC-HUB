@@ -1327,7 +1327,7 @@ window.addEventListener('DOMContentLoaded', function() {
 })();
 </script>
 
-<!-- IGDC OS Login Provider Patch v2.5.6: exact Auth0 social connection names -->
+<!-- IGDC OS Login Provider Patch v2.6.0: Naver restored / Apple-WeChat hidden until Auth0 keys are enabled -->
 <style id="igdc-provider-login-style">
 #igdc-provider-login-mask{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:2147483644;display:none}
 #igdc-provider-login-modal{position:fixed;left:50%;top:48%;transform:translate(-50%,-50%);width:min(405px,90vw);background:#fff;color:#1f2937;border-radius:0;box-shadow:0 18px 46px rgba(0,0,0,.26);z-index:2147483645;padding:28px 30px 24px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;display:none}
@@ -1344,16 +1344,14 @@ window.addEventListener('DOMContentLoaded', function() {
 #igdc-provider-login-modal button[data-provider]:hover{background:#f6f8fa}
 #igdc-provider-login-modal .igdc-provider-icon{width:28px;min-width:28px;display:inline-flex;align-items:center;justify-content:center;font-size:22px;font-weight:800}
 #igdc-provider-login-modal button[data-provider="naver"] .igdc-provider-icon{color:#03c75a}
-#igdc-provider-login-modal button[data-provider="apple"] .igdc-provider-icon{color:#111}
-#igdc-provider-login-modal button[data-provider="wechat"] .igdc-provider-icon{color:#1aad19}
 #igdc-provider-login-modal .igdc-provider-cancel{margin-top:12px;width:100%;height:42px;border:1px solid #d0d7de;border-radius:4px;background:#fff;font-weight:600;color:#555;cursor:pointer}
 @media(max-width:480px){#igdc-provider-login-modal{padding:24px 18px 20px}#igdc-provider-login-modal h3{font-size:24px}#igdc-provider-login-modal button[data-provider]{font-size:16px}}
 </style>
-<script id="igdc-oslogin-provider-patch-v256">
+<script id="igdc-oslogin-provider-patch-v260">
 (function(){
   'use strict';
-  if (window.__IGDC_OSLOGIN_PROVIDER_PATCH_V256__) return;
-  window.__IGDC_OSLOGIN_PROVIDER_PATCH_V256__ = true;
+  if (window.__IGDC_OSLOGIN_PROVIDER_PATCH_V260__) return;
+  window.__IGDC_OSLOGIN_PROVIDER_PATCH_V260__ = true;
 
   var AUTH0_DOMAIN = 'login.igdcglobal.com';
   var CLIENT_ID = '4JeT1Fdy' + 'DZaN7nEO' + 'DVsKe2Sx8' + 'kKMWagj';
@@ -1362,16 +1360,17 @@ window.addEventListener('DOMContentLoaded', function() {
   var TOKENS_KEY = 'osauth.tokens.v2';
   var PKCE_KEY = 'osauth.pkce.v1';
   var LAST_PROVIDER_KEY = 'igdc.last.login.provider';
-  var NAVER_FORCE_KEY = 'igdc.naver.force_reauth_after_logout';
 
+  /*
+    정식 운영 기준:
+    - 현재 실제 사용 provider는 Google / Facebook / Naver만 노출합니다.
+    - Apple / WeChat은 Auth0 Dashboard에 Developer Key/App Secret 연결이 완료되기 전까지 버튼을 숨깁니다.
+    - Naver는 원래 작동하던 Auth0 connection 이름인 lowercase naver로 복구합니다.
+  */
   var PROVIDERS = {
     google:   { label:'Google',   connection:'google-oauth2' },
     facebook: { label:'Facebook', connection:'facebook' },
-    // Auth0 Dashboard에 등록된 커스텀 소셜 connection 이름은 대소문자를 맞춰야 합니다.
-    // Naver / WeChat 버튼은 Universal Login 목록으로 우회하지 않고 해당 connection으로 직접 진입합니다.
-    naver:    { label:'Naver',    connection:'Naver' },
-    apple:    { label:'Apple',    connection:'apple' },
-    wechat:   { label:'WeChat',   connection:'WeChat' }
+    naver:    { label:'Naver',    connection:'naver' }
   };
 
   function save(name,obj){ try{ localStorage.setItem(name, JSON.stringify(obj)); }catch(e){} }
@@ -1392,8 +1391,6 @@ window.addEventListener('DOMContentLoaded', function() {
     if(sub.indexOf('naver')>=0) return 'naver';
     if(sub.indexOf('google')>=0) return 'google';
     if(sub.indexOf('facebook')>=0) return 'facebook';
-    if(sub.indexOf('apple')>=0) return 'apple';
-    if(sub.indexOf('wechat')>=0 || sub.indexOf('weixin')>=0) return 'wechat';
     return localStorage.getItem(LAST_PROVIDER_KEY)||'';
   }
   function normalizedReturnTo(to){
@@ -1406,11 +1403,11 @@ window.addEventListener('DOMContentLoaded', function() {
   function clearLocalAuth(){
     del(TOKENS_KEY); del(PKCE_KEY);
     try{ sessionStorage.removeItem(TOKENS_KEY); sessionStorage.removeItem(PKCE_KEY); }catch(e){}
+    try{ window.__IGDC_ROLE = 'guest'; window.__IGDC_ROLE_LABEL = 'guest'; localStorage.setItem('igdc_role','guest'); }catch(e){}
   }
   function osLogout(to){
     var provider = providerFromPayload();
     if(provider) try{ localStorage.setItem(LAST_PROVIDER_KEY, provider); }catch(e){}
-    if(provider === 'naver') try{ localStorage.setItem(NAVER_FORCE_KEY, String(Date.now())); }catch(e){}
     clearLocalAuth();
     var returnTo = normalizedReturnTo(to);
     var url = 'https://' + AUTH0_DOMAIN + '/v2/logout?' + new URLSearchParams({
@@ -1433,31 +1430,16 @@ window.addEventListener('DOMContentLoaded', function() {
       redirect_uri:REDIRECT_URI,
       scope:SCOPE,
       state:state,
-      nonce:nonce
+      nonce:nonce,
+      prompt:'login'
     });
-    /*
-      Social provider routing rule:
-      - Provider buttons must go directly to the selected Auth0 connection.
-      - Naver must not reopen the generic Universal Login provider list; it should request
-        the Naver connection directly and force a fresh login challenge as much as Auth0/Naver allows.
-      - Apple/WeChat require matching Auth0 connections enabled in the Auth0 Dashboard.
-    */
     if(cfg && cfg.connection) params.set('connection', cfg.connection);
     if(loginHint) params.set('login_hint', loginHint);
     if(providerKey === 'naver'){
-      // 로그아웃 뒤에도 네이버 쿠키가 남아 자동 로그인되는 것을 줄이기 위한 표준 재인증 요청입니다.
-      // 비표준 파라미터는 Chrome 위험 경고를 만들 수 있어 넣지 않습니다.
-      params.set('prompt','login');
+      // 표준 파라미터만 사용합니다. 비표준 강제값은 Auth0/Naver 콜백을 꼬이게 할 수 있어 제거했습니다.
       params.set('max_age','0');
       params.set('ui_locales','ko');
       try{ sessionStorage.setItem('igdc.requested.provider', 'naver'); }catch(e){}
-    }else if(providerKey === 'wechat'){
-      // WeChat은 이메일 입력식이 아니라 Auth0 WeChat connection의 QR/WeChat 인증 화면으로 이동합니다.
-      params.set('prompt','login');
-      params.set('ui_locales','zh');
-      try{ sessionStorage.setItem('igdc.requested.provider', 'wechat'); }catch(e){}
-    }else if(providerKey === 'apple'){
-      params.set('prompt','login');
     }
     window.location.href = 'https://' + AUTH0_DOMAIN + '/authorize?' + params.toString();
   }
@@ -1483,8 +1465,6 @@ window.addEventListener('DOMContentLoaded', function() {
         '<button type="button" data-provider="google"><span class="igdc-provider-icon">G</span><span>Continue with Google</span></button>'+ 
         '<button type="button" data-provider="facebook"><span class="igdc-provider-icon">f</span><span>Continue with Facebook</span></button>'+ 
         '<button type="button" data-provider="naver"><span class="igdc-provider-icon">N</span><span>Continue with Naver</span></button>'+ 
-        '<button type="button" data-provider="apple"><span class="igdc-provider-icon"></span><span>Continue with Apple</span></button>'+ 
-        '<button type="button" data-provider="wechat"><span class="igdc-provider-icon">☘</span><span>Continue with WeChat</span></button>'+ 
       '</div>'+ 
       '<button type="button" class="igdc-provider-cancel" data-provider-cancel>닫기</button>';
     document.body.appendChild(mask); document.body.appendChild(modal);
@@ -1500,7 +1480,9 @@ window.addEventListener('DOMContentLoaded', function() {
         return;
       }
       var btn=e.target.closest('[data-provider]'); if(!btn) return;
-      var p=btn.getAttribute('data-provider'); closeChooser(); authorize(p);
+      var p=btn.getAttribute('data-provider');
+      if(!PROVIDERS[p]) return;
+      closeChooser(); authorize(p);
     });
     modal.addEventListener('keydown', function(e){
       if(e.key === 'Enter' && e.target && e.target.classList && e.target.classList.contains('igdc-login-email')){
@@ -1530,7 +1512,7 @@ window.addEventListener('DOMContentLoaded', function() {
 
   document.addEventListener('click', function(e){
     var btn=e.target && e.target.closest ? e.target.closest('#osLoginBtn') : null;
-    if(!btn) return;
+    if(!btn || btn.id !== 'osLoginBtn') return;
     if(window.osAuth && typeof window.osAuth.isAuthenticated === 'function' && window.osAuth.isAuthenticated()) return;
     e.preventDefault(); e.stopPropagation();
     openChooser();
@@ -1538,7 +1520,7 @@ window.addEventListener('DOMContentLoaded', function() {
   document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeChooser(); });
 })();
 </script>
-<!-- END IGDC OS Login Provider Patch v2.5.6 -->
+<!-- END IGDC OS Login Provider Patch v2.6.0 -->
 
 <!-- Auth0 SPA SDK -->
 <script src="https://cdn.jsdelivr.net/npm/@auth0/auth0-spa-js@2.1.3/dist/auth0-spa-js.production.js"></script>
