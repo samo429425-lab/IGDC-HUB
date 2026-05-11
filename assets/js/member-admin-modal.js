@@ -10,7 +10,7 @@
 
   if (window.IGDCMemberAdminModal && window.IGDCMemberAdminModal.__version) return;
 
-  var VERSION = '2.0.0';
+  var VERSION = '2.1.0';
   var DEFAULT_API = '/.netlify/functions/member-admin';
   var ROOT_ID = 'igdc-member-admin-root';
   var STYLE_ID = 'igdc-member-admin-style-v2';
@@ -171,15 +171,31 @@
     var roles = readRoles();
     return roles.length > 0 && roles.indexOf('guest') === -1;
   }
+  function storedTokens() {
+    var keys = ['osauth.tokens.v2', 'igdc.tokens', 'igdc_auth_tokens', 'auth0_tokens'];
+    for (var i = 0; i < keys.length; i++) {
+      try {
+        var raw = localStorage.getItem(keys[i]);
+        if (!raw) continue;
+        var data = safeJsonParse(raw, null);
+        if (data && (data.id_token || data.access_token)) return data;
+      } catch (e) {}
+    }
+    return null;
+  }
   function idToken() {
     try {
       if (window.osAuth && typeof window.osAuth.getIdToken === 'function') return window.osAuth.getIdToken();
       if (window.osAuth && typeof window.osAuth.getIdTokenClaims === 'function') {
         var c = window.osAuth.getIdTokenClaims();
-        return c && (c.__raw || c.raw || c.id_token || '');
+        if (c && (c.__raw || c.raw || c.id_token)) return c.__raw || c.raw || c.id_token;
       }
     } catch (e) {}
-    try { return localStorage.getItem('igdc_id_token') || localStorage.getItem('id_token') || ''; } catch (e) {}
+    try {
+      var tok = storedTokens();
+      if (tok && tok.id_token) return tok.id_token;
+      return localStorage.getItem('igdc_id_token') || localStorage.getItem('id_token') || '';
+    } catch (e) {}
     return '';
   }
   function userProfile() {
@@ -197,8 +213,13 @@
     };
   }
   function openLogin() {
+    if (isLoggedIn()) {
+      try { alert('이미 로그인되어 있습니다.'); } catch (e) {}
+      return;
+    }
+    if (typeof window.osLogin === 'function') { window.osLogin(); return; }
     var btn = document.getElementById('osLoginBtn') || document.querySelector('[data-os-login], .os-login, [data-login]');
-    if (btn) { btn.click(); return; }
+    if (btn && String(btn.textContent || '').toLowerCase().indexOf('logout') < 0) { btn.click(); return; }
     try { document.dispatchEvent(new CustomEvent('igdc:login-request')); } catch (e) {}
   }
   function targetPage() {
@@ -355,7 +376,10 @@
       '<div class="card"><h4>커머스/상위 권한</h4><div class="muted">상품·커머스·상위 롤은 관리자 검토 후 부여합니다.</div><br><button '+(!canCommerce?'disabled':'')+' data-action="request-upgrade" data-role="commerce">커머스 신청</button></div>'+
       '<div class="card"><h4>스탠다드 신청</h4><div class="muted">기본 회원 서비스 확장 신청입니다.</div><br><button '+(!canStandard?'disabled':'')+' data-action="request-upgrade" data-role="standard">스탠다드 신청</button></div>'+
       '<div class="card"><h4>회원 페이지</h4><div class="muted">전용 문서, 문의, 제출 상태를 확인합니다.</div><br><button class="primary" data-action="open-page">회원 페이지 열기</button></div>'+
-      '<div class="card"><h4>로그인</h4><div class="muted">OS-Login 연결이 필요할 경우 로그인 버튼을 사용합니다.</div><br><button data-action="login">OS-Login</button></div>'+
+      (me.admin ? '<div class="card"><h4>관리자 회원 목록</h4><div class="muted">owner/admin 권한으로 OS0/Auth0 회원 목록을 불러오고 롤을 관리합니다.</div><br><button class="primary" data-tab="admin-members">회원 목록 열기</button></div>' : '')+
+      (isLoggedIn()
+        ? '<div class="card"><h4>로그인 상태</h4><div class="muted">현재 사이트 OS-Login 세션과 연동되어 있습니다.<br>표시 역할: <b>'+esc(me.role || 'member')+'</b></div></div>'
+        : '<div class="card"><h4>로그인</h4><div class="muted">OS-Login 연결이 필요할 경우 로그인 버튼을 사용합니다.</div><br><button data-action="login">OS-Login</button></div>')+
     '</div>';
   }
   function submitHtml() {
@@ -456,7 +480,7 @@
       render();
     }).catch(function (e) {
       STATE.loading = false;
-      STATE.error = e.message || t().apiMissing;
+      STATE.error = (e.message || t().apiMissing) + (!idToken() ? ' / 현재 로그인 세션의 id_token을 찾지 못했습니다.' : '');
       render();
     });
   }

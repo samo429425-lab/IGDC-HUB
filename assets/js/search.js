@@ -35,11 +35,17 @@ ready(function () {
         
     if (!input || !btn) return;
 
-    const PAGE_SIZE = 15;
+    const PAGE_SIZE = 25;
     const BLOCK_SIZE = 10;
-    const FETCH_LIMIT = 5000;
+    const MAX_PAGER_PAGES = 499;
+    const INITIAL_PRELOAD_PAGES = 12;
+    const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES;
+    const FETCH_LIMIT = PAGE_SIZE * 300;
 
     let allItems = [];
+    let serverPagedMode = false;
+    let serverTotalItems = 0;
+    const loadedServerPages = new Map();
     let currentPage = 1;
     let currentBlock = 0;
     let activeType = 'all';
@@ -633,6 +639,38 @@ function normalizeSearchPayload(payload){
   return { payload: root, items, pageItems, viewportSections };
 }
 
+function serverTotalFromPayload(payload, fallbackCount){
+  const root = unwrap(payload) || payload || {};
+  const meta = root.meta || {};
+  const vp = root.visiblePagePack || meta.viewport || (root.sectionPack && root.sectionPack.visiblePagePack) || {};
+  const total = Number(
+    vp.totalVisibleItems ||
+    vp.fullCandidateCount ||
+    meta.totalCandidates ||
+    meta.fullCandidateCount ||
+    meta.totalItems ||
+    root.totalCandidates ||
+    root.totalItems ||
+    fallbackCount ||
+    0
+  ) || 0;
+  const cappedTotal = Math.min(Math.max(total, fallbackCount || 0), MAX_PAGER_PAGES * PAGE_SIZE);
+  return cappedTotal;
+}
+
+function pageItemsFromPack(pack){
+  if(!pack) return [];
+  if(Array.isArray(pack.pageItems) && pack.pageItems.length) return pack.pageItems;
+  const payload = pack.payload || pack;
+  if(payload && payload.visiblePagePack && Array.isArray(payload.visiblePagePack.pageItems) && payload.visiblePagePack.pageItems.length) return payload.visiblePagePack.pageItems;
+  if(payload && Array.isArray(payload.pageItems) && payload.pageItems.length) return payload.pageItems;
+  return Array.isArray(pack.items) ? pack.items.slice(0, PAGE_SIZE) : [];
+}
+
+function preloadPageCountFromItems(items){
+  return Math.max(1, Math.ceil((Array.isArray(items) ? items.length : 0) / PAGE_SIZE));
+}
+
     function safeText(v){
       return String(v || '').toLowerCase();
     }
@@ -693,7 +731,7 @@ function normalizeSearchPayload(payload){
   return out;
 }
 
-async function fetchSearch(q, type = activeType){
+async function fetchSearch(q, type = activeType, page = 1){
   const safeType = normalizeSearchType(type);
   signalSanmaruSearch(q, safeType, 'maru-search-fetch');
 
@@ -704,6 +742,9 @@ async function fetchSearch(q, type = activeType){
   sp.set('tab', safeType);
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
+  sp.set('page', String(Math.max(1, Number(page) || 1)));
+  sp.set('visiblePage', String(Math.max(1, Number(page) || 1)));
+  sp.set('pageWindowOnly', '1');
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
   sp.set('routeOwner', 'sanmaru');
@@ -737,9 +778,11 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('query', q);
   sp.set('type', safeType);
   sp.set('tab', safeType);
-  sp.set('limit', '900');
-  sp.set('candidatePool', '3000');
-  sp.set('candidatePoolTarget', '3000');
+  sp.set('limit', String(INITIAL_PRELOAD_TARGET));
+  sp.set('candidatePool', String(FETCH_LIMIT));
+  sp.set('candidatePoolTarget', String(FETCH_LIMIT));
+  sp.set('initialPreloadPages', String(INITIAL_PRELOAD_PAGES));
+  sp.set('initialPreloadTarget', String(INITIAL_PRELOAD_TARGET));
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
   sp.set('providerPassthrough', '1');
@@ -1874,12 +1917,16 @@ if (it.riskLabel === '⚠️ high-risk') {
     }
 
     function visibleItemsForPage(page){
+      if(serverPagedMode && loadedServerPages.has(page)){
+        return loadedServerPages.get(page).slice(0, PAGE_SIZE);
+      }
       const stream = buildClientVisibleStream(page);
       const start = (page - 1) * PAGE_SIZE;
       return stream.slice(start, start + PAGE_SIZE);
     }
 
     function visibleItemCountForPager(){
+      if(serverPagedMode && serverTotalItems > 0) return serverTotalItems;
       return buildClientVisibleStream(currentPage || 1).length;
     }
 
@@ -1899,6 +1946,42 @@ if (it.riskLabel === '⚠️ high-risk') {
       if(!skipEnrich){
         enrichRenderedPageImages(page, slice, start);
       }
+    }
+
+
+    async function loadServerPageAndRender(page){
+      if(!serverPagedMode){
+        renderPage(page);
+        return;
+      }
+      if(loadedServerPages.has(page)){
+        renderPage(page);
+        return;
+      }
+      const preloadedPageCount = preloadPageCountFromItems(allItems);
+      if(page <= preloadedPageCount){
+        renderPage(page);
+        return;
+      }
+      const q = (lastQuery || input.value || '').trim();
+      if(!q){
+        renderPage(page);
+        return;
+      }
+      status.textContent = `Loading page ${page} for "${q}"...`;
+      try{
+        const pack = await fetchSearch(q, activeType, page);
+        const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
+        if(pageSlice.length){
+          loadedServerPages.set(page, pageSlice.slice(0, PAGE_SIZE));
+          const total = serverTotalFromPayload(pack && pack.payload, serverTotalItems || pageSlice.length);
+          serverTotalItems = Math.max(serverTotalItems || 0, total || 0);
+        }
+      }catch(e){
+        console.warn('server page fetch skipped:', e);
+      }
+      renderPage(page);
+      status.textContent = `${serverTotalItems || visibleItemCountForPager()} results for "${q}" · ${getTypeLabel(activeType)}`;
     }
 
 function updateSearchPageHistory(page, block) {
@@ -1935,7 +2018,7 @@ function updateSearchPageHistory(page, block) {
 }
 
 function drawPager(){
-  const pages = Math.max(1, Math.ceil(visibleItemCountForPager() / PAGE_SIZE));
+  const pages = Math.min(MAX_PAGER_PAGES, Math.max(1, Math.ceil(visibleItemCountForPager() / PAGE_SIZE)));
   if (pages <= 1) { clearPager(); return; }
 
   const bar = ensurePager();
@@ -1951,7 +2034,7 @@ function drawPager(){
       currentBlock = Math.max(0, currentBlock - 1);
       currentPage = currentBlock * BLOCK_SIZE + 1;
       updateSearchPageHistory(currentPage, currentBlock);
-      renderPage(currentPage);
+      loadServerPageAndRender(currentPage);
     };
     bar.appendChild(left);
   }
@@ -1964,7 +2047,7 @@ function drawPager(){
       currentPage = p;
       currentBlock = Math.floor((p - 1) / BLOCK_SIZE);
       updateSearchPageHistory(currentPage, currentBlock);
-      renderPage(currentPage);
+      loadServerPageAndRender(currentPage);
     };
     bar.appendChild(b);
   }
@@ -1977,7 +2060,7 @@ function drawPager(){
       currentBlock = Math.min(maxBlock, currentBlock + 1);
       currentPage = currentBlock * BLOCK_SIZE + 1;
       updateSearchPageHistory(currentPage, currentBlock);
-      renderPage(currentPage);
+      loadServerPageAndRender(currentPage);
     };
     bar.appendChild(right);
   }
@@ -1989,6 +2072,9 @@ async function runSearch(q, type = activeType){
   updateSearchTabsActive();
   if (!qq){
     allItems = [];
+    serverPagedMode = false;
+    serverTotalItems = 0;
+    loadedServerPages.clear();
     results.innerHTML = '';
     clearPager();
     status.textContent = '';
@@ -1998,6 +2084,9 @@ async function runSearch(q, type = activeType){
   runSearch._seq = (runSearch._seq || 0) + 1;
   const seq = runSearch._seq;
   let firstPaintItems = [];
+  serverPagedMode = false;
+  serverTotalItems = 0;
+  loadedServerPages.clear();
 
   signalSanmaruSearch(qq, activeType, 'run-search');
   status.textContent = `Searching ${getTypeLabel(activeType)} for "${qq}"...`;
@@ -2011,6 +2100,11 @@ async function runSearch(q, type = activeType){
     firstPaintItems = quickItems;
     if (quickItems.length) {
       allItems = quickItems;
+      const quickTotal = serverTotalFromPayload(pack && pack.payload, quickItems.length);
+      if(quickTotal > quickItems.length){
+        serverPagedMode = true;
+        serverTotalItems = quickTotal;
+      }
       lastSearchPayload = pack && pack.payload || lastSearchPayload;
       currentBlock = 0;
       currentPage = 1;
@@ -2035,7 +2129,16 @@ async function runSearch(q, type = activeType){
     lastSearchPayload = searchPack && searchPack.payload || null;
     const items = Array.isArray(searchPack) ? searchPack : (searchPack && searchPack.items) || [];
     const filteredItems = filterSearchResultItems(items || []);
+    const serverPageItems = dedupeItems(filterSearchResultItems(pageItemsFromPack(searchPack)));
     const mergedItems = dedupeItems([...(firstPaintItems || []), ...(filteredItems || [])]);
+    const serverTotal = serverTotalFromPayload(searchPack && searchPack.payload, mergedItems.length);
+
+    serverPagedMode = serverTotal > mergedItems.length;
+    serverTotalItems = serverPagedMode ? Math.max(serverTotal, mergedItems.length) : 0;
+    loadedServerPages.clear();
+    if(serverPagedMode && serverPageItems.length){
+      loadedServerPages.set(1, serverPageItems.slice(0, PAGE_SIZE));
+    }
     allItems = mergedItems;
 
     pageImageEnrichCache.clear();
