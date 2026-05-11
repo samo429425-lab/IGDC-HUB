@@ -1327,7 +1327,7 @@ window.addEventListener('DOMContentLoaded', function() {
 })();
 </script>
 
-<!-- IGDC OS Login Provider Patch v2.5.5: direct social connection restore + naver reauth -->
+<!-- IGDC OS Login Provider Patch v2.5.6: exact Auth0 social connection names -->
 <style id="igdc-provider-login-style">
 #igdc-provider-login-mask{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:2147483644;display:none}
 #igdc-provider-login-modal{position:fixed;left:50%;top:48%;transform:translate(-50%,-50%);width:min(405px,90vw);background:#fff;color:#1f2937;border-radius:0;box-shadow:0 18px 46px rgba(0,0,0,.26);z-index:2147483645;padding:28px 30px 24px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;display:none}
@@ -1349,11 +1349,11 @@ window.addEventListener('DOMContentLoaded', function() {
 #igdc-provider-login-modal .igdc-provider-cancel{margin-top:12px;width:100%;height:42px;border:1px solid #d0d7de;border-radius:4px;background:#fff;font-weight:600;color:#555;cursor:pointer}
 @media(max-width:480px){#igdc-provider-login-modal{padding:24px 18px 20px}#igdc-provider-login-modal h3{font-size:24px}#igdc-provider-login-modal button[data-provider]{font-size:16px}}
 </style>
-<script id="igdc-oslogin-provider-patch-v255">
+<script id="igdc-oslogin-provider-patch-v256">
 (function(){
   'use strict';
-  if (window.__IGDC_OSLOGIN_PROVIDER_PATCH_V255__) return;
-  window.__IGDC_OSLOGIN_PROVIDER_PATCH_V255__ = true;
+  if (window.__IGDC_OSLOGIN_PROVIDER_PATCH_V256__) return;
+  window.__IGDC_OSLOGIN_PROVIDER_PATCH_V256__ = true;
 
   var AUTH0_DOMAIN = 'login.igdcglobal.com';
   var CLIENT_ID = '4JeT1Fdy' + 'DZaN7nEO' + 'DVsKe2Sx8' + 'kKMWagj';
@@ -1367,9 +1367,11 @@ window.addEventListener('DOMContentLoaded', function() {
   var PROVIDERS = {
     google:   { label:'Google',   connection:'google-oauth2' },
     facebook: { label:'Facebook', connection:'facebook' },
-    naver:    { label:'Naver',    connection:'naver' },
+    // Auth0 Dashboard에 등록된 커스텀 소셜 connection 이름은 대소문자를 맞춰야 합니다.
+    // Naver / WeChat 버튼은 Universal Login 목록으로 우회하지 않고 해당 connection으로 직접 진입합니다.
+    naver:    { label:'Naver',    connection:'Naver' },
     apple:    { label:'Apple',    connection:'apple' },
-    wechat:   { label:'WeChat',   connection:'wechat' }
+    wechat:   { label:'WeChat',   connection:'WeChat' }
   };
 
   function save(name,obj){ try{ localStorage.setItem(name, JSON.stringify(obj)); }catch(e){} }
@@ -1443,13 +1445,16 @@ window.addEventListener('DOMContentLoaded', function() {
     if(cfg && cfg.connection) params.set('connection', cfg.connection);
     if(loginHint) params.set('login_hint', loginHint);
     if(providerKey === 'naver'){
+      // 로그아웃 뒤에도 네이버 쿠키가 남아 자동 로그인되는 것을 줄이기 위한 표준 재인증 요청입니다.
+      // 비표준 파라미터는 Chrome 위험 경고를 만들 수 있어 넣지 않습니다.
       params.set('prompt','login');
       params.set('max_age','0');
-      params.set('screen_hint','login');
+      params.set('ui_locales','ko');
       try{ sessionStorage.setItem('igdc.requested.provider', 'naver'); }catch(e){}
     }else if(providerKey === 'wechat'){
+      // WeChat은 이메일 입력식이 아니라 Auth0 WeChat connection의 QR/WeChat 인증 화면으로 이동합니다.
       params.set('prompt','login');
-      params.set('screen_hint','login');
+      params.set('ui_locales','zh');
       try{ sessionStorage.setItem('igdc.requested.provider', 'wechat'); }catch(e){}
     }else if(providerKey === 'apple'){
       params.set('prompt','login');
@@ -1533,7 +1538,7 @@ window.addEventListener('DOMContentLoaded', function() {
   document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeChooser(); });
 })();
 </script>
-<!-- END IGDC OS Login Provider Patch v2.5.5 -->
+<!-- END IGDC OS Login Provider Patch v2.5.6 -->
 
 <!-- Auth0 SPA SDK -->
 <script src="https://cdn.jsdelivr.net/npm/@auth0/auth0-spa-js@2.1.3/dist/auth0-spa-js.production.js"></script>
