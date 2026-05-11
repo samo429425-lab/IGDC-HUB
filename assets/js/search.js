@@ -2101,10 +2101,13 @@ async function runSearch(q, type = activeType){
     if (quickItems.length) {
       allItems = quickItems;
       const quickTotal = serverTotalFromPayload(pack && pack.payload, quickItems.length);
-      if(quickTotal > quickItems.length){
-        serverPagedMode = true;
-        serverTotalItems = quickTotal;
-      }
+      // First paint must seed the pager immediately.  Even when the instant
+      // package only carries the first preload window, the pager should be
+      // based on the authoritative/preloaded count, not on the currently
+      // rendered 25-card page slice.
+      const immediatePagerTotal = Math.max(quickTotal || 0, quickItems.length || 0);
+      serverPagedMode = immediatePagerTotal > PAGE_SIZE;
+      serverTotalItems = serverPagedMode ? immediatePagerTotal : 0;
       lastSearchPayload = pack && pack.payload || lastSearchPayload;
       currentBlock = 0;
       currentPage = 1;
@@ -2133,8 +2136,11 @@ async function runSearch(q, type = activeType){
     const mergedItems = dedupeItems([...(firstPaintItems || []), ...(filteredItems || [])]);
     const serverTotal = serverTotalFromPayload(searchPack && searchPack.payload, mergedItems.length);
 
-    serverPagedMode = serverTotal > mergedItems.length;
-    serverTotalItems = serverPagedMode ? Math.max(serverTotal, mergedItems.length) : 0;
+    // Keep server-paged mode whenever the result set is larger than one page.
+    // This prevents the first paint from showing only 1~2 pages while the
+    // wider result set is still being prepared.
+    serverPagedMode = Math.max(serverTotal || 0, mergedItems.length || 0) > PAGE_SIZE;
+    serverTotalItems = serverPagedMode ? Math.max(serverTotal || 0, mergedItems.length || 0) : 0;
     loadedServerPages.clear();
     if(serverPagedMode && serverPageItems.length){
       loadedServerPages.set(1, serverPageItems.slice(0, PAGE_SIZE));
@@ -2157,7 +2163,7 @@ async function runSearch(q, type = activeType){
     }
 
     renderPage(1);
-    status.textContent = `${allItems.length} results for "${qq}" · ${getTypeLabel(activeType)}`;
+    status.textContent = `${serverTotalItems || allItems.length} results for "${qq}" · ${getTypeLabel(activeType)}`;
 
   } catch(e){
     console.error(e);
