@@ -951,6 +951,12 @@ async function fetchInstantSearchPack(q, type = activeType){
       if(/\.(ico)(\?|#|$)/i.test(s)) return true;
       if(/\.(svg)(\?|#|$)/i.test(s) && /(logo|symbol|icon|emblem|brand|ci|bi)/i.test(s)) return true;
 
+      // Brand/logo images must not be promoted as large media snapshots.
+      // Keep the small favicon in the link row, but reject logos from card media.
+      const logoLike = /(^|[\/_\-.])(logo|logotype|brand|symbol|emblem|ci|bi)([\/_\-.]|$)/i.test(s) ||
+        /(naver|google|youtube|tiktok|facebook|instagram|twitter|x)[^?#]*(logo|brand|symbol|favicon)/i.test(s);
+      if(logoLike) return true;
+
       return false;
     }
 
@@ -1931,6 +1937,14 @@ if (it.riskLabel === '⚠️ high-risk') {
     }
 
     function renderPage(page, skipEnrich = false){
+      if(serverPagedMode && !loadedServerPages.has(page)){
+        const preloadedPageCount = preloadPageCountFromItems(allItems);
+        if(page > preloadedPageCount && !renderPage._serverWindowLoading){
+          renderPage._serverWindowLoading = true;
+          loadServerPageAndRender(page).finally(() => { renderPage._serverWindowLoading = false; });
+          return;
+        }
+      }
       results.innerHTML = '';
       const slice = visibleItemsForPage(page);
       const start = (page - 1) * PAGE_SIZE;
@@ -1976,6 +1990,10 @@ if (it.riskLabel === '⚠️ high-risk') {
           loadedServerPages.set(page, pageSlice.slice(0, PAGE_SIZE));
           const total = serverTotalFromPayload(pack && pack.payload, serverTotalItems || pageSlice.length);
           serverTotalItems = Math.max(serverTotalItems || 0, total || 0);
+        } else if(serverTotalItems > ((page - 1) * PAGE_SIZE)){
+          // Do not silently render a blank page when the pager says that page exists.
+          // Keep the loading state visible and let the user retry by clicking the page again.
+          status.textContent = `Page ${page} data is being supplied for "${q}"...`;
         }
       }catch(e){
         console.warn('server page fetch skipped:', e);

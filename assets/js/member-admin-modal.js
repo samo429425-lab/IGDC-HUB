@@ -1,4 +1,4 @@
-/* IGDC Member/Admin Modal v2.2
+/* IGDC Member/Admin Modal v2.4.0
    6번 권한별 서비스 패널 + 7번 안정 트리거/호환 구조 통합본.
    - Trigger: #mo-btn, [data-member-modal="open"], .js-member-admin-modal-trigger, .js-seller-modal-trigger
    - Legacy compatibility: openModal('apply'), injectModal(), openMemberAdminModal()
@@ -10,7 +10,7 @@
 
   if (window.IGDCMemberAdminModal && window.IGDCMemberAdminModal.__version) return;
 
-  var VERSION = '2.3.0';
+  var VERSION = '2.4.0';
   var DEFAULT_API = '/.netlify/functions/member-admin';
   var ROOT_ID = 'igdc-member-admin-root';
   var STYLE_ID = 'igdc-member-admin-style-v2';
@@ -33,15 +33,35 @@
   var ROLE_LEVEL = {
     guest: 0,
     member: 1,
-    standard: 2,
-    premium: 3,
-    special: 4,
-    commerce: 5,
-    partner: 6,
-    manager: 10,
+    member_standard: 2,
+    member_premium: 3,
+    special_menber: 4,
+    commerce_manager: 5,
+    site_manager_home_om: 10,
+    site_manager_home_op: 11,
+    site_manager_home: 12,
+    site_manager_distribution_om: 10,
+    site_manager_distribution_op: 11,
+    site_manager_distribution: 12,
+    site_manager_donation_om: 10,
+    site_manager_donation_op: 11,
+    site_manager_donation: 12,
+    site_manager_mediahub_om: 10,
+    site_manager_mediahub_op: 11,
+    site_manager_mediahub: 12,
+    site_manager_networkhub_om: 10,
+    site_manager_networkhub_op: 11,
+    site_manager_networkhub: 12,
+    site_manager_socialnetwork_om: 10,
+    site_manager_socialnetwork_op: 11,
+    site_manager_socialnetwork: 12,
+    site_manager_tour_om: 10,
+    site_manager_tour_op: 11,
+    site_manager_tour: 12,
+    coordinator_director: 14,
+    director: 15,
     admin: 20,
-    owner: 30,
-    super_admin: 40
+    owner: 30
   };
 
   var LABELS = {
@@ -143,7 +163,7 @@
     if (!s || /[�]/.test(s) || /Ã|Â|ì|í|ë|ê|ð/.test(s)) return fallback || 'Member';
     return s;
   }
-  function normalizeRole(v) { return String(v || '').trim().toLowerCase().replace(/\s+/g, '_'); }
+  function normalizeRole(v) { return String(v || '').trim().toLowerCase().replace(/[\s.]+/g, '_'); }
   function unique(arr) {
     var map = {};
     return (arr || []).map(normalizeRole).filter(function (x) {
@@ -160,7 +180,7 @@
   }
   function canAdmin(roles) {
     roles = unique(roles);
-    return roles.some(function (r) { return roleLevel(r) >= ROLE_LEVEL.manager || r.indexOf('admin') >= 0 || r.indexOf('owner') >= 0; });
+    return roles.some(function (r) { return roleLevel(r) >= 10 || r.indexOf('admin') >= 0 || r.indexOf('owner') >= 0; });
   }
   function roleEngineRole() {
     try { if (typeof window.getUserRole === 'function') return window.getUserRole(); } catch (e) {}
@@ -341,7 +361,7 @@
       '#'+ROOT_ID+' .igdc-ma-top{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#fff;border-bottom:1px solid #e5e8ee;padding:14px 18px}'+
       '#'+ROOT_ID+' .igdc-ma-top h2{font-size:20px;margin:0;color:#0b3f74}'+
       '#'+ROOT_ID+' .igdc-ma-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}'+
-      '#'+ROOT_ID+' button{border:1px solid #d0d7de;border-radius:9px;padding:8px 11px;background:#fff;cursor:pointer;font-weight:700}'+
+      '#'+ROOT_ID+' button{border:1px solid #d0d7de;border-radius:9px;padding:7px 10px;background:#fff;cursor:pointer;font-weight:700}'+
       '#'+ROOT_ID+' button.primary{background:#0b74de;color:#fff;border-color:#0b74de}'+
       '#'+ROOT_ID+' button.danger{background:#b42318;color:#fff;border-color:#b42318}'+
       '#'+ROOT_ID+' button:disabled{opacity:.5;cursor:not-allowed}'+
@@ -353,13 +373,27 @@
       '#'+ROOT_ID+' .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}'+
       '#'+ROOT_ID+' input,#'+ROOT_ID+' select,#'+ROOT_ID+' textarea{border:1px solid #d0d7de;border-radius:9px;padding:9px;width:100%;box-sizing:border-box;background:#fff}'+
       '#'+ROOT_ID+' textarea{min-height:110px;resize:vertical}'+
-      '#'+ROOT_ID+' table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden}'+
-      '#'+ROOT_ID+' th,#'+ROOT_ID+' td{border-bottom:1px solid #edf0f5;padding:10px;text-align:left;font-size:13px;vertical-align:top}'+
-      '#'+ROOT_ID+' th{background:#eef4fb;color:#0b3f74;font-size:12px}'+
-      '#'+ROOT_ID+' .badge{display:inline-block;border-radius:999px;background:#eef4fb;color:#0b3f74;padding:3px 8px;margin:2px;font-size:12px;font-weight:700}'+
+      '#'+ROOT_ID+' table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;table-layout:fixed}'+
+      '#'+ROOT_ID+' th,#'+ROOT_ID+' td{border-bottom:1px solid #edf0f5;padding:7px 8px;text-align:left;font-size:13px;vertical-align:middle;line-height:1.3}'+
+      '#'+ROOT_ID+' th{background:#eef4fb;color:#0b3f74;font-size:12px;position:sticky;top:0;z-index:1}'+
+      '#'+ROOT_ID+' .igdc-ma-member-card{padding:10px 12px!important}'+
+      '#'+ROOT_ID+' .igdc-ma-member-tools{margin:8px 0 10px!important}'+
+      '#'+ROOT_ID+' .igdc-ma-member-list{border:1px solid #e5e8ee;border-radius:12px;overflow:hidden;background:#fff;display:block!important}'+
+      '#'+ROOT_ID+' .igdc-ma-member-head,#'+ROOT_ID+' .igdc-ma-member-row{display:grid!important;grid-template-columns:minmax(210px,1.25fr) minmax(170px,1.05fr) minmax(145px,.85fr) minmax(170px,.9fr) minmax(150px,.9fr)!important;align-items:center!important;gap:6px!important}'+
+      '#'+ROOT_ID+' .igdc-ma-member-head{background:#eef4fb;color:#0b3f74;font-size:12px;font-weight:800;padding:7px 10px!important;min-height:30px!important;line-height:1.2!important}'+
+      '#'+ROOT_ID+' .igdc-ma-member-row{padding:5px 10px!important;border-top:1px solid #edf0f5!important;min-height:34px!important;height:auto!important;max-height:none!important;margin:0!important;line-height:1.18!important}'+
+      '#'+ROOT_ID+' .igdc-ma-member-row>*{margin:0!important;padding-top:0!important;padding-bottom:0!important;min-height:0!important}'+
+      '#'+ROOT_ID+' .igdc-ma-member-row:hover{background:#f8fafc}'+
+      '#'+ROOT_ID+' .igdc-ma-member-id{font-size:11.5px!important;line-height:1.18!important;word-break:break-all;color:#344054}'+
+      '#'+ROOT_ID+' .igdc-ma-member-name{font-size:12.5px!important;line-height:1.18!important}'+
+      '#'+ROOT_ID+' .igdc-ma-member-name .muted{font-size:12px!important;line-height:1.18!important}'+
+      '#'+ROOT_ID+' .igdc-ma-member-actions{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-start}'+
+      '#'+ROOT_ID+' .igdc-ma-member-actions button{padding:4px 7px!important;font-size:11.5px!important;border-radius:6px!important;line-height:1.15!important}'+
+      '#'+ROOT_ID+' .igdc-ma-member-row select{padding:4px 7px!important;font-size:11.5px!important;border-radius:6px!important;height:30px!important;line-height:1.15!important}'+
+      '#'+ROOT_ID+' .badge{display:inline-block;border-radius:999px;background:#eef4fb;color:#0b3f74;padding:2px 7px;margin:1px 2px;font-size:11px;font-weight:700}'+
       '#'+ROOT_ID+' .error{background:#fff1f0;color:#b42318;border:1px solid #ffccc7;border-radius:10px;padding:10px;margin-bottom:10px}'+
       '#'+ROOT_ID+' .ok{background:#ecfdf3;color:#027a48;border:1px solid #abefc6;border-radius:10px;padding:10px;margin-bottom:10px}'+
-      '@media(max-width:760px){#'+ROOT_ID+' .igdc-ma-modal{width:96vw;height:92vh;flex-direction:column}#'+ROOT_ID+' .igdc-ma-side{width:auto;max-height:210px;overflow:auto}#'+ROOT_ID+' .grid{grid-template-columns:1fr}#'+ROOT_ID+' th:nth-child(1),#'+ROOT_ID+' td:nth-child(1){display:none}}';
+      '@media(max-width:760px){#'+ROOT_ID+' .igdc-ma-modal{width:96vw;height:92vh;flex-direction:column}#'+ROOT_ID+' .igdc-ma-side{width:auto;max-height:210px;overflow:auto}#'+ROOT_ID+' .grid{grid-template-columns:1fr}#'+ROOT_ID+' .igdc-ma-member-head{display:none}#'+ROOT_ID+' .igdc-ma-member-row{grid-template-columns:1fr;gap:5px}#'+ROOT_ID+' th:nth-child(1),#'+ROOT_ID+' td:nth-child(1){display:none}}';
     document.head.appendChild(style);
   }
   function root() {
@@ -469,26 +503,61 @@
       (admin?'<br><button data-tab="admin-notice">공지 작성/답글 관리</button>':'')+'</div>';
   }
   function rolesForSelect(current) {
-    var roles = (cfg().roleOptions || ['member','standard','premium','special','commerce','partner','manager','admin','owner','super_admin']);
+    var roles = (cfg().roleOptions || [
+      'guest',
+      'member',
+      'member_standard',
+      'member_premium',
+      'special_menber',
+      'commerce_manager',
+      'site_manager.home.om',
+      'site_manager.home.op',
+      'site_manager.home',
+      'site_manager.distribution.om',
+      'site_manager.distribution.op',
+      'site_manager.distribution',
+      'site_manager.mediahub.om',
+      'site_manager.mediahub.op',
+      'site_manager.mediahub',
+      'site_manager.networkhub.om',
+      'site_manager.networkhub.op',
+      'site_manager.networkhub',
+      'site_manager.socialnetwork.om',
+      'site_manager.socialnetwork.op',
+      'site_manager.socialnetwork',
+      'site_manager.tour.om',
+      'site_manager.tour.op',
+      'site_manager.tour',
+      'site_manager.donation.om',
+      'site_manager.donation.op',
+      'site_manager.donation',
+      'coordinator_director',
+      'director',
+      'admin',
+      'owner'
+    ]);
     return roles.map(function (r) { return '<option value="'+esc(r)+'" '+(normalizeRole(current)===normalizeRole(r)?'selected':'')+'>'+esc(r)+'</option>'; }).join('');
   }
   function adminMembersHtml(labels) {
     var rows = STATE.members.map(function (m) {
       var roles = unique(m.roles || (m.app_metadata && m.app_metadata.roles) || []);
       var role = highestRole(roles);
-      return '<tr data-user-id="'+esc(m.user_id || m.id || '')+'">'+
-        '<td>'+esc(m.user_id || '')+'</td>'+ 
-        '<td><b>'+esc(m.name || m.nickname || '')+'</b><br><span class="muted">'+esc(m.email || '')+'</span></td>'+ 
-        '<td>'+roles.map(function (r) { return '<span class="badge">'+esc(r)+'</span>'; }).join('')+'</td>'+ 
-        '<td><select data-role-select>'+rolesForSelect(role)+'</select></td>'+ 
-        '<td class="row"><button data-action="save-role">승급/변경</button><button data-action="block-user" class="danger">퇴출/차단</button></td>'+ 
-      '</tr>';
+      return '<div class="igdc-ma-member-row" data-user-id="'+esc(m.user_id || m.id || '')+'">'+
+        '<div class="igdc-ma-member-id">'+esc(m.user_id || '')+'</div>'+ 
+        '<div class="igdc-ma-member-name"><b>'+esc(m.name || m.nickname || '')+'</b><br><span class="muted">'+esc(m.email || '')+'</span></div>'+ 
+        '<div>'+roles.map(function (r) { return '<span class="badge">'+esc(r)+'</span>'; }).join('')+'</div>'+ 
+        '<div><select data-role-select>'+rolesForSelect(role)+'</select></div>'+ 
+        '<div class="igdc-ma-member-actions"><button data-action="save-role">변경</button><button data-action="block-user" class="danger">차단</button></div>'+ 
+      '</div>';
     }).join('');
-    return '<div class="card"><div class="row" style="justify-content:space-between"><h4>OS0/Auth0 회원 목록</h4><button data-action="reload-members">'+esc(labels.refresh)+'</button></div>'+ 
-      '<div class="row"><input id="igdc-member-search" value="'+esc(STATE.query)+'" placeholder="'+esc(labels.searchPlaceholder)+'"><button data-action="search-members">검색</button></div><br>'+ 
+    return '<div class="card igdc-ma-member-card"><div class="row" style="justify-content:space-between"><h4>OS0/Auth0 회원 목록</h4><button data-action="reload-members">'+esc(labels.refresh)+'</button></div>'+ 
+      '<div class="row igdc-ma-member-tools"><input id="igdc-member-search" value="'+esc(STATE.query)+'" placeholder="'+esc(labels.searchPlaceholder)+'"><button data-action="search-members">검색</button></div>'+ 
       (STATE.loading?'<div class="muted">'+esc(labels.loading)+'</div>':'')+
-      '<table><thead><tr><th>User ID</th><th>회원</th><th>현재 롤</th><th>변경 롤</th><th>관리</th></tr></thead><tbody>'+(rows || '<tr><td colspan="5" class="muted">회원 목록이 없거나 API 연결 대기 중입니다.</td></tr>')+'</tbody></table>'+ 
-      '<br><div class="muted">총 '+esc(STATE.total || STATE.members.length)+'명 / 페이지 '+esc(STATE.page + 1)+'</div></div>';
+      '<div class="igdc-ma-member-list">'+
+        '<div class="igdc-ma-member-head"><div>User ID</div><div>회원</div><div>현재 롤</div><div>변경 롤</div><div>관리</div></div>'+
+        (rows || '<div class="igdc-ma-member-row"><div class="muted" style="grid-column:1/-1">회원 목록이 없거나 API 연결 대기 중입니다.</div></div>')+
+      '</div>'+ 
+      '<div class="muted" style="margin-top:8px">총 '+esc(STATE.total || STATE.members.length)+'명 / 페이지 '+esc(STATE.page + 1)+'</div></div>';
   }
   function adminQueueHtml() {
     return '<div class="card"><h4>승급/검토 큐</h4><div class="muted">일반→프리미엄/스페셜/커머스 및 상위 20단계 롤 검토 요청을 관리하는 영역입니다. 서버 API의 review queue 연결 시 자동 표시됩니다.</div><br><button data-action="reload-review-queue">검토 큐 새로고침</button></div>';
@@ -512,8 +581,8 @@
     else if (act === 'open-page') openTarget();
     else if (act === 'reload-members') loadMembers();
     else if (act === 'search-members') { var s = document.getElementById('igdc-member-search'); STATE.query = s ? s.value : ''; STATE.page = 0; loadMembers(); }
-    else if (act === 'save-role') saveRole(action.closest('tr'));
-    else if (act === 'block-user') blockUser(action.closest('tr'));
+    else if (act === 'save-role') saveRole(action.closest('[data-user-id]'));
+    else if (act === 'block-user') blockUser(action.closest('[data-user-id]'));
     else if (act === 'request-upgrade') requestUpgrade(action.getAttribute('data-role'));
     else if (act === 'reload-review-queue') setError('검토 큐 API 연결이 필요합니다.');
   }
