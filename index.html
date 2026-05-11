@@ -1329,33 +1329,26 @@ window.addEventListener('DOMContentLoaded', function() {
 })();
 </script>
 
-<!-- IGDC OS Login Provider Patch v2.5.3: provider chooser visual polish + safe logout/naver reauth -->
+<!-- IGDC OS Login Provider Patch v2.5: provider chooser + Naver reauth guard -->
 <style id="igdc-provider-login-style">
-#igdc-provider-login-mask{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:2147483644;display:none}
-#igdc-provider-login-modal{position:fixed;left:50%;top:48%;transform:translate(-50%,-50%);width:min(405px,90vw);background:#fff;color:#1f2937;border-radius:0;box-shadow:0 18px 46px rgba(0,0,0,.26);z-index:2147483645;padding:28px 30px 24px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;display:none}
-#igdc-provider-login-modal .igdc-login-mark{width:44px;height:44px;margin:0 auto 10px;border-radius:12px;background:#111827;color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;letter-spacing:-.03em}
-#igdc-provider-login-modal h3{margin:0 0 8px;font-size:28px;line-height:1.15;text-align:center;color:#1f2937;font-weight:500}
-#igdc-provider-login-modal p{margin:0 0 18px;font-size:15px;line-height:1.38;color:#374151;text-align:center}
-#igdc-provider-login-modal .igdc-login-email{width:100%;height:52px;border:1px solid #9ca3af;border-radius:4px;padding:0 16px;font-size:17px;box-sizing:border-box;margin:0 0 12px;outline:none}
-#igdc-provider-login-modal .igdc-login-email:focus{border-color:#0b5bd3;box-shadow:0 0 0 1px #0b5bd3}
-#igdc-provider-login-modal .igdc-email-continue{width:100%;height:52px;border:1px solid #0f62d8;border-radius:4px;background:#0f62d8;color:#fff;cursor:pointer;font-weight:700;font-size:17px;text-align:center;margin:0 0 16px}
-#igdc-provider-login-modal .igdc-login-or{display:flex;align-items:center;gap:14px;margin:0 0 14px;color:#333;font-size:14px;justify-content:center}
-#igdc-provider-login-modal .igdc-login-or:before,#igdc-provider-login-modal .igdc-login-or:after{content:"";height:1px;background:#d1d5db;flex:1}
-#igdc-provider-login-modal .igdc-provider-grid{display:grid;grid-template-columns:1fr;gap:9px}
-#igdc-provider-login-modal button[data-provider]{width:100%;height:52px;border:1px solid #9ca3af;border-radius:4px;padding:0 16px;background:#fff;color:#26323f;cursor:pointer;font-weight:500;font-size:18px;text-align:left;display:flex;align-items:center;justify-content:flex-start;gap:14px}
-#igdc-provider-login-modal button[data-provider]:hover{background:#f6f8fa}
-#igdc-provider-login-modal .igdc-provider-icon{width:28px;min-width:28px;display:inline-flex;align-items:center;justify-content:center;font-size:22px;font-weight:800}
-#igdc-provider-login-modal button[data-provider="naver"] .igdc-provider-icon{color:#03c75a}
-#igdc-provider-login-modal button[data-provider="apple"] .igdc-provider-icon{color:#111}
-#igdc-provider-login-modal button[data-provider="wechat"] .igdc-provider-icon{color:#1aad19}
-#igdc-provider-login-modal .igdc-provider-cancel{margin-top:12px;width:100%;height:42px;border:1px solid #d0d7de;border-radius:4px;background:#fff;font-weight:600;color:#555;cursor:pointer}
-@media(max-width:480px){#igdc-provider-login-modal{padding:24px 18px 20px}#igdc-provider-login-modal h3{font-size:24px}#igdc-provider-login-modal button[data-provider]{font-size:16px}}
+#igdc-provider-login-mask{position:fixed;inset:0;background:rgba(0,0,0,.46);z-index:2147483644;display:none}
+#igdc-provider-login-modal{position:fixed;left:50%;top:46%;transform:translate(-50%,-50%);width:min(420px,92vw);background:#fff;color:#111;border-radius:14px;box-shadow:0 16px 42px rgba(0,0,0,.28);z-index:2147483645;padding:18px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;display:none}
+#igdc-provider-login-modal h3{margin:0 0 8px;font-size:18px;color:#0b3f74}
+#igdc-provider-login-modal p{margin:0 0 12px;font-size:13px;line-height:1.5;color:#333}
+#igdc-provider-login-modal .igdc-provider-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#igdc-provider-login-modal button{border:1px solid #d0d7de;border-radius:9px;padding:9px 10px;background:#fff;color:#111;cursor:pointer;font-weight:700;font-size:13px;text-align:center}
+#igdc-provider-login-modal button:hover{background:#f6f8fa}
+#igdc-provider-login-modal button[data-provider="naver"]{border-color:#03c75a;color:#04843e}
+#igdc-provider-login-modal button[data-provider="apple"]{border-color:#111;color:#111}
+#igdc-provider-login-modal button[data-provider="wechat"]{border-color:#1aad19;color:#148414}
+#igdc-provider-login-modal .igdc-provider-cancel{margin-top:10px;width:100%;font-weight:600;color:#555}
+@media(max-width:480px){#igdc-provider-login-modal .igdc-provider-grid{grid-template-columns:1fr}}
 </style>
-<script id="igdc-oslogin-provider-patch-v253">
+<script id="igdc-oslogin-provider-patch-v25">
 (function(){
   'use strict';
-  if (window.__IGDC_OSLOGIN_PROVIDER_PATCH_V253__) return;
-  window.__IGDC_OSLOGIN_PROVIDER_PATCH_V253__ = true;
+  if (window.__IGDC_OSLOGIN_PROVIDER_PATCH_V25__) return;
+  window.__IGDC_OSLOGIN_PROVIDER_PATCH_V25__ = true;
 
   var AUTH0_DOMAIN = 'login.igdcglobal.com';
   var CLIENT_ID = '4JeT1Fdy' + 'DZaN7nEO' + 'DVsKe2Sx8' + 'kKMWagj';
@@ -1415,11 +1408,12 @@ window.addEventListener('DOMContentLoaded', function() {
     var returnTo = normalizedReturnTo(to);
     var url = 'https://' + AUTH0_DOMAIN + '/v2/logout?' + new URLSearchParams({
       client_id: CLIENT_ID,
-      returnTo: returnTo
+      returnTo: returnTo,
+      federated: ''
     }).toString();
     window.location.href = url;
   }
-  async function authorize(providerKey, loginHint){
+  async function authorize(providerKey){
     var cfg = providerKey ? PROVIDERS[providerKey] : null;
     var state='st_'+randString(24), nonce='nn_'+randString(24), code_verifier=randString(64);
     var code_challenge=await sha256(code_verifier);
@@ -1436,12 +1430,12 @@ window.addEventListener('DOMContentLoaded', function() {
       nonce:nonce
     });
     if(cfg && cfg.connection) params.set('connection', cfg.connection);
-    if(loginHint) params.set('login_hint', loginHint);
     if(providerKey === 'naver'){
-      // Keep only standard Auth0/OIDC re-auth parameters.
-      // Non-standard upstream parameters can trigger unstable provider callback behavior.
       params.set('prompt','login');
       params.set('max_age','0');
+      params.set('auth_type','reauthenticate');
+      params.set('force_reauth','1');
+      try{ params.set('naver_reauth', localStorage.getItem(NAVER_FORCE_KEY) || String(Date.now())); }catch(e){}
     }else if(providerKey === 'apple'){
       params.set('prompt','login');
     }
@@ -1459,42 +1453,22 @@ window.addEventListener('DOMContentLoaded', function() {
     modal=document.createElement('section'); modal.id='igdc-provider-login-modal';
     modal.setAttribute('role','dialog'); modal.setAttribute('aria-modal','true');
     modal.innerHTML = ''+
-      '<div class="igdc-login-mark">IG</div>'+ 
-      '<h3>Welcome</h3>'+ 
-      '<p>Log in to IGDC Platform.</p>'+ 
-      '<input class="igdc-login-email" type="email" autocomplete="email" placeholder="Email address *">'+ 
-      '<button type="button" class="igdc-email-continue" data-email-continue>Continue</button>'+ 
-      '<div class="igdc-login-or">OR</div>'+ 
+      '<h3>OS-Login</h3>'+
+      '<p>로그인 방식을 선택하세요. 네이버는 로그아웃 후 재접속 시 재인증을 요청합니다.</p>'+
       '<div class="igdc-provider-grid">'+
-        '<button type="button" data-provider="google"><span class="igdc-provider-icon">G</span><span>Continue with Google</span></button>'+ 
-        '<button type="button" data-provider="facebook"><span class="igdc-provider-icon">f</span><span>Continue with Facebook</span></button>'+ 
-        '<button type="button" data-provider="naver"><span class="igdc-provider-icon">N</span><span>Continue with Naver</span></button>'+ 
-        '<button type="button" data-provider="apple"><span class="igdc-provider-icon"></span><span>Continue with Apple</span></button>'+ 
-        '<button type="button" data-provider="wechat"><span class="igdc-provider-icon">☘</span><span>Continue with WeChat</span></button>'+ 
-      '</div>'+ 
+        '<button type="button" data-provider="google">Google</button>'+
+        '<button type="button" data-provider="facebook">Facebook</button>'+
+        '<button type="button" data-provider="naver">Naver</button>'+
+        '<button type="button" data-provider="apple">Apple</button>'+
+        '<button type="button" data-provider="wechat">WeChat</button>'+
+      '</div>'+
       '<button type="button" class="igdc-provider-cancel" data-provider-cancel>닫기</button>';
     document.body.appendChild(mask); document.body.appendChild(modal);
     mask.addEventListener('click', closeChooser);
     modal.addEventListener('click', function(e){
       var cancel=e.target.closest('[data-provider-cancel]'); if(cancel){ closeChooser(); return; }
-      var emailGo=e.target.closest('[data-email-continue]');
-      if(emailGo){
-        var emailInput=modal.querySelector('.igdc-login-email');
-        var email=emailInput ? String(emailInput.value||'').trim() : '';
-        closeChooser();
-        authorize(null, email);
-        return;
-      }
       var btn=e.target.closest('[data-provider]'); if(!btn) return;
       var p=btn.getAttribute('data-provider'); closeChooser(); authorize(p);
-    });
-    modal.addEventListener('keydown', function(e){
-      if(e.key === 'Enter' && e.target && e.target.classList && e.target.classList.contains('igdc-login-email')){
-        e.preventDefault();
-        var email=String(e.target.value||'').trim();
-        closeChooser();
-        authorize(null, email);
-      }
     });
     return modal;
   }
@@ -1524,7 +1498,7 @@ window.addEventListener('DOMContentLoaded', function() {
   document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeChooser(); });
 })();
 </script>
-<!-- END IGDC OS Login Provider Patch v2.5.3 -->
+<!-- END IGDC OS Login Provider Patch v2.5 -->
 
 <!-- Auth0 SPA SDK -->
 <script src="https://cdn.jsdelivr.net/npm/@auth0/auth0-spa-js@2.1.3/dist/auth0-spa-js.production.js"></script>
