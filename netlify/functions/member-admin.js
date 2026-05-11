@@ -1,4 +1,4 @@
-/* IGDC Member Admin API v2.0 - Netlify Function
+/* IGDC Member Admin API v2.2 - Netlify Function
    Purpose: secure server-side Auth0/OS0 member list + role management for member-admin-modal.js.
    Required ENV:
    - AUTH0_DOMAIN                 ex) your-tenant.us.auth0.com
@@ -40,7 +40,8 @@ exports.handler = async function handler(event) {
       const q = buildUserQuery(qs.q || '');
       const users = await auth0Get(env, `/api/v2/users?search_engine=v3&include_totals=true&page=${page}&per_page=${perPage}${q ? '&q=' + encodeURIComponent(q) : ''}`);
       const list = Array.isArray(users) ? users : users.users || [];
-      return json(200, { ok: true, users: list.map(publicUser), total: users.total || list.length, page, per_page: perPage });
+      const publicList = await Promise.all(list.map(u => publicUserWithRoles(env, u)));
+      return json(200, { ok: true, users: publicList, total: users.total || list.length, page, per_page: perPage });
     }
 
     if (method === 'POST' && action === 'update-role') {
@@ -82,7 +83,8 @@ function readEnv() {
     clientSecret: required(process.env.AUTH0_M2M_CLIENT_SECRET, 'AUTH0_M2M_CLIENT_SECRET'),
     rolesClaim: process.env.AUTH0_ROLES_CLAIM || 'https://igdcglobal.com/roles',
     adminRoles: String(process.env.IGDC_ADMIN_ROLES || 'owner,admin,super_admin,manager').split(',').map(normalizeRole),
-    roleIdMap: safeJson(process.env.AUTH0_ROLE_ID_MAP_JSON || '{}')
+    roleIdMap: safeJson(process.env.AUTH0_ROLE_ID_MAP_JSON || '{}'),
+    loadUserRoles: String(process.env.AUTH0_LOAD_USER_ROLES || 'true') !== 'false'
   };
 }
 function required(v, name) {
@@ -152,9 +154,18 @@ function requireAdmin(requester) {
   if (!requester.admin) throw Object.assign(new Error('관리자 권한이 필요합니다.'), { statusCode: 403 });
 }
 function publicRequester(u) { return { user_id: u.sub, email: u.email, name: u.name, roles: u.roles, admin: u.admin }; }
-function publicUser(u) {
+async function publicUserWithRoles(env, u) {
   const meta = u.app_metadata || {};
-  const roles = Array.isArray(meta.roles) ? meta.roles : [];
+  let roles = [];
+  if (Array.isArray(meta.roles)) roles = roles.concat(meta.roles);
+  if (meta.igdc_role) roles.push(meta.igdc_role);
+  if (env.loadUserRoles) {
+    try {
+      const assigned = await auth0Get(env, `/api/v2/users/${encodeURIComponent(u.user_id)}/roles`);
+      if (Array.isArray(assigned)) roles = roles.concat(assigned.map(r => r.name || r.id).filter(Boolean));
+    } catch (_) {}
+  }
+  roles = [...new Set(roles.map(normalizeRole).filter(Boolean))];
   return { user_id: u.user_id, email: u.email, name: u.name || u.nickname || '', nickname: u.nickname || '', picture: u.picture || '', blocked: !!u.blocked, created_at: u.created_at, last_login: u.last_login, roles, app_metadata: meta };
 }
 async function managementToken(env) {
