@@ -346,6 +346,24 @@ function ensureSearchCardMediaStyle(){
       font-weight: 800;
     }
 
+
+    .maru-search-home-link {
+      display: inline-block;
+      margin-right: 4px;
+      color: #111827;
+      font-weight: 900;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .maru-search-home-link:hover {
+      color: #4f46e5;
+      text-decoration: underline;
+    }
+    .maru-search-header-title {
+      white-space: nowrap;
+      font-weight: 800;
+    }
+
     @media (max-width: 720px) {
       .maru-search-card-body {
         display: block;
@@ -365,6 +383,49 @@ function ensureSearchCardMediaStyle(){
 }
 
 ensureSearchCardMediaStyle();
+
+
+function resolveSearchHomeUrl(){
+  try {
+    const rawFrom = (new URLSearchParams(location.search).get('from') || '').trim();
+    if (rawFrom) {
+      const u = new URL(rawFrom, location.origin);
+      if (u.origin === location.origin) return u.pathname + u.search + u.hash;
+    }
+  } catch(e) {}
+  return '/';
+}
+
+function ensureSearchHeaderHomeLink(){
+  if (!isSearchPage || document.getElementById('maru-search-home-title-link')) return;
+  try {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode(node){
+        const text = String(node.nodeValue || '').replace(/\s+/g, ' ').trim();
+        if (text === 'IGDC Global Search') return NodeFilter.FILTER_ACCEPT;
+        return NodeFilter.FILTER_SKIP;
+      }
+    });
+    const node = walker.nextNode();
+    if (!node || !node.parentNode) return;
+
+    const wrap = document.createElement('span');
+    wrap.className = 'maru-search-header-title';
+
+    const home = document.createElement('a');
+    home.id = 'maru-search-home-title-link';
+    home.className = 'maru-search-home-link';
+    home.href = resolveSearchHomeUrl();
+    home.textContent = 'Home';
+    home.setAttribute('aria-label', 'Go to Home');
+
+    wrap.appendChild(home);
+    wrap.appendChild(document.createTextNode(' Global Search'));
+    node.parentNode.replaceChild(wrap, node);
+  } catch(e) {}
+}
+
+ensureSearchHeaderHomeLink();
 
 
 const type0 = normalizeSearchType(params.get('type') || 'all');
@@ -1349,7 +1410,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       // a Google/Naver-like balanced order.
       const limits = {
         authority: 4,
-        news: 5,
+        news: 6,
         local_tour: 3,
         media: 5,
         social: 5,
@@ -1425,8 +1486,84 @@ async function fetchInstantSearchPack(q, type = activeType){
       return firstBySource.concat(rest);
     }
 
+    function buildFrontViewportGroups(source, maxSlots){
+      if(!Array.isArray(source) || !source.length) return [];
+      const slotLimit = Math.max(1, parseInt(maxSlots, 10) || PAGE_SIZE);
+      const visibleCaps = {
+        authority: 3,
+        knowledge: 3,
+        local_tour: 2,
+        news: 6,
+        community: 5,
+        social: 3,
+        media: 3,
+        shopping: 3,
+        sports: 2,
+        finance: 2,
+        webtoon: 2,
+        web: 25
+      };
+      const groups = groupSliceForDisplay(source).map(g => {
+        const items = diversifyGroupPreviewItems(g.group, g.items || []);
+        return Object.assign({}, g, { items });
+      });
+
+      const out = [];
+      let remaining = slotLimit;
+      groups.forEach(g => {
+        if(remaining <= 0 || !g || !Array.isArray(g.items) || !g.items.length) return;
+        const baseCap = visibleCaps[g.group] || displayGroupPreviewLimit(g.group, g.items[0]) || 5;
+        const visibleCount = Math.max(0, Math.min(baseCap, g.items.length, remaining));
+        if(!visibleCount) return;
+        out.push(Object.assign({}, g, {
+          previewLimit: visibleCount,
+          previewItems: g.items.slice(0, visibleCount),
+          hiddenItems: g.items.slice(visibleCount),
+          slotAwareViewport: true,
+          displaySlotCount: visibleCount,
+          sourceTotal: g.items.length
+        }));
+        remaining -= visibleCount;
+      });
+
+      // Fill any unused first-page slots with balanced web/general results. This keeps
+      // the first viewport at 25 visible cards while collapsed overflow does not count.
+      if(remaining > 0){
+        const used = new Set();
+        out.forEach(g => (g.previewItems || []).forEach(it => {
+          const key = String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
+          if(key) used.add(key);
+        }));
+        const filler = [];
+        groups.forEach(g => {
+          (g.items || []).forEach(it => {
+            if(filler.length >= remaining) return;
+            const key = String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
+            if(key && used.has(key)) return;
+            if(key) used.add(key);
+            filler.push(it);
+          });
+        });
+        if(filler.length){
+          out.push({
+            group: 'web',
+            label: '웹 결과',
+            previewLimit: filler.length,
+            previewItems: filler,
+            hiddenItems: [],
+            items: filler,
+            slotAwareViewport: true,
+            displaySlotCount: filler.length,
+            sourceTotal: filler.length,
+            firstIndex: 9999
+          });
+        }
+      }
+      return out;
+    }
+
     function renderGroupedSlice(slice, page){
-      const groups = groupSliceForDisplay(slice);
+      const groups = (Array.isArray(slice) && slice.length && slice[0] && Array.isArray(slice[0].items) && slice[0].group) ? slice : groupSliceForDisplay(slice);
       groups.forEach(groupInfo => {
         groupInfo.items = diversifyGroupPreviewItems(groupInfo.group, groupInfo.items);
 
@@ -1444,8 +1581,9 @@ async function fetchInstantSearchPack(q, type = activeType){
 
         const meta = document.createElement('div');
         meta.className = 'maru-display-section-meta';
-        const sourceTotal = Math.max.apply(null, groupInfo.items.map(x => parseInt(x && x.displayGroupSourceTotal, 10) || 0).concat([groupInfo.items.length]));
-        meta.textContent = sourceTotal > groupInfo.items.length ? `${groupInfo.items.length}/${sourceTotal}개` : `${groupInfo.items.length}개`;
+        const sourceTotal = parseInt(groupInfo.sourceTotal, 10) || Math.max.apply(null, groupInfo.items.map(x => parseInt(x && x.displayGroupSourceTotal, 10) || 0).concat([groupInfo.items.length]));
+        const visibleCountForMeta = Array.isArray(groupInfo.previewItems) ? groupInfo.previewItems.length : groupInfo.items.length;
+        meta.textContent = sourceTotal > visibleCountForMeta ? `${visibleCountForMeta}/${sourceTotal}개` : `${visibleCountForMeta}개`;
 
         head.appendChild(title);
         head.appendChild(meta);
@@ -1454,8 +1592,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         body.className = 'maru-display-section-body';
 
         const previewLimit = Math.max(1, parseInt(groupInfo.previewLimit, 10) || displayGroupPreviewLimit(groupInfo.group, groupInfo.items[0]));
-        const previewItems = groupInfo.items.slice(0, previewLimit);
-        const hiddenItems = groupInfo.items.slice(previewLimit);
+        const previewItems = Array.isArray(groupInfo.previewItems) ? groupInfo.previewItems : groupInfo.items.slice(0, previewLimit);
+        const hiddenItems = Array.isArray(groupInfo.hiddenItems) ? groupInfo.hiddenItems : groupInfo.items.slice(previewItems.length);
         let hiddenMounted = false;
         let hiddenWrap = null;
 
@@ -2163,7 +2301,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       // image/video/SNS/blog/web results are promoted, but lower-priority results
       // are not omitted. They continue naturally on later pages.
       const frontCaps = {
-        authority: 4, knowledge: 3, local_tour: 3, news: 5,
+        authority: 4, knowledge: 3, local_tour: 3, news: 6,
         media: 5, social: 5, community: 5, shopping: 5,
         sports: 5, finance: 5, webtoon: 5, web: 30
       };
@@ -2255,7 +2393,8 @@ if (it.riskLabel === '⚠️ high-risk') {
 
       const frontSections = (page === 1) ? frontPageSectionSource() : null;
       if (frontSections && shouldUseDisplayGroups(frontSections)) {
-        renderGroupedSlice(frontSections, page);
+        const frontGroups = buildFrontViewportGroups(frontSections, PAGE_SIZE);
+        renderGroupedSlice(frontGroups, page);
       } else if (shouldUseDisplayGroups(slice)) {
         renderGroupedSlice(slice, page);
       } else {
