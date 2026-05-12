@@ -22,8 +22,8 @@ const crypto = require('crypto');
 
 const VERSION = 'A1.5.46-595-sanmaru-cpu-direct-page25-sns-google-fix';
 const DEFAULT_LIMIT = 600;
-const MAX_LIMIT = 12000;
-const MIN_RESULT_TARGET = 300;
+const MAX_LIMIT = 1500;
+const MIN_RESULT_TARGET = 120;
 const MARU_SEARCH_MAX_PAGER_PAGES = 499;
 const DEFAULT_SOFT_TIMEOUT_MS = 10500;
 
@@ -35,12 +35,12 @@ const DEFAULT_SOFT_TIMEOUT_MS = 10500;
 const MARU_GATEWAY_CACHE_TTL_MS = 5 * 60 * 1000;
 const MARU_INFLIGHT_TTL_MS = 30 * 1000;
 const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
-const OG_IMAGE_ENRICH_LIMIT = 60;
-const OG_IMAGE_ENRICH_CONCURRENCY = 5;
+const OG_IMAGE_ENRICH_LIMIT = 36;
+const OG_IMAGE_ENRICH_CONCURRENCY = 6;
 const OG_IMAGE_ENRICH_TIMEOUT_MS = 1200;
 const OG_IMAGE_CACHE_TTL_MS = 30 * 60 * 1000;
-const MAX_SEARCH_BANK_PAGES_NORMAL = 30;
-const MAX_SEARCH_BANK_PAGES_DEEP = 60;
+const MAX_SEARCH_BANK_PAGES_NORMAL = 12;
+const MAX_SEARCH_BANK_PAGES_DEEP = 24;
 
 function nowMs(){ return Date.now(); }
 
@@ -115,24 +115,6 @@ function envFirst(){
 }
 function stripHtml(s){ return safeString(s).replace(/<[^>]*>/g, ''); }
 
-
-function adaptiveMaruCandidateTarget(q, searchType){
-  const text = safeString(q).trim();
-  const type = normalizeSearchType(searchType || 'all');
-  if(!text) return MIN_RESULT_TARGET;
-  const tokens = text.split(/[\s,·/|]+/).filter(Boolean);
-  const compact = text.replace(/\s+/g, '');
-  const localSignal = /(동|읍|면|리|로|길|시장|카페|맛집|식당|호텔|학교|병원|역|터미널|상가|거리|남대문|동대문|명동|강남|홍대|부산|서울|제주|대구|인천|광주|대전|울산)/.test(text);
-  const broadSignal = /(세계|글로벌|global|world|뉴스|news|관광|tour|travel|경제|정치|ai|인공지능|기술|technology|한국|korea|미국|china|japan|europe|시장 동향|트렌드|trend)/i.test(text);
-  const specific = tokens.length >= 3 || compact.length >= 9 || /[0-9]/.test(text);
-  let target = DEFAULT_LIMIT;
-  if(type !== 'all') target = ['news','blog','sns','video','image'].includes(type) ? (broadSignal ? 900 : 500) : (broadSignal ? 800 : 400);
-  else if(localSignal && specific && !broadSignal) target = 350;
-  else if(localSignal) target = 550;
-  else if(broadSignal) target = 1200;
-  else if(specific) target = 500;
-  return Math.max(MIN_RESULT_TARGET, Math.min(1500, target));
-}
 
 function requestHeaders(event){ return (event && event.headers) || {}; }
 function requestMethod(event){ return safeString(event && event.httpMethod || 'GET').toUpperCase(); }
@@ -468,7 +450,6 @@ function isHardRejectImageUrl(imageUrl){
 
   if(hardBad.some(k => s.includes(k))) return true;
   if(/\.(ico)(\?|#|$)/i.test(s)) return true;
-  if(/search\.naver\.com\/.+favicon|ssl\.pstatic\.net\/.+(logo|sp_|ico)|googlelogo|gstatic\.com\/.+(logo|icon)|youtube\.com\/s\/desktop\/.+\.svg/i.test(s)) return true;
 
   // SVG is often a logo/icon. Do not globally reject it if it is a real provider thumbnail,
   // but reject obvious logo/icon SVG paths.
@@ -1590,8 +1571,8 @@ function getSanmaruResidentForMaru(q, raw, opts){
         residentKey,
         strictQuery: true,
         isolateByQuery: true,
-        limit: Math.min(1500, Math.max(clampInt(raw.limit, adaptiveMaruCandidateTarget(q, opts.searchType), 1, 1500), MIN_RESULT_TARGET)),
-        candidatePoolTarget: Math.min(1500, Math.max(clampInt(raw.candidatePool || raw.candidatePoolTarget, adaptiveMaruCandidateTarget(q, opts.searchType), 1, 1500), MIN_RESULT_TARGET)),
+        limit: Math.min(MAX_LIMIT, Math.max(clampInt(raw.limit, DEFAULT_LIMIT, 1, MAX_LIMIT), MIN_RESULT_TARGET)),
+        candidatePoolTarget: Math.min(MAX_LIMIT, Math.max(clampInt(raw.candidatePool || raw.candidatePoolTarget, DEFAULT_LIMIT, 1, MAX_LIMIT), MIN_RESULT_TARGET)),
         searchType: opts.searchType,
         type: opts.searchType,
         lang: opts.lang,
@@ -1694,7 +1675,7 @@ function triggerSanmaruResidentRefresh(q, raw, ctx){
 }
 
 function buildImmediateResidentResponse(q, raw, residentPack, baseMeta){
-  const candidateTarget = Math.min(1500, Math.max(clampInt(raw && (raw.candidatePool || raw.candidatePoolTarget || raw.limit), adaptiveMaruCandidateTarget(q, raw && (raw.type || raw.category || raw.tab || raw.vertical)), 1, 1500), MIN_RESULT_TARGET));
+  const candidateTarget = Math.min(MAX_LIMIT, Math.max(clampInt(raw && (raw.candidatePool || raw.candidatePoolTarget || raw.limit), DEFAULT_LIMIT, 1, MAX_LIMIT), MIN_RESULT_TARGET));
   const visibleNeed = clampInt(firstNonEmpty(raw && (raw.perPage || raw.pageSize || raw.visibleCardsPerPage || raw.visibleLimit), 25), 25, 1, 100);
   let items = dedupeCanonicalItems(residentPack.items || []).slice(0, candidateTarget).map(compactResultItem);
   if(items.length < visibleNeed){
@@ -1854,12 +1835,12 @@ function buildSanmaruProviderLaneExpansionCards(q, raw, ctx, requestedLimit, exi
   // It preserves the fast Sanmaru first-paint path while preventing large queries
   // from looking capped at the small resident/cache count. Real provider/API
   // results can still be absorbed by the normal wide gateway or background refresh.
+  const requestedTarget = clampInt(raw.fastLaneTarget || raw.providerLaneTarget || raw.candidatePool || raw.candidatePoolTarget || raw.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
+  const smoothCap = truthy(raw.smoothIntake) || truthy(raw.pageWindowOnly) || truthy(raw.noBlockingWide) ? Math.min(MAX_LIMIT, Math.max(requestedTarget, 300)) : MAX_LIMIT;
   const target = Math.min(
+    smoothCap,
     MAX_LIMIT,
-    Math.max(
-      clampInt(raw.fastLaneTarget || raw.providerLaneTarget || raw.candidatePool || raw.candidatePoolTarget || raw.limit, DEFAULT_LIMIT, 1, MAX_LIMIT),
-      MIN_RESULT_TARGET
-    )
+    Math.max(requestedTarget, MIN_RESULT_TARGET)
   );
   const need = Math.max(0, target - (existingCount || 0));
   if(need <= 0) return [];
@@ -2216,8 +2197,8 @@ function mapCards(q, region){
   if(!q) return [];
   const enc = encodeURIComponent(q);
   const cards = [
-    { title: '[Map] ' + q + ' - Google Maps', url: 'https://www.google.com/maps/search/' + enc, source: 'google_maps', mediaType: 'map', type: 'map', summary: q + ' 지도 검색', score: 0.72 },
-    { title: '[Map] ' + q + ' - Naver Map', url: 'https://map.naver.com/p/search/' + enc, source: 'naver_map', mediaType: 'map', type: 'map', summary: q + ' 네이버 지도 검색', score: 0.71 }
+    { title: '[Map] ' + q + ' - Google Maps', url: 'https://www.google.com/maps/search/' + enc, source: 'google_maps', mediaType: 'map', type: 'map', category: 'map', displayGroup: 'local_tour', summary: q + ' 지도 검색', score: 0.72, mapQuery: q, visualKind: 'map' },
+    { title: '[Map] ' + q + ' - Naver Map', url: 'https://map.naver.com/p/search/' + enc, source: 'naver_map', mediaType: 'map', type: 'map', category: 'map', displayGroup: 'local_tour', summary: q + ' 네이버 지도 검색', score: 0.71, mapQuery: q, visualKind: 'map' }
   ];
   return cards.map(x => canonicalizeItem(x, q, x.source));
 }
@@ -2722,19 +2703,19 @@ function sourceCaps(opts){
     // Sanmaru/Maru Search must not choke the information road at the gateway.
     // Normal mode stays bounded, but opens the major provider lanes broadly enough
     // to avoid the old few-hundred-result ceiling. Deep mode is still the wider pass.
-    naverPages: deep ? 6 : 3,
-    naverBlogPages: deep ? 4 : 2,
-    naverNewsPages: deep ? 4 : 2,
-    naverCafePages: deep ? 3 : 2,
-    naverEncycPages: deep ? 2 : 1,
-    naverKinPages: deep ? 2 : 1,
-    naverBookPages: deep ? 2 : 1,
-    naverLocalPages: deep ? 2 : 1,
-    googlePages: deep ? 5 : 3,
-    bingPages: deep ? 3 : 2,
-    imagePages: deep ? 3 : 2,
-    naverImagePages: deep ? 3 : 2,
-    youtubeLimit: deep ? 80 : 40,
+    naverPages: deep ? 10 : 10,
+    naverBlogPages: deep ? 8 : 6,
+    naverNewsPages: deep ? 8 : 6,
+    naverCafePages: deep ? 8 : 6,
+    naverEncycPages: deep ? 3 : 2,
+    naverKinPages: deep ? 3 : 2,
+    naverBookPages: deep ? 4 : 2,
+    naverLocalPages: deep ? 3 : 2,
+    googlePages: deep ? 9 : 6,
+    bingPages: deep ? 6 : 4,
+    imagePages: deep ? 6 : 4,
+    naverImagePages: deep ? 6 : 4,
+    youtubeLimit: deep ? 180 : 120,
     timeoutMs: deep ? 15000 : DEFAULT_SOFT_TIMEOUT_MS
   };
 }
@@ -2748,7 +2729,7 @@ function addBundle(bundle, fallbackSource, collected, sourceState){
 }
 
 async function orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType, sanmaruRouteContext }){
-  limit = clampInt(limit, adaptiveMaruCandidateTarget(q, searchType), 1, 1500);
+  limit = clampInt(limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
 
   globalThis.__MARU_CACHE = globalThis.__MARU_CACHE || new Map();
   globalThis.__MARU_INFLIGHT = globalThis.__MARU_INFLIGHT || new Map();
@@ -2775,8 +2756,8 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     const sanmaruRoutePlan = sanmaruRouteContext && sanmaruRouteContext.routePlan;
     const sanmaruProviderHealth = sanmaruRouteContext && sanmaruRouteContext.providerHealth;
     const externalTriggerMin = Math.min(
-      1500,
-      Math.max(gatewayExternalTriggerCount(), Math.min(limit, adaptiveMaruCandidateTarget(q, searchType)))
+      MAX_LIMIT,
+      Math.max(gatewayExternalTriggerCount(), Math.min(limit, MIN_RESULT_TARGET))
     );
 
     function record(name, status, count, extra){ trace.push(Object.assign({ name, status, count: count || 0 }, extra || {})); }
@@ -2788,10 +2769,10 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     });
 
     async function pullFromSearchBank(){
-      const target = Math.min(1500, Math.max(limit, adaptiveMaruCandidateTarget(q, searchType)));
+      const target = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
       const pageSize = 100;
       const maxPages = Math.min(caps.searchBankPages, Math.ceil(target / pageSize) + 3);
-      const firstWindow = Math.min(maxPages, deep ? 8 : 4);
+      const firstWindow = Math.min(maxPages, deep ? 18 : 12);
       const offsets = [];
       for(let i=0; i<firstWindow; i++) offsets.push(i * pageSize);
 
@@ -4642,7 +4623,7 @@ async function attachSanmaruAugmentResults(base, event, ctx){
     }
   }
 
-  const finalTarget = Math.min(1500, Math.max(limit, currentCount, merged.length, adaptiveMaruCandidateTarget(q, ctx && ctx.searchType)));
+  const finalTarget = Math.min(MAX_LIMIT, Math.max(limit, currentCount, merged.length, MIN_RESULT_TARGET));
   const finalItems = merged.slice(0, finalTarget);
   absorbIntoSanmaruResident(q, finalItems, { searchType: ctx && ctx.searchType, lang: ctx && ctx.lang });
 
@@ -4749,9 +4730,7 @@ exports.handler = async function(event){
 
     let base = null;
     const sanmaruOpenGateRequested = truthy(raw && (raw.sanmaruFastOnly || raw.cacheOnly || raw.instantOnly || raw.sanmaruFirst || raw.residentFirst || raw.naturalFlow || raw.residentSwitch)) || safeString(raw && raw.routeOwner).toLowerCase() === 'sanmaru';
-    const smoothIntakeRequested = truthy(raw && (raw.smoothIntake || raw.noBlockingWide || raw.pageWindowOnly));
-    const sanmaruFastEnoughNeed = smoothIntakeRequested ? visibleNeed : limit;
-    const sanmaruCanServeFromFastLayer = residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, sanmaruFastEnoughNeed, raw || {}) && sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal));
+    const sanmaruCanServeFromFastLayer = residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, limit, raw || {}) && sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal));
     if(sanmaruCanServeFromFastLayer){
       base = buildSanmaruFastLayerBase(q, residentSeedPack, Object.assign({}, raw || {}, { limit }), { region:detectRuntimeRegion(event, lang, q) });
       base.meta = Object.assign({}, base.meta || {}, {
@@ -4797,7 +4776,7 @@ exports.handler = async function(event){
     }
     if(residentSeedPack && Array.isArray(residentSeedPack.items) && residentSeedPack.items.length){
       const residentSeedItems = residentSeedPack.items.map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru-resident-seed')));
-      const finalSeedTarget = Math.min(1500, Math.max(limit, adaptiveMaruCandidateTarget(q, searchType), (base.items || []).length, residentSeedItems.length));
+      const finalSeedTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET, (base.items || []).length, residentSeedItems.length));
       base.items = dedupeCanonicalItems([].concat(base.items || [], residentSeedItems)).slice(0, finalSeedTarget);
       base.results = base.items;
       base.meta = Object.assign({}, base.meta || {}, {
@@ -4813,7 +4792,7 @@ exports.handler = async function(event){
       });
     }
     const requestedPageForWindow = clampInt(firstNonEmpty(raw && (raw.page || raw.p || raw.visiblePage || raw.sectionPage), 1), 1, 1, MARU_SEARCH_MAX_PAGER_PAGES);
-    const providerLaneTarget = Math.min(1500, Math.max(limit, adaptiveMaruCandidateTarget(q, searchType), visibleNeed * 12, requestedPageForWindow * visibleNeed));
+    const providerLaneTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET, visibleNeed * 12, requestedPageForWindow * visibleNeed));
     if(sanmaruOpenGateRequested && (base.items || []).length < providerLaneTarget && !forceProviderRefresh){
       const laneItems = buildSanmaruProviderLaneExpansionCards(q, Object.assign({}, raw || {}, { limit: providerLaneTarget }), { region:detectRuntimeRegion(event, lang, q) }, providerLaneTarget, (base.items || []).length);
       base.items = dedupeCanonicalItems([].concat(base.items || [], laneItems)).slice(0, providerLaneTarget);
@@ -4834,7 +4813,7 @@ exports.handler = async function(event){
     // expansion and does not render all candidates on the client.
     const requestedPageForWindowGuarantee = clampInt(firstNonEmpty(raw && (raw.page || raw.p || raw.visiblePage || raw.sectionPage), 1), 1, 1, MARU_SEARCH_MAX_PAGER_PAGES);
     const pageWindowCandidateNeed = Math.min(
-      1500,
+      MAX_LIMIT,
       Math.max(visibleNeed * 12, requestedPageForWindowGuarantee * visibleNeed + visibleNeed)
     );
     if((base.items || []).length < pageWindowCandidateNeed){

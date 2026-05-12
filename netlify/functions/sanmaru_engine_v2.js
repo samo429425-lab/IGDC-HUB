@@ -30,7 +30,7 @@ try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) 
 const VERSION = "sanmaru-engine-v2.6.1-engine-upload-lifecycle";
 const ENGINE_NAME = "sanmaru";
 
-const DEFAULT_LIMIT = 600;
+const DEFAULT_LIMIT = 2000;
 const DEFAULT_VISIBLE_PER_PAGE = 25;
 const MAX_LIMIT = 12000;
 const SANMARU_MAX_PAGER_PAGES = 499;
@@ -41,29 +41,11 @@ const INFLIGHT_TTL_MS = 30 * 1000;
 const RATE_WINDOW_MS = 10 * 1000;
 const RATE_MAX = 60;
 const MAX_QUERY_LENGTH = 240;
-const MIN_FAST_TARGET = 300;
+const MIN_FAST_TARGET = 120;
 const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
-const DEFAULT_CANDIDATE_POOL_TARGET = 1200;
+const DEFAULT_CANDIDATE_POOL_TARGET = 900;
 const MAX_INDEX_FAST_LIMIT = 1500;
 const MAX_SEARCH_BANK_FAST_LIMIT = 1500;
-
-function adaptiveSanmaruCandidateTarget(q, searchType){
-  const text = String(q || '').trim();
-  const type = normalizeSearchType(searchType || 'all');
-  if(!text) return MIN_FAST_TARGET;
-  const tokens = text.split(/[\s,·/|]+/).filter(Boolean);
-  const compact = text.replace(/\s+/g, '');
-  const localSignal = /(동|읍|면|리|로|길|시장|카페|맛집|식당|호텔|학교|병원|역|터미널|상가|거리|남대문|동대문|명동|강남|홍대|부산|서울|제주|대구|인천|광주|대전|울산)/.test(text);
-  const broadSignal = /(세계|글로벌|global|world|뉴스|news|관광|tour|travel|경제|정치|ai|인공지능|기술|technology|한국|korea|미국|china|japan|europe|시장 동향|트렌드|trend)/i.test(text);
-  const specific = tokens.length >= 3 || compact.length >= 9 || /[0-9]/.test(text);
-  let target = DEFAULT_CANDIDATE_POOL_TARGET;
-  if(type !== 'all') target = ['news','blog','sns','video','image'].includes(type) ? (broadSignal ? 900 : 500) : (broadSignal ? 800 : 400);
-  else if(localSignal && specific && !broadSignal) target = 350;
-  else if(localSignal) target = 550;
-  else if(broadSignal) target = 1200;
-  else if(specific) target = 500;
-  return Math.max(MIN_FAST_TARGET, Math.min(1500, target));
-}
 
 const globalState = globalThis.__SANMARU_V2_STATE || (globalThis.__SANMARU_V2_STATE = {
   cache: new Map(),
@@ -2359,7 +2341,6 @@ function parseCtx(input, maybeCtx){
   const wideExpansion = ["wide","global","library","full","max","world"].includes(expansionRaw);
   const deep = truthy(ctx.deep || raw.deep || qs.deep) || externalRaw === "deep" || wideExpansion;
   const externalForced = ["1","true","yes","on","force","live","deep"].includes(externalRaw) || truthy(ctx.useExternal || raw.useExternal || qs.useExternal || ctx.useLive || raw.useLive || qs.useLive);
-  const adaptiveTarget = adaptiveSanmaruCandidateTarget(clean.value, searchType);
 
   return Object.assign(ctx, {
     event,
@@ -2382,7 +2363,7 @@ function parseCtx(input, maybeCtx){
     page: clampInt(firstNonEmpty(ctx.page, raw.page, qs.page), 1, 1, 100000),
     perPage: clampInt(firstNonEmpty(ctx.perPage, raw.perPage, qs.perPage), DEFAULT_VISIBLE_PER_PAGE, 1, 200),
     start: clampInt(firstNonEmpty(ctx.start, raw.start, qs.start), 1, 1, 1000000),
-    candidatePoolTarget: clampInt(firstNonEmpty(ctx.candidatePool, raw.candidatePool, qs.candidatePool, ctx.candidatePoolTarget, raw.candidatePoolTarget, qs.candidatePoolTarget, wideExpansion ? DEFAULT_CANDIDATE_POOL_TARGET : "", ctx.limit, raw.limit, qs.limit, adaptiveTarget), adaptiveTarget, 1, 1500),
+    candidatePoolTarget: clampInt(firstNonEmpty(ctx.candidatePool, raw.candidatePool, qs.candidatePool, ctx.candidatePoolTarget, raw.candidatePoolTarget, qs.candidatePoolTarget, wideExpansion ? DEFAULT_CANDIDATE_POOL_TARGET : "", ctx.limit, raw.limit, qs.limit), DEFAULT_CANDIDATE_POOL_TARGET, 1, MAX_LIMIT),
     expansion: expansionRaw || (wideExpansion ? "wide" : "balanced"),
     directExternalAllowed: truthy(ctx.directExternal || raw.directExternal || qs.directExternal || ctx.sanmaruDirectExternal || raw.sanmaruDirectExternal || qs.sanmaruDirectExternal || process.env.SANMARU_DIRECT_EXTERNAL),
     requestId: firstNonEmpty(ctx.requestId, stableHash([clean.value, nowMs(), Math.random()].join("|")))
@@ -2429,7 +2410,7 @@ async function runSanmaru(input, maybeCtx){
       allowOpeningCards:true
     });
     let instantItems = Array.isArray(supplied && supplied.items) ? supplied.items : [];
-    const finalTarget = Math.min(1500, Math.max(ctx.limit, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET));
+    const finalTarget = Math.min(MAX_LIMIT, Math.max(ctx.limit, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET));
     instantItems = finalRank(ctx.q, instantItems, ctx).slice(0, finalTarget).map(it => {
       const copy = Object.assign({}, it);
       delete copy._sanmaruSeq;
@@ -2548,7 +2529,7 @@ async function runSanmaru(input, maybeCtx){
     });
 
     let ranked = finalRank(ctx.q, items, ctx);
-    const finalTarget = Math.min(1500, Math.max(ctx.limit, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET));
+    const finalTarget = Math.min(MAX_LIMIT, Math.max(ctx.limit, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET));
     ranked = ranked.slice(0, finalTarget).map(it => {
       const copy = Object.assign({}, it);
       delete copy._sanmaruSeq;
@@ -2624,7 +2605,7 @@ async function runSanmaru(input, maybeCtx){
   catch(e){
     const fallbackItems = residentCandidatesSync(ctx.q, { limit:ctx.candidatePoolTarget || ctx.limit, candidatePoolTarget:ctx.candidatePoolTarget, searchType:ctx.searchType, lang:ctx.lang });
     if(fallbackItems.length){
-      const rankedFallback = finalRank(ctx.q, fallbackItems, ctx).slice(0, Math.min(1500, Math.max(ctx.limit, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET)));
+      const rankedFallback = finalRank(ctx.q, fallbackItems, ctx).slice(0, Math.min(MAX_LIMIT, Math.max(ctx.limit, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET)));
       return {
         status:"ok",
         engine:ENGINE_NAME,
@@ -2939,10 +2920,10 @@ function buildSanmaruInstantOsPackage(q, opts){
     type: searchType,
     lang,
     region: effectiveCountry,
-    candidatePoolTarget: clampInt(firstNonEmpty(opts.candidatePool, opts.candidatePoolTarget, adaptiveSanmaruCandidateTarget(q, searchType)), adaptiveSanmaruCandidateTarget(q, searchType), 1, 1500),
-    limit: clampInt(firstNonEmpty(opts.limit), DEFAULT_LIMIT, 1, 1500)
+    candidatePoolTarget: clampInt(firstNonEmpty(opts.candidatePool, opts.candidatePoolTarget), DEFAULT_CANDIDATE_POOL_TARGET, 1, MAX_LIMIT),
+    limit: clampInt(firstNonEmpty(opts.limit), DEFAULT_LIMIT, 1, MAX_LIMIT)
   };
-  const finalTarget = Math.min(1500, Math.max(ctx.limit, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET));
+  const finalTarget = Math.min(MAX_LIMIT, Math.max(ctx.limit, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET));
   items = finalRank(q, items, ctx).slice(0, finalTarget).map(it => {
     const copy = Object.assign({}, it);
     delete copy._sanmaruSeq;
@@ -2972,6 +2953,13 @@ function buildSanmaruInstantOsPackage(q, opts){
     ? Math.min(SANMARU_MAX_PAGER_PAGES, Math.max(1, Math.ceil(reportedTotalCandidates / perPage)))
     : 0;
   const pageItems = items.slice((requestedPage - 1) * perPage, requestedPage * perPage);
+  const firstPaintLimit = Math.max(perPage, Math.min(
+    clampInt(firstNonEmpty(opts.firstPaintLimit, opts.initialRenderTarget, opts.initialPreloadTarget, opts.limit), perPage * 2, perPage, perPage * 2),
+    perPage * 2
+  ));
+  const responseItems = requestedPage === 1
+    ? items.slice(0, firstPaintLimit)
+    : pageItems.slice(0, perPage);
   const visiblePagePack = {
     page: requestedPage,
     perPage,
@@ -2994,9 +2982,9 @@ function buildSanmaruInstantOsPackage(q, opts){
     version: VERSION,
     action: "instant-os-supply",
     query: q,
-    source: items.length ? "sanmaru-instant-os" : "sanmaru-instant-os-empty",
-    items,
-    results: items,
+    source: responseItems.length ? "sanmaru-instant-os" : "sanmaru-instant-os-empty",
+    items: responseItems,
+    results: responseItems,
     pageItems,
     visiblePagePack,
     totalCandidates: reportedTotalCandidates,
@@ -3014,7 +3002,7 @@ function buildSanmaruInstantOsPackage(q, opts){
       mountRegistry: mountRegistrySnapshot()
     },
     meta: Object.assign({}, supplied && supplied.meta || {}, {
-      count: items.length,
+      count: responseItems.length,
       totalCandidates: reportedTotalCandidates,
       fullCandidateCount: reportedTotalCandidates,
       totalItems: reportedTotalCandidates,
@@ -3022,8 +3010,8 @@ function buildSanmaruInstantOsPackage(q, opts){
       page: requestedPage,
       perPage,
       visibleCount: pageItems.length,
-      responseWindowCount: items.length,
-      initialResponseWindow: Math.min(items.length, Math.max(perPage, Math.min(perPage * 12, 300))),
+      responseWindowCount: responseItems.length,
+      initialResponseWindow: responseItems.length,
       providerPassthroughCount: providerPassthroughItems.length,
       elapsedMs: nowMs() - started,
       instantSupply: true,
@@ -3038,8 +3026,8 @@ function buildSanmaruInstantOsPackage(q, opts){
       lanes: Array.isArray(categoryLanePlan && categoryLanePlan.lanes) ? categoryLanePlan.lanes : undefined,
       trace: [].concat((supplied && supplied.meta && supplied.meta.trace) || [], [{
         name: "sanmaru-instant-os-supply",
-        status: items.length ? "ok" : "empty",
-        count: items.length,
+        status: responseItems.length ? "ok" : "empty",
+        count: responseItems.length,
         providerPassthroughCount: providerPassthroughItems.length,
         mode: "provider-passthrough-plus-resident-no-provider-wait",
         currentPageFirst: true,
