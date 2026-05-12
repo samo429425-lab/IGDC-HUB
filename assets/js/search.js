@@ -40,7 +40,12 @@ ready(function () {
     const MAX_PAGER_PAGES = 499;
     const INITIAL_PRELOAD_PAGES = 12;
     const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES;
-    const FETCH_LIMIT = PAGE_SIZE * 300;
+    const MIN_PROGRESSIVE_TARGET = INITIAL_PRELOAD_TARGET;
+    const DEFAULT_PROGRESSIVE_TARGET = PAGE_SIZE * 24;
+    const MAX_PROGRESSIVE_TARGET = PAGE_SIZE * 60;
+    const FETCH_LIMIT = MAX_PROGRESSIVE_TARGET;
+    const INTAKE_CONCURRENCY = 2;
+    const INTAKE_TICK_MS = 35;
 
     let allItems = [];
     let serverPagedMode = false;
@@ -52,18 +57,10 @@ ready(function () {
     let lastQuery = '';
     let lastType = 'all';
     let lastSearchPayload = null;
+    let continuousIntake = null;
     const pageImageEnrichCache = new Set();
     const itemImageEnrichCache = new Map();
     const expandedDisplayGroups = new Set();
-
-    // SANMARU CONTINUOUS INTAKE STATE
-    // First paint stays small and fast. Additional page windows are received
-    // quietly after the search opens, so page 13+ is ready without re-rendering
-    // the whole result set.
-    let continuousIntake = { seq: 0, active: false, q: '', type: 'all', nextPage: INITIAL_PRELOAD_PAGES + 1, inFlight: 0, timer: null };
-    const CONTINUOUS_INTAKE_BATCH_PAGES = 12;
-    const CONTINUOUS_INTAKE_MAX_PAGES_PER_TICK = 3;
-    const CONTINUOUS_INTAKE_DELAY_MS = 90;
 
     // SANMARU resident switch:
     // The first search signal warms/activates Sanmaru on the server. Later searches
@@ -134,6 +131,33 @@ function normalizeSearchType(v){
 function getTypeLabel(type){
   const hit = SEARCH_TABS.find(x => x[0] === normalizeSearchType(type));
   return hit ? hit[1] : '전체';
+}
+
+
+function estimateProgressiveTarget(q, type){
+  const text = String(q || '').trim();
+  const t = normalizeSearchType(type || 'all');
+  if (!text) return MIN_PROGRESSIVE_TARGET;
+
+  const spacedTokens = text.split(/[\s,·/|]+/).filter(Boolean);
+  const compact = text.replace(/\s+/g, '');
+  const hasSpecificLocal = /(동|읍|면|리|로|길|시장|카페|맛집|식당|호텔|학교|병원|역|터미널|상가|거리|남대문|동대문|명동|강남|홍대|부산|서울|제주|대구|인천|광주|대전|울산)/.test(text);
+  const hasBroadSignal = /(세계|글로벌|global|world|뉴스|news|관광|tour|travel|경제|정치|ai|인공지능|기술|technology|한국|korea|미국|china|japan|europe|시장 동향|트렌드|trend)/i.test(text);
+  const looksEntitySpecific = spacedTokens.length >= 3 || compact.length >= 9 || /[0-9]/.test(text);
+
+  if (t !== 'all') {
+    if (['news','blog','sns','video','image'].includes(t)) return hasBroadSignal ? 900 : 500;
+    return hasBroadSignal ? 800 : 400;
+  }
+  if (hasSpecificLocal && looksEntitySpecific && !hasBroadSignal) return 350;
+  if (hasSpecificLocal) return 550;
+  if (hasBroadSignal) return 1200;
+  if (looksEntitySpecific) return 500;
+  return DEFAULT_PROGRESSIVE_TARGET;
+}
+
+function progressiveTargetForCurrentQuery(q, type){
+  return Math.max(MIN_PROGRESSIVE_TARGET, Math.min(MAX_PROGRESSIVE_TARGET, estimateProgressiveTarget(q, type)));
 }
 
 
@@ -659,10 +683,7 @@ function serverTotalFromPayload(payload, fallbackCount){
     meta.fullCandidateCount ||
     meta.totalItems ||
     root.totalCandidates ||
-    root.fullCandidateCount ||
     root.totalItems ||
-    (root.totalPages ? Number(root.totalPages) * PAGE_SIZE : 0) ||
-    (meta.totalPages ? Number(meta.totalPages) * PAGE_SIZE : 0) ||
     fallbackCount ||
     0
   ) || 0;
@@ -749,7 +770,10 @@ async function fetchSearch(q, type = activeType, page = 1){
 
   const sp = new URLSearchParams();
   sp.set('q', q);
-  sp.set('limit', String(FETCH_LIMIT));
+  const progressiveTarget = progressiveTargetForCurrentQuery(q, safeType);
+  sp.set('limit', String(progressiveTarget));
+  sp.set('candidatePool', String(progressiveTarget));
+  sp.set('candidatePoolTarget', String(progressiveTarget));
   sp.set('type', safeType);
   sp.set('tab', safeType);
   sp.set('perPage', String(PAGE_SIZE));
@@ -757,6 +781,8 @@ async function fetchSearch(q, type = activeType, page = 1){
   sp.set('page', String(Math.max(1, Number(page) || 1)));
   sp.set('visiblePage', String(Math.max(1, Number(page) || 1)));
   sp.set('pageWindowOnly', '1');
+  sp.set('smoothIntake', '1');
+  sp.set('noBlockingWide', '1');
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
   sp.set('routeOwner', 'sanmaru');
@@ -764,11 +790,6 @@ async function fetchSearch(q, type = activeType, page = 1){
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
-  // This is a page-window request. It must not trigger a heavy full re-render
-  // response; Maru Search should return only the requested viewport slice plus
-  // total-count metadata.
-  sp.set('responseWindow', 'page');
-  sp.set('progressiveIntake', '1');
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
   try {
@@ -796,8 +817,10 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('type', safeType);
   sp.set('tab', safeType);
   sp.set('limit', String(INITIAL_PRELOAD_TARGET));
-  sp.set('candidatePool', String(FETCH_LIMIT));
-  sp.set('candidatePoolTarget', String(FETCH_LIMIT));
+  const progressiveTarget = progressiveTargetForCurrentQuery(q, safeType);
+  sp.set('candidatePool', String(progressiveTarget));
+  sp.set('candidatePoolTarget', String(progressiveTarget));
+  sp.set('smoothIntake', '1');
   sp.set('initialPreloadPages', String(INITIAL_PRELOAD_PAGES));
   sp.set('initialPreloadTarget', String(INITIAL_PRELOAD_TARGET));
   sp.set('perPage', String(PAGE_SIZE));
@@ -806,8 +829,6 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
   sp.set('reason', 'search-ui-first-paint');
-  sp.set('responseWindow', 'initial');
-  sp.set('progressiveIntake', '1');
 
   try {
     const r = await fetch(`${SANMARU_BOOT_URL}?${sp.toString()}`, { cache: 'no-store' });
@@ -1192,13 +1213,13 @@ async function fetchInstantSearchPack(q, type = activeType){
       // keep the full candidate stream and only arrange the first viewport in
       // a Google/Naver-like balanced order.
       const limits = {
-        authority: 3,
-        knowledge: 4,
-        local_tour: 4,
-        news: 6,
-        media: 6,
-        social: 5,
-        community: 5,
+        authority: 5,
+        news: 10,
+        local_tour: 5,
+        media: 8,
+        social: 6,
+        community: 6,
+        knowledge: 5,
         shopping: 5,
         sports: 5,
         finance: 5,
@@ -1257,12 +1278,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         const meta = document.createElement('div');
         meta.className = 'maru-display-section-meta';
         const sourceTotal = Math.max.apply(null, groupInfo.items.map(x => parseInt(x && x.displayGroupSourceTotal, 10) || 0).concat([groupInfo.items.length]));
-        const stateKey = stateKeyForGroup(page, groupInfo.group);
-        const expanded = expandedDisplayGroups.has(stateKey);
-        const previewLimit = Math.max(1, parseInt(groupInfo.previewLimit, 10) || displayGroupPreviewLimit(groupInfo.group, groupInfo.items[0]));
-        const visibleItems = expanded ? groupInfo.items : groupInfo.items.slice(0, previewLimit);
-        const hiddenCount = Math.max(0, sourceTotal - visibleItems.length);
-        meta.textContent = sourceTotal > visibleItems.length ? `${visibleItems.length}/${sourceTotal}개` : `${visibleItems.length}개`;
+        meta.textContent = sourceTotal > groupInfo.items.length ? `${groupInfo.items.length}/${sourceTotal}개` : `${groupInfo.items.length}개`;
 
         head.appendChild(title);
         head.appendChild(meta);
@@ -1270,26 +1286,17 @@ async function fetchInstantSearchPack(q, type = activeType){
         const body = document.createElement('div');
         body.className = 'maru-display-section-body';
 
-        visibleItems.forEach(it => renderItem(it, body));
-
-        if(!expanded && hiddenCount > 0){
-          const more = document.createElement('button');
-          more.type = 'button';
-          more.className = 'maru-display-more';
-          more.textContent = `${groupInfo.label} 더 보기 (${hiddenCount}개)`;
-          more.addEventListener('click', () => {
-            expandedDisplayGroups.add(stateKey);
-            renderPage(page, true);
-          });
-          body.appendChild(more);
-        }
+        // Do not hide cards inside the current 15-card viewport. The server/client
+        // stream already decided which 15 cards are visible. Hiding again here was
+        // the reason broad searches looked artificially tiny. Extra news/media/SNS
+        // results flow to later pages instead of being dropped.
+        groupInfo.items.forEach(it => renderItem(it, body));
 
         section.appendChild(head);
         section.appendChild(body);
         results.appendChild(section);
       });
     }
-
 
 
     function setRevenueDataset(el, key, value){
@@ -1911,14 +1918,14 @@ if (it.riskLabel === '⚠️ high-risk') {
       // image/video/SNS/blog/web results are promoted, but lower-priority results
       // are not omitted. They continue naturally on later pages.
       const frontCaps = {
-        authority: 3, knowledge: 4, local_tour: 4, news: 6,
-        media: 6, social: 5, community: 5, shopping: 5,
-        sports: 5, finance: 5, webtoon: 5, web: 40
+        authority: 5, knowledge: 5, local_tour: 5, news: 10,
+        media: 8, social: 6, community: 6, shopping: 5,
+        sports: 5, finance: 5, webtoon: 5, web: 30
       };
       const lanes = [
-        'authority','knowledge','local_tour','web','news','media','social','community','shopping',
-        'authority','knowledge','web','local_tour','news','media','social','community','web',
-        'web','media','community','social','shopping','news','web'
+        'authority','knowledge','local_tour','news','web','media','social','community','shopping',
+        'news','web','authority','local_tour','knowledge','media','social','community','web',
+        'news','web','media','community','social','shopping','web'
       ];
       const pickedByGroup = Object.create(null);
       let safety = 0;
@@ -2024,14 +2031,16 @@ if (it.riskLabel === '⚠️ high-risk') {
           const total = serverTotalFromPayload(pack && pack.payload, serverTotalItems || pageSlice.length);
           serverTotalItems = Math.max(serverTotalItems || 0, total || 0);
         } else if(serverTotalItems > ((page - 1) * PAGE_SIZE)){
-          // Do not silently render a blank page when the pager says that page exists.
-          // Keep the loading state visible and let the user retry by clicking the page again.
           status.textContent = `Page ${page} data is being supplied for "${q}"...`;
+          startContinuousIntake(q, activeType, runSearch._seq || 0);
+          return;
         }
       }catch(e){
         console.warn('server page fetch skipped:', e);
+        startContinuousIntake(q, activeType, runSearch._seq || 0);
+        return;
       }
-      renderPage(page);
+      if(loadedServerPages.has(page) || page <= preloadPageCountFromItems(allItems)) renderPage(page);
       status.textContent = `${serverTotalItems || visibleItemCountForPager()} results for "${q}" · ${getTypeLabel(activeType)}`;
     }
 
@@ -2119,107 +2128,74 @@ function drawPager(){
 
 
 function stopContinuousIntake(){
-  continuousIntake.active = false;
-  continuousIntake.seq += 1;
-  continuousIntake.inFlight = 0;
-  if(continuousIntake.timer){
-    clearTimeout(continuousIntake.timer);
-    continuousIntake.timer = null;
+  if (continuousIntake) {
+    continuousIntake.cancelled = true;
+    continuousIntake = null;
   }
 }
 
-function mergeIntakeItems(items){
-  const merged = dedupeItems([].concat(allItems || [], items || []));
+function mergeIntakePageItems(page, pack){
+  const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
+  if(!pageSlice.length) return 0;
+  loadedServerPages.set(page, pageSlice.slice(0, PAGE_SIZE));
+  const total = serverTotalFromPayload(pack && pack.payload, serverTotalItems || pageSlice.length);
+  serverTotalItems = Math.max(serverTotalItems || 0, total || 0, page * PAGE_SIZE);
+  const merged = dedupeItems([].concat(allItems || [], pageSlice));
   allItems = merged;
-  return merged;
+  return pageSlice.length;
 }
 
-function seedLoadedPagesFromItems(items){
-  const list = Array.isArray(items) ? items : [];
-  const maxPage = Math.min(INITIAL_PRELOAD_PAGES, Math.ceil(list.length / PAGE_SIZE));
-  for(let p = 1; p <= maxPage; p++){
-    if(!loadedServerPages.has(p)){
-      const start = (p - 1) * PAGE_SIZE;
-      const slice = list.slice(start, start + PAGE_SIZE);
-      if(slice.length) loadedServerPages.set(p, slice);
-    }
-  }
-}
-
-function startContinuousIntake(q, type, startPage){
-  if(!q) return;
+function startContinuousIntake(q, type, seq){
   stopContinuousIntake();
-  continuousIntake = {
-    seq: continuousIntake.seq + 1,
-    active: true,
-    q: String(q || '').trim(),
-    type: normalizeSearchType(type || activeType || 'all'),
-    nextPage: Math.max(2, Number(startPage) || (INITIAL_PRELOAD_PAGES + 1)),
-    inFlight: 0,
-    timer: null
+  const target = progressiveTargetForCurrentQuery(q, type);
+  const totalPages = Math.max(INITIAL_PRELOAD_PAGES, Math.ceil((serverTotalItems || target) / PAGE_SIZE));
+  const preloadedPageCount = preloadPageCountFromItems(allItems);
+  const startPage = Math.max(2, preloadedPageCount + 1);
+  if(startPage > totalPages) return;
+
+  const state = continuousIntake = {
+    q,
+    type: normalizeSearchType(type),
+    seq,
+    nextPage: startPage,
+    lastPage: Math.min(MAX_PAGER_PAGES, totalPages),
+    running: 0,
+    cancelled: false,
+    loaded: 0
   };
-  scheduleContinuousIntake(35);
-}
 
-function scheduleContinuousIntake(delay){
-  if(!continuousIntake.active) return;
-  if(continuousIntake.timer) clearTimeout(continuousIntake.timer);
-  continuousIntake.timer = setTimeout(runContinuousIntakeTick, Math.max(20, delay || CONTINUOUS_INTAKE_DELAY_MS));
-}
-
-async function runContinuousIntakeTick(){
-  const state = continuousIntake;
-  if(!state || !state.active || !state.q) return;
-  const seq = state.seq;
-  const totalPages = Math.min(MAX_PAGER_PAGES, Math.max(1, Math.ceil((serverTotalItems || visibleItemCountForPager() || 0) / PAGE_SIZE)));
-  if(totalPages && state.nextPage > totalPages){
-    state.active = false;
-    return;
-  }
-
-  const pages = [];
-  while(pages.length < CONTINUOUS_INTAKE_MAX_PAGES_PER_TICK && (!totalPages || state.nextPage <= totalPages)){
-    const p = state.nextPage++;
-    if(!loadedServerPages.has(p)) pages.push(p);
-  }
-  if(!pages.length){
-    scheduleContinuousIntake(CONTINUOUS_INTAKE_DELAY_MS);
-    return;
-  }
-
-  state.inFlight += pages.length;
-  await Promise.all(pages.map(async (p) => {
-    try{
-      const pack = await fetchSearch(state.q, state.type, p);
-      if(!continuousIntake.active || continuousIntake.seq !== seq) return;
-      const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack))).slice(0, PAGE_SIZE);
-      const total = serverTotalFromPayload(pack && pack.payload, serverTotalItems || pageSlice.length);
-      if(total) serverTotalItems = Math.max(serverTotalItems || 0, total);
-      if(pageSlice.length){
-        loadedServerPages.set(p, pageSlice);
-        mergeIntakeItems(pageSlice);
-      }
-    }catch(e){
-      console.warn('continuous intake skipped page', p, e);
-    }finally{
-      state.inFlight = Math.max(0, state.inFlight - 1);
+  function pump(){
+    if(!continuousIntake || continuousIntake !== state || state.cancelled || runSearch._seq !== seq) return;
+    while(state.running < INTAKE_CONCURRENCY && state.nextPage <= state.lastPage){
+      const page = state.nextPage++;
+      if(loadedServerPages.has(page)) continue;
+      state.running++;
+      fetchSearch(q, state.type, page).then(pack => {
+        if(!continuousIntake || continuousIntake !== state || state.cancelled || runSearch._seq !== seq) return;
+        const n = mergeIntakePageItems(page, pack);
+        if(n){
+          state.loaded += n;
+          drawPager();
+          if(currentPage === page) renderPage(page);
+        }
+      }).catch(() => null).finally(() => {
+        state.running--;
+        if(!continuousIntake || continuousIntake !== state || state.cancelled || runSearch._seq !== seq) return;
+        if(state.nextPage <= state.lastPage) setTimeout(pump, INTAKE_TICK_MS);
+        else if(state.running <= 0) {
+          status.textContent = `${serverTotalItems || visibleItemCountForPager()} results for "${q}" · ${getTypeLabel(state.type)}`;
+        }
+      });
     }
-  }));
-
-  if(!continuousIntake.active || continuousIntake.seq !== seq) return;
-  drawPager();
-  const loadedCount = loadedServerPages.size * PAGE_SIZE;
-  if(state.q === (lastQuery || input.value || '').trim()){
-    status.textContent = `${serverTotalItems || visibleItemCountForPager()} results for "${state.q}" · ${Math.min(loadedCount, serverTotalItems || loadedCount)} loaded`; 
   }
-  scheduleContinuousIntake(CONTINUOUS_INTAKE_DELAY_MS);
+
+  setTimeout(pump, INTAKE_TICK_MS);
 }
 
 async function runSearch(q, type = activeType){
   const qq = (q || '').trim();
   activeType = normalizeSearchType(type);
   updateSearchTabsActive();
-  stopContinuousIntake();
   if (!qq){
     allItems = [];
     serverPagedMode = false;
@@ -2233,56 +2209,107 @@ async function runSearch(q, type = activeType){
 
   runSearch._seq = (runSearch._seq || 0) + 1;
   const seq = runSearch._seq;
+  let firstPaintItems = [];
   serverPagedMode = false;
   serverTotalItems = 0;
   loadedServerPages.clear();
-  pageImageEnrichCache.clear();
-  itemImageEnrichCache.clear();
-  expandedDisplayGroups.clear();
+  stopContinuousIntake();
 
-  signalSanmaruSearch(qq, activeType, 'run-search-progressive');
+  signalSanmaruSearch(qq, activeType, 'run-search');
   status.textContent = `Searching ${getTypeLabel(activeType)} for "${qq}"...`;
   renderSkeleton();
   clearPager();
 
+  const instantPromise = fetchInstantSearchPack(qq, activeType).then((pack) => {
+    if (runSearch._seq !== seq) return [];
+    const rawItems = Array.isArray(pack) ? pack : (pack && pack.items) || [];
+    const quickItems = dedupeItems(filterSearchResultItems(rawItems || []));
+    firstPaintItems = quickItems;
+    if (quickItems.length) {
+      allItems = quickItems;
+      const quickTotal = serverTotalFromPayload(pack && pack.payload, quickItems.length);
+      // First paint must seed the pager immediately.  Even when the instant
+      // package only carries the first preload window, the pager should be
+      // based on the authoritative/preloaded count, not on the currently
+      // rendered 25-card page slice.
+      const immediatePagerTotal = Math.max(quickTotal || 0, quickItems.length || 0);
+      serverPagedMode = immediatePagerTotal > PAGE_SIZE;
+      serverTotalItems = serverPagedMode ? immediatePagerTotal : 0;
+      lastSearchPayload = pack && pack.payload || lastSearchPayload;
+      currentBlock = 0;
+      currentPage = 1;
+      lastQuery = qq;
+      lastType = activeType;
+      pageImageEnrichCache.clear();
+      itemImageEnrichCache.clear();
+      expandedDisplayGroups.clear();
+      renderPage(1, true);
+      status.textContent = `${quickItems.length} quick provider/authority results for "${qq}" · full search continues...`;
+    }
+    return quickItems;
+  }).catch(() => []);
+
   try {
-    const instantPack = await fetchInstantSearchPack(qq, activeType);
+    const quick = await instantPromise;
     if (runSearch._seq !== seq) return;
 
-    lastSearchPayload = instantPack && instantPack.payload || null;
-    const firstItems = dedupeItems(filterSearchResultItems((instantPack && instantPack.items) || []));
-    const totalHint = serverTotalFromPayload(instantPack && instantPack.payload, firstItems.length);
+    if (quick && quick.length) {
+      const target = progressiveTargetForCurrentQuery(qq, activeType);
+      serverPagedMode = Math.max(serverTotalItems || 0, target, quick.length) > PAGE_SIZE;
+      serverTotalItems = serverPagedMode ? Math.max(serverTotalItems || 0, target, quick.length) : 0;
+      drawPager();
+      startContinuousIntake(qq, activeType, seq);
+      status.textContent = `${quick.length} quick results for "${qq}" · loading continues smoothly...`;
+      return;
+    }
 
-    allItems = firstItems;
-    serverPagedMode = Math.max(totalHint || 0, firstItems.length || 0) > PAGE_SIZE;
-    serverTotalItems = serverPagedMode ? Math.max(totalHint || 0, firstItems.length || 0) : 0;
-    seedLoadedPagesFromItems(firstItems);
+    const searchPack = await fetchSearch(qq, activeType, 1);
+    if (runSearch._seq !== seq) return;
+    lastSearchPayload = searchPack && searchPack.payload || null;
+    const items = Array.isArray(searchPack) ? searchPack : (searchPack && searchPack.items) || [];
+    const filteredItems = dedupeItems(filterSearchResultItems(items || []));
+    const serverPageItems = dedupeItems(filterSearchResultItems(pageItemsFromPack(searchPack)));
+    const serverTotal = serverTotalFromPayload(searchPack && searchPack.payload, filteredItems.length);
 
+    allItems = filteredItems;
+    serverPagedMode = Math.max(serverTotal || 0, filteredItems.length || 0) > PAGE_SIZE;
+    serverTotalItems = serverPagedMode ? Math.max(serverTotal || 0, filteredItems.length || 0) : 0;
+    loadedServerPages.clear();
+    if(serverPagedMode && serverPageItems.length){
+      loadedServerPages.set(1, serverPageItems.slice(0, PAGE_SIZE));
+    }
+    pageImageEnrichCache.clear();
+    itemImageEnrichCache.clear();
+    expandedDisplayGroups.clear();
     currentBlock = 0;
     currentPage = 1;
     lastQuery = qq;
     lastType = activeType;
 
-    if (!firstItems.length) {
+    if (!allItems.length) {
       results.innerHTML = '';
-      status.textContent = `No quick results for "${qq}" · waiting for Sanmaru supply...`;
-    } else {
-      renderPage(1, true);
-      status.textContent = `${serverTotalItems || firstItems.length} results for "${qq}" · first ${firstItems.length} loaded`;
+      status.textContent = `No results for "${qq}"`;
+      return;
     }
 
-    // Open the receiver immediately after first paint.  We start after the
-    // preload window because pages 1~12 are already carried in the first package.
-    startContinuousIntake(qq, activeType, INITIAL_PRELOAD_PAGES + 1);
+    renderPage(1);
+    startContinuousIntake(qq, activeType, seq);
+    status.textContent = `${serverTotalItems || allItems.length} results for "${qq}" · ${getTypeLabel(activeType)}`;
+
   } catch(e){
     console.error(e);
+    if (firstPaintItems && firstPaintItems.length) {
+      allItems = firstPaintItems;
+      renderPage(1, true);
+      status.textContent = `${firstPaintItems.length} quick provider/authority results for "${qq}" · full search delayed`;
+      return;
+    }
     allItems = [];
     results.innerHTML = '';
     clearPager();
     status.textContent = `No results for "${qq}"`;
   }
 }
-
   });
 })();
 
