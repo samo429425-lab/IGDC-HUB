@@ -2758,7 +2758,19 @@ function sanmaruProviderPassthroughCards(q, opts){
   const type = s(firstNonEmpty(opts.searchType, opts.type, opts.category, opts.tab, opts.vertical, "all")).toLowerCase();
   const perPageForNeed = clampInt(firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit), DEFAULT_VISIBLE_PER_PAGE, 1, 100);
   const requestedPageForNeed = clampInt(firstNonEmpty(opts.page, opts.p, opts.start, 1), 1, 1, SANMARU_MAX_PAGER_PAGES);
-  const requestedNeed = clampInt(Math.max(firstNonEmpty(opts.need, opts.target, opts.limit, opts.candidatePoolTarget, 300), requestedPageForNeed * perPageForNeed, perPageForNeed * 12), 300, 1, MAX_LIMIT);
+  // The first-render limit may be only 300, but Sanmaru must still prepare the
+  // full candidate pool hint/window from candidatePoolTarget.  Prefer pool/target
+  // values over the small first-paint limit so page 13+ can be supplied.
+  const requestedNeed = clampInt(
+    Math.max(
+      firstNonEmpty(opts.candidatePoolTarget, opts.candidatePool, opts.providerLaneTarget, opts.fullCandidateTarget, opts.need, opts.target, opts.limit, 300),
+      requestedPageForNeed * perPageForNeed,
+      perPageForNeed * 12
+    ),
+    300,
+    1,
+    MAX_LIMIT
+  );
 
   const rows = [
     ["provider-google-web", "Google 통합 검색", (page)=>"https://www.google.com/search?q=" + enc + "&start=" + Math.max(0, (page - 1) * 10), "google", "web", 0.997],
@@ -2945,14 +2957,26 @@ function buildSanmaruInstantOsPackage(q, opts){
 
   const perPage = clampInt(firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit), DEFAULT_VISIBLE_PER_PAGE, 1, 100);
   const requestedPage = clampInt(firstNonEmpty(opts.page, opts.p, opts.start, 1), 1, 1, 100000);
+  const fullItems = Array.isArray(items) ? items : [];
   const reportedTotalCandidates = Math.max(
     Number(supplied && supplied.meta && (supplied.meta.totalCandidates || supplied.meta.fullCandidateCount)) || 0,
-    items.length
+    fullItems.length
   );
   const reportedTotalPages = reportedTotalCandidates
     ? Math.min(SANMARU_MAX_PAGER_PAGES, Math.max(1, Math.ceil(reportedTotalCandidates / perPage)))
     : 0;
-  const pageItems = items.slice((requestedPage - 1) * perPage, requestedPage * perPage);
+  const pageItems = fullItems.slice((requestedPage - 1) * perPage, requestedPage * perPage);
+  const firstResponseWindow = Math.max(
+    perPage,
+    Math.min(
+      clampInt(firstNonEmpty(opts.initialPreloadTarget, opts.firstResponseWindow), perPage * 12, perPage, 1000),
+      perPage * 12,
+      300
+    )
+  );
+  const responseItems = requestedPage <= 1
+    ? fullItems.slice(0, Math.min(fullItems.length, firstResponseWindow))
+    : pageItems.slice();
   const visiblePagePack = {
     page: requestedPage,
     perPage,
@@ -2975,9 +2999,9 @@ function buildSanmaruInstantOsPackage(q, opts){
     version: VERSION,
     action: "instant-os-supply",
     query: q,
-    source: items.length ? "sanmaru-instant-os" : "sanmaru-instant-os-empty",
-    items,
-    results: items,
+    source: responseItems.length ? "sanmaru-instant-os" : "sanmaru-instant-os-empty",
+    items: responseItems,
+    results: responseItems,
     pageItems,
     visiblePagePack,
     totalCandidates: reportedTotalCandidates,
@@ -2995,7 +3019,7 @@ function buildSanmaruInstantOsPackage(q, opts){
       mountRegistry: mountRegistrySnapshot()
     },
     meta: Object.assign({}, supplied && supplied.meta || {}, {
-      count: items.length,
+      count: responseItems.length,
       totalCandidates: reportedTotalCandidates,
       fullCandidateCount: reportedTotalCandidates,
       totalItems: reportedTotalCandidates,
@@ -3003,8 +3027,8 @@ function buildSanmaruInstantOsPackage(q, opts){
       page: requestedPage,
       perPage,
       visibleCount: pageItems.length,
-      responseWindowCount: items.length,
-      initialResponseWindow: Math.min(items.length, Math.max(perPage, Math.min(perPage * 12, 300))),
+      responseWindowCount: responseItems.length,
+      initialResponseWindow: firstResponseWindow,
       providerPassthroughCount: providerPassthroughItems.length,
       elapsedMs: nowMs() - started,
       instantSupply: true,
@@ -3019,8 +3043,8 @@ function buildSanmaruInstantOsPackage(q, opts){
       lanes: Array.isArray(categoryLanePlan && categoryLanePlan.lanes) ? categoryLanePlan.lanes : undefined,
       trace: [].concat((supplied && supplied.meta && supplied.meta.trace) || [], [{
         name: "sanmaru-instant-os-supply",
-        status: items.length ? "ok" : "empty",
-        count: items.length,
+        status: responseItems.length ? "ok" : "empty",
+        count: responseItems.length,
         providerPassthroughCount: providerPassthroughItems.length,
         mode: "provider-passthrough-plus-resident-no-provider-wait",
         currentPageFirst: true,
