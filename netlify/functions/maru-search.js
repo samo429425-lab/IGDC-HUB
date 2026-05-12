@@ -970,56 +970,56 @@ const SEARCH_SECTION_META = {
   official_authority: {
     title: '공식 / 관공서 / 권위 정보',
     label: '공식/권위',
-    previewLimit: 6,
+    previewLimit: 3,
     rank: 10,
     description: '정부·공공기관·공식 홈페이지·권위 출처를 먼저 보여주는 섹션'
   },
   map_local_tour: {
     title: '지도 / 지역 / 관광 / 맛집',
     label: '지도/관광',
-    previewLimit: 8,
+    previewLimit: 4,
     rank: 20,
     description: '지도, 위치, 교통, 관광지, 맛집, 볼거리 결과'
   },
   knowledge_wiki: {
     title: '위키 / 백과 / 지식',
     label: '지식/백과',
-    previewLimit: 6,
+    previewLimit: 4,
     rank: 30,
     description: '위키, 백과, 지식, 연구·자료형 결과'
   },
   news: {
     title: '뉴스 / 보도 / 최신 이슈',
     label: '뉴스',
-    previewLimit: 8,
+    previewLimit: 6,
     rank: 40,
     description: '뉴스, 보도자료, 최신 이슈 결과'
   },
   video_vlog: {
     title: '동영상 / 유튜브 / 브이로그',
     label: '영상',
-    previewLimit: 8,
+    previewLimit: 6,
     rank: 50,
     description: '유튜브, 영상, 브이로그, 쇼츠·릴스 계열 결과'
   },
   image_gallery: {
     title: '이미지 / 사진 / 홍보 스냅샷',
     label: '이미지',
-    previewLimit: 10,
+    previewLimit: 6,
     rank: 60,
     description: '원본 이미지, 대표 이미지, 홍보 사진, 갤러리 결과'
   },
   blog_review: {
     title: '블로그 / 리뷰 / 후기',
     label: '블로그/리뷰',
-    previewLimit: 8,
+    previewLimit: 5,
     rank: 70,
     description: '블로그, 리뷰, 여행기, 방문 후기 결과'
   },
   community_sns: {
     title: 'SNS / 커뮤니티 / 카페',
     label: 'SNS/커뮤니티',
-    previewLimit: 8,
+    previewLimit: 5,
     rank: 80,
     description: '인스타그램, 페이스북, 틱톡, X, 카페, 커뮤니티 결과'
   },
@@ -1033,7 +1033,7 @@ const SEARCH_SECTION_META = {
   company_web: {
     title: '기업 / 홈페이지 / 일반 웹',
     label: '기업/웹',
-    previewLimit: 8,
+    previewLimit: 4,
     rank: 100,
     description: '회사, 브랜드, 공식 사이트, 일반 웹페이지 결과'
   },
@@ -1273,25 +1273,27 @@ function buildNaturalSearchDisplayStream(items){
   const cursors = Object.create(null);
   const picked = Object.create(null);
   const frontCaps = {
-    official_authority: 6,
-    knowledge_wiki: 8,
-    map_local_tour: 6,
-    news: 10,
-    image_gallery: 8,
-    video_vlog: 8,
-    community_sns: 6,
-    blog_review: 6,
+    official_authority: 3,
+    knowledge_wiki: 4,
+    map_local_tour: 4,
+    news: 6,
+    image_gallery: 6,
+    video_vlog: 6,
+    community_sns: 5,
+    blog_review: 5,
     shopping_product: 5,
-    company_web: 8,
-    general_web: 30
+    company_web: 4,
+    general_web: 40
   };
   const lanes = [
-    // Naver-like first paint: official/authority first, then encyclopedia/knowledge, then map/local, then news.
-    'official_authority','knowledge_wiki','knowledge_wiki','knowledge_wiki','map_local_tour','news','company_web','general_web','image_gallery','video_vlog','community_sns','blog_review','shopping_product',
-    'official_authority','knowledge_wiki','map_local_tour','news','general_web','image_gallery','video_vlog','community_sns','blog_review','company_web','general_web',
-    'news','image_gallery','video_vlog','blog_review','community_sns','general_web'
+    // Naver/Google-like first paint: authority -> knowledge/wiki -> map/local -> a few ranked news -> web.
+    // Large sections such as news/blog/SNS are capped in the lead and continue
+    // through expandable sections or later pages, not as one long block.
+    'official_authority','knowledge_wiki','map_local_tour','company_web','general_web','news','image_gallery','video_vlog','community_sns','blog_review','shopping_product',
+    'official_authority','knowledge_wiki','general_web','map_local_tour','news','image_gallery','video_vlog','community_sns','blog_review','company_web','general_web',
+    'general_web','image_gallery','video_vlog','blog_review','community_sns','news','general_web'
   ];
-  const leadTarget = Math.min(sourceItems.length, 60);
+  const leadTarget = Math.min(sourceItems.length, 120);
   let safety = 0;
   while(stream.length < leadTarget && safety++ < sourceItems.length * 4){
     let progressed = false;
@@ -1346,14 +1348,14 @@ function buildCollapseAwareVisiblePagePack(items, q, raw, fullSectionPack){
       label: meta.label,
       rank: meta.rank,
       previewLimit: SEARCH_SECTION_META[sectionId] && SEARCH_SECTION_META[sectionId].previewLimit || 6,
-      expanded: true,
-      collapsed: false,
+      expanded: false,
+      collapsed: buckets[sectionId].length > (SEARCH_SECTION_META[sectionId] && SEARCH_SECTION_META[sectionId].previewLimit || 6),
       sourceTotal: buckets[sectionId].length,
-      visibleTotal: buckets[sectionId].length,
-      collapsedCount: 0,
-      hiddenCount: 0,
+      visibleTotal: Math.min(buckets[sectionId].length, SEARCH_SECTION_META[sectionId] && SEARCH_SECTION_META[sectionId].previewLimit || 6),
+      collapsedCount: Math.max(0, buckets[sectionId].length - (SEARCH_SECTION_META[sectionId] && SEARCH_SECTION_META[sectionId].previewLimit || 6)),
+      hiddenCount: Math.max(0, buckets[sectionId].length - (SEARCH_SECTION_META[sectionId] && SEARCH_SECTION_META[sectionId].previewLimit || 6)),
       collapsedItemsExcludedFromCount: true,
-      naturalFlowNoForcedCollapse: true
+      naturalFlowNoForcedCollapse: false
     };
   }
 
@@ -1726,9 +1728,13 @@ function buildImmediateResidentResponse(q, raw, residentPack, baseMeta){
     doesNotLimitItemsResults: true,
     viewportBackfill: true
   });
+  const firstResponseWindow = Math.max(visiblePagePack.perPage, Math.min(visiblePagePack.perPage * 12, 300));
+  const responseItems = visiblePagePack.page <= 1
+    ? items.slice(0, Math.min(items.length, firstResponseWindow))
+    : visiblePagePack.pageItems.slice();
   return {
     status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: 'sanmaru-resident',
-    items, results: items,
+    items: responseItems, results: responseItems,
     sections: viewportSections.sections,
     visibleSections: viewportSections.visibleSections || viewportSections.sections,
     displaySections: viewportSections.displaySections || viewportSections.sections,
@@ -1737,7 +1743,8 @@ function buildImmediateResidentResponse(q, raw, residentPack, baseMeta){
     visiblePagePack,
     sectionPack,
     meta: Object.assign({}, baseMeta || {}, {
-      count: items.length,
+      count: responseItems.length,
+      responseWindowCount: responseItems.length,
       totalCandidates: residentTotalCandidates,
       fullCandidateCount: residentTotalCandidates,
       pageCountPolicy: 'no-fixed-page-cap-current-page-renders-only',
