@@ -1,3 +1,152 @@
+/* ------------------------------------------------------------------
+ * MARU HOME SEARCH SUGGEST BRIDGE — lightweight, home-only safe layer
+ * - Binds directly to #homeSearchInput / #homeSearchBtn used by home*.html.
+ * - Runs before the heavy search-page renderer, so an error in search.html
+ *   rendering code cannot block home-page related search dropdown.
+ * - Does not call maru-search and does not delay first-paint search results.
+ * ------------------------------------------------------------------ */
+(function(){
+  'use strict';
+  if (window.__MARU_HOME_SEARCH_SUGGEST_READY__) return;
+  window.__MARU_HOME_SEARCH_SUGGEST_READY__ = true;
+  window.__MARU_UNIVERSAL_SEARCH_SUGGEST_BRIDGE__ = true;
+
+  function ready(fn){
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+    else fn();
+  }
+  function clean(v){ return String(v == null ? '' : v).trim(); }
+  function isHomeSearchInput(el){
+    return !!(el && el.id === 'homeSearchInput');
+  }
+  function relatedTerms(q){
+    const base = clean(q).replace(/\s+/g, ' ');
+    if (!base) return [];
+    const low = base.toLowerCase();
+    const place = /서울|부산|대구|인천|광주|대전|울산|제주|대한민국|한국|뉴욕|도쿄|오사카|파리|런던|베트남|하노이|호치민|seoul|busan|korea|new york|tokyo|paris|london|vietnam/.test(low);
+    const local = /카페|맛집|식당|시장|호텔|숙소|관광|여행|축제|공원|박물관|주소|전화|지도|cafe|restaurant|hotel|market|travel|tour|map/.test(low);
+    const media = /영상|영화|드라마|음악|유튜브|쇼츠|sns|video|movie|youtube|shorts/.test(low);
+    const suffixes = media
+      ? ['유튜브','영상','쇼츠','뉴스','블로그','인스타그램','틱톡','이미지','리뷰','추천']
+      : (place || local)
+        ? ['지도','맛집','카페','볼만한 곳','관광','여행 코스','축제','호텔','교통','뉴스','블로그','유튜브','이미지']
+        : ['뜻','뉴스','이미지','영상','블로그','리뷰','가격','방법','추천','비교','공식','위키'];
+    const out = [];
+    const seen = new Set([low]);
+    suffixes.forEach(s => {
+      const term = (base + ' ' + s).trim();
+      const key = term.toLowerCase();
+      if(!seen.has(key)){ seen.add(key); out.push(term); }
+    });
+    return out.slice(0, 12);
+  }
+  function ensureBox(){
+    let box = document.getElementById('maru-home-related-suggest-box');
+    if (box) return box;
+    const style = document.createElement('style');
+    style.id = 'maru-home-related-suggest-style';
+    style.textContent = `
+      #maru-home-related-suggest-box{position:fixed;z-index:2147483647;display:none;background:#fff;border:1px solid #e5e7eb;border-radius:14px;box-shadow:0 16px 38px rgba(15,23,42,.18);padding:8px;max-height:420px;overflow-y:auto;box-sizing:border-box;}
+      #maru-home-related-suggest-box[data-open="1"]{display:block;}
+      .maru-home-suggest-caption{padding:7px 12px 5px;color:#64748b;font-size:12px;font-weight:800;}
+      .maru-home-suggest-row{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:0;border-radius:10px;background:transparent;color:#111827;cursor:pointer;text-align:left;font-size:14px;font-weight:750;}
+      .maru-home-suggest-row:hover,.maru-home-suggest-row:focus{background:#f3f4f6;outline:none;}
+      .maru-home-suggest-icon{width:22px;height:22px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#eef2ff;color:#4f46e5;font-size:13px;flex:0 0 auto;}
+      .maru-home-suggest-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    `;
+    document.head.appendChild(style);
+    box = document.createElement('div');
+    box.id = 'maru-home-related-suggest-box';
+    box.setAttribute('role', 'listbox');
+    document.body.appendChild(box);
+    return box;
+  }
+  function buildSearchUrl(q){
+    const u = new URL('/search.html', location.origin);
+    u.searchParams.set('q', clean(q));
+    u.searchParams.set('page', '1');
+    u.searchParams.set('block', '0');
+    u.searchParams.set('residentFirst', '1');
+    u.searchParams.set('sanmaruFirst', '1');
+    u.searchParams.set('residentSwitch', '1');
+    u.searchParams.set('handoff', '1');
+    u.searchParams.set('from', location.pathname + location.search + location.hash);
+    return u.pathname + u.search + u.hash;
+  }
+  function positionBox(input){
+    const box = ensureBox();
+    const r = input.getBoundingClientRect();
+    box.style.left = Math.max(8, r.left) + 'px';
+    box.style.top = (r.bottom + 6) + 'px';
+    box.style.width = Math.max(280, r.width) + 'px';
+  }
+  function hideBox(){
+    const box = document.getElementById('maru-home-related-suggest-box');
+    if (box) box.dataset.open = '0';
+  }
+  function showFor(input){
+    if (!isHomeSearchInput(input)) return;
+    const q = clean(input.value);
+    const terms = relatedTerms(q);
+    const box = ensureBox();
+    if (!q || !terms.length){ hideBox(); return; }
+    box.innerHTML = '';
+    const cap = document.createElement('div');
+    cap.className = 'maru-home-suggest-caption';
+    cap.textContent = '연관 검색어';
+    box.appendChild(cap);
+    terms.forEach(term => {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'maru-home-suggest-row';
+      row.addEventListener('mousedown', e => e.preventDefault());
+      row.addEventListener('click', () => {
+        input.value = term;
+        try { input.dispatchEvent(new Event('input', { bubbles:true })); } catch(e) {}
+        hideBox();
+        const url = buildSearchUrl(term);
+        try { window.open(url, '_blank'); } catch(e) { location.href = url; }
+      });
+      const icon = document.createElement('span');
+      icon.className = 'maru-home-suggest-icon';
+      icon.textContent = '⌕';
+      const txt = document.createElement('span');
+      txt.className = 'maru-home-suggest-text';
+      txt.textContent = term;
+      row.appendChild(icon); row.appendChild(txt); box.appendChild(row);
+    });
+    positionBox(input);
+    box.dataset.open = '1';
+  }
+  function bindHomeInput(input){
+    if (!isHomeSearchInput(input) || input.__maruHomeSuggestBound) return;
+    input.__maruHomeSuggestBound = true;
+    input.addEventListener('input', () => showFor(input));
+    input.addEventListener('keyup', () => showFor(input));
+    input.addEventListener('focus', () => showFor(input));
+    input.addEventListener('blur', () => setTimeout(hideBox, 180));
+  }
+  function scan(){
+    const input = document.getElementById('homeSearchInput');
+    if (input) bindHomeInput(input);
+  }
+  ready(function(){
+    scan();
+    document.addEventListener('input', e => { if(isHomeSearchInput(e.target)) showFor(e.target); }, true);
+    document.addEventListener('focusin', e => { if(isHomeSearchInput(e.target)) showFor(e.target); }, true);
+    document.addEventListener('keydown', e => { if(e.key === 'Escape') hideBox(); }, true);
+    window.addEventListener('resize', scan);
+    window.addEventListener('scroll', () => {
+      const input = document.getElementById('homeSearchInput');
+      const box = document.getElementById('maru-home-related-suggest-box');
+      if(input && box && box.dataset.open === '1') positionBox(input);
+    }, true);
+    try {
+      new MutationObserver(scan).observe(document.documentElement, { childList:true, subtree:true });
+    } catch(e) {}
+  });
+})();
+
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
 // PATCH: Sanmaru route-owned natural flow + page-lazy rendering + balanced vertical tabs
 // - collector first
@@ -3269,7 +3418,7 @@ async function runSearch(q, type = activeType){
     itemImageEnrichCache.clear();
     expandedDisplayGroups.clear();
     startInitialPreloadPages(qq, activeType, seq);
-    startCategorySeedPreload(qq, seq);
+    // category seed preload removed: it opened multiple vertical fetches before first paint and caused 30s~1m delay.
 
     if (!allItems.length) {
       results.innerHTML = '';
@@ -3295,7 +3444,7 @@ async function runSearch(q, type = activeType){
     lastQuery = qq;
     lastType = activeType;
     startInitialPreloadPages(qq, activeType, seq);
-    startCategorySeedPreload(qq, seq);
+    // category seed preload removed: keep fallback first paint unblocked.
     if(allItems.length) renderPage(1);
     else { results.innerHTML = ''; clearPager(); }
     status.textContent = allItems.length ? `${serverTotalItems || allItems.length} results for "${qq}" · receiving...` : `No results for "${qq}"`;
