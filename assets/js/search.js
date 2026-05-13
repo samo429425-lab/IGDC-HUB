@@ -48,6 +48,7 @@ ready(function () {
     const MIN_SMOOTH_CANDIDATES = 120;
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
+    const CONTINUOUS_PIPELINE_TARGET = MAX_SMOOTH_CANDIDATES;
     const INTAKE_CONCURRENCY = 3;
     const INTAKE_BURST_DELAY_MS = 60;
 
@@ -873,16 +874,39 @@ function sleepIntake(ms){
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function firstMissingPipelinePage(startPage, maxPages){
+  const start = Math.max(2, Number(startPage) || 2);
+  const max = Math.max(start, Number(maxPages) || start);
+  for(let page = start; page <= max; page++){
+    if(!loadedServerPages.has(page)) return page;
+  }
+  return max + 1;
+}
+
 function startContinuousIntake(q, type, seq){
   if(!q || runSearch._seq !== seq) return;
   const token = ++continuousIntakeSeq;
   continuousIntakeActive = true;
-  const target = adaptiveSearchTarget(q, type);
-  authoritativeServerTotalItems = Math.max(authoritativeServerTotalItems || 0, target);
-  updateProgressiveTotalFromPayload(lastSearchPayload || {}, Math.max(target, allItems.length || 0));
 
-  let nextPage = Math.max(2, preloadPageCountFromItems(allItems) + 1);
-  const maxPages = Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(target / PAGE_SIZE)));
+  // The initial 300 is only the first preload window. The search pipeline must
+  // keep receiving page windows after that, like an open faucet. Use the larger
+  // server/adaptive/pipeline target for background intake, while Maru Search
+  // still controls external-provider budgets on the server side.
+  const target = Math.max(
+    CONTINUOUS_PIPELINE_TARGET,
+    adaptiveSearchTarget(q, type),
+    authoritativeServerTotalItems || 0,
+    serverTotalItems || 0,
+    INITIAL_PRELOAD_TARGET
+  );
+  authoritativeServerTotalItems = Math.max(authoritativeServerTotalItems || 0, target);
+  updateProgressiveTotalFromPayload(lastSearchPayload || {}, Math.max(target, allItems.length || 0), { expandAll:true });
+
+  const maxPages = Math.min(
+    MAX_PROGRESSIVE_PAGER_PAGES,
+    Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(target / PAGE_SIZE))
+  );
+  let nextPage = firstMissingPipelinePage(2, maxPages);
 
   async function worker(){
     while(continuousIntakeActive && continuousIntakeSeq === token && runSearch._seq === seq && nextPage <= maxPages){
@@ -896,7 +920,7 @@ function startContinuousIntake(q, type, seq){
           loadedServerPages.set(page, pageSlice);
           allItems = dedupeItems(allItems.concat(pageSlice));
           lastSearchPayload = pack && pack.payload || lastSearchPayload;
-          updateProgressiveTotalFromPayload(pack && pack.payload, allItems.length);
+          updateProgressiveTotalFromPayload(pack && pack.payload, Math.max(target, allItems.length), { expandAll:true });
           if(page === currentPage) renderPage(page, true);
           else drawPager();
           status.textContent = `${serverTotalItems || allItems.length} results for "${q}" · ${getTypeLabel(type)} · receiving...`;
@@ -1009,6 +1033,42 @@ async function fetchSearch(q, type = activeType, page = 1){
   } catch (e) {
     console.error('fetchSearch failed:', e);
     return { items: [], payload: null, pageItems: [], viewportSections: [] };
+  }
+}
+
+
+async function ensureInitialPreloadFromMaruSearch(q, type, seq){
+  if(!q || runSearch._seq !== seq) return false;
+  if((Array.isArray(allItems) ? allItems.length : 0) >= INITIAL_PRELOAD_TARGET) return false;
+
+  try{
+    const pack = await fetchSearch(q, type, 1);
+    if(runSearch._seq !== seq) return false;
+
+    const candidates = [];
+    if(pack && Array.isArray(pack.items)) candidates.push(...pack.items);
+    if(pack && pack.payload) candidates.push(...normalizeItems(pack.payload));
+    candidates.push(...pageItemsFromPack(pack));
+
+    const preloadItems = dedupeItems(filterSearchResultItems(candidates));
+    if(!preloadItems.length) return false;
+
+    const before = Array.isArray(allItems) ? allItems.length : 0;
+    allItems = dedupeItems((Array.isArray(allItems) ? allItems : []).concat(preloadItems)).slice(0, Math.max(INITIAL_PRELOAD_TARGET, before));
+    seedLoadedServerPagesFromItems(allItems, INITIAL_PRELOAD_TARGET);
+    lastSearchPayload = (pack && pack.payload) || lastSearchPayload;
+    updateProgressiveTotalFromPayload(pack && pack.payload, Math.max(adaptiveSearchTarget(q, type), allItems.length, INITIAL_PRELOAD_TARGET));
+    serverTotalItems = Math.max(serverTotalItems || 0, INITIAL_PRELOAD_TARGET, allItems.length);
+    progressivePagerPages = Math.max(progressivePagerPages || 0, INITIAL_PROGRESSIVE_PAGER_PAGES, preloadPageCountFromItems(allItems));
+
+    if(currentPage === 1) renderPage(1, true);
+    else drawPager();
+
+    status.textContent = `${serverTotalItems || allItems.length} results for "${q}" · ${getTypeLabel(type)} · receiving...`;
+    return allItems.length > before;
+  }catch(e){
+    console.warn('initial maru-search preload skipped:', e);
+    return false;
   }
 }
 
@@ -3019,7 +3079,8 @@ async function runSearch(q, type = activeType){
       status.textContent = `${serverTotalItems || allItems.length} results for "${qq}" · ${getTypeLabel(activeType)} · receiving...`;
     }
 
-    startContinuousIntake(qq, activeType, seq);
+    if(runSearch._seq === seq) startContinuousIntake(qq, activeType, seq);
+    ensureInitialPreloadFromMaruSearch(qq, activeType, seq).catch(() => null);
   } catch(e){
     console.error(e);
     const fallbackPack = await fetchSearch(qq, activeType, 1);
@@ -3037,7 +3098,8 @@ async function runSearch(q, type = activeType){
     if(allItems.length) renderPage(1);
     else { results.innerHTML = ''; clearPager(); }
     status.textContent = allItems.length ? `${serverTotalItems || allItems.length} results for "${qq}" · receiving...` : `No results for "${qq}"`;
-    startContinuousIntake(qq, activeType, seq);
+    if(runSearch._seq === seq) startContinuousIntake(qq, activeType, seq);
+    ensureInitialPreloadFromMaruSearch(qq, activeType, seq).catch(() => null);
   }
 }
 
