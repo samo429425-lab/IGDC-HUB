@@ -1156,7 +1156,21 @@ async function fetchInstantSearchPack(q, type = activeType){
         'pixel',
         'tracking',
         'analytics',
-        'captcha'
+        'captcha',
+        'staticmap',
+        'maps.googleapis.com',
+        'map.naver.com',
+        'naver_map',
+        '/maps/',
+        '/map/',
+        'map_tile',
+        'tile.openstreetmap',
+        'banner',
+        'placard',
+        'adserver',
+        'doubleclick',
+        'advertisement',
+        'promo-banner'
       ];
 
       if(hardBad.some(k => s.includes(k))) return true;
@@ -1185,11 +1199,29 @@ async function fetchInstantSearchPack(q, type = activeType){
       return false;
     }
 
+    function isMapImageUrlClient(imageUrl){
+      const s = String(imageUrl || '').toLowerCase();
+      return /staticmap|maps\.googleapis|google\.com\/maps|map\.naver\.com|naver_map|\/maps\/|\/map\/|map_tile|tile\.openstreetmap/.test(s);
+    }
+
+    function isProviderLogoOrBannerImageClient(imageUrl, it){
+      const s = String(imageUrl || '').toLowerCase();
+      const host = (() => { try { return new URL(s, location.origin).hostname.toLowerCase(); } catch(e){ return ''; } })();
+      const titleSummary = String([it && it.title, it && it.summary, it && it.description].filter(Boolean).join(' ')).toLowerCase();
+      if(/google\.com\/s2\/favicons|favicon|apple-touch-icon|logo|logotype|brandmark|symbol|emblem|\/ci[\/_-]|\/bi[\/_-]/i.test(s)) return true;
+      if(/(naver|google|youtube|facebook|instagram|tiktok|twitter|x)[^?#]*(logo|favicon|brand|symbol|icon)/i.test(s)) return true;
+      if(/banner|placard|adserver|doubleclick|advertisement|promo-banner|popup/i.test(s)) return true;
+      if(/banner|placard|현수막|배너|광고/.test(titleSummary) && !/news|article|photo|image|youtube|ytimg|sns|instagram|tiktok/i.test(host + ' ' + s)) return true;
+      return false;
+    }
+
     function isMeaningfulImageForItemClient(imageUrl, it){
       const s = String(imageUrl || '').trim();
       if(!s) return false;
       if(!/^https?:\/\//i.test(s) && !s.startsWith('/')) return false;
       if(isHardRejectImageUrlClient(s)) return false;
+      if(isMapImageUrlClient(s)) return false;
+      if(isProviderLogoOrBannerImageClient(s, it)) return false;
       return true;
     }
 
@@ -1270,6 +1302,12 @@ async function fetchInstantSearchPack(q, type = activeType){
         if (isFaviconLike) return;
         if (!/^https?:\/\//i.test(s) && !s.startsWith('/')) return;
         if (!isMeaningfulImageForItemClient(s, it)) return;
+
+        // Provider logos and brand icons are source markers, not thumbnails.
+        // They must never be promoted into the visual card area.
+        const providerLogoLike = /(google|naver|youtube|facebook|instagram|tiktok|twitter|x)[^?#]*(logo|favicon|brand|symbol|icon)/i.test(low) ||
+          /(logo|favicon|brandmark|symbol|emblem|ci|bi)[^?#]*\.(png|jpg|jpeg|webp|svg)(\?|#|$)/i.test(low);
+        if (providerLogoLike) return;
 
         let key = s.split('#')[0].toLowerCase();
         try {
@@ -1382,7 +1420,6 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function displayGroupLabel(group, sample){
-      const fallback = sample && sample.displayGroupLabel;
       const labels = {
         authority: '주요 정보',
         news: '뉴스',
@@ -1395,9 +1432,9 @@ async function fetchInstantSearchPack(q, type = activeType){
         sports: '스포츠',
         finance: '금융',
         webtoon: '웹툰',
-        web: '웹'
+        web: '웹 결과'
       };
-      return labels[group] || fallback || '웹';
+      return labels[group] || '웹 결과';
     }
 
     function displayGroupPreviewLimit(group, sample){
@@ -1489,20 +1526,27 @@ async function fetchInstantSearchPack(q, type = activeType){
     function buildFrontViewportGroups(source, maxSlots){
       if(!Array.isArray(source) || !source.length) return [];
       const slotLimit = Math.max(1, parseInt(maxSlots, 10) || PAGE_SIZE);
+
+      // Front viewport policy:
+      // - each section exposes only representative cards;
+      // - hidden overflow is stored behind the section button;
+      // - hidden overflow NEVER counts in the 25 visible slots;
+      // - do not refill empty slots with hidden news/blog/SNS overflow.
       const visibleCaps = {
-        authority: 3,
-        knowledge: 3,
-        local_tour: 2,
+        authority: 4,
+        knowledge: 4,
+        local_tour: 3,
         news: 6,
-        community: 5,
-        social: 3,
-        media: 3,
-        shopping: 3,
-        sports: 2,
-        finance: 2,
-        webtoon: 2,
-        web: 25
+        community: 6,
+        social: 5,
+        media: 5,
+        shopping: 4,
+        sports: 3,
+        finance: 3,
+        webtoon: 3,
+        web: 8
       };
+
       const groups = groupSliceForDisplay(source).map(g => {
         const items = diversifyGroupPreviewItems(g.group, g.items || []);
         return Object.assign({}, g, { items });
@@ -1526,39 +1570,6 @@ async function fetchInstantSearchPack(q, type = activeType){
         remaining -= visibleCount;
       });
 
-      // Fill any unused first-page slots with balanced web/general results. This keeps
-      // the first viewport at 25 visible cards while collapsed overflow does not count.
-      if(remaining > 0){
-        const used = new Set();
-        out.forEach(g => (g.previewItems || []).forEach(it => {
-          const key = String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
-          if(key) used.add(key);
-        }));
-        const filler = [];
-        groups.forEach(g => {
-          (g.items || []).forEach(it => {
-            if(filler.length >= remaining) return;
-            const key = String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
-            if(key && used.has(key)) return;
-            if(key) used.add(key);
-            filler.push(it);
-          });
-        });
-        if(filler.length){
-          out.push({
-            group: 'web',
-            label: '웹 결과',
-            previewLimit: filler.length,
-            previewItems: filler,
-            hiddenItems: [],
-            items: filler,
-            slotAwareViewport: true,
-            displaySlotCount: filler.length,
-            sourceTotal: filler.length,
-            firstIndex: 9999
-          });
-        }
-      }
       return out;
     }
 
@@ -1577,7 +1588,9 @@ async function fetchInstantSearchPack(q, type = activeType){
 
         const title = document.createElement('div');
         title.className = 'maru-display-section-title';
-        title.textContent = groupInfo.label;
+        const cleanGroupLabel = displayGroupLabel(groupInfo.group, groupInfo.items && groupInfo.items[0]);
+        title.textContent = cleanGroupLabel;
+        groupInfo.label = cleanGroupLabel;
 
         const meta = document.createElement('div');
         meta.className = 'maru-display-section-meta';
@@ -1880,17 +1893,112 @@ async function fetchInstantSearchPack(q, type = activeType){
       const category = String((it && it.category) || '').toLowerCase();
       const visualKind = String((it && it.visualKind) || '').toLowerCase();
       const url = String((it && (it.url || it.link)) || '').toLowerCase();
-      return visualKind === 'map' || mediaType === 'map' || type === 'map' || category === 'map' || source.includes('google_maps') || source.includes('naver_map') || /\/maps\/search|google\.com\/maps|map\.naver\.com/.test(url);
+      const title = String((it && it.title) || '').toLowerCase();
+      const group = displayGroupOfItem(it);
+
+      // Do not let a generic web/news result become a thumbnail-like map card
+      // just because its title contains words such as 지도/교통지도. Map preview
+      // is allowed only for the map tab or for true map provider records.
+      if (normalizeSearchType(activeType) === 'map') return true;
+      if (source.includes('google_maps') || source.includes('naver_map')) return true;
+      if (/google\.com\/maps|map\.naver\.com|\/maps\/search/.test(url)) return true;
+      if ((type === 'map' || mediaType === 'map' || category === 'map') && group === 'local_tour' && !source.includes('news')) return true;
+      if (visualKind === 'map' && group === 'local_tour' && !source.includes('news') && !title.includes('뉴스')) return true;
+      return false;
     }
 
     function isMapLikeItemClient(it){
       return isPureMapItemClient(it);
     }
 
+    function firstExistingValueClient(obj, keys){
+      if(!obj || typeof obj !== 'object') return '';
+      for(const key of keys){
+        const v = obj[key];
+        if(v !== undefined && v !== null && String(v).trim()) return String(v).trim();
+      }
+      return '';
+    }
+
+    function placeInfoForItemClient(it){
+      const p = (it && it.placeInfo && typeof it.placeInfo === 'object') ? it.placeInfo : {};
+      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const address = firstExistingValueClient(p, ['address','roadAddress','jibunAddress','addr']) || firstExistingValueClient(it, ['address','roadAddress','jibunAddress','addr']) || firstExistingValueClient(payload, ['address','roadAddress','jibunAddress','addr']);
+      const phone = firstExistingValueClient(p, ['phone','telephone','tel','contact']) || firstExistingValueClient(it, ['phone','telephone','tel','contact']) || firstExistingValueClient(payload, ['phone','telephone','tel','contact']);
+      const hours = firstExistingValueClient(p, ['hours','openingHours','businessHours','openStatus']) || firstExistingValueClient(it, ['hours','openingHours','businessHours','openStatus']) || firstExistingValueClient(payload, ['hours','openingHours','businessHours','openStatus']);
+      const homepage = firstExistingValueClient(p, ['homepage','website','officialUrl','url']) || firstExistingValueClient(it, ['homepage','website','officialUrl']);
+      const title = String((it && it.title) || '').replace(/^\[[^\]]+\]\s*/, '').trim();
+      const query = firstExistingValueClient(p, ['mapQuery','query','name']) || firstExistingValueClient(it, ['mapQuery','placeName','name']) || title || lastQuery || input.value || '';
+      return { address, phone, hours, homepage, query };
+    }
+
     function mapQueryForItemClient(it){
+      const info = placeInfoForItemClient(it);
       const title = String((it && it.title) || '').replace(/^\[[^\]]+\]\s*/, '').replace(/[-–—].*$/, '').trim();
       const summary = String((it && (it.summary || it.description)) || '').trim();
-      return (title || summary || lastQuery || input.value || '').slice(0, 120);
+      return (info.address ? `${title || info.query} ${info.address}` : (info.query || title || summary || lastQuery || input.value || '')).slice(0, 160);
+    }
+
+    function renderPlaceInfoClient(it, mapQuery){
+      const info = placeInfoForItemClient(it);
+      const hasInfo = !!(info.address || info.phone || info.hours || info.homepage);
+      const wrap = document.createElement('div');
+      wrap.className = 'maru-place-info';
+
+      if(hasInfo){
+        if(info.address){
+          const row = document.createElement('div');
+          row.className = 'maru-place-info-row';
+          row.textContent = '주소: ' + info.address;
+          wrap.appendChild(row);
+        }
+        if(info.phone){
+          const row = document.createElement('div');
+          row.className = 'maru-place-info-row';
+          row.textContent = '전화: ' + info.phone;
+          wrap.appendChild(row);
+        }
+        if(info.hours){
+          const row = document.createElement('div');
+          row.className = 'maru-place-info-row';
+          row.textContent = '시간: ' + info.hours;
+          wrap.appendChild(row);
+        }
+      } else {
+        const row = document.createElement('div');
+        row.className = 'maru-place-info-row';
+        row.textContent = '장소 정보: 지도 보기에서 주소·길찾기·주변 정보를 확인할 수 있습니다.';
+        wrap.appendChild(row);
+      }
+
+      const actions = document.createElement('div');
+      actions.className = 'maru-place-actions';
+
+      const google = document.createElement('a');
+      google.href = 'https://www.google.com/maps/search/' + encodeURIComponent(mapQuery || info.query || '');
+      google.target = '_self';
+      google.rel = 'noopener';
+      google.textContent = 'Google 지도';
+      actions.appendChild(google);
+
+      const naver = document.createElement('a');
+      naver.href = 'https://map.naver.com/p/search/' + encodeURIComponent(mapQuery || info.query || '');
+      naver.target = '_self';
+      naver.rel = 'noopener';
+      naver.textContent = 'Naver 지도';
+      actions.appendChild(naver);
+
+      if(info.homepage){
+        const home = document.createElement('a');
+        home.href = info.homepage;
+        home.target = '_self';
+        home.rel = 'noopener';
+        home.textContent = '홈페이지';
+        actions.appendChild(home);
+      }
+
+      wrap.appendChild(actions);
+      return wrap;
     }
 
     function renderMapPreviewClient(it){
@@ -1905,11 +2013,12 @@ async function fetchInstantSearchPack(q, type = activeType){
       iframe.src = 'https://maps.google.com/maps?q=' + encodeURIComponent(q) + '&output=embed';
       iframe.title = q + ' map';
       iframe.onerror = () => wrap.remove();
+      wrap.appendChild(iframe);
       const cap = document.createElement('div');
       cap.className = 'maru-map-preview-caption';
-      cap.textContent = '지도 · 위치 정보';
-      wrap.appendChild(iframe);
+      cap.textContent = q;
       wrap.appendChild(cap);
+      wrap.appendChild(renderPlaceInfoClient(it, q));
       return wrap;
     }
 
@@ -1997,15 +2106,15 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const fav = document.createElement('img');
       fav.src = faviconOf(url);
-      fav.style.width = '23px';
-      fav.style.height = '23px';
+      fav.style.width = '16px';
+      fav.style.height = '16px';
       fav.style.verticalAlign = 'middle';
       fav.style.marginRight = '10px';
-      fav.style.borderRadius = '6px';
+      fav.style.borderRadius = '4px';
       fav.style.background = '#ffffff';
       fav.style.border = '1px solid #d6e4ff';
       fav.style.boxShadow = '0 0 0 0 rgba(0,0,0,0)';
-      fav.style.padding = '2px';
+      fav.style.padding = '1px';
       fav.onerror = () => fav.remove();
 
       const span = document.createElement('span');
@@ -2271,7 +2380,9 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (!sourceItems.length) return [];
       if (normalizeSearchType(activeType) !== 'all') return sourceItems.slice();
 
-      const groups = groupSliceForDisplay(sourceItems);
+      const groups = groupSliceForDisplay(sourceItems).map(g => Object.assign({}, g, {
+        items: diversifyGroupPreviewItems(g.group, g.items || [])
+      }));
       const byGroup = new Map(groups.map(g => [g.group, Object.assign({}, g, { cursor: 0 })]));
       const used = new Set();
       const stream = [];
@@ -2286,83 +2397,98 @@ if (it.riskLabel === '⚠️ high-risk') {
         if(key) used.add(key);
         stream.push(Object.assign({}, it, {
           displayGroup: groupInfo.group,
-          displayGroupLabel: groupInfo.label,
+          displayGroupLabel: displayGroupLabel(groupInfo.group, it),
           displayGroupVisibleIndex: idx,
           displayGroupSourceTotal: groupInfo.items.length,
           displayGroupCollapsedCount: 0,
           collapsedAwareViewportCard: true,
-          visibleViewportCard: true,
-          naturalFlowNoForcedCollapse: true
+          visibleViewportCard: true
         }));
         return true;
       }
 
-      // Balanced lead for the first few pages: good official/knowledge/map/news/
-      // image/video/SNS/blog/web results are promoted, but lower-priority results
-      // are not omitted. They continue naturally on later pages.
-      const frontCaps = {
-        authority: 4, knowledge: 3, local_tour: 3, news: 6,
-        media: 5, social: 5, community: 5, shopping: 5,
-        sports: 5, finance: 5, webtoon: 5, web: 30
+      // First 2~3 pages are Naver-like category lead pages. Overflow from heavy
+      // categories is NOT appended to these visible slots; it remains behind the
+      // section button. General web starts after the representative category zone.
+      const leadCaps = {
+        authority: 5,
+        knowledge: 5,
+        local_tour: 5,
+        news: 6,
+        community: 6,
+        social: 6,
+        media: 6,
+        shopping: 5,
+        sports: 4,
+        finance: 4,
+        webtoon: 4,
+        web: 8
       };
-      const lanes = [
-        'authority','knowledge','local_tour','news','community','social','media','shopping','web',
-        'authority','knowledge','local_tour','news','community','social','media','web',
-        'shopping','sports','finance','webtoon','web'
-      ];
-      const pickedByGroup = Object.create(null);
-      let safety = 0;
-      while(stream.length < Math.min(sourceItems.length, PAGE_SIZE * 4) && safety++ < sourceItems.length * 3){
-        let progressed = false;
-        for(const group of lanes){
-          const g = byGroup.get(group);
-          if(!g || !g.items.length) continue;
-          const cap = frontCaps[group] || 6;
-          pickedByGroup[group] = pickedByGroup[group] || 0;
-          if(pickedByGroup[group] >= cap) continue;
-          while(g.cursor < g.items.length){
-            const idx = g.cursor++;
-            const it = g.items[idx];
-            if(pushItem(it, g, idx)){
-              pickedByGroup[group]++;
-              progressed = true;
-              break;
-            }
-          }
-          if(stream.length >= Math.min(sourceItems.length, PAGE_SIZE * 4)) break;
-        }
-        if(!progressed) break;
-      }
-
-      // Append every remaining result, but keep heavy vertical overflow (news/blog/SNS)
-      // behind the primary information/web flow. This preserves all results without
-      // letting one provider/category occupy the whole first viewport.
-      const remainderOrder = ['web','local_tour','media','community','social','shopping','sports','finance','webtoon','knowledge','authority','news'];
-      const appendedGroups = new Set();
-      remainderOrder.forEach(group => {
+      const leadOrder = ['authority','knowledge','local_tour','news','community','social','media','shopping','sports','finance','webtoon','web'];
+      leadOrder.forEach(group => {
         const g = byGroup.get(group);
-        if(!g || !g.items) return;
+        if(!g || !Array.isArray(g.items)) return;
+        const cap = leadCaps[group] || 5;
+        let picked = 0;
+        while(g.cursor < g.items.length && picked < cap){
+          const idx = g.cursor++;
+          if(pushItem(g.items[idx], g, idx)) picked++;
+        }
+      });
+
+      // After the lead zone, continue with general web and useful non-heavy items.
+      // Heavy overflow (news/blog/SNS/media) appears only after general web, and
+      // each section's full overflow is also available through its 더보기 button.
+      const continuationOrder = ['web','local_tour','shopping','sports','finance','webtoon','knowledge','authority','community','social','media','news'];
+      const appendedGroups = new Set();
+      continuationOrder.forEach(group => {
+        const g = byGroup.get(group);
+        if(!g || !Array.isArray(g.items)) return;
         appendedGroups.add(group);
-        g.items.forEach((it, idx) => pushItem(it, g, idx));
+        while(g.cursor < g.items.length){
+          const idx = g.cursor++;
+          pushItem(g.items[idx], g, idx);
+        }
       });
       groups.forEach(g => {
         if(appendedGroups.has(g.group)) return;
-        g.items.forEach((it, idx) => pushItem(it, g, idx));
+        const gg = byGroup.get(g.group);
+        if(!gg || !Array.isArray(gg.items)) return;
+        while(gg.cursor < gg.items.length){
+          const idx = gg.cursor++;
+          pushItem(gg.items[idx], gg, idx);
+        }
       });
 
       return stream;
     }
 
     function visibleItemsForPage(page){
+      const start = (page - 1) * PAGE_SIZE;
+
+      // In the all tab, never let a raw server page full of one vertical
+      // such as news occupy the viewport. Rebuild a balanced visible stream
+      // from the accumulated pool so collapsed/overflow items do not consume
+      // the 25 visible slots.
+      if (normalizeSearchType(activeType) === 'all') {
+        const stream = buildClientVisibleStream(page);
+        if (stream.length > start) return stream.slice(start, start + PAGE_SIZE);
+      }
+
       if(serverPagedMode && loadedServerPages.has(page)){
         return loadedServerPages.get(page).slice(0, PAGE_SIZE);
       }
       const stream = buildClientVisibleStream(page);
-      const start = (page - 1) * PAGE_SIZE;
       return stream.slice(start, start + PAGE_SIZE);
     }
 
     function visibleItemCountForPager(){
+      // In the all tab the pager must count the client visible stream, not the
+      // raw server total. Collapsed category overflow remains behind 더보기 and
+      // must not consume page slots.
+      if (normalizeSearchType(activeType) === 'all') {
+        return buildClientVisibleStream(currentPage || 1).length;
+      }
       if(serverPagedMode && serverTotalItems > 0) return serverTotalItems;
       return buildClientVisibleStream(currentPage || 1).length;
     }
