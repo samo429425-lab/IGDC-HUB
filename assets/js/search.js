@@ -21,21 +21,49 @@ ready(function () {
     p.endsWith('/search') ||
     p.endsWith('/search/');
 
-  // 🔥 홈에서도 search.js 동작 허용 (핵심 수정)
-  const hasSearchUI =
-    document.getElementById('searchInput') ||
-    document.getElementById('globalSearchInput');
+  // 홈/검색 페이지 어디에서든 search.js가 검색창을 감지해야 한다.
+  // 홈 검색창이 DOMContentLoaded 이후 늦게 생성되는 경우도 있으므로
+  // searchInput/globalSearchInput만 없다고 바로 종료하지 않는다.
+  const EARLY_SEARCH_INPUT_SELECTOR = [
+    '#searchInput',
+    '#globalSearchInput',
+    '#homeSearchInput',
+    '#mainSearchInput',
+    '#heroSearchInput',
+    'input[type="search"]',
+    'input[name="q"]',
+    'input[name*="query" i]',
+    'input[name*="keyword" i]',
+    'input[id*="search" i]',
+    'input[id*="query" i]',
+    'input[id*="keyword" i]',
+    'input[class*="search" i]',
+    'input[class*="query" i]',
+    'input[placeholder*="검색" i]',
+    'input[placeholder*="검색어" i]',
+    'input[placeholder*="search" i]',
+    '.search input',
+    '.search-box input',
+    '.search-area input',
+    '.hero-search input',
+    '.main-search input',
+    'form[action*="search" i] input'
+  ].join(',');
 
-  if (!isSearchPage && !hasSearchUI) return;
+  function findEarlySearchInput(){
+    try {
+      return document.querySelector(EARLY_SEARCH_INPUT_SELECTOR);
+    } catch(e) {
+      return document.getElementById('searchInput') || document.getElementById('globalSearchInput');
+    }
+  }
 
-    const input   = document.getElementById('searchInput') || document.getElementById('globalSearchInput');
-    const btn     = document.getElementById('searchBtn') || document.getElementById('globalSearchBtn');
+    const input   = findEarlySearchInput() || document.createElement('input');
+    const btn     = document.getElementById('searchBtn') || document.getElementById('globalSearchBtn') || { addEventListener: function(){} };
     const statusEl = document.getElementById('searchStatus');
     const resultsEl = document.getElementById('searchResults');
     const status  = statusEl || { textContent: '' };
     const results = resultsEl || document.createElement('div');
-        
-    if (!input || !btn) return;
 
     const PAGE_SIZE = 25;
     const BLOCK_SIZE = 10;
@@ -850,6 +878,68 @@ function seedLoadedServerPagesFromItems(items, maxItems){
   }
 }
 
+function absorbServerPagePack(pack, page){
+  const pageNo = Math.max(1, parseInt(page || 1, 10) || 1);
+  const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack))).slice(0, PAGE_SIZE);
+  if(pageSlice.length){
+    loadedServerPages.set(pageNo, pageSlice);
+    allItems = dedupeItems((Array.isArray(allItems) ? allItems : []).concat(pageSlice));
+  }
+
+  const fullItems = dedupeItems(filterSearchResultItems(normalizeItems(pack && (pack.payload || pack))));
+  if(fullItems.length){
+    allItems = dedupeItems((Array.isArray(allItems) ? allItems : []).concat(fullItems.slice(0, INITIAL_PRELOAD_TARGET)));
+  }
+
+  lastSearchPayload = pack && pack.payload || lastSearchPayload;
+  updateProgressiveTotalFromPayload(pack && pack.payload, Math.max(allItems.length || 0, INITIAL_PRELOAD_TARGET));
+  serverTotalItems = Math.max(serverTotalItems || 0, INITIAL_PRELOAD_TARGET);
+  progressivePagerPages = Math.max(progressivePagerPages || 0, INITIAL_PROGRESSIVE_PAGER_PAGES);
+  return pageSlice.length || fullItems.length;
+}
+
+function scheduleSoftRenderCurrentPage(){
+  if(scheduleSoftRenderCurrentPage._timer) return;
+  scheduleSoftRenderCurrentPage._timer = setTimeout(() => {
+    scheduleSoftRenderCurrentPage._timer = null;
+    try {
+      if(lastQuery && Array.isArray(allItems) && allItems.length){
+        renderPage(currentPage || 1, true);
+      } else {
+        drawPager();
+      }
+    } catch(e) {}
+  }, 80);
+}
+
+function startInitialPreloadPages(q, type, seq){
+  const query = String(q || '').trim();
+  if(!query) return;
+  const maxPage = INITIAL_PRELOAD_PAGES;
+  let next = 1;
+  let stopped = false;
+
+  async function worker(){
+    while(!stopped && runSearch._seq === seq && next <= maxPage){
+      const page = next++;
+      const existing = loadedServerPages.get(page);
+      if(existing && existing.length >= PAGE_SIZE) continue;
+      try{
+        const pack = await fetchSearch(query, type, page);
+        if(stopped || runSearch._seq !== seq) return;
+        if(absorbServerPagePack(pack, page)){
+          scheduleSoftRenderCurrentPage();
+        }
+      }catch(e){
+        console.warn('initial preload page skipped:', page, e);
+      }
+    }
+  }
+
+  const workers = Math.min(4, maxPage);
+  for(let i = 0; i < workers; i++) worker();
+}
+
 function updateProgressiveTotalFromPayload(payload, fallbackCount, opts){
   const total = serverTotalFromPayload(payload, fallbackCount || 0);
   authoritativeServerTotalItems = Math.max(authoritativeServerTotalItems || 0, total || 0, fallbackCount || 0);
@@ -891,12 +981,7 @@ function startContinuousIntake(q, type, seq){
       try{
         const pack = await fetchSearch(q, type, page);
         if(!continuousIntakeActive || continuousIntakeSeq !== token || runSearch._seq !== seq) return;
-        const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack))).slice(0, PAGE_SIZE);
-        if(pageSlice.length){
-          loadedServerPages.set(page, pageSlice);
-          allItems = dedupeItems(allItems.concat(pageSlice));
-          lastSearchPayload = pack && pack.payload || lastSearchPayload;
-          updateProgressiveTotalFromPayload(pack && pack.payload, allItems.length);
+        if(absorbServerPagePack(pack, page)){
           if(page === currentPage) renderPage(page, true);
           else drawPager();
           status.textContent = `${serverTotalItems || allItems.length} results for "${q}" · ${getTypeLabel(type)} · receiving...`;
@@ -1072,7 +1157,19 @@ async function fetchInstantSearchPack(q, type = activeType){
       const ph = String(el.getAttribute('placeholder') || '').toLowerCase();
       const role = String(el.getAttribute('role') || '').toLowerCase();
       const type = String(el.type || '').toLowerCase();
-      return el === input || id.includes('search') || name.includes('search') || cls.includes('search') || ph.includes('검색') || ph.includes('search') || role === 'searchbox' || type === 'search';
+      const searchish =
+        el === input ||
+        id.includes('search') || id.includes('query') || id.includes('keyword') || id.includes('hero') || id.includes('global') ||
+        name.includes('search') || name === 'q' || name.includes('query') || name.includes('keyword') ||
+        cls.includes('search') || cls.includes('query') || cls.includes('keyword') || cls.includes('hero') ||
+        ph.includes('검색') || ph.includes('검색어') || ph.includes('search') || ph.includes('keyword') || ph.includes('무엇') ||
+        role === 'searchbox' || type === 'search';
+
+      if(searchish) return true;
+
+      // 홈 메인 검색창은 id/class가 부모에만 붙는 경우가 많다.
+      const wrap = el.closest && el.closest('.search, .search-box, .search-area, .hero-search, .main-search, [id*=search i], [class*=search i], form[action*=search i]');
+      return !!wrap;
     }
 
     function runGlobalSearch(){
@@ -1265,8 +1362,20 @@ async function fetchInstantSearchPack(q, type = activeType){
         'input[name*="search" i]',
         'input[id*="search" i]',
         'input[class*="search" i]',
+        'input[id*="query" i]',
+        'input[name="q"]',
+        'input[name*="query" i]',
+        'input[name*="keyword" i]',
+        'input[class*="query" i]',
         'input[placeholder*="검색" i]',
-        'input[placeholder*="search" i]'
+        'input[placeholder*="검색어" i]',
+        'input[placeholder*="search" i]',
+        '.search input',
+        '.search-box input',
+        '.search-area input',
+        '.hero-search input',
+        '.main-search input',
+        'form[action*="search" i] input'
       ].join(',');
 
       const targets = Array.from(new Set([input].concat(Array.from(document.querySelectorAll(selector))).filter(Boolean)))
@@ -1587,8 +1696,10 @@ async function fetchInstantSearchPack(q, type = activeType){
 
         // Provider logos and brand icons are source markers, not thumbnails.
         // They must never be promoted into the visual card area.
-        const providerLogoLike = /(google|naver|youtube|facebook|instagram|tiktok|twitter|x)[^?#]*(logo|favicon|brand|symbol|icon)/i.test(low) ||
-          /(logo|favicon|brandmark|symbol|emblem|ci|bi)[^?#]*\.(png|jpg|jpeg|webp|svg)(\?|#|$)/i.test(low);
+        const providerLogoLike =
+          /(google|naver|youtube|facebook|instagram|tiktok|twitter|x|kakao|daum|bing)[^?#]*(logo|favicon|brand|symbol|icon)/i.test(low) ||
+          /(logo|favicon|brandmark|symbol|emblem|ci|bi|og_default|default_logo|site_logo)[^?#]*\.(png|jpg|jpeg|webp|svg)(\?|#|$)/i.test(low) ||
+          /(^|[\/_\-.])(logo|favicon|brand|symbol|emblem|ci|bi)([\/_\-.]|$)/i.test(low);
         if (providerLogoLike) return;
 
         let key = s.split('#')[0].toLowerCase();
@@ -2841,12 +2952,8 @@ if (it.riskLabel === '⚠️ high-risk') {
       status.textContent = `Loading page ${page} for "${q}"...`;
       try{
         const pack = await fetchSearch(q, activeType, page);
-        const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
-        if(pageSlice.length){
-          loadedServerPages.set(page, pageSlice.slice(0, PAGE_SIZE));
-          allItems = dedupeItems(allItems.concat(pageSlice));
-          const total = serverTotalFromPayload(pack && pack.payload, serverTotalItems || pageSlice.length);
-          serverTotalItems = Math.max(serverTotalItems || 0, total || 0, INITIAL_PRELOAD_TARGET);
+        if(absorbServerPagePack(pack, page)){
+          // page absorbed
         } else if(serverTotalItems > ((page - 1) * PAGE_SIZE)){
           // Do not silently render a blank page when the pager says that page exists.
           // Keep the loading state visible and let the user retry by clicking the page again.
@@ -3005,6 +3112,7 @@ async function runSearch(q, type = activeType){
     pageImageEnrichCache.clear();
     itemImageEnrichCache.clear();
     expandedDisplayGroups.clear();
+    startInitialPreloadPages(qq, activeType, seq);
 
     if (!allItems.length) {
       results.innerHTML = '';
@@ -3029,6 +3137,7 @@ async function runSearch(q, type = activeType){
     currentPage = 1;
     lastQuery = qq;
     lastType = activeType;
+    startInitialPreloadPages(qq, activeType, seq);
     if(allItems.length) renderPage(1);
     else { results.innerHTML = ''; clearPager(); }
     status.textContent = allItems.length ? `${serverTotalItems || allItems.length} results for "${qq}" · receiving...` : `No results for "${qq}"`;
