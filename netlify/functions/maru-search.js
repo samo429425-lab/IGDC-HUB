@@ -338,14 +338,19 @@ function canonicalizeItem(raw, query, sourceHint){
   const title = safeString(firstNonEmpty(it.title, it.name, p.title, p.name, url)).trim();
   const summary = safeString(firstNonEmpty(it.summary, it.snippet, it.description, p.summary, p.snippet, p.description)).trim();
 
-  const imageCandidates = compactImages([
+  const rawImageCandidates = compactImages([
+    it.originalImage, it.fullImage, it.imageOriginal, it.viewerImage, it.openImageUrl, it.contentUrl, it.cardImage,
     it.thumbnail, it.thumb, it.image, it.image_url, it.og_image,
+    p.originalImage, p.fullImage, p.imageOriginal, p.viewerImage, p.openImageUrl, p.contentUrl, p.cardImage,
     p.thumbnail, p.thumb, p.image, p.image_url, p.og_image,
     mediaPoster(it, p)
   ].concat(Array.isArray(it.imageSet) ? it.imageSet : []).concat(Array.isArray(p.imageSet) ? p.imageSet : []));
 
-  const favicon = faviconOf(url);
-  const thumbnail = imageCandidates[0] || favicon;
+  // Large card thumbnails must be real content media only.
+  // Favicon/provider logos remain available to the UI as small source icons,
+  // but they must never become thumbnail/image/imageSet.
+  const imageCandidates = rawImageCandidates.filter(img => isMeaningfulImageForItem(img, it));
+  const thumbnail = imageCandidates[0] || '';
   const type = safeString(it.type || p.type || 'web') || 'web';
   const mediaType = safeString(it.mediaType || p.mediaType || (type === 'image' ? 'image' : (type === 'video' ? 'video' : 'article')));
   const source = firstNonEmpty(it.source, p.source, sourceHint, domainOf(url));
@@ -364,8 +369,8 @@ function canonicalizeItem(raw, query, sourceHint){
     source,
     lang: it.lang || p.lang || detectLangFromTextFallback(title + ' ' + summary),
     thumbnail,
-    thumb: firstNonEmpty(it.thumb, imageCandidates[0], thumbnail),
-    image: firstNonEmpty(it.image, imageCandidates[0], ''),
+    thumb: thumbnail,
+    image: imageCandidates[0] || '',
     imageSet: imageCandidates,
     media: it.media || p.media || undefined,
     channel: it.channel || p.channel,
@@ -461,7 +466,13 @@ function isHardRejectImageUrl(imageUrl){
     'doubleclick',
     'advertisement',
     'promo-banner',
-    'popup'
+    'popup',
+    'og_default',
+    'default_logo',
+    'site_logo',
+    'logo_default',
+    'profile_default',
+    'sns_share'
   ];
 
   if(hardBad.some(k => s.includes(k))) return true;
@@ -518,8 +529,9 @@ function isLogoBannerOrPlacardImage(imageUrl, it){
   const s = safeString(imageUrl).toLowerCase();
   const text = [s, safeString(it && it.title), safeString(it && it.summary), safeString(it && it.description), safeString(it && it.source)].join(' ').toLowerCase();
   if(/google\.com\/s2\/favicons|favicon|apple-touch-icon|logo|logotype|brandmark|symbol|emblem|\/ci[\/_-]|\/bi[\/_-]/i.test(s)) return true;
-  if(/(naver|google|youtube|facebook|instagram|tiktok|twitter|x)[^?#]*(logo|favicon|brand|symbol|icon)/i.test(s)) return true;
-  if(/banner|placard|현수막|배너|광고|popup|adserver|doubleclick|advertisement|promo-banner/i.test(text)) return true;
+  if(/(naver|google|youtube|facebook|instagram|tiktok|twitter|x|kakao|daum|bing)[^?#]*(logo|favicon|brand|symbol|icon)/i.test(s)) return true;
+  if(/(^|[\/_\-.])(logo|favicon|brand|symbol|emblem|ci|bi|og_default|default_logo|site_logo)([\/_\-.]|$)/i.test(s)) return true;
+  if(/banner|placard|현수막|배너|광고|popup|adserver|doubleclick|advertisement|promo-banner|og_default|default_logo|site_logo/i.test(text)) return true;
   return false;
 }
 
