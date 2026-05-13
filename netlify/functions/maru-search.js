@@ -529,8 +529,9 @@ function isLogoBannerOrPlacardImage(imageUrl, it){
   const s = safeString(imageUrl).toLowerCase();
   const text = [s, safeString(it && it.title), safeString(it && it.summary), safeString(it && it.description), safeString(it && it.source)].join(' ').toLowerCase();
   if(/google\.com\/s2\/favicons|favicon|apple-touch-icon|logo|logotype|brandmark|symbol|emblem|\/ci[\/_-]|\/bi[\/_-]/i.test(s)) return true;
-  if(/(naver|google|youtube|facebook|instagram|tiktok|twitter|x|kakao|daum|bing)[^?#]*(logo|favicon|brand|symbol|icon)/i.test(s)) return true;
+  if(/(naver|google|youtube|facebook|instagram|tiktok|twitter|x|kakao|daum|bing)[^?#]*(logo|favicon|brand|symbol|icon|mark)/i.test(s)) return true;
   if(/(^|[\/_\-.])(logo|favicon|brand|symbol|emblem|ci|bi|og_default|default_logo|site_logo)([\/_\-.]|$)/i.test(s)) return true;
+  if(/ssl\.pstatic\.net\/(sstatic|static)|s\.pstatic\.net\/static|search\.pstatic\.net\/(sstatic|static)|sp[_-]?common|sp[_-]?search|naver[_-]?logo|googlelogo|gstatic\.com\/images\/branding|google\.com\/images\/branding|youtube\.com\/s\/desktop/i.test(s)) return true;
   if(/banner|placard|현수막|배너|광고|popup|adserver|doubleclick|advertisement|promo-banner|og_default|default_logo|site_logo/i.test(text)) return true;
   return false;
 }
@@ -901,6 +902,46 @@ function mediaProfileForItem(it){
   };
 }
 
+
+function stripInlineHtml(v){
+  return safeString(v)
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function resultSummaryText(it){
+  it = (it && typeof it === 'object') ? it : {};
+  const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+  const meta = (it.meta && typeof it.meta === 'object') ? it.meta : {};
+  const candidates = [
+    it.summary, it.snippet, it.description, it.excerpt, it.content, it.text,
+    it.ogDescription, it.metaDescription, it.seoDescription,
+    p.summary, p.snippet, p.description, p.excerpt, p.content, p.text,
+    p.ogDescription, p.metaDescription,
+    meta.description, meta.ogDescription
+  ];
+  for(const v of candidates){
+    const clean = stripInlineHtml(v);
+    if(clean && clean.length >= 18) return clean.slice(0, 300);
+  }
+  const title = stripInlineHtml(firstNonEmpty(it.title, it.name));
+  const url = safeString(firstNonEmpty(it.url, it.link, it.href));
+  const host = domainOf(url);
+  const source = safeString(firstNonEmpty(it.source, it.provider, it.channel));
+  const type = safeString(firstNonEmpty(it.type, it.mediaType, 'web'));
+  if(title && host) return host + '의 ' + title + ' 관련 공개 검색 결과입니다. 상세 페이지에서 본문·이미지·위치·연관 정보를 확인할 수 있습니다.';
+  if(host) return host + '에서 제공하는 ' + type + ' 관련 공개 웹 결과입니다.';
+  if(source) return source + '에서 제공하는 ' + type + ' 관련 검색 결과입니다.';
+  return '';
+}
+
 function compactResultItem(it){
   it = (it && typeof it === 'object') ? it : {};
 
@@ -944,8 +985,8 @@ function compactResultItem(it){
     type,
     mediaType,
     title: safeString(it.title).trim(),
-    summary: safeString(firstNonEmpty(it.summary, it.snippet, it.description)).trim(),
-    description: safeString(firstNonEmpty(it.description, it.summary, it.snippet)).trim(),
+    summary: resultSummaryText(it),
+    description: resultSummaryText(it),
     url: safeString(firstNonEmpty(it.url, it.link, it.href, profile.openUrl)).trim(),
     link: safeString(firstNonEmpty(it.link, it.url, it.href, profile.openUrl)).trim(),
     source: it.source || null,
