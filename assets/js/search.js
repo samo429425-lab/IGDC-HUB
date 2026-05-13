@@ -940,6 +940,83 @@ function startInitialPreloadPages(q, type, seq){
   for(let i = 0; i < workers; i++) worker();
 }
 
+
+function seedDisplayGroupForType(type){
+  const t = normalizeSearchType(type);
+  const map = {
+    knowledge: 'knowledge',
+    map: 'local_tour',
+    tour: 'local_tour',
+    news: 'news',
+    blog: 'community',
+    cafe: 'community',
+    sns: 'social',
+    video: 'media',
+    image: 'media',
+    shopping: 'shopping',
+    sports: 'sports',
+    finance: 'finance',
+    book: 'knowledge',
+    webtoon: 'webtoon'
+  };
+  return map[t] || '';
+}
+
+function normalizeSeedItemsForViewport(items, seedType){
+  const group = seedDisplayGroupForType(seedType);
+  if(!group) return Array.isArray(items) ? items : [];
+  return (Array.isArray(items) ? items : []).map(it => {
+    if(!it || typeof it !== 'object') return it;
+    const copy = Object.assign({}, it);
+    copy.displayGroup = group;
+    copy.displayGroupLabel = displayGroupLabel(group, copy);
+    copy.displayGroupPreviewLimit = displayGroupPreviewLimit(group, copy);
+    copy.seededVertical = normalizeSearchType(seedType);
+    return copy;
+  });
+}
+
+function startCategorySeedPreload(q, seq){
+  const query = String(q || '').trim();
+  if(!query || normalizeSearchType(activeType) !== 'all') return;
+
+  // 목적: 첫 12페이지 안에 뉴스만 먼저 들어와 빈 슬롯이 생기는 것을 막고,
+  // 블로그/카페/SNS/영상/이미지/지식/지역 대표 결과를 빠르게 앞으로 당긴다.
+  // 각 vertical은 대표 카드용 seed만 가져오며, 초과분은 기존 더보기/후속 흐름에 맡긴다.
+  const seedTypes = ['knowledge','map','tour','blog','cafe','sns','video','image','news'];
+  let cursor = 0;
+  let active = 0;
+  const maxWorkers = 3;
+
+  function pump(){
+    if(runSearch._seq !== seq) return;
+    while(active < maxWorkers && cursor < seedTypes.length){
+      const seedType = seedTypes[cursor++];
+      active++;
+      fetchSearch(query, seedType, 1).then(pack => {
+        if(runSearch._seq !== seq) return;
+        const pageItems = pageItemsFromPack(pack);
+        const normalized = normalizeSeedItemsForViewport(
+          dedupeItems(filterSearchResultItems(pageItems.length ? pageItems : normalizeItems(pack && (pack.payload || pack)))).slice(0, 12),
+          seedType
+        );
+        if(normalized.length){
+          allItems = dedupeItems((Array.isArray(allItems) ? allItems : []).concat(normalized));
+          seedLoadedServerPagesFromItems(allItems, INITIAL_PRELOAD_TARGET);
+          scheduleSoftRenderCurrentPage();
+        }
+      }).catch(e => {
+        console.warn('category seed preload skipped:', seedType, e);
+      }).finally(() => {
+        active--;
+        if(runSearch._seq === seq) pump();
+      });
+    }
+  }
+
+  pump();
+}
+
 function updateProgressiveTotalFromPayload(payload, fallbackCount, opts){
   const total = serverTotalFromPayload(payload, fallbackCount || 0);
   authoritativeServerTotalItems = Math.max(authoritativeServerTotalItems || 0, total || 0, fallbackCount || 0);
@@ -1099,27 +1176,39 @@ async function fetchSearch(q, type = activeType, page = 1){
 
 async function fetchInstantSearchPack(q, type = activeType){
   const safeType = normalizeSearchType(type);
+  const target = Math.max(INITIAL_PRELOAD_TARGET, adaptiveSearchTarget(q, safeType));
+  signalSanmaruSearch(q, safeType, 'search-ui-first-300');
+
+  // First visible search must be supplied by Maru Search, not by the lighter
+  // Sanmaru boot ping.  Sanmaru is still warmed above, but Maru Search returns
+  // the first 12-page body window so search.html opens with about 300 usable
+  // cards and a 12-page pager immediately.
   const sp = new URLSearchParams();
-  sp.set('action', 'instant-supply');
   sp.set('q', q);
   sp.set('query', q);
   sp.set('type', safeType);
   sp.set('tab', safeType);
-  sp.set('limit', String(firstPaintLimitFor(q, safeType)));
-  sp.set('firstPaintLimit', String(firstPaintLimitFor(q, safeType)));
-  sp.set('candidatePool', String(adaptiveSearchTarget(q, safeType)));
-  sp.set('candidatePoolTarget', String(adaptiveSearchTarget(q, safeType)));
+  sp.set('limit', String(target));
+  sp.set('firstPaintLimit', String(INITIAL_PRELOAD_TARGET));
+  sp.set('candidatePool', String(target));
+  sp.set('candidatePoolTarget', String(target));
   sp.set('initialPreloadPages', String(INITIAL_PRELOAD_PAGES));
   sp.set('initialPreloadTarget', String(INITIAL_PRELOAD_TARGET));
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
-  sp.set('providerPassthrough', '1');
+  sp.set('page', '1');
+  sp.set('visiblePage', '1');
+  sp.set('pageWindowOnly', '1');
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
-  sp.set('reason', 'search-ui-first-paint');
+  sp.set('residentSwitch', '1');
+  sp.set('activateResident', '1');
+  sp.set('naturalFlow', '1');
+  sp.set('smoothIntake', '1');
+  sp.set('handoff', isSearchPage ? 'search-html-first-300' : 'home-first-300');
 
   try {
-    const r = await fetch(`${SANMARU_BOOT_URL}?${sp.toString()}`, { cache: 'no-store' });
+    const r = await fetch(`/.netlify/functions/maru-search?${sp.toString()}`, { cache: 'no-store' });
     if (!r.ok) return { items: [], payload: null, pageItems: [], viewportSections: [] };
     const json = await r.json();
     if (!json || json.status === 'error' || json.status === 'blocked') return { items: [], payload: json || null, pageItems: [], viewportSections: [] };
@@ -1600,8 +1689,11 @@ async function fetchInstantSearchPack(q, type = activeType){
       const host = (() => { try { return new URL(s, location.origin).hostname.toLowerCase(); } catch(e){ return ''; } })();
       const titleSummary = String([it && it.title, it && it.summary, it && it.description].filter(Boolean).join(' ')).toLowerCase();
       if(/google\.com\/s2\/favicons|favicon|apple-touch-icon|logo|logotype|brandmark|symbol|emblem|\/ci[\/_-]|\/bi[\/_-]/i.test(s)) return true;
-      if(/(naver|google|youtube|facebook|instagram|tiktok|twitter|x)[^?#]*(logo|favicon|brand|symbol|icon)/i.test(s)) return true;
-      if(/banner|placard|adserver|doubleclick|advertisement|promo-banner|popup/i.test(s)) return true;
+      if(/(naver|google|youtube|facebook|instagram|tiktok|twitter|x|kakao|daum|bing)[^?#]*(logo|favicon|brand|symbol|icon|mark)/i.test(s)) return true;
+      // Provider UI/static sprites are not content thumbnails.  Keep real content
+      // hosts such as postfiles/blogthumb/phinf, but block provider branding/static UI paths.
+      if(/ssl\.pstatic\.net\/(sstatic|static)|s\.pstatic\.net\/static|search\.pstatic\.net\/(sstatic|static)|sp[_-]?common|sp[_-]?search|naver[_-]?logo|googlelogo|gstatic\.com\/images\/branding|google\.com\/images\/branding|youtube\.com\/s\/desktop/i.test(s)) return true;
+      if(/banner|placard|adserver|doubleclick|advertisement|promo-banner|popup|현수막|배너|광고/i.test(s)) return true;
       if(/banner|placard|현수막|배너|광고/.test(titleSummary) && !/news|article|photo|image|youtube|ytimg|sns|instagram|tiktok/i.test(host + ' ' + s)) return true;
       return false;
     }
@@ -2463,6 +2555,44 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
 
+
+    function stripInlineHtmlClient(v){
+      return String(v || '')
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function displaySnippetForItem(it){
+      it = (it && typeof it === 'object') ? it : {};
+      const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const meta = (it.meta && typeof it.meta === 'object') ? it.meta : {};
+      const candidates = [
+        it.summary, it.description, it.snippet, it.excerpt, it.content, it.text,
+        it.ogDescription, it.metaDescription, it.seoDescription,
+        p.summary, p.description, p.snippet, p.excerpt, p.content, p.text,
+        p.ogDescription, p.metaDescription,
+        meta.description, meta.ogDescription
+      ];
+      for(const v of candidates){
+        const clean = stripInlineHtmlClient(v);
+        if(clean && clean.length >= 18) return clean.slice(0, 260);
+      }
+      const title = stripInlineHtmlClient(it.title || it.name || '');
+      const group = displayGroupLabel(displayGroupOfItem(it), it);
+      const domain = domainOf(it.url || it.link || '');
+      if(title && domain) return `${domain}의 ${group} 관련 검색 결과입니다. 제목과 연결 주소를 확인한 뒤 상세 내용을 열람할 수 있습니다.`;
+      if(title) return `${group} 관련 검색 결과입니다. 상세 페이지에서 본문과 추가 정보를 확인할 수 있습니다.`;
+      if(domain) return `${domain}에서 제공하는 ${group} 관련 공개 웹 결과입니다.`;
+      return '';
+    }
+
     function renderItem(it, mountTarget){
       const url = it.url || it.link || '';
       const domain = domainOf(url);
@@ -2528,7 +2658,7 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const d = document.createElement('div');
       d.className = 'desc';
-      d.textContent = (it.summary || it.description || '').trim();
+      d.textContent = displaySnippetForItem(it);
 
   textCol.appendChild(t);
 
@@ -2840,6 +2970,32 @@ if (it.riskLabel === '⚠️ high-risk') {
         }
       });
 
+      // If the visible lead pages still have empty slots, pull the next available
+      // category representatives forward. This is the missing slot-refill rule:
+      // collapsed overflow must not count, but real cards from later categories
+      // should move up immediately instead of waiting for page 4~5.
+      const leadSlotTarget = Math.min(INITIAL_PRELOAD_TARGET, PAGE_SIZE * 3);
+      const refillOrder = ['knowledge','local_tour','community','social','media','shopping','sports','finance','webtoon','authority','web'];
+      let refillSafety = 0;
+      while(stream.length < leadSlotTarget && refillSafety++ < 120){
+        let moved = false;
+        for(const group of refillOrder){
+          if(stream.length >= leadSlotTarget) break;
+          const g = byGroup.get(group);
+          if(!g || !Array.isArray(g.items) || g.cursor >= g.items.length) continue;
+
+          // News 초과분은 더보기로 보관한다. 빈 슬롯을 메우기 위해 뉴스만
+          // 다시 밀어 넣으면 정이사장님이 지적한 '뉴스만 계속 나오는' 문제가 반복된다.
+          if(group === 'news') continue;
+
+          const idx = g.cursor++;
+          if(pushItem(g.items[idx], g, idx, { general: group === 'web' })){
+            moved = true;
+          }
+        }
+        if(!moved) break;
+      }
+
       // Continuation zone: after the category representative zone, only non-heavy
       // web/reference/local candidates flow into normal pagination. Heavy vertical
       // overflow is available through its own section button only.
@@ -3113,6 +3269,7 @@ async function runSearch(q, type = activeType){
     itemImageEnrichCache.clear();
     expandedDisplayGroups.clear();
     startInitialPreloadPages(qq, activeType, seq);
+    startCategorySeedPreload(qq, seq);
 
     if (!allItems.length) {
       results.innerHTML = '';
@@ -3138,6 +3295,7 @@ async function runSearch(q, type = activeType){
     lastQuery = qq;
     lastType = activeType;
     startInitialPreloadPages(qq, activeType, seq);
+    startCategorySeedPreload(qq, seq);
     if(allItems.length) renderPage(1);
     else { results.innerHTML = ''; clearPager(); }
     status.textContent = allItems.length ? `${serverTotalItems || allItems.length} results for "${qq}" · receiving...` : `No results for "${qq}"`;
@@ -3149,6 +3307,181 @@ async function runSearch(q, type = activeType){
 })();
 
 
+
+
+
+/* ------------------------------------------------------------------
+ * MARU Universal Search Suggest Bridge
+ * Applies related-search dropdown to home-page search bars even when the
+ * actual input is created late or does not use #searchInput/#globalSearchInput.
+ * This bridge is intentionally independent from the search.html renderer.
+ * ------------------------------------------------------------------ */
+(function(){
+  'use strict';
+  if (window.__MARU_UNIVERSAL_SEARCH_SUGGEST_BRIDGE__) return;
+  window.__MARU_UNIVERSAL_SEARCH_SUGGEST_BRIDGE__ = true;
+
+  function ready(fn){
+    if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+    else fn();
+  }
+
+  function clean(v){ return String(v || '').trim(); }
+
+  function isTextSearchTarget(el){
+    if(!el) return false;
+    const tag = String(el.tagName || '').toLowerCase();
+    const type = String(el.type || '').toLowerCase();
+    const editable = el.isContentEditable || el.getAttribute && el.getAttribute('contenteditable') === 'true';
+    if(tag !== 'input' && tag !== 'textarea' && !editable) return false;
+    if(tag === 'input' && /^(hidden|password|email|file|checkbox|radio|button|submit|reset|range|date|time|color)$/i.test(type)) return false;
+
+    const attrs = [
+      el.id, el.name, el.className, el.getAttribute && el.getAttribute('placeholder'),
+      el.getAttribute && el.getAttribute('aria-label'), el.getAttribute && el.getAttribute('title'),
+      el.getAttribute && el.getAttribute('data-search-input'), el.getAttribute && el.getAttribute('data-role')
+    ].map(clean).join(' ').toLowerCase();
+
+    if(/search|query|keyword|global|hero|home|main|검색|검색어|찾기|무엇|어디|q\b/.test(attrs)) return true;
+    if(type === 'search' || (el.getAttribute && el.getAttribute('role') === 'searchbox')) return true;
+
+    const wrap = el.closest && el.closest('form, .search, .search-box, .search-area, .hero-search, .main-search, .global-search, [id*=search i], [class*=search i], [action*=search i]');
+    if(!wrap) return false;
+    const wrapText = [wrap.id, wrap.className, wrap.getAttribute && wrap.getAttribute('action'), wrap.getAttribute && wrap.getAttribute('role')].map(clean).join(' ').toLowerCase();
+    return /search|query|keyword|hero|home|main|검색|찾기/.test(wrapText);
+  }
+
+  function valueOf(el){
+    if(!el) return '';
+    if(el.isContentEditable) return clean(el.textContent);
+    return clean(el.value);
+  }
+
+  function setValue(el, v){
+    if(!el) return;
+    if(el.isContentEditable) el.textContent = v;
+    else el.value = v;
+    try{ el.dispatchEvent(new Event('input', { bubbles:true })); }catch(e){}
+    try{ el.dispatchEvent(new Event('change', { bubbles:true })); }catch(e){}
+  }
+
+  function termsFor(q){
+    const base = clean(q).replace(/\s+/g, ' ');
+    if(!base) return [];
+    const lower = base.toLowerCase();
+    const isPlace = /서울|부산|대구|인천|광주|대전|울산|제주|대한민국|한국|뉴욕|도쿄|오사카|파리|런던|베트남|하노이|호치민|seoul|busan|korea|new york|tokyo|paris|london|vietnam/.test(lower);
+    const local = /카페|맛집|식당|시장|호텔|숙소|관광|여행|축제|공원|박물관|주소|전화|지도|cafe|restaurant|hotel|market|travel|tour|map/.test(lower);
+    const media = /영상|영화|드라마|음악|유튜브|쇼츠|sns|video|movie|youtube|shorts/.test(lower);
+    const suffixes = media
+      ? ['유튜브', '쇼츠', '영상', '뉴스', '인스타그램', '틱톡', '블로그', '이미지', '리뷰', '추천']
+      : (isPlace || local)
+        ? ['지도', '날씨', '맛집', '카페', '볼만한 곳', '관광', '여행 코스', '축제', '호텔', '교통', '뉴스', '블로그', '유튜브', '이미지']
+        : ['뜻', '뉴스', '이미지', '영상', '블로그', '리뷰', '가격', '방법', '추천', '비교', '공식', '위키'];
+    const seen = new Set();
+    const out = [];
+    suffixes.forEach(s => {
+      const term = `${base} ${s}`.trim();
+      const key = term.toLowerCase();
+      if(key !== lower && !seen.has(key)){ seen.add(key); out.push(term); }
+    });
+    return out.slice(0, 12);
+  }
+
+  function box(){
+    let b = document.getElementById('maru-universal-related-suggest-box');
+    if(b) return b;
+    const style = document.createElement('style');
+    style.id = 'maru-universal-related-suggest-style';
+    style.textContent = `
+      #maru-universal-related-suggest-box{position:fixed;z-index:2147483646;display:none;background:#fff;border:1px solid #e5e7eb;border-radius:14px;box-shadow:0 16px 38px rgba(15,23,42,.18);padding:8px;max-height:420px;overflow-y:auto;box-sizing:border-box;}
+      #maru-universal-related-suggest-box[data-open="1"]{display:block;}
+      .maru-universal-suggest-caption{padding:7px 12px 5px;color:#64748b;font-size:12px;font-weight:800;}
+      .maru-universal-suggest-row{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:0;border-radius:10px;background:transparent;color:#111827;cursor:pointer;text-align:left;font-size:14px;font-weight:750;}
+      .maru-universal-suggest-row:hover,.maru-universal-suggest-row:focus{background:#f3f4f6;outline:none;}
+      .maru-universal-suggest-icon{width:22px;height:22px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#eef2ff;color:#4f46e5;font-size:13px;flex:0 0 auto;}
+      .maru-universal-suggest-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    `;
+    document.head.appendChild(style);
+    b = document.createElement('div');
+    b.id = 'maru-universal-related-suggest-box';
+    b.setAttribute('role', 'listbox');
+    document.body.appendChild(b);
+    return b;
+  }
+
+  let active = null;
+  let hideTimer = null;
+
+  function position(el){
+    const b = box();
+    const r = el.getBoundingClientRect();
+    b.style.left = Math.max(8, r.left) + 'px';
+    b.style.top = (r.bottom + 6) + 'px';
+    b.style.width = Math.max(280, r.width) + 'px';
+  }
+
+  function buildSearchUrl(q){
+    const u = new URL('/search.html', location.origin);
+    u.searchParams.set('q', clean(q));
+    u.searchParams.set('page', '1');
+    u.searchParams.set('block', '0');
+    u.searchParams.set('residentFirst', '1');
+    u.searchParams.set('sanmaruFirst', '1');
+    u.searchParams.set('residentSwitch', '1');
+    u.searchParams.set('handoff', '1');
+    const from = location.pathname + location.search + location.hash;
+    if(from && !/^\/search(\.html)?/i.test(location.pathname)) u.searchParams.set('from', from);
+    return u.pathname + u.search + u.hash;
+  }
+
+  function hide(){
+    const b = document.getElementById('maru-universal-related-suggest-box');
+    if(b) b.dataset.open = '0';
+  }
+
+  function show(el){
+    if(!isTextSearchTarget(el)) return;
+    active = el;
+    const q = valueOf(el);
+    const terms = termsFor(q);
+    const b = box();
+    if(!q || !terms.length){ hide(); return; }
+    b.innerHTML = '';
+    const cap = document.createElement('div');
+    cap.className = 'maru-universal-suggest-caption';
+    cap.textContent = '연관 검색어';
+    b.appendChild(cap);
+    terms.forEach(term => {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'maru-universal-suggest-row';
+      row.addEventListener('mousedown', e => e.preventDefault());
+      row.addEventListener('click', () => {
+        setValue(active || el, term);
+        hide();
+        window.location.assign(buildSearchUrl(term));
+      });
+      const icon = document.createElement('span');
+      icon.className = 'maru-universal-suggest-icon';
+      icon.textContent = '⌕';
+      const text = document.createElement('span');
+      text.className = 'maru-universal-suggest-text';
+      text.textContent = term;
+      row.appendChild(icon); row.appendChild(text); b.appendChild(row);
+    });
+    position(el);
+    b.dataset.open = '1';
+  }
+
+  ready(function(){
+    document.addEventListener('input', function(e){ if(isTextSearchTarget(e.target)) show(e.target); }, true);
+    document.addEventListener('focusin', function(e){ if(isTextSearchTarget(e.target)) show(e.target); }, true);
+    document.addEventListener('keydown', function(e){ if(e.key === 'Escape') hide(); }, true);
+    document.addEventListener('focusout', function(){ clearTimeout(hideTimer); hideTimer = setTimeout(hide, 180); }, true);
+    window.addEventListener('resize', function(){ if(active && isTextSearchTarget(active)) position(active); });
+    window.addEventListener('scroll', function(){ if(active && isTextSearchTarget(active)) position(active); }, true);
+  });
+})();
 
 /* ------------------------------------------------------------------
  * MARU Search Revenue Hook Loader
