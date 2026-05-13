@@ -2700,9 +2700,9 @@ if (it.riskLabel === '⚠️ high-risk') {
         return true;
       }
 
-      // Lead SERP zone: the first 2~3 pages are category representatives.
-      // Overflow from news/blog/SNS/media stays behind each section's 더보기 and
-      // does NOT consume the 25-card page slots.
+      // Lead SERP zone: the first viewport is category-balanced. Overflow still
+      // keeps its display-group metadata, but it must remain available in the
+      // normal preloaded page stream immediately after the representative lead.
       const leadCaps = {
         authority: 5,
         knowledge: 5,
@@ -2729,18 +2729,23 @@ if (it.riskLabel === '⚠️ high-risk') {
         }
       });
 
-      // Continuation zone: after the category representative zone, only non-heavy
-      // web/reference/local candidates flow into normal pagination. Heavy vertical
-      // overflow is available through its own section button only.
-      const mainContinuationGroups = ['web','authority','knowledge','local_tour','shopping','sports','finance','webtoon'];
-      mainContinuationGroups.forEach(group => {
-        const g = byGroup.get(group);
-        if(!g || !Array.isArray(g.items)) return;
-        while(g.cursor < g.items.length){
-          const idx = g.cursor++;
-          pushItem(g.items[idx], g, idx, { general: true });
+      // Continuation zone: keep every remaining candidate in the received
+      // preload pool. The first viewport is still balanced by the lead caps above,
+      // but the rest of the initial 300 candidates must be available immediately
+      // for page 2~12 instead of waiting for delayed page fetches. Heavy verticals
+      // such as news/SNS/media/blog remain grouped by display metadata, but they
+      // no longer get excluded from normal pagination.
+      for(let i = 0; i < sourceItems.length; i++){
+        const it = sourceItems[i];
+        const group = displayGroupOfItem(it);
+        const g = byGroup.get(group) || { group, items: [it], cursor: 0 };
+        let idx = -1;
+        if(Array.isArray(g.items)){
+          const key = itemKey(it);
+          idx = g.items.findIndex(x => itemKey(x) === key);
         }
-      });
+        pushItem(it, g, idx >= 0 ? idx : i, { general: true });
+      }
 
       return stream;
     }
