@@ -21,9 +21,9 @@ const path = require('path');
 const crypto = require('crypto');
 
 const VERSION = 'A1.5.46-595-sanmaru-cpu-direct-page25-sns-google-fix';
-const DEFAULT_LIMIT = 600;
-const MAX_LIMIT = 1500;
-const MIN_RESULT_TARGET = 120;
+const DEFAULT_LIMIT = 2000;
+const MAX_LIMIT = 12000;
+const MIN_RESULT_TARGET = 1500;
 const MARU_SEARCH_MAX_PAGER_PAGES = 499;
 const DEFAULT_SOFT_TIMEOUT_MS = 10500;
 
@@ -39,8 +39,8 @@ const OG_IMAGE_ENRICH_LIMIT = 36;
 const OG_IMAGE_ENRICH_CONCURRENCY = 6;
 const OG_IMAGE_ENRICH_TIMEOUT_MS = 1200;
 const OG_IMAGE_CACHE_TTL_MS = 30 * 60 * 1000;
-const MAX_SEARCH_BANK_PAGES_NORMAL = 12;
-const MAX_SEARCH_BANK_PAGES_DEEP = 24;
+const MAX_SEARCH_BANK_PAGES_NORMAL = 30;
+const MAX_SEARCH_BANK_PAGES_DEEP = 60;
 
 function nowMs(){ return Date.now(); }
 
@@ -445,7 +445,23 @@ function isHardRejectImageUrl(imageUrl){
     'no_image',
     'no-img',
     'default-image',
-    'default_img'
+    'default_img',
+    'staticmap',
+    'maps.googleapis.com',
+    'google.com/maps',
+    'map.naver.com',
+    'naver_map',
+    '/maps/',
+    '/map/',
+    'map_tile',
+    'tile.openstreetmap',
+    'banner',
+    'placard',
+    'adserver',
+    'doubleclick',
+    'advertisement',
+    'promo-banner',
+    'popup'
   ];
 
   if(hardBad.some(k => s.includes(k))) return true;
@@ -480,10 +496,31 @@ function isSoftBrandImageUrl(imageUrl){
     '-bi',
     'header_logo',
     'footer_logo',
-    'sns_logo'
+    'sns_logo',
+    'banner',
+    'placard',
+    'popup',
+    'adserver',
+    'doubleclick',
+    'advertisement'
   ];
 
   return softBad.some(k => s.includes(k));
+}
+
+
+function isMapImageUrl(imageUrl){
+  const s = safeString(imageUrl).toLowerCase();
+  return /staticmap|maps\.googleapis|google\.com\/maps|map\.naver\.com|naver_map|\/maps\/|\/map\/|map_tile|tile\.openstreetmap/.test(s);
+}
+
+function isLogoBannerOrPlacardImage(imageUrl, it){
+  const s = safeString(imageUrl).toLowerCase();
+  const text = [s, safeString(it && it.title), safeString(it && it.summary), safeString(it && it.description), safeString(it && it.source)].join(' ').toLowerCase();
+  if(/google\.com\/s2\/favicons|favicon|apple-touch-icon|logo|logotype|brandmark|symbol|emblem|\/ci[\/_-]|\/bi[\/_-]/i.test(s)) return true;
+  if(/(naver|google|youtube|facebook|instagram|tiktok|twitter|x)[^?#]*(logo|favicon|brand|symbol|icon)/i.test(s)) return true;
+  if(/banner|placard|현수막|배너|광고|popup|adserver|doubleclick|advertisement|promo-banner/i.test(text)) return true;
+  return false;
 }
 
 function providerSuppliedThisImage(it, imageUrl){
@@ -535,8 +572,10 @@ function isGenericGovOfficialItem(it){
 function isMeaningfulImageForItem(imageUrl, it){
   const img = safeString(imageUrl).trim();
   if(!isRealImageUrl(img)) return false;
-
   if(isHardRejectImageUrl(img)) return false;
+  if(isMapImageUrl(img)) return false;
+  if(isLogoBannerOrPlacardImage(img, it)) return false;
+  if(isSoftBrandImageUrl(img)) return false;
 
   const source = safeString(it && it.source).toLowerCase();
   const type = safeString(it && it.type).toLowerCase();
@@ -554,13 +593,8 @@ function isMeaningfulImageForItem(imageUrl, it){
 
   const providerSupplied = providerSuppliedThisImage(it, img);
 
-  // Provider/API supplied media should be preserved unless it is a hard reject.
+  // Provider/API supplied media is accepted only after map/logo/banner rejection.
   if(providerSupplied || isMediaResult) return true;
-
-  // For page-scanned fallback images, still avoid obvious brand/logo-only assets.
-  // But do not block an entire government/official page just because it is official.
-  if(isSoftBrandImageUrl(img)) return false;
-
   return true;
 }
 
@@ -869,6 +903,7 @@ function compactResultItem(it){
   const previewBase = (mediaBase && mediaBase.preview && typeof mediaBase.preview === 'object') ? Object.assign({}, mediaBase.preview) : {};
 
   const media = mediaBase || (mediaType === 'video' || ownThumb ? { type: mediaType === 'video' ? 'video' : 'image' } : undefined);
+  const placeInfo = (it.placeInfo && typeof it.placeInfo === 'object') ? Object.assign({}, it.placeInfo) : undefined;
   if(media){
     if(youtubeLike){
       media.type = 'video';
@@ -915,6 +950,10 @@ function compactResultItem(it){
     openImageUrl: originalImage,
     contentUrl: originalImage,
     cardImage: ownThumb || originalImage,
+    placeInfo,
+    mapQuery: it.mapQuery || (placeInfo && (placeInfo.mapQuery || placeInfo.address || placeInfo.name)) || undefined,
+    visualKind: it.visualKind || (mediaType === 'map' || type === 'map' ? 'map' : undefined),
+    isMapOnly: it.isMapOnly || (mediaType === 'map' || type === 'map') || undefined,
     mediaQuality: mediaQualityProfileForItem(it, ownImages),
     selectedImageQuality: profile.selectedImageQuality,
     selectedCardImageQuality: profile.selectedCardImageQuality,
@@ -968,16 +1007,16 @@ const SEARCH_SECTION_ORDER = [
 
 const SEARCH_SECTION_META = {
   official_authority: {
-    title: '공식 / 관공서 / 권위 정보',
-    label: '공식/권위',
-    previewLimit: 6,
+    title: '주요 정보 / 공공기관 / 공식 정보',
+    label: '주요 정보',
+    previewLimit: 5,
     rank: 10,
-    description: '정부·공공기관·공식 홈페이지·권위 출처를 먼저 보여주는 섹션'
+    description: '정부·공공기관·공식 홈페이지·주요 정보를 먼저 보여주는 섹션'
   },
   map_local_tour: {
     title: '지도 / 지역 / 관광 / 맛집',
-    label: '지도/관광',
-    previewLimit: 8,
+    label: '지도/지역',
+    previewLimit: 5,
     rank: 20,
     description: '지도, 위치, 교통, 관광지, 맛집, 볼거리 결과'
   },
@@ -991,35 +1030,35 @@ const SEARCH_SECTION_META = {
   news: {
     title: '뉴스 / 보도 / 최신 이슈',
     label: '뉴스',
-    previewLimit: 8,
+    previewLimit: 6,
     rank: 40,
     description: '뉴스, 보도자료, 최신 이슈 결과'
   },
   video_vlog: {
     title: '동영상 / 유튜브 / 브이로그',
     label: '영상',
-    previewLimit: 8,
+    previewLimit: 6,
     rank: 50,
     description: '유튜브, 영상, 브이로그, 쇼츠·릴스 계열 결과'
   },
   image_gallery: {
     title: '이미지 / 사진 / 홍보 스냅샷',
     label: '이미지',
-    previewLimit: 10,
+    previewLimit: 6,
     rank: 60,
     description: '원본 이미지, 대표 이미지, 홍보 사진, 갤러리 결과'
   },
   blog_review: {
     title: '블로그 / 리뷰 / 후기',
     label: '블로그/리뷰',
-    previewLimit: 8,
+    previewLimit: 6,
     rank: 70,
     description: '블로그, 리뷰, 여행기, 방문 후기 결과'
   },
   community_sns: {
     title: 'SNS / 커뮤니티 / 카페',
     label: 'SNS/커뮤니티',
-    previewLimit: 8,
+    previewLimit: 6,
     rank: 80,
     description: '인스타그램, 페이스북, 틱톡, X, 카페, 커뮤니티 결과'
   },
@@ -1835,12 +1874,12 @@ function buildSanmaruProviderLaneExpansionCards(q, raw, ctx, requestedLimit, exi
   // It preserves the fast Sanmaru first-paint path while preventing large queries
   // from looking capped at the small resident/cache count. Real provider/API
   // results can still be absorbed by the normal wide gateway or background refresh.
-  const requestedTarget = clampInt(raw.fastLaneTarget || raw.providerLaneTarget || raw.candidatePool || raw.candidatePoolTarget || raw.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
-  const smoothCap = truthy(raw.smoothIntake) || truthy(raw.pageWindowOnly) || truthy(raw.noBlockingWide) ? Math.min(MAX_LIMIT, Math.max(requestedTarget, 300)) : MAX_LIMIT;
   const target = Math.min(
-    smoothCap,
     MAX_LIMIT,
-    Math.max(requestedTarget, MIN_RESULT_TARGET)
+    Math.max(
+      clampInt(raw.fastLaneTarget || raw.providerLaneTarget || raw.candidatePool || raw.candidatePoolTarget || raw.limit, DEFAULT_LIMIT, 1, MAX_LIMIT),
+      MIN_RESULT_TARGET
+    )
   );
   const need = Math.max(0, target - (existingCount || 0));
   if(need <= 0) return [];
@@ -2196,9 +2235,48 @@ function googleLikeSearchLinks(q){
 function mapCards(q, region){
   if(!q) return [];
   const enc = encodeURIComponent(q);
+  const basePlaceInfo = {
+    name: q,
+    mapQuery: q,
+    address: '',
+    phone: '',
+    hours: '',
+    homepage: '',
+    note: '지도 보기에서 주소·전화·영업시간·길찾기 정보를 확인할 수 있습니다.'
+  };
   const cards = [
-    { title: '[Map] ' + q + ' - Google Maps', url: 'https://www.google.com/maps/search/' + enc, source: 'google_maps', mediaType: 'map', type: 'map', category: 'map', displayGroup: 'local_tour', summary: q + ' 지도 검색', score: 0.72, mapQuery: q, visualKind: 'map' },
-    { title: '[Map] ' + q + ' - Naver Map', url: 'https://map.naver.com/p/search/' + enc, source: 'naver_map', mediaType: 'map', type: 'map', category: 'map', displayGroup: 'local_tour', summary: q + ' 네이버 지도 검색', score: 0.71, mapQuery: q, visualKind: 'map' }
+    {
+      title: q + ' · Google 지도/위치',
+      url: 'https://www.google.com/maps/search/' + enc,
+      source: 'google_maps',
+      mediaType: 'map',
+      type: 'map',
+      summary: q + ' 위치·주소·길찾기 지도 검색',
+      score: 0.72,
+      displayGroup: 'map_local_tour',
+      sectionId: 'map_local_tour',
+      visualKind: 'map',
+      isMapOnly: true,
+      mapQuery: q,
+      placeInfo: Object.assign({}, basePlaceInfo, { provider: 'Google Maps' }),
+      thumbnail: '', thumb: '', image: '', imageSet: []
+    },
+    {
+      title: q + ' · Naver 지도/지역',
+      url: 'https://map.naver.com/p/search/' + enc,
+      source: 'naver_map',
+      mediaType: 'map',
+      type: 'map',
+      summary: q + ' 네이버 지도·주소·지역 검색',
+      score: 0.71,
+      displayGroup: 'map_local_tour',
+      sectionId: 'map_local_tour',
+      visualKind: 'map',
+      isMapOnly: true,
+      mapQuery: q,
+      placeInfo: Object.assign({}, basePlaceInfo, { provider: 'Naver Map' }),
+      thumbnail: '', thumb: '', image: '', imageSet: []
+    }
   ];
   return cards.map(x => canonicalizeItem(x, q, x.source));
 }
@@ -3659,7 +3737,7 @@ function backfillVisuals(items){
     if(!it) return it;
     const profile = mediaProfileForItem(it);
     const existing = firstNonEmpty(it.thumbnail, it.thumb, it.image, it.imageUrl, it.og_image, it.originalImage);
-    const safeExisting = isRealImageUrl(existing) && !isHardRejectImageUrl(existing) ? existing : '';
+    const safeExisting = isMeaningfulImageForItem(existing, it) ? existing : '';
     const thumb = profile.thumbnail || safeExisting || '';
     const original = profile.originalImage || safeExisting || thumb || '';
     const imageSet = profile.imageSet && profile.imageSet.length ? profile.imageSet : compactImages([thumb, original]);
@@ -3688,6 +3766,10 @@ function backfillVisuals(items){
       openImageUrl: original,
       contentUrl: original,
       cardImage: thumb || original,
+      placeInfo: it.placeInfo,
+      mapQuery: it.mapQuery,
+      visualKind: it.visualKind,
+      isMapOnly: it.isMapOnly,
       videoId: profile.videoId || it.videoId,
       videoUrl: profile.videoUrl || it.videoUrl,
       watchUrl: profile.watchUrl || it.watchUrl,
