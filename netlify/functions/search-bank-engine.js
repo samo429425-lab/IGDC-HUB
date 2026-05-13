@@ -37,6 +37,9 @@ try { Core = require("./core"); } catch (e) { Core = null; }
 let SearchBankSync = null;
 try { SearchBankSync = require("./maru-searchbank-sync"); } catch (e) { SearchBankSync = null; }
 
+let SearchBankIndex = null;
+try { SearchBankIndex = require("./search-bank-index-engine"); } catch (e) { SearchBankIndex = null; }
+
 let CommerceEngine = null;
 try { CommerceEngine = require("./maru-commerce-engine"); } catch (e) { CommerceEngine = null; }
 
@@ -81,6 +84,60 @@ function truthy(x){
 }
 function stableHash(v){ return crypto.createHash("sha1").update(String(v||"")).digest("hex").slice(0,16); }
 function domainOf(url){ try{ return new URL(url).hostname.replace(/^www\./,""); }catch(e){ return ""; } }
+function firstNonEmpty(){
+  for(const v of arguments){
+    const x = s(v).trim();
+    if(x) return x;
+  }
+  return "";
+}
+function normalizeSourceValue(v){
+  if(v == null) return "";
+  if(typeof v === "string" || typeof v === "number" || typeof v === "boolean") return s(v).trim();
+  if(Array.isArray(v)) return v.map(normalizeSourceValue).filter(Boolean).join(" ").trim();
+  if(typeof v === "object"){
+    return firstNonEmpty(v.name, v.provider, v.engine, v.platform, v.type, v.id, v.key, v.label, v.url, v.href, v.source);
+  }
+  return s(v).trim();
+}
+function adminTokenExpected(){
+  return firstNonEmpty(process.env.SANMARU_ADMIN_TOKEN, process.env.MARU_ADMIN_TOKEN, process.env.ADMIN_TOKEN);
+}
+function requestToken(event, params){
+  const h = (event && event.headers) || {};
+  const auth = firstNonEmpty(h.authorization, h.Authorization);
+  const bearer = auth && /^Bearer\s+(.+)$/i.test(auth) ? auth.replace(/^Bearer\s+/i, "").trim() : "";
+  return firstNonEmpty(params && (params.adminToken || params.token || params.sanmaruAdminToken || params.maruAdminToken), h["x-sanmaru-admin-token"], h["X-Sanmaru-Admin-Token"], bearer);
+}
+function isAuthorizedAdmin(event, params){
+  const expected = adminTokenExpected();
+  if(!expected) return false;
+  const got = requestToken(event, params || {});
+  if(!got) return false;
+  try{
+    const a = Buffer.from(s(got));
+    const b = Buffer.from(s(expected));
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  }catch(e){ return false; }
+}
+function isReadOnlyMode(ctx){
+  const p = (ctx && ctx.params) || {};
+  if(truthy(p.readOnly || p.readonly || p.noWrite || p.disableWrite)) return true;
+  const mode = low(p.writeMode || p.persistMode || p.mode);
+  return mode === "readonly" || mode === "read-only" || mode === "query" || mode === "preview";
+}
+function writeModeEnabled(ctx){
+  const p = (ctx && ctx.params) || {};
+  const mode = low(p.writeMode || p.persistMode || p.snapshotWriteMode || p.mode);
+  const explicit = truthy(p.allowWrite || p.enableWrite || p.writeSnapshot || p.snapshotWrite || p.forceSnapshotWrite || p.persist || p.syncWrite) || ["write","sync","admin-write","snapshot-write","force"].includes(mode);
+  if(!explicit || isReadOnlyMode(ctx)) return false;
+  return isAuthorizedAdmin(ctx && ctx.event, p) || truthy(process.env.MARU_SEARCH_BANK_WRITE_UNSAFE);
+}
+function searchBankSyncEnabled(ctx){
+  const p = (ctx && ctx.params) || {};
+  if(isReadOnlyMode(ctx) || truthy(p.noSync || p.disableSync)) return false;
+  return writeModeEnabled(ctx) && (truthy(p.syncSearchBank || p.searchBankSync || p.syncWrite) || truthy(process.env.MARU_SEARCHBANK_SYNC_ENABLED));
+}
 
 function tryReadJsonFile(p){
   try{ return JSON.parse(fs.readFileSync(p,"utf8")); }catch(e){ return null; }
@@ -303,14 +360,49 @@ function isRegionOnlyAlias(hit){
 
 function externalSuppressed(ctx){
   const p = ctx?.params || {};
-  return truthy(p.disableExternal || p.noExternal || p.external === "off" || p.external === "0" || p.external === "false" || p.live === "off" || p.useLive === "off");
+  const external = low(p.external || p.externalMode || p.live || p.useLive || "");
+  return truthy(p.disableExternal || p.noExternal || p.disableLive || p.noLive) || ["off","0","false","no","disabled","disable"].includes(external);
 }
-
-function externalCollectionEnabled(ctx, adapterName){
-  if(externalSuppressed(ctx)) return false;
+function explicitExternalMode(ctx){
   const p = ctx?.params || {};
-  const manual = truthy(p.useExternalSources || p.external || p.useLive || p.live || p[adapterName] || p[`use_${adapterName}`]) || truthy(process.env.MARU_BANK_EXTERNAL);
-  return manual || slotExternalEnabled(ctx, adapterName);
+  const mode = low(p.externalMode || p.external || p.liveMode || p.live || "auto");
+  if(["force","forced","deep","live","on","1","true","yes"].includes(mode)) return "force";
+  if(["off","0","false","no","disabled","disable"].includes(mode)) return "off";
+  return "auto";
+}
+function explicitAdapterRequested(ctx, adapterName){
+  const p = ctx?.params || {};
+  const name = s(adapterName || "");
+  return truthy(p[name]) || truthy(p[`use_${name}`]) || truthy(p[`enable_${name}`]) || truthy(p[`use${name.charAt(0).toUpperCase()}${name.slice(1)}`]);
+}
+function controlledExternalAllowed(ctx, adapterName){
+  const name = low(adapterName);
+  if(["snapshot","index","searchbank-index","search-bank-index"].includes(name)) return true;
+  if(externalSuppressed(ctx)) return false;
+
+  const p = ctx?.params || {};
+  const mode = explicitExternalMode(ctx);
+
+  // Collector/Planetary may create broad collection pressure. Keep them closed unless explicitly opened.
+  if(name === "collector" || name === "planetary"){
+    return explicitAdapterRequested(ctx, name) || truthy(process.env[`MARU_BANK_ALLOW_${name.toUpperCase()}`]);
+  }
+
+  // MaruSearch remains the single controlled external gateway. Even it stays closed by default.
+  if(mode === "force" || truthy(process.env.MARU_BANK_EXTERNAL) || explicitAdapterRequested(ctx, name) || truthy(p.useExternalSources)){
+    return true;
+  }
+
+  // Auto mode may open only when the operator explicitly enables auto-external on deficiency.
+  if(mode === "auto" && truthy(process.env.MARU_BANK_AUTO_EXTERNAL) && needsExternalForCoverage(ctx)){
+    return true;
+  }
+
+  return false;
+}
+function externalCollectionEnabled(ctx, adapterName){
+  if(ctx?.operationalPolicy && channelBlockedForPolicy(adapterName, ctx.operationalPolicy)) return false;
+  return controlledExternalAllowed(ctx, adapterName);
 }
 function maruSearchReentrySuppressed(ctx){
   const p = ctx?.params || {};
@@ -366,15 +458,9 @@ function resolveSlotPolicy(params={}, queryIntent={}){
 }
 
 function slotExternalEnabled(ctx, adapterName){
-  const slot = ctx?.slotContext;
-  if(externalSuppressed(ctx)) return false;
-  if(adapterName === "snapshot") return true;
-  if(ctx?.operationalPolicy && channelBlockedForPolicy(adapterName, ctx.operationalPolicy)) return false;
-  if(slot?.autoFill && slot.policy){
-    return slot.policy.preferredAdapters.includes(adapterName) || ["live","regional"].includes(adapterName);
-  }
-  if(needsExternalForCoverage(ctx)) return ["live","regional","collector","planetary"].includes(adapterName);
-  return false;
+  // Compatibility export: slot-fill no longer opens external adapters by itself.
+  // Actual permission is centralized in controlledExternalAllowed().
+  return controlledExternalAllowed(ctx, adapterName);
 }
 
 function buildSlotQuery(ctx, adapterName){
@@ -570,6 +656,41 @@ function channelMatches(itemChannel, filterChannel){
   if(!allowed.length) return true;
   return allowed.includes(low(itemChannel || ""));
 }
+function itemSlotValues(item){
+  item = item || {};
+  const bind = item.bind && typeof item.bind === "object" ? item.bind : {};
+  return {
+    channel: low(item.channel || ""),
+    page: [item.page, bind.page].map(low).filter(Boolean),
+    route: [item.route, bind.route].map(low).filter(Boolean),
+    section: [item.section, item.psom_key, item.slotKey, bind.section, bind.psom_key, bind.slot, bind.slotKey, bind.key].map(low).filter(Boolean)
+  };
+}
+function itemMatchesFrontChannel(item, filterChannel){
+  const allowed = channelAliases(filterChannel);
+  if(!allowed.length) return true;
+
+  // 1) Preserve the original channel contract first.
+  if(channelMatches(item && item.channel, filterChannel)) return true;
+
+  const vals = itemSlotValues(item);
+
+  // 2) Exact page/bind.page match is a safe front-slot contract.
+  if(vals.page.some(v => allowed.includes(v))) return true;
+
+  // 3) Exact route prefix like home.home_1 is also safe.
+  if(vals.route.some(v => allowed.some(ch => v === ch || v.startsWith(ch + ".")))) return true;
+
+  // 4) Section-prefix fallback is only for legacy rows that have no explicit
+  // channel/page, for example section=network-right. It is not a fuzzy duplicate
+  // rule and must not override an explicit channel/page contract.
+  const hasExplicitChannelOrPage = !!(vals.channel || vals.page.length);
+  if(!hasExplicitChannelOrPage){
+    return vals.section.some(v => allowed.some(ch => v === ch || v.startsWith(ch + "-") || v.startsWith(ch + "_")));
+  }
+
+  return false;
+}
 function explicitGeoFilters(params={}, queryIntent={}){
   return {
     region: low(canonicalRegionName(params.region || params.geo_region || queryIntent.regionHint || "") || ""),
@@ -598,7 +719,7 @@ function policyIssuesForItem(item, ctx){
 function policyAcceptsItem(item, ctx){ return policyIssuesForItem(item, ctx).filter(x => !["high_risk_tld","stale_item"].includes(x)).length === 0; }
 function applyOperationalPolicy(item, ctx){ if(!item || typeof item !== "object") return item; const policy=ctx?.operationalPolicy || null; if(!policy) return item; const issues=policyIssuesForItem(item, ctx); if(issues.length){ item.policy={...(item.policy||{}), issues, ok:!issues.some(x=>x.startsWith("channel_blocked") || x==="donation_blocked_for_country" || x==="geo_country_region_mismatch")}; } if(policy.region || policy.country){ item.routing={...(item.routing||{}), priority_region:policy.region||undefined, priority_country:policy.country||undefined, source_policy:"region_ip_slot_v9"}; } return item; }
 function computeOperationalScore(ctx, item){ const policy=ctx?.operationalPolicy || {}; let score=0.5; const ir=canonicalRegionName(item?.geo?.region || item?.region || countryToRegion(item?.geo?.country || "") || ""); const ic=itemCountryCode(item); if(policy.country && ic && ic===policy.country) score+=0.25; if(policy.region && ir && ir===policy.region) score+=0.20; if(policy.priorityRegions?.includes(ir)) score+=0.12; if(policy.underfilledRegions?.includes(ir)) score+=0.08; if(policyIssuesForItem(item, ctx).some(x => !["stale_item","high_risk_tld"].includes(x))) score-=0.25; score = (score * 0.7) + (computeSupplyScore(ctx, item) * 0.3); return Math.max(0, Math.min(1, score)); }
-function needsExternalForCoverage(ctx){ const p=ctx?.params || {}; if(externalSuppressed(ctx)) return false; if(ctx?.slotContext?.autoFill) return true; if(truthy(p.autoExternal || p.autoFillRegion || process.env.MARU_BANK_AUTO_EXTERNAL)) return true; if(ctx?.slotDeficiency?.deficient) return true; return !!(ctx?.operationalPolicy?.underfilledRegions?.length && (ctx?.geoContext?.region || ctx?.geoContext?.country)); }
+function needsExternalForCoverage(ctx){ const p=ctx?.params || {}; if(externalSuppressed(ctx)) return false; const explicitlyAuto = truthy(p.autoExternal || p.autoFillRegion || p.allowExternalOnDeficiency || process.env.MARU_BANK_AUTO_EXTERNAL); if(!explicitlyAuto) return false; if(ctx?.slotDeficiency?.deficient) return true; return !!(ctx?.operationalPolicy?.underfilledRegions?.length && (ctx?.geoContext?.region || ctx?.geoContext?.country)); }
 
 // ---------- v10 source power / slot fill / locale query / aging ----------
 const DEFAULT_SOURCE_TIMEOUT_MS = 6500;
@@ -618,6 +739,33 @@ const LOCALE_QUERY_TERMS = {
   UZ:{cooperative:["kooperativ","qishloq xoʻjaligi"],fisheries:["baliqchilik","dengiz mahsulotlari"],manufacturing:["ishlab chiqarish","sanoat tovarlari"],tourism:["turizm","sayohat"],ngo:["NNT","notijorat tashkilot"],donation:["xayriya","ehson"],media:["video","yangiliklar"]}
 };
 function sourceTimeoutMs(ctx, name){ return safeInt(ctx?.params?.sourceTimeoutMs || ctx?.params?.timeoutMs || process.env.MARU_BANK_SOURCE_TIMEOUT_MS, DEFAULT_SOURCE_TIMEOUT_MS, 1000, 20000); }
+
+// Search Bank Engine capacity policy
+// - Keep external/provider calls small elsewhere, but do not choke the internal
+//   snapshot/index vessel at 1000 items. Large front-slot/search-bank reads should
+//   use offset/page windows, while allowing enough headroom for 8 front pages and
+//   Sanmaru resident supply.
+// - Social previously had a hard 300 cap; that can cut valid front slot rows, so
+//   it is no longer capped unless an operator explicitly sets MARU_BANK_SOCIAL_MAX_LIMIT.
+function searchBankMaxLimit(){
+  return safeInt(process.env.MARU_BANK_MAX_LIMIT, 12000, 1000, 50000);
+}
+function resolveSearchBankLimit(params){
+  params = params || {};
+  const maxLimit = searchBankMaxLimit();
+  const base = safeInt(params.limit, 100, 1, maxLimit);
+  const socialCapRaw = process.env.MARU_BANK_SOCIAL_MAX_LIMIT;
+  const isSocial =
+    low(params.channel) === "social" ||
+    low(params.type) === "social" ||
+    low(params.category) === "social" ||
+    low(params.page) === "social" ||
+    low(params.route) === "social";
+  if(isSocial && socialCapRaw !== undefined && s(socialCapRaw).trim() !== ""){
+    return Math.min(base, safeInt(socialCapRaw, maxLimit, 1, maxLimit));
+  }
+  return base;
+}
 function withTimeout(promise, ms, label){
   let timer;
   return Promise.race([
@@ -987,7 +1135,7 @@ function normalizeItem(raw, ctx={}){
   const semantic_category = s(src.semantic_category || src.taxonomy?.category || category || "").trim();
   const channel = low(src.channel || src.page || src.bind?.page || queryIntent.channelHint || "");
   const lang = low(src.lang || src.language || src.i18n?.lang || queryIntent.languageHint || "");
-  const source = (typeof src.source === "string") ? src.source : s(src.source?.name || src.provider || domainOf(url) || "").trim();
+  const source = firstNonEmpty(normalizeSourceValue(src.source), normalizeSourceValue(src.provider), domainOf(url));
 
   const thumbnail = s(src.thumbnail || src.thumb || src.image || src.media?.thumb || src.payload?.thumb || src.payload?.thumbnail || "").trim();
   const thumb = s(src.thumb || src.thumbnail || src.image || src.media?.thumb || src.payload?.thumb || "").trim();
@@ -1241,6 +1389,39 @@ class SnapshotAdapter extends BaseSourceAdapter {
   }
 }
 
+class SearchBankIndexAdapter extends BaseSourceAdapter {
+  constructor(){ super("index"); }
+  async collect(ctx){
+    if(!SearchBankIndex) return [];
+    try{
+      const q = ctx.queryIntent?.raw || ctx.q || ctx.slotContext?.section || ctx.slotContext?.channel || ctx.params?.section || ctx.params?.page || "front";
+      const params = {
+        q,
+        query: q,
+        type: ctx.params?.type || ctx.slotContext?.channel || "all",
+        limit: Math.min(ctx.limit || 1000, searchBankMaxLimit()),
+        includePlaceholders: !!ctx.slotContext?.autoFill,
+        frontSupply: !!ctx.slotContext?.autoFill,
+        layerMode: !!ctx.slotContext?.autoFill,
+        facets: false
+      };
+      let res = null;
+      if(typeof SearchBankIndex.query === "function") res = SearchBankIndex.query(params);
+      else if(typeof SearchBankIndex.runEngine === "function") res = await SearchBankIndex.runEngine({ __sanmaruInternal:true }, params);
+      else if(typeof SearchBankIndex.handler === "function"){
+        const out = await SearchBankIndex.handler({ httpMethod:"GET", queryStringParameters:params, __sanmaruInternal:true });
+        try{ res = out && out.body ? JSON.parse(out.body) : out; }catch(e){ res = out; }
+      }
+      if(Array.isArray(res?.items)) return res.items;
+      if(Array.isArray(res?.results)) return res.results;
+      if(Array.isArray(res?.data?.items)) return res.data.items;
+    }catch(e){
+      recordSourceHealth("index", false, 0, s(e?.message || e));
+    }
+    return [];
+  }
+}
+
 class LiveSearchAdapter extends BaseSourceAdapter {
   constructor(){ super("live"); }
   async collect(ctx){
@@ -1367,7 +1548,7 @@ class CollectorSourceAdapter extends BaseSourceAdapter {
 }
 
 function selectAdapters(ctx){
-  const names = new Set(["snapshot"]);
+  const names = new Set(["snapshot", "index"]);
   if(!externalSuppressed(ctx) && (truthy(process.env.MARU_BANK_LIVE) || externalCollectionEnabled(ctx, "live"))) names.add("live");
   if(externalCollectionEnabled(ctx, "planetary")) names.add("planetary");
   if(externalCollectionEnabled(ctx, "collector")) names.add("collector");
@@ -1391,6 +1572,7 @@ function selectAdapters(ctx){
 
 function adapterRegistry(){
   return {
+    index: new SearchBankIndexAdapter(),
     snapshot: new SnapshotAdapter(),
     live: new LiveSearchAdapter(),
     planetary: new PlanetarySourceAdapter(),
@@ -1444,7 +1626,7 @@ function computeQualityScore(q, item){
   if(item.imageSet?.length) s0 += 0.4;
 
   // source boosts (light)
-  const src = low(item.source || "");
+  const src = low(normalizeSourceValue(item.source || item.provider || ""));
   if(src){
     if(/\.(gov|edu|ac)\b/.test(src)) s0 += 0.25;
     if(/(wikipedia|reuters|apnews|bbc|nytimes|wsj|ft)\b/.test(src)) s0 += 0.15;
@@ -1477,7 +1659,7 @@ function applyFilters(items, f){
     if(!it) return false;
 
     if(f.type && f.type !== "any" && low(it.type) !== f.type) return false;
-    if(f.channel && !channelMatches(it.channel, f.channel)) return false;
+    if(f.channel && !itemMatchesFrontChannel(it, f.channel)) return false;
     if(f.lang && low(it.lang||"") !== f.lang) return false;
 
     // geo filters (optional)
@@ -1487,13 +1669,13 @@ function applyFilters(items, f){
     if(f.city && low(it.geo?.city||"") !== f.city) return false;
 
     if(f.sector && low(it.sector?.major || "") !== f.sector) {
-      if(!(f.relaxedQuery && f.channel && channelMatches(it.channel, f.channel))) return false;
+      if(!(f.relaxedQuery && f.channel && itemMatchesFrontChannel(it, f.channel))) return false;
     }
     if(f.sectorMinor && low(it.sector?.minor || "") !== f.sectorMinor) {
-      if(!(f.relaxedQuery && f.channel && channelMatches(it.channel, f.channel))) return false;
+      if(!(f.relaxedQuery && f.channel && itemMatchesFrontChannel(it, f.channel))) return false;
     }
     if(f.entity && low(it.entity?.type || it.type || "") !== f.entity) {
-      if(!(f.relaxedQuery && f.channel && channelMatches(it.channel, f.channel))) return false;
+      if(!(f.relaxedQuery && f.channel && itemMatchesFrontChannel(it, f.channel))) return false;
     }
 
     // producer filters (optional)
@@ -1523,7 +1705,7 @@ function applyFilters(items, f){
             (f.country && low(it.geo?.country || "") === f.country) ||
             (f.sector && low(it.sector?.major || "") === f.sector) ||
             (f.entity && low(it.entity?.type || it.type || "") === f.entity) ||
-            (f.channel && channelMatches(it.channel, f.channel))
+            (f.channel && itemMatchesFrontChannel(it, f.channel))
           )
         );
         if(!structuredHit) return false;
@@ -1537,7 +1719,12 @@ function dedup(items){
   const seen = new Set();
   const out = [];
   for(const it of items){
-    const key = (it.url && low(it.url)) || (it.id && low(it.id)) || "";
+    if(!it) continue;
+    const rawUrl = low(it.url || (typeof it.link === "string" ? it.link : (it.link && (it.link.url || it.link.href))) || "");
+    const usableUrl = rawUrl && rawUrl !== "#" && rawUrl !== "/" && !rawUrl.startsWith("javascript:") ? rawUrl : "";
+    const stableId = low(firstNonEmpty(it.originalId, it.indexOriginalId, it.sourceId, it.id, it.uid));
+    const slotKey = low([it.title, it.page, it.section, it.psom_key, it.channel, it.slotKey].filter(Boolean).join("|"));
+    const key = usableUrl || stableId || slotKey;
     if(!key) continue;
     if(seen.has(key)) continue;
     seen.add(key);
@@ -1649,18 +1836,8 @@ if(global.SearchBankExtensionCore?.security){
   const geoContext = resolveGeoContext(params, queryIntent, ipGeo);
   const slotContext = resolveSlotPolicy(params, queryIntent);
 
-let limit = safeInt(params.limit, 100, 1, 1000);
+let limit = resolveSearchBankLimit(params);
 const offset = safeInt(params.offset, 0, 0, 100000);
-
-// ===== SOCIAL LIMIT OVERRIDE =====
-const isSocial =
-  (params.channel && params.channel === "social") ||
-  (params.type && params.type === "social") ||
-  (params.category && params.category === "social");
-
-if (isSocial) {
-  limit = Math.min(limit, 300);
-}
 
   const allowListMode = truthy(params.list) || slotContext.autoFill || (!q && (type!=="any" || channel || lang || country || state || city || producer || queryIntent.regionHint || queryIntent.countryHint || queryIntent.sectorHint));
   if(!q && !allowListMode){
@@ -1691,8 +1868,8 @@ if (isSocial) {
   for(const r of rawItems){
     const adapterName = r && typeof r === "object" ? r.__adapter : null;
 
-    // Snapshot rows are already contract-shaped. Keep them as corpus and avoid full-bank deep normalization per request.
-    if(adapterName === "snapshot"){
+    // Snapshot/index rows are already internal memory rows. Keep them as corpus and avoid write-back loops.
+    if(adapterName === "snapshot" || adapterName === "index"){
       const rawSnapshot = { ...r };
       delete rawSnapshot.__adapter;
       snapshotCorpus.push(rawSnapshot);
@@ -1761,7 +1938,8 @@ const bank = {
   }
 };
 
-if(persistCandidates.length || truthy(params.forceSnapshotWrite)){
+const writeAllowed = writeModeEnabled(adapterCtx);
+if(writeAllowed && (persistCandidates.length || truthy(params.forceSnapshotWrite))){
   writeSearchBankSnapshots(bank);
 }
 
@@ -1814,15 +1992,17 @@ if(persistCandidates.length || truthy(params.forceSnapshotWrite)){
 	
 /* ===== SNAPSHOT AUTO PIPELINE ===== */
 try{
-  if(SearchBankSync && typeof SearchBankSync.run === "function"){
+  if(searchBankSyncEnabled(adapterCtx) && SearchBankSync){
     const syncItems = (newItems && newItems.length) ? newItems : persistCandidates;
     const commerceSyncItems = applyCommerceEngineToItems(syncItems || [], adapterCtx);
     if(commerceSyncItems && commerceSyncItems.length){
-      await SearchBankSync.run({
-        source: "search-bank",
-        items: commerceSyncItems,
-        query: q
-      });
+      if(typeof SearchBankSync.run === "function"){
+        await SearchBankSync.run({ source: "search-bank", items: commerceSyncItems, query: q });
+      }else if(typeof SearchBankSync.handler === "function"){
+        for(const syncItem of commerceSyncItems.slice(0, 100)){
+          await SearchBankSync.handler({ httpMethod:"POST", body: JSON.stringify(Object.assign({ source:"search-bank", query:q }, syncItem)) });
+        }
+      }
     }
   }
 }catch(e){
@@ -1866,6 +2046,10 @@ return {
     sector_context: queryIntent.sectorHint || undefined,
     entity_context: queryIntent.entityHint || undefined,
     adapters: served.adapters || undefined,
+    write_allowed: !!writeAllowed,
+    sync_enabled: !!searchBankSyncEnabled(adapterCtx),
+    external_mode: explicitExternalMode(adapterCtx),
+    external_policy: "maru-search-controlled-internal-first",
     rejected_count: rejected.length,
     generated_at: nowIso()
   }
@@ -1897,6 +2081,12 @@ exports.resolveSlotDeficiency = resolveSlotDeficiency;
 exports.expandQueryForLocale = expandQueryForLocale;
 exports.getSourceHealth = getSourceHealth;
 exports.computeSupplyScore = computeSupplyScore;
+exports.writeModeEnabled = writeModeEnabled;
+exports.searchBankSyncEnabled = searchBankSyncEnabled;
+exports.itemMatchesFrontChannel = itemMatchesFrontChannel;
+exports.searchBankMaxLimit = searchBankMaxLimit;
+exports.resolveSearchBankLimit = resolveSearchBankLimit;
+exports.normalizeSourceValue = normalizeSourceValue;
 
 exports.handler = async function(event){
   try{
