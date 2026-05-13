@@ -9,7 +9,7 @@
   'use strict';
   if (window.__MARU_HOME_SEARCH_SUGGEST_READY__) return;
   window.__MARU_HOME_SEARCH_SUGGEST_READY__ = true;
-  window.__MARU_UNIVERSAL_SEARCH_SUGGEST_BRIDGE__ = true;
+  // Do not mark the universal bridge as handled; the home bridge itself is universal-safe.
 
   function ready(fn){
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
@@ -17,7 +17,38 @@
   }
   function clean(v){ return String(v == null ? '' : v).trim(); }
   function isHomeSearchInput(el){
-    return !!(el && el.id === 'homeSearchInput');
+    if(!el) return false;
+    const tag = String(el.tagName || '').toLowerCase();
+    const type = String(el.type || '').toLowerCase();
+    if(tag !== 'input' && tag !== 'textarea') return false;
+    if(tag === 'input' && /^(hidden|password|email|file|checkbox|radio|button|submit|reset|range|date|time|color)$/i.test(type)) return false;
+    if(location.pathname && /\/search(\.html)?/i.test(location.pathname)) return false;
+
+    const rect = el.getBoundingClientRect ? el.getBoundingClientRect() : { width:0, height:0 };
+    if(rect.width < 220 || rect.height < 20) return false;
+
+    const attrs = [
+      el.id, el.name, el.className,
+      el.getAttribute && el.getAttribute('placeholder'),
+      el.getAttribute && el.getAttribute('aria-label'),
+      el.getAttribute && el.getAttribute('title'),
+      el.getAttribute && el.getAttribute('role')
+    ].map(v => String(v == null ? '' : v)).join(' ').toLowerCase();
+
+    if(/homesearchinput|globalsearchinput|mainsearch|herosearch|search|query|keyword|검색|검색어/.test(attrs)) return true;
+    if(type === 'search') return true;
+
+    let node = el.parentElement;
+    for(let i=0; node && i<5; i++, node=node.parentElement){
+      const text = String(node.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      const htmlAttrs = [node.id, node.className, node.getAttribute && node.getAttribute('role')].map(v => String(v == null ? '' : v)).join(' ').toLowerCase();
+      if(/검색|search/.test(text) && /검색|search|hero|main|global|platform|hub/.test(text + ' ' + htmlAttrs)) return true;
+      if(node.querySelector && node.querySelector('button, input[type=button], input[type=submit]')){
+        const btnText = Array.from(node.querySelectorAll('button, input[type=button], input[type=submit]')).map(b => String(b.textContent || b.value || '')).join(' ').toLowerCase();
+        if(/검색|search/.test(btnText)) return true;
+      }
+    }
+    return false;
   }
   function relatedTerms(q){
     const base = clean(q).replace(/\s+/g, ' ');
@@ -127,8 +158,14 @@
     input.addEventListener('blur', () => setTimeout(hideBox, 180));
   }
   function scan(){
-    const input = document.getElementById('homeSearchInput');
-    if (input) bindHomeInput(input);
+    try {
+      Array.from(document.querySelectorAll('input, textarea')).forEach(input => {
+        if(isHomeSearchInput(input)) bindHomeInput(input);
+      });
+    } catch(e) {
+      const input = document.getElementById('homeSearchInput') || document.getElementById('globalSearchInput');
+      if (input && isHomeSearchInput(input)) bindHomeInput(input);
+    }
   }
   ready(function(){
     scan();
@@ -137,9 +174,9 @@
     document.addEventListener('keydown', e => { if(e.key === 'Escape') hideBox(); }, true);
     window.addEventListener('resize', scan);
     window.addEventListener('scroll', () => {
-      const input = document.getElementById('homeSearchInput');
       const box = document.getElementById('maru-home-related-suggest-box');
-      if(input && box && box.dataset.open === '1') positionBox(input);
+      const input = document.activeElement;
+      if(input && isHomeSearchInput(input) && box && box.dataset.open === '1') positionBox(input);
     }, true);
     try {
       new MutationObserver(scan).observe(document.documentElement, { childList:true, subtree:true });
@@ -1282,6 +1319,22 @@ function startContinuousIntake(q, type, seq){
   return out;
 }
 
+
+async function fetchJsonWithTimeout(url, timeoutMs){
+  const ms = Math.max(800, Math.min(8000, Number(timeoutMs) || 3500));
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => { try{ ctrl.abort(); }catch(e){} }, ms);
+  try{
+    const r = await fetch(url, { cache:'no-store', signal: ctrl.signal });
+    if(!r.ok) return null;
+    return await r.json();
+  }catch(e){
+    return null;
+  }finally{
+    clearTimeout(timer);
+  }
+}
+
 async function fetchSearch(q, type = activeType, page = 1){
   const safeType = normalizeSearchType(type);
   signalSanmaruSearch(q, safeType, 'maru-search-fetch');
@@ -1308,10 +1361,7 @@ async function fetchSearch(q, type = activeType, page = 1){
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
   try {
-    const r = await fetch(url, { cache: 'no-store' });
-    if (!r.ok) return { items: [], payload: null, pageItems: [], viewportSections: [] };
-
-    const json = await r.json();
+    const json = await fetchJsonWithTimeout(url, page <= 1 ? 4200 : 2800);
     if (!json) return { items: [], payload: null, pageItems: [], viewportSections: [] };
     if (json.status === 'error') return { items: [], payload: json, pageItems: [], viewportSections: [] };
     if (json.status === 'blocked') return { items: [], payload: json, pageItems: [], viewportSections: [] };
@@ -1326,21 +1376,46 @@ async function fetchSearch(q, type = activeType, page = 1){
 async function fetchInstantSearchPack(q, type = activeType){
   const safeType = normalizeSearchType(type);
   const target = Math.max(INITIAL_PRELOAD_TARGET, adaptiveSearchTarget(q, safeType));
-  signalSanmaruSearch(q, safeType, 'search-ui-first-300');
+  signalSanmaruSearch(q, safeType, 'search-ui-direct-instant-300');
 
-  // First visible search must be supplied by Maru Search, not by the lighter
-  // Sanmaru boot ping.  Sanmaru is still warmed above, but Maru Search returns
-  // the first 12-page body window so search.html opens with about 300 usable
-  // cards and a 12-page pager immediately.
+  // FIRST PAINT RULE:
+  // Sanmaru already owns the resident/instant supply. Do not wait for Maru Search
+  // wide/provider/card work before the first render. Ask Sanmaru directly for the
+  // first 300 resident candidates, then let Maru Search fill page windows behind it.
+  const san = new URLSearchParams();
+  san.set('action', 'instant-supply');
+  san.set('q', q);
+  san.set('query', q);
+  san.set('type', safeType);
+  san.set('tab', safeType);
+  san.set('limit', String(INITIAL_PRELOAD_TARGET));
+  san.set('candidatePool', String(INITIAL_PRELOAD_TARGET));
+  san.set('candidatePoolTarget', String(INITIAL_PRELOAD_TARGET));
+  san.set('perPage', String(PAGE_SIZE));
+  san.set('visibleCardsPerPage', String(PAGE_SIZE));
+  san.set('page', '1');
+  san.set('visiblePage', '1');
+  san.set('residentFirst', '1');
+  san.set('sanmaruFirst', '1');
+  san.set('residentSwitch', '1');
+  san.set('handoff', isSearchPage ? 'search-html-direct-instant-300' : 'home-direct-instant-300');
+
+  const direct = await fetchJsonWithTimeout(`${SANMARU_BOOT_URL}?${san.toString()}`, 2600);
+  if (direct && direct.status !== 'error' && direct.status !== 'blocked') {
+    const pack = normalizeSearchPayload(direct);
+    if ((pack.items && pack.items.length) || (pack.pageItems && pack.pageItems.length)) return pack;
+  }
+
+  // Short backup only. This must never become a 30s~1m blocking path.
   const sp = new URLSearchParams();
   sp.set('q', q);
   sp.set('query', q);
   sp.set('type', safeType);
   sp.set('tab', safeType);
-  sp.set('limit', String(target));
+  sp.set('limit', String(INITIAL_PRELOAD_TARGET));
   sp.set('firstPaintLimit', String(INITIAL_PRELOAD_TARGET));
-  sp.set('candidatePool', String(target));
-  sp.set('candidatePoolTarget', String(target));
+  sp.set('candidatePool', String(INITIAL_PRELOAD_TARGET));
+  sp.set('candidatePoolTarget', String(INITIAL_PRELOAD_TARGET));
   sp.set('initialPreloadPages', String(INITIAL_PRELOAD_PAGES));
   sp.set('initialPreloadTarget', String(INITIAL_PRELOAD_TARGET));
   sp.set('perPage', String(PAGE_SIZE));
@@ -1354,18 +1429,12 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('activateResident', '1');
   sp.set('naturalFlow', '1');
   sp.set('smoothIntake', '1');
-  sp.set('handoff', isSearchPage ? 'search-html-first-300' : 'home-first-300');
+  sp.set('noBlockingWide', '1');
+  sp.set('handoff', isSearchPage ? 'search-html-backup-first-300' : 'home-backup-first-300');
 
-  try {
-    const r = await fetch(`/.netlify/functions/maru-search?${sp.toString()}`, { cache: 'no-store' });
-    if (!r.ok) return { items: [], payload: null, pageItems: [], viewportSections: [] };
-    const json = await r.json();
-    if (!json || json.status === 'error' || json.status === 'blocked') return { items: [], payload: json || null, pageItems: [], viewportSections: [] };
-    return normalizeSearchPayload(json);
-  } catch (e) {
-    console.warn('fetchInstantSearchPack failed:', e);
-    return { items: [], payload: null, pageItems: [], viewportSections: [] };
-  }
+  const backup = await fetchJsonWithTimeout(`/.netlify/functions/maru-search?${sp.toString()}`, 3200);
+  if (!backup || backup.status === 'error' || backup.status === 'blocked') return { items: [], payload: backup || null, pageItems: [], viewportSections: [] };
+  return normalizeSearchPayload(backup);
 }
 
     function renderSkeleton(count = 6){
