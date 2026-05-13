@@ -583,6 +583,7 @@ if (q0) {
 }
 
 ensureSearchTabs();
+bindRelatedSearchSuggest();
 updateSearchTabsActive();
 
 if (q0) {
@@ -806,7 +807,11 @@ function adaptiveSearchTarget(q, type){
 }
 
 function firstPaintLimitFor(q, type){
-  return Math.min(INITIAL_DOM_RENDER_TARGET, adaptiveSearchTarget(q, type));
+  // Keep the UI first paint light, but ask Sanmaru for the first 12 pages of
+  // already-prepared resident candidates. The DOM still renders only the
+  // current viewport; the extra candidates keep the initial pager at 10~12 pages
+  // and let page navigation feel immediate.
+  return Math.min(INITIAL_PRELOAD_TARGET, adaptiveSearchTarget(q, type));
 }
 
 function seedLoadedServerPagesFromItems(items, maxItems){
@@ -994,7 +999,7 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('candidatePool', String(adaptiveSearchTarget(q, safeType)));
   sp.set('candidatePoolTarget', String(adaptiveSearchTarget(q, safeType)));
   sp.set('initialPreloadPages', String(INITIAL_PRELOAD_PAGES));
-  sp.set('initialPreloadTarget', String(firstPaintLimitFor(q, safeType)));
+  sp.set('initialPreloadTarget', String(INITIAL_PRELOAD_TARGET));
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
   sp.set('providerPassthrough', '1');
@@ -1030,6 +1035,165 @@ async function fetchInstantSearchPack(q, type = activeType){
       }
     }
 
+
+
+    function ensureRelatedSearchSuggestStyle(){
+      if(document.getElementById('maru-related-search-style')) return;
+      const style = document.createElement('style');
+      style.id = 'maru-related-search-style';
+      style.textContent = `
+        #maru-related-suggest-box {
+          position: fixed;
+          z-index: 9999;
+          display: none;
+          background: #ffffff;
+          border: 1px solid #e5e7eb;
+          border-radius: 14px;
+          box-shadow: 0 14px 34px rgba(15, 23, 42, 0.16);
+          padding: 8px;
+          max-height: 420px;
+          overflow-y: auto;
+        }
+        #maru-related-suggest-box[data-open="1"] { display: block; }
+        .maru-related-suggest-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          width: 100%;
+          padding: 10px 12px;
+          border: 0;
+          border-radius: 10px;
+          background: transparent;
+          color: #111827;
+          cursor: pointer;
+          text-align: left;
+          font-size: 14px;
+          font-weight: 700;
+        }
+        .maru-related-suggest-row:hover,
+        .maru-related-suggest-row:focus { background: #f3f4f6; outline: none; }
+        .maru-related-suggest-icon {
+          flex: 0 0 auto;
+          width: 22px;
+          height: 22px;
+          border-radius: 999px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: #eef2ff;
+          color: #4f46e5;
+          font-size: 13px;
+        }
+        .maru-related-suggest-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .maru-related-suggest-caption {
+          padding: 7px 12px 5px;
+          color: #64748b;
+          font-size: 12px;
+          font-weight: 800;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    function ensureRelatedSuggestBox(){
+      ensureRelatedSearchSuggestStyle();
+      let box = document.getElementById('maru-related-suggest-box');
+      if(box) return box;
+      box = document.createElement('div');
+      box.id = 'maru-related-suggest-box';
+      box.setAttribute('role', 'listbox');
+      document.body.appendChild(box);
+      return box;
+    }
+
+    function positionRelatedSuggestBox(){
+      const box = ensureRelatedSuggestBox();
+      if(!input || !box) return;
+      const r = input.getBoundingClientRect();
+      box.style.left = Math.max(8, r.left) + 'px';
+      box.style.top = (r.bottom + 6) + 'px';
+      box.style.width = Math.max(280, r.width) + 'px';
+    }
+
+    function relatedSearchTermsFor(q){
+      const base = String(q || '').trim().replace(/\s+/g, ' ');
+      if(!base) return [];
+      const lower = base.toLowerCase();
+      const broadPlace = /서울|부산|대구|인천|광주|대전|울산|제주|대한민국|한국|뉴욕|도쿄|오사카|파리|런던|베트남|하노이|호치민|seoul|busan|korea|new york|tokyo|paris|london|vietnam/.test(lower);
+      const foodOrLocal = /카페|맛집|식당|시장|호텔|숙소|관광|여행|축제|공원|박물관|cafe|restaurant|hotel|market|travel|tour/.test(lower);
+      const mediaIntent = /영상|영화|드라마|음악|유튜브|쇼츠|sns|video|movie|youtube|shorts/.test(lower);
+      let suffixes;
+      if(mediaIntent){
+        suffixes = ['유튜브', '쇼츠', '영상', '뉴스', '인스타그램', '틱톡', '블로그', '이미지', '리뷰', '추천'];
+      }else if(foodOrLocal || broadPlace){
+        suffixes = ['지도', '날씨', '맛집', '카페', '볼만한 곳', '관광', '여행 코스', '축제', '호텔', '교통', '뉴스', '블로그', '유튜브', '이미지'];
+      }else{
+        suffixes = ['뜻', '뉴스', '이미지', '영상', '블로그', '리뷰', '가격', '방법', '추천', '비교', '공식', '위키'];
+      }
+      const out = [];
+      const seen = new Set();
+      suffixes.forEach(s => {
+        const term = `${base} ${s}`.trim();
+        const key = term.toLowerCase();
+        if(key !== lower && !seen.has(key)){
+          seen.add(key); out.push(term);
+        }
+      });
+      return out.slice(0, 12);
+    }
+
+    function hideRelatedSuggestBox(){
+      const box = document.getElementById('maru-related-suggest-box');
+      if(box) box.dataset.open = '0';
+    }
+
+    function showRelatedSuggestBox(){
+      const q = input ? input.value.trim() : '';
+      const terms = relatedSearchTermsFor(q);
+      const box = ensureRelatedSuggestBox();
+      if(!q || !terms.length){ hideRelatedSuggestBox(); return; }
+      box.innerHTML = '';
+      const cap = document.createElement('div');
+      cap.className = 'maru-related-suggest-caption';
+      cap.textContent = '연관 검색어';
+      box.appendChild(cap);
+      terms.forEach(term => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'maru-related-suggest-row';
+        row.setAttribute('role', 'option');
+        const icon = document.createElement('span');
+        icon.className = 'maru-related-suggest-icon';
+        icon.textContent = '⌕';
+        const text = document.createElement('span');
+        text.className = 'maru-related-suggest-text';
+        text.textContent = term;
+        row.appendChild(icon);
+        row.appendChild(text);
+        row.addEventListener('mousedown', e => e.preventDefault());
+        row.addEventListener('click', () => {
+          input.value = term;
+          hideRelatedSuggestBox();
+          runGlobalSearch();
+        });
+        box.appendChild(row);
+      });
+      positionRelatedSuggestBox();
+      box.dataset.open = '1';
+    }
+
+    function bindRelatedSearchSuggest(){
+      if(!input || input.__maruRelatedSuggestBound) return;
+      input.__maruRelatedSuggestBound = true;
+      input.addEventListener('input', showRelatedSuggestBox);
+      input.addEventListener('focus', showRelatedSuggestBox);
+      input.addEventListener('blur', () => setTimeout(hideRelatedSuggestBox, 160));
+      input.addEventListener('keydown', e => {
+        if(e.key === 'Escape') hideRelatedSuggestBox();
+      });
+      window.addEventListener('resize', positionRelatedSuggestBox);
+      window.addEventListener('scroll', positionRelatedSuggestBox, true);
+    }
 
     function ensureSearchTabs(){
       if (!isSearchPage) return null;
@@ -2699,12 +2863,12 @@ async function runSearch(q, type = activeType){
 
     lastSearchPayload = instantPack && instantPack.payload || null;
     const rawItems = Array.isArray(instantPack) ? instantPack : (instantPack && instantPack.items) || [];
-    const quickItems = dedupeItems(filterSearchResultItems(rawItems || [])).slice(0, INITIAL_DOM_RENDER_TARGET);
+    const quickItems = dedupeItems(filterSearchResultItems(rawItems || [])).slice(0, INITIAL_PRELOAD_TARGET);
     const pageItems = dedupeItems(filterSearchResultItems(pageItemsFromPack(instantPack)));
 
     const firstItems = quickItems.length ? quickItems : pageItems;
     allItems = dedupeItems(firstItems);
-    seedLoadedServerPagesFromItems(allItems, INITIAL_DOM_RENDER_TARGET);
+    seedLoadedServerPagesFromItems(allItems, INITIAL_PRELOAD_TARGET);
     if(pageItems.length && !loadedServerPages.has(1)) loadedServerPages.set(1, pageItems.slice(0, PAGE_SIZE));
 
     const payloadTotal = serverTotalFromPayload(instantPack && instantPack.payload, Math.max(target, allItems.length));
@@ -2732,9 +2896,9 @@ async function runSearch(q, type = activeType){
     console.error(e);
     const fallbackPack = await fetchSearch(qq, activeType, 1);
     if (runSearch._seq !== seq) return;
-    const fallbackItems = dedupeItems(filterSearchResultItems(normalizeItems(fallbackPack && fallbackPack.payload || fallbackPack))).slice(0, INITIAL_DOM_RENDER_TARGET);
+    const fallbackItems = dedupeItems(filterSearchResultItems(normalizeItems(fallbackPack && fallbackPack.payload || fallbackPack))).slice(0, INITIAL_PRELOAD_TARGET);
     allItems = fallbackItems;
-    seedLoadedServerPagesFromItems(allItems, INITIAL_DOM_RENDER_TARGET);
+    seedLoadedServerPagesFromItems(allItems, INITIAL_PRELOAD_TARGET);
     updateProgressiveTotalFromPayload(fallbackPack && fallbackPack.payload, Math.max(target, fallbackItems.length));
     currentBlock = 0;
     currentPage = 1;
@@ -2747,12 +2911,6 @@ async function runSearch(q, type = activeType){
   }
 }
 
-btn.addEventListener('click', runGlobalSearch);
-    if (input) {
-      input.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') runGlobalSearch();
-      });
-    }
   });
 })();
 
