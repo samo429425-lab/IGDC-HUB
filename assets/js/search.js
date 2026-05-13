@@ -353,29 +353,41 @@ function ensureSearchCardMediaStyle(){
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      margin-right: 7px;
-      padding: 5px 10px;
-      border-radius: 999px;
-      border: 1px solid #f7b9aa;
-      background: linear-gradient(180deg, #ffe1d8, #ffc8bb);
-      color: #227ca5;
-      font-size: 13px;
+      margin-right: 9px;
+      padding: 8px 17px;
+      min-height: 38px;
+      border-radius: 11px;
+      border: 1px solid rgba(255, 166, 146, 0.92);
+      background: linear-gradient(180deg, #ffe3da 0%, #ffcabc 100%);
+      color: #2389bd;
+      font-size: 20px;
       font-weight: 900;
       line-height: 1;
+      letter-spacing: -0.02em;
       text-decoration: none;
       cursor: pointer;
-      box-shadow: 0 2px 8px rgba(244, 140, 120, 0.18);
+      box-shadow: 0 2px 8px rgba(244, 140, 120, 0.20);
       vertical-align: middle;
     }
     .maru-search-home-link:hover {
-      color: #155e7e;
-      background: linear-gradient(180deg, #ffd8cf, #ffb8a8);
+      color: #156b99;
+      background: linear-gradient(180deg, #ffd8cf 0%, #ffb9aa 100%);
       text-decoration: none;
       transform: translateY(-1px);
     }
     .maru-search-header-title {
       white-space: nowrap;
       font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+    }
+    @media (max-width: 720px) {
+      .maru-search-home-link {
+        min-height: 34px;
+        padding: 7px 13px;
+        font-size: 17px;
+      }
     }
 
     @media (max-width: 720px) {
@@ -1051,6 +1063,44 @@ async function fetchInstantSearchPack(q, type = activeType){
 
 
 
+
+    function isLikelySearchInputElement(el){
+      if(!el || !el.tagName || String(el.tagName).toLowerCase() !== 'input') return false;
+      const id = String(el.id || '').toLowerCase();
+      const name = String(el.name || '').toLowerCase();
+      const cls = String(el.className || '').toLowerCase();
+      const ph = String(el.getAttribute('placeholder') || '').toLowerCase();
+      const role = String(el.getAttribute('role') || '').toLowerCase();
+      const type = String(el.type || '').toLowerCase();
+      return el === input || id.includes('search') || name.includes('search') || cls.includes('search') || ph.includes('검색') || ph.includes('search') || role === 'searchbox' || type === 'search';
+    }
+
+    function runGlobalSearch(){
+      const anchor = activeSuggestInput || input;
+      const q = (anchor && anchor.value ? anchor.value : input.value || '').trim();
+      if(!q) return;
+      if(anchor && anchor !== input) input.value = q;
+      if(isSearchPage){
+        const nextType = 'all';
+        activeType = nextType;
+        updateSearchTabsActive();
+        const u = new URL(location.href);
+        u.searchParams.set('q', q);
+        u.searchParams.set('page', '1');
+        u.searchParams.set('block', '0');
+        u.searchParams.delete('type');
+        u.searchParams.set('residentFirst', '1');
+        u.searchParams.set('sanmaruFirst', '1');
+        u.searchParams.set('residentSwitch', '1');
+        const safeReturnUrl = getSafeReturnUrl();
+        if(safeReturnUrl) u.searchParams.set('from', safeReturnUrl);
+        history.pushState({ q, type: nextType, from: safeReturnUrl || '' }, '', u.toString());
+        runSearch(q, nextType);
+      } else {
+        window.location.assign(buildSearchUrl(q));
+      }
+    }
+
     function ensureRelatedSearchSuggestStyle(){
       if(document.getElementById('maru-related-search-style')) return;
       const style = document.createElement('style');
@@ -1204,13 +1254,23 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function bindRelatedSearchSuggest(){
-      const targets = Array.from(new Set([
-        input,
-        document.getElementById('searchInput'),
-        document.getElementById('globalSearchInput'),
-        document.querySelector('input[type="search"]'),
-        document.querySelector('input[data-search-input]')
-      ].filter(Boolean)));
+      const selector = [
+        '#searchInput',
+        '#globalSearchInput',
+        '#homeSearchInput',
+        '#mainSearchInput',
+        '#heroSearchInput',
+        'input[type="search"]',
+        'input[data-search-input]',
+        'input[name*="search" i]',
+        'input[id*="search" i]',
+        'input[class*="search" i]',
+        'input[placeholder*="검색" i]',
+        'input[placeholder*="search" i]'
+      ].join(',');
+
+      const targets = Array.from(new Set([input].concat(Array.from(document.querySelectorAll(selector))).filter(Boolean)))
+        .filter(isLikelySearchInputElement);
 
       targets.forEach(target => {
         if(target.__maruRelatedSuggestBound) return;
@@ -1220,6 +1280,10 @@ async function fetchInstantSearchPack(q, type = activeType){
         target.addEventListener('blur', () => setTimeout(hideRelatedSuggestBox, 160));
         target.addEventListener('keydown', e => {
           if(e.key === 'Escape') hideRelatedSuggestBox();
+          if(e.key === 'Enter') {
+            activeSuggestInput = target;
+            hideRelatedSuggestBox();
+          }
         });
       });
 
@@ -1227,6 +1291,25 @@ async function fetchInstantSearchPack(q, type = activeType){
         bindRelatedSearchSuggest.__windowBound = true;
         window.addEventListener('resize', () => positionRelatedSuggestBox(activeSuggestInput));
         window.addEventListener('scroll', () => positionRelatedSuggestBox(activeSuggestInput), true);
+        document.addEventListener('input', e => {
+          const target = e.target;
+          if(!isLikelySearchInputElement(target)) return;
+          activeSuggestInput = target;
+          showRelatedSuggestBox(target);
+        }, true);
+        document.addEventListener('focusin', e => {
+          const target = e.target;
+          if(!isLikelySearchInputElement(target)) return;
+          activeSuggestInput = target;
+          showRelatedSuggestBox(target);
+          bindRelatedSearchSuggest();
+        });
+        try {
+          const mo = new MutationObserver(() => bindRelatedSearchSuggest());
+          mo.observe(document.body, { childList: true, subtree: true });
+        } catch(e) {}
+        setTimeout(bindRelatedSearchSuggest, 500);
+        setTimeout(bindRelatedSearchSuggest, 1500);
       }
     }
 
@@ -1805,7 +1888,17 @@ async function fetchInstantSearchPack(q, type = activeType){
 
         const previewLimit = Math.max(1, parseInt(groupInfo.previewLimit, 10) || displayGroupPreviewLimit(groupInfo.group, groupInfo.items[0]));
         const previewItems = Array.isArray(groupInfo.previewItems) ? groupInfo.previewItems : groupInfo.items.slice(0, previewLimit);
-        const hiddenItems = Array.isArray(groupInfo.hiddenItems) ? groupInfo.hiddenItems : groupInfo.items.slice(previewItems.length);
+        let hiddenItems = Array.isArray(groupInfo.hiddenItems) ? groupInfo.hiddenItems : null;
+        if(!hiddenItems && normalizeSearchType(activeType) === 'all'){
+          const fullGroup = diversifyGroupPreviewItems(groupInfo.group, groupSliceForDisplay(allItems).find(g => g.group === groupInfo.group)?.items || []);
+          const visibleKeys = new Set(previewItems.map(it => String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase()).filter(Boolean));
+          const groupCap = displayGroupPreviewLimit(groupInfo.group, fullGroup[0]);
+          hiddenItems = fullGroup.slice(groupCap).filter(it => {
+            const key = String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
+            return !key || !visibleKeys.has(key);
+          });
+        }
+        hiddenItems = Array.isArray(hiddenItems) ? hiddenItems : groupInfo.items.slice(previewItems.length);
         let hiddenMounted = false;
         let hiddenWrap = null;
 
@@ -2709,11 +2802,10 @@ if (it.riskLabel === '⚠️ high-risk') {
       const slice = visibleItemsForPage(page);
       const start = (page - 1) * PAGE_SIZE;
 
-      const frontSections = (page === 1) ? frontPageSectionSource() : null;
-      if (frontSections && shouldUseDisplayGroups(frontSections)) {
-        const frontGroups = buildFrontViewportGroups(frontSections, PAGE_SIZE);
-        renderGroupedSlice(frontGroups, page);
-      } else if (shouldUseDisplayGroups(slice)) {
+      // Render the already-balanced visible stream. Do not rebuild page 1 from a
+      // raw source slice, because a raw slice may contain only news/logo/map cards
+      // and then hidden overflow still blocks the following categories from moving up.
+      if (shouldUseDisplayGroups(slice)) {
         renderGroupedSlice(slice, page);
       } else {
         slice.forEach(it => renderItem(it));
