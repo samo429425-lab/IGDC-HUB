@@ -28,10 +28,12 @@ ready(function () {
 
   if (!isSearchPage && !hasSearchUI) return;
 
-    const input   = document.getElementById('searchInput');
-    const btn     = document.getElementById('searchBtn');
-    const status  = document.getElementById('searchStatus');
-    const results = document.getElementById('searchResults');
+    const input   = document.getElementById('searchInput') || document.getElementById('globalSearchInput');
+    const btn     = document.getElementById('searchBtn') || document.getElementById('globalSearchBtn');
+    const statusEl = document.getElementById('searchStatus');
+    const resultsEl = document.getElementById('searchResults');
+    const status  = statusEl || { textContent: '' };
+    const results = resultsEl || document.createElement('div');
         
     if (!input || !btn) return;
 
@@ -40,7 +42,7 @@ ready(function () {
     const MAX_PAGER_PAGES = 499;
     const INITIAL_PRELOAD_PAGES = 12;
     const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES;
-    const INITIAL_DOM_RENDER_TARGET = PAGE_SIZE * 2;
+    const INITIAL_DOM_RENDER_TARGET = INITIAL_PRELOAD_TARGET;
     const INITIAL_PROGRESSIVE_PAGER_PAGES = 12;
     const MAX_PROGRESSIVE_PAGER_PAGES = 60;
     const MIN_SMOOTH_CANDIDATES = 120;
@@ -348,16 +350,28 @@ function ensureSearchCardMediaStyle(){
 
 
     .maru-search-home-link {
-      display: inline-block;
-      margin-right: 4px;
-      color: #111827;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 7px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      border: 1px solid #f7b9aa;
+      background: linear-gradient(180deg, #ffe1d8, #ffc8bb);
+      color: #227ca5;
+      font-size: 13px;
       font-weight: 900;
+      line-height: 1;
       text-decoration: none;
       cursor: pointer;
+      box-shadow: 0 2px 8px rgba(244, 140, 120, 0.18);
+      vertical-align: middle;
     }
     .maru-search-home-link:hover {
-      color: #4f46e5;
-      text-decoration: underline;
+      color: #155e7e;
+      background: linear-gradient(180deg, #ffd8cf, #ffb8a8);
+      text-decoration: none;
+      transform: translateY(-1px);
     }
     .maru-search-header-title {
       white-space: nowrap;
@@ -855,7 +869,7 @@ function startContinuousIntake(q, type, seq){
   authoritativeServerTotalItems = Math.max(authoritativeServerTotalItems || 0, target);
   updateProgressiveTotalFromPayload(lastSearchPayload || {}, Math.max(target, allItems.length || 0));
 
-  let nextPage = Math.max(3, preloadPageCountFromItems(allItems) + 1);
+  let nextPage = Math.max(2, preloadPageCountFromItems(allItems) + 1);
   const maxPages = Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(target / PAGE_SIZE)));
 
   async function worker(){
@@ -1106,10 +1120,13 @@ async function fetchInstantSearchPack(q, type = activeType){
       return box;
     }
 
-    function positionRelatedSuggestBox(){
+    let activeSuggestInput = input;
+
+    function positionRelatedSuggestBox(targetInput){
       const box = ensureRelatedSuggestBox();
-      if(!input || !box) return;
-      const r = input.getBoundingClientRect();
+      const anchor = targetInput || activeSuggestInput || input;
+      if(!anchor || !box) return;
+      const r = anchor.getBoundingClientRect();
       box.style.left = Math.max(8, r.left) + 'px';
       box.style.top = (r.bottom + 6) + 'px';
       box.style.width = Math.max(280, r.width) + 'px';
@@ -1147,8 +1164,10 @@ async function fetchInstantSearchPack(q, type = activeType){
       if(box) box.dataset.open = '0';
     }
 
-    function showRelatedSuggestBox(){
-      const q = input ? input.value.trim() : '';
+    function showRelatedSuggestBox(targetInput){
+      const anchor = targetInput || activeSuggestInput || input;
+      activeSuggestInput = anchor || input;
+      const q = anchor ? anchor.value.trim() : '';
       const terms = relatedSearchTermsFor(q);
       const box = ensureRelatedSuggestBox();
       if(!q || !terms.length){ hideRelatedSuggestBox(); return; }
@@ -1172,27 +1191,43 @@ async function fetchInstantSearchPack(q, type = activeType){
         row.appendChild(text);
         row.addEventListener('mousedown', e => e.preventDefault());
         row.addEventListener('click', () => {
-          input.value = term;
+          const anchor = activeSuggestInput || input;
+          if(anchor) anchor.value = term;
+          if(anchor && anchor !== input) input.value = term;
           hideRelatedSuggestBox();
           runGlobalSearch();
         });
         box.appendChild(row);
       });
-      positionRelatedSuggestBox();
+      positionRelatedSuggestBox(anchor);
       box.dataset.open = '1';
     }
 
     function bindRelatedSearchSuggest(){
-      if(!input || input.__maruRelatedSuggestBound) return;
-      input.__maruRelatedSuggestBound = true;
-      input.addEventListener('input', showRelatedSuggestBox);
-      input.addEventListener('focus', showRelatedSuggestBox);
-      input.addEventListener('blur', () => setTimeout(hideRelatedSuggestBox, 160));
-      input.addEventListener('keydown', e => {
-        if(e.key === 'Escape') hideRelatedSuggestBox();
+      const targets = Array.from(new Set([
+        input,
+        document.getElementById('searchInput'),
+        document.getElementById('globalSearchInput'),
+        document.querySelector('input[type="search"]'),
+        document.querySelector('input[data-search-input]')
+      ].filter(Boolean)));
+
+      targets.forEach(target => {
+        if(target.__maruRelatedSuggestBound) return;
+        target.__maruRelatedSuggestBound = true;
+        target.addEventListener('input', () => { activeSuggestInput = target; showRelatedSuggestBox(target); });
+        target.addEventListener('focus', () => { activeSuggestInput = target; showRelatedSuggestBox(target); });
+        target.addEventListener('blur', () => setTimeout(hideRelatedSuggestBox, 160));
+        target.addEventListener('keydown', e => {
+          if(e.key === 'Escape') hideRelatedSuggestBox();
+        });
       });
-      window.addEventListener('resize', positionRelatedSuggestBox);
-      window.addEventListener('scroll', positionRelatedSuggestBox, true);
+
+      if(!bindRelatedSearchSuggest.__windowBound){
+        bindRelatedSearchSuggest.__windowBound = true;
+        window.addEventListener('resize', () => positionRelatedSuggestBox(activeSuggestInput));
+        window.addEventListener('scroll', () => positionRelatedSuggestBox(activeSuggestInput), true);
+      }
     }
 
     function ensureSearchTabs(){
@@ -2555,7 +2590,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         return String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
       }
 
-      function pushItem(it, groupInfo, idx){
+      function pushItem(it, groupInfo, idx, opts){
         const key = itemKey(it);
         if(key && used.has(key)) return false;
         if(key) used.add(key);
@@ -2564,16 +2599,17 @@ if (it.riskLabel === '⚠️ high-risk') {
           displayGroupLabel: displayGroupLabel(groupInfo.group, it),
           displayGroupVisibleIndex: idx,
           displayGroupSourceTotal: groupInfo.items.length,
-          displayGroupCollapsedCount: 0,
+          displayGroupCollapsedCount: Math.max(0, (groupInfo.items.length || 0) - (idx + 1)),
           collapsedAwareViewportCard: true,
-          visibleViewportCard: true
+          visibleViewportCard: true,
+          generalWebContinuation: !!(opts && opts.general)
         }));
         return true;
       }
 
-      // First 2~3 pages are Naver-like category lead pages. Overflow from heavy
-      // categories is NOT appended to these visible slots; it remains behind the
-      // section button. General web starts after the representative category zone.
+      // Lead SERP zone: the first 2~3 pages are category representatives.
+      // Overflow from news/blog/SNS/media stays behind each section's 더보기 and
+      // does NOT consume the 25-card page slots.
       const leadCaps = {
         authority: 5,
         knowledge: 5,
@@ -2600,27 +2636,16 @@ if (it.riskLabel === '⚠️ high-risk') {
         }
       });
 
-      // After the lead zone, continue with general web and useful non-heavy items.
-      // Heavy overflow (news/blog/SNS/media) appears only after general web, and
-      // each section's full overflow is also available through its 더보기 button.
-      const continuationOrder = ['web','local_tour','shopping','sports','finance','webtoon','knowledge','authority','community','social','media','news'];
-      const appendedGroups = new Set();
-      continuationOrder.forEach(group => {
+      // Continuation zone: after the category representative zone, only non-heavy
+      // web/reference/local candidates flow into normal pagination. Heavy vertical
+      // overflow is available through its own section button only.
+      const mainContinuationGroups = ['web','authority','knowledge','local_tour','shopping','sports','finance','webtoon'];
+      mainContinuationGroups.forEach(group => {
         const g = byGroup.get(group);
         if(!g || !Array.isArray(g.items)) return;
-        appendedGroups.add(group);
         while(g.cursor < g.items.length){
           const idx = g.cursor++;
-          pushItem(g.items[idx], g, idx);
-        }
-      });
-      groups.forEach(g => {
-        if(appendedGroups.has(g.group)) return;
-        const gg = byGroup.get(g.group);
-        if(!gg || !Array.isArray(gg.items)) return;
-        while(gg.cursor < gg.items.length){
-          const idx = gg.cursor++;
-          pushItem(gg.items[idx], gg, idx);
+          pushItem(g.items[idx], g, idx, { general: true });
         }
       });
 
@@ -2636,7 +2661,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       // the 25 visible slots.
       if (normalizeSearchType(activeType) === 'all') {
         const stream = buildClientVisibleStream(page);
-        if (stream.length > start) return stream.slice(start, start + PAGE_SIZE);
+        return stream.slice(start, start + PAGE_SIZE);
       }
 
       if(serverPagedMode && loadedServerPages.has(page)){
@@ -2651,7 +2676,10 @@ if (it.riskLabel === '⚠️ high-risk') {
       // raw server total. Collapsed category overflow remains behind 더보기 and
       // must not consume page slots.
       if (normalizeSearchType(activeType) === 'all') {
-        return buildClientVisibleStream(currentPage || 1).length;
+        const visibleCount = buildClientVisibleStream(currentPage || 1).length;
+        const preloadFloor = lastQuery ? INITIAL_PRELOAD_TARGET : 0;
+        const progressiveFloor = Math.min(serverTotalItems || 0, INITIAL_PRELOAD_TARGET);
+        return Math.max(visibleCount, progressiveFloor, preloadFloor);
       }
       if(serverPagedMode && serverTotalItems > 0) return serverTotalItems;
       return buildClientVisibleStream(currentPage || 1).length;
@@ -2724,8 +2752,9 @@ if (it.riskLabel === '⚠️ high-risk') {
         const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
         if(pageSlice.length){
           loadedServerPages.set(page, pageSlice.slice(0, PAGE_SIZE));
+          allItems = dedupeItems(allItems.concat(pageSlice));
           const total = serverTotalFromPayload(pack && pack.payload, serverTotalItems || pageSlice.length);
-          serverTotalItems = Math.max(serverTotalItems || 0, total || 0);
+          serverTotalItems = Math.max(serverTotalItems || 0, total || 0, INITIAL_PRELOAD_TARGET);
         } else if(serverTotalItems > ((page - 1) * PAGE_SIZE)){
           // Do not silently render a blank page when the pager says that page exists.
           // Keep the loading state visible and let the user retry by clicking the page again.
@@ -2873,7 +2902,9 @@ async function runSearch(q, type = activeType){
 
     const payloadTotal = serverTotalFromPayload(instantPack && instantPack.payload, Math.max(target, allItems.length));
     authoritativeServerTotalItems = Math.max(target, payloadTotal || 0, allItems.length);
-    updateProgressiveTotalFromPayload(instantPack && instantPack.payload, Math.max(target, allItems.length));
+    updateProgressiveTotalFromPayload(instantPack && instantPack.payload, Math.max(target, allItems.length, INITIAL_PRELOAD_TARGET));
+    serverTotalItems = Math.max(serverTotalItems || 0, INITIAL_PRELOAD_TARGET);
+    progressivePagerPages = Math.max(progressivePagerPages || 0, INITIAL_PROGRESSIVE_PAGER_PAGES);
 
     currentBlock = 0;
     currentPage = 1;
@@ -2899,7 +2930,9 @@ async function runSearch(q, type = activeType){
     const fallbackItems = dedupeItems(filterSearchResultItems(normalizeItems(fallbackPack && fallbackPack.payload || fallbackPack))).slice(0, INITIAL_PRELOAD_TARGET);
     allItems = fallbackItems;
     seedLoadedServerPagesFromItems(allItems, INITIAL_PRELOAD_TARGET);
-    updateProgressiveTotalFromPayload(fallbackPack && fallbackPack.payload, Math.max(target, fallbackItems.length));
+    updateProgressiveTotalFromPayload(fallbackPack && fallbackPack.payload, Math.max(target, fallbackItems.length, INITIAL_PRELOAD_TARGET));
+    serverTotalItems = Math.max(serverTotalItems || 0, INITIAL_PRELOAD_TARGET);
+    progressivePagerPages = Math.max(progressivePagerPages || 0, INITIAL_PROGRESSIVE_PAGER_PAGES);
     currentBlock = 0;
     currentPage = 1;
     lastQuery = qq;
