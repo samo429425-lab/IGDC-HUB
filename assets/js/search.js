@@ -44,7 +44,7 @@ ready(function () {
     const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES;
     const INITIAL_DOM_RENDER_TARGET = INITIAL_PRELOAD_TARGET;
     const INITIAL_PROGRESSIVE_PAGER_PAGES = 12;
-    const MAX_PROGRESSIVE_PAGER_PAGES = 80;
+    const MAX_PROGRESSIVE_PAGER_PAGES = 120;
     const MIN_SMOOTH_CANDIDATES = 120;
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
@@ -819,19 +819,19 @@ function adaptiveSearchTarget(q, type){
   const text = String(q || '').trim().toLowerCase();
   const words = text.split(/\s+/).filter(Boolean);
   const safeType = normalizeSearchType(type || activeType || 'all');
-  const broadHints = /(세계|전세계|글로벌|뉴스|영상|이미지|관광|여행|ai|인공지능|기술|시장|경제|정치|sports|finance|global|world|news|tour|travel|technology|market)/i;
+  const broadHints = /(세계|전세계|글로벌|뉴스|영상|이미지|관광|여행|ai|인공지능|기술|시장|경제|정치|스포츠|금융|도서|쇼핑|웹툰|global|world|news|tour|travel|technology|market|sports|finance|book|shopping|webtoon)/i;
   const narrowHints = /(카페|맛집|식당|주소|전화|위치|지도|병원|약국|학교|교회|상호|주차|near me|cafe|restaurant|address|map)/i;
 
-  // Search.js is only the receiver/container. This number is the size of the
-  // server-side Sanmaru/MaruSearch supply window that the UI is ready to cache,
-  // not a request for the browser to perform separate searches. Keep the first
-  // 300 candidates ready immediately and let the faucet keep filling up to roughly 2,000.
-  let target = 1600;
-  if (safeType !== 'all') target = 1200;
-  if (words.length >= 3 || narrowHints.test(text)) target = 1000;
-  if (words.length <= 1 || broadHints.test(text)) target = 2000;
-  if (/^(news|image|video|sns|blog|tour)$/.test(safeType)) target = Math.max(target, 1600);
-  if (/^(map|knowledge|book|shopping)$/.test(safeType)) target = Math.max(900, Math.min(target, 1400));
+  // Search.js remains only a receiver/container. This target is the amount of
+  // Sanmaru/MaruSearch supply the UI is ready to cache for search pages. It is
+  // separate from the 4,500~5,000 Search Bank Snapshot supply used by front pages.
+  let target = 2400;
+  if (safeType === 'all') target = 3000;
+  if (safeType !== 'all') target = 1800;
+  if (words.length >= 3 || narrowHints.test(text)) target = Math.max(target, 1800);
+  if (words.length <= 1 || broadHints.test(text)) target = 3000;
+  if (/^(news|image|video|sns|blog|tour)$/.test(safeType)) target = Math.max(target, 2200);
+  if (/^(map|knowledge|book|shopping)$/.test(safeType)) target = Math.max(1600, Math.min(target, 2400));
 
   return Math.max(INITIAL_PRELOAD_TARGET, Math.min(MAX_SMOOTH_CANDIDATES, target));
 }
@@ -1689,17 +1689,43 @@ async function fetchInstantSearchPack(q, type = activeType){
         official: 'authority',
         gov: 'authority',
         government: 'authority',
+        public: 'public_data',
+        public_data: 'public_data',
+        opendata: 'public_data',
+        open_data: 'public_data',
         knowledge_wiki: 'knowledge',
-        wiki: 'knowledge',
+        wiki: 'wiki',
+        encyclopedia: 'knowledge',
+        academic: 'academic',
+        scholar: 'academic',
+        research: 'academic',
+        paper: 'academic',
         map_local_tour: 'local_tour',
         local: 'local_tour',
+        map: 'local_tour',
         tour: 'local_tour',
-        video_vlog: 'media',
-        image_gallery: 'media',
-        blog_review: 'community',
+        video_vlog: 'video',
+        video: 'video',
+        youtube: 'video',
+        image_gallery: 'image',
+        image: 'image',
+        photo: 'image',
+        blog_review: 'blog',
+        blog: 'blog',
+        cafe: 'cafe',
+        forum: 'community',
+        community: 'community',
         community_sns: 'social',
         sns: 'social',
+        social: 'social',
         shopping_product: 'shopping',
+        shopping: 'shopping',
+        commerce: 'shopping',
+        product: 'shopping',
+        sports: 'sports',
+        finance: 'finance',
+        stock: 'finance',
+        webtoon: 'webtoon',
         company_web: 'site',
         corporate_homepage: 'site',
         business_site: 'site',
@@ -1720,11 +1746,11 @@ async function fetchInstantSearchPack(q, type = activeType){
       const normalized = normalizeDisplayGroupClient(rawGroup);
       const inferred = inferDisplayGroupClient(it);
 
-      // Server supply may mark broad results as "web". In that case the UI
-      // container should still recognize clear site/book/news/blog/map/etc.
-      // signals from URL/source/type so portal categories are not lost.
+      // Keep server groups when they are already precise, but allow broad groups
+      // such as web/media/knowledge/community to split into richer portal lanes.
       if(!rawGroup) return inferred;
-      if((normalized === 'web' || normalized === 'general_web') && inferred && inferred !== 'web') return inferred;
+      const broadGroups = new Set(['web','general_web','media','knowledge','community','social']);
+      if(broadGroups.has(normalized) && inferred && inferred !== normalized && inferred !== 'web') return inferred;
       return normalized || inferred || 'web';
     }
 
@@ -1749,67 +1775,85 @@ async function fetchInstantSearchPack(q, type = activeType){
 
     function inferDisplayGroupClient(it){
       const source = String((it && it.source) || '').toLowerCase();
+      const provider = String((it && (it.provider || it.channel)) || '').toLowerCase();
       const type = String((it && it.type) || '').toLowerCase();
+      const category = String((it && it.category) || '').toLowerCase();
       const mediaType = String((it && it.mediaType) || '').toLowerCase();
       const title = String((it && it.title) || '').toLowerCase();
-      const summary = String((it && (it.summary || it.description)) || '').toLowerCase();
+      const summary = String((it && (it.summary || it.snippet || it.description || it.contentSnippet || it.excerpt || it.abstract)) || '').toLowerCase();
       const url = String((it && (it.url || it.link)) || '').toLowerCase();
       const host = domainOf(url).toLowerCase();
-      const text = `${source} ${type} ${mediaType} ${title} ${summary} ${host}`;
+      const text = `${source} ${provider} ${type} ${category} ${mediaType} ${title} ${summary} ${host}`;
 
       if (host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr')) return 'authority';
-      if (source.includes('local') || source.includes('map') || type === 'map' || type === 'local' || mediaType === 'map' || text.includes('관광') || text.includes('여행') || text.includes('지도') || text.includes('주소') || text.includes('위치') || text.includes('맛집') || text.includes('공원') || text.includes('landmark') || text.includes('tour')) return 'local_tour';
-      if (source.includes('encyc') || source.includes('kin') || type === 'knowledge' || text.includes('지식') || text.includes('백과') || text.includes('위키') || host.includes('wikipedia.org') || host.includes('namu.wiki')) return 'knowledge';
-      if (source.includes('corporate') || source.includes('homepage') || source.includes('business') || source.includes('company') || type === 'site' || type === 'homepage' || type === 'business' || text.includes('홈페이지') || text.includes('공식사이트') || text.includes('공식 사이트') || text.includes('기업') || text.includes('회사') || text.includes('business') || text.includes('company') || text.includes('corporate')) return 'site';
+      if (source.includes('public') || provider.includes('public') || type === 'public_data' || category === 'public_data' || text.includes('공공데이터') || text.includes('공공 데이터') || text.includes('데이터포털') || text.includes('open data') || host.includes('data.go.kr')) return 'public_data';
+      if (source.includes('local') || source.includes('map') || type === 'map' || type === 'local' || mediaType === 'map' || category === 'map' || text.includes('관광') || text.includes('여행') || text.includes('지도') || text.includes('주소') || text.includes('위치') || text.includes('맛집') || text.includes('공원') || text.includes('landmark') || text.includes('tour')) return 'local_tour';
+      if (host.includes('wikipedia.org') || host.includes('namu.wiki') || source.includes('wiki') || type === 'wiki' || text.includes('위키')) return 'wiki';
+      if (source.includes('scholar') || source.includes('academic') || source.includes('paper') || source.includes('research') || source.includes('library') || type === 'academic' || type === 'paper' || type === 'research' || category === 'academic' || text.includes('학술') || text.includes('논문') || text.includes('연구') || text.includes('journal') || text.includes('citation') || text.includes('thesis') || host.includes('scholar.google') || host.includes('riss.kr') || host.includes('dbpia.co.kr') || host.includes('kci.go.kr')) return 'academic';
+      if (source.includes('encyc') || source.includes('kin') || type === 'knowledge' || category === 'knowledge' || text.includes('지식') || text.includes('백과') || text.includes('사전')) return 'knowledge';
+      if (source.includes('corporate') || source.includes('homepage') || source.includes('business') || source.includes('company') || type === 'site' || type === 'homepage' || type === 'business' || category === 'site' || text.includes('홈페이지') || text.includes('공식사이트') || text.includes('공식 사이트') || text.includes('기업') || text.includes('회사') || text.includes('business') || text.includes('company') || text.includes('corporate')) return 'site';
       if (isHomepageLikeUrlClient(url) && !isKnownNonSiteHostClient(host) && !source.includes('news')) return 'site';
-      if (source.includes('book') || type === 'book' || text.includes('도서') || text.includes('책 ') || text.includes('isbn')) return 'book';
-      if (source.includes('news') || type === 'news' || text.includes('뉴스') || text.includes('속보') || text.includes('latest') || text.includes('breaking')) return 'news';
-      if (source.includes('blog') || source.includes('cafe') || source.includes('forum') || text.includes('블로그') || text.includes('카페') || text.includes('커뮤니티')) return 'community';
-      if (source.includes('shopping') || source.includes('shop') || source.includes('commerce') || type === 'shopping' || type === 'product' || text.includes('쇼핑') || text.includes('상품') || text.includes('구매') || text.includes('가격')) return 'shopping';
-      if (source.includes('sports') || type === 'sports' || text.includes('스포츠') || text.includes('축구') || text.includes('야구') || text.includes('농구')) return 'sports';
-      if (source.includes('finance') || type === 'finance' || text.includes('금융') || text.includes('증권') || text.includes('주식') || text.includes('환율')) return 'finance';
-      if (source.includes('webtoon') || type === 'webtoon' || text.includes('웹툰') || text.includes('만화') || text.includes('comic') || text.includes('manga')) return 'webtoon';
-      if (mediaType === 'image' || type === 'image' || mediaType === 'video' || type === 'video' || source.includes('image') || source.includes('youtube')) return 'media';
-      if (host.includes('instagram.') || host.includes('facebook.') || host.includes('tiktok.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social')) return 'social';
+      if (source.includes('book') || type === 'book' || category === 'book' || text.includes('도서') || text.includes('책 ') || text.includes('isbn') || host.includes('book.naver') || host.includes('books.google')) return 'book';
+      if (source.includes('news') || type === 'news' || category === 'news' || text.includes('뉴스') || text.includes('속보') || text.includes('latest') || text.includes('breaking')) return 'news';
+      if (source.includes('blog') || type === 'blog' || category === 'blog' || host.includes('blog.') || text.includes('블로그')) return 'blog';
+      if (source.includes('cafe') || type === 'cafe' || category === 'cafe' || host.includes('cafe.') || text.includes('카페')) return 'cafe';
+      if (source.includes('forum') || type === 'community' || category === 'community' || text.includes('커뮤니티') || text.includes('forum') || text.includes('게시판')) return 'community';
+      if (source.includes('shopping') || source.includes('shop') || source.includes('commerce') || type === 'shopping' || type === 'product' || category === 'shopping' || text.includes('쇼핑') || text.includes('상품') || text.includes('구매') || text.includes('가격') || host.includes('shopping.')) return 'shopping';
+      if (source.includes('sports') || type === 'sports' || category === 'sports' || text.includes('스포츠') || text.includes('축구') || text.includes('야구') || text.includes('농구') || text.includes('배구')) return 'sports';
+      if (source.includes('finance') || type === 'finance' || category === 'finance' || text.includes('금융') || text.includes('증권') || text.includes('주식') || text.includes('환율') || text.includes('코스피') || text.includes('나스닥')) return 'finance';
+      if (source.includes('webtoon') || type === 'webtoon' || category === 'webtoon' || text.includes('웹툰') || text.includes('만화') || text.includes('comic') || text.includes('manga')) return 'webtoon';
+      if (mediaType === 'image' || type === 'image' || category === 'image' || source.includes('image') || text.includes('이미지') || text.includes('사진')) return 'image';
+      if (mediaType === 'video' || type === 'video' || category === 'video' || source.includes('youtube') || source.includes('video') || host.includes('youtube.com') || host.includes('youtu.be') || text.includes('영상') || text.includes('유튜브')) return 'video';
+      if (host.includes('instagram.') || host.includes('facebook.') || host.includes('tiktok.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social') || type === 'sns' || category === 'sns') return 'social';
       return 'web';
     }
 
     function displayGroupLabel(group, sample){
       const labels = {
         authority: '주요 정보',
-        news: '뉴스',
+        public_data: '공공자료',
         local_tour: '지도/지역',
+        knowledge: '지식/백과',
+        wiki: '위키',
+        academic: '학술/논문',
         site: '사이트/홈페이지',
         book: '도서',
+        news: '뉴스',
+        blog: '블로그',
+        cafe: '카페',
+        community: '커뮤니티',
+        image: '이미지',
+        video: '영상',
         media: '이미지/영상',
-        social: 'SNS/영상',
-        community: '블로그/카페',
-        knowledge: '지식/백과',
+        social: 'SNS',
         shopping: '쇼핑',
         sports: '스포츠',
         finance: '금융',
         webtoon: '웹툰',
-        web: '웹 결과'
+        web: '일반 웹 결과'
       };
-      return labels[group] || '웹 결과';
+      return labels[group] || '일반 웹 결과';
     }
 
     function displayGroupPreviewLimit(group, sample){
       const n = parseInt(sample && sample.displayGroupPreviewLimit, 10);
       if (n > 0) return n;
 
-      // These limits are presentation hints only. They must never remove
-      // results from pagination. Broad searches such as 서울/부산/뉴욕 should
-      // keep the full candidate stream and only arrange the first viewport in
-      // a Google/Naver-like balanced order.
       const limits = {
         authority: 3,
+        public_data: 3,
         local_tour: 2,
         knowledge: 4,
+        wiki: 4,
+        academic: 4,
         site: 5,
         book: 4,
         news: 5,
+        blog: 5,
+        cafe: 5,
         community: 5,
+        image: 5,
+        video: 5,
         media: 5,
         social: 4,
         shopping: 5,
@@ -1828,7 +1872,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = ['authority','local_tour','knowledge','site','book','news','community','media','social','shopping','sports','finance','webtoon','web'];
+      const order = ['authority','public_data','local_tour','knowledge','wiki','academic','site','book','news','blog','cafe','community','image','video','media','social','shopping','sports','finance','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -1864,7 +1908,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     function diversifyGroupPreviewItems(group, items){
       const list = Array.isArray(items) ? items.slice() : [];
       if(!list.length) return list;
-      const verticals = new Set(['news','community','social','media']);
+      const verticals = new Set(['news','blog','cafe','community','social','image','video','media']);
       if(!verticals.has(group)) return list;
 
       const firstBySource = [];
@@ -2492,6 +2536,24 @@ async function fetchInstantSearchPack(q, type = activeType){
         data.abstract,
         data.content,
         data.text,
+        it && it.desc,
+        it && it.metaDescription,
+        it && it.ogDescription,
+        it && it.lead,
+        it && it.subtitle,
+        it && it.bodyText,
+        payload.desc,
+        payload.metaDescription,
+        payload.ogDescription,
+        payload.lead,
+        payload.subtitle,
+        payload.bodyText,
+        data.desc,
+        data.metaDescription,
+        data.ogDescription,
+        data.lead,
+        data.subtitle,
+        data.bodyText,
         preview.summary,
         preview.description,
         preview.caption
@@ -2847,12 +2909,19 @@ if (it.riskLabel === '⚠️ high-risk') {
       // continue as ordinary web/list results after the category portal blocks.
       const caps = {
         authority: 12,
+        public_data: 24,
         local_tour: 8,
         knowledge: 30,
+        wiki: 30,
+        academic: 30,
         site: 30,
         book: 30,
         news: 30,
+        blog: 30,
+        cafe: 30,
         community: 30,
+        image: 30,
+        video: 30,
         media: 30,
         social: 24,
         shopping: 30,
@@ -2872,7 +2941,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         items: diversifyGroupPreviewItems(g.group, g.items || [])
       }));
       const byGroup = new Map(grouped.map(g => [g.group, g]));
-      const categoryOrder = ['authority','local_tour','knowledge','site','book','news','community','media','social','shopping','sports','finance','webtoon'];
+      const categoryOrder = ['authority','public_data','local_tour','knowledge','wiki','academic','site','book','news','blog','cafe','community','image','video','media','social','shopping','sports','finance','webtoon'];
       const categoryOverflowItems = [];
       const categoryPages = [];
       let page = [];
