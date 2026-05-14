@@ -21,106 +21,73 @@ ready(function () {
     p.endsWith('/search') ||
     p.endsWith('/search/');
 
-  // 🔥 홈/search.html 양쪽 검색창 모두 수신.
-  // 홈 검색창은 searchInput/globalSearchInput 이외의 id/class를 쓰는 경우가 있어
-  // 초기 진입 조건과 대표 input/button 선택을 넓혀야 연관 검색어 드롭다운이 살아난다.
-  const MARU_SEARCH_INPUT_SELECTOR = [
-    '#searchInput',
-    '#globalSearchInput',
-    '#homeSearchInput',
-    '#mainSearchInput',
-    '#heroSearchInput',
-    'input[type="search"]',
-    'input[data-search-input]',
-    'input[name*="search" i]',
-    'input[id*="search" i]',
-    'input[class*="search" i]',
-    'input[placeholder*="검색" i]',
-    'input[placeholder*="search" i]',
-    'input[role="searchbox"]'
-  ].join(',');
-
-  const MARU_SEARCH_BUTTON_SELECTOR = [
-    '#searchBtn',
-    '#globalSearchBtn',
-    '#homeSearchBtn',
-    '#mainSearchBtn',
-    '#heroSearchBtn',
-    'button[data-search-button]',
-    'button[type="submit"]',
-    'input[type="submit"]',
-    'button[id*="search" i]',
-    'button[class*="search" i]',
-    'button[aria-label*="검색" i]',
-    'button[aria-label*="search" i]'
-  ].join(',');
-
-  function isVisibleSearchControl(el){
-    if(!el) return false;
-    try{
-      const style = window.getComputedStyle ? window.getComputedStyle(el) : null;
-      if(style && (style.display === 'none' || style.visibility === 'hidden')) return false;
-      return !!(el.offsetWidth || el.offsetHeight || (el.getClientRects && el.getClientRects().length));
-    }catch(e){
-      return true;
+  // 홈/search.html 모두에서 검색창 ID가 달라도 search.js가 살아 있어야 한다.
+  // 특히 홈 검색창은 연관검색어 드롭다운만으로도 먼저 바인딩되어야 하므로
+  // 고정 ID(searchInput/globalSearchInput)에만 의존하지 않는다.
+  function firstExistingElement(selectors){
+    for (const selector of selectors){
+      try {
+        const el = document.querySelector(selector);
+        if (el) return el;
+      } catch(e) {}
     }
+    return null;
   }
 
   function findPrimarySearchInput(){
-    const direct =
-      document.getElementById('searchInput') ||
+    return document.getElementById('searchInput') ||
       document.getElementById('globalSearchInput') ||
       document.getElementById('homeSearchInput') ||
       document.getElementById('mainSearchInput') ||
-      document.getElementById('heroSearchInput');
-    if(direct) return direct;
-    try{
-      const candidates = Array.from(document.querySelectorAll(MARU_SEARCH_INPUT_SELECTOR))
-        .filter(el => el && String(el.tagName || '').toLowerCase() === 'input' && !el.disabled && !el.readOnly);
-      return candidates.find(isVisibleSearchControl) || candidates[0] || null;
-    }catch(e){
-      return null;
-    }
+      document.getElementById('heroSearchInput') ||
+      firstExistingElement([
+        'input[type="search"]',
+        'input[data-search-input]',
+        'input[name*="search" i]',
+        'input[id*="search" i]',
+        'input[class*="search" i]',
+        'input[placeholder*="검색" i]',
+        'input[placeholder*="Search" i]',
+        'input[placeholder*="search" i]',
+        '[role="searchbox"]'
+      ]);
   }
 
-  function findPrimarySearchButton(anchor){
-    const direct =
-      document.getElementById('searchBtn') ||
+  function findPrimarySearchButton(anchorInput){
+    const direct = document.getElementById('searchBtn') ||
       document.getElementById('globalSearchBtn') ||
       document.getElementById('homeSearchBtn') ||
       document.getElementById('mainSearchBtn') ||
       document.getElementById('heroSearchBtn');
-    if(direct) return direct;
-    try{
-      if(anchor && anchor.closest){
-        const form = anchor.closest('form');
-        if(form){
-          const formBtn = form.querySelector(MARU_SEARCH_BUTTON_SELECTOR);
-          if(formBtn) return formBtn;
-        }
-        const box = anchor.closest('[role="search"], .search, .search-box, .searchbar, .hero-search, .global-search, .main-search');
-        if(box){
-          const boxBtn = box.querySelector(MARU_SEARCH_BUTTON_SELECTOR);
-          if(boxBtn) return boxBtn;
-        }
+    if (direct) return direct;
+
+    try {
+      const form = anchorInput && anchorInput.closest ? anchorInput.closest('form') : null;
+      if (form) {
+        const formBtn = form.querySelector('button[type="submit"], input[type="submit"], button:not([type]), [data-search-button]');
+        if (formBtn) return formBtn;
       }
-      const candidates = Array.from(document.querySelectorAll(MARU_SEARCH_BUTTON_SELECTOR))
-        .filter(el => el && !el.disabled);
-      return candidates.find(isVisibleSearchControl) || candidates[0] || null;
-    }catch(e){
-      return null;
-    }
+    } catch(e) {}
+
+    return firstExistingElement([
+      'button[data-search-button]',
+      'button[id*="search" i]',
+      'button[class*="search" i]',
+      'input[type="submit"][value*="검색" i]',
+      'button[aria-label*="search" i]',
+      'button[aria-label*="검색" i]'
+    ]);
   }
 
   const input = findPrimarySearchInput();
   const btn = findPrimarySearchButton(input);
-  const hasSearchUI = !!input;
+  const hasSearchUI = !!input || !!btn;
 
   if (!isSearchPage && !hasSearchUI) return;
 
     const statusEl = document.getElementById('searchStatus');
     const resultsEl = document.getElementById('searchResults');
-    const status  = statusEl || { textContent: '', parentNode: null };
+    const status  = statusEl || { textContent: '' };
     const results = resultsEl || document.createElement('div');
         
     if (!input) return;
@@ -136,8 +103,8 @@ ready(function () {
     const MIN_SMOOTH_CANDIDATES = 120;
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
-    const INTAKE_CONCURRENCY = 3;
-    const INTAKE_BURST_DELAY_MS = 60;
+    const INTAKE_CONCURRENCY = 6;
+    const INTAKE_BURST_DELAY_MS = 20;
 
     let allItems = [];
     let serverPagedMode = false;
@@ -700,8 +667,19 @@ if (q0) {
   input.value = q0;
 }
 
-if (isSearchPage) ensureSearchTabs();
+ensureSearchTabs();
 bindRelatedSearchSuggest();
+try {
+  const form = input && input.closest ? input.closest('form') : null;
+  if (form && !form.__maruSearchSubmitBound) {
+    form.__maruSearchSubmitBound = true;
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      runGlobalSearch();
+    });
+  }
+} catch(e) {}
 updateSearchTabsActive();
 
 if (q0) {
@@ -1088,6 +1066,9 @@ async function fetchSearch(q, type = activeType, page = 1){
   sp.set('routeOwner', 'sanmaru');
   sp.set('naturalFlow', '1');
   sp.set('smoothIntake', '1');
+  sp.set('openPipe', '1');
+  sp.set('streamFullWindow', '1');
+  sp.set('bodyWindowLimit', String(adaptiveSearchTarget(q, safeType)));
   sp.set('noBlockingWide', '1');
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
@@ -1129,6 +1110,9 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('providerPassthrough', '1');
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
+  sp.set('openPipe', '1');
+  sp.set('streamFullWindow', '1');
+  sp.set('bodyWindowLimit', String(adaptiveSearchTarget(q, safeType)));
   sp.set('reason', 'search-ui-first-paint');
 
   try {
@@ -3142,17 +3126,8 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (normalizeSearchType(activeType) === 'all') {
         const model = buildPortalPageModel();
         const portalCount = model && model.virtualCount ? model.virtualCount : buildClientVisibleStream(currentPage || 1).length;
-        const openPipeFloor = lastQuery
-          ? Math.min(MAX_SMOOTH_CANDIDATES, Math.max(
-              serverTotalItems || 0,
-              authoritativeServerTotalItems || 0,
-              allItems.length || 0,
-              portalCount || 0,
-              INITIAL_PRELOAD_TARGET
-            ))
-          : 0;
         const preloadFloor = lastQuery ? Math.min(INITIAL_PRELOAD_TARGET, Math.max(allItems.length || 0, portalCount || 0)) : 0;
-        return Math.max(portalCount, allItems.length || 0, preloadFloor, openPipeFloor);
+        return Math.max(portalCount, allItems.length || 0, preloadFloor);
       }
       if(serverPagedMode && serverTotalItems > 0) return serverTotalItems;
       return buildClientVisibleStream(currentPage || 1).length;
@@ -3452,7 +3427,7 @@ async function runSearch(q, type = activeType){
     // Do not wait for Sanmaru/MaruSearch to finish all lanes. Start the faucet
     // shortly after first paint, but let the page-1 300-window seed pages 1~12
     // first when it arrives quickly.
-    intakeTimer = setTimeout(() => startIntakeOnce('first-paint-timer'), 700);
+    intakeTimer = setTimeout(() => startIntakeOnce('first-paint-timer'), 120);
 
     maruWindowPromise.then(res => {
       if(runSearch._seq !== seq || !res || res.error) return;
