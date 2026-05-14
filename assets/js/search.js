@@ -1111,7 +1111,9 @@ const SERP_VERTICAL_FETCH_LIMITS = {
   webtoon: 6
 };
 
-const SERP_INITIAL_PREVIEW_WAIT_MS = 850;
+const SERP_INITIAL_PREVIEW_WAIT_MS = 0;
+const SERP_CATEGORY_PREVIEW_DELAY_MS = 1200;
+const SERP_VERTICAL_PREVIEW_MAX_PARALLEL = 2;
 
 function serpPreviewCap(group){
   return SERP_SECTION_PREVIEW_CAPS[group] || 5;
@@ -1217,7 +1219,7 @@ async function fetchVerticalPreviewSearch(q, route){
 
 async function startSerpVerticalPreviewBackfill(q, seq){
   if(!q || runSearch._seq !== seq || normalizeSearchType(activeType) !== 'all') return;
-  const maxParallel = 4;
+  const maxParallel = SERP_VERTICAL_PREVIEW_MAX_PARALLEL;
   let cursor = 0;
 
   async function worker(){
@@ -1245,6 +1247,15 @@ async function startSerpVerticalPreviewBackfill(q, seq){
   const workers = [];
   for(let i=0; i<Math.min(maxParallel, SERP_VERTICAL_PREVIEW_ROUTES.length); i++) workers.push(worker());
   await Promise.all(workers).catch(() => null);
+}
+
+
+function deferSerpVerticalPreviewBackfill(q, seq){
+  if(!q || runSearch._seq !== seq || normalizeSearchType(activeType) !== 'all') return;
+  setTimeout(() => {
+    if(runSearch._seq !== seq) return;
+    startSerpVerticalPreviewBackfill(q, seq).catch(() => null);
+  }, Math.max(0, SERP_CATEGORY_PREVIEW_DELAY_MS));
 }
 
 async function fetchInstantSearchPack(q, type = activeType){
@@ -2030,20 +2041,22 @@ async function fetchInstantSearchPack(q, type = activeType){
     const NEWS_MEDIUM_PRIORITY = [
       ['naver', /(^|\.)news\.naver\.com$|(^|\.)naver\.com$|네이버/i],
       ['google-news', /news\.google\.|구글\s*뉴스|google\s*news/i],
-      ['kbs', /(^|\.)kbs\.co\.kr$|kbs/i],
-      ['mbc', /(^|\.)mbc\.co\.kr$|mbc/i],
-      ['sbs', /(^|\.)sbs\.co\.kr$|sbs/i],
-      ['jtbc', /(^|\.)jtbc\.co\.kr$|jtbc/i],
       ['ytn', /(^|\.)ytn\.co\.kr$|ytn/i],
       ['yonhap', /yna\.co\.kr|yonhap|연합/i],
-      ['chosun', /chosun\.com|조선/i],
-      ['joongang', /joongang\.co\.kr|중앙/i],
-      ['donga', /donga\.com|동아/i],
+      ['herald', /heraldcorp\.com|herald경제|헤럴드경제|헤럴드/i],
+      ['mbn', /mbn\.co\.kr|mk\.co\.kr\/news\/mbn|mbn/i],
       ['hankyung', /hankyung\.com|한국경제/i],
       ['mk', /mk\.co\.kr|매일경제/i],
       ['seoul', /seoul\.co\.kr|서울신문/i],
+      ['kbs', /(^|\.)kbs\.co\.kr$|kbs/i],
+      ['sbs', /(^|\.)sbs\.co\.kr$|sbs/i],
+      ['jtbc', /(^|\.)jtbc\.co\.kr$|jtbc/i],
       ['channel-a', /ichannela\.com|채널a/i],
-      ['tvchosun', /tvchosun\.com|tv\s*조선|티비조선/i]
+      ['tvchosun', /tvchosun\.com|tv\s*조선|티비조선/i],
+      ['chosun', /chosun\.com|조선/i],
+      ['joongang', /joongang\.co\.kr|중앙/i],
+      ['donga', /donga\.com|동아/i],
+      ['mbc', /(^|\.)mbc\.co\.kr$|mbc/i]
     ];
 
     function newsMediumKeyForItem(it){
@@ -3316,12 +3329,11 @@ async function runSearch(q, type = activeType){
   clearPager();
 
   try {
-    const initialSerpPreviewPromise = normalizeSearchType(activeType) === 'all'
-      ? collectInitialSerpPreviewItems(qq, seq, SERP_INITIAL_PREVIEW_WAIT_MS)
-      : Promise.resolve([]);
-
+    // Speed-first: do not block the first paint on vertical/category preview calls.
+    // Sanmaru/MaruSearch instant supply is rendered immediately; category preview
+    // enrichment is deferred so the initial page does not wait behind extra fetches.
     const instantPack = await fetchInstantSearchPack(qq, activeType);
-    const initialSerpPreviewItems = await initialSerpPreviewPromise.catch(() => []);
+    const initialSerpPreviewItems = [];
     if (runSearch._seq !== seq) return;
 
     lastSearchPayload = instantPack && instantPack.payload || null;
@@ -3356,14 +3368,12 @@ async function runSearch(q, type = activeType){
       status.textContent = `${serverTotalItems || allItems.length} results for "${qq}" · ${getTypeLabel(activeType)} · receiving...`;
     }
 
-    startSerpVerticalPreviewBackfill(qq, seq).catch(() => null);
     startInitialPageWindowBackfill(qq, activeType, seq).catch(() => null);
+    deferSerpVerticalPreviewBackfill(qq, seq);
     startContinuousIntake(qq, activeType, seq);
   } catch(e){
     console.error(e);
-    const initialSerpPreviewItems = normalizeSearchType(activeType) === 'all'
-      ? await collectInitialSerpPreviewItems(qq, seq, SERP_INITIAL_PREVIEW_WAIT_MS).catch(() => [])
-      : [];
+    const initialSerpPreviewItems = [];
     const fallbackPack = await fetchSearch(qq, activeType, 1);
     if (runSearch._seq !== seq) return;
     const fallbackItems = dedupeItems(filterSearchResultItems(normalizeItems(fallbackPack && fallbackPack.payload || fallbackPack))).slice(0, INITIAL_PRELOAD_TARGET);
@@ -3379,8 +3389,8 @@ async function runSearch(q, type = activeType){
     if(allItems.length) renderPage(1);
     else { results.innerHTML = ''; clearPager(); }
     status.textContent = allItems.length ? `${serverTotalItems || allItems.length} results for "${qq}" · receiving...` : `No results for "${qq}"`;
-    startSerpVerticalPreviewBackfill(qq, seq).catch(() => null);
     startInitialPageWindowBackfill(qq, activeType, seq).catch(() => null);
+    deferSerpVerticalPreviewBackfill(qq, seq);
     startContinuousIntake(qq, activeType, seq);
   }
 }
