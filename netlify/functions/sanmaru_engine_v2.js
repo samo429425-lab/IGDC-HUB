@@ -317,11 +317,11 @@ function mountRegistrySnapshot(){
 // Sanmaru's front gateway/body, not as the decision owner.
 // -----------------------------------------------------------------------------
 const SANMARU_CANONICAL_CATEGORIES = {
-  official:{ label:"공식/권위", weight:98, routes:["official-web","google","naver","bing","duckduckgo","yahoo","searchbank-index","searchbank"] },
-  government:{ label:"정부/공공기관", weight:96, routes:["official-web","public-data","google","naver","bing"] },
+  official:{ label:"주요 정보", weight:98, routes:["official-web","google","naver","bing","duckduckgo","yahoo","searchbank-index","searchbank"] },
+  government:{ label:"공공기관", weight:96, routes:["official-web","public-data","google","naver","bing"] },
   public_data:{ label:"공공 데이터", weight:94, routes:["public-data","official-web","google","bing"] },
   map_local:{ label:"지도/주소/지역", weight:92, routes:["naver","google","bing","maru-search-wide-gateway"] },
-  tourism:{ label:"관광/지역 홍보", weight:90, routes:["official-web","naver","google","youtube","social-public-web"] },
+  tourism:{ label:"지도/지역", weight:90, routes:["official-web","naver","google","youtube","social-public-web"] },
   news:{ label:"뉴스", weight:88, routes:["naver","google","bing","maru-search-wide-gateway"] },
   knowledge:{ label:"지식/백과", weight:86, routes:["wiki-knowledge","google","naver","bing","searchbank-index"] },
   wiki:{ label:"위키", weight:85, routes:["wiki-knowledge","google","bing"] },
@@ -1808,7 +1808,7 @@ function canonicalItem(raw, query, adapterName){
     imageSet: images,
     searchCategory: category,
     displayGroup: it.displayGroup || displayGroupForCategory(category),
-    displayGroupPreviewLimit: it.displayGroupPreviewLimit || (displayGroupForCategory(category) === "media" ? 4 : 3),
+    displayGroupPreviewLimit: it.displayGroupPreviewLimit || ({ authority:4, knowledge:3, local_tour:3, news:6, media:5, social:5, community:6 }[displayGroupForCategory(category)] || 5),
     sourceTrust: trust,
     sanmaruScore: baseScore,
     indexText: compactSpaces(text).slice(0, 1200),
@@ -2953,10 +2953,17 @@ function buildSanmaruInstantOsPackage(q, opts){
     ? Math.min(SANMARU_MAX_PAGER_PAGES, Math.max(1, Math.ceil(reportedTotalCandidates / perPage)))
     : 0;
   const pageItems = items.slice((requestedPage - 1) * perPage, requestedPage * perPage);
-  const firstPaintLimit = Math.max(perPage, Math.min(
-    clampInt(firstNonEmpty(opts.firstPaintLimit, opts.initialRenderTarget, opts.initialPreloadTarget, opts.limit), perPage * 2, perPage, perPage * 2),
-    perPage * 2
-  ));
+  // Sanmaru is the prepared information OS/data-bank layer. For search UI
+  // handoff it must not cut the supply down to only the visible page. Return the
+  // requested first preload window (normally 300 = 12 pages × 25) immediately;
+  // search.js will render page 1 first and cache the rest.
+  const requestedFirstWindow = clampInt(
+    firstNonEmpty(opts.firstPaintLimit, opts.initialRenderTarget, opts.initialPreloadTarget, opts.limit),
+    Math.max(perPage * 12, 300),
+    perPage,
+    MAX_LIMIT
+  );
+  const firstPaintLimit = Math.max(perPage, Math.min(requestedFirstWindow, finalTarget, MAX_LIMIT));
   const responseItems = requestedPage === 1
     ? items.slice(0, firstPaintLimit)
     : pageItems.slice(0, perPage);
@@ -2973,7 +2980,7 @@ function buildSanmaruInstantOsPackage(q, opts){
     totalPages: reportedTotalPages,
     hasNextPage: requestedPage < reportedTotalPages,
     nextPage: requestedPage < reportedTotalPages ? requestedPage + 1 : null,
-    responseMode: "instant-preload-window-current-page-render"
+    responseMode: "instant-preload-window-cache-first-page-render"
   };
 
   return {
@@ -3015,7 +3022,7 @@ function buildSanmaruInstantOsPackage(q, opts){
       providerPassthroughCount: providerPassthroughItems.length,
       elapsedMs: nowMs() - started,
       instantSupply: true,
-      responseMode: "first-supply-package",
+      responseMode: "first-preload-supply-package",
       doesNotBlockOnProviders: true,
       doesNotReplaceFullSearch: true,
       fullSearchPolicy: "maru-search-wide-provider-pass-continues-or-can-be-called-after-first-render",
