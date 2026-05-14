@@ -48,9 +48,8 @@ ready(function () {
     const MIN_SMOOTH_CANDIDATES = 120;
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
-    const CONTINUOUS_PIPELINE_TARGET = MAX_SMOOTH_CANDIDATES;
-    const INTAKE_CONCURRENCY = 5;
-    const INTAKE_BURST_DELAY_MS = 10;
+    const INTAKE_CONCURRENCY = 6;
+    const INTAKE_BURST_DELAY_MS = 0;
 
     let allItems = [];
     let serverPagedMode = false;
@@ -874,39 +873,71 @@ function sleepIntake(ms){
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function firstMissingPipelinePage(startPage, maxPages){
-  const start = Math.max(2, Number(startPage) || 2);
-  const max = Math.max(start, Number(maxPages) || start);
-  for(let page = start; page <= max; page++){
-    if(!loadedServerPages.has(page)) return page;
+
+function mergeIncomingSearchPage(page, pageSlice, pack){
+  const list = dedupeItems(filterSearchResultItems(pageSlice || []));
+  if(!list.length) return false;
+  loadedServerPages.set(page, list.slice(0, PAGE_SIZE));
+  allItems = dedupeItems(allItems.concat(list));
+  if(pack && pack.payload) lastSearchPayload = pack.payload;
+  updateProgressiveTotalFromPayload(pack && pack.payload, allItems.length);
+  return true;
+}
+
+function shouldRefreshCurrentSearchView(newPage){
+  if(normalizeSearchType(activeType) !== 'all') return newPage === currentPage;
+  if(newPage === currentPage) return true;
+  // Early SERP pages are category-module pages. When a newly received page brings
+  // another vertical/category, refresh the current viewport so the user sees
+  // diverse categories immediately instead of waiting for manual pagination.
+  return currentPage <= 2 && newPage <= Math.max(INITIAL_PRELOAD_PAGES, 12);
+}
+
+function refreshSearchViewAfterIntake(newPage){
+  if(shouldRefreshCurrentSearchView(newPage)) renderPage(currentPage || 1, true);
+  else drawPager();
+}
+
+async function startInitialPageWindowBackfill(q, type, seq){
+  if(!q || runSearch._seq !== seq) return;
+  const pages = [];
+  for(let page = 1; page <= INITIAL_PRELOAD_PAGES; page++) pages.push(page);
+  let cursor = 0;
+
+  async function worker(){
+    while(runSearch._seq === seq && cursor < pages.length){
+      const page = pages[cursor++];
+      try{
+        const pack = await fetchSearch(q, type, page);
+        if(runSearch._seq !== seq) return;
+        const pageSlice = pageItemsFromPack(pack);
+        if(mergeIncomingSearchPage(page, pageSlice, pack)){
+          refreshSearchViewAfterIntake(page);
+          status.textContent = `${serverTotalItems || allItems.length} results for "${q}" · ${getTypeLabel(type)} · receiving...`;
+        }
+      }catch(e){
+        console.warn('initial page window backfill skipped:', page, e);
+      }
+      if(INTAKE_BURST_DELAY_MS > 0) await sleepIntake(INTAKE_BURST_DELAY_MS);
+    }
   }
-  return max + 1;
+
+  const workers = [];
+  for(let i = 0; i < Math.min(INTAKE_CONCURRENCY, pages.length); i++) workers.push(worker());
+  await Promise.all(workers).catch(() => null);
 }
 
 function startContinuousIntake(q, type, seq){
   if(!q || runSearch._seq !== seq) return;
   const token = ++continuousIntakeSeq;
   continuousIntakeActive = true;
-
-  // The initial 300 is only the first preload window. The search pipeline must
-  // keep receiving page windows after that, like an open faucet. Use the larger
-  // server/adaptive/pipeline target for background intake, while Maru Search
-  // still controls external-provider budgets on the server side.
-  const target = Math.max(
-    CONTINUOUS_PIPELINE_TARGET,
-    adaptiveSearchTarget(q, type),
-    authoritativeServerTotalItems || 0,
-    serverTotalItems || 0,
-    INITIAL_PRELOAD_TARGET
-  );
+  const target = adaptiveSearchTarget(q, type);
   authoritativeServerTotalItems = Math.max(authoritativeServerTotalItems || 0, target);
-  updateProgressiveTotalFromPayload(lastSearchPayload || {}, Math.max(target, allItems.length || 0), { expandAll:true });
+  updateProgressiveTotalFromPayload(lastSearchPayload || {}, Math.max(target, allItems.length || 0));
 
-  const maxPages = Math.min(
-    MAX_PROGRESSIVE_PAGER_PAGES,
-    Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(target / PAGE_SIZE))
-  );
-  let nextPage = firstMissingPipelinePage(2, maxPages);
+  let nextPage = Math.max(INITIAL_PRELOAD_PAGES + 1, preloadPageCountFromItems(allItems) + 1);
+  const totalForIntake = Math.max(target, authoritativeServerTotalItems || 0, serverTotalItems || 0, allItems.length || 0);
+  const maxPages = Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(totalForIntake / PAGE_SIZE)));
 
   async function worker(){
     while(continuousIntakeActive && continuousIntakeSeq === token && runSearch._seq === seq && nextPage <= maxPages){
@@ -915,14 +946,9 @@ function startContinuousIntake(q, type, seq){
       try{
         const pack = await fetchSearch(q, type, page);
         if(!continuousIntakeActive || continuousIntakeSeq !== token || runSearch._seq !== seq) return;
-        const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack))).slice(0, PAGE_SIZE);
-        if(pageSlice.length){
-          loadedServerPages.set(page, pageSlice);
-          allItems = dedupeItems(allItems.concat(pageSlice));
-          lastSearchPayload = pack && pack.payload || lastSearchPayload;
-          updateProgressiveTotalFromPayload(pack && pack.payload, Math.max(target, allItems.length), { expandAll:true });
-          if(page === currentPage) renderPage(page, true);
-          else drawPager();
+        const pageSlice = pageItemsFromPack(pack);
+        if(mergeIncomingSearchPage(page, pageSlice, pack)){
+          refreshSearchViewAfterIntake(page);
           status.textContent = `${serverTotalItems || allItems.length} results for "${q}" · ${getTypeLabel(type)} · receiving...`;
         }
       }catch(e){
@@ -1033,42 +1059,6 @@ async function fetchSearch(q, type = activeType, page = 1){
   } catch (e) {
     console.error('fetchSearch failed:', e);
     return { items: [], payload: null, pageItems: [], viewportSections: [] };
-  }
-}
-
-
-async function ensureInitialPreloadFromMaruSearch(q, type, seq){
-  if(!q || runSearch._seq !== seq) return false;
-  if((Array.isArray(allItems) ? allItems.length : 0) >= INITIAL_PRELOAD_TARGET) return false;
-
-  try{
-    const pack = await fetchSearch(q, type, 1);
-    if(runSearch._seq !== seq) return false;
-
-    const candidates = [];
-    if(pack && Array.isArray(pack.items)) candidates.push(...pack.items);
-    if(pack && pack.payload) candidates.push(...normalizeItems(pack.payload));
-    candidates.push(...pageItemsFromPack(pack));
-
-    const preloadItems = dedupeItems(filterSearchResultItems(candidates));
-    if(!preloadItems.length) return false;
-
-    const before = Array.isArray(allItems) ? allItems.length : 0;
-    allItems = dedupeItems((Array.isArray(allItems) ? allItems : []).concat(preloadItems)).slice(0, Math.max(INITIAL_PRELOAD_TARGET, before));
-    seedLoadedServerPagesFromItems(allItems, INITIAL_PRELOAD_TARGET);
-    lastSearchPayload = (pack && pack.payload) || lastSearchPayload;
-    updateProgressiveTotalFromPayload(pack && pack.payload, Math.max(adaptiveSearchTarget(q, type), allItems.length, INITIAL_PRELOAD_TARGET));
-    serverTotalItems = Math.max(serverTotalItems || 0, INITIAL_PRELOAD_TARGET, allItems.length);
-    progressivePagerPages = Math.max(progressivePagerPages || 0, INITIAL_PROGRESSIVE_PAGER_PAGES, preloadPageCountFromItems(allItems));
-
-    if(currentPage === 1) renderPage(1, true);
-    else drawPager();
-
-    status.textContent = `${serverTotalItems || allItems.length} results for "${q}" · ${getTypeLabel(type)} · receiving...`;
-    return allItems.length > before;
-  }catch(e){
-    console.warn('initial maru-search preload skipped:', e);
-    return false;
   }
 }
 
@@ -1804,16 +1794,10 @@ async function fetchInstantSearchPack(q, type = activeType){
       return limits[group] || 6;
     }
 
-    function shouldUseDisplayGroups(slice, page){
+    function shouldUseDisplayGroups(slice){
       if (!Array.isArray(slice) || !slice.length) return false;
       if (normalizeSearchType(activeType) !== 'all') return false;
-
-      // Category boards are a first-page presentation only. Subsequent pages
-      // must continue the natural result stream without re-creating the same
-      // section headers such as 주요 정보 / 지식·백과 / 지도·지역 again.
-      if (Math.max(1, parseInt(page, 10) || 1) !== 1) return false;
-
-      return slice.some(it => it && (it.displayGroup || it.displayGroupLabel));
+      return slice.some(it => it && ((Array.isArray(it.items) && it.group) || it.displayGroup || it.displayGroupLabel));
     }
 
     function groupSliceForDisplay(slice){
@@ -2733,43 +2717,23 @@ if (it.riskLabel === '⚠️ high-risk') {
       return `${lastQuery || input.value || ''}::${activeType || 'all'}::${page}::${group}`;
     }
 
-    function buildClientVisibleStream(page){
+    function itemKeyForDisplayPlan(it){
+      return String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
+    }
+
+    function buildSearchResultDisplayPlan(){
       const sourceItems = Array.isArray(allItems) ? allItems : [];
-      if (!sourceItems.length) return [];
-      if (normalizeSearchType(activeType) !== 'all') return sourceItems.slice();
+      if (!sourceItems.length) return { modulePages: [], webItems: [], pageCount: 0, totalDisplayUnits: 0 };
 
-      const groups = groupSliceForDisplay(sourceItems).map(g => Object.assign({}, g, {
-        items: diversifyGroupPreviewItems(g.group, g.items || [])
-      }));
-      const byGroup = new Map(groups.map(g => [g.group, Object.assign({}, g, { cursor: 0 })]));
-      const used = new Set();
-      const stream = [];
-
-      function itemKey(it){
-        return String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
+      // Non-all tabs are pure result lists. The category-board plan is only for
+      // broad all-tab SERP pages.
+      if (normalizeSearchType(activeType) !== 'all') {
+        const pageCount = Math.max(1, Math.ceil(sourceItems.length / PAGE_SIZE));
+        return { modulePages: [], webItems: sourceItems.slice(), pageCount, totalDisplayUnits: sourceItems.length };
       }
 
-      function pushItem(it, groupInfo, idx, opts){
-        const key = itemKey(it);
-        if(key && used.has(key)) return false;
-        if(key) used.add(key);
-        stream.push(Object.assign({}, it, {
-          displayGroup: groupInfo.group,
-          displayGroupLabel: displayGroupLabel(groupInfo.group, it),
-          displayGroupVisibleIndex: idx,
-          displayGroupSourceTotal: groupInfo.items.length,
-          displayGroupCollapsedCount: Math.max(0, (groupInfo.items.length || 0) - (idx + 1)),
-          collapsedAwareViewportCard: true,
-          visibleViewportCard: true,
-          generalWebContinuation: !!(opts && opts.general)
-        }));
-        return true;
-      }
-
-      // Lead SERP zone: the first viewport is category-balanced. Overflow still
-      // keeps its display-group metadata, but it must remain available in the
-      // normal preloaded page stream immediately after the representative lead.
-      const leadCaps = {
+      const groupOrder = ['authority','knowledge','local_tour','news','community','social','media','shopping','sports','finance','webtoon'];
+      const previewCaps = {
         authority: 5,
         knowledge: 5,
         local_tour: 5,
@@ -2778,54 +2742,118 @@ if (it.riskLabel === '⚠️ high-risk') {
         social: 6,
         media: 6,
         shopping: 5,
-        sports: 4,
-        finance: 4,
-        webtoon: 4,
-        web: 8
+        sports: 5,
+        finance: 5,
+        webtoon: 5
       };
-      const leadOrder = ['authority','knowledge','local_tour','news','community','social','media','shopping','sports','finance','webtoon','web'];
-      leadOrder.forEach(group => {
+
+      const groups = groupSliceForDisplay(sourceItems).map(g => Object.assign({}, g, {
+        items: diversifyGroupPreviewItems(g.group, g.items || [])
+      }));
+      const byGroup = new Map(groups.map(g => [g.group, g]));
+      const usedKeys = new Set();
+      const modules = [];
+
+      groupOrder.forEach(group => {
         const g = byGroup.get(group);
-        if(!g || !Array.isArray(g.items)) return;
-        const cap = leadCaps[group] || 5;
-        let picked = 0;
-        while(g.cursor < g.items.length && picked < cap){
-          const idx = g.cursor++;
-          if(pushItem(g.items[idx], g, idx)) picked++;
-        }
+        if(!g || !Array.isArray(g.items) || !g.items.length) return;
+        const cap = Math.max(3, previewCaps[group] || displayGroupPreviewLimit(group, g.items[0]) || 5);
+        const previewItems = [];
+        const hiddenItems = [];
+
+        g.items.forEach((it, idx) => {
+          const key = itemKeyForDisplayPlan(it);
+          if(key && usedKeys.has(key)) return;
+          if(key) usedKeys.add(key);
+          const decorated = Object.assign({}, it, {
+            displayGroup: group,
+            displayGroupLabel: displayGroupLabel(group, it),
+            displayGroupVisibleIndex: idx,
+            displayGroupSourceTotal: g.items.length,
+            displayGroupCollapsedCount: Math.max(0, g.items.length - (idx + 1)),
+            collapsedAwareViewportCard: true,
+            visibleViewportCard: true,
+            categoryModuleItem: true
+          });
+          if(previewItems.length < cap) previewItems.push(decorated);
+          else hiddenItems.push(decorated);
+        });
+
+        if(!previewItems.length) return;
+        modules.push({
+          group,
+          label: displayGroupLabel(group, previewItems[0]),
+          previewLimit: previewItems.length,
+          previewItems,
+          hiddenItems,
+          items: previewItems.concat(hiddenItems),
+          sourceTotal: previewItems.length + hiddenItems.length,
+          displaySlotCount: previewItems.length,
+          categoryModule: true,
+          slotAwareViewport: true
+        });
       });
 
-      // Continuation zone: keep every remaining candidate in the received
-      // preload pool. The first viewport is still balanced by the lead caps above,
-      // but the rest of the initial 300 candidates must be available immediately
-      // for page 2~12 instead of waiting for delayed page fetches. Heavy verticals
-      // such as news/SNS/media/blog remain grouped by display metadata, but they
-      // no longer get excluded from normal pagination.
-      for(let i = 0; i < sourceItems.length; i++){
-        const it = sourceItems[i];
-        const group = displayGroupOfItem(it);
-        const g = byGroup.get(group) || { group, items: [it], cursor: 0 };
-        let idx = -1;
-        if(Array.isArray(g.items)){
-          const key = itemKey(it);
-          idx = g.items.findIndex(x => itemKey(x) === key);
+      // Pack category modules across pages once. Do not repeat the same category
+      // on page 2/3; its overflow stays behind the module's 더보기 button.
+      const modulePages = [];
+      let current = [];
+      let remaining = PAGE_SIZE;
+      modules.forEach(mod => {
+        const slots = Math.max(1, parseInt(mod.displaySlotCount, 10) || (mod.previewItems ? mod.previewItems.length : 1));
+        if(current.length && slots > remaining){
+          modulePages.push(current);
+          current = [];
+          remaining = PAGE_SIZE;
         }
-        pushItem(it, g, idx >= 0 ? idx : i, { general: true });
-      }
+        current.push(mod);
+        remaining -= Math.min(slots, PAGE_SIZE);
+      });
+      if(current.length) modulePages.push(current);
 
-      return stream;
+      // General web results begin only after the category board is exhausted.
+      // Category overflow is NOT repeated here because it lives inside each
+      // section's drop-down list.
+      const webGroup = byGroup.get('web');
+      const webItems = [];
+      (webGroup && Array.isArray(webGroup.items) ? webGroup.items : sourceItems).forEach((it, idx) => {
+        const group = displayGroupOfItem(it);
+        if(group !== 'web') return;
+        const key = itemKeyForDisplayPlan(it);
+        if(key && usedKeys.has(key)) return;
+        if(key) usedKeys.add(key);
+        webItems.push(Object.assign({}, it, {
+          displayGroup: 'web',
+          displayGroupLabel: displayGroupLabel('web', it),
+          displayGroupVisibleIndex: idx,
+          displayGroupSourceTotal: webGroup && webGroup.items ? webGroup.items.length : webItems.length + 1,
+          generalWebContinuation: true,
+          visibleViewportCard: true
+        }));
+      });
+
+      const pageCount = modulePages.length + Math.ceil(webItems.length / PAGE_SIZE);
+      const totalDisplayUnits = (modulePages.length * PAGE_SIZE) + webItems.length;
+      return { modulePages, webItems, pageCount: Math.max(1, pageCount), totalDisplayUnits: Math.max(PAGE_SIZE, totalDisplayUnits) };
+    }
+
+    function buildClientVisibleStream(page){
+      const sourceItems = Array.isArray(allItems) ? allItems : [];
+      if (!sourceItems.length) return [];
+      if (normalizeSearchType(activeType) !== 'all') return sourceItems.slice();
+      const plan = buildSearchResultDisplayPlan();
+      const moduleCount = plan.modulePages.length;
+      if(page <= moduleCount) return plan.modulePages[page - 1] || [];
+      const webPage = page - moduleCount;
+      const start = (webPage - 1) * PAGE_SIZE;
+      return (plan.webItems || []).slice(start, start + PAGE_SIZE);
     }
 
     function visibleItemsForPage(page){
       const start = (page - 1) * PAGE_SIZE;
 
-      // In the all tab, never let a raw server page full of one vertical
-      // such as news occupy the viewport. Rebuild a balanced visible stream
-      // from the accumulated pool so collapsed/overflow items do not consume
-      // the 25 visible slots.
       if (normalizeSearchType(activeType) === 'all') {
-        const stream = buildClientVisibleStream(page);
-        return stream.slice(start, start + PAGE_SIZE);
+        return buildClientVisibleStream(page);
       }
 
       if(serverPagedMode && loadedServerPages.has(page)){
@@ -2836,14 +2864,11 @@ if (it.riskLabel === '⚠️ high-risk') {
     }
 
     function visibleItemCountForPager(){
-      // In the all tab the pager must count the client visible stream, not the
-      // raw server total. Collapsed category overflow remains behind 더보기 and
-      // must not consume page slots.
       if (normalizeSearchType(activeType) === 'all') {
-        const visibleCount = buildClientVisibleStream(currentPage || 1).length;
-        const preloadFloor = lastQuery ? INITIAL_PRELOAD_TARGET : 0;
-        const progressiveFloor = Math.min(serverTotalItems || 0, INITIAL_PRELOAD_TARGET);
-        return Math.max(visibleCount, progressiveFloor, preloadFloor);
+        const plan = buildSearchResultDisplayPlan();
+        const planUnits = plan && plan.totalDisplayUnits ? plan.totalDisplayUnits : 0;
+        const progressiveFloor = Math.min(serverTotalItems || 0, MAX_PROGRESSIVE_PAGER_PAGES * PAGE_SIZE);
+        return Math.max(planUnits, progressiveFloor, lastQuery ? PAGE_SIZE : 0);
       }
       if(serverPagedMode && serverTotalItems > 0) return serverTotalItems;
       return buildClientVisibleStream(currentPage || 1).length;
@@ -2876,7 +2901,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       // Render the already-balanced visible stream. Do not rebuild page 1 from a
       // raw source slice, because a raw slice may contain only news/logo/map cards
       // and then hidden overflow still blocks the following categories from moving up.
-      if (shouldUseDisplayGroups(slice, page)) {
+      if (shouldUseDisplayGroups(slice)) {
         renderGroupedSlice(slice, page);
       } else {
         slice.forEach(it => renderItem(it));
@@ -3085,8 +3110,8 @@ async function runSearch(q, type = activeType){
       status.textContent = `${serverTotalItems || allItems.length} results for "${qq}" · ${getTypeLabel(activeType)} · receiving...`;
     }
 
-    if(runSearch._seq === seq) startContinuousIntake(qq, activeType, seq);
-    ensureInitialPreloadFromMaruSearch(qq, activeType, seq).catch(() => null);
+    startInitialPageWindowBackfill(qq, activeType, seq).catch(() => null);
+    startContinuousIntake(qq, activeType, seq);
   } catch(e){
     console.error(e);
     const fallbackPack = await fetchSearch(qq, activeType, 1);
@@ -3104,8 +3129,8 @@ async function runSearch(q, type = activeType){
     if(allItems.length) renderPage(1);
     else { results.innerHTML = ''; clearPager(); }
     status.textContent = allItems.length ? `${serverTotalItems || allItems.length} results for "${qq}" · receiving...` : `No results for "${qq}"`;
-    if(runSearch._seq === seq) startContinuousIntake(qq, activeType, seq);
-    ensureInitialPreloadFromMaruSearch(qq, activeType, seq).catch(() => null);
+    startInitialPageWindowBackfill(qq, activeType, seq).catch(() => null);
+    startContinuousIntake(qq, activeType, seq);
   }
 }
 
