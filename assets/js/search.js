@@ -1565,18 +1565,39 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function collectNaturalImages(it){
-      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
-      const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
-      const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
-      const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
-      const youtubeThumb = youtubeThumbFromItemClient(it);
-      const raw = []
-        .concat(youtubeThumb ? [youtubeThumb] : [])
-        .concat([it && it.thumbnail, it && it.thumb, it && it.image, it && it.image_url, it && it.og_image, it && it.ogImage, it && it.poster, it && it.cover])
-        .concat([payload.thumbnail, payload.thumb, payload.image, payload.image_url, payload.og_image, payload.ogImage, payload.poster, payload.cover])
-        .concat([data.thumbnail, data.thumb, data.image, data.og_image, preview.poster, preview.thumbnail, preview.image])
-        .concat(Array.isArray(it && it.imageSet) ? it.imageSet : [])
-        .concat(Array.isArray(payload && payload.imageSet) ? payload.imageSet : []);
+      const raw = [];
+      const seenObjects = new Set();
+      const push = (v) => {
+        if (Array.isArray(v)) { v.forEach(push); return; }
+        if (v && typeof v === 'object') { scan(v, 0); return; }
+        const src = String(v || '').trim();
+        if (src) raw.push(src);
+      };
+      const imageKeys = new Set([
+        'thumbnail','thumb','image','image_url','imageUrl','img','imgUrl','picture','photo','photoUrl',
+        'poster','cover','og_image','ogImage','openGraphImage','contentUrl','mediaUrl','previewImage',
+        'src','url'
+      ]);
+      function scan(obj, depth){
+        if(!obj || typeof obj !== 'object' || depth > 4 || seenObjects.has(obj)) return;
+        seenObjects.add(obj);
+        Object.keys(obj).forEach(k => {
+          const v = obj[k];
+          const lk = String(k).toLowerCase();
+          if(imageKeys.has(k) || /image|thumb|poster|cover|photo|picture|og_?image|preview/.test(lk)){
+            if(typeof v === 'string') raw.push(v);
+            else if(Array.isArray(v)) v.forEach(push);
+            else if(v && typeof v === 'object') scan(v, depth + 1);
+            return;
+          }
+          if(Array.isArray(v) && /images|imageSet|media|preview|gallery|thumbnails/i.test(k)) v.forEach(push);
+          else if(v && typeof v === 'object' && /payload|data|media|preview|openGraph|og|metadata|meta|thumbnail|image|images|video/.test(k)) scan(v, depth + 1);
+        });
+      }
+      push(preferredYoutubeThumbClient(it));
+      push(youtubeThumbFromItemClient(it));
+      scan(it, 0);
+
       const out = [];
       const seen = new Set();
       raw.forEach(v => {
@@ -1594,7 +1615,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         seen.add(key);
         out.push(src);
       });
-      return out;
+      return out.slice(0, 3);
     }
 
     function displayGroupOfItem(it){
@@ -1606,31 +1627,35 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function inferDisplayGroupClient(it){
-      const source = String((it && (it.source?.name || it.source || it.provider || it.channel)) || '').toLowerCase();
+      const sourceRaw = (it && (it.source?.name || it.source || it.provider || it.channel || it.engine)) || '';
+      const source = String(sourceRaw).toLowerCase();
       const type = String((it && it.type) || '').toLowerCase();
       const mediaType = String((it && it.mediaType) || '').toLowerCase();
-      const category = String((it && (it.category || it.searchCategory || it.vertical || it.tab)) || '').toLowerCase();
+      const category = String((it && (it.category || it.searchCategory || it.vertical || it.tab || it.displayGroup)) || '').toLowerCase();
       const title = String((it && it.title) || '').toLowerCase();
-      const summary = String((it && (it.summary || it.description || it.snippet || it.contentSnippet || it.excerpt || it.abstract || it.content || it.text)) || '').toLowerCase();
+      const summary = String((it && (it.summary || it.snippet || it.description || it.contentSnippet || it.excerpt || it.abstract || it.content || it.text || it.desc || it.body)) || '').toLowerCase();
       const url = String((it && (it.url || it.link || it.href || it.openUrl)) || '').toLowerCase();
       const host = domainOf(url).toLowerCase();
-      const text = `${source} ${type} ${mediaType} ${category} ${title} ${summary} ${host}`;
+      let path = '';
+      try { path = new URL(url, location.origin).pathname || ''; } catch(e) {}
+      const shallowPath = path && path.split('/').filter(Boolean).length <= 1;
+      const text = `${source} ${type} ${mediaType} ${category} ${title} ${summary} ${host} ${path}`;
 
-      if (host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr') || text.includes('공식') || text.includes('정부') || text.includes('시청') || text.includes('구청') || text.includes('공공기관')) return 'authority';
-      if (host.includes('data.go.kr') || host.includes('stat.') || host.includes('kosis.kr') || text.includes('공공데이터') || text.includes('공공 자료') || text.includes('통계') || text.includes('dataset') || text.includes('open data')) return 'public_data';
-      if (source.includes('local') || source.includes('map') || category.includes('map') || type === 'map' || mediaType === 'map' || text.includes('관광') || text.includes('여행') || text.includes('지도') || text.includes('주소') || text.includes('전화') || text.includes('맛집') || text.includes('공원') || text.includes('landmark') || text.includes('tour')) return 'local_tour';
-      if (source.includes('encyc') || source.includes('kin') || category.includes('knowledge') || text.includes('지식') || text.includes('백과') || text.includes('위키') || host.includes('wikipedia.org') || host.includes('namu.wiki') || host.includes('wikidata.org')) return 'knowledge';
-      if (source.includes('scholar') || source.includes('academic') || source.includes('research') || category.includes('academic') || host.includes('scholar.google') || host.includes('riss.kr') || host.includes('dbpia') || host.includes('kci.go.kr') || host.includes('arxiv.org') || host.includes('.ac.') || text.includes('논문') || text.includes('학술') || text.includes('연구') || text.includes('저널') || text.includes('paper') || text.includes('journal')) return 'academic';
-      if (source.includes('corporate') || source.includes('homepage') || source.includes('business') || source.includes('company') || source.includes('official-web') || category.includes('site') || category.includes('homepage') || type === 'site' || type === 'homepage' || type === 'business' || text.includes('홈페이지') || text.includes('공식사이트') || text.includes('공식 사이트') || text.includes('기업') || text.includes('회사') || text.includes('브랜드') || text.includes('서비스') || text.includes('business') || text.includes('company') || text.includes('corporate')) return 'site';
-      if (source.includes('book') || category.includes('book') || type === 'book' || host.includes('books.google') || text.includes('도서') || text.includes('책 ') || text.includes('isbn') || text.includes('저자')) return 'book';
-      if (source.includes('shop') || source.includes('commerce') || category.includes('shopping') || type === 'shopping' || host.includes('shopping.') || text.includes('쇼핑') || text.includes('상품') || text.includes('가격') || text.includes('구매') || text.includes('product') || text.includes('price')) return 'shopping';
-      if (source.includes('sports') || category.includes('sports') || type === 'sports' || text.includes('스포츠') || text.includes('축구') || text.includes('야구') || text.includes('농구') || text.includes('경기결과') || text.includes('score')) return 'sports';
-      if (source.includes('finance') || category.includes('finance') || type === 'finance' || text.includes('금융') || text.includes('주식') || text.includes('증권') || text.includes('환율') || text.includes('코스피') || text.includes('나스닥') || text.includes('stock') || text.includes('market')) return 'finance';
-      if (source.includes('webtoon') || category.includes('webtoon') || type === 'webtoon' || text.includes('웹툰') || text.includes('만화') || text.includes('comic') || text.includes('manga')) return 'webtoon';
-      if (source.includes('news') || category.includes('news') || type === 'news' || text.includes('뉴스') || text.includes('속보') || text.includes('latest') || text.includes('breaking')) return 'news';
-      if (source.includes('blog') || source.includes('cafe') || category.includes('blog') || category.includes('cafe') || host.includes('blog.') || host.includes('cafe.') || text.includes('블로그') || text.includes('카페')) return 'community';
-      if (mediaType === 'image' || type === 'image' || mediaType === 'video' || type === 'video' || source.includes('image') || source.includes('youtube') || host.includes('youtube.com') || host.includes('youtu.be')) return 'media';
-      if (host.includes('instagram.') || host.includes('facebook.') || host.includes('tiktok.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social') || category.includes('sns') || category.includes('social')) return 'social';
+      if (host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr') || host.includes('gov.uk') || host.includes('go.jp') || text.includes('공식') || text.includes('정부') || text.includes('시청') || text.includes('구청') || text.includes('군청') || text.includes('도청') || text.includes('공공기관')) return 'authority';
+      if (host.includes('data.go.kr') || host.includes('kosis.kr') || host.includes('stat.') || host.includes('opendata') || text.includes('공공데이터') || text.includes('공공 자료') || text.includes('통계') || text.includes('dataset') || text.includes('open data')) return 'public_data';
+      if (source.includes('local') || source.includes('map') || category.includes('map') || type === 'map' || mediaType === 'map' || /google\.com\/maps|map\.naver\.com|\/maps\/search/.test(url) || text.includes('관광') || text.includes('여행') || text.includes('지도') || text.includes('주소') || text.includes('전화') || text.includes('맛집') || text.includes('공원') || text.includes('landmark') || text.includes('tour')) return 'local_tour';
+      if (source.includes('encyc') || source.includes('kin') || category.includes('knowledge') || text.includes('지식') || text.includes('백과') || text.includes('위키') || host.includes('wikipedia.org') || host.includes('namu.wiki') || host.includes('wikidata.org') || host.includes('terms.naver.com')) return 'knowledge';
+      if (source.includes('scholar') || source.includes('academic') || source.includes('research') || category.includes('academic') || host.includes('scholar.google') || host.includes('riss.kr') || host.includes('dbpia') || host.includes('kci.go.kr') || host.includes('arxiv.org') || host.includes('pubmed') || host.includes('.ac.') || host.includes('.edu') || text.includes('논문') || text.includes('학술') || text.includes('연구') || text.includes('저널') || text.includes('paper') || text.includes('journal')) return 'academic';
+      if (source.includes('book') || category.includes('book') || type === 'book' || host.includes('books.google') || host.includes('book.naver') || host.includes('yes24') || host.includes('kyobobook') || host.includes('aladin.co.kr') || text.includes('도서') || text.includes('책 ') || text.includes('isbn') || text.includes('저자')) return 'book';
+      if (source.includes('shop') || source.includes('commerce') || category.includes('shopping') || type === 'shopping' || host.includes('shopping.') || host.includes('coupang') || host.includes('gmarket') || host.includes('11st') || host.includes('auction.co.kr') || host.includes('amazon.') || host.includes('ebay.') || host.includes('aliexpress') || text.includes('쇼핑') || text.includes('상품') || text.includes('가격') || text.includes('구매') || text.includes('제품') || text.includes('product') || text.includes('price')) return 'shopping';
+      if (source.includes('sports') || category.includes('sports') || type === 'sports' || host.includes('sports.') || text.includes('스포츠') || text.includes('축구') || text.includes('야구') || text.includes('농구') || text.includes('배구') || text.includes('경기결과') || text.includes('score')) return 'sports';
+      if (source.includes('finance') || category.includes('finance') || type === 'finance' || host.includes('finance.') || host.includes('investing.com') || host.includes('bloomberg') || host.includes('marketwatch') || text.includes('금융') || text.includes('주식') || text.includes('증권') || text.includes('환율') || text.includes('코스피') || text.includes('나스닥') || text.includes('stock') || text.includes('market')) return 'finance';
+      if (source.includes('webtoon') || category.includes('webtoon') || type === 'webtoon' || host.includes('webtoon') || text.includes('웹툰') || text.includes('만화') || text.includes('comic') || text.includes('manga')) return 'webtoon';
+      if (source.includes('blog') || source.includes('cafe') || category.includes('blog') || category.includes('cafe') || host.includes('blog.') || host.includes('cafe.') || host.includes('tistory.com') || host.includes('brunch.co.kr') || host.includes('velog.io') || host.includes('medium.com') || text.includes('블로그') || text.includes('카페')) return 'community';
+      if (host.includes('instagram.') || host.includes('facebook.') || host.includes('tiktok.') || host.includes('x.com') || host.includes('twitter.') || host.includes('threads.net') || source.includes('sns') || source.includes('social') || category.includes('sns') || category.includes('social')) return 'social';
+      if (mediaType === 'image' || type === 'image' || mediaType === 'video' || type === 'video' || source.includes('image') || source.includes('youtube') || host.includes('youtube.com') || host.includes('youtu.be') || host.includes('vimeo.com')) return 'media';
+      if (source.includes('news') || category.includes('news') || type === 'news' || host.includes('news.') || host.includes('yna.co.kr') || host.includes('ytn.co.kr') || host.includes('mk.co.kr') || host.includes('hankyung.com') || host.includes('heraldcorp.com') || host.includes('mbn.co.kr') || host.includes('joongang.co.kr') || host.includes('chosun.com') || host.includes('donga.com') || host.includes('sbs.co.kr') || host.includes('kbs.co.kr') || text.includes('뉴스') || text.includes('속보') || text.includes('latest') || text.includes('breaking')) return 'news';
+      if (source.includes('corporate') || source.includes('homepage') || source.includes('business') || source.includes('company') || source.includes('official-web') || category.includes('site') || category.includes('homepage') || type === 'site' || type === 'homepage' || type === 'business' || (url && shallowPath && !host.includes('google.') && !host.includes('naver.') && !host.includes('bing.') && !host.includes('youtube.') && !host.includes('facebook.') && !host.includes('instagram.') && !host.includes('tiktok.')) || text.includes('홈페이지') || text.includes('공식사이트') || text.includes('공식 사이트') || text.includes('기업') || text.includes('회사') || text.includes('브랜드') || text.includes('서비스') || text.includes('business') || text.includes('company') || text.includes('corporate')) return 'site';
       return 'web';
     }
 
@@ -1845,7 +1870,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         meta.className = 'maru-display-section-meta';
         const sourceTotal = parseInt(groupInfo.sourceTotal, 10) || Math.max.apply(null, groupInfo.items.map(x => parseInt(x && x.displayGroupSourceTotal, 10) || 0).concat([groupInfo.items.length]));
         const visibleCountForMeta = Array.isArray(groupInfo.previewItems) ? groupInfo.previewItems.length : groupInfo.items.length;
-        meta.textContent = sourceTotal > visibleCountForMeta ? `${visibleCountForMeta}/${sourceTotal}개` : `${visibleCountForMeta}개`;
+        meta.textContent = sourceTotal > visibleCountForMeta ? `${visibleCountForMeta}/${Math.min(sourceTotal, displayGroupCategoryCap(groupInfo.group))}개` : `${visibleCountForMeta}개`;
 
         head.appendChild(title);
         head.appendChild(meta);
@@ -2261,7 +2286,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function renderMapPreviewClient(it){
-      if(normalizeSearchType(activeType) === 'all' && !(it && it.__maruMapPreviewAllowed)) return null;
+      if(normalizeSearchType(activeType) === 'all' && (!(it && it.__maruMapPreviewAllowed) || (it && it.generalWebContinuation))) return null;
       if(!isMapLikeItemClient(it)) return null;
       const q = mapQueryForItemClient(it);
       if(!q) return null;
@@ -2321,16 +2346,39 @@ async function fetchInstantSearchPack(q, type = activeType){
 
 
     function cardSummaryTextClient(it){
-      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
-      const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
-      const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
-      const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
-      const candidates = [it && it.summary, it && it.snippet, it && it.description, it && it.contentSnippet, it && it.excerpt, it && it.abstract, it && it.content, it && it.text, payload.summary, payload.snippet, payload.description, payload.contentSnippet, payload.excerpt, payload.abstract, payload.content, payload.text, data.summary, data.snippet, data.description, data.contentSnippet, data.excerpt, data.abstract, preview.summary, preview.description, preview.caption];
-      for(const value of candidates){
-        let text = String(value || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-        if(!text) continue;
-        if(text === String((it && it.title) || '').trim()) continue;
-        if(text.length > 320) text = text.slice(0, 320).replace(/\s+\S*$/, '') + '…';
+      const title = String((it && it.title) || '').replace(/\s+/g, ' ').trim();
+      const seenObjects = new Set();
+      const candidates = [];
+      const keys = new Set([
+        'summary','snippet','description','desc','contentSnippet','excerpt','abstract','lead','subtitle',
+        'content','text','body','articleBody','previewText','caption','ogDescription','metaDescription',
+        'shortDescription','longDescription','intro','overview'
+      ]);
+      function push(v){
+        if(v === undefined || v === null) return;
+        if(Array.isArray(v)){ v.forEach(push); return; }
+        if(typeof v === 'object'){ scan(v, 0); return; }
+        let text = String(v || '').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        if(!text) return;
+        if(text === title) return;
+        if(/^https?:\/\//i.test(text) && text.length < 160) return;
+        if(text.length < 18 && !/[가-힣]/.test(text)) return;
+        candidates.push(text);
+      }
+      function scan(obj, depth){
+        if(!obj || typeof obj !== 'object' || depth > 4 || seenObjects.has(obj)) return;
+        seenObjects.add(obj);
+        Object.keys(obj).forEach(k => {
+          const v = obj[k];
+          const lk = String(k).toLowerCase();
+          if(keys.has(k) || /summary|snippet|description|desc|excerpt|abstract|caption|content|body|text|lead|subtitle|overview/.test(lk)) push(v);
+          else if(v && typeof v === 'object' && /payload|data|media|preview|openGraph|og|metadata|meta|article|content|result/.test(k)) scan(v, depth + 1);
+        });
+      }
+      scan(it, 0);
+      for(const text0 of candidates){
+        let text = text0;
+        if(text.length > 360) text = text.slice(0, 360).replace(/\s+\S*$/, '') + '…';
         return text;
       }
       return '';
