@@ -112,20 +112,20 @@ const from0 = (params.get('from') || '').trim();
 
 const SEARCH_TABS = [
   ['all', '전체'],
-  ['image', '이미지'],
-  ['news', '뉴스'],
   ['map', '지도'],
+  ['knowledge', '지식'],
+  ['wiki', '위키'],
+  ['site', '사이트'],
   ['book', '도서'],
   ['blog', '블로그'],
   ['cafe', '카페'],
   ['shopping', '쇼핑'],
+  ['news', '뉴스'],
+  ['image', '이미지'],
   ['video', '영상'],
   ['sns', '소셜'],
   ['tour', '관광'],
-  ['site', '사이트'],
   ['public_data', '공공자료'],
-  ['knowledge', '지식'],
-  ['wiki', '위키'],
   ['academic', '학술'],
   ['sports', '스포츠'],
   ['finance', '증권'],
@@ -1854,8 +1854,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         authority: 3,
         public_data: 2,
         local_tour: 2,
-        knowledge: 4,
-        wiki: 4,
+        knowledge: 3,
+        wiki: 3,
         academic: 4,
         site: 5,
         book: 4,
@@ -1883,7 +1883,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = ['authority','local_tour','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','knowledge','wiki','academic','community','sports','finance','webtoon','web'];
+      const order = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -1950,7 +1950,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         authority: 3,
         public_data: 2,
         local_tour: 2,
-        knowledge: 4,
+        knowledge: 3,
+        wiki: 3,
         site: 5,
         book: 4,
         news: 5,
@@ -2923,8 +2924,8 @@ if (it.riskLabel === '⚠️ high-risk') {
         authority: 8,
         public_data: 8,
         local_tour: 8,
-        knowledge: 15,
-        wiki: 15,
+        knowledge: 3,
+        wiki: 3,
         academic: 15,
         site: 15,
         book: 15,
@@ -2953,7 +2954,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         items: diversifyGroupPreviewItems(g.group, g.items || [])
       }));
       const byGroup = new Map(grouped.map(g => [g.group, g]));
-      const categoryOrder = ['authority','local_tour','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','knowledge','wiki','academic','community','sports','finance','webtoon'];
+      const categoryOrder = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon'];
       const categoryOverflowItems = [];
       const categoryPages = [];
       let page = [];
@@ -3012,7 +3013,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       const categoryFillCounts = categoryPages.map((modules, idx) => {
         // General web/plain results must not be inserted between category modules.
         // They may only start after the final category page has rendered, so the
-        // category board keeps its intended order: site/book/blog/cafe/news/etc.
+        // category board keeps its intended order: knowledge/wiki/site/book/blog/cafe/news/etc.
         if(idx !== categoryPages.length - 1) return 0;
         const fill = Math.min(
           Math.max(0, webItems.length - filledWebBeforePlainPages),
