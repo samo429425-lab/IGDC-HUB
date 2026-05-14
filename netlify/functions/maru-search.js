@@ -938,6 +938,24 @@ function isSyntheticSearchSummaryText(v){
     /(Google|Naver|네이버|구글|YouTube|유튜브|Instagram|Facebook|TikTok|Threads|Twitter|X\/Twitter|위키백과|나무위키|지식백과).*검색$/i.test(t);
 }
 
+
+function isSyntheticSanmaruScaffoldItem(it){
+  if(!it || typeof it !== 'object') return false;
+  const source = safeString(it.source || it.provider || it.generatedBy || it.sourceType || '').toLowerCase();
+  const title = safeString(it.title || '').toLowerCase();
+  const summary = [it.summary, it.snippet, it.description, it.excerpt].map(v => safeString(v).toLowerCase()).join(' ');
+  return !!(
+    it.sanmaruRouteCard || it.sanmaruOpeningCard || it.passthrough === true ||
+    source.includes('sanmaru_route') || source.includes('sanmaru_opening') ||
+    source.includes('sanmaru-provider-passthrough') || source.includes('provider-window') ||
+    title.includes('[sanmaru route]') || title.includes('[sanmaru opening]') ||
+    summary.includes('산마루 최상위 정보 레이어') ||
+    summary.includes('산마루가 관리하는 열린 정보 통로') ||
+    summary.includes('관련 공개 웹 검색 결과입니다') ||
+    summary.includes('관련 공개 정보 경로입니다')
+  );
+}
+
 function resultSummaryText(it){
   it = (it && typeof it === 'object') ? it : {};
   const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
@@ -1693,7 +1711,7 @@ function getSanmaruResidentForMaru(q, raw, opts){
       });
       const rawItems = Array.isArray(res && res.items) ? res.items : [];
       const canonical = rawItems.map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru-resident')));
-      const items = canonical.filter(x => x && (x.sanmaruRouteCard || x.sanmaruOpeningCard || residentItemMatchesQuery(x, q)));
+      const items = canonical.filter(x => x && !isSyntheticSanmaruScaffoldItem(x) && residentItemMatchesQuery(x, q));
       const droppedByQueryGuard = Math.max(0, canonical.length - items.length);
       return {
         items,
