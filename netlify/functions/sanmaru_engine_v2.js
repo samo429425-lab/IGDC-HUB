@@ -1208,39 +1208,6 @@ function buildOpeningFallbackCards(q, opts){
   }, q, "sanmaru-opening"));
 }
 
-function isPublicSearchSurface(opts){
-  opts = opts || {};
-  const surface = s(opts.searchSurface || opts.surface || opts.mode).trim().toLowerCase();
-  return truthy(opts.publicSearch) || truthy(opts.excludeSnapshotSlots) || truthy(opts.excludeFrontSlots) || truthy(opts.excludeInternalCodeResults) || surface === "public-search" || surface === "search";
-}
-
-function isInternalOrSyntheticPublicSearchItem(it){
-  if(!it || typeof it !== "object") return true;
-  const sourceName = s((it.source && it.source.name) || it.source || it.provider || "").toLowerCase();
-  const title = s(it.title || it.name || "").toLowerCase();
-  const summary = s(firstNonEmpty(it.summary, it.description, it.snippet)).toLowerCase();
-  const url = s(firstNonEmpty(it.url, it.link, it.href)).trim().toLowerCase();
-  const generatedBy = s(it.generatedBy || "").toLowerCase();
-  const sourceType = s(it.sourceType || "").toLowerCase();
-
-  if(!url || url === "#" || url === "/" || url.startsWith("javascript:")) return true;
-  if(sourceName.includes("search-bank") || sourceName.includes("searchbank") || sourceName.includes("snapshot")) return true;
-  if(sourceName.includes("sanmaru_route") || sourceName.includes("sanmaru_opening")) return true;
-  if(title.startsWith("network item") || title.includes("[sanmaru route]") || title.includes("[sanmaru opening]")) return true;
-  if(url.includes("search-bank.snapshot") || url.includes("/assets/sample/")) return true;
-  if(it.sanmaruRouteCard === true || it.sanmaruOpeningCard === true) return true;
-  if(generatedBy.includes("provider-lane") || sourceType.includes("provider-lane")) return true;
-  if(summary.includes("산마루 최상위 정보 레이어") || summary.includes("마루서치는 이 경로") || summary.includes("열린 정보 통로")) return true;
-  if(summary.includes("관련 공개 웹 검색 결과입니다") || summary.includes("관련 최신 기사와 주요 보도 검색 결과입니다")) return true;
-  if(summary.includes("관련 사진·이미지·시각 자료 검색 결과입니다") || summary.includes("관련 영상·현장 콘텐츠 검색 결과입니다")) return true;
-  if(summary.includes("관련 지도·장소·지역 정보 검색 결과입니다") || summary.includes("관련 백과·지식·참고 자료 검색 결과입니다")) return true;
-  return false;
-}
-
-function sanitizePublicSearchItems(items){
-  return (Array.isArray(items) ? items : []).filter(it => !isInternalOrSyntheticPublicSearchItem(it));
-}
-
 function supplyResidentSync(input, opts){
   opts = opts || {};
   const q = typeof input === "string" ? input : firstNonEmpty(input && input.q, input && input.query, opts.q, opts.query);
@@ -1274,7 +1241,6 @@ function supplyResidentSync(input, opts){
     indexMeta = { status:responseErrorCode(e) };
   }
   const residentState = ensureResidentState();
-  const publicSearchSurface = isPublicSearchSurface(opts);
   let routeFallbackCards = [];
   let openingFallbackCards = [];
   let items = dedupeItems(residentItems.concat(indexItems));
@@ -1284,14 +1250,13 @@ function supplyResidentSync(input, opts){
   // route/opening signals, not replacements for real provider results. They keep
   // category trees visible and prevent empty-looking searches while the broad
   // resident cache is warming.
-  if(!publicSearchSurface && opts.allowRouteCards !== false && opts.noRouteCards !== true){
+  if(opts.allowRouteCards !== false && opts.noRouteCards !== true){
     routeFallbackCards = buildRouteFallbackCards(clean.value, routePlan, Object.assign({}, opts, { routeCardLimit: clampInt(opts.routeCardLimit, 28, 1, 60) }));
   }
-  if(!publicSearchSurface && opts.allowOpeningCards !== false && opts.noOpeningCards !== true){
+  if(opts.allowOpeningCards !== false && opts.noOpeningCards !== true){
     openingFallbackCards = buildOpeningFallbackCards(clean.value, Object.assign({}, opts, { openingCardLimit: clampInt(opts.openingCardLimit, 24, 1, 40) }));
   }
   items = dedupeItems(items.concat(routeFallbackCards, openingFallbackCards));
-  if(publicSearchSurface) items = sanitizePublicSearchItems(items);
 
   const fullCandidateItems = items.slice();
   const requestedPage = clampInt(firstNonEmpty(opts.page, opts.p, opts.visiblePage, opts.sectionPage), 1, 1, 100000);
@@ -2404,6 +2369,10 @@ function parseCtx(input, maybeCtx){
     lang,
     deep,
     noMedia: truthy(ctx.noMedia || raw.noMedia || qs.noMedia || ctx.disableMedia || raw.disableMedia || qs.disableMedia),
+    publicSearch: truthy(ctx.publicSearch || raw.publicSearch || qs.publicSearch),
+    openPipe: truthy(ctx.openPipe || raw.openPipe || qs.openPipe || ctx.streamFullWindow || raw.streamFullWindow || qs.streamFullWindow || ctx.naturalFlow || raw.naturalFlow || qs.naturalFlow),
+    noRouteCards: truthy(ctx.noRouteCards || raw.noRouteCards || qs.noRouteCards),
+    noOpeningCards: truthy(ctx.noOpeningCards || raw.noOpeningCards || qs.noOpeningCards),
     externalOff,
     externalForced,
     externalAllowed: !externalOff,
@@ -2455,16 +2424,11 @@ async function runSanmaru(input, maybeCtx){
       page:ctx.page,
       perPage:ctx.perPage,
       visibleNeed:ctx.perPage || DEFAULT_VISIBLE_PER_PAGE,
-      allowRouteCards:!isPublicSearchSurface(ctx.raw || {}),
-      allowOpeningCards:!isPublicSearchSurface(ctx.raw || {}),
-      noRouteCards:isPublicSearchSurface(ctx.raw || {}),
-      noOpeningCards:isPublicSearchSurface(ctx.raw || {}),
-      publicSearch:isPublicSearchSurface(ctx.raw || {}),
-      searchSurface:isPublicSearchSurface(ctx.raw || {}) ? "public-search" : ctx.raw.searchSurface
+      allowRouteCards:!(ctx.noRouteCards || ctx.publicSearch || ctx.openPipe),
+      allowOpeningCards:!(ctx.noOpeningCards || ctx.publicSearch || ctx.openPipe)
     });
     let instantItems = Array.isArray(supplied && supplied.items) ? supplied.items : [];
     const finalTarget = Math.min(MAX_LIMIT, Math.max(ctx.limit, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET));
-    if(isPublicSearchSurface(ctx.raw || {})) instantItems = sanitizePublicSearchItems(instantItems);
     instantItems = finalRank(ctx.q, instantItems, ctx).slice(0, finalTarget).map(it => {
       const copy = Object.assign({}, it);
       delete copy._sanmaruSeq;
@@ -2780,8 +2744,8 @@ function sanmaruKoreaLocalAuthorityCards(query, country){
   return rows.filter(r => q.indexOf(r[0]) >= 0).map((r, idx) => ({
     id:'sanmaru-local-authority-' + stableHash([q,r[0],r[1]].join('|')),
     title:r[1],
-    summary:q + ' 관련 공식/공공 정보입니다.',
-    description:q + ' 공식 기관 정보',
+    summary:'',
+    description:'',
     url:r[2], link:r[2],
     source:r[1], provider:'local-authority',
     type:r[3], mediaType:'article', category:r[3], lane:r[3],
@@ -2889,17 +2853,9 @@ function sanmaruProviderPassthroughCards(q, opts){
       const url = typeof r[2] === "function" ? r[2](round) : r[2];
       const topicLabel = maruTopicLabels[(round - 1) % maruTopicLabels.length];
       const cleanTitle = query + " · " + r[1] + (round > 1 ? " · " + topicLabel : "");
-      const cleanSummary = lane === "news"
-        ? query + " 관련 최신 기사와 주요 보도 검색 결과입니다."
-        : lane === "knowledge"
-          ? query + " 관련 백과·지식·참고 자료 검색 결과입니다."
-          : lane === "image"
-            ? query + " 관련 사진·이미지·시각 자료 검색 결과입니다."
-            : lane === "video"
-              ? query + " 관련 영상·현장 콘텐츠 검색 결과입니다."
-              : lane === "local"
-                ? query + " 관련 지도·장소·지역 정보 검색 결과입니다."
-                : query + " 관련 공개 웹 검색 결과입니다.";
+      // Provider-passthrough cards are fast roads, not page bodies.
+      // Do not inject 안내문 as card content; preserve real snippets only when providers return them.
+      const cleanSummary = "";
       out.push({
         id: "sanmaru-pass-" + stableHash([query, r[0], country, round].join("|")),
         title: cleanTitle,
@@ -2943,7 +2899,6 @@ function buildSanmaruInstantOsPackage(q, opts){
 
   const lang = firstNonEmpty(opts.lang, opts.uiLang, opts.locale);
   const searchType = firstNonEmpty(opts.searchType, opts.type, opts.category, opts.tab, opts.vertical, "all");
-  const publicSearchSurface = isPublicSearchSurface(opts);
   const country = firstNonEmpty(opts.country, opts.region, opts.geo, opts.runtimeRegion);
   const effectiveCountry = firstNonEmpty(country, "GLOBAL");
 
@@ -2957,25 +2912,18 @@ function buildSanmaruInstantOsPackage(q, opts){
     page: firstNonEmpty(opts.page, opts.p, opts.start, 1),
     perPage: firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit, DEFAULT_VISIBLE_PER_PAGE),
     visibleNeed: firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit, DEFAULT_VISIBLE_PER_PAGE),
-    allowRouteCards: !publicSearchSurface,
-    allowOpeningCards: !publicSearchSurface,
-    noRouteCards: publicSearchSurface,
-    noOpeningCards: publicSearchSurface,
-    publicSearch: publicSearchSurface,
-    searchSurface: publicSearchSurface ? "public-search" : opts.searchSurface,
+    allowRouteCards: true,
+    allowOpeningCards: true,
     country: effectiveCountry
   });
 
   let items = Array.isArray(supplied && supplied.items) ? supplied.items.slice() : [];
-  const providerPassthroughItems = publicSearchSurface || truthy(opts.noProviderPassthrough) || s(opts.providerPassthrough).trim() === "0"
-    ? []
-    : sanmaruProviderPassthroughCards(q, Object.assign({}, opts, { country: effectiveCountry, searchType }));
+  const providerPassthroughItems = sanmaruProviderPassthroughCards(q, Object.assign({}, opts, { country: effectiveCountry, searchType }));
   // Provider passthrough cards are first-paint roads. They must never replace the
   // full Maru Search result set; they only make the page usable immediately.
   if(providerPassthroughItems.length){
     items = providerPassthroughItems.concat(items);
   }
-  if(publicSearchSurface) items = sanitizePublicSearchItems(items);
   const ctx = {
     q,
     searchType,

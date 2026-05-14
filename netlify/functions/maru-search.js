@@ -69,6 +69,20 @@ function explicitExternalBlocked(qs){
     || truthy(qs.disableExternal);
 }
 
+function isOpenPipeRequest(raw){
+  raw = raw || {};
+  return truthy(raw.openPipe) || truthy(raw.streamFullWindow) || truthy(raw.smoothIntake) ||
+    truthy(raw.naturalFlow) || truthy(raw.noBlockingWide) || truthy(raw.noWaitProviders) ||
+    truthy(raw.pageWindowOnly);
+}
+
+function isPublicSearchRequest(raw){
+  raw = raw || {};
+  const action = safeString(raw.action).toLowerCase();
+  if(['front-supply','slot-supply','content-supply','snapshot-supply','searchbank-supply'].includes(action)) return false;
+  return truthy(raw.publicSearch) || truthy(raw.pageWindowOnly) || isOpenPipeRequest(raw) || !action;
+}
+
 function normalizeSearchType(v){
   const raw = safeString(v || '').trim().toLowerCase();
   const alias = {
@@ -262,8 +276,8 @@ function detectRuntimeRegion(event, lang, q){
 
 function sourceOrderForRegion(region){
   const r = safeString(region).toUpperCase();
-  if(r === 'KR') return ['search_bank','web_naver','web_google','web_google_sns','web_youtube','web_bing','web_image','maps'];
-  return ['search_bank','web_google','web_google_sns','web_youtube','web_bing','web_naver','web_image','maps'];
+  if(r === 'KR') return ['web_naver','web_google','web_google_sns','web_youtube','web_bing','web_image','maps'];
+  return ['web_google','web_google_sns','web_youtube','web_bing','web_naver','web_image','maps'];
 }
 
 function domainOf(url){
@@ -916,6 +930,14 @@ function stripInlineHtml(v){
     .trim();
 }
 
+function isSyntheticSearchSummaryText(v){
+  const t = stripInlineHtml(v);
+  if(!t) return false;
+  return /검색 결과입니다|공개 웹 결과입니다|관련 검색 결과입니다|검색 결과 경로|공개 정보 경로|공개 검색 경로|통합 공개 검색 경로|검색 결과 경로$/i.test(t) ||
+    /관련\s+.*검색(\s*결과|\s*경로)?$/i.test(t) ||
+    /(Google|Naver|네이버|구글|YouTube|유튜브|Instagram|Facebook|TikTok|Threads|Twitter|X\/Twitter|위키백과|나무위키|지식백과).*검색$/i.test(t);
+}
+
 function resultSummaryText(it){
   it = (it && typeof it === 'object') ? it : {};
   const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
@@ -929,16 +951,12 @@ function resultSummaryText(it){
   ];
   for(const v of candidates){
     const clean = stripInlineHtml(v);
-    if(clean && clean.length >= 18) return clean.slice(0, 300);
+    if(clean && clean.length >= 18 && !isSyntheticSearchSummaryText(clean)) return clean.slice(0, 300);
   }
-  const title = stripInlineHtml(firstNonEmpty(it.title, it.name));
-  const url = safeString(firstNonEmpty(it.url, it.link, it.href));
-  const host = domainOf(url);
-  const source = safeString(firstNonEmpty(it.source, it.provider, it.channel));
-  const type = safeString(firstNonEmpty(it.type, it.mediaType, 'web'));
-  if(title && host) return host + '의 ' + title + ' 관련 공개 검색 결과입니다. 상세 페이지에서 본문·이미지·위치·연관 정보를 확인할 수 있습니다.';
-  if(host) return host + '에서 제공하는 ' + type + ' 관련 공개 웹 결과입니다.';
-  if(source) return source + '에서 제공하는 ' + type + ' 관련 검색 결과입니다.';
+
+  // Do not manufacture card summaries such as "...검색 결과입니다".
+  // A search card should show only real provider snippets/body/OG descriptions.
+  // If the provider has not supplied real body text yet, leave the summary blank.
   return '';
 }
 
@@ -1900,8 +1918,8 @@ function buildKoreaLocalAuthorityCardsForSearch(q, region){
   return rows.filter(r => q.indexOf(r[0]) >= 0).map((r, idx) => canonicalizeItem({
     id:'maru-local-authority-' + safeString([q,r[0],r[1]].join('|')).replace(/[^a-z0-9가-힣]+/gi,'-').slice(0,80),
     title:r[1],
-    summary:q + ' 관련 공식/공공 정보입니다.',
-    description:q + ' 공식 기관 정보',
+    summary:'',
+    description:'',
     url:r[2], link:r[2],
     source:'local_authority', provider:'local-authority',
     type:r[3], searchCategory:r[3], mediaType:'article', route:'local-authority',
@@ -2089,17 +2107,9 @@ function buildSanmaruProviderLaneExpansionCards(q, raw, ctx, requestedLimit, exi
       const topicLabel = maruTopicLabels[(round - 1) % maruTopicLabels.length];
       const titleSuffix = round > 1 ? ' · ' + topicLabel : '';
       const cleanTitle = q + ' · ' + lane.label + titleSuffix;
-      const cleanSummary = lane.type === 'news'
-        ? q + ' 관련 최신 기사와 주요 보도 검색 결과입니다.'
-        : lane.type === 'knowledge'
-          ? q + ' 관련 백과·지식·참고 자료 검색 결과입니다.'
-          : lane.type === 'image'
-            ? q + ' 관련 사진·이미지·시각 자료 검색 결과입니다.'
-            : lane.type === 'video'
-              ? q + ' 관련 영상·현장 콘텐츠 검색 결과입니다.'
-              : lane.type === 'map'
-                ? q + ' 관련 지도·장소·지역 정보 검색 결과입니다.'
-                : q + ' 관련 공개 웹 검색 결과입니다.';
+      // Provider-lane cards are fast roads, not page bodies.
+      // Keep real snippets only when providers return them; never show 안내문 as body text.
+      const cleanSummary = '';
       out.push(canonicalizeItem({
         id:'sanmaru-fast-provider-lane-' + localStableHash([q, lane.id, region, round].join('|')),
         title:cleanTitle,
@@ -2267,7 +2277,7 @@ function sanmaruEmergencyDiscoveryCards(q){
   return specs.map(spec => canonicalizeItem({
     id:'sanmaru-emergency-' + spec[0] + '-' + q,
     title:'[' + spec[1] + '] ' + q,
-    summary:q + ' 관련 공개 정보 경로입니다. 산마루가 provider/API 결과를 흡수하면 실제 검색 결과가 이 경로 위에 우선 배치됩니다.',
+    summary: '',
     url:spec[2], link:spec[2], source:'sanmaru_discovery_' + spec[0], provider:spec[0], type:spec[3], searchCategory:spec[3], mediaType: spec[3] === 'video' ? 'video' : 'article', score:0.37, sanmaruEmergencyDiscovery:true
   }, q, 'sanmaru-emergency-discovery'));
 }
@@ -2304,7 +2314,7 @@ function mapCards(q, region){
       source: 'google_maps',
       mediaType: 'map',
       type: 'map',
-      summary: q + ' 위치·주소·길찾기 지도 검색',
+      summary: '',
       score: 0.72,
       displayGroup: 'map_local_tour',
       sectionId: 'map_local_tour',
@@ -2320,7 +2330,7 @@ function mapCards(q, region){
       source: 'naver_map',
       mediaType: 'map',
       type: 'map',
-      summary: q + ' 네이버 지도·주소·지역 검색',
+      summary: '',
       score: 0.71,
       displayGroup: 'map_local_tour',
       sectionId: 'map_local_tour',
@@ -2345,7 +2355,7 @@ function transportCards(q){
       source: 'naver_map_transport',
       mediaType: 'map',
       type: 'map',
-      summary: q + ' 지하철·대중교통 검색',
+      summary: '',
       score: 0.69
     },
     {
@@ -2354,7 +2364,7 @@ function transportCards(q){
       source: 'google_maps_transport',
       mediaType: 'map',
       type: 'map',
-      summary: q + ' 교통·환승 지도 검색',
+      summary: '',
       score: 0.68
     }
   ];
@@ -2366,24 +2376,24 @@ function openDiscoverySurfaceCards(q){
   if(!q) return [];
   const enc = encodeURIComponent(q);
   const cards = [
-    { title: '[Knowledge] ' + q + ' - Wikipedia / 백과', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' wikipedia encyclopedia 백과'), source: 'wikipedia_discovery', mediaType: 'article', type: 'knowledge', searchCategory:'knowledge', summary: q + ' 위키백과·백과사전 검색', score: 0.72 },
-    { title: '[Knowledge] ' + q + ' - 나무위키 / 지식', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' 나무위키 지식백과'), source: 'namuwiki_discovery', mediaType: 'article', type: 'knowledge', searchCategory:'knowledge', summary: q + ' 나무위키·지식백과 검색', score: 0.718 },
-    { title: '[Knowledge] ' + q + ' - 네이버 지식백과', url: 'https://search.naver.com/search.naver?where=kdic&query=' + enc, source: 'naver_encyclopedia_discovery', mediaType: 'article', type: 'knowledge', searchCategory:'knowledge', summary: q + ' 네이버 지식백과 검색', score: 0.716 },
-    { title: '[News] ' + q + ' - Google News', url: 'https://news.google.com/search?q=' + enc, source: 'google_news_discovery', mediaType: 'article', type: 'news', summary: q + ' 구글 뉴스 검색', score: 0.66 },
-    { title: '[News] ' + q + ' - Naver News', url: 'https://search.naver.com/search.naver?where=news&query=' + enc, source: 'naver_news_discovery', mediaType: 'article', type: 'news', summary: q + ' 네이버 뉴스 검색', score: 0.66 },
-    { title: '[Video] ' + q + ' - YouTube', url: 'https://www.youtube.com/results?search_query=' + enc, source: 'youtube_discovery', mediaType: 'video', type: 'video', summary: q + ' 유튜브 영상·브이로그 검색', score: 0.64 },
-    { title: '[Vlog] ' + q + ' 브이로그 / 리뷰 영상', url: 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q + ' vlog review'), source: 'youtube_vlog_discovery', mediaType: 'video', type: 'video', summary: q + ' 브이로그·리뷰 영상 검색', score: 0.63 },
-    { title: '[Shorts] ' + q + ' Shorts / Reels', url: 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q + ' shorts reels'), source: 'shorts_reels_discovery', mediaType: 'video', type: 'video', summary: q + ' 쇼츠·릴스 영상 검색', score: 0.61 },
-    { title: '[SNS] ' + q + ' - Instagram', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:instagram.com'), source: 'instagram_discovery', mediaType: 'article', type: 'sns', summary: q + ' 인스타그램 공개 게시물 검색', score: 0.58 },
-    { title: '[SNS] ' + q + ' - Facebook', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:facebook.com'), source: 'facebook_discovery', mediaType: 'article', type: 'sns', summary: q + ' 페이스북 공개 페이지 검색', score: 0.57 },
-    { title: '[SNS] ' + q + ' - TikTok', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:tiktok.com'), source: 'tiktok_discovery', mediaType: 'video', type: 'sns', summary: q + ' 틱톡 공개 영상 검색', score: 0.57 },
-    { title: '[SNS] ' + q + ' - X / Twitter', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:x.com OR site:twitter.com'), source: 'x_twitter_discovery', mediaType: 'article', type: 'sns', summary: q + ' X/Twitter 공개 게시물 검색', score: 0.56 },
-    { title: '[Company] ' + q + ' 공식 홈페이지 / 기업 사이트', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' 공식 홈페이지 회사 기업 official site'), source: 'company_official_discovery', mediaType: 'article', type: 'web', summary: q + ' 공식 홈페이지·회사·기업 사이트 검색', score: 0.60 },
-    { title: '[Official] ' + q + ' 정부 / 공공 / 기관', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:go.kr OR site:gov official'), source: 'official_gov_discovery', mediaType: 'article', type: 'web', summary: q + ' 정부·공공·기관 공식 정보 검색', score: 0.60 },
-    { title: '[Blog] ' + q + ' - Naver Blog', url: 'https://search.naver.com/search.naver?where=blog&query=' + enc, source: 'naver_blog_discovery', mediaType: 'article', type: 'blog', summary: q + ' 네이버 블로그 검색', score: 0.59 },
-    { title: '[Cafe] ' + q + ' - Naver Cafe', url: 'https://search.naver.com/search.naver?where=article&query=' + enc, source: 'naver_cafe_discovery', mediaType: 'article', type: 'cafe', summary: q + ' 네이버 카페·커뮤니티 검색', score: 0.58 },
-    { title: '[Community] ' + q + ' 커뮤니티 / 후기', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' 커뮤니티 후기 리뷰 forum community'), source: 'community_discovery', mediaType: 'article', type: 'community', summary: q + ' 커뮤니티·후기·리뷰 검색', score: 0.56 },
-    { title: '[Knowledge] ' + q + ' 위키 / 백과 / 지식', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' wikipedia encyclopedia wiki 지식백과'), source: 'knowledge_discovery', mediaType: 'article', type: 'knowledge', summary: q + ' 위키·백과·지식 검색', score: 0.57 }
+    { title: '[Knowledge] ' + q + ' - Wikipedia / 백과', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' wikipedia encyclopedia 백과'), source: 'wikipedia_discovery', mediaType: 'article', type: 'knowledge', searchCategory:'knowledge', summary: '', score: 0.72 },
+    { title: '[Knowledge] ' + q + ' - 나무위키 / 지식', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' 나무위키 지식백과'), source: 'namuwiki_discovery', mediaType: 'article', type: 'knowledge', searchCategory:'knowledge', summary: '', score: 0.718 },
+    { title: '[Knowledge] ' + q + ' - 네이버 지식백과', url: 'https://search.naver.com/search.naver?where=kdic&query=' + enc, source: 'naver_encyclopedia_discovery', mediaType: 'article', type: 'knowledge', searchCategory:'knowledge', summary: '', score: 0.716 },
+    { title: '[News] ' + q + ' - Google News', url: 'https://news.google.com/search?q=' + enc, source: 'google_news_discovery', mediaType: 'article', type: 'news', summary: '', score: 0.66 },
+    { title: '[News] ' + q + ' - Naver News', url: 'https://search.naver.com/search.naver?where=news&query=' + enc, source: 'naver_news_discovery', mediaType: 'article', type: 'news', summary: '', score: 0.66 },
+    { title: '[Video] ' + q + ' - YouTube', url: 'https://www.youtube.com/results?search_query=' + enc, source: 'youtube_discovery', mediaType: 'video', type: 'video', summary: '', score: 0.64 },
+    { title: '[Vlog] ' + q + ' 브이로그 / 리뷰 영상', url: 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q + ' vlog review'), source: 'youtube_vlog_discovery', mediaType: 'video', type: 'video', summary: '', score: 0.63 },
+    { title: '[Shorts] ' + q + ' Shorts / Reels', url: 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q + ' shorts reels'), source: 'shorts_reels_discovery', mediaType: 'video', type: 'video', summary: '', score: 0.61 },
+    { title: '[SNS] ' + q + ' - Instagram', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:instagram.com'), source: 'instagram_discovery', mediaType: 'article', type: 'sns', summary: '', score: 0.58 },
+    { title: '[SNS] ' + q + ' - Facebook', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:facebook.com'), source: 'facebook_discovery', mediaType: 'article', type: 'sns', summary: '', score: 0.57 },
+    { title: '[SNS] ' + q + ' - TikTok', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:tiktok.com'), source: 'tiktok_discovery', mediaType: 'video', type: 'sns', summary: '', score: 0.57 },
+    { title: '[SNS] ' + q + ' - X / Twitter', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:x.com OR site:twitter.com'), source: 'x_twitter_discovery', mediaType: 'article', type: 'sns', summary: '', score: 0.56 },
+    { title: '[Company] ' + q + ' 공식 홈페이지 / 기업 사이트', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' 공식 홈페이지 회사 기업 official site'), source: 'company_official_discovery', mediaType: 'article', type: 'web', summary: '', score: 0.60 },
+    { title: '[Official] ' + q + ' 정부 / 공공 / 기관', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:go.kr OR site:gov official'), source: 'official_gov_discovery', mediaType: 'article', type: 'web', summary: '', score: 0.60 },
+    { title: '[Blog] ' + q + ' - Naver Blog', url: 'https://search.naver.com/search.naver?where=blog&query=' + enc, source: 'naver_blog_discovery', mediaType: 'article', type: 'blog', summary: '', score: 0.59 },
+    { title: '[Cafe] ' + q + ' - Naver Cafe', url: 'https://search.naver.com/search.naver?where=article&query=' + enc, source: 'naver_cafe_discovery', mediaType: 'article', type: 'cafe', summary: '', score: 0.58 },
+    { title: '[Community] ' + q + ' 커뮤니티 / 후기', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' 커뮤니티 후기 리뷰 forum community'), source: 'community_discovery', mediaType: 'article', type: 'community', summary: '', score: 0.56 },
+    { title: '[Knowledge] ' + q + ' 위키 / 백과 / 지식', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' wikipedia encyclopedia wiki 지식백과'), source: 'knowledge_discovery', mediaType: 'article', type: 'knowledge', summary: '', score: 0.57 }
   ];
   return cards.map(x => canonicalizeItem(x, q, x.source));
 }
@@ -2393,14 +2403,14 @@ function publicPlatformResultCards(q){
   if(!q) return [];
   const enc = encodeURIComponent(q);
   const cards = [
-    { title: '[YouTube] ' + q + ' 영상 검색', url: 'https://www.youtube.com/results?search_query=' + enc, source: 'youtube_public_search', mediaType: 'video', type: 'video', summary: q + ' 관련 YouTube 공개 영상 검색 결과 경로', score: 0.655 },
-    { title: '[Instagram] ' + q + ' 공개 게시물', url: 'https://www.google.com/search?q=' + encodeURIComponent('site:instagram.com ' + q), source: 'google_sns_instagram_public', mediaType: 'article', type: 'sns', summary: q + ' 관련 Instagram 공개 게시물 검색', score: 0.612 },
-    { title: '[Facebook] ' + q + ' 공개 페이지/게시물', url: 'https://www.google.com/search?q=' + encodeURIComponent('site:facebook.com ' + q), source: 'google_sns_facebook_public', mediaType: 'article', type: 'sns', summary: q + ' 관련 Facebook 공개 페이지와 게시물 검색', score: 0.611 },
-    { title: '[TikTok] ' + q + ' 공개 영상', url: 'https://www.google.com/search?q=' + encodeURIComponent('site:tiktok.com ' + q), source: 'google_sns_tiktok_public', mediaType: 'video', type: 'sns', summary: q + ' 관련 TikTok 공개 영상 검색', score: 0.610 },
-    { title: '[X / Twitter] ' + q + ' 공개 글', url: 'https://www.google.com/search?q=' + encodeURIComponent('(site:x.com OR site:twitter.com) ' + q), source: 'google_sns_x_twitter_public', mediaType: 'article', type: 'sns', summary: q + ' 관련 X/Twitter 공개 글 검색', score: 0.609 },
-    { title: '[Threads] ' + q + ' 공개 글', url: 'https://www.google.com/search?q=' + encodeURIComponent('site:threads.net ' + q), source: 'google_sns_threads_public', mediaType: 'article', type: 'sns', summary: q + ' 관련 Threads 공개 글 검색', score: 0.608 },
-    { title: '[Google] ' + q + ' 통합 검색', url: 'https://www.google.com/search?q=' + enc, source: 'google_public_search', mediaType: 'article', type: 'web', summary: q + ' Google 통합 공개 검색 경로', score: 0.607 },
-    { title: '[Naver] ' + q + ' 통합 검색', url: 'https://search.naver.com/search.naver?query=' + enc, source: 'naver_public_search', mediaType: 'article', type: 'web', summary: q + ' Naver 통합 공개 검색 경로', score: 0.606 }
+    { title: '[YouTube] ' + q + ' 영상 검색', url: 'https://www.youtube.com/results?search_query=' + enc, source: 'youtube_public_search', mediaType: 'video', type: 'video', summary: '', score: 0.655 },
+    { title: '[Instagram] ' + q + ' 공개 게시물', url: 'https://www.google.com/search?q=' + encodeURIComponent('site:instagram.com ' + q), source: 'google_sns_instagram_public', mediaType: 'article', type: 'sns', summary: '', score: 0.612 },
+    { title: '[Facebook] ' + q + ' 공개 페이지/게시물', url: 'https://www.google.com/search?q=' + encodeURIComponent('site:facebook.com ' + q), source: 'google_sns_facebook_public', mediaType: 'article', type: 'sns', summary: '', score: 0.611 },
+    { title: '[TikTok] ' + q + ' 공개 영상', url: 'https://www.google.com/search?q=' + encodeURIComponent('site:tiktok.com ' + q), source: 'google_sns_tiktok_public', mediaType: 'video', type: 'sns', summary: '', score: 0.610 },
+    { title: '[X / Twitter] ' + q + ' 공개 글', url: 'https://www.google.com/search?q=' + encodeURIComponent('(site:x.com OR site:twitter.com) ' + q), source: 'google_sns_x_twitter_public', mediaType: 'article', type: 'sns', summary: '', score: 0.609 },
+    { title: '[Threads] ' + q + ' 공개 글', url: 'https://www.google.com/search?q=' + encodeURIComponent('site:threads.net ' + q), source: 'google_sns_threads_public', mediaType: 'article', type: 'sns', summary: '', score: 0.608 },
+    { title: '[Google] ' + q + ' 통합 검색', url: 'https://www.google.com/search?q=' + enc, source: 'google_public_search', mediaType: 'article', type: 'web', summary: '', score: 0.607 },
+    { title: '[Naver] ' + q + ' 통합 검색', url: 'https://search.naver.com/search.naver?query=' + enc, source: 'naver_public_search', mediaType: 'article', type: 'web', summary: '', score: 0.606 }
   ];
   return cards.map(x => canonicalizeItem(Object.assign({ generatedBy:'sanmaru-public-provider-road', publicProviderRoad:true }, x), q, x.source));
 }
@@ -2827,68 +2837,30 @@ function hasAnyLooseTerm(text, terms){
   return (Array.isArray(terms) ? terms : []).some(x => t.includes(safeString(x).toLowerCase()));
 }
 
-function isPublicSearchSurface(raw){
-  raw = raw || {};
-  const surface = safeString(raw.searchSurface || raw.surface || raw.mode).toLowerCase();
-  return truthy(raw.publicSearch) ||
-    truthy(raw.excludeSnapshotSlots) ||
-    truthy(raw.excludeFrontSlots) ||
-    truthy(raw.excludeInternalCodeResults) ||
-    surface === 'public-search' ||
-    surface === 'search';
-}
-
-function isInternalOrSyntheticPublicSearchItem(it){
-  if(!it || typeof it !== 'object') return true;
-  const sourceName = safeString((it.source && it.source.name) || it.source || it.provider || '').toLowerCase();
-  const title = safeString(it.title || it.name || '').toLowerCase();
-  const summary = safeString(firstNonEmpty(it.summary, it.description, it.snippet)).toLowerCase();
-  const url = safeString(firstNonEmpty(it.url, it.link, it.href)).trim().toLowerCase();
-  const generatedBy = safeString(it.generatedBy || '').toLowerCase();
-  const sourceType = safeString(it.sourceType || '').toLowerCase();
-
-  if(!url || url === '#' || url === '/' || url.startsWith('javascript:')) return true;
-  if(sourceName.includes('search-bank') || sourceName.includes('searchbank') || sourceName.includes('snapshot')) return true;
-  if(sourceName.includes('sanmaru_route') || sourceName.includes('sanmaru_opening')) return true;
-  if(sourceName.includes('_discovery') || sourceName.includes('discovery') || sourceName.includes('public_search') || sourceName.includes('_public')) return true;
-  if(sourceName === 'google_maps' || sourceName === 'naver_map' || sourceName === 'map_link') return true;
-  if(title.startsWith('network item') || title.includes('[sanmaru route]') || title.includes('[sanmaru opening]')) return true;
-  if(url.includes('search-bank.snapshot') || url.includes('/assets/sample/')) return true;
-  if(it.sanmaruRouteCard === true || it.sanmaruOpeningCard === true) return true;
-  if(generatedBy.includes('provider-lane') || sourceType.includes('provider-lane')) return true;
-  if(summary.includes('산마루 최상위 정보 레이어') || summary.includes('마루서치는 이 경로') || summary.includes('열린 정보 통로')) return true;
-  if(summary.includes('관련 공개 웹 검색 결과입니다') || summary.includes('관련 공개 검색 결과입니다') || summary.includes('관련 공개 정보 경로입니다') || summary.includes('관련 최신 기사와 주요 보도 검색 결과입니다')) return true;
-  if(summary.includes('관련 사진·이미지·시각 자료 검색 결과입니다') || summary.includes('관련 영상·현장 콘텐츠 검색 결과입니다')) return true;
-  if(summary.includes('관련 지도·장소·지역 정보 검색 결과입니다') || summary.includes('관련 백과·지식·참고 자료 검색 결과입니다')) return true;
-  return false;
-}
-
-function sanitizePublicSearchItems(items){
-  return (Array.isArray(items) ? items : []).filter(it => !isInternalOrSyntheticPublicSearchItem(it));
-}
-
 function sourceCaps(opts){
   opts = opts || {};
   const deep = !!opts.deep;
-  const fastPublic = !!opts.fastPublic;
+  const raw = opts.raw || {};
+  const fast = isOpenPipeRequest(raw);
   return {
-    searchBankPages: deep ? MAX_SEARCH_BANK_PAGES_DEEP : MAX_SEARCH_BANK_PAGES_NORMAL,
-    // Public search first response must not wait for a huge vertical sweep.
-    // Page-1 opens a smaller provider window quickly; search.js then keeps the pipe open.
-    naverPages: deep ? 10 : (fastPublic ? 3 : 10),
-    naverBlogPages: deep ? 8 : (fastPublic ? 1 : 6),
-    naverNewsPages: deep ? 8 : (fastPublic ? 2 : 6),
-    naverCafePages: deep ? 8 : (fastPublic ? 1 : 6),
-    naverEncycPages: deep ? 3 : (fastPublic ? 1 : 2),
-    naverKinPages: deep ? 3 : (fastPublic ? 1 : 2),
-    naverBookPages: deep ? 4 : (fastPublic ? 0 : 2),
-    naverLocalPages: deep ? 3 : (fastPublic ? 1 : 2),
-    googlePages: deep ? 9 : (fastPublic ? 3 : 6),
-    bingPages: deep ? 6 : (fastPublic ? 2 : 4),
-    imagePages: deep ? 6 : (fastPublic ? 2 : 4),
-    naverImagePages: deep ? 6 : (fastPublic ? 2 : 4),
-    youtubeLimit: deep ? 180 : (fastPublic ? 40 : 120),
-    timeoutMs: deep ? 15000 : (fastPublic ? 4500 : DEFAULT_SOFT_TIMEOUT_MS)
+    searchBankPages: 0,
+    // 일반 검색 첫 응답은 30초짜리 전체 수집이 아니라 빠른 창을 먼저 열어야 한다.
+    // 뒤쪽 보강은 search.js의 열린 수신 루프가 page window로 계속 받는다.
+    naverPages: fast ? 3 : (deep ? 10 : 6),
+    naverBlogPages: fast ? 1 : (deep ? 8 : 4),
+    naverNewsPages: fast ? 2 : (deep ? 8 : 4),
+    naverCafePages: fast ? 1 : (deep ? 8 : 4),
+    naverEncycPages: fast ? 1 : (deep ? 3 : 2),
+    naverKinPages: fast ? 1 : (deep ? 3 : 2),
+    naverBookPages: fast ? 1 : (deep ? 4 : 2),
+    naverLocalPages: fast ? 1 : (deep ? 3 : 2),
+    googlePages: fast ? 2 : (deep ? 9 : 4),
+    bingPages: fast ? 2 : (deep ? 6 : 3),
+    imagePages: fast ? 1 : (deep ? 6 : 2),
+    naverImagePages: fast ? 1 : (deep ? 6 : 2),
+    youtubeLimit: fast ? 40 : (deep ? 180 : 100),
+    timeoutMs: fast ? 2800 : (deep ? 15000 : DEFAULT_SOFT_TIMEOUT_MS),
+    fastFirstWindow: fast
   };
 }
 
@@ -2908,9 +2880,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 
   const mode = externalMode || (externalOff ? 'off' : 'auto');
   const viewType = normalizeSearchType(searchType);
-  const raw = (event && event.queryStringParameters) || {};
-  const publicSearchSurface = isPublicSearchSurface(raw);
-  const cacheKey = [q, limit, start, lang || '', deep ? 'deep' : 'normal', mode, noMedia ? 'no-media' : 'media', viewType, publicSearchSurface ? 'public-search' : 'mixed'].join('::');
+  const cacheKey = [q, limit, start, lang || '', deep ? 'deep' : 'normal', mode, noMedia ? 'no-media' : 'media', viewType].join('::');
   const cached = globalThis.__MARU_CACHE.get(cacheKey);
   if(cached && Date.now() - cached.t < MARU_GATEWAY_CACHE_TTL_MS) return cached.v;
 
@@ -2919,7 +2889,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 
   const work = (async () => {
     const started = nowMs();
-    const caps = sourceCaps({ deep, fastPublic: publicSearchSurface });
+    const caps = sourceCaps({ deep, raw: (event && event.queryStringParameters) || {} });
     const deadline = started + caps.timeoutMs;
     const timeLeft = () => Math.max(0, deadline - nowMs());
     const collected = [];
@@ -3323,14 +3293,13 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       return total;
     }
 
-    // 일반 검색 경로에서는 Search Bank Engine / snapshot raw를 절대 직접 호출하지 않는다.
-    // Search Bank Engine은 프론트 슬롯 공급 전용이고, public search는 산마루/공개 provider 경로만 사용한다.
-    const internalCount = 0;
-    record('search-bank', 'skipped-public-search-boundary', 0, {
-      role:'front-slot-supply-only',
-      publicSearchSurface:true,
-      reason:'search-bank-engine-and-snapshot-raw-are-not-general-search-results'
-    });
+    const publicSearchSurface = isPublicSearchRequest((event && event.queryStringParameters) || {});
+    const internalCount = publicSearchSurface ? 0 : await pullFromSearchBank();
+    if(publicSearchSurface){
+      record('search-bank', 'skipped-public-search-boundary', 0, {
+        reason:'Search Bank Engine / snapshot raw are front-page slot supply only'
+      });
+    }
     // PRESERVE + EXPAND: Search Bank/Index must never stop the broad Maru Search gateway.
     // If the caller did not explicitly block external sources, run the controlled gateway pass.
     // This restores news/blog/cafe/youtube/image/company discovery that disappeared when internal results were considered "enough".
@@ -3349,13 +3318,13 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 
       const afterPrimaryExternal = collected.length;
       const naturalExpansionTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
-      if(timeLeft() > 1200){
+      if(!caps.fastFirstWindow && timeLeft() > 1200){
         await pullFromNaverVerticals();
       } else {
         record('naver_verticals', 'skipped-time', 0, { afterPrimaryExternal, naturalExpansionTarget });
       }
 
-      if((viewType !== 'all' || detectQueryIntentCluster(q) !== 'general') && timeLeft() > 1300){
+      if(!caps.fastFirstWindow && (viewType !== 'all' || detectQueryIntentCluster(q) !== 'general') && timeLeft() > 1300){
         await pullFromIntentExpansion();
       }
 
@@ -3364,24 +3333,19 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       record('external-gateway', externalOff ? 'blocked-by-request' : 'skipped-internal-enough', 0, { internalCount, trigger: externalTriggerMin, mode });
     }
 
-    if(!publicSearchSurface){
-      const publicProviderCards = publicPlatformResultCards(q);
-      if(publicProviderCards.length){
-        collected.push.apply(collected, publicProviderCards);
-        record('public-provider-roads', 'ok', publicProviderCards.length, { includes:['google','naver','youtube','instagram','facebook','tiktok','x-twitter','threads'], role:'category-and-provider-road-preservation-not-result-suppression' });
-      }
-
-      const directMapCards = mapCards(q, region);
-      if(directMapCards.length){
-        collected.push.apply(collected, directMapCards);
-        record('map-link-cards', 'ok', directMapCards.length, { mode: 'direct-navigation-links' });
-      }
-    }else{
-      record('public-provider-roads', 'skipped-public-search-no-generic-guide-cards', 0);
-      record('map-link-cards', 'skipped-public-search-no-generic-guide-cards', 0);
+    const publicProviderCards = publicPlatformResultCards(q);
+    if(publicProviderCards.length){
+      collected.push.apply(collected, publicProviderCards);
+      record('public-provider-roads', 'ok', publicProviderCards.length, { includes:['google','naver','youtube','instagram','facebook','tiktok','x-twitter','threads'], role:'category-and-provider-road-preservation-not-result-suppression' });
     }
 
-    if(!publicSearchSurface && (viewType === 'map' || viewType === 'tour')){
+    const directMapCards = mapCards(q, region);
+    if(directMapCards.length){
+      collected.push.apply(collected, directMapCards);
+      record('map-link-cards', 'ok', directMapCards.length, { mode: 'direct-navigation-links' });
+    }
+
+    if(viewType === 'map' || viewType === 'tour'){
       const directTransportCards = transportCards(q);
       if(directTransportCards.length){
         collected.push.apply(collected, directTransportCards);
@@ -3389,25 +3353,20 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       }
     }
 
-    if(!publicSearchSurface){
-      // Open/public discovery surfaces are bridge cards only. They are not real
-      // search-result content, so public search must not fill cards with them.
-      const discoveryCards = openDiscoverySurfaceCards(q);
-      if(discoveryCards.length){
-        collected.push.apply(collected, discoveryCards);
-        record('open-discovery-surfaces', 'ok', discoveryCards.length, {
-          includes: ['news','youtube','vlog','instagram','facebook','tiktok','x-twitter','company-official','blog','cafe','community','knowledge']
-        });
-      }
+    // Open/public discovery surfaces: SNS, company/official pages, blogs, communities, videos, vlogs and news.
+    // These are additive bridge cards only; they do not replace provider/API results and do not touch media/image fields.
+    const discoveryCards = openDiscoverySurfaceCards(q);
+    if(discoveryCards.length){
+      collected.push.apply(collected, discoveryCards);
+      record('open-discovery-surfaces', 'ok', discoveryCards.length, {
+        includes: ['news','youtube','vlog','instagram','facebook','tiktok','x-twitter','company-official','blog','cafe','community','knowledge']
+      });
+    }
 
-      if(collected.length < 25){
-        const emergencyCards = sanmaruEmergencyDiscoveryCards(q);
-        collected.push.apply(collected, emergencyCards);
-        record('sanmaru-emergency-discovery', emergencyCards.length ? 'ok' : 'empty', emergencyCards.length, { reason:'prevent-empty-result-while-provider-cache-warms' });
-      }
-    }else{
-      record('open-discovery-surfaces', 'skipped-public-search-no-generic-guide-cards', 0);
-      record('sanmaru-emergency-discovery', 'skipped-public-search-no-generic-guide-cards', 0);
+    if(collected.length < 25){
+      const emergencyCards = sanmaruEmergencyDiscoveryCards(q);
+      collected.push.apply(collected, emergencyCards);
+      record('sanmaru-emergency-discovery', emergencyCards.length ? 'ok' : 'empty', emergencyCards.length, { reason:'prevent-empty-result-while-provider-cache-warms' });
     }
 
     let unique = dedupeCanonicalItems(collected);
@@ -4769,8 +4728,7 @@ async function attachSanmaruAugmentResults(base, event, ctx){
     waitedForDeepSanmaru: false
   };
 
-  if(!q || isPublicSearchSurface(raw) || truthy(raw.noSanmaru) || truthy(raw.skipSanmaru) || truthy(raw.disableSanmaru)){
-    hookMeta.status = isPublicSearchSurface(raw) ? 'skipped-public-search-boundary' : hookMeta.status;
+  if(!q || truthy(raw.noSanmaru) || truthy(raw.skipSanmaru) || truthy(raw.disableSanmaru)){
     return Object.assign({}, base, { meta: Object.assign({}, base.meta || {}, { sanmaruAugment: hookMeta }) });
   }
 
@@ -4905,9 +4863,7 @@ exports.handler = async function(event){
     }
 
     const visibleNeed = clampInt(firstNonEmpty(raw && (raw.perPage || raw.pageSize || raw.visibleCardsPerPage || raw.visibleLimit), 25), 25, 1, 100);
-    const publicSearchSurface = isPublicSearchSurface(raw || {});
-    const openPipeRequested = truthy(raw && (raw.openPipe || raw.streamFullWindow || raw.smoothIntake || raw.naturalFlow));
-    const forceProviderRefresh = deep || publicSearchSurface || explicitExternalRequested(raw) || truthy(raw && (raw.refresh || raw.forceRefresh || raw.waitProviders || raw.waitExternal));
+    const forceProviderRefresh = deep || explicitExternalRequested(raw) || truthy(raw && (raw.refresh || raw.forceRefresh || raw.waitProviders || raw.waitExternal));
 
     // IMPORTANT: Sanmaru is the top resident information CPU. Maru Search is the
     // mounted gateway/body and should format/page Sanmaru's already-mounted
@@ -4921,14 +4877,14 @@ exports.handler = async function(event){
     const sanmaruRouteContext = getSanmaruRouteContextForMaru(q, raw || {}, { searchType, lang, limit, reason:'maru-top-route-owner-context' });
     let residentSeedPack = null;
     let residentRefreshSignal = null;
-    if(!publicSearchSurface && !truthy(raw && (raw.noResident || raw.skipResident || raw.disableResident))){
+    if(!truthy(raw && (raw.noResident || raw.skipResident || raw.disableResident))){
       residentSeedPack = getSanmaruResidentForMaru(q, raw || {}, { searchType, lang, limit, reason:'maru-top-resident-seed-preserve-wide-search' });
       residentRefreshSignal = triggerSanmaruResidentRefresh(q, raw || {}, { searchType, lang, limit });
     }
 
     let base = null;
     const sanmaruOpenGateRequested = truthy(raw && (raw.sanmaruFastOnly || raw.cacheOnly || raw.instantOnly || raw.sanmaruFirst || raw.residentFirst || raw.naturalFlow || raw.residentSwitch)) || safeString(raw && raw.routeOwner).toLowerCase() === 'sanmaru';
-    const sanmaruCanServeFromFastLayer = !publicSearchSurface && residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, limit, raw || {}) && sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal));
+    const sanmaruCanServeFromFastLayer = residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, limit, raw || {}) && sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal));
     if(sanmaruCanServeFromFastLayer){
       base = buildSanmaruFastLayerBase(q, residentSeedPack, Object.assign({}, raw || {}, { limit }), { region:detectRuntimeRegion(event, lang, q) });
       base.meta = Object.assign({}, base.meta || {}, {
@@ -4955,7 +4911,7 @@ exports.handler = async function(event){
       }
     }
     if(!base || !Array.isArray(base.items)) base = Object.assign({ source:null, route:[], sourceRoute:[], region:detectRuntimeRegion(event, lang, q), items:[], results:[], meta:{ trace:[] } }, base || {});
-    if(!publicSearchSurface && (base.items || []).length < Math.min(visibleNeed, 25)){
+    if((base.items || []).length < Math.min(visibleNeed, 25)){
       const fallbackCards = [].concat(
         (residentSeedPack && Array.isArray(residentSeedPack.items) ? residentSeedPack.items : []),
         mapCards(q, detectRuntimeRegion(event, lang, q)),
@@ -4972,7 +4928,7 @@ exports.handler = async function(event){
         trace:[].concat(base.meta && base.meta.trace || [], [{ name:'fail-safe-sanmaru-open-discovery-backfill', status:fallbackCards.length ? 'ok' : 'empty', count:fallbackCards.length }])
       });
     }
-    if(!publicSearchSurface && residentSeedPack && Array.isArray(residentSeedPack.items) && residentSeedPack.items.length){
+    if(residentSeedPack && Array.isArray(residentSeedPack.items) && residentSeedPack.items.length){
       const residentSeedItems = residentSeedPack.items.map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru-resident-seed')));
       const finalSeedTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET, (base.items || []).length, residentSeedItems.length));
       base.items = dedupeCanonicalItems([].concat(base.items || [], residentSeedItems)).slice(0, finalSeedTarget);
@@ -4991,7 +4947,7 @@ exports.handler = async function(event){
     }
     const requestedPageForWindow = clampInt(firstNonEmpty(raw && (raw.page || raw.p || raw.visiblePage || raw.sectionPage), 1), 1, 1, MARU_SEARCH_MAX_PAGER_PAGES);
     const providerLaneTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET, visibleNeed * 12, requestedPageForWindow * visibleNeed));
-    if(!publicSearchSurface && sanmaruOpenGateRequested && (base.items || []).length < providerLaneTarget && !forceProviderRefresh){
+    if(sanmaruOpenGateRequested && (base.items || []).length < providerLaneTarget && !forceProviderRefresh){
       const laneItems = buildSanmaruProviderLaneExpansionCards(q, Object.assign({}, raw || {}, { limit: providerLaneTarget }), { region:detectRuntimeRegion(event, lang, q) }, providerLaneTarget, (base.items || []).length);
       base.items = dedupeCanonicalItems([].concat(base.items || [], laneItems)).slice(0, providerLaneTarget);
       base.results = base.items;
@@ -5014,7 +4970,7 @@ exports.handler = async function(event){
       MAX_LIMIT,
       Math.max(visibleNeed * 12, requestedPageForWindowGuarantee * visibleNeed + visibleNeed)
     );
-    if(!publicSearchSurface && (base.items || []).length < pageWindowCandidateNeed){
+    if((base.items || []).length < pageWindowCandidateNeed){
       const guaranteedLaneItems = buildSanmaruProviderLaneExpansionCards(
         q,
         Object.assign({}, raw || {}, { limit: pageWindowCandidateNeed, providerLaneTarget: pageWindowCandidateNeed }),
@@ -5046,21 +5002,10 @@ exports.handler = async function(event){
     const realtimeRevenueRequested = truthy(raw && (raw.realtimeRevenue || raw.distributeNow || raw.enableRealtimeRevenue)) || truthy(process.env.MARU_SEARCH_REALTIME_REVENUE);
     const analyticsOff = truthy(raw && (raw.noAnalytics || raw.disableAnalytics)) || !analyticsRequested;
     const revenueOff = truthy(raw && (raw.noRevenue || raw.disableRevenue)) || !realtimeRevenueRequested;
-    if(publicSearchSurface){
-      base.items = sanitizePublicSearchItems(base.items || []);
-      base.results = base.items;
-      base.meta = Object.assign({}, base.meta || {}, {
-        publicSearchBoundary:true,
-        publicSearchBoundaryPolicy:'no-search-bank-engine-no-snapshot-raw-no-sanmaru-guide-cards'
-      });
-    }
     if(!analyticsOff) syncSearchAnalytics(event, q, base.items).catch(() => null);
     const maruLocalAuthorityCards = buildKoreaLocalAuthorityCardsForSearch(q, base.region || base.route || 'KR');
     if(maruLocalAuthorityCards.length){
       base.items = dedupeCanonicalItems([].concat(maruLocalAuthorityCards, base.items || []));
-    }
-    if(publicSearchSurface){
-      base.items = sanitizePublicSearchItems(base.items || []);
     }
     base.items = (Array.isArray(base.items) ? base.items : []).map(compactResultItem);
     base.results = base.items;
@@ -5088,10 +5033,7 @@ exports.handler = async function(event){
       doesNotLimitItemsResults: true
     });
     const fullCandidateCount = Array.isArray(base.items) ? base.items.length : 0;
-    const requestedBodyWindow = clampInt(firstNonEmpty(raw && (raw.bodyWindowLimit || raw.fullWindowLimit || raw.responseWindowLimit), 0), 0, 0, MAX_LIMIT);
-    const firstResponseWindow = openPipeRequested
-      ? Math.max(visiblePagePack.perPage, Math.min(fullCandidateCount || MAX_LIMIT, requestedBodyWindow || limit || MAX_LIMIT))
-      : Math.max(visiblePagePack.perPage, Math.min(visiblePagePack.perPage * 12, 300));
+    const firstResponseWindow = Math.max(visiblePagePack.perPage, Math.min(visiblePagePack.perPage * 12, 300));
     const responseItems = visiblePagePack.page <= 1
       ? base.items.slice(0, Math.min(fullCandidateCount, firstResponseWindow))
       : visiblePagePack.pageItems.slice();
@@ -5141,17 +5083,7 @@ async function maruSearchDispatcher(req){
     mediaExternal: req.mediaExternal,
     mediaEngineExternal: req.mediaEngineExternal,
     includeImmersive: req.includeImmersive,
-    useImmersiveMedia: req.useImmersiveMedia,
-    publicSearch: req.publicSearch,
-    searchSurface: req.searchSurface,
-    excludeSnapshotSlots: req.excludeSnapshotSlots,
-    excludeFrontSlots: req.excludeFrontSlots,
-    excludeInternalCodeResults: req.excludeInternalCodeResults,
-    openPipe: req.openPipe,
-    streamFullWindow: req.streamFullWindow,
-    bodyWindowLimit: req.bodyWindowLimit,
-    naturalFlow: req.naturalFlow,
-    smoothIntake: req.smoothIntake
+    useImmersiveMedia: req.useImmersiveMedia
   }, headers: req.headers || {} });
   try { return JSON.parse(res.body || '{}'); }
   catch(e){ return { status: 'fail', message: 'BAD_JSON' }; }
