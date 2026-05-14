@@ -1079,10 +1079,57 @@ const SERP_VERTICAL_PREVIEW_ROUTES = [
   { type:'webtoon', group:'webtoon' }
 ];
 
+const SERP_SECTION_PREVIEW_CAPS = {
+  authority: 3,
+  knowledge: 4,
+  local_tour: 2,
+  news: 5,
+  media: 5,
+  social: 4,
+  community: 5,
+  book: 4,
+  shopping: 4,
+  sports: 3,
+  finance: 3,
+  webtoon: 3,
+  web: 8
+};
+
+const SERP_VERTICAL_FETCH_LIMITS = {
+  map: 4,
+  knowledge: 8,
+  news: 12,
+  video: 8,
+  image: 8,
+  blog: 8,
+  cafe: 8,
+  sns: 8,
+  book: 8,
+  shopping: 8,
+  sports: 6,
+  finance: 6,
+  webtoon: 6
+};
+
+const SERP_INITIAL_PREVIEW_WAIT_MS = 850;
+
+function serpPreviewCap(group){
+  return SERP_SECTION_PREVIEW_CAPS[group] || 5;
+}
+
+function serpVerticalFetchLimit(route){
+  const safeType = normalizeSearchType(route && route.type);
+  return SERP_VERTICAL_FETCH_LIMITS[safeType] || 8;
+}
+
+function isEarlyPortalGroup(group){
+  return group && group !== 'web';
+}
+
 function categoryPreviewDeficitMap(){
   const groups = groupSliceForDisplay(allItems || []);
   const counts = new Map(groups.map(g => [g.group, Array.isArray(g.items) ? g.items.length : 0]));
-  const desired = { authority:3, local_tour:4, knowledge:4, news:4, media:4, community:4, social:3, book:3, shopping:3, sports:3, finance:3, webtoon:3 };
+  const desired = SERP_SECTION_PREVIEW_CAPS;
   const deficit = new Set();
   Object.keys(desired).forEach(group => {
     if((counts.get(group) || 0) < desired[group]) deficit.add(group);
@@ -1103,11 +1150,42 @@ function decorateVerticalPreviewItems(items, route){
   }));
 }
 
+async function collectInitialSerpPreviewItems(q, seq, maxWaitMs){
+  if(!q || runSearch._seq !== seq || normalizeSearchType(activeType) !== 'all') return [];
+  const routes = SERP_VERTICAL_PREVIEW_ROUTES.filter(r => isEarlyPortalGroup(r.group));
+  const collected = [];
+  const seen = new Set();
+
+  function absorb(route, pack){
+    const raw = pageItemsFromPack(pack).length ? pageItemsFromPack(pack) : (pack && pack.items) || [];
+    const cap = Math.max(serpVerticalFetchLimit(route), serpPreviewCap(route && route.group));
+    const items = decorateVerticalPreviewItems(dedupeItems(filterSearchResultItems(raw)).slice(0, cap), route);
+    items.forEach(it => {
+      const key = String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
+      if(key && seen.has(key)) return;
+      if(key) seen.add(key);
+      collected.push(it);
+    });
+  }
+
+  const tasks = routes.map(route => fetchVerticalPreviewSearch(q, route).then(pack => {
+    if(runSearch._seq !== seq) return;
+    absorb(route, pack);
+  }).catch(() => null));
+
+  await Promise.race([
+    Promise.allSettled(tasks),
+    sleepIntake(Math.max(150, parseInt(maxWaitMs, 10) || SERP_INITIAL_PREVIEW_WAIT_MS))
+  ]).catch(() => null);
+
+  return collected;
+}
+
 async function fetchVerticalPreviewSearch(q, route){
   const safeType = normalizeSearchType(route && route.type);
   const sp = new URLSearchParams();
   sp.set('q', q);
-  sp.set('limit', '80');
+  sp.set('limit', String(serpVerticalFetchLimit(route)));
   sp.set('type', safeType);
   sp.set('tab', safeType);
   sp.set('perPage', String(PAGE_SIZE));
@@ -1151,7 +1229,7 @@ async function startSerpVerticalPreviewBackfill(q, seq){
         const pack = await fetchVerticalPreviewSearch(q, route);
         if(runSearch._seq !== seq) return;
         const raw = pageItemsFromPack(pack).length ? pageItemsFromPack(pack) : (pack.items || []);
-        const decorated = decorateVerticalPreviewItems(dedupeItems(filterSearchResultItems(raw)).slice(0, 25), route);
+        const decorated = decorateVerticalPreviewItems(dedupeItems(filterSearchResultItems(raw)).slice(0, Math.max(serpVerticalFetchLimit(route), serpPreviewCap(route && route.group))), route);
         if(decorated.length){
           allItems = dedupeItems((allItems || []).concat(decorated));
           updateProgressiveTotalFromPayload(pack && pack.payload, Math.max(allItems.length, serverTotalItems || 0));
@@ -1905,21 +1983,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       // results from pagination. Broad searches such as 서울/부산/뉴욕 should
       // keep the full candidate stream and only arrange the first viewport in
       // a Google/Naver-like balanced order.
-      const limits = {
-        authority: 4,
-        news: 6,
-        local_tour: 3,
-        media: 5,
-        social: 5,
-        community: 5,
-        knowledge: 3,
-        book: 5,
-        shopping: 5,
-        sports: 5,
-        finance: 5,
-        webtoon: 5,
-        web: 18
-      };
+      const limits = Object.assign({}, SERP_SECTION_PREVIEW_CAPS, { web: 18 });
       return limits[group] || 6;
     }
 
@@ -1930,7 +1994,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = ['authority','local_tour','knowledge','news','media','community','social','book','shopping','sports','finance','webtoon','web'];
+      const order = ['authority','local_tour','knowledge','news','media','social','community','book','shopping','sports','finance','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -1963,10 +2027,83 @@ async function fetchInstantSearchPack(q, type = activeType){
       return source || String((it && it.title) || '').slice(0, 40).toLowerCase();
     }
 
+    const NEWS_MEDIUM_PRIORITY = [
+      ['naver', /(^|\.)news\.naver\.com$|(^|\.)naver\.com$|네이버/i],
+      ['google-news', /news\.google\.|구글\s*뉴스|google\s*news/i],
+      ['kbs', /(^|\.)kbs\.co\.kr$|kbs/i],
+      ['mbc', /(^|\.)mbc\.co\.kr$|mbc/i],
+      ['sbs', /(^|\.)sbs\.co\.kr$|sbs/i],
+      ['jtbc', /(^|\.)jtbc\.co\.kr$|jtbc/i],
+      ['ytn', /(^|\.)ytn\.co\.kr$|ytn/i],
+      ['yonhap', /yna\.co\.kr|yonhap|연합/i],
+      ['chosun', /chosun\.com|조선/i],
+      ['joongang', /joongang\.co\.kr|중앙/i],
+      ['donga', /donga\.com|동아/i],
+      ['hankyung', /hankyung\.com|한국경제/i],
+      ['mk', /mk\.co\.kr|매일경제/i],
+      ['seoul', /seoul\.co\.kr|서울신문/i],
+      ['channel-a', /ichannela\.com|채널a/i],
+      ['tvchosun', /tvchosun\.com|tv\s*조선|티비조선/i]
+    ];
+
+    function newsMediumKeyForItem(it){
+      const url = String((it && (it.url || it.link || it.openUrl)) || '').trim();
+      const host = domainOf(url).toLowerCase().replace(/^www\./, '');
+      const source = String((it && (it.source || it.provider || it.channel || it.publisher || it.author)) || '').toLowerCase();
+      const title = String((it && it.title) || '').toLowerCase();
+      const summary = String((it && (it.summary || it.description || it.snippet)) || '').toLowerCase();
+      const text = `${host} ${source} ${title} ${summary}`;
+      for(const [key, rx] of NEWS_MEDIUM_PRIORITY){
+        if(rx.test(text)) return key;
+      }
+      if(host){
+        return host
+          .replace(/^m\./, '')
+          .replace(/^news\./, '')
+          .replace(/\.com$|\.co\.kr$|\.co$|\.kr$|\.net$|\.org$/g, '');
+      }
+      return source || String((it && it.title) || '').slice(0, 40).toLowerCase();
+    }
+
+    function newsMediumPriorityRank(key){
+      const k = String(key || '').toLowerCase();
+      const idx = NEWS_MEDIUM_PRIORITY.findIndex(([name]) => name === k);
+      return idx >= 0 ? idx : 999;
+    }
+
+    function diversifyNewsByMedium(items){
+      const list = Array.isArray(items) ? items.slice() : [];
+      const bestByMedium = new Map();
+      const overflow = [];
+      list.forEach((it, idx) => {
+        const key = newsMediumKeyForItem(it) || sourceKeyForDisplayGroupItem(it) || `news-${idx}`;
+        if(!bestByMedium.has(key)){
+          bestByMedium.set(key, Object.assign({}, it, {
+            newsMediumKey: key,
+            newsMediumRepresentative: true
+          }));
+        } else {
+          overflow.push(Object.assign({}, it, { newsMediumKey: key }));
+        }
+      });
+      const heads = Array.from(bestByMedium.values()).sort((a, b) => {
+        const ak = newsMediumKeyForItem(a);
+        const bk = newsMediumKeyForItem(b);
+        return (newsMediumPriorityRank(ak) - newsMediumPriorityRank(bk));
+      });
+      return heads.concat(overflow);
+    }
+
     function diversifyGroupPreviewItems(group, items){
       const list = Array.isArray(items) ? items.slice() : [];
       if(!list.length) return list;
-      const verticals = new Set(['news','community','social','media']);
+
+      // News is a medium/source module, not an article dump. Show one headline
+      // representative per major outlet first, and keep the remaining articles
+      // behind the section expand button.
+      if(group === 'news') return diversifyNewsByMedium(list);
+
+      const verticals = new Set(['community','social','media']);
       if(!verticals.has(group)) return list;
 
       const firstBySource = [];
@@ -1993,21 +2130,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       // - hidden overflow is stored behind the section button;
       // - hidden overflow NEVER counts in the 25 visible slots;
       // - do not refill empty slots with hidden news/blog/SNS overflow.
-      const visibleCaps = {
-        authority: 4,
-        knowledge: 4,
-        local_tour: 3,
-        news: 6,
-        community: 6,
-        social: 5,
-        media: 5,
-        book: 4,
-        shopping: 4,
-        sports: 3,
-        finance: 3,
-        webtoon: 3,
-        web: 8
-      };
+      const visibleCaps = SERP_SECTION_PREVIEW_CAPS;
 
       const groups = groupSliceForDisplay(source).map(g => {
         const items = diversifyGroupPreviewItems(g.group, g.items || []);
@@ -2862,21 +2985,8 @@ if (it.riskLabel === '⚠️ high-risk') {
         return { modulePages: [], webItems: sourceItems.slice(), pageCount, totalDisplayUnits: sourceItems.length };
       }
 
-      const groupOrder = ['authority','knowledge','local_tour','news','community','social','media','shopping','sports','finance','webtoon'];
-      const previewCaps = {
-        authority: 5,
-        knowledge: 5,
-        local_tour: 5,
-        news: 6,
-        community: 6,
-        social: 6,
-        media: 6,
-        book: 5,
-        shopping: 5,
-        sports: 5,
-        finance: 5,
-        webtoon: 5
-      };
+      const groupOrder = ['authority','local_tour','knowledge','news','media','social','community','book','shopping','sports','finance','webtoon'];
+      const previewCaps = SERP_SECTION_PREVIEW_CAPS;
 
       const groups = groupSliceForDisplay(sourceItems).map(g => Object.assign({}, g, {
         items: diversifyGroupPreviewItems(g.group, g.items || [])
@@ -2888,7 +2998,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       groupOrder.forEach(group => {
         const g = byGroup.get(group);
         if(!g || !Array.isArray(g.items) || !g.items.length) return;
-        const cap = Math.max(3, previewCaps[group] || displayGroupPreviewLimit(group, g.items[0]) || 5);
+        const cap = Math.max(1, previewCaps[group] || displayGroupPreviewLimit(group, g.items[0]) || 5);
         const previewItems = [];
         const hiddenItems = [];
 
@@ -3206,7 +3316,12 @@ async function runSearch(q, type = activeType){
   clearPager();
 
   try {
+    const initialSerpPreviewPromise = normalizeSearchType(activeType) === 'all'
+      ? collectInitialSerpPreviewItems(qq, seq, SERP_INITIAL_PREVIEW_WAIT_MS)
+      : Promise.resolve([]);
+
     const instantPack = await fetchInstantSearchPack(qq, activeType);
+    const initialSerpPreviewItems = await initialSerpPreviewPromise.catch(() => []);
     if (runSearch._seq !== seq) return;
 
     lastSearchPayload = instantPack && instantPack.payload || null;
@@ -3215,7 +3330,7 @@ async function runSearch(q, type = activeType){
     const pageItems = dedupeItems(filterSearchResultItems(pageItemsFromPack(instantPack)));
 
     const firstItems = quickItems.length ? quickItems : pageItems;
-    allItems = dedupeItems(firstItems);
+    allItems = dedupeItems(firstItems.concat(initialSerpPreviewItems || []));
     seedLoadedServerPagesFromItems(allItems, INITIAL_PRELOAD_TARGET);
     if(pageItems.length && !loadedServerPages.has(1)) loadedServerPages.set(1, pageItems.slice(0, PAGE_SIZE));
 
@@ -3246,10 +3361,13 @@ async function runSearch(q, type = activeType){
     startContinuousIntake(qq, activeType, seq);
   } catch(e){
     console.error(e);
+    const initialSerpPreviewItems = normalizeSearchType(activeType) === 'all'
+      ? await collectInitialSerpPreviewItems(qq, seq, SERP_INITIAL_PREVIEW_WAIT_MS).catch(() => [])
+      : [];
     const fallbackPack = await fetchSearch(qq, activeType, 1);
     if (runSearch._seq !== seq) return;
     const fallbackItems = dedupeItems(filterSearchResultItems(normalizeItems(fallbackPack && fallbackPack.payload || fallbackPack))).slice(0, INITIAL_PRELOAD_TARGET);
-    allItems = fallbackItems;
+    allItems = dedupeItems(fallbackItems.concat(initialSerpPreviewItems || []));
     seedLoadedServerPagesFromItems(allItems, INITIAL_PRELOAD_TARGET);
     updateProgressiveTotalFromPayload(fallbackPack && fallbackPack.payload, Math.max(target, fallbackItems.length, INITIAL_PRELOAD_TARGET));
     serverTotalItems = Math.max(serverTotalItems || 0, INITIAL_PRELOAD_TARGET);
