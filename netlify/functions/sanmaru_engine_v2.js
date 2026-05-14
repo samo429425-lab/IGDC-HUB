@@ -1208,6 +1208,39 @@ function buildOpeningFallbackCards(q, opts){
   }, q, "sanmaru-opening"));
 }
 
+function isPublicSearchSurface(opts){
+  opts = opts || {};
+  const surface = s(opts.searchSurface || opts.surface || opts.mode).trim().toLowerCase();
+  return truthy(opts.publicSearch) || truthy(opts.excludeSnapshotSlots) || truthy(opts.excludeFrontSlots) || truthy(opts.excludeInternalCodeResults) || surface === "public-search" || surface === "search";
+}
+
+function isInternalOrSyntheticPublicSearchItem(it){
+  if(!it || typeof it !== "object") return true;
+  const sourceName = s((it.source && it.source.name) || it.source || it.provider || "").toLowerCase();
+  const title = s(it.title || it.name || "").toLowerCase();
+  const summary = s(firstNonEmpty(it.summary, it.description, it.snippet)).toLowerCase();
+  const url = s(firstNonEmpty(it.url, it.link, it.href)).trim().toLowerCase();
+  const generatedBy = s(it.generatedBy || "").toLowerCase();
+  const sourceType = s(it.sourceType || "").toLowerCase();
+
+  if(!url || url === "#" || url === "/" || url.startsWith("javascript:")) return true;
+  if(sourceName.includes("search-bank") || sourceName.includes("searchbank") || sourceName.includes("snapshot")) return true;
+  if(sourceName.includes("sanmaru_route") || sourceName.includes("sanmaru_opening")) return true;
+  if(title.startsWith("network item") || title.includes("[sanmaru route]") || title.includes("[sanmaru opening]")) return true;
+  if(url.includes("search-bank.snapshot") || url.includes("/assets/sample/")) return true;
+  if(it.sanmaruRouteCard === true || it.sanmaruOpeningCard === true) return true;
+  if(generatedBy.includes("provider-lane") || sourceType.includes("provider-lane")) return true;
+  if(summary.includes("산마루 최상위 정보 레이어") || summary.includes("마루서치는 이 경로") || summary.includes("열린 정보 통로")) return true;
+  if(summary.includes("관련 공개 웹 검색 결과입니다") || summary.includes("관련 최신 기사와 주요 보도 검색 결과입니다")) return true;
+  if(summary.includes("관련 사진·이미지·시각 자료 검색 결과입니다") || summary.includes("관련 영상·현장 콘텐츠 검색 결과입니다")) return true;
+  if(summary.includes("관련 지도·장소·지역 정보 검색 결과입니다") || summary.includes("관련 백과·지식·참고 자료 검색 결과입니다")) return true;
+  return false;
+}
+
+function sanitizePublicSearchItems(items){
+  return (Array.isArray(items) ? items : []).filter(it => !isInternalOrSyntheticPublicSearchItem(it));
+}
+
 function supplyResidentSync(input, opts){
   opts = opts || {};
   const q = typeof input === "string" ? input : firstNonEmpty(input && input.q, input && input.query, opts.q, opts.query);
@@ -1233,7 +1266,6 @@ function supplyResidentSync(input, opts){
     if(IndexEngine && typeof IndexEngine.query === "function"){
       const indexRes = IndexEngine.query({ q: clean.value, query: clean.value, type: normalizeSearchType(opts.searchType || opts.type || "all"), limit: Math.max(minVisible, Math.min(MAX_INDEX_FAST_LIMIT, clampInt(opts.limit || opts.candidatePoolTarget, DEFAULT_LIMIT, 1, MAX_LIMIT))) });
       indexItems = normalizeItemsFromResponse(indexRes).map(x => canonicalItem(x, clean.value, "search-bank-index"));
-      indexItems = filterPublicSearchItems(indexItems, opts);
       indexMeta = { status: indexItems.length ? "ok" : "empty", count:indexItems.length, engine:indexRes && indexRes.engine, latency:indexRes && indexRes.meta && indexRes.meta.latency };
     }else{
       indexMeta = { status:"unavailable" };
@@ -1242,6 +1274,7 @@ function supplyResidentSync(input, opts){
     indexMeta = { status:responseErrorCode(e) };
   }
   const residentState = ensureResidentState();
+  const publicSearchSurface = isPublicSearchSurface(opts);
   let routeFallbackCards = [];
   let openingFallbackCards = [];
   let items = dedupeItems(residentItems.concat(indexItems));
@@ -1251,13 +1284,14 @@ function supplyResidentSync(input, opts){
   // route/opening signals, not replacements for real provider results. They keep
   // category trees visible and prevent empty-looking searches while the broad
   // resident cache is warming.
-  if(opts.allowRouteCards !== false && opts.noRouteCards !== true){
+  if(!publicSearchSurface && opts.allowRouteCards !== false && opts.noRouteCards !== true){
     routeFallbackCards = buildRouteFallbackCards(clean.value, routePlan, Object.assign({}, opts, { routeCardLimit: clampInt(opts.routeCardLimit, 28, 1, 60) }));
   }
-  if(opts.allowOpeningCards !== false && opts.noOpeningCards !== true){
+  if(!publicSearchSurface && opts.allowOpeningCards !== false && opts.noOpeningCards !== true){
     openingFallbackCards = buildOpeningFallbackCards(clean.value, Object.assign({}, opts, { openingCardLimit: clampInt(opts.openingCardLimit, 24, 1, 40) }));
   }
   items = dedupeItems(items.concat(routeFallbackCards, openingFallbackCards));
+  if(publicSearchSurface) items = sanitizePublicSearchItems(items);
 
   const fullCandidateItems = items.slice();
   const requestedPage = clampInt(firstNonEmpty(opts.page, opts.p, opts.visiblePage, opts.sectionPage), 1, 1, 100000);
@@ -1394,42 +1428,6 @@ function truthy(v){
   if(v === false || v == null) return false;
   const x = low(v);
   return !!x && !["0","false","no","off","disable","disabled","null","undefined"].includes(x);
-}
-
-function isFrontSupplyContext(ctx){
-  ctx = ctx || {};
-  const raw = ctx.raw || ctx;
-  const joined = s([raw.action, raw.mode, raw.fn, raw.reason, raw.searchSurface, raw.surface, raw.from, raw.supplyMode].join(' ')).toLowerCase();
-  return !!(
-    truthy(raw.frontSupply) || truthy(raw.slotSupply) || truthy(raw.snapshotSupply) || truthy(raw.searchBankSupply) ||
-    truthy(raw.forFrontSlots) || truthy(raw.writeSnapshot) || truthy(raw.snapshotWrite) ||
-    /front[-_ ]?supply|slot[-_ ]?supply|content[-_ ]?supply|snapshot[-_ ]?supply|searchbank[-_ ]?supply|front[-_ ]?slot|automap|snapshot[-_ ]?write/.test(joined)
-  );
-}
-
-function isInternalFrontSlotLeakItem(it){
-  if(!it || typeof it !== 'object') return false;
-  const source = s(firstNonEmpty(it.source && (it.source.name || it.source.id || it.source.platform), it.source, it.provider)).toLowerCase();
-  const title = s(firstNonEmpty(it.title, it.name)).toLowerCase();
-  const summary = s(firstNonEmpty(it.summary, it.snippet, it.description)).toLowerCase();
-  const url = s(firstNonEmpty(it.url, it.link, it.href)).trim().toLowerCase();
-  const id = s(firstNonEmpty(it.id, it.originalId, it.indexId)).toLowerCase();
-  const section = s(firstNonEmpty(it.section, it.page, it.route, it.psom_key, it.bind && it.bind.section)).toLowerCase();
-  const tags = Array.isArray(it.tags) ? it.tags.join(' ').toLowerCase() : '';
-  const hay = [source, title, summary, url, id, section, tags].join(' ');
-  if(url === '#' || url === '/' || url.startsWith('javascript:')) return true;
-  if(hay.includes('search-bank.snapshot.json') || hay.includes('snapshot-local')) return true;
-  if(hay.includes('search-bank-engine') || hay.includes('search-bank-index-engine')) return true;
-  if(/\bnetwork item\s*\d+\b/i.test(hay)) return true;
-  if(hay.includes('/assets/sample/') || hay.includes('sample/network') || hay.includes('sample/media') || hay.includes('sample/distribution')) return true;
-  if(hay.includes('front-slot') || hay.includes('snapshot raw') || hay.includes('seed placeholder')) return true;
-  if(!/^https?:\/\//i.test(url) && /(^|\b)(network|distribution|social|media|tour|donation|home)[-_ ]?(right|slot|hero|main)?(\b|$)/.test(section)) return true;
-  return false;
-}
-
-function filterPublicSearchItems(items, ctx){
-  if(isFrontSupplyContext(ctx)) return Array.isArray(items) ? items : [];
-  return (Array.isArray(items) ? items : []).filter(it => !isInternalFrontSlotLeakItem(it));
 }
 function clampInt(v, d, min, max){
   const n = parseInt(v, 10);
@@ -2040,8 +2038,7 @@ async function callSearchBankIndex(ctx){
       const h = await withTimeout(mod.handler({ httpMethod:"GET", headers:(ctx.event && ctx.event.headers) || {}, queryStringParameters: params }), ctx.deep ? 1800 : 1300);
       res = h && typeof h.body === "string" ? JSON.parse(h.body || "{}") : h;
     }
-    let items = normalizeItemsFromResponse(res).map(x => canonicalItem(x, ctx.q, "search-bank-index"));
-    items = filterPublicSearchItems(items, ctx);
+    const items = normalizeItemsFromResponse(res).map(x => canonicalItem(x, ctx.q, "search-bank-index"));
     return { trace: adapterResult("searchbank-index", items.length ? "ok" : "empty", started, items), items };
   }catch(e){
     return { trace: adapterResult("searchbank-index", responseErrorCode(e), started, [], { error: responseErrorCode(e) }), items: [] };
@@ -2050,14 +2047,6 @@ async function callSearchBankIndex(ctx){
 
 async function callSearchBank(ctx){
   const started = nowMs();
-  if(!isFrontSupplyContext(ctx)){
-    return {
-      trace: adapterResult("searchbank", "skipped-public-search-surface", started, [], {
-        reason:"Search Bank Engine is front-page slot supply only"
-      }),
-      items: []
-    };
-  }
   try{
     let mod = null;
     try{ mod = require("./search-bank-engine"); }catch(e){ mod = null; }
@@ -2466,11 +2455,16 @@ async function runSanmaru(input, maybeCtx){
       page:ctx.page,
       perPage:ctx.perPage,
       visibleNeed:ctx.perPage || DEFAULT_VISIBLE_PER_PAGE,
-      allowRouteCards:true,
-      allowOpeningCards:true
+      allowRouteCards:!isPublicSearchSurface(ctx.raw || {}),
+      allowOpeningCards:!isPublicSearchSurface(ctx.raw || {}),
+      noRouteCards:isPublicSearchSurface(ctx.raw || {}),
+      noOpeningCards:isPublicSearchSurface(ctx.raw || {}),
+      publicSearch:isPublicSearchSurface(ctx.raw || {}),
+      searchSurface:isPublicSearchSurface(ctx.raw || {}) ? "public-search" : ctx.raw.searchSurface
     });
     let instantItems = Array.isArray(supplied && supplied.items) ? supplied.items : [];
     const finalTarget = Math.min(MAX_LIMIT, Math.max(ctx.limit, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET));
+    if(isPublicSearchSurface(ctx.raw || {})) instantItems = sanitizePublicSearchItems(instantItems);
     instantItems = finalRank(ctx.q, instantItems, ctx).slice(0, finalTarget).map(it => {
       const copy = Object.assign({}, it);
       delete copy._sanmaruSeq;
@@ -2589,7 +2583,6 @@ async function runSanmaru(input, maybeCtx){
     });
 
     let ranked = finalRank(ctx.q, items, ctx);
-    ranked = filterPublicSearchItems(ranked, ctx);
     const finalTarget = Math.min(MAX_LIMIT, Math.max(ctx.limit, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET));
     ranked = ranked.slice(0, finalTarget).map(it => {
       const copy = Object.assign({}, it);
@@ -2950,6 +2943,7 @@ function buildSanmaruInstantOsPackage(q, opts){
 
   const lang = firstNonEmpty(opts.lang, opts.uiLang, opts.locale);
   const searchType = firstNonEmpty(opts.searchType, opts.type, opts.category, opts.tab, opts.vertical, "all");
+  const publicSearchSurface = isPublicSearchSurface(opts);
   const country = firstNonEmpty(opts.country, opts.region, opts.geo, opts.runtimeRegion);
   const effectiveCountry = firstNonEmpty(country, "GLOBAL");
 
@@ -2963,19 +2957,25 @@ function buildSanmaruInstantOsPackage(q, opts){
     page: firstNonEmpty(opts.page, opts.p, opts.start, 1),
     perPage: firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit, DEFAULT_VISIBLE_PER_PAGE),
     visibleNeed: firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit, DEFAULT_VISIBLE_PER_PAGE),
-    allowRouteCards: true,
-    allowOpeningCards: true,
+    allowRouteCards: !publicSearchSurface,
+    allowOpeningCards: !publicSearchSurface,
+    noRouteCards: publicSearchSurface,
+    noOpeningCards: publicSearchSurface,
+    publicSearch: publicSearchSurface,
+    searchSurface: publicSearchSurface ? "public-search" : opts.searchSurface,
     country: effectiveCountry
   });
 
   let items = Array.isArray(supplied && supplied.items) ? supplied.items.slice() : [];
-  const providerPassthroughItems = sanmaruProviderPassthroughCards(q, Object.assign({}, opts, { country: effectiveCountry, searchType }));
+  const providerPassthroughItems = publicSearchSurface || truthy(opts.noProviderPassthrough) || s(opts.providerPassthrough).trim() === "0"
+    ? []
+    : sanmaruProviderPassthroughCards(q, Object.assign({}, opts, { country: effectiveCountry, searchType }));
   // Provider passthrough cards are first-paint roads. They must never replace the
   // full Maru Search result set; they only make the page usable immediately.
   if(providerPassthroughItems.length){
     items = providerPassthroughItems.concat(items);
   }
-  items = filterPublicSearchItems(items, opts);
+  if(publicSearchSurface) items = sanitizePublicSearchItems(items);
   const ctx = {
     q,
     searchType,
