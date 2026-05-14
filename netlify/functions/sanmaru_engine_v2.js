@@ -1139,6 +1139,34 @@ function routeProviderSearchUrl(provider, q){
   return "https://www.google.com/search?q=" + enc;
 }
 
+
+function sanmaruPublicSearchSurface(opts){
+  opts = opts || {};
+  const flags = [
+    opts.action, opts.reason, opts.handoff, opts.surface, opts.searchSurface,
+    opts.mode, opts.from, opts.source, opts.entry
+  ].map(v => s(v).toLowerCase()).join(' ');
+  return truthy(opts.publicSearch) || truthy(opts.searchUi) || truthy(opts.searchHTML) ||
+    /public-search|search-ui|search-html|maru-search|instant-supply|instant-search|first-supply/.test(flags);
+}
+
+function sanmaruIsScaffoldSearchCard(it){
+  if(!it || typeof it !== "object") return false;
+  const src = s(it.source || it.provider || it.generatedBy || it.sourceType || '').toLowerCase();
+  const title = s(it.title || '').toLowerCase();
+  const text = [it.summary, it.description, it.snippet].map(v => s(v).toLowerCase()).join(' ');
+  return !!(
+    it.sanmaruRouteCard || it.sanmaruOpeningCard ||
+    src.includes('sanmaru_route') || src.includes('sanmaru_opening') ||
+    src.includes('provider-window') || src.includes('sanmaru-provider-passthrough') ||
+    title.includes('[sanmaru route]') || title.includes('[sanmaru opening]') ||
+    text.includes('산마루 최상위 정보 레이어') ||
+    text.includes('산마루가 관리하는 열린 정보 통로') ||
+    text.includes('관련 공개 웹 검색 결과입니다') ||
+    text.includes('관련 공개 정보 경로입니다')
+  );
+}
+
 function buildRouteFallbackCards(q, routePlan, opts){
   opts = opts || {};
   const plan = routePlan || buildRoutePlanForQuery(q, opts);
@@ -1154,8 +1182,8 @@ function buildRouteFallbackCards(q, routePlan, opts){
     seen.add(key);
     const item = canonicalItem({
       id:"sanmaru-route-" + stableHash([q, provider, category].join("|")),
-      title:"[Sanmaru Route] " + q + " · " + provider + " / " + category,
-      summary:"산마루 최상위 정보 레이어가 이미 알고 있는 정보원 경로입니다. 마루서치는 이 경로를 프론트로 공급하는 게이트웨이이며, 부족분은 열린 provider/API에서 보강됩니다.",
+      title: q + " · " + provider + " / " + category,
+      summary:"",
       url:routeProviderSearchUrl(provider, [q, category].filter(Boolean).join(" ")),
       link:routeProviderSearchUrl(provider, [q, category].filter(Boolean).join(" ")),
       source:"sanmaru_route_" + provider,
@@ -1202,8 +1230,8 @@ function buildOpeningFallbackCards(q, opts){
   ];
   return specs.slice(0, clampInt(opts.openingCardLimit, 15, 1, 30)).map(spec => canonicalItem({
     id:"sanmaru-opening-" + stableHash([q, spec[0]].join("|")),
-    title:"[Sanmaru Opening] " + q + " · " + spec[1],
-    summary:"산마루가 관리하는 열린 정보 통로입니다. 실제 provider/API가 열려 있으면 resident refresh가 결과를 흡수합니다.",
+    title: q + " · " + spec[1],
+    summary:"",
     url:spec[2], link:spec[2], source:"sanmaru_opening_" + spec[0], provider:spec[0], type:spec[3], searchCategory:spec[3], mediaType: spec[3] === "video" ? "video" : "article", score:0.39, sanmaruOpeningCard:true
   }, q, "sanmaru-opening"));
 }
@@ -1250,13 +1278,17 @@ function supplyResidentSync(input, opts){
   // route/opening signals, not replacements for real provider results. They keep
   // category trees visible and prevent empty-looking searches while the broad
   // resident cache is warming.
-  if(opts.allowRouteCards !== false && opts.noRouteCards !== true){
+  const publicSearchSurface = sanmaruPublicSearchSurface(opts);
+  if(!publicSearchSurface && opts.allowRouteCards !== false && opts.noRouteCards !== true){
     routeFallbackCards = buildRouteFallbackCards(clean.value, routePlan, Object.assign({}, opts, { routeCardLimit: clampInt(opts.routeCardLimit, 28, 1, 60) }));
   }
-  if(opts.allowOpeningCards !== false && opts.noOpeningCards !== true){
+  if(!publicSearchSurface && opts.allowOpeningCards !== false && opts.noOpeningCards !== true){
     openingFallbackCards = buildOpeningFallbackCards(clean.value, Object.assign({}, opts, { openingCardLimit: clampInt(opts.openingCardLimit, 24, 1, 40) }));
   }
   items = dedupeItems(items.concat(routeFallbackCards, openingFallbackCards));
+  if(publicSearchSurface){
+    items = items.filter(it => !sanmaruIsScaffoldSearchCard(it));
+  }
 
   const fullCandidateItems = items.slice();
   const requestedPage = clampInt(firstNonEmpty(opts.page, opts.p, opts.visiblePage, opts.sectionPage), 1, 1, 100000);
@@ -2902,6 +2934,7 @@ function buildSanmaruInstantOsPackage(q, opts){
   const country = firstNonEmpty(opts.country, opts.region, opts.geo, opts.runtimeRegion);
   const effectiveCountry = firstNonEmpty(country, "GLOBAL");
 
+  const publicSearchSurface = sanmaruPublicSearchSurface(Object.assign({}, opts, { reason: opts.reason || "instant-os-supply", action: opts.action || "instant-supply" }));
   const supplied = supplyResidentSync({ q, query:q }, {
     reason: opts.reason || "instant-os-supply",
     limit: firstNonEmpty(opts.limit, opts.candidatePool, opts.candidatePoolTarget, DEFAULT_LIMIT),
@@ -2912,15 +2945,18 @@ function buildSanmaruInstantOsPackage(q, opts){
     page: firstNonEmpty(opts.page, opts.p, opts.start, 1),
     perPage: firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit, DEFAULT_VISIBLE_PER_PAGE),
     visibleNeed: firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit, DEFAULT_VISIBLE_PER_PAGE),
-    allowRouteCards: true,
-    allowOpeningCards: true,
+    allowRouteCards: !publicSearchSurface,
+    noRouteCards: publicSearchSurface,
+    allowOpeningCards: !publicSearchSurface,
+    noOpeningCards: publicSearchSurface,
+    publicSearch: publicSearchSurface,
     country: effectiveCountry
   });
 
   let items = Array.isArray(supplied && supplied.items) ? supplied.items.slice() : [];
-  const providerPassthroughItems = sanmaruProviderPassthroughCards(q, Object.assign({}, opts, { country: effectiveCountry, searchType }));
-  // Provider passthrough cards are first-paint roads. They must never replace the
-  // full Maru Search result set; they only make the page usable immediately.
+  const providerPassthroughItems = publicSearchSurface ? [] : sanmaruProviderPassthroughCards(q, Object.assign({}, opts, { country: effectiveCountry, searchType }));
+  // Provider passthrough cards are diagnostic/front-supply roads, not public search cards.
+  // Public search must show real provider snippets/body/OG descriptions only.
   if(providerPassthroughItems.length){
     items = providerPassthroughItems.concat(items);
   }
@@ -2934,6 +2970,9 @@ function buildSanmaruInstantOsPackage(q, opts){
     limit: clampInt(firstNonEmpty(opts.limit), DEFAULT_LIMIT, 1, MAX_LIMIT)
   };
   const finalTarget = Math.min(MAX_LIMIT, Math.max(ctx.limit, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET));
+  if(publicSearchSurface){
+    items = items.filter(it => !sanmaruIsScaffoldSearchCard(it));
+  }
   items = finalRank(q, items, ctx).slice(0, finalTarget).map(it => {
     const copy = Object.assign({}, it);
     delete copy._sanmaruSeq;
