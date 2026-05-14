@@ -30,7 +30,7 @@ try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) 
 const VERSION = "sanmaru-engine-v2.6.1-engine-upload-lifecycle";
 const ENGINE_NAME = "sanmaru";
 
-const DEFAULT_LIMIT = 2000;
+const DEFAULT_LIMIT = 3000;
 const DEFAULT_VISIBLE_PER_PAGE = 25;
 const MAX_LIMIT = 12000;
 const SANMARU_MAX_PAGER_PAGES = 499;
@@ -43,9 +43,9 @@ const RATE_MAX = 60;
 const MAX_QUERY_LENGTH = 240;
 const MIN_FAST_TARGET = 120;
 const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
-const DEFAULT_CANDIDATE_POOL_TARGET = 900;
-const MAX_INDEX_FAST_LIMIT = 2000;
-const MAX_SEARCH_BANK_FAST_LIMIT = 2000;
+const DEFAULT_CANDIDATE_POOL_TARGET = 1600;
+const MAX_INDEX_FAST_LIMIT = 3000;
+const MAX_SEARCH_BANK_FAST_LIMIT = 3000;
 
 const globalState = globalThis.__SANMARU_V2_STATE || (globalThis.__SANMARU_V2_STATE = {
   cache: new Map(),
@@ -325,6 +325,7 @@ const SANMARU_CANONICAL_CATEGORIES = {
   news:{ label:"뉴스", weight:88, routes:["naver","google","bing","maru-search-wide-gateway"] },
   knowledge:{ label:"지식/백과", weight:86, routes:["wiki-knowledge","google","naver","bing","searchbank-index"] },
   wiki:{ label:"위키", weight:85, routes:["wiki-knowledge","google","bing"] },
+  site:{ label:"사이트/홈페이지", weight:84, routes:["corporate-homepage","official-web","google","naver","bing","searchbank-index"] },
   book:{ label:"도서", weight:82, routes:["naver","google","university-library"] },
   academic:{ label:"학술", weight:80, routes:["academic","research-paper","university-library","google","bing"] },
   research_paper:{ label:"논문/연구", weight:79, routes:["research-paper","academic","university-library","google","bing"] },
@@ -358,7 +359,7 @@ const PROVIDER_CATEGORY_ALIASES = {
 const PROVIDER_CAPABILITY_MAP = {
   "searchbank-index": ["internal_search_bank","official","knowledge","web","news","image","video","blog","cafe","community"],
   "searchbank": ["internal_search_bank","official","knowledge","web","news","image","video","blog","cafe","community"],
-  "maru-search-wide-gateway": ["web","news","image","video","youtube","map_local","tourism","blog","cafe","community","sns","shopping","book","knowledge"],
+  "maru-search-wide-gateway": ["web","site","news","image","video","youtube","map_local","tourism","blog","cafe","community","sns","shopping","book","knowledge"],
   naver: ["web","news","blog","cafe","knowledge","book","shopping","image","map_local","tourism"],
   google: ["web","official","knowledge","wiki","news","image","video","map_local","tourism","academic","research_paper","book","sns"],
   bing: ["web","news","image","video","academic","research_paper","official"],
@@ -367,13 +368,14 @@ const PROVIDER_CAPABILITY_MAP = {
   baidu: ["web","news","image","video","knowledge"],
   yandex: ["web","image","video","news","map_local"],
   youtube: ["youtube","video","sns","tourism"],
-  "official-web": ["official","government","public_data","tourism"],
+  "official-web": ["official","government","public_data","site","tourism"],
   "social-public-web": ["sns","video","youtube","community"],
   instagram: ["sns","image","tourism"],
   facebook: ["sns","community","news"],
   tiktok: ["sns","video","youtube","tourism"],
   "x-twitter": ["sns","news","community"],
   threads: ["sns","community"],
+  "corporate-homepage": ["site","web","official"],
   "blog-community": ["blog","cafe","community"],
   academic: ["academic","research_paper","university_library"],
   "research-paper": ["research_paper","academic"],
@@ -447,7 +449,7 @@ const SANMARU_COUNTRY_CHARACTER_PROFILE = {
 const SANMARU_LANE_CATEGORY_MAP = {
   authority:["official","government","public_data"],
   local:["map_local","tourism"],
-  web:["web"],
+  web:["web","site"],
   news:["news"],
   blog:["blog"],
   media:["video","youtube","image"],
