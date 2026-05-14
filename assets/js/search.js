@@ -49,8 +49,8 @@ ready(function () {
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
     const CONTINUOUS_PIPELINE_TARGET = MAX_SMOOTH_CANDIDATES;
-    const INTAKE_CONCURRENCY = 3;
-    const INTAKE_BURST_DELAY_MS = 60;
+    const INTAKE_CONCURRENCY = 5;
+    const INTAKE_BURST_DELAY_MS = 10;
 
     let allItems = [];
     let serverPagedMode = false;
@@ -1804,9 +1804,15 @@ async function fetchInstantSearchPack(q, type = activeType){
       return limits[group] || 6;
     }
 
-    function shouldUseDisplayGroups(slice){
+    function shouldUseDisplayGroups(slice, page){
       if (!Array.isArray(slice) || !slice.length) return false;
       if (normalizeSearchType(activeType) !== 'all') return false;
+
+      // Category boards are a first-page presentation only. Subsequent pages
+      // must continue the natural result stream without re-creating the same
+      // section headers such as 주요 정보 / 지식·백과 / 지도·지역 again.
+      if (Math.max(1, parseInt(page, 10) || 1) !== 1) return false;
+
       return slice.some(it => it && (it.displayGroup || it.displayGroupLabel));
     }
 
@@ -2870,7 +2876,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       // Render the already-balanced visible stream. Do not rebuild page 1 from a
       // raw source slice, because a raw slice may contain only news/logo/map cards
       // and then hidden overflow still blocks the following categories from moving up.
-      if (shouldUseDisplayGroups(slice)) {
+      if (shouldUseDisplayGroups(slice, page)) {
         renderGroupedSlice(slice, page);
       } else {
         slice.forEach(it => renderItem(it));
