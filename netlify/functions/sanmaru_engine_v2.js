@@ -27,10 +27,17 @@ const path = require("path");
 let LogosEngineClass = null;
 try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) { LogosEngineClass = null; }
 
-const VERSION = "sanmaru-engine-v2.6.2-search-supply-3000-front-safe";
+const VERSION = "sanmaru-engine-v2.6.3-supply-limits-separated";
 const ENGINE_NAME = "sanmaru";
 
-const DEFAULT_LIMIT = 3000;
+// Supply limits are separated by role.
+// - Search/Global Insight supply can request about 4,500 items.
+// - Front/SearchBank snapshot material must not be capped by the search UI limit.
+// - MAX_LIMIT remains the absolute Sanmaru safety ceiling, not the normal response size.
+const DEFAULT_SEARCH_SUPPLY_LIMIT = 4500;
+const DEFAULT_INSIGHT_SUPPLY_LIMIT = 4500;
+const DEFAULT_FRONT_SUPPLY_LIMIT = 6000;
+const DEFAULT_LIMIT = DEFAULT_SEARCH_SUPPLY_LIMIT;
 const DEFAULT_VISIBLE_PER_PAGE = 25;
 const MAX_LIMIT = 12000;
 const SANMARU_MAX_PAGER_PAGES = 499;
@@ -43,9 +50,9 @@ const RATE_MAX = 60;
 const MAX_QUERY_LENGTH = 240;
 const MIN_FAST_TARGET = 120;
 const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
-const DEFAULT_CANDIDATE_POOL_TARGET = 900;
-const MAX_INDEX_FAST_LIMIT = 3000;
-const MAX_SEARCH_BANK_FAST_LIMIT = 3000;
+const DEFAULT_CANDIDATE_POOL_TARGET = DEFAULT_SEARCH_SUPPLY_LIMIT;
+const MAX_INDEX_FAST_LIMIT = DEFAULT_FRONT_SUPPLY_LIMIT;
+const MAX_SEARCH_BANK_FAST_LIMIT = DEFAULT_FRONT_SUPPLY_LIMIT;
 
 const globalState = globalThis.__SANMARU_V2_STATE || (globalThis.__SANMARU_V2_STATE = {
   cache: new Map(),
@@ -3049,15 +3056,27 @@ function buildSanmaruInstantOsPackage(q, opts){
 
 function buildSanmaruFrontSupplyPackage(q, opts){
   opts = opts || {};
-  const pack = buildSanmaruInstantOsPackage(q || firstNonEmpty(opts.q, opts.query, opts.section, opts.page, "front"), Object.assign({}, opts, { reason: opts.reason || "front-slot-supply" }));
-  pack.action = "front-supply";
+  const reason = firstNonEmpty(opts.reason, "front-slot-supply");
+  const reasonText = low(reason);
+  const isInsightSupply = reasonText.includes("insight") || reasonText.includes("global-insight") || reasonText.includes("issue");
+  const defaultSupplyLimit = isInsightSupply ? DEFAULT_INSIGHT_SUPPLY_LIMIT : DEFAULT_FRONT_SUPPLY_LIMIT;
+  const supplyOpts = Object.assign({
+    limit: defaultSupplyLimit,
+    candidatePool: defaultSupplyLimit,
+    candidatePoolTarget: defaultSupplyLimit
+  }, opts, { reason });
+  const pack = buildSanmaruInstantOsPackage(q || firstNonEmpty(opts.q, opts.query, opts.section, opts.page, "front"), supplyOpts);
+  pack.action = isInsightSupply ? "insight-supply" : "front-supply";
   pack.source = pack.items && pack.items.length ? "sanmaru-front-slot-resident-supply" : "sanmaru-front-slot-route-supply";
   pack.meta = Object.assign({}, pack.meta || {}, {
-    frontSupply: true,
-    slotSupply: true,
+    frontSupply: !isInsightSupply,
+    slotSupply: !isInsightSupply,
+    insightSupply: isInsightSupply,
     page: firstNonEmpty(opts.page, opts.targetPage, opts.hub, ""),
     section: firstNonEmpty(opts.section, opts.slot, opts.psom_key, opts.category, ""),
-    policy: "front-slot-resident-first-no-provider-wait"
+    supplyLimitPolicy: isInsightSupply ? "insight-search-supply-4500" : "front-searchbank-snapshot-supply-6000",
+    searchUiLimitSeparated: true,
+    policy: "front-slot-resident-first-no-provider-wait; search-ui-limit-does-not-cap-front-snapshot-material"
   });
   return pack;
 }
