@@ -1,5 +1,5 @@
-// IGDC Search.js — FULL SEARCH PIPELINE PATCH
-// PATCH: Sanmaru route-owned natural flow + page-lazy rendering + balanced vertical tabs
+// IGDC Search.js — RECEIVER/CONTAINER UI LAYER PATCH
+// PATCH: search.js receives Sanmaru/MaruSearch supply only; no client-side vertical re-search
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -48,8 +48,8 @@ ready(function () {
     const MIN_SMOOTH_CANDIDATES = 120;
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
-    const INTAKE_CONCURRENCY = 6;
-    const INTAKE_BURST_DELAY_MS = 0;
+    const INTAKE_CONCURRENCY = 4;
+    const INTAKE_BURST_DELAY_MS = 15;
 
     let allItems = [];
     let serverPagedMode = false;
@@ -59,6 +59,7 @@ ready(function () {
     let continuousIntakeSeq = 0;
     let continuousIntakeActive = false;
     const loadedServerPages = new Map();
+    const loadedServerSections = new Map();
     let currentPage = 1;
     let currentBlock = 0;
     let activeType = 'all';
@@ -802,6 +803,64 @@ function serverTotalFromPayload(payload, fallbackCount){
   return cappedTotal;
 }
 
+
+function serverSectionsFromPack(pack){
+  if(!pack) return [];
+  const payload = pack.payload || pack;
+  const candidates = [];
+  if(Array.isArray(pack.viewportSections)) candidates.push(pack.viewportSections);
+  if(payload && Array.isArray(payload.viewportSections)) candidates.push(payload.viewportSections);
+  if(payload && payload.sectionPack && Array.isArray(payload.sectionPack.viewportSections)) candidates.push(payload.sectionPack.viewportSections);
+  if(payload && Array.isArray(payload.displaySections)) candidates.push(payload.displaySections);
+  if(payload && Array.isArray(payload.sections)) candidates.push(payload.sections);
+  for(const sections of candidates){
+    const normalized = normalizeServerDisplaySections(sections);
+    if(normalized.length) return normalized;
+  }
+  return [];
+}
+
+function normalizeServerDisplaySections(sections){
+  return (Array.isArray(sections) ? sections : []).map((sec, idx) => {
+    const group = String(sec && (sec.group || sec.key || sec.type || sec.displayGroup || sec.category) || ('section-' + idx)).trim();
+    const items = Array.isArray(sec && sec.items) ? sec.items :
+      (Array.isArray(sec && sec.pageItems) ? sec.pageItems :
+      (Array.isArray(sec && sec.results) ? sec.results : []));
+    if(!group || !items.length) return null;
+    const previewItems = Array.isArray(sec.previewItems) ? sec.previewItems : items.slice(0, Math.max(1, parseInt(sec.previewLimit, 10) || items.length));
+    const visibleKeys = new Set(previewItems.map(itemKeyForServerSection).filter(Boolean));
+    const hiddenItems = Array.isArray(sec.hiddenItems) ? sec.hiddenItems : items.filter(it => {
+      const key = itemKeyForServerSection(it);
+      return !key || !visibleKeys.has(key);
+    });
+    return {
+      group,
+      label: sec.label || sec.title || sec.displayGroupLabel || displayGroupLabel(group, previewItems[0] || items[0]),
+      previewLimit: parseInt(sec.previewLimit, 10) || previewItems.length,
+      previewItems,
+      hiddenItems,
+      items,
+      sourceTotal: parseInt(sec.sourceTotal || sec.total || sec.count, 10) || items.length,
+      serverSection: true,
+      categoryModule: true,
+      slotAwareViewport: true
+    };
+  }).filter(Boolean);
+}
+
+function itemKeyForServerSection(it){
+  return String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
+}
+
+function storeServerSections(page, pack){
+  const sections = serverSectionsFromPack(pack);
+  if(sections.length){
+    loadedServerSections.set(page, sections);
+    return true;
+  }
+  return false;
+}
+
 function pageItemsFromPack(pack){
   if(!pack) return [];
   if(Array.isArray(pack.pageItems) && pack.pageItems.length) return pack.pageItems;
@@ -878,6 +937,7 @@ function mergeIncomingSearchPage(page, pageSlice, pack){
   const list = dedupeItems(filterSearchResultItems(pageSlice || []));
   if(!list.length) return false;
   loadedServerPages.set(page, list.slice(0, PAGE_SIZE));
+  storeServerSections(page, pack);
   allItems = dedupeItems(allItems.concat(list));
   if(pack && pack.payload) lastSearchPayload = pack.payload;
   updateProgressiveTotalFromPayload(pack && pack.payload, allItems.length);
@@ -1153,109 +1213,23 @@ function decorateVerticalPreviewItems(items, route){
 }
 
 async function collectInitialSerpPreviewItems(q, seq, maxWaitMs){
-  if(!q || runSearch._seq !== seq || normalizeSearchType(activeType) !== 'all') return [];
-  const routes = SERP_VERTICAL_PREVIEW_ROUTES.filter(r => isEarlyPortalGroup(r.group));
-  const collected = [];
-  const seen = new Set();
-
-  function absorb(route, pack){
-    const raw = pageItemsFromPack(pack).length ? pageItemsFromPack(pack) : (pack && pack.items) || [];
-    const cap = Math.max(serpVerticalFetchLimit(route), serpPreviewCap(route && route.group));
-    const items = decorateVerticalPreviewItems(dedupeItems(filterSearchResultItems(raw)).slice(0, cap), route);
-    items.forEach(it => {
-      const key = String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
-      if(key && seen.has(key)) return;
-      if(key) seen.add(key);
-      collected.push(it);
-    });
-  }
-
-  const tasks = routes.map(route => fetchVerticalPreviewSearch(q, route).then(pack => {
-    if(runSearch._seq !== seq) return;
-    absorb(route, pack);
-  }).catch(() => null));
-
-  await Promise.race([
-    Promise.allSettled(tasks),
-    sleepIntake(Math.max(150, parseInt(maxWaitMs, 10) || SERP_INITIAL_PREVIEW_WAIT_MS))
-  ]).catch(() => null);
-
-  return collected;
+  return [];
 }
 
 async function fetchVerticalPreviewSearch(q, route){
-  const safeType = normalizeSearchType(route && route.type);
-  const sp = new URLSearchParams();
-  sp.set('q', q);
-  sp.set('limit', String(serpVerticalFetchLimit(route)));
-  sp.set('type', safeType);
-  sp.set('tab', safeType);
-  sp.set('perPage', String(PAGE_SIZE));
-  sp.set('visibleCardsPerPage', String(PAGE_SIZE));
-  sp.set('page', '1');
-  sp.set('visiblePage', '1');
-  sp.set('pageWindowOnly', '1');
-  sp.set('residentFirst', '1');
-  sp.set('sanmaruFirst', '1');
-  sp.set('routeOwner', 'sanmaru');
-  sp.set('naturalFlow', '1');
-  sp.set('categoryPreview', '1');
-  sp.set('noBlockingWide', '1');
-  sp.set('residentSwitch', '1');
-  sp.set('activateResident', '1');
-  sp.set('handoff', isSearchPage ? 'search-html' : 'home');
-  const url = `/.netlify/functions/maru-search?${sp.toString()}`;
-  try{
-    const r = await fetch(url, { cache:'no-store' });
-    if(!r.ok) return { items:[], payload:null, pageItems:[], viewportSections:[] };
-    const json = await r.json();
-    if(!json || json.status === 'error' || json.status === 'blocked') return { items:[], payload:json || null, pageItems:[], viewportSections:[] };
-    return normalizeSearchPayload(json);
-  }catch(e){
-    console.warn('vertical preview fetch skipped:', safeType, e);
-    return { items:[], payload:null, pageItems:[], viewportSections:[] };
-  }
+  return { items: [], payload: null, pageItems: [], viewportSections: [] };
 }
 
 async function startSerpVerticalPreviewBackfill(q, seq){
-  if(!q || runSearch._seq !== seq || normalizeSearchType(activeType) !== 'all') return;
-  const maxParallel = SERP_VERTICAL_PREVIEW_MAX_PARALLEL;
-  let cursor = 0;
-
-  async function worker(){
-    while(runSearch._seq === seq && cursor < SERP_VERTICAL_PREVIEW_ROUTES.length){
-      const route = SERP_VERTICAL_PREVIEW_ROUTES[cursor++];
-      const deficit = categoryPreviewDeficitMap();
-      if(!deficit.has(route.group)) continue;
-      try{
-        const pack = await fetchVerticalPreviewSearch(q, route);
-        if(runSearch._seq !== seq) return;
-        const raw = pageItemsFromPack(pack).length ? pageItemsFromPack(pack) : (pack.items || []);
-        const decorated = decorateVerticalPreviewItems(dedupeItems(filterSearchResultItems(raw)).slice(0, Math.max(serpVerticalFetchLimit(route), serpPreviewCap(route && route.group))), route);
-        if(decorated.length){
-          allItems = dedupeItems((allItems || []).concat(decorated));
-          updateProgressiveTotalFromPayload(pack && pack.payload, Math.max(allItems.length, serverTotalItems || 0));
-          renderPage(currentPage || 1, true);
-          status.textContent = `${serverTotalItems || allItems.length} results for "${q}" · category preview receiving...`;
-        }
-      }catch(e){
-        console.warn('serp vertical preview skipped:', route && route.type, e);
-      }
-    }
-  }
-
-  const workers = [];
-  for(let i=0; i<Math.min(maxParallel, SERP_VERTICAL_PREVIEW_ROUTES.length); i++) workers.push(worker());
-  await Promise.all(workers).catch(() => null);
+  return;
 }
 
 
 function deferSerpVerticalPreviewBackfill(q, seq){
-  if(!q || runSearch._seq !== seq || normalizeSearchType(activeType) !== 'all') return;
-  setTimeout(() => {
-    if(runSearch._seq !== seq) return;
-    startSerpVerticalPreviewBackfill(q, seq).catch(() => null);
-  }, Math.max(0, SERP_CATEGORY_PREVIEW_DELAY_MS));
+  // v11: No client-side vertical/category re-search.
+  // search.js must not open news/knowledge/map/blog/etc. preview searches by itself.
+  // It only renders the Sanmaru/MaruSearch supply already received through the gateway.
+  return;
 }
 
 async function fetchInstantSearchPack(q, type = activeType){
@@ -2039,14 +2013,14 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     const NEWS_MEDIUM_PRIORITY = [
-      ['naver', /(^|\.)news\.naver\.com$|(^|\.)naver\.com$|네이버/i],
-      ['google-news', /news\.google\.|구글\s*뉴스|google\s*news/i],
-      ['ytn', /(^|\.)ytn\.co\.kr$|ytn/i],
+      // v11: news preview is an outlet-headline module, not a Google/Naver article dump.
+      // Actual news outlets come first; aggregators are allowed only as fallback.
       ['yonhap', /yna\.co\.kr|yonhap|연합/i],
+      ['ytn', /(^|\.)ytn\.co\.kr$|ytn/i],
       ['herald', /heraldcorp\.com|herald경제|헤럴드경제|헤럴드/i],
       ['mbn', /mbn\.co\.kr|mk\.co\.kr\/news\/mbn|mbn/i],
-      ['hankyung', /hankyung\.com|한국경제/i],
       ['mk', /mk\.co\.kr|매일경제/i],
+      ['hankyung', /hankyung\.com|한국경제/i],
       ['seoul', /seoul\.co\.kr|서울신문/i],
       ['kbs', /(^|\.)kbs\.co\.kr$|kbs/i],
       ['sbs', /(^|\.)sbs\.co\.kr$|sbs/i],
@@ -2056,6 +2030,8 @@ async function fetchInstantSearchPack(q, type = activeType){
       ['chosun', /chosun\.com|조선/i],
       ['joongang', /joongang\.co\.kr|중앙/i],
       ['donga', /donga\.com|동아/i],
+      ['naver-news', /(^|\.)news\.naver\.com$|언론사\s*편집|네이버\s*뉴스/i],
+      ['google-news', /news\.google\.|구글\s*뉴스|google\s*news/i],
       ['mbc', /(^|\.)mbc\.co\.kr$|mbc/i]
     ];
 
@@ -3152,10 +3128,13 @@ if (it.riskLabel === '⚠️ high-risk') {
       const slice = visibleItemsForPage(page);
       const start = (page - 1) * PAGE_SIZE;
 
-      // Render the already-balanced visible stream. Do not rebuild page 1 from a
-      // raw source slice, because a raw slice may contain only news/logo/map cards
-      // and then hidden overflow still blocks the following categories from moving up.
-      if (shouldUseDisplayGroups(slice)) {
+      // Receiver/container rule:
+      // If Sanmaru/MaruSearch supplies viewportSections, render them as-is.
+      // search.js must not re-search or re-rank categories by itself.
+      const serverSections = normalizeSearchType(activeType) === 'all' ? (loadedServerSections.get(page) || []) : [];
+      if (serverSections.length) {
+        renderGroupedSlice(serverSections, page);
+      } else if (shouldUseDisplayGroups(slice)) {
         renderGroupedSlice(slice, page);
       } else {
         slice.forEach(it => renderItem(it));
@@ -3194,6 +3173,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
         if(pageSlice.length){
           loadedServerPages.set(page, pageSlice.slice(0, PAGE_SIZE));
+          storeServerSections(page, pack);
           allItems = dedupeItems(allItems.concat(pageSlice));
           const total = serverTotalFromPayload(pack && pack.payload, serverTotalItems || pageSlice.length);
           serverTotalItems = Math.max(serverTotalItems || 0, total || 0, INITIAL_PRELOAD_TARGET);
@@ -3306,6 +3286,7 @@ async function runSearch(q, type = activeType){
     authoritativeServerTotalItems = 0;
     progressivePagerPages = INITIAL_PROGRESSIVE_PAGER_PAGES;
     loadedServerPages.clear();
+    loadedServerSections.clear();
     results.innerHTML = '';
     clearPager();
     status.textContent = '';
@@ -3322,6 +3303,7 @@ async function runSearch(q, type = activeType){
   progressivePagerPages = Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(Math.min(target, INITIAL_PROGRESSIVE_PAGER_PAGES * PAGE_SIZE) / PAGE_SIZE)));
   serverTotalItems = progressivePagerPages * PAGE_SIZE;
   loadedServerPages.clear();
+  loadedServerSections.clear();
 
   signalSanmaruSearch(qq, activeType, 'run-search');
   status.textContent = `Searching ${getTypeLabel(activeType)} for "${qq}"...`;
@@ -3337,6 +3319,7 @@ async function runSearch(q, type = activeType){
     if (runSearch._seq !== seq) return;
 
     lastSearchPayload = instantPack && instantPack.payload || null;
+    storeServerSections(1, instantPack);
     const rawItems = Array.isArray(instantPack) ? instantPack : (instantPack && instantPack.items) || [];
     const quickItems = dedupeItems(filterSearchResultItems(rawItems || [])).slice(0, INITIAL_PRELOAD_TARGET);
     const pageItems = dedupeItems(filterSearchResultItems(pageItemsFromPack(instantPack)));
@@ -3369,13 +3352,14 @@ async function runSearch(q, type = activeType){
     }
 
     startInitialPageWindowBackfill(qq, activeType, seq).catch(() => null);
-    deferSerpVerticalPreviewBackfill(qq, seq);
+    // v11: continuous intake only; no extra vertical preview searches from the browser.
     startContinuousIntake(qq, activeType, seq);
   } catch(e){
     console.error(e);
     const initialSerpPreviewItems = [];
     const fallbackPack = await fetchSearch(qq, activeType, 1);
     if (runSearch._seq !== seq) return;
+    storeServerSections(1, fallbackPack);
     const fallbackItems = dedupeItems(filterSearchResultItems(normalizeItems(fallbackPack && fallbackPack.payload || fallbackPack))).slice(0, INITIAL_PRELOAD_TARGET);
     allItems = dedupeItems(fallbackItems.concat(initialSerpPreviewItems || []));
     seedLoadedServerPagesFromItems(allItems, INITIAL_PRELOAD_TARGET);
@@ -3390,7 +3374,7 @@ async function runSearch(q, type = activeType){
     else { results.innerHTML = ''; clearPager(); }
     status.textContent = allItems.length ? `${serverTotalItems || allItems.length} results for "${qq}" · receiving...` : `No results for "${qq}"`;
     startInitialPageWindowBackfill(qq, activeType, seq).catch(() => null);
-    deferSerpVerticalPreviewBackfill(qq, seq);
+    // v11: continuous intake only; no extra vertical preview searches from the browser.
     startContinuousIntake(qq, activeType, seq);
   }
 }
