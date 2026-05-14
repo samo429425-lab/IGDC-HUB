@@ -1636,6 +1636,11 @@ function displayGroupForCategory(cat){
     map:"local_tour",
     local:"local_tour",
     tour:"local_tour",
+    site:"site",
+    homepage:"site",
+    company:"site",
+    corporate:"site",
+    business:"site",
     image:"media",
     video:"media",
     media:"media",
@@ -1645,7 +1650,7 @@ function displayGroupForCategory(cat){
     cafe:"community",
     community:"community",
     knowledge:"knowledge",
-    book:"knowledge",
+    book:"book",
     shopping:"shopping",
     product:"shopping",
     sports:"sports",
@@ -1663,19 +1668,20 @@ function categoryOfItem(item){
   const url = low(firstNonEmpty(it.url, it.link));
   const text = low([it.title, it.summary, it.snippet, it.description, source, url].join(" "));
 
-  if(source.includes("youtube") || type === "video" || url.includes("youtube.com/watch") || url.includes("youtu.be/")) return "video";
-  if(source.includes("image") || type === "image") return "image";
-  if(source.includes("news") || type === "news") return "news";
+  if(/\.gov\b|\.go\.kr\b|\.edu\b|korea\.kr/.test(url)) return "official";
   if(source.includes("local") || type === "map" || type === "local" || /map|지도|주소|위치/.test(text)) return "map";
-  if(type === "book" || source.includes("book")) return "book";
-  if(type === "shopping" || type === "product" || source.includes("shopping")) return "shopping";
-  if(type === "finance" || source.includes("finance")) return "finance";
-  if(type === "sports" || source.includes("sports")) return "sports";
-  if(type === "webtoon" || /웹툰|webtoon|comic|manga/.test(text)) return "webtoon";
+  if(type === "knowledge" || source.includes("encyc") || source.includes("wiki") || /wikipedia\.org|namu\.wiki|britannica\.com/.test(url)) return "knowledge";
+  if(type === "site" || type === "homepage" || type === "business" || source.includes("homepage") || source.includes("corporate") || source.includes("company") || source.includes("business") || /홈페이지|공식사이트|공식 사이트|기업|회사|corporate|company|business/.test(text)) return "site";
+  if(type === "book" || source.includes("book") || /도서|책|isbn|book/.test(text)) return "book";
+  if(source.includes("news") || type === "news") return "news";
   if(type === "blog" || source.includes("blog")) return "blog";
   if(type === "cafe" || source.includes("cafe") || source.includes("forum")) return "cafe";
-  if(type === "knowledge" || source.includes("encyc") || source.includes("wiki")) return "knowledge";
-  if(/\.gov\b|\.go\.kr\b|\.edu\b|wikipedia\.org|britannica\.com/.test(url)) return "official";
+  if(type === "shopping" || type === "product" || source.includes("shopping") || /쇼핑|상품|구매|가격/.test(text)) return "shopping";
+  if(type === "finance" || source.includes("finance") || /금융|증권|주식|환율/.test(text)) return "finance";
+  if(type === "sports" || source.includes("sports") || /스포츠|축구|야구|농구/.test(text)) return "sports";
+  if(type === "webtoon" || /웹툰|webtoon|comic|manga/.test(text)) return "webtoon";
+  if(source.includes("youtube") || type === "video" || url.includes("youtube.com/watch") || url.includes("youtu.be/")) return "video";
+  if(source.includes("image") || type === "image") return "image";
   return "web";
 }
 
@@ -1814,7 +1820,7 @@ function canonicalItem(raw, query, adapterName){
     imageSet: images,
     searchCategory: category,
     displayGroup: it.displayGroup || displayGroupForCategory(category),
-    displayGroupPreviewLimit: it.displayGroupPreviewLimit || ({ authority:4, knowledge:3, local_tour:3, news:6, media:5, social:5, community:6 }[displayGroupForCategory(category)] || 5),
+    displayGroupPreviewLimit: it.displayGroupPreviewLimit || ({ authority:3, local_tour:2, knowledge:4, site:5, book:4, news:5, community:5, media:5, social:4, shopping:4, sports:3, finance:3, webtoon:3 }[displayGroupForCategory(category)] || 5),
     sourceTrust: trust,
     sanmaruScore: baseScore,
     indexText: compactSpaces(text).slice(0, 1200),
