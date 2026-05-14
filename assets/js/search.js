@@ -44,7 +44,7 @@ ready(function () {
     const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES;
     const INITIAL_DOM_RENDER_TARGET = INITIAL_PRELOAD_TARGET;
     const INITIAL_PROGRESSIVE_PAGER_PAGES = 12;
-    const MAX_PROGRESSIVE_PAGER_PAGES = 120;
+    const MAX_PROGRESSIVE_PAGER_PAGES = 180;
     const MIN_SMOOTH_CANDIDATES = 120;
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
@@ -115,7 +115,11 @@ const SEARCH_TABS = [
   ['image', '이미지'],
   ['news', '뉴스'],
   ['map', '지도'],
+  ['public_data', '공공자료'],
   ['knowledge', '지식'],
+  ['wiki', '위키'],
+  ['academic', '학술'],
+  ['site', '사이트'],
   ['tour', '관광'],
   ['video', '영상'],
   ['sns', '소셜'],
@@ -131,7 +135,7 @@ const SEARCH_TABS = [
 function normalizeSearchType(v){
   const raw = String(v || '').trim().toLowerCase();
   const allowed = new Set(SEARCH_TABS.map(x => x[0]));
-  const alias = { books: 'book', 도서: 'book', 책: 'book', sns: 'sns', social: 'sns' };
+  const alias = { books: 'book', 도서: 'book', 책: 'book', sns: 'sns', social: 'sns', public: 'public_data', 공공자료: 'public_data', wiki: 'wiki', 위키: 'wiki', academic: 'academic', 학술: 'academic', site: 'site', 사이트: 'site' };
   return allowed.has(raw) ? raw : (alias[raw] || 'all');
 }
 
@@ -819,19 +823,21 @@ function adaptiveSearchTarget(q, type){
   const text = String(q || '').trim().toLowerCase();
   const words = text.split(/\s+/).filter(Boolean);
   const safeType = normalizeSearchType(type || activeType || 'all');
-  const broadHints = /(세계|전세계|글로벌|뉴스|영상|이미지|관광|여행|ai|인공지능|기술|시장|경제|정치|스포츠|금융|도서|쇼핑|웹툰|global|world|news|tour|travel|technology|market|sports|finance|book|shopping|webtoon)/i;
+  const broadHints = /(세계|전세계|글로벌|뉴스|영상|이미지|관광|여행|ai|인공지능|기술|시장|경제|정치|스포츠|금융|도서|쇼핑|웹툰|공공|학술|논문|사이트|홈페이지|global|world|news|tour|travel|technology|market|sports|finance|book|shopping|webtoon)/i;
   const narrowHints = /(카페|맛집|식당|주소|전화|위치|지도|병원|약국|학교|교회|상호|주차|near me|cafe|restaurant|address|map)/i;
 
   // Search.js remains only a receiver/container. This target is the amount of
   // Sanmaru/MaruSearch supply the UI is ready to cache for search pages. It is
   // separate from the 4,500~5,000 Search Bank Snapshot supply used by front pages.
-  let target = 2400;
-  if (safeType === 'all') target = 3000;
-  if (safeType !== 'all') target = 1800;
-  if (words.length >= 3 || narrowHints.test(text)) target = Math.max(target, 1800);
-  if (words.length <= 1 || broadHints.test(text)) target = 3000;
-  if (/^(news|image|video|sns|blog|tour)$/.test(safeType)) target = Math.max(target, 2200);
-  if (/^(map|knowledge|book|shopping)$/.test(safeType)) target = Math.max(1600, Math.min(target, 2400));
+  // Broad searches may keep filling up to 4,500 candidates, while first paint
+  // still renders only the current viewport and uses continuous intake for the rest.
+  let target = 3200;
+  if (safeType === 'all') target = 4500;
+  if (safeType !== 'all') target = 2400;
+  if (words.length >= 3 || narrowHints.test(text)) target = Math.max(target, 2400);
+  if (words.length <= 1 || broadHints.test(text)) target = 4500;
+  if (/^(news|image|video|sns|blog|cafe|tour|site|academic|wiki|public_data)$/.test(safeType)) target = Math.max(target, 3000);
+  if (/^(map|knowledge|book|shopping|sports|finance|webtoon)$/.test(safeType)) target = Math.max(2200, Math.min(target, 3200));
 
   return Math.max(INITIAL_PRELOAD_TARGET, Math.min(MAX_SMOOTH_CANDIDATES, target));
 }
@@ -1785,6 +1791,11 @@ async function fetchInstantSearchPack(q, type = activeType){
       const host = domainOf(url).toLowerCase();
       const text = `${source} ${provider} ${type} ${category} ${mediaType} ${title} ${summary} ${host}`;
 
+      if (/(shopping\.naver|shopping|coupang|gmarket|11st|auction|amazon|aliexpress|temu|shop|store|mall)/i.test(host + ' ' + url)) return 'shopping';
+      if (/(sports\.naver|espn|fifa|kbo|kfa|nba|mlb|uefa|sports|score|league)/i.test(host + ' ' + url + ' ' + text)) return 'sports';
+      if (/(finance\.naver|finance\.yahoo|investing|tradingview|marketwatch|bloomberg|reuters|stock|finance|securities|증권|주식|환율|코스피|나스닥)/i.test(host + ' ' + url + ' ' + text)) return 'finance';
+      if (/(comic\.naver|webtoon|kakao.*webtoon|comic|manga|웹툰|만화)/i.test(host + ' ' + url + ' ' + text)) return 'webtoon';
+
       if (host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr')) return 'authority';
       if (source.includes('public') || provider.includes('public') || type === 'public_data' || category === 'public_data' || text.includes('공공데이터') || text.includes('공공 데이터') || text.includes('데이터포털') || text.includes('open data') || host.includes('data.go.kr')) return 'public_data';
       if (source.includes('local') || source.includes('map') || type === 'map' || type === 'local' || mediaType === 'map' || category === 'map' || text.includes('관광') || text.includes('여행') || text.includes('지도') || text.includes('주소') || text.includes('위치') || text.includes('맛집') || text.includes('공원') || text.includes('landmark') || text.includes('tour')) return 'local_tour';
@@ -1841,7 +1852,7 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const limits = {
         authority: 3,
-        public_data: 3,
+        public_data: 2,
         local_tour: 2,
         knowledge: 4,
         wiki: 4,
@@ -1937,6 +1948,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       // - do not refill empty slots with hidden news/blog/SNS overflow.
       const visibleCaps = {
         authority: 3,
+        public_data: 2,
         local_tour: 2,
         knowledge: 4,
         site: 5,
@@ -2908,26 +2920,26 @@ if (it.riskLabel === '⚠️ high-risk') {
       // Keep each category useful but bounded. Extra items are not deleted; they
       // continue as ordinary web/list results after the category portal blocks.
       const caps = {
-        authority: 12,
-        public_data: 24,
+        authority: 8,
+        public_data: 8,
         local_tour: 8,
-        knowledge: 30,
-        wiki: 30,
-        academic: 30,
-        site: 30,
-        book: 30,
-        news: 30,
-        blog: 30,
-        cafe: 30,
-        community: 30,
-        image: 30,
-        video: 30,
-        media: 30,
-        social: 24,
-        shopping: 30,
-        sports: 24,
-        finance: 24,
-        webtoon: 24
+        knowledge: 15,
+        wiki: 15,
+        academic: 15,
+        site: 15,
+        book: 15,
+        news: 15,
+        blog: 15,
+        cafe: 15,
+        community: 15,
+        image: 15,
+        video: 15,
+        media: 15,
+        social: 15,
+        shopping: 15,
+        sports: 15,
+        finance: 15,
+        webtoon: 15
       };
       return caps[group] || 30;
     }
@@ -2956,8 +2968,9 @@ if (it.riskLabel === '⚠️ high-risk') {
         const hiddenItems = moduleItems.slice(previewItems.length);
         const overflowItems = g.items.slice(moduleCap).map(makePlainWebItem);
         if(overflowItems.length) categoryOverflowItems.push(...overflowItems);
-        const weight = Math.max(1, previewItems.length + 1);
-        if(page.length && pageWeight + weight > PAGE_SIZE){
+        const weight = Math.max(1, previewItems.length);
+        const categoryPageTarget = 20;
+        if(page.length && pageWeight + weight > categoryPageTarget){
           categoryPages.push(page);
           page = [];
           pageWeight = 0;
