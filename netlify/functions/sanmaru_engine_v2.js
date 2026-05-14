@@ -1233,6 +1233,7 @@ function supplyResidentSync(input, opts){
     if(IndexEngine && typeof IndexEngine.query === "function"){
       const indexRes = IndexEngine.query({ q: clean.value, query: clean.value, type: normalizeSearchType(opts.searchType || opts.type || "all"), limit: Math.max(minVisible, Math.min(MAX_INDEX_FAST_LIMIT, clampInt(opts.limit || opts.candidatePoolTarget, DEFAULT_LIMIT, 1, MAX_LIMIT))) });
       indexItems = normalizeItemsFromResponse(indexRes).map(x => canonicalItem(x, clean.value, "search-bank-index"));
+      indexItems = filterPublicSearchItems(indexItems, opts);
       indexMeta = { status: indexItems.length ? "ok" : "empty", count:indexItems.length, engine:indexRes && indexRes.engine, latency:indexRes && indexRes.meta && indexRes.meta.latency };
     }else{
       indexMeta = { status:"unavailable" };
@@ -1261,18 +1262,10 @@ function supplyResidentSync(input, opts){
   const fullCandidateItems = items.slice();
   const requestedPage = clampInt(firstNonEmpty(opts.page, opts.p, opts.visiblePage, opts.sectionPage), 1, 1, 100000);
   const perPage = clampInt(firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit), DEFAULT_VISIBLE_PER_PAGE, 1, 100);
-  const openPipeRequested = truthy(opts.openPipe || opts.streamFullWindow || opts.continuousSupply || opts.smoothIntake || opts.naturalFlow);
   const firstResponseWindow = Math.max(perPage, Math.min(
     Math.max(
       perPage * 12,
-      clampInt(
-        openPipeRequested
-          ? firstNonEmpty(opts.bodyWindowLimit, opts.streamLimit, opts.candidatePoolTarget, opts.candidatePool, opts.limit, opts.firstPaintLimit, opts.initialRenderTarget, opts.initialPreloadTarget)
-          : firstNonEmpty(opts.firstPaintLimit, opts.initialRenderTarget, opts.initialPreloadTarget, opts.limit, opts.candidatePoolTarget),
-        perPage * 12,
-        perPage,
-        MAX_LIMIT
-      )
+      clampInt(firstNonEmpty(opts.firstPaintLimit, opts.initialRenderTarget, opts.initialPreloadTarget, opts.limit, opts.candidatePoolTarget), perPage * 12, perPage, MAX_LIMIT)
     ),
     MAX_LIMIT
   ));
@@ -1401,6 +1394,42 @@ function truthy(v){
   if(v === false || v == null) return false;
   const x = low(v);
   return !!x && !["0","false","no","off","disable","disabled","null","undefined"].includes(x);
+}
+
+function isFrontSupplyContext(ctx){
+  ctx = ctx || {};
+  const raw = ctx.raw || ctx;
+  const joined = s([raw.action, raw.mode, raw.fn, raw.reason, raw.searchSurface, raw.surface, raw.from, raw.supplyMode].join(' ')).toLowerCase();
+  return !!(
+    truthy(raw.frontSupply) || truthy(raw.slotSupply) || truthy(raw.snapshotSupply) || truthy(raw.searchBankSupply) ||
+    truthy(raw.forFrontSlots) || truthy(raw.writeSnapshot) || truthy(raw.snapshotWrite) ||
+    /front[-_ ]?supply|slot[-_ ]?supply|content[-_ ]?supply|snapshot[-_ ]?supply|searchbank[-_ ]?supply|front[-_ ]?slot|automap|snapshot[-_ ]?write/.test(joined)
+  );
+}
+
+function isInternalFrontSlotLeakItem(it){
+  if(!it || typeof it !== 'object') return false;
+  const source = s(firstNonEmpty(it.source && (it.source.name || it.source.id || it.source.platform), it.source, it.provider)).toLowerCase();
+  const title = s(firstNonEmpty(it.title, it.name)).toLowerCase();
+  const summary = s(firstNonEmpty(it.summary, it.snippet, it.description)).toLowerCase();
+  const url = s(firstNonEmpty(it.url, it.link, it.href)).trim().toLowerCase();
+  const id = s(firstNonEmpty(it.id, it.originalId, it.indexId)).toLowerCase();
+  const section = s(firstNonEmpty(it.section, it.page, it.route, it.psom_key, it.bind && it.bind.section)).toLowerCase();
+  const tags = Array.isArray(it.tags) ? it.tags.join(' ').toLowerCase() : '';
+  const hay = [source, title, summary, url, id, section, tags].join(' ');
+  if(url === '#' || url === '/' || url.startsWith('javascript:')) return true;
+  if(hay.includes('search-bank.snapshot.json') || hay.includes('snapshot-local')) return true;
+  if(hay.includes('search-bank-engine') || hay.includes('search-bank-index-engine')) return true;
+  if(/\bnetwork item\s*\d+\b/i.test(hay)) return true;
+  if(hay.includes('/assets/sample/') || hay.includes('sample/network') || hay.includes('sample/media') || hay.includes('sample/distribution')) return true;
+  if(hay.includes('front-slot') || hay.includes('snapshot raw') || hay.includes('seed placeholder')) return true;
+  if(!/^https?:\/\//i.test(url) && /(^|\b)(network|distribution|social|media|tour|donation|home)[-_ ]?(right|slot|hero|main)?(\b|$)/.test(section)) return true;
+  return false;
+}
+
+function filterPublicSearchItems(items, ctx){
+  if(isFrontSupplyContext(ctx)) return Array.isArray(items) ? items : [];
+  return (Array.isArray(items) ? items : []).filter(it => !isInternalFrontSlotLeakItem(it));
 }
 function clampInt(v, d, min, max){
   const n = parseInt(v, 10);
@@ -2011,7 +2040,8 @@ async function callSearchBankIndex(ctx){
       const h = await withTimeout(mod.handler({ httpMethod:"GET", headers:(ctx.event && ctx.event.headers) || {}, queryStringParameters: params }), ctx.deep ? 1800 : 1300);
       res = h && typeof h.body === "string" ? JSON.parse(h.body || "{}") : h;
     }
-    const items = normalizeItemsFromResponse(res).map(x => canonicalItem(x, ctx.q, "search-bank-index"));
+    let items = normalizeItemsFromResponse(res).map(x => canonicalItem(x, ctx.q, "search-bank-index"));
+    items = filterPublicSearchItems(items, ctx);
     return { trace: adapterResult("searchbank-index", items.length ? "ok" : "empty", started, items), items };
   }catch(e){
     return { trace: adapterResult("searchbank-index", responseErrorCode(e), started, [], { error: responseErrorCode(e) }), items: [] };
@@ -2020,6 +2050,14 @@ async function callSearchBankIndex(ctx){
 
 async function callSearchBank(ctx){
   const started = nowMs();
+  if(!isFrontSupplyContext(ctx)){
+    return {
+      trace: adapterResult("searchbank", "skipped-public-search-surface", started, [], {
+        reason:"Search Bank Engine is front-page slot supply only"
+      }),
+      items: []
+    };
+  }
   try{
     let mod = null;
     try{ mod = require("./search-bank-engine"); }catch(e){ mod = null; }
@@ -2551,6 +2589,7 @@ async function runSanmaru(input, maybeCtx){
     });
 
     let ranked = finalRank(ctx.q, items, ctx);
+    ranked = filterPublicSearchItems(ranked, ctx);
     const finalTarget = Math.min(MAX_LIMIT, Math.max(ctx.limit, ctx.candidatePoolTarget || 0, MIN_FAST_TARGET));
     ranked = ranked.slice(0, finalTarget).map(it => {
       const copy = Object.assign({}, it);
@@ -2936,6 +2975,7 @@ function buildSanmaruInstantOsPackage(q, opts){
   if(providerPassthroughItems.length){
     items = providerPassthroughItems.concat(items);
   }
+  items = filterPublicSearchItems(items, opts);
   const ctx = {
     q,
     searchType,
@@ -2976,16 +3016,11 @@ function buildSanmaruInstantOsPackage(q, opts){
     : 0;
   const pageItems = items.slice((requestedPage - 1) * perPage, requestedPage * perPage);
   // Sanmaru is the prepared information OS/data-bank layer. For search UI
-  // handoff it must not cut the supply down to only the visible page. In normal
-  // first-paint mode it can still preload a small window, but when search.js asks
-  // for openPipe/smoothIntake/naturalFlow the response body carries the available
-  // ranked supply window immediately so the browser can cache 400/500+ without
-  // waiting for page-by-page faucet calls.
-  const openPipeRequestedForPack = truthy(opts.openPipe || opts.streamFullWindow || opts.continuousSupply || opts.smoothIntake || opts.naturalFlow);
+  // handoff it must not cut the supply down to only the visible page. Return the
+  // requested first preload window (normally 300 = 12 pages × 25) immediately;
+  // search.js will render page 1 first and cache the rest.
   const requestedFirstWindow = clampInt(
-    openPipeRequestedForPack
-      ? firstNonEmpty(opts.bodyWindowLimit, opts.streamLimit, opts.candidatePoolTarget, opts.candidatePool, opts.limit, opts.firstPaintLimit, opts.initialRenderTarget, opts.initialPreloadTarget)
-      : firstNonEmpty(opts.firstPaintLimit, opts.initialRenderTarget, opts.initialPreloadTarget, opts.limit),
+    firstNonEmpty(opts.firstPaintLimit, opts.initialRenderTarget, opts.initialPreloadTarget, opts.limit),
     Math.max(perPage * 12, 300),
     perPage,
     MAX_LIMIT
