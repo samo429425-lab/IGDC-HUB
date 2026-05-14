@@ -44,8 +44,8 @@ const MAX_QUERY_LENGTH = 240;
 const MIN_FAST_TARGET = 120;
 const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
 const DEFAULT_CANDIDATE_POOL_TARGET = 900;
-const MAX_INDEX_FAST_LIMIT = 1500;
-const MAX_SEARCH_BANK_FAST_LIMIT = 1500;
+const MAX_INDEX_FAST_LIMIT = 2000;
+const MAX_SEARCH_BANK_FAST_LIMIT = 2000;
 
 const globalState = globalThis.__SANMARU_V2_STATE || (globalThis.__SANMARU_V2_STATE = {
   cache: new Map(),
@@ -1259,7 +1259,13 @@ function supplyResidentSync(input, opts){
   const fullCandidateItems = items.slice();
   const requestedPage = clampInt(firstNonEmpty(opts.page, opts.p, opts.visiblePage, opts.sectionPage), 1, 1, 100000);
   const perPage = clampInt(firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit), DEFAULT_VISIBLE_PER_PAGE, 1, 100);
-  const firstResponseWindow = Math.max(perPage, Math.min(perPage * 12, 300));
+  const firstResponseWindow = Math.max(perPage, Math.min(
+    Math.max(
+      perPage * 12,
+      clampInt(firstNonEmpty(opts.firstPaintLimit, opts.initialRenderTarget, opts.initialPreloadTarget, opts.limit, opts.candidatePoolTarget), perPage * 12, perPage, MAX_LIMIT)
+    ),
+    MAX_LIMIT
+  ));
   const offset = (requestedPage - 1) * perPage;
   const responseItems = requestedPage <= 1
     ? fullCandidateItems.slice(0, Math.min(fullCandidateItems.length, firstResponseWindow))
