@@ -1566,11 +1566,38 @@ async function fetchInstantSearchPack(q, type = activeType){
 
     function collectNaturalImages(it){
       const sourceText = String((it && it.source) || '').toLowerCase();
+      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
+      const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
+      const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
+
       const raw = []
         .concat(it && it.thumbnail ? [it.thumbnail] : [])
         .concat(it && it.thumb ? [it.thumb] : [])
         .concat(it && it.image ? [it.image] : [])
-        .concat(Array.isArray(it && it.imageSet) ? it.imageSet : []);
+        .concat(it && it.poster ? [it.poster] : [])
+        .concat(it && it.cover ? [it.cover] : [])
+        .concat(it && it.og_image ? [it.og_image] : [])
+        .concat(it && it.ogImage ? [it.ogImage] : [])
+        .concat(payload.thumbnail ? [payload.thumbnail] : [])
+        .concat(payload.thumb ? [payload.thumb] : [])
+        .concat(payload.image ? [payload.image] : [])
+        .concat(payload.image_url ? [payload.image_url] : [])
+        .concat(payload.og_image ? [payload.og_image] : [])
+        .concat(payload.ogImage ? [payload.ogImage] : [])
+        .concat(payload.poster ? [payload.poster] : [])
+        .concat(payload.cover ? [payload.cover] : [])
+        .concat(data.thumbnail ? [data.thumbnail] : [])
+        .concat(data.thumb ? [data.thumb] : [])
+        .concat(data.image ? [data.image] : [])
+        .concat(data.og_image ? [data.og_image] : [])
+        .concat(data.poster ? [data.poster] : [])
+        .concat(preview.poster ? [preview.poster] : [])
+        .concat(preview.thumbnail ? [preview.thumbnail] : [])
+        .concat(preview.image ? [preview.image] : [])
+        .concat(Array.isArray(it && it.imageSet) ? it.imageSet : [])
+        .concat(Array.isArray(payload.imageSet) ? payload.imageSet : [])
+        .concat(Array.isArray(data.imageSet) ? data.imageSet : []);
 
       const out = [];
       const seen = new Set();
@@ -1607,9 +1634,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         out.push(s);
       });
 
-      // YouTube result cards must expose one representative visual only. If an
-      // iframe is rendered, this prevents a second small thumbnail from being
-      // appended next to the player.
+      // YouTube result cards should expose a representative thumbnail when a
+      // full player is not appropriate or when the provider did not include an image.
       if (isYoutubeLikeItemClient(it)) {
         const best = preferredYoutubeThumbClient(it) || out[0] || '';
         return best ? [best] : [];
@@ -1622,7 +1648,6 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       return out.slice(0, 3);
     }
-
 
     function classifyVisualKindClient(it){
       const source = String((it && it.source) || '').toLowerCase();
@@ -1691,7 +1716,16 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function displayGroupOfItem(it){
-      return normalizeDisplayGroupClient(String((it && it.displayGroup) || '').trim() || inferDisplayGroupClient(it));
+      const rawGroup = String((it && (it.displayGroup || it.displayGroupLabel || it.group)) || '').trim();
+      const normalized = normalizeDisplayGroupClient(rawGroup);
+      const inferred = inferDisplayGroupClient(it);
+
+      // Server supply may mark broad results as "web". In that case the UI
+      // container should still recognize clear site/book/news/blog/map/etc.
+      // signals from URL/source/type so portal categories are not lost.
+      if(!rawGroup) return inferred;
+      if((normalized === 'web' || normalized === 'general_web') && inferred && inferred !== 'web') return inferred;
+      return normalized || inferred || 'web';
     }
 
     function isHomepageLikeUrlClient(url){
@@ -1900,6 +1934,20 @@ async function fetchInstantSearchPack(q, type = activeType){
       return out;
     }
 
+    function decorateDisplayItemForRender(it, groupInfo, index, hidden){
+      const copy = Object.assign({}, it || {});
+      const group = groupInfo && groupInfo.group ? groupInfo.group : displayGroupOfItem(copy);
+      copy.__maruDisplayGroup = group;
+      copy.__maruGroupPreviewIndex = Math.max(0, parseInt(index, 10) || 0);
+      copy.__maruGroupHidden = !!hidden;
+
+      // Only top-ranked map/local cards get live map preview + place info.
+      // Later local results remain normal cards with summary text, preventing
+      // long map iframes from flooding the search pages.
+      copy.__maruAllowMapPreview = group === 'local_tour' && !hidden && copy.__maruGroupPreviewIndex < 3;
+      return copy;
+    }
+
     function renderGroupedSlice(slice, page){
       const groups = (Array.isArray(slice) && slice.length && slice[0] && Array.isArray(slice[0].items) && slice[0].group) ? slice : groupSliceForDisplay(slice);
       groups.forEach(groupInfo => {
@@ -1947,7 +1995,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         let hiddenMounted = false;
         let hiddenWrap = null;
 
-        previewItems.forEach(it => renderItem(it, body));
+        previewItems.forEach((it, idx) => renderItem(decorateDisplayItemForRender(it, groupInfo, idx, false), body));
 
         section.appendChild(head);
         section.appendChild(body);
@@ -1972,7 +2020,7 @@ async function fetchInstantSearchPack(q, type = activeType){
             if(!hiddenMounted){
               hiddenWrap = document.createElement('div');
               hiddenWrap.className = 'maru-display-hidden-wrap';
-              hiddenItems.forEach(it => renderItem(it, hiddenWrap));
+              hiddenItems.slice(0, displayGroupModuleTotalCap(groupInfo.group)).forEach((it, idx) => renderItem(decorateDisplayItemForRender(it, groupInfo, idx, true), hiddenWrap));
               body.appendChild(hiddenWrap);
               hiddenMounted = true;
             }
@@ -2397,6 +2445,68 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
 
+    function compactCardTextClient(v){
+      if(v === undefined || v === null) return '';
+      if(typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'){
+        return String(v).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+      }
+      if(Array.isArray(v)){
+        return v.map(compactCardTextClient).filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+      }
+      if(typeof v === 'object'){
+        return compactCardTextClient([
+          v.summary, v.snippet, v.description, v.contentSnippet, v.content, v.text,
+          v.abstract, v.excerpt, v.intro, v.body, v.caption
+        ]);
+      }
+      return '';
+    }
+
+    function descriptionForItemClient(it){
+      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
+      const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
+      const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
+      const candidates = [
+        it && it.summary,
+        it && it.snippet,
+        it && it.description,
+        it && it.contentSnippet,
+        it && it.excerpt,
+        it && it.abstract,
+        it && it.content,
+        it && it.text,
+        payload.summary,
+        payload.snippet,
+        payload.description,
+        payload.contentSnippet,
+        payload.excerpt,
+        payload.abstract,
+        payload.content,
+        payload.text,
+        data.summary,
+        data.snippet,
+        data.description,
+        data.contentSnippet,
+        data.excerpt,
+        data.abstract,
+        data.content,
+        data.text,
+        preview.summary,
+        preview.description,
+        preview.caption
+      ];
+      for(const v of candidates){
+        const text = compactCardTextClient(v);
+        if(text) return text.slice(0, 360);
+      }
+      return '';
+    }
+
+    function shouldRenderMapPreviewForItemClient(it){
+      return !!(it && it.__maruAllowMapPreview === true && isMapLikeItemClient(it));
+    }
+
     function renderItem(it, mountTarget){
       const url = it.url || it.link || '';
       const domain = domainOf(url);
@@ -2462,7 +2572,7 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const d = document.createElement('div');
       d.className = 'desc';
-      d.textContent = (it.summary || it.snippet || it.description || it.content || it.text || '').trim();
+      d.textContent = descriptionForItemClient(it);
 
   textCol.appendChild(t);
 
@@ -2484,7 +2594,7 @@ if (it.riskLabel === '⚠️ high-risk') {
 }
 // 그 외는 아예 표시 안 함 (safe 제거)
 
-      textCol.appendChild(risk);
+      if (risk.textContent) textCol.appendChild(risk);
       textCol.appendChild(l);
       if (d.textContent) textCol.appendChild(d);
 
@@ -2518,7 +2628,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         body.appendChild(playableMediaNode);
       }
 
-      const mapPreviewNode = (!playableMediaNode && !isRealThumb) ? renderMapPreviewClient(it) : null;
+      const mapPreviewNode = (!playableMediaNode && shouldRenderMapPreviewForItemClient(it)) ? renderMapPreviewClient(it) : null;
       if (mapPreviewNode) {
         body.appendChild(mapPreviewNode);
       }
