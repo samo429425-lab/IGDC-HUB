@@ -1062,6 +1062,113 @@ async function fetchSearch(q, type = activeType, page = 1){
   }
 }
 
+
+const SERP_VERTICAL_PREVIEW_ROUTES = [
+  { type:'map', group:'local_tour' },
+  { type:'knowledge', group:'knowledge' },
+  { type:'news', group:'news' },
+  { type:'video', group:'media' },
+  { type:'image', group:'media' },
+  { type:'blog', group:'community' },
+  { type:'cafe', group:'community' },
+  { type:'sns', group:'social' },
+  { type:'book', group:'book' },
+  { type:'shopping', group:'shopping' },
+  { type:'sports', group:'sports' },
+  { type:'finance', group:'finance' },
+  { type:'webtoon', group:'webtoon' }
+];
+
+function categoryPreviewDeficitMap(){
+  const groups = groupSliceForDisplay(allItems || []);
+  const counts = new Map(groups.map(g => [g.group, Array.isArray(g.items) ? g.items.length : 0]));
+  const desired = { authority:3, local_tour:4, knowledge:4, news:4, media:4, community:4, social:3, book:3, shopping:3, sports:3, finance:3, webtoon:3 };
+  const deficit = new Set();
+  Object.keys(desired).forEach(group => {
+    if((counts.get(group) || 0) < desired[group]) deficit.add(group);
+  });
+  return deficit;
+}
+
+function decorateVerticalPreviewItems(items, route){
+  const group = route && route.group;
+  const type = route && route.type;
+  return (Array.isArray(items) ? items : []).map((it, idx) => Object.assign({}, it, {
+    displayGroup: group || displayGroupOfItem(it),
+    displayGroupLabel: displayGroupLabel(group || displayGroupOfItem(it), it),
+    verticalPreviewType: type,
+    verticalPreviewRank: idx,
+    categoryModuleItem: true,
+    visibleViewportCard: true
+  }));
+}
+
+async function fetchVerticalPreviewSearch(q, route){
+  const safeType = normalizeSearchType(route && route.type);
+  const sp = new URLSearchParams();
+  sp.set('q', q);
+  sp.set('limit', '80');
+  sp.set('type', safeType);
+  sp.set('tab', safeType);
+  sp.set('perPage', String(PAGE_SIZE));
+  sp.set('visibleCardsPerPage', String(PAGE_SIZE));
+  sp.set('page', '1');
+  sp.set('visiblePage', '1');
+  sp.set('pageWindowOnly', '1');
+  sp.set('residentFirst', '1');
+  sp.set('sanmaruFirst', '1');
+  sp.set('routeOwner', 'sanmaru');
+  sp.set('naturalFlow', '1');
+  sp.set('categoryPreview', '1');
+  sp.set('noBlockingWide', '1');
+  sp.set('residentSwitch', '1');
+  sp.set('activateResident', '1');
+  sp.set('handoff', isSearchPage ? 'search-html' : 'home');
+  const url = `/.netlify/functions/maru-search?${sp.toString()}`;
+  try{
+    const r = await fetch(url, { cache:'no-store' });
+    if(!r.ok) return { items:[], payload:null, pageItems:[], viewportSections:[] };
+    const json = await r.json();
+    if(!json || json.status === 'error' || json.status === 'blocked') return { items:[], payload:json || null, pageItems:[], viewportSections:[] };
+    return normalizeSearchPayload(json);
+  }catch(e){
+    console.warn('vertical preview fetch skipped:', safeType, e);
+    return { items:[], payload:null, pageItems:[], viewportSections:[] };
+  }
+}
+
+async function startSerpVerticalPreviewBackfill(q, seq){
+  if(!q || runSearch._seq !== seq || normalizeSearchType(activeType) !== 'all') return;
+  const maxParallel = 4;
+  let cursor = 0;
+
+  async function worker(){
+    while(runSearch._seq === seq && cursor < SERP_VERTICAL_PREVIEW_ROUTES.length){
+      const route = SERP_VERTICAL_PREVIEW_ROUTES[cursor++];
+      const deficit = categoryPreviewDeficitMap();
+      if(!deficit.has(route.group)) continue;
+      try{
+        const pack = await fetchVerticalPreviewSearch(q, route);
+        if(runSearch._seq !== seq) return;
+        const raw = pageItemsFromPack(pack).length ? pageItemsFromPack(pack) : (pack.items || []);
+        const decorated = decorateVerticalPreviewItems(dedupeItems(filterSearchResultItems(raw)).slice(0, 25), route);
+        if(decorated.length){
+          allItems = dedupeItems((allItems || []).concat(decorated));
+          updateProgressiveTotalFromPayload(pack && pack.payload, Math.max(allItems.length, serverTotalItems || 0));
+          renderPage(currentPage || 1, true);
+          status.textContent = `${serverTotalItems || allItems.length} results for "${q}" · category preview receiving...`;
+        }
+      }catch(e){
+        console.warn('serp vertical preview skipped:', route && route.type, e);
+      }
+    }
+  }
+
+  const workers = [];
+  for(let i=0; i<Math.min(maxParallel, SERP_VERTICAL_PREVIEW_ROUTES.length); i++) workers.push(worker());
+  await Promise.all(workers).catch(() => null);
+}
+
 async function fetchInstantSearchPack(q, type = activeType){
   const safeType = normalizeSearchType(type);
   const sp = new URLSearchParams();
@@ -1712,12 +1819,22 @@ async function fetchInstantSearchPack(q, type = activeType){
         government: 'authority',
         knowledge_wiki: 'knowledge',
         wiki: 'knowledge',
+        encyclopedia: 'knowledge',
+        namuwiki: 'knowledge',
         map_local_tour: 'local_tour',
+        map: 'local_tour',
         local: 'local_tour',
         tour: 'local_tour',
+        tourism: 'local_tour',
         video_vlog: 'media',
+        video: 'media',
         image_gallery: 'media',
+        image: 'media',
+        book: 'book',
+        books: 'book',
         blog_review: 'community',
+        blog: 'community',
+        cafe: 'community',
         community_sns: 'social',
         sns: 'social',
         shopping_product: 'shopping',
@@ -1741,13 +1858,23 @@ async function fetchInstantSearchPack(q, type = activeType){
       const host = domainOf(url).toLowerCase();
       const text = `${source} ${type} ${mediaType} ${title} ${summary} ${host}`;
 
-      if (source.includes('news') || type === 'news' || text.includes('뉴스') || text.includes('속보') || text.includes('latest') || text.includes('breaking')) return 'news';
-      if (mediaType === 'image' || type === 'image' || mediaType === 'video' || type === 'video' || source.includes('image') || source.includes('youtube')) return 'media';
-      if (source.includes('local') || source.includes('map') || text.includes('관광') || text.includes('여행') || text.includes('지도') || text.includes('맛집') || text.includes('공원') || text.includes('landmark') || text.includes('tour')) return 'local_tour';
-      if (source.includes('blog') || source.includes('cafe') || text.includes('블로그') || text.includes('카페')) return 'community';
-      if (host.includes('instagram.') || host.includes('facebook.') || host.includes('tiktok.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social')) return 'social';
-      if (source.includes('encyc') || source.includes('kin') || source.includes('book') || text.includes('지식') || text.includes('도서') || text.includes('책 ')) return 'knowledge';
-      if (host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr')) return 'authority';
+      const isAuthorityHost = host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr') || host.endsWith('.edu') || host.includes('.edu.') || host.includes('.ac.kr');
+      const isWikiHost = host.includes('wikipedia.org') || host.includes('namu.wiki') || host.includes('wikidata.org') || host.includes('dbpedia.org') || host.includes('britannica.com') || host.includes('encyclopedia.com');
+      const isNewsHost = /(^|\.)(news|yna|yonhap|hani|khan|chosun|joongang|donga|mk|hankyung|bbc|cnn|reuters|apnews|nytimes|guardian|bloomberg|wsj)\./i.test(host);
+
+      // SERP classification must protect answer/authority/knowledge/local cards
+      // from being swallowed by news-heavy all-search results. Naver/Google/Bing
+      // all expose mixed vertical answer blocks instead of letting news occupy
+      // the whole first viewport.
+      if (isAuthorityHost || source.includes('official') || source.includes('authority') || type === 'official') return 'authority';
+      if (source.includes('local') || source.includes('map') || type === 'map' || type === 'local' || text.includes('관광') || text.includes('여행') || text.includes('지도') || text.includes('맛집') || text.includes('공원') || text.includes('landmark') || text.includes('tour')) return 'local_tour';
+      if (isWikiHost || source.includes('wiki') || source.includes('encyc') || source.includes('kin') || type === 'knowledge' || type === 'wiki' || text.includes('지식') || text.includes('백과') || text.includes('위키') || text.includes('나무위키')) return 'knowledge';
+      if (type === 'book' || source.includes('book') || text.includes('도서') || text.includes('책 ') || text.includes('isbn')) return 'book';
+      if (source.includes('news') || type === 'news' || isNewsHost || text.includes('뉴스') || text.includes('속보') || text.includes('latest') || text.includes('breaking')) return 'news';
+      if (mediaType === 'image' || type === 'image' || mediaType === 'video' || type === 'video' || source.includes('image') || source.includes('youtube') || source.includes('video')) return 'media';
+      if (source.includes('blog') || source.includes('cafe') || type === 'blog' || type === 'cafe' || text.includes('블로그') || text.includes('카페')) return 'community';
+      if (host.includes('instagram.') || host.includes('facebook.') || host.includes('tiktok.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social') || type === 'sns' || type === 'social') return 'social';
+      if (type === 'shopping' || source.includes('shopping') || source.includes('shop') || text.includes('쇼핑') || text.includes('상품') || text.includes('구매')) return 'shopping';
       return 'web';
     }
 
@@ -1760,6 +1887,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         social: 'SNS/영상',
         community: '블로그/카페',
         knowledge: '지식/백과',
+        book: '도서',
         shopping: '쇼핑',
         sports: '스포츠',
         finance: '금융',
@@ -1785,6 +1913,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         social: 5,
         community: 5,
         knowledge: 3,
+        book: 5,
         shopping: 5,
         sports: 5,
         finance: 5,
@@ -1801,7 +1930,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = ['authority','knowledge','local_tour','news','community','social','media','shopping','sports','finance','webtoon','web'];
+      const order = ['authority','local_tour','knowledge','news','media','community','social','book','shopping','sports','finance','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -1872,6 +2001,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         community: 6,
         social: 5,
         media: 5,
+        book: 4,
         shopping: 4,
         sports: 3,
         finance: 3,
@@ -2741,6 +2871,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         community: 6,
         social: 6,
         media: 6,
+        book: 5,
         shopping: 5,
         sports: 5,
         finance: 5,
@@ -3110,6 +3241,7 @@ async function runSearch(q, type = activeType){
       status.textContent = `${serverTotalItems || allItems.length} results for "${qq}" · ${getTypeLabel(activeType)} · receiving...`;
     }
 
+    startSerpVerticalPreviewBackfill(qq, seq).catch(() => null);
     startInitialPageWindowBackfill(qq, activeType, seq).catch(() => null);
     startContinuousIntake(qq, activeType, seq);
   } catch(e){
@@ -3129,6 +3261,7 @@ async function runSearch(q, type = activeType){
     if(allItems.length) renderPage(1);
     else { results.innerHTML = ''; clearPager(); }
     status.textContent = allItems.length ? `${serverTotalItems || allItems.length} results for "${qq}" · receiving...` : `No results for "${qq}"`;
+    startSerpVerticalPreviewBackfill(qq, seq).catch(() => null);
     startInitialPageWindowBackfill(qq, activeType, seq).catch(() => null);
     startContinuousIntake(qq, activeType, seq);
   }
