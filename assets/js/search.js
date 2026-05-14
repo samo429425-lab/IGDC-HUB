@@ -1,5 +1,5 @@
-// IGDC Search.js — RECEIVER/CONTAINER UI LAYER PATCH
-// PATCH: search.js receives Sanmaru/MaruSearch supply only; no client-side vertical re-search
+// IGDC Search.js — FULL SEARCH PIPELINE PATCH
+// PATCH: Sanmaru route-owned natural flow + page-lazy rendering + balanced vertical tabs
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -48,8 +48,8 @@ ready(function () {
     const MIN_SMOOTH_CANDIDATES = 120;
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
-    const INTAKE_CONCURRENCY = 4;
-    const INTAKE_BURST_DELAY_MS = 15;
+    const INTAKE_CONCURRENCY = 3;
+    const INTAKE_BURST_DELAY_MS = 60;
 
     let allItems = [];
     let serverPagedMode = false;
@@ -59,7 +59,6 @@ ready(function () {
     let continuousIntakeSeq = 0;
     let continuousIntakeActive = false;
     const loadedServerPages = new Map();
-    const loadedServerSections = new Map();
     let currentPage = 1;
     let currentBlock = 0;
     let activeType = 'all';
@@ -803,64 +802,6 @@ function serverTotalFromPayload(payload, fallbackCount){
   return cappedTotal;
 }
 
-
-function serverSectionsFromPack(pack){
-  if(!pack) return [];
-  const payload = pack.payload || pack;
-  const candidates = [];
-  if(Array.isArray(pack.viewportSections)) candidates.push(pack.viewportSections);
-  if(payload && Array.isArray(payload.viewportSections)) candidates.push(payload.viewportSections);
-  if(payload && payload.sectionPack && Array.isArray(payload.sectionPack.viewportSections)) candidates.push(payload.sectionPack.viewportSections);
-  if(payload && Array.isArray(payload.displaySections)) candidates.push(payload.displaySections);
-  if(payload && Array.isArray(payload.sections)) candidates.push(payload.sections);
-  for(const sections of candidates){
-    const normalized = normalizeServerDisplaySections(sections);
-    if(normalized.length) return normalized;
-  }
-  return [];
-}
-
-function normalizeServerDisplaySections(sections){
-  return (Array.isArray(sections) ? sections : []).map((sec, idx) => {
-    const group = String(sec && (sec.group || sec.key || sec.type || sec.displayGroup || sec.category) || ('section-' + idx)).trim();
-    const items = Array.isArray(sec && sec.items) ? sec.items :
-      (Array.isArray(sec && sec.pageItems) ? sec.pageItems :
-      (Array.isArray(sec && sec.results) ? sec.results : []));
-    if(!group || !items.length) return null;
-    const previewItems = Array.isArray(sec.previewItems) ? sec.previewItems : items.slice(0, Math.max(1, parseInt(sec.previewLimit, 10) || items.length));
-    const visibleKeys = new Set(previewItems.map(itemKeyForServerSection).filter(Boolean));
-    const hiddenItems = Array.isArray(sec.hiddenItems) ? sec.hiddenItems : items.filter(it => {
-      const key = itemKeyForServerSection(it);
-      return !key || !visibleKeys.has(key);
-    });
-    return {
-      group,
-      label: sec.label || sec.title || sec.displayGroupLabel || displayGroupLabel(group, previewItems[0] || items[0]),
-      previewLimit: parseInt(sec.previewLimit, 10) || previewItems.length,
-      previewItems,
-      hiddenItems,
-      items,
-      sourceTotal: parseInt(sec.sourceTotal || sec.total || sec.count, 10) || items.length,
-      serverSection: true,
-      categoryModule: true,
-      slotAwareViewport: true
-    };
-  }).filter(Boolean);
-}
-
-function itemKeyForServerSection(it){
-  return String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
-}
-
-function storeServerSections(page, pack){
-  const sections = serverSectionsFromPack(pack);
-  if(sections.length){
-    loadedServerSections.set(page, sections);
-    return true;
-  }
-  return false;
-}
-
 function pageItemsFromPack(pack){
   if(!pack) return [];
   if(Array.isArray(pack.pageItems) && pack.pageItems.length) return pack.pageItems;
@@ -881,14 +822,18 @@ function adaptiveSearchTarget(q, type){
   const broadHints = /(세계|전세계|글로벌|뉴스|영상|이미지|관광|여행|ai|인공지능|기술|시장|경제|정치|sports|finance|global|world|news|tour|travel|technology|market)/i;
   const narrowHints = /(카페|맛집|식당|주소|전화|위치|지도|병원|약국|학교|교회|상호|주차|near me|cafe|restaurant|address|map)/i;
 
-  let target = 600;
-  if (safeType !== 'all') target = 350;
-  if (words.length >= 3 || narrowHints.test(text)) target = 300;
-  if (words.length <= 1 || broadHints.test(text)) target = 900;
-  if (/^(news|image|video|sns|blog|tour)$/.test(safeType)) target = Math.max(target, 700);
-  if (/^(map|knowledge|book|shopping)$/.test(safeType)) target = Math.min(target, 450);
+  // Search.js is only the receiver/container. This number is the size of the
+  // server-side Sanmaru/MaruSearch supply window that the UI is ready to cache,
+  // not a request for the browser to perform separate searches. Keep the first
+  // 300 pages ready immediately and let the faucet keep filling up to 1,500.
+  let target = 1200;
+  if (safeType !== 'all') target = 900;
+  if (words.length >= 3 || narrowHints.test(text)) target = 700;
+  if (words.length <= 1 || broadHints.test(text)) target = 1500;
+  if (/^(news|image|video|sns|blog|tour)$/.test(safeType)) target = Math.max(target, 1200);
+  if (/^(map|knowledge|book|shopping)$/.test(safeType)) target = Math.max(700, Math.min(target, 1000));
 
-  return Math.max(MIN_SMOOTH_CANDIDATES, Math.min(MAX_SMOOTH_CANDIDATES, target));
+  return Math.max(INITIAL_PRELOAD_TARGET, Math.min(MAX_SMOOTH_CANDIDATES, target));
 }
 
 function firstPaintLimitFor(q, type){
@@ -932,61 +877,6 @@ function sleepIntake(ms){
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-
-function mergeIncomingSearchPage(page, pageSlice, pack){
-  const list = dedupeItems(filterSearchResultItems(pageSlice || []));
-  if(!list.length) return false;
-  loadedServerPages.set(page, list.slice(0, PAGE_SIZE));
-  storeServerSections(page, pack);
-  allItems = dedupeItems(allItems.concat(list));
-  if(pack && pack.payload) lastSearchPayload = pack.payload;
-  updateProgressiveTotalFromPayload(pack && pack.payload, allItems.length);
-  return true;
-}
-
-function shouldRefreshCurrentSearchView(newPage){
-  if(normalizeSearchType(activeType) !== 'all') return newPage === currentPage;
-  if(newPage === currentPage) return true;
-  // Early SERP pages are category-module pages. When a newly received page brings
-  // another vertical/category, refresh the current viewport so the user sees
-  // diverse categories immediately instead of waiting for manual pagination.
-  return currentPage <= 2 && newPage <= Math.max(INITIAL_PRELOAD_PAGES, 12);
-}
-
-function refreshSearchViewAfterIntake(newPage){
-  if(shouldRefreshCurrentSearchView(newPage)) renderPage(currentPage || 1, true);
-  else drawPager();
-}
-
-async function startInitialPageWindowBackfill(q, type, seq){
-  if(!q || runSearch._seq !== seq) return;
-  const pages = [];
-  for(let page = 1; page <= INITIAL_PRELOAD_PAGES; page++) pages.push(page);
-  let cursor = 0;
-
-  async function worker(){
-    while(runSearch._seq === seq && cursor < pages.length){
-      const page = pages[cursor++];
-      try{
-        const pack = await fetchSearch(q, type, page);
-        if(runSearch._seq !== seq) return;
-        const pageSlice = pageItemsFromPack(pack);
-        if(mergeIncomingSearchPage(page, pageSlice, pack)){
-          refreshSearchViewAfterIntake(page);
-          status.textContent = `${serverTotalItems || allItems.length} results for "${q}" · ${getTypeLabel(type)} · receiving...`;
-        }
-      }catch(e){
-        console.warn('initial page window backfill skipped:', page, e);
-      }
-      if(INTAKE_BURST_DELAY_MS > 0) await sleepIntake(INTAKE_BURST_DELAY_MS);
-    }
-  }
-
-  const workers = [];
-  for(let i = 0; i < Math.min(INTAKE_CONCURRENCY, pages.length); i++) workers.push(worker());
-  await Promise.all(workers).catch(() => null);
-}
-
 function startContinuousIntake(q, type, seq){
   if(!q || runSearch._seq !== seq) return;
   const token = ++continuousIntakeSeq;
@@ -995,9 +885,8 @@ function startContinuousIntake(q, type, seq){
   authoritativeServerTotalItems = Math.max(authoritativeServerTotalItems || 0, target);
   updateProgressiveTotalFromPayload(lastSearchPayload || {}, Math.max(target, allItems.length || 0));
 
-  let nextPage = Math.max(INITIAL_PRELOAD_PAGES + 1, preloadPageCountFromItems(allItems) + 1);
-  const totalForIntake = Math.max(target, authoritativeServerTotalItems || 0, serverTotalItems || 0, allItems.length || 0);
-  const maxPages = Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(totalForIntake / PAGE_SIZE)));
+  let nextPage = Math.max(2, preloadPageCountFromItems(allItems) + 1);
+  const maxPages = Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(target / PAGE_SIZE)));
 
   async function worker(){
     while(continuousIntakeActive && continuousIntakeSeq === token && runSearch._seq === seq && nextPage <= maxPages){
@@ -1006,9 +895,14 @@ function startContinuousIntake(q, type, seq){
       try{
         const pack = await fetchSearch(q, type, page);
         if(!continuousIntakeActive || continuousIntakeSeq !== token || runSearch._seq !== seq) return;
-        const pageSlice = pageItemsFromPack(pack);
-        if(mergeIncomingSearchPage(page, pageSlice, pack)){
-          refreshSearchViewAfterIntake(page);
+        const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack))).slice(0, PAGE_SIZE);
+        if(pageSlice.length){
+          loadedServerPages.set(page, pageSlice);
+          allItems = dedupeItems(allItems.concat(pageSlice));
+          lastSearchPayload = pack && pack.payload || lastSearchPayload;
+          updateProgressiveTotalFromPayload(pack && pack.payload, allItems.length);
+          if(page === currentPage) renderPage(page, true);
+          else drawPager();
           status.textContent = `${serverTotalItems || allItems.length} results for "${q}" · ${getTypeLabel(type)} · receiving...`;
         }
       }catch(e){
@@ -1120,116 +1014,6 @@ async function fetchSearch(q, type = activeType, page = 1){
     console.error('fetchSearch failed:', e);
     return { items: [], payload: null, pageItems: [], viewportSections: [] };
   }
-}
-
-
-const SERP_VERTICAL_PREVIEW_ROUTES = [
-  { type:'map', group:'local_tour' },
-  { type:'knowledge', group:'knowledge' },
-  { type:'news', group:'news' },
-  { type:'video', group:'media' },
-  { type:'image', group:'media' },
-  { type:'blog', group:'community' },
-  { type:'cafe', group:'community' },
-  { type:'sns', group:'social' },
-  { type:'book', group:'book' },
-  { type:'shopping', group:'shopping' },
-  { type:'sports', group:'sports' },
-  { type:'finance', group:'finance' },
-  { type:'webtoon', group:'webtoon' }
-];
-
-const SERP_SECTION_PREVIEW_CAPS = {
-  authority: 3,
-  knowledge: 4,
-  local_tour: 2,
-  news: 5,
-  media: 5,
-  social: 4,
-  community: 5,
-  book: 4,
-  shopping: 4,
-  sports: 3,
-  finance: 3,
-  webtoon: 3,
-  web: 8
-};
-
-const SERP_VERTICAL_FETCH_LIMITS = {
-  map: 4,
-  knowledge: 8,
-  news: 12,
-  video: 8,
-  image: 8,
-  blog: 8,
-  cafe: 8,
-  sns: 8,
-  book: 8,
-  shopping: 8,
-  sports: 6,
-  finance: 6,
-  webtoon: 6
-};
-
-const SERP_INITIAL_PREVIEW_WAIT_MS = 0;
-const SERP_CATEGORY_PREVIEW_DELAY_MS = 1200;
-const SERP_VERTICAL_PREVIEW_MAX_PARALLEL = 2;
-
-function serpPreviewCap(group){
-  return SERP_SECTION_PREVIEW_CAPS[group] || 5;
-}
-
-function serpVerticalFetchLimit(route){
-  const safeType = normalizeSearchType(route && route.type);
-  return SERP_VERTICAL_FETCH_LIMITS[safeType] || 8;
-}
-
-function isEarlyPortalGroup(group){
-  return group && group !== 'web';
-}
-
-function categoryPreviewDeficitMap(){
-  const groups = groupSliceForDisplay(allItems || []);
-  const counts = new Map(groups.map(g => [g.group, Array.isArray(g.items) ? g.items.length : 0]));
-  const desired = SERP_SECTION_PREVIEW_CAPS;
-  const deficit = new Set();
-  Object.keys(desired).forEach(group => {
-    if((counts.get(group) || 0) < desired[group]) deficit.add(group);
-  });
-  return deficit;
-}
-
-function decorateVerticalPreviewItems(items, route){
-  const group = route && route.group;
-  const type = route && route.type;
-  return (Array.isArray(items) ? items : []).map((it, idx) => Object.assign({}, it, {
-    displayGroup: group || displayGroupOfItem(it),
-    displayGroupLabel: displayGroupLabel(group || displayGroupOfItem(it), it),
-    verticalPreviewType: type,
-    verticalPreviewRank: idx,
-    categoryModuleItem: true,
-    visibleViewportCard: true
-  }));
-}
-
-async function collectInitialSerpPreviewItems(q, seq, maxWaitMs){
-  return [];
-}
-
-async function fetchVerticalPreviewSearch(q, route){
-  return { items: [], payload: null, pageItems: [], viewportSections: [] };
-}
-
-async function startSerpVerticalPreviewBackfill(q, seq){
-  return;
-}
-
-
-function deferSerpVerticalPreviewBackfill(q, seq){
-  // v11: No client-side vertical/category re-search.
-  // search.js must not open news/knowledge/map/blog/etc. preview searches by itself.
-  // It only renders the Sanmaru/MaruSearch supply already received through the gateway.
-  return;
 }
 
 async function fetchInstantSearchPack(q, type = activeType){
@@ -1882,22 +1666,12 @@ async function fetchInstantSearchPack(q, type = activeType){
         government: 'authority',
         knowledge_wiki: 'knowledge',
         wiki: 'knowledge',
-        encyclopedia: 'knowledge',
-        namuwiki: 'knowledge',
         map_local_tour: 'local_tour',
-        map: 'local_tour',
         local: 'local_tour',
         tour: 'local_tour',
-        tourism: 'local_tour',
         video_vlog: 'media',
-        video: 'media',
         image_gallery: 'media',
-        image: 'media',
-        book: 'book',
-        books: 'book',
         blog_review: 'community',
-        blog: 'community',
-        cafe: 'community',
         community_sns: 'social',
         sns: 'social',
         shopping_product: 'shopping',
@@ -1921,23 +1695,13 @@ async function fetchInstantSearchPack(q, type = activeType){
       const host = domainOf(url).toLowerCase();
       const text = `${source} ${type} ${mediaType} ${title} ${summary} ${host}`;
 
-      const isAuthorityHost = host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr') || host.endsWith('.edu') || host.includes('.edu.') || host.includes('.ac.kr');
-      const isWikiHost = host.includes('wikipedia.org') || host.includes('namu.wiki') || host.includes('wikidata.org') || host.includes('dbpedia.org') || host.includes('britannica.com') || host.includes('encyclopedia.com');
-      const isNewsHost = /(^|\.)(news|yna|yonhap|hani|khan|chosun|joongang|donga|mk|hankyung|bbc|cnn|reuters|apnews|nytimes|guardian|bloomberg|wsj)\./i.test(host);
-
-      // SERP classification must protect answer/authority/knowledge/local cards
-      // from being swallowed by news-heavy all-search results. Naver/Google/Bing
-      // all expose mixed vertical answer blocks instead of letting news occupy
-      // the whole first viewport.
-      if (isAuthorityHost || source.includes('official') || source.includes('authority') || type === 'official') return 'authority';
-      if (source.includes('local') || source.includes('map') || type === 'map' || type === 'local' || text.includes('관광') || text.includes('여행') || text.includes('지도') || text.includes('맛집') || text.includes('공원') || text.includes('landmark') || text.includes('tour')) return 'local_tour';
-      if (isWikiHost || source.includes('wiki') || source.includes('encyc') || source.includes('kin') || type === 'knowledge' || type === 'wiki' || text.includes('지식') || text.includes('백과') || text.includes('위키') || text.includes('나무위키')) return 'knowledge';
-      if (type === 'book' || source.includes('book') || text.includes('도서') || text.includes('책 ') || text.includes('isbn')) return 'book';
-      if (source.includes('news') || type === 'news' || isNewsHost || text.includes('뉴스') || text.includes('속보') || text.includes('latest') || text.includes('breaking')) return 'news';
-      if (mediaType === 'image' || type === 'image' || mediaType === 'video' || type === 'video' || source.includes('image') || source.includes('youtube') || source.includes('video')) return 'media';
-      if (source.includes('blog') || source.includes('cafe') || type === 'blog' || type === 'cafe' || text.includes('블로그') || text.includes('카페')) return 'community';
-      if (host.includes('instagram.') || host.includes('facebook.') || host.includes('tiktok.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social') || type === 'sns' || type === 'social') return 'social';
-      if (type === 'shopping' || source.includes('shopping') || source.includes('shop') || text.includes('쇼핑') || text.includes('상품') || text.includes('구매')) return 'shopping';
+      if (source.includes('news') || type === 'news' || text.includes('뉴스') || text.includes('속보') || text.includes('latest') || text.includes('breaking')) return 'news';
+      if (mediaType === 'image' || type === 'image' || mediaType === 'video' || type === 'video' || source.includes('image') || source.includes('youtube')) return 'media';
+      if (source.includes('local') || source.includes('map') || text.includes('관광') || text.includes('여행') || text.includes('지도') || text.includes('맛집') || text.includes('공원') || text.includes('landmark') || text.includes('tour')) return 'local_tour';
+      if (source.includes('blog') || source.includes('cafe') || text.includes('블로그') || text.includes('카페')) return 'community';
+      if (host.includes('instagram.') || host.includes('facebook.') || host.includes('tiktok.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social')) return 'social';
+      if (source.includes('encyc') || source.includes('kin') || source.includes('book') || text.includes('지식') || text.includes('도서') || text.includes('책 ')) return 'knowledge';
+      if (host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr')) return 'authority';
       return 'web';
     }
 
@@ -1950,7 +1714,6 @@ async function fetchInstantSearchPack(q, type = activeType){
         social: 'SNS/영상',
         community: '블로그/카페',
         knowledge: '지식/백과',
-        book: '도서',
         shopping: '쇼핑',
         sports: '스포츠',
         finance: '금융',
@@ -1968,18 +1731,31 @@ async function fetchInstantSearchPack(q, type = activeType){
       // results from pagination. Broad searches such as 서울/부산/뉴욕 should
       // keep the full candidate stream and only arrange the first viewport in
       // a Google/Naver-like balanced order.
-      const limits = Object.assign({}, SERP_SECTION_PREVIEW_CAPS, { web: 18 });
+      const limits = {
+        authority: 4,
+        news: 6,
+        local_tour: 3,
+        media: 5,
+        social: 5,
+        community: 5,
+        knowledge: 3,
+        shopping: 5,
+        sports: 5,
+        finance: 5,
+        webtoon: 5,
+        web: 18
+      };
       return limits[group] || 6;
     }
 
     function shouldUseDisplayGroups(slice){
       if (!Array.isArray(slice) || !slice.length) return false;
       if (normalizeSearchType(activeType) !== 'all') return false;
-      return slice.some(it => it && ((Array.isArray(it.items) && it.group) || it.displayGroup || it.displayGroupLabel));
+      return slice.some(it => it && (it.displayGroup || it.displayGroupLabel));
     }
 
     function groupSliceForDisplay(slice){
-      const order = ['authority','local_tour','knowledge','news','media','social','community','book','shopping','sports','finance','webtoon','web'];
+      const order = ['authority','knowledge','local_tour','news','community','social','media','shopping','sports','finance','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -2012,87 +1788,10 @@ async function fetchInstantSearchPack(q, type = activeType){
       return source || String((it && it.title) || '').slice(0, 40).toLowerCase();
     }
 
-    const NEWS_MEDIUM_PRIORITY = [
-      // v11: news preview is an outlet-headline module, not a Google/Naver article dump.
-      // Actual news outlets come first; aggregators are allowed only as fallback.
-      ['yonhap', /yna\.co\.kr|yonhap|연합/i],
-      ['ytn', /(^|\.)ytn\.co\.kr$|ytn/i],
-      ['herald', /heraldcorp\.com|herald경제|헤럴드경제|헤럴드/i],
-      ['mbn', /mbn\.co\.kr|mk\.co\.kr\/news\/mbn|mbn/i],
-      ['mk', /mk\.co\.kr|매일경제/i],
-      ['hankyung', /hankyung\.com|한국경제/i],
-      ['seoul', /seoul\.co\.kr|서울신문/i],
-      ['kbs', /(^|\.)kbs\.co\.kr$|kbs/i],
-      ['sbs', /(^|\.)sbs\.co\.kr$|sbs/i],
-      ['jtbc', /(^|\.)jtbc\.co\.kr$|jtbc/i],
-      ['channel-a', /ichannela\.com|채널a/i],
-      ['tvchosun', /tvchosun\.com|tv\s*조선|티비조선/i],
-      ['chosun', /chosun\.com|조선/i],
-      ['joongang', /joongang\.co\.kr|중앙/i],
-      ['donga', /donga\.com|동아/i],
-      ['naver-news', /(^|\.)news\.naver\.com$|언론사\s*편집|네이버\s*뉴스/i],
-      ['google-news', /news\.google\.|구글\s*뉴스|google\s*news/i],
-      ['mbc', /(^|\.)mbc\.co\.kr$|mbc/i]
-    ];
-
-    function newsMediumKeyForItem(it){
-      const url = String((it && (it.url || it.link || it.openUrl)) || '').trim();
-      const host = domainOf(url).toLowerCase().replace(/^www\./, '');
-      const source = String((it && (it.source || it.provider || it.channel || it.publisher || it.author)) || '').toLowerCase();
-      const title = String((it && it.title) || '').toLowerCase();
-      const summary = String((it && (it.summary || it.description || it.snippet)) || '').toLowerCase();
-      const text = `${host} ${source} ${title} ${summary}`;
-      for(const [key, rx] of NEWS_MEDIUM_PRIORITY){
-        if(rx.test(text)) return key;
-      }
-      if(host){
-        return host
-          .replace(/^m\./, '')
-          .replace(/^news\./, '')
-          .replace(/\.com$|\.co\.kr$|\.co$|\.kr$|\.net$|\.org$/g, '');
-      }
-      return source || String((it && it.title) || '').slice(0, 40).toLowerCase();
-    }
-
-    function newsMediumPriorityRank(key){
-      const k = String(key || '').toLowerCase();
-      const idx = NEWS_MEDIUM_PRIORITY.findIndex(([name]) => name === k);
-      return idx >= 0 ? idx : 999;
-    }
-
-    function diversifyNewsByMedium(items){
-      const list = Array.isArray(items) ? items.slice() : [];
-      const bestByMedium = new Map();
-      const overflow = [];
-      list.forEach((it, idx) => {
-        const key = newsMediumKeyForItem(it) || sourceKeyForDisplayGroupItem(it) || `news-${idx}`;
-        if(!bestByMedium.has(key)){
-          bestByMedium.set(key, Object.assign({}, it, {
-            newsMediumKey: key,
-            newsMediumRepresentative: true
-          }));
-        } else {
-          overflow.push(Object.assign({}, it, { newsMediumKey: key }));
-        }
-      });
-      const heads = Array.from(bestByMedium.values()).sort((a, b) => {
-        const ak = newsMediumKeyForItem(a);
-        const bk = newsMediumKeyForItem(b);
-        return (newsMediumPriorityRank(ak) - newsMediumPriorityRank(bk));
-      });
-      return heads.concat(overflow);
-    }
-
     function diversifyGroupPreviewItems(group, items){
       const list = Array.isArray(items) ? items.slice() : [];
       if(!list.length) return list;
-
-      // News is a medium/source module, not an article dump. Show one headline
-      // representative per major outlet first, and keep the remaining articles
-      // behind the section expand button.
-      if(group === 'news') return diversifyNewsByMedium(list);
-
-      const verticals = new Set(['community','social','media']);
+      const verticals = new Set(['news','community','social','media']);
       if(!verticals.has(group)) return list;
 
       const firstBySource = [];
@@ -2119,7 +1818,20 @@ async function fetchInstantSearchPack(q, type = activeType){
       // - hidden overflow is stored behind the section button;
       // - hidden overflow NEVER counts in the 25 visible slots;
       // - do not refill empty slots with hidden news/blog/SNS overflow.
-      const visibleCaps = SERP_SECTION_PREVIEW_CAPS;
+      const visibleCaps = {
+        authority: 4,
+        knowledge: 4,
+        local_tour: 3,
+        news: 6,
+        community: 6,
+        social: 5,
+        media: 5,
+        shopping: 4,
+        sports: 3,
+        finance: 3,
+        webtoon: 3,
+        web: 8
+      };
 
       const groups = groupSliceForDisplay(source).map(g => {
         const items = diversifyGroupPreviewItems(g.group, g.items || []);
@@ -2959,131 +2671,99 @@ if (it.riskLabel === '⚠️ high-risk') {
       return `${lastQuery || input.value || ''}::${activeType || 'all'}::${page}::${group}`;
     }
 
-    function itemKeyForDisplayPlan(it){
-      return String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
-    }
-
-    function buildSearchResultDisplayPlan(){
-      const sourceItems = Array.isArray(allItems) ? allItems : [];
-      if (!sourceItems.length) return { modulePages: [], webItems: [], pageCount: 0, totalDisplayUnits: 0 };
-
-      // Non-all tabs are pure result lists. The category-board plan is only for
-      // broad all-tab SERP pages.
-      if (normalizeSearchType(activeType) !== 'all') {
-        const pageCount = Math.max(1, Math.ceil(sourceItems.length / PAGE_SIZE));
-        return { modulePages: [], webItems: sourceItems.slice(), pageCount, totalDisplayUnits: sourceItems.length };
-      }
-
-      const groupOrder = ['authority','local_tour','knowledge','news','media','social','community','book','shopping','sports','finance','webtoon'];
-      const previewCaps = SERP_SECTION_PREVIEW_CAPS;
-
-      const groups = groupSliceForDisplay(sourceItems).map(g => Object.assign({}, g, {
-        items: diversifyGroupPreviewItems(g.group, g.items || [])
-      }));
-      const byGroup = new Map(groups.map(g => [g.group, g]));
-      const usedKeys = new Set();
-      const modules = [];
-
-      groupOrder.forEach(group => {
-        const g = byGroup.get(group);
-        if(!g || !Array.isArray(g.items) || !g.items.length) return;
-        const cap = Math.max(1, previewCaps[group] || displayGroupPreviewLimit(group, g.items[0]) || 5);
-        const previewItems = [];
-        const hiddenItems = [];
-
-        g.items.forEach((it, idx) => {
-          const key = itemKeyForDisplayPlan(it);
-          if(key && usedKeys.has(key)) return;
-          if(key) usedKeys.add(key);
-          const decorated = Object.assign({}, it, {
-            displayGroup: group,
-            displayGroupLabel: displayGroupLabel(group, it),
-            displayGroupVisibleIndex: idx,
-            displayGroupSourceTotal: g.items.length,
-            displayGroupCollapsedCount: Math.max(0, g.items.length - (idx + 1)),
-            collapsedAwareViewportCard: true,
-            visibleViewportCard: true,
-            categoryModuleItem: true
-          });
-          if(previewItems.length < cap) previewItems.push(decorated);
-          else hiddenItems.push(decorated);
-        });
-
-        if(!previewItems.length) return;
-        modules.push({
-          group,
-          label: displayGroupLabel(group, previewItems[0]),
-          previewLimit: previewItems.length,
-          previewItems,
-          hiddenItems,
-          items: previewItems.concat(hiddenItems),
-          sourceTotal: previewItems.length + hiddenItems.length,
-          displaySlotCount: previewItems.length,
-          categoryModule: true,
-          slotAwareViewport: true
-        });
-      });
-
-      // Pack category modules across pages once. Do not repeat the same category
-      // on page 2/3; its overflow stays behind the module's 더보기 button.
-      const modulePages = [];
-      let current = [];
-      let remaining = PAGE_SIZE;
-      modules.forEach(mod => {
-        const slots = Math.max(1, parseInt(mod.displaySlotCount, 10) || (mod.previewItems ? mod.previewItems.length : 1));
-        if(current.length && slots > remaining){
-          modulePages.push(current);
-          current = [];
-          remaining = PAGE_SIZE;
-        }
-        current.push(mod);
-        remaining -= Math.min(slots, PAGE_SIZE);
-      });
-      if(current.length) modulePages.push(current);
-
-      // General web results begin only after the category board is exhausted.
-      // Category overflow is NOT repeated here because it lives inside each
-      // section's drop-down list.
-      const webGroup = byGroup.get('web');
-      const webItems = [];
-      (webGroup && Array.isArray(webGroup.items) ? webGroup.items : sourceItems).forEach((it, idx) => {
-        const group = displayGroupOfItem(it);
-        if(group !== 'web') return;
-        const key = itemKeyForDisplayPlan(it);
-        if(key && usedKeys.has(key)) return;
-        if(key) usedKeys.add(key);
-        webItems.push(Object.assign({}, it, {
-          displayGroup: 'web',
-          displayGroupLabel: displayGroupLabel('web', it),
-          displayGroupVisibleIndex: idx,
-          displayGroupSourceTotal: webGroup && webGroup.items ? webGroup.items.length : webItems.length + 1,
-          generalWebContinuation: true,
-          visibleViewportCard: true
-        }));
-      });
-
-      const pageCount = modulePages.length + Math.ceil(webItems.length / PAGE_SIZE);
-      const totalDisplayUnits = (modulePages.length * PAGE_SIZE) + webItems.length;
-      return { modulePages, webItems, pageCount: Math.max(1, pageCount), totalDisplayUnits: Math.max(PAGE_SIZE, totalDisplayUnits) };
-    }
-
     function buildClientVisibleStream(page){
       const sourceItems = Array.isArray(allItems) ? allItems : [];
       if (!sourceItems.length) return [];
       if (normalizeSearchType(activeType) !== 'all') return sourceItems.slice();
-      const plan = buildSearchResultDisplayPlan();
-      const moduleCount = plan.modulePages.length;
-      if(page <= moduleCount) return plan.modulePages[page - 1] || [];
-      const webPage = page - moduleCount;
-      const start = (webPage - 1) * PAGE_SIZE;
-      return (plan.webItems || []).slice(start, start + PAGE_SIZE);
+
+      const groups = groupSliceForDisplay(sourceItems).map(g => Object.assign({}, g, {
+        items: diversifyGroupPreviewItems(g.group, g.items || [])
+      }));
+      const byGroup = new Map(groups.map(g => [g.group, Object.assign({}, g, { cursor: 0 })]));
+      const used = new Set();
+      const stream = [];
+
+      function itemKey(it){
+        return String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
+      }
+
+      function pushItem(it, groupInfo, idx, opts){
+        const key = itemKey(it);
+        if(key && used.has(key)) return false;
+        if(key) used.add(key);
+        stream.push(Object.assign({}, it, {
+          displayGroup: groupInfo.group,
+          displayGroupLabel: displayGroupLabel(groupInfo.group, it),
+          displayGroupVisibleIndex: idx,
+          displayGroupSourceTotal: groupInfo.items.length,
+          displayGroupCollapsedCount: Math.max(0, (groupInfo.items.length || 0) - (idx + 1)),
+          collapsedAwareViewportCard: true,
+          visibleViewportCard: true,
+          generalWebContinuation: !!(opts && opts.general)
+        }));
+        return true;
+      }
+
+      // Lead SERP zone: the first viewport is category-balanced. Overflow still
+      // keeps its display-group metadata, but it must remain available in the
+      // normal preloaded page stream immediately after the representative lead.
+      const leadCaps = {
+        authority: 5,
+        knowledge: 5,
+        local_tour: 5,
+        news: 6,
+        community: 6,
+        social: 6,
+        media: 6,
+        shopping: 5,
+        sports: 4,
+        finance: 4,
+        webtoon: 4,
+        web: 8
+      };
+      const leadOrder = ['authority','knowledge','local_tour','news','community','social','media','shopping','sports','finance','webtoon','web'];
+      leadOrder.forEach(group => {
+        const g = byGroup.get(group);
+        if(!g || !Array.isArray(g.items)) return;
+        const cap = leadCaps[group] || 5;
+        let picked = 0;
+        while(g.cursor < g.items.length && picked < cap){
+          const idx = g.cursor++;
+          if(pushItem(g.items[idx], g, idx)) picked++;
+        }
+      });
+
+      // Continuation zone: keep every remaining candidate in the received
+      // preload pool. The first viewport is still balanced by the lead caps above,
+      // but the rest of the initial 300 candidates must be available immediately
+      // for page 2~12 instead of waiting for delayed page fetches. Heavy verticals
+      // such as news/SNS/media/blog remain grouped by display metadata, but they
+      // no longer get excluded from normal pagination.
+      for(let i = 0; i < sourceItems.length; i++){
+        const it = sourceItems[i];
+        const group = displayGroupOfItem(it);
+        const g = byGroup.get(group) || { group, items: [it], cursor: 0 };
+        let idx = -1;
+        if(Array.isArray(g.items)){
+          const key = itemKey(it);
+          idx = g.items.findIndex(x => itemKey(x) === key);
+        }
+        pushItem(it, g, idx >= 0 ? idx : i, { general: true });
+      }
+
+      return stream;
     }
 
     function visibleItemsForPage(page){
       const start = (page - 1) * PAGE_SIZE;
 
+      // In the all tab, never let a raw server page full of one vertical
+      // such as news occupy the viewport. Rebuild a balanced visible stream
+      // from the accumulated pool so collapsed/overflow items do not consume
+      // the 25 visible slots.
       if (normalizeSearchType(activeType) === 'all') {
-        return buildClientVisibleStream(page);
+        const stream = buildClientVisibleStream(page);
+        return stream.slice(start, start + PAGE_SIZE);
       }
 
       if(serverPagedMode && loadedServerPages.has(page)){
@@ -3094,11 +2774,14 @@ if (it.riskLabel === '⚠️ high-risk') {
     }
 
     function visibleItemCountForPager(){
+      // In the all tab the pager must count the client visible stream, not the
+      // raw server total. Collapsed category overflow remains behind 더보기 and
+      // must not consume page slots.
       if (normalizeSearchType(activeType) === 'all') {
-        const plan = buildSearchResultDisplayPlan();
-        const planUnits = plan && plan.totalDisplayUnits ? plan.totalDisplayUnits : 0;
-        const progressiveFloor = Math.min(serverTotalItems || 0, MAX_PROGRESSIVE_PAGER_PAGES * PAGE_SIZE);
-        return Math.max(planUnits, progressiveFloor, lastQuery ? PAGE_SIZE : 0);
+        const visibleCount = buildClientVisibleStream(currentPage || 1).length;
+        const preloadFloor = lastQuery ? INITIAL_PRELOAD_TARGET : 0;
+        const progressiveFloor = Math.min(serverTotalItems || 0, INITIAL_PRELOAD_TARGET);
+        return Math.max(visibleCount, progressiveFloor, preloadFloor);
       }
       if(serverPagedMode && serverTotalItems > 0) return serverTotalItems;
       return buildClientVisibleStream(currentPage || 1).length;
@@ -3128,13 +2811,10 @@ if (it.riskLabel === '⚠️ high-risk') {
       const slice = visibleItemsForPage(page);
       const start = (page - 1) * PAGE_SIZE;
 
-      // Receiver/container rule:
-      // If Sanmaru/MaruSearch supplies viewportSections, render them as-is.
-      // search.js must not re-search or re-rank categories by itself.
-      const serverSections = normalizeSearchType(activeType) === 'all' ? (loadedServerSections.get(page) || []) : [];
-      if (serverSections.length) {
-        renderGroupedSlice(serverSections, page);
-      } else if (shouldUseDisplayGroups(slice)) {
+      // Render the already-balanced visible stream. Do not rebuild page 1 from a
+      // raw source slice, because a raw slice may contain only news/logo/map cards
+      // and then hidden overflow still blocks the following categories from moving up.
+      if (shouldUseDisplayGroups(slice)) {
         renderGroupedSlice(slice, page);
       } else {
         slice.forEach(it => renderItem(it));
@@ -3173,7 +2853,6 @@ if (it.riskLabel === '⚠️ high-risk') {
         const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
         if(pageSlice.length){
           loadedServerPages.set(page, pageSlice.slice(0, PAGE_SIZE));
-          storeServerSections(page, pack);
           allItems = dedupeItems(allItems.concat(pageSlice));
           const total = serverTotalFromPayload(pack && pack.payload, serverTotalItems || pageSlice.length);
           serverTotalItems = Math.max(serverTotalItems || 0, total || 0, INITIAL_PRELOAD_TARGET);
@@ -3286,7 +2965,6 @@ async function runSearch(q, type = activeType){
     authoritativeServerTotalItems = 0;
     progressivePagerPages = INITIAL_PROGRESSIVE_PAGER_PAGES;
     loadedServerPages.clear();
-    loadedServerSections.clear();
     results.innerHTML = '';
     clearPager();
     status.textContent = '';
@@ -3295,89 +2973,134 @@ async function runSearch(q, type = activeType){
 
   runSearch._seq = (runSearch._seq || 0) + 1;
   const seq = runSearch._seq;
-  const target = adaptiveSearchTarget(qq, activeType);
+  const target = Math.max(INITIAL_PRELOAD_TARGET, adaptiveSearchTarget(qq, activeType));
 
   allItems = [];
   serverPagedMode = true;
-  authoritativeServerTotalItems = target;
-  progressivePagerPages = Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(Math.min(target, INITIAL_PROGRESSIVE_PAGER_PAGES * PAGE_SIZE) / PAGE_SIZE)));
-  serverTotalItems = progressivePagerPages * PAGE_SIZE;
+  authoritativeServerTotalItems = Math.max(target, INITIAL_PRELOAD_TARGET);
+  progressivePagerPages = Math.min(
+    MAX_PROGRESSIVE_PAGER_PAGES,
+    Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(Math.min(target, MAX_SMOOTH_CANDIDATES) / PAGE_SIZE))
+  );
+  serverTotalItems = Math.max(INITIAL_PRELOAD_TARGET, progressivePagerPages * PAGE_SIZE);
   loadedServerPages.clear();
-  loadedServerSections.clear();
 
   signalSanmaruSearch(qq, activeType, 'run-search');
-  status.textContent = `Searching ${getTypeLabel(activeType)} for "${qq}"...`;
+  status.textContent = `Receiving ${getTypeLabel(activeType)} supply for "${qq}"...`;
   renderSkeleton();
   clearPager();
 
-  try {
-    // Speed-first: do not block the first paint on vertical/category preview calls.
-    // Sanmaru/MaruSearch instant supply is rendered immediately; category preview
-    // enrichment is deferred so the initial page does not wait behind extra fetches.
-    const instantPack = await fetchInstantSearchPack(qq, activeType);
-    const initialSerpPreviewItems = [];
-    if (runSearch._seq !== seq) return;
+  currentBlock = 0;
+  currentPage = 1;
+  lastQuery = qq;
+  lastType = activeType;
+  pageImageEnrichCache.clear();
+  itemImageEnrichCache.clear();
+  expandedDisplayGroups.clear();
 
-    lastSearchPayload = instantPack && instantPack.payload || null;
-    storeServerSections(1, instantPack);
-    const rawItems = Array.isArray(instantPack) ? instantPack : (instantPack && instantPack.items) || [];
-    const quickItems = dedupeItems(filterSearchResultItems(rawItems || [])).slice(0, INITIAL_PRELOAD_TARGET);
-    const pageItems = dedupeItems(filterSearchResultItems(pageItemsFromPack(instantPack)));
+  let firstPaintDone = false;
+  let intakeStarted = false;
+  let intakeTimer = null;
 
-    const firstItems = quickItems.length ? quickItems : pageItems;
-    allItems = dedupeItems(firstItems.concat(initialSerpPreviewItems || []));
-    seedLoadedServerPagesFromItems(allItems, INITIAL_PRELOAD_TARGET);
-    if(pageItems.length && !loadedServerPages.has(1)) loadedServerPages.set(1, pageItems.slice(0, PAGE_SIZE));
+  function startIntakeOnce(reason){
+    if(intakeStarted || runSearch._seq !== seq) return;
+    intakeStarted = true;
+    if(intakeTimer) clearTimeout(intakeTimer);
+    startContinuousIntake(qq, activeType, seq);
+    status.textContent = `${serverTotalItems || allItems.length || INITIAL_PRELOAD_TARGET} results for "${qq}" · ${getTypeLabel(activeType)} · receiving...`;
+  }
 
-    const payloadTotal = serverTotalFromPayload(instantPack && instantPack.payload, Math.max(target, allItems.length));
-    authoritativeServerTotalItems = Math.max(target, payloadTotal || 0, allItems.length);
-    updateProgressiveTotalFromPayload(instantPack && instantPack.payload, Math.max(target, allItems.length, INITIAL_PRELOAD_TARGET));
-    serverTotalItems = Math.max(serverTotalItems || 0, INITIAL_PRELOAD_TARGET);
-    progressivePagerPages = Math.max(progressivePagerPages || 0, INITIAL_PROGRESSIVE_PAGER_PAGES);
+  function applySupplyPack(pack, sourceName){
+    if(runSearch._seq !== seq || !pack) return 0;
+    const normalized = normalizeSearchPayload(pack && pack.payload ? pack.payload : pack);
+    const payload = normalized.payload || (pack && pack.payload) || pack || null;
+    lastSearchPayload = payload || lastSearchPayload;
 
-    currentBlock = 0;
-    currentPage = 1;
-    lastQuery = qq;
-    lastType = activeType;
-    pageImageEnrichCache.clear();
-    itemImageEnrichCache.clear();
-    expandedDisplayGroups.clear();
+    const rawItems = Array.isArray(pack)
+      ? pack
+      : dedupeItems(filterSearchResultItems((pack && pack.items) || normalized.items || []));
+    const pageItems = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
+    const incoming = rawItems && rawItems.length ? rawItems : pageItems;
+    if(!incoming || !incoming.length) return 0;
 
-    if (!allItems.length) {
-      results.innerHTML = '';
-      status.textContent = `No quick results for "${qq}" · receiving...`;
-    } else {
+    // Cache the supply window immediately. Rendering still shows only the current
+    // viewport, but pages 2~12 are already in memory when the user clicks them.
+    const initialWindow = Math.min(
+      MAX_SMOOTH_CANDIDATES,
+      Math.max(INITIAL_PRELOAD_TARGET, incoming.length)
+    );
+    const windowItems = incoming.slice(0, initialWindow);
+    allItems = dedupeItems(allItems.concat(windowItems)).slice(0, MAX_SMOOTH_CANDIDATES);
+    seedLoadedServerPagesFromItems(allItems, Math.min(allItems.length, Math.max(INITIAL_PRELOAD_TARGET, windowItems.length)));
+    if(pageItems.length) loadedServerPages.set(1, pageItems.slice(0, PAGE_SIZE));
+
+    updateProgressiveTotalFromPayload(payload, Math.max(target, allItems.length, INITIAL_PRELOAD_TARGET), { expandAll:true });
+    serverTotalItems = Math.max(serverTotalItems || 0, target, allItems.length, INITIAL_PRELOAD_TARGET);
+    progressivePagerPages = Math.max(progressivePagerPages || 0, INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(Math.min(serverTotalItems, MAX_SMOOTH_CANDIDATES) / PAGE_SIZE));
+
+    if(!firstPaintDone && allItems.length){
+      firstPaintDone = true;
       renderPage(1);
-      status.textContent = `${serverTotalItems || allItems.length} results for "${qq}" · ${getTypeLabel(activeType)} · receiving...`;
+    }else if(firstPaintDone && currentPage === 1){
+      renderPage(1, true);
+    }else if(firstPaintDone){
+      drawPager();
+    }
+    status.textContent = `${serverTotalItems || allItems.length} results for "${qq}" · ${getTypeLabel(activeType)} · receiving...`;
+    return incoming.length;
+  }
+
+  function wrapSupply(promise, kind){
+    return promise.then(pack => ({ kind, pack })).catch(error => ({ kind, error }));
+  }
+
+  const instantPromise = wrapSupply(fetchInstantSearchPack(qq, activeType), 'sanmaru-instant');
+  const maruWindowPromise = wrapSupply(fetchSearch(qq, activeType, 1), 'maru-search-window');
+
+  try{
+    const first = await Promise.race([instantPromise, maruWindowPromise]);
+    if(runSearch._seq !== seq) return;
+
+    const firstCount = first && !first.error ? applySupplyPack(first.pack, first.kind) : 0;
+    if(!firstCount){
+      const second = first && first.kind === 'sanmaru-instant' ? await maruWindowPromise : await instantPromise;
+      if(runSearch._seq !== seq) return;
+      if(second && !second.error) applySupplyPack(second.pack, second.kind);
     }
 
-    startInitialPageWindowBackfill(qq, activeType, seq).catch(() => null);
-    // v11: continuous intake only; no extra vertical preview searches from the browser.
-    startContinuousIntake(qq, activeType, seq);
-  } catch(e){
+    if(!firstPaintDone){
+      results.innerHTML = '';
+      status.textContent = `No quick results for "${qq}" · receiving...`;
+    }
+
+    // Do not wait for Sanmaru/MaruSearch to finish all lanes. Start the faucet
+    // shortly after first paint, but let the page-1 300-window seed pages 1~12
+    // first when it arrives quickly.
+    intakeTimer = setTimeout(() => startIntakeOnce('first-paint-timer'), 700);
+
+    maruWindowPromise.then(res => {
+      if(runSearch._seq !== seq || !res || res.error) return;
+      applySupplyPack(res.pack, res.kind);
+      startIntakeOnce('maru-page1-window-ready');
+    });
+    instantPromise.then(res => {
+      if(runSearch._seq !== seq || !res || res.error) return;
+      applySupplyPack(res.pack, res.kind);
+    });
+  }catch(e){
     console.error(e);
-    const initialSerpPreviewItems = [];
     const fallbackPack = await fetchSearch(qq, activeType, 1);
     if (runSearch._seq !== seq) return;
-    storeServerSections(1, fallbackPack);
-    const fallbackItems = dedupeItems(filterSearchResultItems(normalizeItems(fallbackPack && fallbackPack.payload || fallbackPack))).slice(0, INITIAL_PRELOAD_TARGET);
-    allItems = dedupeItems(fallbackItems.concat(initialSerpPreviewItems || []));
-    seedLoadedServerPagesFromItems(allItems, INITIAL_PRELOAD_TARGET);
-    updateProgressiveTotalFromPayload(fallbackPack && fallbackPack.payload, Math.max(target, fallbackItems.length, INITIAL_PRELOAD_TARGET));
-    serverTotalItems = Math.max(serverTotalItems || 0, INITIAL_PRELOAD_TARGET);
-    progressivePagerPages = Math.max(progressivePagerPages || 0, INITIAL_PROGRESSIVE_PAGER_PAGES);
-    currentBlock = 0;
-    currentPage = 1;
-    lastQuery = qq;
-    lastType = activeType;
-    if(allItems.length) renderPage(1);
-    else { results.innerHTML = ''; clearPager(); }
-    status.textContent = allItems.length ? `${serverTotalItems || allItems.length} results for "${qq}" · receiving...` : `No results for "${qq}"`;
-    startInitialPageWindowBackfill(qq, activeType, seq).catch(() => null);
-    // v11: continuous intake only; no extra vertical preview searches from the browser.
-    startContinuousIntake(qq, activeType, seq);
+    applySupplyPack(fallbackPack, 'fallback-maru-search');
+    if(!firstPaintDone){
+      results.innerHTML = '';
+      clearPager();
+      status.textContent = `No results for "${qq}"`;
+    }
+    startIntakeOnce('fallback');
   }
 }
+
 
   });
 })();
