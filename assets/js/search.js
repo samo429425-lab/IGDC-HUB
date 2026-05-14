@@ -1680,6 +1680,11 @@ async function fetchInstantSearchPack(q, type = activeType){
         business_site: 'site',
         official_site: 'site',
         homepage: 'site',
+        website: 'site',
+        site: 'site',
+        company: 'site',
+        corporate: 'site',
+        business: 'site',
         general_web: 'web'
       };
       return map[raw] || raw;
@@ -1687,6 +1692,25 @@ async function fetchInstantSearchPack(q, type = activeType){
 
     function displayGroupOfItem(it){
       return normalizeDisplayGroupClient(String((it && it.displayGroup) || '').trim() || inferDisplayGroupClient(it));
+    }
+
+    function isHomepageLikeUrlClient(url){
+      try {
+        const u = new URL(String(url || ''), location.origin);
+        const host = u.hostname.replace(/^www\./, '').toLowerCase();
+        const path = String(u.pathname || '/').replace(/\/+$/,'/');
+        const parts = path.split('/').filter(Boolean);
+        if(!host || !/\./.test(host)) return false;
+        if(parts.length === 0) return true;
+        if(parts.length === 1 && /^(home|main|company|about|intro|kr|ko|en|index)$/i.test(parts[0])) return true;
+        return false;
+      } catch(e) { return false; }
+    }
+
+    function isKnownNonSiteHostClient(host){
+      host = String(host || '').toLowerCase();
+      return /(^|\.)(youtube\.com|youtu\.be|instagram\.com|facebook\.com|tiktok\.com|x\.com|twitter\.com|naver\.com|daum\.net|google\.com|google\.co|bing\.com|wikipedia\.org|namu\.wiki)$/i.test(host) ||
+        /(news|blog|cafe|shopping|shop|book|maps|map|finance|sports|webtoon)/i.test(host);
     }
 
     function inferDisplayGroupClient(it){
@@ -1699,15 +1723,20 @@ async function fetchInstantSearchPack(q, type = activeType){
       const host = domainOf(url).toLowerCase();
       const text = `${source} ${type} ${mediaType} ${title} ${summary} ${host}`;
 
-      if (source.includes('news') || type === 'news' || text.includes('뉴스') || text.includes('속보') || text.includes('latest') || text.includes('breaking')) return 'news';
-      if (mediaType === 'image' || type === 'image' || mediaType === 'video' || type === 'video' || source.includes('image') || source.includes('youtube')) return 'media';
-      if (source.includes('local') || source.includes('map') || text.includes('관광') || text.includes('여행') || text.includes('지도') || text.includes('맛집') || text.includes('공원') || text.includes('landmark') || text.includes('tour')) return 'local_tour';
-      if (source.includes('blog') || source.includes('cafe') || text.includes('블로그') || text.includes('카페')) return 'community';
-      if (host.includes('instagram.') || host.includes('facebook.') || host.includes('tiktok.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social')) return 'social';
-      if (source.includes('book') || type === 'book' || text.includes('도서') || text.includes('책 ')) return 'book';
-      if (source.includes('encyc') || source.includes('kin') || text.includes('지식') || text.includes('백과') || host.includes('wikipedia.org') || host.includes('namu.wiki')) return 'knowledge';
       if (host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr')) return 'authority';
-      if (source.includes('corporate') || source.includes('homepage') || source.includes('business') || source.includes('company') || type === 'site' || type === 'homepage' || type === 'business' || text.includes('홈페이지') || text.includes('공식사이트') || text.includes('기업') || text.includes('회사') || text.includes('business') || text.includes('company') || text.includes('corporate')) return 'site';
+      if (source.includes('local') || source.includes('map') || type === 'map' || type === 'local' || mediaType === 'map' || text.includes('관광') || text.includes('여행') || text.includes('지도') || text.includes('주소') || text.includes('위치') || text.includes('맛집') || text.includes('공원') || text.includes('landmark') || text.includes('tour')) return 'local_tour';
+      if (source.includes('encyc') || source.includes('kin') || type === 'knowledge' || text.includes('지식') || text.includes('백과') || text.includes('위키') || host.includes('wikipedia.org') || host.includes('namu.wiki')) return 'knowledge';
+      if (source.includes('corporate') || source.includes('homepage') || source.includes('business') || source.includes('company') || type === 'site' || type === 'homepage' || type === 'business' || text.includes('홈페이지') || text.includes('공식사이트') || text.includes('공식 사이트') || text.includes('기업') || text.includes('회사') || text.includes('business') || text.includes('company') || text.includes('corporate')) return 'site';
+      if (isHomepageLikeUrlClient(url) && !isKnownNonSiteHostClient(host) && !source.includes('news')) return 'site';
+      if (source.includes('book') || type === 'book' || text.includes('도서') || text.includes('책 ') || text.includes('isbn')) return 'book';
+      if (source.includes('news') || type === 'news' || text.includes('뉴스') || text.includes('속보') || text.includes('latest') || text.includes('breaking')) return 'news';
+      if (source.includes('blog') || source.includes('cafe') || source.includes('forum') || text.includes('블로그') || text.includes('카페') || text.includes('커뮤니티')) return 'community';
+      if (source.includes('shopping') || source.includes('shop') || source.includes('commerce') || type === 'shopping' || type === 'product' || text.includes('쇼핑') || text.includes('상품') || text.includes('구매') || text.includes('가격')) return 'shopping';
+      if (source.includes('sports') || type === 'sports' || text.includes('스포츠') || text.includes('축구') || text.includes('야구') || text.includes('농구')) return 'sports';
+      if (source.includes('finance') || type === 'finance' || text.includes('금융') || text.includes('증권') || text.includes('주식') || text.includes('환율')) return 'finance';
+      if (source.includes('webtoon') || type === 'webtoon' || text.includes('웹툰') || text.includes('만화') || text.includes('comic') || text.includes('manga')) return 'webtoon';
+      if (mediaType === 'image' || type === 'image' || mediaType === 'video' || type === 'video' || source.includes('image') || source.includes('youtube')) return 'media';
+      if (host.includes('instagram.') || host.includes('facebook.') || host.includes('tiktok.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social')) return 'social';
       return 'web';
     }
 
@@ -1743,12 +1772,12 @@ async function fetchInstantSearchPack(q, type = activeType){
         authority: 3,
         local_tour: 2,
         knowledge: 4,
-        news: 5,
-        site: 6,
+        site: 5,
         book: 4,
+        news: 5,
+        community: 5,
         media: 5,
         social: 4,
-        community: 5,
         shopping: 5,
         sports: 4,
         finance: 4,
@@ -1765,7 +1794,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = ['authority','local_tour','knowledge','news','site','media','social','community','book','shopping','sports','finance','webtoon','web'];
+      const order = ['authority','local_tour','knowledge','site','book','news','community','media','social','shopping','sports','finance','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -1829,13 +1858,15 @@ async function fetchInstantSearchPack(q, type = activeType){
       // - hidden overflow NEVER counts in the 25 visible slots;
       // - do not refill empty slots with hidden news/blog/SNS overflow.
       const visibleCaps = {
-        authority: 4,
+        authority: 3,
+        local_tour: 2,
         knowledge: 4,
-        local_tour: 3,
-        news: 6,
-        community: 6,
-        social: 5,
+        site: 5,
+        book: 4,
+        news: 5,
+        community: 5,
         media: 5,
+        social: 4,
         shopping: 4,
         sports: 3,
         finance: 3,
@@ -1906,8 +1937,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         if(!hiddenItems && normalizeSearchType(activeType) === 'all'){
           const fullGroup = diversifyGroupPreviewItems(groupInfo.group, groupSliceForDisplay(allItems).find(g => g.group === groupInfo.group)?.items || []);
           const visibleKeys = new Set(previewItems.map(it => String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase()).filter(Boolean));
-          const groupCap = displayGroupPreviewLimit(groupInfo.group, fullGroup[0]);
-          hiddenItems = fullGroup.slice(groupCap).filter(it => {
+          const groupCap = Math.max(displayGroupPreviewLimit(groupInfo.group, fullGroup[0]), displayGroupModuleTotalCap(groupInfo.group));
+          hiddenItems = fullGroup.slice(displayGroupPreviewLimit(groupInfo.group, fullGroup[0]), groupCap).filter(it => {
             const key = String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
             return !key || !visibleKeys.has(key);
           });
@@ -2431,7 +2462,7 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const d = document.createElement('div');
       d.className = 'desc';
-      d.textContent = (it.summary || it.description || '').trim();
+      d.textContent = (it.summary || it.snippet || it.description || it.content || it.text || '').trim();
 
   textCol.appendChild(t);
 
@@ -2701,6 +2732,27 @@ if (it.riskLabel === '⚠️ high-risk') {
       return copy;
     }
 
+    function displayGroupModuleTotalCap(group){
+      // Keep each category useful but bounded. Extra items are not deleted; they
+      // continue as ordinary web/list results after the category portal blocks.
+      const caps = {
+        authority: 12,
+        local_tour: 8,
+        knowledge: 30,
+        site: 30,
+        book: 30,
+        news: 30,
+        community: 30,
+        media: 30,
+        social: 24,
+        shopping: 30,
+        sports: 24,
+        finance: 24,
+        webtoon: 24
+      };
+      return caps[group] || 30;
+    }
+
     function buildPortalPageModel(){
       const sourceItems = Array.isArray(allItems) ? allItems : [];
       const empty = { categoryPages: [], webItems: [], pageCount: 0, virtualCount: 0 };
@@ -2710,7 +2762,8 @@ if (it.riskLabel === '⚠️ high-risk') {
         items: diversifyGroupPreviewItems(g.group, g.items || [])
       }));
       const byGroup = new Map(grouped.map(g => [g.group, g]));
-      const categoryOrder = ['authority','local_tour','knowledge','news','site','media','social','community','book','shopping','sports','finance','webtoon'];
+      const categoryOrder = ['authority','local_tour','knowledge','site','book','news','community','media','social','shopping','sports','finance','webtoon'];
+      const categoryOverflowItems = [];
       const categoryPages = [];
       let page = [];
       let pageWeight = 0;
@@ -2718,8 +2771,12 @@ if (it.riskLabel === '⚠️ high-risk') {
       function pushCategoryModule(g){
         if(!g || !Array.isArray(g.items) || !g.items.length) return;
         const previewLimit = Math.max(1, displayGroupPreviewLimit(g.group, g.items[0]));
-        const previewItems = g.items.slice(0, previewLimit);
-        const hiddenItems = g.items.slice(previewItems.length);
+        const moduleCap = Math.max(previewLimit, displayGroupModuleTotalCap(g.group));
+        const moduleItems = g.items.slice(0, moduleCap);
+        const previewItems = moduleItems.slice(0, previewLimit);
+        const hiddenItems = moduleItems.slice(previewItems.length);
+        const overflowItems = g.items.slice(moduleCap).map(makePlainWebItem);
+        if(overflowItems.length) categoryOverflowItems.push(...overflowItems);
         const weight = Math.max(1, previewItems.length + 1);
         if(page.length && pageWeight + weight > PAGE_SIZE){
           categoryPages.push(page);
@@ -2733,7 +2790,8 @@ if (it.riskLabel === '⚠️ high-risk') {
           previewLimit,
           previewItems,
           hiddenItems,
-          sourceTotal: g.items.length,
+          sourceTotal: moduleItems.length,
+          overflowAsWebCount: overflowItems.length,
           items: previewItems,
           firstIndex: g.firstIndex || 0
         });
@@ -2743,9 +2801,15 @@ if (it.riskLabel === '⚠️ high-risk') {
       categoryOrder.forEach(group => pushCategoryModule(byGroup.get(group)));
       if(page.length) categoryPages.push(page);
 
+      const ordered = new Set(categoryOrder.concat(['web']));
+      const nonPortalItems = [];
+      grouped.forEach(g => {
+        if(!ordered.has(g.group) && Array.isArray(g.items)) nonPortalItems.push(...g.items.map(makePlainWebItem));
+      });
       const webGroup = byGroup.get('web');
-      const webItems = (webGroup && Array.isArray(webGroup.items) ? webGroup.items : [])
-        .map(makePlainWebItem);
+      const webItems = categoryOverflowItems
+        .concat(nonPortalItems)
+        .concat((webGroup && Array.isArray(webGroup.items) ? webGroup.items : []).map(makePlainWebItem));
       const pageCount = categoryPages.length + Math.max(0, Math.ceil(webItems.length / PAGE_SIZE));
       return {
         categoryPages,
@@ -2798,9 +2862,8 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (normalizeSearchType(activeType) === 'all') {
         const model = buildPortalPageModel();
         const portalCount = model && model.virtualCount ? model.virtualCount : buildClientVisibleStream(currentPage || 1).length;
-        const preloadFloor = lastQuery ? INITIAL_PRELOAD_TARGET : 0;
-        const progressiveFloor = Math.min(serverTotalItems || 0, MAX_SMOOTH_CANDIDATES);
-        return Math.max(portalCount, progressiveFloor, preloadFloor);
+        const preloadFloor = lastQuery ? Math.min(INITIAL_PRELOAD_TARGET, Math.max(allItems.length || 0, portalCount || 0)) : 0;
+        return Math.max(portalCount, allItems.length || 0, preloadFloor);
       }
       if(serverPagedMode && serverTotalItems > 0) return serverTotalItems;
       return buildClientVisibleStream(currentPage || 1).length;
