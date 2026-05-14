@@ -44,7 +44,7 @@ ready(function () {
     const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES;
     const INITIAL_DOM_RENDER_TARGET = INITIAL_PRELOAD_TARGET;
     const INITIAL_PROGRESSIVE_PAGER_PAGES = 12;
-    const MAX_PROGRESSIVE_PAGER_PAGES = 60;
+    const MAX_PROGRESSIVE_PAGER_PAGES = 80;
     const MIN_SMOOTH_CANDIDATES = 120;
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
@@ -825,13 +825,13 @@ function adaptiveSearchTarget(q, type){
   // Search.js is only the receiver/container. This number is the size of the
   // server-side Sanmaru/MaruSearch supply window that the UI is ready to cache,
   // not a request for the browser to perform separate searches. Keep the first
-  // 300 pages ready immediately and let the faucet keep filling up to 1,500.
-  let target = 1200;
-  if (safeType !== 'all') target = 900;
-  if (words.length >= 3 || narrowHints.test(text)) target = 700;
-  if (words.length <= 1 || broadHints.test(text)) target = 1500;
-  if (/^(news|image|video|sns|blog|tour)$/.test(safeType)) target = Math.max(target, 1200);
-  if (/^(map|knowledge|book|shopping)$/.test(safeType)) target = Math.max(700, Math.min(target, 1000));
+  // 300 candidates ready immediately and let the faucet keep filling up to roughly 2,000.
+  let target = 1600;
+  if (safeType !== 'all') target = 1200;
+  if (words.length >= 3 || narrowHints.test(text)) target = 1000;
+  if (words.length <= 1 || broadHints.test(text)) target = 2000;
+  if (/^(news|image|video|sns|blog|tour)$/.test(safeType)) target = Math.max(target, 1600);
+  if (/^(map|knowledge|book|shopping)$/.test(safeType)) target = Math.max(900, Math.min(target, 1400));
 
   return Math.max(INITIAL_PRELOAD_TARGET, Math.min(MAX_SMOOTH_CANDIDATES, target));
 }
@@ -1675,7 +1675,11 @@ async function fetchInstantSearchPack(q, type = activeType){
         community_sns: 'social',
         sns: 'social',
         shopping_product: 'shopping',
-        company_web: 'web',
+        company_web: 'site',
+        corporate_homepage: 'site',
+        business_site: 'site',
+        official_site: 'site',
+        homepage: 'site',
         general_web: 'web'
       };
       return map[raw] || raw;
@@ -1700,8 +1704,10 @@ async function fetchInstantSearchPack(q, type = activeType){
       if (source.includes('local') || source.includes('map') || text.includes('관광') || text.includes('여행') || text.includes('지도') || text.includes('맛집') || text.includes('공원') || text.includes('landmark') || text.includes('tour')) return 'local_tour';
       if (source.includes('blog') || source.includes('cafe') || text.includes('블로그') || text.includes('카페')) return 'community';
       if (host.includes('instagram.') || host.includes('facebook.') || host.includes('tiktok.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social')) return 'social';
-      if (source.includes('encyc') || source.includes('kin') || source.includes('book') || text.includes('지식') || text.includes('도서') || text.includes('책 ')) return 'knowledge';
+      if (source.includes('book') || type === 'book' || text.includes('도서') || text.includes('책 ')) return 'book';
+      if (source.includes('encyc') || source.includes('kin') || text.includes('지식') || text.includes('백과') || host.includes('wikipedia.org') || host.includes('namu.wiki')) return 'knowledge';
       if (host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr')) return 'authority';
+      if (source.includes('corporate') || source.includes('homepage') || source.includes('business') || source.includes('company') || type === 'site' || type === 'homepage' || type === 'business' || text.includes('홈페이지') || text.includes('공식사이트') || text.includes('기업') || text.includes('회사') || text.includes('business') || text.includes('company') || text.includes('corporate')) return 'site';
       return 'web';
     }
 
@@ -1710,6 +1716,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         authority: '주요 정보',
         news: '뉴스',
         local_tour: '지도/지역',
+        site: '사이트/홈페이지',
+        book: '도서',
         media: '이미지/영상',
         social: 'SNS/영상',
         community: '블로그/카페',
@@ -1732,17 +1740,19 @@ async function fetchInstantSearchPack(q, type = activeType){
       // keep the full candidate stream and only arrange the first viewport in
       // a Google/Naver-like balanced order.
       const limits = {
-        authority: 4,
-        news: 6,
-        local_tour: 3,
+        authority: 3,
+        local_tour: 2,
+        knowledge: 4,
+        news: 5,
+        site: 6,
+        book: 4,
         media: 5,
-        social: 5,
+        social: 4,
         community: 5,
-        knowledge: 3,
         shopping: 5,
-        sports: 5,
-        finance: 5,
-        webtoon: 5,
+        sports: 4,
+        finance: 4,
+        webtoon: 4,
         web: 18
       };
       return limits[group] || 6;
@@ -1755,7 +1765,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = ['authority','knowledge','local_tour','news','community','social','media','shopping','sports','finance','webtoon','web'];
+      const order = ['authority','local_tour','knowledge','news','site','media','social','community','book','shopping','sports','finance','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -2671,87 +2681,96 @@ if (it.riskLabel === '⚠️ high-risk') {
       return `${lastQuery || input.value || ''}::${activeType || 'all'}::${page}::${group}`;
     }
 
+    function isDisplayGroupModule(x){
+      return !!(x && x.__maruDisplayGroupModule === true && x.group && Array.isArray(x.items));
+    }
+
+    function displayItemKey(it){
+      return String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
+    }
+
+    function makePlainWebItem(it){
+      const copy = Object.assign({}, it || {});
+      delete copy.displayGroup;
+      delete copy.displayGroupLabel;
+      delete copy.displayGroupVisibleIndex;
+      delete copy.displayGroupSourceTotal;
+      delete copy.displayGroupCollapsedCount;
+      copy.generalWebContinuation = true;
+      copy.visibleViewportCard = true;
+      return copy;
+    }
+
+    function buildPortalPageModel(){
+      const sourceItems = Array.isArray(allItems) ? allItems : [];
+      const empty = { categoryPages: [], webItems: [], pageCount: 0, virtualCount: 0 };
+      if(!sourceItems.length || normalizeSearchType(activeType) !== 'all') return empty;
+
+      const grouped = groupSliceForDisplay(sourceItems).map(g => Object.assign({}, g, {
+        items: diversifyGroupPreviewItems(g.group, g.items || [])
+      }));
+      const byGroup = new Map(grouped.map(g => [g.group, g]));
+      const categoryOrder = ['authority','local_tour','knowledge','news','site','media','social','community','book','shopping','sports','finance','webtoon'];
+      const categoryPages = [];
+      let page = [];
+      let pageWeight = 0;
+
+      function pushCategoryModule(g){
+        if(!g || !Array.isArray(g.items) || !g.items.length) return;
+        const previewLimit = Math.max(1, displayGroupPreviewLimit(g.group, g.items[0]));
+        const previewItems = g.items.slice(0, previewLimit);
+        const hiddenItems = g.items.slice(previewItems.length);
+        const weight = Math.max(1, previewItems.length + 1);
+        if(page.length && pageWeight + weight > PAGE_SIZE){
+          categoryPages.push(page);
+          page = [];
+          pageWeight = 0;
+        }
+        page.push({
+          __maruDisplayGroupModule: true,
+          group: g.group,
+          label: displayGroupLabel(g.group, g.items[0]),
+          previewLimit,
+          previewItems,
+          hiddenItems,
+          sourceTotal: g.items.length,
+          items: previewItems,
+          firstIndex: g.firstIndex || 0
+        });
+        pageWeight += weight;
+      }
+
+      categoryOrder.forEach(group => pushCategoryModule(byGroup.get(group)));
+      if(page.length) categoryPages.push(page);
+
+      const webGroup = byGroup.get('web');
+      const webItems = (webGroup && Array.isArray(webGroup.items) ? webGroup.items : [])
+        .map(makePlainWebItem);
+      const pageCount = categoryPages.length + Math.max(0, Math.ceil(webItems.length / PAGE_SIZE));
+      return {
+        categoryPages,
+        webItems,
+        pageCount,
+        virtualCount: (categoryPages.length * PAGE_SIZE) + webItems.length
+      };
+    }
+
     function buildClientVisibleStream(page){
       const sourceItems = Array.isArray(allItems) ? allItems : [];
       if (!sourceItems.length) return [];
       if (normalizeSearchType(activeType) !== 'all') return sourceItems.slice();
 
-      const groups = groupSliceForDisplay(sourceItems).map(g => Object.assign({}, g, {
-        items: diversifyGroupPreviewItems(g.group, g.items || [])
-      }));
-      const byGroup = new Map(groups.map(g => [g.group, Object.assign({}, g, { cursor: 0 })]));
-      const used = new Set();
-      const stream = [];
-
-      function itemKey(it){
-        return String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
+      const model = buildPortalPageModel();
+      if(model.pageCount){
+        const categoryPageCount = model.categoryPages.length;
+        const pageNo = Math.max(1, parseInt(page, 10) || 1);
+        if(pageNo <= categoryPageCount) return model.categoryPages[pageNo - 1] || [];
+        const webPage = pageNo - categoryPageCount;
+        const start = Math.max(0, (webPage - 1) * PAGE_SIZE);
+        return model.webItems.slice(start, start + PAGE_SIZE);
       }
 
-      function pushItem(it, groupInfo, idx, opts){
-        const key = itemKey(it);
-        if(key && used.has(key)) return false;
-        if(key) used.add(key);
-        stream.push(Object.assign({}, it, {
-          displayGroup: groupInfo.group,
-          displayGroupLabel: displayGroupLabel(groupInfo.group, it),
-          displayGroupVisibleIndex: idx,
-          displayGroupSourceTotal: groupInfo.items.length,
-          displayGroupCollapsedCount: Math.max(0, (groupInfo.items.length || 0) - (idx + 1)),
-          collapsedAwareViewportCard: true,
-          visibleViewportCard: true,
-          generalWebContinuation: !!(opts && opts.general)
-        }));
-        return true;
-      }
-
-      // Lead SERP zone: the first viewport is category-balanced. Overflow still
-      // keeps its display-group metadata, but it must remain available in the
-      // normal preloaded page stream immediately after the representative lead.
-      const leadCaps = {
-        authority: 5,
-        knowledge: 5,
-        local_tour: 5,
-        news: 6,
-        community: 6,
-        social: 6,
-        media: 6,
-        shopping: 5,
-        sports: 4,
-        finance: 4,
-        webtoon: 4,
-        web: 8
-      };
-      const leadOrder = ['authority','knowledge','local_tour','news','community','social','media','shopping','sports','finance','webtoon','web'];
-      leadOrder.forEach(group => {
-        const g = byGroup.get(group);
-        if(!g || !Array.isArray(g.items)) return;
-        const cap = leadCaps[group] || 5;
-        let picked = 0;
-        while(g.cursor < g.items.length && picked < cap){
-          const idx = g.cursor++;
-          if(pushItem(g.items[idx], g, idx)) picked++;
-        }
-      });
-
-      // Continuation zone: keep every remaining candidate in the received
-      // preload pool. The first viewport is still balanced by the lead caps above,
-      // but the rest of the initial 300 candidates must be available immediately
-      // for page 2~12 instead of waiting for delayed page fetches. Heavy verticals
-      // such as news/SNS/media/blog remain grouped by display metadata, but they
-      // no longer get excluded from normal pagination.
-      for(let i = 0; i < sourceItems.length; i++){
-        const it = sourceItems[i];
-        const group = displayGroupOfItem(it);
-        const g = byGroup.get(group) || { group, items: [it], cursor: 0 };
-        let idx = -1;
-        if(Array.isArray(g.items)){
-          const key = itemKey(it);
-          idx = g.items.findIndex(x => itemKey(x) === key);
-        }
-        pushItem(it, g, idx >= 0 ? idx : i, { general: true });
-      }
-
-      return stream;
+      return sourceItems.slice();
     }
 
     function visibleItemsForPage(page){
@@ -2762,8 +2781,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       // from the accumulated pool so collapsed/overflow items do not consume
       // the 25 visible slots.
       if (normalizeSearchType(activeType) === 'all') {
-        const stream = buildClientVisibleStream(page);
-        return stream.slice(start, start + PAGE_SIZE);
+        return buildClientVisibleStream(page);
       }
 
       if(serverPagedMode && loadedServerPages.has(page)){
@@ -2778,10 +2796,11 @@ if (it.riskLabel === '⚠️ high-risk') {
       // raw server total. Collapsed category overflow remains behind 더보기 and
       // must not consume page slots.
       if (normalizeSearchType(activeType) === 'all') {
-        const visibleCount = buildClientVisibleStream(currentPage || 1).length;
+        const model = buildPortalPageModel();
+        const portalCount = model && model.virtualCount ? model.virtualCount : buildClientVisibleStream(currentPage || 1).length;
         const preloadFloor = lastQuery ? INITIAL_PRELOAD_TARGET : 0;
-        const progressiveFloor = Math.min(serverTotalItems || 0, INITIAL_PRELOAD_TARGET);
-        return Math.max(visibleCount, progressiveFloor, preloadFloor);
+        const progressiveFloor = Math.min(serverTotalItems || 0, MAX_SMOOTH_CANDIDATES);
+        return Math.max(portalCount, progressiveFloor, preloadFloor);
       }
       if(serverPagedMode && serverTotalItems > 0) return serverTotalItems;
       return buildClientVisibleStream(currentPage || 1).length;
@@ -2814,7 +2833,12 @@ if (it.riskLabel === '⚠️ high-risk') {
       // Render the already-balanced visible stream. Do not rebuild page 1 from a
       // raw source slice, because a raw slice may contain only news/logo/map cards
       // and then hidden overflow still blocks the following categories from moving up.
-      if (shouldUseDisplayGroups(slice)) {
+      if (slice.some(isDisplayGroupModule)) {
+        slice.forEach(entry => {
+          if(isDisplayGroupModule(entry)) renderGroupedSlice([entry], page);
+          else renderItem(entry);
+        });
+      } else if (shouldUseDisplayGroups(slice)) {
         renderGroupedSlice(slice, page);
       } else {
         slice.forEach(it => renderItem(it));
