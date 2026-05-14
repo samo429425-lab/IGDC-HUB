@@ -1883,7 +1883,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = ['authority','local_tour','book','blog','cafe','shopping','news','image','video','media','social','site','public_data','knowledge','wiki','academic','community','sports','finance','webtoon','web'];
+      const order = ['authority','local_tour','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','knowledge','wiki','academic','community','sports','finance','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -2953,7 +2953,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         items: diversifyGroupPreviewItems(g.group, g.items || [])
       }));
       const byGroup = new Map(grouped.map(g => [g.group, g]));
-      const categoryOrder = ['authority','local_tour','book','blog','cafe','shopping','news','image','video','media','social','site','public_data','knowledge','wiki','academic','community','sports','finance','webtoon'];
+      const categoryOrder = ['authority','local_tour','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','knowledge','wiki','academic','community','sports','finance','webtoon'];
       const categoryOverflowItems = [];
       const categoryPages = [];
       let page = [];
@@ -2969,7 +2969,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         const overflowItems = g.items.slice(moduleCap).map(makePlainWebItem);
         if(overflowItems.length) categoryOverflowItems.push(...overflowItems);
         const weight = Math.max(1, previewItems.length);
-        const categoryPageTarget = 20;
+        const categoryPageTarget = PAGE_SIZE;
         if(page.length && pageWeight + weight > categoryPageTarget){
           categoryPages.push(page);
           page = [];
@@ -3009,7 +3009,11 @@ if (it.riskLabel === '⚠️ high-risk') {
         return (Array.isArray(modules) ? modules : []).reduce((sum, mod) => sum + categoryModuleWeight(mod), 0);
       }
       let filledWebBeforePlainPages = 0;
-      const categoryFillCounts = categoryPages.map(modules => {
+      const categoryFillCounts = categoryPages.map((modules, idx) => {
+        // General web/plain results must not be inserted between category modules.
+        // They may only start after the final category page has rendered, so the
+        // category board keeps its intended order: site/book/blog/cafe/news/etc.
+        if(idx !== categoryPages.length - 1) return 0;
         const fill = Math.min(
           Math.max(0, webItems.length - filledWebBeforePlainPages),
           Math.max(0, PAGE_SIZE - categoryPageWeight(modules))
