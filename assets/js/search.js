@@ -115,18 +115,18 @@ const SEARCH_TABS = [
   ['image', '이미지'],
   ['news', '뉴스'],
   ['map', '지도'],
+  ['book', '도서'],
+  ['blog', '블로그'],
+  ['cafe', '카페'],
+  ['shopping', '쇼핑'],
+  ['video', '영상'],
+  ['sns', '소셜'],
+  ['tour', '관광'],
+  ['site', '사이트'],
   ['public_data', '공공자료'],
   ['knowledge', '지식'],
   ['wiki', '위키'],
   ['academic', '학술'],
-  ['site', '사이트'],
-  ['tour', '관광'],
-  ['video', '영상'],
-  ['sns', '소셜'],
-  ['blog', '블로그'],
-  ['cafe', '카페'],
-  ['book', '도서'],
-  ['shopping', '쇼핑'],
   ['sports', '스포츠'],
   ['finance', '증권'],
   ['webtoon', '웹툰']
@@ -1883,7 +1883,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = ['authority','public_data','local_tour','knowledge','wiki','academic','site','book','news','blog','cafe','community','image','video','media','social','shopping','sports','finance','webtoon','web'];
+      const order = ['authority','local_tour','book','blog','cafe','shopping','news','image','video','media','social','site','public_data','knowledge','wiki','academic','community','sports','finance','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -2953,7 +2953,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         items: diversifyGroupPreviewItems(g.group, g.items || [])
       }));
       const byGroup = new Map(grouped.map(g => [g.group, g]));
-      const categoryOrder = ['authority','public_data','local_tour','knowledge','wiki','academic','site','book','news','blog','cafe','community','image','video','media','social','shopping','sports','finance','webtoon'];
+      const categoryOrder = ['authority','local_tour','book','blog','cafe','shopping','news','image','video','media','social','site','public_data','knowledge','wiki','academic','community','sports','finance','webtoon'];
       const categoryOverflowItems = [];
       const categoryPages = [];
       let page = [];
@@ -2969,7 +2969,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         const overflowItems = g.items.slice(moduleCap).map(makePlainWebItem);
         if(overflowItems.length) categoryOverflowItems.push(...overflowItems);
         const weight = Math.max(1, previewItems.length);
-        const categoryPageTarget = PAGE_SIZE;
+        const categoryPageTarget = 20;
         if(page.length && pageWeight + weight > categoryPageTarget){
           categoryPages.push(page);
           page = [];
@@ -3002,32 +3002,30 @@ if (it.riskLabel === '⚠️ high-risk') {
       const webItems = categoryOverflowItems
         .concat(nonPortalItems)
         .concat((webGroup && Array.isArray(webGroup.items) ? webGroup.items : []).map(makePlainWebItem));
-      const categoryPageWeights = categoryPages.map(pageItems => (Array.isArray(pageItems) ? pageItems : []).reduce((sum, entry) => {
-        if(isDisplayGroupModule(entry)) return sum + Math.max(1, Array.isArray(entry.items) ? entry.items.length : 1);
-        return sum + 1;
-      }, 0));
-      let backfillConsumed = 0;
-      const categoryBackfillRanges = categoryPageWeights.map(weight => {
-        const slot = Math.max(0, PAGE_SIZE - weight);
-        const start = backfillConsumed;
-        const end = Math.min(webItems.length, start + slot);
-        backfillConsumed = end;
-        return { start, end, count: Math.max(0, end - start) };
+      function categoryModuleWeight(mod){
+        return Math.max(1, Array.isArray(mod && mod.previewItems) ? mod.previewItems.length : 1);
+      }
+      function categoryPageWeight(modules){
+        return (Array.isArray(modules) ? modules : []).reduce((sum, mod) => sum + categoryModuleWeight(mod), 0);
+      }
+      let filledWebBeforePlainPages = 0;
+      const categoryFillCounts = categoryPages.map(modules => {
+        const fill = Math.min(
+          Math.max(0, webItems.length - filledWebBeforePlainPages),
+          Math.max(0, PAGE_SIZE - categoryPageWeight(modules))
+        );
+        filledWebBeforePlainPages += fill;
+        return fill;
       });
-      const remainingWebCount = Math.max(0, webItems.length - backfillConsumed);
+      const remainingWebCount = Math.max(0, webItems.length - filledWebBeforePlainPages);
       const pageCount = categoryPages.length + Math.max(0, Math.ceil(remainingWebCount / PAGE_SIZE));
-      const actualCategoryVisibleCount = categoryPageWeights.reduce((sum, weight, idx) => {
-        const range = categoryBackfillRanges[idx] || { count:0 };
-        return sum + weight + (range.count || 0);
-      }, 0);
       return {
         categoryPages,
-        categoryPageWeights,
-        categoryBackfillRanges,
-        backfillConsumed,
+        categoryFillCounts,
+        filledWebBeforePlainPages,
         webItems,
         pageCount,
-        virtualCount: actualCategoryVisibleCount + remainingWebCount
+        virtualCount: (categoryPages.length * PAGE_SIZE) + remainingWebCount
       };
     }
 
@@ -3041,13 +3039,13 @@ if (it.riskLabel === '⚠️ high-risk') {
         const categoryPageCount = model.categoryPages.length;
         const pageNo = Math.max(1, parseInt(page, 10) || 1);
         if(pageNo <= categoryPageCount) {
-          const modules = (model.categoryPages[pageNo - 1] || []).slice();
-          const range = model.categoryBackfillRanges && model.categoryBackfillRanges[pageNo - 1];
-          const backfill = range ? model.webItems.slice(range.start, range.end) : [];
-          return modules.concat(backfill).slice(0, PAGE_SIZE);
+          const modules = model.categoryPages[pageNo - 1] || [];
+          const fillStart = (model.categoryFillCounts || []).slice(0, pageNo - 1).reduce((sum, n) => sum + (Number(n) || 0), 0);
+          const fillCount = Number((model.categoryFillCounts || [])[pageNo - 1]) || 0;
+          return modules.concat((model.webItems || []).slice(fillStart, fillStart + fillCount));
         }
         const webPage = pageNo - categoryPageCount;
-        const start = Math.max(0, (model.backfillConsumed || 0) + ((webPage - 1) * PAGE_SIZE));
+        const start = Math.max(0, (model.filledWebBeforePlainPages || 0) + ((webPage - 1) * PAGE_SIZE));
         return model.webItems.slice(start, start + PAGE_SIZE);
       }
 
@@ -3351,6 +3349,9 @@ async function runSearch(q, type = activeType){
       drawPager();
     }
     status.textContent = `${serverTotalItems || allItems.length} results for "${qq}" · ${getTypeLabel(activeType)} · receiving...`;
+    if(!intakeStarted && allItems.length >= 250){
+      setTimeout(() => startIntakeOnce('receiver-250-open-pipe'), 0);
+    }
     return incoming.length;
   }
 
