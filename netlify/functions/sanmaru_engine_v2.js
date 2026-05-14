@@ -27,17 +27,10 @@ const path = require("path");
 let LogosEngineClass = null;
 try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) { LogosEngineClass = null; }
 
-const VERSION = "sanmaru-engine-v2.6.3-supply-limits-separated";
+const VERSION = "sanmaru-engine-v2.6.1-engine-upload-lifecycle";
 const ENGINE_NAME = "sanmaru";
 
-// Supply limits are separated by role.
-// - Search/Global Insight supply can request about 4,500 items.
-// - Front/SearchBank snapshot material must not be capped by the search UI limit.
-// - MAX_LIMIT remains the absolute Sanmaru safety ceiling, not the normal response size.
-const DEFAULT_SEARCH_SUPPLY_LIMIT = 4500;
-const DEFAULT_INSIGHT_SUPPLY_LIMIT = 4500;
-const DEFAULT_FRONT_SUPPLY_LIMIT = 6000;
-const DEFAULT_LIMIT = DEFAULT_SEARCH_SUPPLY_LIMIT;
+const DEFAULT_LIMIT = 3000;
 const DEFAULT_VISIBLE_PER_PAGE = 25;
 const MAX_LIMIT = 12000;
 const SANMARU_MAX_PAGER_PAGES = 499;
@@ -50,9 +43,9 @@ const RATE_MAX = 60;
 const MAX_QUERY_LENGTH = 240;
 const MIN_FAST_TARGET = 120;
 const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
-const DEFAULT_CANDIDATE_POOL_TARGET = DEFAULT_SEARCH_SUPPLY_LIMIT;
-const MAX_INDEX_FAST_LIMIT = DEFAULT_FRONT_SUPPLY_LIMIT;
-const MAX_SEARCH_BANK_FAST_LIMIT = DEFAULT_FRONT_SUPPLY_LIMIT;
+const DEFAULT_CANDIDATE_POOL_TARGET = 1600;
+const MAX_INDEX_FAST_LIMIT = 3000;
+const MAX_SEARCH_BANK_FAST_LIMIT = 3000;
 
 const globalState = globalThis.__SANMARU_V2_STATE || (globalThis.__SANMARU_V2_STATE = {
   cache: new Map(),
@@ -332,8 +325,8 @@ const SANMARU_CANONICAL_CATEGORIES = {
   news:{ label:"뉴스", weight:88, routes:["naver","google","bing","maru-search-wide-gateway"] },
   knowledge:{ label:"지식/백과", weight:86, routes:["wiki-knowledge","google","naver","bing","searchbank-index"] },
   wiki:{ label:"위키", weight:85, routes:["wiki-knowledge","google","bing"] },
+  site:{ label:"사이트/홈페이지", weight:84, routes:["corporate-homepage","official-web","google","naver","bing","searchbank-index"] },
   book:{ label:"도서", weight:82, routes:["naver","google","university-library"] },
-  site:{ label:"사이트/홈페이지", weight:83, routes:["corporate-homepage","official-web","google","naver","bing","searchbank-index"] },
   academic:{ label:"학술", weight:80, routes:["academic","research-paper","university-library","google","bing"] },
   research_paper:{ label:"논문/연구", weight:79, routes:["research-paper","academic","university-library","google","bing"] },
   university_library:{ label:"대학 도서관", weight:78, routes:["university-library","academic","research-paper"] },
@@ -355,7 +348,7 @@ const SANMARU_CANONICAL_CATEGORIES = {
 
 const PROVIDER_CATEGORY_ALIASES = {
   naver:{ web:"web", blog:"blog", cafe:"cafe", news:"news", encyc:"knowledge", kin:"knowledge", book:"book", shop:"shopping", image:"image", local:"map_local", webkr:"web" },
-  google:{ web:"web", news:"news", image:"image", video:"video", maps:"map_local", scholar:"academic", books:"book", site:"site", homepage:"site" },
+  google:{ web:"web", news:"news", image:"image", video:"video", maps:"map_local", scholar:"academic", books:"book" },
   bing:{ web:"web", news:"news", image:"image", video:"video", academic:"academic" },
   youtube:{ search:"youtube", video:"video", shorts:"video" },
   searchbank:{ memory:"internal_search_bank", snapshot:"internal_search_bank" },
@@ -366,7 +359,7 @@ const PROVIDER_CATEGORY_ALIASES = {
 const PROVIDER_CAPABILITY_MAP = {
   "searchbank-index": ["internal_search_bank","official","knowledge","web","news","image","video","blog","cafe","community"],
   "searchbank": ["internal_search_bank","official","knowledge","web","news","image","video","blog","cafe","community"],
-  "maru-search-wide-gateway": ["web","news","image","video","youtube","map_local","tourism","blog","cafe","community","sns","shopping","book","knowledge"],
+  "maru-search-wide-gateway": ["web","site","news","image","video","youtube","map_local","tourism","blog","cafe","community","sns","shopping","book","knowledge"],
   naver: ["web","news","blog","cafe","knowledge","book","shopping","image","map_local","tourism"],
   google: ["web","official","knowledge","wiki","news","image","video","map_local","tourism","academic","research_paper","book","sns"],
   bing: ["web","news","image","video","academic","research_paper","official"],
@@ -375,14 +368,14 @@ const PROVIDER_CAPABILITY_MAP = {
   baidu: ["web","news","image","video","knowledge"],
   yandex: ["web","image","video","news","map_local"],
   youtube: ["youtube","video","sns","tourism"],
-  "official-web": ["official","government","public_data","tourism","site"],
-  "corporate-homepage": ["site","web","shopping"],
+  "official-web": ["official","government","public_data","site","tourism"],
   "social-public-web": ["sns","video","youtube","community"],
   instagram: ["sns","image","tourism"],
   facebook: ["sns","community","news"],
   tiktok: ["sns","video","youtube","tourism"],
   "x-twitter": ["sns","news","community"],
   threads: ["sns","community"],
+  "corporate-homepage": ["site","web","official"],
   "blog-community": ["blog","cafe","community"],
   academic: ["academic","research_paper","university_library"],
   "research-paper": ["research_paper","academic"],
@@ -456,8 +449,7 @@ const SANMARU_COUNTRY_CHARACTER_PROFILE = {
 const SANMARU_LANE_CATEGORY_MAP = {
   authority:["official","government","public_data"],
   local:["map_local","tourism"],
-  web:["web"],
-  site:["site"],
+  web:["web","site"],
   news:["news"],
   blog:["blog"],
   media:["video","youtube","image"],
@@ -1269,7 +1261,21 @@ function supplyResidentSync(input, opts){
   const fullCandidateItems = items.slice();
   const requestedPage = clampInt(firstNonEmpty(opts.page, opts.p, opts.visiblePage, opts.sectionPage), 1, 1, 100000);
   const perPage = clampInt(firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit), DEFAULT_VISIBLE_PER_PAGE, 1, 100);
-  const firstResponseWindow = Math.max(perPage, Math.min(perPage * 12, 300));
+  const openPipeRequested = truthy(opts.openPipe || opts.streamFullWindow || opts.continuousSupply || opts.smoothIntake || opts.naturalFlow);
+  const firstResponseWindow = Math.max(perPage, Math.min(
+    Math.max(
+      perPage * 12,
+      clampInt(
+        openPipeRequested
+          ? firstNonEmpty(opts.bodyWindowLimit, opts.streamLimit, opts.candidatePoolTarget, opts.candidatePool, opts.limit, opts.firstPaintLimit, opts.initialRenderTarget, opts.initialPreloadTarget)
+          : firstNonEmpty(opts.firstPaintLimit, opts.initialRenderTarget, opts.initialPreloadTarget, opts.limit, opts.candidatePoolTarget),
+        perPage * 12,
+        perPage,
+        MAX_LIMIT
+      )
+    ),
+    MAX_LIMIT
+  ));
   const offset = (requestedPage - 1) * perPage;
   const responseItems = requestedPage <= 1
     ? fullCandidateItems.slice(0, Math.min(fullCandidateItems.length, firstResponseWindow))
@@ -1640,6 +1646,11 @@ function displayGroupForCategory(cat){
     map:"local_tour",
     local:"local_tour",
     tour:"local_tour",
+    site:"site",
+    homepage:"site",
+    company:"site",
+    corporate:"site",
+    business:"site",
     image:"media",
     video:"media",
     media:"media",
@@ -1649,7 +1660,7 @@ function displayGroupForCategory(cat){
     cafe:"community",
     community:"community",
     knowledge:"knowledge",
-    book:"knowledge",
+    book:"book",
     shopping:"shopping",
     product:"shopping",
     sports:"sports",
@@ -1667,19 +1678,20 @@ function categoryOfItem(item){
   const url = low(firstNonEmpty(it.url, it.link));
   const text = low([it.title, it.summary, it.snippet, it.description, source, url].join(" "));
 
-  if(source.includes("youtube") || type === "video" || url.includes("youtube.com/watch") || url.includes("youtu.be/")) return "video";
-  if(source.includes("image") || type === "image") return "image";
-  if(source.includes("news") || type === "news") return "news";
+  if(/\.gov\b|\.go\.kr\b|\.edu\b|korea\.kr/.test(url)) return "official";
   if(source.includes("local") || type === "map" || type === "local" || /map|지도|주소|위치/.test(text)) return "map";
-  if(type === "book" || source.includes("book")) return "book";
-  if(type === "shopping" || type === "product" || source.includes("shopping")) return "shopping";
-  if(type === "finance" || source.includes("finance")) return "finance";
-  if(type === "sports" || source.includes("sports")) return "sports";
-  if(type === "webtoon" || /웹툰|webtoon|comic|manga/.test(text)) return "webtoon";
+  if(type === "knowledge" || source.includes("encyc") || source.includes("wiki") || /wikipedia\.org|namu\.wiki|britannica\.com/.test(url)) return "knowledge";
+  if(type === "site" || type === "homepage" || type === "business" || source.includes("homepage") || source.includes("corporate") || source.includes("company") || source.includes("business") || /홈페이지|공식사이트|공식 사이트|기업|회사|corporate|company|business/.test(text)) return "site";
+  if(type === "book" || source.includes("book") || /도서|책|isbn|book/.test(text)) return "book";
+  if(source.includes("news") || type === "news") return "news";
   if(type === "blog" || source.includes("blog")) return "blog";
   if(type === "cafe" || source.includes("cafe") || source.includes("forum")) return "cafe";
-  if(type === "knowledge" || source.includes("encyc") || source.includes("wiki")) return "knowledge";
-  if(/\.gov\b|\.go\.kr\b|\.edu\b|wikipedia\.org|britannica\.com/.test(url)) return "official";
+  if(type === "shopping" || type === "product" || source.includes("shopping") || /쇼핑|상품|구매|가격/.test(text)) return "shopping";
+  if(type === "finance" || source.includes("finance") || /금융|증권|주식|환율/.test(text)) return "finance";
+  if(type === "sports" || source.includes("sports") || /스포츠|축구|야구|농구/.test(text)) return "sports";
+  if(type === "webtoon" || /웹툰|webtoon|comic|manga/.test(text)) return "webtoon";
+  if(source.includes("youtube") || type === "video" || url.includes("youtube.com/watch") || url.includes("youtu.be/")) return "video";
+  if(source.includes("image") || type === "image") return "image";
   return "web";
 }
 
@@ -1818,7 +1830,7 @@ function canonicalItem(raw, query, adapterName){
     imageSet: images,
     searchCategory: category,
     displayGroup: it.displayGroup || displayGroupForCategory(category),
-    displayGroupPreviewLimit: it.displayGroupPreviewLimit || ({ authority:4, knowledge:3, local_tour:3, news:6, media:5, social:5, community:6 }[displayGroupForCategory(category)] || 5),
+    displayGroupPreviewLimit: it.displayGroupPreviewLimit || ({ authority:3, local_tour:2, knowledge:4, site:5, book:4, news:5, community:5, media:5, social:4, shopping:4, sports:3, finance:3, webtoon:3 }[displayGroupForCategory(category)] || 5),
     sourceTrust: trust,
     sanmaruScore: baseScore,
     indexText: compactSpaces(text).slice(0, 1200),
@@ -2964,11 +2976,16 @@ function buildSanmaruInstantOsPackage(q, opts){
     : 0;
   const pageItems = items.slice((requestedPage - 1) * perPage, requestedPage * perPage);
   // Sanmaru is the prepared information OS/data-bank layer. For search UI
-  // handoff it must not cut the supply down to only the visible page. Return the
-  // requested first preload window (normally 300 = 12 pages × 25) immediately;
-  // search.js will render page 1 first and cache the rest.
+  // handoff it must not cut the supply down to only the visible page. In normal
+  // first-paint mode it can still preload a small window, but when search.js asks
+  // for openPipe/smoothIntake/naturalFlow the response body carries the available
+  // ranked supply window immediately so the browser can cache 400/500+ without
+  // waiting for page-by-page faucet calls.
+  const openPipeRequestedForPack = truthy(opts.openPipe || opts.streamFullWindow || opts.continuousSupply || opts.smoothIntake || opts.naturalFlow);
   const requestedFirstWindow = clampInt(
-    firstNonEmpty(opts.firstPaintLimit, opts.initialRenderTarget, opts.initialPreloadTarget, opts.limit),
+    openPipeRequestedForPack
+      ? firstNonEmpty(opts.bodyWindowLimit, opts.streamLimit, opts.candidatePoolTarget, opts.candidatePool, opts.limit, opts.firstPaintLimit, opts.initialRenderTarget, opts.initialPreloadTarget)
+      : firstNonEmpty(opts.firstPaintLimit, opts.initialRenderTarget, opts.initialPreloadTarget, opts.limit),
     Math.max(perPage * 12, 300),
     perPage,
     MAX_LIMIT
@@ -3056,27 +3073,15 @@ function buildSanmaruInstantOsPackage(q, opts){
 
 function buildSanmaruFrontSupplyPackage(q, opts){
   opts = opts || {};
-  const reason = firstNonEmpty(opts.reason, "front-slot-supply");
-  const reasonText = low(reason);
-  const isInsightSupply = reasonText.includes("insight") || reasonText.includes("global-insight") || reasonText.includes("issue");
-  const defaultSupplyLimit = isInsightSupply ? DEFAULT_INSIGHT_SUPPLY_LIMIT : DEFAULT_FRONT_SUPPLY_LIMIT;
-  const supplyOpts = Object.assign({
-    limit: defaultSupplyLimit,
-    candidatePool: defaultSupplyLimit,
-    candidatePoolTarget: defaultSupplyLimit
-  }, opts, { reason });
-  const pack = buildSanmaruInstantOsPackage(q || firstNonEmpty(opts.q, opts.query, opts.section, opts.page, "front"), supplyOpts);
-  pack.action = isInsightSupply ? "insight-supply" : "front-supply";
+  const pack = buildSanmaruInstantOsPackage(q || firstNonEmpty(opts.q, opts.query, opts.section, opts.page, "front"), Object.assign({}, opts, { reason: opts.reason || "front-slot-supply" }));
+  pack.action = "front-supply";
   pack.source = pack.items && pack.items.length ? "sanmaru-front-slot-resident-supply" : "sanmaru-front-slot-route-supply";
   pack.meta = Object.assign({}, pack.meta || {}, {
-    frontSupply: !isInsightSupply,
-    slotSupply: !isInsightSupply,
-    insightSupply: isInsightSupply,
+    frontSupply: true,
+    slotSupply: true,
     page: firstNonEmpty(opts.page, opts.targetPage, opts.hub, ""),
     section: firstNonEmpty(opts.section, opts.slot, opts.psom_key, opts.category, ""),
-    supplyLimitPolicy: isInsightSupply ? "insight-search-supply-4500" : "front-searchbank-snapshot-supply-6000",
-    searchUiLimitSeparated: true,
-    policy: "front-slot-resident-first-no-provider-wait; search-ui-limit-does-not-cap-front-snapshot-material"
+    policy: "front-slot-resident-first-no-provider-wait"
   });
   return pack;
 }
