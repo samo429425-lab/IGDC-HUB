@@ -842,6 +842,24 @@ function adaptiveSearchTarget(q, type){
   return Math.max(INITIAL_PRELOAD_TARGET, Math.min(MAX_SMOOTH_CANDIDATES, target));
 }
 
+function receiverSupplyTarget(q, type){
+  // Search.js is an always-open receiver. This number is only the UI/pager
+  // ready window, not a hard stop that closes the faucet. Front-page Search
+  // Bank snapshot supply is separate and must not be affected here.
+  const base = Math.max(INITIAL_PRELOAD_TARGET, adaptiveSearchTarget(q || lastQuery || '', type || activeType || 'all'));
+  return Math.min(MAX_SMOOTH_CANDIDATES, Math.max(base, authoritativeServerTotalItems || 0, serverTotalItems || 0, allItems.length || 0));
+}
+
+function receiverMaxPageWindow(q, type){
+  return Math.min(
+    MAX_PROGRESSIVE_PAGER_PAGES,
+    Math.max(
+      INITIAL_PROGRESSIVE_PAGER_PAGES,
+      Math.ceil(receiverSupplyTarget(q, type) / PAGE_SIZE)
+    )
+  );
+}
+
 function firstPaintLimitFor(q, type){
   // Keep the UI first paint light, but ask Sanmaru for the first 12 pages of
   // already-prepared resident candidates. The DOM still renders only the
@@ -862,15 +880,29 @@ function seedLoadedServerPagesFromItems(items, maxItems){
 
 function updateProgressiveTotalFromPayload(payload, fallbackCount, opts){
   const total = serverTotalFromPayload(payload, fallbackCount || 0);
-  authoritativeServerTotalItems = Math.max(authoritativeServerTotalItems || 0, total || 0, fallbackCount || 0);
+  const target = receiverSupplyTarget(lastQuery || input.value || '', activeType);
+  authoritativeServerTotalItems = Math.max(
+    authoritativeServerTotalItems || 0,
+    total || 0,
+    fallbackCount || 0,
+    target || 0
+  );
   const minPages = Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, preloadPageCountFromItems(allItems));
-  const wantedPages = Math.max(minPages, Math.ceil((authoritativeServerTotalItems || fallbackCount || 0) / PAGE_SIZE));
-  const previousPages = Math.max(progressivePagerPages || 0, Math.ceil((serverTotalItems || 0) / PAGE_SIZE));
-  const nextPages = opts && opts.expandAll
-    ? Math.min(MAX_PROGRESSIVE_PAGER_PAGES, wantedPages)
-    : Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(minPages, previousPages, Math.min(wantedPages, previousPages + 8 || minPages)));
-  progressivePagerPages = Math.max(minPages, nextPages);
-  serverTotalItems = Math.max(serverTotalItems || 0, Math.min(authoritativeServerTotalItems || 0, progressivePagerPages * PAGE_SIZE));
+  const wantedPages = Math.max(
+    minPages,
+    Math.ceil((authoritativeServerTotalItems || fallbackCount || target || 0) / PAGE_SIZE),
+    receiverMaxPageWindow(lastQuery || input.value || '', activeType)
+  );
+
+  // Do not let the initial 12-page preload behave like the final page count.
+  // The pager should open to the receiver window immediately; continuous intake
+  // fills pages as Sanmaru/MaruSearch supplies them.
+  progressivePagerPages = Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(minPages, wantedPages));
+  serverTotalItems = Math.max(
+    serverTotalItems || 0,
+    Math.min(authoritativeServerTotalItems || 0, progressivePagerPages * PAGE_SIZE),
+    Math.min(target || 0, progressivePagerPages * PAGE_SIZE)
+  );
   return serverTotalItems;
 }
 
@@ -887,15 +919,19 @@ function startContinuousIntake(q, type, seq){
   if(!q || runSearch._seq !== seq) return;
   const token = ++continuousIntakeSeq;
   continuousIntakeActive = true;
-  const target = adaptiveSearchTarget(q, type);
+  const target = receiverSupplyTarget(q, type);
   authoritativeServerTotalItems = Math.max(authoritativeServerTotalItems || 0, target);
-  updateProgressiveTotalFromPayload(lastSearchPayload || {}, Math.max(target, allItems.length || 0));
+  updateProgressiveTotalFromPayload(lastSearchPayload || {}, Math.max(target, allItems.length || 0), { expandAll:true });
 
   let nextPage = Math.max(2, preloadPageCountFromItems(allItems) + 1);
-  const maxPages = Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(target / PAGE_SIZE)));
+  let emptyPageStreak = 0;
+
+  function intakeMaxPages(){
+    return receiverMaxPageWindow(q, type);
+  }
 
   async function worker(){
-    while(continuousIntakeActive && continuousIntakeSeq === token && runSearch._seq === seq && nextPage <= maxPages){
+    while(continuousIntakeActive && continuousIntakeSeq === token && runSearch._seq === seq && nextPage <= intakeMaxPages()){
       const page = nextPage++;
       if(loadedServerPages.has(page)) continue;
       try{
@@ -903,13 +939,22 @@ function startContinuousIntake(q, type, seq){
         if(!continuousIntakeActive || continuousIntakeSeq !== token || runSearch._seq !== seq) return;
         const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack))).slice(0, PAGE_SIZE);
         if(pageSlice.length){
+          emptyPageStreak = 0;
           loadedServerPages.set(page, pageSlice);
-          allItems = dedupeItems(allItems.concat(pageSlice));
+          allItems = dedupeItems(allItems.concat(pageSlice)).slice(0, MAX_SMOOTH_CANDIDATES);
           lastSearchPayload = pack && pack.payload || lastSearchPayload;
-          updateProgressiveTotalFromPayload(pack && pack.payload, allItems.length);
+          updateProgressiveTotalFromPayload(pack && pack.payload, Math.max(receiverSupplyTarget(q, type), allItems.length), { expandAll:true });
           if(page === currentPage) renderPage(page, true);
           else drawPager();
           status.textContent = `${serverTotalItems || allItems.length} results for "${q}" · ${getTypeLabel(type)} · receiving...`;
+        } else {
+          // Empty pages may occur while the server-side faucet is still warming.
+          // Do not close the receiver immediately; skip a few empty windows only
+          // after repeated misses to avoid endless blank fetching.
+          emptyPageStreak += 1;
+          if(emptyPageStreak >= 10 && page > INITIAL_PRELOAD_PAGES){
+            break;
+          }
         }
       }catch(e){
         console.warn('continuous intake page skipped:', page, e);
@@ -920,6 +965,7 @@ function startContinuousIntake(q, type, seq){
 
   for(let i = 0; i < INTAKE_CONCURRENCY; i++) worker();
 }
+
 
     function safeText(v){
       return String(v || '').toLowerCase();
@@ -3048,18 +3094,27 @@ if (it.riskLabel === '⚠️ high-risk') {
     }
 
     function visibleItemCountForPager(){
-      // In the all tab the pager must count the client visible stream, not the
-      // raw server total. Collapsed category overflow remains behind 더보기 and
-      // must not consume page slots.
+      // Search.js is an open receiver. Pager count should reflect the supply
+      // window Sanmaru/MaruSearch may keep filling, not only the cards already
+      // rendered into the current DOM. INITIAL_PRELOAD_PAGES is just first paint.
+      const target = lastQuery ? receiverSupplyTarget(lastQuery, activeType) : 0;
+      const serverCount = Math.max(
+        Number(serverTotalItems || 0),
+        Number(authoritativeServerTotalItems || 0),
+        Number(target || 0),
+        Number(allItems.length || 0)
+      );
+
       if (normalizeSearchType(activeType) === 'all') {
         const model = buildPortalPageModel();
         const portalCount = model && model.virtualCount ? model.virtualCount : buildClientVisibleStream(currentPage || 1).length;
-        const preloadFloor = lastQuery ? Math.min(INITIAL_PRELOAD_TARGET, Math.max(allItems.length || 0, portalCount || 0)) : 0;
-        return Math.max(portalCount, allItems.length || 0, preloadFloor);
+        return Math.max(portalCount || 0, serverCount, INITIAL_PRELOAD_TARGET);
       }
-      if(serverPagedMode && serverTotalItems > 0) return serverTotalItems;
-      return buildClientVisibleStream(currentPage || 1).length;
+
+      if(serverPagedMode && serverCount > 0) return serverCount;
+      return Math.max(buildClientVisibleStream(currentPage || 1).length, serverCount || 0);
     }
+
 
     function frontPageSectionSource(){
       if(normalizeSearchType(activeType) !== 'all') return null;
@@ -3252,7 +3307,7 @@ async function runSearch(q, type = activeType){
 
   runSearch._seq = (runSearch._seq || 0) + 1;
   const seq = runSearch._seq;
-  const target = Math.max(INITIAL_PRELOAD_TARGET, adaptiveSearchTarget(qq, activeType));
+  const target = Math.max(INITIAL_PRELOAD_TARGET, receiverSupplyTarget(qq, activeType));
 
   allItems = [];
   serverPagedMode = true;
