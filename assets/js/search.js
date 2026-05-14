@@ -21,54 +21,57 @@ ready(function () {
     p.endsWith('/search') ||
     p.endsWith('/search/');
 
-  // Home/search page input resolver.  search.js must attach to the home
-  // search box even when the page uses hero/main/home ids instead of the
-  // search.html ids.  A missing button must not disable autocomplete/Enter.
-  function findMaruSearchInput(){
-    const selectors = [
-      '#searchInput',
-      '#globalSearchInput',
-      '#homeSearchInput',
-      '#mainSearchInput',
-      '#heroSearchInput',
-      'input[type="search"]',
-      'input[data-search-input]',
-      'input[name*="search" i]',
-      'input[id*="search" i]',
-      'input[class*="search" i]',
-      'input[placeholder*="검색" i]',
-      'input[placeholder*="search" i]'
-    ];
-    for (const sel of selectors){
-      try {
-        const el = document.querySelector(sel);
-        if(el) return el;
-      } catch(e) {}
-    }
-    return null;
+  // 홈/search.html 양쪽 검색창을 모두 잡는다. 홈 검색창 ID가 달라도
+  // search.js가 시작 전에 빠져나가지 않게 한다.
+  const SEARCH_INPUT_SELECTOR = [
+    '#searchInput',
+    '#globalSearchInput',
+    '#homeSearchInput',
+    '#mainSearchInput',
+    '#heroSearchInput',
+    'input[type="search"]',
+    'input[data-search-input]',
+    'input[name*="search" i]',
+    'input[id*="search" i]',
+    'input[class*="search" i]',
+    'input[placeholder*="검색" i]',
+    'input[placeholder*="search" i]'
+  ].join(',');
+
+  const SEARCH_BUTTON_SELECTOR = [
+    '#searchBtn',
+    '#globalSearchBtn',
+    '#homeSearchBtn',
+    '#mainSearchBtn',
+    '#heroSearchBtn',
+    'button[data-search-button]',
+    'button[id*="search" i]',
+    'button[class*="search" i]'
+  ].join(',');
+
+  function pickSearchInputCandidate(){
+    return document.getElementById('searchInput') ||
+      document.getElementById('globalSearchInput') ||
+      document.getElementById('homeSearchInput') ||
+      document.getElementById('mainSearchInput') ||
+      document.getElementById('heroSearchInput') ||
+      document.querySelector(SEARCH_INPUT_SELECTOR);
   }
 
-  function findMaruSearchButton(){
-    const selectors = [
-      '#searchBtn', '#globalSearchBtn', '#homeSearchBtn', '#mainSearchBtn', '#heroSearchBtn',
-      'button[data-search-button]',
-      'button[id*="search" i]',
-      'button[class*="search" i]'
-    ];
-    for (const sel of selectors){
-      try {
-        const el = document.querySelector(sel);
-        if(el) return el;
-      } catch(e) {}
-    }
-    return null;
+  function pickSearchButtonCandidate(){
+    return document.getElementById('searchBtn') ||
+      document.getElementById('globalSearchBtn') ||
+      document.getElementById('homeSearchBtn') ||
+      document.getElementById('mainSearchBtn') ||
+      document.getElementById('heroSearchBtn') ||
+      document.querySelector(SEARCH_BUTTON_SELECTOR);
   }
 
-  const hasSearchUI = !!findMaruSearchInput();
+  const hasSearchUI = !!pickSearchInputCandidate();
   if (!isSearchPage && !hasSearchUI) return;
 
-    const input   = findMaruSearchInput();
-    const btn     = findMaruSearchButton();
+    const input   = pickSearchInputCandidate();
+    const btn     = pickSearchButtonCandidate() || { addEventListener: function(){} };
     const statusEl = document.getElementById('searchStatus');
     const resultsEl = document.getElementById('searchResults');
     const status  = statusEl || { textContent: '' };
@@ -87,8 +90,8 @@ ready(function () {
     const MIN_SMOOTH_CANDIDATES = 120;
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
-    const INTAKE_CONCURRENCY = 3;
-    const INTAKE_BURST_DELAY_MS = 60;
+    const INTAKE_CONCURRENCY = 5;
+    const INTAKE_BURST_DELAY_MS = 20;
 
     let allItems = [];
     let serverPagedMode = false;
@@ -663,7 +666,7 @@ if (q0) {
   status.textContent = '';
 }
 
-if (btn) btn.addEventListener('click', (e) => {
+btn.addEventListener('click', (e) => {
   e.preventDefault();
   e.stopPropagation();
 
@@ -1039,18 +1042,18 @@ async function fetchSearch(q, type = activeType, page = 1){
   sp.set('routeOwner', 'sanmaru');
   sp.set('naturalFlow', '1');
   sp.set('smoothIntake', '1');
+  sp.set('openPipe', '1');
+  sp.set('streamFullWindow', '1');
+  sp.set('bodyWindowLimit', String(adaptiveSearchTarget(q, safeType)));
+  sp.set('publicSearch', '1');
+  sp.set('searchSurface', 'public-search');
+  sp.set('excludeSnapshotSlots', '1');
+  sp.set('excludeFrontSlots', '1');
+  sp.set('excludeInternalCodeResults', '1');
   sp.set('noBlockingWide', '1');
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
-  sp.set('searchSurface', 'public-search');
-  sp.set('publicSearch', '1');
-  sp.set('excludeFrontSlots', '1');
-  sp.set('excludeSnapshotSlots', '1');
-  sp.set('excludePlaceholderUrls', '1');
-  sp.set('openPipe', '1');
-  sp.set('streamFullWindow', '1');
-  sp.set('bodyWindowLimit', String(adaptiveSearchTarget(q, safeType)));
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
   try {
@@ -1085,16 +1088,18 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('initialPreloadTarget', String(INITIAL_PRELOAD_TARGET));
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
-  sp.set('providerPassthrough', '1');
+  sp.set('providerPassthrough', '0');
+  sp.set('publicSearch', '1');
+  sp.set('searchSurface', 'public-search');
+  sp.set('excludeSnapshotSlots', '1');
+  sp.set('excludeFrontSlots', '1');
+  sp.set('excludeInternalCodeResults', '1');
+  sp.set('noRouteCards', '1');
+  sp.set('noOpeningCards', '1');
+  sp.set('noProviderPassthrough', '1');
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
   sp.set('reason', 'search-ui-first-paint');
-  sp.set('searchSurface', 'public-search');
-  sp.set('publicSearch', '1');
-  sp.set('excludeFrontSlots', '1');
-  sp.set('excludeSnapshotSlots', '1');
-  sp.set('excludePlaceholderUrls', '1');
-  sp.set('openPipe', '1');
 
   try {
     const r = await fetch(`${SANMARU_BOOT_URL}?${sp.toString()}`, { cache: 'no-store' });
@@ -2292,27 +2297,6 @@ async function fetchInstantSearchPack(q, type = activeType){
       );
     }
 
-    function isInternalFrontSlotLeakItem(it){
-      if (!it || typeof it !== 'object') return false;
-      const source = String((it.source && (it.source.name || it.source.id || it.source.platform)) || it.source || it.provider || '').toLowerCase();
-      const title = String(it.title || it.name || '').toLowerCase();
-      const summary = String(it.summary || it.snippet || it.description || '').toLowerCase();
-      const url = String(it.url || it.link || it.href || '').toLowerCase();
-      const id = String(it.id || it.originalId || '').toLowerCase();
-      const section = String(it.section || it.page || it.route || it.psom_key || (it.bind && it.bind.section) || '').toLowerCase();
-      const tags = Array.isArray(it.tags) ? it.tags.join(' ').toLowerCase() : '';
-      const hay = [source, title, summary, url, id, section, tags].join(' ');
-
-      if (url === '#' || url === '/' || url.startsWith('javascript:')) return true;
-      if (hay.includes('search-bank.snapshot.json')) return true;
-      if (hay.includes('search-bank-engine') || hay.includes('search-bank index') || hay.includes('searchbank-index')) return true;
-      if (/\bnetwork item\s*\d+\b/i.test(hay)) return true;
-      if (/\b(distribution|network|social|media|tour|donation|home)[-_ ]?(right|slot|hero|main)?\b/.test(section) && !/^https?:\/\//.test(url)) return true;
-      if (hay.includes('/assets/sample/') || hay.includes('sample/network') || hay.includes('sample/media') || hay.includes('sample/distribution')) return true;
-      if (hay.includes('front-slot') || hay.includes('snapshot raw') || hay.includes('snapshot-local')) return true;
-      return false;
-    }
-
     function hasInvalidYouTubeVideoUrl(it){
       const urls = [
         it && it.url,
@@ -2333,10 +2317,35 @@ async function fetchInstantSearchPack(q, type = activeType){
       });
     }
 
+    function isInternalOrSyntheticPublicSearchItem(it){
+      if (!it || typeof it !== 'object') return true;
+      const sourceName = String(it.source?.name || it.source || it.provider || '').toLowerCase();
+      const title = String(it.title || it.name || '').toLowerCase();
+      const summary = String(it.summary || it.description || it.snippet || '').toLowerCase();
+      const url = String(it.url || it.link || '').toLowerCase();
+      const generatedBy = String(it.generatedBy || '').toLowerCase();
+      const sourceType = String(it.sourceType || '').toLowerCase();
+
+      if (!url || url === '#' || url === '/' || url.startsWith('javascript:')) return true;
+      if (sourceName.includes('search-bank') || sourceName.includes('searchbank') || sourceName.includes('snapshot')) return true;
+      if (sourceName.includes('sanmaru_route') || sourceName.includes('sanmaru_opening')) return true;
+      if (sourceName.includes('_discovery') || sourceName.includes('discovery') || sourceName.includes('public_search') || sourceName.includes('_public')) return true;
+      if (sourceName === 'google_maps' || sourceName === 'naver_map' || sourceName === 'map_link') return true;
+      if (title.startsWith('network item') || title.includes('[sanmaru route]') || title.includes('[sanmaru opening]')) return true;
+      if (url.includes('search-bank.snapshot') || url.includes('/assets/sample/')) return true;
+      if (it.sanmaruRouteCard === true || it.sanmaruOpeningCard === true) return true;
+      if (generatedBy.includes('provider-lane') || sourceType.includes('provider-lane')) return true;
+      if (summary.includes('산마루 최상위 정보 레이어') || summary.includes('마루서치는 이 경로') || summary.includes('열린 정보 통로')) return true;
+      if (summary.includes('관련 공개 웹 검색 결과입니다') || summary.includes('관련 공개 검색 결과입니다') || summary.includes('관련 공개 정보 경로입니다') || summary.includes('관련 최신 기사와 주요 보도 검색 결과입니다')) return true;
+      if (summary.includes('관련 사진·이미지·시각 자료 검색 결과입니다') || summary.includes('관련 영상·현장 콘텐츠 검색 결과입니다')) return true;
+      if (summary.includes('관련 지도·장소·지역 정보 검색 결과입니다') || summary.includes('관련 백과·지식·참고 자료 검색 결과입니다')) return true;
+      return false;
+    }
+
     function shouldRejectSearchResultItem(it){
       if (!it) return true;
       if (isSeedPlaceholderItem(it)) return true;
-      if (isInternalFrontSlotLeakItem(it)) return true;
+      if (isInternalOrSyntheticPublicSearchItem(it)) return true;
       if (hasInvalidYouTubeVideoUrl(it)) return true;
       return false;
     }
