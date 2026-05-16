@@ -24,12 +24,13 @@ ready(function () {
   // 🔥 홈에서도 search.js 동작 허용 (핵심 수정)
   const hasSearchUI =
     document.getElementById('searchInput') ||
-    document.getElementById('globalSearchInput');
+    document.getElementById('globalSearchInput') ||
+    document.getElementById('homeSearchInput');
 
   if (!isSearchPage && !hasSearchUI) return;
 
-    const input   = document.getElementById('searchInput') || document.getElementById('globalSearchInput');
-    const btn     = document.getElementById('searchBtn') || document.getElementById('globalSearchBtn');
+    const input   = document.getElementById('searchInput') || document.getElementById('globalSearchInput') || document.getElementById('homeSearchInput');
+    const btn     = document.getElementById('searchBtn') || document.getElementById('globalSearchBtn') || document.getElementById('homeSearchBtn');
     const statusEl = document.getElementById('searchStatus');
     const resultsEl = document.getElementById('searchResults');
     const status  = statusEl || { textContent: '' };
@@ -675,7 +676,12 @@ btn.addEventListener('click', (e) => {
     return;
   }
 
-  window.location.assign(buildSearchUrl(q));
+  const nextUrl = buildSearchUrl(q);
+  try {
+    window.top.location.href = nextUrl;
+  } catch (e) {
+    window.location.assign(nextUrl);
+  }
 });
 
 input.addEventListener('keydown', (e) => {
@@ -731,7 +737,12 @@ input.addEventListener('keydown', (e) => {
     return;
   }
 
-  window.location.assign(buildSearchUrl(q));
+  const nextUrl = buildSearchUrl(q);
+  try {
+    window.top.location.href = nextUrl;
+  } catch (e) {
+    window.location.assign(nextUrl);
+  }
 });
 
 function unwrap(x){
@@ -1107,7 +1118,12 @@ async function fetchInstantSearchPack(q, type = activeType){
         history.pushState({ q, type: nextType, from: safeReturnUrl || '' }, '', u.toString());
         runSearch(q, nextType);
       } else {
-        window.location.assign(buildSearchUrl(q));
+        const nextUrl = buildSearchUrl(q);
+        try {
+          window.top.location.href = nextUrl;
+        } catch (e) {
+          window.location.assign(nextUrl);
+        }
       }
     }
 
