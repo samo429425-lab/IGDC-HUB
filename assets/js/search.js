@@ -69,7 +69,6 @@ ready(function () {
     const pageImageEnrichCache = new Set();
     const itemImageEnrichCache = new Map();
     const expandedDisplayGroups = new Set();
-    let currentDisplayPolicy = null;
 
     // SANMARU resident switch:
     // The first search signal warms/activates Sanmaru on the server. Later searches
@@ -786,13 +785,7 @@ function normalizeSearchPayload(payload){
     (root.sectionPack && Array.isArray(root.sectionPack.viewportSections) && root.sectionPack.viewportSections) ||
     (Array.isArray(root.displaySections) && root.displaySections) ||
     [];
-  const displayPolicy = sanitizeDisplayPolicy(
-    root.displayPolicy ||
-    (root.meta && root.meta.displayPolicy) ||
-    (root.sectionPack && root.sectionPack.displayPolicy) ||
-    null
-  );
-  return { payload: root, items, pageItems, viewportSections, displayPolicy };
+  return { payload: root, items, pageItems, viewportSections };
 }
 
 function serverTotalFromPayload(payload, fallbackCount){
@@ -912,7 +905,7 @@ function startContinuousIntake(q, type, seq){
         const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack))).slice(0, PAGE_SIZE);
         if(pageSlice.length){
           loadedServerPages.set(page, pageSlice);
-          allItems = dedupeItems(allItems.concat(pageSlice));
+          allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice);
           lastSearchPayload = pack && pack.payload || lastSearchPayload;
           updateProgressiveTotalFromPayload(pack && pack.payload, allItems.length);
           if(page === currentPage) renderPage(page, true);
@@ -986,6 +979,69 @@ function startContinuousIntake(q, type, seq){
     out.push(it);
   }
 
+  return out;
+}
+
+function searchDisplayKeyForItem(it){
+  if(!it) return '';
+  const rawUrl = String(it.url || it.link || it.openUrl || '').trim();
+  const normUrl = rawUrl.toLowerCase();
+  const isPlaceholderUrl =
+    !rawUrl ||
+    rawUrl === '#' ||
+    rawUrl === '/' ||
+    normUrl === 'javascript:void(0)' ||
+    normUrl.startsWith('javascript:');
+
+  if(!isPlaceholderUrl) return normUrl;
+  return String(
+    it.id || it.indexId || it.originalId ||
+    ((String(it.title || it.name || '').trim()) + '|' + String((it.source && (it.source.name || it.source.platform)) || it.source || it.provider || '').trim())
+  ).toLowerCase();
+}
+
+function displayRichnessScore(it){
+  if(!it || typeof it !== 'object') return 0;
+  let score = 0;
+  const card = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+  const media = (it.media && typeof it.media === 'object') ? it.media : {};
+  const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
+  const summaryText = [
+    card.summary, card.description, card.body, card.text,
+    it.displaySummary, it.summary, it.snippet, it.description, it.contentSnippet,
+    it.excerpt, it.abstract, it.text, it.content, it.metaDescription, it.ogDescription
+  ].map(v => String(v || '').trim()).filter(Boolean).join(' ');
+  if(summaryText.length >= 18) score += Math.min(40, Math.floor(summaryText.length / 12));
+  if(card && Object.keys(card).length) score += 18;
+  if(card.showMapPreview || it.__maruAllowMapPreview || it.mapQuery || it.placeInfo) score += 20;
+  if(card.thumbnail || card.image || (Array.isArray(card.imageSet) && card.imageSet.length)) score += 25;
+  if(it.thumbnail || it.thumb || it.image || it.ogImage || it.og_image || (Array.isArray(it.imageSet) && it.imageSet.length)) score += 20;
+  if(preview.thumbnail || preview.image || preview.poster || preview.mp4 || preview.webm) score += 18;
+  if(it.videoId || it.videoUrl || it.embedUrl || /youtube|youtu\.be|ytimg/i.test(String([it.url, it.link, it.thumbnail, it.image].join(' ')))) score += 14;
+  return score;
+}
+
+function mergeItemsPreferDisplayRichness(baseItems, incomingItems){
+  const out = [];
+  const pos = new Map();
+  function addOrMerge(it){
+    if(!it) return;
+    const key = searchDisplayKeyForItem(it);
+    if(!key) return;
+    if(!pos.has(key)){
+      pos.set(key, out.length);
+      out.push(it);
+      return;
+    }
+    const idx = pos.get(key);
+    const prev = out[idx];
+    const merged = Object.assign({}, prev || {}, it || {});
+    const prevScore = displayRichnessScore(prev);
+    const nextScore = displayRichnessScore(it);
+    out[idx] = nextScore >= prevScore ? merged : Object.assign({}, it || {}, prev || {});
+  }
+  (Array.isArray(baseItems) ? baseItems : []).forEach(addOrMerge);
+  (Array.isArray(incomingItems) ? incomingItems : []).forEach(addOrMerge);
   return out;
 }
 
@@ -1557,7 +1613,14 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function preferredYoutubeThumbClient(it){
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
       const candidates = [
+        displayCard.videoId,
+        displayCard.videoUrl,
+        displayCard.watchUrl,
+        displayCard.embedUrl,
+        displayCard.thumbnail,
+        displayCard.image,
         it && it.videoId,
         it && it.url,
         it && it.link,
@@ -1567,7 +1630,9 @@ async function fetchInstantSearchPack(q, type = activeType){
         it && it.thumbnail,
         it && it.thumb,
         it && it.image
-      ].concat(Array.isArray(it && it.imageSet) ? it.imageSet : []);
+      ]
+        .concat(Array.isArray(displayCard.imageSet) ? displayCard.imageSet : [])
+        .concat(Array.isArray(it && it.imageSet) ? it.imageSet : []);
 
       for (const v of candidates) {
         const id = String(v || '').length === 11 && /^[A-Za-z0-9_-]{11}$/.test(String(v || ''))
@@ -1580,12 +1645,18 @@ async function fetchInstantSearchPack(q, type = activeType){
 
     function collectNaturalImages(it){
       const sourceText = String((it && it.source) || '').toLowerCase();
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
       const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
       const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
       const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
       const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
 
       const raw = []
+        .concat(displayCard.thumbnail ? [displayCard.thumbnail] : [])
+        .concat(displayCard.image ? [displayCard.image] : [])
+        .concat(Array.isArray(displayCard.imageSet) ? displayCard.imageSet : [])
+        .concat(displayCard.preview && displayCard.preview.thumbnail ? [displayCard.preview.thumbnail] : [])
+        .concat(displayCard.preview && displayCard.preview.image ? [displayCard.preview.image] : [])
         .concat(it && it.thumbnail ? [it.thumbnail] : [])
         .concat(it && it.thumb ? [it.thumb] : [])
         .concat(it && it.image ? [it.image] : [])
@@ -1854,80 +1925,9 @@ async function fetchInstantSearchPack(q, type = activeType){
       return labels[group] || '일반 웹 결과';
     }
 
-
-    function sanitizeDisplayPolicy(policy){
-      if(!policy || typeof policy !== 'object') return null;
-      const allowed = new Set(['authority','public_data','local_tour','knowledge','wiki','academic','site','book','news','blog','cafe','community','image','video','media','social','shopping','sports','finance','webtoon','web']);
-      const out = {
-        status: String(policy.status || 'ok'),
-        engine: String(policy.engine || 'maru-search-display-engine'),
-        intent: String(policy.intent || policy.queryIntent || 'general'),
-        confidence: Number(policy.confidence || 0) || 0,
-        groupOrder: [],
-        categoryOrder: [],
-        visibleGroups: [],
-        hiddenGroups: [],
-        previewLimitByGroup: {},
-        moduleCapByGroup: {},
-        cardContract: policy.cardContract || null
-      };
-      const normalizeGroup = (g) => {
-        const x = String(g || '').trim();
-        const map = { map:'local_tour', tour:'local_tour', sns:'social', public:'public_data', official:'authority', gov:'authority' };
-        return map[x] || x;
-      };
-      ['groupOrder','categoryOrder','visibleGroups','hiddenGroups'].forEach(key => {
-        const arr = Array.isArray(policy[key]) ? policy[key] : [];
-        out[key] = arr.map(normalizeGroup).filter(g => allowed.has(g));
-      });
-      ['previewLimitByGroup','moduleCapByGroup'].forEach(key => {
-        const src = policy[key] && typeof policy[key] === 'object' ? policy[key] : {};
-        Object.keys(src).forEach(k => {
-          const g = normalizeGroup(k);
-          const n = parseInt(src[k], 10);
-          if(allowed.has(g) && n > 0) out[key][g] = Math.max(1, Math.min(30, n));
-        });
-      });
-      return out;
-    }
-
-    function setCurrentDisplayPolicy(policy){
-      currentDisplayPolicy = sanitizeDisplayPolicy(policy);
-    }
-
-    function displayPolicyGroupOrder(){
-      const base = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
-      const p = currentDisplayPolicy;
-      const preferred = p && Array.isArray(p.groupOrder) && p.groupOrder.length
-        ? p.groupOrder
-        : (p && Array.isArray(p.categoryOrder) ? p.categoryOrder : []);
-      const out = [];
-      const seen = new Set();
-      preferred.concat(base).forEach(g => {
-        if(!g || seen.has(g)) return;
-        seen.add(g);
-        out.push(g);
-      });
-      return out;
-    }
-
-    function displayPolicyPreviewLimit(group){
-      const p = currentDisplayPolicy;
-      const n = p && p.previewLimitByGroup ? parseInt(p.previewLimitByGroup[group], 10) : 0;
-      return n > 0 ? n : 0;
-    }
-
-    function displayPolicyModuleCap(group){
-      const p = currentDisplayPolicy;
-      const n = p && p.moduleCapByGroup ? parseInt(p.moduleCapByGroup[group], 10) : 0;
-      return n > 0 ? n : 0;
-    }
-
     function displayGroupPreviewLimit(group, sample){
       const n = parseInt(sample && sample.displayGroupPreviewLimit, 10);
       if (n > 0) return n;
-      const policyLimit = displayPolicyPreviewLimit(group);
-      if (policyLimit > 0) return policyLimit;
 
       const limits = {
         authority: 3,
@@ -1962,7 +1962,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = displayPolicyGroupOrder();
+      const order = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -2599,11 +2599,18 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function descriptionForItemClient(it){
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
       const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
       const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
       const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
       const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
       const candidates = [
+        displayCard.summary,
+        displayCard.description,
+        displayCard.body,
+        displayCard.text,
+        displayCard.snippet,
+        it && it.displaySummary,
         it && it.summary,
         it && it.snippet,
         it && it.description,
@@ -3006,8 +3013,6 @@ if (it.riskLabel === '⚠️ high-risk') {
     function displayGroupModuleTotalCap(group){
       // Keep each category useful but bounded. Extra items are not deleted; they
       // continue as ordinary web/list results after the category portal blocks.
-      const policyCap = displayPolicyModuleCap(group);
-      if (policyCap > 0) return policyCap;
       const caps = {
         authority: 8,
         public_data: 8,
@@ -3042,7 +3047,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         items: diversifyGroupPreviewItems(g.group, g.items || [])
       }));
       const byGroup = new Map(grouped.map(g => [g.group, g]));
-      const categoryOrder = displayPolicyGroupOrder().filter(g => g !== 'web');
+      const categoryOrder = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon'];
       const categoryOverflowItems = [];
       const categoryPages = [];
       let page = [];
@@ -3248,7 +3253,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
         if(pageSlice.length){
           loadedServerPages.set(page, pageSlice.slice(0, PAGE_SIZE));
-          allItems = dedupeItems(allItems.concat(pageSlice));
+          allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice);
           const total = serverTotalFromPayload(pack && pack.payload, serverTotalItems || pageSlice.length);
           serverTotalItems = Math.max(serverTotalItems || 0, total || 0, INITIAL_PRELOAD_TARGET);
         } else if(serverTotalItems > ((page - 1) * PAGE_SIZE)){
@@ -3392,7 +3397,6 @@ async function runSearch(q, type = activeType){
   pageImageEnrichCache.clear();
   itemImageEnrichCache.clear();
   expandedDisplayGroups.clear();
-  currentDisplayPolicy = null;
 
   let firstPaintDone = false;
   let intakeStarted = false;
@@ -3409,7 +3413,6 @@ async function runSearch(q, type = activeType){
   function applySupplyPack(pack, sourceName){
     if(runSearch._seq !== seq || !pack) return 0;
     const normalized = normalizeSearchPayload(pack && pack.payload ? pack.payload : pack);
-    if(normalized.displayPolicy) setCurrentDisplayPolicy(normalized.displayPolicy);
     const payload = normalized.payload || (pack && pack.payload) || pack || null;
     lastSearchPayload = payload || lastSearchPayload;
 
@@ -3427,7 +3430,7 @@ async function runSearch(q, type = activeType){
       Math.max(INITIAL_PRELOAD_TARGET, incoming.length)
     );
     const windowItems = incoming.slice(0, initialWindow);
-    allItems = dedupeItems(allItems.concat(windowItems)).slice(0, MAX_SMOOTH_CANDIDATES);
+    allItems = mergeItemsPreferDisplayRichness(allItems, windowItems).slice(0, MAX_SMOOTH_CANDIDATES);
     seedLoadedServerPagesFromItems(allItems, Math.min(allItems.length, Math.max(INITIAL_PRELOAD_TARGET, windowItems.length)));
     if(pageItems.length) loadedServerPages.set(1, pageItems.slice(0, PAGE_SIZE));
 
