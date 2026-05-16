@@ -69,6 +69,7 @@ ready(function () {
     const pageImageEnrichCache = new Set();
     const itemImageEnrichCache = new Map();
     const expandedDisplayGroups = new Set();
+    let currentDisplayPolicy = null;
 
     // SANMARU resident switch:
     // The first search signal warms/activates Sanmaru on the server. Later searches
@@ -795,7 +796,13 @@ function normalizeSearchPayload(payload){
     (root.sectionPack && Array.isArray(root.sectionPack.viewportSections) && root.sectionPack.viewportSections) ||
     (Array.isArray(root.displaySections) && root.displaySections) ||
     [];
-  return { payload: root, items, pageItems, viewportSections };
+  const displayPolicy = sanitizeDisplayPolicy(
+    root.displayPolicy ||
+    (root.meta && root.meta.displayPolicy) ||
+    (root.sectionPack && root.sectionPack.displayPolicy) ||
+    null
+  );
+  return { payload: root, items, pageItems, viewportSections, displayPolicy };
 }
 
 function serverTotalFromPayload(payload, fallbackCount){
@@ -1339,6 +1346,77 @@ async function fetchInstantSearchPack(q, type = activeType){
       }
     }
 
+
+    function sanitizeDisplayPolicy(policy){
+      if(!policy || typeof policy !== 'object') return null;
+      function arr(v){ return Array.isArray(v) ? v.map(x => String(x || '').trim()).filter(Boolean) : []; }
+      const out = Object.assign({}, policy);
+      out.visibleGroups = arr(policy.visibleGroups);
+      out.hiddenGroups = arr(policy.hiddenGroups);
+      out.groupOrder = arr(policy.groupOrder || policy.categoryOrder);
+      out.categoryOrder = out.groupOrder;
+      out.visibleTabs = arr(policy.visibleTabs);
+      out.hiddenTabs = arr(policy.hiddenTabs);
+      out.previewLimitByGroup = (policy.previewLimitByGroup && typeof policy.previewLimitByGroup === 'object') ? policy.previewLimitByGroup : {};
+      out.moduleCapByGroup = (policy.moduleCapByGroup && typeof policy.moduleCapByGroup === 'object') ? policy.moduleCapByGroup : {};
+      return out;
+    }
+
+    function setCurrentDisplayPolicy(policy){
+      const next = sanitizeDisplayPolicy(policy);
+      if(!next) return false;
+      currentDisplayPolicy = next;
+      applySearchTabsDisplayPolicy();
+      return true;
+    }
+
+    function displayPolicyGroupOrder(){
+      const fallback = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
+      const p = currentDisplayPolicy;
+      const preferred = p && Array.isArray(p.groupOrder) && p.groupOrder.length ? p.groupOrder : [];
+      const seen = new Set();
+      return preferred.concat(fallback).filter(g => {
+        g = String(g || '').trim();
+        if(!g || seen.has(g)) return false;
+        seen.add(g);
+        return true;
+      });
+    }
+
+    function displayPolicyAllowsGroup(group){
+      if(normalizeSearchType(activeType) !== 'all') return true;
+      const p = currentDisplayPolicy;
+      const g = String(group || '').trim();
+      if(!p || !g || g === 'web') return true;
+      if(Array.isArray(p.hiddenGroups) && p.hiddenGroups.includes(g)) return false;
+      if(Array.isArray(p.visibleGroups) && p.visibleGroups.length) return p.visibleGroups.includes(g) || g === 'web';
+      return true;
+    }
+
+    function displayPolicyPreviewLimit(group){
+      const p = currentDisplayPolicy;
+      const n = p && p.previewLimitByGroup ? parseInt(p.previewLimitByGroup[group], 10) : 0;
+      return n > 0 ? n : 0;
+    }
+
+    function displayPolicyModuleCap(group){
+      const p = currentDisplayPolicy;
+      const n = p && p.moduleCapByGroup ? parseInt(p.moduleCapByGroup[group], 10) : 0;
+      return n > 0 ? n : 0;
+    }
+
+    function applySearchTabsDisplayPolicy(){
+      const bar = document.getElementById('maru-search-tabs');
+      if(!bar || !currentDisplayPolicy) return;
+      const visible = Array.isArray(currentDisplayPolicy.visibleTabs) ? currentDisplayPolicy.visibleTabs : [];
+      const hidden = Array.isArray(currentDisplayPolicy.hiddenTabs) ? currentDisplayPolicy.hiddenTabs : [];
+      Array.from(bar.querySelectorAll('button[data-type]')).forEach(btn => {
+        const t = btn.dataset.type || 'all';
+        const show = t === 'all' || (!hidden.includes(t) && (!visible.length || visible.includes(t)));
+        btn.style.display = show ? '' : 'none';
+      });
+    }
+
     function ensureSearchTabs(){
       if (!isSearchPage) return null;
       let bar = document.getElementById('maru-search-tabs');
@@ -1382,6 +1460,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     function updateSearchTabsActive(){
       const bar = document.getElementById('maru-search-tabs');
       if (!bar) return;
+      applySearchTabsDisplayPolicy();
       const type = normalizeSearchType(activeType);
       Array.from(bar.querySelectorAll('button[data-type]')).forEach(btn => {
         const on = btn.dataset.type === type;
@@ -1592,12 +1671,15 @@ async function fetchInstantSearchPack(q, type = activeType){
       const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
       const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
       const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
 
       const raw = []
+        .concat(displayCard.thumbnail ? [displayCard.thumbnail] : [])
+        .concat(displayCard.image ? [displayCard.image] : [])
+        .concat(Array.isArray(displayCard.imageSet) ? displayCard.imageSet : [])
         .concat(it && it.thumbnail ? [it.thumbnail] : [])
         .concat(it && it.thumb ? [it.thumb] : [])
         .concat(it && it.image ? [it.image] : [])
-        .concat(it && it.poster ? [it.poster] : [])
         .concat(it && it.cover ? [it.cover] : [])
         .concat(it && it.og_image ? [it.og_image] : [])
         .concat(it && it.ogImage ? [it.ogImage] : [])
@@ -1607,14 +1689,11 @@ async function fetchInstantSearchPack(q, type = activeType){
         .concat(payload.image_url ? [payload.image_url] : [])
         .concat(payload.og_image ? [payload.og_image] : [])
         .concat(payload.ogImage ? [payload.ogImage] : [])
-        .concat(payload.poster ? [payload.poster] : [])
         .concat(payload.cover ? [payload.cover] : [])
         .concat(data.thumbnail ? [data.thumbnail] : [])
         .concat(data.thumb ? [data.thumb] : [])
         .concat(data.image ? [data.image] : [])
         .concat(data.og_image ? [data.og_image] : [])
-        .concat(data.poster ? [data.poster] : [])
-        .concat(preview.poster ? [preview.poster] : [])
         .concat(preview.thumbnail ? [preview.thumbnail] : [])
         .concat(preview.image ? [preview.image] : [])
         .concat(Array.isArray(it && it.imageSet) ? it.imageSet : [])
@@ -1689,7 +1768,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         text.includes('shopping') ||
         text.includes('쇼핑')
       ) {
-        return 'poster';
+        return 'article';
       }
 
       if (
@@ -1865,6 +1944,8 @@ async function fetchInstantSearchPack(q, type = activeType){
     function displayGroupPreviewLimit(group, sample){
       const n = parseInt(sample && sample.displayGroupPreviewLimit, 10);
       if (n > 0) return n;
+      const policyLimit = displayPolicyPreviewLimit(group);
+      if (policyLimit > 0) return policyLimit;
 
       const limits = {
         authority: 3,
@@ -1899,12 +1980,13 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
+      const order = displayPolicyGroupOrder();
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
       (Array.isArray(slice) ? slice : []).forEach((it, idx) => {
-        const group = displayGroupOfItem(it);
+        const rawGroup = displayGroupOfItem(it);
+        const group = displayPolicyAllowsGroup(rawGroup) ? rawGroup : 'web';
         if (!groups.has(group)) {
           groups.set(group, {
             group,
@@ -2540,7 +2622,12 @@ async function fetchInstantSearchPack(q, type = activeType){
       const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
       const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
       const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
       const candidates = [
+        it && it.displaySummary,
+        displayCard.summary,
+        displayCard.body,
+        displayCard.description,
         it && it.summary,
         it && it.snippet,
         it && it.description,
@@ -2691,7 +2778,8 @@ if (it.riskLabel === '⚠️ high-risk') {
 
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
-        d.style.webkitLineClamp = '3';
+        const cardLineClamp = it && it.displayCard && parseInt(it.displayCard.lineClamp, 10);
+        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(5, cardLineClamp) : 3);
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
@@ -2772,8 +2860,6 @@ if (it.riskLabel === '⚠️ high-risk') {
         video.style.width = '100%';
         video.style.maxHeight = '120px';
         video.style.objectFit = 'cover';
-
-        if (it.media.preview.poster) video.poster = it.media.preview.poster;
 
         if (it.media.preview.webm) {
           const s = document.createElement('source');
@@ -2936,6 +3022,8 @@ if (it.riskLabel === '⚠️ high-risk') {
     function displayGroupModuleTotalCap(group){
       // Keep each category useful but bounded. Extra items are not deleted; they
       // continue as ordinary web/list results after the category portal blocks.
+      const policyCap = displayPolicyModuleCap(group);
+      if (policyCap > 0) return policyCap;
       const caps = {
         authority: 8,
         public_data: 8,
@@ -2970,7 +3058,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         items: diversifyGroupPreviewItems(g.group, g.items || [])
       }));
       const byGroup = new Map(grouped.map(g => [g.group, g]));
-      const categoryOrder = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon'];
+      const categoryOrder = displayPolicyGroupOrder().filter(g => g !== 'web');
       const categoryOverflowItems = [];
       const categoryPages = [];
       let page = [];
@@ -3282,6 +3370,7 @@ async function runSearch(q, type = activeType){
   stopContinuousIntake();
 
   if (!qq){
+    currentDisplayPolicy = null;
     allItems = [];
     serverPagedMode = false;
     serverTotalItems = 0;
@@ -3298,6 +3387,7 @@ async function runSearch(q, type = activeType){
   const seq = runSearch._seq;
   const target = Math.max(INITIAL_PRELOAD_TARGET, adaptiveSearchTarget(qq, activeType));
 
+  currentDisplayPolicy = null;
   allItems = [];
   serverPagedMode = true;
   authoritativeServerTotalItems = Math.max(target, INITIAL_PRELOAD_TARGET);
@@ -3336,6 +3426,7 @@ async function runSearch(q, type = activeType){
   function applySupplyPack(pack, sourceName){
     if(runSearch._seq !== seq || !pack) return 0;
     const normalized = normalizeSearchPayload(pack && pack.payload ? pack.payload : pack);
+    if(normalized.displayPolicy) setCurrentDisplayPolicy(normalized.displayPolicy);
     const payload = normalized.payload || (pack && pack.payload) || pack || null;
     lastSearchPayload = payload || lastSearchPayload;
 
