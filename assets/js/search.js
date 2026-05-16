@@ -1363,57 +1363,45 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function setCurrentDisplayPolicy(policy){
+      // Display policy is kept only as server metadata.
+      // Search.js must not hide search tabs or collapse result categories from
+      // the browser side, because that removes useful category lanes from the
+      // visible search page. Category intent can be used later by the display
+      // engine/server, but the UI keeps the original full category exposure.
       const next = sanitizeDisplayPolicy(policy);
-      if(!next) return false;
-      currentDisplayPolicy = next;
+      currentDisplayPolicy = next || null;
       applySearchTabsDisplayPolicy();
-      return true;
+      return !!next;
     }
 
     function displayPolicyGroupOrder(){
-      const fallback = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
-      const p = currentDisplayPolicy;
-      const preferred = p && Array.isArray(p.groupOrder) && p.groupOrder.length ? p.groupOrder : [];
-      const seen = new Set();
-      return preferred.concat(fallback).filter(g => {
-        g = String(g || '').trim();
-        if(!g || seen.has(g)) return false;
-        seen.add(g);
-        return true;
-      });
+      // Restore the original stable category order. Do not let displayPolicy
+      // reorder or remove categories in search.js.
+      return ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
     }
 
     function displayPolicyAllowsGroup(group){
-      if(normalizeSearchType(activeType) !== 'all') return true;
-      const p = currentDisplayPolicy;
-      const g = String(group || '').trim();
-      if(!p || !g || g === 'web') return true;
-      if(Array.isArray(p.hiddenGroups) && p.hiddenGroups.includes(g)) return false;
-      if(Array.isArray(p.visibleGroups) && p.visibleGroups.length) return p.visibleGroups.includes(g) || g === 'web';
+      // Restore original behavior: every detected category remains eligible.
       return true;
     }
 
     function displayPolicyPreviewLimit(group){
-      const p = currentDisplayPolicy;
-      const n = p && p.previewLimitByGroup ? parseInt(p.previewLimitByGroup[group], 10) : 0;
-      return n > 0 ? n : 0;
+      // Restore original preview limits from displayGroupPreviewLimit().
+      return 0;
     }
 
     function displayPolicyModuleCap(group){
-      const p = currentDisplayPolicy;
-      const n = p && p.moduleCapByGroup ? parseInt(p.moduleCapByGroup[group], 10) : 0;
-      return n > 0 ? n : 0;
+      // Restore original module caps from displayGroupModuleTotalCap().
+      return 0;
     }
 
     function applySearchTabsDisplayPolicy(){
+      // Restore original behavior: search tabs stay visible. The display engine
+      // may classify intent, but search.js should not hide tab buttons.
       const bar = document.getElementById('maru-search-tabs');
-      if(!bar || !currentDisplayPolicy) return;
-      const visible = Array.isArray(currentDisplayPolicy.visibleTabs) ? currentDisplayPolicy.visibleTabs : [];
-      const hidden = Array.isArray(currentDisplayPolicy.hiddenTabs) ? currentDisplayPolicy.hiddenTabs : [];
+      if(!bar) return;
       Array.from(bar.querySelectorAll('button[data-type]')).forEach(btn => {
-        const t = btn.dataset.type || 'all';
-        const show = t === 'all' || (!hidden.includes(t) && (!visible.length || visible.includes(t)));
-        btn.style.display = show ? '' : 'none';
+        btn.style.display = '';
       });
     }
 
