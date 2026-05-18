@@ -27,12 +27,12 @@ const path = require("path");
 let LogosEngineClass = null;
 try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) { LogosEngineClass = null; }
 
-const VERSION = "sanmaru-engine-v2.7.1-ranked-supply-capacity";
+const VERSION = "sanmaru-engine-v2.7.1-public-search-front-boundary";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 3000;
 const DEFAULT_VISIBLE_PER_PAGE = 25;
-const MAX_LIMIT = 12000;
+const MAX_LIMIT = 15000;
 const SANMARU_MAX_PAGER_PAGES = 499;
 const DEFAULT_TIMEOUT_MS = 10500;
 const DEEP_TIMEOUT_MS = 15000;
@@ -44,11 +44,8 @@ const MAX_QUERY_LENGTH = 240;
 const MIN_FAST_TARGET = 120;
 const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
 const DEFAULT_CANDIDATE_POOL_TARGET = 1600;
-const SANMARU_SUPPLY_CAPACITY_TARGET = 15000;
-const SANMARU_FRONT_RESERVOIR_TARGET = 5000;
-const SANMARU_REAL_ITEM_MIN_SCORE = 35;
-const MAX_INDEX_FAST_LIMIT = 5000;
-const MAX_SEARCH_BANK_FAST_LIMIT = 5000;
+const MAX_INDEX_FAST_LIMIT = 3000;
+const MAX_SEARCH_BANK_FAST_LIMIT = 3000;
 
 const globalState = globalThis.__SANMARU_V2_STATE || (globalThis.__SANMARU_V2_STATE = {
   cache: new Map(),
@@ -88,10 +85,7 @@ function ensureResidentState(){
       engineIdentity:null,
       lastLifecycleMode:null,
       lastHotRefreshAt:0,
-      lastHotRefreshReason:null,
-      supplyPools:null,
-      supplyPoolsBuiltAt:0,
-      supplyPoolsReason:null
+      lastHotRefreshReason:null
     };
   }
   if(!globalState.resident.supplyPools) globalState.resident.supplyPools = null;
@@ -951,6 +945,11 @@ function absorbResidentItems(items, meta){
     addToMultiMap(resident.sourceMap, firstNonEmpty(item.source, item.provider, "unknown"), item);
     added++;
   }
+  if(added){
+    resident.supplyPools = null;
+    resident.supplyPoolsBuiltAt = 0;
+    resident.supplyPoolsReason = "resident-absorbed-new-items";
+  }
   if(meta && meta.q && input.length){
     const canonicalForCache = dedupeItems(input.map(raw => canonicalItem(raw, meta.q, firstNonEmpty(raw && raw.source, raw && raw.provider, raw && raw._residentSourceHint, meta && meta.source, "resident"))));
     const ranked = dedupeItems(
@@ -1056,6 +1055,14 @@ function residentBootSnapshot(){
     providerHealthCount:resident.providerHealth ? resident.providerHealth.size : 0,
     categoryCounts:Array.from((resident.categoryMap || new Map()).entries()).map(([name, arr]) => ({ name, count:arr.length })).sort((a,b)=>b.count-a.count).slice(0,60),
     sourceCounts:Array.from((resident.sourceMap || new Map()).entries()).map(([name, arr]) => ({ name, count:arr.length })).sort((a,b)=>b.count-a.count).slice(0,60),
+    supplyPools: resident.supplyPools ? {
+      search: resident.supplyPools.search ? resident.supplyPools.search.length : 0,
+      front: resident.supplyPools.front ? resident.supplyPools.front.length : 0,
+      media: resident.supplyPools.media ? resident.supplyPools.media.length : 0,
+      commerce: resident.supplyPools.commerce ? resident.supplyPools.commerce.length : 0,
+      builtAt: resident.supplyPoolsBuiltAt ? new Date(resident.supplyPoolsBuiltAt).toISOString() : null,
+      reason: resident.supplyPoolsReason || null
+    } : null,
     lastBootLatency:resident.lastBootLatency || 0,
     lastBootFiles:resident.lastBootFiles || [],
     lastError:resident.lastError || null,
@@ -1071,18 +1078,6 @@ function residentBootSnapshot(){
     topRole: "global-web-ecosystem-information-cpu",
     maruRole: "mounted-gateway-body",
     dataUpdateMode: "hot-ingest-index-refresh-no-engine-reboot",
-    supplyPoolsBuiltAt:resident.supplyPoolsBuiltAt ? new Date(resident.supplyPoolsBuiltAt).toISOString() : null,
-    supplyPoolsReason:resident.supplyPoolsReason || null,
-    supplyPoolCounts:resident.supplyPools ? {
-      allReal:resident.supplyPools.allReal ? resident.supplyPools.allReal.length : 0,
-      front:resident.supplyPools.front ? resident.supplyPools.front.length : 0,
-      search:resident.supplyPools.search ? resident.supplyPools.search.length : 0,
-      media:resident.supplyPools.media ? resident.supplyPools.media.length : 0,
-      commerce:resident.supplyPools.commerce ? resident.supplyPools.commerce.length : 0,
-      region:resident.supplyPools.region ? resident.supplyPools.region.length : 0
-    } : null,
-    frontSupplyTarget:SANMARU_FRONT_RESERVOIR_TARGET,
-    supplyCapacityTarget:SANMARU_SUPPLY_CAPACITY_TARGET,
     openingSignals: openingSignalsSnapshot(),
     logosGuard: logosEvaluate([{ type:"resident_status", intent:"stewardship", truthConfidence:0.95, recoveryOpportunity:true }], "resident-status"),
     securityEvents:(globalState.securityEvents || []).slice(-10)
@@ -1229,217 +1224,12 @@ function buildOpeningFallbackCards(q, opts){
   }, q, "sanmaru-opening"));
 }
 
-
-function sanmaruText(v){
-  return s(v).replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-}
-function sanmaruItemBody(item){
-  item = item || {};
-  const p = item.payload && typeof item.payload === "object" ? item.payload : {};
-  const d = item.data && typeof item.data === "object" ? item.data : {};
-  return sanmaruText([
-    item.summary, item.description, item.snippet, item.content, item.text, item.excerpt, item.abstract,
-    p.summary, p.description, p.snippet, p.content, p.text, p.excerpt, p.abstract,
-    d.summary, d.description, d.snippet, d.content, d.text, d.excerpt, d.abstract
-  ].filter(Boolean).join(" "));
-}
-function sanmaruMediaCandidates(item){
-  item = item || {};
-  const p = item.payload && typeof item.payload === "object" ? item.payload : {};
-  const d = item.data && typeof item.data === "object" ? item.data : {};
-  const media = item.media && typeof item.media === "object" ? item.media : {};
-  const preview = media.preview && typeof media.preview === "object" ? media.preview : {};
-  return Array.from(new Set([
-    item.thumbnail, item.thumb, item.image, item.imageUrl, item.image_url, item.og_image, item.ogImage,
-    item.originalImage, item.fullImage, item.imageOriginal, item.viewerImage, item.openImageUrl, item.contentUrl, item.cardImage,
-    p.thumbnail, p.thumb, p.image, p.imageUrl, p.image_url, p.og_image, p.ogImage, p.originalImage, p.fullImage, p.imageOriginal, p.viewerImage, p.openImageUrl, p.contentUrl, p.cardImage,
-    d.thumbnail, d.thumb, d.image, d.imageUrl, d.image_url, d.og_image, d.ogImage, d.originalImage, d.viewerImage, d.openImageUrl, d.contentUrl, d.cardImage,
-    preview.thumbnail, preview.image, preview.poster, media.poster,
-    ...(Array.isArray(item.imageSet) ? item.imageSet : []),
-    ...(Array.isArray(p.imageSet) ? p.imageSet : []),
-    ...(Array.isArray(d.imageSet) ? d.imageSet : [])
-  ].map(x => s(x).trim()).filter(Boolean)));
-}
-function sanmaruIsContentImageUrl(url){
-  const u = s(url).trim();
-  if(!u) return false;
-  const lowUrl = u.toLowerCase();
-  if(!/^https?:\/\//i.test(u) && !u.startsWith("/")) return false;
-  if(/google\.com\/s2\/favicons|favicon|apple-touch-icon|\.ico(\?|#|$)|sprite|spacer|blank|transparent|1x1|pixel|tracking|captcha|placeholder|noimage|no-image|no_img|default_logo|site_logo|profile_default/i.test(lowUrl)) return false;
-  if(/(^|[\/_\-.])(logo|logotype|brand|symbol|emblem|ci|bi|banner|placard|adserver|advertisement|promo)([\/_\-.]|$)/i.test(lowUrl)) return false;
-  if(/staticmap|maps\.googleapis|map\.naver\.com|tile\.openstreetmap|\/maps?\/|map_tile/i.test(lowUrl)) return false;
-  return /\.(png|jpe?g|webp|gif|avif)(\?|#|$)/i.test(lowUrl) || /ytimg\.com|img\.youtube\.com|search\.pstatic\.net|kakaocdn|cloudfront|twimg|fbcdn|instagram|googleusercontent|gstatic/i.test(lowUrl);
-}
-function sanmaruRealMediaSet(item){
-  return sanmaruMediaCandidates(item).filter(sanmaruIsContentImageUrl).slice(0, 6);
-}
-function sanmaruIsRouteOpeningCard(item){
-  item = item || {};
-  const text = normalizeText([item.title, item.summary, item.source, item.provider, item.id, item.url].filter(Boolean).join(" "));
-  return !!(
-    item.sanmaruRouteCard || item.sanmaruOpeningCard || item.providerRouteCard || item.providerHint ||
-    /sanmaru\s+(route|opening)|route\s*card|opening\s*card|provider\s*route|검색\s*경로|정보원\s*경로|열린\s*정보\s*통로/.test(text)
-  );
-}
-function sanmaruSourceTrust(item){
-  item = item || {};
-  const url = firstNonEmpty(item.url, item.link, item.href);
-  const host = domainOf(url).toLowerCase();
-  const source = low(firstNonEmpty(item.source, item.provider, host));
-  let trust = 0.46;
-  if(/\.go\.kr$|\.gov$|\.gov\.|gov\.uk|go\.jp|gov\.cn|korea\.kr|data\.go\.kr|usa\.gov/.test(host)) trust = 0.95;
-  else if(/wikipedia\.org|wikidata\.org|britannica\.com|namu\.wiki/.test(host)) trust = 0.84;
-  else if(/naver|google|bing|youtube|news|official|public|government/.test(source + " " + host)) trust = 0.74;
-  else if(url && url !== "#") trust = 0.60;
-  if(sanmaruIsRouteOpeningCard(item)) trust = Math.min(trust, 0.22);
-  return Math.max(0, Math.min(1, trust));
-}
-function sanmaruSupplyLanes(item){
-  item = item || {};
-  const text = normalizeText([item.page, item.section, item.psom_key, item.category, item.type, item.searchCategory, item.displayGroup, item.source, item.provider, item.route].filter(Boolean).join(" "));
-  const lanes = new Set(["search"]);
-  if(/home|front|slot|network|distribution|social|media|tour|literature|academic|donation|commerce|product|content/.test(text)) lanes.add("front");
-  if(/shopping|commerce|product|market|상품|쇼핑/.test(text)) lanes.add("commerce"), lanes.add("front");
-  if(/image|photo|video|youtube|media|영상|이미지|사진/.test(text)) lanes.add("media"), lanes.add("front");
-  if(/map|local|tour|travel|region|address|지도|지역|관광|여행/.test(text)) lanes.add("region"), lanes.add("front");
-  if(/insight|analysis|global insight|인사이트|분석/.test(text)) lanes.add("insight");
-  return Array.from(lanes);
-}
-function sanmaruRealItemQuality(item){
-  item = item || {};
-  if(isPlaceholderItem(item) || sanmaruIsRouteOpeningCard(item)) return 0;
-  const title = firstNonEmpty(item.title, item.name, item.label);
-  const url = firstNonEmpty(item.url, item.link, item.href);
-  const body = sanmaruItemBody(item);
-  const media = sanmaruRealMediaSet(item);
-  let score = 0;
-  if(title && title.length >= 2) score += 14;
-  if(url && url !== "#") score += 16;
-  if(body.length >= 24) score += 28;
-  else if(body.length >= 10) score += 14;
-  if(media.length) score += 18;
-  if(media.length >= 2) score += 6;
-  score += Math.round(sanmaruSourceTrust(item) * 18);
-  const lanes = sanmaruSupplyLanes(item);
-  if(lanes.includes("front")) score += 8;
-  if(lanes.includes("media") || lanes.includes("commerce") || lanes.includes("region")) score += 5;
-  return Math.max(0, Math.min(120, score));
-}
-function sanmaruDecorateRealSupplyItem(item){
-  item = canonicalItem(item || {}, "", item && item.source);
-  const media = sanmaruRealMediaSet(item);
-  const score = sanmaruRealItemQuality(item);
-  const lanes = sanmaruSupplyLanes(item);
-  return Object.assign({}, item, {
-    realItem: score >= SANMARU_REAL_ITEM_MIN_SCORE,
-    supplyReady: score >= SANMARU_REAL_ITEM_MIN_SCORE,
-    supplyQualityScore: score,
-    supplyTrustScore: sanmaruSourceTrust(item),
-    supplyLanes: lanes,
-    frontSupplyEligible: lanes.includes("front") && score >= SANMARU_REAL_ITEM_MIN_SCORE,
-    searchSupplyEligible: lanes.includes("search") && score >= SANMARU_REAL_ITEM_MIN_SCORE,
-    mediaSupplyEligible: lanes.includes("media") && score >= SANMARU_REAL_ITEM_MIN_SCORE,
-    commerceSupplyEligible: lanes.includes("commerce") && score >= SANMARU_REAL_ITEM_MIN_SCORE,
-    regionSupplyEligible: lanes.includes("region") && score >= SANMARU_REAL_ITEM_MIN_SCORE,
-    hasRealSummary: sanmaruItemBody(item).length >= 10,
-    hasRealMedia: media.length > 0,
-    imageSet: media.length ? media : item.imageSet,
-    thumbnail: firstNonEmpty(item.thumbnail, item.thumb, media[0]),
-    image: firstNonEmpty(item.image, media[0]),
-    supplyPolicy:"sanmaru-real-item-first-trust-ranked"
-  });
-}
-function sanmaruRealItemsOnly(items){
-  return dedupeItems((Array.isArray(items) ? items : []).map(sanmaruDecorateRealSupplyItem))
-    .filter(x => x && x.realItem && !x.sanmaruRouteCard && !x.sanmaruOpeningCard && !x.providerRouteCard && !x.providerHint)
-    .sort((a,b) =>
-      (Number(b.supplyQualityScore || 0) - Number(a.supplyQualityScore || 0)) ||
-      (Number(b.supplyTrustScore || 0) - Number(a.supplyTrustScore || 0)) ||
-      (Number(b.score || 0) - Number(a.score || 0))
-    );
-}
-function sanmaruBuildSupplyPools(items, reason){
-  const real = sanmaruRealItemsOnly(items).slice(0, SANMARU_SUPPLY_CAPACITY_TARGET);
-  const byLane = lane => real.filter(x => Array.isArray(x.supplyLanes) && x.supplyLanes.includes(lane));
-  const pools = {
-    builtAt:nowIso(),
-    reason:reason || "resident-supply",
-    allReal:real,
-    front:byLane("front").slice(0, Math.max(SANMARU_FRONT_RESERVOIR_TARGET, 6000)),
-    search:byLane("search").slice(0, SANMARU_SUPPLY_CAPACITY_TARGET),
-    media:byLane("media").slice(0, 5000),
-    commerce:byLane("commerce").slice(0, 5000),
-    region:byLane("region").slice(0, 5000),
-    insight:byLane("insight").slice(0, 3000),
-    policy:{
-      frontSupplyTarget:SANMARU_FRONT_RESERVOIR_TARGET,
-      supplyCapacityTarget:SANMARU_SUPPLY_CAPACITY_TARGET,
-      ranking:"real-content-summary-media-source-trust"
-    }
-  };
-  const resident = ensureResidentState();
-  resident.supplyPools = pools;
-  resident.supplyPoolsBuiltAt = nowMs();
-  resident.supplyPoolsReason = reason || "resident-supply";
-  return pools;
-}
-function rebuildSupplyPools(reason){
-  const resident = ensureResidentState();
-  const items = Array.isArray(resident.items) ? resident.items : [];
-  return sanmaruBuildSupplyPools(items, reason || "manual-rebuild");
-}
-function supplyPoolSnapshot(){
-  const resident = ensureResidentState();
-  const pools = resident.supplyPools || rebuildSupplyPools("snapshot");
-  return {
-    status:"ok",
-    engine:ENGINE_NAME,
-    version:VERSION,
-    builtAt:pools.builtAt,
-    reason:pools.reason,
-    frontSupplyTarget:SANMARU_FRONT_RESERVOIR_TARGET,
-    supplyCapacityTarget:SANMARU_SUPPLY_CAPACITY_TARGET,
-    counts:{
-      allReal:pools.allReal ? pools.allReal.length : 0,
-      front:pools.front ? pools.front.length : 0,
-      search:pools.search ? pools.search.length : 0,
-      media:pools.media ? pools.media.length : 0,
-      commerce:pools.commerce ? pools.commerce.length : 0,
-      region:pools.region ? pools.region.length : 0,
-      insight:pools.insight ? pools.insight.length : 0
-    },
-    policy:pools.policy
-  };
-}
-function querySearchBankIndexSupply(q, opts){
-  opts = opts || {};
-  try{
-    let IndexEngine = null;
-    try { IndexEngine = require("./search-bank-index-engine"); } catch(e) { IndexEngine = null; }
-    if(!IndexEngine || typeof IndexEngine.query !== "function") return { items:[], meta:{ status:"unavailable" } };
-    const res = IndexEngine.query({
-      q, query:q,
-      type: normalizeSearchType(opts.searchType || opts.type || "all"),
-      limit: clampInt(opts.limit || opts.candidatePoolTarget, opts.frontSupply ? SANMARU_FRONT_RESERVOIR_TARGET : MAX_INDEX_FAST_LIMIT, 1, opts.frontSupply ? Math.max(SANMARU_FRONT_RESERVOIR_TARGET, MAX_INDEX_FAST_LIMIT) : MAX_INDEX_FAST_LIMIT),
-      supplyMode: opts.frontSupply ? "front-supply" : "search-supply",
-      realOnly:true,
-      realSupply:true,
-      frontSupply: opts.frontSupply ? "1" : undefined,
-      page:opts.page,
-      perPage:opts.perPage
-    });
-    return { items: normalizeItemsFromResponse(res).map(x => canonicalItem(x, q, "search-bank-index")), meta:{ status:"ok", count:normalizeItemsFromResponse(res).length, engine:res && res.engine, supplyMode:res && res.supplyMode, latency:res && res.meta && res.meta.latency } };
-  }catch(e){
-    return { items:[], meta:{ status:responseErrorCode(e) } };
-  }
-}
-
 function supplyResidentSync(input, opts){
   opts = opts || {};
   const q = typeof input === "string" ? input : firstNonEmpty(input && input.q, input && input.query, opts.q, opts.query);
   const clean = sanitizeQuery(q);
   const activation = touchResidentSwitch({ reason:opts.reason || opts.from || "resident-supply", q:clean.value || q, warmMs:opts.warmMs });
-  if(!clean.ok) return { status:"ok", engine:ENGINE_NAME, version:VERSION, query:clean.value, items:[], results:[], meta:{ count:0, reason:clean.code, resident:residentBootSnapshot(), residentSwitch:activation } };
+  if(!clean.ok) return { status:"ok", engine:ENGINE_NAME, version:VERSION, query:clean.value, items:[], results:[], providerHints:[], meta:{ count:0, reason:clean.code, resident:residentBootSnapshot(), residentSwitch:activation } };
 
   const routePlan = residentRoutePlanFor(clean.value, opts);
   const searchTypeForCache = normalizeSearchType(opts.searchType || opts.type || "all");
@@ -1449,57 +1239,56 @@ function supplyResidentSync(input, opts){
   const exactCacheEntry = residentStateForCache.queryMap && (residentStateForCache.queryMap.get(exactCacheKey) || residentStateForCache.queryMap.get(noPageCacheKey));
   const queryCacheHit = !!(exactCacheEntry && Array.isArray(exactCacheEntry.items) && exactCacheEntry.items.length);
   const queryCacheCount = queryCacheHit ? exactCacheEntry.items.length : 0;
-  const residentItems = residentCandidatesSync(clean.value, opts).map(x => canonicalItem(x, clean.value, x && x.source));
   const minVisible = clampInt(firstNonEmpty(opts.visibleNeed, opts.perPage, opts.visibleCardsPerPage), DEFAULT_VISIBLE_PER_PAGE, 1, 100);
+
+  let residentItems = residentCandidatesSync(clean.value, opts).map(x => enrichRealSupplyItem(x, clean.value, x && x.source));
   let indexItems = [];
   let indexMeta = { status:"not-called" };
   try{
     let IndexEngine = null;
     try { IndexEngine = require("./search-bank-index-engine"); } catch(e) { IndexEngine = null; }
     if(IndexEngine && typeof IndexEngine.query === "function"){
+      const frontSupplyMode = truthy(opts.frontSupply || opts.slotSupply || opts.snapshotSupply || opts.contentSupply);
       const indexRes = IndexEngine.query({
         q: clean.value,
         query: clean.value,
         type: normalizeSearchType(opts.searchType || opts.type || "all"),
         limit: Math.max(minVisible, Math.min(MAX_INDEX_FAST_LIMIT, clampInt(opts.limit || opts.candidatePoolTarget, DEFAULT_LIMIT, 1, MAX_LIMIT))),
-        supplyMode: opts.frontSupply ? "front-supply" : "search-supply",
-        realOnly:true,
-        realSupply:true,
-        frontSupply: opts.frontSupply ? "1" : undefined
+        from: "sanmaru",
+        publicSearch: frontSupplyMode ? "0" : "1",
+        searchSupply: frontSupplyMode ? "0" : "1",
+        excludeFrontSupply: frontSupplyMode ? "0" : "1",
+        frontSupply: frontSupplyMode ? "1" : "0"
       });
-      indexItems = normalizeItemsFromResponse(indexRes).map(x => canonicalItem(x, clean.value, "search-bank-index"));
-      indexMeta = { status: indexItems.length ? "ok" : "empty", count:indexItems.length, engine:indexRes && indexRes.engine, supplyMode:indexRes && indexRes.supplyMode, latency:indexRes && indexRes.meta && indexRes.meta.latency };
+      indexItems = normalizeItemsFromResponse(indexRes).map(x => enrichRealSupplyItem(x, clean.value, "search-bank-index"));
+      indexMeta = { status: indexItems.length ? "ok" : "empty", count:indexItems.length, engine:indexRes && indexRes.engine, latency:indexRes && indexRes.meta && indexRes.meta.latency };
     }else{
       indexMeta = { status:"unavailable" };
     }
   }catch(e){
     indexMeta = { status:responseErrorCode(e) };
   }
-  const residentState = ensureResidentState();
+
   let routeFallbackCards = [];
   let openingFallbackCards = [];
-  let items = dedupeItems(residentItems.concat(indexItems));
-
-  // Sanmaru should always know and expose the major information roads
-  // (Google/Naver/SNS/video/wiki/public-data routes). These cards are low-priority
-  // route/opening signals, not replacements for real provider results. They keep
-  // category trees visible and prevent empty-looking searches while the broad
-  // resident cache is warming.
   if(opts.allowRouteCards !== false && opts.noRouteCards !== true){
     routeFallbackCards = buildRouteFallbackCards(clean.value, routePlan, Object.assign({}, opts, { routeCardLimit: clampInt(opts.routeCardLimit, 28, 1, 60) }));
   }
   if(opts.allowOpeningCards !== false && opts.noOpeningCards !== true){
     openingFallbackCards = buildOpeningFallbackCards(clean.value, Object.assign({}, opts, { openingCardLimit: clampInt(opts.openingCardLimit, 24, 1, 40) }));
   }
-  const providerHints = dedupeItems(routeFallbackCards.concat(openingFallbackCards));
-  items = sanmaruRealItemsOnly(items);
-  const allForPools = dedupeItems((residentState.items || []).concat(items));
-  const currentPools = sanmaruBuildSupplyPools(allForPools, opts.reason || "resident-supply");
-  if(opts.frontSupply && currentPools.front && currentPools.front.length){
-    items = dedupeItems(items.concat(currentPools.front)).slice(0, Math.max(SANMARU_FRONT_RESERVOIR_TARGET, items.length));
+
+  const split = splitRealAndHintItems(dedupeItems(residentItems.concat(indexItems)), clean.value, Object.assign({}, opts, { searchType:searchTypeForCache }));
+  let fullCandidateItems = split.real.filter(it => realItemMatchesQuery(it, clean.value));
+  const providerHints = dedupeItems([].concat(split.hints, routeFallbackCards, openingFallbackCards));
+
+  // Backward-compatible escape hatch: only explicit debugging/API calls can ask
+  // to place route/opening road cards into normal results. Normal search/front
+  // supply must return real content items only.
+  if(truthy(opts.includeRouteCardsInResults || opts.routeCardsAsItems || opts.openingCardsAsItems)){
+    fullCandidateItems = dedupeItems(fullCandidateItems.concat(providerHints));
   }
 
-  const fullCandidateItems = items.slice(0, SANMARU_SUPPLY_CAPACITY_TARGET);
   const requestedPage = clampInt(firstNonEmpty(opts.page, opts.p, opts.visiblePage, opts.sectionPage), 1, 1, 100000);
   const perPage = clampInt(firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit), DEFAULT_VISIBLE_PER_PAGE, 1, 100);
   const firstResponseWindow = Math.max(perPage, Math.min(
@@ -1513,17 +1302,19 @@ function supplyResidentSync(input, opts){
   const responseItems = requestedPage <= 1
     ? fullCandidateItems.slice(0, Math.min(fullCandidateItems.length, firstResponseWindow))
     : fullCandidateItems.slice(offset, offset + perPage);
-  items = responseItems.length ? responseItems : fullCandidateItems.slice(0, Math.min(fullCandidateItems.length, minVisible));
+  const items = responseItems.length ? responseItems : fullCandidateItems.slice(0, Math.min(fullCandidateItems.length, minVisible));
   const totalCandidates = fullCandidateItems.length;
   const totalPages = totalCandidates ? Math.min(SANMARU_MAX_PAGER_PAGES, Math.max(1, Math.ceil(totalCandidates / perPage))) : 0;
   const cacheKey = queryCacheHit ? (exactCacheKey || noPageCacheKey) : (rememberResidentQueryCache(clean.value, opts, fullCandidateItems) || residentCacheKey(clean.value, opts));
+
+  ensureSupplyPools("resident-supply");
 
   return {
     status:"ok",
     engine:ENGINE_NAME,
     version:VERSION,
     query:clean.value,
-    source:items.length ? "sanmaru-resident" : null,
+    source:items.length ? "sanmaru-real-resident-supply" : null,
     items,
     results:items,
     providerHints,
@@ -1539,21 +1330,12 @@ function supplyResidentSync(input, opts){
       pagedCandidatePool:true,
       maxPagerPages:SANMARU_MAX_PAGER_PAGES,
       realResidentCount:residentItems.length,
+      realSupplyCount:fullCandidateItems.length,
+      providerHintCount:providerHints.length,
       searchBankIndex:indexMeta,
-      realItemCount:fullCandidateItems.length,
-      frontSupplyTarget:SANMARU_FRONT_RESERVOIR_TARGET,
-      supplyCapacityTarget:SANMARU_SUPPLY_CAPACITY_TARGET,
-      supplyPoolCounts:{
-        allReal:currentPools.allReal ? currentPools.allReal.length : 0,
-        front:currentPools.front ? currentPools.front.length : 0,
-        search:currentPools.search ? currentPools.search.length : 0,
-        media:currentPools.media ? currentPools.media.length : 0,
-        commerce:currentPools.commerce ? currentPools.commerce.length : 0,
-        region:currentPools.region ? currentPools.region.length : 0
-      },
-      routeFallbackCount:0,
-      openingFallbackCount:0,
-      providerHintsCount:providerHints.length,
+      routeFallbackCount:routeFallbackCards.length,
+      openingFallbackCount:openingFallbackCards.length,
+      routeFallbackAsResults:false,
       queryCacheHit,
       cachedQueryHit:queryCacheHit,
       fromQueryCache:queryCacheHit,
@@ -1562,27 +1344,29 @@ function supplyResidentSync(input, opts){
       resident:residentBootSnapshot(),
       residentSwitch:activation,
       routePlan,
+      supplyPools:supplyPoolSnapshot(),
       providerHealth:providerHealthSnapshot(),
       sourceRegistryReady:true,
       categoryBrainReady:true,
       providerCapabilityReady:true,
-      mode:"resident-switch-supply-sync",
+      mode:"resident-switch-real-content-supply-sync",
       visibleCardsPerPage:perPage,
       lifecyclePolicy:"engine-code-upload-only-reboot-hot-data-refresh-otherwise",
       doesNotCallExternal:true,
       supplyContract:{
         owner:"sanmaru-global-web-information-cpu",
         maruRole:"mounted-gateway-ui-body",
-        itemResults:"real-resident-index-cache-candidate-pool",
+        itemResults:"real-resident-index-content-only",
+        providerHints:"route-opening-provider-roads-separated-from-results",
         viewport:"page-sized-current-render-window",
         perPage,
         noProviderRescanWhenBroadQueryCacheCovered:true,
         noProviderRescanWhenViewportCovered:false,
-        expansion:"provider-hints-separated-from-real-items"
+        expansion:"opening-signal-and-mounted-route-map"
       },
       logosGuard: logosEvaluate(logosSignalsForQuery(clean.value, { queryRisk:null }), "resident-supply"),
       openingSignals: openingSignalsSnapshot(),
-      note:"Sanmaru owns routing/provider-health/category/index/cache as the top information CPU. Maru Search is the mounted gateway/body. Provider re-scan is skipped only when Sanmaru already has a broad query cache; thin route/index cards never suppress Google/Naver/SNS/category expansion."
+      note:"Sanmaru now returns real resident/searchbank content as result items. Route/opening roads are separated as providerHints so UI cards are not filled with fake 안내문."
     }
   };
 }
@@ -2037,7 +1821,7 @@ function isPlaceholderItem(it){
   const text = low(itemText(it));
   const url = low(firstNonEmpty(it && it.url, it && it.link));
   if(!text && !url) return true;
-  if(/seed placeholder|movie slot|mediamovie0|dummy item|sample item|test item|lorem ipsum/.test(text)) return true;
+  if(/seed placeholder|movie slot|\b[a-z0-9가-힣 ]{0,40}slot\s*\d+\b|슬롯\s*\d+|mediamovie0|dummy item|sample item|test item|lorem ipsum|\b(network|media|shop|shopping|social|tour|distribution|donation) item \d+\b/.test(text)) return true;
   // Search Bank / Snapshot slot data often uses url:"#" while still carrying
   // real front-page content. Do not drop those slots just because the URL is a
   // placeholder. Only reject placeholder URLs when there is no real slot content.
@@ -2045,14 +1829,254 @@ function isPlaceholderItem(it){
   return false;
 }
 
+
+function objectField(obj, key){
+  return obj && typeof obj === "object" ? obj[key] : undefined;
+}
+
+function collectImageCandidatesFromItem(it){
+  it = (it && typeof it === "object") ? it : {};
+  const p = (it.payload && typeof it.payload === "object") ? it.payload : {};
+  const d = (it.data && typeof it.data === "object") ? it.data : {};
+  const media = (it.media && typeof it.media === "object") ? it.media : {};
+  const preview = (media.preview && typeof media.preview === "object") ? media.preview : {};
+  const display = (it.displayCard && typeof it.displayCard === "object") ? it.displayCard : {};
+  return []
+    .concat(it.thumbnail, it.thumb, it.image, it.imageUrl, it.image_url, it.og_image, it.ogImage)
+    .concat(it.originalImage, it.fullImage, it.imageOriginal, it.viewerImage, it.openImageUrl, it.contentUrl, it.cardImage, it.mainImage, it.heroImage)
+    .concat(display.thumbnail, display.image)
+    .concat(p.thumbnail, p.thumb, p.image, p.imageUrl, p.image_url, p.og_image, p.ogImage)
+    .concat(p.originalImage, p.fullImage, p.imageOriginal, p.viewerImage, p.openImageUrl, p.contentUrl, p.cardImage, p.mainImage, p.heroImage)
+    .concat(d.thumbnail, d.thumb, d.image, d.imageUrl, d.image_url, d.og_image, d.ogImage)
+    .concat(d.originalImage, d.fullImage, d.imageOriginal, d.viewerImage, d.openImageUrl, d.contentUrl, d.cardImage, d.mainImage, d.heroImage)
+    .concat(preview.thumbnail, preview.image, preview.poster, preview.original, preview.url)
+    .concat(Array.isArray(it.imageSet) ? it.imageSet : [])
+    .concat(Array.isArray(it.images) ? it.images : [])
+    .concat(Array.isArray(display.imageSet) ? display.imageSet : [])
+    .concat(Array.isArray(p.imageSet) ? p.imageSet : [])
+    .concat(Array.isArray(p.images) ? p.images : [])
+    .concat(Array.isArray(d.imageSet) ? d.imageSet : [])
+    .concat(Array.isArray(d.images) ? d.images : []);
+}
+
+function isSearchPageUrlOnly(v){
+  const x = low(v);
+  return /google\.com\/search|search\.naver\.com\/search|youtube\.com\/results|duckduckgo\.com\/\?q=|search\.yahoo\.com\/search|baidu\.com\/s\?|yandex\.com\/search/.test(x);
+}
+
+function isContentImageUrl(v){
+  const x = s(v).trim();
+  if(!/^https?:\/\//i.test(x) && !x.startsWith('/')) return false;
+  const lx = x.toLowerCase();
+  if(isSearchPageUrlOnly(lx)) return false;
+  if(/google\.com\/s2\/favicons|favicon|apple-touch-icon|\.ico(\?|#|$)|sprite|spacer|blank\.(gif|png)|transparent|1x1|pixel|tracking|analytics|captcha|qr|noimage|no-image|placeholder|default-image|default_img/.test(lx)) return false;
+  if(/logo|logotype|brandmark|symbol|emblem|\/ci[\/_-]|\/bi[\/_-]|banner|placard|현수막|배너|광고|adserver|doubleclick|advertisement|promo-banner|popup/.test(lx)) return false;
+  if(/staticmap|maps\.googleapis|google\.com\/maps|map\.naver\.com|naver_map|\/maps\/|\/map\/|map_tile|tile\.openstreetmap/.test(lx)) return false;
+  return /\.(png|jpe?g|webp|gif|avif)(\?|#|$)/i.test(lx) || /ytimg\.com|img\.youtube\.com|search\.pstatic\.net|kakaocdn|cloudfront|twimg|fbcdn|instagram|googleusercontent|gstatic|wikimedia|media-amazon|ssl\.pstatic\.net/i.test(lx);
+}
+
+function compactContentImages(arr){
+  const out = [];
+  const seen = new Set();
+  for(const v of Array.isArray(arr) ? arr : []){
+    const x = s(v).trim();
+    if(!x || !isContentImageUrl(x)) continue;
+    let key = x.split('#')[0].toLowerCase();
+    try{ const u = new URL(x, 'https://sanmaru.local'); key = (u.origin + u.pathname).toLowerCase(); }catch(e){}
+    if(seen.has(key)) continue;
+    seen.add(key);
+    out.push(x);
+    if(out.length >= 6) break;
+  }
+  return out;
+}
+
+function collectTextCandidatesFromItem(it){
+  it = (it && typeof it === "object") ? it : {};
+  const p = (it.payload && typeof it.payload === "object") ? it.payload : {};
+  const d = (it.data && typeof it.data === "object") ? it.data : {};
+  const display = (it.displayCard && typeof it.displayCard === "object") ? it.displayCard : {};
+  return [
+    it.displaySummary, display.summary, display.body, display.description, display.snippet,
+    it.summary, it.snippet, it.description, it.contentSnippet, it.excerpt, it.abstract, it.text, it.content, it.metaDescription, it.ogDescription,
+    p.summary, p.snippet, p.description, p.contentSnippet, p.excerpt, p.abstract, p.text, p.content, p.metaDescription, p.ogDescription,
+    d.summary, d.snippet, d.description, d.contentSnippet, d.excerpt, d.abstract, d.text, d.content, d.metaDescription, d.ogDescription
+  ];
+}
+
+function naturalItemSummary(it){
+  for(const v of collectTextCandidatesFromItem(it)){
+    const clean = compactSpaces(stripHtml(v));
+    if(clean && clean.length >= 12 && !/산마루.*정보원 경로|열린 정보 통로|공개 정보를 기준|관련 .* 검색 결과입니다/.test(clean)) return clean.slice(0, 700);
+  }
+  return "";
+}
+
+function isRouteOrOpeningItem(it){
+  const source = low(firstNonEmpty(it && it.source, it && it.provider, it && it.sourceType, it && it.generatedBy));
+  const title = low(it && it.title);
+  return !!(it && (it.sanmaruRouteCard || it.sanmaruOpeningCard || it.passthrough || it.sourceType === "provider-page-window" || it.generatedBy === "sanmaru-provider-passthrough-paged-window" || source.includes("sanmaru_route") || source.includes("sanmaru_opening") || source.includes("provider-page-window") || source.includes("passthrough") || title.startsWith("[sanmaru route]") || title.startsWith("[sanmaru opening]")));
+}
+
+function hasRealBody(it){
+  const body = naturalItemSummary(it);
+  return body.length >= 12;
+}
+
+function hasRealMedia(it){
+  if(compactContentImages(collectImageCandidatesFromItem(it)).length) return true;
+  const url = low(firstNonEmpty(it && it.url, it && it.link, it && it.videoUrl, it && it.watchUrl, it && it.embedUrl));
+  return /youtube\.com\/watch|youtu\.be\/|vimeo\.com|instagram\.com|tiktok\.com/.test(url);
+}
+
+function isFrontSupplyOnlyItem(it){
+  it = it && typeof it === "object" ? it : {};
+  const lp = it.layerPointer && typeof it.layerPointer === "object" ? it.layerPointer : {};
+  const layerRole = low(firstNonEmpty(lp.layerRole, it.layerRole));
+  const page = firstNonEmpty(lp.page, it.page, it.route, it.path, it.bind && (it.bind.page || it.bind.route));
+  const section = firstNonEmpty(lp.section, it.section, it.psom_key, it.category, it.bind && (it.bind.section || it.bind.key));
+  const slot = firstNonEmpty(lp.slotKey, it.slotKey, it.slot, it.bind && (it.bind.slotKey || it.bind.slot));
+  const sourceText = low([
+    it.source, it.provider, it.engine, it._sourceHint, it.indexSource, it.sourceFile,
+    lp.source, it.generatedBy, it.storageSource, it.id
+  ].filter(Boolean).join(" "));
+  const frontRouteText = low([page, section, slot, it.psom_key, it.slotKey].filter(Boolean).join(" "));
+  if(layerRole === "front-supply-layer") return true;
+  if(/search-bank\.snapshot|snapshot-object|snapshot-array|front-data-ingested|front-supply|slot-supply|automap/.test(sourceText) && (page || section || slot)) return true;
+  if(/search-bank|snapshot|front|slot/.test(sourceText) && /home|network|distribution|social|media|tour|literature|academic|donation|front|slot/.test(frontRouteText)) return true;
+  return false;
+}
+
+function isRealSupplyItem(it, opts){
+  opts = opts || {};
+  if(!it || typeof it !== "object") return false;
+  if(isRouteOrOpeningItem(it)) return false;
+  if(!opts.frontSupply && isFrontSupplyOnlyItem(it)) return false;
+  if(isPlaceholderItem(it) && !hasRealSlotContent(it)) return false;
+  const title = firstNonEmpty(it.title, it.name, it.label, it.heading);
+  if(!title) return false;
+  if(hasRealBody(it) || hasRealMedia(it)) return true;
+  // Front slots can be real even when the final URL is not ready yet.
+  if(opts.frontSupply && hasRealSlotContent(it) && firstNonEmpty(it.page, it.section, it.route, it.psom_key, it.bind && it.bind.page, it.bind && it.bind.section)) return true;
+  const url = firstNonEmpty(it.url, it.link, it.href);
+  return !!(url && !isPlaceholderUrlValue(url) && !isSearchPageUrlOnly(url));
+}
+
+function enrichRealSupplyItem(raw, query, source){
+  const enrichedRaw = Object.assign({}, raw || {});
+  const naturalSummaryValue = naturalItemSummary(enrichedRaw);
+  if(naturalSummaryValue){
+    enrichedRaw.summary = firstNonEmpty(enrichedRaw.summary, enrichedRaw.snippet, enrichedRaw.description, naturalSummaryValue);
+    enrichedRaw.snippet = firstNonEmpty(enrichedRaw.snippet, enrichedRaw.summary, naturalSummaryValue);
+    enrichedRaw.description = firstNonEmpty(enrichedRaw.description, enrichedRaw.summary, naturalSummaryValue);
+    enrichedRaw.displaySummary = firstNonEmpty(enrichedRaw.displaySummary, naturalSummaryValue);
+  }
+  const images = compactContentImages(collectImageCandidatesFromItem(enrichedRaw));
+  if(images.length){
+    enrichedRaw.thumbnail = firstNonEmpty(enrichedRaw.thumbnail, enrichedRaw.thumb, enrichedRaw.image, images[0]);
+    enrichedRaw.thumb = firstNonEmpty(enrichedRaw.thumb, enrichedRaw.thumbnail, images[0]);
+    enrichedRaw.image = firstNonEmpty(enrichedRaw.image, images[0]);
+    enrichedRaw.imageSet = images;
+  }
+  const item = canonicalItem(enrichedRaw, query, source || enrichedRaw.source || enrichedRaw.provider || "sanmaru-real");
+  return Object.assign({}, item, {
+    displaySummary: firstNonEmpty(item.displaySummary, naturalSummaryValue, item.summary, item.snippet, item.description),
+    realSupplyItem: true,
+    routeOnly: false,
+    sanmaruSupplyQuality: sanmaruRealQualityScore(item)
+  });
+}
+
+function sanmaruRealQualityScore(it){
+  let score = 0;
+  if(hasRealBody(it)) score += 20;
+  if(hasRealMedia(it)) score += 14;
+  if(firstNonEmpty(it && it.url, it && it.link) && !isPlaceholderUrlValue(firstNonEmpty(it && it.url, it && it.link))) score += 6;
+  if(firstNonEmpty(it && it.page, it && it.section, it && it.route, it && it.psom_key)) score += 5;
+  if(firstNonEmpty(it && it.source, it && it.provider)) score += 3;
+  if((it && it.searchCategory) === "official") score += 3;
+  return score;
+}
+
+
+function realItemMatchesQuery(it, q){
+  const query = normalizeText(q);
+  if(!query) return true;
+  const joined = query.replace(/\s+/g, "");
+  const text = normalizeText(itemText(it) + " " + firstNonEmpty(it && it.displaySummary, it && it.section, it && it.page, it && it.route, it && it.psom_key));
+  const compact = text.replace(/\s+/g, "");
+  if(text.includes(query) || (joined && compact.includes(joined))) return true;
+  const tokens = tokenize(q).filter(t => t.length >= 2);
+  if(!tokens.length) return true;
+  return tokens.some(t => text.includes(t) || compact.includes(t.replace(/\s+/g, "")));
+}
+
+function splitRealAndHintItems(items, query, opts){
+  opts = opts || {};
+  const real = [];
+  const hints = [];
+  for(const raw of Array.isArray(items) ? items : []){
+    if(isRouteOrOpeningItem(raw)) { hints.push(raw); continue; }
+    if(!opts.frontSupply && isFrontSupplyOnlyItem(raw)) { hints.push(Object.assign({}, raw, { sanmaruHiddenFromPublicSearch:true })); continue; }
+    if(isRealSupplyItem(raw, opts)) real.push(enrichRealSupplyItem(raw, query, raw && raw.source));
+    else hints.push(raw);
+  }
+  const rankedReal = finalRank(query, dedupeItems(real), { q:query, searchType:opts.searchType || opts.type || "all", intents:classifyQueryCategories(query, opts.searchType || opts.type || "all") })
+    .map(it => Object.assign({}, it, { sanmaruSupplyQuality: sanmaruRealQualityScore(it) }))
+    .sort((a,b) => (b.sanmaruSupplyQuality || 0) - (a.sanmaruSupplyQuality || 0) || (b.sanmaruScore || 0) - (a.sanmaruScore || 0));
+  return { real:dedupeItems(rankedReal), hints:dedupeItems(hints) };
+}
+
+function rebuildSupplyPools(reason){
+  const resident = ensureResidentState();
+  if(!resident.ready) ensureResidentBoot({ reason:reason || "supply-pool-build" });
+  const base = Array.isArray(resident.items) ? resident.items : [];
+  const realSearch = splitRealAndHintItems(base, "", { frontSupply:false, searchType:"all" }).real;
+  const realFront = splitRealAndHintItems(base, "", { frontSupply:true, searchType:"all" }).real;
+  const media = realSearch.filter(it => hasRealMedia(it) || ["image","video"].includes(categoryOfItem(it)));
+  const commerce = realSearch.filter(it => ["shopping","book","webtoon"].includes(categoryOfItem(it)) || /product|shopping|commerce|shop|상품|쇼핑|가격/.test(low(itemText(it))));
+  const front = realFront.filter(it => hasRealSlotContent(it) || firstNonEmpty(it.page, it.section, it.route, it.psom_key, it.bind && it.bind.page, it.bind && it.bind.section));
+  resident.supplyPools = {
+    search: realSearch.slice(0, MAX_LIMIT),
+    front: (front.length ? front : realFront).slice(0, 6000),
+    media: media.slice(0, 4000),
+    commerce: commerce.slice(0, 4000),
+    builtAt: nowMs(),
+    reason: reason || "supply-pool-build"
+  };
+  resident.supplyPoolsBuiltAt = nowMs();
+  resident.supplyPoolsReason = reason || "supply-pool-build";
+  return resident.supplyPools;
+}
+
+function ensureSupplyPools(reason){
+  const resident = ensureResidentState();
+  if(!resident.supplyPools || !resident.supplyPoolsBuiltAt || nowMs() - resident.supplyPoolsBuiltAt > CACHE_TTL_MS){
+    return rebuildSupplyPools(reason || "ensure-supply-pools");
+  }
+  return resident.supplyPools;
+}
+
+function supplyPoolSnapshot(){
+  const pools = ensureSupplyPools("supply-pool-snapshot");
+  return {
+    search:pools.search ? pools.search.length : 0,
+    front:pools.front ? pools.front.length : 0,
+    media:pools.media ? pools.media.length : 0,
+    commerce:pools.commerce ? pools.commerce.length : 0,
+    builtAt:pools.builtAt ? new Date(pools.builtAt).toISOString() : null,
+    reason:pools.reason || null,
+    policy:"public-search-excludes-front-slot-snapshot-items; front-supply-keeps-slot-items; route/opening/provider roads are providerHints"
+  };
+}
+
 function canonicalItem(raw, query, adapterName){
   const it = (raw && typeof raw === "object") ? raw : {};
   const source = firstNonEmpty(it.source, it.provider, it.sourceType, adapterName, "sanmaru");
   const url = firstNonEmpty(it.url, it.link, it.href);
   const title = compactSpaces(stripHtml(firstNonEmpty(it.title, it.name, url, "(no title)"))).slice(0, 260);
-  const summary = compactSpaces(stripHtml(firstNonEmpty(it.summary, it.snippet, it.description, it.content))).slice(0, 600);
-  const thumb = firstNonEmpty(it.thumbnail, it.thumb, it.image, it.imageUrl, it.cover);
-  const images = compactImages([thumb].concat(Array.isArray(it.imageSet) ? it.imageSet : [], Array.isArray(it.images) ? it.images : []));
+  const summary = compactSpaces(stripHtml(firstNonEmpty(it.displaySummary, naturalItemSummary(it), it.summary, it.snippet, it.description, it.content))).slice(0, 700);
+  const images = compactContentImages(collectImageCandidatesFromItem(it));
   const category = categoryOfItem(Object.assign({}, it, { source }));
   const text = [title, summary, url, source, itemText(it)].join(" ");
   const tokens = tokenize(text);
@@ -2247,6 +2271,10 @@ async function callSearchBankIndex(ctx){
       type: ctx.searchType === "all" ? "" : ctx.searchType,
       lang: ctx.lang,
       from: "sanmaru",
+      publicSearch: ctx.frontSupply ? "0" : "1",
+      searchSupply: ctx.frontSupply ? "0" : "1",
+      excludeFrontSupply: ctx.frontSupply ? "0" : "1",
+      frontSupply: ctx.frontSupply ? "1" : "0",
       noExternal: "1",
       skipSanmaru: "1"
     };
@@ -3173,9 +3201,12 @@ function buildSanmaruInstantOsPackage(q, opts){
 
   let items = Array.isArray(supplied && supplied.items) ? supplied.items.slice() : [];
   const providerPassthroughItems = sanmaruProviderPassthroughCards(q, Object.assign({}, opts, { country: effectiveCountry, searchType }));
-  // Provider passthrough cards are route hints only. They must not become
-  // content result cards or front/search supply items.
-  const instantProviderHints = dedupeItems((Array.isArray(supplied && supplied.providerHints) ? supplied.providerHints : []).concat(providerPassthroughItems));
+  const providerHints = dedupeItems([].concat(Array.isArray(supplied && supplied.providerHints) ? supplied.providerHints : [], providerPassthroughItems));
+  // Provider passthrough cards are roads/hints only. They must never replace real
+  // search result cards or front-slot data.
+  if(truthy(opts.includeProviderPassthroughItems || opts.providerHintsAsItems)){
+    items = providerPassthroughItems.concat(items);
+  }
   const ctx = {
     q,
     searchType,
@@ -3254,7 +3285,6 @@ function buildSanmaruInstantOsPackage(q, opts){
     source: responseItems.length ? "sanmaru-instant-os" : "sanmaru-instant-os-empty",
     items: responseItems,
     results: responseItems,
-    providerHints: instantProviderHints,
     pageItems,
     visiblePagePack,
     totalCandidates: reportedTotalCandidates,
@@ -3265,6 +3295,7 @@ function buildSanmaruInstantOsPackage(q, opts){
     routePlan,
     categoryLanePlan,
     searchSkeleton,
+    providerHints,
     providerLayer: {
       mode: "provider-lane-map-only-no-provider-wait",
       providerHealth: providerHealthSnapshot(),
@@ -3283,7 +3314,8 @@ function buildSanmaruInstantOsPackage(q, opts){
       responseWindowCount: responseItems.length,
       initialResponseWindow: responseItems.length,
       providerPassthroughCount: providerPassthroughItems.length,
-      providerHintsCount: instantProviderHints.length,
+      providerHintCount: providerHints.length,
+      realSupplyCount: items.length,
       elapsedMs: nowMs() - started,
       instantSupply: true,
       responseMode: "first-preload-supply-package",
@@ -3293,14 +3325,14 @@ function buildSanmaruInstantOsPackage(q, opts){
       searchExecutionOwner: "sanmaru-global-information-os",
       maruSearchRole: "gateway-body-and-render-channel",
       coreRole: "normalize-bus-only",
-      principle: "real-resident-cache-snapshot-authority-first; provider-routes-as-hints; live-provider-refresh-after-first-render",
+      principle: "resident-cache-snapshot-authority-route-first; live-provider-refresh-after-first-render",
       lanes: Array.isArray(categoryLanePlan && categoryLanePlan.lanes) ? categoryLanePlan.lanes : undefined,
       trace: [].concat((supplied && supplied.meta && supplied.meta.trace) || [], [{
         name: "sanmaru-instant-os-supply",
         status: responseItems.length ? "ok" : "empty",
         count: responseItems.length,
         providerPassthroughCount: providerPassthroughItems.length,
-        mode: "provider-passthrough-plus-resident-no-provider-wait",
+        mode: "real-resident-supply-plus-provider-hints-no-provider-wait",
         currentPageFirst: true,
         keepFullProviderSearchRunning: true
       }])
@@ -3311,61 +3343,55 @@ function buildSanmaruInstantOsPackage(q, opts){
 function buildSanmaruFrontSupplyPackage(q, opts){
   opts = opts || {};
   const started = nowMs();
-  const query = q || firstNonEmpty(opts.q, opts.query, opts.section, opts.page, "front");
-  const index = querySearchBankIndexSupply(query, Object.assign({}, opts, {
-    frontSupply:true,
-    supplyMode:"front-supply",
-    limit:firstNonEmpty(opts.limit, SANMARU_FRONT_RESERVOIR_TARGET)
-  }));
-  let items = sanmaruRealItemsOnly(index.items || []);
-  if(items.length < Math.min(500, SANMARU_FRONT_RESERVOIR_TARGET)){
-    const resident = ensureResidentState();
-    const residentItems = sanmaruRealItemsOnly(resident.items || []);
-    items = dedupeItems(items.concat(residentItems)).slice(0, SANMARU_FRONT_RESERVOIR_TARGET);
+  const target = clampInt(firstNonEmpty(opts.limit, opts.candidatePool, opts.candidatePoolTarget, opts.frontSupplyTarget), 5000, 1, 6000);
+  const pageKey = low(firstNonEmpty(opts.page, opts.targetPage, opts.hub, ""));
+  const sectionKey = low(firstNonEmpty(opts.section, opts.slot, opts.psom_key, opts.category, ""));
+  const country = firstNonEmpty(opts.country, opts.region, opts.geo, opts.runtimeRegion, "GLOBAL");
+  ensureResidentBoot({ reason: opts.reason || "front-slot-supply" });
+  const pools = ensureSupplyPools(opts.reason || "front-slot-supply");
+  let pool = Array.isArray(pools.front) && pools.front.length ? pools.front.slice() : (Array.isArray(pools.search) ? pools.search.slice() : []);
+  if(pageKey || sectionKey){
+    const filtered = pool.filter(it => {
+      const page = low(firstNonEmpty(it.page, it.route, it.path, it.bind && it.bind.page, it.bind && it.bind.route));
+      const sec = low(firstNonEmpty(it.section, it.psom_key, it.slot, it.slotKey, it.bind && it.bind.section, it.bind && it.bind.slot, it.category, it.searchCategory));
+      return (!pageKey || page.includes(pageKey) || pageKey.includes(page)) && (!sectionKey || sec.includes(sectionKey) || sectionKey.includes(sec));
+    });
+    if(filtered.length) pool = filtered;
   }
-  const pools = sanmaruBuildSupplyPools(dedupeItems((ensureResidentState().items || []).concat(items)), opts.reason || "front-supply");
-  if(items.length < SANMARU_FRONT_RESERVOIR_TARGET && pools.front && pools.front.length){
-    items = dedupeItems(items.concat(pools.front)).slice(0, SANMARU_FRONT_RESERVOIR_TARGET);
-  }
-  const page = clampInt(firstNonEmpty(opts.pageNo, opts.visiblePage, opts.p), 1, 1, 100000);
-  const perPage = clampInt(firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit), DEFAULT_VISIBLE_PER_PAGE, 1, 200);
-  const offset = (page - 1) * perPage;
-  const pageItems = items.slice(offset, offset + perPage);
+  const qx = firstNonEmpty(q, opts.q, opts.query, opts.section, opts.page, "front");
+  const items = finalRank(qx, pool, { q:qx, searchType:firstNonEmpty(opts.type, opts.category, "all"), intents:classifyQueryCategories(qx, opts.type || opts.category || "all") })
+    .filter(it => isRealSupplyItem(it, { frontSupply:true }))
+    .slice(0, target)
+    .map(it => enrichRealSupplyItem(it, qx, it && it.source));
+  const hints = sanmaruProviderPassthroughCards(qx, Object.assign({}, opts, { country, searchType:firstNonEmpty(opts.type, opts.category, "all"), need:Math.min(120, target) }));
   return {
     status:"ok",
     engine:ENGINE_NAME,
     version:VERSION,
     action:"front-supply",
-    query,
-    source:items.length ? "sanmaru-front-real-supply-pool" : "sanmaru-front-empty",
+    query:qx,
+    source:items.length ? "sanmaru-front-real-supply-pool" : "sanmaru-front-empty-provider-hints-only",
     items,
     results:items,
-    pageItems,
-    providerHints:[],
+    providerHints:hints,
     meta:{
       count:items.length,
-      visibleCount:pageItems.length,
-      page,
-      perPage,
+      totalCandidates:pool.length,
+      fullCandidateCount:pool.length,
+      providerHintCount:hints.length,
       frontSupply:true,
       slotSupply:true,
-      pageKey:firstNonEmpty(opts.page, opts.targetPage, opts.hub, ""),
+      target,
+      page:firstNonEmpty(opts.page, opts.targetPage, opts.hub, ""),
       section:firstNonEmpty(opts.section, opts.slot, opts.psom_key, opts.category, ""),
-      frontSupplyTarget:SANMARU_FRONT_RESERVOIR_TARGET,
-      supplyCapacityTarget:SANMARU_SUPPLY_CAPACITY_TARGET,
-      supplyPoolCounts:{
-        allReal:pools.allReal ? pools.allReal.length : 0,
-        front:pools.front ? pools.front.length : 0,
-        media:pools.media ? pools.media.length : 0,
-        commerce:pools.commerce ? pools.commerce.length : 0,
-        region:pools.region ? pools.region.length : 0
-      },
-      searchBankIndex:index.meta || null,
-      policy:"front-slot-real-item-reservoir-first-no-route-opening-as-content",
-      latency:nowMs() - started
+      country,
+      elapsedMs:nowMs() - started,
+      supplyPools:supplyPoolSnapshot(),
+      policy:"front slots receive real resident/searchbank content only; provider roads are hints; no fake route/opening cards as slot data"
     }
   };
 }
+
 
 async function handler(event){
   if(event && event.httpMethod === "OPTIONS") return ok({ status:"ok" });
@@ -3382,8 +3408,8 @@ async function handler(event){
   if(action === "resident-boot" || action === "boot" || action === "mount-library") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-boot", resident:touchResidentSwitch({ reason:firstNonEmpty(merged.reason, "manual-boot-switch"), q:firstNonEmpty(merged.q, merged.query) }) });
   if(action === "resident-activate" || action === "resident-switch" || action === "warm-ping" || action === "warm") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-switch", resident:touchResidentSwitch({ reason:firstNonEmpty(merged.reason, action), q:firstNonEmpty(merged.q, merged.query) }) });
   if(action === "resident-rebuild" || action === "rebuild-resident") { const rebuilt = ensureResidentBoot({ force:true, admin:security.admin, engineUpgrade:truthy(merged.engineUpgrade || merged.upgrade || merged.versionUpload), engineUpload:truthy(merged.engineUpload || merged.sanmaruEngineUpload || merged.sanmaruEngineReupload || merged.codeUpload), reason:"manual-rebuild" }); return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-rebuild", resident:touchResidentSwitch({ reason:"manual-rebuild-switch" }), rebuilt, lifecycleNote:"admin permission does not reset Sanmaru by itself; only Sanmaru engine file upload/code fingerprint change performs engine reboot" }); }
-  if(action === "resident-status") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-status", resident:touchResidentSwitch({ reason:"resident-status" }), health:healthSnapshot(), providerHealth:providerHealthSnapshot() });
-  if(action === "supply-pools" || action === "supply-pool-status") return ok(supplyPoolSnapshot());
+  if(action === "resident-status") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-status", resident:touchResidentSwitch({ reason:"resident-status" }), supplyPools:supplyPoolSnapshot(), health:healthSnapshot(), providerHealth:providerHealthSnapshot() });
+  if(action === "supply-pools" || action === "resident-supply-pools") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"supply-pools", supplyPools:supplyPoolSnapshot(), resident:touchResidentSwitch({ reason:"supply-pools" }) });
   if(action === "provider-health") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"provider-health", providerHealth:providerHealthSnapshot(), resident:residentBootSnapshot() });
   if(action === "source-registry") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"source-registry", sources:sourceRegistrySnapshot(), openingSignals:openingSignalsSnapshot(), resident:residentBootSnapshot() });
   if(action === "category-map" || action === "category-brain") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"category-map", categories:categoryMapSnapshot(), aliases:PROVIDER_CATEGORY_ALIASES, capabilities:PROVIDER_CAPABILITY_MAP, logosGuard:logosEvaluate([{ type:"category_brain", intent:"stewardship", truthConfidence:0.95 }], "category-map"), resident:residentBootSnapshot() });
@@ -3433,6 +3459,12 @@ async function runEngine(event, params){
   return await runSanmaru({ event: event || {}, raw: params || {}, q: firstNonEmpty(params && params.q, params && params.query), limit: params && params.limit, type: params && (params.type || params.category || params.tab || params.vertical), lang: params && (params.lang || params.uiLang || params.locale), deep: params && params.deep, external: params && params.external, noExternal: params && params.noExternal, disableExternal: params && params.disableExternal, noMedia: params && params.noMedia, disableMedia: params && params.disableMedia, candidatePool: params && (params.candidatePool || params.candidatePoolTarget), expansion: params && (params.expansion || params.searchExpansion), directExternal: params && params.directExternal });
 }
 
+
+try {
+  ensureResidentBoot({ reason:"module-load-resident-warm" });
+  ensureSupplyPools("module-load-supply-pool-warm");
+} catch(e) {}
+
 module.exports = {
   version: VERSION,
   runSanmaru,
@@ -3459,8 +3491,8 @@ module.exports = {
   absorbResidentItems,
   buildSanmaruInstantOsPackage,
   buildSanmaruFrontSupplyPackage,
-  rebuildSupplyPools,
-  supplyPoolSnapshot
+  supplyPoolSnapshot,
+  rebuildSupplyPools
 };
 
 exports.version = VERSION;
@@ -3484,6 +3516,6 @@ exports.triggerDeepRefresh = triggerDeepRefresh;
 exports.absorbResidentItems = absorbResidentItems;
 exports.buildSanmaruInstantOsPackage = buildSanmaruInstantOsPackage;
 exports.buildSanmaruFrontSupplyPackage = buildSanmaruFrontSupplyPackage;
-exports.rebuildSupplyPools = rebuildSupplyPools;
 exports.supplyPoolSnapshot = supplyPoolSnapshot;
+exports.rebuildSupplyPools = rebuildSupplyPools;
 try { ensureResidentBoot({ reason:"module-load" }); } catch(e) {}
