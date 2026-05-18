@@ -17,12 +17,12 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const VERSION = "search-bank-index-engine-v2.2.0-resident-layer-index";
+const VERSION = "search-bank-index-engine-v2.3.0-real-front-reservoir";
 const ENGINE_NAME = "search-bank-index";
 
 const DEFAULT_LIMIT = 1000;
 const DEFAULT_PER_PAGE = 25;
-const MAX_LIMIT = 8000;
+const MAX_LIMIT = 15000;
 const MAX_PER_PAGE = 200;
 const MAX_INDEX_ITEMS = 200000;
 const PROMOTED_LIMIT = 25000;
@@ -35,6 +35,10 @@ const RESIDENT_WARM_TTL_MS = 30 * 60 * 1000;
 const PLACEHOLDER_QUERY_PENALTY = -38;
 const LAYER_POINTER_TRUST = 0.24;
 const ACTIVE_POINTER_TRUST = 0.56;
+const FRONT_SUPPLY_TARGET = 5000;
+const SANMARU_SUPPLY_CAPACITY_TARGET = 15000;
+const REAL_ITEM_MIN_SCORE = 35;
+const TRUSTED_REAL_ITEM_SCORE = 70;
 const MAX_TOKEN_GRAMS = 80;
 const MAX_COMPACT_INDEX_LENGTH = 96;
 
@@ -48,7 +52,9 @@ const state = globalThis.__SEARCH_BANK_INDEX_STATE || (globalThis.__SEARCH_BANK_
   ingested: [],
   ingestedLoaded: false,
   lastSnapshotStat: null,
-  lastRuntimeStat: null
+  lastRuntimeStat: null,
+  supplyPools: null,
+  supplyPoolsBuiltAt: 0
 });
 
 function s(v){ return String(v == null ? "" : v); }
@@ -461,6 +467,117 @@ function canonicalItem(item, query, fallbackSource){
     layerPointer: layerPointerOf(item)
   });
 }
+
+function valueTextForRealness(item){
+  item = item || {};
+  const p = item.payload && typeof item.payload === "object" ? item.payload : {};
+  const d = item.data && typeof item.data === "object" ? item.data : {};
+  return compactSpaces([
+    item.summary, item.description, item.snippet, item.content, item.text, item.excerpt, item.abstract,
+    p.summary, p.description, p.snippet, p.content, p.text, p.excerpt, p.abstract,
+    d.summary, d.description, d.snippet, d.content, d.text, d.excerpt, d.abstract
+  ].filter(Boolean).join(" "));
+}
+function mediaCandidatesOf(item){
+  item = item || {};
+  const p = item.payload && typeof item.payload === "object" ? item.payload : {};
+  const d = item.data && typeof item.data === "object" ? item.data : {};
+  const media = item.media && typeof item.media === "object" ? item.media : {};
+  const preview = media.preview && typeof media.preview === "object" ? media.preview : {};
+  return unique([
+    item.thumbnail, item.thumb, item.image, item.imageUrl, item.image_url, item.og_image, item.ogImage,
+    item.originalImage, item.fullImage, item.imageOriginal, item.viewerImage, item.openImageUrl, item.contentUrl, item.cardImage,
+    p.thumbnail, p.thumb, p.image, p.imageUrl, p.image_url, p.og_image, p.ogImage, p.originalImage, p.fullImage, p.imageOriginal, p.viewerImage, p.openImageUrl, p.contentUrl, p.cardImage,
+    d.thumbnail, d.thumb, d.image, d.imageUrl, d.image_url, d.og_image, d.ogImage, d.originalImage, d.fullImage, d.imageOriginal, d.viewerImage, d.openImageUrl, d.contentUrl, d.cardImage,
+    preview.thumbnail, preview.image, preview.poster, media.poster,
+    ...(Array.isArray(item.imageSet) ? item.imageSet : []),
+    ...(Array.isArray(p.imageSet) ? p.imageSet : []),
+    ...(Array.isArray(d.imageSet) ? d.imageSet : [])
+  ].map(x => s(x).trim()).filter(Boolean));
+}
+function isContentImageUrl(url){
+  const u = s(url).trim();
+  if(!u) return false;
+  const lowUrl = u.toLowerCase();
+  if(!/^https?:\/\//i.test(u) && !u.startsWith("/")) return false;
+  if(/google\.com\/s2\/favicons|favicon|apple-touch-icon|\.ico(\?|#|$)|sprite|spacer|blank|transparent|1x1|pixel|tracking|captcha|placeholder|noimage|no-image|no_img|default_logo|site_logo|profile_default/i.test(lowUrl)) return false;
+  if(/(^|[\/_\-.])(logo|logotype|brand|symbol|emblem|ci|bi|banner|placard|adserver|advertisement|promo)([\/_\-.]|$)/i.test(lowUrl)) return false;
+  if(/staticmap|maps\.googleapis|map\.naver\.com|tile\.openstreetmap|\/maps?\/|map_tile/i.test(lowUrl)) return false;
+  return /\.(png|jpe?g|webp|gif|avif)(\?|#|$)/i.test(lowUrl) || /ytimg\.com|img\.youtube\.com|search\.pstatic\.net|kakaocdn|cloudfront|twimg|fbcdn|instagram|googleusercontent|gstatic/i.test(lowUrl);
+}
+function realMediaSet(item){
+  return mediaCandidatesOf(item).filter(isContentImageUrl).slice(0, 6);
+}
+function isRouteOrOpeningCard(item){
+  item = item || {};
+  const text = normalizeText([
+    item.title, item.summary, item.source, item.provider, item.id, item.url, item.routePlanProvider,
+    item.sanmaruRouteCard ? "sanmaru route" : "", item.sanmaruOpeningCard ? "sanmaru opening" : "",
+    item.providerRouteCard ? "provider route" : "", item.providerHint ? "provider hint" : ""
+  ].filter(Boolean).join(" "));
+  return !!(
+    item.sanmaruRouteCard || item.sanmaruOpeningCard || item.providerRouteCard || item.providerHint ||
+    /\bsanmaru\s+(route|opening)\b|route\s*card|opening\s*card|provider\s*route|검색\s*경로|정보원\s*경로|열린\s*정보\s*통로/.test(text)
+  );
+}
+function supplyLanesOf(item){
+  item = item || {};
+  const lp = item.layerPointer || layerPointerOf(item);
+  const text = normalizeText([item.page, item.section, item.psom_key, item.category, item.type, item.searchCategory, item.displayGroup, item.source, item.provider, lp.layerRole].filter(Boolean).join(" "));
+  const lanes = new Set(["search"]);
+  if(/home|front|slot|network|distribution|social|media|tour|literature|academic|donation|commerce|product|content/.test(text)) lanes.add("front");
+  if(/shopping|commerce|product|market|상품|쇼핑/.test(text)) lanes.add("commerce"), lanes.add("front");
+  if(/image|photo|video|youtube|media|영상|이미지|사진/.test(text)) lanes.add("media"), lanes.add("front");
+  if(/map|local|tour|travel|region|address|지도|지역|관광|여행/.test(text)) lanes.add("region"), lanes.add("front");
+  if(/insight|analysis|global insight|인사이트|분석/.test(text)) lanes.add("insight");
+  return Array.from(lanes);
+}
+function realItemQuality(item, pInfo){
+  item = item || {};
+  pInfo = pInfo || placeholderInfo(item);
+  if(pInfo.isPlaceholder || isRouteOrOpeningCard(item)) return 0;
+  const url = firstNonEmpty(item.url, item.link, item.href);
+  const title = firstNonEmpty(item.title, item.name, item.label);
+  const body = valueTextForRealness(item);
+  const media = realMediaSet(item);
+  let score = 0;
+  if(title && title.length >= 2) score += 14;
+  if(url && url !== "#") score += 16;
+  if(body.length >= 24) score += 28;
+  else if(body.length >= 10) score += 14;
+  if(media.length) score += 18;
+  if(media.length >= 2) score += 6;
+  score += Math.round(sourceTrust(item) * 18);
+  const lanes = supplyLanesOf(item);
+  if(lanes.includes("front")) score += 8;
+  if(lanes.includes("media") || lanes.includes("commerce") || lanes.includes("region")) score += 5;
+  return Math.max(0, Math.min(120, score));
+}
+function decorateSupplyFields(item, pInfo){
+  const media = realMediaSet(item);
+  const score = realItemQuality(item, pInfo);
+  const lanes = supplyLanesOf(item);
+  const body = valueTextForRealness(item);
+  return Object.assign({}, item, {
+    realItem: score >= REAL_ITEM_MIN_SCORE,
+    supplyReady: score >= REAL_ITEM_MIN_SCORE,
+    supplyQualityScore: score,
+    supplyTrustScore: sourceTrust(item),
+    supplyLanes: lanes,
+    frontSupplyEligible: lanes.includes("front") && score >= REAL_ITEM_MIN_SCORE,
+    searchSupplyEligible: lanes.includes("search") && score >= REAL_ITEM_MIN_SCORE,
+    mediaSupplyEligible: lanes.includes("media") && score >= REAL_ITEM_MIN_SCORE,
+    commerceSupplyEligible: lanes.includes("commerce") && score >= REAL_ITEM_MIN_SCORE,
+    regionSupplyEligible: lanes.includes("region") && score >= REAL_ITEM_MIN_SCORE,
+    hasRealSummary: body.length >= 10,
+    hasRealMedia: media.length > 0,
+    imageSet: media.length ? media : item.imageSet,
+    thumbnail: firstNonEmpty(item.thumbnail, item.thumb, media[0]),
+    image: firstNonEmpty(item.image, media[0]),
+    supplyPolicy: "real-item-first-trust-ranked-no-route-opening-as-content"
+  });
+}
+
 function indexItem(raw, i, source){
   const item = canonicalItem(raw, "", source || "search-bank");
   const pInfo = placeholderInfo(item);
@@ -477,7 +594,8 @@ function indexItem(raw, i, source){
   const trust = Number.isFinite(Number(item.sourceTrust))
     ? Number(item.sourceTrust)
     : (pInfo.isPlaceholder ? LAYER_POINTER_TRUST : sourceTrust(item));
-  return Object.assign({}, item, c, {
+  const supplyDecorated = decorateSupplyFields(item, pInfo);
+  return Object.assign({}, item, c, supplyDecorated, {
     indexId: firstNonEmpty(item.indexId, item.id, stableHash([item.title, item.url, item.source, i].join("|"))),
     indexText,
     normalizedText,
@@ -492,6 +610,7 @@ function indexItem(raw, i, source){
     isLayerPointer: !!pInfo.canIndexAsLayerPointer,
     layerPointer: pointer,
     indexQuality: pInfo.isPlaceholder ? "layer-pointer" : (trust >= ACTIVE_POINTER_TRUST ? "active-trusted" : "active"),
+    supplyQuality: supplyDecorated.supplyReady ? (trust >= ACTIVE_POINTER_TRUST ? "real-trusted" : "real-active") : (pInfo.isPlaceholder ? "layer-pointer" : "thin"),
     externalCall:false,
     storagePolicy:"fast-memory-index-pointer-only",
     indexedAt: nowIso()
@@ -526,8 +645,25 @@ function buildIndexFromSnapshot(){
     pageCoverage[pg] = (pageCoverage[pg] || 0) + 1;
     indexed.push(item);
   }
+  indexed.sort((a,b) =>
+    (Number(b.supplyQualityScore || 0) - Number(a.supplyQualityScore || 0)) ||
+    (Number(b.sourceTrust || 0) - Number(a.sourceTrust || 0))
+  );
+  const realItemCount = indexed.filter(x => x && x.realItem).length;
+  const frontEligibleCount = indexed.filter(x => x && x.frontSupplyEligible).length;
+  const mediaEligibleCount = indexed.filter(x => x && x.mediaSupplyEligible).length;
+  const commerceEligibleCount = indexed.filter(x => x && x.commerceSupplyEligible).length;
+  const regionEligibleCount = indexed.filter(x => x && x.regionSupplyEligible).length;
+
   const stat = {
     rawCount: rawItems.length,
+    realItemCount,
+    frontEligibleCount,
+    mediaEligibleCount,
+    commerceEligibleCount,
+    regionEligibleCount,
+    frontSupplyTarget: FRONT_SUPPLY_TARGET,
+    sanmaruSupplyCapacityTarget: SANMARU_SUPPLY_CAPACITY_TARGET,
     activeCount,
     layerPointerCount,
     hardFiltered,
@@ -550,6 +686,8 @@ function buildIndexFromSnapshot(){
     placeholderFiltered: hardFiltered,
     layerPointerCount,
     activeCount,
+    realItemCount,
+    frontEligibleCount,
     count: indexed.length,
     items:indexed,
     meta:stat
@@ -672,6 +810,103 @@ function collectCandidateIndexes(qInfo, idx, runtime, type){
   }
   return Array.from(candidates);
 }
+
+function buildSupplyPools(idx){
+  const source = Array.isArray(idx && idx.items) ? idx.items : [];
+  const real = source
+    .filter(x => x && x.realItem && !x.isPlaceholder && !x.isLayerPointer && !isRouteOrOpeningCard(x))
+    .sort((a,b) =>
+      (Number(b.supplyQualityScore || 0) - Number(a.supplyQualityScore || 0)) ||
+      (Number(b.sourceTrust || 0) - Number(a.sourceTrust || 0))
+    );
+  const byLane = lane => real.filter(x => Array.isArray(x.supplyLanes) && x.supplyLanes.includes(lane));
+  const pools = {
+    generatedAt: nowIso(),
+    front: byLane("front").slice(0, Math.max(FRONT_SUPPLY_TARGET, 6000)),
+    search: byLane("search").slice(0, SANMARU_SUPPLY_CAPACITY_TARGET),
+    media: byLane("media").slice(0, 5000),
+    commerce: byLane("commerce").slice(0, 5000),
+    region: byLane("region").slice(0, 5000),
+    insight: byLane("insight").slice(0, 3000),
+    allReal: real.slice(0, SANMARU_SUPPLY_CAPACITY_TARGET),
+    policy: {
+      frontSupplyTarget: FRONT_SUPPLY_TARGET,
+      sanmaruSupplyCapacityTarget: SANMARU_SUPPLY_CAPACITY_TARGET,
+      ranking: "supplyQualityScore-sourceTrust-realSummary-realMedia-frontSlot",
+      exclude: "placeholder-route-opening-provider-hint"
+    }
+  };
+  state.supplyPools = pools;
+  state.supplyPoolsBuiltAt = nowMs();
+  return pools;
+}
+function ensureSupplyPools(idx){
+  if(state.supplyPools && nowMs() - state.supplyPoolsBuiltAt < RUNTIME_CACHE_TTL_MS) return state.supplyPools;
+  return buildSupplyPools(idx || loadIndex(false));
+}
+function supplyPoolName(params){
+  const mode = low(firstNonEmpty(params && (params.supplyMode || params.pool || params.action || params.mode), ""));
+  if(mode.includes("media")) return "media";
+  if(mode.includes("commerce") || mode.includes("product")) return "commerce";
+  if(mode.includes("region") || mode.includes("local") || mode.includes("map")) return "region";
+  if(mode.includes("insight")) return "insight";
+  if(mode.includes("front") || mode.includes("slot") || mode.includes("content") || truthy(params && params.frontSupply)) return "front";
+  return "search";
+}
+function querySupplyPool(params){
+  params = params || {};
+  const started = params.__startedAt || nowMs();
+  const idx = loadIndex(false);
+  const pools = ensureSupplyPools(idx);
+  const poolName = supplyPoolName(params);
+  const q = firstNonEmpty(params.q, params.query);
+  const qInfo = q ? { normalized: normalizeText(q), joined: compactText(q), tokens: tokensOf(q), synonyms: buildSynonyms({}, q) } : null;
+  const requestedLimit = clampInt(params.limit, poolName === "front" ? FRONT_SUPPLY_TARGET : DEFAULT_LIMIT, 1, poolName === "front" ? Math.max(FRONT_SUPPLY_TARGET, MAX_LIMIT) : MAX_LIMIT);
+  const page = clampInt(params.page, 1, 1, 100000);
+  const perPageWasProvided = params.perPage != null || params.pageSize != null || params.size != null;
+  const perPage = clampInt(firstNonEmpty(params.perPage, params.pageSize, params.size), DEFAULT_PER_PAGE, 1, MAX_PER_PAGE);
+  const offset = clampInt(params.offset, perPageWasProvided || page > 1 ? (page - 1) * perPage : 0, 0, 10000000);
+  let list = Array.isArray(pools[poolName]) ? pools[poolName].slice() : [];
+  if(qInfo && qInfo.normalized){
+    list = list.map(x => Object.assign({}, x, { sanmaruIndexScore: scoreIndexedItem(qInfo, x, low(params.type || params.category || "all")) + Number(x.supplyQualityScore || 0) }))
+      .filter(x => (x.sanmaruIndexScore || 0) > 0)
+      .sort((a,b) => (b.sanmaruIndexScore || 0) - (a.sanmaruIndexScore || 0));
+    if(list.length < Math.min(100, requestedLimit)){
+      const seen = new Set(list.map(slotDedupeSignature));
+      const extra = (pools.allReal || []).filter(x => !seen.has(slotDedupeSignature(x))).slice(0, requestedLimit);
+      list = list.concat(extra);
+    }
+  }
+  const totalMatches = list.length;
+  const sliceSize = perPageWasProvided || page > 1 ? perPage : requestedLimit;
+  const items = list.slice(offset, offset + sliceSize).map(stripPrivateIndexFields);
+  return {
+    status:"ok",
+    engine:ENGINE_NAME,
+    version:VERSION,
+    action:"supply-pool",
+    supplyMode:poolName,
+    query:q,
+    source:items.length ? "search-bank-index-real-supply-pool" : null,
+    items,
+    results:items,
+    meta:{
+      count:items.length,
+      totalMatches,
+      totalReal:pools.allReal ? pools.allReal.length : 0,
+      frontSupplyCount:pools.front ? pools.front.length : 0,
+      frontSupplyTarget:FRONT_SUPPLY_TARGET,
+      sanmaruSupplyCapacityTarget:SANMARU_SUPPLY_CAPACITY_TARGET,
+      page,
+      perPage: perPageWasProvided || page > 1 ? perPage : null,
+      offset,
+      realOnly:true,
+      ranking:"trust-and-real-content-first",
+      latency: nowMs() - started
+    }
+  };
+}
+
 function stripPrivateIndexFields(item){
   const y = Object.assign({}, item);
   delete y.normalizedText;
@@ -703,8 +938,12 @@ function facetCounts(items){
 }
 function queryIndex(params){
   const started = nowMs();
+  params = params || {};
+  params.__startedAt = started;
   const q = firstNonEmpty(params && params.q, params && params.query);
   const normalized = normalizeText(q);
+  const wantsSupplyPool = /front|slot|content|media|commerce|product|region|local|insight|supply/.test(low(firstNonEmpty(params && (params.supplyMode || params.action || params.mode), ""))) || truthy(params && (params.frontSupply || params.realSupply || params.searchSupply));
+  if(!normalized && wantsSupplyPool) return querySupplyPool(params);
   if(!normalized) return { status:"ok", engine:ENGINE_NAME, version:VERSION, query:q, items:[], results:[], meta:{ count:0, reason:"EMPTY_QUERY" } };
 
   const requestedLimit = clampInt(params && params.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
@@ -715,8 +954,12 @@ function queryIndex(params){
   const sliceSize = perPageWasProvided || page > 1 ? perPage : requestedLimit;
   const type = low(firstNonEmpty(params && (params.type || params.category || params.tab || params.vertical), "all")) || "all";
   const includeFacets = truthy(params && (params.facets || params.includeFacets || params.debug));
-  const includePlaceholders = truthy(params && (params.includePlaceholders || params.frontSupply || params.layerMode || params.slotMode || params.snapshotLayer));
+  const supplyMode = low(firstNonEmpty(params && (params.supplyMode || params.action || params.mode), ""));
+  const realOnly = truthy(params && (params.realOnly || params.realSupply || params.frontSupply || params.searchSupply)) || /front|slot|content|media|commerce|product|region|local|insight|supply/.test(supplyMode);
+  const includePlaceholders = !realOnly && truthy(params && (params.includePlaceholders || params.layerMode || params.slotMode || params.snapshotLayer));
   const layerOnly = truthy(params && (params.layerOnly || params.pointerOnly));
+
+  if(realOnly && /front|slot|content|media|commerce|product|region|local|insight|supply/.test(supplyMode)) return querySupplyPool(params);
 
   const qInfo = { normalized, joined: compactText(q), tokens: tokensOf(q), synonyms: buildSynonyms({}, q) };
   const idx = loadIndex(false);
@@ -735,8 +978,9 @@ function queryIndex(params){
     if(!item){ continue; }
     const placeholder = !!(item.isPlaceholder || isPlaceholder(item));
     if(placeholder && !includePlaceholders){ placeholderFiltered++; continue; }
+    if(realOnly && (!item.realItem || isRouteOrOpeningCard(item))){ placeholderFiltered++; continue; }
     if(layerOnly && !item.isLayerPointer) continue;
-    const sc = scoreIndexedItem(qInfo, item, type) + (placeholder && includePlaceholders ? 30 : 0);
+    const sc = scoreIndexedItem(qInfo, item, type) + (placeholder && includePlaceholders ? 30 : 0) + Math.round(Number(item.supplyQualityScore || 0) / 4);
     if(sc <= 0) continue;
     const sig = slotDedupeSignature(item);
     if(seen.has(sig)) continue;
@@ -775,6 +1019,9 @@ function queryIndex(params){
       layerPointerIndexed: runtime.layerPointerCount,
       includePlaceholders,
       layerOnly,
+      realOnly,
+      frontSupplyTarget: FRONT_SUPPLY_TARGET,
+      sanmaruSupplyCapacityTarget: SANMARU_SUPPLY_CAPACITY_TARGET,
       promoted: promoted.length,
       ingested: ingested.length,
       type,
@@ -836,6 +1083,7 @@ function health(){
   const idx = loadIndex(false);
   const runtime = ensureRuntime(idx);
   const stat = state.lastSnapshotStat || (idx && idx.meta) || {};
+  const pools = ensureSupplyPools(idx);
   return {
     status:"ok",
     engine:ENGINE_NAME,
@@ -848,6 +1096,10 @@ function health(){
     indexCount:idx && Array.isArray(idx.items) ? idx.items.length : 0,
     activeIndexCount:runtime && Number.isFinite(runtime.activeCount) ? runtime.activeCount : 0,
     layerPointerCount:runtime && Number.isFinite(runtime.layerPointerCount) ? runtime.layerPointerCount : 0,
+    realItemCount:pools && pools.allReal ? pools.allReal.length : 0,
+    frontSupplyCount:pools && pools.front ? pools.front.length : 0,
+    frontSupplyTarget:FRONT_SUPPLY_TARGET,
+    sanmaruSupplyCapacityTarget:SANMARU_SUPPLY_CAPACITY_TARGET,
     promotedCount:loadPromoted().length,
     ingestedCount:loadIngested().length,
     runtimeTokenCount:runtime && runtime.tokenMap ? runtime.tokenMap.size : 0,
@@ -907,6 +1159,7 @@ async function runEngine(event, params){
   }
   if(action === "promote") return promote(merged);
   if(action === "ingest" || action === "upsert" || action === "hydrate") return ingest(merged);
+  if(action === "front-supply" || action === "slot-supply" || action === "content-supply" || action === "media-supply" || action === "commerce-supply" || action === "region-supply" || action === "insight-supply" || action === "supply-pool") return querySupplyPool(Object.assign({}, merged, { action }));
   if(action === "stats" || action === "facets"){
     const res = queryIndex(Object.assign({}, merged, { includeFacets:true, limit:1 }));
     return { status:"ok", engine:ENGINE_NAME, version:VERSION, query:res.query, meta:res.meta };
@@ -920,7 +1173,7 @@ async function handler(event){
   return ok(res);
 }
 
-module.exports = { version:VERSION, runEngine, handler, query:queryIndex, promote, ingest, health, buildIndexFromSnapshot, loadIndex };
+module.exports = { version:VERSION, runEngine, handler, query:queryIndex, promote, ingest, health, buildIndexFromSnapshot, loadIndex, querySupplyPool, ensureSupplyPools };
 exports.version = VERSION;
 exports.runEngine = runEngine;
 exports.handler = handler;
@@ -928,3 +1181,5 @@ exports.query = queryIndex;
 exports.promote = promote;
 exports.ingest = ingest;
 exports.health = health;
+exports.querySupplyPool = querySupplyPool;
+exports.ensureSupplyPools = ensureSupplyPools;
