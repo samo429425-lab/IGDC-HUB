@@ -12,7 +12,7 @@
  * - search.js remains the UI executor: it hides/shows/reorders categories using this policy.
  */
 
-const VERSION = 'maru-search-display-engine-v1.3.0-rich-card-no-category-overwrite';
+const VERSION = 'maru-search-display-engine-v1.4.0-card-contract-executor';
 const ENGINE_NAME = 'maru-search-display-engine';
 
 const BASE_GROUP_ORDER = [
@@ -116,15 +116,21 @@ function fallbackDisplaySummary(item, query, group){
   const title = firstNonEmpty(item.title, item.name, query);
   const url = firstNonEmpty(item.url, item.link, item.href);
   const host = domainOf(url);
-  const q = compact(query);
+  const q = compact(query || title);
   const label = ({
     authority:'공식·기관', public_data:'공공자료', local_tour:'지도·지역', knowledge:'지식', wiki:'위키', site:'사이트', book:'도서',
     blog:'블로그', cafe:'카페', shopping:'쇼핑', news:'뉴스', image:'이미지', video:'영상', media:'미디어', social:'소셜',
     academic:'학술', community:'커뮤니티', sports:'스포츠', finance:'금융', webtoon:'웹툰', web:'웹'
   })[group] || '웹';
-  const line1 = q ? `${q} 관련 ${label} 검색 결과입니다.` : `${label} 검색 결과입니다.`;
-  const line2 = host ? `${host}에서 제공되는 공개 페이지이며, 제목·출처·연결 정보를 기준으로 확인할 수 있습니다.` : `${title} 항목의 공개 페이지로 연결됩니다.`;
-  return `${line1} ${line2}`.slice(0, 260);
+  if(group === 'local_tour') return `${q}의 위치·관광·교통·주변 정보를 확인할 수 있는 ${label} 결과입니다. 지도 미리보기와 관련 장소 정보가 함께 표시됩니다.`.slice(0, 300);
+  if(group === 'image') return `${q}와 관련된 사진·그래픽·이미지 자료를 확인할 수 있는 결과입니다. 원본 페이지가 제공하는 대표 이미지가 있으면 카드 오른쪽에 표시됩니다.`.slice(0, 300);
+  if(group === 'video' || group === 'media') return `${q} 관련 영상·현장 화면·리뷰 콘텐츠로 연결되는 결과입니다. 영상 대표 스냅샷이 있는 경우 검색 카드에 함께 표시됩니다.`.slice(0, 300);
+  if(group === 'blog' || group === 'cafe' || group === 'community' || group === 'social') return `${q}에 대한 현장 후기, 소셜 반응, 커뮤니티 글을 확인할 수 있는 결과입니다. 제공된 본문·이미지가 있으면 검색 카드에 같이 표시됩니다.`.slice(0, 300);
+  if(group === 'news') return `${q}와 관련된 최신 보도·이슈·기사 흐름을 확인할 수 있는 결과입니다. 언론사 본문 요약이 제공되면 2~3줄로 표시됩니다.`.slice(0, 300);
+  if(group === 'authority' || group === 'public_data' || group === 'site') return `${q}와 관련된 공식 사이트·공공자료·주요 기관 페이지입니다. ${host || '해당 출처'}의 공개 정보를 기준으로 연결됩니다.`.slice(0, 300);
+  const line1 = q ? `${q} 관련 ${label} 결과입니다.` : `${label} 결과입니다.`;
+  const line2 = host ? `${host}에서 제공되는 공개 페이지이며, 본문 요약이나 대표 이미지가 있으면 검색 카드에 함께 표시됩니다.` : `${title} 항목의 공개 페이지로 연결됩니다.`;
+  return `${line1} ${line2}`.slice(0, 300);
 }
 function collectDisplayImages(item){
   item = item && typeof item === 'object' ? item : {};
@@ -136,6 +142,8 @@ function collectDisplayImages(item){
   const raw = []
     .concat(displayCard.thumbnail ? [displayCard.thumbnail] : [])
     .concat(displayCard.image ? [displayCard.image] : [])
+    .concat(displayCard.originalImage ? [displayCard.originalImage] : [])
+    .concat(displayCard.fullImage ? [displayCard.fullImage] : [])
     .concat(Array.isArray(displayCard.imageSet) ? displayCard.imageSet : [])
     .concat(item.originalImage ? [item.originalImage] : [])
     .concat(item.fullImage ? [item.fullImage] : [])
@@ -144,28 +152,12 @@ function collectDisplayImages(item){
     .concat(item.openImageUrl ? [item.openImageUrl] : [])
     .concat(item.contentUrl ? [item.contentUrl] : [])
     .concat(item.cardImage ? [item.cardImage] : [])
-    .concat(preview.original ? [preview.original] : [])
-    .concat(preview.poster ? [preview.poster] : [])
-    .concat(preview.thumb ? [preview.thumb] : [])
     .concat(item.thumbnail ? [item.thumbnail] : [])
     .concat(item.thumb ? [item.thumb] : [])
     .concat(item.image ? [item.image] : [])
     .concat(item.imageUrl ? [item.imageUrl] : [])
     .concat(item.og_image ? [item.og_image] : [])
     .concat(item.ogImage ? [item.ogImage] : [])
-    .concat(payload.thumbnail ? [payload.thumbnail] : [])
-    .concat(payload.thumb ? [payload.thumb] : [])
-    .concat(payload.image ? [payload.image] : [])
-    .concat(payload.imageUrl ? [payload.imageUrl] : [])
-    .concat(payload.og_image ? [payload.og_image] : [])
-    .concat(payload.ogImage ? [payload.ogImage] : [])
-    .concat(data.thumbnail ? [data.thumbnail] : [])
-    .concat(data.thumb ? [data.thumb] : [])
-    .concat(data.image ? [data.image] : [])
-    .concat(data.imageUrl ? [data.imageUrl] : [])
-    .concat(preview.thumbnail ? [preview.thumbnail] : [])
-    .concat(preview.image ? [preview.image] : [])
-    .concat(Array.isArray(item.imageSet) ? item.imageSet : [])
     .concat(payload.originalImage ? [payload.originalImage] : [])
     .concat(payload.fullImage ? [payload.fullImage] : [])
     .concat(payload.imageOriginal ? [payload.imageOriginal] : [])
@@ -173,14 +165,30 @@ function collectDisplayImages(item){
     .concat(payload.openImageUrl ? [payload.openImageUrl] : [])
     .concat(payload.contentUrl ? [payload.contentUrl] : [])
     .concat(payload.cardImage ? [payload.cardImage] : [])
-    .concat(Array.isArray(payload.imageSet) ? payload.imageSet : [])
+    .concat(payload.thumbnail ? [payload.thumbnail] : [])
+    .concat(payload.thumb ? [payload.thumb] : [])
+    .concat(payload.image ? [payload.image] : [])
+    .concat(payload.imageUrl ? [payload.imageUrl] : [])
+    .concat(payload.image_url ? [payload.image_url] : [])
+    .concat(payload.og_image ? [payload.og_image] : [])
+    .concat(payload.ogImage ? [payload.ogImage] : [])
     .concat(data.originalImage ? [data.originalImage] : [])
     .concat(data.fullImage ? [data.fullImage] : [])
     .concat(data.imageOriginal ? [data.imageOriginal] : [])
-    .concat(data.viewerImage ? [data.viewerImage] : [])
     .concat(data.openImageUrl ? [data.openImageUrl] : [])
     .concat(data.contentUrl ? [data.contentUrl] : [])
     .concat(data.cardImage ? [data.cardImage] : [])
+    .concat(data.thumbnail ? [data.thumbnail] : [])
+    .concat(data.thumb ? [data.thumb] : [])
+    .concat(data.image ? [data.image] : [])
+    .concat(data.imageUrl ? [data.imageUrl] : [])
+    .concat(data.image_url ? [data.image_url] : [])
+    .concat(preview.original ? [preview.original] : [])
+    .concat(preview.poster ? [preview.poster] : [])
+    .concat(preview.thumbnail ? [preview.thumbnail] : [])
+    .concat(preview.image ? [preview.image] : [])
+    .concat(Array.isArray(item.imageSet) ? item.imageSet : [])
+    .concat(Array.isArray(payload.imageSet) ? payload.imageSet : [])
     .concat(Array.isArray(data.imageSet) ? data.imageSet : []);
   const out = [];
   const seen = new Set();
@@ -229,40 +237,59 @@ function decorateDisplayItem(item, ctx, index){
   const summary = naturalSummary(item, q) || fallbackDisplaySummary(item, q, group);
   const cardType = cardTypeForGroup(group, item);
   const mapLike = cardType === 'map';
-  const groupLabelHint = ({
-    authority:'주요 정보', public_data:'공공자료', local_tour:'지도/지역', knowledge:'지식', wiki:'위키', site:'사이트', book:'도서',
-    blog:'블로그', cafe:'카페', shopping:'쇼핑', news:'뉴스', image:'이미지', video:'영상', media:'미디어', social:'소셜',
-    academic:'학술', community:'커뮤니티', sports:'스포츠', finance:'증권', webtoon:'웹툰', web:'웹'
-  })[group] || '웹';
-
-  // Do not overwrite search.js' stable category pipeline. Attach rich display hints only.
   const copy = Object.assign({}, item, {
-    displayGroupHint: group,
-    displayGroupLabelHint: groupLabelHint,
+    displayGroup: group,
+    displayGroupLabel: ({
+      authority:'주요 정보', public_data:'공공자료', local_tour:'지도/지역', knowledge:'지식', wiki:'위키', site:'사이트', book:'도서',
+      blog:'블로그', cafe:'카페', shopping:'쇼핑', news:'뉴스', image:'이미지', video:'영상', media:'미디어', social:'소셜',
+      academic:'학술', community:'커뮤니티', sports:'스포츠', finance:'증권', webtoon:'웹툰', web:'웹'
+    })[group] || '웹',
     displaySummary: summary,
     summary: firstNonEmpty(item.summary, item.snippet, item.description, summary),
     description: firstNonEmpty(item.description, item.summary, item.snippet, summary),
     snippet: firstNonEmpty(item.snippet, item.summary, item.description, summary),
-    thumbnail: firstNonEmpty(item.thumbnail, item.thumb, images[0]),
-    thumb: firstNonEmpty(item.thumb, item.thumbnail, images[0]),
-    image: firstNonEmpty(item.image, images[0]),
-    imageSet: images.length ? images : (Array.isArray(item.imageSet) ? item.imageSet : []),
+    // Only sanitized direct content images may enter search-card media fields.
+    // Do not preserve upstream thumbnails when they are merely provider/search URLs
+    // such as google.com/search, map pages, logos, banners, or placards.
+    thumbnail: images[0] || '',
+    thumb: images[0] || '',
+    image: images[0] || '',
+    imageUrl: images[0] || '',
+    originalImage: images[0] || '',
+    fullImage: images[0] || '',
+    imageOriginal: images[0] || '',
+    viewerImage: images[0] || '',
+    openImageUrl: images[0] || '',
+    contentUrl: images[0] || '',
+    cardImage: images[0] || '',
+    imageSet: images,
     displayCard: Object.assign({}, pickObject(item.displayCard), {
       engine: ENGINE_NAME,
       version: VERSION,
       cardType,
       group,
+      title: firstNonEmpty(item.title, item.name, q),
+      url: firstNonEmpty(item.url, item.link, item.href),
+      source: firstNonEmpty(item.source, item.provider, domainOf(firstNonEmpty(item.url, item.link, item.href))),
       summary,
+      body: summary,
+      description: summary,
+      snippet: summary,
       lineClamp: mapLike ? 2 : 3,
       bodyLines: mapLike ? 2 : 3,
       thumbnail: images[0] || '',
       image: images[0] || '',
+      imageUrl: images[0] || '',
+      originalImage: images[0] || '',
+      fullImage: images[0] || '',
       imageSet: images,
       hasThumbnail: !!images.length,
       showThumbnail: !!images.length,
       showMapPreview: mapLike,
       showVideoPreview: cardType === 'video',
       showBody: true,
+      bodySource: naturalSummary(item, q) ? 'provider' : 'display-engine-fallback',
+      thumbnailPolicy: 'actual-content-image-only; no-logo-no-favicon-no-banner-no-placard-no-search-url',
       displayMode: mapLike ? 'map-plus-list-card' : (images.length ? 'text-plus-thumbnail-card' : 'text-summary-card')
     })
   });
@@ -273,6 +300,16 @@ function decorateDisplayItem(item, ctx, index){
       name: firstNonEmpty(item.placeInfo && item.placeInfo.name, item.title, q),
       address: firstNonEmpty(item.placeInfo && item.placeInfo.address, item.address, ''),
       mapQuery: firstNonEmpty(item.mapQuery, item.address, item.title, q)
+    });
+    copy.displayCard = Object.assign({}, copy.displayCard, {
+      showMapPreview: true,
+      mapQuery: copy.mapQuery,
+      mapPreview: {
+        enabled: true,
+        query: copy.mapQuery,
+        name: copy.placeInfo.name || copy.mapQuery,
+        address: copy.placeInfo.address || ''
+      }
     });
   }
   if(cardType === 'video' && images[0]){
