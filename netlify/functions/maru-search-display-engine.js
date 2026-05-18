@@ -12,7 +12,7 @@
  * - search.js remains the UI executor: it hides/shows/reorders categories using this policy.
  */
 
-const VERSION = 'maru-search-display-engine-v1.2.0-card-contract-no-category-overwrite';
+const VERSION = 'maru-search-display-engine-v1.1.1-natural-thumbnail-filter';
 const ENGINE_NAME = 'maru-search-display-engine';
 
 const BASE_GROUP_ORDER = [
@@ -205,18 +205,13 @@ function decorateDisplayItem(item, ctx, index){
   const summary = naturalSummary(item, q) || fallbackDisplaySummary(item, q, group);
   const cardType = cardTypeForGroup(group, item);
   const mapLike = cardType === 'map';
-  const groupLabelHint = ({
-    authority:'주요 정보', public_data:'공공자료', local_tour:'지도/지역', knowledge:'지식', wiki:'위키', site:'사이트', book:'도서',
-    blog:'블로그', cafe:'카페', shopping:'쇼핑', news:'뉴스', image:'이미지', video:'영상', media:'미디어', social:'소셜',
-    academic:'학술', community:'커뮤니티', sports:'스포츠', finance:'증권', webtoon:'웹툰', web:'웹'
-  })[group] || '웹';
-
-  // Do NOT overwrite displayGroup/displayGroupLabel here. search.js already has
-  // the stable category pipeline. This engine only attaches card display
-  // contracts and soft hints so the category lanes do not collapse or disappear.
   const copy = Object.assign({}, item, {
-    displayGroupHint: group,
-    displayGroupLabelHint: groupLabelHint,
+    displayGroup: group,
+    displayGroupLabel: ({
+      authority:'주요 정보', public_data:'공공자료', local_tour:'지도/지역', knowledge:'지식', wiki:'위키', site:'사이트', book:'도서',
+      blog:'블로그', cafe:'카페', shopping:'쇼핑', news:'뉴스', image:'이미지', video:'영상', media:'미디어', social:'소셜',
+      academic:'학술', community:'커뮤니티', sports:'스포츠', finance:'증권', webtoon:'웹툰', web:'웹'
+    })[group] || '웹',
     displaySummary: summary,
     summary: firstNonEmpty(item.summary, item.snippet, item.description, summary),
     description: firstNonEmpty(item.description, item.summary, item.snippet, summary),
@@ -394,7 +389,7 @@ function policyForIntent(intentInfo, counts){
   const visibleGroups = unique(presentPreferred.concat(fallbackPresent.slice(0, Math.max(0, maxGroups - presentPreferred.length)), ['web'])).slice(0, maxGroups);
   if(!visibleGroups.includes('web')) visibleGroups.push('web');
 
-  const hiddenGroups = []; // advisory engine must not hide existing search.js categories
+  const hiddenGroups = BASE_GROUP_ORDER.filter(g => g !== 'web' && !visibleGroups.includes(g));
   const groupOrder = unique(visibleGroups.concat(BASE_GROUP_ORDER));
 
   const visibleTabsMap = {
@@ -411,7 +406,7 @@ function policyForIntent(intentInfo, counts){
     general: BASE_TABS
   };
   const visibleTabs = visibleTabsMap[intent] || visibleTabsMap.general;
-  const hiddenTabs = []; // search.js keeps the full tab row; policy only recommends priority/order
+  const hiddenTabs = BASE_TABS.filter(t => !visibleTabs.includes(t));
 
   const previewLimitByGroup = Object.assign({}, DEFAULT_PREVIEW_LIMITS);
   const moduleCapByGroup = Object.assign({}, DEFAULT_MODULE_CAPS);
@@ -441,7 +436,7 @@ function buildDisplayPolicy(input){
     status:'ok',
     engine:ENGINE_NAME,
     version:VERSION,
-    mode:'query-intent-card-display-policy-soft-order-only',
+    mode:'query-intent-category-display-policy',
     query:q,
     intent:intentInfo.intent,
     confidence:intentInfo.confidence,
@@ -456,7 +451,7 @@ function buildDisplayPolicy(input){
     hiddenTabs:p.hiddenTabs,
     groupCounts:counts,
     cardContract:{ enabled:true, bodyLines:3, thumbnailPolicy:'natural-content-image-only; reject-logo-banner-placard; do-not-promote-poster-field', mapPolicy:'show-map-preview-for-local-tour', executor:'search.js' },
-    execution:'maru-search-attaches-display-card-contract; search-js-preserves-category-pipeline-and-renders-cards',
+    execution:'search-js-applies-policy; maru-search-attaches-display-card-contract',
     externalCall:false,
     storageWrite:false
   };
