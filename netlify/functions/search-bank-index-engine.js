@@ -17,12 +17,12 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const VERSION = "search-bank-index-engine-v2.3.0-public-search-front-boundary";
+const VERSION = "search-bank-index-engine-v2.4.0-front-real-floor";
 const ENGINE_NAME = "search-bank-index";
 
 const DEFAULT_LIMIT = 1000;
 const DEFAULT_PER_PAGE = 25;
-const MAX_LIMIT = 8000;
+const MAX_LIMIT = 12000;
 const MAX_PER_PAGE = 200;
 const MAX_INDEX_ITEMS = 200000;
 const PROMOTED_LIMIT = 25000;
@@ -35,6 +35,9 @@ const RESIDENT_WARM_TTL_MS = 30 * 60 * 1000;
 const PLACEHOLDER_QUERY_PENALTY = -38;
 const LAYER_POINTER_TRUST = 0.24;
 const ACTIVE_POINTER_TRUST = 0.56;
+const FRONT_REAL_ITEM_FLOOR = 5000;
+const FRONT_REAL_ITEM_SOFT_TARGET = 6000;
+const PUBLIC_QUERY_STRICT_FRONT_BOUNDARY = true;
 const MAX_TOKEN_GRAMS = 80;
 const MAX_COMPACT_INDEX_LENGTH = 96;
 
@@ -274,18 +277,98 @@ function isFrontSupplyIndexItem(item){
   if(/search-bank|snapshot|front|slot/.test(sourceText) && /home|network|distribution|social|media|tour|literature|academic|donation|front|slot/.test(frontRouteText)) return true;
   return false;
 }
-
 function shouldExcludeFrontSupplyForQuery(params){
   params = params || {};
   const includeFrontSupply = truthy(params.frontSupply) || truthy(params.slotSupply) || truthy(params.layerMode) || truthy(params.slotMode) || truthy(params.snapshotLayer) || truthy(params.includeFrontSupply) || truthy(params.includeFrontSlots) || truthy(params.layerOnly) || truthy(params.pointerOnly);
   if(includeFrontSupply) return false;
-  return true;
+  return PUBLIC_QUERY_STRICT_FRONT_BOUNDARY;
+}
+function hasRenderableText(item){
+  item = item || {};
+  return compactSpaces(stripHtml(firstNonEmpty(item.summary, item.description, item.snippet, item.content, item.text))).length >= 16;
+}
+function hasRenderableMedia(item){
+  item = item || {};
+  return !!firstNonEmpty(item.thumbnail, item.thumb, item.image, item.imageUrl, item.cover, Array.isArray(item.imageSet) && item.imageSet[0]);
+}
+function isRealIndexItem(item){
+  item = item || {};
+  if(item.isPlaceholder || isPlaceholder(item)) return false;
+  const url = firstNonEmpty(item.url, item.link, item.href);
+  const hasUrl = !!(url && url !== "#" && !/^javascript:/i.test(url));
+  const hasTitle = !!firstNonEmpty(item.title, item.name, item.label);
+  return !!(hasTitle && (hasUrl || hasRenderableText(item) || hasRenderableMedia(item)));
+}
+function frontSupplyQualityScore(item){
+  item = item || {};
+  let score = 0;
+  const lp = item.layerPointer || layerPointerOf(item);
+  if(isFrontSupplyIndexItem(item)) score += 80;
+  if(isRealIndexItem(item)) score += 60;
+  if(hasRenderableText(item)) score += 24;
+  if(hasRenderableMedia(item)) score += 18;
+  if(firstNonEmpty(lp.page, item.page, item.route)) score += 12;
+  if(firstNonEmpty(lp.section, item.section, item.psom_key)) score += 10;
+  if(firstNonEmpty(lp.slotKey, item.slotKey, item.slot)) score += 8;
+  score += Math.max(0, Math.min(20, Number(item.rankHint || 0)));
+  score += Math.max(0, Math.min(20, Number(item.sourceTrust || 0) * 20));
+  if(item._promoted) score += 14;
+  if(item._ingested) score += 10;
+  return score;
+}
+function buildFrontSupplyPool(params){
+  const started = nowMs();
+  params = params || {};
+  const target = clampInt(firstNonEmpty(params.limit, params.frontSupplyTarget, params.target), FRONT_REAL_ITEM_FLOOR, 1, MAX_LIMIT);
+  const idx = loadIndex(false);
+  ensureRuntime(idx);
+  const base = Array.isArray(idx && idx.items) ? idx.items : [];
+  const promoted = loadPromoted().map((x,i) => indexItem(Object.assign({}, x, { _promoted:true }), i, "sanmaru-promoted")).filter(Boolean);
+  const ingested = loadIngested().map((x,i) => indexItem(Object.assign({}, x, { _ingested:true }), i, "front-data-ingested")).filter(Boolean);
+  const pool = promoted.concat(ingested).concat(base)
+    .filter(item => isFrontSupplyIndexItem(item) && isRealIndexItem(item))
+    .map((item, idx) => Object.assign({}, item, { frontSupplyScore:frontSupplyQualityScore(item), _frontSeq:idx }))
+    .sort((a,b) => (b.frontSupplyScore || 0) - (a.frontSupplyScore || 0) || (a._frontSeq || 0) - (b._frontSeq || 0));
+  const seen = new Set();
+  const items = [];
+  for(const item of pool){
+    const sig = slotDedupeSignature(item);
+    if(!sig || seen.has(sig)) continue;
+    seen.add(sig);
+    const out = stripPrivateIndexFields(item);
+    delete out._frontSeq;
+    items.push(out);
+    if(items.length >= target) break;
+  }
+  return {
+    status:"ok",
+    engine:ENGINE_NAME,
+    version:VERSION,
+    action:"front-supply",
+    source:items.length ? "search-bank-index-front-real-pool" : null,
+    items,
+    results:items,
+    meta:{
+      count:items.length,
+      target,
+      floor:FRONT_REAL_ITEM_FLOOR,
+      softTarget:FRONT_REAL_ITEM_SOFT_TARGET,
+      shortage:Math.max(0, FRONT_REAL_ITEM_FLOOR - items.length),
+      totalFrontCandidates:pool.length,
+      frontRealFloorReady:items.length >= FRONT_REAL_ITEM_FLOOR,
+      frontSupplyOnly:true,
+      excludesPlaceholder:true,
+      externalCall:false,
+      latency:nowMs() - started,
+      storagePolicy:"front-supply-fast-memory-real-items-only"
+    }
+  };
 }
 function placeholderInfo(item){
   item = item || {};
   const text = normalizeText([item.title, item.name, item.label, item.summary, item.description, item.url, normalizeSourceValue(item.source), item.id].filter(Boolean).join(" "));
   const url = firstNonEmpty(item.url, item.link, item.href);
-  const explicitSeed = /seed\s*placeholder|placeholder|movie\s*slot|\b[a-z0-9가-힣 ]{0,40}slot\s*\d+\b|슬롯\s*\d+|media\s*movie\s*0|mediamovie0|dummy|sample\s*item|test\s*item|lorem\s*ipsum|untitled/.test(text);
+  const explicitSeed = /seed\s*placeholder|placeholder|movie\s*slot|media\s*movie\s*0|mediamovie0|dummy|sample\s*item|test\s*item|lorem\s*ipsum|untitled/.test(text);
   const emptyShell = (!text || text.length < 2 || ((!url || url === "#") && !firstNonEmpty(item.title, item.name, item.summary, item.description)));
   const frontSlot = !!firstNonEmpty(item.section, item.psom_key, item.page, item.route, item._sourceHint, item.bind && (item.bind.section || item.bind.page || item.bind.slot));
   return {
@@ -740,10 +823,9 @@ function queryIndex(params){
   const sliceSize = perPageWasProvided || page > 1 ? perPage : requestedLimit;
   const type = low(firstNonEmpty(params && (params.type || params.category || params.tab || params.vertical), "all")) || "all";
   const includeFacets = truthy(params && (params.facets || params.includeFacets || params.debug));
-  const includeFrontSupply = !shouldExcludeFrontSupplyForQuery(params || {});
-  const excludeFrontSupply = !includeFrontSupply;
-  const includePlaceholders = truthy(params && (params.includePlaceholders || params.includeLayerPointers || params.layerMode || params.pointerOnly));
+  const includePlaceholders = truthy(params && (params.includePlaceholders || params.frontSupply || params.layerMode || params.slotMode || params.snapshotLayer));
   const layerOnly = truthy(params && (params.layerOnly || params.pointerOnly));
+  const excludeFrontSupply = shouldExcludeFrontSupplyForQuery(params);
 
   const qInfo = { normalized, joined: compactText(q), tokens: tokensOf(q), synonyms: buildSynonyms({}, q) };
   const idx = loadIndex(false);
@@ -761,8 +843,8 @@ function queryIndex(params){
   let frontSupplyFiltered = 0;
   for(const item of pool){
     if(!item){ continue; }
-    if(excludeFrontSupply && isFrontSupplyIndexItem(item)){ frontSupplyFiltered++; continue; }
     const placeholder = !!(item.isPlaceholder || isPlaceholder(item));
+    if(excludeFrontSupply && isFrontSupplyIndexItem(item)){ frontSupplyFiltered++; continue; }
     if(placeholder && !includePlaceholders){ placeholderFiltered++; continue; }
     if(layerOnly && !item.isLayerPointer) continue;
     const sc = scoreIndexedItem(qInfo, item, type) + (placeholder && includePlaceholders ? 30 : 0);
@@ -803,15 +885,14 @@ function queryIndex(params){
       activeIndexed: runtime.activeCount,
       layerPointerIndexed: runtime.layerPointerCount,
       includePlaceholders,
-      includeFrontSupply,
-      excludeFrontSupply,
-      frontSupplyFiltered,
-      publicSearchBoundary:true,
       layerOnly,
+      excludeFrontSupply,
+      publicQueryStrictFrontBoundary:PUBLIC_QUERY_STRICT_FRONT_BOUNDARY,
       promoted: promoted.length,
       ingested: ingested.length,
       type,
       placeholderFiltered,
+      frontSupplyFiltered,
       candidatePool: pool.length,
       latency: nowMs() - started,
       fastMemory:true,
@@ -869,6 +950,7 @@ function health(){
   const idx = loadIndex(false);
   const runtime = ensureRuntime(idx);
   const stat = state.lastSnapshotStat || (idx && idx.meta) || {};
+  const frontPool = buildFrontSupplyPool({ limit:FRONT_REAL_ITEM_FLOOR });
   return {
     status:"ok",
     engine:ENGINE_NAME,
@@ -883,6 +965,10 @@ function health(){
     layerPointerCount:runtime && Number.isFinite(runtime.layerPointerCount) ? runtime.layerPointerCount : 0,
     promotedCount:loadPromoted().length,
     ingestedCount:loadIngested().length,
+    frontRealFloor:FRONT_REAL_ITEM_FLOOR,
+    frontRealCount:frontPool.meta.count,
+    frontRealShortage:frontPool.meta.shortage,
+    frontRealFloorReady:frontPool.meta.frontRealFloorReady,
     runtimeTokenCount:runtime && runtime.tokenMap ? runtime.tokenMap.size : 0,
     runtimePageCount:runtime && runtime.pageMap ? runtime.pageMap.size : 0,
     runtimeSectionCount:runtime && runtime.sectionMap ? runtime.sectionMap.size : 0,
@@ -940,6 +1026,7 @@ async function runEngine(event, params){
   }
   if(action === "promote") return promote(merged);
   if(action === "ingest" || action === "upsert" || action === "hydrate") return ingest(merged);
+  if(action === "front-supply" || action === "slot-supply" || action === "front-pool" || action === "reservoir" || action === "front-floor") return buildFrontSupplyPool(merged);
   if(action === "stats" || action === "facets"){
     const res = queryIndex(Object.assign({}, merged, { includeFacets:true, limit:1 }));
     return { status:"ok", engine:ENGINE_NAME, version:VERSION, query:res.query, meta:res.meta };
@@ -953,7 +1040,7 @@ async function handler(event){
   return ok(res);
 }
 
-module.exports = { version:VERSION, runEngine, handler, query:queryIndex, promote, ingest, health, buildIndexFromSnapshot, loadIndex };
+module.exports = { version:VERSION, runEngine, handler, query:queryIndex, promote, ingest, health, buildIndexFromSnapshot, loadIndex, buildFrontSupplyPool };
 exports.version = VERSION;
 exports.runEngine = runEngine;
 exports.handler = handler;
@@ -961,3 +1048,5 @@ exports.query = queryIndex;
 exports.promote = promote;
 exports.ingest = ingest;
 exports.health = health;
+
+exports.buildFrontSupplyPool = buildFrontSupplyPool;
