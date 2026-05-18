@@ -24,12 +24,13 @@ ready(function () {
   // 🔥 홈에서도 search.js 동작 허용 (핵심 수정)
   const hasSearchUI =
     document.getElementById('searchInput') ||
-    document.getElementById('globalSearchInput');
+    document.getElementById('globalSearchInput') ||
+    document.getElementById('homeSearchInput');
 
   if (!isSearchPage && !hasSearchUI) return;
 
-    const input   = document.getElementById('searchInput') || document.getElementById('globalSearchInput');
-    const btn     = document.getElementById('searchBtn') || document.getElementById('globalSearchBtn');
+    const input   = document.getElementById('searchInput') || document.getElementById('globalSearchInput') || document.getElementById('homeSearchInput');
+    const btn     = document.getElementById('searchBtn') || document.getElementById('globalSearchBtn') || document.getElementById('homeSearchBtn');
     const statusEl = document.getElementById('searchStatus');
     const resultsEl = document.getElementById('searchResults');
     const status  = statusEl || { textContent: '' };
@@ -675,7 +676,7 @@ btn.addEventListener('click', (e) => {
     return;
   }
 
-  window.location.assign(buildSearchUrl(q));
+  try { window.top.location.href = buildSearchUrl(q); } catch(e) { window.location.assign(buildSearchUrl(q)); }
 });
 
 input.addEventListener('keydown', (e) => {
@@ -731,7 +732,7 @@ input.addEventListener('keydown', (e) => {
     return;
   }
 
-  window.location.assign(buildSearchUrl(q));
+  try { window.top.location.href = buildSearchUrl(q); } catch(e) { window.location.assign(buildSearchUrl(q)); }
 });
 
 function unwrap(x){
@@ -904,7 +905,7 @@ function startContinuousIntake(q, type, seq){
         const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack))).slice(0, PAGE_SIZE);
         if(pageSlice.length){
           loadedServerPages.set(page, pageSlice);
-          allItems = dedupeItems(allItems.concat(pageSlice));
+          allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice);
           lastSearchPayload = pack && pack.payload || lastSearchPayload;
           updateProgressiveTotalFromPayload(pack && pack.payload, allItems.length);
           if(page === currentPage) renderPage(page, true);
@@ -949,77 +950,100 @@ function startContinuousIntake(q, type, seq){
       ].map(safeText).join(' ');
       return haystack.includes(qq);
     }
-    function itemRichnessScore(it){
-      if(!it || typeof it !== 'object') return 0;
-      let score = 0;
-      const dc = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
-      const summary = compactCardTextClient([
-        dc.summary, dc.body, dc.description, it.displaySummary, it.summary, it.snippet,
-        it.description, it.contentSnippet, it.excerpt, it.abstract
-      ]);
-      if(summary && summary.length >= 12) score += Math.min(80, summary.length);
-      try { if(collectNaturalImages(it).length) score += 120; } catch(e) {}
-      if(dc && (dc.showThumbnail || dc.hasThumbnail || dc.thumbnail || (Array.isArray(dc.imageSet) && dc.imageSet.length))) score += 80;
-      if(dc && dc.showMapPreview) score += 45;
-      if(it.__maruAllowMapPreview) score += 35;
-      if(it.media && it.media.preview) score += 35;
-      if(it.placeInfo || it.mapQuery) score += 20;
-      return score;
-    }
 
-    function mergeRicherSearchItem(a, b){
-      if(!a) return b;
-      if(!b) return a;
-      const richer = itemRichnessScore(b) > itemRichnessScore(a) ? b : a;
-      const poorer = richer === b ? a : b;
-      const merged = Object.assign({}, poorer, richer);
-      const dcA = (a.displayCard && typeof a.displayCard === 'object') ? a.displayCard : {};
-      const dcB = (b.displayCard && typeof b.displayCard === 'object') ? b.displayCard : {};
-      merged.displayCard = Object.assign({}, dcA, dcB, richer.displayCard || {});
-      const imageSet = [];
-      [a.imageSet, b.imageSet, dcA.imageSet, dcB.imageSet].forEach(list => {
-        (Array.isArray(list) ? list : []).forEach(x => { if(x && !imageSet.includes(x)) imageSet.push(x); });
-      });
-      ['thumbnail','thumb','image','imageUrl','originalImage','fullImage','imageOriginal','viewerImage','openImageUrl','contentUrl','cardImage'].forEach(k => {
-        if(a[k] && !imageSet.includes(a[k])) imageSet.push(a[k]);
-        if(b[k] && !imageSet.includes(b[k])) imageSet.push(b[k]);
-      });
-      if(imageSet.length){
-        merged.imageSet = imageSet;
-        merged.thumbnail = merged.thumbnail || imageSet[0];
-        merged.thumb = merged.thumb || imageSet[0];
-        merged.image = merged.image || imageSet[0];
-      }
-      const summary = compactCardTextClient([merged.displayCard && merged.displayCard.summary, merged.displaySummary, merged.summary, merged.snippet, merged.description]);
-      if(summary){
-        merged.displaySummary = merged.displaySummary || summary;
-        merged.summary = merged.summary || summary;
-        merged.snippet = merged.snippet || summary;
-        merged.description = merged.description || summary;
-      }
-      return merged;
-    }
+   function dedupeItems(items){
+  const out = [];
+  const seen = new Set();
 
-    function dedupeItems(items){
-      const out = [];
-      const pos = new Map();
+  for (const it of Array.isArray(items) ? items : []) {
+    const rawUrl = String(it?.url || it?.link || '').trim();
+    const normUrl = rawUrl.toLowerCase();
 
-      for (const it of Array.isArray(items) ? items : []) {
-        const rawUrl = String(it?.url || it?.link || '').trim();
-        const normUrl = rawUrl.toLowerCase();
-        const isPlaceholderUrl = !rawUrl || rawUrl === '#' || rawUrl === '/' || normUrl === 'javascript:void(0)' || normUrl.startsWith('javascript:');
-        const key = (!isPlaceholderUrl ? rawUrl : (String(it?.id || '').trim() || ((String(it?.title || '').trim()) + '|' + String(it?.source?.name || it?.source || '').trim()))).toLowerCase();
-        if (!key) continue;
-        if (pos.has(key)) {
-          const idx = pos.get(key);
-          out[idx] = mergeRicherSearchItem(out[idx], it);
-          continue;
-        }
-        pos.set(key, out.length);
-        out.push(it);
-      }
-      return out;
+    const isPlaceholderUrl =
+      !rawUrl ||
+      rawUrl === '#' ||
+      rawUrl === '/' ||
+      normUrl === 'javascript:void(0)' ||
+      normUrl.startsWith('javascript:');
+
+    const key = (
+      !isPlaceholderUrl
+        ? rawUrl
+        : (String(it?.id || '').trim() ||
+           ((String(it?.title || '').trim()) + '|' + String(it?.source?.name || it?.source || '').trim()))
+    ).toLowerCase();
+
+    if (!key) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(it);
+  }
+
+  return out;
+}
+
+function searchDisplayKeyForItem(it){
+  if(!it) return '';
+  const rawUrl = String(it.url || it.link || it.openUrl || '').trim();
+  const normUrl = rawUrl.toLowerCase();
+  const isPlaceholderUrl =
+    !rawUrl ||
+    rawUrl === '#' ||
+    rawUrl === '/' ||
+    normUrl === 'javascript:void(0)' ||
+    normUrl.startsWith('javascript:');
+
+  if(!isPlaceholderUrl) return normUrl;
+  return String(
+    it.id || it.indexId || it.originalId ||
+    ((String(it.title || it.name || '').trim()) + '|' + String((it.source && (it.source.name || it.source.platform)) || it.source || it.provider || '').trim())
+  ).toLowerCase();
+}
+
+function displayRichnessScore(it){
+  if(!it || typeof it !== 'object') return 0;
+  let score = 0;
+  const card = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+  const media = (it.media && typeof it.media === 'object') ? it.media : {};
+  const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
+  const summaryText = [
+    card.summary, card.description, card.body, card.text,
+    it.displaySummary, it.summary, it.snippet, it.description, it.contentSnippet,
+    it.excerpt, it.abstract, it.text, it.content, it.metaDescription, it.ogDescription
+  ].map(v => String(v || '').trim()).filter(Boolean).join(' ');
+  if(summaryText.length >= 18) score += Math.min(40, Math.floor(summaryText.length / 12));
+  if(card && Object.keys(card).length) score += 18;
+  if(card.showMapPreview || it.__maruAllowMapPreview || it.mapQuery || it.placeInfo) score += 20;
+  if(card.thumbnail || card.image || (Array.isArray(card.imageSet) && card.imageSet.length)) score += 25;
+  if(it.thumbnail || it.thumb || it.image || it.ogImage || it.og_image || (Array.isArray(it.imageSet) && it.imageSet.length)) score += 20;
+  if(preview.thumbnail || preview.image || preview.poster || preview.mp4 || preview.webm) score += 18;
+  if(it.videoId || it.videoUrl || it.embedUrl || /youtube|youtu\.be|ytimg/i.test(String([it.url, it.link, it.thumbnail, it.image].join(' ')))) score += 14;
+  return score;
+}
+
+function mergeItemsPreferDisplayRichness(baseItems, incomingItems){
+  const out = [];
+  const pos = new Map();
+  function addOrMerge(it){
+    if(!it) return;
+    const key = searchDisplayKeyForItem(it);
+    if(!key) return;
+    if(!pos.has(key)){
+      pos.set(key, out.length);
+      out.push(it);
+      return;
     }
+    const idx = pos.get(key);
+    const prev = out[idx];
+    const merged = Object.assign({}, prev || {}, it || {});
+    const prevScore = displayRichnessScore(prev);
+    const nextScore = displayRichnessScore(it);
+    out[idx] = nextScore >= prevScore ? merged : Object.assign({}, it || {}, prev || {});
+  }
+  (Array.isArray(baseItems) ? baseItems : []).forEach(addOrMerge);
+  (Array.isArray(incomingItems) ? incomingItems : []).forEach(addOrMerge);
+  return out;
+}
 
 async function fetchSearch(q, type = activeType, page = 1){
   const safeType = normalizeSearchType(type);
@@ -1044,11 +1068,6 @@ async function fetchSearch(q, type = activeType, page = 1){
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
-  sp.set('displayRich', '1');
-  sp.set('displayCards', '1');
-  sp.set('fastFirstWindow', '1');
-  sp.set('noWaitProviders', '1');
-  sp.set('deferImageEnrich', '1');
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
   try {
@@ -1152,7 +1171,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         history.pushState({ q, type: nextType, from: safeReturnUrl || '' }, '', u.toString());
         runSearch(q, nextType);
       } else {
-        window.location.assign(buildSearchUrl(q));
+        try { window.top.location.href = buildSearchUrl(q); } catch(e) { window.location.assign(buildSearchUrl(q)); }
       }
     }
 
@@ -1594,7 +1613,14 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function preferredYoutubeThumbClient(it){
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
       const candidates = [
+        displayCard.videoId,
+        displayCard.videoUrl,
+        displayCard.watchUrl,
+        displayCard.embedUrl,
+        displayCard.thumbnail,
+        displayCard.image,
         it && it.videoId,
         it && it.url,
         it && it.link,
@@ -1604,7 +1630,9 @@ async function fetchInstantSearchPack(q, type = activeType){
         it && it.thumbnail,
         it && it.thumb,
         it && it.image
-      ].concat(Array.isArray(it && it.imageSet) ? it.imageSet : []);
+      ]
+        .concat(Array.isArray(displayCard.imageSet) ? displayCard.imageSet : [])
+        .concat(Array.isArray(it && it.imageSet) ? it.imageSet : []);
 
       for (const v of candidates) {
         const id = String(v || '').length === 11 && /^[A-Za-z0-9_-]{11}$/.test(String(v || ''))
@@ -1617,27 +1645,18 @@ async function fetchInstantSearchPack(q, type = activeType){
 
     function collectNaturalImages(it){
       const sourceText = String((it && it.source) || '').toLowerCase();
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
       const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
       const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
       const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
       const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
 
-      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
-
       const raw = []
         .concat(displayCard.thumbnail ? [displayCard.thumbnail] : [])
         .concat(displayCard.image ? [displayCard.image] : [])
         .concat(Array.isArray(displayCard.imageSet) ? displayCard.imageSet : [])
-        .concat(it && it.originalImage ? [it.originalImage] : [])
-        .concat(it && it.fullImage ? [it.fullImage] : [])
-        .concat(it && it.imageOriginal ? [it.imageOriginal] : [])
-        .concat(it && it.viewerImage ? [it.viewerImage] : [])
-        .concat(it && it.openImageUrl ? [it.openImageUrl] : [])
-        .concat(it && it.contentUrl ? [it.contentUrl] : [])
-        .concat(it && it.cardImage ? [it.cardImage] : [])
-        .concat(preview.original ? [preview.original] : [])
-        .concat(preview.poster ? [preview.poster] : [])
-        .concat(preview.thumb ? [preview.thumb] : [])
+        .concat(displayCard.preview && displayCard.preview.thumbnail ? [displayCard.preview.thumbnail] : [])
+        .concat(displayCard.preview && displayCard.preview.image ? [displayCard.preview.image] : [])
         .concat(it && it.thumbnail ? [it.thumbnail] : [])
         .concat(it && it.thumb ? [it.thumb] : [])
         .concat(it && it.image ? [it.image] : [])
@@ -2580,11 +2599,18 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function descriptionForItemClient(it){
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
       const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
       const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
       const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
       const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
       const candidates = [
+        displayCard.summary,
+        displayCard.description,
+        displayCard.body,
+        displayCard.text,
+        displayCard.snippet,
+        it && it.displaySummary,
         it && it.summary,
         it && it.snippet,
         it && it.description,
@@ -2741,7 +2767,8 @@ if (it.riskLabel === '⚠️ high-risk') {
 
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
-        d.style.webkitLineClamp = '3';
+        const cardLineClamp = it && it.displayCard && parseInt(it.displayCard.lineClamp, 10);
+        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(5, cardLineClamp) : 3);
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
@@ -3226,7 +3253,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
         if(pageSlice.length){
           loadedServerPages.set(page, pageSlice.slice(0, PAGE_SIZE));
-          allItems = dedupeItems(allItems.concat(pageSlice));
+          allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice);
           const total = serverTotalFromPayload(pack && pack.payload, serverTotalItems || pageSlice.length);
           serverTotalItems = Math.max(serverTotalItems || 0, total || 0, INITIAL_PRELOAD_TARGET);
         } else if(serverTotalItems > ((page - 1) * PAGE_SIZE)){
@@ -3403,7 +3430,7 @@ async function runSearch(q, type = activeType){
       Math.max(INITIAL_PRELOAD_TARGET, incoming.length)
     );
     const windowItems = incoming.slice(0, initialWindow);
-    allItems = dedupeItems(allItems.concat(windowItems)).slice(0, MAX_SMOOTH_CANDIDATES);
+    allItems = mergeItemsPreferDisplayRichness(allItems, windowItems).slice(0, MAX_SMOOTH_CANDIDATES);
     seedLoadedServerPagesFromItems(allItems, Math.min(allItems.length, Math.max(INITIAL_PRELOAD_TARGET, windowItems.length)));
     if(pageItems.length) loadedServerPages.set(1, pageItems.slice(0, PAGE_SIZE));
 
@@ -3430,23 +3457,39 @@ async function runSearch(q, type = activeType){
     return promise.then(pack => ({ kind, pack })).catch(error => ({ kind, error }));
   }
 
-  // Search result display must be built through Maru Search + Display Engine.
-  // Sanmaru direct instant-supply is only a warm signal and must not paint raw route/opening cards.
-  fetchInstantSearchPack(qq, activeType).catch(() => null);
+  const instantPromise = wrapSupply(fetchInstantSearchPack(qq, activeType), 'sanmaru-instant');
   const maruWindowPromise = wrapSupply(fetchSearch(qq, activeType, 1), 'maru-search-window');
 
   try{
-    const first = await maruWindowPromise;
+    const first = await Promise.race([instantPromise, maruWindowPromise]);
     if(runSearch._seq !== seq) return;
 
     const firstCount = first && !first.error ? applySupplyPack(first.pack, first.kind) : 0;
-    if(!firstPaintDone && !firstCount){
+    if(!firstCount){
+      const second = first && first.kind === 'sanmaru-instant' ? await maruWindowPromise : await instantPromise;
+      if(runSearch._seq !== seq) return;
+      if(second && !second.error) applySupplyPack(second.pack, second.kind);
+    }
+
+    if(!firstPaintDone){
       results.innerHTML = '';
       status.textContent = `No quick results for "${qq}" · receiving...`;
     }
 
+    // Do not wait for Sanmaru/MaruSearch to finish all lanes. Start the faucet
+    // shortly after first paint, but let the page-1 300-window seed pages 1~12
+    // first when it arrives quickly.
     intakeTimer = setTimeout(() => startIntakeOnce('first-paint-timer'), 50);
-    if(firstCount) startIntakeOnce('maru-page1-window-ready');
+
+    maruWindowPromise.then(res => {
+      if(runSearch._seq !== seq || !res || res.error) return;
+      applySupplyPack(res.pack, res.kind);
+      startIntakeOnce('maru-page1-window-ready');
+    });
+    instantPromise.then(res => {
+      if(runSearch._seq !== seq || !res || res.error) return;
+      applySupplyPack(res.pack, res.kind);
+    });
   }catch(e){
     console.error(e);
     const fallbackPack = await fetchSearch(qq, activeType, 1);
