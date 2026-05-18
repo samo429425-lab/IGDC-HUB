@@ -16,23 +16,16 @@
 let Core = null;
 try { Core = require('./core'); } catch (e) { Core = null; }
 
-let SearchDisplayEngine = null;
-function getSearchDisplayEngine(){
-  if(SearchDisplayEngine !== null) return SearchDisplayEngine;
-  try { SearchDisplayEngine = require('./maru-search-display-engine'); } catch (e) { SearchDisplayEngine = false; }
-  return SearchDisplayEngine || null;
-}
-
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.46-595-sanmaru-cpu-direct-page25-sns-google-fix';
+const VERSION = 'A1.5.47-display-rich-fast-window';
 const DEFAULT_LIMIT = 2000;
 const MAX_LIMIT = 12000;
 const MIN_RESULT_TARGET = 1500;
 const MARU_SEARCH_MAX_PAGER_PAGES = 499;
-const DEFAULT_SOFT_TIMEOUT_MS = 10500;
+const DEFAULT_SOFT_TIMEOUT_MS = 4500;
 
 // MARU gateway policy:
 // - Internal search-bank first.
@@ -302,10 +295,8 @@ function isRealImageUrl(u){
   if(!s) return false;
   const low = s.toLowerCase();
   if(low.includes('google.com/s2/favicons') || low.includes('favicon') || low.endsWith('.ico')) return false;
-  if(low.startsWith('data:image/')) return true;
-  if(!/^https?:\/\//i.test(s) && !s.startsWith('/')) return false;
-  if(/\.(png|jpe?g|webp|gif|avif)(\?|#|$)/i.test(low)) return true;
-  if(/ytimg\.com|img\.youtube\.com|search\.pstatic\.net|postfiles\.pstatic\.net|blogfiles\.pstatic\.net|kakaocdn|cloudfront|twimg|fbcdn|instagram|googleusercontent|gstatic/i.test(low)) return true;
+  if(low.startsWith('data:')) return true;
+  if(/^https?:\/\//i.test(s) || s.startsWith('/')) return true;
   return false;
 }
 
@@ -951,9 +942,7 @@ function resultSummaryText(it){
   it = (it && typeof it === 'object') ? it : {};
   const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
   const meta = (it.meta && typeof it.meta === 'object') ? it.meta : {};
-  const dc = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
   const candidates = [
-    dc.summary, dc.body, dc.description, it.displaySummary,
     it.summary, it.snippet, it.description, it.excerpt, it.content, it.text,
     it.ogDescription, it.metaDescription, it.seoDescription,
     p.summary, p.snippet, p.description, p.excerpt, p.content, p.text,
@@ -977,13 +966,9 @@ function compactResultItem(it){
   const type = it.type || 'web';
   const mediaType = it.mediaType || (type === 'image' ? 'image' : (type === 'video' ? 'video' : 'article'));
   const profile = mediaProfileForItem(it);
-  const displayCard = (it.displayCard && typeof it.displayCard === 'object') ? Object.assign({}, it.displayCard) : null;
-  const displayImages = compactImages([
-    displayCard && displayCard.thumbnail, displayCard && displayCard.image
-  ].concat(displayCard && Array.isArray(displayCard.imageSet) ? displayCard.imageSet : []));
   const youtubeLike = isYoutubeLikeItem(Object.assign({}, it, { type, mediaType, videoId: profile.videoId, videoUrl: profile.videoUrl, watchUrl: profile.watchUrl }));
-  const ownImages = qualitySortImagesForItem((youtubeLike && profile.thumbnail ? [profile.thumbnail] : []).concat(displayImages, profile.imageSet || []), it).slice(0, 6);
-  const ownThumb = ownImages[0] || profile.thumbnail || '';
+  const ownImages = youtubeLike && profile.thumbnail ? [profile.thumbnail] : (profile.imageSet || []);
+  const ownThumb = profile.thumbnail || '';
   const originalImage = youtubeLike ? ownThumb : (profile.originalImage || ownThumb || '');
   const mediaBase = (it.media && typeof it.media === 'object') ? Object.assign({}, it.media) : undefined;
   const previewBase = (mediaBase && mediaBase.preview && typeof mediaBase.preview === 'object') ? Object.assign({}, mediaBase.preview) : {};
@@ -1018,8 +1003,6 @@ function compactResultItem(it){
     type,
     mediaType,
     title: safeString(it.title).trim(),
-    displaySummary: firstNonEmpty(it.displaySummary, displayCard && displayCard.summary, resultSummaryText(it)),
-    displayCard: displayCard || undefined,
     summary: resultSummaryText(it),
     description: resultSummaryText(it),
     url: safeString(firstNonEmpty(it.url, it.link, it.href, profile.openUrl)).trim(),
@@ -1065,8 +1048,6 @@ function compactResultItem(it){
     _authorityScore: typeof it._authorityScore === 'number' ? it._authorityScore : undefined,
     searchCategory: it.searchCategory || it.searchType || it._category || classifySearchCategory(it),
     displayGroup: it.displayGroup || sectionIdForItem(it),
-    displayGroupHint: it.displayGroupHint || (displayCard && displayCard.group) || undefined,
-    displayGroupLabelHint: it.displayGroupLabelHint || undefined,
     sectionId: it.sectionId || sectionIdForItem(it),
     sectionTitle: it.sectionTitle || (SEARCH_SECTION_META[sectionIdForItem(it)] && SEARCH_SECTION_META[sectionIdForItem(it)].title),
     _category: it._category || classifySearchCategory(it)
@@ -1635,6 +1616,31 @@ function buildViewportDisplaySections(pageItems, q, fullSectionPack, visiblePage
   };
 }
 
+
+
+function buildSearchDisplayPolicyForMaru(q, ctx){
+  try{
+    const Engine = getSearchDisplayEngine();
+    if(!Engine || typeof Engine.buildDisplayPolicy !== 'function') return null;
+    const policy = Engine.buildDisplayPolicy(Object.assign({ q, query:q, source:'maru-search', externalCall:false, storageWrite:false }, ctx || {}));
+    if(policy && policy.status === 'ok') return policy;
+  }catch(e){
+    return { status:'soft-failed', engine:'maru-search-display-engine', error:safeString((e && e.message) || e).slice(0,160), externalCall:false, storageWrite:false };
+  }
+  return null;
+}
+
+function decorateSearchItemsForDisplay(q, items, ctx){
+  const list = Array.isArray(items) ? items : [];
+  if(!list.length) return list;
+  try{
+    const Engine = getSearchDisplayEngine();
+    if(Engine && typeof Engine.decorateItems === 'function'){
+      return Engine.decorateItems(list, Object.assign({ q, query:q, source:'maru-search', externalCall:false, storageWrite:false }, ctx || {}));
+    }
+  }catch(e){}
+  return list;
+}
 
 function queryNeedlesForResident(q){
   const raw = safeString(q).trim().toLowerCase();
@@ -2865,7 +2871,7 @@ function sourceCaps(opts){
     searchBankPages: 0,
     // 일반 검색 첫 응답은 30초짜리 전체 수집이 아니라 빠른 창을 먼저 열어야 한다.
     // 뒤쪽 보강은 search.js의 열린 수신 루프가 page window로 계속 받는다.
-    naverPages: fast ? 3 : (deep ? 10 : 6),
+    naverPages: fast ? 1 : (deep ? 10 : 6),
     naverBlogPages: fast ? 1 : (deep ? 8 : 4),
     naverNewsPages: fast ? 2 : (deep ? 8 : 4),
     naverCafePages: fast ? 1 : (deep ? 8 : 4),
@@ -2873,12 +2879,12 @@ function sourceCaps(opts){
     naverKinPages: fast ? 1 : (deep ? 3 : 2),
     naverBookPages: fast ? 1 : (deep ? 4 : 2),
     naverLocalPages: fast ? 1 : (deep ? 3 : 2),
-    googlePages: fast ? 2 : (deep ? 9 : 4),
-    bingPages: fast ? 2 : (deep ? 6 : 3),
+    googlePages: fast ? 1 : (deep ? 9 : 4),
+    bingPages: fast ? 1 : (deep ? 6 : 3),
     imagePages: fast ? 1 : (deep ? 6 : 2),
     naverImagePages: fast ? 1 : (deep ? 6 : 2),
-    youtubeLimit: fast ? 40 : (deep ? 180 : 100),
-    timeoutMs: fast ? 2800 : (deep ? 15000 : DEFAULT_SOFT_TIMEOUT_MS),
+    youtubeLimit: fast ? 12 : (deep ? 180 : 100),
+    timeoutMs: fast ? 1600 : (deep ? 9000 : DEFAULT_SOFT_TIMEOUT_MS),
     fastFirstWindow: fast
   };
 }
@@ -3322,7 +3328,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     // PRESERVE + EXPAND: Search Bank/Index must never stop the broad Maru Search gateway.
     // If the caller did not explicitly block external sources, run the controlled gateway pass.
     // This restores news/blog/cafe/youtube/image/company discovery that disappeared when internal results were considered "enough".
-    const shouldUseExternal = !externalOff;
+    const shouldUseExternal = !externalOff && !truthy((event && event.queryStringParameters || {}).noWaitProviders) && !truthy((event && event.queryStringParameters || {}).fastFirstWindow);
 
     if(shouldUseExternal){
       // Single maru-search gateway pass. No recursive loops, no repeated fan-out.
@@ -4829,56 +4835,6 @@ function parseEventJsonBody(event){
 }
 
 
-
-function attachSearchDisplayEngineContract(base, q, raw, ctx){
-  base = (base && typeof base === 'object') ? base : { items:[], results:[], meta:{} };
-  const engine = getSearchDisplayEngine && getSearchDisplayEngine();
-  if(!engine) {
-    base.meta = Object.assign({}, base.meta || {}, { displayEngineAttached:false, displayEngineReason:'not-found' });
-    return base;
-  }
-  const items = Array.isArray(base.items) ? base.items : [];
-  let policy = null;
-  try{
-    if(typeof engine.buildDisplayPolicy === 'function'){
-      policy = engine.buildDisplayPolicy({
-        q, query:q,
-        type: ctx && ctx.searchType,
-        tab: raw && raw.tab,
-        items,
-        results: items,
-        pageItems: Array.isArray(base.pageItems) ? base.pageItems : [],
-        raw: raw || {}
-      });
-    }
-  }catch(e){
-    policy = { status:'error', engine:'maru-search-display-engine', message:safeString((e && e.message) || e).slice(0,180) };
-  }
-  let decorated = items;
-  try{
-    if(typeof engine.decorateItems === 'function'){
-      decorated = engine.decorateItems(items, { q, query:q, type:ctx && ctx.searchType, raw:raw || {}, displayPolicy:policy });
-    }else if(typeof engine.decorateDisplayItem === 'function'){
-      decorated = items.map((item, idx) => engine.decorateDisplayItem(item, { q, query:q, type:ctx && ctx.searchType, raw:raw || {}, displayPolicy:policy }, idx));
-    }
-  }catch(e){
-    decorated = items;
-    policy = Object.assign({}, policy || {}, { decorateError:safeString((e && e.message) || e).slice(0,180) });
-  }
-  base.items = Array.isArray(decorated) ? decorated : items;
-  base.results = base.items;
-  base.displayPolicy = policy || null;
-  base.meta = Object.assign({}, base.meta || {}, {
-    displayEngineAttached:true,
-    displayEngine:'maru-search-display-engine',
-    displayPolicy: policy || null,
-    displayCardDecoratedCount: base.items.filter(x => x && x.displayCard).length,
-    displayBodyDecoratedCount: base.items.filter(x => x && (x.displaySummary || (x.displayCard && x.displayCard.summary))).length,
-    displayThumbnailDecoratedCount: base.items.filter(x => x && ((Array.isArray(x.imageSet) && x.imageSet.length) || x.thumbnail || (x.displayCard && x.displayCard.thumbnail))).length
-  });
-  return base;
-}
-
 exports.handler = async function(event){
   try{
     const picked = pickQ(event || {});
@@ -4909,7 +4865,8 @@ exports.handler = async function(event){
         timeLeft: () => Math.max(0, 6500 - (nowMs() - started))
       });
 
-      const items = enriched.map(compactResultItem);
+      let items = enriched.map(compactResultItem);
+      items = decorateSearchItemsForDisplay(q, items, { raw: raw || {}, type: searchType, searchType, lang, path:'image-enrich' });
       return ok({
         status: 'ok',
         engine: 'maru-search',
@@ -4932,8 +4889,7 @@ exports.handler = async function(event){
     }
 
     const visibleNeed = clampInt(firstNonEmpty(raw && (raw.perPage || raw.pageSize || raw.visibleCardsPerPage || raw.visibleLimit), 25), 25, 1, 100);
-    const displayRichRequested = truthy(raw && (raw.displayRich || raw.richCards || raw.displayEngine || raw.requireBody || raw.searchDisplay));
-    const forceProviderRefresh = deep || explicitExternalRequested(raw) || displayRichRequested || truthy(raw && (raw.refresh || raw.forceRefresh || raw.waitProviders || raw.waitExternal));
+    const forceProviderRefresh = deep || explicitExternalRequested(raw) || truthy(raw && (raw.refresh || raw.forceRefresh || raw.waitProviders || raw.waitExternal));
 
     // IMPORTANT: Sanmaru is the top resident information CPU. Maru Search is the
     // mounted gateway/body and should format/page Sanmaru's already-mounted
@@ -5077,12 +5033,9 @@ exports.handler = async function(event){
     if(maruLocalAuthorityCards.length){
       base.items = dedupeCanonicalItems([].concat(maruLocalAuthorityCards, base.items || []));
     }
-
-    // Search display engine layer: attach body/thumbnail/map/video card contract
-    // before compacting, then preserve that contract through compactResultItem.
-    base = attachSearchDisplayEngineContract(base, q, raw || {}, { searchType, lang, limit });
-
-    base.items = (Array.isArray(base.items) ? base.items : []).map(compactResultItem);
+    base.items = backfillVisuals(Array.isArray(base.items) ? base.items : []);
+    base.items = base.items.map(compactResultItem);
+    base.items = decorateSearchItemsForDisplay(q, base.items, { raw: raw || {}, type: searchType, searchType, lang, meta: base.meta || {}, path:'main-response' });
     base.results = base.items;
     absorbIntoSanmaruResident(q, base.items, { searchType, lang });
     const fullSectionPack = buildSearchSections(base.items, q, { searchType });
@@ -5108,6 +5061,15 @@ exports.handler = async function(event){
       doesNotLimitItemsResults: true
     });
     const fullCandidateCount = Array.isArray(base.items) ? base.items.length : 0;
+    const displayPolicy = buildSearchDisplayPolicyForMaru(q, {
+      raw: raw || {}, type: searchType, searchType, lang,
+      items: base.items, results: base.results || base.items,
+      pageItems: visiblePagePack.pageItems,
+      sections: viewportSections.sections,
+      fullSections: fullSectionPack.sections,
+      visiblePagePack, meta: base.meta || {}
+    });
+    sectionPackWithViewport.displayPolicy = displayPolicy;
     const firstResponseWindow = Math.max(visiblePagePack.perPage, Math.min(visiblePagePack.perPage * 12, 300));
     const responseItems = visiblePagePack.page <= 1
       ? base.items.slice(0, Math.min(fullCandidateCount, firstResponseWindow))
@@ -5123,8 +5085,8 @@ exports.handler = async function(event){
       pageItems: visiblePagePack.pageItems,
       visiblePagePack,
       sectionPack: sectionPackWithViewport,
-      displayPolicy: base.displayPolicy || (base.meta && base.meta.displayPolicy) || null,
-      meta: Object.assign({}, base.meta || {}, { count: responseItems.length, fullCandidateCount, totalCandidates: fullCandidateCount, responseWindowCount: responseItems.length, initialResponseWindow: firstResponseWindow, pagedCandidatePool: true, maxPagerPages: MARU_SEARCH_MAX_PAGER_PAGES, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, fullCandidateCount, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', security:{ allowed:true, admin:security.admin, mode:'read-search-open-admin-actions-protected' }, sanmaruTopResident: Object.assign({}, sanmaruRouteContext && sanmaruRouteContext.meta || {}, { routePlan: sanmaruRouteContext && sanmaruRouteContext.routePlan, providerHealth: sanmaruRouteContext && sanmaruRouteContext.providerHealth }), searchContract:{ owner:'sanmaru-global-web-information-cpu', maruRole:'mounted-gateway-ui-body', itemResults:'full-candidate-pool-not-viewport-limited', viewport:'page-sized-current-render-window', perPage:visiblePagePack.perPage, providerRescanPolicy:'skip-only-when-sanmaru-holds-broad-query-cache; otherwise preserve-google-naver-sns-wide-gateway' }, preservationPatch: 'A1.5.46-595-direct-page25-sns-google-category-fix' })
+      displayPolicy,
+      meta: Object.assign({}, base.meta || {}, { displayPolicy, count: responseItems.length, fullCandidateCount, totalCandidates: fullCandidateCount, responseWindowCount: responseItems.length, initialResponseWindow: firstResponseWindow, pagedCandidatePool: true, maxPagerPages: MARU_SEARCH_MAX_PAGER_PAGES, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, fullCandidateCount, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', security:{ allowed:true, admin:security.admin, mode:'read-search-open-admin-actions-protected' }, sanmaruTopResident: Object.assign({}, sanmaruRouteContext && sanmaruRouteContext.meta || {}, { routePlan: sanmaruRouteContext && sanmaruRouteContext.routePlan, providerHealth: sanmaruRouteContext && sanmaruRouteContext.providerHealth }), searchContract:{ owner:'sanmaru-global-web-information-cpu', maruRole:'mounted-gateway-ui-body', itemResults:'full-candidate-pool-not-viewport-limited', viewport:'page-sized-current-render-window', perPage:visiblePagePack.perPage, providerRescanPolicy:'skip-only-when-sanmaru-holds-broad-query-cache; otherwise preserve-google-naver-sns-wide-gateway' }, preservationPatch: 'A1.5.46-595-direct-page25-sns-google-category-fix' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));

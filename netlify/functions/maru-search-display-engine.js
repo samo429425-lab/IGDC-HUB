@@ -12,7 +12,7 @@
  * - search.js remains the UI executor: it hides/shows/reorders categories using this policy.
  */
 
-const VERSION = 'maru-search-display-engine-v1.1.1-natural-thumbnail-filter';
+const VERSION = 'maru-search-display-engine-v1.3.0-rich-card-no-category-overwrite';
 const ENGINE_NAME = 'maru-search-display-engine';
 
 const BASE_GROUP_ORDER = [
@@ -137,6 +137,16 @@ function collectDisplayImages(item){
     .concat(displayCard.thumbnail ? [displayCard.thumbnail] : [])
     .concat(displayCard.image ? [displayCard.image] : [])
     .concat(Array.isArray(displayCard.imageSet) ? displayCard.imageSet : [])
+    .concat(item.originalImage ? [item.originalImage] : [])
+    .concat(item.fullImage ? [item.fullImage] : [])
+    .concat(item.imageOriginal ? [item.imageOriginal] : [])
+    .concat(item.viewerImage ? [item.viewerImage] : [])
+    .concat(item.openImageUrl ? [item.openImageUrl] : [])
+    .concat(item.contentUrl ? [item.contentUrl] : [])
+    .concat(item.cardImage ? [item.cardImage] : [])
+    .concat(preview.original ? [preview.original] : [])
+    .concat(preview.poster ? [preview.poster] : [])
+    .concat(preview.thumb ? [preview.thumb] : [])
     .concat(item.thumbnail ? [item.thumbnail] : [])
     .concat(item.thumb ? [item.thumb] : [])
     .concat(item.image ? [item.image] : [])
@@ -156,7 +166,21 @@ function collectDisplayImages(item){
     .concat(preview.thumbnail ? [preview.thumbnail] : [])
     .concat(preview.image ? [preview.image] : [])
     .concat(Array.isArray(item.imageSet) ? item.imageSet : [])
+    .concat(payload.originalImage ? [payload.originalImage] : [])
+    .concat(payload.fullImage ? [payload.fullImage] : [])
+    .concat(payload.imageOriginal ? [payload.imageOriginal] : [])
+    .concat(payload.viewerImage ? [payload.viewerImage] : [])
+    .concat(payload.openImageUrl ? [payload.openImageUrl] : [])
+    .concat(payload.contentUrl ? [payload.contentUrl] : [])
+    .concat(payload.cardImage ? [payload.cardImage] : [])
     .concat(Array.isArray(payload.imageSet) ? payload.imageSet : [])
+    .concat(data.originalImage ? [data.originalImage] : [])
+    .concat(data.fullImage ? [data.fullImage] : [])
+    .concat(data.imageOriginal ? [data.imageOriginal] : [])
+    .concat(data.viewerImage ? [data.viewerImage] : [])
+    .concat(data.openImageUrl ? [data.openImageUrl] : [])
+    .concat(data.contentUrl ? [data.contentUrl] : [])
+    .concat(data.cardImage ? [data.cardImage] : [])
     .concat(Array.isArray(data.imageSet) ? data.imageSet : []);
   const out = [];
   const seen = new Set();
@@ -205,13 +229,16 @@ function decorateDisplayItem(item, ctx, index){
   const summary = naturalSummary(item, q) || fallbackDisplaySummary(item, q, group);
   const cardType = cardTypeForGroup(group, item);
   const mapLike = cardType === 'map';
+  const groupLabelHint = ({
+    authority:'주요 정보', public_data:'공공자료', local_tour:'지도/지역', knowledge:'지식', wiki:'위키', site:'사이트', book:'도서',
+    blog:'블로그', cafe:'카페', shopping:'쇼핑', news:'뉴스', image:'이미지', video:'영상', media:'미디어', social:'소셜',
+    academic:'학술', community:'커뮤니티', sports:'스포츠', finance:'증권', webtoon:'웹툰', web:'웹'
+  })[group] || '웹';
+
+  // Do not overwrite search.js' stable category pipeline. Attach rich display hints only.
   const copy = Object.assign({}, item, {
-    displayGroup: group,
-    displayGroupLabel: ({
-      authority:'주요 정보', public_data:'공공자료', local_tour:'지도/지역', knowledge:'지식', wiki:'위키', site:'사이트', book:'도서',
-      blog:'블로그', cafe:'카페', shopping:'쇼핑', news:'뉴스', image:'이미지', video:'영상', media:'미디어', social:'소셜',
-      academic:'학술', community:'커뮤니티', sports:'스포츠', finance:'증권', webtoon:'웹툰', web:'웹'
-    })[group] || '웹',
+    displayGroupHint: group,
+    displayGroupLabelHint: groupLabelHint,
     displaySummary: summary,
     summary: firstNonEmpty(item.summary, item.snippet, item.description, summary),
     description: firstNonEmpty(item.description, item.summary, item.snippet, summary),
