@@ -68,7 +68,6 @@ ready(function () {
     const pageImageEnrichCache = new Set();
     const itemImageEnrichCache = new Map();
     const expandedDisplayGroups = new Set();
-    let currentDisplayPolicy = null;
 
     // SANMARU resident switch:
     // The first search signal warms/activates Sanmaru on the server. Later searches
@@ -143,28 +142,6 @@ function normalizeSearchType(v){
 function getTypeLabel(type){
   const hit = SEARCH_TABS.find(x => x[0] === normalizeSearchType(type));
   return hit ? hit[1] : '전체';
-}
-
-function normalizeDisplayPolicyGroupName(group){
-  const raw = String(group || '').trim().toLowerCase();
-  const map = {
-    official_authority:'authority', official:'authority', gov:'authority', government:'authority',
-    map_local_tour:'local_tour', local:'local_tour', map:'local_tour', tour:'local_tour', travel:'local_tour',
-    knowledge_wiki:'knowledge', encyclopedia:'knowledge',
-    image_gallery:'image', video_vlog:'video', blog_review:'blog', community_sns:'social', sns:'social',
-    shopping_product:'shopping', company_web:'site', general_web:'web', public:'public_data'
-  };
-  return map[raw] || raw;
-}
-
-function readDisplayPolicyFromPayload(payload){
-  const root = payload && payload.payload ? payload.payload : payload;
-  if(!root || typeof root !== 'object') return null;
-  return root.displayPolicy ||
-    (root.meta && root.meta.displayPolicy) ||
-    (root.sectionPack && root.sectionPack.displayPolicy) ||
-    (root.visiblePagePack && root.visiblePagePack.displayPolicy) ||
-    null;
 }
 
 
@@ -972,61 +949,77 @@ function startContinuousIntake(q, type, seq){
       ].map(safeText).join(' ');
       return haystack.includes(qq);
     }
-
-   function dedupeItems(items){
-  const byKey = new Map();
-  const order = [];
-
-  function sourceNameOf(it){
-    const src = it && it.source;
-    if(src && typeof src === 'object') return String(src.name || src.provider || src.platform || src.id || '').trim();
-    return String(src || it?.provider || it?.channel || '').trim();
-  }
-
-  function keyOf(it){
-    const rawUrl = String(it?.url || it?.link || it?.openUrl || '').trim();
-    const normUrl = rawUrl.toLowerCase();
-    const isPlaceholderUrl =
-      !rawUrl || rawUrl === '#' || rawUrl === '/' || normUrl === 'javascript:void(0)' || normUrl.startsWith('javascript:');
-    return (
-      !isPlaceholderUrl
-        ? rawUrl
-        : (String(it?.id || '').trim() || ((String(it?.title || '').trim()) + '|' + sourceNameOf(it)))
-    ).toLowerCase();
-  }
-
-  function richnessScore(it){
-    if(!it || typeof it !== 'object') return 0;
-    const dc = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
-    const desc = descriptionForItemClient ? descriptionForItemClient(it) : String(it.summary || it.snippet || it.description || it.displaySummary || dc.summary || '');
-    const imgs = collectNaturalImages ? collectNaturalImages(it) : (Array.isArray(it.imageSet) ? it.imageSet : []);
-    let score = 0;
-    if(dc && Object.keys(dc).length) score += 80;
-    if(String(it.displaySummary || dc.summary || '').trim()) score += 45;
-    if(desc && desc.length >= 40) score += 35;
-    else if(desc) score += 16;
-    if(imgs && imgs.length) score += 40 + Math.min(20, imgs.length * 6);
-    if(it.media && it.media.preview) score += 20;
-    if(it.videoId || it.videoUrl || it.embedUrl) score += 25;
-    if(it.placeInfo || it.mapQuery || (dc && dc.showMapPreview)) score += 18;
-    if(it.generatedBy || it.sanmaruFirstPaint || it.sourceType === 'provider-lane-window') score -= 25;
-    return score;
-  }
-
-  for (const it of Array.isArray(items) ? items : []) {
-    const key = keyOf(it);
-    if (!key) continue;
-    if (!byKey.has(key)) {
-      byKey.set(key, it);
-      order.push(key);
-      continue;
+    function itemRichnessScore(it){
+      if(!it || typeof it !== 'object') return 0;
+      let score = 0;
+      const dc = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+      const summary = compactCardTextClient([
+        dc.summary, dc.body, dc.description, it.displaySummary, it.summary, it.snippet,
+        it.description, it.contentSnippet, it.excerpt, it.abstract
+      ]);
+      if(summary && summary.length >= 12) score += Math.min(80, summary.length);
+      try { if(collectNaturalImages(it).length) score += 120; } catch(e) {}
+      if(dc && (dc.showThumbnail || dc.hasThumbnail || dc.thumbnail || (Array.isArray(dc.imageSet) && dc.imageSet.length))) score += 80;
+      if(dc && dc.showMapPreview) score += 45;
+      if(it.__maruAllowMapPreview) score += 35;
+      if(it.media && it.media.preview) score += 35;
+      if(it.placeInfo || it.mapQuery) score += 20;
+      return score;
     }
-    const prev = byKey.get(key);
-    if (richnessScore(it) > richnessScore(prev)) byKey.set(key, Object.assign({}, prev || {}, it || {}));
-  }
 
-  return order.map(key => byKey.get(key)).filter(Boolean);
-}
+    function mergeRicherSearchItem(a, b){
+      if(!a) return b;
+      if(!b) return a;
+      const richer = itemRichnessScore(b) > itemRichnessScore(a) ? b : a;
+      const poorer = richer === b ? a : b;
+      const merged = Object.assign({}, poorer, richer);
+      const dcA = (a.displayCard && typeof a.displayCard === 'object') ? a.displayCard : {};
+      const dcB = (b.displayCard && typeof b.displayCard === 'object') ? b.displayCard : {};
+      merged.displayCard = Object.assign({}, dcA, dcB, richer.displayCard || {});
+      const imageSet = [];
+      [a.imageSet, b.imageSet, dcA.imageSet, dcB.imageSet].forEach(list => {
+        (Array.isArray(list) ? list : []).forEach(x => { if(x && !imageSet.includes(x)) imageSet.push(x); });
+      });
+      ['thumbnail','thumb','image','imageUrl','originalImage','fullImage','imageOriginal','viewerImage','openImageUrl','contentUrl','cardImage'].forEach(k => {
+        if(a[k] && !imageSet.includes(a[k])) imageSet.push(a[k]);
+        if(b[k] && !imageSet.includes(b[k])) imageSet.push(b[k]);
+      });
+      if(imageSet.length){
+        merged.imageSet = imageSet;
+        merged.thumbnail = merged.thumbnail || imageSet[0];
+        merged.thumb = merged.thumb || imageSet[0];
+        merged.image = merged.image || imageSet[0];
+      }
+      const summary = compactCardTextClient([merged.displayCard && merged.displayCard.summary, merged.displaySummary, merged.summary, merged.snippet, merged.description]);
+      if(summary){
+        merged.displaySummary = merged.displaySummary || summary;
+        merged.summary = merged.summary || summary;
+        merged.snippet = merged.snippet || summary;
+        merged.description = merged.description || summary;
+      }
+      return merged;
+    }
+
+    function dedupeItems(items){
+      const out = [];
+      const pos = new Map();
+
+      for (const it of Array.isArray(items) ? items : []) {
+        const rawUrl = String(it?.url || it?.link || '').trim();
+        const normUrl = rawUrl.toLowerCase();
+        const isPlaceholderUrl = !rawUrl || rawUrl === '#' || rawUrl === '/' || normUrl === 'javascript:void(0)' || normUrl.startsWith('javascript:');
+        const key = (!isPlaceholderUrl ? rawUrl : (String(it?.id || '').trim() || ((String(it?.title || '').trim()) + '|' + String(it?.source?.name || it?.source || '').trim()))).toLowerCase();
+        if (!key) continue;
+        if (pos.has(key)) {
+          const idx = pos.get(key);
+          out[idx] = mergeRicherSearchItem(out[idx], it);
+          continue;
+        }
+        pos.set(key, out.length);
+        out.push(it);
+      }
+      return out;
+    }
 
 async function fetchSearch(q, type = activeType, page = 1){
   const safeType = normalizeSearchType(type);
@@ -1051,16 +1044,11 @@ async function fetchSearch(q, type = activeType, page = 1){
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
-  // Search display engine contract: page 1 must return rich cards, not only
-  // Sanmaru route/provider-lane placeholders. Later pages may still stream.
   sp.set('displayRich', '1');
-  sp.set('richCards', '1');
-  sp.set('displayEngine', '1');
-  sp.set('requireBody', '1');
-  if (Math.max(1, Number(page) || 1) === 1) {
-    sp.set('waitProviders', '1');
-    sp.set('forceWide', '1');
-  }
+  sp.set('displayCards', '1');
+  sp.set('fastFirstWindow', '1');
+  sp.set('noWaitProviders', '1');
+  sp.set('deferImageEnrich', '1');
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
   try {
@@ -1634,7 +1622,22 @@ async function fetchInstantSearchPack(q, type = activeType){
       const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
       const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
 
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+
       const raw = []
+        .concat(displayCard.thumbnail ? [displayCard.thumbnail] : [])
+        .concat(displayCard.image ? [displayCard.image] : [])
+        .concat(Array.isArray(displayCard.imageSet) ? displayCard.imageSet : [])
+        .concat(it && it.originalImage ? [it.originalImage] : [])
+        .concat(it && it.fullImage ? [it.fullImage] : [])
+        .concat(it && it.imageOriginal ? [it.imageOriginal] : [])
+        .concat(it && it.viewerImage ? [it.viewerImage] : [])
+        .concat(it && it.openImageUrl ? [it.openImageUrl] : [])
+        .concat(it && it.contentUrl ? [it.contentUrl] : [])
+        .concat(it && it.cardImage ? [it.cardImage] : [])
+        .concat(preview.original ? [preview.original] : [])
+        .concat(preview.poster ? [preview.poster] : [])
+        .concat(preview.thumb ? [preview.thumb] : [])
         .concat(it && it.thumbnail ? [it.thumbnail] : [])
         .concat(it && it.thumb ? [it.thumb] : [])
         .concat(it && it.image ? [it.image] : [])
@@ -1906,9 +1909,6 @@ async function fetchInstantSearchPack(q, type = activeType){
     function displayGroupPreviewLimit(group, sample){
       const n = parseInt(sample && sample.displayGroupPreviewLimit, 10);
       if (n > 0) return n;
-      const policyLimit = currentDisplayPolicy && currentDisplayPolicy.previewLimitByGroup &&
-        parseInt(currentDisplayPolicy.previewLimitByGroup[normalizeDisplayPolicyGroupName(group)], 10);
-      if(policyLimit > 0) return policyLimit;
 
       const limits = {
         authority: 3,
@@ -1943,11 +1943,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const baseOrder = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
-      const policyOrder = currentDisplayPolicy && Array.isArray(currentDisplayPolicy.groupOrder)
-        ? currentDisplayPolicy.groupOrder.map(normalizeDisplayPolicyGroupName).filter(Boolean)
-        : [];
-      const order = Array.from(new Set(policyOrder.concat(baseOrder)));
+      const order = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -2588,12 +2584,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
       const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
       const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
-      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
       const candidates = [
-        displayCard.summary,
-        displayCard.body,
-        displayCard.description,
-        it && it.displaySummary,
         it && it.summary,
         it && it.snippet,
         it && it.description,
@@ -2648,7 +2639,13 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function shouldRenderMapPreviewForItemClient(it){
-      return !!(it && it.__maruAllowMapPreview === true && isMapLikeItemClient(it));
+      if(!it) return false;
+      const displayCard = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+      if(displayCard.showMapPreview === true && isMapLikeItemClient(it)) return true;
+      if(it.__maruAllowMapPreview === true && isMapLikeItemClient(it)) return true;
+      const t = normalizeSearchType(activeType);
+      if((t === 'map' || t === 'tour') && isMapLikeItemClient(it)) return true;
+      return false;
     }
 
     function renderItem(it, mountTarget){
@@ -2743,9 +2740,8 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (d.textContent) textCol.appendChild(d);
 
       if (d && d.textContent) {
-        const cardLineClamp = it && it.displayCard && parseInt(it.displayCard.lineClamp, 10);
         d.style.display = '-webkit-box';
-        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(5, cardLineClamp) : 3);
+        d.style.webkitLineClamp = '3';
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
@@ -3374,7 +3370,6 @@ async function runSearch(q, type = activeType){
   pageImageEnrichCache.clear();
   itemImageEnrichCache.clear();
   expandedDisplayGroups.clear();
-  currentDisplayPolicy = null;
 
   let firstPaintDone = false;
   let intakeStarted = false;
@@ -3393,8 +3388,6 @@ async function runSearch(q, type = activeType){
     const normalized = normalizeSearchPayload(pack && pack.payload ? pack.payload : pack);
     const payload = normalized.payload || (pack && pack.payload) || pack || null;
     lastSearchPayload = payload || lastSearchPayload;
-    const incomingPolicy = readDisplayPolicyFromPayload(payload || pack);
-    if(incomingPolicy && typeof incomingPolicy === 'object') currentDisplayPolicy = incomingPolicy;
 
     const rawItems = Array.isArray(pack)
       ? pack
@@ -3437,37 +3430,23 @@ async function runSearch(q, type = activeType){
     return promise.then(pack => ({ kind, pack })).catch(error => ({ kind, error }));
   }
 
-  const instantPromise = wrapSupply(fetchInstantSearchPack(qq, activeType), 'sanmaru-instant');
+  // Search result display must be built through Maru Search + Display Engine.
+  // Sanmaru direct instant-supply is only a warm signal and must not paint raw route/opening cards.
+  fetchInstantSearchPack(qq, activeType).catch(() => null);
   const maruWindowPromise = wrapSupply(fetchSearch(qq, activeType, 1), 'maru-search-window');
 
   try{
-    // Rich search cards must be painted from maru-search because that is where
-    // maru-search-display-engine decorates body text, thumbnails, map/video
-    // contracts. Sanmaru instant may warm/cache in the background, but it must
-    // not win first paint with thin title-only route cards.
     const first = await maruWindowPromise;
     if(runSearch._seq !== seq) return;
 
     const firstCount = first && !first.error ? applySupplyPack(first.pack, first.kind) : 0;
-    if(!firstCount){
-      const second = await instantPromise;
-      if(runSearch._seq !== seq) return;
-      if(second && !second.error) applySupplyPack(second.pack, second.kind);
-    }
-
-    if(!firstPaintDone){
+    if(!firstPaintDone && !firstCount){
       results.innerHTML = '';
       status.textContent = `No quick results for "${qq}" · receiving...`;
     }
 
-    intakeTimer = setTimeout(() => startIntakeOnce('first-paint-timer'), 80);
-
-    instantPromise.then(res => {
-      // Instant results are only background cache/merge after rich paint.
-      // They may fill gaps, but richer displayCard items win dedupe.
-      if(runSearch._seq !== seq || !res || res.error || !firstPaintDone) return;
-      applySupplyPack(res.pack, res.kind);
-    });
+    intakeTimer = setTimeout(() => startIntakeOnce('first-paint-timer'), 50);
+    if(firstCount) startIntakeOnce('maru-page1-window-ready');
   }catch(e){
     console.error(e);
     const fallbackPack = await fetchSearch(qq, activeType, 1);
