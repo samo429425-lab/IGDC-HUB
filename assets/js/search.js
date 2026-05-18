@@ -949,37 +949,77 @@ function startContinuousIntake(q, type, seq){
       ].map(safeText).join(' ');
       return haystack.includes(qq);
     }
+    function itemRichnessScore(it){
+      if(!it || typeof it !== 'object') return 0;
+      let score = 0;
+      const dc = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+      const summary = compactCardTextClient([
+        dc.summary, dc.body, dc.description, it.displaySummary, it.summary, it.snippet,
+        it.description, it.contentSnippet, it.excerpt, it.abstract
+      ]);
+      if(summary && summary.length >= 12) score += Math.min(80, summary.length);
+      try { if(collectNaturalImages(it).length) score += 120; } catch(e) {}
+      if(dc && (dc.showThumbnail || dc.hasThumbnail || dc.thumbnail || (Array.isArray(dc.imageSet) && dc.imageSet.length))) score += 80;
+      if(dc && dc.showMapPreview) score += 45;
+      if(it.__maruAllowMapPreview) score += 35;
+      if(it.media && it.media.preview) score += 35;
+      if(it.placeInfo || it.mapQuery) score += 20;
+      return score;
+    }
 
-   function dedupeItems(items){
-  const out = [];
-  const seen = new Set();
+    function mergeRicherSearchItem(a, b){
+      if(!a) return b;
+      if(!b) return a;
+      const richer = itemRichnessScore(b) > itemRichnessScore(a) ? b : a;
+      const poorer = richer === b ? a : b;
+      const merged = Object.assign({}, poorer, richer);
+      const dcA = (a.displayCard && typeof a.displayCard === 'object') ? a.displayCard : {};
+      const dcB = (b.displayCard && typeof b.displayCard === 'object') ? b.displayCard : {};
+      merged.displayCard = Object.assign({}, dcA, dcB, richer.displayCard || {});
+      const imageSet = [];
+      [a.imageSet, b.imageSet, dcA.imageSet, dcB.imageSet].forEach(list => {
+        (Array.isArray(list) ? list : []).forEach(x => { if(x && !imageSet.includes(x)) imageSet.push(x); });
+      });
+      ['thumbnail','thumb','image','imageUrl','originalImage','fullImage','imageOriginal','viewerImage','openImageUrl','contentUrl','cardImage'].forEach(k => {
+        if(a[k] && !imageSet.includes(a[k])) imageSet.push(a[k]);
+        if(b[k] && !imageSet.includes(b[k])) imageSet.push(b[k]);
+      });
+      if(imageSet.length){
+        merged.imageSet = imageSet;
+        merged.thumbnail = merged.thumbnail || imageSet[0];
+        merged.thumb = merged.thumb || imageSet[0];
+        merged.image = merged.image || imageSet[0];
+      }
+      const summary = compactCardTextClient([merged.displayCard && merged.displayCard.summary, merged.displaySummary, merged.summary, merged.snippet, merged.description]);
+      if(summary){
+        merged.displaySummary = merged.displaySummary || summary;
+        merged.summary = merged.summary || summary;
+        merged.snippet = merged.snippet || summary;
+        merged.description = merged.description || summary;
+      }
+      return merged;
+    }
 
-  for (const it of Array.isArray(items) ? items : []) {
-    const rawUrl = String(it?.url || it?.link || '').trim();
-    const normUrl = rawUrl.toLowerCase();
+    function dedupeItems(items){
+      const out = [];
+      const pos = new Map();
 
-    const isPlaceholderUrl =
-      !rawUrl ||
-      rawUrl === '#' ||
-      rawUrl === '/' ||
-      normUrl === 'javascript:void(0)' ||
-      normUrl.startsWith('javascript:');
-
-    const key = (
-      !isPlaceholderUrl
-        ? rawUrl
-        : (String(it?.id || '').trim() ||
-           ((String(it?.title || '').trim()) + '|' + String(it?.source?.name || it?.source || '').trim()))
-    ).toLowerCase();
-
-    if (!key) continue;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(it);
-  }
-
-  return out;
-}
+      for (const it of Array.isArray(items) ? items : []) {
+        const rawUrl = String(it?.url || it?.link || '').trim();
+        const normUrl = rawUrl.toLowerCase();
+        const isPlaceholderUrl = !rawUrl || rawUrl === '#' || rawUrl === '/' || normUrl === 'javascript:void(0)' || normUrl.startsWith('javascript:');
+        const key = (!isPlaceholderUrl ? rawUrl : (String(it?.id || '').trim() || ((String(it?.title || '').trim()) + '|' + String(it?.source?.name || it?.source || '').trim()))).toLowerCase();
+        if (!key) continue;
+        if (pos.has(key)) {
+          const idx = pos.get(key);
+          out[idx] = mergeRicherSearchItem(out[idx], it);
+          continue;
+        }
+        pos.set(key, out.length);
+        out.push(it);
+      }
+      return out;
+    }
 
 async function fetchSearch(q, type = activeType, page = 1){
   const safeType = normalizeSearchType(type);
@@ -1004,6 +1044,11 @@ async function fetchSearch(q, type = activeType, page = 1){
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
+  sp.set('displayRich', '1');
+  sp.set('displayCards', '1');
+  sp.set('fastFirstWindow', '1');
+  sp.set('noWaitProviders', '1');
+  sp.set('deferImageEnrich', '1');
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
   try {
@@ -1577,7 +1622,22 @@ async function fetchInstantSearchPack(q, type = activeType){
       const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
       const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
 
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+
       const raw = []
+        .concat(displayCard.thumbnail ? [displayCard.thumbnail] : [])
+        .concat(displayCard.image ? [displayCard.image] : [])
+        .concat(Array.isArray(displayCard.imageSet) ? displayCard.imageSet : [])
+        .concat(it && it.originalImage ? [it.originalImage] : [])
+        .concat(it && it.fullImage ? [it.fullImage] : [])
+        .concat(it && it.imageOriginal ? [it.imageOriginal] : [])
+        .concat(it && it.viewerImage ? [it.viewerImage] : [])
+        .concat(it && it.openImageUrl ? [it.openImageUrl] : [])
+        .concat(it && it.contentUrl ? [it.contentUrl] : [])
+        .concat(it && it.cardImage ? [it.cardImage] : [])
+        .concat(preview.original ? [preview.original] : [])
+        .concat(preview.poster ? [preview.poster] : [])
+        .concat(preview.thumb ? [preview.thumb] : [])
         .concat(it && it.thumbnail ? [it.thumbnail] : [])
         .concat(it && it.thumb ? [it.thumb] : [])
         .concat(it && it.image ? [it.image] : [])
@@ -2579,7 +2639,13 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function shouldRenderMapPreviewForItemClient(it){
-      return !!(it && it.__maruAllowMapPreview === true && isMapLikeItemClient(it));
+      if(!it) return false;
+      const displayCard = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+      if(displayCard.showMapPreview === true && isMapLikeItemClient(it)) return true;
+      if(it.__maruAllowMapPreview === true && isMapLikeItemClient(it)) return true;
+      const t = normalizeSearchType(activeType);
+      if((t === 'map' || t === 'tour') && isMapLikeItemClient(it)) return true;
+      return false;
     }
 
     function renderItem(it, mountTarget){
@@ -3364,39 +3430,23 @@ async function runSearch(q, type = activeType){
     return promise.then(pack => ({ kind, pack })).catch(error => ({ kind, error }));
   }
 
-  const instantPromise = wrapSupply(fetchInstantSearchPack(qq, activeType), 'sanmaru-instant');
+  // Search result display must be built through Maru Search + Display Engine.
+  // Sanmaru direct instant-supply is only a warm signal and must not paint raw route/opening cards.
+  fetchInstantSearchPack(qq, activeType).catch(() => null);
   const maruWindowPromise = wrapSupply(fetchSearch(qq, activeType, 1), 'maru-search-window');
 
   try{
-    const first = await Promise.race([instantPromise, maruWindowPromise]);
+    const first = await maruWindowPromise;
     if(runSearch._seq !== seq) return;
 
     const firstCount = first && !first.error ? applySupplyPack(first.pack, first.kind) : 0;
-    if(!firstCount){
-      const second = first && first.kind === 'sanmaru-instant' ? await maruWindowPromise : await instantPromise;
-      if(runSearch._seq !== seq) return;
-      if(second && !second.error) applySupplyPack(second.pack, second.kind);
-    }
-
-    if(!firstPaintDone){
+    if(!firstPaintDone && !firstCount){
       results.innerHTML = '';
       status.textContent = `No quick results for "${qq}" · receiving...`;
     }
 
-    // Do not wait for Sanmaru/MaruSearch to finish all lanes. Start the faucet
-    // shortly after first paint, but let the page-1 300-window seed pages 1~12
-    // first when it arrives quickly.
     intakeTimer = setTimeout(() => startIntakeOnce('first-paint-timer'), 50);
-
-    maruWindowPromise.then(res => {
-      if(runSearch._seq !== seq || !res || res.error) return;
-      applySupplyPack(res.pack, res.kind);
-      startIntakeOnce('maru-page1-window-ready');
-    });
-    instantPromise.then(res => {
-      if(runSearch._seq !== seq || !res || res.error) return;
-      applySupplyPack(res.pack, res.kind);
-    });
+    if(firstCount) startIntakeOnce('maru-page1-window-ready');
   }catch(e){
     console.error(e);
     const fallbackPack = await fetchSearch(qq, activeType, 1);
