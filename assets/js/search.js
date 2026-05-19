@@ -24,13 +24,12 @@ ready(function () {
   // 🔥 홈에서도 search.js 동작 허용 (핵심 수정)
   const hasSearchUI =
     document.getElementById('searchInput') ||
-    document.getElementById('globalSearchInput') ||
-    document.getElementById('homeSearchInput');
+    document.getElementById('globalSearchInput');
 
   if (!isSearchPage && !hasSearchUI) return;
 
-    const input   = document.getElementById('searchInput') || document.getElementById('globalSearchInput') || document.getElementById('homeSearchInput');
-    const btn     = document.getElementById('searchBtn') || document.getElementById('globalSearchBtn') || document.getElementById('homeSearchBtn');
+    const input   = document.getElementById('searchInput') || document.getElementById('globalSearchInput');
+    const btn     = document.getElementById('searchBtn') || document.getElementById('globalSearchBtn');
     const statusEl = document.getElementById('searchStatus');
     const resultsEl = document.getElementById('searchResults');
     const status  = statusEl || { textContent: '' };
@@ -114,18 +113,19 @@ const from0 = (params.get('from') || '').trim();
 const SEARCH_TABS = [
   ['all', '전체'],
   ['map', '지도'],
+  ['news', '뉴스'],
   ['knowledge', '지식'],
   ['wiki', '위키'],
   ['site', '사이트'],
-  ['book', '도서'],
   ['blog', '블로그'],
   ['cafe', '카페'],
-  ['shopping', '쇼핑'],
-  ['news', '뉴스'],
+  ['sns', 'SNS'],
+  ['tour', '관광'],
   ['image', '이미지'],
   ['video', '영상'],
-  ['sns', '소셜'],
-  ['tour', '관광'],
+  ['media', '미디어'],
+  ['book', '도서'],
+  ['shopping', '쇼핑'],
   ['public_data', '공공자료'],
   ['academic', '학술'],
   ['sports', '스포츠'],
@@ -136,7 +136,7 @@ const SEARCH_TABS = [
 function normalizeSearchType(v){
   const raw = String(v || '').trim().toLowerCase();
   const allowed = new Set(SEARCH_TABS.map(x => x[0]));
-  const alias = { books: 'book', 도서: 'book', 책: 'book', sns: 'sns', social: 'sns', public: 'public_data', 공공자료: 'public_data', wiki: 'wiki', 위키: 'wiki', academic: 'academic', 학술: 'academic', site: 'site', 사이트: 'site' };
+  const alias = { books: 'book', 도서: 'book', 책: 'book', sns: 'sns', social: 'sns', 소셜: 'sns', public: 'public_data', 공공자료: 'public_data', wiki: 'wiki', 위키: 'wiki', academic: 'academic', 학술: 'academic', site: 'site', 사이트: 'site', media: 'media', 미디어: 'media', tour: 'tour', 관광: 'tour', news: 'news', 뉴스: 'news' };
   return allowed.has(raw) ? raw : (alias[raw] || 'all');
 }
 
@@ -676,7 +676,7 @@ btn.addEventListener('click', (e) => {
     return;
   }
 
-  try { window.top.location.href = buildSearchUrl(q); } catch(e) { window.location.assign(buildSearchUrl(q)); }
+  window.location.assign(buildSearchUrl(q));
 });
 
 input.addEventListener('keydown', (e) => {
@@ -732,7 +732,7 @@ input.addEventListener('keydown', (e) => {
     return;
   }
 
-  try { window.top.location.href = buildSearchUrl(q); } catch(e) { window.location.assign(buildSearchUrl(q)); }
+  window.location.assign(buildSearchUrl(q));
 });
 
 function unwrap(x){
@@ -905,7 +905,7 @@ function startContinuousIntake(q, type, seq){
         const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack))).slice(0, PAGE_SIZE);
         if(pageSlice.length){
           loadedServerPages.set(page, pageSlice);
-          allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice);
+          allItems = dedupeItems(allItems.concat(pageSlice));
           lastSearchPayload = pack && pack.payload || lastSearchPayload;
           updateProgressiveTotalFromPayload(pack && pack.payload, allItems.length);
           if(page === currentPage) renderPage(page, true);
@@ -979,69 +979,6 @@ function startContinuousIntake(q, type, seq){
     out.push(it);
   }
 
-  return out;
-}
-
-function searchDisplayKeyForItem(it){
-  if(!it) return '';
-  const rawUrl = String(it.url || it.link || it.openUrl || '').trim();
-  const normUrl = rawUrl.toLowerCase();
-  const isPlaceholderUrl =
-    !rawUrl ||
-    rawUrl === '#' ||
-    rawUrl === '/' ||
-    normUrl === 'javascript:void(0)' ||
-    normUrl.startsWith('javascript:');
-
-  if(!isPlaceholderUrl) return normUrl;
-  return String(
-    it.id || it.indexId || it.originalId ||
-    ((String(it.title || it.name || '').trim()) + '|' + String((it.source && (it.source.name || it.source.platform)) || it.source || it.provider || '').trim())
-  ).toLowerCase();
-}
-
-function displayRichnessScore(it){
-  if(!it || typeof it !== 'object') return 0;
-  let score = 0;
-  const card = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
-  const media = (it.media && typeof it.media === 'object') ? it.media : {};
-  const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
-  const summaryText = [
-    card.summary, card.description, card.body, card.text,
-    it.displaySummary, it.summary, it.snippet, it.description, it.contentSnippet,
-    it.excerpt, it.abstract, it.text, it.content, it.metaDescription, it.ogDescription
-  ].map(v => String(v || '').trim()).filter(Boolean).join(' ');
-  if(summaryText.length >= 18) score += Math.min(40, Math.floor(summaryText.length / 12));
-  if(card && Object.keys(card).length) score += 18;
-  if(card.showMapPreview || it.__maruAllowMapPreview || it.mapQuery || it.placeInfo) score += 20;
-  if(card.thumbnail || card.image || (Array.isArray(card.imageSet) && card.imageSet.length)) score += 25;
-  if(it.thumbnail || it.thumb || it.image || it.ogImage || it.og_image || (Array.isArray(it.imageSet) && it.imageSet.length)) score += 20;
-  if(preview.thumbnail || preview.image || preview.poster || preview.mp4 || preview.webm) score += 18;
-  if(it.videoId || it.videoUrl || it.embedUrl || /youtube|youtu\.be|ytimg/i.test(String([it.url, it.link, it.thumbnail, it.image].join(' ')))) score += 14;
-  return score;
-}
-
-function mergeItemsPreferDisplayRichness(baseItems, incomingItems){
-  const out = [];
-  const pos = new Map();
-  function addOrMerge(it){
-    if(!it) return;
-    const key = searchDisplayKeyForItem(it);
-    if(!key) return;
-    if(!pos.has(key)){
-      pos.set(key, out.length);
-      out.push(it);
-      return;
-    }
-    const idx = pos.get(key);
-    const prev = out[idx];
-    const merged = Object.assign({}, prev || {}, it || {});
-    const prevScore = displayRichnessScore(prev);
-    const nextScore = displayRichnessScore(it);
-    out[idx] = nextScore >= prevScore ? merged : Object.assign({}, it || {}, prev || {});
-  }
-  (Array.isArray(baseItems) ? baseItems : []).forEach(addOrMerge);
-  (Array.isArray(incomingItems) ? incomingItems : []).forEach(addOrMerge);
   return out;
 }
 
@@ -1171,7 +1108,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         history.pushState({ q, type: nextType, from: safeReturnUrl || '' }, '', u.toString());
         runSearch(q, nextType);
       } else {
-        try { window.top.location.href = buildSearchUrl(q); } catch(e) { window.location.assign(buildSearchUrl(q)); }
+        window.location.assign(buildSearchUrl(q));
       }
     }
 
@@ -1613,14 +1550,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function preferredYoutubeThumbClient(it){
-      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
       const candidates = [
-        displayCard.videoId,
-        displayCard.videoUrl,
-        displayCard.watchUrl,
-        displayCard.embedUrl,
-        displayCard.thumbnail,
-        displayCard.image,
         it && it.videoId,
         it && it.url,
         it && it.link,
@@ -1630,9 +1560,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         it && it.thumbnail,
         it && it.thumb,
         it && it.image
-      ]
-        .concat(Array.isArray(displayCard.imageSet) ? displayCard.imageSet : [])
-        .concat(Array.isArray(it && it.imageSet) ? it.imageSet : []);
+      ].concat(Array.isArray(it && it.imageSet) ? it.imageSet : []);
 
       for (const v of candidates) {
         const id = String(v || '').length === 11 && /^[A-Za-z0-9_-]{11}$/.test(String(v || ''))
@@ -1645,18 +1573,12 @@ async function fetchInstantSearchPack(q, type = activeType){
 
     function collectNaturalImages(it){
       const sourceText = String((it && it.source) || '').toLowerCase();
-      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
       const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
       const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
       const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
       const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
 
       const raw = []
-        .concat(displayCard.thumbnail ? [displayCard.thumbnail] : [])
-        .concat(displayCard.image ? [displayCard.image] : [])
-        .concat(Array.isArray(displayCard.imageSet) ? displayCard.imageSet : [])
-        .concat(displayCard.preview && displayCard.preview.thumbnail ? [displayCard.preview.thumbnail] : [])
-        .concat(displayCard.preview && displayCard.preview.image ? [displayCard.preview.image] : [])
         .concat(it && it.thumbnail ? [it.thumbnail] : [])
         .concat(it && it.thumb ? [it.thumb] : [])
         .concat(it && it.image ? [it.image] : [])
@@ -1914,7 +1836,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         community: '커뮤니티',
         image: '이미지',
         video: '영상',
-        media: '이미지/영상',
+        media: '미디어',
         social: 'SNS',
         shopping: '쇼핑',
         sports: '스포츠',
@@ -1962,7 +1884,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
+      const order = ['local_tour','news','knowledge','wiki','site','blog','cafe','social','image','video','media','book','shopping','public_data','academic','sports','finance','webtoon','authority','community','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -2339,10 +2261,29 @@ async function fetchInstantSearchPack(q, type = activeType){
       });
     }
 
+    function isProviderSearchIndexUrlClient(url){
+      const raw = String(url || '').trim();
+      if(!raw) return false;
+      try {
+        const u = new URL(raw, location.origin);
+        const host = u.hostname.replace(/^www\./, '').toLowerCase();
+        const path = String(u.pathname || '').toLowerCase();
+        if((host === 'google.com' || host.startsWith('google.')) && path === '/search') return true;
+        if(host === 'search.naver.com' && path.includes('/search.naver')) return true;
+        if(host === 'm.search.naver.com' && path.includes('/search.naver')) return true;
+        if(host === 'bing.com' && path === '/search') return true;
+        if(host === 'duckduckgo.com' && (path === '/' || path === '/html/' || path === '/lite/')) return !!u.searchParams.get('q');
+        if(host === 'youtube.com' && path === '/results') return true;
+        if(host === 'search.yahoo.com' && path.includes('/search')) return true;
+      } catch(e) {}
+      return false;
+    }
+
     function shouldRejectSearchResultItem(it){
       if (!it) return true;
       if (isSeedPlaceholderItem(it)) return true;
       if (hasInvalidYouTubeVideoUrl(it)) return true;
+      if (isProviderSearchIndexUrlClient(it && (it.url || it.link || it.href || it.openUrl))) return true;
       return false;
     }
 
@@ -2599,18 +2540,11 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function descriptionForItemClient(it){
-      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
       const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
       const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
       const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
       const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
       const candidates = [
-        displayCard.summary,
-        displayCard.description,
-        displayCard.body,
-        displayCard.text,
-        displayCard.snippet,
-        it && it.displaySummary,
         it && it.summary,
         it && it.snippet,
         it && it.description,
@@ -2665,13 +2599,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function shouldRenderMapPreviewForItemClient(it){
-      if(!it) return false;
-      const displayCard = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
-      if(displayCard.showMapPreview === true && isMapLikeItemClient(it)) return true;
-      if(it.__maruAllowMapPreview === true && isMapLikeItemClient(it)) return true;
-      const t = normalizeSearchType(activeType);
-      if((t === 'map' || t === 'tour') && isMapLikeItemClient(it)) return true;
-      return false;
+      return !!(it && it.__maruAllowMapPreview === true && isMapLikeItemClient(it));
     }
 
     function renderItem(it, mountTarget){
@@ -2688,7 +2616,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         card.style.cursor = 'pointer';
         card.addEventListener('click', (e) => {
           if (e.target && e.target.closest && e.target.closest('a, button, iframe, video, .maru-video-embed-wrap, .maru-card-media')) return;
-          window.location.href = url;
+          window.open(url, '_blank', 'noopener,noreferrer');
         });
       }
 
@@ -2705,8 +2633,8 @@ async function fetchInstantSearchPack(q, type = activeType){
       if (url) {
         const a = document.createElement('a');
         a.href = url;
-        a.target = '_self';
-        a.rel = 'noopener';
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
         a.textContent = (it.title || '').trim() || '(no title)';
         a.style.color = 'inherit';
         a.style.textDecoration = 'none';
@@ -2767,8 +2695,7 @@ if (it.riskLabel === '⚠️ high-risk') {
 
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
-        const cardLineClamp = it && it.displayCard && parseInt(it.displayCard.lineClamp, 10);
-        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(5, cardLineClamp) : 3);
+        d.style.webkitLineClamp = '3';
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
@@ -3253,7 +3180,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
         if(pageSlice.length){
           loadedServerPages.set(page, pageSlice.slice(0, PAGE_SIZE));
-          allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice);
+          allItems = dedupeItems(allItems.concat(pageSlice));
           const total = serverTotalFromPayload(pack && pack.payload, serverTotalItems || pageSlice.length);
           serverTotalItems = Math.max(serverTotalItems || 0, total || 0, INITIAL_PRELOAD_TARGET);
         } else if(serverTotalItems > ((page - 1) * PAGE_SIZE)){
@@ -3430,7 +3357,7 @@ async function runSearch(q, type = activeType){
       Math.max(INITIAL_PRELOAD_TARGET, incoming.length)
     );
     const windowItems = incoming.slice(0, initialWindow);
-    allItems = mergeItemsPreferDisplayRichness(allItems, windowItems).slice(0, MAX_SMOOTH_CANDIDATES);
+    allItems = dedupeItems(allItems.concat(windowItems)).slice(0, MAX_SMOOTH_CANDIDATES);
     seedLoadedServerPagesFromItems(allItems, Math.min(allItems.length, Math.max(INITIAL_PRELOAD_TARGET, windowItems.length)));
     if(pageItems.length) loadedServerPages.set(1, pageItems.slice(0, PAGE_SIZE));
 
