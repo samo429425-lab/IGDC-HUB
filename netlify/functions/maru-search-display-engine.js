@@ -12,17 +12,17 @@
  * - search.js remains the UI executor: it hides/shows/reorders categories using this policy.
  */
 
-const VERSION = 'maru-search-display-engine-v1.4.0-card-contract-executor';
+const VERSION = 'maru-search-display-engine-v1.4.1-real-card-policy';
 const ENGINE_NAME = 'maru-search-display-engine';
 
 const BASE_GROUP_ORDER = [
-  'authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news',
-  'image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'
+  'authority','local_tour','news','knowledge','wiki','site','blog','cafe','social','community',
+  'image','video','media','book','shopping','public_data','academic','sports','finance','webtoon','web'
 ];
 
 const BASE_TABS = [
-  'all','map','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video',
-  'sns','tour','public_data','academic','sports','finance','webtoon'
+  'all','map','news','knowledge','wiki','site','blog','cafe','sns','tour','image','video',
+  'media','book','shopping','public_data','academic','sports','finance','webtoon'
 ];
 
 const DEFAULT_PREVIEW_LIMITS = {
@@ -112,25 +112,10 @@ function naturalSummary(item, query){
   return '';
 }
 function fallbackDisplaySummary(item, query, group){
-  item = item && typeof item === 'object' ? item : {};
-  const title = firstNonEmpty(item.title, item.name, query);
-  const url = firstNonEmpty(item.url, item.link, item.href);
-  const host = domainOf(url);
-  const q = compact(query || title);
-  const label = ({
-    authority:'공식·기관', public_data:'공공자료', local_tour:'지도·지역', knowledge:'지식', wiki:'위키', site:'사이트', book:'도서',
-    blog:'블로그', cafe:'카페', shopping:'쇼핑', news:'뉴스', image:'이미지', video:'영상', media:'미디어', social:'소셜',
-    academic:'학술', community:'커뮤니티', sports:'스포츠', finance:'금융', webtoon:'웹툰', web:'웹'
-  })[group] || '웹';
-  if(group === 'local_tour') return `${q}의 위치·관광·교통·주변 정보를 확인할 수 있는 ${label} 결과입니다. 지도 미리보기와 관련 장소 정보가 함께 표시됩니다.`.slice(0, 300);
-  if(group === 'image') return `${q}와 관련된 사진·그래픽·이미지 자료를 확인할 수 있는 결과입니다. 원본 페이지가 제공하는 대표 이미지가 있으면 카드 오른쪽에 표시됩니다.`.slice(0, 300);
-  if(group === 'video' || group === 'media') return `${q} 관련 영상·현장 화면·리뷰 콘텐츠로 연결되는 결과입니다. 영상 대표 스냅샷이 있는 경우 검색 카드에 함께 표시됩니다.`.slice(0, 300);
-  if(group === 'blog' || group === 'cafe' || group === 'community' || group === 'social') return `${q}에 대한 현장 후기, 소셜 반응, 커뮤니티 글을 확인할 수 있는 결과입니다. 제공된 본문·이미지가 있으면 검색 카드에 같이 표시됩니다.`.slice(0, 300);
-  if(group === 'news') return `${q}와 관련된 최신 보도·이슈·기사 흐름을 확인할 수 있는 결과입니다. 언론사 본문 요약이 제공되면 2~3줄로 표시됩니다.`.slice(0, 300);
-  if(group === 'authority' || group === 'public_data' || group === 'site') return `${q}와 관련된 공식 사이트·공공자료·주요 기관 페이지입니다. ${host || '해당 출처'}의 공개 정보를 기준으로 연결됩니다.`.slice(0, 300);
-  const line1 = q ? `${q} 관련 ${label} 결과입니다.` : `${label} 결과입니다.`;
-  const line2 = host ? `${host}에서 제공되는 공개 페이지이며, 본문 요약이나 대표 이미지가 있으면 검색 카드에 함께 표시됩니다.` : `${title} 항목의 공개 페이지로 연결됩니다.`;
-  return `${line1} ${line2}`.slice(0, 300);
+  // Search cards must not fabricate guide/shortcut text as if it were a real
+  // provider snippet. If no provider summary/body/OG description exists, leave
+  // the card body blank and let search.js render only the title/source.
+  return '';
 }
 function collectDisplayImages(item){
   item = item && typeof item === 'object' ? item : {};
@@ -457,7 +442,7 @@ function policyForIntent(intentInfo, counts){
   const groupOrder = unique(visibleGroups.concat(BASE_GROUP_ORDER));
 
   const visibleTabsMap = {
-    local: ['all','map','tour','blog','image','video','news','site'],
+    local: ['all','map','news','site','blog','cafe','sns','tour','image','video'],
     shopping: ['all','shopping','image','video','blog','site','news'],
     finance: ['all','finance','news','site','blog','video'],
     issue: ['all','news','sns','blog','video','image','wiki','site'],
