@@ -24,12 +24,13 @@ ready(function () {
   // 🔥 홈에서도 search.js 동작 허용 (핵심 수정)
   const hasSearchUI =
     document.getElementById('searchInput') ||
-    document.getElementById('globalSearchInput');
+    document.getElementById('globalSearchInput') ||
+    document.getElementById('homeSearchInput');
 
   if (!isSearchPage && !hasSearchUI) return;
 
-    const input   = document.getElementById('searchInput') || document.getElementById('globalSearchInput');
-    const btn     = document.getElementById('searchBtn') || document.getElementById('globalSearchBtn');
+    const input   = document.getElementById('searchInput') || document.getElementById('globalSearchInput') || document.getElementById('homeSearchInput');
+    const btn     = document.getElementById('searchBtn') || document.getElementById('globalSearchBtn') || document.getElementById('homeSearchBtn');
     const statusEl = document.getElementById('searchStatus');
     const resultsEl = document.getElementById('searchResults');
     const status  = statusEl || { textContent: '' };
@@ -136,13 +137,48 @@ const SEARCH_TABS = [
 function normalizeSearchType(v){
   const raw = String(v || '').trim().toLowerCase();
   const allowed = new Set(SEARCH_TABS.map(x => x[0]));
-  const alias = { books: 'book', 도서: 'book', 책: 'book', sns: 'sns', social: 'sns', media: 'media', 미디어: 'media', public: 'public_data', 공공자료: 'public_data', wiki: 'wiki', 위키: 'wiki', academic: 'academic', 학술: 'academic', site: 'site', 사이트: 'site' };
+  const alias = { books: 'book', 도서: 'book', 책: 'book', sns: 'sns', social: 'sns', 소셜: 'sns', public: 'public_data', 공공자료: 'public_data', wiki: 'wiki', 위키: 'wiki', academic: 'academic', 학술: 'academic', site: 'site', 사이트: 'site', tour: 'tour', 관광: 'tour', 투어: 'tour', media: 'media', 미디어: 'media' };
   return allowed.has(raw) ? raw : (alias[raw] || 'all');
 }
 
 function getTypeLabel(type){
   const hit = SEARCH_TABS.find(x => x[0] === normalizeSearchType(type));
   return hit ? hit[1] : '전체';
+}
+
+const MARU_DEFAULT_GROUP_ORDER = ['authority','local_tour','news','knowledge','wiki','site','blog','cafe','social','image','video','media','book','shopping','public_data','academic','community','sports','finance','webtoon','web'];
+const MARU_TAB_TO_GROUP = { map:'local_tour', sns:'social', tour:'local_tour', media:'media', public_data:'public_data' };
+
+function currentDisplayPolicy(){
+  const root = lastSearchPayload || {};
+  return (root.displayPolicy && typeof root.displayPolicy === 'object') ? root.displayPolicy : null;
+}
+
+function normalizeDisplayGroupNameClient(g){
+  const raw = String(g || '').trim().toLowerCase();
+  const map = { map:'local_tour', local:'local_tour', tour:'local_tour', travel:'local_tour', tourism:'local_tour', sns:'social', social:'social', company:'site', homepage:'site', website:'site', official:'authority', government:'authority', gov:'authority', public:'public_data', public_data:'public_data', video:'video', youtube:'video', image:'image', photo:'image', news:'news', blog:'blog', cafe:'cafe', media:'media', shopping:'shopping', book:'book', academic:'academic', sports:'sports', finance:'finance', webtoon:'webtoon', knowledge:'knowledge', wiki:'wiki', site:'site', web:'web' };
+  return map[raw] || raw || 'web';
+}
+
+function displayPolicyGroupOrderClient(){
+  const policy = currentDisplayPolicy();
+  const order = policy && Array.isArray(policy.groupOrder) ? policy.groupOrder : (policy && Array.isArray(policy.categoryOrder) ? policy.categoryOrder : null);
+  const normalized = Array.isArray(order) ? order.map(normalizeDisplayGroupNameClient).filter(Boolean) : [];
+  const merged = [];
+  normalized.concat(MARU_DEFAULT_GROUP_ORDER).forEach(g => { if(g && !merged.includes(g)) merged.push(g); });
+  return merged.length ? merged : MARU_DEFAULT_GROUP_ORDER.slice();
+}
+
+function applyDisplayPolicyToTabs(policy){
+  const bar = document.getElementById('maru-search-tabs');
+  if(!bar) return;
+  const visible = policy && Array.isArray(policy.visibleTabs) && policy.visibleTabs.length ? policy.visibleTabs.map(normalizeSearchType) : SEARCH_TABS.map(x => x[0]);
+  const keep = new Set(visible.concat(['all', normalizeSearchType(activeType)]));
+  Array.from(bar.querySelectorAll('button[data-type]')).forEach(btn => {
+    const type = normalizeSearchType(btn.dataset.type || 'all');
+    btn.style.display = keep.has(type) ? '' : 'none';
+  });
+  updateSearchTabsActive();
 }
 
 
@@ -827,16 +863,18 @@ function adaptiveSearchTarget(q, type){
   const broadHints = /(세계|전세계|글로벌|뉴스|영상|이미지|관광|여행|ai|인공지능|기술|시장|경제|정치|스포츠|금융|도서|쇼핑|웹툰|공공|학술|논문|사이트|홈페이지|global|world|news|tour|travel|technology|market|sports|finance|book|shopping|webtoon)/i;
   const narrowHints = /(카페|맛집|식당|주소|전화|위치|지도|병원|약국|학교|교회|상호|주차|near me|cafe|restaurant|address|map)/i;
 
-  // Search.js remains only a receiver/container. It must keep the original
-  // 300-card first-paint window and 50ms faucet intake, while allowing broad
-  // boundary queries to cache up to about 7~8k ranked candidates.
-  let target = 3600;
-  if (safeType === 'all') target = 7200;
-  if (safeType !== 'all') target = 2800;
-  if (words.length >= 3 || narrowHints.test(text)) target = Math.max(target, 2800);
+  // Search.js remains only a receiver/container. This target is the amount of
+  // Sanmaru/MaruSearch supply the UI is ready to cache for search pages. It is
+  // separate from the 4,500~5,000 Search Bank Snapshot supply used by front pages.
+  // Broad searches may keep filling up to 7,800 candidates, while first paint
+  // still renders only the current viewport and uses continuous intake for the rest.
+  let target = 4200;
+  if (safeType === 'all') target = 7800;
+  if (safeType !== 'all') target = 3200;
+  if (words.length >= 3 || narrowHints.test(text)) target = Math.max(target, 2400);
   if (words.length <= 1 || broadHints.test(text)) target = 7800;
-  if (/^(news|image|video|media|sns|blog|cafe|tour|site|academic|wiki|public_data)$/.test(safeType)) target = Math.max(target, 4200);
-  if (/^(map|knowledge|book|shopping|sports|finance|webtoon)$/.test(safeType)) target = Math.max(2600, Math.min(target, 4200));
+  if (/^(news|image|video|sns|blog|cafe|tour|site|academic|wiki|public_data|media)$/.test(safeType)) target = Math.max(target, 3600);
+  if (/^(map|knowledge|book|shopping|sports|finance|webtoon)$/.test(safeType)) target = Math.max(2200, Math.min(target, 3200));
 
   return Math.max(INITIAL_PRELOAD_TARGET, Math.min(MAX_SMOOTH_CANDIDATES, target));
 }
@@ -1882,7 +1920,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = ['authority','local_tour','news','knowledge','wiki','site','blog','cafe','social','community','image','video','media','book','shopping','public_data','academic','sports','finance','webtoon','web'];
+      const order = displayPolicyGroupOrderClient();
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -2239,41 +2277,6 @@ async function fetchInstantSearchPack(q, type = activeType){
       );
     }
 
-
-    function isProviderSearchIndexUrlClient(url){
-      const raw = String(url || '').trim();
-      if(!raw) return false;
-      let host = '';
-      let path = '';
-      let query = '';
-      try {
-        const u = new URL(raw, location.origin);
-        host = u.hostname.toLowerCase().replace(/^www\./, '');
-        path = u.pathname.toLowerCase();
-        query = u.search.toLowerCase();
-      } catch(e) {
-        const low = raw.toLowerCase();
-        return /google\.com\/search|search\.naver\.com\/search|bing\.com\/search|youtube\.com\/results|duckduckgo\.com\/\?/.test(low);
-      }
-      if(host === 'google.com' && path === '/search') return true;
-      if(host === 'news.google.com' && path.includes('/search')) return true;
-      if(host === 'search.naver.com' && path.includes('/search')) return true;
-      if(host === 'bing.com' && path.includes('/search')) return true;
-      if(host === 'duckduckgo.com' && query.includes('q=')) return true;
-      if(host === 'youtube.com' && path.includes('/results')) return true;
-      if(host === 'naver.com' && path.includes('/search')) return true;
-      return false;
-    }
-
-    function isSyntheticProviderShortcutItemClient(it){
-      if(!it || typeof it !== 'object') return false;
-      const url = String(it.url || it.link || it.href || it.openUrl || '').trim();
-      if(isProviderSearchIndexUrlClient(url)) return true;
-      const sourceText = String([it.source, it.provider, it.channel, it.id, it.title, it.displayGroupLabel].filter(Boolean).join(' ')).toLowerCase();
-      if(/(_search|search_route|passthrough|provider\s*hint|open-discovery|discovery surface|검색 바로가기|검색통로)/i.test(sourceText)) return true;
-      return false;
-    }
-
     function hasInvalidYouTubeVideoUrl(it){
       const urls = [
         it && it.url,
@@ -2297,7 +2300,6 @@ async function fetchInstantSearchPack(q, type = activeType){
     function shouldRejectSearchResultItem(it){
       if (!it) return true;
       if (isSeedPlaceholderItem(it)) return true;
-      if (isSyntheticProviderShortcutItemClient(it)) return true;
       if (hasInvalidYouTubeVideoUrl(it)) return true;
       return false;
     }
@@ -2631,7 +2633,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         card.style.cursor = 'pointer';
         card.addEventListener('click', (e) => {
           if (e.target && e.target.closest && e.target.closest('a, button, iframe, video, .maru-video-embed-wrap, .maru-card-media')) return;
-          window.open(url, '_blank', 'noopener,noreferrer');
+          window.open(url, '_blank', 'noopener');
         });
       }
 
@@ -2989,7 +2991,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         items: diversifyGroupPreviewItems(g.group, g.items || [])
       }));
       const byGroup = new Map(grouped.map(g => [g.group, g]));
-      const categoryOrder = ['authority','local_tour','news','knowledge','wiki','site','blog','cafe','social','community','image','video','media','book','shopping','public_data','academic','sports','finance','webtoon'];
+      const categoryOrder = displayPolicyGroupOrderClient().filter(g => g !== 'web');
       const categoryOverflowItems = [];
       const categoryPages = [];
       let page = [];
@@ -3298,6 +3300,7 @@ async function runSearch(q, type = activeType){
   const qq = (q || '').trim();
   activeType = normalizeSearchType(type);
   updateSearchTabsActive();
+  applyDisplayPolicyToTabs(null);
   stopContinuousIntake();
 
   if (!qq){
@@ -3357,6 +3360,7 @@ async function runSearch(q, type = activeType){
     const normalized = normalizeSearchPayload(pack && pack.payload ? pack.payload : pack);
     const payload = normalized.payload || (pack && pack.payload) || pack || null;
     lastSearchPayload = payload || lastSearchPayload;
+    applyDisplayPolicyToTabs(payload && payload.displayPolicy);
 
     const rawItems = Array.isArray(pack)
       ? pack
