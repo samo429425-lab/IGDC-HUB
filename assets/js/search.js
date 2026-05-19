@@ -44,7 +44,7 @@ ready(function () {
     const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES;
     const INITIAL_DOM_RENDER_TARGET = INITIAL_PRELOAD_TARGET;
     const INITIAL_PROGRESSIVE_PAGER_PAGES = 12;
-    const MAX_PROGRESSIVE_PAGER_PAGES = 400;
+    const MAX_PROGRESSIVE_PAGER_PAGES = 180;
     const MIN_SMOOTH_CANDIDATES = 120;
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
@@ -840,15 +840,15 @@ function adaptiveSearchTarget(q, type){
   // Search.js remains only a receiver/container. This target is the amount of
   // Sanmaru/MaruSearch supply the UI is ready to cache for search pages. It is
   // separate from the 4,500~5,000 Search Bank Snapshot supply used by front pages.
-  // Broad searches may keep filling up to 9,000~10,000 candidates, while first paint
+  // Broad searches may keep filling up to 4,500 candidates, while first paint
   // still renders only the current viewport and uses continuous intake for the rest.
-  let target = 6000;
-  if (safeType === 'all') target = 9000;
-  if (safeType !== 'all') target = 5000;
-  if (words.length >= 3 || narrowHints.test(text)) target = Math.max(target, 5000);
-  if (words.length <= 1 || broadHints.test(text)) target = 10000;
-  if (/^(news|image|video|media|sns|blog|cafe|tour|site|academic|wiki|public_data)$/.test(safeType)) target = Math.max(target, 7000);
-  if (/^(map|knowledge|book|shopping|sports|finance|webtoon)$/.test(safeType)) target = Math.max(4000, Math.min(target, 7000));
+  let target = 3200;
+  if (safeType === 'all') target = 4500;
+  if (safeType !== 'all') target = 2400;
+  if (words.length >= 3 || narrowHints.test(text)) target = Math.max(target, 2400);
+  if (words.length <= 1 || broadHints.test(text)) target = 4500;
+  if (/^(news|image|video|media|sns|blog|cafe|tour|site|academic|wiki|public_data)$/.test(safeType)) target = Math.max(target, 3000);
+  if (/^(map|knowledge|book|shopping|sports|finance|webtoon)$/.test(safeType)) target = Math.max(2200, Math.min(target, 3200));
 
   return Math.max(INITIAL_PRELOAD_TARGET, Math.min(MAX_SMOOTH_CANDIDATES, target));
 }
