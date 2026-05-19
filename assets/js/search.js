@@ -136,7 +136,7 @@ const SEARCH_TABS = [
 function normalizeSearchType(v){
   const raw = String(v || '').trim().toLowerCase();
   const allowed = new Set(SEARCH_TABS.map(x => x[0]));
-  const alias = { books: 'book', 도서: 'book', 책: 'book', sns: 'sns', social: 'sns', media: 'media', 미디어: 'media', public: 'public_data', 공공자료: 'public_data', wiki: 'knowledge', 위키: 'knowledge', 지식: 'knowledge', knowledge_wiki: 'knowledge', academic: 'academic', 학술: 'academic', site: 'site', 사이트: 'site' };
+  const alias = { books: 'book', 도서: 'book', 책: 'book', sns: 'sns', social: 'sns', public: 'public_data', 공공자료: 'public_data', wiki: 'knowledge', 위키: 'knowledge', 지식: 'knowledge', media: 'media', 미디어: 'media', academic: 'academic', 학술: 'academic', site: 'site', 사이트: 'site' };
   return allowed.has(raw) ? raw : (alias[raw] || 'all');
 }
 
@@ -837,7 +837,7 @@ function adaptiveSearchTarget(q, type){
   if (safeType !== 'all') target = 2400;
   if (words.length >= 3 || narrowHints.test(text)) target = Math.max(target, 2400);
   if (words.length <= 1 || broadHints.test(text)) target = 4500;
-  if (/^(news|image|video|media|sns|blog|cafe|tour|site|academic|public_data)$/.test(safeType)) target = Math.max(target, 3000);
+  if (/^(news|image|video|sns|blog|cafe|tour|site|academic|wiki|public_data)$/.test(safeType)) target = Math.max(target, 3000);
   if (/^(map|knowledge|book|shopping|sports|finance|webtoon)$/.test(safeType)) target = Math.max(2200, Math.min(target, 3200));
 
   return Math.max(INITIAL_PRELOAD_TARGET, Math.min(MAX_SMOOTH_CANDIDATES, target));
@@ -1962,7 +1962,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = ['authority','local_tour','news','knowledge','site','blog','cafe','social','image','video','media','book','shopping','public_data','academic','community','sports','finance','webtoon','web'];
+      const order = ['authority','local_tour','news','knowledge','site','blog','cafe','social','tour','image','video','media','book','shopping','public_data','academic','community','sports','finance','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -2034,8 +2034,6 @@ async function fetchInstantSearchPack(q, type = activeType){
         site: 5,
         book: 4,
         news: 5,
-        blog: 5,
-        cafe: 5,
         community: 5,
         media: 5,
         social: 4,
@@ -2659,11 +2657,13 @@ async function fetchInstantSearchPack(q, type = activeType){
         preview.description,
         preview.caption
       ];
+      let best = '';
       for(const v of candidates){
         const text = compactCardTextClient(v);
-        if(text) return text.slice(0, 360);
+        if(!text) continue;
+        if(text.length > best.length) best = text;
       }
-      return '';
+      return best ? best.slice(0, 520) : '';
     }
 
     function shouldRenderMapPreviewForItemClient(it){
@@ -2690,7 +2690,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         card.style.cursor = 'pointer';
         card.addEventListener('click', (e) => {
           if (e.target && e.target.closest && e.target.closest('a, button, iframe, video, .maru-video-embed-wrap, .maru-card-media')) return;
-          window.location.href = url;
+          window.open(url, '_blank', 'noopener');
         });
       }
 
@@ -2707,7 +2707,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       if (url) {
         const a = document.createElement('a');
         a.href = url;
-        a.target = '_self';
+        a.target = '_blank';
         a.rel = 'noopener';
         a.textContent = (it.title || '').trim() || '(no title)';
         a.style.color = 'inherit';
@@ -2770,10 +2770,15 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
         const cardLineClamp = it && it.displayCard && parseInt(it.displayCard.lineClamp, 10);
-        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(5, cardLineClamp) : 3);
+        const clampLines = cardLineClamp > 0 ? Math.min(5, Math.max(3, cardLineClamp)) : 4;
+        d.style.webkitLineClamp = String(clampLines);
+        d.style.lineClamp = String(clampLines);
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
+        d.style.lineHeight = '1.45';
+        d.style.maxHeight = `calc(1.45em * ${clampLines})`;
+        d.style.whiteSpace = 'normal';
       }
 
       const hasImageSet = Array.isArray(it.imageSet) && it.imageSet.length > 0;
@@ -3019,12 +3024,12 @@ if (it.riskLabel === '⚠️ high-risk') {
         authority: 8,
         public_data: 8,
         local_tour: 8,
-        knowledge: 15,
-        wiki: 15,
+        knowledge: 10,
+        wiki: 10,
         academic: 15,
         site: 15,
         book: 15,
-        news: 15,
+        news: 25,
         blog: 15,
         cafe: 15,
         community: 15,
@@ -3108,7 +3113,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       const categoryFillCounts = categoryPages.map((modules, idx) => {
         // General web/plain results must not be inserted between category modules.
         // They may only start after the final category page has rendered, so the
-        // category board keeps its intended order: news/knowledge/site/blog/cafe/SNS/etc.
+        // category board keeps its intended order: knowledge/wiki/site/book/blog/cafe/news/etc.
         if(idx !== categoryPages.length - 1) return 0;
         const fill = Math.min(
           Math.max(0, webItems.length - filledWebBeforePlainPages),
