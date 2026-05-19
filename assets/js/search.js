@@ -24,13 +24,12 @@ ready(function () {
   // 🔥 홈에서도 search.js 동작 허용 (핵심 수정)
   const hasSearchUI =
     document.getElementById('searchInput') ||
-    document.getElementById('globalSearchInput') ||
-    document.getElementById('homeSearchInput');
+    document.getElementById('globalSearchInput');
 
   if (!isSearchPage && !hasSearchUI) return;
 
-    const input   = document.getElementById('searchInput') || document.getElementById('globalSearchInput') || document.getElementById('homeSearchInput');
-    const btn     = document.getElementById('searchBtn') || document.getElementById('globalSearchBtn') || document.getElementById('homeSearchBtn');
+    const input   = document.getElementById('searchInput') || document.getElementById('globalSearchInput');
+    const btn     = document.getElementById('searchBtn') || document.getElementById('globalSearchBtn');
     const statusEl = document.getElementById('searchStatus');
     const resultsEl = document.getElementById('searchResults');
     const status  = statusEl || { textContent: '' };
@@ -45,7 +44,7 @@ ready(function () {
     const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES;
     const INITIAL_DOM_RENDER_TARGET = INITIAL_PRELOAD_TARGET;
     const INITIAL_PROGRESSIVE_PAGER_PAGES = 12;
-    const MAX_PROGRESSIVE_PAGER_PAGES = 320;
+    const MAX_PROGRESSIVE_PAGER_PAGES = 180;
     const MIN_SMOOTH_CANDIDATES = 120;
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
@@ -144,41 +143,6 @@ function normalizeSearchType(v){
 function getTypeLabel(type){
   const hit = SEARCH_TABS.find(x => x[0] === normalizeSearchType(type));
   return hit ? hit[1] : '전체';
-}
-
-const MARU_DEFAULT_GROUP_ORDER = ['authority','local_tour','news','knowledge','wiki','site','blog','cafe','social','image','video','media','book','shopping','public_data','academic','community','sports','finance','webtoon','web'];
-const MARU_TAB_TO_GROUP = { map:'local_tour', sns:'social', tour:'local_tour', media:'media', public_data:'public_data' };
-
-function currentDisplayPolicy(){
-  const root = lastSearchPayload || {};
-  return (root.displayPolicy && typeof root.displayPolicy === 'object') ? root.displayPolicy : null;
-}
-
-function normalizeDisplayGroupNameClient(g){
-  const raw = String(g || '').trim().toLowerCase();
-  const map = { map:'local_tour', local:'local_tour', tour:'local_tour', travel:'local_tour', tourism:'local_tour', sns:'social', social:'social', company:'site', homepage:'site', website:'site', official:'authority', government:'authority', gov:'authority', public:'public_data', public_data:'public_data', video:'video', youtube:'video', image:'image', photo:'image', news:'news', blog:'blog', cafe:'cafe', media:'media', shopping:'shopping', book:'book', academic:'academic', sports:'sports', finance:'finance', webtoon:'webtoon', knowledge:'knowledge', wiki:'wiki', site:'site', web:'web' };
-  return map[raw] || raw || 'web';
-}
-
-function displayPolicyGroupOrderClient(){
-  const policy = currentDisplayPolicy();
-  const order = policy && Array.isArray(policy.groupOrder) ? policy.groupOrder : (policy && Array.isArray(policy.categoryOrder) ? policy.categoryOrder : null);
-  const normalized = Array.isArray(order) ? order.map(normalizeDisplayGroupNameClient).filter(Boolean) : [];
-  const merged = [];
-  normalized.concat(MARU_DEFAULT_GROUP_ORDER).forEach(g => { if(g && !merged.includes(g)) merged.push(g); });
-  return merged.length ? merged : MARU_DEFAULT_GROUP_ORDER.slice();
-}
-
-function applyDisplayPolicyToTabs(policy){
-  const bar = document.getElementById('maru-search-tabs');
-  if(!bar) return;
-  const visible = policy && Array.isArray(policy.visibleTabs) && policy.visibleTabs.length ? policy.visibleTabs.map(normalizeSearchType) : SEARCH_TABS.map(x => x[0]);
-  const keep = new Set(visible.concat(['all', normalizeSearchType(activeType)]));
-  Array.from(bar.querySelectorAll('button[data-type]')).forEach(btn => {
-    const type = normalizeSearchType(btn.dataset.type || 'all');
-    btn.style.display = keep.has(type) ? '' : 'none';
-  });
-  updateSearchTabsActive();
 }
 
 
@@ -866,14 +830,14 @@ function adaptiveSearchTarget(q, type){
   // Search.js remains only a receiver/container. This target is the amount of
   // Sanmaru/MaruSearch supply the UI is ready to cache for search pages. It is
   // separate from the 4,500~5,000 Search Bank Snapshot supply used by front pages.
-  // Broad searches may keep filling up to 7,800 candidates, while first paint
+  // Broad searches may keep filling up to 4,500 candidates, while first paint
   // still renders only the current viewport and uses continuous intake for the rest.
-  let target = 4200;
-  if (safeType === 'all') target = 7800;
-  if (safeType !== 'all') target = 3200;
+  let target = 3200;
+  if (safeType === 'all') target = 4500;
+  if (safeType !== 'all') target = 2400;
   if (words.length >= 3 || narrowHints.test(text)) target = Math.max(target, 2400);
-  if (words.length <= 1 || broadHints.test(text)) target = 7800;
-  if (/^(news|image|video|sns|blog|cafe|tour|site|academic|wiki|public_data|media)$/.test(safeType)) target = Math.max(target, 3600);
+  if (words.length <= 1 || broadHints.test(text)) target = 4500;
+  if (/^(news|image|video|sns|blog|cafe|tour|site|academic|wiki|public_data)$/.test(safeType)) target = Math.max(target, 3000);
   if (/^(map|knowledge|book|shopping|sports|finance|webtoon)$/.test(safeType)) target = Math.max(2200, Math.min(target, 3200));
 
   return Math.max(INITIAL_PRELOAD_TARGET, Math.min(MAX_SMOOTH_CANDIDATES, target));
@@ -1920,7 +1884,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = displayPolicyGroupOrderClient();
+      const order = ['authority','local_tour','news','knowledge','wiki','site','blog','cafe','social','image','video','media','book','shopping','public_data','academic','community','sports','finance','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -2300,6 +2264,9 @@ async function fetchInstantSearchPack(q, type = activeType){
     function shouldRejectSearchResultItem(it){
       if (!it) return true;
       if (isSeedPlaceholderItem(it)) return true;
+      const sourceType = String(it.sourceType || '').toLowerCase();
+      const generatedBy = String(it.generatedBy || '').toLowerCase();
+      if (sourceType === 'search-link' || generatedBy === 'maru-search') return true;
       if (hasInvalidYouTubeVideoUrl(it)) return true;
       return false;
     }
@@ -2561,7 +2528,13 @@ async function fetchInstantSearchPack(q, type = activeType){
       const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
       const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
       const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
       const candidates = [
+        displayCard.summary,
+        displayCard.body,
+        displayCard.description,
+        displayCard.snippet,
+        it && it.displaySummary,
         it && it.summary,
         it && it.snippet,
         it && it.description,
@@ -2712,10 +2685,14 @@ if (it.riskLabel === '⚠️ high-risk') {
 
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
-        d.style.webkitLineClamp = '3';
+        d.style.webkitLineClamp = '4';
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
+        d.style.lineHeight = '1.55';
+        d.style.marginTop = '6px';
+        d.style.marginBottom = '9px';
+        d.style.maxHeight = '6.3em';
       }
 
       const hasImageSet = Array.isArray(it.imageSet) && it.imageSet.length > 0;
@@ -2991,7 +2968,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         items: diversifyGroupPreviewItems(g.group, g.items || [])
       }));
       const byGroup = new Map(grouped.map(g => [g.group, g]));
-      const categoryOrder = displayPolicyGroupOrderClient().filter(g => g !== 'web');
+      const categoryOrder = ['authority','local_tour','news','knowledge','wiki','site','blog','cafe','social','image','video','media','book','shopping','public_data','academic','community','sports','finance','webtoon'];
       const categoryOverflowItems = [];
       const categoryPages = [];
       let page = [];
@@ -3300,7 +3277,6 @@ async function runSearch(q, type = activeType){
   const qq = (q || '').trim();
   activeType = normalizeSearchType(type);
   updateSearchTabsActive();
-  applyDisplayPolicyToTabs(null);
   stopContinuousIntake();
 
   if (!qq){
@@ -3360,7 +3336,6 @@ async function runSearch(q, type = activeType){
     const normalized = normalizeSearchPayload(pack && pack.payload ? pack.payload : pack);
     const payload = normalized.payload || (pack && pack.payload) || pack || null;
     lastSearchPayload = payload || lastSearchPayload;
-    applyDisplayPolicyToTabs(payload && payload.displayPolicy);
 
     const rawItems = Array.isArray(pack)
       ? pack
