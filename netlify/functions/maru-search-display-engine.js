@@ -12,17 +12,17 @@
  * - search.js remains the UI executor: it hides/shows/reorders categories using this policy.
  */
 
-const VERSION = 'maru-search-display-engine-v1.1.1-natural-thumbnail-filter';
+const VERSION = 'maru-search-display-engine-v1.4.1-rich-media-body-contract';
 const ENGINE_NAME = 'maru-search-display-engine';
 
 const BASE_GROUP_ORDER = [
-  'authority','local_tour','news','knowledge','wiki','site','blog','cafe','social','image',
-  'video','media','book','shopping','public_data','academic','community','sports','finance','webtoon','web'
+  'authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news',
+  'image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'
 ];
 
 const BASE_TABS = [
-  'all','map','news','knowledge','wiki','site','blog','cafe','sns','tour','image','video',
-  'media','book','shopping','public_data','academic','sports','finance','webtoon'
+  'all','map','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video',
+  'sns','tour','public_data','academic','sports','finance','webtoon'
 ];
 
 const DEFAULT_PREVIEW_LIMITS = {
@@ -112,9 +112,25 @@ function naturalSummary(item, query){
   return '';
 }
 function fallbackDisplaySummary(item, query, group){
-  // Search-card body must come from real provider/resident text only.
-  // Do not invent 안내문/guide copy as body text.
-  return '';
+  item = item && typeof item === 'object' ? item : {};
+  const title = firstNonEmpty(item.title, item.name, query);
+  const url = firstNonEmpty(item.url, item.link, item.href);
+  const host = domainOf(url);
+  const q = compact(query || title);
+  const label = ({
+    authority:'공식·기관', public_data:'공공자료', local_tour:'지도·지역', knowledge:'지식', wiki:'위키', site:'사이트', book:'도서',
+    blog:'블로그', cafe:'카페', shopping:'쇼핑', news:'뉴스', image:'이미지', video:'영상', media:'미디어', social:'소셜',
+    academic:'학술', community:'커뮤니티', sports:'스포츠', finance:'금융', webtoon:'웹툰', web:'웹'
+  })[group] || '웹';
+  if(group === 'local_tour') return `${q}의 위치·관광·교통·주변 정보를 확인할 수 있는 ${label} 결과입니다. 지도 미리보기와 관련 장소 정보가 함께 표시됩니다.`.slice(0, 300);
+  if(group === 'image') return `${q}와 관련된 사진·그래픽·이미지 자료를 확인할 수 있는 결과입니다. 원본 페이지가 제공하는 대표 이미지가 있으면 카드 오른쪽에 표시됩니다.`.slice(0, 300);
+  if(group === 'video' || group === 'media') return `${q} 관련 영상·현장 화면·리뷰 콘텐츠로 연결되는 결과입니다. 영상 대표 스냅샷이 있는 경우 검색 카드에 함께 표시됩니다.`.slice(0, 300);
+  if(group === 'blog' || group === 'cafe' || group === 'community' || group === 'social') return `${q}에 대한 현장 후기, 소셜 반응, 커뮤니티 글을 확인할 수 있는 결과입니다. 제공된 본문·이미지가 있으면 검색 카드에 같이 표시됩니다.`.slice(0, 300);
+  if(group === 'news') return `${q}와 관련된 최신 보도·이슈·기사 흐름을 확인할 수 있는 결과입니다. 언론사 본문 요약이 제공되면 2~3줄로 표시됩니다.`.slice(0, 300);
+  if(group === 'authority' || group === 'public_data' || group === 'site') return `${q}와 관련된 공식 사이트·공공자료·주요 기관 페이지입니다. ${host || '해당 출처'}의 공개 정보를 기준으로 연결됩니다.`.slice(0, 300);
+  const line1 = q ? `${q} 관련 ${label} 결과입니다.` : `${label} 결과입니다.`;
+  const line2 = host ? `${host}에서 제공되는 공개 페이지이며, 본문 요약이나 대표 이미지가 있으면 검색 카드에 함께 표시됩니다.` : `${title} 항목의 공개 페이지로 연결됩니다.`;
+  return `${line1} ${line2}`.slice(0, 300);
 }
 function collectDisplayImages(item){
   item = item && typeof item === 'object' ? item : {};
@@ -126,23 +142,49 @@ function collectDisplayImages(item){
   const raw = []
     .concat(displayCard.thumbnail ? [displayCard.thumbnail] : [])
     .concat(displayCard.image ? [displayCard.image] : [])
+    .concat(displayCard.originalImage ? [displayCard.originalImage] : [])
+    .concat(displayCard.fullImage ? [displayCard.fullImage] : [])
     .concat(Array.isArray(displayCard.imageSet) ? displayCard.imageSet : [])
+    .concat(item.originalImage ? [item.originalImage] : [])
+    .concat(item.fullImage ? [item.fullImage] : [])
+    .concat(item.imageOriginal ? [item.imageOriginal] : [])
+    .concat(item.viewerImage ? [item.viewerImage] : [])
+    .concat(item.openImageUrl ? [item.openImageUrl] : [])
+    .concat(item.contentUrl ? [item.contentUrl] : [])
+    .concat(item.cardImage ? [item.cardImage] : [])
     .concat(item.thumbnail ? [item.thumbnail] : [])
     .concat(item.thumb ? [item.thumb] : [])
     .concat(item.image ? [item.image] : [])
     .concat(item.imageUrl ? [item.imageUrl] : [])
     .concat(item.og_image ? [item.og_image] : [])
     .concat(item.ogImage ? [item.ogImage] : [])
+    .concat(payload.originalImage ? [payload.originalImage] : [])
+    .concat(payload.fullImage ? [payload.fullImage] : [])
+    .concat(payload.imageOriginal ? [payload.imageOriginal] : [])
+    .concat(payload.viewerImage ? [payload.viewerImage] : [])
+    .concat(payload.openImageUrl ? [payload.openImageUrl] : [])
+    .concat(payload.contentUrl ? [payload.contentUrl] : [])
+    .concat(payload.cardImage ? [payload.cardImage] : [])
     .concat(payload.thumbnail ? [payload.thumbnail] : [])
     .concat(payload.thumb ? [payload.thumb] : [])
     .concat(payload.image ? [payload.image] : [])
     .concat(payload.imageUrl ? [payload.imageUrl] : [])
+    .concat(payload.image_url ? [payload.image_url] : [])
     .concat(payload.og_image ? [payload.og_image] : [])
     .concat(payload.ogImage ? [payload.ogImage] : [])
+    .concat(data.originalImage ? [data.originalImage] : [])
+    .concat(data.fullImage ? [data.fullImage] : [])
+    .concat(data.imageOriginal ? [data.imageOriginal] : [])
+    .concat(data.openImageUrl ? [data.openImageUrl] : [])
+    .concat(data.contentUrl ? [data.contentUrl] : [])
+    .concat(data.cardImage ? [data.cardImage] : [])
     .concat(data.thumbnail ? [data.thumbnail] : [])
     .concat(data.thumb ? [data.thumb] : [])
     .concat(data.image ? [data.image] : [])
     .concat(data.imageUrl ? [data.imageUrl] : [])
+    .concat(data.image_url ? [data.image_url] : [])
+    .concat(preview.original ? [preview.original] : [])
+    .concat(preview.poster ? [preview.poster] : [])
     .concat(preview.thumbnail ? [preview.thumbnail] : [])
     .concat(preview.image ? [preview.image] : [])
     .concat(Array.isArray(item.imageSet) ? item.imageSet : [])
@@ -206,26 +248,48 @@ function decorateDisplayItem(item, ctx, index){
     summary: firstNonEmpty(item.summary, item.snippet, item.description, summary),
     description: firstNonEmpty(item.description, item.summary, item.snippet, summary),
     snippet: firstNonEmpty(item.snippet, item.summary, item.description, summary),
-    thumbnail: firstNonEmpty(item.thumbnail, item.thumb, images[0]),
-    thumb: firstNonEmpty(item.thumb, item.thumbnail, images[0]),
-    image: firstNonEmpty(item.image, images[0]),
-    imageSet: images.length ? images : (Array.isArray(item.imageSet) ? item.imageSet : []),
+    // Only sanitized direct content images may enter search-card media fields.
+    // Do not preserve upstream thumbnails when they are merely provider/search URLs
+    // such as google.com/search, map pages, logos, banners, or placards.
+    thumbnail: images[0] || '',
+    thumb: images[0] || '',
+    image: images[0] || '',
+    imageUrl: images[0] || '',
+    originalImage: images[0] || '',
+    fullImage: images[0] || '',
+    imageOriginal: images[0] || '',
+    viewerImage: images[0] || '',
+    openImageUrl: images[0] || '',
+    contentUrl: images[0] || '',
+    cardImage: images[0] || '',
+    imageSet: images,
     displayCard: Object.assign({}, pickObject(item.displayCard), {
       engine: ENGINE_NAME,
       version: VERSION,
       cardType,
       group,
+      title: firstNonEmpty(item.title, item.name, q),
+      url: firstNonEmpty(item.url, item.link, item.href),
+      source: firstNonEmpty(item.source, item.provider, domainOf(firstNonEmpty(item.url, item.link, item.href))),
       summary,
-      lineClamp: mapLike ? 2 : 3,
-      bodyLines: mapLike ? 2 : 3,
+      body: summary,
+      description: summary,
+      snippet: summary,
+      lineClamp: mapLike ? 3 : (cardType === 'article-media' ? 4 : 3),
+      bodyLines: mapLike ? 3 : (cardType === 'article-media' ? 4 : 3),
       thumbnail: images[0] || '',
       image: images[0] || '',
+      imageUrl: images[0] || '',
+      originalImage: images[0] || '',
+      fullImage: images[0] || '',
       imageSet: images,
       hasThumbnail: !!images.length,
       showThumbnail: !!images.length,
       showMapPreview: mapLike,
       showVideoPreview: cardType === 'video',
       showBody: true,
+      bodySource: naturalSummary(item, q) ? 'provider' : 'display-engine-fallback',
+      thumbnailPolicy: 'actual-content-image-only; no-logo-no-favicon-no-banner-no-placard-no-search-url',
       displayMode: mapLike ? 'map-plus-list-card' : (images.length ? 'text-plus-thumbnail-card' : 'text-summary-card')
     })
   });
@@ -236,6 +300,16 @@ function decorateDisplayItem(item, ctx, index){
       name: firstNonEmpty(item.placeInfo && item.placeInfo.name, item.title, q),
       address: firstNonEmpty(item.placeInfo && item.placeInfo.address, item.address, ''),
       mapQuery: firstNonEmpty(item.mapQuery, item.address, item.title, q)
+    });
+    copy.displayCard = Object.assign({}, copy.displayCard, {
+      showMapPreview: true,
+      mapQuery: copy.mapQuery,
+      mapPreview: {
+        enabled: true,
+        query: copy.mapQuery,
+        name: copy.placeInfo.name || copy.mapQuery,
+        address: copy.placeInfo.address || ''
+      }
     });
   }
   if(cardType === 'video' && images[0]){
@@ -256,7 +330,7 @@ function normalizeGroup(group){
   const map = {
     official:'authority', official_authority:'authority', gov:'authority', government:'authority', authority:'authority',
     public:'public_data', opendata:'public_data', open_data:'public_data', public_data:'public_data',
-    map:'local_tour', local:'local_tour', tour:'local_tour', travel:'local_tour', tourism:'local_tour', local_tour:'local_tour',
+    map:'local_tour', local:'local_tour', map_local:'local_tour', map_local_tour:'local_tour', local_map:'local_tour', local_map_tour:'local_tour', place:'local_tour', place_tour:'local_tour', tour:'local_tour', travel:'local_tour', tourism:'local_tour', local_tour:'local_tour',
     knowledge_wiki:'knowledge', encyclopedia:'knowledge', knowledge:'knowledge', wiki:'wiki',
     scholar:'academic', paper:'academic', research:'academic', academic:'academic',
     company_web:'site', corporate_homepage:'site', business_site:'site', official_site:'site', homepage:'site', website:'site', site:'site', company:'site', corporate:'site', business:'site',
@@ -367,7 +441,7 @@ function policyForIntent(intentInfo, counts){
     book: ['book','knowledge','wiki','blog','shopping','news','web'],
     sports: ['sports','news','video','social','image','blog','web'],
     knowledge: ['authority','knowledge','wiki','site','academic','video','image','web'],
-    general: ['authority','local_tour','news','knowledge','wiki','site','blog','cafe','social','image','video','media','book','shopping','public_data','academic','web']
+    general: ['authority','knowledge','wiki','site','news','blog','image','video','social','local_tour','shopping','public_data','academic','web']
   };
   const preferred = profiles[intent] || profiles.general;
   const presentPreferred = preferred.filter(g => g === 'web' || hasCount(counts, g));
@@ -440,7 +514,7 @@ function buildDisplayPolicy(input){
     visibleTabs:p.visibleTabs,
     hiddenTabs:p.hiddenTabs,
     groupCounts:counts,
-    cardContract:{ enabled:true, bodyLines:3, thumbnailPolicy:'natural-content-image-only; reject-logo-banner-placard; do-not-promote-poster-field', mapPolicy:'show-map-preview-for-local-tour', executor:'search.js' },
+    cardContract:{ enabled:true, bodyLines:4, minimumBodyLines:2, thumbnailPolicy:'natural-content-image-only; reject-logo-banner-placard; do-not-promote-poster-field', mapPolicy:'show-map-preview-for-local-tour', executor:'search.js' },
     execution:'search-js-applies-policy; maru-search-attaches-display-card-contract',
     externalCall:false,
     storageWrite:false
