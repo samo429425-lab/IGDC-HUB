@@ -114,18 +114,18 @@ const from0 = (params.get('from') || '').trim();
 const SEARCH_TABS = [
   ['all', '전체'],
   ['map', '지도'],
-  ['news', '뉴스'],
-  ['knowledge', '지식/위키'],
+  ['knowledge', '지식'],
+  ['wiki', '위키'],
   ['site', '사이트'],
+  ['book', '도서'],
   ['blog', '블로그'],
   ['cafe', '카페'],
-  ['sns', 'SNS'],
-  ['tour', '관광'],
+  ['shopping', '쇼핑'],
+  ['news', '뉴스'],
   ['image', '이미지'],
   ['video', '영상'],
-  ['media', '미디어'],
-  ['book', '도서'],
-  ['shopping', '쇼핑'],
+  ['sns', '소셜'],
+  ['tour', '관광'],
   ['public_data', '공공자료'],
   ['academic', '학술'],
   ['sports', '스포츠'],
@@ -136,7 +136,7 @@ const SEARCH_TABS = [
 function normalizeSearchType(v){
   const raw = String(v || '').trim().toLowerCase();
   const allowed = new Set(SEARCH_TABS.map(x => x[0]));
-  const alias = { books: 'book', 도서: 'book', 책: 'book', sns: 'sns', social: 'sns', public: 'public_data', 공공자료: 'public_data', wiki: 'knowledge', 위키: 'knowledge', 지식: 'knowledge', media: 'media', 미디어: 'media', academic: 'academic', 학술: 'academic', site: 'site', 사이트: 'site' };
+  const alias = { books: 'book', 도서: 'book', 책: 'book', sns: 'sns', social: 'sns', public: 'public_data', 공공자료: 'public_data', wiki: 'wiki', 위키: 'wiki', academic: 'academic', 학술: 'academic', site: 'site', 사이트: 'site' };
   return allowed.has(raw) ? raw : (alias[raw] || 'all');
 }
 
@@ -351,6 +351,89 @@ function ensureSearchCardMediaStyle(){
       color: #4338ca;
       font-size: 11px;
       font-weight: 800;
+    }
+
+    .maru-result-preview {
+      margin: 10px 0 4px 0;
+      border: 1px solid #dbeafe;
+      border-radius: 14px;
+      background: #ffffff;
+      overflow: hidden;
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+    }
+    .maru-result-preview-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      background: linear-gradient(180deg, #f8fbff, #eff6ff);
+      border-bottom: 1px solid #dbeafe;
+    }
+    .maru-result-preview-title {
+      min-width: 0;
+      font-size: 14px;
+      font-weight: 900;
+      color: #0f172a;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .maru-result-preview-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+    .maru-result-preview-actions a,
+    .maru-result-preview-actions button {
+      border: 1px solid #bfdbfe;
+      border-radius: 999px;
+      background: #ffffff;
+      color: #1d4ed8;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 900;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .maru-result-preview-body {
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+    .maru-result-preview-summary {
+      font-size: 14px;
+      line-height: 1.62;
+      color: #334155;
+      white-space: normal;
+      word-break: keep-all;
+    }
+    .maru-result-preview-media {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 8px;
+    }
+    .maru-result-preview-media img {
+      width: 100%;
+      height: 126px;
+      object-fit: cover;
+      border-radius: 10px;
+      border: 1px solid #e5e7eb;
+      background: #f8fafc;
+    }
+    .maru-result-preview-frame {
+      width: 100%;
+      height: min(66vh, 760px);
+      min-height: 420px;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      background: #f8fafc;
+    }
+    .maru-result-preview-note {
+      font-size: 12px;
+      line-height: 1.5;
+      color: #64748b;
     }
 
 
@@ -1779,7 +1862,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         opendata: 'public_data',
         open_data: 'public_data',
         knowledge_wiki: 'knowledge',
-        wiki: 'knowledge',
+        wiki: 'wiki',
         encyclopedia: 'knowledge',
         academic: 'academic',
         scholar: 'academic',
@@ -1878,7 +1961,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       if (host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr')) return 'authority';
       if (source.includes('public') || provider.includes('public') || type === 'public_data' || category === 'public_data' || text.includes('공공데이터') || text.includes('공공 데이터') || text.includes('데이터포털') || text.includes('open data') || host.includes('data.go.kr')) return 'public_data';
       if (source.includes('local') || source.includes('map') || type === 'map' || type === 'local' || mediaType === 'map' || category === 'map' || text.includes('관광') || text.includes('여행') || text.includes('지도') || text.includes('주소') || text.includes('위치') || text.includes('맛집') || text.includes('공원') || text.includes('landmark') || text.includes('tour')) return 'local_tour';
-      if (host.includes('wikipedia.org') || host.includes('namu.wiki') || source.includes('wiki') || type === 'wiki' || text.includes('위키')) return 'knowledge';
+      if (host.includes('wikipedia.org') || host.includes('namu.wiki') || source.includes('wiki') || type === 'wiki' || text.includes('위키')) return 'wiki';
       if (source.includes('scholar') || source.includes('academic') || source.includes('paper') || source.includes('research') || source.includes('library') || type === 'academic' || type === 'paper' || type === 'research' || category === 'academic' || text.includes('학술') || text.includes('논문') || text.includes('연구') || text.includes('journal') || text.includes('citation') || text.includes('thesis') || host.includes('scholar.google') || host.includes('riss.kr') || host.includes('dbpia.co.kr') || host.includes('kci.go.kr')) return 'academic';
       if (source.includes('encyc') || source.includes('kin') || type === 'knowledge' || category === 'knowledge' || text.includes('지식') || text.includes('백과') || text.includes('사전')) return 'knowledge';
       if (source.includes('corporate') || source.includes('homepage') || source.includes('business') || source.includes('company') || type === 'site' || type === 'homepage' || type === 'business' || category === 'site' || text.includes('홈페이지') || text.includes('공식사이트') || text.includes('공식 사이트') || text.includes('기업') || text.includes('회사') || text.includes('business') || text.includes('company') || text.includes('corporate')) return 'site';
@@ -1903,8 +1986,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         authority: '주요 정보',
         public_data: '공공자료',
         local_tour: '지도/지역',
-        knowledge: '지식/위키',
-        wiki: '지식/위키',
+        knowledge: '지식/백과',
+        wiki: '위키',
         academic: '학술/논문',
         site: '사이트/홈페이지',
         book: '도서',
@@ -1933,8 +2016,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         authority: 3,
         public_data: 2,
         local_tour: 2,
-        knowledge: 5,
-        wiki: 5,
+        knowledge: 3,
+        wiki: 3,
         academic: 4,
         site: 5,
         book: 4,
@@ -1962,7 +2045,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = ['authority','local_tour','news','knowledge','site','blog','cafe','social','tour','image','video','media','book','shopping','public_data','academic','community','sports','finance','webtoon','web'];
+      const order = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -2029,8 +2112,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         authority: 3,
         public_data: 2,
         local_tour: 2,
-        knowledge: 5,
-        wiki: 5,
+        knowledge: 3,
+        wiki: 3,
         site: 5,
         book: 4,
         news: 5,
@@ -2497,14 +2580,14 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const google = document.createElement('a');
       google.href = 'https://www.google.com/maps/search/' + encodeURIComponent(mapQuery || info.query || '');
-      google.target = '_self';
+      google.target = '_blank';
       google.rel = 'noopener';
       google.textContent = 'Google 지도';
       actions.appendChild(google);
 
       const naver = document.createElement('a');
       naver.href = 'https://map.naver.com/p/search/' + encodeURIComponent(mapQuery || info.query || '');
-      naver.target = '_self';
+      naver.target = '_blank';
       naver.rel = 'noopener';
       naver.textContent = 'Naver 지도';
       actions.appendChild(naver);
@@ -2512,7 +2595,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       if(info.homepage){
         const home = document.createElement('a');
         home.href = info.homepage;
-        home.target = '_self';
+        home.target = '_blank';
         home.rel = 'noopener';
         home.textContent = '홈페이지';
         actions.appendChild(home);
@@ -2657,13 +2740,11 @@ async function fetchInstantSearchPack(q, type = activeType){
         preview.description,
         preview.caption
       ];
-      let best = '';
       for(const v of candidates){
         const text = compactCardTextClient(v);
-        if(!text) continue;
-        if(text.length > best.length) best = text;
+        if(text) return text.slice(0, 360);
       }
-      return best ? best.slice(0, 520) : '';
+      return '';
     }
 
     function shouldRenderMapPreviewForItemClient(it){
@@ -2676,23 +2757,156 @@ async function fetchInstantSearchPack(q, type = activeType){
       return false;
     }
 
+    function isSearchEngineLandingUrlClient(url){
+      const raw = String(url || '').trim();
+      if(!raw) return false;
+      try {
+        const u = new URL(raw, location.origin);
+        const h = u.hostname.replace(/^www\./, '').toLowerCase();
+        const path = u.pathname.toLowerCase();
+        if(h === 'google.com' && (path === '/search' || path === '/webhp' || path === '/')) return u.searchParams.has('q');
+        if(h.endsWith('google.com') && path === '/search') return true;
+        if(h === 'bing.com' && path.startsWith('/search')) return true;
+        if(h === 'search.naver.com' && path.includes('/search.naver')) return true;
+        if(h === 'naver.com' && path.includes('/search')) return true;
+        if(h === 'duckduckgo.com' && (path === '/' || path.includes('/html'))) return u.searchParams.has('q');
+        if(h === 'search.yahoo.com' && path.includes('/search')) return true;
+        if(h === 'yandex.com' && path.includes('/search')) return true;
+        if(h === 'baidu.com' && (path === '/s' || path.includes('/search'))) return true;
+      } catch(e) {}
+      return false;
+    }
+
+    function resolveResultOpenUrlClient(it){
+      it = it && typeof it === 'object' ? it : {};
+      const displayCard = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+      const payload = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const data = (it.data && typeof it.data === 'object') ? it.data : {};
+      const candidates = [
+        displayCard.originalUrl, displayCard.targetUrl, displayCard.canonicalUrl, displayCard.sourceUrl, displayCard.url, displayCard.link,
+        it.originalUrl, it.targetUrl, it.canonicalUrl, it.sourceUrl, it.realUrl, it.contentUrl, it.url, it.link, it.href,
+        payload.originalUrl, payload.targetUrl, payload.canonicalUrl, payload.sourceUrl, payload.realUrl, payload.contentUrl, payload.url, payload.link, payload.href,
+        data.originalUrl, data.targetUrl, data.canonicalUrl, data.sourceUrl, data.realUrl, data.contentUrl, data.url, data.link, data.href
+      ];
+      let searchProviderUrl = '';
+      for(const v of candidates){
+        const x = String(v || '').trim();
+        if(!x || x === '#') continue;
+        if(isSearchEngineLandingUrlClient(x)){ if(!searchProviderUrl) searchProviderUrl = x; continue; }
+        if(/^https?:\/\//i.test(x) || x.startsWith('/')) return { url:x, blockedProviderUrl:searchProviderUrl };
+      }
+      return { url:'', blockedProviderUrl:searchProviderUrl };
+    }
+
+    function removeOpenResultPreviewsClient(except){
+      document.querySelectorAll('.maru-result-preview').forEach(node => {
+        if(node !== except) node.remove();
+      });
+    }
+
+    function toggleResultPreviewClient(card, it){
+      if(!card) return;
+      const existing = card.querySelector(':scope > .maru-result-preview');
+      if(existing){ existing.remove(); return; }
+      removeOpenResultPreviewsClient(null);
+
+      const open = resolveResultOpenUrlClient(it);
+      const openUrl = open && open.url ? open.url : '';
+      const title = String((it && it.title) || '').trim() || '(no title)';
+      const desc = descriptionForItemClient(it);
+      const images = collectNaturalImages(it).slice(0, 4);
+
+      const wrap = document.createElement('div');
+      wrap.className = 'maru-result-preview';
+      wrap.addEventListener('click', e => e.stopPropagation());
+
+      const head = document.createElement('div');
+      head.className = 'maru-result-preview-head';
+      const ht = document.createElement('div');
+      ht.className = 'maru-result-preview-title';
+      ht.textContent = title;
+      head.appendChild(ht);
+
+      const actions = document.createElement('div');
+      actions.className = 'maru-result-preview-actions';
+      if(openUrl){
+        const out = document.createElement('a');
+        out.href = openUrl;
+        out.target = '_blank';
+        out.rel = 'noopener noreferrer';
+        out.textContent = '원문 새 탭';
+        actions.appendChild(out);
+      }
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.textContent = '닫기';
+      close.addEventListener('click', () => wrap.remove());
+      actions.appendChild(close);
+      head.appendChild(actions);
+      wrap.appendChild(head);
+
+      const body = document.createElement('div');
+      body.className = 'maru-result-preview-body';
+      if(desc){
+        const summary = document.createElement('div');
+        summary.className = 'maru-result-preview-summary';
+        summary.textContent = desc;
+        body.appendChild(summary);
+      }
+      if(images.length){
+        const media = document.createElement('div');
+        media.className = 'maru-result-preview-media';
+        images.forEach(src => {
+          const img = document.createElement('img');
+          img.src = src;
+          img.loading = 'lazy';
+          img.alt = '';
+          img.onerror = () => img.remove();
+          media.appendChild(img);
+        });
+        body.appendChild(media);
+      }
+      if(openUrl && /^https?:\/\//i.test(openUrl)){
+        const frame = document.createElement('iframe');
+        frame.className = 'maru-result-preview-frame';
+        frame.loading = 'lazy';
+        frame.referrerPolicy = 'no-referrer-when-downgrade';
+        frame.sandbox = 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin';
+        frame.src = openUrl;
+        body.appendChild(frame);
+        const note = document.createElement('div');
+        note.className = 'maru-result-preview-note';
+        note.textContent = '일부 사이트는 보안 정책 때문에 미리보기가 비어 보일 수 있습니다. 이 경우 현재 검색 화면은 유지하고 원문은 새 탭으로만 엽니다.';
+        body.appendChild(note);
+      } else {
+        const note = document.createElement('div');
+        note.className = 'maru-result-preview-note';
+        note.textContent = open && open.blockedProviderUrl ? '검색엔진의 메인 검색 결과 페이지로 이동하지 않도록 이 카드 안에서 요약만 표시합니다.' : '열 수 있는 원문 URL이 없어 검색 카드 요약만 표시합니다.';
+        body.appendChild(note);
+      }
+      wrap.appendChild(body);
+      card.appendChild(wrap);
+      try { wrap.scrollIntoView({ block:'nearest', behavior:'smooth' }); } catch(e) {}
+    }
+
     function renderItem(it, mountTarget){
-      const url = it.url || it.link || '';
-      const domain = domainOf(url);
+      const openInfo = resolveResultOpenUrlClient(it);
+      const url = (openInfo && openInfo.url) || it.url || it.link || '';
+      const openUrl = (openInfo && openInfo.url) || '';
+      const domain = domainOf(openUrl || url);
 
       const card = document.createElement('div');
       card.className = 'card';
-      applySearchRevenueDataset(card, it, url);
+      applySearchRevenueDataset(card, it, openUrl || url);
 
-      const playableMedia = getPlayableMediaInfo(it, url);
+      const playableMedia = getPlayableMediaInfo(it, openUrl || url);
 
-      if (url) {
-        card.style.cursor = 'pointer';
-        card.addEventListener('click', (e) => {
-          if (e.target && e.target.closest && e.target.closest('a, button, iframe, video, .maru-video-embed-wrap, .maru-card-media')) return;
-          window.open(url, '_blank', 'noopener');
-        });
-      }
+      card.style.cursor = 'pointer';
+      card.addEventListener('click', (e) => {
+        if (e.target && e.target.closest && e.target.closest('button, iframe, video, .maru-video-embed-wrap, .maru-card-media, .maru-result-preview')) return;
+        if (e.target && e.target.closest && e.target.closest('a')) return;
+        toggleResultPreviewClient(card, it);
+      });
 
       const body = document.createElement('div');
       body.className = 'maru-search-card-body';
@@ -2704,14 +2918,18 @@ async function fetchInstantSearchPack(q, type = activeType){
       const t = document.createElement('div');
       t.className = 'title';
 
-      if (url) {
+      if (openUrl || url) {
         const a = document.createElement('a');
-        a.href = url;
+        a.href = openUrl || '#';
         a.target = '_blank';
-        a.rel = 'noopener';
+        a.rel = 'noopener noreferrer';
         a.textContent = (it.title || '').trim() || '(no title)';
         a.style.color = 'inherit';
         a.style.textDecoration = 'none';
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          toggleResultPreviewClient(card, it);
+        });
         t.appendChild(a);
       } else {
         t.textContent = (it.title || '').trim() || '(no title)';
@@ -2770,15 +2988,10 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
         const cardLineClamp = it && it.displayCard && parseInt(it.displayCard.lineClamp, 10);
-        const clampLines = cardLineClamp > 0 ? Math.min(5, Math.max(3, cardLineClamp)) : 4;
-        d.style.webkitLineClamp = String(clampLines);
-        d.style.lineClamp = String(clampLines);
+        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(6, cardLineClamp) : 4);
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
-        d.style.lineHeight = '1.45';
-        d.style.maxHeight = `calc(1.45em * ${clampLines})`;
-        d.style.whiteSpace = 'normal';
       }
 
       const hasImageSet = Array.isArray(it.imageSet) && it.imageSet.length > 0;
@@ -3024,12 +3237,12 @@ if (it.riskLabel === '⚠️ high-risk') {
         authority: 8,
         public_data: 8,
         local_tour: 8,
-        knowledge: 10,
-        wiki: 10,
+        knowledge: 3,
+        wiki: 3,
         academic: 15,
         site: 15,
         book: 15,
-        news: 25,
+        news: 15,
         blog: 15,
         cafe: 15,
         community: 15,
@@ -3054,7 +3267,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         items: diversifyGroupPreviewItems(g.group, g.items || [])
       }));
       const byGroup = new Map(grouped.map(g => [g.group, g]));
-      const categoryOrder = ['authority','local_tour','news','knowledge','site','blog','cafe','social','image','video','media','book','shopping','public_data','academic','community','sports','finance','webtoon'];
+      const categoryOrder = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon'];
       const categoryOverflowItems = [];
       const categoryPages = [];
       let page = [];
