@@ -12,17 +12,17 @@
  * - search.js remains the UI executor: it hides/shows/reorders categories using this policy.
  */
 
-const VERSION = 'maru-search-display-engine-v1.4.1-real-card-policy';
+const VERSION = 'maru-search-display-engine-v1.1.1-natural-thumbnail-filter';
 const ENGINE_NAME = 'maru-search-display-engine';
 
 const BASE_GROUP_ORDER = [
-  'authority','local_tour','news','knowledge','wiki','site','blog','cafe','social','community',
-  'image','video','media','book','shopping','public_data','academic','sports','finance','webtoon','web'
+  'authority','local_tour','news','knowledge','wiki','site','blog','cafe','social','image','video','media',
+  'book','shopping','public_data','academic','community','sports','finance','webtoon','web'
 ];
 
 const BASE_TABS = [
-  'all','map','news','knowledge','wiki','site','blog','cafe','sns','tour','image','video',
-  'media','book','shopping','public_data','academic','sports','finance','webtoon'
+  'all','map','news','knowledge','wiki','site','blog','cafe','sns','tour','image','video','media',
+  'book','shopping','public_data','academic','sports','finance','webtoon'
 ];
 
 const DEFAULT_PREVIEW_LIMITS = {
@@ -112,9 +112,8 @@ function naturalSummary(item, query){
   return '';
 }
 function fallbackDisplaySummary(item, query, group){
-  // Search cards must not fabricate guide/shortcut text as if it were a real
-  // provider snippet. If no provider summary/body/OG description exists, leave
-  // the card body blank and let search.js render only the title/source.
+  // Do not invent 안내문/guide copy as a search-card body.
+  // Search cards should show real provider/resident text only.
   return '';
 }
 function collectDisplayImages(item){
@@ -127,49 +126,23 @@ function collectDisplayImages(item){
   const raw = []
     .concat(displayCard.thumbnail ? [displayCard.thumbnail] : [])
     .concat(displayCard.image ? [displayCard.image] : [])
-    .concat(displayCard.originalImage ? [displayCard.originalImage] : [])
-    .concat(displayCard.fullImage ? [displayCard.fullImage] : [])
     .concat(Array.isArray(displayCard.imageSet) ? displayCard.imageSet : [])
-    .concat(item.originalImage ? [item.originalImage] : [])
-    .concat(item.fullImage ? [item.fullImage] : [])
-    .concat(item.imageOriginal ? [item.imageOriginal] : [])
-    .concat(item.viewerImage ? [item.viewerImage] : [])
-    .concat(item.openImageUrl ? [item.openImageUrl] : [])
-    .concat(item.contentUrl ? [item.contentUrl] : [])
-    .concat(item.cardImage ? [item.cardImage] : [])
     .concat(item.thumbnail ? [item.thumbnail] : [])
     .concat(item.thumb ? [item.thumb] : [])
     .concat(item.image ? [item.image] : [])
     .concat(item.imageUrl ? [item.imageUrl] : [])
     .concat(item.og_image ? [item.og_image] : [])
     .concat(item.ogImage ? [item.ogImage] : [])
-    .concat(payload.originalImage ? [payload.originalImage] : [])
-    .concat(payload.fullImage ? [payload.fullImage] : [])
-    .concat(payload.imageOriginal ? [payload.imageOriginal] : [])
-    .concat(payload.viewerImage ? [payload.viewerImage] : [])
-    .concat(payload.openImageUrl ? [payload.openImageUrl] : [])
-    .concat(payload.contentUrl ? [payload.contentUrl] : [])
-    .concat(payload.cardImage ? [payload.cardImage] : [])
     .concat(payload.thumbnail ? [payload.thumbnail] : [])
     .concat(payload.thumb ? [payload.thumb] : [])
     .concat(payload.image ? [payload.image] : [])
     .concat(payload.imageUrl ? [payload.imageUrl] : [])
-    .concat(payload.image_url ? [payload.image_url] : [])
     .concat(payload.og_image ? [payload.og_image] : [])
     .concat(payload.ogImage ? [payload.ogImage] : [])
-    .concat(data.originalImage ? [data.originalImage] : [])
-    .concat(data.fullImage ? [data.fullImage] : [])
-    .concat(data.imageOriginal ? [data.imageOriginal] : [])
-    .concat(data.openImageUrl ? [data.openImageUrl] : [])
-    .concat(data.contentUrl ? [data.contentUrl] : [])
-    .concat(data.cardImage ? [data.cardImage] : [])
     .concat(data.thumbnail ? [data.thumbnail] : [])
     .concat(data.thumb ? [data.thumb] : [])
     .concat(data.image ? [data.image] : [])
     .concat(data.imageUrl ? [data.imageUrl] : [])
-    .concat(data.image_url ? [data.image_url] : [])
-    .concat(preview.original ? [preview.original] : [])
-    .concat(preview.poster ? [preview.poster] : [])
     .concat(preview.thumbnail ? [preview.thumbnail] : [])
     .concat(preview.image ? [preview.image] : [])
     .concat(Array.isArray(item.imageSet) ? item.imageSet : [])
@@ -233,48 +206,26 @@ function decorateDisplayItem(item, ctx, index){
     summary: firstNonEmpty(item.summary, item.snippet, item.description, summary),
     description: firstNonEmpty(item.description, item.summary, item.snippet, summary),
     snippet: firstNonEmpty(item.snippet, item.summary, item.description, summary),
-    // Only sanitized direct content images may enter search-card media fields.
-    // Do not preserve upstream thumbnails when they are merely provider/search URLs
-    // such as google.com/search, map pages, logos, banners, or placards.
-    thumbnail: images[0] || '',
-    thumb: images[0] || '',
-    image: images[0] || '',
-    imageUrl: images[0] || '',
-    originalImage: images[0] || '',
-    fullImage: images[0] || '',
-    imageOriginal: images[0] || '',
-    viewerImage: images[0] || '',
-    openImageUrl: images[0] || '',
-    contentUrl: images[0] || '',
-    cardImage: images[0] || '',
-    imageSet: images,
+    thumbnail: firstNonEmpty(item.thumbnail, item.thumb, images[0]),
+    thumb: firstNonEmpty(item.thumb, item.thumbnail, images[0]),
+    image: firstNonEmpty(item.image, images[0]),
+    imageSet: images.length ? images : (Array.isArray(item.imageSet) ? item.imageSet : []),
     displayCard: Object.assign({}, pickObject(item.displayCard), {
       engine: ENGINE_NAME,
       version: VERSION,
       cardType,
       group,
-      title: firstNonEmpty(item.title, item.name, q),
-      url: firstNonEmpty(item.url, item.link, item.href),
-      source: firstNonEmpty(item.source, item.provider, domainOf(firstNonEmpty(item.url, item.link, item.href))),
       summary,
-      body: summary,
-      description: summary,
-      snippet: summary,
       lineClamp: mapLike ? 2 : 3,
       bodyLines: mapLike ? 2 : 3,
       thumbnail: images[0] || '',
       image: images[0] || '',
-      imageUrl: images[0] || '',
-      originalImage: images[0] || '',
-      fullImage: images[0] || '',
       imageSet: images,
       hasThumbnail: !!images.length,
       showThumbnail: !!images.length,
       showMapPreview: mapLike,
       showVideoPreview: cardType === 'video',
       showBody: true,
-      bodySource: naturalSummary(item, q) ? 'provider' : 'display-engine-fallback',
-      thumbnailPolicy: 'actual-content-image-only; no-logo-no-favicon-no-banner-no-placard-no-search-url',
       displayMode: mapLike ? 'map-plus-list-card' : (images.length ? 'text-plus-thumbnail-card' : 'text-summary-card')
     })
   });
@@ -285,16 +236,6 @@ function decorateDisplayItem(item, ctx, index){
       name: firstNonEmpty(item.placeInfo && item.placeInfo.name, item.title, q),
       address: firstNonEmpty(item.placeInfo && item.placeInfo.address, item.address, ''),
       mapQuery: firstNonEmpty(item.mapQuery, item.address, item.title, q)
-    });
-    copy.displayCard = Object.assign({}, copy.displayCard, {
-      showMapPreview: true,
-      mapQuery: copy.mapQuery,
-      mapPreview: {
-        enabled: true,
-        query: copy.mapQuery,
-        name: copy.placeInfo.name || copy.mapQuery,
-        address: copy.placeInfo.address || ''
-      }
     });
   }
   if(cardType === 'video' && images[0]){
@@ -416,20 +357,20 @@ function inferIntent(q, counts, rawType){
 function policyForIntent(intentInfo, counts){
   const intent = intentInfo.intent || 'general';
   const profiles = {
-    local: ['authority','local_tour','blog','image','video','news','site','web'],
+    local: ['authority','local_tour','news','blog','image','video','site','web'],
     shopping: ['shopping','image','video','blog','site','news','web'],
     finance: ['finance','news','authority','site','blog','video','web'],
-    issue: ['news','social','blog','video','image','wiki','authority','web'],
+    issue: ['news','social','blog','video','image','wiki','authority','site','web'],
     celebrity: ['news','video','social','image','blog','cafe','wiki','site','web'],
     celebrity_or_person: ['news','video','social','image','blog','cafe','wiki','site','web'],
     academic: ['academic','knowledge','wiki','site','book','news','web'],
     book: ['book','knowledge','wiki','blog','shopping','news','web'],
     sports: ['sports','news','video','social','image','blog','web'],
     knowledge: ['authority','knowledge','wiki','site','academic','video','image','web'],
-    general: ['authority','knowledge','wiki','site','news','blog','image','video','social','local_tour','shopping','public_data','academic','web']
+    general: ['authority','local_tour','news','knowledge','wiki','site','blog','cafe','social','image','video','media','book','shopping','public_data','academic','web']
   };
   const preferred = profiles[intent] || profiles.general;
-  const presentPreferred = preferred.filter(g => g === 'web' || hasCount(counts, g));
+  const presentPreferred = preferred.filter(g => hasCount(counts, g));
   const fallbackPresent = BASE_GROUP_ORDER.filter(g => hasCount(counts, g) && !presentPreferred.includes(g));
 
   // Keep the board focused, but never delete data: search.js will demote hidden
@@ -439,15 +380,15 @@ function policyForIntent(intentInfo, counts){
   if(!visibleGroups.includes('web')) visibleGroups.push('web');
 
   const hiddenGroups = BASE_GROUP_ORDER.filter(g => g !== 'web' && !visibleGroups.includes(g));
-  const groupOrder = unique(visibleGroups.concat(BASE_GROUP_ORDER));
+  const groupOrder = unique(visibleGroups.filter(g => g !== 'web').concat(BASE_GROUP_ORDER.filter(g => g !== 'web')).concat(['web']));
 
   const visibleTabsMap = {
-    local: ['all','map','news','site','blog','cafe','sns','tour','image','video'],
+    local: ['all','map','tour','blog','image','video','news','site'],
     shopping: ['all','shopping','image','video','blog','site','news'],
     finance: ['all','finance','news','site','blog','video'],
-    issue: ['all','news','sns','blog','video','image','wiki','site'],
-    celebrity: ['all','news','video','sns','image','blog','cafe','wiki','site'],
-    celebrity_or_person: ['all','news','video','sns','image','blog','cafe','wiki','site'],
+    issue: ['all','news','sns','blog','video','image','media','wiki','site'],
+    celebrity: ['all','news','video','sns','image','media','blog','cafe','wiki','site'],
+    celebrity_or_person: ['all','news','video','sns','image','media','blog','cafe','wiki','site'],
     academic: ['all','academic','knowledge','wiki','site','book','news'],
     book: ['all','book','knowledge','wiki','blog','shopping','news'],
     sports: ['all','sports','news','video','sns','image','blog'],
