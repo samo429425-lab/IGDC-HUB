@@ -21,9 +21,9 @@ const path = require('path');
 const crypto = require('crypto');
 
 const VERSION = 'A1.5.47-public-result-boundary-fake-road-filter';
-const DEFAULT_LIMIT = 3000;
-const MAX_LIMIT = 15000;
-const MIN_RESULT_TARGET = 3000;
+const DEFAULT_LIMIT = 2000;
+const MAX_LIMIT = 12000;
+const MIN_RESULT_TARGET = 1500;
 const MARU_SEARCH_MAX_PAGER_PAGES = 499;
 const DEFAULT_SOFT_TIMEOUT_MS = 10500;
 
@@ -469,22 +469,21 @@ function isProviderSearchIndexUrl(url){
 }
 
 function isProviderSearchIndexItem(it){
-  it = (it && typeof it === 'object') ? it : {};
-  const url = safeString(firstNonEmpty(it.url, it.link, it.href, it.openUrl)).trim();
-  const source = safeString(firstNonEmpty(it.source, it.provider, it.generatedBy, it.sourceType)).toLowerCase();
-  const title = safeString(firstNonEmpty(it.title, it.name)).toLowerCase();
-  const generatedBy = safeString(it.generatedBy).toLowerCase();
-  const sourceType = safeString(it.sourceType).toLowerCase();
-  const payload = (it.payload && typeof it.payload === 'object') ? it.payload : {};
-  const providerRoadFlag = !!(
-    it.publicProviderRoad || it.sanmaruRouteCard || it.routePlanProvider || it.providerRoad ||
-    it.openingCard || it.passthrough || payload.providerLane || payload.providerUrl ||
-    /provider[-_ ]?lane|provider[-_ ]?road|opening|route|passthrough|public[-_ ]?search/.test(source + ' ' + generatedBy + ' ' + sourceType)
-  );
-  if(providerRoadFlag) return true;
-  if(providerSearchIndexReason(url)) return true;
-  if(/public_provider_road|provider-road|provider_lane|provider-lane|search-index|passthrough|opening|route/.test(source)) return true;
-  if(/\[(google|naver|bing|youtube|instagram|facebook|tiktok|threads|x|twitter)\]/i.test(title) && /검색|search|공개/.test(title)) return true;
+  if(!it || typeof it !== 'object') return false;
+  const url = firstNonEmpty(it.url, it.link, it.href, it.openUrl);
+  const searchIndexUrl = isProviderSearchIndexUrl(url);
+  const hay = [
+    it.sourceType, it.source, it.provider, it.generatedBy, it.id, it.title,
+    Array.isArray(it.tags) ? it.tags.join(' ') : '',
+    it.publicProviderRoad ? 'publicProviderRoad' : '',
+    it.sanmaruRouteCard ? 'sanmaruRouteCard' : '',
+    it.providerHintOnly ? 'providerHintOnly' : '',
+    it.routePlanProvider ? 'routePlanProvider' : ''
+  ].join(' ').toLowerCase();
+
+  if(searchIndexUrl) return true;
+  if(/search[-_ ]?link|public[-_ ]?provider[-_ ]?road|provider[-_ ]?road|provider[-_ ]?lane|opening[-_ ]?card|route[-_ ]?card|discovery|passthrough/.test(hay) && !resultSummaryText(it)) return true;
+  if((it.publicProviderRoad || it.sanmaruRouteCard || it.providerHintOnly || it.routePlanProvider) && !resultSummaryText(it)) return true;
   return false;
 }
 
@@ -5160,7 +5159,7 @@ exports.handler = async function(event){
       pageItems: visiblePagePack.pageItems,
       visiblePagePack,
       sectionPack: sectionPackWithViewport,
-      meta: Object.assign({}, base.meta || {}, { count: responseItems.length, fullCandidateCount, totalCandidates: fullCandidateCount, responseWindowCount: responseItems.length, initialResponseWindow: firstResponseWindow, pagedCandidatePool: true, maxPagerPages: MARU_SEARCH_MAX_PAGER_PAGES, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, fullCandidateCount, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', security:{ allowed:true, admin:security.admin, mode:'read-search-open-admin-actions-protected' }, sanmaruTopResident: Object.assign({}, sanmaruRouteContext && sanmaruRouteContext.meta || {}, { routePlan: sanmaruRouteContext && sanmaruRouteContext.routePlan, providerHealth: sanmaruRouteContext && sanmaruRouteContext.providerHealth }), searchContract:{ owner:'sanmaru-global-web-information-cpu', maruRole:'mounted-gateway-ui-body', itemResults:'full-candidate-pool-not-viewport-limited', viewport:'page-sized-current-render-window', perPage:visiblePagePack.perPage, providerRescanPolicy:'skip-only-when-sanmaru-holds-broad-query-cache; otherwise preserve-google-naver-sns-wide-gateway' }, preservationPatch: 'A1.5.48-broad-10k-intake-public-road-filter-preserve-300-first-window' })
+      meta: Object.assign({}, base.meta || {}, { count: responseItems.length, fullCandidateCount, totalCandidates: fullCandidateCount, responseWindowCount: responseItems.length, initialResponseWindow: firstResponseWindow, pagedCandidatePool: true, maxPagerPages: MARU_SEARCH_MAX_PAGER_PAGES, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, fullCandidateCount, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', security:{ allowed:true, admin:security.admin, mode:'read-search-open-admin-actions-protected' }, sanmaruTopResident: Object.assign({}, sanmaruRouteContext && sanmaruRouteContext.meta || {}, { routePlan: sanmaruRouteContext && sanmaruRouteContext.routePlan, providerHealth: sanmaruRouteContext && sanmaruRouteContext.providerHealth }), searchContract:{ owner:'sanmaru-global-web-information-cpu', maruRole:'mounted-gateway-ui-body', itemResults:'full-candidate-pool-not-viewport-limited', viewport:'page-sized-current-render-window', perPage:visiblePagePack.perPage, providerRescanPolicy:'skip-only-when-sanmaru-holds-broad-query-cache; otherwise preserve-google-naver-sns-wide-gateway' }, preservationPatch: 'A1.5.47-public-result-boundary-fake-road-filter-preserve-300-intake' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));
