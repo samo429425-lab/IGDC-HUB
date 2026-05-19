@@ -1132,16 +1132,32 @@ async function fetchSearch(q, type = activeType, page = 1){
   const safeType = normalizeSearchType(type);
   signalSanmaruSearch(q, safeType, 'maru-search-fetch');
 
+  const pageNo = Math.max(1, Number(page) || 1);
+  const fullCandidateTarget = adaptiveSearchTarget(q, safeType);
+  const firstWindowTarget = firstPaintLimitFor(q, safeType);
+  const responseLimit = pageNo <= 1
+    ? firstWindowTarget
+    : Math.min(fullCandidateTarget, Math.max(firstWindowTarget, pageNo * PAGE_SIZE + PAGE_SIZE));
+
   const sp = new URLSearchParams();
   sp.set('q', q);
-  sp.set('limit', String(adaptiveSearchTarget(q, safeType)));
+  // First paint must be a 300-card window, not a 3,000~4,500-card wait.
+  // The full target is still passed separately so Maru/Sanmaru can keep filling
+  // the faucet behind the visible page.
+  sp.set('limit', String(responseLimit));
+  sp.set('candidatePoolTarget', String(fullCandidateTarget));
+  sp.set('fullCandidateTarget', String(fullCandidateTarget));
+  sp.set('firstPaintLimit', String(firstWindowTarget));
+  sp.set('initialResponseWindow', String(firstWindowTarget));
   sp.set('type', safeType);
   sp.set('tab', safeType);
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
-  sp.set('page', String(Math.max(1, Number(page) || 1)));
-  sp.set('visiblePage', String(Math.max(1, Number(page) || 1)));
+  sp.set('page', String(pageNo));
+  sp.set('visiblePage', String(pageNo));
   sp.set('pageWindowOnly', '1');
+  sp.set('fastFirstPaint', '1');
+  sp.set('responseWindow', '1');
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
   sp.set('routeOwner', 'sanmaru');
@@ -1179,8 +1195,11 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('tab', safeType);
   sp.set('limit', String(firstPaintLimitFor(q, safeType)));
   sp.set('firstPaintLimit', String(firstPaintLimitFor(q, safeType)));
-  sp.set('candidatePool', String(adaptiveSearchTarget(q, safeType)));
-  sp.set('candidatePoolTarget', String(adaptiveSearchTarget(q, safeType)));
+  sp.set('candidatePool', String(firstPaintLimitFor(q, safeType)));
+  sp.set('candidatePoolTarget', String(firstPaintLimitFor(q, safeType)));
+  sp.set('fullCandidateTarget', String(adaptiveSearchTarget(q, safeType)));
+  sp.set('fastFirstPaint', '1');
+  sp.set('responseWindow', '1');
   sp.set('initialPreloadPages', String(INITIAL_PRELOAD_PAGES));
   sp.set('initialPreloadTarget', String(INITIAL_PRELOAD_TARGET));
   sp.set('perPage', String(PAGE_SIZE));
@@ -1550,13 +1569,23 @@ async function fetchInstantSearchPack(q, type = activeType){
       if (!bar){
         bar = document.createElement('div');
         bar.id = 'maru-page-controls';
+        bar.setAttribute('data-maru-fixed-search-nav', '1');
         bar.style.display = 'flex';
         bar.style.alignItems = 'center';
         bar.style.justifyContent = 'center';
+        bar.style.flexWrap = 'wrap';
         bar.style.gap = '6px';
         bar.style.margin = '8px 0 14px';
+        bar.style.padding = '8px 6px';
+        bar.style.background = '#ffffff';
+        bar.style.borderBottom = '1px solid #e5e7eb';
+        bar.style.position = 'sticky';
+        bar.style.top = '0';
+        bar.style.zIndex = '30';
+        bar.style.boxShadow = '0 4px 12px rgba(15,23,42,0.04)';
         status.parentNode.insertBefore(bar, status.nextSibling);
       }
+      bar.style.display = 'flex';
       return bar;
     }
 
@@ -2806,8 +2835,9 @@ async function fetchInstantSearchPack(q, type = activeType){
 
     function toggleResultPreviewClient(card, it){
       if(!card) return;
+      drawPager();
       const existing = card.querySelector(':scope > .maru-result-preview');
-      if(existing){ existing.remove(); return; }
+      if(existing){ existing.remove(); drawPager(); return; }
       removeOpenResultPreviewsClient(null);
 
       const open = resolveResultOpenUrlClient(it);
@@ -3529,6 +3559,19 @@ function drawPager(){
 
   const bar = ensurePager();
   bar.innerHTML = '';
+  bar.setAttribute('aria-label', '검색 결과 페이지');
+
+  const stylePagerButton = (button, on) => {
+    button.type = 'button';
+    button.style.minWidth = '34px';
+    button.style.height = '32px';
+    button.style.borderRadius = '9px';
+    button.style.border = '1px solid ' + (on ? '#1e3a8a' : '#cbd5e1');
+    button.style.background = on ? '#1e3a8a' : '#ffffff';
+    button.style.color = on ? '#ffffff' : '#1e293b';
+    button.style.fontWeight = '900';
+    button.style.cursor = 'pointer';
+  };
 
   const blockStart = currentBlock * BLOCK_SIZE + 1;
   const blockEnd = Math.min(blockStart + BLOCK_SIZE - 1, pages);
@@ -3536,6 +3579,7 @@ function drawPager(){
   if (blockStart > 1){
     const left = document.createElement('button');
     left.textContent = '◀';
+    stylePagerButton(left, false);
     left.onclick = () => {
       currentBlock = Math.max(0, currentBlock - 1);
       currentPage = currentBlock * BLOCK_SIZE + 1;
@@ -3548,7 +3592,7 @@ function drawPager(){
   for (let p = blockStart; p <= blockEnd; p++){
     const b = document.createElement('button');
     b.textContent = String(p);
-    b.style.opacity = (p === currentPage) ? '0.6' : '1';
+    stylePagerButton(b, p === currentPage);
     b.onclick = () => {
       currentPage = p;
       currentBlock = Math.floor((p - 1) / BLOCK_SIZE);
@@ -3561,6 +3605,7 @@ function drawPager(){
   if (blockEnd < pages){
     const right = document.createElement('button');
     right.textContent = '▶';
+    stylePagerButton(right, false);
     right.onclick = () => {
       const maxBlock = Math.floor((pages - 1) / BLOCK_SIZE);
       currentBlock = Math.min(maxBlock, currentBlock + 1);
@@ -3608,10 +3653,12 @@ async function runSearch(q, type = activeType){
   signalSanmaruSearch(qq, activeType, 'run-search');
   status.textContent = `Receiving ${getTypeLabel(activeType)} supply for "${qq}"...`;
   renderSkeleton();
-  clearPager();
 
   currentBlock = 0;
   currentPage = 1;
+  // Page navigation is part of the fixed search header. Show it immediately
+  // from the progressive target instead of waiting for the first network pack.
+  drawPager();
   lastQuery = qq;
   lastType = activeType;
   pageImageEnrichCache.clear();
