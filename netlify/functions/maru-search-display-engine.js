@@ -16,13 +16,13 @@ const VERSION = 'maru-search-display-engine-v1.1.1-natural-thumbnail-filter';
 const ENGINE_NAME = 'maru-search-display-engine';
 
 const BASE_GROUP_ORDER = [
-  'authority','local_tour','news','knowledge','wiki','site','blog','cafe','social','image','video','media',
-  'book','shopping','public_data','academic','community','sports','finance','webtoon','web'
+  'authority','local_tour','news','knowledge','wiki','site','blog','cafe','social','image',
+  'video','media','book','shopping','public_data','academic','community','sports','finance','webtoon','web'
 ];
 
 const BASE_TABS = [
-  'all','map','news','knowledge','wiki','site','blog','cafe','sns','tour','image','video','media',
-  'book','shopping','public_data','academic','sports','finance','webtoon'
+  'all','map','news','knowledge','wiki','site','blog','cafe','sns','tour','image','video',
+  'media','book','shopping','public_data','academic','sports','finance','webtoon'
 ];
 
 const DEFAULT_PREVIEW_LIMITS = {
@@ -112,8 +112,8 @@ function naturalSummary(item, query){
   return '';
 }
 function fallbackDisplaySummary(item, query, group){
-  // Do not invent 안내문/guide copy as a search-card body.
-  // Search cards should show real provider/resident text only.
+  // Search-card body must come from real provider/resident text only.
+  // Do not invent 안내문/guide copy as body text.
   return '';
 }
 function collectDisplayImages(item){
@@ -357,10 +357,10 @@ function inferIntent(q, counts, rawType){
 function policyForIntent(intentInfo, counts){
   const intent = intentInfo.intent || 'general';
   const profiles = {
-    local: ['authority','local_tour','news','blog','image','video','site','web'],
+    local: ['authority','local_tour','blog','image','video','news','site','web'],
     shopping: ['shopping','image','video','blog','site','news','web'],
     finance: ['finance','news','authority','site','blog','video','web'],
-    issue: ['news','social','blog','video','image','wiki','authority','site','web'],
+    issue: ['news','social','blog','video','image','wiki','authority','web'],
     celebrity: ['news','video','social','image','blog','cafe','wiki','site','web'],
     celebrity_or_person: ['news','video','social','image','blog','cafe','wiki','site','web'],
     academic: ['academic','knowledge','wiki','site','book','news','web'],
@@ -370,7 +370,7 @@ function policyForIntent(intentInfo, counts){
     general: ['authority','local_tour','news','knowledge','wiki','site','blog','cafe','social','image','video','media','book','shopping','public_data','academic','web']
   };
   const preferred = profiles[intent] || profiles.general;
-  const presentPreferred = preferred.filter(g => hasCount(counts, g));
+  const presentPreferred = preferred.filter(g => g === 'web' || hasCount(counts, g));
   const fallbackPresent = BASE_GROUP_ORDER.filter(g => hasCount(counts, g) && !presentPreferred.includes(g));
 
   // Keep the board focused, but never delete data: search.js will demote hidden
@@ -380,15 +380,15 @@ function policyForIntent(intentInfo, counts){
   if(!visibleGroups.includes('web')) visibleGroups.push('web');
 
   const hiddenGroups = BASE_GROUP_ORDER.filter(g => g !== 'web' && !visibleGroups.includes(g));
-  const groupOrder = unique(visibleGroups.filter(g => g !== 'web').concat(BASE_GROUP_ORDER.filter(g => g !== 'web')).concat(['web']));
+  const groupOrder = unique(visibleGroups.concat(BASE_GROUP_ORDER));
 
   const visibleTabsMap = {
     local: ['all','map','tour','blog','image','video','news','site'],
     shopping: ['all','shopping','image','video','blog','site','news'],
     finance: ['all','finance','news','site','blog','video'],
-    issue: ['all','news','sns','blog','video','image','media','wiki','site'],
-    celebrity: ['all','news','video','sns','image','media','blog','cafe','wiki','site'],
-    celebrity_or_person: ['all','news','video','sns','image','media','blog','cafe','wiki','site'],
+    issue: ['all','news','sns','blog','video','image','wiki','site'],
+    celebrity: ['all','news','video','sns','image','blog','cafe','wiki','site'],
+    celebrity_or_person: ['all','news','video','sns','image','blog','cafe','wiki','site'],
     academic: ['all','academic','knowledge','wiki','site','book','news'],
     book: ['all','book','knowledge','wiki','blog','shopping','news'],
     sports: ['all','sports','news','video','sns','image','blog'],
