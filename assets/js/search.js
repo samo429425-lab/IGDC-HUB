@@ -1569,13 +1569,23 @@ async function fetchInstantSearchPack(q, type = activeType){
       if (!bar){
         bar = document.createElement('div');
         bar.id = 'maru-page-controls';
+        bar.setAttribute('data-maru-fixed-search-nav', '1');
         bar.style.display = 'flex';
         bar.style.alignItems = 'center';
         bar.style.justifyContent = 'center';
+        bar.style.flexWrap = 'wrap';
         bar.style.gap = '6px';
         bar.style.margin = '8px 0 14px';
+        bar.style.padding = '8px 6px';
+        bar.style.background = '#ffffff';
+        bar.style.borderBottom = '1px solid #e5e7eb';
+        bar.style.position = 'sticky';
+        bar.style.top = '0';
+        bar.style.zIndex = '30';
+        bar.style.boxShadow = '0 4px 12px rgba(15,23,42,0.04)';
         status.parentNode.insertBefore(bar, status.nextSibling);
       }
+      bar.style.display = 'flex';
       return bar;
     }
 
@@ -2886,15 +2896,27 @@ async function fetchInstantSearchPack(q, type = activeType){
         });
         body.appendChild(media);
       }
-      const note = document.createElement('div');
-      note.className = 'maru-result-preview-note';
-      note.textContent = openUrl
-        ? '현재 검색 화면은 유지합니다. 원문은 새 탭으로만 열고, 카드에는 검색 요약과 사용 가능한 이미지/영상만 표시합니다.'
-        : (open && open.blockedProviderUrl ? '검색엔진의 메인 검색 결과 페이지로 이동하지 않도록 이 카드 안에서 요약만 표시합니다.' : '열 수 있는 원문 URL이 없어 검색 카드 요약만 표시합니다.');
-      body.appendChild(note);
+      if(openUrl && /^https?:\/\//i.test(openUrl)){
+        const frame = document.createElement('iframe');
+        frame.className = 'maru-result-preview-frame';
+        frame.loading = 'lazy';
+        frame.referrerPolicy = 'no-referrer-when-downgrade';
+        frame.sandbox = 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin';
+        frame.src = openUrl;
+        body.appendChild(frame);
+        const note = document.createElement('div');
+        note.className = 'maru-result-preview-note';
+        note.textContent = '일부 사이트는 보안 정책 때문에 미리보기가 비어 보일 수 있습니다. 이 경우 현재 검색 화면은 유지하고 원문은 새 탭으로만 엽니다.';
+        body.appendChild(note);
+      } else {
+        const note = document.createElement('div');
+        note.className = 'maru-result-preview-note';
+        note.textContent = open && open.blockedProviderUrl ? '검색엔진의 메인 검색 결과 페이지로 이동하지 않도록 이 카드 안에서 요약만 표시합니다.' : '열 수 있는 원문 URL이 없어 검색 카드 요약만 표시합니다.';
+        body.appendChild(note);
+      }
       wrap.appendChild(body);
       card.appendChild(wrap);
-      drawPager();
+      try { wrap.scrollIntoView({ block:'nearest', behavior:'smooth' }); } catch(e) {}
     }
 
     function renderItem(it, mountTarget){
