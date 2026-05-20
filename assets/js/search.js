@@ -1045,13 +1045,36 @@ function mergeItemsPreferDisplayRichness(baseItems, incomingItems){
   return out;
 }
 
+
+function fetchJsonNoStoreWithTimeout(url, timeoutMs){
+  const ms = Math.max(700, Math.min(6000, Number(timeoutMs) || 2500));
+  const hasAbort = typeof AbortController !== 'undefined';
+  const ctrl = hasAbort ? new AbortController() : null;
+  const timer = setTimeout(() => {
+    try { if(ctrl) ctrl.abort(); } catch(e) {}
+  }, ms);
+
+  return fetch(url, Object.assign({ cache: 'no-store' }, ctrl ? { signal: ctrl.signal } : {}))
+    .then(r => {
+      clearTimeout(timer);
+      if(!r || !r.ok) return null;
+      return r.json().catch(() => null);
+    })
+    .catch(() => {
+      clearTimeout(timer);
+      return null;
+    });
+}
+
 async function fetchSearch(q, type = activeType, page = 1){
   const safeType = normalizeSearchType(type);
   signalSanmaruSearch(q, safeType, 'maru-search-fetch');
 
   const sp = new URLSearchParams();
   sp.set('q', q);
-  sp.set('limit', String(adaptiveSearchTarget(q, safeType)));
+  sp.set('limit', String(Math.max(PAGE_SIZE, page <= 1 ? firstPaintLimitFor(q, safeType) : adaptiveSearchTarget(q, safeType))));
+  sp.set('firstPaintLimit', String(firstPaintLimitFor(q, safeType)));
+  sp.set('candidatePoolTarget', String(adaptiveSearchTarget(q, safeType)));
   sp.set('type', safeType);
   sp.set('tab', safeType);
   sp.set('perPage', String(PAGE_SIZE));
@@ -1071,10 +1094,8 @@ async function fetchSearch(q, type = activeType, page = 1){
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
   try {
-    const r = await fetch(url, { cache: 'no-store' });
-    if (!r.ok) return { items: [], payload: null, pageItems: [], viewportSections: [] };
-
-    const json = await r.json();
+    const timeoutMs = page <= 1 ? 2600 : 4200;
+    const json = await fetchJsonNoStoreWithTimeout(url, timeoutMs);
     if (!json) return { items: [], payload: null, pageItems: [], viewportSections: [] };
     if (json.status === 'error') return { items: [], payload: json, pageItems: [], viewportSections: [] };
     if (json.status === 'blocked') return { items: [], payload: json, pageItems: [], viewportSections: [] };
@@ -1108,9 +1129,7 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('reason', 'search-ui-first-paint');
 
   try {
-    const r = await fetch(`${SANMARU_BOOT_URL}?${sp.toString()}`, { cache: 'no-store' });
-    if (!r.ok) return { items: [], payload: null, pageItems: [], viewportSections: [] };
-    const json = await r.json();
+    const json = await fetchJsonNoStoreWithTimeout(`${SANMARU_BOOT_URL}?${sp.toString()}`, 1500);
     if (!json || json.status === 'error' || json.status === 'blocked') return { items: [], payload: json || null, pageItems: [], viewportSections: [] };
     return normalizeSearchPayload(json);
   } catch (e) {
@@ -3385,13 +3404,13 @@ async function runSearch(q, type = activeType){
   serverTotalItems = Math.max(INITIAL_PRELOAD_TARGET, progressivePagerPages * PAGE_SIZE);
   loadedServerPages.clear();
 
+  currentBlock = 0;
+  currentPage = 1;
   signalSanmaruSearch(qq, activeType, 'run-search');
   status.textContent = `Receiving ${getTypeLabel(activeType)} supply for "${qq}"...`;
   renderSkeleton();
-  clearPager();
+  drawPager();
 
-  currentBlock = 0;
-  currentPage = 1;
   lastQuery = qq;
   lastType = activeType;
   pageImageEnrichCache.clear();
@@ -3497,7 +3516,7 @@ async function runSearch(q, type = activeType){
     applySupplyPack(fallbackPack, 'fallback-maru-search');
     if(!firstPaintDone){
       results.innerHTML = '';
-      clearPager();
+      drawPager();
       status.textContent = `No results for "${qq}"`;
     }
     startIntakeOnce('fallback');
