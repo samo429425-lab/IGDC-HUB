@@ -353,6 +353,89 @@ function ensureSearchCardMediaStyle(){
       font-weight: 800;
     }
 
+    .maru-result-preview {
+      margin: 10px 0 4px 0;
+      border: 1px solid #dbeafe;
+      border-radius: 14px;
+      background: #ffffff;
+      overflow: hidden;
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+    }
+    .maru-result-preview-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      background: linear-gradient(180deg, #f8fbff, #eff6ff);
+      border-bottom: 1px solid #dbeafe;
+    }
+    .maru-result-preview-title {
+      min-width: 0;
+      font-size: 14px;
+      font-weight: 900;
+      color: #0f172a;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .maru-result-preview-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+    .maru-result-preview-actions a,
+    .maru-result-preview-actions button {
+      border: 1px solid #bfdbfe;
+      border-radius: 999px;
+      background: #ffffff;
+      color: #1d4ed8;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 900;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .maru-result-preview-body {
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+    .maru-result-preview-summary {
+      font-size: 14px;
+      line-height: 1.62;
+      color: #334155;
+      white-space: normal;
+      word-break: keep-all;
+    }
+    .maru-result-preview-media {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 8px;
+    }
+    .maru-result-preview-media img {
+      width: 100%;
+      height: 126px;
+      object-fit: cover;
+      border-radius: 10px;
+      border: 1px solid #e5e7eb;
+      background: #f8fafc;
+    }
+    .maru-result-preview-frame {
+      width: 100%;
+      height: min(66vh, 760px);
+      min-height: 420px;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      background: #f8fafc;
+    }
+    .maru-result-preview-note {
+      font-size: 12px;
+      line-height: 1.5;
+      color: #64748b;
+    }
+
 
     .maru-search-home-link {
       display: inline-flex;
@@ -1049,16 +1132,32 @@ async function fetchSearch(q, type = activeType, page = 1){
   const safeType = normalizeSearchType(type);
   signalSanmaruSearch(q, safeType, 'maru-search-fetch');
 
+  const pageNo = Math.max(1, Number(page) || 1);
+  const fullCandidateTarget = adaptiveSearchTarget(q, safeType);
+  const firstWindowTarget = firstPaintLimitFor(q, safeType);
+  const responseLimit = pageNo <= 1
+    ? firstWindowTarget
+    : Math.min(fullCandidateTarget, Math.max(firstWindowTarget, pageNo * PAGE_SIZE + PAGE_SIZE));
+
   const sp = new URLSearchParams();
   sp.set('q', q);
-  sp.set('limit', String(adaptiveSearchTarget(q, safeType)));
+  // First paint must be a 300-card window, not a 3,000~4,500-card wait.
+  // The full target is still passed separately so Maru/Sanmaru can keep filling
+  // the faucet behind the visible page.
+  sp.set('limit', String(responseLimit));
+  sp.set('candidatePoolTarget', String(fullCandidateTarget));
+  sp.set('fullCandidateTarget', String(fullCandidateTarget));
+  sp.set('firstPaintLimit', String(firstWindowTarget));
+  sp.set('initialResponseWindow', String(firstWindowTarget));
   sp.set('type', safeType);
   sp.set('tab', safeType);
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
-  sp.set('page', String(Math.max(1, Number(page) || 1)));
-  sp.set('visiblePage', String(Math.max(1, Number(page) || 1)));
+  sp.set('page', String(pageNo));
+  sp.set('visiblePage', String(pageNo));
   sp.set('pageWindowOnly', '1');
+  sp.set('fastFirstPaint', '1');
+  sp.set('responseWindow', '1');
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
   sp.set('routeOwner', 'sanmaru');
@@ -1096,8 +1195,11 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('tab', safeType);
   sp.set('limit', String(firstPaintLimitFor(q, safeType)));
   sp.set('firstPaintLimit', String(firstPaintLimitFor(q, safeType)));
-  sp.set('candidatePool', String(adaptiveSearchTarget(q, safeType)));
-  sp.set('candidatePoolTarget', String(adaptiveSearchTarget(q, safeType)));
+  sp.set('candidatePool', String(firstPaintLimitFor(q, safeType)));
+  sp.set('candidatePoolTarget', String(firstPaintLimitFor(q, safeType)));
+  sp.set('fullCandidateTarget', String(adaptiveSearchTarget(q, safeType)));
+  sp.set('fastFirstPaint', '1');
+  sp.set('responseWindow', '1');
   sp.set('initialPreloadPages', String(INITIAL_PRELOAD_PAGES));
   sp.set('initialPreloadTarget', String(INITIAL_PRELOAD_TARGET));
   sp.set('perPage', String(PAGE_SIZE));
@@ -2497,14 +2599,14 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const google = document.createElement('a');
       google.href = 'https://www.google.com/maps/search/' + encodeURIComponent(mapQuery || info.query || '');
-      google.target = '_self';
+      google.target = '_blank';
       google.rel = 'noopener';
       google.textContent = 'Google 지도';
       actions.appendChild(google);
 
       const naver = document.createElement('a');
       naver.href = 'https://map.naver.com/p/search/' + encodeURIComponent(mapQuery || info.query || '');
-      naver.target = '_self';
+      naver.target = '_blank';
       naver.rel = 'noopener';
       naver.textContent = 'Naver 지도';
       actions.appendChild(naver);
@@ -2512,7 +2614,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       if(info.homepage){
         const home = document.createElement('a');
         home.href = info.homepage;
-        home.target = '_self';
+        home.target = '_blank';
         home.rel = 'noopener';
         home.textContent = '홈페이지';
         actions.appendChild(home);
@@ -2674,23 +2776,145 @@ async function fetchInstantSearchPack(q, type = activeType){
       return false;
     }
 
+    function isSearchEngineLandingUrlClient(url){
+      const raw = String(url || '').trim();
+      if(!raw) return false;
+      try {
+        const u = new URL(raw, location.origin);
+        const h = u.hostname.replace(/^www\./, '').toLowerCase();
+        const path = u.pathname.toLowerCase();
+        if(h === 'google.com' && (path === '/search' || path === '/webhp' || path === '/')) return u.searchParams.has('q');
+        if(h.endsWith('google.com') && path === '/search') return true;
+        if(h === 'bing.com' && path.startsWith('/search')) return true;
+        if(h === 'search.naver.com' && path.includes('/search.naver')) return true;
+        if(h === 'naver.com' && path.includes('/search')) return true;
+        if(h === 'duckduckgo.com' && (path === '/' || path.includes('/html'))) return u.searchParams.has('q');
+        if(h === 'search.yahoo.com' && path.includes('/search')) return true;
+        if(h === 'yandex.com' && path.includes('/search')) return true;
+        if(h === 'baidu.com' && (path === '/s' || path.includes('/search'))) return true;
+      } catch(e) {}
+      return false;
+    }
+
+    function resolveResultOpenUrlClient(it){
+      it = it && typeof it === 'object' ? it : {};
+      const displayCard = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+      const payload = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const data = (it.data && typeof it.data === 'object') ? it.data : {};
+      const candidates = [
+        displayCard.originalUrl, displayCard.targetUrl, displayCard.canonicalUrl, displayCard.sourceUrl, displayCard.url, displayCard.link,
+        it.originalUrl, it.targetUrl, it.canonicalUrl, it.sourceUrl, it.realUrl, it.contentUrl, it.url, it.link, it.href,
+        payload.originalUrl, payload.targetUrl, payload.canonicalUrl, payload.sourceUrl, payload.realUrl, payload.contentUrl, payload.url, payload.link, payload.href,
+        data.originalUrl, data.targetUrl, data.canonicalUrl, data.sourceUrl, data.realUrl, data.contentUrl, data.url, data.link, data.href
+      ];
+      let searchProviderUrl = '';
+      for(const v of candidates){
+        const x = String(v || '').trim();
+        if(!x || x === '#') continue;
+        if(isSearchEngineLandingUrlClient(x)){ if(!searchProviderUrl) searchProviderUrl = x; continue; }
+        if(/^https?:\/\//i.test(x) || x.startsWith('/')) return { url:x, blockedProviderUrl:searchProviderUrl };
+      }
+      return { url:'', blockedProviderUrl:searchProviderUrl };
+    }
+
+    function removeOpenResultPreviewsClient(except){
+      document.querySelectorAll('.maru-result-preview').forEach(node => {
+        if(node !== except) node.remove();
+      });
+    }
+
+    function toggleResultPreviewClient(card, it){
+      if(!card) return;
+      drawPager();
+      const existing = card.querySelector(':scope > .maru-result-preview');
+      if(existing){ existing.remove(); drawPager(); return; }
+      removeOpenResultPreviewsClient(null);
+
+      const open = resolveResultOpenUrlClient(it);
+      const openUrl = open && open.url ? open.url : '';
+      const title = String((it && it.title) || '').trim() || '(no title)';
+      const desc = descriptionForItemClient(it);
+      const images = collectNaturalImages(it).slice(0, 4);
+
+      const wrap = document.createElement('div');
+      wrap.className = 'maru-result-preview';
+      wrap.addEventListener('click', e => e.stopPropagation());
+
+      const head = document.createElement('div');
+      head.className = 'maru-result-preview-head';
+      const ht = document.createElement('div');
+      ht.className = 'maru-result-preview-title';
+      ht.textContent = title;
+      head.appendChild(ht);
+
+      const actions = document.createElement('div');
+      actions.className = 'maru-result-preview-actions';
+      if(openUrl){
+        const out = document.createElement('a');
+        out.href = openUrl;
+        out.target = '_blank';
+        out.rel = 'noopener noreferrer';
+        out.textContent = '원문 새 탭';
+        actions.appendChild(out);
+      }
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.textContent = '닫기';
+      close.addEventListener('click', () => wrap.remove());
+      actions.appendChild(close);
+      head.appendChild(actions);
+      wrap.appendChild(head);
+
+      const body = document.createElement('div');
+      body.className = 'maru-result-preview-body';
+      if(desc){
+        const summary = document.createElement('div');
+        summary.className = 'maru-result-preview-summary';
+        summary.textContent = desc;
+        body.appendChild(summary);
+      }
+      if(images.length){
+        const media = document.createElement('div');
+        media.className = 'maru-result-preview-media';
+        images.forEach(src => {
+          const img = document.createElement('img');
+          img.src = src;
+          img.loading = 'lazy';
+          img.alt = '';
+          img.onerror = () => img.remove();
+          media.appendChild(img);
+        });
+        body.appendChild(media);
+      }
+      const note = document.createElement('div');
+      note.className = 'maru-result-preview-note';
+      note.textContent = openUrl
+        ? '현재 검색 화면은 유지합니다. 원문은 새 탭으로만 열고, 카드에는 검색 요약과 사용 가능한 이미지/영상만 표시합니다.'
+        : (open && open.blockedProviderUrl ? '검색엔진의 메인 검색 결과 페이지로 이동하지 않도록 이 카드 안에서 요약만 표시합니다.' : '열 수 있는 원문 URL이 없어 검색 카드 요약만 표시합니다.');
+      body.appendChild(note);
+      wrap.appendChild(body);
+      card.appendChild(wrap);
+      drawPager();
+    }
+
     function renderItem(it, mountTarget){
-      const url = it.url || it.link || '';
-      const domain = domainOf(url);
+      const openInfo = resolveResultOpenUrlClient(it);
+      const url = (openInfo && openInfo.url) || it.url || it.link || '';
+      const openUrl = (openInfo && openInfo.url) || '';
+      const domain = domainOf(openUrl || url);
 
       const card = document.createElement('div');
       card.className = 'card';
-      applySearchRevenueDataset(card, it, url);
+      applySearchRevenueDataset(card, it, openUrl || url);
 
-      const playableMedia = getPlayableMediaInfo(it, url);
+      const playableMedia = getPlayableMediaInfo(it, openUrl || url);
 
-      if (url) {
-        card.style.cursor = 'pointer';
-        card.addEventListener('click', (e) => {
-          if (e.target && e.target.closest && e.target.closest('a, button, iframe, video, .maru-video-embed-wrap, .maru-card-media')) return;
-          window.location.href = url;
-        });
-      }
+      card.style.cursor = 'pointer';
+      card.addEventListener('click', (e) => {
+        if (e.target && e.target.closest && e.target.closest('button, iframe, video, .maru-video-embed-wrap, .maru-card-media, .maru-result-preview')) return;
+        if (e.target && e.target.closest && e.target.closest('a')) return;
+        toggleResultPreviewClient(card, it);
+      });
 
       const body = document.createElement('div');
       body.className = 'maru-search-card-body';
@@ -2702,14 +2926,18 @@ async function fetchInstantSearchPack(q, type = activeType){
       const t = document.createElement('div');
       t.className = 'title';
 
-      if (url) {
+      if (openUrl || url) {
         const a = document.createElement('a');
-        a.href = url;
-        a.target = '_self';
-        a.rel = 'noopener';
+        a.href = openUrl || '#';
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
         a.textContent = (it.title || '').trim() || '(no title)';
         a.style.color = 'inherit';
         a.style.textDecoration = 'none';
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          toggleResultPreviewClient(card, it);
+        });
         t.appendChild(a);
       } else {
         t.textContent = (it.title || '').trim() || '(no title)';
@@ -2768,7 +2996,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
         const cardLineClamp = it && it.displayCard && parseInt(it.displayCard.lineClamp, 10);
-        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(5, cardLineClamp) : 3);
+        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(6, cardLineClamp) : 4);
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
@@ -3309,6 +3537,19 @@ function drawPager(){
 
   const bar = ensurePager();
   bar.innerHTML = '';
+  bar.setAttribute('aria-label', '검색 결과 페이지');
+
+  const stylePagerButton = (button, on) => {
+    button.type = 'button';
+    button.style.minWidth = '34px';
+    button.style.height = '32px';
+    button.style.borderRadius = '9px';
+    button.style.border = '1px solid ' + (on ? '#1e3a8a' : '#cbd5e1');
+    button.style.background = on ? '#1e3a8a' : '#ffffff';
+    button.style.color = on ? '#ffffff' : '#1e293b';
+    button.style.fontWeight = '900';
+    button.style.cursor = 'pointer';
+  };
 
   const blockStart = currentBlock * BLOCK_SIZE + 1;
   const blockEnd = Math.min(blockStart + BLOCK_SIZE - 1, pages);
@@ -3316,6 +3557,7 @@ function drawPager(){
   if (blockStart > 1){
     const left = document.createElement('button');
     left.textContent = '◀';
+    stylePagerButton(left, false);
     left.onclick = () => {
       currentBlock = Math.max(0, currentBlock - 1);
       currentPage = currentBlock * BLOCK_SIZE + 1;
@@ -3328,7 +3570,7 @@ function drawPager(){
   for (let p = blockStart; p <= blockEnd; p++){
     const b = document.createElement('button');
     b.textContent = String(p);
-    b.style.opacity = (p === currentPage) ? '0.6' : '1';
+    stylePagerButton(b, p === currentPage);
     b.onclick = () => {
       currentPage = p;
       currentBlock = Math.floor((p - 1) / BLOCK_SIZE);
@@ -3341,6 +3583,7 @@ function drawPager(){
   if (blockEnd < pages){
     const right = document.createElement('button');
     right.textContent = '▶';
+    stylePagerButton(right, false);
     right.onclick = () => {
       const maxBlock = Math.floor((pages - 1) / BLOCK_SIZE);
       currentBlock = Math.min(maxBlock, currentBlock + 1);
@@ -3388,10 +3631,12 @@ async function runSearch(q, type = activeType){
   signalSanmaruSearch(qq, activeType, 'run-search');
   status.textContent = `Receiving ${getTypeLabel(activeType)} supply for "${qq}"...`;
   renderSkeleton();
-  clearPager();
 
   currentBlock = 0;
   currentPage = 1;
+  // Page navigation is part of the fixed search header. Show it immediately
+  // from the progressive target instead of waiting for the first network pack.
+  drawPager();
   lastQuery = qq;
   lastType = activeType;
   pageImageEnrichCache.clear();
