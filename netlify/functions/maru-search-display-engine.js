@@ -12,11 +12,11 @@
  * - search.js remains the UI executor: it hides/shows/reorders categories using this policy.
  */
 
-const VERSION = 'maru-search-display-engine-v1.4.2-real-data-only-contract';
+const VERSION = 'maru-search-display-engine-v1.4.2-real-media-faucet-contract';
 const ENGINE_NAME = 'maru-search-display-engine';
 
 const BASE_GROUP_ORDER = [
-  'authority','local_tour','knowledge','site','news','tour','blog','social','shopping','book','cafe',
+  'authority','local_tour','knowledge','site','news','blog','social','shopping','book','cafe',
   'image','video','media','public_data','academic','sports','finance','community','webtoon','web'
 ];
 
@@ -26,15 +26,15 @@ const BASE_TABS = [
 ];
 
 const DEFAULT_PREVIEW_LIMITS = {
-  authority:3, local_tour:5, knowledge:5, site:5, news:5, tour:5, blog:5, social:5,
-  shopping:5, book:4, cafe:5, image:5, video:5, media:5, public_data:2, academic:4,
-  sports:4, finance:4, community:5, webtoon:4, web:18
+  authority:3, public_data:2, local_tour:4, knowledge:5, wiki:0, academic:4, site:5,
+  news:5, blog:5, social:5, shopping:5, book:4, cafe:5, community:5, image:12, video:5, media:5,
+  sports:4, finance:4, webtoon:4, web:18
 };
 
 const DEFAULT_MODULE_CAPS = {
-  authority:8, local_tour:15, knowledge:12, site:15, news:15, tour:15, blog:15, social:15,
-  shopping:15, book:15, cafe:15, image:15, video:15, media:15, public_data:8, academic:15,
-  sports:15, finance:15, community:15, webtoon:15, web:30
+  authority:8, public_data:8, local_tour:15, knowledge:15, wiki:0, academic:15, site:15,
+  news:15, blog:15, social:15, shopping:15, book:15, cafe:15, community:15, image:36, video:15, media:15,
+  sports:15, finance:15, webtoon:15, web:30
 };
 
 function s(v){ return String(v == null ? '' : v); }
@@ -112,9 +112,8 @@ function naturalSummary(item, query){
   return '';
 }
 function fallbackDisplaySummary(item, query, group){
-  // Real-data-only policy: do not manufacture explanatory/search-instruction text.
-  // Search cards may show a blank body when the provider did not supply a real snippet,
-  // description, content text, or OG description.
+  // Do not manufacture 안내문/샘플 본문. A card body must come from a real
+  // provider snippet, page description, OG description, or supplied content.
   return '';
 }
 function collectDisplayImages(item){
@@ -203,7 +202,6 @@ function youtubeThumb(item){
 function cardTypeForGroup(group, item){
   const g = normalizeGroup(groupOfItem(item) || group);
   if(g === 'local_tour') return 'map';
-  if(g === 'tour') return 'article-media';
   if(g === 'image') return 'image';
   if(g === 'video' || g === 'media') return 'video';
   if(g === 'shopping') return 'shopping';
@@ -220,13 +218,13 @@ function decorateDisplayItem(item, ctx, index){
   let images = collectDisplayImages(item);
   const yt = youtubeThumb(item);
   if(yt && !images.length) images = [yt];
-  const summary = naturalSummary(item, q);
+  const summary = naturalSummary(item, q) || fallbackDisplaySummary(item, q, group);
   const cardType = cardTypeForGroup(group, item);
   const mapLike = cardType === 'map';
   const copy = Object.assign({}, item, {
     displayGroup: group,
     displayGroupLabel: ({
-      authority:'주요 정보', public_data:'공공자료', local_tour:'지도/지역', knowledge:'지식/위키', wiki:'지식/위키', tour:'관광', site:'사이트', book:'도서',
+      authority:'주요 정보', public_data:'공공자료', local_tour:'지도/지역', knowledge:'지식/위키', wiki:'지식/위키', site:'사이트', book:'도서',
       blog:'블로그', cafe:'카페', shopping:'쇼핑', news:'뉴스', image:'이미지', video:'영상', media:'미디어', social:'소셜',
       academic:'학술', community:'커뮤니티', sports:'스포츠', finance:'증권', webtoon:'웹툰', web:'웹'
     })[group] || '웹',
@@ -261,8 +259,8 @@ function decorateDisplayItem(item, ctx, index){
       body: summary,
       description: summary,
       snippet: summary,
-      lineClamp: mapLike ? 2 : 3,
-      bodyLines: mapLike ? 2 : 3,
+      lineClamp: mapLike ? 3 : 4,
+      bodyLines: mapLike ? 3 : 4,
       thumbnail: images[0] || '',
       image: images[0] || '',
       imageUrl: images[0] || '',
@@ -316,7 +314,7 @@ function normalizeGroup(group){
   const map = {
     official:'authority', official_authority:'authority', gov:'authority', government:'authority', authority:'authority',
     public:'public_data', opendata:'public_data', open_data:'public_data', public_data:'public_data',
-    map:'local_tour', local:'local_tour', map_local:'local_tour', map_local_tour:'local_tour', local_map:'local_tour', region:'local_tour', place:'local_tour', tour:'tour', travel:'tour', tourism:'tour', attraction:'tour', landmark:'tour', local_tour:'local_tour',
+    map:'local_tour', maps:'local_tour', local:'local_tour', region:'local_tour', map_local:'local_tour', map_local_tour:'local_tour', local_map:'local_tour', tour:'local_tour', travel:'local_tour', tourism:'local_tour', place_tour:'local_tour', local_tour:'local_tour',
     knowledge_wiki:'knowledge', encyclopedia:'knowledge', wikipedia:'knowledge', knowledge:'knowledge', wiki:'knowledge',
     scholar:'academic', paper:'academic', research:'academic', academic:'academic',
     company_web:'site', corporate_homepage:'site', business_site:'site', official_site:'site', homepage:'site', website:'site', site:'site', company:'site', corporate:'site', business:'site',
