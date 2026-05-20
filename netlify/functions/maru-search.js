@@ -2534,24 +2534,39 @@ function isProviderRoadOnlyUrl(url){
 
 function hasRealRenderableContent(it){
   if(!it || typeof it !== 'object') return false;
+
+  // Provider/search-road cards are only navigation hints. They must not become
+  // visible result cards, even if they have a title or source name.
   if(it.publicProviderRoad || it.sanmaruEmergencyDiscovery || it.providerRoute || it.providerRoadOnly) return false;
-  const url = firstNonEmpty(it.url, it.link, it.href, it.openUrl, it.pageUrl);
+  const generatedBy = safeString(firstNonEmpty(it.generatedBy, it.sourceType, it.routeType)).toLowerCase();
+  if(/provider-road|public-provider-road|emergency-discovery|search-link|discovery/.test(generatedBy)) return false;
+
+  const url = normalizePublicUrl(firstNonEmpty(it.url, it.link, it.href, it.openUrl, it.pageUrl));
   if(!url || isProviderRoadOnlyUrl(url)) return false;
+
+  const title = stripInlineHtml(firstNonEmpty(it.title, it.name, it.label));
+  if(!title || /^\[[^\]]+\]\s*/.test(title)) return false;
+
   const body = resultSummaryText(it);
   const images = providedMediaCandidatesForItem(it).filter(x => isMeaningfulImageForItem(x, it));
   const type = safeString(firstNonEmpty(it.type, it.mediaType, it.searchCategory)).toLowerCase();
   const place = it.placeInfo && typeof it.placeInfo === 'object' && firstNonEmpty(it.placeInfo.address, it.placeInfo.name, it.placeInfo.mapQuery);
-  if(body && body.length >= 18) return true;
+
+  if(body && body.length >= 12) return true;
   if(images.length) return true;
   if(type === 'map' && place) return true;
   if(type === 'image' && images.length) return true;
   if(type === 'video' && (firstNonEmpty(it.videoId, it.videoUrl, it.embedUrl, it.watchUrl) || images.length)) return true;
-  // Official homepages may have little body; keep them only if they are direct non-search URLs.
+
+  // Do not choke off real data just because a provider did not supply a snippet
+  // or thumbnail. A direct non-search URL with a real title is still a real result.
+  // This keeps actual SearchBank/API/provider items flowing while still rejecting
+  // fake samples, placeholders and search-engine result-road URLs above.
   const host = domainOf(url);
-  if(host && (host.endsWith('.go.kr') || host.endsWith('.gov') || host.includes('wikipedia.org') || host.includes('wikidata.org') || host.includes('openstreetmap.org'))) return true;
+  if(host && title && !isProviderRoadOnlyUrl(url)) return true;
+
   return false;
 }
-
 async function openPublicRealSources(q, opts){
   opts = opts || {};
   const query = safeString(q).trim();
@@ -2763,6 +2778,45 @@ async function openPublicRealSources(q, opts){
     }catch(e){}
   }
 
+
+  function publicEntitySlugCandidates(){
+    const raw = query.replace(/\s+/g, ' ').trim();
+    if(!raw || raw.length > 60) return [];
+    if(/[?&=<>"'{}[\]`]/.test(raw)) return [];
+    const alias = {
+      '일본':'Japan','도쿄':'Tokyo','동경':'Tokyo','오사카':'Osaka','교토':'Kyoto','후쿠오카':'Fukuoka','삿포로':'Sapporo','나고야':'Nagoya','요코하마':'Yokohama','히로시마':'Hiroshima',
+      '서울':'Seoul','부산':'Busan','제주':'Jeju','대한민국':'South Korea','한국':'South Korea',
+      '중국':'China','베이징':'Beijing','상하이':'Shanghai','홍콩':'Hong Kong','대만':'Taiwan','타이베이':'Taipei',
+      '미국':'United States','뉴욕':'New York City','로스앤젤레스':'Los Angeles','샌프란시스코':'San Francisco','시카고':'Chicago','워싱턴':'Washington, D.C.',
+      '영국':'United Kingdom','런던':'London','프랑스':'France','파리':'Paris','독일':'Germany','베를린':'Berlin','이탈리아':'Italy','로마':'Rome','스페인':'Spain','마드리드':'Madrid','바르셀로나':'Barcelona',
+      '캐나다':'Canada','토론토':'Toronto','밴쿠버':'Vancouver','호주':'Australia','시드니':'Sydney','멜버른':'Melbourne','뉴질랜드':'New Zealand',
+      '태국':'Thailand','방콕':'Bangkok','베트남':'Vietnam','하노이':'Hanoi','호치민':'Ho Chi Minh City','싱가포르':'Singapore','인도':'India','델리':'Delhi','뭄바이':'Mumbai','두바이':'Dubai'
+    };
+    const out = [raw];
+    if(alias[raw]) out.push(alias[raw]);
+    if(/^[A-Za-z0-9 .,'-]+$/.test(raw)) out.push(raw.replace(/\s+/g, ' '));
+    return Array.from(new Set(out.filter(Boolean))).slice(0, 3);
+  }
+
+  function addDirectPublicEntityAnchorsIfEmpty(){
+    if(results.length) return;
+    const slugs = publicEntitySlugCandidates();
+    if(!slugs.length) return;
+    const raw = query.replace(/\s+/g, ' ').trim();
+    const primary = slugs[0];
+    const latin = slugs.find(x => /^[A-Za-z0-9 .,'-]+$/.test(x)) || primary;
+    const items = [];
+    if(/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(raw)){
+      items.push({ title: raw, url:'https://ko.wikipedia.org/wiki/' + encodeURIComponent(raw).replace(/%20/g, '_'), type:'knowledge', mediaType:'article', source:'wikipedia_ko_direct', score:0.62 });
+      items.push({ title: raw + ' 여행', url:'https://ko.wikivoyage.org/wiki/' + encodeURIComponent(raw).replace(/%20/g, '_'), type:'tour', mediaType:'article', source:'wikivoyage_ko_direct', score:0.58 });
+    }
+    if(latin){
+      items.push({ title: latin, url:'https://en.wikipedia.org/wiki/' + encodeURIComponent(latin).replace(/%20/g, '_'), type:'knowledge', mediaType:'article', source:'wikipedia_en_direct', score:0.60 });
+      items.push({ title: latin + ' travel guide', url:'https://en.wikivoyage.org/wiki/' + encodeURIComponent(latin).replace(/%20/g, '_'), type:'tour', mediaType:'article', source:'wikivoyage_en_direct', score:0.56 });
+    }
+    items.forEach(push);
+  }
+
   await Promise.allSettled([
     fromWikipedia('ko'),
     fromWikipedia('en'),
@@ -2774,7 +2828,8 @@ async function openPublicRealSources(q, opts){
     fromCrossref()
   ]);
 
-  return { source:'open_public_real', results: results.filter(hasRealRenderableContent), meta:{ status:results.length ? 'ok' : 'empty', count:results.length, realOnly:true } };
+  addDirectPublicEntityAnchorsIfEmpty();
+  return { source:'open_public_real', results: results.filter(hasRealRenderableContent), meta:{ status:results.length ? 'ok' : 'empty', count:results.length, realOnly:true, directPublicAnchors: results.some(x => /_direct$/.test(safeString(x && x.source))) } };
 }
 
 let SearchBankEngine = null;
