@@ -117,26 +117,27 @@ const SEARCH_TABS = [
   ['knowledge', '지식'],
   ['wiki', '위키'],
   ['site', '사이트'],
-  ['book', '도서'],
-  ['blog', '블로그'],
-  ['cafe', '카페'],
-  ['shopping', '쇼핑'],
   ['news', '뉴스'],
+  ['tour', '관광'],
+  ['blog', '블로그'],
+  ['shopping', '쇼핑'],
+  ['book', '도서'],
+  ['cafe', '카페'],
   ['image', '이미지'],
   ['video', '영상'],
-  ['sns', '소셜'],
-  ['tour', '관광'],
+  ['sns', 'SNS'],
   ['public_data', '공공자료'],
   ['academic', '학술'],
   ['sports', '스포츠'],
   ['finance', '증권'],
+  ['community', '커뮤니티'],
   ['webtoon', '웹툰']
 ];
 
 function normalizeSearchType(v){
   const raw = String(v || '').trim().toLowerCase();
   const allowed = new Set(SEARCH_TABS.map(x => x[0]));
-  const alias = { books: 'book', 도서: 'book', 책: 'book', sns: 'sns', social: 'sns', public: 'public_data', 공공자료: 'public_data', wiki: 'wiki', 위키: 'wiki', academic: 'academic', 학술: 'academic', site: 'site', 사이트: 'site' };
+  const alias = { books: 'book', 도서: 'book', 책: 'book', sns: 'sns', social: 'sns', 소셜: 'sns', community: 'community', 커뮤니티: 'community', forum: 'community', public: 'public_data', 공공자료: 'public_data', wiki: 'wiki', 위키: 'wiki', academic: 'academic', 학술: 'academic', site: 'site', 사이트: 'site', 홈페이지: 'site' };
   return allowed.has(raw) ? raw : (alias[raw] || 'all');
 }
 
@@ -206,6 +207,15 @@ function ensureSearchCardMediaStyle(){
     }
     .maru-card-media[data-count="3"] img:not(:first-child) {
       height: 99px;
+    }
+    .maru-card-media[data-count="4"] {
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      flex-basis: 340px;
+      width: 340px;
+    }
+    .maru-card-media[data-count="4"] img {
+      height: 102px;
     }
 
     /* Book / webtoon / shopping-like vertical cover cards */
@@ -1472,6 +1482,11 @@ async function fetchInstantSearchPack(q, type = activeType){
         bar.style.justifyContent = 'center';
         bar.style.gap = '6px';
         bar.style.margin = '8px 0 14px';
+        bar.style.padding = '6px 0';
+        bar.style.background = '#fff';
+        bar.style.position = 'sticky';
+        bar.style.top = '112px';
+        bar.style.zIndex = '88';
         status.parentNode.insertBefore(bar, status.nextSibling);
       }
       return bar;
@@ -1731,7 +1746,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         return out.slice(0, 1);
       }
 
-      return out.slice(0, 3);
+      return out.slice(0, 4);
     }
 
     function classifyVisualKindClient(it){
@@ -1962,7 +1977,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
+      const order = ['authority','knowledge','wiki','site','news','local_tour','blog','shopping','book','cafe','image','video','media','social','public_data','academic','sports','finance','community','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -2768,7 +2783,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
         const cardLineClamp = it && it.displayCard && parseInt(it.displayCard.lineClamp, 10);
-        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(5, cardLineClamp) : 3);
+        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(5, cardLineClamp) : 4);
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
@@ -2787,24 +2802,13 @@ if (it.riskLabel === '⚠️ high-risk') {
 
       body.appendChild(textCol);
 
-      const playableMediaNode = renderPlayableMedia(playableMedia, it);
-      if (playableMediaNode) {
-        const badge = document.createElement('div');
-        badge.className = 'maru-video-badge';
-        badge.textContent = playableMedia.kind === 'youtube' ? '영상 재생' : '동영상';
-        textCol.appendChild(badge);
-        body.appendChild(playableMediaNode);
-      }
-
-      const mapPreviewNode = (!playableMediaNode && shouldRenderMapPreviewForItemClient(it)) ? renderMapPreviewClient(it) : null;
-      if (mapPreviewNode) {
-        body.appendChild(mapPreviewNode);
-      }
-
-      if (!playableMediaNode && isRealThumb) {
+      // Card visual order: text/body first, then image snapshots, then map,
+      // and playable video last. Do not suppress images just because a video
+      // or map preview exists; the search card should show all supplied media.
+      if (isRealThumb) {
         const mediaWrap = document.createElement('div');
         mediaWrap.className = 'maru-card-media';
-        const mediaCount = Math.min(naturalImages.length, 3);
+        const mediaCount = Math.min(naturalImages.length, 4);
         const mediaKind = classifyVisualKindClient(it);
         mediaWrap.dataset.count = String(mediaCount);
         mediaWrap.dataset.kind = mediaKind;
@@ -2816,7 +2820,7 @@ if (it.riskLabel === '⚠️ high-risk') {
           mediaCount === 2 ? '164px' :
           '176px';
 
-        naturalImages.forEach((src) => {
+        naturalImages.slice(0, 4).forEach((src) => {
           const img = document.createElement('img');
           img.src = src;
           img.loading = 'lazy';
@@ -2826,6 +2830,20 @@ if (it.riskLabel === '⚠️ high-risk') {
         });
 
         body.appendChild(mediaWrap);
+      }
+
+      const mapPreviewNode = shouldRenderMapPreviewForItemClient(it) ? renderMapPreviewClient(it) : null;
+      if (mapPreviewNode) {
+        body.appendChild(mapPreviewNode);
+      }
+
+      const playableMediaNode = renderPlayableMedia(playableMedia, it);
+      if (playableMediaNode) {
+        const badge = document.createElement('div');
+        badge.className = 'maru-video-badge';
+        badge.textContent = playableMedia.kind === 'youtube' ? '영상 재생' : '동영상';
+        textCol.appendChild(badge);
+        body.appendChild(playableMediaNode);
       }
 
       if (hasVideoPreview && !playableMediaNode && !isYoutubeLikeItemClient(it)) {
@@ -2878,9 +2896,8 @@ if (it.riskLabel === '⚠️ high-risk') {
       }
 
       // Natural media policy:
-      // Do not render a separate imageSet gallery here.
-      // The card uses one natural thumbnail when the result itself has one.
-      // This prevents duplicate images and keeps card height natural.
+      // Natural media is rendered above as a compact snapshot strip.
+      // Video stays last so image and text context remain visible first.
 
       card.appendChild(body);
       (mountTarget || results).appendChild(card);
@@ -3047,7 +3064,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         items: diversifyGroupPreviewItems(g.group, g.items || [])
       }));
       const byGroup = new Map(grouped.map(g => [g.group, g]));
-      const categoryOrder = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon'];
+      const categoryOrder = ['authority','knowledge','wiki','site','news','local_tour','blog','shopping','book','cafe','image','video','media','social','public_data','academic','sports','finance','community','webtoon'];
       const categoryOverflowItems = [];
       const categoryPages = [];
       let page = [];
@@ -3385,13 +3402,13 @@ async function runSearch(q, type = activeType){
   serverTotalItems = Math.max(INITIAL_PRELOAD_TARGET, progressivePagerPages * PAGE_SIZE);
   loadedServerPages.clear();
 
+  currentBlock = 0;
+  currentPage = 1;
+
   signalSanmaruSearch(qq, activeType, 'run-search');
   status.textContent = `Receiving ${getTypeLabel(activeType)} supply for "${qq}"...`;
   renderSkeleton();
-  clearPager();
-
-  currentBlock = 0;
-  currentPage = 1;
+  drawPager();
   lastQuery = qq;
   lastType = activeType;
   pageImageEnrichCache.clear();
