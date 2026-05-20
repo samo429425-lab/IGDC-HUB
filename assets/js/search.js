@@ -113,19 +113,19 @@ const from0 = (params.get('from') || '').trim();
 
 const SEARCH_TABS = [
   ['all', '전체'],
-  ['map', '지도'],
+  ['map', '지도/지역'],
   ['knowledge', '지식'],
   ['wiki', '위키'],
   ['site', '사이트'],
   ['news', '뉴스'],
   ['tour', '관광'],
   ['blog', '블로그'],
+  ['sns', 'SNS'],
   ['shopping', '쇼핑'],
   ['book', '도서'],
   ['cafe', '카페'],
   ['image', '이미지'],
   ['video', '영상'],
-  ['sns', 'SNS'],
   ['public_data', '공공자료'],
   ['academic', '학술'],
   ['sports', '스포츠'],
@@ -137,7 +137,17 @@ const SEARCH_TABS = [
 function normalizeSearchType(v){
   const raw = String(v || '').trim().toLowerCase();
   const allowed = new Set(SEARCH_TABS.map(x => x[0]));
-  const alias = { books: 'book', 도서: 'book', 책: 'book', sns: 'sns', social: 'sns', 소셜: 'sns', community: 'community', 커뮤니티: 'community', forum: 'community', public: 'public_data', 공공자료: 'public_data', wiki: 'wiki', 위키: 'wiki', academic: 'academic', 학술: 'academic', site: 'site', 사이트: 'site', 홈페이지: 'site' };
+  const alias = {
+    books: 'book', 도서: 'book', 책: 'book',
+    sns: 'sns', social: 'sns', 소셜: 'sns',
+    community: 'community', forum: 'community', 커뮤니티: 'community',
+    map: 'map', maps: 'map', local: 'map', region: 'map', 지역: 'map', 지도: 'map',
+    tour: 'tour', travel: 'tour', tourism: 'tour', 관광: 'tour', 여행: 'tour',
+    public: 'public_data', 공공자료: 'public_data', 공공데이터: 'public_data',
+    wiki: 'wiki', 위키: 'wiki', academic: 'academic', 학술: 'academic',
+    site: 'site', 사이트: 'site', homepage: 'site', 홈페이지: 'site',
+    shopping: 'shopping', 쇼핑: 'shopping', news: 'news', 뉴스: 'news'
+  };
   return allowed.has(raw) ? raw : (alias[raw] || 'all');
 }
 
@@ -211,11 +221,11 @@ function ensureSearchCardMediaStyle(){
     .maru-card-media[data-count="4"] {
       grid-template-columns: 1fr 1fr;
       grid-template-rows: 1fr 1fr;
-      flex-basis: 340px;
-      width: 340px;
+      flex-basis: 330px;
+      width: 330px;
     }
     .maru-card-media[data-count="4"] img {
-      height: 102px;
+      height: 99px;
     }
 
     /* Book / webtoon / shopping-like vertical cover cards */
@@ -1482,11 +1492,11 @@ async function fetchInstantSearchPack(q, type = activeType){
         bar.style.justifyContent = 'center';
         bar.style.gap = '6px';
         bar.style.margin = '8px 0 14px';
-        bar.style.padding = '6px 0';
-        bar.style.background = '#fff';
         bar.style.position = 'sticky';
         bar.style.top = '112px';
-        bar.style.zIndex = '88';
+        bar.style.zIndex = '89';
+        bar.style.background = '#fff';
+        bar.style.padding = '6px 0';
         status.parentNode.insertBefore(bar, status.nextSibling);
       }
       return bar;
@@ -1801,9 +1811,20 @@ async function fetchInstantSearchPack(q, type = activeType){
         research: 'academic',
         paper: 'academic',
         map_local_tour: 'local_tour',
+        map_local: 'local_tour',
+        local_map: 'local_tour',
+        local_map_tour: 'local_tour',
+        place: 'local_tour',
+        place_tour: 'local_tour',
+        region: 'local_tour',
+        지역: 'local_tour',
+        지도: 'local_tour',
         local: 'local_tour',
         map: 'local_tour',
+        maps: 'local_tour',
         tour: 'local_tour',
+        tourism: 'local_tour',
+        travel: 'local_tour',
         video_vlog: 'video',
         video: 'video',
         youtube: 'video',
@@ -1814,6 +1835,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         blog: 'blog',
         cafe: 'cafe',
         forum: 'community',
+        board: 'community',
+        커뮤니티: 'community',
         community: 'community',
         community_sns: 'social',
         sns: 'social',
@@ -1977,7 +2000,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = ['authority','knowledge','wiki','site','news','local_tour','blog','shopping','book','cafe','image','video','media','social','public_data','academic','sports','finance','community','webtoon','web'];
+      const order = ['authority','local_tour','knowledge','wiki','site','news','blog','social','shopping','book','cafe','image','video','media','public_data','academic','sports','finance','community','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -2047,12 +2070,14 @@ async function fetchInstantSearchPack(q, type = activeType){
         knowledge: 3,
         wiki: 3,
         site: 5,
-        book: 4,
         news: 5,
+        blog: 5,
+        social: 5,
+        shopping: 5,
+        book: 4,
+        cafe: 5,
         community: 5,
         media: 5,
-        social: 4,
-        shopping: 4,
         sports: 3,
         finance: 3,
         webtoon: 3,
@@ -2802,9 +2827,6 @@ if (it.riskLabel === '⚠️ high-risk') {
 
       body.appendChild(textCol);
 
-      // Card visual order: text/body first, then image snapshots, then map,
-      // and playable video last. Do not suppress images just because a video
-      // or map preview exists; the search card should show all supplied media.
       if (isRealThumb) {
         const mediaWrap = document.createElement('div');
         mediaWrap.className = 'maru-card-media';
@@ -2843,6 +2865,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         badge.className = 'maru-video-badge';
         badge.textContent = playableMedia.kind === 'youtube' ? '영상 재생' : '동영상';
         textCol.appendChild(badge);
+        // Video/player preview is intentionally appended after image/map media.
         body.appendChild(playableMediaNode);
       }
 
@@ -2896,8 +2919,9 @@ if (it.riskLabel === '⚠️ high-risk') {
       }
 
       // Natural media policy:
-      // Natural media is rendered above as a compact snapshot strip.
-      // Video stays last so image and text context remain visible first.
+      // Do not render a separate imageSet gallery here.
+      // The card uses one natural thumbnail when the result itself has one.
+      // This prevents duplicate images and keeps card height natural.
 
       card.appendChild(body);
       (mountTarget || results).appendChild(card);
@@ -3064,11 +3088,33 @@ if (it.riskLabel === '⚠️ high-risk') {
         items: diversifyGroupPreviewItems(g.group, g.items || [])
       }));
       const byGroup = new Map(grouped.map(g => [g.group, g]));
-      const categoryOrder = ['authority','knowledge','wiki','site','news','local_tour','blog','shopping','book','cafe','image','video','media','social','public_data','academic','sports','finance','community','webtoon'];
+      const categoryOrder = ['authority','local_tour','knowledge','wiki','site','news','tour','blog','social','shopping','book','cafe','image','video','media','public_data','academic','sports','finance','community','webtoon'];
       const categoryOverflowItems = [];
       const categoryPages = [];
       let page = [];
       let pageWeight = 0;
+
+      function pushCategoryModuleChunk(g, chunkItems, hiddenItems, isFinalChunk, moduleItems, overflowItems, chunkIndex){
+        if(!chunkItems || !chunkItems.length) return;
+        page.push({
+          __maruDisplayGroupModule: true,
+          group: g.group,
+          label: displayGroupLabel(g.group, g.items[0]),
+          previewLimit: chunkItems.length,
+          previewItems: chunkItems,
+          // Only the final continuation chunk owns the hidden overflow button.
+          // Earlier chunks stay as pure visible continuation cards so the next
+          // page continues the same category before a new category begins.
+          hiddenItems: isFinalChunk ? hiddenItems : [],
+          sourceTotal: moduleItems.length,
+          overflowAsWebCount: isFinalChunk ? overflowItems.length : 0,
+          items: chunkItems,
+          continuationIndex: chunkIndex || 0,
+          continuationFinal: !!isFinalChunk,
+          firstIndex: (g.firstIndex || 0) + (chunkIndex || 0)
+        });
+        pageWeight += chunkItems.length;
+      }
 
       function pushCategoryModule(g){
         if(!g || !Array.isArray(g.items) || !g.items.length) return;
@@ -3079,26 +3125,32 @@ if (it.riskLabel === '⚠️ high-risk') {
         const hiddenItems = moduleItems.slice(previewItems.length);
         const overflowItems = g.items.slice(moduleCap).map(makePlainWebItem);
         if(overflowItems.length) categoryOverflowItems.push(...overflowItems);
-        const weight = Math.max(1, previewItems.length);
-        const categoryPageTarget = PAGE_SIZE;
-        if(page.length && pageWeight + weight > categoryPageTarget){
-          categoryPages.push(page);
-          page = [];
-          pageWeight = 0;
+
+        let cursor = 0;
+        let chunkIndex = 0;
+        while(cursor < previewItems.length){
+          let remaining = PAGE_SIZE - pageWeight;
+          if(remaining <= 0){
+            if(page.length) categoryPages.push(page);
+            page = [];
+            pageWeight = 0;
+            remaining = PAGE_SIZE;
+          }
+
+          const take = Math.max(1, Math.min(remaining, previewItems.length - cursor));
+          const nextCursor = cursor + take;
+          const chunk = previewItems.slice(cursor, nextCursor);
+          const isFinalChunk = nextCursor >= previewItems.length;
+          pushCategoryModuleChunk(g, chunk, hiddenItems, isFinalChunk, moduleItems, overflowItems, chunkIndex);
+          cursor = nextCursor;
+          chunkIndex += 1;
+
+          if(pageWeight >= PAGE_SIZE){
+            categoryPages.push(page);
+            page = [];
+            pageWeight = 0;
+          }
         }
-        page.push({
-          __maruDisplayGroupModule: true,
-          group: g.group,
-          label: displayGroupLabel(g.group, g.items[0]),
-          previewLimit,
-          previewItems,
-          hiddenItems,
-          sourceTotal: moduleItems.length,
-          overflowAsWebCount: overflowItems.length,
-          items: previewItems,
-          firstIndex: g.firstIndex || 0
-        });
-        pageWeight += weight;
       }
 
       categoryOrder.forEach(group => pushCategoryModule(byGroup.get(group)));
@@ -3402,13 +3454,13 @@ async function runSearch(q, type = activeType){
   serverTotalItems = Math.max(INITIAL_PRELOAD_TARGET, progressivePagerPages * PAGE_SIZE);
   loadedServerPages.clear();
 
-  currentBlock = 0;
-  currentPage = 1;
-
   signalSanmaruSearch(qq, activeType, 'run-search');
   status.textContent = `Receiving ${getTypeLabel(activeType)} supply for "${qq}"...`;
   renderSkeleton();
-  drawPager();
+  clearPager();
+
+  currentBlock = 0;
+  currentPage = 1;
   lastQuery = qq;
   lastType = activeType;
   pageImageEnrichCache.clear();
