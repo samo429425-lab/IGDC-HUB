@@ -180,14 +180,7 @@ function collectDisplayImages(item){
   for(const v of raw){
     const img = s(v).trim();
     if(!img || !isRealImageUrl(img)) continue;
-    let key = img.split('#')[0].toLowerCase();
-    try{
-      const u = new URL(img, 'https://local.invalid');
-      let pathKey = u.pathname;
-      if(pathKey.includes('/thumb/')) pathKey = pathKey.replace('/thumb/', '/').replace(/\/[^\/]+$/, '');
-      pathKey = pathKey.replace(/\/(\d{2,5}px-|thumb_?)/i, '/');
-      key = (u.origin + pathKey).toLowerCase();
-    }catch(e){}
+    const key = img.split('#')[0].toLowerCase();
     if(seen.has(key)) continue;
     seen.add(key);
     out.push(img);

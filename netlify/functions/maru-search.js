@@ -1902,7 +1902,7 @@ function buildImmediateResidentResponse(q, raw, residentPack, baseMeta){
       pageCountPolicy: 'no-fixed-page-cap-current-page-renders-only',
       fastResidentResponse: true,
       sanmaruResident: residentPack.meta || {},
-      viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: Math.max(visiblePagePack.totalVisibleItems, advertisedCandidateCount), fullCandidateCount: residentTotalCandidates, totalCandidates: residentTotalCandidates, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, backfill:true },
+      viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, fullCandidateCount: residentTotalCandidates, totalCandidates: residentTotalCandidates, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, backfill:true },
       sections: { enabled:true, mode:viewportSections.mode, totalSections:viewportSections.totalSections, fullSectionCount:fullSectionPack.totalSections },
       doesNotCallExternal: true,
       principle: 'Sanmaru resident hub supplied this response; deep provider refresh can be called separately.'
@@ -3260,7 +3260,7 @@ function sourceCaps(opts){
   const raw = opts.raw || {};
   const fast = isOpenPipeRequest(raw);
   return {
-    searchBankPages: deep ? MAX_SEARCH_BANK_PAGES_DEEP : MAX_SEARCH_BANK_PAGES_NORMAL,
+    searchBankPages: 0,
     // 일반 검색 첫 응답은 30초짜리 전체 수집이 아니라 빠른 창을 먼저 열어야 한다.
     // 뒤쪽 보강은 search.js의 열린 수신 루프가 page window로 계속 받는다.
     naverPages: fast ? 3 : (deep ? 10 : 6),
@@ -3276,7 +3276,7 @@ function sourceCaps(opts){
     imagePages: fast ? 1 : (deep ? 6 : 2),
     naverImagePages: fast ? 1 : (deep ? 6 : 2),
     youtubeLimit: fast ? 40 : (deep ? 180 : 100),
-    timeoutMs: fast ? 5200 : (deep ? 15000 : DEFAULT_SOFT_TIMEOUT_MS),
+    timeoutMs: fast ? 2800 : (deep ? 15000 : DEFAULT_SOFT_TIMEOUT_MS),
     fastFirstWindow: fast
   };
 }
@@ -5506,7 +5506,6 @@ exports.handler = async function(event){
       doesNotLimitItemsResults: true
     });
     const fullCandidateCount = Array.isArray(base.items) ? base.items.length : 0;
-    const advertisedCandidateCount = Math.max(fullCandidateCount, Math.min(Math.max(limit || 0, 0), MARU_SEARCH_MAX_PAGER_PAGES * visiblePagePack.perPage), visiblePagePack.perPage * 12);
     const firstResponseWindow = Math.max(visiblePagePack.perPage, Math.min(visiblePagePack.perPage * 12, 300));
     const responseItems = visiblePagePack.page <= 1
       ? base.items.slice(0, Math.min(fullCandidateCount, firstResponseWindow))
@@ -5523,7 +5522,7 @@ exports.handler = async function(event){
       visiblePagePack,
       sectionPack: sectionPackWithViewport,
       displayPolicy: base.displayPolicy || null,
-      meta: Object.assign({}, base.meta || {}, { count: responseItems.length, fullCandidateCount, totalCandidates: advertisedCandidateCount, responseWindowCount: responseItems.length, initialResponseWindow: firstResponseWindow, pagedCandidatePool: true, maxPagerPages: MARU_SEARCH_MAX_PAGER_PAGES, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, fullCandidateCount, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', security:{ allowed:true, admin:security.admin, mode:'read-search-open-admin-actions-protected' }, sanmaruTopResident: Object.assign({}, sanmaruRouteContext && sanmaruRouteContext.meta || {}, { routePlan: sanmaruRouteContext && sanmaruRouteContext.routePlan, providerHealth: sanmaruRouteContext && sanmaruRouteContext.providerHealth }), searchContract:{ owner:'sanmaru-global-web-information-cpu', maruRole:'mounted-gateway-ui-body', itemResults:'full-candidate-pool-not-viewport-limited', viewport:'page-sized-current-render-window', perPage:visiblePagePack.perPage, providerRescanPolicy:'skip-only-when-sanmaru-holds-broad-query-cache; otherwise preserve-google-naver-sns-wide-gateway' }, preservationPatch: 'A1.5.46-595-direct-page25-sns-google-category-fix' })
+      meta: Object.assign({}, base.meta || {}, { count: responseItems.length, fullCandidateCount, totalCandidates: fullCandidateCount, responseWindowCount: responseItems.length, initialResponseWindow: firstResponseWindow, pagedCandidatePool: true, maxPagerPages: MARU_SEARCH_MAX_PAGER_PAGES, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, fullCandidateCount, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', security:{ allowed:true, admin:security.admin, mode:'read-search-open-admin-actions-protected' }, sanmaruTopResident: Object.assign({}, sanmaruRouteContext && sanmaruRouteContext.meta || {}, { routePlan: sanmaruRouteContext && sanmaruRouteContext.routePlan, providerHealth: sanmaruRouteContext && sanmaruRouteContext.providerHealth }), searchContract:{ owner:'sanmaru-global-web-information-cpu', maruRole:'mounted-gateway-ui-body', itemResults:'full-candidate-pool-not-viewport-limited', viewport:'page-sized-current-render-window', perPage:visiblePagePack.perPage, providerRescanPolicy:'skip-only-when-sanmaru-holds-broad-query-cache; otherwise preserve-google-naver-sns-wide-gateway' }, preservationPatch: 'A1.5.46-595-direct-page25-sns-google-category-fix' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));
