@@ -123,6 +123,173 @@ function isPublicSearchRequest(raw){
   return truthy(raw.publicSearch) || truthy(raw.pageWindowOnly) || isOpenPipeRequest(raw) || !action;
 }
 
+function noProviderRoadCardsRequested(raw){
+  raw = raw || {};
+  return truthy(raw.realOnly) || truthy(raw.contentOnly) || truthy(raw.noProviderRoadCards) || truthy(raw.noSearchPathCards);
+}
+
+function isSearchEngineResultUrl(url){
+  const u = safeString(url).trim().toLowerCase();
+  if(!u) return false;
+  return /(^https?:\/\/)?(www\.)?google\.[^/]+\/search/.test(u) ||
+    /(^https?:\/\/)?(www\.)?google\.[^/]+\/maps\/search/.test(u) ||
+    /(^https?:\/\/)?news\.google\.[^/]+\/search/.test(u) ||
+    /(^https?:\/\/)?search\.naver\.com\/search\.naver/.test(u) ||
+    /(^https?:\/\/)?map\.naver\.com\/p\/search/.test(u) ||
+    /(^https?:\/\/)?(www\.)?bing\.com\/(search|images|videos)/.test(u) ||
+    /(^https?:\/\/)?(www\.)?youtube\.com\/results/.test(u) ||
+    /(^https?:\/\/)?duckduckgo\.com\//.test(u) ||
+    /(^https?:\/\/)?search\.yahoo\.com\/search/.test(u) ||
+    /(^https?:\/\/)?(www\.)?baidu\.com\/s/.test(u) ||
+    /(^https?:\/\/)?(www\.)?yandex\.[^/]+\/search/.test(u);
+}
+
+function isNonContentProviderRoadItem(it){
+  it = (it && typeof it === 'object') ? it : {};
+  const source = safeString(firstNonEmpty(it.source, it.provider, it.sourceType, it.route)).toLowerCase();
+  const url = safeString(firstNonEmpty(it.url, it.link, it.href, it.openUrl, it.pageUrl)).trim();
+  const title = safeString(firstNonEmpty(it.title, it.name)).toLowerCase();
+  const hasBody = !!safeString(firstNonEmpty(it.summary, it.snippet, it.description, it.contentSnippet, it.excerpt, it.abstract, it.text, it.content, it.ogDescription, it.metaDescription)).trim();
+  const hasMedia = !!safeString(firstNonEmpty(it.thumbnail, it.thumb, it.image, it.imageUrl, it.og_image, it.ogImage, it.videoUrl, it.embedUrl)).trim() || (Array.isArray(it.imageSet) && it.imageSet.length);
+  if(it.placeholder || it.sanmaruEmergencyDiscovery || it.sanmaruDiscovery || it.sanmaruProviderLane || it.providerLane || it.passthrough) return true;
+  if(/passthrough|discovery|search[_-]?link|provider[_-]?road|provider[_-]?lane|public[_-]?provider|emergency/.test(source)) return true;
+  if(/^\[(knowledge|news|video|vlog|shorts|sns|company|official|blog|cafe|community)\]/i.test(title)) return true;
+  if(isSearchEngineResultUrl(url) && (/public[_-]?search|search[_-]?link|discovery|passthrough|provider/.test(source) || /검색|search/.test(title))) return true;
+  if(isSearchEngineResultUrl(url) && !hasBody && !hasMedia) return true;
+  return false;
+}
+
+function xmlTextDecode(v){
+  return safeString(v)
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function firstXmlTag(block, tag){
+  const m = safeString(block).match(new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)<\\/' + tag + '>', 'i'));
+  return m ? xmlTextDecode(m[1]) : '';
+}
+
+async function fetchGoogleNewsRssRealItems(q, searchType, region, maxItems){
+  if(!q || !/^(all|news|tour|map|site|blog|sns)$/.test(normalizeSearchType(searchType || 'all'))) return [];
+  const hl = region === 'KR' ? 'ko' : 'en';
+  const ceid = region === 'KR' ? 'KR:ko' : 'US:en';
+  const url = 'https://news.google.com/rss/search?q=' + encodeURIComponent(q) + '&hl=' + hl + '&gl=' + (region === 'KR' ? 'KR' : 'US') + '&ceid=' + ceid;
+  try{
+    const r = await fetchWithTimeout(url, { headers:{ 'User-Agent':'IGDC-MaruSearch/1.0' } }, 1800);
+    if(!r || !r.ok) return [];
+    const xml = await r.text();
+    const blocks = safeString(xml).match(/<item[\s\S]*?<\/item>/gi) || [];
+    return blocks.slice(0, maxItems || 12).map((b, idx) => {
+      const title = firstXmlTag(b, 'title');
+      const link = firstXmlTag(b, 'link');
+      const summary = firstXmlTag(b, 'description');
+      if(!title || !link) return null;
+      return canonicalizeItem({
+        id:'google-news-rss-' + idx + '-' + link,
+        title, url:link, link, summary, description:summary, snippet:summary,
+        source:'google_news_rss', provider:'Google News RSS', type:'news', mediaType:'article', searchCategory:'news', score:0.86
+      }, q, 'google_news_rss');
+    }).filter(Boolean);
+  }catch(e){ return []; }
+}
+
+async function fetchWikipediaSummaryRealItems(q, searchType, maxItems){
+  if(!q || !/^(all|knowledge|wiki|site)$/.test(normalizeSearchType(searchType || 'all'))) return [];
+  const langs = /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(q) ? ['ko','en'] : ['en','ko'];
+  const out = [];
+  for(const lang of langs){
+    try{
+      const url = 'https://' + lang + '.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(q);
+      const r = await fetchWithTimeout(url, { headers:{ 'User-Agent':'IGDC-MaruSearch/1.0' } }, 1600);
+      if(!r || !r.ok) continue;
+      const j = await r.json();
+      const title = firstNonEmpty(j.title, q);
+      const pageUrl = j.content_urls && j.content_urls.desktop && j.content_urls.desktop.page;
+      const summary = firstNonEmpty(j.extract, j.description);
+      if(!title || !pageUrl || !summary) continue;
+      out.push(canonicalizeItem({
+        id:'wikipedia-summary-' + lang + '-' + pageUrl, title, url:pageUrl, link:pageUrl,
+        summary, description:summary, snippet:summary, source:'wikipedia_summary', provider:'Wikipedia',
+        type:'knowledge', mediaType:'article', searchCategory:'knowledge',
+        thumbnail:j.thumbnail && j.thumbnail.source || '', image:j.originalimage && j.originalimage.source || (j.thumbnail && j.thumbnail.source) || '',
+        imageSet:[j.originalimage && j.originalimage.source, j.thumbnail && j.thumbnail.source].filter(Boolean), score:0.88
+      }, q, 'wikipedia_summary'));
+      if(out.length >= (maxItems || 2)) break;
+    }catch(e){}
+  }
+  return out;
+}
+
+async function fetchWikimediaImageRealItems(q, searchType, maxItems){
+  if(!q || !/^(all|image|tour|map|knowledge|wiki)$/.test(normalizeSearchType(searchType || 'all'))) return [];
+  const api = 'https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrsearch=' + encodeURIComponent(q) + '&gsrlimit=' + encodeURIComponent(String(maxItems || 12)) + '&prop=imageinfo&iiprop=url|mime|extmetadata&iiurlwidth=720&format=json&origin=*';
+  try{
+    const r = await fetchWithTimeout(api, { headers:{ 'User-Agent':'IGDC-MaruSearch/1.0' } }, 2200);
+    if(!r || !r.ok) return [];
+    const j = await r.json();
+    const pages = j && j.query && j.query.pages ? Object.values(j.query.pages) : [];
+    return pages.map((pg, idx) => {
+      const ii = Array.isArray(pg.imageinfo) ? pg.imageinfo[0] : null;
+      const img = ii && (ii.thumburl || ii.url);
+      if(!img) return null;
+      const title = safeString(pg.title || '').replace(/^File:/i, '').replace(/[_]+/g, ' ');
+      const pageUrl = 'https://commons.wikimedia.org/wiki/' + encodeURIComponent(pg.title || '');
+      return canonicalizeItem({
+        id:'wikimedia-image-' + idx + '-' + img, title: title || q, url:pageUrl, link:pageUrl,
+        summary:'', description:'', source:'wikimedia_commons_image', provider:'Wikimedia Commons',
+        type:'image', mediaType:'image', searchCategory:'image', thumbnail:img, image:img, imageSet:[img], score:0.82
+      }, q, 'wikimedia_commons_image');
+    }).filter(Boolean);
+  }catch(e){ return []; }
+}
+
+async function fetchOpenStreetMapRealItems(q, searchType, maxItems){
+  if(!q || !/^(all|map|tour)$/.test(normalizeSearchType(searchType || 'all'))) return [];
+  const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=' + encodeURIComponent(String(maxItems || 6)) + '&q=' + encodeURIComponent(q);
+  try{
+    const r = await fetchWithTimeout(url, { headers:{ 'User-Agent':'IGDC-MaruSearch/1.0 (search@igdc)' } }, 1800);
+    if(!r || !r.ok) return [];
+    const arr = await r.json();
+    return (Array.isArray(arr) ? arr : []).map((x, idx) => {
+      const name = firstNonEmpty(x.name, x.display_name, q);
+      const summary = firstNonEmpty(x.display_name, '');
+      const pageUrl = x.osm_type && x.osm_id ? ('https://www.openstreetmap.org/' + x.osm_type + '/' + x.osm_id) : ('https://www.openstreetmap.org/search?query=' + encodeURIComponent(q));
+      return canonicalizeItem({
+        id:'osm-place-' + idx + '-' + pageUrl, title:name, url:pageUrl, link:pageUrl, summary, description:summary, snippet:summary,
+        source:'openstreetmap_nominatim', provider:'OpenStreetMap', type:'map', mediaType:'map', searchCategory:'map',
+        placeInfo:{ name, address:summary, lat:x.lat, lon:x.lon, mapQuery:q }, mapQuery:q, score:0.84
+      }, q, 'openstreetmap_nominatim');
+    });
+  }catch(e){ return []; }
+}
+
+async function fetchPublicRealSources(q, searchType, region, timeLeft){
+  const budget = typeof timeLeft === 'function' ? timeLeft : () => 0;
+  if(budget() <= 700) return [];
+  const tasks = [
+    fetchWikipediaSummaryRealItems(q, searchType, 2),
+    fetchGoogleNewsRssRealItems(q, searchType, region, 10),
+    fetchWikimediaImageRealItems(q, searchType, 10),
+    fetchOpenStreetMapRealItems(q, searchType, 5)
+  ];
+  const settled = await Promise.allSettled(tasks);
+  return dedupeCanonicalItems(settled.flatMap(x => x.status === 'fulfilled' && Array.isArray(x.value) ? x.value : []));
+}
+
+function filterRealContentItems(items, raw){
+  const list = Array.isArray(items) ? items : [];
+  if(!noProviderRoadCardsRequested(raw || {})) return list;
+  return list.filter(x => !isNonContentProviderRoadItem(x));
+}
+
 function normalizeSearchType(v){
   const raw = safeString(v || '').trim().toLowerCase();
   const alias = {
@@ -3385,47 +3552,59 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       record('external-gateway', externalOff ? 'blocked-by-request' : 'skipped-internal-enough', 0, { internalCount, trigger: externalTriggerMin, mode });
     }
 
-    const publicProviderCards = publicPlatformResultCards(q);
-    if(publicProviderCards.length){
-      collected.push.apply(collected, publicProviderCards);
-      record('public-provider-roads', 'ok', publicProviderCards.length, { includes:['google','naver','youtube','instagram','facebook','tiktok','x-twitter','threads'], role:'category-and-provider-road-preservation-not-result-suppression' });
-    }
-
-    const directMapCards = mapCards(q, region);
-    if(directMapCards.length){
-      collected.push.apply(collected, directMapCards);
-      record('map-link-cards', 'ok', directMapCards.length, { mode: 'direct-navigation-links' });
-    }
-
-    if(viewType === 'map' || viewType === 'tour'){
-      const directTransportCards = transportCards(q);
-      if(directTransportCards.length){
-        collected.push.apply(collected, directTransportCards);
-        record('transport-link-cards', 'ok', directTransportCards.length, { mode: 'direct-navigation-links' });
+    if(noProviderRoadCardsRequested((event && event.queryStringParameters) || {}) && timeLeft() > 900){
+      const publicRealItems = await fetchPublicRealSources(q, viewType, region, timeLeft);
+      if(publicRealItems.length){
+        collected.push.apply(collected, publicRealItems);
       }
+      record('public-real-sources', publicRealItems.length ? 'ok' : 'empty', publicRealItems.length, { includes:['wikipedia','google-news-rss','wikimedia-commons','openstreetmap'] });
     }
 
-    // Open/public discovery surfaces: SNS, company/official pages, blogs, communities, videos, vlogs and news.
-    // These are additive bridge cards only; they do not replace provider/API results and do not touch media/image fields.
-    const discoveryCards = openDiscoverySurfaceCards(q);
-    if(discoveryCards.length){
-      collected.push.apply(collected, discoveryCards);
-      record('open-discovery-surfaces', 'ok', discoveryCards.length, {
-        includes: ['news','youtube','vlog','instagram','facebook','tiktok','x-twitter','company-official','blog','cafe','community','knowledge']
-      });
-    }
+    const allowProviderRoadCards = !noProviderRoadCardsRequested((event && event.queryStringParameters) || {});
+    if(allowProviderRoadCards){
+      const publicProviderCards = publicPlatformResultCards(q);
+      if(publicProviderCards.length){
+        collected.push.apply(collected, publicProviderCards);
+        record('public-provider-roads', 'ok', publicProviderCards.length, { role:'provider-road-opt-in-only' });
+      }
 
-    if(collected.length < 25){
-      const emergencyCards = sanmaruEmergencyDiscoveryCards(q);
-      collected.push.apply(collected, emergencyCards);
-      record('sanmaru-emergency-discovery', emergencyCards.length ? 'ok' : 'empty', emergencyCards.length, { reason:'prevent-empty-result-while-provider-cache-warms' });
+      const directMapCards = mapCards(q, region);
+      if(directMapCards.length){
+        collected.push.apply(collected, directMapCards);
+        record('map-link-cards', 'ok', directMapCards.length, { mode: 'direct-navigation-links' });
+      }
+
+      if(viewType === 'map' || viewType === 'tour'){
+        const directTransportCards = transportCards(q);
+        if(directTransportCards.length){
+          collected.push.apply(collected, directTransportCards);
+          record('transport-link-cards', 'ok', directTransportCards.length, { mode: 'direct-navigation-links' });
+        }
+      }
+
+      const discoveryCards = openDiscoverySurfaceCards(q);
+      if(discoveryCards.length){
+        collected.push.apply(collected, discoveryCards);
+        record('open-discovery-surfaces', 'ok', discoveryCards.length, { role:'provider-road-opt-in-only' });
+      }
+
+      if(collected.length < 25){
+        const emergencyCards = sanmaruEmergencyDiscoveryCards(q);
+        collected.push.apply(collected, emergencyCards);
+        record('sanmaru-emergency-discovery', emergencyCards.length ? 'ok' : 'empty', emergencyCards.length, { reason:'provider-road-opt-in-only' });
+      }
+    }else{
+      record('provider-road-cards', 'suppressed-real-content-only', 0, { reason:'realOnly/contentOnly/noProviderRoadCards' });
     }
 
     let unique = dedupeCanonicalItems(collected);
     unique = backfillVisuals(unique);
     unique = await applyCorePipeline(q, unique);
     unique = applyServerSideBoosts(unique, { q, lang, searchType: viewType });
-    unique = promoteProviderAndCategoryRoads(unique, q);
+    if(!noProviderRoadCardsRequested((event && event.queryStringParameters) || {})){
+      unique = promoteProviderAndCategoryRoads(unique, q);
+    }
+    unique = filterRealContentItems(unique, (event && event.queryStringParameters) || {});
 
     // Controlled card-media autofill:
     // Keep the existing wide search pipeline, but make visible search cards useful by filling
@@ -5041,7 +5220,7 @@ exports.handler = async function(event){
       }
     }
     if(!base || !Array.isArray(base.items)) base = Object.assign({ source:null, route:[], sourceRoute:[], region:detectRuntimeRegion(event, lang, q), items:[], results:[], meta:{ trace:[] } }, base || {});
-    if((base.items || []).length < Math.min(visibleNeed, 25)){
+    if((base.items || []).length < Math.min(visibleNeed, 25) && !noProviderRoadCardsRequested(raw || {})){
       const fallbackCards = [].concat(
         (residentSeedPack && Array.isArray(residentSeedPack.items) ? residentSeedPack.items : []),
         mapCards(q, detectRuntimeRegion(event, lang, q)),
@@ -5057,6 +5236,8 @@ exports.handler = async function(event){
         failSafeBackfillCount:fallbackCards.length,
         trace:[].concat(base.meta && base.meta.trace || [], [{ name:'fail-safe-sanmaru-open-discovery-backfill', status:fallbackCards.length ? 'ok' : 'empty', count:fallbackCards.length }])
       });
+    }else if((base.items || []).length < Math.min(visibleNeed, 25)){
+      base.meta = Object.assign({}, base.meta || {}, { failSafeBackfill:false, providerRoadBackfillSuppressed:true });
     }
     if(residentSeedPack && Array.isArray(residentSeedPack.items) && residentSeedPack.items.length){
       const residentSeedItems = residentSeedPack.items.map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru-resident-seed')));
@@ -5080,7 +5261,7 @@ exports.handler = async function(event){
     const providerLaneTarget = fastDisplayFirstWindow
       ? fastWindowCandidateTarget
       : Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET, visibleNeed * 12, requestedPageForWindow * visibleNeed));
-    if(sanmaruOpenGateRequested && (base.items || []).length < providerLaneTarget && !forceProviderRefresh){
+    if(!noProviderRoadCardsRequested(raw || {}) && sanmaruOpenGateRequested && (base.items || []).length < providerLaneTarget && !forceProviderRefresh){
       const laneItems = buildSanmaruProviderLaneExpansionCards(q, Object.assign({}, raw || {}, { limit: providerLaneTarget }), { region:detectRuntimeRegion(event, lang, q) }, providerLaneTarget, (base.items || []).length);
       base.items = dedupeCanonicalItems([].concat(base.items || [], laneItems)).slice(0, providerLaneTarget);
       base.results = base.items;
@@ -5103,7 +5284,7 @@ exports.handler = async function(event){
       MAX_LIMIT,
       Math.max(visibleNeed * 12, requestedPageForWindowGuarantee * visibleNeed + visibleNeed, fastDisplayFirstWindow ? 300 : 0)
     );
-    if((base.items || []).length < pageWindowCandidateNeed){
+    if(!noProviderRoadCardsRequested(raw || {}) && (base.items || []).length < pageWindowCandidateNeed){
       const guaranteedLaneItems = buildSanmaruProviderLaneExpansionCards(
         q,
         Object.assign({}, raw || {}, { limit: pageWindowCandidateNeed, providerLaneTarget: pageWindowCandidateNeed }),
@@ -5142,7 +5323,8 @@ exports.handler = async function(event){
     if(maruLocalAuthorityCards.length){
       base.items = dedupeCanonicalItems([].concat(maruLocalAuthorityCards, base.items || []));
     }
-    base.items = (Array.isArray(base.items) ? base.items : []).map(compactResultItem);
+    base.items = filterRealContentItems((Array.isArray(base.items) ? base.items : []), raw || {}).map(compactResultItem);
+    base.results = base.items;
     // Sanmaru must keep neutral/search data, not browser-specific display contracts.
     // Store the compact neutral candidate layer first, then decorate only the HTTP response for search.js.
     absorbIntoSanmaruResident(q, base.items, { searchType, lang });
