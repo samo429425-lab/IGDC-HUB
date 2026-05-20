@@ -12,7 +12,7 @@
  * - search.js remains the UI executor: it hides/shows/reorders categories using this policy.
  */
 
-const VERSION = 'maru-search-display-engine-v1.4.1-rich-media-body-contract';
+const VERSION = 'maru-search-display-engine-v1.4.1-safe-rich-card-contract';
 const ENGINE_NAME = 'maru-search-display-engine';
 
 const BASE_GROUP_ORDER = [
@@ -514,7 +514,7 @@ function buildDisplayPolicy(input){
     visibleTabs:p.visibleTabs,
     hiddenTabs:p.hiddenTabs,
     groupCounts:counts,
-    cardContract:{ enabled:true, bodyLines:4, minimumBodyLines:2, thumbnailPolicy:'natural-content-image-only; reject-logo-banner-placard; do-not-promote-poster-field', mapPolicy:'show-map-preview-for-local-tour', executor:'search.js' },
+    cardContract:{ enabled:true, bodyLines:4, thumbnailPolicy:'natural-content-image-only; reject-logo-banner-placard; do-not-promote-poster-field', mapPolicy:'show-map-preview-for-local-tour', executor:'search.js' },
     execution:'search-js-applies-policy; maru-search-attaches-display-card-contract',
     externalCall:false,
     storageWrite:false
