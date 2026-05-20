@@ -113,40 +113,30 @@ const from0 = (params.get('from') || '').trim();
 
 const SEARCH_TABS = [
   ['all', '전체'],
-  ['map', '지도/지역'],
-  ['knowledge', '지식/위키'],
+  ['map', '지도'],
+  ['knowledge', '지식'],
+  ['wiki', '위키'],
   ['site', '사이트'],
-  ['news', '뉴스'],
-  ['tour', '관광'],
-  ['blog', '블로그'],
-  ['sns', 'SNS'],
-  ['shopping', '쇼핑'],
   ['book', '도서'],
+  ['blog', '블로그'],
   ['cafe', '카페'],
+  ['shopping', '쇼핑'],
+  ['news', '뉴스'],
   ['image', '이미지'],
   ['video', '영상'],
+  ['sns', '소셜'],
+  ['tour', '관광'],
   ['public_data', '공공자료'],
   ['academic', '학술'],
   ['sports', '스포츠'],
   ['finance', '증권'],
-  ['community', '커뮤니티'],
   ['webtoon', '웹툰']
 ];
 
 function normalizeSearchType(v){
   const raw = String(v || '').trim().toLowerCase();
   const allowed = new Set(SEARCH_TABS.map(x => x[0]));
-  const alias = {
-    books: 'book', 도서: 'book', 책: 'book',
-    sns: 'sns', social: 'sns', 소셜: 'sns',
-    community: 'community', forum: 'community', 커뮤니티: 'community',
-    map: 'map', maps: 'map', local: 'map', region: 'map', 지역: 'map', 지도: 'map',
-    tour: 'tour', travel: 'tour', tourism: 'tour', 관광: 'tour', 여행: 'tour', '가볼만한곳': 'tour', '가볼 만한 곳': 'tour',
-    public: 'public_data', 공공자료: 'public_data', 공공데이터: 'public_data',
-    wiki: 'knowledge', 위키: 'knowledge', wikipedia: 'knowledge', encyclopedia: 'knowledge', 백과: 'knowledge',
-    academic: 'academic', 학술: 'academic', site: 'site', 사이트: 'site', homepage: 'site', 홈페이지: 'site',
-    shopping: 'shopping', 쇼핑: 'shopping', news: 'news', 뉴스: 'news'
-  };
+  const alias = { books: 'book', 도서: 'book', 책: 'book', sns: 'sns', social: 'sns', public: 'public_data', 공공자료: 'public_data', wiki: 'wiki', 위키: 'wiki', academic: 'academic', 학술: 'academic', site: 'site', 사이트: 'site' };
   return allowed.has(raw) ? raw : (alias[raw] || 'all');
 }
 
@@ -215,15 +205,6 @@ function ensureSearchCardMediaStyle(){
       height: 206px;
     }
     .maru-card-media[data-count="3"] img:not(:first-child) {
-      height: 99px;
-    }
-    .maru-card-media[data-count="4"] {
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: 1fr 1fr;
-      flex-basis: 330px;
-      width: 330px;
-    }
-    .maru-card-media[data-count="4"] img {
       height: 99px;
     }
 
@@ -1491,12 +1472,6 @@ async function fetchInstantSearchPack(q, type = activeType){
         bar.style.justifyContent = 'center';
         bar.style.gap = '6px';
         bar.style.margin = '8px 0 14px';
-        bar.style.position = 'sticky';
-        bar.style.top = '118px';
-        bar.style.zIndex = '89';
-        bar.style.background = '#fff';
-        bar.style.padding = '6px 0 8px';
-        bar.style.borderBottom = '1px solid #eef2f7';
         status.parentNode.insertBefore(bar, status.nextSibling);
       }
       return bar;
@@ -1600,7 +1575,6 @@ async function fetchInstantSearchPack(q, type = activeType){
       const s = String(imageUrl || '').trim();
       if(!s) return false;
       if(!/^https?:\/\//i.test(s) && !s.startsWith('/')) return false;
-      if(isSearchEngineLandingUrlClient(s)) return false;
       if(isHardRejectImageUrlClient(s)) return false;
       if(isMapImageUrlClient(s)) return false;
       if(isProviderLogoOrBannerImageClient(s, it)) return false;
@@ -1805,8 +1779,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         opendata: 'public_data',
         open_data: 'public_data',
         knowledge_wiki: 'knowledge',
-        wiki: 'knowledge',
-        wikipedia: 'knowledge',
+        wiki: 'wiki',
         encyclopedia: 'knowledge',
         academic: 'academic',
         scholar: 'academic',
@@ -1814,13 +1787,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         paper: 'academic',
         map_local_tour: 'local_tour',
         local: 'local_tour',
-        region: 'local_tour',
         map: 'local_tour',
-        maps: 'local_tour',
-        tour: 'tour',
-        travel: 'tour',
-        tourism: 'tour',
-        place_tour: 'tour',
+        tour: 'local_tour',
         video_vlog: 'video',
         video: 'video',
         youtube: 'video',
@@ -1909,10 +1877,8 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       if (host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr')) return 'authority';
       if (source.includes('public') || provider.includes('public') || type === 'public_data' || category === 'public_data' || text.includes('공공데이터') || text.includes('공공 데이터') || text.includes('데이터포털') || text.includes('open data') || host.includes('data.go.kr')) return 'public_data';
-      if (source.includes('news') || type === 'news' || category === 'news' || text.includes('뉴스') || text.includes('속보') || text.includes('latest') || text.includes('breaking')) return 'news';
-      if (source.includes('local') || source.includes('map') || type === 'map' || type === 'local' || mediaType === 'map' || category === 'map' || text.includes('지도') || text.includes('주소') || text.includes('위치') || text.includes('근처') || text.includes('교통') || text.includes('길찾기') || text.includes('local') || text.includes('map')) return 'local_tour';
-      if (type === 'tour' || category === 'tour' || source.includes('tour') || /관광|여행|가볼\s*만한\s*곳|볼거리|명소|축제|공원|박물관|미술관|야경|전망대|랜드마크|맛집|호텔|숙소|travel|tour|tourism|attraction|landmark|things to do|restaurant|hotel|park|museum|gallery/.test(text)) return 'tour';
-      if (host.includes('wikipedia.org') || host.includes('namu.wiki') || source.includes('wiki') || type === 'wiki' || text.includes('위키')) return 'knowledge';
+      if (source.includes('local') || source.includes('map') || type === 'map' || type === 'local' || mediaType === 'map' || category === 'map' || text.includes('관광') || text.includes('여행') || text.includes('지도') || text.includes('주소') || text.includes('위치') || text.includes('맛집') || text.includes('공원') || text.includes('landmark') || text.includes('tour')) return 'local_tour';
+      if (host.includes('wikipedia.org') || host.includes('namu.wiki') || source.includes('wiki') || type === 'wiki' || text.includes('위키')) return 'wiki';
       if (source.includes('scholar') || source.includes('academic') || source.includes('paper') || source.includes('research') || source.includes('library') || type === 'academic' || type === 'paper' || type === 'research' || category === 'academic' || text.includes('학술') || text.includes('논문') || text.includes('연구') || text.includes('journal') || text.includes('citation') || text.includes('thesis') || host.includes('scholar.google') || host.includes('riss.kr') || host.includes('dbpia.co.kr') || host.includes('kci.go.kr')) return 'academic';
       if (source.includes('encyc') || source.includes('kin') || type === 'knowledge' || category === 'knowledge' || text.includes('지식') || text.includes('백과') || text.includes('사전')) return 'knowledge';
       if (source.includes('corporate') || source.includes('homepage') || source.includes('business') || source.includes('company') || type === 'site' || type === 'homepage' || type === 'business' || category === 'site' || text.includes('홈페이지') || text.includes('공식사이트') || text.includes('공식 사이트') || text.includes('기업') || text.includes('회사') || text.includes('business') || text.includes('company') || text.includes('corporate')) return 'site';
@@ -1937,8 +1903,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         authority: '주요 정보',
         public_data: '공공자료',
         local_tour: '지도/지역',
-        knowledge: '지식/위키',
-        tour: '관광/가볼 만한 곳',
+        knowledge: '지식/백과',
+        wiki: '위키',
         academic: '학술/논문',
         site: '사이트/홈페이지',
         book: '도서',
@@ -1952,7 +1918,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         social: 'SNS',
         shopping: '쇼핑',
         sports: '스포츠',
-        finance: '증권',
+        finance: '금융',
         webtoon: '웹툰',
         web: '일반 웹 결과'
       };
@@ -1967,20 +1933,20 @@ async function fetchInstantSearchPack(q, type = activeType){
         authority: 3,
         public_data: 2,
         local_tour: 2,
-        knowledge: 5,
-        tour: 5,
+        knowledge: 3,
+        wiki: 3,
         academic: 4,
         site: 5,
+        book: 4,
         news: 5,
         blog: 5,
-        social: 5,
-        shopping: 5,
-        book: 4,
         cafe: 5,
         community: 5,
         image: 5,
         video: 5,
         media: 5,
+        social: 4,
+        shopping: 5,
         sports: 4,
         finance: 4,
         webtoon: 4,
@@ -1996,7 +1962,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = ['authority','local_tour','knowledge','site','news','tour','blog','social','shopping','book','cafe','image','video','media','public_data','academic','sports','finance','community','webtoon','web'];
+      const order = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -2032,7 +1998,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     function diversifyGroupPreviewItems(group, items){
       const list = Array.isArray(items) ? items.slice() : [];
       if(!list.length) return list;
-      const verticals = new Set(['news','tour','blog','cafe','community','social','image','video','media','shopping','book']);
+      const verticals = new Set(['news','blog','cafe','community','social','image','video','media']);
       if(!verticals.has(group)) return list;
 
       const firstBySource = [];
@@ -2063,17 +2029,15 @@ async function fetchInstantSearchPack(q, type = activeType){
         authority: 3,
         public_data: 2,
         local_tour: 2,
-        knowledge: 5,
+        knowledge: 3,
+        wiki: 3,
         site: 5,
-        news: 5,
-        tour: 5,
-        blog: 5,
-        social: 5,
-        shopping: 5,
         book: 4,
-        cafe: 5,
+        news: 5,
         community: 5,
         media: 5,
+        social: 4,
+        shopping: 4,
         sports: 3,
         finance: 3,
         webtoon: 3,
@@ -2375,54 +2339,9 @@ async function fetchInstantSearchPack(q, type = activeType){
       });
     }
 
-
-    function isSearchEngineLandingUrlClient(url){
-      try {
-        const u = new URL(String(url || ''), location.origin);
-        const host = u.hostname.replace(/^www\./, '').toLowerCase();
-        const path = String(u.pathname || '').toLowerCase();
-        const qs = String(u.search || '').toLowerCase();
-        if(host === 'google.com' && (path === '/search' || qs.includes('tbm=isch') || qs.includes('tbm=vid') || qs.includes('tbm=nws'))) return true;
-        if(host.endsWith('google.com') && path === '/search') return true;
-        if(host === 'search.naver.com' || host === 'm.search.naver.com') return true;
-        if(host === 'news.google.com' && path.includes('/search')) return true;
-        if(host === 'youtube.com' && path.includes('/results')) return true;
-        if(host === 'bing.com' && (path === '/search' || path.includes('/images/search') || path.includes('/videos/search'))) return true;
-        if(host === 'duckduckgo.com' || host === 'search.yahoo.com' || host === 'yandex.com' || host === 'baidu.com') return true;
-        return false;
-      } catch(e) { return false; }
-    }
-
-    function hasRealCardPayloadClient(it){
-      if(!it || typeof it !== 'object') return false;
-      const desc = descriptionForItemClient(it);
-      const imgs = collectNaturalImages(it);
-      if(desc && desc.length >= 18) return true;
-      if(imgs.length > 0) return true;
-      if(getPlayableMediaInfo(it, it.url || it.link)) return true;
-      if(isMapLikeItemClient(it)) return true;
-      return false;
-    }
-
-    function isProviderRoadOnlyItemClient(it){
-      if(!it || typeof it !== 'object') return false;
-      const source = String(it.source || it.provider || '').toLowerCase();
-      const sourceType = String(it.sourceType || '').toLowerCase();
-      const url = String(it.url || it.link || it.openUrl || '').trim();
-      const title = String(it.title || '').toLowerCase();
-      if(isSearchEngineLandingUrlClient(url)) return true;
-      if(isMapLikeItemClient(it)) return false;
-      if(it.sanmaruEmergencyDiscovery || it.publicProviderRoad || it.placeholder || sourceType === 'search-link') return true;
-      if(/(_discovery|public_search|search_link|search-link|provider-road|sanmaru_discovery)/.test(source)) return true;
-      if(isSearchEngineLandingUrlClient(url)) return true;
-      if(/google images|naver image|bing images|google news|naver news|instagram public|tiktok public|twitter public|x \/ twitter public/i.test(title) && !hasRealCardPayloadClient(it)) return true;
-      return false;
-    }
-
     function shouldRejectSearchResultItem(it){
       if (!it) return true;
       if (isSeedPlaceholderItem(it)) return true;
-      if (isProviderRoadOnlyItemClient(it)) return true;
       if (hasInvalidYouTubeVideoUrl(it)) return true;
       return false;
     }
@@ -2578,14 +2497,14 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const google = document.createElement('a');
       google.href = 'https://www.google.com/maps/search/' + encodeURIComponent(mapQuery || info.query || '');
-      google.target = '_blank';
+      google.target = '_self';
       google.rel = 'noopener';
       google.textContent = 'Google 지도';
       actions.appendChild(google);
 
       const naver = document.createElement('a');
       naver.href = 'https://map.naver.com/p/search/' + encodeURIComponent(mapQuery || info.query || '');
-      naver.target = '_blank';
+      naver.target = '_self';
       naver.rel = 'noopener';
       naver.textContent = 'Naver 지도';
       actions.appendChild(naver);
@@ -2593,7 +2512,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       if(info.homepage){
         const home = document.createElement('a');
         home.href = info.homepage;
-        home.target = '_blank';
+        home.target = '_self';
         home.rel = 'noopener';
         home.textContent = '홈페이지';
         actions.appendChild(home);
@@ -2765,12 +2684,11 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const playableMedia = getPlayableMediaInfo(it, url);
 
-      const blockedSearchLanding = isSearchEngineLandingUrlClient(url) && !hasRealCardPayloadClient(it);
-      if (url && !blockedSearchLanding) {
+      if (url) {
         card.style.cursor = 'pointer';
         card.addEventListener('click', (e) => {
           if (e.target && e.target.closest && e.target.closest('a, button, iframe, video, .maru-video-embed-wrap, .maru-card-media')) return;
-          window.open(url, '_blank', 'noopener');
+          window.location.href = url;
         });
       }
 
@@ -2786,8 +2704,8 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       if (url) {
         const a = document.createElement('a');
-        a.href = blockedSearchLanding ? 'javascript:void(0)' : url;
-        a.target = blockedSearchLanding ? '' : '_blank';
+        a.href = url;
+        a.target = '_self';
         a.rel = 'noopener';
         a.textContent = (it.title || '').trim() || '(no title)';
         a.style.color = 'inherit';
@@ -2883,10 +2801,10 @@ if (it.riskLabel === '⚠️ high-risk') {
         body.appendChild(mapPreviewNode);
       }
 
-      if (isRealThumb) {
+      if (!playableMediaNode && isRealThumb) {
         const mediaWrap = document.createElement('div');
         mediaWrap.className = 'maru-card-media';
-        const mediaCount = Math.min(naturalImages.length, 4);
+        const mediaCount = Math.min(naturalImages.length, 3);
         const mediaKind = classifyVisualKindClient(it);
         mediaWrap.dataset.count = String(mediaCount);
         mediaWrap.dataset.kind = mediaKind;
@@ -3099,20 +3017,20 @@ if (it.riskLabel === '⚠️ high-risk') {
         authority: 8,
         public_data: 8,
         local_tour: 8,
-        knowledge: 15,
-        tour: 15,
+        knowledge: 3,
+        wiki: 3,
         academic: 15,
         site: 15,
+        book: 15,
         news: 15,
         blog: 15,
-        social: 15,
-        shopping: 15,
-        book: 15,
         cafe: 15,
         community: 15,
         image: 15,
         video: 15,
         media: 15,
+        social: 15,
+        shopping: 15,
         sports: 15,
         finance: 15,
         webtoon: 15
@@ -3129,7 +3047,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         items: diversifyGroupPreviewItems(g.group, g.items || [])
       }));
       const byGroup = new Map(grouped.map(g => [g.group, g]));
-      const categoryOrder = ['authority','local_tour','knowledge','site','news','tour','blog','social','shopping','book','cafe','image','video','media','public_data','academic','sports','finance','community','webtoon'];
+      const categoryOrder = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon'];
       const categoryOverflowItems = [];
       const categoryPages = [];
       let page = [];
@@ -3140,45 +3058,30 @@ if (it.riskLabel === '⚠️ high-risk') {
         const previewLimit = Math.max(1, displayGroupPreviewLimit(g.group, g.items[0]));
         const moduleCap = Math.max(previewLimit, displayGroupModuleTotalCap(g.group));
         const moduleItems = g.items.slice(0, moduleCap);
-        const previewSourceItems = moduleItems.slice(0, previewLimit);
+        const previewItems = moduleItems.slice(0, previewLimit);
+        const hiddenItems = moduleItems.slice(previewItems.length);
         const overflowItems = g.items.slice(moduleCap).map(makePlainWebItem);
         if(overflowItems.length) categoryOverflowItems.push(...overflowItems);
-        let cursor = 0;
+        const weight = Math.max(1, previewItems.length);
         const categoryPageTarget = PAGE_SIZE;
-        while(cursor < previewSourceItems.length){
-          let remaining = Math.max(0, categoryPageTarget - pageWeight);
-          if(remaining <= 0){
-            if(page.length) categoryPages.push(page);
-            page = [];
-            pageWeight = 0;
-            remaining = categoryPageTarget;
-          }
-          const take = Math.max(1, Math.min(remaining, previewSourceItems.length - cursor));
-          const previewItems = previewSourceItems.slice(cursor, cursor + take);
-          const isLastChunk = cursor + take >= previewSourceItems.length;
-          const hiddenItems = isLastChunk ? moduleItems.slice(previewLimit) : [];
-          page.push({
-            __maruDisplayGroupModule: true,
-            group: g.group,
-            label: displayGroupLabel(g.group, g.items[0]) + (cursor > 0 ? ' 계속' : ''),
-            previewLimit: previewItems.length,
-            previewItems,
-            hiddenItems,
-            sourceTotal: moduleItems.length,
-            overflowAsWebCount: overflowItems.length,
-            items: previewItems,
-            firstIndex: (g.firstIndex || 0) + cursor,
-            continuation: cursor > 0,
-            continuesNextPage: !isLastChunk
-          });
-          pageWeight += previewItems.length;
-          cursor += take;
-          if(pageWeight >= categoryPageTarget){
-            categoryPages.push(page);
-            page = [];
-            pageWeight = 0;
-          }
+        if(page.length && pageWeight + weight > categoryPageTarget){
+          categoryPages.push(page);
+          page = [];
+          pageWeight = 0;
         }
+        page.push({
+          __maruDisplayGroupModule: true,
+          group: g.group,
+          label: displayGroupLabel(g.group, g.items[0]),
+          previewLimit,
+          previewItems,
+          hiddenItems,
+          sourceTotal: moduleItems.length,
+          overflowAsWebCount: overflowItems.length,
+          items: previewItems,
+          firstIndex: g.firstIndex || 0
+        });
+        pageWeight += weight;
       }
 
       categoryOrder.forEach(group => pushCategoryModule(byGroup.get(group)));
@@ -3485,10 +3388,10 @@ async function runSearch(q, type = activeType){
   signalSanmaruSearch(qq, activeType, 'run-search');
   status.textContent = `Receiving ${getTypeLabel(activeType)} supply for "${qq}"...`;
   renderSkeleton();
+  clearPager();
 
   currentBlock = 0;
   currentPage = 1;
-  drawPager();
   lastQuery = qq;
   lastType = activeType;
   pageImageEnrichCache.clear();
