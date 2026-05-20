@@ -12,29 +12,29 @@
  * - search.js remains the UI executor: it hides/shows/reorders categories using this policy.
  */
 
-const VERSION = 'maru-search-display-engine-v1.4.1-category-continuation-media-contract';
+const VERSION = 'maru-search-display-engine-v1.4.0-card-contract-executor';
 const ENGINE_NAME = 'maru-search-display-engine';
 
 const BASE_GROUP_ORDER = [
-  'authority','local_tour','knowledge','wiki','site','news','blog','social','shopping','book','cafe',
-  'image','video','media','public_data','academic','sports','finance','community','webtoon','web'
+  'authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news',
+  'image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'
 ];
 
 const BASE_TABS = [
-  'all','map','knowledge','wiki','site','news','tour','blog','sns','shopping','book','cafe','image','video',
-  'public_data','academic','sports','finance','community','webtoon'
+  'all','map','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video',
+  'sns','tour','public_data','academic','sports','finance','webtoon'
 ];
 
 const DEFAULT_PREVIEW_LIMITS = {
   authority:3, public_data:2, local_tour:2, knowledge:3, wiki:3, academic:4, site:5,
-  news:5, blog:5, social:5, shopping:5, book:4, cafe:5, community:5, image:5, video:5, media:5,
-  sports:4, finance:4, webtoon:4, web:18
+  book:4, news:5, blog:5, cafe:5, community:5, image:5, video:5, media:5,
+  social:4, shopping:5, sports:4, finance:4, webtoon:4, web:18
 };
 
 const DEFAULT_MODULE_CAPS = {
   authority:8, public_data:8, local_tour:8, knowledge:3, wiki:3, academic:15, site:15,
-  news:15, blog:15, social:15, shopping:15, book:15, cafe:15, community:15, image:15, video:15, media:15,
-  sports:15, finance:15, webtoon:15, web:30
+  book:15, news:15, blog:15, cafe:15, community:15, image:15, video:15, media:15,
+  social:15, shopping:15, sports:15, finance:15, webtoon:15, web:30
 };
 
 function s(v){ return String(v == null ? '' : v); }
@@ -199,7 +199,7 @@ function collectDisplayImages(item){
     if(seen.has(key)) continue;
     seen.add(key);
     out.push(img);
-    if(out.length >= 4) break;
+    if(out.length >= 3) break;
   }
   return out;
 }
@@ -234,7 +234,7 @@ function decorateDisplayItem(item, ctx, index){
   let images = collectDisplayImages(item);
   const yt = youtubeThumb(item);
   if(yt && !images.length) images = [yt];
-  const summary = naturalSummary(item, q) || fallbackDisplaySummary(item, q, group);
+  const summary = naturalSummary(item, q);
   const cardType = cardTypeForGroup(group, item);
   const mapLike = cardType === 'map';
   const copy = Object.assign({}, item, {
@@ -275,8 +275,8 @@ function decorateDisplayItem(item, ctx, index){
       body: summary,
       description: summary,
       snippet: summary,
-      lineClamp: mapLike ? 3 : (cardType === 'article-media' ? 4 : 4),
-      bodyLines: mapLike ? 3 : (cardType === 'article-media' ? 4 : 4),
+      lineClamp: mapLike ? 2 : 3,
+      bodyLines: mapLike ? 2 : 3,
       thumbnail: images[0] || '',
       image: images[0] || '',
       imageUrl: images[0] || '',
@@ -288,7 +288,7 @@ function decorateDisplayItem(item, ctx, index){
       showMapPreview: mapLike,
       showVideoPreview: cardType === 'video',
       showBody: true,
-      bodySource: naturalSummary(item, q) ? 'provider' : 'display-engine-fallback',
+      bodySource: summary ? 'provider' : 'empty',
       thumbnailPolicy: 'actual-content-image-only; no-logo-no-favicon-no-banner-no-placard-no-search-url',
       displayMode: mapLike ? 'map-plus-list-card' : (images.length ? 'text-plus-thumbnail-card' : 'text-summary-card')
     })
@@ -330,7 +330,7 @@ function normalizeGroup(group){
   const map = {
     official:'authority', official_authority:'authority', gov:'authority', government:'authority', authority:'authority',
     public:'public_data', opendata:'public_data', open_data:'public_data', public_data:'public_data',
-    map:'local_tour', local:'local_tour', tour:'local_tour', travel:'local_tour', tourism:'local_tour', local_tour:'local_tour',
+    map:'local_tour', maps:'local_tour', local:'local_tour', region:'local_tour', place:'local_tour', map_local:'local_tour', map_local_tour:'local_tour', local_map:'local_tour', local_map_tour:'local_tour', place_tour:'local_tour', tour:'local_tour', travel:'local_tour', tourism:'local_tour', local_tour:'local_tour', 지역:'local_tour', 지도:'local_tour',
     knowledge_wiki:'knowledge', encyclopedia:'knowledge', knowledge:'knowledge', wiki:'wiki',
     scholar:'academic', paper:'academic', research:'academic', academic:'academic',
     company_web:'site', corporate_homepage:'site', business_site:'site', official_site:'site', homepage:'site', website:'site', site:'site', company:'site', corporate:'site', business:'site',
@@ -514,7 +514,7 @@ function buildDisplayPolicy(input){
     visibleTabs:p.visibleTabs,
     hiddenTabs:p.hiddenTabs,
     groupCounts:counts,
-    cardContract:{ enabled:true, bodyLines:4, thumbnailPolicy:'natural-content-image-only; reject-logo-banner-placard; do-not-promote-poster-field', mapPolicy:'show-map-preview-for-local-tour', executor:'search.js' },
+    cardContract:{ enabled:true, bodyLines:3, thumbnailPolicy:'natural-content-image-only; reject-logo-banner-placard; do-not-promote-poster-field', mapPolicy:'show-map-preview-for-local-tour', executor:'search.js' },
     execution:'search-js-applies-policy; maru-search-attaches-display-card-contract',
     externalCall:false,
     storageWrite:false
