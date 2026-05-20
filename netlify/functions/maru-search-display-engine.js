@@ -12,17 +12,17 @@
  * - search.js remains the UI executor: it hides/shows/reorders categories using this policy.
  */
 
-const VERSION = 'maru-search-display-engine-v1.4.1-safe-rich-card-contract';
+const VERSION = 'maru-search-display-engine-v1.4.2-category-media-contract';
 const ENGINE_NAME = 'maru-search-display-engine';
 
 const BASE_GROUP_ORDER = [
-  'authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news',
-  'image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'
+  'authority','knowledge','wiki','site','news','local_tour','blog','shopping','book','cafe',
+  'image','video','media','social','public_data','academic','sports','finance','community','webtoon','web'
 ];
 
 const BASE_TABS = [
-  'all','map','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video',
-  'sns','tour','public_data','academic','sports','finance','webtoon'
+  'all','map','knowledge','wiki','site','news','tour','blog','shopping','book','cafe','image','video',
+  'sns','public_data','academic','sports','finance','community','webtoon'
 ];
 
 const DEFAULT_PREVIEW_LIMITS = {
@@ -199,7 +199,7 @@ function collectDisplayImages(item){
     if(seen.has(key)) continue;
     seen.add(key);
     out.push(img);
-    if(out.length >= 3) break;
+    if(out.length >= 4) break;
   }
   return out;
 }
@@ -330,7 +330,7 @@ function normalizeGroup(group){
   const map = {
     official:'authority', official_authority:'authority', gov:'authority', government:'authority', authority:'authority',
     public:'public_data', opendata:'public_data', open_data:'public_data', public_data:'public_data',
-    map:'local_tour', local:'local_tour', map_local:'local_tour', map_local_tour:'local_tour', local_map:'local_tour', local_map_tour:'local_tour', place:'local_tour', place_tour:'local_tour', tour:'local_tour', travel:'local_tour', tourism:'local_tour', local_tour:'local_tour',
+    map:'local_tour', local:'local_tour', tour:'local_tour', travel:'local_tour', tourism:'local_tour', local_tour:'local_tour',
     knowledge_wiki:'knowledge', encyclopedia:'knowledge', knowledge:'knowledge', wiki:'wiki',
     scholar:'academic', paper:'academic', research:'academic', academic:'academic',
     company_web:'site', corporate_homepage:'site', business_site:'site', official_site:'site', homepage:'site', website:'site', site:'site', company:'site', corporate:'site', business:'site',
@@ -441,7 +441,7 @@ function policyForIntent(intentInfo, counts){
     book: ['book','knowledge','wiki','blog','shopping','news','web'],
     sports: ['sports','news','video','social','image','blog','web'],
     knowledge: ['authority','knowledge','wiki','site','academic','video','image','web'],
-    general: ['authority','knowledge','wiki','site','news','blog','image','video','social','local_tour','shopping','public_data','academic','web']
+    general: ['authority','knowledge','wiki','site','news','local_tour','blog','shopping','book','cafe','image','video','social','public_data','academic','sports','finance','community','webtoon','web']
   };
   const preferred = profiles[intent] || profiles.general;
   const presentPreferred = preferred.filter(g => g === 'web' || hasCount(counts, g));
@@ -457,16 +457,16 @@ function policyForIntent(intentInfo, counts){
   const groupOrder = unique(visibleGroups.concat(BASE_GROUP_ORDER));
 
   const visibleTabsMap = {
-    local: ['all','map','tour','blog','image','video','news','site'],
-    shopping: ['all','shopping','image','video','blog','site','news'],
-    finance: ['all','finance','news','site','blog','video'],
-    issue: ['all','news','sns','blog','video','image','wiki','site'],
+    local: ['all','map','site','news','tour','blog','image','video','sns'],
+    shopping: ['all','site','news','tour','blog','shopping','image','video'],
+    finance: ['all','site','news','blog','finance','video'],
+    issue: ['all','site','news','tour','blog','image','video','sns','wiki'],
     celebrity: ['all','news','video','sns','image','blog','cafe','wiki','site'],
     celebrity_or_person: ['all','news','video','sns','image','blog','cafe','wiki','site'],
-    academic: ['all','academic','knowledge','wiki','site','book','news'],
-    book: ['all','book','knowledge','wiki','blog','shopping','news'],
-    sports: ['all','sports','news','video','sns','image','blog'],
-    knowledge: ['all','knowledge','wiki','site','academic','video','image'],
+    academic: ['all','knowledge','wiki','site','news','blog','book','academic'],
+    book: ['all','knowledge','wiki','site','news','blog','shopping','book'],
+    sports: ['all','site','news','tour','blog','video','sns','sports'],
+    knowledge: ['all','knowledge','wiki','site','news','tour','blog','image','video','academic'],
     general: BASE_TABS
   };
   const visibleTabs = visibleTabsMap[intent] || visibleTabsMap.general;
@@ -514,7 +514,7 @@ function buildDisplayPolicy(input){
     visibleTabs:p.visibleTabs,
     hiddenTabs:p.hiddenTabs,
     groupCounts:counts,
-    cardContract:{ enabled:true, bodyLines:4, thumbnailPolicy:'natural-content-image-only; reject-logo-banner-placard; do-not-promote-poster-field', mapPolicy:'show-map-preview-for-local-tour', executor:'search.js' },
+    cardContract:{ enabled:true, bodyLines:4, maxImages:4, thumbnailPolicy:'natural-content-image-only; reject-logo-banner-placard; do-not-promote-poster-field', mapPolicy:'show-map-preview-for-local-tour', mediaOrder:'text-images-map-video', executor:'search.js' },
     execution:'search-js-applies-policy; maru-search-attaches-display-card-contract',
     externalCall:false,
     storageWrite:false
