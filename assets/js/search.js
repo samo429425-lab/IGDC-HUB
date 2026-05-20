@@ -24,22 +24,42 @@ ready(function () {
   // 🔥 홈에서도 search.js 동작 허용 (핵심 수정)
   const hasSearchUI =
     document.getElementById('searchInput') ||
-    document.getElementById('globalSearchInput');
+    document.getElementById('globalSearchInput') ||
+    document.getElementById('homeSearchInput');
 
   if (!isSearchPage && !hasSearchUI) return;
 
-    const input   = document.getElementById('searchInput');
-    const btn     = document.getElementById('searchBtn');
-    const status  = document.getElementById('searchStatus');
-    const results = document.getElementById('searchResults');
+    const input   = document.getElementById('searchInput') || document.getElementById('globalSearchInput') || document.getElementById('homeSearchInput');
+    const btn     = document.getElementById('searchBtn') || document.getElementById('globalSearchBtn') || document.getElementById('homeSearchBtn');
+    const statusEl = document.getElementById('searchStatus');
+    const resultsEl = document.getElementById('searchResults');
+    const status  = statusEl || { textContent: '' };
+    const results = resultsEl || document.createElement('div');
         
     if (!input || !btn) return;
 
-    const PAGE_SIZE = 15;
+    const PAGE_SIZE = 25;
     const BLOCK_SIZE = 10;
-    const FETCH_LIMIT = 1000;
+    const MAX_PAGER_PAGES = 499;
+    const INITIAL_PRELOAD_PAGES = 12;
+    const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES;
+    const INITIAL_DOM_RENDER_TARGET = INITIAL_PRELOAD_TARGET;
+    const INITIAL_PROGRESSIVE_PAGER_PAGES = 12;
+    const MAX_PROGRESSIVE_PAGER_PAGES = 180;
+    const MIN_SMOOTH_CANDIDATES = 120;
+    const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
+    const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
+    const INTAKE_CONCURRENCY = 3;
+    const INTAKE_BURST_DELAY_MS = 50;
 
     let allItems = [];
+    let serverPagedMode = false;
+    let serverTotalItems = 0;
+    let authoritativeServerTotalItems = 0;
+    let progressivePagerPages = INITIAL_PROGRESSIVE_PAGER_PAGES;
+    let continuousIntakeSeq = 0;
+    let continuousIntakeActive = false;
+    const loadedServerPages = new Map();
     let currentPage = 1;
     let currentBlock = 0;
     let activeType = 'all';
@@ -93,17 +113,21 @@ const from0 = (params.get('from') || '').trim();
 
 const SEARCH_TABS = [
   ['all', '전체'],
-  ['image', '이미지'],
-  ['news', '뉴스'],
   ['map', '지도'],
   ['knowledge', '지식'],
-  ['tour', '관광'],
-  ['video', '영상'],
-  ['sns', '소셜'],
+  ['wiki', '위키'],
+  ['site', '사이트'],
+  ['book', '도서'],
   ['blog', '블로그'],
   ['cafe', '카페'],
-  ['book', '도서'],
   ['shopping', '쇼핑'],
+  ['news', '뉴스'],
+  ['image', '이미지'],
+  ['video', '영상'],
+  ['sns', '소셜'],
+  ['tour', '관광'],
+  ['public_data', '공공자료'],
+  ['academic', '학술'],
   ['sports', '스포츠'],
   ['finance', '증권'],
   ['webtoon', '웹툰']
@@ -112,7 +136,7 @@ const SEARCH_TABS = [
 function normalizeSearchType(v){
   const raw = String(v || '').trim().toLowerCase();
   const allowed = new Set(SEARCH_TABS.map(x => x[0]));
-  const alias = { books: 'book', 도서: 'book', 책: 'book', sns: 'sns', social: 'sns' };
+  const alias = { books: 'book', 도서: 'book', 책: 'book', sns: 'sns', social: 'sns', public: 'public_data', 공공자료: 'public_data', wiki: 'wiki', 위키: 'wiki', academic: 'academic', 학술: 'academic', site: 'site', 사이트: 'site' };
   return allowed.has(raw) ? raw : (alias[raw] || 'all');
 }
 
@@ -254,6 +278,23 @@ function ensureSearchCardMediaStyle(){
       font-weight: 800;
       cursor: pointer;
     }
+    .maru-display-more:hover {
+      background: #eef2ff;
+      border-color: #c7d2fe;
+      color: #3730a3;
+    }
+    .maru-display-collapsed-card {
+      display: none !important;
+    }
+    .maru-display-section[data-expanded="1"] .maru-display-collapsed-card {
+      display: block !important;
+    }
+    .maru-display-hidden-wrap {
+      margin-top: 6px;
+    }
+    .maru-display-hidden-wrap > .card {
+      margin: 8px 0;
+    }
     .maru-video-embed-wrap {
       flex: 0 0 360px;
       width: 360px;
@@ -274,6 +315,33 @@ function ensureSearchCardMediaStyle(){
       background: #000;
       object-fit: cover;
     }
+
+    .maru-map-preview {
+      flex: 0 0 330px;
+      width: 330px;
+      max-width: 46%;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid #e5e7eb;
+      background: #eef2f7;
+      align-self: flex-start;
+    }
+    .maru-map-preview iframe {
+      display: block;
+      width: 100%;
+      height: 190px;
+      border: 0;
+      background: #e5e7eb;
+    }
+    .maru-map-preview-caption {
+      padding: 8px 10px;
+      font-size: 12px;
+      font-weight: 800;
+      color: #334155;
+      background: #ffffff;
+      border-top: 1px solid #e5e7eb;
+    }
+
     .maru-video-badge {
       display: inline-block;
       margin-top: 6px;
@@ -285,11 +353,54 @@ function ensureSearchCardMediaStyle(){
       font-weight: 800;
     }
 
+
+    .maru-search-home-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 9px;
+      padding: 8px 17px;
+      min-height: 38px;
+      border-radius: 11px;
+      border: 1px solid rgba(255, 166, 146, 0.92);
+      background: linear-gradient(180deg, #ffe3da 0%, #ffcabc 100%);
+      color: #2389bd;
+      font-size: 20px;
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: -0.02em;
+      text-decoration: none;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(244, 140, 120, 0.20);
+      vertical-align: middle;
+    }
+    .maru-search-home-link:hover {
+      color: #156b99;
+      background: linear-gradient(180deg, #ffd8cf 0%, #ffb9aa 100%);
+      text-decoration: none;
+      transform: translateY(-1px);
+    }
+    .maru-search-header-title {
+      white-space: nowrap;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+    }
+    @media (max-width: 720px) {
+      .maru-search-home-link {
+        min-height: 34px;
+        padding: 7px 13px;
+        font-size: 17px;
+      }
+    }
+
     @media (max-width: 720px) {
       .maru-search-card-body {
         display: block;
       }
-      .maru-card-media {
+      .maru-card-media,
+      .maru-map-preview {
         width: 100%;
         max-width: 100%;
         margin-top: 10px !important;
@@ -303,6 +414,49 @@ function ensureSearchCardMediaStyle(){
 }
 
 ensureSearchCardMediaStyle();
+
+
+function resolveSearchHomeUrl(){
+  try {
+    const rawFrom = (new URLSearchParams(location.search).get('from') || '').trim();
+    if (rawFrom) {
+      const u = new URL(rawFrom, location.origin);
+      if (u.origin === location.origin) return u.pathname + u.search + u.hash;
+    }
+  } catch(e) {}
+  return '/';
+}
+
+function ensureSearchHeaderHomeLink(){
+  if (!isSearchPage || document.getElementById('maru-search-home-title-link')) return;
+  try {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode(node){
+        const text = String(node.nodeValue || '').replace(/\s+/g, ' ').trim();
+        if (text === 'IGDC Global Search') return NodeFilter.FILTER_ACCEPT;
+        return NodeFilter.FILTER_SKIP;
+      }
+    });
+    const node = walker.nextNode();
+    if (!node || !node.parentNode) return;
+
+    const wrap = document.createElement('span');
+    wrap.className = 'maru-search-header-title';
+
+    const home = document.createElement('a');
+    home.id = 'maru-search-home-title-link';
+    home.className = 'maru-search-home-link';
+    home.href = resolveSearchHomeUrl();
+    home.textContent = 'Home';
+    home.setAttribute('aria-label', 'Go to Home');
+
+    wrap.appendChild(home);
+    wrap.appendChild(document.createTextNode(' Global Search'));
+    node.parentNode.replaceChild(wrap, node);
+  } catch(e) {}
+}
+
+ensureSearchHeaderHomeLink();
 
 
 const type0 = normalizeSearchType(params.get('type') || 'all');
@@ -394,7 +548,7 @@ function syncSearchFromUrl(run = true) {
     runSearch(qp, activeType).then(() => {
       currentPage = pageParam;
       currentBlock = blockParam;
-      renderPage(currentPage);
+      loadServerPageAndRender(currentPage);
     });
   } else if (run && !qp) {
     allItems = [];
@@ -444,7 +598,7 @@ window.addEventListener('popstate', (e) => {
     runSearch(q, nextType).then(() => {
       currentPage = page;
       currentBlock = block;
-      renderPage(currentPage);
+      loadServerPageAndRender(currentPage);
     });
     return;
   }
@@ -452,7 +606,7 @@ window.addEventListener('popstate', (e) => {
   // 5️⃣ 바로 페이지 복원
   currentPage = page;
   currentBlock = block;
-  renderPage(currentPage);
+  loadServerPageAndRender(currentPage);
 });
 
 if (q0) {
@@ -460,6 +614,7 @@ if (q0) {
 }
 
 ensureSearchTabs();
+bindRelatedSearchSuggest();
 updateSearchTabsActive();
 
 if (q0) {
@@ -481,7 +636,19 @@ btn.addEventListener('click', (e) => {
     const currentQ = (new URLSearchParams(location.search).get('q') || '').trim();
 
     if (currentQ === q) {
-      runSearch(q, activeType);
+      const nextType = 'all';
+      activeType = nextType;
+      updateSearchTabsActive();
+      const u = new URL(location.href);
+      u.searchParams.set('q', q);
+      u.searchParams.set('page', '1');
+      u.searchParams.set('block', '0');
+      u.searchParams.delete('type');
+      u.searchParams.set('residentFirst', '1');
+      u.searchParams.set('sanmaruFirst', '1');
+      u.searchParams.set('residentSwitch', '1');
+      history.pushState({ q, type: nextType, page: 1, block: 0 }, '', u.toString());
+      runSearch(q, nextType);
       return;
     }
 
@@ -509,7 +676,7 @@ btn.addEventListener('click', (e) => {
     return;
   }
 
-  window.location.assign(buildSearchUrl(q));
+  try { window.top.location.href = buildSearchUrl(q); } catch(e) { window.location.assign(buildSearchUrl(q)); }
 });
 
 input.addEventListener('keydown', (e) => {
@@ -525,7 +692,19 @@ input.addEventListener('keydown', (e) => {
     const currentQ = (new URLSearchParams(location.search).get('q') || '').trim();
 
     if (currentQ === q) {
-      runSearch(q, activeType);
+      const nextType = 'all';
+      activeType = nextType;
+      updateSearchTabsActive();
+      const u = new URL(location.href);
+      u.searchParams.set('q', q);
+      u.searchParams.set('page', '1');
+      u.searchParams.set('block', '0');
+      u.searchParams.delete('type');
+      u.searchParams.set('residentFirst', '1');
+      u.searchParams.set('sanmaruFirst', '1');
+      u.searchParams.set('residentSwitch', '1');
+      history.pushState({ q, type: nextType, page: 1, block: 0 }, '', u.toString());
+      runSearch(q, nextType);
       return;
     }
 
@@ -553,7 +732,7 @@ input.addEventListener('keydown', (e) => {
     return;
   }
 
-  window.location.assign(buildSearchUrl(q));
+  try { window.top.location.href = buildSearchUrl(q); } catch(e) { window.location.assign(buildSearchUrl(q)); }
 });
 
 function unwrap(x){
@@ -607,6 +786,140 @@ function normalizeSearchPayload(payload){
     (Array.isArray(root.displaySections) && root.displaySections) ||
     [];
   return { payload: root, items, pageItems, viewportSections };
+}
+
+function serverTotalFromPayload(payload, fallbackCount){
+  const root = unwrap(payload) || payload || {};
+  const meta = root.meta || {};
+  const vp = root.visiblePagePack || meta.viewport || (root.sectionPack && root.sectionPack.visiblePagePack) || {};
+  const total = Number(
+    vp.totalVisibleItems ||
+    vp.fullCandidateCount ||
+    meta.totalCandidates ||
+    meta.fullCandidateCount ||
+    meta.totalItems ||
+    root.totalCandidates ||
+    root.totalItems ||
+    fallbackCount ||
+    0
+  ) || 0;
+  const cappedTotal = Math.min(Math.max(total, fallbackCount || 0), MAX_PAGER_PAGES * PAGE_SIZE);
+  return cappedTotal;
+}
+
+function pageItemsFromPack(pack){
+  if(!pack) return [];
+  if(Array.isArray(pack.pageItems) && pack.pageItems.length) return pack.pageItems;
+  const payload = pack.payload || pack;
+  if(payload && payload.visiblePagePack && Array.isArray(payload.visiblePagePack.pageItems) && payload.visiblePagePack.pageItems.length) return payload.visiblePagePack.pageItems;
+  if(payload && Array.isArray(payload.pageItems) && payload.pageItems.length) return payload.pageItems;
+  return Array.isArray(pack.items) ? pack.items.slice(0, PAGE_SIZE) : [];
+}
+
+function preloadPageCountFromItems(items){
+  return Math.max(1, Math.ceil((Array.isArray(items) ? items.length : 0) / PAGE_SIZE));
+}
+
+function adaptiveSearchTarget(q, type){
+  const text = String(q || '').trim().toLowerCase();
+  const words = text.split(/\s+/).filter(Boolean);
+  const safeType = normalizeSearchType(type || activeType || 'all');
+  const broadHints = /(세계|전세계|글로벌|뉴스|영상|이미지|관광|여행|ai|인공지능|기술|시장|경제|정치|스포츠|금융|도서|쇼핑|웹툰|공공|학술|논문|사이트|홈페이지|global|world|news|tour|travel|technology|market|sports|finance|book|shopping|webtoon)/i;
+  const narrowHints = /(카페|맛집|식당|주소|전화|위치|지도|병원|약국|학교|교회|상호|주차|near me|cafe|restaurant|address|map)/i;
+
+  // Search.js remains only a receiver/container. This target is the amount of
+  // Sanmaru/MaruSearch supply the UI is ready to cache for search pages. It is
+  // separate from the 4,500~5,000 Search Bank Snapshot supply used by front pages.
+  // Broad searches may keep filling up to 4,500 candidates, while first paint
+  // still renders only the current viewport and uses continuous intake for the rest.
+  let target = 3200;
+  if (safeType === 'all') target = 4500;
+  if (safeType !== 'all') target = 2400;
+  if (words.length >= 3 || narrowHints.test(text)) target = Math.max(target, 2400);
+  if (words.length <= 1 || broadHints.test(text)) target = 4500;
+  if (/^(news|image|video|sns|blog|cafe|tour|site|academic|wiki|public_data)$/.test(safeType)) target = Math.max(target, 3000);
+  if (/^(map|knowledge|book|shopping|sports|finance|webtoon)$/.test(safeType)) target = Math.max(2200, Math.min(target, 3200));
+
+  return Math.max(INITIAL_PRELOAD_TARGET, Math.min(MAX_SMOOTH_CANDIDATES, target));
+}
+
+function firstPaintLimitFor(q, type){
+  // Keep the UI first paint light, but ask Sanmaru for the first 12 pages of
+  // already-prepared resident candidates. The DOM still renders only the
+  // current viewport; the extra candidates keep the initial pager at 10~12 pages
+  // and let page navigation feel immediate.
+  return Math.min(INITIAL_PRELOAD_TARGET, adaptiveSearchTarget(q, type));
+}
+
+function seedLoadedServerPagesFromItems(items, maxItems){
+  const list = Array.isArray(items) ? items : [];
+  const limit = Math.min(list.length, maxItems || INITIAL_DOM_RENDER_TARGET);
+  for(let offset = 0; offset < limit; offset += PAGE_SIZE){
+    const pageNo = Math.floor(offset / PAGE_SIZE) + 1;
+    const slice = list.slice(offset, offset + PAGE_SIZE);
+    if(slice.length) loadedServerPages.set(pageNo, slice);
+  }
+}
+
+function updateProgressiveTotalFromPayload(payload, fallbackCount, opts){
+  const total = serverTotalFromPayload(payload, fallbackCount || 0);
+  authoritativeServerTotalItems = Math.max(authoritativeServerTotalItems || 0, total || 0, fallbackCount || 0);
+  const minPages = Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, preloadPageCountFromItems(allItems));
+  const wantedPages = Math.max(minPages, Math.ceil((authoritativeServerTotalItems || fallbackCount || 0) / PAGE_SIZE));
+  const previousPages = Math.max(progressivePagerPages || 0, Math.ceil((serverTotalItems || 0) / PAGE_SIZE));
+  const nextPages = opts && opts.expandAll
+    ? Math.min(MAX_PROGRESSIVE_PAGER_PAGES, wantedPages)
+    : Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(minPages, previousPages, Math.min(wantedPages, previousPages + 8 || minPages)));
+  progressivePagerPages = Math.max(minPages, nextPages);
+  serverTotalItems = Math.max(serverTotalItems || 0, Math.min(authoritativeServerTotalItems || 0, progressivePagerPages * PAGE_SIZE));
+  return serverTotalItems;
+}
+
+function stopContinuousIntake(){
+  continuousIntakeSeq += 1;
+  continuousIntakeActive = false;
+}
+
+function sleepIntake(ms){
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function startContinuousIntake(q, type, seq){
+  if(!q || runSearch._seq !== seq) return;
+  const token = ++continuousIntakeSeq;
+  continuousIntakeActive = true;
+  const target = adaptiveSearchTarget(q, type);
+  authoritativeServerTotalItems = Math.max(authoritativeServerTotalItems || 0, target);
+  updateProgressiveTotalFromPayload(lastSearchPayload || {}, Math.max(target, allItems.length || 0));
+
+  let nextPage = Math.max(2, preloadPageCountFromItems(allItems) + 1);
+  const maxPages = Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(target / PAGE_SIZE)));
+
+  async function worker(){
+    while(continuousIntakeActive && continuousIntakeSeq === token && runSearch._seq === seq && nextPage <= maxPages){
+      const page = nextPage++;
+      if(loadedServerPages.has(page)) continue;
+      try{
+        const pack = await fetchSearch(q, type, page);
+        if(!continuousIntakeActive || continuousIntakeSeq !== token || runSearch._seq !== seq) return;
+        const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack))).slice(0, PAGE_SIZE);
+        if(pageSlice.length){
+          loadedServerPages.set(page, pageSlice);
+          allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice);
+          lastSearchPayload = pack && pack.payload || lastSearchPayload;
+          updateProgressiveTotalFromPayload(pack && pack.payload, allItems.length);
+          if(page === currentPage) renderPage(page, true);
+          else drawPager();
+          status.textContent = `${serverTotalItems || allItems.length} results for "${q}" · ${getTypeLabel(type)} · receiving...`;
+        }
+      }catch(e){
+        console.warn('continuous intake page skipped:', page, e);
+      }
+      await sleepIntake(INTAKE_BURST_DELAY_MS);
+    }
+  }
+
+  for(let i = 0; i < INTAKE_CONCURRENCY; i++) worker();
 }
 
     function safeText(v){
@@ -669,21 +982,89 @@ function normalizeSearchPayload(payload){
   return out;
 }
 
-async function fetchSearch(q, type = activeType){
+function searchDisplayKeyForItem(it){
+  if(!it) return '';
+  const rawUrl = String(it.url || it.link || it.openUrl || '').trim();
+  const normUrl = rawUrl.toLowerCase();
+  const isPlaceholderUrl =
+    !rawUrl ||
+    rawUrl === '#' ||
+    rawUrl === '/' ||
+    normUrl === 'javascript:void(0)' ||
+    normUrl.startsWith('javascript:');
+
+  if(!isPlaceholderUrl) return normUrl;
+  return String(
+    it.id || it.indexId || it.originalId ||
+    ((String(it.title || it.name || '').trim()) + '|' + String((it.source && (it.source.name || it.source.platform)) || it.source || it.provider || '').trim())
+  ).toLowerCase();
+}
+
+function displayRichnessScore(it){
+  if(!it || typeof it !== 'object') return 0;
+  let score = 0;
+  const card = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+  const media = (it.media && typeof it.media === 'object') ? it.media : {};
+  const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
+  const summaryText = [
+    card.summary, card.description, card.body, card.text,
+    it.displaySummary, it.summary, it.snippet, it.description, it.contentSnippet,
+    it.excerpt, it.abstract, it.text, it.content, it.metaDescription, it.ogDescription
+  ].map(v => String(v || '').trim()).filter(Boolean).join(' ');
+  if(summaryText.length >= 18) score += Math.min(40, Math.floor(summaryText.length / 12));
+  if(card && Object.keys(card).length) score += 18;
+  if(card.showMapPreview || it.__maruAllowMapPreview || it.mapQuery || it.placeInfo) score += 20;
+  if(card.thumbnail || card.image || (Array.isArray(card.imageSet) && card.imageSet.length)) score += 25;
+  if(it.thumbnail || it.thumb || it.image || it.ogImage || it.og_image || (Array.isArray(it.imageSet) && it.imageSet.length)) score += 20;
+  if(preview.thumbnail || preview.image || preview.poster || preview.mp4 || preview.webm) score += 18;
+  if(it.videoId || it.videoUrl || it.embedUrl || /youtube|youtu\.be|ytimg/i.test(String([it.url, it.link, it.thumbnail, it.image].join(' ')))) score += 14;
+  return score;
+}
+
+function mergeItemsPreferDisplayRichness(baseItems, incomingItems){
+  const out = [];
+  const pos = new Map();
+  function addOrMerge(it){
+    if(!it) return;
+    const key = searchDisplayKeyForItem(it);
+    if(!key) return;
+    if(!pos.has(key)){
+      pos.set(key, out.length);
+      out.push(it);
+      return;
+    }
+    const idx = pos.get(key);
+    const prev = out[idx];
+    const merged = Object.assign({}, prev || {}, it || {});
+    const prevScore = displayRichnessScore(prev);
+    const nextScore = displayRichnessScore(it);
+    out[idx] = nextScore >= prevScore ? merged : Object.assign({}, it || {}, prev || {});
+  }
+  (Array.isArray(baseItems) ? baseItems : []).forEach(addOrMerge);
+  (Array.isArray(incomingItems) ? incomingItems : []).forEach(addOrMerge);
+  return out;
+}
+
+async function fetchSearch(q, type = activeType, page = 1){
   const safeType = normalizeSearchType(type);
   signalSanmaruSearch(q, safeType, 'maru-search-fetch');
 
   const sp = new URLSearchParams();
   sp.set('q', q);
-  sp.set('limit', String(FETCH_LIMIT));
+  sp.set('limit', String(adaptiveSearchTarget(q, safeType)));
   sp.set('type', safeType);
   sp.set('tab', safeType);
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
+  sp.set('page', String(Math.max(1, Number(page) || 1)));
+  sp.set('visiblePage', String(Math.max(1, Number(page) || 1)));
+  sp.set('pageWindowOnly', '1');
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
   sp.set('routeOwner', 'sanmaru');
   sp.set('naturalFlow', '1');
+  sp.set('smoothIntake', '1');
+  sp.set('noBlockingWide', '1');
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
@@ -705,6 +1086,39 @@ async function fetchSearch(q, type = activeType){
   }
 }
 
+async function fetchInstantSearchPack(q, type = activeType){
+  const safeType = normalizeSearchType(type);
+  const sp = new URLSearchParams();
+  sp.set('action', 'instant-supply');
+  sp.set('q', q);
+  sp.set('query', q);
+  sp.set('type', safeType);
+  sp.set('tab', safeType);
+  sp.set('limit', String(firstPaintLimitFor(q, safeType)));
+  sp.set('firstPaintLimit', String(firstPaintLimitFor(q, safeType)));
+  sp.set('candidatePool', String(adaptiveSearchTarget(q, safeType)));
+  sp.set('candidatePoolTarget', String(adaptiveSearchTarget(q, safeType)));
+  sp.set('initialPreloadPages', String(INITIAL_PRELOAD_PAGES));
+  sp.set('initialPreloadTarget', String(INITIAL_PRELOAD_TARGET));
+  sp.set('perPage', String(PAGE_SIZE));
+  sp.set('visibleCardsPerPage', String(PAGE_SIZE));
+  sp.set('providerPassthrough', '1');
+  sp.set('residentFirst', '1');
+  sp.set('sanmaruFirst', '1');
+  sp.set('reason', 'search-ui-first-paint');
+
+  try {
+    const r = await fetch(`${SANMARU_BOOT_URL}?${sp.toString()}`, { cache: 'no-store' });
+    if (!r.ok) return { items: [], payload: null, pageItems: [], viewportSections: [] };
+    const json = await r.json();
+    if (!json || json.status === 'error' || json.status === 'blocked') return { items: [], payload: json || null, pageItems: [], viewportSections: [] };
+    return normalizeSearchPayload(json);
+  } catch (e) {
+    console.warn('fetchInstantSearchPack failed:', e);
+    return { items: [], payload: null, pageItems: [], viewportSections: [] };
+  }
+}
+
     function renderSkeleton(count = 6){
       results.innerHTML = '';
       for (let i = 0; i < count; i++){
@@ -721,6 +1135,257 @@ async function fetchSearch(q, type = activeType){
       }
     }
 
+
+
+
+    function isLikelySearchInputElement(el){
+      if(!el || !el.tagName || String(el.tagName).toLowerCase() !== 'input') return false;
+      const id = String(el.id || '').toLowerCase();
+      const name = String(el.name || '').toLowerCase();
+      const cls = String(el.className || '').toLowerCase();
+      const ph = String(el.getAttribute('placeholder') || '').toLowerCase();
+      const role = String(el.getAttribute('role') || '').toLowerCase();
+      const type = String(el.type || '').toLowerCase();
+      return el === input || id.includes('search') || name.includes('search') || cls.includes('search') || ph.includes('검색') || ph.includes('search') || role === 'searchbox' || type === 'search';
+    }
+
+    function runGlobalSearch(){
+      const anchor = activeSuggestInput || input;
+      const q = (anchor && anchor.value ? anchor.value : input.value || '').trim();
+      if(!q) return;
+      if(anchor && anchor !== input) input.value = q;
+      if(isSearchPage){
+        const nextType = 'all';
+        activeType = nextType;
+        updateSearchTabsActive();
+        const u = new URL(location.href);
+        u.searchParams.set('q', q);
+        u.searchParams.set('page', '1');
+        u.searchParams.set('block', '0');
+        u.searchParams.delete('type');
+        u.searchParams.set('residentFirst', '1');
+        u.searchParams.set('sanmaruFirst', '1');
+        u.searchParams.set('residentSwitch', '1');
+        const safeReturnUrl = getSafeReturnUrl();
+        if(safeReturnUrl) u.searchParams.set('from', safeReturnUrl);
+        history.pushState({ q, type: nextType, from: safeReturnUrl || '' }, '', u.toString());
+        runSearch(q, nextType);
+      } else {
+        try { window.top.location.href = buildSearchUrl(q); } catch(e) { window.location.assign(buildSearchUrl(q)); }
+      }
+    }
+
+    function ensureRelatedSearchSuggestStyle(){
+      if(document.getElementById('maru-related-search-style')) return;
+      const style = document.createElement('style');
+      style.id = 'maru-related-search-style';
+      style.textContent = `
+        #maru-related-suggest-box {
+          position: fixed;
+          z-index: 9999;
+          display: none;
+          background: #ffffff;
+          border: 1px solid #e5e7eb;
+          border-radius: 14px;
+          box-shadow: 0 14px 34px rgba(15, 23, 42, 0.16);
+          padding: 8px;
+          max-height: 420px;
+          overflow-y: auto;
+        }
+        #maru-related-suggest-box[data-open="1"] { display: block; }
+        .maru-related-suggest-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          width: 100%;
+          padding: 10px 12px;
+          border: 0;
+          border-radius: 10px;
+          background: transparent;
+          color: #111827;
+          cursor: pointer;
+          text-align: left;
+          font-size: 14px;
+          font-weight: 700;
+        }
+        .maru-related-suggest-row:hover,
+        .maru-related-suggest-row:focus { background: #f3f4f6; outline: none; }
+        .maru-related-suggest-icon {
+          flex: 0 0 auto;
+          width: 22px;
+          height: 22px;
+          border-radius: 999px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: #eef2ff;
+          color: #4f46e5;
+          font-size: 13px;
+        }
+        .maru-related-suggest-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .maru-related-suggest-caption {
+          padding: 7px 12px 5px;
+          color: #64748b;
+          font-size: 12px;
+          font-weight: 800;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    function ensureRelatedSuggestBox(){
+      ensureRelatedSearchSuggestStyle();
+      let box = document.getElementById('maru-related-suggest-box');
+      if(box) return box;
+      box = document.createElement('div');
+      box.id = 'maru-related-suggest-box';
+      box.setAttribute('role', 'listbox');
+      document.body.appendChild(box);
+      return box;
+    }
+
+    let activeSuggestInput = input;
+
+    function positionRelatedSuggestBox(targetInput){
+      const box = ensureRelatedSuggestBox();
+      const anchor = targetInput || activeSuggestInput || input;
+      if(!anchor || !box) return;
+      const r = anchor.getBoundingClientRect();
+      box.style.left = Math.max(8, r.left) + 'px';
+      box.style.top = (r.bottom + 6) + 'px';
+      box.style.width = Math.max(280, r.width) + 'px';
+    }
+
+    function relatedSearchTermsFor(q){
+      const base = String(q || '').trim().replace(/\s+/g, ' ');
+      if(!base) return [];
+      const lower = base.toLowerCase();
+      const broadPlace = /서울|부산|대구|인천|광주|대전|울산|제주|대한민국|한국|뉴욕|도쿄|오사카|파리|런던|베트남|하노이|호치민|seoul|busan|korea|new york|tokyo|paris|london|vietnam/.test(lower);
+      const foodOrLocal = /카페|맛집|식당|시장|호텔|숙소|관광|여행|축제|공원|박물관|cafe|restaurant|hotel|market|travel|tour/.test(lower);
+      const mediaIntent = /영상|영화|드라마|음악|유튜브|쇼츠|sns|video|movie|youtube|shorts/.test(lower);
+      let suffixes;
+      if(mediaIntent){
+        suffixes = ['유튜브', '쇼츠', '영상', '뉴스', '인스타그램', '틱톡', '블로그', '이미지', '리뷰', '추천'];
+      }else if(foodOrLocal || broadPlace){
+        suffixes = ['지도', '날씨', '맛집', '카페', '볼만한 곳', '관광', '여행 코스', '축제', '호텔', '교통', '뉴스', '블로그', '유튜브', '이미지'];
+      }else{
+        suffixes = ['뜻', '뉴스', '이미지', '영상', '블로그', '리뷰', '가격', '방법', '추천', '비교', '공식', '위키'];
+      }
+      const out = [];
+      const seen = new Set();
+      suffixes.forEach(s => {
+        const term = `${base} ${s}`.trim();
+        const key = term.toLowerCase();
+        if(key !== lower && !seen.has(key)){
+          seen.add(key); out.push(term);
+        }
+      });
+      return out.slice(0, 12);
+    }
+
+    function hideRelatedSuggestBox(){
+      const box = document.getElementById('maru-related-suggest-box');
+      if(box) box.dataset.open = '0';
+    }
+
+    function showRelatedSuggestBox(targetInput){
+      const anchor = targetInput || activeSuggestInput || input;
+      activeSuggestInput = anchor || input;
+      const q = anchor ? anchor.value.trim() : '';
+      const terms = relatedSearchTermsFor(q);
+      const box = ensureRelatedSuggestBox();
+      if(!q || !terms.length){ hideRelatedSuggestBox(); return; }
+      box.innerHTML = '';
+      const cap = document.createElement('div');
+      cap.className = 'maru-related-suggest-caption';
+      cap.textContent = '연관 검색어';
+      box.appendChild(cap);
+      terms.forEach(term => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'maru-related-suggest-row';
+        row.setAttribute('role', 'option');
+        const icon = document.createElement('span');
+        icon.className = 'maru-related-suggest-icon';
+        icon.textContent = '⌕';
+        const text = document.createElement('span');
+        text.className = 'maru-related-suggest-text';
+        text.textContent = term;
+        row.appendChild(icon);
+        row.appendChild(text);
+        row.addEventListener('mousedown', e => e.preventDefault());
+        row.addEventListener('click', () => {
+          const anchor = activeSuggestInput || input;
+          if(anchor) anchor.value = term;
+          if(anchor && anchor !== input) input.value = term;
+          hideRelatedSuggestBox();
+          runGlobalSearch();
+        });
+        box.appendChild(row);
+      });
+      positionRelatedSuggestBox(anchor);
+      box.dataset.open = '1';
+    }
+
+    function bindRelatedSearchSuggest(){
+      const selector = [
+        '#searchInput',
+        '#globalSearchInput',
+        '#homeSearchInput',
+        '#mainSearchInput',
+        '#heroSearchInput',
+        'input[type="search"]',
+        'input[data-search-input]',
+        'input[name*="search" i]',
+        'input[id*="search" i]',
+        'input[class*="search" i]',
+        'input[placeholder*="검색" i]',
+        'input[placeholder*="search" i]'
+      ].join(',');
+
+      const targets = Array.from(new Set([input].concat(Array.from(document.querySelectorAll(selector))).filter(Boolean)))
+        .filter(isLikelySearchInputElement);
+
+      targets.forEach(target => {
+        if(target.__maruRelatedSuggestBound) return;
+        target.__maruRelatedSuggestBound = true;
+        target.addEventListener('input', () => { activeSuggestInput = target; showRelatedSuggestBox(target); });
+        target.addEventListener('focus', () => { activeSuggestInput = target; showRelatedSuggestBox(target); });
+        target.addEventListener('blur', () => setTimeout(hideRelatedSuggestBox, 160));
+        target.addEventListener('keydown', e => {
+          if(e.key === 'Escape') hideRelatedSuggestBox();
+          if(e.key === 'Enter') {
+            activeSuggestInput = target;
+            hideRelatedSuggestBox();
+          }
+        });
+      });
+
+      if(!bindRelatedSearchSuggest.__windowBound){
+        bindRelatedSearchSuggest.__windowBound = true;
+        window.addEventListener('resize', () => positionRelatedSuggestBox(activeSuggestInput));
+        window.addEventListener('scroll', () => positionRelatedSuggestBox(activeSuggestInput), true);
+        document.addEventListener('input', e => {
+          const target = e.target;
+          if(!isLikelySearchInputElement(target)) return;
+          activeSuggestInput = target;
+          showRelatedSuggestBox(target);
+        }, true);
+        document.addEventListener('focusin', e => {
+          const target = e.target;
+          if(!isLikelySearchInputElement(target)) return;
+          activeSuggestInput = target;
+          showRelatedSuggestBox(target);
+          bindRelatedSearchSuggest();
+        });
+        try {
+          const mo = new MutationObserver(() => bindRelatedSearchSuggest());
+          mo.observe(document.body, { childList: true, subtree: true });
+        } catch(e) {}
+        setTimeout(bindRelatedSearchSuggest, 500);
+        setTimeout(bindRelatedSearchSuggest, 1500);
+      }
+    }
 
     function ensureSearchTabs(){
       if (!isSearchPage) return null;
@@ -847,12 +1512,32 @@ async function fetchSearch(q, type = activeType){
         'pixel',
         'tracking',
         'analytics',
-        'captcha'
+        'captcha',
+        'staticmap',
+        'maps.googleapis.com',
+        'map.naver.com',
+        'naver_map',
+        '/maps/',
+        '/map/',
+        'map_tile',
+        'tile.openstreetmap',
+        'banner',
+        'placard',
+        'adserver',
+        'doubleclick',
+        'advertisement',
+        'promo-banner'
       ];
 
       if(hardBad.some(k => s.includes(k))) return true;
       if(/\.(ico)(\?|#|$)/i.test(s)) return true;
       if(/\.(svg)(\?|#|$)/i.test(s) && /(logo|symbol|icon|emblem|brand|ci|bi)/i.test(s)) return true;
+
+      // Brand/logo images must not be promoted as large media snapshots.
+      // Keep the small favicon in the link row, but reject logos from card media.
+      const logoLike = /(^|[\/_\-.])(logo|logotype|brand|symbol|emblem|ci|bi)([\/_\-.]|$)/i.test(s) ||
+        /(naver|google|youtube|tiktok|facebook|instagram|twitter|x)[^?#]*(logo|brand|symbol|favicon)/i.test(s);
+      if(logoLike) return true;
 
       return false;
     }
@@ -870,11 +1555,29 @@ async function fetchSearch(q, type = activeType){
       return false;
     }
 
+    function isMapImageUrlClient(imageUrl){
+      const s = String(imageUrl || '').toLowerCase();
+      return /staticmap|maps\.googleapis|google\.com\/maps|map\.naver\.com|naver_map|\/maps\/|\/map\/|map_tile|tile\.openstreetmap/.test(s);
+    }
+
+    function isProviderLogoOrBannerImageClient(imageUrl, it){
+      const s = String(imageUrl || '').toLowerCase();
+      const host = (() => { try { return new URL(s, location.origin).hostname.toLowerCase(); } catch(e){ return ''; } })();
+      const titleSummary = String([it && it.title, it && it.summary, it && it.description].filter(Boolean).join(' ')).toLowerCase();
+      if(/google\.com\/s2\/favicons|favicon|apple-touch-icon|logo|logotype|brandmark|symbol|emblem|\/ci[\/_-]|\/bi[\/_-]/i.test(s)) return true;
+      if(/(naver|google|youtube|facebook|instagram|tiktok|twitter|x)[^?#]*(logo|favicon|brand|symbol|icon)/i.test(s)) return true;
+      if(/banner|placard|adserver|doubleclick|advertisement|promo-banner|popup/i.test(s)) return true;
+      if(/banner|placard|현수막|배너|광고/.test(titleSummary) && !/news|article|photo|image|youtube|ytimg|sns|instagram|tiktok/i.test(host + ' ' + s)) return true;
+      return false;
+    }
+
     function isMeaningfulImageForItemClient(imageUrl, it){
       const s = String(imageUrl || '').trim();
       if(!s) return false;
       if(!/^https?:\/\//i.test(s) && !s.startsWith('/')) return false;
       if(isHardRejectImageUrlClient(s)) return false;
+      if(isMapImageUrlClient(s)) return false;
+      if(isProviderLogoOrBannerImageClient(s, it)) return false;
       return true;
     }
 
@@ -910,7 +1613,14 @@ async function fetchSearch(q, type = activeType){
     }
 
     function preferredYoutubeThumbClient(it){
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
       const candidates = [
+        displayCard.videoId,
+        displayCard.videoUrl,
+        displayCard.watchUrl,
+        displayCard.embedUrl,
+        displayCard.thumbnail,
+        displayCard.image,
         it && it.videoId,
         it && it.url,
         it && it.link,
@@ -920,7 +1630,9 @@ async function fetchSearch(q, type = activeType){
         it && it.thumbnail,
         it && it.thumb,
         it && it.image
-      ].concat(Array.isArray(it && it.imageSet) ? it.imageSet : []);
+      ]
+        .concat(Array.isArray(displayCard.imageSet) ? displayCard.imageSet : [])
+        .concat(Array.isArray(it && it.imageSet) ? it.imageSet : []);
 
       for (const v of candidates) {
         const id = String(v || '').length === 11 && /^[A-Za-z0-9_-]{11}$/.test(String(v || ''))
@@ -933,11 +1645,44 @@ async function fetchSearch(q, type = activeType){
 
     function collectNaturalImages(it){
       const sourceText = String((it && it.source) || '').toLowerCase();
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
+      const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
+      const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
+
       const raw = []
+        .concat(displayCard.thumbnail ? [displayCard.thumbnail] : [])
+        .concat(displayCard.image ? [displayCard.image] : [])
+        .concat(Array.isArray(displayCard.imageSet) ? displayCard.imageSet : [])
+        .concat(displayCard.preview && displayCard.preview.thumbnail ? [displayCard.preview.thumbnail] : [])
+        .concat(displayCard.preview && displayCard.preview.image ? [displayCard.preview.image] : [])
         .concat(it && it.thumbnail ? [it.thumbnail] : [])
         .concat(it && it.thumb ? [it.thumb] : [])
         .concat(it && it.image ? [it.image] : [])
-        .concat(Array.isArray(it && it.imageSet) ? it.imageSet : []);
+        .concat(it && it.poster ? [it.poster] : [])
+        .concat(it && it.cover ? [it.cover] : [])
+        .concat(it && it.og_image ? [it.og_image] : [])
+        .concat(it && it.ogImage ? [it.ogImage] : [])
+        .concat(payload.thumbnail ? [payload.thumbnail] : [])
+        .concat(payload.thumb ? [payload.thumb] : [])
+        .concat(payload.image ? [payload.image] : [])
+        .concat(payload.image_url ? [payload.image_url] : [])
+        .concat(payload.og_image ? [payload.og_image] : [])
+        .concat(payload.ogImage ? [payload.ogImage] : [])
+        .concat(payload.poster ? [payload.poster] : [])
+        .concat(payload.cover ? [payload.cover] : [])
+        .concat(data.thumbnail ? [data.thumbnail] : [])
+        .concat(data.thumb ? [data.thumb] : [])
+        .concat(data.image ? [data.image] : [])
+        .concat(data.og_image ? [data.og_image] : [])
+        .concat(data.poster ? [data.poster] : [])
+        .concat(preview.poster ? [preview.poster] : [])
+        .concat(preview.thumbnail ? [preview.thumbnail] : [])
+        .concat(preview.image ? [preview.image] : [])
+        .concat(Array.isArray(it && it.imageSet) ? it.imageSet : [])
+        .concat(Array.isArray(payload.imageSet) ? payload.imageSet : [])
+        .concat(Array.isArray(data.imageSet) ? data.imageSet : []);
 
       const out = [];
       const seen = new Set();
@@ -956,6 +1701,12 @@ async function fetchSearch(q, type = activeType){
         if (!/^https?:\/\//i.test(s) && !s.startsWith('/')) return;
         if (!isMeaningfulImageForItemClient(s, it)) return;
 
+        // Provider logos and brand icons are source markers, not thumbnails.
+        // They must never be promoted into the visual card area.
+        const providerLogoLike = /(google|naver|youtube|facebook|instagram|tiktok|twitter|x)[^?#]*(logo|favicon|brand|symbol|icon)/i.test(low) ||
+          /(logo|favicon|brandmark|symbol|emblem|ci|bi)[^?#]*\.(png|jpg|jpeg|webp|svg)(\?|#|$)/i.test(low);
+        if (providerLogoLike) return;
+
         let key = s.split('#')[0].toLowerCase();
         try {
           const u = new URL(s, location.origin);
@@ -968,9 +1719,8 @@ async function fetchSearch(q, type = activeType){
         out.push(s);
       });
 
-      // YouTube result cards must expose one representative visual only. If an
-      // iframe is rendered, this prevents a second small thumbnail from being
-      // appended next to the player.
+      // YouTube result cards should expose a representative thumbnail when a
+      // full player is not appropriate or when the provider did not include an image.
       if (isYoutubeLikeItemClient(it)) {
         const best = preferredYoutubeThumbClient(it) || out[0] || '';
         return best ? [best] : [];
@@ -983,7 +1733,6 @@ async function fetchSearch(q, type = activeType){
 
       return out.slice(0, 3);
     }
-
 
     function classifyVisualKindClient(it){
       const source = String((it && it.source) || '').toLowerCase();
@@ -1018,70 +1767,190 @@ async function fetchSearch(q, type = activeType){
     }
 
 
+    function normalizeDisplayGroupClient(group){
+      const raw = String(group || '').trim();
+      const map = {
+        official_authority: 'authority',
+        official: 'authority',
+        gov: 'authority',
+        government: 'authority',
+        public: 'public_data',
+        public_data: 'public_data',
+        opendata: 'public_data',
+        open_data: 'public_data',
+        knowledge_wiki: 'knowledge',
+        wiki: 'wiki',
+        encyclopedia: 'knowledge',
+        academic: 'academic',
+        scholar: 'academic',
+        research: 'academic',
+        paper: 'academic',
+        map_local_tour: 'local_tour',
+        local: 'local_tour',
+        map: 'local_tour',
+        tour: 'local_tour',
+        video_vlog: 'video',
+        video: 'video',
+        youtube: 'video',
+        image_gallery: 'image',
+        image: 'image',
+        photo: 'image',
+        blog_review: 'blog',
+        blog: 'blog',
+        cafe: 'cafe',
+        forum: 'community',
+        community: 'community',
+        community_sns: 'social',
+        sns: 'social',
+        social: 'social',
+        shopping_product: 'shopping',
+        shopping: 'shopping',
+        commerce: 'shopping',
+        product: 'shopping',
+        sports: 'sports',
+        finance: 'finance',
+        stock: 'finance',
+        webtoon: 'webtoon',
+        company_web: 'site',
+        corporate_homepage: 'site',
+        business_site: 'site',
+        official_site: 'site',
+        homepage: 'site',
+        website: 'site',
+        site: 'site',
+        company: 'site',
+        corporate: 'site',
+        business: 'site',
+        general_web: 'web'
+      };
+      return map[raw] || raw;
+    }
+
     function displayGroupOfItem(it){
-      return String((it && it.displayGroup) || '').trim() || inferDisplayGroupClient(it);
+      const rawGroup = String((it && (it.displayGroup || it.displayGroupLabel || it.group)) || '').trim();
+      const normalized = normalizeDisplayGroupClient(rawGroup);
+      const inferred = inferDisplayGroupClient(it);
+
+      // Keep server groups when they are already precise, but allow broad groups
+      // such as web/media/knowledge/community to split into richer portal lanes.
+      if(!rawGroup) return inferred;
+      const broadGroups = new Set(['web','general_web','media','knowledge','community','social']);
+      if(broadGroups.has(normalized) && inferred && inferred !== normalized && inferred !== 'web') return inferred;
+      return normalized || inferred || 'web';
+    }
+
+    function isHomepageLikeUrlClient(url){
+      try {
+        const u = new URL(String(url || ''), location.origin);
+        const host = u.hostname.replace(/^www\./, '').toLowerCase();
+        const path = String(u.pathname || '/').replace(/\/+$/,'/');
+        const parts = path.split('/').filter(Boolean);
+        if(!host || !/\./.test(host)) return false;
+        if(parts.length === 0) return true;
+        if(parts.length === 1 && /^(home|main|company|about|intro|kr|ko|en|index)$/i.test(parts[0])) return true;
+        return false;
+      } catch(e) { return false; }
+    }
+
+    function isKnownNonSiteHostClient(host){
+      host = String(host || '').toLowerCase();
+      return /(^|\.)(youtube\.com|youtu\.be|instagram\.com|facebook\.com|tiktok\.com|x\.com|twitter\.com|naver\.com|daum\.net|google\.com|google\.co|bing\.com|wikipedia\.org|namu\.wiki)$/i.test(host) ||
+        /(news|blog|cafe|shopping|shop|book|maps|map|finance|sports|webtoon)/i.test(host);
     }
 
     function inferDisplayGroupClient(it){
       const source = String((it && it.source) || '').toLowerCase();
+      const provider = String((it && (it.provider || it.channel)) || '').toLowerCase();
       const type = String((it && it.type) || '').toLowerCase();
+      const category = String((it && it.category) || '').toLowerCase();
       const mediaType = String((it && it.mediaType) || '').toLowerCase();
       const title = String((it && it.title) || '').toLowerCase();
-      const summary = String((it && (it.summary || it.description)) || '').toLowerCase();
+      const summary = String((it && (it.summary || it.snippet || it.description || it.contentSnippet || it.excerpt || it.abstract)) || '').toLowerCase();
       const url = String((it && (it.url || it.link)) || '').toLowerCase();
       const host = domainOf(url).toLowerCase();
-      const text = `${source} ${type} ${mediaType} ${title} ${summary} ${host}`;
+      const text = `${source} ${provider} ${type} ${category} ${mediaType} ${title} ${summary} ${host}`;
 
-      if (source.includes('news') || type === 'news' || text.includes('뉴스') || text.includes('속보') || text.includes('latest') || text.includes('breaking')) return 'news';
-      if (mediaType === 'image' || type === 'image' || mediaType === 'video' || type === 'video' || source.includes('image') || source.includes('youtube')) return 'media';
-      if (source.includes('local') || source.includes('map') || text.includes('관광') || text.includes('여행') || text.includes('지도') || text.includes('맛집') || text.includes('공원') || text.includes('landmark') || text.includes('tour')) return 'local_tour';
-      if (source.includes('blog') || source.includes('cafe') || text.includes('블로그') || text.includes('카페')) return 'community';
-      if (host.includes('instagram.') || host.includes('facebook.') || host.includes('tiktok.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social')) return 'social';
-      if (source.includes('encyc') || source.includes('kin') || source.includes('book') || text.includes('지식') || text.includes('도서') || text.includes('책 ')) return 'knowledge';
+      if (/(shopping\.naver|shopping|coupang|gmarket|11st|auction|amazon|aliexpress|temu|shop|store|mall)/i.test(host + ' ' + url)) return 'shopping';
+      if (/(sports\.naver|espn|fifa|kbo|kfa|nba|mlb|uefa|sports|score|league)/i.test(host + ' ' + url + ' ' + text)) return 'sports';
+      if (/(finance\.naver|finance\.yahoo|investing|tradingview|marketwatch|bloomberg|reuters|stock|finance|securities|증권|주식|환율|코스피|나스닥)/i.test(host + ' ' + url + ' ' + text)) return 'finance';
+      if (/(comic\.naver|webtoon|kakao.*webtoon|comic|manga|웹툰|만화)/i.test(host + ' ' + url + ' ' + text)) return 'webtoon';
+
       if (host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr')) return 'authority';
+      if (source.includes('public') || provider.includes('public') || type === 'public_data' || category === 'public_data' || text.includes('공공데이터') || text.includes('공공 데이터') || text.includes('데이터포털') || text.includes('open data') || host.includes('data.go.kr')) return 'public_data';
+      if (source.includes('local') || source.includes('map') || type === 'map' || type === 'local' || mediaType === 'map' || category === 'map' || text.includes('관광') || text.includes('여행') || text.includes('지도') || text.includes('주소') || text.includes('위치') || text.includes('맛집') || text.includes('공원') || text.includes('landmark') || text.includes('tour')) return 'local_tour';
+      if (host.includes('wikipedia.org') || host.includes('namu.wiki') || source.includes('wiki') || type === 'wiki' || text.includes('위키')) return 'wiki';
+      if (source.includes('scholar') || source.includes('academic') || source.includes('paper') || source.includes('research') || source.includes('library') || type === 'academic' || type === 'paper' || type === 'research' || category === 'academic' || text.includes('학술') || text.includes('논문') || text.includes('연구') || text.includes('journal') || text.includes('citation') || text.includes('thesis') || host.includes('scholar.google') || host.includes('riss.kr') || host.includes('dbpia.co.kr') || host.includes('kci.go.kr')) return 'academic';
+      if (source.includes('encyc') || source.includes('kin') || type === 'knowledge' || category === 'knowledge' || text.includes('지식') || text.includes('백과') || text.includes('사전')) return 'knowledge';
+      if (source.includes('corporate') || source.includes('homepage') || source.includes('business') || source.includes('company') || type === 'site' || type === 'homepage' || type === 'business' || category === 'site' || text.includes('홈페이지') || text.includes('공식사이트') || text.includes('공식 사이트') || text.includes('기업') || text.includes('회사') || text.includes('business') || text.includes('company') || text.includes('corporate')) return 'site';
+      if (isHomepageLikeUrlClient(url) && !isKnownNonSiteHostClient(host) && !source.includes('news')) return 'site';
+      if (source.includes('book') || type === 'book' || category === 'book' || text.includes('도서') || text.includes('책 ') || text.includes('isbn') || host.includes('book.naver') || host.includes('books.google')) return 'book';
+      if (source.includes('news') || type === 'news' || category === 'news' || text.includes('뉴스') || text.includes('속보') || text.includes('latest') || text.includes('breaking')) return 'news';
+      if (source.includes('blog') || type === 'blog' || category === 'blog' || host.includes('blog.') || text.includes('블로그')) return 'blog';
+      if (source.includes('cafe') || type === 'cafe' || category === 'cafe' || host.includes('cafe.') || text.includes('카페')) return 'cafe';
+      if (source.includes('forum') || type === 'community' || category === 'community' || text.includes('커뮤니티') || text.includes('forum') || text.includes('게시판')) return 'community';
+      if (source.includes('shopping') || source.includes('shop') || source.includes('commerce') || type === 'shopping' || type === 'product' || category === 'shopping' || text.includes('쇼핑') || text.includes('상품') || text.includes('구매') || text.includes('가격') || host.includes('shopping.')) return 'shopping';
+      if (source.includes('sports') || type === 'sports' || category === 'sports' || text.includes('스포츠') || text.includes('축구') || text.includes('야구') || text.includes('농구') || text.includes('배구')) return 'sports';
+      if (source.includes('finance') || type === 'finance' || category === 'finance' || text.includes('금융') || text.includes('증권') || text.includes('주식') || text.includes('환율') || text.includes('코스피') || text.includes('나스닥')) return 'finance';
+      if (source.includes('webtoon') || type === 'webtoon' || category === 'webtoon' || text.includes('웹툰') || text.includes('만화') || text.includes('comic') || text.includes('manga')) return 'webtoon';
+      if (mediaType === 'image' || type === 'image' || category === 'image' || source.includes('image') || text.includes('이미지') || text.includes('사진')) return 'image';
+      if (mediaType === 'video' || type === 'video' || category === 'video' || source.includes('youtube') || source.includes('video') || host.includes('youtube.com') || host.includes('youtu.be') || text.includes('영상') || text.includes('유튜브')) return 'video';
+      if (host.includes('instagram.') || host.includes('facebook.') || host.includes('tiktok.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social') || type === 'sns' || category === 'sns') return 'social';
       return 'web';
     }
 
     function displayGroupLabel(group, sample){
-      const fallback = sample && sample.displayGroupLabel;
       const labels = {
-        authority: '공식/권위',
+        authority: '주요 정보',
+        public_data: '공공자료',
+        local_tour: '지도/지역',
+        knowledge: '지식/백과',
+        wiki: '위키',
+        academic: '학술/논문',
+        site: '사이트/홈페이지',
+        book: '도서',
         news: '뉴스',
-        local_tour: '지도/관광/지역',
+        blog: '블로그',
+        cafe: '카페',
+        community: '커뮤니티',
+        image: '이미지',
+        video: '영상',
         media: '이미지/영상',
-        social: '소셜',
-        community: '블로그/카페/커뮤니티',
-        knowledge: '지식/도서',
+        social: 'SNS',
         shopping: '쇼핑',
         sports: '스포츠',
         finance: '금융',
         webtoon: '웹툰',
-        web: '웹'
+        web: '일반 웹 결과'
       };
-      return fallback || labels[group] || '웹';
+      return labels[group] || '일반 웹 결과';
     }
 
     function displayGroupPreviewLimit(group, sample){
       const n = parseInt(sample && sample.displayGroupPreviewLimit, 10);
       if (n > 0) return n;
 
-      // These limits are presentation hints only. They must never remove
-      // results from pagination. Broad searches such as 서울/부산/뉴욕 should
-      // keep the full candidate stream and only arrange the first viewport in
-      // a Google/Naver-like balanced order.
       const limits = {
-        authority: 5,
-        news: 10,
-        local_tour: 5,
-        media: 8,
-        social: 6,
-        community: 6,
-        knowledge: 5,
+        authority: 3,
+        public_data: 2,
+        local_tour: 2,
+        knowledge: 3,
+        wiki: 3,
+        academic: 4,
+        site: 5,
+        book: 4,
+        news: 5,
+        blog: 5,
+        cafe: 5,
+        community: 5,
+        image: 5,
+        video: 5,
+        media: 5,
+        social: 4,
         shopping: 5,
-        sports: 5,
-        finance: 5,
-        webtoon: 5,
-        web: 30
+        sports: 4,
+        finance: 4,
+        webtoon: 4,
+        web: 18
       };
       return limits[group] || 6;
     }
@@ -1093,7 +1962,7 @@ async function fetchSearch(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = ['authority','news','local_tour','media','social','community','knowledge','shopping','sports','finance','webtoon','web'];
+      const order = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -1118,24 +1987,127 @@ async function fetchSearch(q, type = activeType){
       });
     }
 
+    function sourceKeyForDisplayGroupItem(it){
+      const url = String((it && (it.url || it.link || it.openUrl)) || '').trim();
+      const host = domainOf(url).toLowerCase();
+      const source = String((it && (it.source || it.provider || it.channel)) || '').toLowerCase();
+      if(host) return host.replace(/^www\./, '');
+      return source || String((it && it.title) || '').slice(0, 40).toLowerCase();
+    }
+
+    function diversifyGroupPreviewItems(group, items){
+      const list = Array.isArray(items) ? items.slice() : [];
+      if(!list.length) return list;
+      const verticals = new Set(['news','blog','cafe','community','social','image','video','media']);
+      if(!verticals.has(group)) return list;
+
+      const firstBySource = [];
+      const rest = [];
+      const seen = new Set();
+      list.forEach(it => {
+        const key = sourceKeyForDisplayGroupItem(it);
+        if(key && !seen.has(key)) {
+          seen.add(key);
+          firstBySource.push(it);
+        } else {
+          rest.push(it);
+        }
+      });
+      return firstBySource.concat(rest);
+    }
+
+    function buildFrontViewportGroups(source, maxSlots){
+      if(!Array.isArray(source) || !source.length) return [];
+      const slotLimit = Math.max(1, parseInt(maxSlots, 10) || PAGE_SIZE);
+
+      // Front viewport policy:
+      // - each section exposes only representative cards;
+      // - hidden overflow is stored behind the section button;
+      // - hidden overflow NEVER counts in the 25 visible slots;
+      // - do not refill empty slots with hidden news/blog/SNS overflow.
+      const visibleCaps = {
+        authority: 3,
+        public_data: 2,
+        local_tour: 2,
+        knowledge: 3,
+        wiki: 3,
+        site: 5,
+        book: 4,
+        news: 5,
+        community: 5,
+        media: 5,
+        social: 4,
+        shopping: 4,
+        sports: 3,
+        finance: 3,
+        webtoon: 3,
+        web: 8
+      };
+
+      const groups = groupSliceForDisplay(source).map(g => {
+        const items = diversifyGroupPreviewItems(g.group, g.items || []);
+        return Object.assign({}, g, { items });
+      });
+
+      const out = [];
+      let remaining = slotLimit;
+      groups.forEach(g => {
+        if(remaining <= 0 || !g || !Array.isArray(g.items) || !g.items.length) return;
+        const baseCap = visibleCaps[g.group] || displayGroupPreviewLimit(g.group, g.items[0]) || 5;
+        const visibleCount = Math.max(0, Math.min(baseCap, g.items.length, remaining));
+        if(!visibleCount) return;
+        out.push(Object.assign({}, g, {
+          previewLimit: visibleCount,
+          previewItems: g.items.slice(0, visibleCount),
+          hiddenItems: g.items.slice(visibleCount),
+          slotAwareViewport: true,
+          displaySlotCount: visibleCount,
+          sourceTotal: g.items.length
+        }));
+        remaining -= visibleCount;
+      });
+
+      return out;
+    }
+
+    function decorateDisplayItemForRender(it, groupInfo, index, hidden){
+      const copy = Object.assign({}, it || {});
+      const group = groupInfo && groupInfo.group ? groupInfo.group : displayGroupOfItem(copy);
+      copy.__maruDisplayGroup = group;
+      copy.__maruGroupPreviewIndex = Math.max(0, parseInt(index, 10) || 0);
+      copy.__maruGroupHidden = !!hidden;
+
+      // Only top-ranked map/local cards get live map preview + place info.
+      // Later local results remain normal cards with summary text, preventing
+      // long map iframes from flooding the search pages.
+      copy.__maruAllowMapPreview = group === 'local_tour' && !hidden && copy.__maruGroupPreviewIndex < 3;
+      return copy;
+    }
+
     function renderGroupedSlice(slice, page){
-      const groups = groupSliceForDisplay(slice);
+      const groups = (Array.isArray(slice) && slice.length && slice[0] && Array.isArray(slice[0].items) && slice[0].group) ? slice : groupSliceForDisplay(slice);
       groups.forEach(groupInfo => {
+        groupInfo.items = diversifyGroupPreviewItems(groupInfo.group, groupInfo.items);
+
         const section = document.createElement('section');
         section.className = 'maru-display-section';
         section.dataset.group = groupInfo.group;
+        section.dataset.expanded = '0';
 
         const head = document.createElement('div');
         head.className = 'maru-display-section-head';
 
         const title = document.createElement('div');
         title.className = 'maru-display-section-title';
-        title.textContent = groupInfo.label;
+        const cleanGroupLabel = displayGroupLabel(groupInfo.group, groupInfo.items && groupInfo.items[0]);
+        title.textContent = cleanGroupLabel;
+        groupInfo.label = cleanGroupLabel;
 
         const meta = document.createElement('div');
         meta.className = 'maru-display-section-meta';
-        const sourceTotal = Math.max.apply(null, groupInfo.items.map(x => parseInt(x && x.displayGroupSourceTotal, 10) || 0).concat([groupInfo.items.length]));
-        meta.textContent = sourceTotal > groupInfo.items.length ? `${groupInfo.items.length}/${sourceTotal}개` : `${groupInfo.items.length}개`;
+        const sourceTotal = parseInt(groupInfo.sourceTotal, 10) || Math.max.apply(null, groupInfo.items.map(x => parseInt(x && x.displayGroupSourceTotal, 10) || 0).concat([groupInfo.items.length]));
+        const visibleCountForMeta = Array.isArray(groupInfo.previewItems) ? groupInfo.previewItems.length : groupInfo.items.length;
+        meta.textContent = sourceTotal > visibleCountForMeta ? `${visibleCountForMeta}/${sourceTotal}개` : `${visibleCountForMeta}개`;
 
         head.appendChild(title);
         head.appendChild(meta);
@@ -1143,14 +2115,57 @@ async function fetchSearch(q, type = activeType){
         const body = document.createElement('div');
         body.className = 'maru-display-section-body';
 
-        // Do not hide cards inside the current 15-card viewport. The server/client
-        // stream already decided which 15 cards are visible. Hiding again here was
-        // the reason broad searches looked artificially tiny. Extra news/media/SNS
-        // results flow to later pages instead of being dropped.
-        groupInfo.items.forEach(it => renderItem(it, body));
+        const previewLimit = Math.max(1, parseInt(groupInfo.previewLimit, 10) || displayGroupPreviewLimit(groupInfo.group, groupInfo.items[0]));
+        const previewItems = Array.isArray(groupInfo.previewItems) ? groupInfo.previewItems : groupInfo.items.slice(0, previewLimit);
+        let hiddenItems = Array.isArray(groupInfo.hiddenItems) ? groupInfo.hiddenItems : null;
+        if(!hiddenItems && normalizeSearchType(activeType) === 'all'){
+          const fullGroup = diversifyGroupPreviewItems(groupInfo.group, groupSliceForDisplay(allItems).find(g => g.group === groupInfo.group)?.items || []);
+          const visibleKeys = new Set(previewItems.map(it => String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase()).filter(Boolean));
+          const groupCap = Math.max(displayGroupPreviewLimit(groupInfo.group, fullGroup[0]), displayGroupModuleTotalCap(groupInfo.group));
+          hiddenItems = fullGroup.slice(displayGroupPreviewLimit(groupInfo.group, fullGroup[0]), groupCap).filter(it => {
+            const key = String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
+            return !key || !visibleKeys.has(key);
+          });
+        }
+        hiddenItems = Array.isArray(hiddenItems) ? hiddenItems : groupInfo.items.slice(previewItems.length);
+        let hiddenMounted = false;
+        let hiddenWrap = null;
+
+        previewItems.forEach((it, idx) => renderItem(decorateDisplayItemForRender(it, groupInfo, idx, false), body));
 
         section.appendChild(head);
         section.appendChild(body);
+
+        if (hiddenItems.length) {
+          const more = document.createElement('button');
+          more.type = 'button';
+          more.className = 'maru-display-more';
+          const hiddenCount = hiddenItems.length;
+          const label = groupInfo.label || '이 섹션';
+          more.textContent = `${label} 전체 보기 ▾ (${hiddenCount}개)`;
+          more.addEventListener('click', () => {
+            const open = section.dataset.expanded === '1';
+            if(open){
+              section.dataset.expanded = '0';
+              if(hiddenWrap) hiddenWrap.style.display = 'none';
+              more.textContent = `${label} 전체 보기 ▾ (${hiddenCount}개)`;
+              return;
+            }
+
+            section.dataset.expanded = '1';
+            if(!hiddenMounted){
+              hiddenWrap = document.createElement('div');
+              hiddenWrap.className = 'maru-display-hidden-wrap';
+              hiddenItems.slice(0, displayGroupModuleTotalCap(groupInfo.group)).forEach((it, idx) => renderItem(decorateDisplayItemForRender(it, groupInfo, idx, true), hiddenWrap));
+              body.appendChild(hiddenWrap);
+              hiddenMounted = true;
+            }
+            if(hiddenWrap) hiddenWrap.style.display = '';
+            more.textContent = `${label} 접기 ▴`;
+          });
+          section.appendChild(more);
+        }
+
         results.appendChild(section);
       });
     }
@@ -1392,6 +2407,142 @@ async function fetchSearch(q, type = activeType){
       return null;
     }
 
+    function isPureMapItemClient(it){
+      const source = String((it && it.source) || '').toLowerCase();
+      const type = String((it && it.type) || '').toLowerCase();
+      const mediaType = String((it && it.mediaType) || '').toLowerCase();
+      const category = String((it && it.category) || '').toLowerCase();
+      const visualKind = String((it && it.visualKind) || '').toLowerCase();
+      const url = String((it && (it.url || it.link)) || '').toLowerCase();
+      const title = String((it && it.title) || '').toLowerCase();
+      const group = displayGroupOfItem(it);
+
+      // Do not let a generic web/news result become a thumbnail-like map card
+      // just because its title contains words such as 지도/교통지도. Map preview
+      // is allowed only for the map tab or for true map provider records.
+      if (normalizeSearchType(activeType) === 'map') return true;
+      if (source.includes('google_maps') || source.includes('naver_map')) return true;
+      if (/google\.com\/maps|map\.naver\.com|\/maps\/search/.test(url)) return true;
+      if ((type === 'map' || mediaType === 'map' || category === 'map') && group === 'local_tour' && !source.includes('news')) return true;
+      if (visualKind === 'map' && group === 'local_tour' && !source.includes('news') && !title.includes('뉴스')) return true;
+      return false;
+    }
+
+    function isMapLikeItemClient(it){
+      return isPureMapItemClient(it);
+    }
+
+    function firstExistingValueClient(obj, keys){
+      if(!obj || typeof obj !== 'object') return '';
+      for(const key of keys){
+        const v = obj[key];
+        if(v !== undefined && v !== null && String(v).trim()) return String(v).trim();
+      }
+      return '';
+    }
+
+    function placeInfoForItemClient(it){
+      const p = (it && it.placeInfo && typeof it.placeInfo === 'object') ? it.placeInfo : {};
+      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const address = firstExistingValueClient(p, ['address','roadAddress','jibunAddress','addr']) || firstExistingValueClient(it, ['address','roadAddress','jibunAddress','addr']) || firstExistingValueClient(payload, ['address','roadAddress','jibunAddress','addr']);
+      const phone = firstExistingValueClient(p, ['phone','telephone','tel','contact']) || firstExistingValueClient(it, ['phone','telephone','tel','contact']) || firstExistingValueClient(payload, ['phone','telephone','tel','contact']);
+      const hours = firstExistingValueClient(p, ['hours','openingHours','businessHours','openStatus']) || firstExistingValueClient(it, ['hours','openingHours','businessHours','openStatus']) || firstExistingValueClient(payload, ['hours','openingHours','businessHours','openStatus']);
+      const homepage = firstExistingValueClient(p, ['homepage','website','officialUrl','url']) || firstExistingValueClient(it, ['homepage','website','officialUrl']);
+      const title = String((it && it.title) || '').replace(/^\[[^\]]+\]\s*/, '').trim();
+      const query = firstExistingValueClient(p, ['mapQuery','query','name']) || firstExistingValueClient(it, ['mapQuery','placeName','name']) || title || lastQuery || input.value || '';
+      return { address, phone, hours, homepage, query };
+    }
+
+    function mapQueryForItemClient(it){
+      const info = placeInfoForItemClient(it);
+      const title = String((it && it.title) || '').replace(/^\[[^\]]+\]\s*/, '').replace(/[-–—].*$/, '').trim();
+      const summary = String((it && (it.summary || it.description)) || '').trim();
+      return (info.address ? `${title || info.query} ${info.address}` : (info.query || title || summary || lastQuery || input.value || '')).slice(0, 160);
+    }
+
+    function renderPlaceInfoClient(it, mapQuery){
+      const info = placeInfoForItemClient(it);
+      const hasInfo = !!(info.address || info.phone || info.hours || info.homepage);
+      const wrap = document.createElement('div');
+      wrap.className = 'maru-place-info';
+
+      if(hasInfo){
+        if(info.address){
+          const row = document.createElement('div');
+          row.className = 'maru-place-info-row';
+          row.textContent = '주소: ' + info.address;
+          wrap.appendChild(row);
+        }
+        if(info.phone){
+          const row = document.createElement('div');
+          row.className = 'maru-place-info-row';
+          row.textContent = '전화: ' + info.phone;
+          wrap.appendChild(row);
+        }
+        if(info.hours){
+          const row = document.createElement('div');
+          row.className = 'maru-place-info-row';
+          row.textContent = '시간: ' + info.hours;
+          wrap.appendChild(row);
+        }
+      } else {
+        const row = document.createElement('div');
+        row.className = 'maru-place-info-row';
+        row.textContent = '장소 정보: 지도 보기에서 주소·길찾기·주변 정보를 확인할 수 있습니다.';
+        wrap.appendChild(row);
+      }
+
+      const actions = document.createElement('div');
+      actions.className = 'maru-place-actions';
+
+      const google = document.createElement('a');
+      google.href = 'https://www.google.com/maps/search/' + encodeURIComponent(mapQuery || info.query || '');
+      google.target = '_self';
+      google.rel = 'noopener';
+      google.textContent = 'Google 지도';
+      actions.appendChild(google);
+
+      const naver = document.createElement('a');
+      naver.href = 'https://map.naver.com/p/search/' + encodeURIComponent(mapQuery || info.query || '');
+      naver.target = '_self';
+      naver.rel = 'noopener';
+      naver.textContent = 'Naver 지도';
+      actions.appendChild(naver);
+
+      if(info.homepage){
+        const home = document.createElement('a');
+        home.href = info.homepage;
+        home.target = '_self';
+        home.rel = 'noopener';
+        home.textContent = '홈페이지';
+        actions.appendChild(home);
+      }
+
+      wrap.appendChild(actions);
+      return wrap;
+    }
+
+    function renderMapPreviewClient(it){
+      if(!isMapLikeItemClient(it)) return null;
+      const q = mapQueryForItemClient(it);
+      if(!q) return null;
+      const wrap = document.createElement('div');
+      wrap.className = 'maru-map-preview';
+      const iframe = document.createElement('iframe');
+      iframe.loading = 'lazy';
+      iframe.referrerPolicy = 'no-referrer-when-downgrade';
+      iframe.src = 'https://maps.google.com/maps?q=' + encodeURIComponent(q) + '&output=embed';
+      iframe.title = q + ' map';
+      iframe.onerror = () => wrap.remove();
+      wrap.appendChild(iframe);
+      const cap = document.createElement('div');
+      cap.className = 'maru-map-preview-caption';
+      cap.textContent = q;
+      wrap.appendChild(cap);
+      wrap.appendChild(renderPlaceInfoClient(it, q));
+      return wrap;
+    }
+
     function renderPlayableMedia(mediaInfo, it){
       if (!mediaInfo) return null;
 
@@ -1429,6 +2580,99 @@ async function fetchSearch(q, type = activeType){
       return null;
     }
 
+
+    function compactCardTextClient(v){
+      if(v === undefined || v === null) return '';
+      if(typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'){
+        return String(v).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+      }
+      if(Array.isArray(v)){
+        return v.map(compactCardTextClient).filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+      }
+      if(typeof v === 'object'){
+        return compactCardTextClient([
+          v.summary, v.snippet, v.description, v.contentSnippet, v.content, v.text,
+          v.abstract, v.excerpt, v.intro, v.body, v.caption
+        ]);
+      }
+      return '';
+    }
+
+    function descriptionForItemClient(it){
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
+      const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
+      const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
+      const candidates = [
+        displayCard.summary,
+        displayCard.description,
+        displayCard.body,
+        displayCard.text,
+        displayCard.snippet,
+        it && it.displaySummary,
+        it && it.summary,
+        it && it.snippet,
+        it && it.description,
+        it && it.contentSnippet,
+        it && it.excerpt,
+        it && it.abstract,
+        it && it.content,
+        it && it.text,
+        payload.summary,
+        payload.snippet,
+        payload.description,
+        payload.contentSnippet,
+        payload.excerpt,
+        payload.abstract,
+        payload.content,
+        payload.text,
+        data.summary,
+        data.snippet,
+        data.description,
+        data.contentSnippet,
+        data.excerpt,
+        data.abstract,
+        data.content,
+        data.text,
+        it && it.desc,
+        it && it.metaDescription,
+        it && it.ogDescription,
+        it && it.lead,
+        it && it.subtitle,
+        it && it.bodyText,
+        payload.desc,
+        payload.metaDescription,
+        payload.ogDescription,
+        payload.lead,
+        payload.subtitle,
+        payload.bodyText,
+        data.desc,
+        data.metaDescription,
+        data.ogDescription,
+        data.lead,
+        data.subtitle,
+        data.bodyText,
+        preview.summary,
+        preview.description,
+        preview.caption
+      ];
+      for(const v of candidates){
+        const text = compactCardTextClient(v);
+        if(text) return text.slice(0, 360);
+      }
+      return '';
+    }
+
+    function shouldRenderMapPreviewForItemClient(it){
+      if(!it) return false;
+      const displayCard = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+      if(displayCard.showMapPreview === true && isMapLikeItemClient(it)) return true;
+      if(it.__maruAllowMapPreview === true && isMapLikeItemClient(it)) return true;
+      const t = normalizeSearchType(activeType);
+      if((t === 'map' || t === 'tour') && isMapLikeItemClient(it)) return true;
+      return false;
+    }
 
     function renderItem(it, mountTarget){
       const url = it.url || it.link || '';
@@ -1476,15 +2720,15 @@ async function fetchSearch(q, type = activeType){
 
       const fav = document.createElement('img');
       fav.src = faviconOf(url);
-      fav.style.width = '23px';
-      fav.style.height = '23px';
+      fav.style.width = '16px';
+      fav.style.height = '16px';
       fav.style.verticalAlign = 'middle';
       fav.style.marginRight = '10px';
-      fav.style.borderRadius = '6px';
+      fav.style.borderRadius = '4px';
       fav.style.background = '#ffffff';
       fav.style.border = '1px solid #d6e4ff';
       fav.style.boxShadow = '0 0 0 0 rgba(0,0,0,0)';
-      fav.style.padding = '2px';
+      fav.style.padding = '1px';
       fav.onerror = () => fav.remove();
 
       const span = document.createElement('span');
@@ -1495,7 +2739,7 @@ async function fetchSearch(q, type = activeType){
 
       const d = document.createElement('div');
       d.className = 'desc';
-      d.textContent = (it.summary || it.description || '').trim();
+      d.textContent = descriptionForItemClient(it);
 
   textCol.appendChild(t);
 
@@ -1517,13 +2761,14 @@ if (it.riskLabel === '⚠️ high-risk') {
 }
 // 그 외는 아예 표시 안 함 (safe 제거)
 
-      textCol.appendChild(risk);
+      if (risk.textContent) textCol.appendChild(risk);
       textCol.appendChild(l);
       if (d.textContent) textCol.appendChild(d);
 
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
-        d.style.webkitLineClamp = '3';
+        const cardLineClamp = it && it.displayCard && parseInt(it.displayCard.lineClamp, 10);
+        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(5, cardLineClamp) : 3);
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
@@ -1549,6 +2794,11 @@ if (it.riskLabel === '⚠️ high-risk') {
         badge.textContent = playableMedia.kind === 'youtube' ? '영상 재생' : '동영상';
         textCol.appendChild(badge);
         body.appendChild(playableMediaNode);
+      }
+
+      const mapPreviewNode = (!playableMediaNode && shouldRenderMapPreviewForItemClient(it)) ? renderMapPreviewClient(it) : null;
+      if (mapPreviewNode) {
+        body.appendChild(mapPreviewNode);
       }
 
       if (!playableMediaNode && isRealThumb) {
@@ -1740,101 +2990,231 @@ if (it.riskLabel === '⚠️ high-risk') {
       return `${lastQuery || input.value || ''}::${activeType || 'all'}::${page}::${group}`;
     }
 
+    function isDisplayGroupModule(x){
+      return !!(x && x.__maruDisplayGroupModule === true && x.group && Array.isArray(x.items));
+    }
+
+    function displayItemKey(it){
+      return String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
+    }
+
+    function makePlainWebItem(it){
+      const copy = Object.assign({}, it || {});
+      delete copy.displayGroup;
+      delete copy.displayGroupLabel;
+      delete copy.displayGroupVisibleIndex;
+      delete copy.displayGroupSourceTotal;
+      delete copy.displayGroupCollapsedCount;
+      copy.generalWebContinuation = true;
+      copy.visibleViewportCard = true;
+      return copy;
+    }
+
+    function displayGroupModuleTotalCap(group){
+      // Keep each category useful but bounded. Extra items are not deleted; they
+      // continue as ordinary web/list results after the category portal blocks.
+      const caps = {
+        authority: 8,
+        public_data: 8,
+        local_tour: 8,
+        knowledge: 3,
+        wiki: 3,
+        academic: 15,
+        site: 15,
+        book: 15,
+        news: 15,
+        blog: 15,
+        cafe: 15,
+        community: 15,
+        image: 15,
+        video: 15,
+        media: 15,
+        social: 15,
+        shopping: 15,
+        sports: 15,
+        finance: 15,
+        webtoon: 15
+      };
+      return caps[group] || 30;
+    }
+
+    function buildPortalPageModel(){
+      const sourceItems = Array.isArray(allItems) ? allItems : [];
+      const empty = { categoryPages: [], webItems: [], pageCount: 0, virtualCount: 0 };
+      if(!sourceItems.length || normalizeSearchType(activeType) !== 'all') return empty;
+
+      const grouped = groupSliceForDisplay(sourceItems).map(g => Object.assign({}, g, {
+        items: diversifyGroupPreviewItems(g.group, g.items || [])
+      }));
+      const byGroup = new Map(grouped.map(g => [g.group, g]));
+      const categoryOrder = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon'];
+      const categoryOverflowItems = [];
+      const categoryPages = [];
+      let page = [];
+      let pageWeight = 0;
+
+      function pushCategoryModule(g){
+        if(!g || !Array.isArray(g.items) || !g.items.length) return;
+        const previewLimit = Math.max(1, displayGroupPreviewLimit(g.group, g.items[0]));
+        const moduleCap = Math.max(previewLimit, displayGroupModuleTotalCap(g.group));
+        const moduleItems = g.items.slice(0, moduleCap);
+        const previewItems = moduleItems.slice(0, previewLimit);
+        const hiddenItems = moduleItems.slice(previewItems.length);
+        const overflowItems = g.items.slice(moduleCap).map(makePlainWebItem);
+        if(overflowItems.length) categoryOverflowItems.push(...overflowItems);
+        const weight = Math.max(1, previewItems.length);
+        const categoryPageTarget = PAGE_SIZE;
+        if(page.length && pageWeight + weight > categoryPageTarget){
+          categoryPages.push(page);
+          page = [];
+          pageWeight = 0;
+        }
+        page.push({
+          __maruDisplayGroupModule: true,
+          group: g.group,
+          label: displayGroupLabel(g.group, g.items[0]),
+          previewLimit,
+          previewItems,
+          hiddenItems,
+          sourceTotal: moduleItems.length,
+          overflowAsWebCount: overflowItems.length,
+          items: previewItems,
+          firstIndex: g.firstIndex || 0
+        });
+        pageWeight += weight;
+      }
+
+      categoryOrder.forEach(group => pushCategoryModule(byGroup.get(group)));
+      if(page.length) categoryPages.push(page);
+
+      const ordered = new Set(categoryOrder.concat(['web']));
+      const nonPortalItems = [];
+      grouped.forEach(g => {
+        if(!ordered.has(g.group) && Array.isArray(g.items)) nonPortalItems.push(...g.items.map(makePlainWebItem));
+      });
+      const webGroup = byGroup.get('web');
+      const webItems = categoryOverflowItems
+        .concat(nonPortalItems)
+        .concat((webGroup && Array.isArray(webGroup.items) ? webGroup.items : []).map(makePlainWebItem));
+      function categoryModuleWeight(mod){
+        return Math.max(1, Array.isArray(mod && mod.previewItems) ? mod.previewItems.length : 1);
+      }
+      function categoryPageWeight(modules){
+        return (Array.isArray(modules) ? modules : []).reduce((sum, mod) => sum + categoryModuleWeight(mod), 0);
+      }
+      let filledWebBeforePlainPages = 0;
+      const categoryFillCounts = categoryPages.map((modules, idx) => {
+        // General web/plain results must not be inserted between category modules.
+        // They may only start after the final category page has rendered, so the
+        // category board keeps its intended order: knowledge/wiki/site/book/blog/cafe/news/etc.
+        if(idx !== categoryPages.length - 1) return 0;
+        const fill = Math.min(
+          Math.max(0, webItems.length - filledWebBeforePlainPages),
+          Math.max(0, PAGE_SIZE - categoryPageWeight(modules))
+        );
+        filledWebBeforePlainPages += fill;
+        return fill;
+      });
+      const remainingWebCount = Math.max(0, webItems.length - filledWebBeforePlainPages);
+      const pageCount = categoryPages.length + Math.max(0, Math.ceil(remainingWebCount / PAGE_SIZE));
+      return {
+        categoryPages,
+        categoryFillCounts,
+        filledWebBeforePlainPages,
+        webItems,
+        pageCount,
+        virtualCount: (categoryPages.length * PAGE_SIZE) + remainingWebCount
+      };
+    }
+
     function buildClientVisibleStream(page){
       const sourceItems = Array.isArray(allItems) ? allItems : [];
       if (!sourceItems.length) return [];
       if (normalizeSearchType(activeType) !== 'all') return sourceItems.slice();
 
-      const groups = groupSliceForDisplay(sourceItems);
-      const byGroup = new Map(groups.map(g => [g.group, Object.assign({}, g, { cursor: 0 })]));
-      const used = new Set();
-      const stream = [];
-
-      function itemKey(it){
-        return String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
-      }
-
-      function pushItem(it, groupInfo, idx){
-        const key = itemKey(it);
-        if(key && used.has(key)) return false;
-        if(key) used.add(key);
-        stream.push(Object.assign({}, it, {
-          displayGroup: groupInfo.group,
-          displayGroupLabel: groupInfo.label,
-          displayGroupVisibleIndex: idx,
-          displayGroupSourceTotal: groupInfo.items.length,
-          displayGroupCollapsedCount: 0,
-          collapsedAwareViewportCard: true,
-          visibleViewportCard: true,
-          naturalFlowNoForcedCollapse: true
-        }));
-        return true;
-      }
-
-      // Balanced lead for the first few pages: good official/knowledge/map/news/
-      // image/video/SNS/blog/web results are promoted, but lower-priority results
-      // are not omitted. They continue naturally on later pages.
-      const frontCaps = {
-        authority: 5, knowledge: 5, local_tour: 5, news: 10,
-        media: 8, social: 6, community: 6, shopping: 5,
-        sports: 5, finance: 5, webtoon: 5, web: 30
-      };
-      const lanes = [
-        'authority','knowledge','local_tour','news','web','media','social','community','shopping',
-        'news','web','authority','local_tour','knowledge','media','social','community','web',
-        'news','web','media','community','social','shopping','web'
-      ];
-      const pickedByGroup = Object.create(null);
-      let safety = 0;
-      while(stream.length < Math.min(sourceItems.length, PAGE_SIZE * 4) && safety++ < sourceItems.length * 3){
-        let progressed = false;
-        for(const group of lanes){
-          const g = byGroup.get(group);
-          if(!g || !g.items.length) continue;
-          const cap = frontCaps[group] || 6;
-          pickedByGroup[group] = pickedByGroup[group] || 0;
-          if(pickedByGroup[group] >= cap) continue;
-          while(g.cursor < g.items.length){
-            const idx = g.cursor++;
-            const it = g.items[idx];
-            if(pushItem(it, g, idx)){
-              pickedByGroup[group]++;
-              progressed = true;
-              break;
-            }
-          }
-          if(stream.length >= Math.min(sourceItems.length, PAGE_SIZE * 4)) break;
+      const model = buildPortalPageModel();
+      if(model.pageCount){
+        const categoryPageCount = model.categoryPages.length;
+        const pageNo = Math.max(1, parseInt(page, 10) || 1);
+        if(pageNo <= categoryPageCount) {
+          const modules = model.categoryPages[pageNo - 1] || [];
+          const fillStart = (model.categoryFillCounts || []).slice(0, pageNo - 1).reduce((sum, n) => sum + (Number(n) || 0), 0);
+          const fillCount = Number((model.categoryFillCounts || [])[pageNo - 1]) || 0;
+          return modules.concat((model.webItems || []).slice(fillStart, fillStart + fillCount));
         }
-        if(!progressed) break;
+        const webPage = pageNo - categoryPageCount;
+        const start = Math.max(0, (model.filledWebBeforePlainPages || 0) + ((webPage - 1) * PAGE_SIZE));
+        return model.webItems.slice(start, start + PAGE_SIZE);
       }
 
-      // Append every remaining result in the original server-ranked order. This is
-      // the key rule: category balancing must never become result suppression.
-      sourceItems.forEach((it, idx) => {
-        const group = displayGroupOfItem(it);
-        const g = byGroup.get(group) || { group, label: displayGroupLabel(group, it), items: sourceItems };
-        pushItem(it, g, idx);
-      });
-
-      return stream;
+      return sourceItems.slice();
     }
 
     function visibleItemsForPage(page){
-      const stream = buildClientVisibleStream(page);
       const start = (page - 1) * PAGE_SIZE;
+
+      // In the all tab, never let a raw server page full of one vertical
+      // such as news occupy the viewport. Rebuild a balanced visible stream
+      // from the accumulated pool so collapsed/overflow items do not consume
+      // the 25 visible slots.
+      if (normalizeSearchType(activeType) === 'all') {
+        return buildClientVisibleStream(page);
+      }
+
+      if(serverPagedMode && loadedServerPages.has(page)){
+        return loadedServerPages.get(page).slice(0, PAGE_SIZE);
+      }
+      const stream = buildClientVisibleStream(page);
       return stream.slice(start, start + PAGE_SIZE);
     }
 
     function visibleItemCountForPager(){
+      // In the all tab the pager must count the client visible stream, not the
+      // raw server total. Collapsed category overflow remains behind 더보기 and
+      // must not consume page slots.
+      if (normalizeSearchType(activeType) === 'all') {
+        const model = buildPortalPageModel();
+        const portalCount = model && model.virtualCount ? model.virtualCount : buildClientVisibleStream(currentPage || 1).length;
+        const preloadFloor = lastQuery ? Math.min(INITIAL_PRELOAD_TARGET, Math.max(allItems.length || 0, portalCount || 0)) : 0;
+        return Math.max(portalCount, allItems.length || 0, preloadFloor);
+      }
+      if(serverPagedMode && serverTotalItems > 0) return serverTotalItems;
       return buildClientVisibleStream(currentPage || 1).length;
     }
 
+    function frontPageSectionSource(){
+      if(normalizeSearchType(activeType) !== 'all') return null;
+      const source = Array.isArray(allItems) ? allItems : [];
+      if(!source.length) return null;
+      // First page is a Naver/Google-like category board. It uses the received
+      // pool, but each vertical renders only its preview count until the user
+      // opens that section. This prevents news/blog/SNS from occupying hundreds
+      // of cards in the main flow.
+      return source.slice(0, Math.min(source.length, 600));
+    }
+
     function renderPage(page, skipEnrich = false){
+      if(serverPagedMode && !loadedServerPages.has(page)){
+        const preloadedPageCount = preloadPageCountFromItems(allItems);
+        if(page > preloadedPageCount && !renderPage._serverWindowLoading){
+          renderPage._serverWindowLoading = true;
+          loadServerPageAndRender(page).finally(() => { renderPage._serverWindowLoading = false; });
+          return;
+        }
+      }
       results.innerHTML = '';
       const slice = visibleItemsForPage(page);
       const start = (page - 1) * PAGE_SIZE;
 
-      if (shouldUseDisplayGroups(slice)) {
+      // Render the already-balanced visible stream. Do not rebuild page 1 from a
+      // raw source slice, because a raw slice may contain only news/logo/map cards
+      // and then hidden overflow still blocks the following categories from moving up.
+      if (slice.some(isDisplayGroupModule)) {
+        slice.forEach(entry => {
+          if(isDisplayGroupModule(entry)) renderGroupedSlice([entry], page);
+          else renderItem(entry);
+        });
+      } else if (shouldUseDisplayGroups(slice)) {
         renderGroupedSlice(slice, page);
       } else {
         slice.forEach(it => renderItem(it));
@@ -1844,6 +3224,49 @@ if (it.riskLabel === '⚠️ high-risk') {
 
       if(!skipEnrich){
         enrichRenderedPageImages(page, slice, start);
+      }
+    }
+
+
+    async function loadServerPageAndRender(page){
+      if(!serverPagedMode){
+        renderPage(page);
+        return;
+      }
+      if(loadedServerPages.has(page)){
+        renderPage(page);
+        return;
+      }
+      const preloadedPageCount = preloadPageCountFromItems(allItems);
+      if(page <= preloadedPageCount){
+        renderPage(page);
+        return;
+      }
+      const q = (lastQuery || input.value || '').trim();
+      if(!q){
+        renderPage(page);
+        return;
+      }
+      status.textContent = `Loading page ${page} for "${q}"...`;
+      try{
+        const pack = await fetchSearch(q, activeType, page);
+        const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
+        if(pageSlice.length){
+          loadedServerPages.set(page, pageSlice.slice(0, PAGE_SIZE));
+          allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice);
+          const total = serverTotalFromPayload(pack && pack.payload, serverTotalItems || pageSlice.length);
+          serverTotalItems = Math.max(serverTotalItems || 0, total || 0, INITIAL_PRELOAD_TARGET);
+        } else if(serverTotalItems > ((page - 1) * PAGE_SIZE)){
+          // Do not silently render a blank page when the pager says that page exists.
+          // Keep the loading state visible and let the user retry by clicking the page again.
+          status.textContent = `Page ${page} data is being supplied for "${q}"...`;
+        }
+      }catch(e){
+        console.warn('server page fetch skipped:', e);
+      }
+      if(loadedServerPages.has(page) || page <= preloadPageCountFromItems(allItems)){
+        renderPage(page);
+        status.textContent = `${serverTotalItems || visibleItemCountForPager()} results for "${q}" · ${getTypeLabel(activeType)}`;
       }
     }
 
@@ -1881,7 +3304,7 @@ function updateSearchPageHistory(page, block) {
 }
 
 function drawPager(){
-  const pages = Math.max(1, Math.ceil(visibleItemCountForPager() / PAGE_SIZE));
+  const pages = Math.min(MAX_PAGER_PAGES, Math.max(1, Math.ceil(visibleItemCountForPager() / PAGE_SIZE)));
   if (pages <= 1) { clearPager(); return; }
 
   const bar = ensurePager();
@@ -1897,7 +3320,7 @@ function drawPager(){
       currentBlock = Math.max(0, currentBlock - 1);
       currentPage = currentBlock * BLOCK_SIZE + 1;
       updateSearchPageHistory(currentPage, currentBlock);
-      renderPage(currentPage);
+      loadServerPageAndRender(currentPage);
     };
     bar.appendChild(left);
   }
@@ -1910,7 +3333,7 @@ function drawPager(){
       currentPage = p;
       currentBlock = Math.floor((p - 1) / BLOCK_SIZE);
       updateSearchPageHistory(currentPage, currentBlock);
-      renderPage(currentPage);
+      loadServerPageAndRender(currentPage);
     };
     bar.appendChild(b);
   }
@@ -1923,7 +3346,7 @@ function drawPager(){
       currentBlock = Math.min(maxBlock, currentBlock + 1);
       currentPage = currentBlock * BLOCK_SIZE + 1;
       updateSearchPageHistory(currentPage, currentBlock);
-      renderPage(currentPage);
+      loadServerPageAndRender(currentPage);
     };
     bar.appendChild(right);
   }
@@ -1933,87 +3356,155 @@ async function runSearch(q, type = activeType){
   const qq = (q || '').trim();
   activeType = normalizeSearchType(type);
   updateSearchTabsActive();
+  stopContinuousIntake();
+
   if (!qq){
     allItems = [];
+    serverPagedMode = false;
+    serverTotalItems = 0;
+    authoritativeServerTotalItems = 0;
+    progressivePagerPages = INITIAL_PROGRESSIVE_PAGER_PAGES;
+    loadedServerPages.clear();
     results.innerHTML = '';
     clearPager();
     status.textContent = '';
     return;
   }
 
+  runSearch._seq = (runSearch._seq || 0) + 1;
+  const seq = runSearch._seq;
+  const target = Math.max(INITIAL_PRELOAD_TARGET, adaptiveSearchTarget(qq, activeType));
+
+  allItems = [];
+  serverPagedMode = true;
+  authoritativeServerTotalItems = Math.max(target, INITIAL_PRELOAD_TARGET);
+  progressivePagerPages = Math.min(
+    MAX_PROGRESSIVE_PAGER_PAGES,
+    Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(Math.min(target, MAX_SMOOTH_CANDIDATES) / PAGE_SIZE))
+  );
+  serverTotalItems = Math.max(INITIAL_PRELOAD_TARGET, progressivePagerPages * PAGE_SIZE);
+  loadedServerPages.clear();
+
   signalSanmaruSearch(qq, activeType, 'run-search');
-  status.textContent = `Searching ${getTypeLabel(activeType)} for "${qq}"...`;
+  status.textContent = `Receiving ${getTypeLabel(activeType)} supply for "${qq}"...`;
   renderSkeleton();
   clearPager();
 
-  try {
-    const searchPack = await fetchSearch(qq, activeType);
-    lastSearchPayload = searchPack && searchPack.payload || null;
-    const items = Array.isArray(searchPack) ? searchPack : (searchPack && searchPack.items) || [];
-    const filteredItems = filterSearchResultItems(items || []);
-    allItems = dedupeItems([...(filteredItems || [])]);
+  currentBlock = 0;
+  currentPage = 1;
+  lastQuery = qq;
+  lastType = activeType;
+  pageImageEnrichCache.clear();
+  itemImageEnrichCache.clear();
+  expandedDisplayGroups.clear();
 
-    pageImageEnrichCache.clear();
-    itemImageEnrichCache.clear();
-    expandedDisplayGroups.clear();
+  let firstPaintDone = false;
+  let intakeStarted = false;
+  let intakeTimer = null;
 
-    currentBlock = 0;
-    currentPage = 1;
-    lastQuery = qq;
-    lastType = activeType;
+  function startIntakeOnce(reason){
+    if(intakeStarted || runSearch._seq !== seq) return;
+    intakeStarted = true;
+    if(intakeTimer) clearTimeout(intakeTimer);
+    startContinuousIntake(qq, activeType, seq);
+    status.textContent = `${serverTotalItems || allItems.length || INITIAL_PRELOAD_TARGET} results for "${qq}" · ${getTypeLabel(activeType)} · receiving...`;
+  }
 
-    if (!allItems.length) {
-      results.innerHTML = '';
-      status.textContent = `No results for "${qq}"`;
-      return;
+  function applySupplyPack(pack, sourceName){
+    if(runSearch._seq !== seq || !pack) return 0;
+    const normalized = normalizeSearchPayload(pack && pack.payload ? pack.payload : pack);
+    const payload = normalized.payload || (pack && pack.payload) || pack || null;
+    lastSearchPayload = payload || lastSearchPayload;
+
+    const rawItems = Array.isArray(pack)
+      ? pack
+      : dedupeItems(filterSearchResultItems((pack && pack.items) || normalized.items || []));
+    const pageItems = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
+    const incoming = rawItems && rawItems.length ? rawItems : pageItems;
+    if(!incoming || !incoming.length) return 0;
+
+    // Cache the supply window immediately. Rendering still shows only the current
+    // viewport, but pages 2~12 are already in memory when the user clicks them.
+    const initialWindow = Math.min(
+      MAX_SMOOTH_CANDIDATES,
+      Math.max(INITIAL_PRELOAD_TARGET, incoming.length)
+    );
+    const windowItems = incoming.slice(0, initialWindow);
+    allItems = mergeItemsPreferDisplayRichness(allItems, windowItems).slice(0, MAX_SMOOTH_CANDIDATES);
+    seedLoadedServerPagesFromItems(allItems, Math.min(allItems.length, Math.max(INITIAL_PRELOAD_TARGET, windowItems.length)));
+    if(pageItems.length) loadedServerPages.set(1, pageItems.slice(0, PAGE_SIZE));
+
+    updateProgressiveTotalFromPayload(payload, Math.max(target, allItems.length, INITIAL_PRELOAD_TARGET), { expandAll:true });
+    serverTotalItems = Math.max(serverTotalItems || 0, target, allItems.length, INITIAL_PRELOAD_TARGET);
+    progressivePagerPages = Math.max(progressivePagerPages || 0, INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(Math.min(serverTotalItems, MAX_SMOOTH_CANDIDATES) / PAGE_SIZE));
+
+    if(!firstPaintDone && allItems.length){
+      firstPaintDone = true;
+      renderPage(1);
+    }else if(firstPaintDone && currentPage === 1){
+      renderPage(1, true);
+    }else if(firstPaintDone){
+      drawPager();
+    }
+    status.textContent = `${serverTotalItems || allItems.length} results for "${qq}" · ${getTypeLabel(activeType)} · receiving...`;
+    if(!intakeStarted && allItems.length >= 250){
+      setTimeout(() => startIntakeOnce('receiver-250-open-pipe'), 0);
+    }
+    return incoming.length;
+  }
+
+  function wrapSupply(promise, kind){
+    return promise.then(pack => ({ kind, pack })).catch(error => ({ kind, error }));
+  }
+
+  const instantPromise = wrapSupply(fetchInstantSearchPack(qq, activeType), 'sanmaru-instant');
+  const maruWindowPromise = wrapSupply(fetchSearch(qq, activeType, 1), 'maru-search-window');
+
+  try{
+    const first = await Promise.race([instantPromise, maruWindowPromise]);
+    if(runSearch._seq !== seq) return;
+
+    const firstCount = first && !first.error ? applySupplyPack(first.pack, first.kind) : 0;
+    if(!firstCount){
+      const second = first && first.kind === 'sanmaru-instant' ? await maruWindowPromise : await instantPromise;
+      if(runSearch._seq !== seq) return;
+      if(second && !second.error) applySupplyPack(second.pack, second.kind);
     }
 
-    renderPage(1);
-    status.textContent = `${allItems.length} results for "${qq}" · ${getTypeLabel(activeType)}`;
+    if(!firstPaintDone){
+      results.innerHTML = '';
+      status.textContent = `No quick results for "${qq}" · receiving...`;
+    }
 
-  } catch(e){
+    // Do not wait for Sanmaru/MaruSearch to finish all lanes. Start the faucet
+    // shortly after first paint, but let the page-1 300-window seed pages 1~12
+    // first when it arrives quickly.
+    intakeTimer = setTimeout(() => startIntakeOnce('first-paint-timer'), 50);
+
+    maruWindowPromise.then(res => {
+      if(runSearch._seq !== seq || !res || res.error) return;
+      applySupplyPack(res.pack, res.kind);
+      startIntakeOnce('maru-page1-window-ready');
+    });
+    instantPromise.then(res => {
+      if(runSearch._seq !== seq || !res || res.error) return;
+      applySupplyPack(res.pack, res.kind);
+    });
+  }catch(e){
     console.error(e);
-    allItems = [];
-    results.innerHTML = '';
-    clearPager();
-    status.textContent = `No results for "${qq}"`;
+    const fallbackPack = await fetchSearch(qq, activeType, 1);
+    if (runSearch._seq !== seq) return;
+    applySupplyPack(fallbackPack, 'fallback-maru-search');
+    if(!firstPaintDone){
+      results.innerHTML = '';
+      clearPager();
+      status.textContent = `No results for "${qq}"`;
+    }
+    startIntakeOnce('fallback');
   }
 }
-  });
-})();
 
-(function () {
-  function runGlobalSearch() {
-    const input = document.getElementById('globalSearchInput');
-    if (!input) return;
 
-    const q = input.value.trim();
-    if (!q) return;
-
-    signalSanmaruSearch(q, 'all', 'global-search-handoff');
-
-    const u = new URL('/search.html', location.origin);
-    u.searchParams.set('q', q);
-    u.searchParams.set('page', '1');
-    u.searchParams.set('block', '0');
-    u.searchParams.set('residentFirst', '1');
-    u.searchParams.set('sanmaruFirst', '1');
-    u.searchParams.set('residentSwitch', '1');
-    u.searchParams.set('from', location.pathname + location.search + location.hash);
-
-    window.location.href = u.pathname + u.search + u.hash;
-  }
-
-  document.addEventListener('DOMContentLoaded', function () {
-    const btn = document.getElementById('globalSearchBtn');
-    const input = document.getElementById('globalSearchInput');
-
-    if (btn) btn.addEventListener('click', runGlobalSearch);
-    if (input) {
-      input.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') runGlobalSearch();
-      });
-    }
   });
 })();
 
