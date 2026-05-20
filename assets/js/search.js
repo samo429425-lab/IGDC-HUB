@@ -1207,10 +1207,15 @@ async function fetchSearch(q, type = activeType, page = 1){
   sp.set('noBlockingWide', '1');
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
-  if (pageNo > 1) {
+  sp.set('realOnly', '1');
+  sp.set('noProviderRoadCards', '1');
+  sp.set('contentOnly', '1');
+  if (pageNo > INITIAL_PRELOAD_PAGES) {
     sp.set('faucetPage', '1');
     sp.set('appendWindow', '1');
     sp.set('noStopAfterFirstWindow', '1');
+    sp.set('external', 'live');
+    sp.set('forceWide', '1');
   }
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
