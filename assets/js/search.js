@@ -113,30 +113,44 @@ const from0 = (params.get('from') || '').trim();
 
 const SEARCH_TABS = [
   ['all', '전체'],
-  ['map', '지도'],
-  ['knowledge', '지식'],
-  ['wiki', '위키'],
+  ['map', '지도/지역'],
+  ['knowledge', '지식/위키'],
   ['site', '사이트'],
-  ['book', '도서'],
-  ['blog', '블로그'],
-  ['cafe', '카페'],
-  ['shopping', '쇼핑'],
   ['news', '뉴스'],
+  ['tour', '관광'],
+  ['blog', '블로그'],
+  ['sns', 'SNS'],
+  ['shopping', '쇼핑'],
+  ['book', '도서'],
+  ['cafe', '카페'],
   ['image', '이미지'],
   ['video', '영상'],
-  ['sns', '소셜'],
-  ['tour', '관광'],
   ['public_data', '공공자료'],
   ['academic', '학술'],
   ['sports', '스포츠'],
   ['finance', '증권'],
+  ['community', '커뮤니티'],
   ['webtoon', '웹툰']
 ];
 
 function normalizeSearchType(v){
   const raw = String(v || '').trim().toLowerCase();
   const allowed = new Set(SEARCH_TABS.map(x => x[0]));
-  const alias = { books: 'book', 도서: 'book', 책: 'book', sns: 'sns', social: 'sns', public: 'public_data', 공공자료: 'public_data', wiki: 'wiki', 위키: 'wiki', academic: 'academic', 학술: 'academic', site: 'site', 사이트: 'site' };
+  const alias = {
+    books: 'book', 도서: 'book', 책: 'book',
+    sns: 'sns', social: 'sns', 소셜: 'sns',
+    community: 'community', forum: 'community', 커뮤니티: 'community',
+    map: 'map', maps: 'map', local: 'map', region: 'map', 지역: 'map', 지도: 'map', '지도/지역': 'map',
+    tour: 'tour', travel: 'tour', tourism: 'tour', 관광: 'tour', 여행: 'tour', '가볼만한곳': 'tour', '가볼 만한 곳': 'tour',
+    public: 'public_data', 공공자료: 'public_data', 공공데이터: 'public_data',
+    wiki: 'knowledge', 위키: 'knowledge', wikipedia: 'knowledge', encyclopedia: 'knowledge', 백과: 'knowledge',
+    knowledge: 'knowledge', 지식: 'knowledge', '지식/위키': 'knowledge',
+    academic: 'academic', 학술: 'academic',
+    site: 'site', 사이트: 'site', homepage: 'site', 홈페이지: 'site',
+    shopping: 'shopping', 쇼핑: 'shopping', news: 'news', 뉴스: 'news',
+    image: 'image', images: 'image', 이미지: 'image', photo: 'image', 사진: 'image',
+    video: 'video', youtube: 'video', 영상: 'video'
+  };
   return allowed.has(raw) ? raw : (alias[raw] || 'all');
 }
 
@@ -206,6 +220,81 @@ function ensureSearchCardMediaStyle(){
     }
     .maru-card-media[data-count="3"] img:not(:first-child) {
       height: 99px;
+    }
+    .maru-card-media[data-count="4"] {
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      flex-basis: 330px;
+      width: 330px;
+    }
+    .maru-card-media[data-count="4"] img {
+      height: 99px;
+    }
+    .maru-card-media a,
+    .maru-image-grid-section a,
+    .maru-video-thumb-link {
+      display: block;
+      color: inherit;
+      text-decoration: none;
+    }
+    .maru-image-grid-section {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+      gap: 10px;
+      padding: 8px 2px 2px;
+    }
+    .maru-image-grid-section a {
+      position: relative;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid #e5e7eb;
+      background: #f8fafc;
+      aspect-ratio: 1 / 0.72;
+    }
+    .maru-image-grid-section img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .maru-image-grid-caption {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 6px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #ffffff;
+      background: linear-gradient(180deg, rgba(15,23,42,0), rgba(15,23,42,0.76));
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .maru-video-thumb-link {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: #0f172a;
+    }
+    .maru-video-thumb-link img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      opacity: 0.94;
+    }
+    .maru-video-play-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      font-size: 34px;
+      font-weight: 900;
+      text-shadow: 0 3px 10px rgba(0,0,0,.38);
+      pointer-events: none;
     }
 
     /* Book / webtoon / shopping-like vertical cover cards */
@@ -884,7 +973,41 @@ function sleepIntake(ms){
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function startContinuousIntake(q, type, seq){
+function pageSliceFromFaucetPack(pack, page){
+  const normalized = normalizeSearchPayload(pack && pack.payload ? pack.payload : pack);
+  const directPage = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
+  if(directPage.length) return directPage.slice(0, PAGE_SIZE);
+
+  const items = dedupeItems(filterSearchResultItems(normalized.items || []));
+  if(!items.length) return [];
+  const startIndex = (Math.max(1, Number(page) || 1) - 1) * PAGE_SIZE;
+  return items.slice(startIndex, startIndex + PAGE_SIZE);
+}
+
+function maxLoadedServerPage(){
+  let max = 0;
+  try{
+    loadedServerPages.forEach((_, key) => {
+      const n = Number(key) || 0;
+      if(n > max) max = n;
+    });
+  }catch(e){}
+  return max;
+}
+
+function nextFaucetPageAfterSeed(){
+  // The first response window is 300 cards = 12 pages. The faucet must not
+  // restart from page 2 and re-fetch pages that are already seeded.
+  const pagesFromItems = preloadPageCountFromItems(allItems);
+  const pagesFromLoadedMap = maxLoadedServerPage();
+  const seededPages = Math.max(pagesFromItems, pagesFromLoadedMap);
+  if(seededPages >= INITIAL_PRELOAD_PAGES || allItems.length >= INITIAL_PRELOAD_TARGET){
+    return INITIAL_PRELOAD_PAGES + 1;
+  }
+  return Math.max(2, seededPages + 1);
+}
+
+function startContinuousIntake(q, type, seq, startPage){
   if(!q || runSearch._seq !== seq) return;
   const token = ++continuousIntakeSeq;
   continuousIntakeActive = true;
@@ -892,30 +1015,42 @@ function startContinuousIntake(q, type, seq){
   authoritativeServerTotalItems = Math.max(authoritativeServerTotalItems || 0, target);
   updateProgressiveTotalFromPayload(lastSearchPayload || {}, Math.max(target, allItems.length || 0));
 
-  let nextPage = Math.max(2, preloadPageCountFromItems(allItems) + 1);
+  let nextPage = Math.max(2, Number(startPage) || nextFaucetPageAfterSeed());
   const maxPages = Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(target / PAGE_SIZE)));
 
   async function worker(){
     while(continuousIntakeActive && continuousIntakeSeq === token && runSearch._seq === seq && nextPage <= maxPages){
       const page = nextPage++;
-      if(loadedServerPages.has(page)) continue;
+      if(loadedServerPages.has(page)) {
+        await sleepIntake(INTAKE_BURST_DELAY_MS);
+        continue;
+      }
       try{
         const pack = await fetchSearch(q, type, page);
         if(!continuousIntakeActive || continuousIntakeSeq !== token || runSearch._seq !== seq) return;
-        const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack))).slice(0, PAGE_SIZE);
+        const pageSlice = pageSliceFromFaucetPack(pack, page);
         if(pageSlice.length){
-          loadedServerPages.set(page, pageSlice);
-          allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice);
+          loadedServerPages.set(page, pageSlice.slice(0, PAGE_SIZE));
+          const before = allItems.length;
+          allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice).slice(0, MAX_SMOOTH_CANDIDATES);
           lastSearchPayload = pack && pack.payload || lastSearchPayload;
-          updateProgressiveTotalFromPayload(pack && pack.payload, allItems.length);
+          updateProgressiveTotalFromPayload(pack && pack.payload, Math.max(target, allItems.length));
           if(page === currentPage) renderPage(page, true);
           else drawPager();
-          status.textContent = `${serverTotalItems || allItems.length} results for "${q}" · ${getTypeLabel(type)} · receiving...`;
+          const added = Math.max(0, allItems.length - before);
+          status.textContent = `${serverTotalItems || target || allItems.length} results for "${q}" · ${getTypeLabel(type)} · receiving ${allItems.length}${added ? ' +' + added : ''}...`;
+        } else {
+          updateProgressiveTotalFromPayload(pack && pack.payload, Math.max(target, allItems.length));
+          drawPager();
         }
       }catch(e){
         console.warn('continuous intake page skipped:', page, e);
       }
       await sleepIntake(INTAKE_BURST_DELAY_MS);
+    }
+
+    if(continuousIntakeSeq === token && runSearch._seq === seq){
+      status.textContent = `${serverTotalItems || allItems.length} results for "${q}" · ${getTypeLabel(type)}`;
     }
   }
 
@@ -1052,12 +1187,17 @@ async function fetchSearch(q, type = activeType, page = 1){
   const sp = new URLSearchParams();
   sp.set('q', q);
   sp.set('limit', String(adaptiveSearchTarget(q, safeType)));
+  sp.set('candidatePool', String(adaptiveSearchTarget(q, safeType)));
+  sp.set('candidatePoolTarget', String(adaptiveSearchTarget(q, safeType)));
   sp.set('type', safeType);
   sp.set('tab', safeType);
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
-  sp.set('page', String(Math.max(1, Number(page) || 1)));
-  sp.set('visiblePage', String(Math.max(1, Number(page) || 1)));
+  const pageNo = Math.max(1, Number(page) || 1);
+  sp.set('page', String(pageNo));
+  sp.set('start', String(((pageNo - 1) * PAGE_SIZE) + 1));
+  sp.set('offset', String((pageNo - 1) * PAGE_SIZE));
+  sp.set('visiblePage', String(pageNo));
   sp.set('pageWindowOnly', '1');
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
@@ -1067,6 +1207,11 @@ async function fetchSearch(q, type = activeType, page = 1){
   sp.set('noBlockingWide', '1');
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
+  if (pageNo > 1) {
+    sp.set('faucetPage', '1');
+    sp.set('appendWindow', '1');
+    sp.set('noStopAfterFirstWindow', '1');
+  }
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
@@ -1472,6 +1617,11 @@ async function fetchInstantSearchPack(q, type = activeType){
         bar.style.justifyContent = 'center';
         bar.style.gap = '6px';
         bar.style.margin = '8px 0 14px';
+        bar.style.padding = '6px 0 8px';
+        bar.style.background = '#fff';
+        bar.style.position = 'sticky';
+        bar.style.top = '113px';
+        bar.style.zIndex = '89';
         status.parentNode.insertBefore(bar, status.nextSibling);
       }
       return bar;
@@ -1779,16 +1929,24 @@ async function fetchInstantSearchPack(q, type = activeType){
         opendata: 'public_data',
         open_data: 'public_data',
         knowledge_wiki: 'knowledge',
-        wiki: 'wiki',
+        wiki: 'knowledge',
+        wikipedia: 'knowledge',
+        위키: 'knowledge',
         encyclopedia: 'knowledge',
         academic: 'academic',
         scholar: 'academic',
         research: 'academic',
         paper: 'academic',
         map_local_tour: 'local_tour',
+        map_local: 'local_tour',
+        local_map: 'local_tour',
         local: 'local_tour',
+        region: 'local_tour',
+        지역: 'local_tour',
         map: 'local_tour',
+        maps: 'local_tour',
         tour: 'local_tour',
+        tourism: 'local_tour',
         video_vlog: 'video',
         video: 'video',
         youtube: 'video',
@@ -1903,8 +2061,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         authority: '주요 정보',
         public_data: '공공자료',
         local_tour: '지도/지역',
-        knowledge: '지식/백과',
-        wiki: '위키',
+        knowledge: '지식/위키',
+        wiki: '지식/위키',
         academic: '학술/논문',
         site: '사이트/홈페이지',
         book: '도서',
@@ -1933,8 +2091,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         authority: 3,
         public_data: 2,
         local_tour: 2,
-        knowledge: 3,
-        wiki: 3,
+        knowledge: 5,
+        wiki: 0,
         academic: 4,
         site: 5,
         book: 4,
@@ -1962,7 +2120,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
+      const order = ['authority','local_tour','knowledge','site','news','blog','social','shopping','book','cafe','image','video','media','public_data','academic','sports','finance','community','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -2029,8 +2187,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         authority: 3,
         public_data: 2,
         local_tour: 2,
-        knowledge: 3,
-        wiki: 3,
+        knowledge: 5,
+        wiki: 0,
         site: 5,
         book: 4,
         news: 5,
@@ -2084,7 +2242,46 @@ async function fetchInstantSearchPack(q, type = activeType){
       return copy;
     }
 
-    function renderGroupedSlice(slice, page){
+    
+    function renderImageGridSection(groupInfo, body){
+      const items = Array.isArray(groupInfo && groupInfo.items) ? groupInfo.items : [];
+      const gridItems = items
+        .map(it => ({ it, images: collectNaturalImages(it) }))
+        .filter(x => x.images && x.images.length)
+        .slice(0, Math.max(12, displayGroupModuleTotalCap('image')));
+      if(!gridItems.length) return false;
+
+      const grid = document.createElement('div');
+      grid.className = 'maru-image-grid-section';
+
+      gridItems.forEach(({ it, images }) => {
+        const src = images[0];
+        const a = document.createElement('a');
+        a.href = primaryMediaUrlForItemClient(it, src);
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.addEventListener('click', e => e.stopPropagation());
+
+        const img = document.createElement('img');
+        img.src = src;
+        img.loading = 'lazy';
+        img.alt = (it && it.title) ? String(it.title).slice(0, 100) : '';
+        img.onerror = () => a.remove();
+
+        const cap = document.createElement('span');
+        cap.className = 'maru-image-grid-caption';
+        cap.textContent = (it && it.title) ? String(it.title).slice(0, 80) : domainOf(a.href);
+
+        a.appendChild(img);
+        a.appendChild(cap);
+        grid.appendChild(a);
+      });
+
+      body.appendChild(grid);
+      return true;
+    }
+
+function renderGroupedSlice(slice, page){
       const groups = (Array.isArray(slice) && slice.length && slice[0] && Array.isArray(slice[0].items) && slice[0].group) ? slice : groupSliceForDisplay(slice);
       groups.forEach(groupInfo => {
         groupInfo.items = diversifyGroupPreviewItems(groupInfo.group, groupInfo.items);
@@ -2131,12 +2328,16 @@ async function fetchInstantSearchPack(q, type = activeType){
         let hiddenMounted = false;
         let hiddenWrap = null;
 
-        previewItems.forEach((it, idx) => renderItem(decorateDisplayItemForRender(it, groupInfo, idx, false), body));
+        if(groupInfo.group === 'image'){
+          renderImageGridSection(Object.assign({}, groupInfo, { items: groupInfo.items }), body);
+        } else {
+          previewItems.forEach((it, idx) => renderItem(decorateDisplayItemForRender(it, groupInfo, idx, false), body));
+        }
 
         section.appendChild(head);
         section.appendChild(body);
 
-        if (hiddenItems.length) {
+        if (hiddenItems.length && groupInfo.group !== 'image') {
           const more = document.createElement('button');
           more.type = 'button';
           more.className = 'maru-display-more';
@@ -2497,23 +2698,23 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const google = document.createElement('a');
       google.href = 'https://www.google.com/maps/search/' + encodeURIComponent(mapQuery || info.query || '');
-      google.target = '_self';
-      google.rel = 'noopener';
+      google.target = '_blank';
+      google.rel = 'noopener noreferrer';
       google.textContent = 'Google 지도';
       actions.appendChild(google);
 
       const naver = document.createElement('a');
       naver.href = 'https://map.naver.com/p/search/' + encodeURIComponent(mapQuery || info.query || '');
-      naver.target = '_self';
-      naver.rel = 'noopener';
+      naver.target = '_blank';
+      naver.rel = 'noopener noreferrer';
       naver.textContent = 'Naver 지도';
       actions.appendChild(naver);
 
       if(info.homepage){
         const home = document.createElement('a');
         home.href = info.homepage;
-        home.target = '_self';
-        home.rel = 'noopener';
+        home.target = '_blank';
+        home.rel = 'noopener noreferrer';
         home.textContent = '홈페이지';
         actions.appendChild(home);
       }
@@ -2543,20 +2744,94 @@ async function fetchInstantSearchPack(q, type = activeType){
       return wrap;
     }
 
-    function renderPlayableMedia(mediaInfo, it){
+    
+    function firstUrlClient(){
+      for (let i = 0; i < arguments.length; i++) {
+        const v = String(arguments[i] || '').trim();
+        if (/^https?:\/\//i.test(v) || v.startsWith('/')) return v;
+      }
+      return '';
+    }
+
+    function urlLooksLikeSearchEngineResultClient(url){
+      const u = String(url || '').toLowerCase();
+      if(!u) return false;
+      return /google\.[^/]+\/search|google\.[^/]+\/imgres|google\.[^/]+\/maps\/search|search\.naver\.com\/search\.naver|search\.naver\.com\/search|bing\.com\/search|bing\.com\/images\/search|youtube\.com\/results|m\.youtube\.com\/results/.test(u);
+    }
+
+    function primaryPageUrlForItemClient(it){
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
+      const url = firstUrlClient(
+        it && it.pageUrl,
+        it && it.openUrl,
+        displayCard.pageUrl,
+        displayCard.url,
+        payload.pageUrl,
+        payload.contextLink,
+        payload.originallink,
+        payload.url,
+        data.pageUrl,
+        data.contextLink,
+        it && it.url,
+        it && it.link,
+        it && it.href
+      );
+      return urlLooksLikeSearchEngineResultClient(url) ? '' : url;
+    }
+
+    function primaryMediaUrlForItemClient(it, fallbackImage){
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
+      return firstUrlClient(
+        it && it.videoUrl,
+        it && it.watchUrl,
+        it && it.openImageUrl,
+        it && it.viewerImage,
+        it && it.originalImage,
+        it && it.fullImage,
+        displayCard.videoUrl,
+        displayCard.watchUrl,
+        displayCard.openImageUrl,
+        displayCard.originalImage,
+        payload.videoUrl,
+        payload.watchUrl,
+        payload.openImageUrl,
+        payload.originalImage,
+        payload.originallink,
+        data.openImageUrl,
+        data.originalImage,
+        fallbackImage,
+        primaryPageUrlForItemClient(it)
+      );
+    }
+
+function renderPlayableMedia(mediaInfo, it){
       if (!mediaInfo) return null;
 
       const wrap = document.createElement('div');
       wrap.className = 'maru-video-embed-wrap';
 
       if (mediaInfo.kind === 'youtube') {
-        const iframe = document.createElement('iframe');
-        iframe.src = mediaInfo.embedUrl;
-        iframe.loading = 'lazy';
-        iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
-        iframe.allowFullscreen = true;
-        iframe.title = (it && it.title) ? String(it.title).slice(0, 120) : 'YouTube video';
-        wrap.appendChild(iframe);
+        const a = document.createElement('a');
+        a.className = 'maru-video-thumb-link';
+        a.href = mediaInfo.originalUrl || ('https://www.youtube.com/watch?v=' + encodeURIComponent(mediaInfo.id));
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.addEventListener('click', e => e.stopPropagation());
+        const img = document.createElement('img');
+        img.loading = 'lazy';
+        img.alt = (it && it.title) ? String(it.title).slice(0, 120) : 'YouTube video';
+        img.src = preferredYoutubeThumbClient(it) || ('https://i.ytimg.com/vi/' + encodeURIComponent(mediaInfo.id) + '/hqdefault.jpg');
+        img.onerror = () => img.remove();
+        const play = document.createElement('span');
+        play.className = 'maru-video-play-overlay';
+        play.textContent = '▶';
+        a.appendChild(img);
+        a.appendChild(play);
+        wrap.appendChild(a);
         return wrap;
       }
 
@@ -2684,11 +2959,12 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const playableMedia = getPlayableMediaInfo(it, url);
 
-      if (url) {
+      const safePageUrl = primaryPageUrlForItemClient(it) || (urlLooksLikeSearchEngineResultClient(url) ? '' : url);
+      if (safePageUrl) {
         card.style.cursor = 'pointer';
         card.addEventListener('click', (e) => {
-          if (e.target && e.target.closest && e.target.closest('a, button, iframe, video, .maru-video-embed-wrap, .maru-card-media')) return;
-          window.location.href = url;
+          if (e.target && e.target.closest && e.target.closest('a, button, iframe, video, .maru-video-embed-wrap, .maru-card-media, .maru-map-preview')) return;
+          window.open(safePageUrl, '_blank', 'noopener,noreferrer');
         });
       }
 
@@ -2704,9 +2980,10 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       if (url) {
         const a = document.createElement('a');
-        a.href = url;
-        a.target = '_self';
-        a.rel = 'noopener';
+        a.href = safePageUrl || url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.addEventListener('click', e => e.stopPropagation());
         a.textContent = (it.title || '').trim() || '(no title)';
         a.style.color = 'inherit';
         a.style.textDecoration = 'none';
@@ -2788,23 +3065,11 @@ if (it.riskLabel === '⚠️ high-risk') {
       body.appendChild(textCol);
 
       const playableMediaNode = renderPlayableMedia(playableMedia, it);
-      if (playableMediaNode) {
-        const badge = document.createElement('div');
-        badge.className = 'maru-video-badge';
-        badge.textContent = playableMedia.kind === 'youtube' ? '영상 재생' : '동영상';
-        textCol.appendChild(badge);
-        body.appendChild(playableMediaNode);
-      }
 
-      const mapPreviewNode = (!playableMediaNode && shouldRenderMapPreviewForItemClient(it)) ? renderMapPreviewClient(it) : null;
-      if (mapPreviewNode) {
-        body.appendChild(mapPreviewNode);
-      }
-
-      if (!playableMediaNode && isRealThumb) {
+      if (isRealThumb) {
         const mediaWrap = document.createElement('div');
         mediaWrap.className = 'maru-card-media';
-        const mediaCount = Math.min(naturalImages.length, 3);
+        const mediaCount = Math.min(naturalImages.length, 4);
         const mediaKind = classifyVisualKindClient(it);
         mediaWrap.dataset.count = String(mediaCount);
         mediaWrap.dataset.kind = mediaKind;
@@ -2816,16 +3081,35 @@ if (it.riskLabel === '⚠️ high-risk') {
           mediaCount === 2 ? '164px' :
           '176px';
 
-        naturalImages.forEach((src) => {
+        naturalImages.slice(0, 4).forEach((src) => {
+          const link = document.createElement('a');
+          link.href = primaryMediaUrlForItemClient(it, src);
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.addEventListener('click', e => e.stopPropagation());
           const img = document.createElement('img');
           img.src = src;
           img.loading = 'lazy';
-          img.alt = '';
-          img.onerror = () => img.remove();
-          mediaWrap.appendChild(img);
+          img.alt = (it && it.title) ? String(it.title).slice(0, 100) : '';
+          img.onerror = () => link.remove();
+          link.appendChild(img);
+          mediaWrap.appendChild(link);
         });
 
         body.appendChild(mediaWrap);
+      }
+
+      const mapPreviewNode = shouldRenderMapPreviewForItemClient(it) ? renderMapPreviewClient(it) : null;
+      if (mapPreviewNode) {
+        body.appendChild(mapPreviewNode);
+      }
+
+      if (playableMediaNode) {
+        const badge = document.createElement('div');
+        badge.className = 'maru-video-badge';
+        badge.textContent = playableMedia.kind === 'youtube' ? '영상 보기' : '동영상';
+        textCol.appendChild(badge);
+        body.appendChild(playableMediaNode);
       }
 
       if (hasVideoPreview && !playableMediaNode && !isYoutubeLikeItemClient(it)) {
@@ -3017,8 +3301,8 @@ if (it.riskLabel === '⚠️ high-risk') {
         authority: 8,
         public_data: 8,
         local_tour: 8,
-        knowledge: 3,
-        wiki: 3,
+        knowledge: 5,
+        wiki: 0,
         academic: 15,
         site: 15,
         book: 15,
@@ -3047,7 +3331,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         items: diversifyGroupPreviewItems(g.group, g.items || [])
       }));
       const byGroup = new Map(grouped.map(g => [g.group, g]));
-      const categoryOrder = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon'];
+      const categoryOrder = ['authority','local_tour','knowledge','site','news','blog','social','shopping','book','cafe','image','video','media','public_data','academic','sports','finance','community','webtoon','web'];
       const categoryOverflowItems = [];
       const categoryPages = [];
       let page = [];
@@ -3205,6 +3489,32 @@ if (it.riskLabel === '⚠️ high-risk') {
       results.innerHTML = '';
       const slice = visibleItemsForPage(page);
       const start = (page - 1) * PAGE_SIZE;
+
+      if (normalizeSearchType(activeType) === 'image') {
+        const section = document.createElement('section');
+        section.className = 'maru-display-section';
+        section.dataset.group = 'image';
+        const head = document.createElement('div');
+        head.className = 'maru-display-section-head';
+        const title = document.createElement('div');
+        title.className = 'maru-display-section-title';
+        title.textContent = '이미지';
+        const meta = document.createElement('div');
+        meta.className = 'maru-display-section-meta';
+        meta.textContent = `${slice.length}개`;
+        head.appendChild(title);
+        head.appendChild(meta);
+        const body = document.createElement('div');
+        body.className = 'maru-display-section-body';
+        const renderedGrid = renderImageGridSection({ group:'image', items:slice }, body);
+        if(!renderedGrid) slice.forEach(it => renderItem(it, body));
+        section.appendChild(head);
+        section.appendChild(body);
+        results.appendChild(section);
+        drawPager();
+        if(!skipEnrich) enrichRenderedPageImages(page, slice, start);
+        return;
+      }
 
       // Render the already-balanced visible stream. Do not rebuild page 1 from a
       // raw source slice, because a raw slice may contain only news/logo/map cards
@@ -3388,7 +3698,7 @@ async function runSearch(q, type = activeType){
   signalSanmaruSearch(qq, activeType, 'run-search');
   status.textContent = `Receiving ${getTypeLabel(activeType)} supply for "${qq}"...`;
   renderSkeleton();
-  clearPager();
+  drawPager();
 
   currentBlock = 0;
   currentPage = 1;
@@ -3406,8 +3716,9 @@ async function runSearch(q, type = activeType){
     if(intakeStarted || runSearch._seq !== seq) return;
     intakeStarted = true;
     if(intakeTimer) clearTimeout(intakeTimer);
-    startContinuousIntake(qq, activeType, seq);
-    status.textContent = `${serverTotalItems || allItems.length || INITIAL_PRELOAD_TARGET} results for "${qq}" · ${getTypeLabel(activeType)} · receiving...`;
+    const firstFaucetPage = nextFaucetPageAfterSeed();
+    startContinuousIntake(qq, activeType, seq, firstFaucetPage);
+    status.textContent = `${serverTotalItems || allItems.length || INITIAL_PRELOAD_TARGET} results for "${qq}" · ${getTypeLabel(activeType)} · receiving from page ${firstFaucetPage}...`;
   }
 
   function applySupplyPack(pack, sourceName){
@@ -3447,8 +3758,8 @@ async function runSearch(q, type = activeType){
       drawPager();
     }
     status.textContent = `${serverTotalItems || allItems.length} results for "${qq}" · ${getTypeLabel(activeType)} · receiving...`;
-    if(!intakeStarted && allItems.length >= 250){
-      setTimeout(() => startIntakeOnce('receiver-250-open-pipe'), 0);
+    if(!intakeStarted && allItems.length >= INITIAL_PRELOAD_TARGET){
+      setTimeout(() => startIntakeOnce('receiver-300-open-pipe'), 0);
     }
     return incoming.length;
   }
@@ -3476,15 +3787,15 @@ async function runSearch(q, type = activeType){
       status.textContent = `No quick results for "${qq}" · receiving...`;
     }
 
-    // Do not wait for Sanmaru/MaruSearch to finish all lanes. Start the faucet
-    // shortly after first paint, but let the page-1 300-window seed pages 1~12
-    // first when it arrives quickly.
-    intakeTimer = setTimeout(() => startIntakeOnce('first-paint-timer'), 50);
+    // Do not restart the faucet from page 2. The first window seeds 300 cards
+    // (12 pages), then the faucet continues from page 13. A slow first window
+    // still gets a short grace period before falling back to whatever page is next.
+    intakeTimer = setTimeout(() => startIntakeOnce('first-window-grace-timer'), 350);
 
     maruWindowPromise.then(res => {
       if(runSearch._seq !== seq || !res || res.error) return;
       applySupplyPack(res.pack, res.kind);
-      startIntakeOnce('maru-page1-window-ready');
+      startIntakeOnce('maru-page1-300-window-ready');
     });
     instantPromise.then(res => {
       if(runSearch._seq !== seq || !res || res.error) return;
