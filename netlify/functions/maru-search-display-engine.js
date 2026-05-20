@@ -12,29 +12,29 @@
  * - search.js remains the UI executor: it hides/shows/reorders categories using this policy.
  */
 
-const VERSION = 'maru-search-display-engine-v1.4.0-card-contract-executor';
+const VERSION = 'maru-search-display-engine-v1.4.2-real-content-category-contract';
 const ENGINE_NAME = 'maru-search-display-engine';
 
 const BASE_GROUP_ORDER = [
-  'authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news',
-  'image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'
+  'authority','local_tour','knowledge','site','news','tour','blog','social','shopping','book','cafe',
+  'image','video','media','public_data','academic','sports','finance','community','webtoon','web'
 ];
 
 const BASE_TABS = [
-  'all','map','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video',
-  'sns','tour','public_data','academic','sports','finance','webtoon'
+  'all','map','knowledge','site','news','tour','blog','sns','shopping','book','cafe','image','video',
+  'public_data','academic','sports','finance','community','webtoon'
 ];
 
 const DEFAULT_PREVIEW_LIMITS = {
-  authority:3, public_data:2, local_tour:2, knowledge:3, wiki:3, academic:4, site:5,
-  book:4, news:5, blog:5, cafe:5, community:5, image:5, video:5, media:5,
-  social:4, shopping:5, sports:4, finance:4, webtoon:4, web:18
+  authority:3, public_data:2, local_tour:2, knowledge:5, academic:4, site:5,
+  news:5, tour:5, blog:5, social:5, shopping:5, book:4, cafe:5, community:5,
+  image:5, video:5, media:5, sports:4, finance:4, webtoon:4, web:18
 };
 
 const DEFAULT_MODULE_CAPS = {
-  authority:8, public_data:8, local_tour:8, knowledge:3, wiki:3, academic:15, site:15,
-  book:15, news:15, blog:15, cafe:15, community:15, image:15, video:15, media:15,
-  social:15, shopping:15, sports:15, finance:15, webtoon:15, web:30
+  authority:8, public_data:8, local_tour:8, knowledge:15, academic:15, site:15,
+  news:15, tour:15, blog:15, social:15, shopping:15, book:15, cafe:15, community:15,
+  image:15, video:15, media:15, sports:15, finance:15, webtoon:15, web:30
 };
 
 function s(v){ return String(v == null ? '' : v); }
@@ -112,25 +112,8 @@ function naturalSummary(item, query){
   return '';
 }
 function fallbackDisplaySummary(item, query, group){
-  item = item && typeof item === 'object' ? item : {};
-  const title = firstNonEmpty(item.title, item.name, query);
-  const url = firstNonEmpty(item.url, item.link, item.href);
-  const host = domainOf(url);
-  const q = compact(query || title);
-  const label = ({
-    authority:'공식·기관', public_data:'공공자료', local_tour:'지도·지역', knowledge:'지식', wiki:'위키', site:'사이트', book:'도서',
-    blog:'블로그', cafe:'카페', shopping:'쇼핑', news:'뉴스', image:'이미지', video:'영상', media:'미디어', social:'소셜',
-    academic:'학술', community:'커뮤니티', sports:'스포츠', finance:'금융', webtoon:'웹툰', web:'웹'
-  })[group] || '웹';
-  if(group === 'local_tour') return `${q}의 위치·관광·교통·주변 정보를 확인할 수 있는 ${label} 결과입니다. 지도 미리보기와 관련 장소 정보가 함께 표시됩니다.`.slice(0, 300);
-  if(group === 'image') return `${q}와 관련된 사진·그래픽·이미지 자료를 확인할 수 있는 결과입니다. 원본 페이지가 제공하는 대표 이미지가 있으면 카드 오른쪽에 표시됩니다.`.slice(0, 300);
-  if(group === 'video' || group === 'media') return `${q} 관련 영상·현장 화면·리뷰 콘텐츠로 연결되는 결과입니다. 영상 대표 스냅샷이 있는 경우 검색 카드에 함께 표시됩니다.`.slice(0, 300);
-  if(group === 'blog' || group === 'cafe' || group === 'community' || group === 'social') return `${q}에 대한 현장 후기, 소셜 반응, 커뮤니티 글을 확인할 수 있는 결과입니다. 제공된 본문·이미지가 있으면 검색 카드에 같이 표시됩니다.`.slice(0, 300);
-  if(group === 'news') return `${q}와 관련된 최신 보도·이슈·기사 흐름을 확인할 수 있는 결과입니다. 언론사 본문 요약이 제공되면 2~3줄로 표시됩니다.`.slice(0, 300);
-  if(group === 'authority' || group === 'public_data' || group === 'site') return `${q}와 관련된 공식 사이트·공공자료·주요 기관 페이지입니다. ${host || '해당 출처'}의 공개 정보를 기준으로 연결됩니다.`.slice(0, 300);
-  const line1 = q ? `${q} 관련 ${label} 결과입니다.` : `${label} 결과입니다.`;
-  const line2 = host ? `${host}에서 제공되는 공개 페이지이며, 본문 요약이나 대표 이미지가 있으면 검색 카드에 함께 표시됩니다.` : `${title} 항목의 공개 페이지로 연결됩니다.`;
-  return `${line1} ${line2}`.slice(0, 300);
+  // Do not manufacture synthetic card body text when provider content is missing.
+  return '';
 }
 function collectDisplayImages(item){
   item = item && typeof item === 'object' ? item : {};
@@ -199,7 +182,7 @@ function collectDisplayImages(item){
     if(seen.has(key)) continue;
     seen.add(key);
     out.push(img);
-    if(out.length >= 3) break;
+    if(out.length >= 4) break;
   }
   return out;
 }
@@ -218,6 +201,7 @@ function youtubeThumb(item){
 function cardTypeForGroup(group, item){
   const g = normalizeGroup(groupOfItem(item) || group);
   if(g === 'local_tour') return 'map';
+  if(g === 'tour') return 'article-media';
   if(g === 'image') return 'image';
   if(g === 'video' || g === 'media') return 'video';
   if(g === 'shopping') return 'shopping';
@@ -240,7 +224,7 @@ function decorateDisplayItem(item, ctx, index){
   const copy = Object.assign({}, item, {
     displayGroup: group,
     displayGroupLabel: ({
-      authority:'주요 정보', public_data:'공공자료', local_tour:'지도/지역', knowledge:'지식', wiki:'위키', site:'사이트', book:'도서',
+      authority:'주요 정보', public_data:'공공자료', local_tour:'지도/지역', knowledge:'지식/위키', tour:'관광/가볼 만한 곳', site:'사이트', book:'도서',
       blog:'블로그', cafe:'카페', shopping:'쇼핑', news:'뉴스', image:'이미지', video:'영상', media:'미디어', social:'소셜',
       academic:'학술', community:'커뮤니티', sports:'스포츠', finance:'증권', webtoon:'웹툰', web:'웹'
     })[group] || '웹',
@@ -275,8 +259,8 @@ function decorateDisplayItem(item, ctx, index){
       body: summary,
       description: summary,
       snippet: summary,
-      lineClamp: mapLike ? 2 : 3,
-      bodyLines: mapLike ? 2 : 3,
+      lineClamp: mapLike ? 3 : 4,
+      bodyLines: mapLike ? 3 : 4,
       thumbnail: images[0] || '',
       image: images[0] || '',
       imageUrl: images[0] || '',
@@ -288,7 +272,7 @@ function decorateDisplayItem(item, ctx, index){
       showMapPreview: mapLike,
       showVideoPreview: cardType === 'video',
       showBody: true,
-      bodySource: summary ? 'provider' : 'empty',
+      bodySource: naturalSummary(item, q) ? 'provider' : 'display-engine-fallback',
       thumbnailPolicy: 'actual-content-image-only; no-logo-no-favicon-no-banner-no-placard-no-search-url',
       displayMode: mapLike ? 'map-plus-list-card' : (images.length ? 'text-plus-thumbnail-card' : 'text-summary-card')
     })
@@ -330,8 +314,9 @@ function normalizeGroup(group){
   const map = {
     official:'authority', official_authority:'authority', gov:'authority', government:'authority', authority:'authority',
     public:'public_data', opendata:'public_data', open_data:'public_data', public_data:'public_data',
-    map:'local_tour', maps:'local_tour', local:'local_tour', region:'local_tour', place:'local_tour', map_local:'local_tour', map_local_tour:'local_tour', local_map:'local_tour', local_map_tour:'local_tour', place_tour:'local_tour', tour:'local_tour', travel:'local_tour', tourism:'local_tour', local_tour:'local_tour', 지역:'local_tour', 지도:'local_tour',
-    knowledge_wiki:'knowledge', encyclopedia:'knowledge', knowledge:'knowledge', wiki:'wiki',
+    map:'local_tour', maps:'local_tour', map_local:'local_tour', map_local_tour:'local_tour', local_map:'local_tour', local:'local_tour', region:'local_tour', local_tour:'local_tour',
+    tour:'tour', travel:'tour', tourism:'tour', place_tour:'tour', attraction:'tour',
+    knowledge_wiki:'knowledge', encyclopedia:'knowledge', wikipedia:'knowledge', knowledge:'knowledge', wiki:'knowledge',
     scholar:'academic', paper:'academic', research:'academic', academic:'academic',
     company_web:'site', corporate_homepage:'site', business_site:'site', official_site:'site', homepage:'site', website:'site', site:'site', company:'site', corporate:'site', business:'site',
     image_gallery:'image', photo:'image', image:'image',
@@ -370,9 +355,11 @@ function groupOfItem(item){
 
   if(/\.go\.kr$|\.gov$|\.or\.kr$|\.edu$|\.ac\.kr$/.test(host) || /공식|정부|기관|authority/.test(text)) return 'authority';
   if(type === 'public_data' || /공공데이터|데이터포털|open data/.test(text) || host.includes('data.go.kr')) return 'public_data';
-  if(type === 'map' || type === 'local' || /지도|주소|위치|근처|맛집|관광|여행|호텔|숙박|landmark|tour|travel|place/.test(text)) return 'local_tour';
+  if(type === 'news' || source.includes('news') || /뉴스|속보|breaking|press/.test(text)) return 'news';
+  if(type === 'map' || type === 'local' || /지도|주소|위치|근처|교통|길찾기|map|local/.test(text)) return 'local_tour';
+  if(type === 'tour' || /관광|여행|가볼\s*만한\s*곳|볼거리|명소|축제|공원|박물관|미술관|야경|전망대|랜드마크|맛집|호텔|숙박|landmark|tour|travel|tourism|attraction|things to do|restaurant|hotel|park|museum|gallery/.test(text)) return 'tour';
   if(type === 'academic' || /학술|논문|연구|journal|paper|thesis|scholar/.test(text) || host.includes('scholar.google')) return 'academic';
-  if(type === 'wiki' || /위키|wiki/.test(text)) return 'wiki';
+  if(type === 'wiki' || /위키|wiki/.test(text)) return 'knowledge';
   if(type === 'knowledge' || /지식|백과|사전|knowledge|encyclopedia/.test(text)) return 'knowledge';
   if(type === 'site' || /홈페이지|공식사이트|기업|회사|business|company|corporate/.test(text)) return 'site';
   if(type === 'book' || /도서|책|isbn|book/.test(text)) return 'book';
@@ -431,17 +418,17 @@ function inferIntent(q, counts, rawType){
 function policyForIntent(intentInfo, counts){
   const intent = intentInfo.intent || 'general';
   const profiles = {
-    local: ['authority','local_tour','blog','image','video','news','site','web'],
+    local: ['authority','local_tour','news','tour','blog','image','video','site','web'],
     shopping: ['shopping','image','video','blog','site','news','web'],
     finance: ['finance','news','authority','site','blog','video','web'],
-    issue: ['news','social','blog','video','image','wiki','authority','web'],
-    celebrity: ['news','video','social','image','blog','cafe','wiki','site','web'],
-    celebrity_or_person: ['news','video','social','image','blog','cafe','wiki','site','web'],
-    academic: ['academic','knowledge','wiki','site','book','news','web'],
-    book: ['book','knowledge','wiki','blog','shopping','news','web'],
+    issue: ['news','social','blog','video','image','knowledge','authority','web'],
+    celebrity: ['news','video','social','image','blog','cafe','knowledge','site','web'],
+    celebrity_or_person: ['news','video','social','image','blog','cafe','knowledge','site','web'],
+    academic: ['academic','knowledge','site','book','news','web'],
+    book: ['book','knowledge','blog','shopping','news','web'],
     sports: ['sports','news','video','social','image','blog','web'],
-    knowledge: ['authority','knowledge','wiki','site','academic','video','image','web'],
-    general: ['authority','knowledge','wiki','site','news','blog','image','video','social','local_tour','shopping','public_data','academic','web']
+    knowledge: ['authority','knowledge','site','academic','video','image','web'],
+    general: ['authority','local_tour','knowledge','site','news','tour','blog','social','shopping','book','cafe','image','video','public_data','academic','sports','finance','community','webtoon','web']
   };
   const preferred = profiles[intent] || profiles.general;
   const presentPreferred = preferred.filter(g => g === 'web' || hasCount(counts, g));
@@ -457,16 +444,16 @@ function policyForIntent(intentInfo, counts){
   const groupOrder = unique(visibleGroups.concat(BASE_GROUP_ORDER));
 
   const visibleTabsMap = {
-    local: ['all','map','tour','blog','image','video','news','site'],
+    local: ['all','map','news','tour','blog','image','video','site'],
     shopping: ['all','shopping','image','video','blog','site','news'],
     finance: ['all','finance','news','site','blog','video'],
-    issue: ['all','news','sns','blog','video','image','wiki','site'],
-    celebrity: ['all','news','video','sns','image','blog','cafe','wiki','site'],
-    celebrity_or_person: ['all','news','video','sns','image','blog','cafe','wiki','site'],
-    academic: ['all','academic','knowledge','wiki','site','book','news'],
-    book: ['all','book','knowledge','wiki','blog','shopping','news'],
+    issue: ['all','news','sns','blog','video','image','knowledge','site'],
+    celebrity: ['all','news','video','sns','image','blog','cafe','knowledge','site'],
+    celebrity_or_person: ['all','news','video','sns','image','blog','cafe','knowledge','site'],
+    academic: ['all','academic','knowledge','site','book','news'],
+    book: ['all','book','knowledge','blog','shopping','news'],
     sports: ['all','sports','news','video','sns','image','blog'],
-    knowledge: ['all','knowledge','wiki','site','academic','video','image'],
+    knowledge: ['all','knowledge','site','academic','video','image'],
     general: BASE_TABS
   };
   const visibleTabs = visibleTabsMap[intent] || visibleTabsMap.general;
@@ -474,12 +461,12 @@ function policyForIntent(intentInfo, counts){
 
   const previewLimitByGroup = Object.assign({}, DEFAULT_PREVIEW_LIMITS);
   const moduleCapByGroup = Object.assign({}, DEFAULT_MODULE_CAPS);
-  if(intent === 'issue') Object.assign(previewLimitByGroup, { news:6, social:5, blog:5, video:5, image:4, wiki:2, authority:2 });
-  if(intent === 'celebrity' || intent === 'celebrity_or_person') Object.assign(previewLimitByGroup, { news:5, video:6, social:5, image:6, blog:5, cafe:4, wiki:2, local_tour:1 });
-  if(intent === 'local') Object.assign(previewLimitByGroup, { local_tour:4, blog:5, image:5, video:4, news:3 });
+  if(intent === 'issue') Object.assign(previewLimitByGroup, { news:6, social:5, blog:5, video:5, image:4, knowledge:5, authority:2 });
+  if(intent === 'celebrity' || intent === 'celebrity_or_person') Object.assign(previewLimitByGroup, { news:5, video:6, social:5, image:6, blog:5, cafe:4, knowledge:5, local_tour:1 });
+  if(intent === 'local') Object.assign(previewLimitByGroup, { local_tour:3, tour:5, blog:5, image:5, video:4, news:3 });
   if(intent === 'shopping') Object.assign(previewLimitByGroup, { shopping:6, image:6, video:5, blog:5, site:4 });
   if(intent === 'finance') Object.assign(previewLimitByGroup, { finance:6, news:5, authority:3, site:4 });
-  if(intent === 'academic') Object.assign(previewLimitByGroup, { academic:6, knowledge:4, wiki:3, site:4, book:4 });
+  if(intent === 'academic') Object.assign(previewLimitByGroup, { academic:6, knowledge:5, site:4, book:4 });
 
   return { visibleGroups, hiddenGroups, groupOrder, visibleTabs, hiddenTabs, previewLimitByGroup, moduleCapByGroup };
 }
@@ -514,7 +501,7 @@ function buildDisplayPolicy(input){
     visibleTabs:p.visibleTabs,
     hiddenTabs:p.hiddenTabs,
     groupCounts:counts,
-    cardContract:{ enabled:true, bodyLines:3, thumbnailPolicy:'natural-content-image-only; reject-logo-banner-placard; do-not-promote-poster-field', mapPolicy:'show-map-preview-for-local-tour', executor:'search.js' },
+    cardContract:{ enabled:true, bodyLines:4, thumbnailPolicy:'natural-content-image-only; reject-logo-banner-placard; do-not-promote-poster-field', mapPolicy:'show-map-preview-for-local-tour', executor:'search.js' },
     execution:'search-js-applies-policy; maru-search-attaches-display-card-contract',
     externalCall:false,
     storageWrite:false
