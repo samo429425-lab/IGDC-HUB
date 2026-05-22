@@ -3,7 +3,7 @@
 // - collector first
 // - collector search pipeline
 // - silent error prevention
-// - protected result navigation: external pages open inside search.html viewer
+// - protected result navigation: external pages open inside search.html viewer below pager
 // - block pagination
 
 (function () {
@@ -84,8 +84,49 @@ ready(function () {
       return true;
     }
 
+    function ensureEmbeddedViewerHost(){
+      try{ drawPager(); }catch(e){}
+      const pager = document.getElementById('maru-page-controls');
+      const parent = (pager && pager.parentNode) || (results && results.parentNode) || document.body;
+      let host = document.getElementById('maru-embedded-search-viewer-host');
+      if(!host){
+        host = document.createElement('div');
+        host.id = 'maru-embedded-search-viewer-host';
+        host.className = 'maru-embedded-search-viewer-host';
+      }
+      if(pager && pager.parentNode){
+        if(host.parentNode !== pager.parentNode || host.previousSibling !== pager){
+          pager.parentNode.insertBefore(host, pager.nextSibling);
+        }
+      }else if(results && results.parentNode){
+        if(host.parentNode !== results.parentNode || host.nextSibling !== results){
+          results.parentNode.insertBefore(host, results);
+        }
+      }else if(!host.parentNode){
+        parent.appendChild(host);
+      }
+      return host;
+    }
+
+    function clearEmbeddedSearchViewerDom(){
+      const host = document.getElementById('maru-embedded-search-viewer-host');
+      if(host) host.innerHTML = '';
+    }
+
+    function scrollToPagerAndViewer(){
+      try{
+        const pager = document.getElementById('maru-page-controls');
+        const anchor = pager || status || document.getElementById('maru-embedded-search-viewer-host');
+        if(!anchor || !anchor.getBoundingClientRect) return;
+        const topGap = 92;
+        const top = Math.max(0, window.pageYOffset + anchor.getBoundingClientRect().top - topGap);
+        window.scrollTo({ top, behavior:'smooth' });
+      }catch(e){}
+    }
+
     function closeEmbeddedSearchViewer(){
       embeddedViewerState = null;
+      clearEmbeddedSearchViewerDom();
       try{
         loadServerPageAndRender(currentPage || 1);
       }catch(e){
@@ -96,6 +137,8 @@ ready(function () {
     function renderEmbeddedSearchViewer(){
       if(!embeddedViewerState || !results) return;
       const state = embeddedViewerState;
+      const viewerHost = ensureEmbeddedViewerHost();
+      viewerHost.innerHTML = '';
       results.innerHTML = '';
 
       const panel = document.createElement('section');
@@ -161,13 +204,13 @@ ready(function () {
       panel.appendChild(head);
       panel.appendChild(iframeWrap);
       panel.appendChild(note);
-      results.appendChild(panel);
+      viewerHost.appendChild(panel);
 
       try{
         if(status) status.textContent = `${state.host || 'external'} 페이지를 검색 화면 안에서 여는 중...`;
         drawPager();
       }catch(e){}
-      try{ panel.scrollIntoView({ block: 'start', behavior: 'smooth' }); }catch(e){}
+      scrollToPagerAndViewer();
     }
 
     // Ensure top search/header area remains visible when navigating cards.
@@ -532,6 +575,19 @@ function ensureSearchCardMediaStyle(){
       font-weight: 800;
     }
 
+    .maru-embedded-search-viewer-host {
+      width: 100%;
+      margin: 0 0 14px;
+      clear: both;
+    }
+    #maru-page-controls {
+      position: sticky;
+      top: 72px;
+      z-index: 9998;
+      padding: 7px 0;
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: saturate(120%) blur(6px);
+    }
     .maru-embedded-search-viewer {
       margin: 10px 0 18px;
       border: 1px solid #e5e7eb;
@@ -548,9 +604,8 @@ function ensureSearchCardMediaStyle(){
       padding: 10px 12px;
       border-bottom: 1px solid #e5e7eb;
       background: linear-gradient(180deg, #ffffff, #f8fafc);
-      position: sticky;
-      top: 0;
-      z-index: 2;
+      position: relative;
+      z-index: 1;
     }
     .maru-embedded-search-viewer-info {
       min-width: 0;
@@ -1754,6 +1809,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     function clearPager(){
       const bar = document.getElementById('maru-page-controls');
       if (bar) bar.remove();
+      clearEmbeddedSearchViewerDom();
     }
 
     function ensurePager(){
@@ -3571,21 +3627,16 @@ if (it.riskLabel === '⚠️ high-risk') {
     function buildClientVisibleStream(page){
       const sourceItems = Array.isArray(allItems) ? allItems : [];
       if (!sourceItems.length) return [];
-      if (normalizeSearchType(activeType) !== 'all') return sourceItems.slice();
 
-      const model = buildPortalPageModel();
-      if(model.pageCount){
-        const categoryPageCount = model.categoryPages.length;
+      // Search results must page as real cards. The previous all-tab portal board
+      // collapsed category groups into preview modules, so 300 received results
+      // could appear as only 7~8 pages and many pages rendered half-empty.
+      // Keep category information on each card, but do not let collapsed modules
+      // consume pager/card slots in the Global Search result stream.
+      if (normalizeSearchType(activeType) === 'all') {
         const pageNo = Math.max(1, parseInt(page, 10) || 1);
-        if(pageNo <= categoryPageCount) {
-          const modules = model.categoryPages[pageNo - 1] || [];
-          const fillStart = (model.categoryFillCounts || []).slice(0, pageNo - 1).reduce((sum, n) => sum + (Number(n) || 0), 0);
-          const fillCount = Number((model.categoryFillCounts || [])[pageNo - 1]) || 0;
-          return modules.concat((model.webItems || []).slice(fillStart, fillStart + fillCount));
-        }
-        const webPage = pageNo - categoryPageCount;
-        const start = Math.max(0, (model.filledWebBeforePlainPages || 0) + ((webPage - 1) * PAGE_SIZE));
-        return model.webItems.slice(start, start + PAGE_SIZE);
+        const start = (pageNo - 1) * PAGE_SIZE;
+        return sourceItems.slice(start, start + PAGE_SIZE).map(makePlainWebItem);
       }
 
       return sourceItems.slice();
@@ -3610,14 +3661,15 @@ if (it.riskLabel === '⚠️ high-risk') {
     }
 
     function visibleItemCountForPager(){
-      // In the all tab the pager must count the client visible stream, not the
-      // raw server total. Collapsed category overflow remains behind 더보기 and
-      // must not consume page slots.
       if (normalizeSearchType(activeType) === 'all') {
-        const model = buildPortalPageModel();
-        const portalCount = model && model.virtualCount ? model.virtualCount : buildClientVisibleStream(currentPage || 1).length;
-        const preloadFloor = lastQuery ? Math.min(INITIAL_PRELOAD_TARGET, Math.max(allItems.length || 0, portalCount || 0)) : 0;
-        return Math.max(portalCount, allItems.length || 0, preloadFloor);
+        const localCount = Array.isArray(allItems) ? allItems.length : 0;
+        const promisedCount = Math.max(
+          localCount,
+          Number(serverTotalItems) || 0,
+          Number(authoritativeServerTotalItems) || 0,
+          lastQuery ? Math.min(INITIAL_PRELOAD_TARGET, adaptiveSearchTarget(lastQuery, activeType)) : 0
+        );
+        return Math.min(MAX_PAGER_PAGES * PAGE_SIZE, Math.max(0, promisedCount));
       }
       if(serverPagedMode && serverTotalItems > 0) return serverTotalItems;
       return buildClientVisibleStream(currentPage || 1).length;
@@ -3636,6 +3688,7 @@ if (it.riskLabel === '⚠️ high-risk') {
 
     function renderPage(page, skipEnrich = false){
       embeddedViewerState = null;
+      clearEmbeddedSearchViewerDom();
       if(serverPagedMode && !loadedServerPages.has(page)){
         const preloadedPageCount = preloadPageCountFromItems(allItems);
         if(page > preloadedPageCount && !renderPage._serverWindowLoading){
@@ -3648,10 +3701,12 @@ if (it.riskLabel === '⚠️ high-risk') {
       const slice = visibleItemsForPage(page);
       const start = (page - 1) * PAGE_SIZE;
 
-      // Render the already-balanced visible stream. Do not rebuild page 1 from a
-      // raw source slice, because a raw slice may contain only news/logo/map cards
-      // and then hidden overflow still blocks the following categories from moving up.
-      if (slice.some(isDisplayGroupModule)) {
+      // Global Search pages render exactly the page window of real result cards.
+      // Group preview modules are disabled here because they reduced the visible
+      // card count and made the pager smaller than the received candidate pool.
+      if (normalizeSearchType(activeType) === 'all') {
+        slice.forEach(it => renderItem(ensureClientDisplayCard(makePlainWebItem(it))));
+      } else if (slice.some(isDisplayGroupModule)) {
         slice.forEach(entry => {
           if(isDisplayGroupModule(entry)) renderGroupedSlice([entry], page);
           else renderItem(entry);
