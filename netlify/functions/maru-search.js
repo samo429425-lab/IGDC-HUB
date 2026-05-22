@@ -68,7 +68,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.48-597-ranked-real-results-continuous-supply';
+const VERSION = 'A1.5.49-598-open-pipe-preserve-results-strip-guidance-fast-supply';
 const DEFAULT_LIMIT = 2000;
 const MAX_LIMIT = 12000;
 const MIN_RESULT_TARGET = 1500;
@@ -1206,6 +1206,8 @@ function isSyntheticSearchSummaryText(v){
   if(!t) return false;
   return /검색 결과입니다|공개 웹 결과입니다|관련 검색 결과입니다|검색 결과 경로|공개 정보 경로|공개 검색 경로|통합 공개 검색 경로|검색 결과 경로$/i.test(t) ||
     /관련\s+.*검색(\s*결과|\s*경로)?$/i.test(t) ||
+    /관련\s+.*(결과입니다|결과|경로|공개 페이지와 연결|공개 페이지|provider|route|lane)/i.test(t) ||
+    /(?:map|local|tour|provider|route|lane|gateway|검색\s*통로|검색\s*경로).*결과입니다/i.test(t) ||
     /(Google|Naver|네이버|구글|YouTube|유튜브|Instagram|Facebook|TikTok|Threads|Twitter|X\/Twitter|위키백과|나무위키|지식백과).*검색$/i.test(t);
 }
 
@@ -2734,39 +2736,109 @@ function maruResultDedupeKey(it){
   return title ? 't:' + title + '|' + src : '';
 }
 
+function isFrontReservoirOrSnapshotItemForSearchUi(it){
+  it = (it && typeof it === 'object') ? it : {};
+  const source = safeString(firstNonEmpty(it.source, it.provider, it.generatedBy, it.sourceType)).toLowerCase();
+  const route = safeString(firstNonEmpty(it.route, it.channel, it.section, it.page, it.psom_key)).toLowerCase();
+  const bind = (it.bind && typeof it.bind === 'object') ? it.bind : {};
+  const payload = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+  const hay = [
+    source,
+    route,
+    safeString(bind.page),
+    safeString(bind.section),
+    safeString(bind.psom_key),
+    safeString(payload.snapshot),
+    safeString(payload.snapshotName),
+    safeString(payload.file),
+    safeString(it.snapshot),
+    safeString(it.snapshotName),
+    safeString(it.file)
+  ].join(' ').toLowerCase();
+
+  // Search Bank snapshot/reservoir files are front-page supply memory.
+  // They must not be promoted into normal search-ui results. The search-bank
+  // consumer can still receive them through the isolated search-bank route.
+  if(/search-bank\.snapshot|front\.snapshot|distribution\.snapshot|social\.snapshot|media\.snapshot|donation\.snapshot|network\.snapshot/i.test(hay)) return true;
+  if(/front[-_ ]?page|front[-_ ]?supply|slot[-_ ]?supply|snapshot[-_ ]?supply|reservoir|replaceable[-_ ]?slot/i.test(hay)) return true;
+  if(source === 'search-bank' || source === 'snapshot-local' || source === 'searchbank' || source === 'search-bank-index') return true;
+  return false;
+}
+
+function sanitizeSearchUiResultBody(it, q){
+  const clean = Object.assign({}, (it && typeof it === 'object') ? it : {});
+  const summary = resultSummaryText(clean);
+  clean.summary = summary;
+  clean.description = summary;
+  clean.snippet = summary;
+  clean.displaySummary = summary;
+  if(clean.displayCard && typeof clean.displayCard === 'object'){
+    clean.displayCard = Object.assign({}, clean.displayCard, {
+      summary,
+      description: summary,
+      body: summary,
+      text: summary,
+      snippet: summary,
+      showBody: !!summary
+    });
+  }
+  return clean;
+}
+
 function splitRealResultsAndProviderHints(items){
   const real = [];
+  const roads = [];
   const hints = [];
   const seenReal = new Set();
+  const seenRoad = new Set();
   const seenHint = new Set();
+
   for(const raw of (Array.isArray(items) ? items : [])){
     const it = raw && typeof raw === 'object' ? raw : {};
     const title = safeString(it.title).trim();
     const url = safeString(firstNonEmpty(it.url, it.link)).trim();
     if(!title && !url) continue;
-    if(isMaruProviderRoadItem(it)){
+
+    if(isFrontReservoirOrSnapshotItemForSearchUi(it)){
       const hk = (url || title + '|' + safeString(it.source)).toLowerCase();
       if(hk && !seenHint.has(hk)){
         seenHint.add(hk);
-        hints.push({ title, url, source:it.source || null, provider:it.provider || null, type:it.type || it.searchCategory || null, role:'providerHint' });
+        hints.push({ title, url, source:it.source || null, provider:it.provider || null, type:it.type || it.searchCategory || null, role:'frontReservoirSuppressed' });
       }
       continue;
     }
-    const clean = Object.assign({}, it);
-    const summary = resultSummaryText(clean);
-    clean.summary = summary;
-    clean.description = summary;
-    clean.snippet = summary;
-    clean.displaySummary = summary;
-    if(clean.displayCard && typeof clean.displayCard === 'object'){
-      clean.displayCard = Object.assign({}, clean.displayCard, { summary, description:summary, body:summary, snippet:summary, showBody:!!summary });
+
+    const clean = sanitizeSearchUiResultBody(it);
+
+    if(isMaruProviderRoadItem(clean)){
+      const hk = (url || title + '|' + safeString(clean.source)).toLowerCase();
+      if(hk && !seenHint.has(hk)){
+        seenHint.add(hk);
+        hints.push({ title, url, source:clean.source || null, provider:clean.provider || null, type:clean.type || clean.searchCategory || null, role:'providerHint' });
+      }
+
+      // Do not throw away the clickable result lane.  The instruction is to remove
+      // the 안내문/body text, not to collapse the available search list itself.
+      const rk = maruResultDedupeKey(clean);
+      if(rk && seenRoad.has(rk)) continue;
+      if(rk) seenRoad.add(rk);
+      roads.push(Object.assign({}, clean, {
+        summary:'',
+        description:'',
+        snippet:'',
+        displaySummary:'',
+        _maruProviderRoadPreserved:true,
+        _maruProviderRoadDemoted:true
+      }));
+      continue;
     }
+
     const rk = maruResultDedupeKey(clean);
     if(rk && seenReal.has(rk)) continue;
     if(rk) seenReal.add(rk);
     real.push(clean);
   }
-  return { real, hints };
+  return { real, roads, hints };
 }
 
 function prepareRankedSearchUiItems(items, q, raw, opts){
@@ -2775,19 +2847,34 @@ function prepareRankedSearchUiItems(items, q, raw, opts){
   const requested = clampInt(firstNonEmpty(opts.target, raw.limit, raw.max, raw.count), SEARCH_UI_CONTINUOUS_MAX_TARGET, 1, MAX_LIMIT);
   const target = Math.min(SEARCH_UI_CONTINUOUS_MAX_TARGET, Math.max(requested, SEARCH_UI_INITIAL_WINDOW));
   const split = splitRealResultsAndProviderHints(items);
-  let ranked = dedupeCanonicalItems(split.real);
-  ranked = applyServerSideBoosts(ranked, { q, lang:opts.lang || raw.lang, searchType:opts.searchType || raw.type || raw.tab || raw.category || raw.vertical || 'all' });
-  ranked = ranked.slice(0, target);
+  let rankedReal = dedupeCanonicalItems(split.real);
+  rankedReal = applyServerSideBoosts(rankedReal, { q, lang:opts.lang || raw.lang, searchType:opts.searchType || raw.type || raw.tab || raw.category || raw.vertical || 'all' });
+
+  let rankedRoads = dedupeCanonicalItems(split.roads || []);
+  rankedRoads = applyServerSideBoosts(rankedRoads, { q, lang:opts.lang || raw.lang, searchType:opts.searchType || raw.type || raw.tab || raw.category || raw.vertical || 'all' })
+    .map(x => Object.assign({}, x, {
+      summary:'',
+      description:'',
+      snippet:'',
+      displaySummary:'',
+      _maruProviderRoadPreserved:true,
+      _maruProviderRoadDemoted:true
+    }));
+
+  const ranked = dedupeCanonicalItems([].concat(rankedReal, rankedRoads)).slice(0, target);
   return {
     items: ranked,
-    providerHints: split.hints.slice(0, 120),
-    filteredProviderRoadCount: split.hints.length,
+    providerHints: split.hints.slice(0, 240),
+    filteredProviderRoadCount: 0,
+    preservedProviderRoadCount: rankedRoads.length,
+    frontReservoirSuppressedCount: split.hints.filter(x => x && x.role === 'frontReservoirSuppressed').length,
     target,
     initialWindow: SEARCH_UI_INITIAL_WINDOW,
     continuousMaxTarget: SEARCH_UI_CONTINUOUS_MAX_TARGET,
-    realRankedCount: ranked.length
+    realRankedCount: rankedReal.length
   };
 }
+
 
 let SearchBankEngine = null;
 let SearchBankEngineLoaded = false;
@@ -3669,12 +3756,13 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     }
 
     const rawParamsForSearchBank = (event && event.queryStringParameters) || {};
-    const searchBankReadSuppressed = shouldSuppressSearchBankRead(rawParamsForSearchBank);
     const publicSearchSurface = isPublicSearchRequest(rawParamsForSearchBank);
+    const searchUiFrontReservoirBlocked = publicSearchSurface && !truthy(rawParamsForSearchBank.useSearchBankMemory) && !truthy(rawParamsForSearchBank.allowSearchBankMemory);
+    const searchBankReadSuppressed = shouldSuppressSearchBankRead(rawParamsForSearchBank) || searchUiFrontReservoirBlocked;
     const internalCount = searchBankReadSuppressed ? 0 : await pullFromSearchBank();
     if(searchBankReadSuppressed){
-      record('search-bank', 'skipped-by-caller-boundary', 0, {
-        reason:'caller is Search Bank or explicitly disabled Search Bank read to prevent reentry',
+      record('search-bank', searchUiFrontReservoirBlocked ? 'skipped-front-reservoir-boundary' : 'skipped-by-caller-boundary', 0, {
+        reason: searchUiFrontReservoirBlocked ? 'front-page Search Bank snapshot/reservoir is isolated from normal search-ui results' : 'caller is Search Bank or explicitly disabled Search Bank read to prevent reentry',
         from:safeString(rawParamsForSearchBank.from || rawParamsForSearchBank.source || '')
       });
     }else if(publicSearchSurface){
@@ -3786,8 +3874,10 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
         realRankedCount: finalPrepared.realRankedCount,
         providerHintsCount: finalPrepared.providerHints.length,
         filteredProviderRoadCount: finalPrepared.filteredProviderRoadCount,
-        providerRoadsSeparatedFromResults: true,
-        rankingOrder:'server-side-score-authority-category-dedupe',
+        providerRoadsPreservedAsResultsWithEmptyBody: true,
+        preservedProviderRoadCount: finalPrepared.preservedProviderRoadCount,
+        frontReservoirSuppressedCount: finalPrepared.frontReservoirSuppressedCount,
+        rankingOrder:'server-side-score-authority-category-dedupe-real-first-provider-road-backfill',
         totalCandidates: collected.length,
         deduped: Math.max(0, collected.length - finalPrepared.items.length),
         richMedia: finalItems.filter(x => x && isRealImageUrl(x.thumbnail)).length,
@@ -5348,11 +5438,10 @@ exports.handler = async function(event){
       residentSeedPack = getSanmaruResidentForMaru(q, raw || {}, { searchType, lang, limit, reason:'maru-top-resident-seed-preserve-wide-search' });
       residentRefreshSignal = triggerSanmaruResidentRefresh(q, raw || {}, { searchType, lang, limit });
     }else if(fastDisplayFirstWindow){
-      // First paint must not block on the heavy Sanmaru resident hydrate path.
-      // Rich cards are supplied by the quick display probe below, then Sanmaru
-      // refreshes resident layers asynchronously.
-      residentSeedPack = { items: [], meta:{ status:'fast-display-first-window-no-blocking-resident-read' } };
-      residentRefreshSignal = { status:'queued-by-first-window', nonBlocking:true };
+      // Open-pipe search pages should receive Sanmaru's current supply immediately.
+      // This is a synchronous resident read only; deep provider refresh remains non-blocking.
+      residentSeedPack = getSanmaruResidentForMaru(q, raw || {}, { searchType, lang, limit, reason:'maru-fast-open-pipe-resident-seed' });
+      residentRefreshSignal = triggerSanmaruResidentRefresh(q, raw || {}, { searchType, lang, limit });
     }
 
     let base = null;
@@ -5360,7 +5449,7 @@ exports.handler = async function(event){
     const fastOpenPipeFirstWindow = sanmaruOpenGateRequested && isOpenPipeRequest(raw || {}) && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal));
     const explicitFastLayerOnly = truthy(raw && (raw.sanmaruFastOnly || raw.cacheOnly || raw.instantOnly || raw.fastOnly || raw.sanmaruOnly));
     const residentLayerReallyEnough = !!(residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, limit, raw || {}));
-    const sanmaruCanServeFromFastLayer = sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal)) && (residentLayerReallyEnough || (explicitFastLayerOnly && residentLayerReallyEnough));
+    const sanmaruCanServeFromFastLayer = sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal)) && (fastOpenPipeFirstWindow || residentLayerReallyEnough || (explicitFastLayerOnly && residentLayerReallyEnough));
     if(sanmaruCanServeFromFastLayer){
       base = buildSanmaruFastLayerBase(q, residentSeedPack, Object.assign({}, raw || {}, { limit: fastDisplayFirstWindow ? Math.min(limit, Math.max(visibleNeed * 12, 300)) : limit }), { region:detectRuntimeRegion(event, lang, q) });
       base.meta = Object.assign({}, base.meta || {}, {
@@ -5495,7 +5584,9 @@ exports.handler = async function(event){
       providerHints: searchUiPrepared.providerHints,
       providerHintsCount: searchUiPrepared.providerHints.length,
       filteredProviderRoadCount: searchUiPrepared.filteredProviderRoadCount,
-      providerRoadsSeparatedFromResults: true,
+      preservedProviderRoadCount: searchUiPrepared.preservedProviderRoadCount,
+      frontReservoirSuppressedCount: searchUiPrepared.frontReservoirSuppressedCount,
+      providerRoadsPreservedAsResultsWithEmptyBody: true,
       realRankedCount: searchUiPrepared.realRankedCount,
       continuousSupplyTarget: searchUiPrepared.continuousMaxTarget,
       initialResponseWindow: searchUiPrepared.initialWindow,
@@ -5731,7 +5822,9 @@ exports.runEngine = async function(event, params){
       providerHints: prepared.providerHints,
       providerHintsCount: prepared.providerHints.length,
       filteredProviderRoadCount: prepared.filteredProviderRoadCount,
-      providerRoadsSeparatedFromResults: true,
+      preservedProviderRoadCount: prepared.preservedProviderRoadCount,
+      frontReservoirSuppressedCount: prepared.frontReservoirSuppressedCount,
+      providerRoadsPreservedAsResultsWithEmptyBody: true,
       realRankedCount: prepared.realRankedCount,
       continuousSupplyTarget: prepared.continuousMaxTarget,
       initialResponseWindow: prepared.initialWindow,
