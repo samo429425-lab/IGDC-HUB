@@ -1531,9 +1531,120 @@ async function fetchInstantSearchPack(q, type = activeType){
         bar.style.justifyContent = 'center';
         bar.style.gap = '6px';
         bar.style.margin = '8px 0 14px';
+        bar.style.position = 'sticky';
+        bar.style.top = '112px';
+        bar.style.zIndex = '89';
+        bar.style.background = '#fff';
+        bar.style.padding = '8px 12px';
+        bar.style.borderBottom = '1px solid #eef2f7';
         status.parentNode.insertBefore(bar, status.nextSibling);
       }
       return bar;
+    }
+
+    function ensureSearchTopLayerSticky(){
+      try{
+        const tabs = document.getElementById('maru-search-tabs');
+        const pager = document.getElementById('maru-page-controls');
+        if(tabs){
+          tabs.style.position = 'sticky';
+          tabs.style.top = tabs.style.top || '65px';
+          tabs.style.zIndex = tabs.style.zIndex || '90';
+          tabs.style.background = tabs.style.background || '#fff';
+        }
+        if(pager){
+          pager.style.position = 'sticky';
+          pager.style.top = pager.style.top || '112px';
+          pager.style.zIndex = pager.style.zIndex || '89';
+          pager.style.background = pager.style.background || '#fff';
+        }
+      }catch(e){}
+    }
+
+    function openResultInsideSearchPage(url, title){
+      url = String(url || '').trim();
+      if(!/^https?:\/\//i.test(url)) return;
+      ensureSearchTabs();
+      ensurePager();
+      ensureSearchTopLayerSticky();
+
+      const viewer = document.createElement('div');
+      viewer.className = 'maru-search-inline-viewer';
+      viewer.style.margin = '14px auto 28px';
+      viewer.style.maxWidth = '1180px';
+      viewer.style.border = '1px solid #e5e7eb';
+      viewer.style.borderRadius = '16px';
+      viewer.style.overflow = 'hidden';
+      viewer.style.background = '#fff';
+      viewer.style.boxShadow = '0 16px 40px rgba(15, 23, 42, .08)';
+
+      const head = document.createElement('div');
+      head.style.display = 'flex';
+      head.style.alignItems = 'center';
+      head.style.justifyContent = 'space-between';
+      head.style.gap = '10px';
+      head.style.padding = '10px 12px';
+      head.style.borderBottom = '1px solid #e5e7eb';
+      head.style.background = '#f8fafc';
+
+      const left = document.createElement('div');
+      left.style.minWidth = '0';
+      left.style.fontWeight = '700';
+      left.style.fontSize = '14px';
+      left.style.whiteSpace = 'nowrap';
+      left.style.overflow = 'hidden';
+      left.style.textOverflow = 'ellipsis';
+      left.textContent = String(title || url);
+
+      const controls = document.createElement('div');
+      controls.style.display = 'flex';
+      controls.style.alignItems = 'center';
+      controls.style.gap = '8px';
+      controls.style.flex = '0 0 auto';
+
+      const back = document.createElement('button');
+      back.type = 'button';
+      back.textContent = '검색 결과로 돌아가기';
+      back.style.padding = '7px 10px';
+      back.style.border = '1px solid #d1d5db';
+      back.style.borderRadius = '10px';
+      back.style.background = '#fff';
+      back.style.cursor = 'pointer';
+      back.onclick = () => loadServerPageAndRender(currentPage);
+
+      const external = document.createElement('a');
+      external.href = url;
+      external.textContent = '원문 열기';
+      external.rel = 'noopener';
+      external.style.padding = '7px 10px';
+      external.style.border = '1px solid #d1d5db';
+      external.style.borderRadius = '10px';
+      external.style.background = '#fff';
+      external.style.color = '#111827';
+      external.style.textDecoration = 'none';
+
+      controls.appendChild(back);
+      controls.appendChild(external);
+      head.appendChild(left);
+      head.appendChild(controls);
+
+      const iframe = document.createElement('iframe');
+      iframe.src = url;
+      iframe.title = String(title || 'search result page').slice(0, 120);
+      iframe.loading = 'eager';
+      iframe.referrerPolicy = 'no-referrer-when-downgrade';
+      iframe.style.width = '100%';
+      iframe.style.height = 'calc(100vh - 210px)';
+      iframe.style.minHeight = '620px';
+      iframe.style.border = '0';
+      iframe.style.display = 'block';
+
+      viewer.appendChild(head);
+      viewer.appendChild(iframe);
+      results.innerHTML = '';
+      results.appendChild(viewer);
+      status.textContent = '검색 결과 페이지 보기';
+      try{ viewer.scrollIntoView({ behavior:'smooth', block:'start' }); }catch(e){}
     }
 
     function domainOf(url){
@@ -2792,7 +2903,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         card.style.cursor = 'pointer';
         card.addEventListener('click', (e) => {
           if (e.target && e.target.closest && e.target.closest('a, button, iframe, video, .maru-video-embed-wrap, .maru-card-media')) return;
-          window.open(url, '_blank', 'noopener');
+          openResultInsideSearchPage(url, it && it.title);
         });
       }
 
@@ -2809,8 +2920,11 @@ async function fetchInstantSearchPack(q, type = activeType){
       if (url) {
         const a = document.createElement('a');
         a.href = url;
-        a.target = '_blank';
         a.rel = 'noopener';
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          openResultInsideSearchPage(url, it && it.title);
+        });
         a.textContent = (it.title || '').trim() || '(no title)';
         a.style.color = 'inherit';
         a.style.textDecoration = 'none';
