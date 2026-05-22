@@ -49,8 +49,8 @@ ready(function () {
     const MIN_SMOOTH_CANDIDATES = 120;
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
-    const INTAKE_CONCURRENCY = 3;
-    const INTAKE_BURST_DELAY_MS = 50;
+    const INTAKE_CONCURRENCY = 5;
+    const INTAKE_BURST_DELAY_MS = 10;
 
     let allItems = [];
     let serverPagedMode = false;
@@ -351,6 +351,95 @@ function ensureSearchCardMediaStyle(){
       color: #4338ca;
       font-size: 11px;
       font-weight: 800;
+    }
+
+    .maru-image-gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: 10px;
+      align-items: stretch;
+      margin: 10px 0 18px;
+    }
+    .maru-image-tile {
+      position: relative;
+      min-height: 158px;
+      border: 1px solid #e5e7eb;
+      border-radius: 13px;
+      overflow: hidden;
+      background: #f8fafc;
+      cursor: pointer;
+    }
+    .maru-image-tile img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-height: 158px;
+      object-fit: cover;
+      background: #f1f5f9;
+    }
+    .maru-image-tile[data-orientation="portrait"] { grid-row: span 2; }
+    .maru-image-tile[data-orientation="portrait"] img { min-height: 326px; }
+    .maru-image-tile-caption {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 7px 9px;
+      background: linear-gradient(180deg, rgba(15,23,42,0), rgba(15,23,42,.72));
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.25;
+      text-shadow: 0 1px 2px rgba(0,0,0,.35);
+    }
+    .maru-result-viewer {
+      margin: 10px 0 18px;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      overflow: hidden;
+      background: #ffffff;
+    }
+    .maru-result-viewer-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-bottom: 1px solid #eef2f7;
+      background: #f8fafc;
+    }
+    .maru-result-viewer-title {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #0f172a;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .maru-result-viewer-actions {
+      display: flex;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+    .maru-result-viewer-actions button,
+    .maru-result-viewer-actions a {
+      border: 1px solid #dbe2ea;
+      border-radius: 9px;
+      background: #fff;
+      color: #334155;
+      padding: 7px 10px;
+      font-size: 12px;
+      font-weight: 800;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .maru-result-viewer iframe {
+      display: block;
+      width: 100%;
+      min-height: calc(100vh - 235px);
+      border: 0;
+      background: #fff;
     }
 
 
@@ -910,7 +999,7 @@ function startContinuousIntake(q, type, seq){
           updateProgressiveTotalFromPayload(pack && pack.payload, allItems.length);
           if(page === currentPage) renderPage(page, true);
           else drawPager();
-          status.textContent = `${serverTotalItems || allItems.length} results for "${q}" · ${getTypeLabel(type)} · receiving...`;
+          status.textContent = `${actualResultCountForStatus()} results for "${q}" · ${getTypeLabel(type)} · receiving...`;
         }
       }catch(e){
         console.warn('continuous intake page skipped:', page, e);
@@ -1728,10 +1817,10 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       // Naver image API item is one image result; thumbnail/original often look duplicated.
       if (sourceText.includes('naver_image') && out.length > 1) {
-        return out.slice(0, 1);
+        return dedupeImageVariantsClient(out).slice(0, 1);
       }
 
-      return out.slice(0, 3);
+      return dedupeImageVariantsClient(out).slice(0, 3);
     }
 
     function classifyVisualKindClient(it){
@@ -2598,6 +2687,149 @@ async function fetchInstantSearchPack(q, type = activeType){
       return '';
     }
 
+    function openResultInsideSearchFrame(url, it){
+      const target = String(url || '').trim();
+      if(!target) return;
+      if(!isSearchPage){
+        try { window.location.href = target; } catch(e) {}
+        return;
+      }
+      try{
+        const viewer = document.createElement('div');
+        viewer.className = 'maru-result-viewer';
+
+        const head = document.createElement('div');
+        head.className = 'maru-result-viewer-head';
+
+        const title = document.createElement('div');
+        title.className = 'maru-result-viewer-title';
+        title.textContent = String((it && it.title) || target).trim() || target;
+
+        const actions = document.createElement('div');
+        actions.className = 'maru-result-viewer-actions';
+
+        const back = document.createElement('button');
+        back.type = 'button';
+        back.textContent = '검색 결과로 돌아가기';
+        back.addEventListener('click', () => renderPage(currentPage || 1, true));
+
+        const open = document.createElement('a');
+        open.href = target;
+        open.target = '_blank';
+        open.rel = 'noopener';
+        open.textContent = '새 창 열기';
+
+        actions.appendChild(back);
+        actions.appendChild(open);
+        head.appendChild(title);
+        head.appendChild(actions);
+
+        const iframe = document.createElement('iframe');
+        iframe.src = target;
+        iframe.loading = 'eager';
+        iframe.referrerPolicy = 'no-referrer-when-downgrade';
+        iframe.title = title.textContent;
+
+        viewer.appendChild(head);
+        viewer.appendChild(iframe);
+        results.innerHTML = '';
+        results.appendChild(viewer);
+        drawPager();
+        try { results.scrollIntoView({ block:'start', behavior:'smooth' }); } catch(e) {}
+      }catch(e){
+        try { window.location.href = target; } catch(_e) {}
+      }
+    }
+
+    function displayUrlForImageItemClient(it, src){
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
+      const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
+      return String(
+        (it && (it.pageUrl || it.openUrl || it.contextLink || it.originalPageUrl)) ||
+        displayCard.pageUrl || displayCard.openUrl || displayCard.url ||
+        payload.pageUrl || payload.openUrl || payload.contextLink || payload.url || payload.link ||
+        preview.pageUrl || preview.openUrl ||
+        (it && (it.url || it.link || it.href)) ||
+        src || ''
+      ).trim();
+    }
+
+    function normalizeImageVariantKeyClient(imageUrl){
+      const raw = String(imageUrl || '').trim();
+      if(!raw) return '';
+      try{
+        const u = new URL(raw, location.origin);
+        let path = decodeURIComponent(u.pathname || '').toLowerCase();
+        path = path.replace(/\/thumb\//g, '/');
+        path = path.replace(/\/\d+(?:px|x\d+)[^/]*$/i, '');
+        path = path.replace(/[-_](?:\d{2,5}x\d{2,5}|\d{2,5}w|\d{2,5}h)(?=\.)/ig, '');
+        const file = path.split('/').filter(Boolean).pop() || path;
+        return (u.hostname.replace(/^www\./,'').toLowerCase() + '/' + file).replace(/\.(jpg|jpeg|png|webp|gif|avif)$/i, '');
+      }catch(e){
+        return raw.split('?')[0].split('#')[0].toLowerCase();
+      }
+    }
+
+    function dedupeImageVariantsClient(images){
+      const out = [];
+      const seen = new Set();
+      (Array.isArray(images) ? images : []).forEach(src => {
+        const s = String(src || '').trim();
+        if(!s) return;
+        const key = normalizeImageVariantKeyClient(s) || s.toLowerCase();
+        if(seen.has(key)) return;
+        seen.add(key);
+        out.push(s);
+      });
+      return out;
+    }
+
+    function renderImageGalleryPage(slice){
+      const list = (Array.isArray(slice) ? slice : []).filter(it => collectNaturalImages(it).length || it.image || it.thumbnail || it.url || it.link);
+      const grid = document.createElement('div');
+      grid.className = 'maru-image-gallery-grid';
+      list.forEach((it) => {
+        const images = dedupeImageVariantsClient(collectNaturalImages(it));
+        const src = images[0] || String((it && (it.image || it.thumbnail || it.thumb)) || '').trim();
+        if(!src) return;
+        const tile = document.createElement('div');
+        tile.className = 'maru-image-tile';
+        tile.title = String((it && it.title) || '').trim();
+
+        const img = document.createElement('img');
+        img.src = src;
+        img.loading = 'lazy';
+        img.alt = String((it && it.title) || '').trim();
+        img.onload = () => {
+          try{
+            const w = img.naturalWidth || 0;
+            const h = img.naturalHeight || 0;
+            tile.dataset.orientation = h > w * 1.18 ? 'portrait' : (w > h * 1.25 ? 'landscape' : 'square');
+          }catch(e){}
+        };
+        img.onerror = () => tile.remove();
+        tile.appendChild(img);
+
+        const capText = String((it && it.title) || '').trim();
+        if(capText){
+          const cap = document.createElement('div');
+          cap.className = 'maru-image-tile-caption';
+          cap.textContent = capText;
+          tile.appendChild(cap);
+        }
+
+        tile.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openResultInsideSearchFrame(displayUrlForImageItemClient(it, src), it);
+        });
+        grid.appendChild(tile);
+      });
+      results.appendChild(grid);
+    }
+
     function descriptionForItemClient(it){
       const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
       const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
@@ -2610,9 +2842,13 @@ async function fetchInstantSearchPack(q, type = activeType){
         displayCard.body,
         displayCard.text,
         displayCard.snippet,
+        displayCard.htmlSnippet,
+        displayCard.html,
         it && it.displaySummary,
         it && it.summary,
         it && it.snippet,
+        it && it.htmlSnippet,
+        it && it.html,
         it && it.description,
         it && it.contentSnippet,
         it && it.excerpt,
@@ -2621,6 +2857,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         it && it.text,
         payload.summary,
         payload.snippet,
+        payload.htmlSnippet,
+        payload.html,
         payload.description,
         payload.contentSnippet,
         payload.excerpt,
@@ -2629,6 +2867,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         payload.text,
         data.summary,
         data.snippet,
+        data.htmlSnippet,
+        data.html,
         data.description,
         data.contentSnippet,
         data.excerpt,
@@ -2674,87 +2914,6 @@ async function fetchInstantSearchPack(q, type = activeType){
       return false;
     }
 
-    function safeInlineViewerUrl(rawUrl){
-      try {
-        const u = new URL(String(rawUrl || '').trim(), location.origin);
-        if (u.protocol === 'http:' || u.protocol === 'https:') return u.href;
-      } catch(e) {}
-      return '';
-    }
-
-    function openSearchResultInsideSearchPage(rawUrl, item){
-      const viewUrl = safeInlineViewerUrl(rawUrl);
-      if(!viewUrl) return;
-
-      if(!isSearchPage){
-        window.location.href = viewUrl;
-        return;
-      }
-
-      const title = String((item && item.title) || domainOf(viewUrl) || viewUrl).trim();
-      const viewer = document.createElement('div');
-      viewer.id = 'maru-search-inline-viewer';
-      viewer.style.width = '100%';
-      viewer.style.minHeight = 'calc(100vh - 150px)';
-      viewer.style.background = '#ffffff';
-      viewer.style.border = '1px solid #e5e7eb';
-      viewer.style.borderRadius = '14px';
-      viewer.style.overflow = 'hidden';
-
-      const toolbar = document.createElement('div');
-      toolbar.style.display = 'flex';
-      toolbar.style.alignItems = 'center';
-      toolbar.style.justifyContent = 'space-between';
-      toolbar.style.gap = '10px';
-      toolbar.style.padding = '10px 12px';
-      toolbar.style.borderBottom = '1px solid #e5e7eb';
-      toolbar.style.background = '#f8fafc';
-
-      const back = document.createElement('button');
-      back.type = 'button';
-      back.textContent = '← 검색 결과로 돌아가기';
-      back.style.flex = '0 0 auto';
-      back.style.border = '1px solid #d1d5db';
-      back.style.borderRadius = '10px';
-      back.style.background = '#ffffff';
-      back.style.padding = '8px 11px';
-      back.style.fontWeight = '800';
-      back.style.cursor = 'pointer';
-      back.addEventListener('click', () => {
-        renderPage(currentPage || 1, true);
-      });
-
-      const label = document.createElement('div');
-      label.textContent = title;
-      label.style.minWidth = '0';
-      label.style.overflow = 'hidden';
-      label.style.textOverflow = 'ellipsis';
-      label.style.whiteSpace = 'nowrap';
-      label.style.fontSize = '13px';
-      label.style.fontWeight = '800';
-      label.style.color = '#334155';
-
-      toolbar.appendChild(back);
-      toolbar.appendChild(label);
-
-      const frame = document.createElement('iframe');
-      frame.src = viewUrl;
-      frame.title = title || 'search result page';
-      frame.referrerPolicy = 'no-referrer-when-downgrade';
-      frame.style.display = 'block';
-      frame.style.width = '100%';
-      frame.style.height = 'calc(100vh - 205px)';
-      frame.style.minHeight = '640px';
-      frame.style.border = '0';
-      frame.style.background = '#ffffff';
-
-      viewer.appendChild(toolbar);
-      viewer.appendChild(frame);
-
-      results.innerHTML = '';
-      results.appendChild(viewer);
-    }
-
     function renderItem(it, mountTarget){
       const url = it.url || it.link || '';
       const domain = domainOf(url);
@@ -2768,10 +2927,8 @@ async function fetchInstantSearchPack(q, type = activeType){
       if (url) {
         card.style.cursor = 'pointer';
         card.addEventListener('click', (e) => {
-          if (e.target && e.target.closest && e.target.closest('button, iframe, video, .maru-video-embed-wrap, .maru-card-media')) return;
-          e.preventDefault();
-          e.stopPropagation();
-          openSearchResultInsideSearchPage(url, it);
+          if (e.target && e.target.closest && e.target.closest('a, button, iframe, video, .maru-video-embed-wrap, .maru-card-media')) return;
+          openResultInsideSearchFrame(url, it);
         });
       }
 
@@ -2796,7 +2953,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         a.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
-          openSearchResultInsideSearchPage(url, it);
+          openResultInsideSearchFrame(url, it);
         });
         t.appendChild(a);
       } else {
@@ -2856,7 +3013,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
         const cardLineClamp = it && it.displayCard && parseInt(it.displayCard.lineClamp, 10);
-        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(5, cardLineClamp) : 3);
+        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(5, cardLineClamp) : 4);
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
@@ -2864,7 +3021,7 @@ if (it.riskLabel === '⚠️ high-risk') {
 
       const hasImageSet = Array.isArray(it.imageSet) && it.imageSet.length > 0;
 
-      const naturalImages = collectNaturalImages(it);
+      const naturalImages = dedupeImageVariantsClient(collectNaturalImages(it));
       const isRealThumb = naturalImages.length > 0;
 
       const hasVideoPreview =
@@ -2903,6 +3060,12 @@ if (it.riskLabel === '⚠️ high-risk') {
           mediaCount >= 3 ? '214px' :
           mediaCount === 2 ? '164px' :
           '176px';
+
+        mediaWrap.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openResultInsideSearchFrame(displayUrlForImageItemClient(it, naturalImages[0] || url), it);
+        });
 
         naturalImages.forEach((src) => {
           const img = document.createElement('img');
@@ -3256,6 +3419,12 @@ if (it.riskLabel === '⚠️ high-risk') {
       return stream.slice(start, start + PAGE_SIZE);
     }
 
+    function actualResultCountForStatus(){
+      // This is the real number currently received into the browser cache.
+      // Do not show the 4,500/5,000 reception target as if it were the real search count.
+      return Array.isArray(allItems) ? allItems.length : 0;
+    }
+
     function visibleItemCountForPager(){
       // In the all tab the pager must count the client visible stream, not the
       // raw server total. Collapsed category overflow remains behind 더보기 and
@@ -3263,11 +3432,11 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (normalizeSearchType(activeType) === 'all') {
         const model = buildPortalPageModel();
         const portalCount = model && model.virtualCount ? model.virtualCount : buildClientVisibleStream(currentPage || 1).length;
-        const preloadFloor = lastQuery ? Math.min(INITIAL_PRELOAD_TARGET, Math.max(allItems.length || 0, portalCount || 0)) : 0;
+        const preloadFloor = lastQuery ? INITIAL_PRELOAD_TARGET : 0;
         return Math.max(portalCount, allItems.length || 0, preloadFloor);
       }
-      if(serverPagedMode && serverTotalItems > 0) return serverTotalItems;
-      return buildClientVisibleStream(currentPage || 1).length;
+      if(serverPagedMode && serverTotalItems > 0) return Math.max(INITIAL_PRELOAD_TARGET, allItems.length || 0, buildClientVisibleStream(currentPage || 1).length);
+      return Math.max(lastQuery ? INITIAL_PRELOAD_TARGET : 0, allItems.length || 0, buildClientVisibleStream(currentPage || 1).length);
     }
 
     function frontPageSectionSource(){
@@ -3293,6 +3462,13 @@ if (it.riskLabel === '⚠️ high-risk') {
       results.innerHTML = '';
       const slice = visibleItemsForPage(page);
       const start = (page - 1) * PAGE_SIZE;
+
+      // Image search should render as a gallery grid instead of stacked cards.
+      if (normalizeSearchType(activeType) === 'image') {
+        renderImageGalleryPage(slice);
+        drawPager();
+        return;
+      }
 
       // Render the already-balanced visible stream. Do not rebuild page 1 from a
       // raw source slice, because a raw slice may contain only news/logo/map cards
@@ -3354,7 +3530,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       }
       if(loadedServerPages.has(page) || page <= preloadPageCountFromItems(allItems)){
         renderPage(page);
-        status.textContent = `${serverTotalItems || visibleItemCountForPager()} results for "${q}" · ${getTypeLabel(activeType)}`;
+        status.textContent = `${actualResultCountForStatus()} results for "${q}" · ${getTypeLabel(activeType)}`;
       }
     }
 
@@ -3495,7 +3671,7 @@ async function runSearch(q, type = activeType){
     intakeStarted = true;
     if(intakeTimer) clearTimeout(intakeTimer);
     startContinuousIntake(qq, activeType, seq);
-    status.textContent = `${serverTotalItems || allItems.length || INITIAL_PRELOAD_TARGET} results for "${qq}" · ${getTypeLabel(activeType)} · receiving...`;
+    status.textContent = `${actualResultCountForStatus()} results for "${qq}" · ${getTypeLabel(activeType)} · receiving...`;
   }
 
   function applySupplyPack(pack, sourceName){
@@ -3534,7 +3710,7 @@ async function runSearch(q, type = activeType){
     }else if(firstPaintDone){
       drawPager();
     }
-    status.textContent = `${serverTotalItems || allItems.length} results for "${qq}" · ${getTypeLabel(activeType)} · receiving...`;
+    status.textContent = `${actualResultCountForStatus()} results for "${qq}" · ${getTypeLabel(activeType)} · receiving...`;
     if(!intakeStarted && allItems.length >= 250){
       setTimeout(() => startIntakeOnce('receiver-250-open-pipe'), 0);
     }
