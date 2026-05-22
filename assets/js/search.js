@@ -2674,6 +2674,87 @@ async function fetchInstantSearchPack(q, type = activeType){
       return false;
     }
 
+    function safeInlineViewerUrl(rawUrl){
+      try {
+        const u = new URL(String(rawUrl || '').trim(), location.origin);
+        if (u.protocol === 'http:' || u.protocol === 'https:') return u.href;
+      } catch(e) {}
+      return '';
+    }
+
+    function openSearchResultInsideSearchPage(rawUrl, item){
+      const viewUrl = safeInlineViewerUrl(rawUrl);
+      if(!viewUrl) return;
+
+      if(!isSearchPage){
+        window.location.href = viewUrl;
+        return;
+      }
+
+      const title = String((item && item.title) || domainOf(viewUrl) || viewUrl).trim();
+      const viewer = document.createElement('div');
+      viewer.id = 'maru-search-inline-viewer';
+      viewer.style.width = '100%';
+      viewer.style.minHeight = 'calc(100vh - 150px)';
+      viewer.style.background = '#ffffff';
+      viewer.style.border = '1px solid #e5e7eb';
+      viewer.style.borderRadius = '14px';
+      viewer.style.overflow = 'hidden';
+
+      const toolbar = document.createElement('div');
+      toolbar.style.display = 'flex';
+      toolbar.style.alignItems = 'center';
+      toolbar.style.justifyContent = 'space-between';
+      toolbar.style.gap = '10px';
+      toolbar.style.padding = '10px 12px';
+      toolbar.style.borderBottom = '1px solid #e5e7eb';
+      toolbar.style.background = '#f8fafc';
+
+      const back = document.createElement('button');
+      back.type = 'button';
+      back.textContent = '← 검색 결과로 돌아가기';
+      back.style.flex = '0 0 auto';
+      back.style.border = '1px solid #d1d5db';
+      back.style.borderRadius = '10px';
+      back.style.background = '#ffffff';
+      back.style.padding = '8px 11px';
+      back.style.fontWeight = '800';
+      back.style.cursor = 'pointer';
+      back.addEventListener('click', () => {
+        renderPage(currentPage || 1, true);
+      });
+
+      const label = document.createElement('div');
+      label.textContent = title;
+      label.style.minWidth = '0';
+      label.style.overflow = 'hidden';
+      label.style.textOverflow = 'ellipsis';
+      label.style.whiteSpace = 'nowrap';
+      label.style.fontSize = '13px';
+      label.style.fontWeight = '800';
+      label.style.color = '#334155';
+
+      toolbar.appendChild(back);
+      toolbar.appendChild(label);
+
+      const frame = document.createElement('iframe');
+      frame.src = viewUrl;
+      frame.title = title || 'search result page';
+      frame.referrerPolicy = 'no-referrer-when-downgrade';
+      frame.style.display = 'block';
+      frame.style.width = '100%';
+      frame.style.height = 'calc(100vh - 205px)';
+      frame.style.minHeight = '640px';
+      frame.style.border = '0';
+      frame.style.background = '#ffffff';
+
+      viewer.appendChild(toolbar);
+      viewer.appendChild(frame);
+
+      results.innerHTML = '';
+      results.appendChild(viewer);
+    }
+
     function renderItem(it, mountTarget){
       const url = it.url || it.link || '';
       const domain = domainOf(url);
@@ -2687,8 +2768,10 @@ async function fetchInstantSearchPack(q, type = activeType){
       if (url) {
         card.style.cursor = 'pointer';
         card.addEventListener('click', (e) => {
-          if (e.target && e.target.closest && e.target.closest('a, button, iframe, video, .maru-video-embed-wrap, .maru-card-media')) return;
-          window.location.href = url;
+          if (e.target && e.target.closest && e.target.closest('button, iframe, video, .maru-video-embed-wrap, .maru-card-media')) return;
+          e.preventDefault();
+          e.stopPropagation();
+          openSearchResultInsideSearchPage(url, it);
         });
       }
 
@@ -2710,6 +2793,11 @@ async function fetchInstantSearchPack(q, type = activeType){
         a.textContent = (it.title || '').trim() || '(no title)';
         a.style.color = 'inherit';
         a.style.textDecoration = 'none';
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openSearchResultInsideSearchPage(url, it);
+        });
         t.appendChild(a);
       } else {
         t.textContent = (it.title || '').trim() || '(no title)';
