@@ -145,87 +145,6 @@ function getTypeLabel(type){
   return hit ? hit[1] : '전체';
 }
 
-function searchTabDef(type){
-  const t = normalizeSearchType(type);
-  const hit = SEARCH_TABS.find(x => x[0] === t);
-  return hit || ['all', '전체'];
-}
-
-function uniqueSearchTabs(types){
-  const out = [];
-  const seen = new Set();
-  (Array.isArray(types) ? types : []).forEach(type => {
-    const def = searchTabDef(type);
-    const key = def[0];
-    if(seen.has(key)) return;
-    seen.add(key);
-    out.push(def);
-  });
-  return out;
-}
-
-function queryTextForTabs(fallback){
-  const fromInput = input && input.value ? input.value.trim() : '';
-  const fromUrl = (new URLSearchParams(location.search).get('q') || '').trim();
-  return String(fallback || fromInput || lastQuery || fromUrl || '').trim();
-}
-
-function inferSearchTabsForQuery(q, active){
-  const text = String(q || '').trim();
-  const low = text.toLowerCase();
-  const compact = low.replace(/\s+/g, '');
-  const base = ['all'];
-  const activeTypeForKeep = normalizeSearchType(active || activeType || 'all');
-
-  const placeSignal = /(서울|부산|대구|인천|광주|대전|울산|세종|제주|강남|홍대|명동|종로|여의도|뉴욕|도쿄|오사카|파리|런던|베트남|하노이|호치민|방콕|로마|시카고|워싱턴|상하이|베이징|city|seoul|busan|new\s*york|tokyo|osaka|paris|london|vietnam|hanoi|bangkok)/i.test(text);
-  const localSignal = /(지도|주소|위치|길찾기|근처|맛집|호텔|숙소|관광|여행|축제|명소|교통|지하철|버스|공항|map|maps|address|near|nearby|local|hotel|travel|tour|restaurant|attraction)/i.test(text);
-  const publicSignal = /(정부|공공|기관|시청|구청|도청|군청|공식|민원|행정|공공자료|공공데이터|open\s*data|government|official|public\s*data)/i.test(text);
-  const personSignal = /(배우|가수|연예인|감독|작가|소설가|시인|교수|연구자|정치인|대통령|의원|선수|축구선수|야구선수|인물|프로필|나이|키|학력|출연|필모그래피|손예진|아이유|김수현|유재석|bts|blackpink|actor|actress|singer|celebrity|profile|biography)/i.test(text) || (/^[가-힣]{2,4}$/.test(compact) && !placeSignal);
-  const productSignal = /(상품|제품|가격|구매|쇼핑|브랜드|후기|리뷰|인삼|홍삼|화장품|폰|자동차|노트북|product|price|buy|shopping|brand|review)/i.test(text);
-  const mediaSignal = /(영상|동영상|유튜브|영화|드라마|음악|뮤직|앨범|video|youtube|movie|drama|music|album)/i.test(text);
-  const imageSignal = /(이미지|사진|포토|갤러리|짤|화보|image|photo|picture|gallery)/i.test(text);
-  const academicSignal = /(논문|연구|학술|저널|대학|도서관|인용|paper|research|scholar|academic|journal|university|library)/i.test(text);
-  const bookSignal = /(책|도서|출판|저자|소설|문학|book|author|novel|literature)/i.test(text);
-  const financeSignal = /(주식|증권|환율|금융|코인|가상화폐|경제|stock|finance|market|crypto|exchange\s*rate)/i.test(text);
-  const sportsSignal = /(스포츠|축구|야구|농구|배구|골프|올림픽|sports|football|baseball|basketball|golf|olympic)/i.test(text);
-  const webtoonSignal = /(웹툰|만화|애니|webtoon|comic|manga|anime)/i.test(text);
-
-  let tabs;
-  if(placeSignal || localSignal){
-    tabs = base.concat(['map','site','tour','news','image','video','blog','sns','public_data','knowledge','wiki']);
-  }else if(personSignal){
-    tabs = base.concat(['knowledge','wiki','news','image','video','sns','blog','site','book']);
-  }else if(productSignal){
-    tabs = base.concat(['shopping','site','image','video','blog','cafe','news','knowledge','wiki']);
-  }else if(academicSignal){
-    tabs = base.concat(['academic','knowledge','wiki','book','site','news','image','video']);
-  }else if(bookSignal){
-    tabs = base.concat(['book','knowledge','wiki','site','blog','news','image','shopping']);
-  }else if(financeSignal){
-    tabs = base.concat(['finance','news','site','knowledge','blog','image','video']);
-  }else if(sportsSignal){
-    tabs = base.concat(['sports','news','video','image','sns','blog','site','knowledge']);
-  }else if(webtoonSignal){
-    tabs = base.concat(['webtoon','image','video','site','blog','sns','shopping','news']);
-  }else if(mediaSignal){
-    tabs = base.concat(['video','image','news','sns','blog','site','knowledge']);
-  }else if(imageSignal){
-    tabs = base.concat(['image','video','site','news','blog','sns','knowledge']);
-  }else if(publicSignal){
-    tabs = base.concat(['public_data','site','knowledge','wiki','news','map','image','video']);
-  }else{
-    tabs = base.concat(['site','knowledge','wiki','news','image','video','blog','sns']);
-  }
-
-  if(activeTypeForKeep && activeTypeForKeep !== 'all' && !tabs.includes(activeTypeForKeep)) tabs.splice(1, 0, activeTypeForKeep);
-  return uniqueSearchTabs(tabs);
-}
-
-function searchTabsProfileKey(q, active){
-  const tabs = inferSearchTabsForQuery(q, active).map(x => x[0]).join('|');
-  return tabs + '::' + normalizeSearchType(active || activeType || 'all');
-}
-
 
 function ensureSearchCardMediaStyle(){
   if (document.getElementById('maru-search-media-style')) return;
@@ -710,7 +629,7 @@ function syncSearchFromUrl(run = true) {
   const pageParam = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1);
   const blockParam = Math.max(0, parseInt(sp.get('block') || '0', 10) || 0);
   activeType = normalizeSearchType(sp.get('type') || 'all');
-  updateSearchTabsActive(qp);
+  updateSearchTabsActive();
 
   input.value = qp;
 
@@ -756,7 +675,7 @@ window.addEventListener('popstate', (e) => {
   const q = (sp.get('q') || state.q || '').trim();
   const nextType = normalizeSearchType(sp.get('type') || state.type || 'all');
   activeType = nextType;
-  updateSearchTabsActive(q);
+  updateSearchTabsActive();
 
   // 3️⃣ 검색어 동기화
   if (q && input.value !== q) {
@@ -1557,62 +1476,49 @@ async function fetchInstantSearchPack(q, type = activeType){
       }
     }
 
-    function buildSearchTabButton(type, label){
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.dataset.type = type;
-      b.textContent = label;
-      b.style.padding = '8px 13px';
-      b.style.borderRadius = '999px';
-      b.style.border = '1px solid #e5e7eb';
-      b.style.background = '#f8fafc';
-      b.style.color = '#111827';
-      b.style.fontSize = '14px';
-      b.style.fontWeight = '600';
-      b.style.cursor = 'pointer';
-      b.onclick = () => switchSearchType(type);
-      return b;
-    }
-
-    function renderSearchTabsForQuery(bar, qOverride){
-      if(!bar) return;
-      const q = queryTextForTabs(qOverride);
-      const key = searchTabsProfileKey(q, activeType);
-      if(bar.dataset.profileKey === key && bar.childNodes.length) return;
-      bar.dataset.profileKey = key;
-      bar.innerHTML = '';
-      inferSearchTabsForQuery(q, activeType).forEach(([type, label]) => {
-        bar.appendChild(buildSearchTabButton(type, label));
-      });
-    }
-
-    function ensureSearchTabs(qOverride){
+    function ensureSearchTabs(){
       if (!isSearchPage) return null;
       let bar = document.getElementById('maru-search-tabs');
-      if (!bar){
-        bar = document.createElement('div');
-        bar.id = 'maru-search-tabs';
-        bar.style.display = 'flex';
-        bar.style.alignItems = 'center';
-        bar.style.gap = '8px';
-        bar.style.overflowX = 'auto';
-        bar.style.whiteSpace = 'nowrap';
-        bar.style.padding = '10px 24px 8px';
-        bar.style.borderBottom = '1px solid #eef2f7';
-        bar.style.background = '#fff';
-        bar.style.position = 'sticky';
-        bar.style.top = '65px';
-        bar.style.zIndex = '90';
-        status.parentNode.insertBefore(bar, status);
-      }
-      renderSearchTabsForQuery(bar, qOverride);
+      if (bar) return bar;
+
+      bar = document.createElement('div');
+      bar.id = 'maru-search-tabs';
+      bar.style.display = 'flex';
+      bar.style.alignItems = 'center';
+      bar.style.gap = '8px';
+      bar.style.overflowX = 'auto';
+      bar.style.whiteSpace = 'nowrap';
+      bar.style.padding = '10px 24px 8px';
+      bar.style.borderBottom = '1px solid #eef2f7';
+      bar.style.background = '#fff';
+      bar.style.position = 'sticky';
+      bar.style.top = '65px';
+      bar.style.zIndex = '90';
+
+      SEARCH_TABS.forEach(([type, label]) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.dataset.type = type;
+        b.textContent = label;
+        b.style.padding = '8px 13px';
+        b.style.borderRadius = '999px';
+        b.style.border = '1px solid #e5e7eb';
+        b.style.background = '#f8fafc';
+        b.style.color = '#111827';
+        b.style.fontSize = '14px';
+        b.style.fontWeight = '600';
+        b.style.cursor = 'pointer';
+        b.onclick = () => switchSearchType(type);
+        bar.appendChild(b);
+      });
+
+      status.parentNode.insertBefore(bar, status);
       return bar;
     }
 
-    function updateSearchTabsActive(qOverride){
-      const bar = ensureSearchTabs(qOverride);
+    function updateSearchTabsActive(){
+      const bar = document.getElementById('maru-search-tabs');
       if (!bar) return;
-      renderSearchTabsForQuery(bar, qOverride);
       const type = normalizeSearchType(activeType);
       Array.from(bar.querySelectorAll('button[data-type]')).forEach(btn => {
         const on = btn.dataset.type === type;
@@ -3713,8 +3619,7 @@ function drawPager(){
 async function runSearch(q, type = activeType){
   const qq = (q || '').trim();
   activeType = normalizeSearchType(type);
-  lastQuery = qq;
-  updateSearchTabsActive(qq);
+  updateSearchTabsActive();
   stopContinuousIntake();
 
   if (!qq){
