@@ -17,7 +17,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const VERSION = "search-bank-index-engine-v2.4.0-front-real-floor";
+const VERSION = "search-bank-index-engine-v2.5.0-optimized-50k-instant-supply";
 const ENGINE_NAME = "search-bank-index";
 
 const DEFAULT_LIMIT = 1000;
@@ -140,6 +140,14 @@ function repoIndexPath(){ return firstExistingPath("search-bank.index.json"); }
 function tmpIndexPath(){ return path.join(writableDir(), "search-bank.index.json"); }
 function tmpPromotedPath(){ return path.join(writableDir(), "search-bank.promoted.json"); }
 function tmpIngestedPath(){ return path.join(writableDir(), "search-bank.ingested.json"); }
+function snapshotStat(){
+  const file = snapshotPath();
+  try{
+    if(!file || !fs.existsSync(file)) return null;
+    const stat = fs.statSync(file);
+    return { path:file, mtimeMs: stat.mtimeMs, size: stat.size };
+  }catch(e){ return null; }
+}
 
 function normalizeText(v){
   return stripHtml(v)
@@ -634,6 +642,7 @@ function buildIndexFromSnapshot(){
     pageCoverage[pg] = (pageCoverage[pg] || 0) + 1;
     indexed.push(item);
   }
+  const snapStat = snapshotStat();
   const stat = {
     rawCount: rawItems.length,
     activeCount,
@@ -644,6 +653,8 @@ function buildIndexFromSnapshot(){
     sectionCoverage,
     pageCoverage,
     snapshotPath: snapFile,
+    snapshotMtime: snapStat ? snapStat.mtimeMs : null,
+    snapshotSize: snapStat ? snapStat.size : null,
     generatedAt: nowIso(),
     residentPolicy:"globalThis hot memory + snapshot hydrate + index pointer layer; no external API calls"
   };
@@ -682,7 +693,9 @@ function loadIndex(forceBuild){
   loadIngested();
   if(!forceBuild && state.index && nowMs() - state.loadedAt < INDEX_CACHE_TTL_MS) return state.index;
   const saved = safeReadJson(tmpIndexPath(), null) || safeReadJson(repoIndexPath(), null);
-  if(!forceBuild && saved && Array.isArray(saved.items) && saved.version === VERSION){
+  const snapStat = snapshotStat();
+  const snapshotMatches = saved && saved.meta && (!snapStat || (saved.meta.snapshotMtime === snapStat.mtimeMs && saved.meta.snapshotSize === snapStat.size));
+  if(!forceBuild && saved && Array.isArray(saved.items) && saved.version === VERSION && snapshotMatches){
     state.index = saved;
     state.loadedAt = nowMs();
     return state.index;
