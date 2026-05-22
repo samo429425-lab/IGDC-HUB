@@ -27,7 +27,7 @@ const path = require("path");
 let LogosEngineClass = null;
 try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) { LogosEngineClass = null; }
 
-const VERSION = "sanmaru-engine-v2.8.0-index-optimized-instant-supply";
+const VERSION = "sanmaru-engine-v2.8.2-reservoir-gateway-os";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 3000;
@@ -44,6 +44,11 @@ const MAX_QUERY_LENGTH = 240;
 const MIN_FAST_TARGET = 120;
 const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
 const DEFAULT_CANDIDATE_POOL_TARGET = 5000;
+const SEARCH_UI_SUPPLY_TARGET = 5000;
+const SEARCH_BANK_FRONT_REAL_FLOOR = 5000;
+const GLOBAL_INSIGHT_SUPPLY_TARGET = 5000;
+const COMBINED_ACTIVE_SUPPLY_BUDGET = 10000;
+const VIRTUAL_SOURCE_SCAN_LIMIT = 250000;
 const MAX_INDEX_FAST_LIMIT = 8000;
 const MAX_SEARCH_BANK_FAST_LIMIT = 8000;
 
@@ -828,12 +833,12 @@ function looksLikeResidentItem(x){
 }
 
 function extractResidentArrays(obj, out, depth, sourceHint){
-  if(!obj || typeof obj !== "object" || depth > 7 || out.length > 250000) return;
+  if(!obj || typeof obj !== "object" || depth > 7 || out.length > VIRTUAL_SOURCE_SCAN_LIMIT) return;
   if(Array.isArray(obj)){
     for(const x of obj){
       if(looksLikeResidentItem(x)) out.push(Object.assign({ _residentSourceHint:sourceHint }, x));
       else extractResidentArrays(x, out, depth + 1, sourceHint);
-      if(out.length > 250000) break;
+      if(out.length > VIRTUAL_SOURCE_SCAN_LIMIT) break;
     }
     return;
   }
@@ -1050,6 +1055,11 @@ function residentBootSnapshot(){
     warmUntil:resident.warmUntil ? new Date(resident.warmUntil).toISOString() : null,
     sessionId:resident.sessionId || null,
     itemCount:resident.items ? resident.items.length : 0,
+    virtualSourceScanLimit:VIRTUAL_SOURCE_SCAN_LIMIT,
+    searchUiSupplyTarget:SEARCH_UI_SUPPLY_TARGET,
+    searchBankFrontRealFloor:SEARCH_BANK_FRONT_REAL_FLOOR,
+    globalInsightSupplyTarget:GLOBAL_INSIGHT_SUPPLY_TARGET,
+    combinedActiveSupplyBudget:COMBINED_ACTIVE_SUPPLY_BUDGET,
     queryCacheSize:resident.queryMap ? resident.queryMap.size : 0,
     routeCacheSize:resident.routeMap ? resident.routeMap.size : 0,
     providerHealthCount:resident.providerHealth ? resident.providerHealth.size : 0,
@@ -1224,6 +1234,14 @@ function buildOpeningFallbackCards(q, opts){
   }, q, "sanmaru-opening"));
 }
 
+function normalizeSanmaruConsumer(v){
+  const x = low(v || "");
+  if(x.includes("global") || x.includes("insight") || x.includes("admin") || x.includes("issue")) return "global-insight";
+  if(x.includes("bank") || x.includes("front") || x.includes("slot") || x.includes("snapshot") || x.includes("home")) return "search-bank";
+  if(x.includes("search") || x.includes("ui") || x.includes("maru")) return "search-ui";
+  return "search-ui";
+}
+
 function supplyResidentSync(input, opts){
   opts = opts || {};
   const q = typeof input === "string" ? input : firstNonEmpty(input && input.q, input && input.query, opts.q, opts.query);
@@ -1240,25 +1258,48 @@ function supplyResidentSync(input, opts){
   const queryCacheHit = !!(exactCacheEntry && Array.isArray(exactCacheEntry.items) && exactCacheEntry.items.length);
   const queryCacheCount = queryCacheHit ? exactCacheEntry.items.length : 0;
   const minVisible = clampInt(firstNonEmpty(opts.visibleNeed, opts.perPage, opts.visibleCardsPerPage), DEFAULT_VISIBLE_PER_PAGE, 1, 100);
+  const frontSupplyMode = truthy(opts.frontSupply || opts.slotSupply || opts.contentSupply || opts.snapshotSupply || opts.searchbankSupply || opts.includeFrontSupply || opts.includeFrontSlots);
+  const consumer = normalizeSanmaruConsumer(firstNonEmpty(opts.consumer, opts.channel, opts.targetConsumer, frontSupplyMode ? "search-bank" : "search-ui"));
+  const defaultSupplyTarget = consumer === "search-bank" ? SEARCH_BANK_FRONT_REAL_FLOOR : (consumer === "global-insight" ? GLOBAL_INSIGHT_SUPPLY_TARGET : SEARCH_UI_SUPPLY_TARGET);
+  const supplyTarget = Math.min(MAX_LIMIT, Math.max(clampInt(firstNonEmpty(opts.limit, opts.candidatePoolTarget, opts.supplyTarget), defaultSupplyTarget, 1, MAX_LIMIT), MIN_FAST_TARGET));
 
-  // 최적화: resident는 메타 추적만, 실제 공급은 search-bank-index에서 직접
+  // Sanmaru is the resident OS/data sea: never depend on Search Bank Index alone.
+  const residentItems = residentCandidatesSync(clean.value, Object.assign({}, opts, { candidatePoolTarget:supplyTarget, limit:supplyTarget }))
+    .map(x => enrichRealSupplyItem(x, clean.value, firstNonEmpty(x && x.source, x && x.provider, "sanmaru-resident")));
+
   let indexItems = [];
   let indexMeta = { status:"not-called" };
   try{
     let IndexEngine = null;
     try { IndexEngine = require("./search-bank-index-engine"); } catch(e) { IndexEngine = null; }
-    if(IndexEngine && typeof IndexEngine.query === "function"){
-      const indexRes = IndexEngine.query({ q: clean.value, query: clean.value, type: normalizeSearchType(opts.searchType || opts.type || "all"), limit: Math.max(minVisible, Math.min(MAX_INDEX_FAST_LIMIT, clampInt(opts.limit || opts.candidatePoolTarget, DEFAULT_LIMIT, 1, MAX_LIMIT))) });
+    if(IndexEngine && (frontSupplyMode || consumer === "search-bank") && typeof IndexEngine.buildFrontSupplyPool === "function"){
+      const indexRes = IndexEngine.buildFrontSupplyPool({
+        q: clean.value,
+        query: clean.value,
+        limit: Math.max(SEARCH_BANK_FRONT_REAL_FLOOR, Math.min(MAX_INDEX_FAST_LIMIT, supplyTarget)),
+        frontSupplyTarget: Math.max(SEARCH_BANK_FRONT_REAL_FLOOR, Math.min(MAX_INDEX_FAST_LIMIT, supplyTarget)),
+        consumer
+      });
+      indexItems = normalizeItemsFromResponse(indexRes).map(x => enrichRealSupplyItem(x, clean.value, "search-bank-index-front-pool"));
+      indexMeta = { status: indexItems.length ? "ok" : "empty", action:"front-supply-pool", count:indexItems.length, engine:indexRes && indexRes.engine, latency:indexRes && indexRes.meta && indexRes.meta.latency, frontSupplyMode, consumer, floor:indexRes && indexRes.meta && indexRes.meta.floor, shortage:indexRes && indexRes.meta && indexRes.meta.shortage, frontRealFloorReady:indexRes && indexRes.meta && indexRes.meta.frontRealFloorReady };
+    }else if(IndexEngine && typeof IndexEngine.query === "function"){
+      const indexRes = IndexEngine.query({
+        q: clean.value,
+        query: clean.value,
+        type: normalizeSearchType(opts.searchType || opts.type || "all"),
+        limit: Math.max(minVisible, Math.min(MAX_INDEX_FAST_LIMIT, supplyTarget)),
+        frontSupply: frontSupplyMode ? "1" : "0",
+        includeFrontSupply: frontSupplyMode ? "1" : "0",
+        consumer
+      });
       indexItems = normalizeItemsFromResponse(indexRes).map(x => enrichRealSupplyItem(x, clean.value, "search-bank-index"));
-      indexMeta = { status: indexItems.length ? "ok" : "empty", count:indexItems.length, engine:indexRes && indexRes.engine, latency:indexRes && indexRes.meta && indexRes.meta.latency };
+      indexMeta = { status: indexItems.length ? "ok" : "empty", action:"query", count:indexItems.length, engine:indexRes && indexRes.engine, latency:indexRes && indexRes.meta && indexRes.meta.latency, frontSupplyMode, consumer, totalMatches:indexRes && indexRes.meta && indexRes.meta.totalMatches };
     }else{
-      indexMeta = { status:"unavailable" };
+      indexMeta = { status:"unavailable", consumer };
     }
   }catch(e){
-    indexMeta = { status:responseErrorCode(e) };
+    indexMeta = { status:responseErrorCode(e), consumer };
   }
-  // resident items는 비용이 높으므로 생략하고 search-bank-index만 사용
-  const residentItems = [];
 
   let routeFallbackCards = [];
   let openingFallbackCards = [];
@@ -1269,9 +1310,16 @@ function supplyResidentSync(input, opts){
     openingFallbackCards = buildOpeningFallbackCards(clean.value, Object.assign({}, opts, { openingCardLimit: clampInt(opts.openingCardLimit, 24, 1, 40) }));
   }
 
-  // 최적화된 공급: search-bank-index 결과만 사용
-  const split = splitRealAndHintItems(dedupeItems(indexItems), clean.value, Object.assign({}, opts, { searchType:searchTypeForCache }));
-  let fullCandidateItems = split.real.filter(it => realItemMatchesQuery(it, clean.value));
+  const split = splitRealAndHintItems(dedupeItems(residentItems.concat(indexItems)), clean.value, Object.assign({}, opts, { searchType:searchTypeForCache, frontSupply:frontSupplyMode }));
+  let fullCandidateItems = frontSupplyMode ? split.real : split.real.filter(it => realItemMatchesQuery(it, clean.value));
+  let broadResidentFallback = false;
+  if(!frontSupplyMode && !fullCandidateItems.length && split.real.length){
+    // Sanmaru is not the self-searcher; it is the resident information gateway.
+    // When the query-specific lane is empty, return real resident data only and
+    // expose the shortage in meta so Maru Search can keep provider adapters running.
+    fullCandidateItems = split.real.slice(0, supplyTarget);
+    broadResidentFallback = true;
+  }
   const providerHints = dedupeItems([].concat(split.hints, routeFallbackCards, openingFallbackCards));
 
   // Backward-compatible escape hatch: only explicit debugging/API calls can ask
@@ -1322,7 +1370,18 @@ function supplyResidentSync(input, opts){
       pagedCandidatePool:true,
       maxPagerPages:SANMARU_MAX_PAGER_PAGES,
       realSupplyCount:fullCandidateItems.length,
+      realResidentCount:residentItems.length,
       providerHintCount:providerHints.length,
+      frontSupplyMode,
+      consumer,
+      supplyReadiness:{ target:supplyTarget, available:totalCandidates, shortage:Math.max(0, supplyTarget - totalCandidates), realItemsOnly:true, providerHintsExcludedFromItems:true },
+      broadResidentFallback,
+      gatewayRole:"resident-information-sea-gateway-not-self-searcher",
+      virtualSourceScanLimit:VIRTUAL_SOURCE_SCAN_LIMIT,
+      searchUiSupplyTarget:SEARCH_UI_SUPPLY_TARGET,
+      searchBankFrontRealFloor:SEARCH_BANK_FRONT_REAL_FLOOR,
+      globalInsightSupplyTarget:GLOBAL_INSIGHT_SUPPLY_TARGET,
+      combinedActiveSupplyBudget:COMBINED_ACTIVE_SUPPLY_BUDGET,
       searchBankIndex:indexMeta,
       routeFallbackCount:routeFallbackCards.length,
       openingFallbackCount:openingFallbackCards.length,
@@ -1340,14 +1399,14 @@ function supplyResidentSync(input, opts){
       sourceRegistryReady:true,
       categoryBrainReady:true,
       providerCapabilityReady:true,
-      mode:"search-bank-index-optimized-fast-sync",
+      mode:"resident-os-plus-index-fast-sync",
       visibleCardsPerPage:perPage,
       lifecyclePolicy:"engine-code-upload-only-reboot-hot-data-refresh-otherwise",
       doesNotCallExternal:true,
       supplyContract:{
         owner:"sanmaru-global-web-information-cpu",
         maruRole:"mounted-gateway-ui-body",
-        itemResults:"search-bank-index-50k-optimized-fast-response",
+        itemResults:"resident-cache-plus-search-bank-index-real-items",
         providerHints:"route-opening-provider-roads-separated-from-results",
         viewport:"page-sized-current-render-window",
         perPage,
@@ -1358,7 +1417,7 @@ function supplyResidentSync(input, opts){
       },
       logosGuard: logosEvaluate(logosSignalsForQuery(clean.value, { queryRisk:null }), "index-supply"),
       openingSignals: openingSignalsSnapshot(),
-      note:"SANMARU OPTIMIZED: Search-bank-index 50K items for instant supply (50-100ms). Resident tracks metadata only. Query cache 5K. Response time -80% vs resident-only mode."
+      note:"SANMARU RESTORED: resident OS cache is the first supply source; Search Bank Index is a fast assist layer. Provider roads stay separated as providerHints."
     }
   };
 }
@@ -1813,7 +1872,7 @@ function isPlaceholderItem(it){
   const text = low(itemText(it));
   const url = low(firstNonEmpty(it && it.url, it && it.link));
   if(!text && !url) return true;
-  if(/seed placeholder|movie slot|mediamovie0|dummy item|sample item|test item|lorem ipsum|\b(network|media|shop|shopping|social|tour|distribution|donation) item \d+\b/.test(text)) return true;
+  if(/seed placeholder|movie slot|mediamovie0|dummy item|sample item|test item|lorem ipsum/.test(text)) return true;
   // Search Bank / Snapshot slot data often uses url:"#" while still carrying
   // real front-page content. Do not drop those slots just because the URL is a
   // placeholder. Only reject placeholder URLs when there is no real slot content.
@@ -3310,34 +3369,66 @@ function buildSanmaruInstantOsPackage(q, opts){
 function buildSanmaruFrontSupplyPackage(q, opts){
   opts = opts || {};
   const started = nowMs();
-  const target = clampInt(firstNonEmpty(opts.limit, opts.candidatePool, opts.candidatePoolTarget, opts.frontSupplyTarget), 5000, 1, 6000);
+  const target = clampInt(firstNonEmpty(opts.limit, opts.candidatePool, opts.candidatePoolTarget, opts.frontSupplyTarget), SEARCH_BANK_FRONT_REAL_FLOOR, 1, 6000);
   const pageKey = low(firstNonEmpty(opts.page, opts.targetPage, opts.hub, ""));
   const sectionKey = low(firstNonEmpty(opts.section, opts.slot, opts.psom_key, opts.category, ""));
   const country = firstNonEmpty(opts.country, opts.region, opts.geo, opts.runtimeRegion, "GLOBAL");
-  ensureResidentBoot({ reason: opts.reason || "front-slot-supply" });
-  const pools = ensureSupplyPools(opts.reason || "front-slot-supply");
+  const action = low(firstNonEmpty(opts.reason, opts.action, opts.mode, "front-supply"));
+  const consumer = normalizeSanmaruConsumer(firstNonEmpty(opts.consumer, opts.channel, action));
+  const qx = firstNonEmpty(q, opts.q, opts.query, opts.section, opts.page, "front");
+
+  ensureResidentBoot({ reason: action || "front-slot-supply" });
+  const pools = ensureSupplyPools(action || "front-slot-supply");
   let pool = Array.isArray(pools.front) && pools.front.length ? pools.front.slice() : (Array.isArray(pools.search) ? pools.search.slice() : []);
+
+  try{
+    const IndexEngine = require("./search-bank-index-engine");
+    if(IndexEngine && typeof IndexEngine.buildFrontSupplyPool === "function"){
+      const frontRes = IndexEngine.buildFrontSupplyPool({ limit:target, frontSupplyTarget:target, q:qx, query:qx, consumer:"search-bank" });
+      const frontItems = normalizeItemsFromResponse(frontRes).map(x => enrichRealSupplyItem(x, qx, "search-bank-index-front-pool"));
+      if(frontItems.length) pool = dedupeItems(frontItems.concat(pool));
+    }
+  }catch(e){}
+
   if(pageKey || sectionKey){
     const filtered = pool.filter(it => {
       const page = low(firstNonEmpty(it.page, it.route, it.path, it.bind && it.bind.page, it.bind && it.bind.route));
       const sec = low(firstNonEmpty(it.section, it.psom_key, it.slot, it.slotKey, it.bind && it.bind.section, it.bind && it.bind.slot, it.category, it.searchCategory));
-      return (!pageKey || page.includes(pageKey) || pageKey.includes(page)) && (!sectionKey || sec.includes(sectionKey) || sectionKey.includes(sec));
+      const pageOk = !pageKey || !page || page.includes(pageKey) || pageKey.includes(page);
+      const secOk = !sectionKey || !sec || sec.includes(sectionKey) || sectionKey.includes(sec);
+      return pageOk && secOk;
     });
-    if(filtered.length) pool = filtered;
+    if(filtered.length >= Math.min(target, DEFAULT_VISIBLE_PER_PAGE)) pool = filtered;
   }
-  const qx = firstNonEmpty(q, opts.q, opts.query, opts.section, opts.page, "front");
-  const items = finalRank(qx, pool, { q:qx, searchType:firstNonEmpty(opts.type, opts.category, "all"), intents:classifyQueryCategories(qx, opts.type || opts.category || "all") })
+
+  if(!pool.length){
+    const supplied = supplyResidentSync({ q:qx, query:qx }, Object.assign({}, opts, {
+      reason: action || "front-slot-supply",
+      frontSupply:true,
+      slotSupply:true,
+      includeFrontSupply:true,
+      consumer,
+      limit:target,
+      candidatePoolTarget:Math.max(target, DEFAULT_CANDIDATE_POOL_TARGET),
+      allowRouteCards:false,
+      allowOpeningCards:false
+    }));
+    pool = Array.isArray(supplied && supplied.items) ? supplied.items.slice() : [];
+  }
+
+  const items = finalRank(qx, pool, { q:qx, searchType:firstNonEmpty(opts.type, opts.category, "all"), intents:classifyQueryCategories(qx, opts.type || opts.category || "all"), frontSupply:true })
     .filter(it => isRealSupplyItem(it, { frontSupply:true }))
     .slice(0, target)
     .map(it => enrichRealSupplyItem(it, qx, it && it.source));
   const hints = sanmaruProviderPassthroughCards(qx, Object.assign({}, opts, { country, searchType:firstNonEmpty(opts.type, opts.category, "all"), need:Math.min(120, target) }));
+
   return {
     status:"ok",
     engine:ENGINE_NAME,
     version:VERSION,
-    action:"front-supply",
+    action: action || "front-supply",
     query:qx,
-    source:items.length ? "sanmaru-front-real-supply-pool" : "sanmaru-front-empty-provider-hints-only",
+    source:items.length ? "sanmaru-resident-os-front-supply" : "sanmaru-front-empty-provider-hints-only",
     items,
     results:items,
     providerHints:hints,
@@ -3348,17 +3439,23 @@ function buildSanmaruFrontSupplyPackage(q, opts){
       providerHintCount:hints.length,
       frontSupply:true,
       slotSupply:true,
+      consumer,
+      channel:consumer,
       target,
+      floor:SEARCH_BANK_FRONT_REAL_FLOOR,
+      shortage:Math.max(0, SEARCH_BANK_FRONT_REAL_FLOOR - items.length),
+      frontRealFloorReady:items.length >= SEARCH_BANK_FRONT_REAL_FLOOR,
+      gatewayRole:"search-bank-index-owns-front-realtime-memory-sanmaru-gates-it",
+      virtualSourceScanLimit:VIRTUAL_SOURCE_SCAN_LIMIT,
       page:firstNonEmpty(opts.page, opts.targetPage, opts.hub, ""),
       section:firstNonEmpty(opts.section, opts.slot, opts.psom_key, opts.category, ""),
       country,
       elapsedMs:nowMs() - started,
       supplyPools:supplyPoolSnapshot(),
-      policy:"front slots receive real resident/searchbank content only; provider roads are hints; no fake route/opening cards as slot data"
+      policy:"Sanmaru resident OS supplies real owned/front data immediately; provider roads remain providerHints and never replace items."
     }
   };
 }
-
 
 async function handler(event){
   if(event && event.httpMethod === "OPTIONS") return ok({ status:"ok" });

@@ -17,14 +17,14 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const VERSION = "search-bank-index-engine-v2.5.0-optimized-50k-instant-supply";
+const VERSION = "search-bank-index-engine-v2.6.1-front-reservoir-25k-auto-replacement";
 const ENGINE_NAME = "search-bank-index";
 
 const DEFAULT_LIMIT = 1000;
 const DEFAULT_PER_PAGE = 25;
-const MAX_LIMIT = 12000;
-const MAX_PER_PAGE = 200;
-const MAX_INDEX_ITEMS = 200000;
+const MAX_LIMIT = 50000;
+const MAX_PER_PAGE = 500;
+const MAX_INDEX_ITEMS = 250000;
 const PROMOTED_LIMIT = 25000;
 const INGESTED_LIMIT = 100000;
 const MAX_INDEX_TEXT_LENGTH = 2400;
@@ -36,7 +36,10 @@ const PLACEHOLDER_QUERY_PENALTY = -38;
 const LAYER_POINTER_TRUST = 0.24;
 const ACTIVE_POINTER_TRUST = 0.56;
 const FRONT_REAL_ITEM_FLOOR = 5000;
-const FRONT_REAL_ITEM_SOFT_TARGET = 6000;
+const FRONT_REAL_ITEM_SOFT_TARGET = 10000;
+const FRONT_RESERVOIR_TARGET = 25000;
+const FRONT_RESERVOIR_HARD_LIMIT = 50000;
+const FRONT_FUTURE_EXPANSION_TARGET = 50000;
 const PUBLIC_QUERY_STRICT_FRONT_BOUNDARY = true;
 const MAX_TOKEN_GRAMS = 80;
 const MAX_COMPACT_INDEX_LENGTH = 96;
@@ -324,36 +327,187 @@ function frontSupplyQualityScore(item){
   if(item._ingested) score += 10;
   return score;
 }
+function frontReservoirQualityScore(item){
+  item = item || {};
+  const lp = item.layerPointer || layerPointerOf(item);
+  const pInfo = placeholderInfo(item);
+  let score = frontSupplyQualityScore(item);
+  if(isRealIndexItem(item)) score += 120;
+  if(isFrontSupplyIndexItem(item)) score += 80;
+  if(pInfo.canIndexAsLayerPointer || item.isLayerPointer) score += 42;
+  if(pInfo.isPlaceholder) score += 18;
+  if(firstNonEmpty(lp.slotKey, item.slotKey, item.slot)) score += 16;
+  if(firstNonEmpty(lp.section, item.section, item.psom_key)) score += 14;
+  if(firstNonEmpty(lp.page, item.page, item.route)) score += 12;
+  const frontText = low([lp.page, lp.section, lp.slotKey, item.page, item.section, item.psom_key, item.type, item.category].filter(Boolean).join(" "));
+  if(/academic|literature|arts|humanities|scholar|research|paper|book|문학|학술/.test(frontText)) score += 20;
+  if(/distribution|product|commerce|donation|media|social|network|tour|home/.test(frontText)) score += 10;
+  return score;
+}
+function normalizeFrontSupplyItem(item, role){
+  const out = stripPrivateIndexFields(item);
+  const pInfo = placeholderInfo(item);
+  const lp = out.layerPointer || layerPointerOf(out);
+  out.frontSupplyRole = role || (isRealIndexItem(item) ? "active-real-content" : "replaceable-front-slot");
+  out.frontReservoir = true;
+  out.targetConsumer = "front-snapshot";
+  out.realContent = isRealIndexItem(item);
+  out.replaceableSlot = !!(!out.realContent && (pInfo.isPlaceholder || pInfo.canIndexAsLayerPointer || out.isLayerPointer));
+  out.needsHydration = !!out.replaceableSlot;
+  out.layerPointer = lp;
+  out.storagePolicy = out.realContent ? "front-active-real-content" : "front-reservoir-replaceable-slot-pointer";
+  return out;
+}
+
+function frontReplacementRoute(seq){
+  const routes = [
+    { page:"front", section:"home", slot:"home-auto-replacement" },
+    { page:"front", section:"distribution", slot:"distribution-auto-replacement" },
+    { page:"front", section:"social", slot:"social-auto-replacement" },
+    { page:"front", section:"media", slot:"media-auto-replacement" },
+    { page:"front", section:"donation", slot:"donation-auto-replacement" },
+    { page:"front", section:"network", slot:"network-auto-replacement" },
+    { page:"front", section:"tour", slot:"tour-auto-replacement" },
+    { page:"front", section:"literature", slot:"literature-auto-replacement" },
+    { page:"front", section:"academic", slot:"academic-auto-replacement" }
+  ];
+  return routes[Math.abs(seq || 0) % routes.length];
+}
+function frontReplacementQualityScore(item){
+  item = item || {};
+  let score = 0;
+  if(isRealIndexItem(item)) score += 160;
+  if(hasRenderableText(item)) score += 34;
+  if(hasRenderableMedia(item)) score += 24;
+  if(firstNonEmpty(item.url, item.link, item.href)) score += 18;
+  if(firstNonEmpty(item.title, item.name, item.label)) score += 14;
+  score += Math.max(0, Math.min(40, Number(item.rankHint || 0)));
+  score += Math.max(0, Math.min(40, Number(item.sourceTrust || 0) * 40));
+  const text = low([item.type, item.category, item.section, item.page, item.route, item.provider, item.source].filter(Boolean).join(" "));
+  if(/product|commerce|shop|distribution|donation|media|social|network|tour|local|culture|academic|literature|book|paper|research|문학|학술|상품|기부|미디어|소셜|네트워크|관광/.test(text)) score += 20;
+  if(/search|query|provider\s*hint|route\s*hint|fallback/.test(text)) score -= 80;
+  if(isPlaceholder(item)) score -= 120;
+  return score;
+}
+function normalizeFrontReplacementItem(item, seq){
+  const base = stripPrivateIndexFields(item);
+  const route = frontReplacementRoute(seq);
+  const currentPointer = base.layerPointer || layerPointerOf(base);
+  const out = Object.assign({}, base);
+  out.frontSupplyRole = "standby-front-replacement";
+  out.frontReservoir = true;
+  out.frontAutoReplacement = true;
+  out.targetConsumer = "front-snapshot";
+  out.realContent = isRealIndexItem(item);
+  out.replaceableSlot = false;
+  out.needsHydration = false;
+  out.layerPointer = {
+    layerRole: "front-supply-layer",
+    page: firstNonEmpty(currentPointer.page, out.page, route.page),
+    section: firstNonEmpty(currentPointer.section, out.section, out.category, route.section),
+    slotKey: firstNonEmpty(currentPointer.slotKey, out.slotKey, out.slot, route.slot + "-" + String((seq || 0) + 1)),
+    route: firstNonEmpty(currentPointer.route, out.route, route.page),
+    source: firstNonEmpty(currentPointer.source, out.source, out.provider, "search-bank-index-auto-replacement"),
+    storagePolicy: "front-standby-real-content-replacement",
+    directStorage: false,
+    externalCall: false
+  };
+  out.storagePolicy = "front-standby-real-content-replacement";
+  out.replacementPolicy = "fill-any-front-shortage-immediately-with-ranked-standby-real-content";
+  return out;
+}
+function buildFrontReplacementPool(allRaw, seen){
+  const pool = (Array.isArray(allRaw) ? allRaw : [])
+    .filter(item => item && isRealIndexItem(item))
+    .filter(item => !isPlaceholder(item))
+    .filter(item => !/provider\s*hint|route\s*hint|검색\s*통로|search\s*route/i.test([item.type, item.category, item.title, item.summary, item.description, item.source, item.provider].filter(Boolean).join(" ")))
+    .map((item, idx) => Object.assign({}, item, { frontReplacementScore:frontReplacementQualityScore(item), _replacementSeq:idx }))
+    .filter(item => {
+      const sig = slotDedupeSignature(item);
+      return !!sig && !(seen && seen.has(sig));
+    })
+    .sort((a,b) => (b.frontReplacementScore || 0) - (a.frontReplacementScore || 0) || (a._replacementSeq || 0) - (b._replacementSeq || 0));
+  return pool;
+}
 function buildFrontSupplyPool(params){
   const started = nowMs();
   params = params || {};
-  const target = clampInt(firstNonEmpty(params.limit, params.frontSupplyTarget, params.target), FRONT_REAL_ITEM_FLOOR, 1, MAX_LIMIT);
+  const requestedTarget = firstNonEmpty(params.limit, params.frontSupplyTarget, params.target);
+  const actionText = low(firstNonEmpty(params.action, params.mode, params.fn));
+  const wantsReservoir = actionText === "reservoir" || truthy(params.reservoir) || truthy(params.includeReservoir) || truthy(params.slotSupply) || truthy(params.frontSupply) || !requestedTarget;
+  const defaultTarget = wantsReservoir ? FRONT_RESERVOIR_TARGET : FRONT_REAL_ITEM_FLOOR;
+  const target = clampInt(requestedTarget, defaultTarget, 1, FRONT_RESERVOIR_HARD_LIMIT);
   const idx = loadIndex(false);
   ensureRuntime(idx);
   const base = Array.isArray(idx && idx.items) ? idx.items : [];
   const promoted = loadPromoted().map((x,i) => indexItem(Object.assign({}, x, { _promoted:true }), i, "sanmaru-promoted")).filter(Boolean);
   const ingested = loadIngested().map((x,i) => indexItem(Object.assign({}, x, { _ingested:true }), i, "front-data-ingested")).filter(Boolean);
-  const pool = promoted.concat(ingested).concat(base)
-    .filter(item => isFrontSupplyIndexItem(item) && isRealIndexItem(item))
-    .map((item, idx) => Object.assign({}, item, { frontSupplyScore:frontSupplyQualityScore(item), _frontSeq:idx }))
+  const allRaw = promoted.concat(ingested).concat(base);
+  const all = allRaw.filter(item => isFrontSupplyIndexItem(item));
+  const activePool = all
+    .filter(item => isRealIndexItem(item))
+    .map((item, idx) => Object.assign({}, item, { frontSupplyScore:frontSupplyQualityScore(item), _frontSeq:idx, _frontRole:"active-real-content" }))
     .sort((a,b) => (b.frontSupplyScore || 0) - (a.frontSupplyScore || 0) || (a._frontSeq || 0) - (b._frontSeq || 0));
+  const reservoirPool = all
+    .map((item, idx) => Object.assign({}, item, { frontSupplyScore:frontReservoirQualityScore(item), _frontSeq:idx, _frontRole:isRealIndexItem(item) ? "active-real-content" : "replaceable-front-slot" }))
+    .sort((a,b) => {
+      const ar = a._frontRole === "active-real-content" ? 1 : 0;
+      const br = b._frontRole === "active-real-content" ? 1 : 0;
+      return br - ar || (b.frontSupplyScore || 0) - (a.frontSupplyScore || 0) || (a._frontSeq || 0) - (b._frontSeq || 0);
+    });
   const seen = new Set();
   const items = [];
-  for(const item of pool){
+  const addItem = item => {
+    if(!item || items.length >= target) return;
     const sig = slotDedupeSignature(item);
-    if(!sig || seen.has(sig)) continue;
+    if(!sig || seen.has(sig)) return;
     seen.add(sig);
-    const out = stripPrivateIndexFields(item);
+    const out = normalizeFrontSupplyItem(item, item._frontRole);
     delete out._frontSeq;
+    delete out._frontRole;
     items.push(out);
+  };
+  for(const item of activePool) addItem(item);
+  for(const item of reservoirPool) addItem(item);
+
+  const beforeReplacementCount = items.length;
+  const replacementPool = buildFrontReplacementPool(allRaw, seen);
+  let replacementReturnedCount = 0;
+  const addReplacement = item => {
+    if(!item || items.length >= target) return;
+    const sig = slotDedupeSignature(item);
+    if(!sig || seen.has(sig)) return;
+    seen.add(sig);
+    const out = normalizeFrontReplacementItem(item, replacementReturnedCount);
+    delete out._replacementSeq;
+    items.push(out);
+    replacementReturnedCount++;
+  };
+  for(const item of replacementPool){
     if(items.length >= target) break;
+    addReplacement(item);
+  }
+
+  const realActiveCount = activePool.length;
+  const reservoirCandidateCount = reservoirPool.length;
+  const replaceableSlotCount = Math.max(0, items.filter(x => x && x.replaceableSlot).length);
+  const activeReturnedCount = items.filter(x => x && x.realContent).length;
+  const layerPointerReturnedCount = items.filter(x => x && x.isLayerPointer).length;
+  const pageCoverage = Object.create(null);
+  const sectionCoverage = Object.create(null);
+  for(const item of items){
+    const lp = item.layerPointer || {};
+    const pg = firstNonEmpty(lp.page, item.page, item.route, "unknown");
+    const sec = firstNonEmpty(lp.section, item.section, item.psom_key, "unknown");
+    pageCoverage[pg] = (pageCoverage[pg] || 0) + 1;
+    sectionCoverage[sec] = (sectionCoverage[sec] || 0) + 1;
   }
   return {
     status:"ok",
     engine:ENGINE_NAME,
     version:VERSION,
     action:"front-supply",
-    source:items.length ? "search-bank-index-front-real-pool" : null,
+    source:items.length ? "search-bank-index-front-reservoir" : null,
     items,
     results:items,
     meta:{
@@ -361,14 +515,38 @@ function buildFrontSupplyPool(params){
       target,
       floor:FRONT_REAL_ITEM_FLOOR,
       softTarget:FRONT_REAL_ITEM_SOFT_TARGET,
-      shortage:Math.max(0, FRONT_REAL_ITEM_FLOOR - items.length),
-      totalFrontCandidates:pool.length,
-      frontRealFloorReady:items.length >= FRONT_REAL_ITEM_FLOOR,
+      reservoirTarget:FRONT_RESERVOIR_TARGET,
+      hardLimit:FRONT_RESERVOIR_HARD_LIMIT,
+      futureExpansionTarget:FRONT_FUTURE_EXPANSION_TARGET,
+      shortage:Math.max(0, target - items.length),
+      shortageBeforeReplacement:Math.max(0, target - beforeReplacementCount),
+      autoReplacementEnabled:true,
+      autoReplacementPolicy:"if-front-slot-is-short-even-by-one-item-fill-from-ranked-standby-real-content-before-return",
+      replacementCandidateCount:replacementPool.length,
+      replacementReturnedCount,
+      shortageFilledByReplacement:replacementReturnedCount,
+      realActiveCount,
+      activeReturnedCount,
+      activeFloorShortage:Math.max(0, FRONT_REAL_ITEM_FLOOR - realActiveCount),
+      activeSoftShortage:Math.max(0, FRONT_REAL_ITEM_SOFT_TARGET - realActiveCount),
+      reservoirCandidateCount,
+      reservoirReturnedCount:items.length,
+      reservoirShortage:Math.max(0, FRONT_RESERVOIR_TARGET - reservoirCandidateCount),
+      replaceableSlotCount,
+      layerPointerReturnedCount,
+      standbyReplacementReady:replacementPool.length > 0,
+      finalSupplyComplete:items.length >= target,
+      frontRealFloorReady:realActiveCount >= FRONT_REAL_ITEM_FLOOR,
+      frontReservoirReady:reservoirCandidateCount >= FRONT_RESERVOIR_TARGET,
+      frontImmediateSupplyReady:items.length >= FRONT_REAL_ITEM_FLOOR,
+      pageCoverage,
+      sectionCoverage,
       frontSupplyOnly:true,
-      excludesPlaceholder:true,
+      placeholderIsolation:true,
+      searchUiSafe:true,
       externalCall:false,
       latency:nowMs() - started,
-      storagePolicy:"front-supply-fast-memory-real-items-only"
+      storagePolicy:"front-reservoir-real-content-plus-replaceable-slot-pointers"
     }
   };
 }
@@ -968,7 +1146,7 @@ function health(){
     status:"ok",
     engine:ENGINE_NAME,
     version:VERSION,
-    role:"sanmaru-resident-fast-memory-layer-and-global-information-bank-index",
+    role:"front-snapshot-reservoir-index-and-sanmaru-fast-memory-gateway",
     snapshotPath:snapshotPath(),
     indexPath:tmpIndexPath(),
     promotedPath:tmpPromotedPath(),
@@ -979,9 +1157,15 @@ function health(){
     promotedCount:loadPromoted().length,
     ingestedCount:loadIngested().length,
     frontRealFloor:FRONT_REAL_ITEM_FLOOR,
-    frontRealCount:frontPool.meta.count,
-    frontRealShortage:frontPool.meta.shortage,
+    frontRealCount:frontPool.meta.realActiveCount,
+    frontReturnedCount:frontPool.meta.count,
+    frontReservoirTarget:FRONT_RESERVOIR_TARGET,
+    frontReservoirCount:frontPool.meta.reservoirCandidateCount,
+    frontReservoirShortage:frontPool.meta.reservoirShortage,
+    frontRealShortage:frontPool.meta.activeFloorShortage,
+    frontImmediateSupplyReady:frontPool.meta.frontImmediateSupplyReady,
     frontRealFloorReady:frontPool.meta.frontRealFloorReady,
+    frontReservoirReady:frontPool.meta.frontReservoirReady,
     runtimeTokenCount:runtime && runtime.tokenMap ? runtime.tokenMap.size : 0,
     runtimePageCount:runtime && runtime.pageMap ? runtime.pageMap.size : 0,
     runtimeSectionCount:runtime && runtime.sectionMap ? runtime.sectionMap.size : 0,
@@ -991,7 +1175,7 @@ function health(){
     pageCoverage: stat.pageCoverage || null,
     sectionCoverage: stat.sectionCoverage || null,
     securityPolicy:"admin token required for build/rebuild/promote/ingest/export; query remains read-only",
-    rolePolicy:"Sanmaru resident fast-memory/index-pointer layer; no external API calls; direct web storage is not performed",
+    rolePolicy:"Search Bank Index keeps the front snapshot reservoir hot for Sanmaru; active real content and replaceable slot pointers are separated; no external API calls are performed",
     generatedAt:nowIso()
   };
 }
