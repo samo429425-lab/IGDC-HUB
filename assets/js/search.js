@@ -3,7 +3,7 @@
 // - collector first
 // - collector search pipeline
 // - silent error prevention
-// - protected result navigation: external pages open inside search.html viewer below pager
+// - same-tab navigation
 // - block pagination
 
 (function () {
@@ -38,181 +38,6 @@ ready(function () {
         
     if (!input || !btn) return;
 
-    // Result cards must never replace search.html. External result pages are
-    // mounted inside the lower search result pane so the Home link, Global
-    // Search bar, category menu, and pager remain fixed in search.html.
-    (function guardResultNavigation(){
-      try{
-        if(!results || results.__maruResultNavigationGuard) return;
-        results.__maruResultNavigationGuard = true;
-        results.addEventListener('click', function(e){
-          const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
-          if(!a || !results.contains(a)) return;
-          if(e.target && e.target.closest && e.target.closest('button, iframe, video, .maru-video-embed-wrap')) return;
-          const raw = String(a.getAttribute('href') || '').trim();
-          if(!raw || raw[0] === '#' || /^javascript:/i.test(raw)) return;
-          if(openResultUrlInSearchPane(raw, a.textContent || a.title || raw)){
-            e.preventDefault();
-            e.stopPropagation();
-          }
-        }, true);
-      }catch(e){}
-    })();
-
-    let embeddedViewerState = null;
-
-    function safeExternalViewerUrl(raw){
-      try{
-        const u = new URL(String(raw || '').trim(), location.href);
-        if(!/^https?:$/i.test(u.protocol)) return '';
-        return u.href;
-      }catch(e){
-        return '';
-      }
-    }
-
-    function openResultUrlInSearchPane(rawUrl, title){
-      const href = safeExternalViewerUrl(rawUrl);
-      if(!href || !results) return false;
-      const host = domainOf(href) || href;
-      embeddedViewerState = {
-        url: href,
-        title: String(title || '').replace(/\s+/g, ' ').trim() || host,
-        host
-      };
-      renderEmbeddedSearchViewer();
-      return true;
-    }
-
-    function ensureEmbeddedViewerHost(){
-      try{ drawPager(); }catch(e){}
-      const pager = document.getElementById('maru-page-controls');
-      const parent = (pager && pager.parentNode) || (results && results.parentNode) || document.body;
-      let host = document.getElementById('maru-embedded-search-viewer-host');
-      if(!host){
-        host = document.createElement('div');
-        host.id = 'maru-embedded-search-viewer-host';
-        host.className = 'maru-embedded-search-viewer-host';
-      }
-      if(pager && pager.parentNode){
-        if(host.parentNode !== pager.parentNode || host.previousSibling !== pager){
-          pager.parentNode.insertBefore(host, pager.nextSibling);
-        }
-      }else if(results && results.parentNode){
-        if(host.parentNode !== results.parentNode || host.nextSibling !== results){
-          results.parentNode.insertBefore(host, results);
-        }
-      }else if(!host.parentNode){
-        parent.appendChild(host);
-      }
-      return host;
-    }
-
-    function clearEmbeddedSearchViewerDom(){
-      const host = document.getElementById('maru-embedded-search-viewer-host');
-      if(host) host.innerHTML = '';
-    }
-
-    function scrollToPagerAndViewer(){
-      try{
-        const pager = document.getElementById('maru-page-controls');
-        const anchor = pager || status || document.getElementById('maru-embedded-search-viewer-host');
-        if(!anchor || !anchor.getBoundingClientRect) return;
-        const topGap = 92;
-        const top = Math.max(0, window.pageYOffset + anchor.getBoundingClientRect().top - topGap);
-        window.scrollTo({ top, behavior:'smooth' });
-      }catch(e){}
-    }
-
-    function closeEmbeddedSearchViewer(){
-      embeddedViewerState = null;
-      clearEmbeddedSearchViewerDom();
-      try{
-        loadServerPageAndRender(currentPage || 1);
-      }catch(e){
-        try{ renderPage(currentPage || 1, true); }catch(_e){}
-      }
-    }
-
-    function renderEmbeddedSearchViewer(){
-      if(!embeddedViewerState || !results) return;
-      const state = embeddedViewerState;
-      const viewerHost = ensureEmbeddedViewerHost();
-      viewerHost.innerHTML = '';
-      results.innerHTML = '';
-
-      const panel = document.createElement('section');
-      panel.className = 'maru-embedded-search-viewer';
-      panel.setAttribute('aria-label', 'Search result page viewer');
-
-      const head = document.createElement('div');
-      head.className = 'maru-embedded-search-viewer-head';
-
-      const info = document.createElement('div');
-      info.className = 'maru-embedded-search-viewer-info';
-
-      const titleEl = document.createElement('div');
-      titleEl.className = 'maru-embedded-search-viewer-title';
-      titleEl.textContent = state.title || state.host || state.url;
-
-      const urlEl = document.createElement('div');
-      urlEl.className = 'maru-embedded-search-viewer-url';
-      urlEl.textContent = state.host || state.url;
-
-      info.appendChild(titleEl);
-      info.appendChild(urlEl);
-
-      const actions = document.createElement('div');
-      actions.className = 'maru-embedded-search-viewer-actions';
-
-      const back = document.createElement('button');
-      back.type = 'button';
-      back.className = 'maru-embedded-search-viewer-back';
-      back.textContent = '검색 결과로 돌아가기';
-      back.addEventListener('click', closeEmbeddedSearchViewer);
-      actions.appendChild(back);
-
-      const reload = document.createElement('button');
-      reload.type = 'button';
-      reload.className = 'maru-embedded-search-viewer-reload';
-      reload.textContent = '다시 불러오기';
-      reload.addEventListener('click', () => {
-        const frame = panel.querySelector('iframe');
-        if(frame) frame.src = state.url;
-      });
-      actions.appendChild(reload);
-
-      head.appendChild(info);
-      head.appendChild(actions);
-
-      const iframeWrap = document.createElement('div');
-      iframeWrap.className = 'maru-embedded-search-viewer-framewrap';
-
-      const iframe = document.createElement('iframe');
-      iframe.className = 'maru-embedded-search-viewer-frame';
-      iframe.src = state.url;
-      iframe.title = state.title || state.host || 'Search result page';
-      iframe.loading = 'eager';
-      iframe.referrerPolicy = 'no-referrer-when-downgrade';
-      iframe.sandbox = 'allow-same-origin allow-scripts allow-forms allow-popups allow-downloads allow-presentation';
-      iframeWrap.appendChild(iframe);
-
-      const note = document.createElement('div');
-      note.className = 'maru-embedded-search-viewer-note';
-      note.textContent = '외부 사이트 보안 정책상 일부 페이지는 이 영역 안에서 표시가 제한될 수 있습니다.';
-
-      panel.appendChild(head);
-      panel.appendChild(iframeWrap);
-      panel.appendChild(note);
-      viewerHost.appendChild(panel);
-
-      try{
-        if(status) status.textContent = `${state.host || 'external'} 페이지를 검색 화면 안에서 여는 중...`;
-        drawPager();
-      }catch(e){}
-      scrollToPagerAndViewer();
-    }
-
     // Ensure top search/header area remains visible when navigating cards.
     // Make the nearest header-like ancestor sticky so clicks or rendering do not
     // remove it from view. This preserves home link, global search, menu items.
@@ -245,12 +70,12 @@ ready(function () {
     const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES;
     const INITIAL_DOM_RENDER_TARGET = INITIAL_PRELOAD_TARGET;
     const INITIAL_PROGRESSIVE_PAGER_PAGES = 12;
-    const MAX_PROGRESSIVE_PAGER_PAGES = 200;
+    const MAX_PROGRESSIVE_PAGER_PAGES = 180;
     const MIN_SMOOTH_CANDIDATES = 120;
-    const MAX_SMOOTH_CANDIDATES = 5000;
+    const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
-    const INTAKE_CONCURRENCY = 4;
-    const INTAKE_BURST_DELAY_MS = 20;
+    const INTAKE_CONCURRENCY = 3;
+    const INTAKE_BURST_DELAY_MS = 50;
 
     let allItems = [];
     let serverPagedMode = false;
@@ -575,103 +400,6 @@ function ensureSearchCardMediaStyle(){
       font-weight: 800;
     }
 
-    .maru-embedded-search-viewer-host {
-      width: 100%;
-      margin: 0 0 14px;
-      clear: both;
-    }
-    #maru-page-controls {
-      position: sticky;
-      top: 72px;
-      z-index: 9998;
-      padding: 7px 0;
-      background: rgba(255, 255, 255, 0.96);
-      backdrop-filter: saturate(120%) blur(6px);
-    }
-    .maru-embedded-search-viewer {
-      margin: 10px 0 18px;
-      border: 1px solid #e5e7eb;
-      border-radius: 14px;
-      background: #ffffff;
-      overflow: hidden;
-      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
-    }
-    .maru-embedded-search-viewer-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 10px 12px;
-      border-bottom: 1px solid #e5e7eb;
-      background: linear-gradient(180deg, #ffffff, #f8fafc);
-      position: relative;
-      z-index: 1;
-    }
-    .maru-embedded-search-viewer-info {
-      min-width: 0;
-      flex: 1 1 auto;
-    }
-    .maru-embedded-search-viewer-title {
-      font-size: 14px;
-      font-weight: 900;
-      color: #111827;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .maru-embedded-search-viewer-url {
-      margin-top: 2px;
-      font-size: 12px;
-      font-weight: 700;
-      color: #64748b;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .maru-embedded-search-viewer-actions {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      flex: 0 0 auto;
-    }
-    .maru-embedded-search-viewer-actions button {
-      appearance: none;
-      border: 1px solid #dbe3ef;
-      border-radius: 10px;
-      background: #f8fafc;
-      color: #334155;
-      font-size: 12px;
-      font-weight: 900;
-      padding: 8px 10px;
-      cursor: pointer;
-    }
-    .maru-embedded-search-viewer-actions button:hover {
-      background: #eef2ff;
-      border-color: #c7d2fe;
-      color: #3730a3;
-    }
-    .maru-embedded-search-viewer-framewrap {
-      width: 100%;
-      height: calc(100vh - 230px);
-      min-height: 560px;
-      background: #ffffff;
-    }
-    .maru-embedded-search-viewer-frame {
-      display: block;
-      width: 100%;
-      height: 100%;
-      border: 0;
-      background: #ffffff;
-    }
-    .maru-embedded-search-viewer-note {
-      padding: 8px 12px;
-      border-top: 1px solid #eef2f7;
-      background: #f8fafc;
-      color: #64748b;
-      font-size: 12px;
-      font-weight: 700;
-    }
-
 
     .maru-search-home-link {
       display: inline-flex;
@@ -726,20 +454,6 @@ function ensureSearchCardMediaStyle(){
       }
       .maru-card-media img {
         height: 190px;
-      }
-      .maru-embedded-search-viewer-head {
-        align-items: flex-start;
-        flex-direction: column;
-      }
-      .maru-embedded-search-viewer-actions {
-        width: 100%;
-      }
-      .maru-embedded-search-viewer-actions button {
-        flex: 1 1 auto;
-      }
-      .maru-embedded-search-viewer-framewrap {
-        height: calc(100vh - 260px);
-        min-height: 460px;
       }
     }
   `;
@@ -1171,14 +885,18 @@ function adaptiveSearchTarget(q, type){
   const broadHints = /(세계|전세계|글로벌|뉴스|영상|이미지|관광|여행|ai|인공지능|기술|시장|경제|정치|스포츠|금융|도서|쇼핑|웹툰|공공|학술|논문|사이트|홈페이지|global|world|news|tour|travel|technology|market|sports|finance|book|shopping|webtoon)/i;
   const narrowHints = /(카페|맛집|식당|주소|전화|위치|지도|병원|약국|학교|교회|상호|주차|near me|cafe|restaurant|address|map)/i;
 
-  // Search.js is the fast receiver for the search UI. Sanmaru/MaruSearch
-  // should give the first 300 candidates immediately, then keep filling the
-  // receiver cache up to 5,000 candidates without blocking the current page.
-  let target = safeType === 'all' ? 5000 : 3600;
-  if (words.length >= 3 || narrowHints.test(text)) target = Math.max(target, 3600);
-  if (words.length <= 1 || broadHints.test(text)) target = 5000;
-  if (/^(news|image|video|sns|blog|cafe|tour|site|academic|wiki|public_data)$/.test(safeType)) target = Math.max(target, 4200);
-  if (/^(map|knowledge|book|shopping|sports|finance|webtoon)$/.test(safeType)) target = Math.max(target, 3600);
+  // Search.js remains only a receiver/container. This target is the amount of
+  // Sanmaru/MaruSearch supply the UI is ready to cache for search pages. It is
+  // separate from the 4,500~5,000 Search Bank Snapshot supply used by front pages.
+  // Broad searches may keep filling up to 4,500 candidates, while first paint
+  // still renders only the current viewport and uses continuous intake for the rest.
+  let target = 3200;
+  if (safeType === 'all') target = 4500;
+  if (safeType !== 'all') target = 2400;
+  if (words.length >= 3 || narrowHints.test(text)) target = Math.max(target, 2400);
+  if (words.length <= 1 || broadHints.test(text)) target = 4500;
+  if (/^(news|image|video|sns|blog|cafe|tour|site|academic|wiki|public_data)$/.test(safeType)) target = Math.max(target, 3000);
+  if (/^(map|knowledge|book|shopping|sports|finance|webtoon)$/.test(safeType)) target = Math.max(2200, Math.min(target, 3200));
 
   return Math.max(INITIAL_PRELOAD_TARGET, Math.min(MAX_SMOOTH_CANDIDATES, target));
 }
@@ -1408,11 +1126,6 @@ async function fetchSearch(q, type = activeType, page = 1){
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
-  sp.set('consumer', 'search-ui');
-  sp.set('realItemsOnly', '1');
-  sp.set('excludeProviderHints', '1');
-  sp.set('firstWindowTarget', String(INITIAL_PRELOAD_TARGET));
-  sp.set('continuousTarget', String(adaptiveSearchTarget(q, safeType)));
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
   try {
@@ -1447,13 +1160,10 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('initialPreloadTarget', String(INITIAL_PRELOAD_TARGET));
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
-  sp.set('providerPassthrough', '0');
+  sp.set('providerPassthrough', '1');
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
   sp.set('reason', 'search-ui-first-paint');
-  sp.set('consumer', 'search-ui');
-  sp.set('realItemsOnly', '1');
-  sp.set('excludeProviderHints', '1');
 
   try {
     const r = await fetch(`${SANMARU_BOOT_URL}?${sp.toString()}`, { cache: 'no-store' });
@@ -1809,7 +1519,6 @@ async function fetchInstantSearchPack(q, type = activeType){
     function clearPager(){
       const bar = document.getElementById('maru-page-controls');
       if (bar) bar.remove();
-      clearEmbeddedSearchViewerDom();
     }
 
     function ensurePager(){
@@ -2644,81 +2353,6 @@ async function fetchInstantSearchPack(q, type = activeType){
              /media\s*slot\s*\d+/i.test(s);
     }
 
-    function compactSyntheticTextClient(v){
-      if(v === undefined || v === null) return '';
-      if(typeof v === 'object'){
-        try{
-          return [v.summary, v.snippet, v.description, v.body, v.text, v.caption]
-            .map(compactSyntheticTextClient).filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
-        }catch(e){ return ''; }
-      }
-      return String(v).replace(/<[^>]*>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/\s+/g, ' ').trim();
-    }
-
-    function isSyntheticSearchGuidanceTextClient(v){
-      const t = compactSyntheticTextClient(v);
-      if(!t) return false;
-      return /검색\s*결과입니다|관련\s+.{0,80}결과입니다|관련\s+.{0,80}검색\s*결과|공개\s*(?:웹\s*)?페이지와\s*연결|공개\s*(?:웹\s*)?결과|검색\s*결과\s*경로|공개\s*정보\s*경로|공개\s*검색\s*경로|통합\s*공개\s*검색\s*경로|검색\s*통로|검색\s*경로|제공된\s*본문[·ㆍ,\s]*이미지|provided\s+(?:body|text|content).{0,80}image/i.test(t);
-    }
-
-    function isGenericSearchProviderHost(host){
-      const h = String(host || '').replace(/^www\./, '').toLowerCase();
-      return /(^|\.)google\./i.test(h) ||
-        /(^|\.)naver\./i.test(h) ||
-        /(^|\.)bing\./i.test(h) ||
-        /(^|\.)daum\./i.test(h) ||
-        /(^|\.)yahoo\./i.test(h) ||
-        /(^|\.)duckduckgo\./i.test(h) ||
-        /(^|\.)youtube\./i.test(h) ||
-        h === 'youtu.be' ||
-        /(^|\.)facebook\./i.test(h) ||
-        /(^|\.)instagram\./i.test(h) ||
-        /(^|\.)tiktok\./i.test(h) ||
-        /(^|\.)threads\./i.test(h) ||
-        h === 'x.com' || h === 'twitter.com';
-    }
-
-    function isProviderGuidanceItem(it){
-      if(!it || typeof it !== 'object') return false;
-      const displayCard = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
-      const meta = (it.meta && typeof it.meta === 'object') ? it.meta : {};
-
-      const explicitFlags = [
-        it.providerHint, it.isProviderHint, it.routeHint, it.isRouteHint,
-        it.openingHint, it.providerPassthrough, it.providerPassthroughItem,
-        it.fallbackCard, it.isFallbackCard, it.searchRoad, it.routeRoad,
-        displayCard.providerHint, displayCard.routeHint, meta.providerHint, meta.routeHint
-      ];
-      if(explicitFlags.some(v => v === true || String(v || '').toLowerCase() === 'true')) return true;
-
-      const roleText = [
-        it.kind, it.cardKind, it.cardType, it.resultType, it.role, it.itemRole,
-        it.supplyType, it.lane, it.sourceType, it.routeType, it.fallbackType,
-        it.providerType, it.consumerRole, meta.kind, meta.role, meta.cardType,
-        displayCard.kind, displayCard.role, displayCard.cardType
-      ].map(compactSyntheticTextClient).join(' ').toLowerCase();
-      if(/provider[-_\s]*(hint|lane|road|route|passthrough)|route[-_\s]*(hint|lane|road|fallback)|opening[-_\s]*(hint|card)|external[-_\s]*search|fallback[-_\s]*(provider|route|search)|gateway[-_\s]*(hint|route)/i.test(roleText)) return true;
-
-      const url = String(it.url || it.link || it.openUrl || it.href || '').trim();
-      let host = '';
-      try { host = url ? domainOf(url) : ''; } catch(e) { host = ''; }
-      const providerText = [it.provider, it.channel, it.source && (it.source.name || it.source.platform), it.source, host].map(compactSyntheticTextClient).join(' ');
-      const title = compactSyntheticTextClient(it.title || it.name || displayCard.title);
-      const summary = compactSyntheticTextClient([
-        displayCard.summary, displayCard.description, displayCard.body, displayCard.text, displayCard.snippet,
-        it.displaySummary, it.summary, it.snippet, it.description, it.contentSnippet, it.excerpt, it.abstract, it.text
-      ]);
-
-      const isProviderHost = isGenericSearchProviderHost(host) || /google|naver|bing|daum|yahoo|duckduckgo|youtube|facebook|instagram|tiktok|threads|twitter|x\/twitter/i.test(providerText);
-      const isSearchUrl = /[?&](q|query|search_query|keyword)=/i.test(url) || /\/(search|find|results?)(\?|\/|$)/i.test(url);
-      const routeLikeTitle = /[·•|]/.test(title) && /(뉴스|신문|방송|블로그|카페|SNS|소셜|관광|문화|지도|이미지|영상|미디어|검색|지역뉴스|연합뉴스|KBS|MBC|SBS|YTN|Google|Naver|YouTube|구글|네이버)/i.test(title);
-
-      if(isProviderHost && isSyntheticSearchGuidanceTextClient(summary) && (isSearchUrl || routeLikeTitle)) return true;
-      if(isProviderHost && /map\s*local\s*tour|official\s*authority|public\s*data/i.test(summary) && routeLikeTitle) return true;
-
-      return false;
-    }
-
     function isSeedPlaceholderItem(it){
       if (!it || typeof it !== 'object') return false;
 
@@ -2767,7 +2401,6 @@ async function fetchInstantSearchPack(q, type = activeType){
     function shouldRejectSearchResultItem(it){
       if (!it) return true;
       if (isSeedPlaceholderItem(it)) return true;
-      if (isProviderGuidanceItem(it)) return true;
       if (hasInvalidYouTubeVideoUrl(it)) return true;
       return false;
     }
@@ -2923,16 +2556,14 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const google = document.createElement('a');
       google.href = 'https://www.google.com/maps/search/' + encodeURIComponent(mapQuery || info.query || '');
-      google.target = '_blank';
-      google.rel = 'noopener noreferrer';
+      google.target = '_self';
       google.rel = 'noopener';
       google.textContent = 'Google 지도';
       actions.appendChild(google);
 
       const naver = document.createElement('a');
       naver.href = 'https://map.naver.com/p/search/' + encodeURIComponent(mapQuery || info.query || '');
-      naver.target = '_blank';
-      naver.rel = 'noopener noreferrer';
+      naver.target = '_self';
       naver.rel = 'noopener';
       naver.textContent = 'Naver 지도';
       actions.appendChild(naver);
@@ -2940,8 +2571,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       if(info.homepage){
         const home = document.createElement('a');
         home.href = info.homepage;
-        home.target = '_blank';
-        home.rel = 'noopener noreferrer';
+        home.target = '_self';
         home.rel = 'noopener';
         home.textContent = '홈페이지';
         actions.appendChild(home);
@@ -3090,7 +2720,6 @@ async function fetchInstantSearchPack(q, type = activeType){
       for(const v of candidates){
         const text = compactCardTextClient(v);
         if(!text) continue;
-        if(isSyntheticSearchGuidanceTextClient(text)) continue;
         if(text.length > best.length) best = text;
       }
       return best ? best.slice(0, 520) : '';
@@ -3163,9 +2792,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         card.style.cursor = 'pointer';
         card.addEventListener('click', (e) => {
           if (e.target && e.target.closest && e.target.closest('a, button, iframe, video, .maru-video-embed-wrap, .maru-card-media')) return;
-          e.preventDefault();
-          e.stopPropagation();
-          openResultUrlInSearchPane(url, it.title || it.name || url);
+          window.open(url, '_blank', 'noopener');
         });
       }
 
@@ -3182,7 +2809,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       if (url) {
         const a = document.createElement('a');
         a.href = url;
-        a.removeAttribute('target');
+        a.target = '_blank';
         a.rel = 'noopener';
         a.textContent = (it.title || '').trim() || '(no title)';
         a.style.color = 'inherit';
@@ -3309,7 +2936,7 @@ if (it.riskLabel === '⚠️ high-risk') {
           if (url) {
             const link = document.createElement('a');
             link.href = url;
-            link.removeAttribute('target');
+            link.target = '_blank';
             link.rel = 'noopener';
             link.style.display = 'inline-block';
             link.style.width = '100%';
@@ -3627,16 +3254,21 @@ if (it.riskLabel === '⚠️ high-risk') {
     function buildClientVisibleStream(page){
       const sourceItems = Array.isArray(allItems) ? allItems : [];
       if (!sourceItems.length) return [];
+      if (normalizeSearchType(activeType) !== 'all') return sourceItems.slice();
 
-      // Search results must page as real cards. The previous all-tab portal board
-      // collapsed category groups into preview modules, so 300 received results
-      // could appear as only 7~8 pages and many pages rendered half-empty.
-      // Keep category information on each card, but do not let collapsed modules
-      // consume pager/card slots in the Global Search result stream.
-      if (normalizeSearchType(activeType) === 'all') {
+      const model = buildPortalPageModel();
+      if(model.pageCount){
+        const categoryPageCount = model.categoryPages.length;
         const pageNo = Math.max(1, parseInt(page, 10) || 1);
-        const start = (pageNo - 1) * PAGE_SIZE;
-        return sourceItems.slice(start, start + PAGE_SIZE).map(makePlainWebItem);
+        if(pageNo <= categoryPageCount) {
+          const modules = model.categoryPages[pageNo - 1] || [];
+          const fillStart = (model.categoryFillCounts || []).slice(0, pageNo - 1).reduce((sum, n) => sum + (Number(n) || 0), 0);
+          const fillCount = Number((model.categoryFillCounts || [])[pageNo - 1]) || 0;
+          return modules.concat((model.webItems || []).slice(fillStart, fillStart + fillCount));
+        }
+        const webPage = pageNo - categoryPageCount;
+        const start = Math.max(0, (model.filledWebBeforePlainPages || 0) + ((webPage - 1) * PAGE_SIZE));
+        return model.webItems.slice(start, start + PAGE_SIZE);
       }
 
       return sourceItems.slice();
@@ -3661,15 +3293,14 @@ if (it.riskLabel === '⚠️ high-risk') {
     }
 
     function visibleItemCountForPager(){
+      // In the all tab the pager must count the client visible stream, not the
+      // raw server total. Collapsed category overflow remains behind 더보기 and
+      // must not consume page slots.
       if (normalizeSearchType(activeType) === 'all') {
-        const localCount = Array.isArray(allItems) ? allItems.length : 0;
-        const promisedCount = Math.max(
-          localCount,
-          Number(serverTotalItems) || 0,
-          Number(authoritativeServerTotalItems) || 0,
-          lastQuery ? Math.min(INITIAL_PRELOAD_TARGET, adaptiveSearchTarget(lastQuery, activeType)) : 0
-        );
-        return Math.min(MAX_PAGER_PAGES * PAGE_SIZE, Math.max(0, promisedCount));
+        const model = buildPortalPageModel();
+        const portalCount = model && model.virtualCount ? model.virtualCount : buildClientVisibleStream(currentPage || 1).length;
+        const preloadFloor = lastQuery ? Math.min(INITIAL_PRELOAD_TARGET, Math.max(allItems.length || 0, portalCount || 0)) : 0;
+        return Math.max(portalCount, allItems.length || 0, preloadFloor);
       }
       if(serverPagedMode && serverTotalItems > 0) return serverTotalItems;
       return buildClientVisibleStream(currentPage || 1).length;
@@ -3687,8 +3318,6 @@ if (it.riskLabel === '⚠️ high-risk') {
     }
 
     function renderPage(page, skipEnrich = false){
-      embeddedViewerState = null;
-      clearEmbeddedSearchViewerDom();
       if(serverPagedMode && !loadedServerPages.has(page)){
         const preloadedPageCount = preloadPageCountFromItems(allItems);
         if(page > preloadedPageCount && !renderPage._serverWindowLoading){
@@ -3701,12 +3330,10 @@ if (it.riskLabel === '⚠️ high-risk') {
       const slice = visibleItemsForPage(page);
       const start = (page - 1) * PAGE_SIZE;
 
-      // Global Search pages render exactly the page window of real result cards.
-      // Group preview modules are disabled here because they reduced the visible
-      // card count and made the pager smaller than the received candidate pool.
-      if (normalizeSearchType(activeType) === 'all') {
-        slice.forEach(it => renderItem(ensureClientDisplayCard(makePlainWebItem(it))));
-      } else if (slice.some(isDisplayGroupModule)) {
+      // Render the already-balanced visible stream. Do not rebuild page 1 from a
+      // raw source slice, because a raw slice may contain only news/logo/map cards
+      // and then hidden overflow still blocks the following categories from moving up.
+      if (slice.some(isDisplayGroupModule)) {
         slice.forEach(entry => {
           if(isDisplayGroupModule(entry)) renderGroupedSlice([entry], page);
           else renderItem(entry);
@@ -3875,8 +3502,11 @@ async function runSearch(q, type = activeType){
   allItems = [];
   serverPagedMode = true;
   authoritativeServerTotalItems = Math.max(target, INITIAL_PRELOAD_TARGET);
-  progressivePagerPages = INITIAL_PROGRESSIVE_PAGER_PAGES;
-  serverTotalItems = INITIAL_PRELOAD_TARGET;
+  progressivePagerPages = Math.min(
+    MAX_PROGRESSIVE_PAGER_PAGES,
+    Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(Math.min(target, MAX_SMOOTH_CANDIDATES) / PAGE_SIZE))
+  );
+  serverTotalItems = Math.max(INITIAL_PRELOAD_TARGET, progressivePagerPages * PAGE_SIZE);
   loadedServerPages.clear();
 
   signalSanmaruSearch(qq, activeType, 'run-search');
@@ -3940,8 +3570,8 @@ async function runSearch(q, type = activeType){
     seedLoadedServerPagesFromItems(allItems, Math.min(allItems.length, Math.max(INITIAL_PRELOAD_TARGET, windowItems.length)));
     if(pageItems.length) loadedServerPages.set(1, pageItems.slice(0, PAGE_SIZE));
 
-    updateProgressiveTotalFromPayload(payload, Math.max(INITIAL_PRELOAD_TARGET, allItems.length));
-    serverTotalItems = Math.max(serverTotalItems || 0, allItems.length, INITIAL_PRELOAD_TARGET);
+    updateProgressiveTotalFromPayload(payload, Math.max(target, allItems.length, INITIAL_PRELOAD_TARGET), { expandAll:true });
+    serverTotalItems = Math.max(serverTotalItems || 0, target, allItems.length, INITIAL_PRELOAD_TARGET);
     progressivePagerPages = Math.max(progressivePagerPages || 0, INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(Math.min(serverTotalItems, MAX_SMOOTH_CANDIDATES) / PAGE_SIZE));
 
     if(!firstPaintDone && allItems.length){
@@ -3985,7 +3615,7 @@ async function runSearch(q, type = activeType){
     // Do not wait for Sanmaru/MaruSearch to finish all lanes. Start the faucet
     // shortly after first paint, but let the page-1 300-window seed pages 1~12
     // first when it arrives quickly.
-    intakeTimer = setTimeout(() => startIntakeOnce('first-paint-timer'), 20);
+    intakeTimer = setTimeout(() => startIntakeOnce('first-paint-timer'), 50);
 
     maruWindowPromise.then(res => {
       if(runSearch._seq !== seq || !res || res.error) return;
