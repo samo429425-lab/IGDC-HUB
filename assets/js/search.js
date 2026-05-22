@@ -38,6 +38,31 @@ ready(function () {
         
     if (!input || !btn) return;
 
+    // Ensure top search/header area remains visible when navigating cards.
+    // Make the nearest header-like ancestor sticky so clicks or rendering do not
+    // remove it from view. This preserves home link, global search, menu items.
+    (function ensureHeaderSticky(){
+      try{
+        const el = input;
+        if(!el) return;
+        let node = el;
+        // Walk up to 5 levels to find a header/nav/top container
+        for(let i=0;i<5 && node && node !== document.body;i++){
+          const tag = (node.tagName || '').toLowerCase();
+          if(tag === 'header' || tag === 'nav' || node.classList && /header|top|nav|menu|search/i.test(node.className)){
+            node.style.position = node.style.position || 'sticky';
+            node.style.top = node.style.top || '0px';
+            node.style.zIndex = node.style.zIndex || '9999';
+            node.style.background = node.style.background || '#fff';
+            node.style.webkitBackdropFilter = node.style.webkitBackdropFilter || 'saturate(120%) blur(6px)';
+            node.style.backdropFilter = node.style.backdropFilter || 'saturate(120%) blur(6px)';
+            break;
+          }
+          node = node.parentElement;
+        }
+      }catch(e){}
+    })();
+
     const PAGE_SIZE = 25;
     const BLOCK_SIZE = 10;
     const MAX_PAGER_PAGES = 499;
@@ -114,18 +139,18 @@ const from0 = (params.get('from') || '').trim();
 const SEARCH_TABS = [
   ['all', '전체'],
   ['map', '지도'],
-  ['knowledge', '지식'],
-  ['wiki', '위키'],
+  ['news', '뉴스'],
+  ['knowledge', '지식/위키'],
   ['site', '사이트'],
-  ['book', '도서'],
   ['blog', '블로그'],
   ['cafe', '카페'],
-  ['shopping', '쇼핑'],
-  ['news', '뉴스'],
+  ['sns', 'SNS'],
+  ['tour', '관광'],
   ['image', '이미지'],
   ['video', '영상'],
-  ['sns', '소셜'],
-  ['tour', '관광'],
+  ['media', '미디어'],
+  ['book', '도서'],
+  ['shopping', '쇼핑'],
   ['public_data', '공공자료'],
   ['academic', '학술'],
   ['sports', '스포츠'],
@@ -136,8 +161,30 @@ const SEARCH_TABS = [
 function normalizeSearchType(v){
   const raw = String(v || '').trim().toLowerCase();
   const allowed = new Set(SEARCH_TABS.map(x => x[0]));
-  const alias = { books: 'book', 도서: 'book', 책: 'book', sns: 'sns', social: 'sns', public: 'public_data', 공공자료: 'public_data', wiki: 'wiki', 위키: 'wiki', academic: 'academic', 학술: 'academic', site: 'site', 사이트: 'site' };
+  const alias = { books: 'book', 도서: 'book', 책: 'book', sns: 'sns', social: 'sns', public: 'public_data', 공공자료: 'public_data', wiki: 'knowledge', 위키: 'knowledge', 지식: 'knowledge', media: 'media', 미디어: 'media', academic: 'academic', 학술: 'academic', site: 'site', 사이트: 'site' };
   return allowed.has(raw) ? raw : (alias[raw] || 'all');
+}
+
+function guessSearchTypeFromQuery(q){
+  const text = String(q || '').trim().toLowerCase();
+  if(!text) return 'all';
+  const has = re => re.test(text);
+
+  if (has(/\b(기업|회사|공식사이트|공식 사이트|코퍼레이션|corporate|company|business|주식회사|법인)\b/)) return 'site';
+  if (has(/\b(국가|나라|도시|지역|주소|위치|지도|여행|관광|관광지|숙박|호텔|공항|시청|경찰서)\b/)) return 'local_tour';
+  if (has(/\b(인물|사람|연예인|배우|가수|정치인|대통령|대표|CEO|사장|작가|저자|선수|유명인)\b/)) return 'knowledge';
+  if (has(/\b(뉴스|속보|기사|보도|언론)\b/)) return 'news';
+  if (has(/\b(도서|책|isbn|소설|에세이|교과서|문학|서적)\b/)) return 'book';
+  if (has(/\b(쇼핑|상품|구매|가격|세일|쿠폰|몰|온라인쇼핑|배송)\b/)) return 'shopping';
+  if (has(/\b(영상|비디오|유튜브|동영상|클립|TV|드라마|영화)\b/)) return 'video';
+  if (has(/\b(이미지|사진|포토|그림|사진첩)\b/)) return 'image';
+  if (has(/\b(학술|논문|연구|리서치|저널|학회|학과)\b/)) return 'academic';
+  if (has(/\b(카페|커뮤니티|게시판|forum|블로그|blog)\b/)) return 'blog';
+  if (has(/\b(스포츠|축구|야구|농구|배구|골프|e스포츠|프로야구|프로축구)\b/)) return 'sports';
+  if (has(/\b(금융|증권|주식|환율|코인|비트코인|etf|펀드)\b/)) return 'finance';
+  if (has(/\b(웹툰|만화|comic|manga|웹소설)\b/)) return 'webtoon';
+  if (has(/\b(공공데이터|데이터포털|공공 자료|open data|public data)\b/)) return 'public_data';
+  return 'all';
 }
 
 function getTypeLabel(type){
@@ -476,17 +523,21 @@ function getSafeReturnUrl() {
 
 function buildSearchUrl(q) {
   const cleanQ = String(q || '').trim();
-  signalSanmaruSearch(cleanQ, 'all', 'home-to-search-handoff');
+  const guessedType = guessSearchTypeFromQuery(cleanQ);
+  signalSanmaruSearch(cleanQ, guessedType === 'all' ? 'all' : guessedType, 'home-to-search-handoff');
 
   const u = new URL('/search.html', location.origin);
   u.searchParams.set('q', cleanQ);
   u.searchParams.set('page', '1');
   u.searchParams.set('block', '0');
 
-  // A fresh query from the homepage/search box must not inherit the previous
-  // tab such as type=video. Search page tabs may be clicked after the new
-  // query loads.
-  u.searchParams.delete('type');
+  // A fresh query from the homepage/search box should use inferred type hints
+  // to optimize the search page category when possible.
+  if (guessedType !== 'all') {
+    u.searchParams.set('type', guessedType);
+  } else {
+    u.searchParams.delete('type');
+  }
   u.searchParams.set('residentFirst', '1');
   u.searchParams.set('sanmaruFirst', '1');
   u.searchParams.set('residentSwitch', '1');
@@ -539,7 +590,12 @@ function syncSearchFromUrl(run = true) {
   const qp = (sp.get('q') || '').trim();
   const pageParam = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1);
   const blockParam = Math.max(0, parseInt(sp.get('block') || '0', 10) || 0);
-  activeType = normalizeSearchType(sp.get('type') || 'all');
+  const explicitType = normalizeSearchType(sp.get('type') || 'all');
+  activeType = explicitType;
+  if (explicitType === 'all' && qp) {
+    const inferred = guessSearchTypeFromQuery(qp);
+    if (inferred !== 'all') activeType = inferred;
+  }
   updateSearchTabsActive();
 
   input.value = qp;
@@ -634,16 +690,17 @@ btn.addEventListener('click', (e) => {
 
   if (isSearchPage) {
     const currentQ = (new URLSearchParams(location.search).get('q') || '').trim();
+    const nextType = guessSearchTypeFromQuery(q);
 
     if (currentQ === q) {
-      const nextType = 'all';
       activeType = nextType;
       updateSearchTabsActive();
       const u = new URL(location.href);
       u.searchParams.set('q', q);
       u.searchParams.set('page', '1');
       u.searchParams.set('block', '0');
-      u.searchParams.delete('type');
+      if (nextType !== 'all') u.searchParams.set('type', nextType);
+      else u.searchParams.delete('type');
       u.searchParams.set('residentFirst', '1');
       u.searchParams.set('sanmaruFirst', '1');
       u.searchParams.set('residentSwitch', '1');
@@ -652,7 +709,6 @@ btn.addEventListener('click', (e) => {
       return;
     }
 
-    const nextType = 'all';
     activeType = nextType;
     updateSearchTabsActive();
     signalSanmaruSearch(q, nextType, 'search-page-new-query');
@@ -661,7 +717,8 @@ btn.addEventListener('click', (e) => {
     u.searchParams.set('q', q);
     u.searchParams.set('page', '1');
     u.searchParams.set('block', '0');
-    u.searchParams.delete('type');
+    if (nextType !== 'all') u.searchParams.set('type', nextType);
+    else u.searchParams.delete('type');
     u.searchParams.set('residentFirst', '1');
     u.searchParams.set('sanmaruFirst', '1');
     u.searchParams.set('residentSwitch', '1');
@@ -690,16 +747,17 @@ input.addEventListener('keydown', (e) => {
 
   if (isSearchPage) {
     const currentQ = (new URLSearchParams(location.search).get('q') || '').trim();
+    const nextType = guessSearchTypeFromQuery(q);
 
     if (currentQ === q) {
-      const nextType = 'all';
       activeType = nextType;
       updateSearchTabsActive();
       const u = new URL(location.href);
       u.searchParams.set('q', q);
       u.searchParams.set('page', '1');
       u.searchParams.set('block', '0');
-      u.searchParams.delete('type');
+      if (nextType !== 'all') u.searchParams.set('type', nextType);
+      else u.searchParams.delete('type');
       u.searchParams.set('residentFirst', '1');
       u.searchParams.set('sanmaruFirst', '1');
       u.searchParams.set('residentSwitch', '1');
@@ -708,7 +766,6 @@ input.addEventListener('keydown', (e) => {
       return;
     }
 
-    const nextType = 'all';
     activeType = nextType;
     updateSearchTabsActive();
     signalSanmaruSearch(q, nextType, 'search-page-new-query');
@@ -717,7 +774,8 @@ input.addEventListener('keydown', (e) => {
     u.searchParams.set('q', q);
     u.searchParams.set('page', '1');
     u.searchParams.set('block', '0');
-    u.searchParams.delete('type');
+    if (nextType !== 'all') u.searchParams.set('type', nextType);
+    else u.searchParams.delete('type');
     u.searchParams.set('residentFirst', '1');
     u.searchParams.set('sanmaruFirst', '1');
     u.searchParams.set('residentSwitch', '1');
@@ -1155,14 +1213,15 @@ async function fetchInstantSearchPack(q, type = activeType){
       if(!q) return;
       if(anchor && anchor !== input) input.value = q;
       if(isSearchPage){
-        const nextType = 'all';
+        const nextType = guessSearchTypeFromQuery(q);
         activeType = nextType;
         updateSearchTabsActive();
         const u = new URL(location.href);
         u.searchParams.set('q', q);
         u.searchParams.set('page', '1');
         u.searchParams.set('block', '0');
-        u.searchParams.delete('type');
+        if (nextType !== 'all') u.searchParams.set('type', nextType);
+        else u.searchParams.delete('type');
         u.searchParams.set('residentFirst', '1');
         u.searchParams.set('sanmaruFirst', '1');
         u.searchParams.set('residentSwitch', '1');
@@ -1779,7 +1838,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         opendata: 'public_data',
         open_data: 'public_data',
         knowledge_wiki: 'knowledge',
-        wiki: 'wiki',
+        wiki: 'knowledge',
         encyclopedia: 'knowledge',
         academic: 'academic',
         scholar: 'academic',
@@ -1878,7 +1937,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       if (host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr')) return 'authority';
       if (source.includes('public') || provider.includes('public') || type === 'public_data' || category === 'public_data' || text.includes('공공데이터') || text.includes('공공 데이터') || text.includes('데이터포털') || text.includes('open data') || host.includes('data.go.kr')) return 'public_data';
       if (source.includes('local') || source.includes('map') || type === 'map' || type === 'local' || mediaType === 'map' || category === 'map' || text.includes('관광') || text.includes('여행') || text.includes('지도') || text.includes('주소') || text.includes('위치') || text.includes('맛집') || text.includes('공원') || text.includes('landmark') || text.includes('tour')) return 'local_tour';
-      if (host.includes('wikipedia.org') || host.includes('namu.wiki') || source.includes('wiki') || type === 'wiki' || text.includes('위키')) return 'wiki';
+      if (host.includes('wikipedia.org') || host.includes('namu.wiki') || source.includes('wiki') || type === 'wiki' || text.includes('위키')) return 'knowledge';
       if (source.includes('scholar') || source.includes('academic') || source.includes('paper') || source.includes('research') || source.includes('library') || type === 'academic' || type === 'paper' || type === 'research' || category === 'academic' || text.includes('학술') || text.includes('논문') || text.includes('연구') || text.includes('journal') || text.includes('citation') || text.includes('thesis') || host.includes('scholar.google') || host.includes('riss.kr') || host.includes('dbpia.co.kr') || host.includes('kci.go.kr')) return 'academic';
       if (source.includes('encyc') || source.includes('kin') || type === 'knowledge' || category === 'knowledge' || text.includes('지식') || text.includes('백과') || text.includes('사전')) return 'knowledge';
       if (source.includes('corporate') || source.includes('homepage') || source.includes('business') || source.includes('company') || type === 'site' || type === 'homepage' || type === 'business' || category === 'site' || text.includes('홈페이지') || text.includes('공식사이트') || text.includes('공식 사이트') || text.includes('기업') || text.includes('회사') || text.includes('business') || text.includes('company') || text.includes('corporate')) return 'site';
@@ -1903,8 +1962,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         authority: '주요 정보',
         public_data: '공공자료',
         local_tour: '지도/지역',
-        knowledge: '지식/백과',
-        wiki: '위키',
+        knowledge: '지식/위키',
+        wiki: '지식/위키',
         academic: '학술/논문',
         site: '사이트/홈페이지',
         book: '도서',
@@ -1933,8 +1992,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         authority: 3,
         public_data: 2,
         local_tour: 2,
-        knowledge: 3,
-        wiki: 3,
+        knowledge: 5,
+        wiki: 5,
         academic: 4,
         site: 5,
         book: 4,
@@ -1962,7 +2021,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
+      const order = ['authority','local_tour','news','knowledge','site','blog','cafe','social','tour','image','video','media','book','shopping','public_data','academic','community','sports','finance','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -2029,8 +2088,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         authority: 3,
         public_data: 2,
         local_tour: 2,
-        knowledge: 3,
-        wiki: 3,
+        knowledge: 5,
+        wiki: 5,
         site: 5,
         book: 4,
         news: 5,
@@ -2657,11 +2716,56 @@ async function fetchInstantSearchPack(q, type = activeType){
         preview.description,
         preview.caption
       ];
+      let best = '';
       for(const v of candidates){
         const text = compactCardTextClient(v);
-        if(text) return text.slice(0, 360);
+        if(!text) continue;
+        if(text.length > best.length) best = text;
       }
-      return '';
+      return best ? best.slice(0, 520) : '';
+    }
+
+    // Ensure a minimal `displayCard` for client-side rendering when server-side
+    // decoration is absent (e.g., sanmaru instant packs). This fills thumbnails,
+    // imageSet, body/summary and line clamps so the UI can render rich cards
+    // immediately for the initial 300-item window.
+    function ensureClientDisplayCard(it){
+      if(!it || typeof it !== 'object') return it || {};
+      const copy = Object.assign({}, it);
+      const displayCard = (copy.displayCard && typeof copy.displayCard === 'object') ? Object.assign({}, copy.displayCard) : {};
+      const group = displayGroupOfItem(copy) || 'web';
+      const q = (input && input.value) ? input.value.trim() : '';
+      const images = collectNaturalImages(copy) || [];
+      const thumb = images[0] || preferredYoutubeThumbClient(copy) || '';
+      const summary = descriptionForItemClient(copy) || (copy.summary || copy.snippet || '').slice(0, 300);
+
+      displayCard.engine = displayCard.engine || 'client-display-decorator';
+      displayCard.version = displayCard.version || 'client-v1';
+      displayCard.cardType = displayCard.cardType || (thumb ? 'article-media' : 'article');
+      displayCard.group = displayCard.group || group;
+      displayCard.title = displayCard.title || copy.title || copy.name || q || '';
+      displayCard.url = displayCard.url || copy.url || copy.link || '';
+      displayCard.source = displayCard.source || (copy.source && (copy.source.name || copy.source)) || domainOf(displayCard.url || copy.url || copy.link || '');
+      displayCard.summary = displayCard.summary || summary;
+      displayCard.body = displayCard.body || summary;
+      displayCard.description = displayCard.description || summary;
+      displayCard.thumbnail = displayCard.thumbnail || thumb;
+      displayCard.image = displayCard.image || thumb;
+      displayCard.imageSet = Array.isArray(displayCard.imageSet) && displayCard.imageSet.length ? displayCard.imageSet : images;
+      displayCard.hasThumbnail = !!displayCard.thumbnail;
+      displayCard.showThumbnail = !!displayCard.thumbnail;
+      displayCard.showMapPreview = shouldRenderMapPreviewForItemClient(copy);
+      displayCard.showVideoPreview = isYoutubeLikeItemClient(copy) || !!(copy.media && (copy.media.type === 'video' || copy.media.kind === 'video'));
+      displayCard.lineClamp = displayCard.lineClamp || (displayCard.showMapPreview ? 3 : (displayCard.showVideoPreview ? 4 : 3));
+      displayCard.bodyLines = displayCard.bodyLines || parseInt(displayCard.lineClamp, 10) || 3;
+
+      copy.displayCard = displayCard;
+      copy.imageSet = copy.imageSet || displayCard.imageSet || images;
+      copy.thumbnail = copy.thumbnail || displayCard.thumbnail || thumb;
+      copy.thumb = copy.thumb || copy.thumbnail;
+      copy.image = copy.image || copy.thumbnail;
+
+      return copy;
     }
 
     function shouldRenderMapPreviewForItemClient(it){
@@ -2688,7 +2792,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         card.style.cursor = 'pointer';
         card.addEventListener('click', (e) => {
           if (e.target && e.target.closest && e.target.closest('a, button, iframe, video, .maru-video-embed-wrap, .maru-card-media')) return;
-          window.location.href = url;
+          window.open(url, '_blank', 'noopener');
         });
       }
 
@@ -2705,7 +2809,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       if (url) {
         const a = document.createElement('a');
         a.href = url;
-        a.target = '_self';
+        a.target = '_blank';
         a.rel = 'noopener';
         a.textContent = (it.title || '').trim() || '(no title)';
         a.style.color = 'inherit';
@@ -2768,10 +2872,15 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
         const cardLineClamp = it && it.displayCard && parseInt(it.displayCard.lineClamp, 10);
-        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(5, cardLineClamp) : 3);
+        const clampLines = cardLineClamp > 0 ? Math.min(5, Math.max(3, cardLineClamp)) : 4;
+        d.style.webkitLineClamp = String(clampLines);
+        d.style.lineClamp = String(clampLines);
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
+        d.style.lineHeight = '1.45';
+        d.style.maxHeight = `calc(1.45em * ${clampLines})`;
+        d.style.whiteSpace = 'normal';
       }
 
       const hasImageSet = Array.isArray(it.imageSet) && it.imageSet.length > 0;
@@ -2821,8 +2930,23 @@ if (it.riskLabel === '⚠️ high-risk') {
           img.src = src;
           img.loading = 'lazy';
           img.alt = '';
+          img.style.cursor = url ? 'pointer' : 'default';
           img.onerror = () => img.remove();
-          mediaWrap.appendChild(img);
+
+          if (url) {
+            const link = document.createElement('a');
+            link.href = url;
+            link.target = '_blank';
+            link.rel = 'noopener';
+            link.style.display = 'inline-block';
+            link.style.width = '100%';
+            link.style.height = '100%';
+            link.style.textDecoration = 'none';
+            link.appendChild(img);
+            mediaWrap.appendChild(link);
+          } else {
+            mediaWrap.appendChild(img);
+          }
         });
 
         body.appendChild(mediaWrap);
@@ -3017,12 +3141,12 @@ if (it.riskLabel === '⚠️ high-risk') {
         authority: 8,
         public_data: 8,
         local_tour: 8,
-        knowledge: 3,
-        wiki: 3,
+        knowledge: 10,
+        wiki: 10,
         academic: 15,
         site: 15,
         book: 15,
-        news: 15,
+        news: 25,
         blog: 15,
         cafe: 15,
         community: 15,
@@ -3047,7 +3171,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         items: diversifyGroupPreviewItems(g.group, g.items || [])
       }));
       const byGroup = new Map(grouped.map(g => [g.group, g]));
-      const categoryOrder = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon'];
+      const categoryOrder = ['authority','local_tour','news','knowledge','site','blog','cafe','social','image','video','media','book','shopping','public_data','academic','community','sports','finance','webtoon'];
       const categoryOverflowItems = [];
       const categoryPages = [];
       let page = [];
@@ -3421,6 +3545,18 @@ async function runSearch(q, type = activeType){
       : dedupeItems(filterSearchResultItems((pack && pack.items) || normalized.items || []));
     const pageItems = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
     const incoming = rawItems && rawItems.length ? rawItems : pageItems;
+    // If the supply pack is an instant Sanmaru pack (first-paint), ensure
+    // each item has a client-side displayCard so the UI renders thumbnails,
+    // video/map previews, and proper line clamps immediately without waiting
+    // for server-side decoration.
+    try{
+      const kind = String(sourceName || (pack && pack.kind) || '').toLowerCase();
+      if(kind.includes('sanmaru') || kind.includes('instant') || kind === 'sanmaru-instant' || kind === 'sanmaru'){
+        for(let i=0;i<incoming.length;i++){
+          incoming[i] = ensureClientDisplayCard(incoming[i]);
+        }
+      }
+    }catch(e){ /* no-op */ }
     if(!incoming || !incoming.length) return 0;
 
     // Cache the supply window immediately. Rendering still shows only the current
