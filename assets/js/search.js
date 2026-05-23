@@ -2929,14 +2929,25 @@ async function fetchInstantSearchPack(q, type = activeType){
       const target = normalizedResultUrlForClient(url);
       if(!target || !isUsableResultUrlForClient(target)) return;
 
-      // Search result click must behave like a real search engine result.
-      // Do not render external sites inside search.html iframe; many sites block iframe
-      // and that turns every result into a dead preview panel. Navigate to the real page.
+      // Keep search.html, the search box, category tabs, and page numbers alive.
+      // Same-tab navigation destroys the search UI, and most external sites block iframe.
+      // Therefore a result opens as a real external page in a separate browser tab/window.
+      // The current search page remains exactly where it is.
       try {
-        window.location.href = target;
-      } catch(e) {
-        try { window.location.assign(target); } catch(_e) {}
-      }
+        const opened = window.open(target, '_blank', 'noopener');
+        if(opened) { try { opened.opener = null; } catch(_e) {} return; }
+      } catch(e) {}
+
+      try {
+        const a = document.createElement('a');
+        a.href = target;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { try { a.remove(); } catch(_e) {} }, 0);
+      } catch(e) {}
     }
 
     function displayUrlForImageItemClient(it, src){
@@ -3143,8 +3154,8 @@ async function fetchInstantSearchPack(q, type = activeType){
       if (url) {
         const a = document.createElement('a');
         a.href = url;
-        a.target = '_self';
-        a.rel = 'noopener';
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
         a.textContent = (it.title || '').trim() || '(no title)';
         a.style.color = 'inherit';
         a.style.textDecoration = 'none';
