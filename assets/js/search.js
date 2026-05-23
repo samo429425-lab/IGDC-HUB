@@ -1022,13 +1022,24 @@ function serverTotalFromPayload(payload, fallbackCount){
   return cappedTotal;
 }
 
-function pageItemsFromPack(pack){
+function pageItemsFromPack(pack, pageNo){
   if(!pack) return [];
   if(Array.isArray(pack.pageItems) && pack.pageItems.length) return pack.pageItems;
   const payload = pack.payload || pack;
   if(payload && payload.visiblePagePack && Array.isArray(payload.visiblePagePack.pageItems) && payload.visiblePagePack.pageItems.length) return payload.visiblePagePack.pageItems;
   if(payload && Array.isArray(payload.pageItems) && payload.pageItems.length) return payload.pageItems;
-  return Array.isArray(pack.items) ? pack.items.slice(0, PAGE_SIZE) : [];
+
+  // Some maru-search/sanmaru responses return the full candidate window in
+  // items/results instead of a pageItems pack. In that case, slice the requested
+  // page window here so continuous intake does not keep re-reading page 1 and
+  // stall around the first 200~300 items.
+  const full = Array.isArray(pack.items)
+    ? pack.items
+    : (payload && Array.isArray(payload.items) ? payload.items : (payload && Array.isArray(payload.results) ? payload.results : []));
+  if(!full.length) return [];
+  const page = Math.max(1, parseInt(pageNo || (payload && (payload.visiblePage || payload.page)) || 1, 10) || 1);
+  const start = (page - 1) * PAGE_SIZE;
+  return full.slice(start, start + PAGE_SIZE);
 }
 
 function preloadPageCountFromItems(items){
@@ -1117,7 +1128,7 @@ function startContinuousIntake(q, type, seq){
       try{
         const pack = await fetchSearch(q, type, page);
         if(!continuousIntakeActive || continuousIntakeSeq !== token || runSearch._seq !== seq) return;
-        const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack))).slice(0, PAGE_SIZE);
+        const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack, page))).slice(0, PAGE_SIZE);
         if(pageSlice.length){
           loadedServerPages.set(page, pageSlice);
           allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice);
@@ -1279,6 +1290,15 @@ async function fetchSearch(q, type = activeType, page = 1){
   sp.set('routeOwner', 'sanmaru');
   sp.set('naturalFlow', '1');
   sp.set('smoothIntake', '1');
+  sp.set('openPipe', '1');
+  sp.set('streamFullWindow', '1');
+  sp.set('continuousSupply', '1');
+  sp.set('fullWindow', '1');
+  sp.set('searchUiContinuous', '1');
+  sp.set('target', String(adaptiveSearchTarget(q, safeType)));
+  sp.set('candidatePoolTarget', String(adaptiveSearchTarget(q, safeType)));
+  sp.set('minResultTarget', String(Math.min(4500, adaptiveSearchTarget(q, safeType))));
+  sp.set('noPageHardStop', '1');
   sp.set('noBlockingWide', '1');
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
@@ -1318,6 +1338,11 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
   sp.set('providerPassthrough', '1');
+  sp.set('openPipe', '1');
+  sp.set('streamFullWindow', '1');
+  sp.set('continuousSupply', '1');
+  sp.set('searchUiContinuous', '1');
+  sp.set('noPageHardStop', '1');
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
   sp.set('reason', 'search-ui-first-paint');
