@@ -1022,24 +1022,13 @@ function serverTotalFromPayload(payload, fallbackCount){
   return cappedTotal;
 }
 
-function pageItemsFromPack(pack, pageNo){
+function pageItemsFromPack(pack){
   if(!pack) return [];
   if(Array.isArray(pack.pageItems) && pack.pageItems.length) return pack.pageItems;
   const payload = pack.payload || pack;
   if(payload && payload.visiblePagePack && Array.isArray(payload.visiblePagePack.pageItems) && payload.visiblePagePack.pageItems.length) return payload.visiblePagePack.pageItems;
   if(payload && Array.isArray(payload.pageItems) && payload.pageItems.length) return payload.pageItems;
-
-  // Some maru-search/sanmaru responses return the full candidate window in
-  // items/results instead of a pageItems pack. In that case, slice the requested
-  // page window here so continuous intake does not keep re-reading page 1 and
-  // stall around the first 200~300 items.
-  const full = Array.isArray(pack.items)
-    ? pack.items
-    : (payload && Array.isArray(payload.items) ? payload.items : (payload && Array.isArray(payload.results) ? payload.results : []));
-  if(!full.length) return [];
-  const page = Math.max(1, parseInt(pageNo || (payload && (payload.visiblePage || payload.page)) || 1, 10) || 1);
-  const start = (page - 1) * PAGE_SIZE;
-  return full.slice(start, start + PAGE_SIZE);
+  return Array.isArray(pack.items) ? pack.items.slice(0, PAGE_SIZE) : [];
 }
 
 function preloadPageCountFromItems(items){
@@ -1128,7 +1117,7 @@ function startContinuousIntake(q, type, seq){
       try{
         const pack = await fetchSearch(q, type, page);
         if(!continuousIntakeActive || continuousIntakeSeq !== token || runSearch._seq !== seq) return;
-        const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack, page))).slice(0, PAGE_SIZE);
+        const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack))).slice(0, PAGE_SIZE);
         if(pageSlice.length){
           loadedServerPages.set(page, pageSlice);
           allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice);
@@ -1290,15 +1279,6 @@ async function fetchSearch(q, type = activeType, page = 1){
   sp.set('routeOwner', 'sanmaru');
   sp.set('naturalFlow', '1');
   sp.set('smoothIntake', '1');
-  sp.set('openPipe', '1');
-  sp.set('streamFullWindow', '1');
-  sp.set('continuousSupply', '1');
-  sp.set('fullWindow', '1');
-  sp.set('searchUiContinuous', '1');
-  sp.set('target', String(adaptiveSearchTarget(q, safeType)));
-  sp.set('candidatePoolTarget', String(adaptiveSearchTarget(q, safeType)));
-  sp.set('minResultTarget', String(Math.min(4500, adaptiveSearchTarget(q, safeType))));
-  sp.set('noPageHardStop', '1');
   sp.set('noBlockingWide', '1');
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
@@ -1338,11 +1318,6 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
   sp.set('providerPassthrough', '1');
-  sp.set('openPipe', '1');
-  sp.set('streamFullWindow', '1');
-  sp.set('continuousSupply', '1');
-  sp.set('searchUiContinuous', '1');
-  sp.set('noPageHardStop', '1');
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
   sp.set('reason', 'search-ui-first-paint');
@@ -2953,73 +2928,14 @@ async function fetchInstantSearchPack(q, type = activeType){
     function openResultInsideSearchFrame(url, it){
       const target = normalizedResultUrlForClient(url);
       if(!target || !isUsableResultUrlForClient(target)) return;
-      if(!isSearchPage){
-        try { window.location.href = target; } catch(e) {}
-        return;
-      }
-      try{
-        const keepScrollY = window.scrollY || window.pageYOffset || 0;
-        const viewer = document.createElement('div');
-        viewer.className = 'maru-result-viewer';
 
-        const head = document.createElement('div');
-        head.className = 'maru-result-viewer-head';
-
-        const title = document.createElement('div');
-        title.className = 'maru-result-viewer-title';
-        title.textContent = String((it && it.title) || target).trim() || target;
-
-        const actions = document.createElement('div');
-        actions.className = 'maru-result-viewer-actions';
-
-        const back = document.createElement('button');
-        back.type = 'button';
-        back.textContent = '검색 결과로 돌아가기';
-        back.addEventListener('click', () => renderPage(currentPage || 1, true));
-
-        const open = document.createElement('a');
-        open.href = target;
-        open.target = '_blank';
-        open.rel = 'noopener';
-        open.textContent = '새 창 열기';
-
-        actions.appendChild(back);
-        actions.appendChild(open);
-        head.appendChild(title);
-        head.appendChild(actions);
-        viewer.appendChild(head);
-
-        const embeddable = isLikelyEmbeddableInSearchFrame(target);
-        if(embeddable){
-          const iframe = document.createElement('iframe');
-          iframe.src = target;
-          iframe.loading = 'eager';
-          iframe.referrerPolicy = 'no-referrer-when-downgrade';
-          iframe.title = title.textContent;
-          let settled = false;
-          iframe.addEventListener('load', () => { settled = true; });
-          iframe.addEventListener('error', () => {
-            settled = true;
-            try{ iframe.replaceWith(makeResultViewerFallback(target, title.textContent)); }catch(e){}
-          });
-          viewer.appendChild(iframe);
-          setTimeout(() => {
-            if(!settled && iframe && iframe.parentNode){
-              try{ iframe.replaceWith(makeResultViewerFallback(target, title.textContent)); }catch(e){}
-            }
-          }, 3500);
-        }else{
-          viewer.appendChild(makeResultViewerFallback(target, title.textContent));
-        }
-
-        results.innerHTML = '';
-        results.appendChild(viewer);
-        drawPager();
-        requestAnimationFrame(() => {
-          try { window.scrollTo({ top: keepScrollY, behavior:'auto' }); } catch(e) { try { window.scrollTo(0, keepScrollY); } catch(_e){} }
-        });
-      }catch(e){
-        // Never replace the search page on viewer failure.
+      // Search result click must behave like a real search engine result.
+      // Do not render external sites inside search.html iframe; many sites block iframe
+      // and that turns every result into a dead preview panel. Navigate to the real page.
+      try {
+        window.location.href = target;
+      } catch(e) {
+        try { window.location.assign(target); } catch(_e) {}
       }
     }
 
