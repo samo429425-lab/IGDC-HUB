@@ -522,51 +522,6 @@ function ensureSearchCardMediaStyle(){
       border: 0;
       background: #fff;
     }
-    .maru-result-viewer-fallback {
-      min-height: calc(100vh - 235px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 28px;
-      background: #f8fafc;
-      color: #334155;
-      text-align: center;
-    }
-    .maru-result-viewer-fallback-inner {
-      max-width: 620px;
-      padding: 20px 22px;
-      border: 1px solid #e2e8f0;
-      border-radius: 16px;
-      background: #ffffff;
-      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
-    }
-    .maru-result-viewer-fallback-title {
-      margin: 0 0 8px;
-      font-size: 15px;
-      font-weight: 900;
-      color: #0f172a;
-    }
-    .maru-result-viewer-fallback-text {
-      margin: 0 0 14px;
-      font-size: 13px;
-      line-height: 1.55;
-      color: #475569;
-    }
-    .maru-result-viewer-fallback-url {
-      margin: 0 0 14px;
-      font-size: 12px;
-      color: #64748b;
-      word-break: break-all;
-    }
-    #maru-page-controls {
-      position: sticky;
-      top: 112px;
-      z-index: 95;
-      background: rgba(255,255,255,0.96);
-      backdrop-filter: blur(6px);
-      padding: 8px 0;
-      border-bottom: 1px solid #eef2f7;
-    }
 
 
     .maru-search-home-link {
@@ -629,143 +584,6 @@ function ensureSearchCardMediaStyle(){
 }
 
 ensureSearchCardMediaStyle();
-
-
-function ensureSearchResultDockStyle(){
-  if (document.getElementById('maru-search-result-dock-style')) return;
-  const style = document.createElement('style');
-  style.id = 'maru-search-result-dock-style';
-  style.textContent = `
-    .maru-result-dock {
-      position: fixed;
-      top: 136px;
-      right: 18px;
-      width: min(460px, 42vw);
-      max-height: calc(100vh - 156px);
-      z-index: 130;
-      display: flex;
-      flex-direction: column;
-      border: 1px solid #dbe2ea;
-      border-radius: 16px;
-      background: #ffffff;
-      box-shadow: 0 20px 50px rgba(15, 23, 42, 0.20);
-      overflow: hidden;
-    }
-    .maru-result-dock-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      padding: 10px 12px;
-      border-bottom: 1px solid #eef2f7;
-      background: #f8fafc;
-      flex: 0 0 auto;
-    }
-    .maru-result-dock-title {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-size: 13px;
-      font-weight: 900;
-      color: #0f172a;
-    }
-    .maru-result-dock-close {
-      flex: 0 0 auto;
-      border: 1px solid #e5e7eb;
-      border-radius: 9px;
-      background: #ffffff;
-      color: #334155;
-      padding: 6px 9px;
-      font-size: 12px;
-      font-weight: 900;
-      cursor: pointer;
-    }
-    .maru-result-dock-body {
-      overflow: auto;
-      padding: 13px 14px 15px;
-    }
-    .maru-result-dock-domain {
-      margin-bottom: 7px;
-      font-size: 12px;
-      font-weight: 800;
-      color: #64748b;
-      word-break: break-all;
-    }
-    .maru-result-dock-main-title {
-      margin: 0 0 10px;
-      color: #111827;
-      font-size: 18px;
-      font-weight: 900;
-      line-height: 1.35;
-      letter-spacing: -0.02em;
-    }
-    .maru-result-dock-image {
-      width: 100%;
-      max-height: 260px;
-      object-fit: cover;
-      border-radius: 12px;
-      border: 1px solid #eef2f7;
-      background: #f8fafc;
-      margin: 0 0 11px;
-    }
-    .maru-result-dock-desc {
-      margin: 0 0 13px;
-      color: #334155;
-      font-size: 14px;
-      line-height: 1.6;
-      white-space: normal;
-    }
-    .maru-result-dock-url {
-      margin: 0 0 12px;
-      color: #64748b;
-      font-size: 12px;
-      line-height: 1.4;
-      word-break: break-all;
-    }
-    .maru-result-dock-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 6px;
-    }
-    .maru-result-dock-actions a,
-    .maru-result-dock-actions button {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 10px;
-      padding: 9px 12px;
-      font-size: 13px;
-      font-weight: 900;
-      text-decoration: none;
-      cursor: pointer;
-    }
-    .maru-result-dock-open {
-      border: 1px solid #c7d2fe;
-      background: #eef2ff;
-      color: #3730a3;
-    }
-    .maru-result-dock-list {
-      border: 1px solid #e5e7eb;
-      background: #ffffff;
-      color: #334155;
-    }
-    @media (max-width: 900px) {
-      .maru-result-dock {
-        left: 10px;
-        right: 10px;
-        bottom: 10px;
-        top: auto;
-        width: auto;
-        max-height: 48vh;
-      }
-    }
-  `;
-  document.head.appendChild(style);
-}
-
-ensureSearchResultDockStyle();
 
 
 function resolveSearchHomeUrl(){
@@ -1837,11 +1655,6 @@ async function fetchInstantSearchPack(q, type = activeType){
         bar.style.justifyContent = 'center';
         bar.style.gap = '6px';
         bar.style.margin = '8px 0 14px';
-        bar.style.position = 'sticky';
-        bar.style.top = '112px';
-        bar.style.zIndex = '95';
-        bar.style.background = 'rgba(255,255,255,0.96)';
-        bar.style.padding = '8px 0';
         status.parentNode.insertBefore(bar, status.nextSibling);
       }
       return bar;
@@ -2709,26 +2522,10 @@ async function fetchInstantSearchPack(q, type = activeType){
       });
     }
 
-    function hasUsableSearchResultPayload(it){
-      if(!it || typeof it !== 'object') return false;
-      const title = String(it.title || it.name || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-      const summary = descriptionForItemClient(it);
-      const url = normalizedResultUrlForClient(it.url || it.link || it.href || it.openUrl || it.pageUrl || '');
-      const images = collectNaturalImages(it);
-      const hasMedia = images.length || it.image || it.thumbnail || it.thumb || it.videoUrl || it.embedUrl;
-      if(url && title) return true;
-      if(url && summary) return true;
-      if(url && hasMedia) return true;
-      if(title && summary) return true;
-      if(title && hasMedia) return true;
-      return false;
-    }
-
     function shouldRejectSearchResultItem(it){
       if (!it) return true;
       if (isSeedPlaceholderItem(it)) return true;
       if (hasInvalidYouTubeVideoUrl(it)) return true;
-      if (!hasUsableSearchResultPayload(it)) return true;
       return false;
     }
 
@@ -2984,181 +2781,58 @@ async function fetchInstantSearchPack(q, type = activeType){
       return '';
     }
 
-    function isUsableResultUrlForClient(url){
-      const raw = String(url || '').trim();
-      if(!raw) return false;
-      const low = raw.toLowerCase();
-      if(raw === '#' || raw === '/' || low.startsWith('javascript:') || low.startsWith('data:') || low === 'about:blank') return false;
-      try{
-        const u = new URL(raw, location.origin);
-        return u.protocol === 'http:' || u.protocol === 'https:' || u.origin === location.origin;
-      }catch(e){ return false; }
-    }
-
-    function normalizedResultUrlForClient(url){
-      const raw = String(url || '').trim();
-      if(!raw) return '';
-      try{
-        const u = new URL(raw, location.origin);
-        if(u.protocol !== 'http:' && u.protocol !== 'https:') return '';
-        return u.href;
-      }catch(e){ return ''; }
-    }
-
-    function isLikelyEmbeddableInSearchFrame(target){
-      const raw = normalizedResultUrlForClient(target);
-      if(!raw) return false;
-      try{
-        const u = new URL(raw);
-        const host = u.hostname.toLowerCase();
-        if(u.origin === location.origin) return true;
-        if(host.includes('youtube.com') && u.pathname.includes('/embed/')) return true;
-        if(host.includes('google.com') && (u.pathname.includes('/maps') || u.search.includes('output=embed'))) return true;
-        if(host.includes('openstreetmap.org') && u.pathname.includes('/export/embed')) return true;
-      }catch(e){}
-      return false;
-    }
-
-    function makeResultViewerFallback(target, titleText){
-      const fallback = document.createElement('div');
-      fallback.className = 'maru-result-viewer-fallback';
-      const inner = document.createElement('div');
-      inner.className = 'maru-result-viewer-fallback-inner';
-
-      const h = document.createElement('div');
-      h.className = 'maru-result-viewer-fallback-title';
-      h.textContent = titleText || '외부 페이지 미리보기를 열 수 없습니다';
-
-      const text = document.createElement('p');
-      text.className = 'maru-result-viewer-fallback-text';
-      text.textContent = '이 사이트는 내부 iframe 표시를 차단했거나, 브라우저 보안 정책상 바로 표시할 수 없습니다. 검색 화면과 페이지 목록은 유지됩니다.';
-
-      const urlLine = document.createElement('p');
-      urlLine.className = 'maru-result-viewer-fallback-url';
-      urlLine.textContent = target || '';
-
-      const open = document.createElement('a');
-      open.href = target;
-      open.target = '_blank';
-      open.rel = 'noopener';
-      open.textContent = '새 창에서 열기';
-      open.style.display = 'inline-flex';
-      open.style.alignItems = 'center';
-      open.style.justifyContent = 'center';
-      open.style.padding = '9px 13px';
-      open.style.border = '1px solid #c7d2fe';
-      open.style.borderRadius = '10px';
-      open.style.background = '#eef2ff';
-      open.style.color = '#3730a3';
-      open.style.fontSize = '13px';
-      open.style.fontWeight = '900';
-      open.style.textDecoration = 'none';
-
-      inner.appendChild(h);
-      inner.appendChild(text);
-      if(target) inner.appendChild(urlLine);
-      if(target) inner.appendChild(open);
-      fallback.appendChild(inner);
-      return fallback;
-    }
-
     function openResultInsideSearchFrame(url, it){
-      const target = normalizedResultUrlForClient(url);
-      if(!target || !isUsableResultUrlForClient(target)) return;
-
-      ensureSearchResultDockStyle();
-
-      let dock = document.getElementById('maru-result-dock');
-      if(!dock){
-        dock = document.createElement('aside');
-        dock.id = 'maru-result-dock';
-        dock.className = 'maru-result-dock';
-        dock.setAttribute('aria-live', 'polite');
-        document.body.appendChild(dock);
+      const target = String(url || '').trim();
+      if(!target) return;
+      if(!isSearchPage){
+        try { window.location.href = target; } catch(e) {}
+        return;
       }
+      try{
+        const viewer = document.createElement('div');
+        viewer.className = 'maru-result-viewer';
 
-      const titleText = String((it && (it.title || it.name)) || target).trim() || target;
-      const domainText = domainOf(target) || String((it && (it.source && (it.source.name || it.source.platform) || it.source)) || '').trim();
-      const descText = descriptionForItemClient(it || {});
-      const imgs = dedupeImageVariantsClient(collectNaturalImages(it || {}));
-      const imgSrc = imgs[0] || String((it && (it.image || it.thumbnail || it.thumb)) || '').trim();
+        const head = document.createElement('div');
+        head.className = 'maru-result-viewer-head';
 
-      dock.innerHTML = '';
+        const title = document.createElement('div');
+        title.className = 'maru-result-viewer-title';
+        title.textContent = String((it && it.title) || target).trim() || target;
 
-      const head = document.createElement('div');
-      head.className = 'maru-result-dock-head';
+        const actions = document.createElement('div');
+        actions.className = 'maru-result-viewer-actions';
 
-      const headTitle = document.createElement('div');
-      headTitle.className = 'maru-result-dock-title';
-      headTitle.textContent = '검색 결과 미리보기';
+        const back = document.createElement('button');
+        back.type = 'button';
+        back.textContent = '검색 결과로 돌아가기';
+        back.addEventListener('click', () => renderPage(currentPage || 1, true));
 
-      const close = document.createElement('button');
-      close.type = 'button';
-      close.className = 'maru-result-dock-close';
-      close.textContent = '닫기';
-      close.addEventListener('click', () => dock.remove());
+        const open = document.createElement('a');
+        open.href = target;
+        open.target = '_blank';
+        open.rel = 'noopener';
+        open.textContent = '새 창 열기';
 
-      head.appendChild(headTitle);
-      head.appendChild(close);
+        actions.appendChild(back);
+        actions.appendChild(open);
+        head.appendChild(title);
+        head.appendChild(actions);
 
-      const body = document.createElement('div');
-      body.className = 'maru-result-dock-body';
+        const iframe = document.createElement('iframe');
+        iframe.src = target;
+        iframe.loading = 'eager';
+        iframe.referrerPolicy = 'no-referrer-when-downgrade';
+        iframe.title = title.textContent;
 
-      if(domainText){
-        const domain = document.createElement('div');
-        domain.className = 'maru-result-dock-domain';
-        domain.textContent = domainText;
-        body.appendChild(domain);
+        viewer.appendChild(head);
+        viewer.appendChild(iframe);
+        results.innerHTML = '';
+        results.appendChild(viewer);
+        drawPager();
+        try { results.scrollIntoView({ block:'start', behavior:'smooth' }); } catch(e) {}
+      }catch(e){
+        try { window.location.href = target; } catch(_e) {}
       }
-
-      const h = document.createElement('h2');
-      h.className = 'maru-result-dock-main-title';
-      h.textContent = titleText;
-      body.appendChild(h);
-
-      if(imgSrc && isMeaningfulImageForItemClient(imgSrc, it || {})){
-        const image = document.createElement('img');
-        image.className = 'maru-result-dock-image';
-        image.src = imgSrc;
-        image.alt = titleText;
-        image.loading = 'lazy';
-        image.onerror = () => image.remove();
-        body.appendChild(image);
-      }
-
-      if(descText){
-        const desc = document.createElement('p');
-        desc.className = 'maru-result-dock-desc';
-        desc.textContent = descText;
-        body.appendChild(desc);
-      }
-
-      const urlLine = document.createElement('p');
-      urlLine.className = 'maru-result-dock-url';
-      urlLine.textContent = target;
-      body.appendChild(urlLine);
-
-      const actions = document.createElement('div');
-      actions.className = 'maru-result-dock-actions';
-
-      const open = document.createElement('a');
-      open.className = 'maru-result-dock-open';
-      open.href = target;
-      open.target = '_blank';
-      open.rel = 'noopener noreferrer';
-      open.textContent = '원문 열기';
-      actions.appendChild(open);
-
-      const keepList = document.createElement('button');
-      keepList.type = 'button';
-      keepList.className = 'maru-result-dock-list';
-      keepList.textContent = '검색 목록 계속 보기';
-      keepList.addEventListener('click', () => dock.remove());
-      actions.appendChild(keepList);
-
-      body.appendChild(actions);
-      dock.appendChild(head);
-      dock.appendChild(body);
     }
 
     function displayUrlForImageItemClient(it, src){
@@ -3365,8 +3039,8 @@ async function fetchInstantSearchPack(q, type = activeType){
       if (url) {
         const a = document.createElement('a');
         a.href = url;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
+        a.target = '_self';
+        a.rel = 'noopener';
         a.textContent = (it.title || '').trim() || '(no title)';
         a.style.color = 'inherit';
         a.style.textDecoration = 'none';
