@@ -631,6 +631,143 @@ function ensureSearchCardMediaStyle(){
 ensureSearchCardMediaStyle();
 
 
+function ensureSearchResultDockStyle(){
+  if (document.getElementById('maru-search-result-dock-style')) return;
+  const style = document.createElement('style');
+  style.id = 'maru-search-result-dock-style';
+  style.textContent = `
+    .maru-result-dock {
+      position: fixed;
+      top: 136px;
+      right: 18px;
+      width: min(460px, 42vw);
+      max-height: calc(100vh - 156px);
+      z-index: 130;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid #dbe2ea;
+      border-radius: 16px;
+      background: #ffffff;
+      box-shadow: 0 20px 50px rgba(15, 23, 42, 0.20);
+      overflow: hidden;
+    }
+    .maru-result-dock-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-bottom: 1px solid #eef2f7;
+      background: #f8fafc;
+      flex: 0 0 auto;
+    }
+    .maru-result-dock-title {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+      font-weight: 900;
+      color: #0f172a;
+    }
+    .maru-result-dock-close {
+      flex: 0 0 auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 9px;
+      background: #ffffff;
+      color: #334155;
+      padding: 6px 9px;
+      font-size: 12px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .maru-result-dock-body {
+      overflow: auto;
+      padding: 13px 14px 15px;
+    }
+    .maru-result-dock-domain {
+      margin-bottom: 7px;
+      font-size: 12px;
+      font-weight: 800;
+      color: #64748b;
+      word-break: break-all;
+    }
+    .maru-result-dock-main-title {
+      margin: 0 0 10px;
+      color: #111827;
+      font-size: 18px;
+      font-weight: 900;
+      line-height: 1.35;
+      letter-spacing: -0.02em;
+    }
+    .maru-result-dock-image {
+      width: 100%;
+      max-height: 260px;
+      object-fit: cover;
+      border-radius: 12px;
+      border: 1px solid #eef2f7;
+      background: #f8fafc;
+      margin: 0 0 11px;
+    }
+    .maru-result-dock-desc {
+      margin: 0 0 13px;
+      color: #334155;
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: normal;
+    }
+    .maru-result-dock-url {
+      margin: 0 0 12px;
+      color: #64748b;
+      font-size: 12px;
+      line-height: 1.4;
+      word-break: break-all;
+    }
+    .maru-result-dock-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .maru-result-dock-actions a,
+    .maru-result-dock-actions button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      padding: 9px 12px;
+      font-size: 13px;
+      font-weight: 900;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .maru-result-dock-open {
+      border: 1px solid #c7d2fe;
+      background: #eef2ff;
+      color: #3730a3;
+    }
+    .maru-result-dock-list {
+      border: 1px solid #e5e7eb;
+      background: #ffffff;
+      color: #334155;
+    }
+    @media (max-width: 900px) {
+      .maru-result-dock {
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+        top: auto;
+        width: auto;
+        max-height: 48vh;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+ensureSearchResultDockStyle();
+
+
 function resolveSearchHomeUrl(){
   try {
     const rawFrom = (new URLSearchParams(location.search).get('from') || '').trim();
@@ -2929,25 +3066,99 @@ async function fetchInstantSearchPack(q, type = activeType){
       const target = normalizedResultUrlForClient(url);
       if(!target || !isUsableResultUrlForClient(target)) return;
 
-      // Keep search.html, the search box, category tabs, and page numbers alive.
-      // Same-tab navigation destroys the search UI, and most external sites block iframe.
-      // Therefore a result opens as a real external page in a separate browser tab/window.
-      // The current search page remains exactly where it is.
-      try {
-        const opened = window.open(target, '_blank', 'noopener');
-        if(opened) { try { opened.opener = null; } catch(_e) {} return; }
-      } catch(e) {}
+      ensureSearchResultDockStyle();
 
-      try {
-        const a = document.createElement('a');
-        a.href = target;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => { try { a.remove(); } catch(_e) {} }, 0);
-      } catch(e) {}
+      let dock = document.getElementById('maru-result-dock');
+      if(!dock){
+        dock = document.createElement('aside');
+        dock.id = 'maru-result-dock';
+        dock.className = 'maru-result-dock';
+        dock.setAttribute('aria-live', 'polite');
+        document.body.appendChild(dock);
+      }
+
+      const titleText = String((it && (it.title || it.name)) || target).trim() || target;
+      const domainText = domainOf(target) || String((it && (it.source && (it.source.name || it.source.platform) || it.source)) || '').trim();
+      const descText = descriptionForItemClient(it || {});
+      const imgs = dedupeImageVariantsClient(collectNaturalImages(it || {}));
+      const imgSrc = imgs[0] || String((it && (it.image || it.thumbnail || it.thumb)) || '').trim();
+
+      dock.innerHTML = '';
+
+      const head = document.createElement('div');
+      head.className = 'maru-result-dock-head';
+
+      const headTitle = document.createElement('div');
+      headTitle.className = 'maru-result-dock-title';
+      headTitle.textContent = '검색 결과 미리보기';
+
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'maru-result-dock-close';
+      close.textContent = '닫기';
+      close.addEventListener('click', () => dock.remove());
+
+      head.appendChild(headTitle);
+      head.appendChild(close);
+
+      const body = document.createElement('div');
+      body.className = 'maru-result-dock-body';
+
+      if(domainText){
+        const domain = document.createElement('div');
+        domain.className = 'maru-result-dock-domain';
+        domain.textContent = domainText;
+        body.appendChild(domain);
+      }
+
+      const h = document.createElement('h2');
+      h.className = 'maru-result-dock-main-title';
+      h.textContent = titleText;
+      body.appendChild(h);
+
+      if(imgSrc && isMeaningfulImageForItemClient(imgSrc, it || {})){
+        const image = document.createElement('img');
+        image.className = 'maru-result-dock-image';
+        image.src = imgSrc;
+        image.alt = titleText;
+        image.loading = 'lazy';
+        image.onerror = () => image.remove();
+        body.appendChild(image);
+      }
+
+      if(descText){
+        const desc = document.createElement('p');
+        desc.className = 'maru-result-dock-desc';
+        desc.textContent = descText;
+        body.appendChild(desc);
+      }
+
+      const urlLine = document.createElement('p');
+      urlLine.className = 'maru-result-dock-url';
+      urlLine.textContent = target;
+      body.appendChild(urlLine);
+
+      const actions = document.createElement('div');
+      actions.className = 'maru-result-dock-actions';
+
+      const open = document.createElement('a');
+      open.className = 'maru-result-dock-open';
+      open.href = target;
+      open.target = '_blank';
+      open.rel = 'noopener noreferrer';
+      open.textContent = '원문 열기';
+      actions.appendChild(open);
+
+      const keepList = document.createElement('button');
+      keepList.type = 'button';
+      keepList.className = 'maru-result-dock-list';
+      keepList.textContent = '검색 목록 계속 보기';
+      keepList.addEventListener('click', () => dock.remove());
+      actions.appendChild(keepList);
+
+      body.appendChild(actions);
+      dock.appendChild(head);
+      dock.appendChild(body);
     }
 
     function displayUrlForImageItemClient(it, src){
