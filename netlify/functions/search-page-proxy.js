@@ -121,6 +121,12 @@ function sanitizeExternalHtml(htmlText, finalUrl){
   out = stripInlineHandlers(out);
   out = rewriteNavigationalLinks(out, finalUrl);
 
+  const visibleText = out.replace(/<style\b[^>]*>[\s\S]*?<\/style>/ig, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;|\s+/g, ' ').trim();
+  const mediaCount = (out.match(/<(img|video|picture|source|svg)\b/ig) || []).length;
+  if(visibleText.length < 80 && mediaCount < 1){
+    return errorHtml('내부 미리보기를 표시할 수 없습니다.', '이 사이트는 자바스크립트 기반 페이지이거나 서버 접근을 제한합니다. IGDC 검색 화면은 유지됩니다.', finalUrl);
+  }
+
   const base = '<base href="' + escapeHtml(finalUrl) + '">';
   const meta = '<meta charset="utf-8"><meta name="referrer" content="no-referrer-when-downgrade">';
   const style = `<style>
@@ -129,16 +135,11 @@ function sanitizeExternalHtml(htmlText, finalUrl){
     img,video,svg,canvas{max-width:100%;height:auto;}
     table{max-width:100%;}
     a{cursor:pointer;}
-    .igdc-proxy-static-bar{position:sticky;top:0;z-index:2147483647;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border-bottom:1px solid #e5e7eb;background:rgba(248,250,252,.96);color:#334155;font:12px/1.35 system-ui,-apple-system,Segoe UI,sans-serif;backdrop-filter:blur(6px)}
-    .igdc-proxy-static-bar b{color:#0f172a}.igdc-proxy-static-bar span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.igdc-proxy-static-bar a{flex:0 0 auto;color:#4f46e5;text-decoration:none;font-weight:800}
   </style>`;
-  const bar = '<div class="igdc-proxy-static-bar"><span><b>IGDC 내부 원문</b> · ' + escapeHtml(finalUrl) + '</span><a href="' + escapeHtml(finalUrl) + '" target="_blank" rel="noopener noreferrer">원문 보기</a></div>';
-
   if(/<head[^>]*>/i.test(out)) out = out.replace(/<head([^>]*)>/i, '<head$1>' + meta + base + style);
   else out = '<head>' + meta + base + style + '</head>' + out;
 
-  if(/<body[^>]*>/i.test(out)) out = out.replace(/<body([^>]*)>/i, '<body$1>' + bar);
-  else out = '<body>' + bar + out + '</body>';
+  if(!/<body[^>]*>/i.test(out)) out = '<body>' + out + '</body>';
 
   if(!/<!doctype/i.test(out)) out = '<!doctype html>' + out;
   return out;
