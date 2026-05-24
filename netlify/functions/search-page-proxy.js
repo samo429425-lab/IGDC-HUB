@@ -3,6 +3,20 @@
 const dns = require('dns').promises;
 const net = require('net');
 
+function html(statusCode, body){
+  return {
+    statusCode,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store, max-age=0',
+      'X-Robots-Tag': 'noindex, nofollow',
+      'Access-Control-Allow-Origin': '*',
+      'Content-Security-Policy': "default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; img-src * data: blob:; media-src * data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval'; font-src * data:; frame-src * data: blob:; connect-src * data: blob:; form-action *; base-uri *;"
+    },
+    body: body || ''
+  };
+}
+
 function json(statusCode, body){
   return {
     statusCode,
@@ -15,31 +29,12 @@ function json(statusCode, body){
   };
 }
 
-function html(statusCode, body){
-  return {
-    statusCode,
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'no-store, max-age=0',
-      'X-Robots-Tag': 'noindex, nofollow',
-      'Access-Control-Allow-Origin': '*',
-      // This proxy is rendered inside the IGDC search result area. Keep scripts
-      // disabled by default so upstream frame-busters/CSP/meta redirects cannot
-      // take over or blank the embedded viewer.
-      'Content-Security-Policy': "default-src * data: blob:; script-src 'none'; img-src * data: blob:; style-src * 'unsafe-inline'; font-src * data:; media-src * data: blob:; frame-src * data: blob:; connect-src * data: blob:; form-action *; base-uri *;"
-    },
-    body: body || ''
-  };
-}
-
 function isPrivateIp(ip){
   const version = net.isIP(ip);
   if(!version) return true;
   if(version === 4){
     const p = ip.split('.').map(x => parseInt(x, 10));
-    if(p[0] === 10) return true;
-    if(p[0] === 127) return true;
-    if(p[0] === 0) return true;
+    if(p[0] === 10 || p[0] === 127 || p[0] === 0) return true;
     if(p[0] === 169 && p[1] === 254) return true;
     if(p[0] === 172 && p[1] >= 16 && p[1] <= 31) return true;
     if(p[0] === 192 && p[1] === 168) return true;
@@ -55,14 +50,9 @@ async function assertPublicTarget(u){
   const host = u.hostname;
   if(!host || /(^|\.)localhost$/i.test(host)) throw new Error('blocked-local-host');
   if(net.isIP(host) && isPrivateIp(host)) throw new Error('blocked-private-ip');
-  try{
-    const records = await dns.lookup(host, { all:true });
-    if(!records || !records.length) throw new Error('dns-empty');
-    if(records.some(r => isPrivateIp(r.address))) throw new Error('blocked-private-dns');
-  }catch(e){
-    if(String(e && e.message || e).startsWith('blocked-')) throw e;
-    throw new Error('dns-lookup-failed');
-  }
+  const records = await dns.lookup(host, { all:true });
+  if(!records || !records.length) throw new Error('dns-empty');
+  if(records.some(r => isPrivateIp(r.address))) throw new Error('blocked-private-dns');
 }
 
 function escapeHtml(v){
@@ -83,76 +73,63 @@ function absoluteUrl(v, baseUrl){
 function proxyLink(v, baseUrl){
   const abs = absoluteUrl(v, baseUrl);
   if(!/^https?:\/\//i.test(abs)) return abs;
-  return '/.netlify/functions/search-page-proxy?safe=1&embed=1&url=' + encodeURIComponent(abs);
+  return '/.netlify/functions/search-page-proxy?url=' + encodeURIComponent(abs);
 }
 
-function stripInlineHandlers(markup){
+function removeFrameAndRedirectTraps(markup){
   return String(markup || '')
-    .replace(/\son[a-z]+\s*=\s*"[^"]*"/ig, '')
-    .replace(/\son[a-z]+\s*=\s*'[^']*'/ig, '')
-    .replace(/\son[a-z]+\s*=\s*[^\s>]+/ig, '');
-}
-
-function rewriteNavigationalLinks(markup, baseUrl){
-  let out = String(markup || '');
-  out = out.replace(/<(a|area)\b([^>]*?)\shref\s*=\s*(["'])(.*?)\3/ig, function(m, tag, before, quote, href){
-    const next = proxyLink(href, baseUrl);
-    return '<' + tag + before.replace(/\s+target\s*=\s*(["']).*?\1/ig, '') + ' href=' + quote + escapeHtml(next) + quote;
-  });
-  out = out.replace(/<form\b([^>]*?)\saction\s*=\s*(["'])(.*?)\2/ig, function(m, before, quote, action){
-    const next = proxyLink(action, baseUrl);
-    return '<form' + before.replace(/\s+target\s*=\s*(["']).*?\1/ig, '') + ' action=' + quote + escapeHtml(next) + quote;
-  });
-  out = out.replace(/\starget\s*=\s*(["'])_(top|parent|blank)\1/ig, ' target="_self"');
-  return out;
-}
-
-function sanitizeExternalHtml(htmlText, finalUrl){
-  let out = String(htmlText || '');
-
-  // Remove upstream rules that commonly blank embedded viewers.
-  out = out
     .replace(/<meta[^>]+http-equiv=["']?content-security-policy["']?[^>]*>/ig, '')
     .replace(/<meta[^>]+http-equiv=["']?x-frame-options["']?[^>]*>/ig, '')
     .replace(/<meta[^>]+http-equiv=["']?refresh["']?[^>]*>/ig, '')
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/ig, '')
-    .replace(/<script\b[^>]*\/?\s*>/ig, '');
+    .replace(/window\.top\s*\.\s*location/ig, 'window.location')
+    .replace(/top\s*\.\s*location/ig, 'location')
+    .replace(/parent\s*\.\s*location/ig, 'location')
+    .replace(/target\s*=\s*(["'])_(top|parent|blank)\1/ig, 'target="_self"');
+}
 
-  out = stripInlineHandlers(out);
-  out = rewriteNavigationalLinks(out, finalUrl);
-
-  const visibleText = out.replace(/<style\b[^>]*>[\s\S]*?<\/style>/ig, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;|\s+/g, ' ').trim();
-  const mediaCount = (out.match(/<(img|video|picture|source|svg)\b/ig) || []).length;
-  if(visibleText.length < 80 && mediaCount < 1){
-    return errorHtml('내부 미리보기를 표시할 수 없습니다.', '이 사이트는 자바스크립트 기반 페이지이거나 서버 접근을 제한합니다. IGDC 검색 화면은 유지됩니다.', finalUrl);
-  }
-
-  const base = '<base href="' + escapeHtml(finalUrl) + '">';
-  const meta = '<meta charset="utf-8"><meta name="referrer" content="no-referrer-when-downgrade">';
-  const style = `<style>
-    html,body{min-height:100%;margin:0;background:#fff!important;color:#111827;}
-    body{overflow:auto!important;}
-    img,video,svg,canvas{max-width:100%;height:auto;}
-    table{max-width:100%;}
-    a{cursor:pointer;}
-  </style>`;
-  if(/<head[^>]*>/i.test(out)) out = out.replace(/<head([^>]*)>/i, '<head$1>' + meta + base + style);
-  else out = '<head>' + meta + base + style + '</head>' + out;
-
-  if(!/<body[^>]*>/i.test(out)) out = '<body>' + out + '</body>';
-
-  if(!/<!doctype/i.test(out)) out = '<!doctype html>' + out;
+function rewriteLinks(markup, baseUrl){
+  let out = String(markup || '');
+  out = out.replace(/<(a|area)\b([^>]*?)\shref\s*=\s*(["'])(.*?)\3/ig, function(m, tag, before, quote, href){
+    const next = proxyLink(href, baseUrl);
+    const cleanBefore = before.replace(/\s+target\s*=\s*(["']).*?\1/ig, '');
+    return '<' + tag + cleanBefore + ' href=' + quote + escapeHtml(next) + quote;
+  });
+  out = out.replace(/<form\b([^>]*?)\saction\s*=\s*(["'])(.*?)\2/ig, function(m, before, quote, action){
+    const next = proxyLink(action, baseUrl);
+    const cleanBefore = before.replace(/\s+target\s*=\s*(["']).*?\1/ig, '');
+    return '<form' + cleanBefore + ' action=' + quote + escapeHtml(next) + quote;
+  });
   return out;
 }
 
-function errorHtml(title, message, target){
-  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;padding:28px;color:#334155;background:#f8fafc}.box{max-width:720px;margin:40px auto;padding:22px;border:1px solid #e2e8f0;border-radius:16px;background:#fff}.url{word-break:break-all;color:#64748b;font-size:13px;background:#f1f5f9;border-radius:10px;padding:10px}</style></head><body><div class="box"><h3>' + escapeHtml(title) + '</h3><p>' + escapeHtml(message) + '</p><p class="url">' + escapeHtml(target || '') + '</p></div></body></html>';
+function fallbackDocument(title, message, target){
+  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff;color:#334155;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.page{padding:42px 28px}.title{font-size:20px;font-weight:800;color:#111827;margin-bottom:10px}.msg{font-size:14px;line-height:1.7;color:#64748b;max-width:760px}.url{margin-top:16px;font-size:13px;color:#64748b;word-break:break-all}</style></head><body><div class="page"><div class="title">' + escapeHtml(title) + '</div><div class="msg">' + escapeHtml(message) + '</div><div class="url">' + escapeHtml(target || '') + '</div></div></body></html>';
+}
+
+function injectShell(htmlText, finalUrl){
+  let out = String(htmlText || '');
+  out = removeFrameAndRedirectTraps(out);
+  out = rewriteLinks(out, finalUrl);
+
+  const headInject = [
+    '<meta charset="utf-8">',
+    '<base href="' + escapeHtml(finalUrl) + '">',
+    '<meta name="referrer" content="no-referrer-when-downgrade">',
+    '<style>html,body{min-height:100%;margin:0;background:#fff;} body{overflow:auto!important;} img,video,svg,canvas{max-width:100%;height:auto;} table{max-width:100%;} a{cursor:pointer;}</style>',
+    '<script>(function(){var PROXY="/.netlify/functions/search-page-proxy?url=";function abs(v){try{return new URL(v,location.href).href}catch(e){return ""}}function prox(v){var u=abs(v);return u?PROXY+encodeURIComponent(u):v}function patch(){document.querySelectorAll("a[href]").forEach(function(a){var h=a.getAttribute("href")||"";if(!h||h[0]==="#"||/^javascript:/i.test(h)||/^mailto:|^tel:/i.test(h))return;if(h.indexOf(PROXY)!==0)a.setAttribute("href",prox(h));a.removeAttribute("target")});document.querySelectorAll("form[action]").forEach(function(f){var h=f.getAttribute("action")||location.href;f.setAttribute("action",prox(h));f.setAttribute("target","_self")})}document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(!a)return;var h=a.getAttribute("href")||"";if(!h||h[0]==="#"||/^javascript:/i.test(h)||/^mailto:|^tel:/i.test(h))return;if(h.indexOf(PROXY)!==0)a.setAttribute("href",prox(h));},true);try{new MutationObserver(patch).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:["href","action","target"]})}catch(e){}setTimeout(patch,0);setTimeout(patch,800);})();</script>'
+  ].join('');
+
+  if(/<head[^>]*>/i.test(out)) out = out.replace(/<head([^>]*)>/i, '<head$1>' + headInject);
+  else out = '<head>' + headInject + '</head>' + out;
+  if(!/<body[^>]*>/i.test(out)) out = '<body>' + out + '</body>';
+  if(!/<!doctype/i.test(out)) out = '<!doctype html>' + out;
+  return out;
 }
 
 exports.handler = async function(event){
   if(event.httpMethod === 'OPTIONS') return json(200, { ok:true });
   const raw = event.queryStringParameters && event.queryStringParameters.url;
-  if(!raw) return html(400, errorHtml('Missing url', '표시할 원문 주소가 없습니다.', ''));
+  if(!raw) return html(400, fallbackDocument('Missing url', '표시할 원문 주소가 없습니다.', ''));
 
   let target;
   try{
@@ -160,18 +137,18 @@ exports.handler = async function(event){
     if(!/^https?:$/.test(target.protocol)) throw new Error('unsupported-protocol');
     await assertPublicTarget(target);
   }catch(e){
-    return html(400, errorHtml('이 주소는 IGDC 내부 표시 대상으로 사용할 수 없습니다.', String(e && e.message || e), raw));
+    return html(400, fallbackDocument('원문 주소를 표시할 수 없습니다.', String(e && e.message || e), raw));
   }
 
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 15000);
+  const timer = setTimeout(() => ctrl.abort(), 18000);
   try{
     const upstream = await fetch(target.href, {
       method:'GET',
       redirect:'follow',
       signal: ctrl.signal,
       headers:{
-        'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36 IGDC-Search-Viewer/1.1',
+        'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36 IGDC-Search-Viewer/1.2',
         'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
         'Accept-Language':'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
       }
@@ -196,9 +173,9 @@ exports.handler = async function(event){
     }
 
     const text = await upstream.text();
-    return html(upstream.status || 200, sanitizeExternalHtml(text, finalUrl));
+    return html(upstream.status || 200, injectShell(text, finalUrl));
   }catch(e){
-    return html(502, errorHtml('원문을 내부 표시로 가져오지 못했습니다.', '사이트가 서버 접근을 차단했거나 응답 시간이 초과되었습니다.', target && target.href));
+    return html(502, fallbackDocument('원문 응답을 불러오지 못했습니다.', '사이트 응답 시간이 길거나 서버 접근을 제한했습니다.', target && target.href));
   }finally{
     clearTimeout(timer);
   }
