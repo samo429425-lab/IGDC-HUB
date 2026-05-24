@@ -522,6 +522,10 @@ function ensureSearchCardMediaStyle(){
       border: 0;
       background: #fff;
     }
+    #maru-active-result-viewer {
+      position: relative;
+      z-index: 1;
+    }
 
 
     .maru-search-home-link {
@@ -2781,390 +2785,91 @@ async function fetchInstantSearchPack(q, type = activeType){
       return '';
     }
 
-    function ensureSearchOwnedResultViewStyle(){
-      if(document.getElementById('maru-search-owned-result-style')) return;
-      const style = document.createElement('style');
-      style.id = 'maru-search-owned-result-style';
-      style.textContent = `
-        .maru-search-owned-result {
-          margin: 10px 0 22px;
-          border: 1px solid #e5e7eb;
-          border-radius: 14px;
-          background: #ffffff;
-          overflow: hidden;
-          box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
-        }
-        .maru-search-owned-result-head {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          padding: 12px 14px;
-          border-bottom: 1px solid #eef2f7;
-          background: linear-gradient(180deg, #ffffff, #f8fafc);
-        }
-        .maru-search-owned-result-kicker {
-          font-size: 13px;
-          font-weight: 900;
-          color: #111827;
-        }
-        .maru-search-owned-result-actions {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          flex: 0 0 auto;
-        }
-        .maru-search-owned-result-actions button,
-        .maru-search-owned-result-actions a {
-          border: 1px solid #dbe2ea;
-          border-radius: 9px;
-          background: #fff;
-          color: #334155;
-          padding: 7px 10px;
-          font-size: 12px;
-          font-weight: 900;
-          text-decoration: none;
-          cursor: pointer;
-        }
-        .maru-search-owned-result-actions a {
-          background: #4f46e5;
-          border-color: #4f46e5;
-          color: #fff;
-        }
-        .maru-search-owned-result-main {
-          padding: 18px 18px 20px;
-          display: grid;
-          grid-template-columns: minmax(0, 1.15fr) minmax(260px, .85fr);
-          gap: 18px;
-          align-items: start;
-        }
-        .maru-search-owned-result-source {
-          margin: 0 0 8px;
-          color: #64748b;
-          font-size: 13px;
-          font-weight: 700;
-          word-break: break-all;
-        }
-        .maru-search-owned-result-title {
-          margin: 0 0 10px;
-          color: #1a0dab;
-          font-size: 27px;
-          font-weight: 900;
-          line-height: 1.18;
-          letter-spacing: -0.03em;
-        }
-        .maru-search-owned-result-desc {
-          margin: 0 0 13px;
-          color: #334155;
-          font-size: 15px;
-          line-height: 1.72;
-          white-space: pre-wrap;
-        }
-        .maru-search-owned-result-facts {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-          margin: 12px 0 0;
-        }
-        .maru-search-owned-result-fact {
-          padding: 7px 9px;
-          border-radius: 999px;
-          background: #f1f5f9;
-          color: #334155;
-          font-size: 12px;
-          font-weight: 800;
-        }
-        .maru-search-owned-media-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 8px;
-        }
-        .maru-search-owned-media-grid img {
-          display: block;
-          width: 100%;
-          min-height: 128px;
-          max-height: 230px;
-          object-fit: cover;
-          border-radius: 12px;
-          border: 1px solid #e5e7eb;
-          background: #f8fafc;
-        }
-        .maru-search-owned-media-grid img:first-child {
-          grid-column: 1 / -1;
-          min-height: 210px;
-        }
-        .maru-search-owned-result-related {
-          margin-top: 14px;
-          padding-top: 12px;
-          border-top: 1px solid #eef2f7;
-        }
-        .maru-search-owned-result-related-title {
-          margin: 0 0 8px;
-          font-size: 13px;
-          font-weight: 900;
-          color: #111827;
-        }
-        .maru-search-owned-result-related-list {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-        }
-        .maru-search-owned-result-related-list button {
-          border: 1px solid #e5e7eb;
-          border-radius: 999px;
-          background: #f8fafc;
-          color: #111827;
-          padding: 7px 11px;
-          font-size: 12px;
-          font-weight: 800;
-          cursor: pointer;
-        }
-        @media (max-width: 840px) {
-          .maru-search-owned-result-main { grid-template-columns: 1fr; }
-          .maru-search-owned-result-title { font-size: 23px; }
-        }
-      `;
-      document.head.appendChild(style);
-    }
-
-    function sourceLabelForOwnedResult(it, target){
-      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
-      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
-      const rawSource = (it && it.source && typeof it.source === 'object')
-        ? (it.source.name || it.source.platform || it.source.provider || '')
-        : (it && it.source) || displayCard.source || payload.source || '';
-      const host = domainOf(target || (it && (it.url || it.link)) || '');
-      return String(rawSource || host || target || '').trim();
-    }
-
-    function detailTextForOwnedResult(it){
-      const desc = descriptionForItemClient(it);
-      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
-      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
-      const candidates = [
-        desc,
-        displayCard.body,
-        displayCard.text,
-        displayCard.description,
-        displayCard.summary,
-        it && it.content,
-        it && it.text,
-        it && it.body,
-        it && it.excerpt,
-        it && it.abstract,
-        payload.body,
-        payload.content,
-        payload.text,
-        payload.description,
-        payload.summary
-      ];
-      for(const v of candidates){
-        const text = compactCardTextClient(v);
-        if(text && text.length >= 18) return text.slice(0, 900);
+    function proxiedOriginalUrlForSearchFrame(target){
+      const raw = String(target || '').trim();
+      if(!raw) return '';
+      try{
+        const resolved = new URL(raw, location.href).href;
+        const sp = new URLSearchParams();
+        sp.set('url', resolved);
+        sp.set('q', lastQuery || (input && input.value) || '');
+        sp.set('from', location.pathname + location.search + location.hash);
+        return '/.netlify/functions/search-page-proxy?' + sp.toString();
+      }catch(e){
+        return '';
       }
-      return '';
     }
 
-    function relatedTermsForOwnedResult(it){
-      const rawTags = []
-        .concat(Array.isArray(it && it.tags) ? it.tags : [])
-        .concat(Array.isArray(it && it.keywords) ? it.keywords : [])
-        .concat(Array.isArray(it && it.categories) ? it.categories : []);
-      const title = String((it && it.title) || lastQuery || '').trim();
-      const base = String(lastQuery || input.value || title || '').trim();
-      const fallback = base ? relatedSearchTermsFor(base).slice(0, 6) : [];
-      const out = [];
-      const seen = new Set();
-      rawTags.concat(fallback).forEach(v => {
-        const s = String(v || '').replace(/[#;]/g, ' ').replace(/\s+/g, ' ').trim();
-        if(!s || seen.has(s.toLowerCase())) return;
-        seen.add(s.toLowerCase());
-        out.push(s);
-      });
-      return out.slice(0, 8);
-    }
-
-    function renderSearchOwnedResultView(url, it){
+    function openResultInsideSearchFrame(url, it){
       const target = String(url || '').trim();
       if(!target) return;
       if(!isSearchPage){
         try { window.location.href = target; } catch(e) {}
         return;
       }
-
-      ensureSearchOwnedResultViewStyle();
-
       try{
-        const currentQ = String(lastQuery || input.value || '').trim();
-        const u = new URL(location.href);
-        u.searchParams.set('view', 'result');
-        u.searchParams.set('page', String(currentPage || 1));
-        u.searchParams.set('block', String(currentBlock || 0));
-        if(currentQ) u.searchParams.set('q', currentQ);
-        if(activeType && activeType !== 'all') u.searchParams.set('type', activeType);
-        else u.searchParams.delete('type');
-        history.pushState({
-          ...(history.state || {}),
-          __maruSearchOwnedResult: true,
-          q: currentQ,
-          page: currentPage || 1,
-          block: currentBlock || 0,
-          type: activeType
-        }, '', u.toString());
-      }catch(e){}
-
-      const shell = document.createElement('div');
-      shell.className = 'maru-search-owned-result';
-
-      const head = document.createElement('div');
-      head.className = 'maru-search-owned-result-head';
-
-      const kicker = document.createElement('div');
-      kicker.className = 'maru-search-owned-result-kicker';
-      kicker.textContent = '검색 결과 상세';
-
-      const actions = document.createElement('div');
-      actions.className = 'maru-search-owned-result-actions';
-
-      const back = document.createElement('button');
-      back.type = 'button';
-      back.textContent = '검색 목록';
-      back.addEventListener('click', () => {
-        try{
-          const u = new URL(location.href);
-          u.searchParams.delete('view');
-          history.replaceState({ ...(history.state || {}), __maruSearchOwnedResult:false }, '', u.toString());
-        }catch(e){}
-        renderPage(currentPage || 1, true);
-        status.textContent = `${actualResultCountForStatus()} results for "${lastQuery || input.value || ''}" · ${getTypeLabel(activeType)}`;
-      });
-
-      const open = document.createElement('a');
-      open.href = target;
-      open.target = '_self';
-      open.rel = 'noopener';
-      open.textContent = '출처 페이지';
-
-      actions.appendChild(back);
-      actions.appendChild(open);
-      head.appendChild(kicker);
-      head.appendChild(actions);
-      shell.appendChild(head);
-
-      const main = document.createElement('div');
-      main.className = 'maru-search-owned-result-main';
-
-      const left = document.createElement('div');
-      const source = document.createElement('div');
-      source.className = 'maru-search-owned-result-source';
-      const sourceLabel = sourceLabelForOwnedResult(it, target);
-      source.textContent = sourceLabel ? `${sourceLabel} · ${target}` : target;
-      left.appendChild(source);
-
-      const title = document.createElement('h1');
-      title.className = 'maru-search-owned-result-title';
-      title.textContent = String((it && it.title) || target).trim() || target;
-      left.appendChild(title);
-
-      const descText = detailTextForOwnedResult(it);
-      if(descText){
-        const desc = document.createElement('p');
-        desc.className = 'maru-search-owned-result-desc';
-        desc.textContent = descText;
-        left.appendChild(desc);
-      }
-
-      const facts = document.createElement('div');
-      facts.className = 'maru-search-owned-result-facts';
-      const factsData = [
-        sourceLabel ? `출처 ${sourceLabel}` : '',
-        domainOf(target) ? `도메인 ${domainOf(target)}` : '',
-        it && it.searchCategory ? `분류 ${it.searchCategory}` : '',
-        it && it.lang ? `언어 ${it.lang}` : ''
-      ].filter(Boolean);
-      factsData.forEach(v => {
-        const chip = document.createElement('span');
-        chip.className = 'maru-search-owned-result-fact';
-        chip.textContent = v;
-        facts.appendChild(chip);
-      });
-      if(facts.childNodes.length) left.appendChild(facts);
-
-      const related = relatedTermsForOwnedResult(it || {});
-      if(related.length){
-        const rel = document.createElement('div');
-        rel.className = 'maru-search-owned-result-related';
-        const rt = document.createElement('div');
-        rt.className = 'maru-search-owned-result-related-title';
-        rt.textContent = '연관 검색';
-        const list = document.createElement('div');
-        list.className = 'maru-search-owned-result-related-list';
-        related.forEach(term => {
-          const b = document.createElement('button');
-          b.type = 'button';
-          b.textContent = term;
-          b.addEventListener('click', () => {
-            input.value = term;
-            const u = new URL(location.href);
-            u.searchParams.set('q', term);
-            u.searchParams.set('page', '1');
-            u.searchParams.set('block', '0');
-            u.searchParams.delete('view');
-            u.searchParams.delete('type');
-            history.pushState({ q:term, type:'all', page:1, block:0 }, '', u.toString());
-            runSearch(term, 'all');
-          });
-          list.appendChild(b);
-        });
-        rel.appendChild(rt);
-        rel.appendChild(list);
-        left.appendChild(rel);
-      }
-
-      const right = document.createElement('div');
-      const mediaInfo = getPlayableMediaInfo(it || {}, target);
-      const playable = mediaInfo ? renderPlayableMedia(mediaInfo, it || {}) : null;
-      if(playable){
-        right.appendChild(playable);
-      }else{
-        const images = dedupeImageVariantsClient(collectNaturalImages(it || {})).slice(0, 5);
-        if(images.length){
-          const grid = document.createElement('div');
-          grid.className = 'maru-search-owned-media-grid';
-          images.forEach(src => {
-            const img = document.createElement('img');
-            img.src = src;
-            img.loading = 'lazy';
-            img.alt = String((it && it.title) || '').trim();
-            img.onerror = () => img.remove();
-            grid.appendChild(img);
-          });
-          right.appendChild(grid);
+        const proxied = proxiedOriginalUrlForSearchFrame(target);
+        if(!proxied){
+          try { window.location.href = target; } catch(e) {}
+          return;
         }
+
+        const oldViewer = document.getElementById('maru-active-result-viewer');
+        if(oldViewer && oldViewer.parentNode) oldViewer.parentNode.removeChild(oldViewer);
+
+        const viewer = document.createElement('div');
+        viewer.id = 'maru-active-result-viewer';
+        viewer.className = 'maru-result-viewer';
+
+        const head = document.createElement('div');
+        head.className = 'maru-result-viewer-head';
+
+        const title = document.createElement('div');
+        title.className = 'maru-result-viewer-title';
+        title.textContent = String((it && it.title) || target).trim() || target;
+
+        const actions = document.createElement('div');
+        actions.className = 'maru-result-viewer-actions';
+
+        const back = document.createElement('button');
+        back.type = 'button';
+        back.textContent = '검색 목록';
+        back.addEventListener('click', () => {
+          if(viewer && viewer.parentNode) viewer.parentNode.removeChild(viewer);
+          drawPager();
+          try { results.scrollIntoView({ block:'start', behavior:'smooth' }); } catch(e) {}
+        });
+
+        const open = document.createElement('a');
+        open.href = target;
+        open.target = '_blank';
+        open.rel = 'noopener noreferrer';
+        open.textContent = '직접 열기';
+
+        actions.appendChild(back);
+        actions.appendChild(open);
+        head.appendChild(title);
+        head.appendChild(actions);
+
+        const iframe = document.createElement('iframe');
+        iframe.src = proxied;
+        iframe.loading = 'eager';
+        iframe.referrerPolicy = 'no-referrer-when-downgrade';
+        iframe.title = title.textContent;
+        iframe.setAttribute('sandbox', 'allow-forms allow-scripts allow-popups allow-pointer-lock allow-downloads allow-top-navigation-by-user-activation');
+        iframe.style.minHeight = 'calc(100vh - 245px)';
+
+        viewer.appendChild(head);
+        viewer.appendChild(iframe);
+
+        // Keep the search result list below the opened original page. Do not wipe
+        // search results, page numbers, or received items when a card is clicked.
+        results.insertBefore(viewer, results.firstChild || null);
+        drawPager();
+        try { viewer.scrollIntoView({ block:'start', behavior:'smooth' }); } catch(e) {}
+      }catch(e){
+        try { window.location.href = target; } catch(_e) {}
       }
-
-      if(shouldRenderMapPreviewForItemClient(it || {})){
-        const map = renderMapPreviewClient(it || {});
-        if(map) right.appendChild(map);
-      }
-
-      main.appendChild(left);
-      if(right.childNodes.length) main.appendChild(right);
-      shell.appendChild(main);
-
-      results.innerHTML = '';
-      results.appendChild(shell);
-      drawPager();
-      status.textContent = `${actualResultCountForStatus()} results for "${lastQuery || input.value || ''}" · ${getTypeLabel(activeType)}`;
-      try { results.scrollIntoView({ block:'start', behavior:'smooth' }); } catch(e) {}
-    }
-
-    function openResultInsideSearchFrame(url, it){
-      // Google/Naver-style behavior for IGDC:
-      // keep the IGDC search header, tabs, pager and render the selected result
-      // as our own search-owned detail page. Do not iframe external pages and
-      // do not force the user into a blank/blocked external frame.
-      renderSearchOwnedResultView(url, it);
     }
 
     function displayUrlForImageItemClient(it, src){
