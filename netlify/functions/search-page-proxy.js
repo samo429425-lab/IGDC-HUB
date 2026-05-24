@@ -175,7 +175,7 @@ function injectShell(htmlText, finalUrl, opts){
     '<meta charset="utf-8">',
     '<base href="' + escapeHtml(finalUrl) + '">',
     '<meta name="referrer" content="no-referrer-when-downgrade">',
-    '<style>html,body{min-height:100%;margin:0;background:#fff!important;visibility:visible!important;opacity:1!important;} body{overflow:auto!important;} img,video,svg,canvas{max-width:100%;height:auto;} table{max-width:100%;} a{cursor:pointer;} .igdc-proxy-static-note{display:none!important;}</style>',
+    '<style>html,body{min-height:100%;margin:0;background:#fff!important;visibility:visible!important;opacity:1!important;} body{overflow:auto!important;} body.loading,body.preload,body.preloading{visibility:visible!important;opacity:1!important;} img,video,svg,canvas{max-width:100%;height:auto;} table{max-width:100%;} a{cursor:pointer;} .igdc-proxy-static-note{display:none!important;}</style>',
     '<script>(function(){var PROXY="/.netlify/functions/search-page-proxy?";var PROXY_ID=' + JSON.stringify(proxyId) + ';function abs(v){try{return new URL(v,location.href).href}catch(e){return ""}}function prox(v){var u=abs(v);if(!u)return v;var sp=new URLSearchParams();sp.set("safe","1");sp.set("embed","1");sp.set("url",u);return PROXY+sp.toString()}function sk(h){return !h||h[0]==="#"||/^javascript:/i.test(h)||/^mailto:|^tel:|^data:|^blob:/i.test(h)}function patch(){document.querySelectorAll("a[href]").forEach(function(a){var h=a.getAttribute("href")||"";if(sk(h))return;if(h.indexOf(PROXY)!==0)a.setAttribute("href",prox(h));a.removeAttribute("target")});document.querySelectorAll("form[action]").forEach(function(f){var h=f.getAttribute("action")||location.href;f.setAttribute("action",prox(h));f.setAttribute("target","_self")});document.querySelectorAll("iframe[src],frame[src],embed[src],object[data]").forEach(function(el){var attr=el.hasAttribute("data")?"data":"src";var h=el.getAttribute(attr)||"";if(sk(h))return;if(h.indexOf(PROXY)!==0)el.setAttribute(attr,prox(h));});}function report(){try{var b=document.body||{};var d=document.documentElement||{};var txt=(b.innerText||"").trim();var media=document.querySelectorAll?document.querySelectorAll("img,svg,canvas,video,iframe,table").length:0;parent.postMessage({__igdcProxyStatus:1,proxyId:PROXY_ID,title:document.title||"",textLen:txt.length,height:Math.max(b.scrollHeight||0,d.scrollHeight||0),mediaCount:media},"*");}catch(e){}}document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(!a)return;var h=a.getAttribute("href")||"";if(sk(h))return;if(h.indexOf(PROXY)!==0)a.setAttribute("href",prox(h));},true);try{new MutationObserver(patch).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:["href","src","data","action","target"]})}catch(e){}setTimeout(patch,0);setTimeout(patch,800);setTimeout(report,900);setTimeout(report,2200);window.addEventListener("load",function(){setTimeout(report,80);setTimeout(report,1200);});})();</script>'
   ].join('');
 
@@ -204,7 +204,7 @@ exports.handler = async function(event){
   }
 
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 20000);
+  const timer = setTimeout(() => ctrl.abort(), 12000);
   try{
     const upstream = await fetch(target.href, {
       method:'GET',
