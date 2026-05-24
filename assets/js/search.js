@@ -668,13 +668,21 @@ function isSkippableNavigationHref(href){
   return !h || h === '#' || h.charAt(0) === '#' || /^javascript:/i.test(h) || /^mailto:|^tel:/i.test(h);
 }
 
-function proxyUrlForResult(target){
+function proxyUrlForResult(target, extraParams){
   const raw = String(target || '').trim();
   if(!raw) return '';
   try{
     const u = new URL(raw, location.href);
     if(!/^https?:$/.test(u.protocol)) return '';
-    return SEARCH_PAGE_PROXY_URL + '?safe=1&embed=1&url=' + encodeURIComponent(u.href);
+    const sp = new URLSearchParams();
+    sp.set('safe', '1');
+    sp.set('embed', '1');
+    sp.set('url', u.href);
+    const extra = extraParams && typeof extraParams === 'object' ? extraParams : {};
+    Object.keys(extra).forEach(k => {
+      if(extra[k] != null && extra[k] !== '') sp.set(k, String(extra[k]));
+    });
+    return SEARCH_PAGE_PROXY_URL + '?' + sp.toString();
   }catch(e){
     return '';
   }
@@ -1973,6 +1981,36 @@ async function fetchInstantSearchPack(q, type = activeType){
       if (bar) bar.remove();
     }
 
+    function ensureStatusPagerRow(){
+      if(!statusEl || !statusEl.parentNode) return null;
+      let row = document.getElementById('maru-search-status-pager-row');
+      if(!row){
+        row = document.createElement('div');
+        row.id = 'maru-search-status-pager-row';
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.justifyContent = 'space-between';
+        row.style.gap = '12px';
+        row.style.padding = '6px 24px 6px';
+        row.style.minHeight = '34px';
+        row.style.borderBottom = '1px solid #f1f5f9';
+        row.style.background = '#fff';
+        statusEl.parentNode.insertBefore(row, statusEl);
+        row.appendChild(statusEl);
+      }else if(statusEl.parentNode !== row){
+        row.insertBefore(statusEl, row.firstChild || null);
+      }
+      statusEl.style.flex = '1 1 auto';
+      statusEl.style.minWidth = '0';
+      statusEl.style.margin = '0';
+      statusEl.style.padding = '0';
+      statusEl.style.whiteSpace = 'nowrap';
+      statusEl.style.overflow = 'hidden';
+      statusEl.style.textOverflow = 'ellipsis';
+      statusEl.style.fontSize = '12px';
+      return row;
+    }
+
     function ensurePager(){
       let bar = document.getElementById('maru-page-controls');
       if (!bar){
@@ -1980,10 +2018,17 @@ async function fetchInstantSearchPack(q, type = activeType){
         bar.id = 'maru-page-controls';
         bar.style.display = 'flex';
         bar.style.alignItems = 'center';
-        bar.style.justifyContent = 'center';
-        bar.style.gap = '6px';
-        bar.style.margin = '8px 0 14px';
-        status.parentNode.insertBefore(bar, status.nextSibling);
+        bar.style.justifyContent = 'flex-end';
+        bar.style.gap = '4px';
+        bar.style.margin = '0';
+        bar.style.padding = '0';
+        bar.style.flex = '0 0 auto';
+        const row = ensureStatusPagerRow();
+        if(row) row.appendChild(bar);
+        else status.parentNode.insertBefore(bar, status.nextSibling);
+      }else{
+        const row = ensureStatusPagerRow();
+        if(row && bar.parentNode !== row) row.appendChild(bar);
       }
       return bar;
     }
@@ -3281,6 +3326,53 @@ async function fetchInstantSearchPack(q, type = activeType){
       return out.slice(0, 8);
     }
 
+    function bindProxyAutoFallback(frame, proxySrc, target, proxyId){
+      if(!frame || !proxySrc || !proxyId) return;
+      let triedStatic = false;
+      let loadTimer = null;
+      const useStatic = () => {
+        if(triedStatic) return;
+        triedStatic = true;
+        try{ frame.src = proxyUrlForResult(target, { static: '1', proxyId: proxyId + '-static' }); }catch(e){}
+      };
+      const cleanup = () => {
+        try{ window.removeEventListener('message', onMessage); }catch(e){}
+        if(loadTimer) try{ clearTimeout(loadTimer); }catch(e){}
+      };
+      const onMessage = (event) => {
+        const data = event && event.data;
+        if(!data || data.__igdcProxyStatus !== 1 || data.proxyId !== proxyId) return;
+        const textLen = Number(data.textLen || 0) || 0;
+        const height = Number(data.height || 0) || 0;
+        const mediaCount = Number(data.mediaCount || 0) || 0;
+        const titleLen = String(data.title || '').trim().length;
+        if(!triedStatic && textLen < 40 && mediaCount < 1 && height < 180 && titleLen < 4){
+          useStatic();
+          return;
+        }
+        cleanup();
+      };
+      window.addEventListener('message', onMessage);
+      loadTimer = setTimeout(() => {
+        if(!triedStatic) useStatic();
+      }, 5200);
+      frame.addEventListener('load', () => {
+        setTimeout(() => {
+          if(triedStatic) { cleanup(); return; }
+          try{
+            const doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+            const body = doc && doc.body;
+            if(!body) return;
+            const textLen = String(body.innerText || '').trim().length;
+            const height = Math.max(body.scrollHeight || 0, doc.documentElement && doc.documentElement.scrollHeight || 0);
+            const mediaCount = body.querySelectorAll ? body.querySelectorAll('img,svg,canvas,video,iframe,table').length : 0;
+            if(textLen < 40 && mediaCount < 1 && height < 180) useStatic();
+            else cleanup();
+          }catch(e){}
+        }, 1400);
+      });
+    }
+
     function renderSearchOwnedResultView(url, it, opts){
       opts = opts || {};
       const target = String(url || '').trim();
@@ -3368,7 +3460,8 @@ async function fetchInstantSearchPack(q, type = activeType){
       head.appendChild(actions);
       shell.appendChild(head);
 
-      const proxySrc = proxyUrlForResult(target);
+      const proxyId = 'maru-proxy-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+      const proxySrc = proxyUrlForResult(target, { proxyId });
       if(proxySrc){
         const proxyBox = document.createElement('div');
         proxyBox.className = 'maru-search-owned-proxy';
@@ -3380,10 +3473,11 @@ async function fetchInstantSearchPack(q, type = activeType){
         frame.src = proxySrc;
         frame.loading = 'eager';
         frame.referrerPolicy = 'no-referrer-when-downgrade';
-        frame.sandbox = 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads';
+        frame.sandbox = 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads';
         frame.title = displayTitle.slice(0, 120);
         frame.addEventListener('load', () => { try{ loading.remove(); }catch(e){} });
-        setTimeout(() => { try{ loading.remove(); }catch(e){} }, 2200);
+        setTimeout(() => { try{ loading.remove(); }catch(e){} }, 1800);
+        bindProxyAutoFallback(frame, proxySrc, target, proxyId);
         proxyBox.appendChild(loading);
         proxyBox.appendChild(frame);
         shell.appendChild(proxyBox);
@@ -3398,7 +3492,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       results.appendChild(shell);
       drawPager();
       status.textContent = statusResultsText(actualResultCountForStatus(), lastQuery || input.value || '', activeType);
-      try { results.scrollIntoView({ block:'start', behavior:'smooth' }); } catch(e) {}
+      // Keep the current IGDC search header/tabs/pager position; do not auto-scroll the shell away.
     }
 
     function openResultInsideSearchFrame(url, it){
@@ -4245,12 +4339,27 @@ function drawPager(){
   const bar = ensurePager();
   bar.innerHTML = '';
 
+  function stylePagerButton(b, on){
+    b.style.minWidth = '30px';
+    b.style.height = '30px';
+    b.style.padding = '0 9px';
+    b.style.borderRadius = '8px';
+    b.style.border = '1px solid ' + (on ? '#4f46e5' : '#dbe2ea');
+    b.style.background = on ? '#4f46e5' : '#ffffff';
+    b.style.color = on ? '#ffffff' : '#334155';
+    b.style.fontSize = '12px';
+    b.style.fontWeight = '800';
+    b.style.cursor = 'pointer';
+    b.style.lineHeight = '1';
+  }
+
   const blockStart = currentBlock * BLOCK_SIZE + 1;
   const blockEnd = Math.min(blockStart + BLOCK_SIZE - 1, pages);
 
   if (blockStart > 1){
     const left = document.createElement('button');
     left.textContent = '◀';
+    stylePagerButton(left, false);
     left.onclick = () => {
       currentBlock = Math.max(0, currentBlock - 1);
       currentPage = currentBlock * BLOCK_SIZE + 1;
@@ -4263,7 +4372,7 @@ function drawPager(){
   for (let p = blockStart; p <= blockEnd; p++){
     const b = document.createElement('button');
     b.textContent = String(p);
-    b.style.opacity = (p === currentPage) ? '0.6' : '1';
+    stylePagerButton(b, p === currentPage);
     b.onclick = () => {
       currentPage = p;
       currentBlock = Math.floor((p - 1) / BLOCK_SIZE);
@@ -4276,6 +4385,7 @@ function drawPager(){
   if (blockEnd < pages){
     const right = document.createElement('button');
     right.textContent = '▶';
+    stylePagerButton(right, false);
     right.onclick = () => {
       const maxBlock = Math.floor((pages - 1) / BLOCK_SIZE);
       currentBlock = Math.min(maxBlock, currentBlock + 1);
