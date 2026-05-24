@@ -1,5 +1,6 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
 // PATCH: Sanmaru route-owned natural flow + page-lazy rendering + balanced vertical tabs
+// PATCH: search-owned proxy viewer + continuous 4,500 intake + 30-language search UI labels
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -111,44 +112,119 @@ const params = new URLSearchParams(location.search);
 const q0 = (params.get('q') || '').trim();
 const from0 = (params.get('from') || '').trim();
 
-const SEARCH_TABS = [
-  ['all', '전체'],
-  ['map', '지도'],
-  ['knowledge', '지식'],
-  ['wiki', '위키'],
-  ['site', '사이트'],
-  ['book', '도서'],
-  ['blog', '블로그'],
-  ['cafe', '카페'],
-  ['shopping', '쇼핑'],
-  ['news', '뉴스'],
-  ['image', '이미지'],
-  ['video', '영상'],
-  ['sns', '소셜'],
-  ['tour', '관광'],
-  ['public_data', '공공자료'],
-  ['academic', '학술'],
-  ['sports', '스포츠'],
-  ['finance', '증권'],
-  ['webtoon', '웹툰']
+const SEARCH_TAB_KEYS = [
+  'all','map','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','sns','tour','public_data','academic','sports','finance','webtoon'
 ];
+const SEARCH_TABS = SEARCH_TAB_KEYS.map(key => [key, key]);
+
+const SEARCH_I18N = {
+  ko:{home:'Home',globalSearchTitle:'Global Search',search:'Search',placeholder:'Search the world…',resultsFor:'results for',receiving:'receiving...',loadingPage:'Loading page',pageDataSupplying:'Page data is being supplied',noQuickResults:'No quick results',noResults:'No results',searchResultDetail:'검색 결과 상세',searchList:'검색 목록',sourcePage:'원문 보기',source:'출처',domain:'도메인',category:'분류',language:'언어',relatedSearch:'연관 검색',internalSource:'내부 원문',internalSourceHelp:'아래 원문은 IGDC 검색 화면 안에서 표시됩니다. 외부 이동은 원문 보기 버튼으로만 실행됩니다.',viewAll:'전체 보기',collapse:'접기',itemsSuffix:'개',sectionDefault:'일반 웹 결과',tabs:{all:'전체',map:'지도',knowledge:'지식',wiki:'위키',site:'사이트',book:'도서',blog:'블로그',cafe:'카페',shopping:'쇼핑',news:'뉴스',image:'이미지',video:'영상',sns:'소셜',tour:'관광',public_data:'공공자료',academic:'학술',sports:'스포츠',finance:'증권',webtoon:'웹툰'},groups:{authority:'주요 정보',public_data:'공공자료',local_tour:'지도/지역',knowledge:'지식/백과',wiki:'위키',academic:'학술/논문',site:'사이트/홈페이지',book:'도서',news:'뉴스',blog:'블로그',cafe:'카페',community:'커뮤니티',image:'이미지',video:'영상',media:'이미지/영상',social:'SNS',shopping:'쇼핑',sports:'스포츠',finance:'금융',webtoon:'웹툰',web:'일반 웹 결과'}},
+  en:{home:'Home',globalSearchTitle:'Global Search',search:'Search',placeholder:'Search the world…',resultsFor:'results for',receiving:'receiving...',loadingPage:'Loading page',pageDataSupplying:'Page data is being supplied',noQuickResults:'No quick results',noResults:'No results',searchResultDetail:'Search result detail',searchList:'Search list',sourcePage:'Original page',source:'Source',domain:'Domain',category:'Category',language:'Language',relatedSearch:'Related searches',internalSource:'Internal original view',internalSourceHelp:'The original page is displayed inside IGDC Search. External navigation is allowed only through Original page.',viewAll:'View all',collapse:'Collapse',itemsSuffix:'',sectionDefault:'General web results',tabs:{all:'All',map:'Maps',knowledge:'Knowledge',wiki:'Wiki',site:'Sites',book:'Books',blog:'Blogs',cafe:'Cafes',shopping:'Shopping',news:'News',image:'Images',video:'Videos',sns:'Social',tour:'Travel',public_data:'Public data',academic:'Academic',sports:'Sports',finance:'Finance',webtoon:'Webtoons'},groups:{authority:'Key information',public_data:'Public data',local_tour:'Maps/Local',knowledge:'Knowledge/Encyclopedia',wiki:'Wiki',academic:'Academic/Papers',site:'Sites/Homepages',book:'Books',news:'News',blog:'Blogs',cafe:'Cafes',community:'Community',image:'Images',video:'Videos',media:'Images/Videos',social:'Social',shopping:'Shopping',sports:'Sports',finance:'Finance',webtoon:'Webtoons',web:'General web results'}},
+  zh:{home:'首页',globalSearchTitle:'全球搜索',search:'搜索',placeholder:'搜索世界…',resultsFor:'条结果：',receiving:'接收中...',loadingPage:'正在加载第',pageDataSupplying:'页面数据正在供应',noQuickResults:'暂无快速结果',noResults:'无结果',searchResultDetail:'搜索结果详情',searchList:'返回列表',sourcePage:'原文页面',source:'来源',domain:'域名',category:'分类',language:'语言',relatedSearch:'相关搜索',internalSource:'内部原文',internalSourceHelp:'原文页面在 IGDC 搜索内显示。仅通过原文页面按钮外部打开。',viewAll:'查看全部',collapse:'收起',itemsSuffix:'项',sectionDefault:'普通网页结果',tabs:{all:'全部',map:'地图',knowledge:'知识',wiki:'维基',site:'网站',book:'图书',blog:'博客',cafe:'社群',shopping:'购物',news:'新闻',image:'图片',video:'视频',sns:'社交',tour:'旅游',public_data:'公共数据',academic:'学术',sports:'体育',finance:'财经',webtoon:'网漫'},groups:{authority:'主要信息',public_data:'公共数据',local_tour:'地图/地区',knowledge:'知识/百科',wiki:'维基',academic:'学术/论文',site:'网站/主页',book:'图书',news:'新闻',blog:'博客',cafe:'社群',community:'社区',image:'图片',video:'视频',media:'图片/视频',social:'社交',shopping:'购物',sports:'体育',finance:'财经',webtoon:'网漫',web:'普通网页结果'}},
+  zht:{home:'首頁',globalSearchTitle:'全球搜尋',search:'搜尋',placeholder:'搜尋世界…',resultsFor:'筆結果：',receiving:'接收中...',loadingPage:'正在載入第',pageDataSupplying:'頁面資料正在供應',noQuickResults:'暫無快速結果',noResults:'沒有結果',searchResultDetail:'搜尋結果詳情',searchList:'返回列表',sourcePage:'原文頁面',source:'來源',domain:'網域',category:'分類',language:'語言',relatedSearch:'相關搜尋',internalSource:'內部原文',internalSourceHelp:'原文頁面會在 IGDC 搜尋內顯示。只有原文頁面按鈕會外部開啟。',viewAll:'查看全部',collapse:'收合',itemsSuffix:'項',sectionDefault:'一般網頁結果',tabs:{all:'全部',map:'地圖',knowledge:'知識',wiki:'維基',site:'網站',book:'圖書',blog:'部落格',cafe:'社群',shopping:'購物',news:'新聞',image:'圖片',video:'影片',sns:'社交',tour:'旅遊',public_data:'公共資料',academic:'學術',sports:'體育',finance:'財經',webtoon:'網漫'},groups:{authority:'主要資訊',public_data:'公共資料',local_tour:'地圖/地區',knowledge:'知識/百科',wiki:'維基',academic:'學術/論文',site:'網站/首頁',book:'圖書',news:'新聞',blog:'部落格',cafe:'社群',community:'社區',image:'圖片',video:'影片',media:'圖片/影片',social:'社交',shopping:'購物',sports:'體育',finance:'財經',webtoon:'網漫',web:'一般網頁結果'}},
+  ja:{home:'ホーム',globalSearchTitle:'グローバル検索',search:'検索',placeholder:'世界を検索…',resultsFor:'件の結果：',receiving:'受信中...',loadingPage:'ページを読み込み中',pageDataSupplying:'ページデータを受信中',noQuickResults:'クイック結果なし',noResults:'結果なし',searchResultDetail:'検索結果詳細',searchList:'検索一覧',sourcePage:'元ページ',source:'出典',domain:'ドメイン',category:'カテゴリ',language:'言語',relatedSearch:'関連検索',internalSource:'内部原文表示',internalSourceHelp:'元ページは IGDC 検索内で表示されます。外部移動は元ページボタンのみです。',viewAll:'すべて表示',collapse:'閉じる',itemsSuffix:'件',sectionDefault:'一般ウェブ結果',tabs:{all:'すべて',map:'地図',knowledge:'知識',wiki:'ウィキ',site:'サイト',book:'本',blog:'ブログ',cafe:'カフェ',shopping:'ショッピング',news:'ニュース',image:'画像',video:'動画',sns:'ソーシャル',tour:'旅行',public_data:'公共データ',academic:'学術',sports:'スポーツ',finance:'金融',webtoon:'ウェブ漫画'},groups:{authority:'主要情報',public_data:'公共データ',local_tour:'地図/地域',knowledge:'知識/百科',wiki:'ウィキ',academic:'学術/論文',site:'サイト/ホームページ',book:'本',news:'ニュース',blog:'ブログ',cafe:'カフェ',community:'コミュニティ',image:'画像',video:'動画',media:'画像/動画',social:'ソーシャル',shopping:'ショッピング',sports:'スポーツ',finance:'金融',webtoon:'ウェブ漫画',web:'一般ウェブ結果'}},
+  es:{home:'Inicio',globalSearchTitle:'Búsqueda global',search:'Buscar',placeholder:'Busca en el mundo…',resultsFor:'resultados para',receiving:'recibiendo...',searchResultDetail:'Detalle del resultado',searchList:'Lista de resultados',sourcePage:'Página original',source:'Fuente',domain:'Dominio',category:'Categoría',language:'Idioma',relatedSearch:'Búsquedas relacionadas',internalSource:'Vista interna original',internalSourceHelp:'La página original se muestra dentro de IGDC Search.',viewAll:'Ver todo',collapse:'Cerrar',itemsSuffix:'',sectionDefault:'Resultados web generales',tabs:{all:'Todo',map:'Mapas',knowledge:'Conocimiento',wiki:'Wiki',site:'Sitios',book:'Libros',blog:'Blogs',cafe:'Cafés',shopping:'Compras',news:'Noticias',image:'Imágenes',video:'Videos',sns:'Social',tour:'Viajes',public_data:'Datos públicos',academic:'Académico',sports:'Deportes',finance:'Finanzas',webtoon:'Webtoons'}},
+  fr:{home:'Accueil',globalSearchTitle:'Recherche globale',search:'Rechercher',placeholder:'Rechercher dans le monde…',resultsFor:'résultats pour',receiving:'réception...',searchResultDetail:'Détail du résultat',searchList:'Liste des résultats',sourcePage:'Page originale',source:'Source',domain:'Domaine',category:'Catégorie',language:'Langue',relatedSearch:'Recherches associées',internalSource:'Vue interne originale',internalSourceHelp:'La page originale s’affiche dans IGDC Search.',viewAll:'Tout voir',collapse:'Fermer',itemsSuffix:'',sectionDefault:'Résultats web généraux',tabs:{all:'Tout',map:'Cartes',knowledge:'Connaissances',wiki:'Wiki',site:'Sites',book:'Livres',blog:'Blogs',cafe:'Cafés',shopping:'Shopping',news:'Actualités',image:'Images',video:'Vidéos',sns:'Social',tour:'Voyage',public_data:'Données publiques',academic:'Académique',sports:'Sports',finance:'Finance',webtoon:'Webtoons'}},
+  de:{home:'Start',globalSearchTitle:'Globale Suche',search:'Suchen',placeholder:'Die Welt durchsuchen…',resultsFor:'Ergebnisse für',receiving:'empfange...',searchResultDetail:'Suchergebnis-Detail',searchList:'Ergebnisliste',sourcePage:'Originalseite',source:'Quelle',domain:'Domain',category:'Kategorie',language:'Sprache',relatedSearch:'Ähnliche Suchen',internalSource:'Interne Originalansicht',internalSourceHelp:'Die Originalseite wird in IGDC Search angezeigt.',viewAll:'Alle anzeigen',collapse:'Schließen',itemsSuffix:'',sectionDefault:'Allgemeine Webergebnisse',tabs:{all:'Alle',map:'Karten',knowledge:'Wissen',wiki:'Wiki',site:'Websites',book:'Bücher',blog:'Blogs',cafe:'Cafés',shopping:'Shopping',news:'Nachrichten',image:'Bilder',video:'Videos',sns:'Sozial',tour:'Reisen',public_data:'Öffentliche Daten',academic:'Wissenschaft',sports:'Sport',finance:'Finanzen',webtoon:'Webtoons'}},
+  ru:{home:'Главная',globalSearchTitle:'Глобальный поиск',search:'Поиск',placeholder:'Искать по миру…',resultsFor:'результатов по',receiving:'получение...',searchResultDetail:'Детали результата',searchList:'Список результатов',sourcePage:'Оригинал',source:'Источник',domain:'Домен',category:'Категория',language:'Язык',relatedSearch:'Похожие запросы',internalSource:'Внутренний просмотр',internalSourceHelp:'Оригинальная страница отображается внутри IGDC Search.',viewAll:'Показать все',collapse:'Свернуть',itemsSuffix:'',sectionDefault:'Обычные веб-результаты',tabs:{all:'Все',map:'Карты',knowledge:'Знания',wiki:'Вики',site:'Сайты',book:'Книги',blog:'Блоги',cafe:'Кафе',shopping:'Покупки',news:'Новости',image:'Изображения',video:'Видео',sns:'Соцсети',tour:'Туризм',public_data:'Открытые данные',academic:'Наука',sports:'Спорт',finance:'Финансы',webtoon:'Вебтуны'}},
+  pt:{home:'Início',globalSearchTitle:'Pesquisa global',search:'Pesquisar',placeholder:'Pesquise o mundo…',resultsFor:'resultados para',receiving:'recebendo...',searchResultDetail:'Detalhe do resultado',searchList:'Lista de resultados',sourcePage:'Página original',source:'Fonte',domain:'Domínio',category:'Categoria',language:'Idioma',relatedSearch:'Pesquisas relacionadas',internalSource:'Visualização interna',internalSourceHelp:'A página original é exibida dentro do IGDC Search.',viewAll:'Ver tudo',collapse:'Fechar',itemsSuffix:'',sectionDefault:'Resultados gerais da web',tabs:{all:'Tudo',map:'Mapas',knowledge:'Conhecimento',wiki:'Wiki',site:'Sites',book:'Livros',blog:'Blogs',cafe:'Cafés',shopping:'Compras',news:'Notícias',image:'Imagens',video:'Vídeos',sns:'Social',tour:'Viagem',public_data:'Dados públicos',academic:'Acadêmico',sports:'Esportes',finance:'Finanças',webtoon:'Webtoons'}},
+  it:{home:'Home',globalSearchTitle:'Ricerca globale',search:'Cerca',placeholder:'Cerca nel mondo…',resultsFor:'risultati per',receiving:'ricezione...',searchResultDetail:'Dettaglio risultato',searchList:'Lista risultati',sourcePage:'Pagina originale',source:'Fonte',domain:'Dominio',category:'Categoria',language:'Lingua',relatedSearch:'Ricerche correlate',internalSource:'Vista interna',internalSourceHelp:'La pagina originale è mostrata dentro IGDC Search.',viewAll:'Vedi tutto',collapse:'Chiudi',itemsSuffix:'',sectionDefault:'Risultati web generali',tabs:{all:'Tutto',map:'Mappe',knowledge:'Conoscenza',wiki:'Wiki',site:'Siti',book:'Libri',blog:'Blog',cafe:'Caffè',shopping:'Shopping',news:'Notizie',image:'Immagini',video:'Video',sns:'Social',tour:'Viaggi',public_data:'Dati pubblici',academic:'Accademico',sports:'Sport',finance:'Finanza',webtoon:'Webtoon'}},
+  ar:{home:'الرئيسية',globalSearchTitle:'بحث عالمي',search:'بحث',placeholder:'ابحث في العالم…',resultsFor:'نتائج عن',receiving:'جارٍ الاستقبال...',searchResultDetail:'تفاصيل النتيجة',searchList:'قائمة النتائج',sourcePage:'الصفحة الأصلية',source:'المصدر',domain:'النطاق',category:'الفئة',language:'اللغة',relatedSearch:'عمليات بحث ذات صلة',internalSource:'عرض داخلي',internalSourceHelp:'تُعرض الصفحة الأصلية داخل بحث IGDC.',viewAll:'عرض الكل',collapse:'إغلاق',itemsSuffix:'',sectionDefault:'نتائج ويب عامة',tabs:{all:'الكل',map:'خرائط',knowledge:'معرفة',wiki:'ويكي',site:'مواقع',book:'كتب',blog:'مدونات',cafe:'مقاهي',shopping:'تسوق',news:'أخبار',image:'صور',video:'فيديو',sns:'اجتماعي',tour:'سفر',public_data:'بيانات عامة',academic:'أكاديمي',sports:'رياضة',finance:'مال',webtoon:'ويبتون'}},
+  vi:{home:'Trang chủ',globalSearchTitle:'Tìm kiếm toàn cầu',search:'Tìm kiếm',placeholder:'Tìm kiếm thế giới…',resultsFor:'kết quả cho',receiving:'đang nhận...',searchResultDetail:'Chi tiết kết quả',searchList:'Danh sách kết quả',sourcePage:'Trang gốc',source:'Nguồn',domain:'Miền',category:'Danh mục',language:'Ngôn ngữ',relatedSearch:'Tìm kiếm liên quan',internalSource:'Xem nội bộ',internalSourceHelp:'Trang gốc hiển thị trong IGDC Search.',viewAll:'Xem tất cả',collapse:'Thu gọn',itemsSuffix:'',sectionDefault:'Kết quả web chung',tabs:{all:'Tất cả',map:'Bản đồ',knowledge:'Tri thức',wiki:'Wiki',site:'Trang web',book:'Sách',blog:'Blog',cafe:'Cafe',shopping:'Mua sắm',news:'Tin tức',image:'Hình ảnh',video:'Video',sns:'Xã hội',tour:'Du lịch',public_data:'Dữ liệu công',academic:'Học thuật',sports:'Thể thao',finance:'Tài chính',webtoon:'Webtoon'}},
+  th:{home:'หน้าแรก',globalSearchTitle:'ค้นหาทั่วโลก',search:'ค้นหา',placeholder:'ค้นหาทั่วโลก…',resultsFor:'ผลลัพธ์สำหรับ',receiving:'กำลังรับ...',searchResultDetail:'รายละเอียดผลลัพธ์',searchList:'รายการผลลัพธ์',sourcePage:'หน้าต้นฉบับ',source:'แหล่งที่มา',domain:'โดเมน',category:'หมวดหมู่',language:'ภาษา',relatedSearch:'การค้นหาที่เกี่ยวข้อง',internalSource:'มุมมองภายใน',internalSourceHelp:'หน้าต้นฉบับแสดงใน IGDC Search.',viewAll:'ดูทั้งหมด',collapse:'ปิด',itemsSuffix:'',sectionDefault:'ผลลัพธ์เว็บทั่วไป',tabs:{all:'ทั้งหมด',map:'แผนที่',knowledge:'ความรู้',wiki:'วิกิ',site:'เว็บไซต์',book:'หนังสือ',blog:'บล็อก',cafe:'คาเฟ่',shopping:'ช้อปปิ้ง',news:'ข่าว',image:'รูปภาพ',video:'วิดีโอ',sns:'โซเชียล',tour:'ท่องเที่ยว',public_data:'ข้อมูลสาธารณะ',academic:'วิชาการ',sports:'กีฬา',finance:'การเงิน',webtoon:'เว็บตูน'}},
+  id:{home:'Beranda',globalSearchTitle:'Pencarian global',search:'Cari',placeholder:'Cari dunia…',resultsFor:'hasil untuk',receiving:'menerima...',searchResultDetail:'Detail hasil',searchList:'Daftar hasil',sourcePage:'Halaman asli',source:'Sumber',domain:'Domain',category:'Kategori',language:'Bahasa',relatedSearch:'Pencarian terkait',internalSource:'Tampilan internal',internalSourceHelp:'Halaman asli ditampilkan di dalam IGDC Search.',viewAll:'Lihat semua',collapse:'Tutup',itemsSuffix:'',sectionDefault:'Hasil web umum',tabs:{all:'Semua',map:'Peta',knowledge:'Pengetahuan',wiki:'Wiki',site:'Situs',book:'Buku',blog:'Blog',cafe:'Kafe',shopping:'Belanja',news:'Berita',image:'Gambar',video:'Video',sns:'Sosial',tour:'Wisata',public_data:'Data publik',academic:'Akademik',sports:'Olahraga',finance:'Keuangan',webtoon:'Webtoon'}},
+  hi:{home:'होम',globalSearchTitle:'वैश्विक खोज',search:'खोजें',placeholder:'दुनिया खोजें…',resultsFor:'परिणाम',receiving:'प्राप्त हो रहा है...',searchResultDetail:'परिणाम विवरण',searchList:'परिणाम सूची',sourcePage:'मूल पेज',source:'स्रोत',domain:'डोमेन',category:'श्रेणी',language:'भाषा',relatedSearch:'संबंधित खोजें',internalSource:'आंतरिक दृश्य',internalSourceHelp:'मूल पेज IGDC Search के अंदर दिखता है।',viewAll:'सभी देखें',collapse:'बंद करें',itemsSuffix:'',sectionDefault:'सामान्य वेब परिणाम',tabs:{all:'सभी',map:'मानचित्र',knowledge:'ज्ञान',wiki:'विकी',site:'साइटें',book:'पुस्तकें',blog:'ब्लॉग',cafe:'कैफे',shopping:'खरीदारी',news:'समाचार',image:'छवियां',video:'वीडियो',sns:'सोशल',tour:'यात्रा',public_data:'सार्वजनिक डेटा',academic:'शैक्षणिक',sports:'खेल',finance:'वित्त',webtoon:'वेबटून'}},
+  tr:{home:'Ana sayfa',globalSearchTitle:'Küresel arama',search:'Ara',placeholder:'Dünyada ara…',resultsFor:'sonuç:',receiving:'alınıyor...',searchResultDetail:'Sonuç detayı',searchList:'Sonuç listesi',sourcePage:'Orijinal sayfa',source:'Kaynak',domain:'Alan adı',category:'Kategori',language:'Dil',relatedSearch:'İlgili aramalar',internalSource:'Dahili görünüm',internalSourceHelp:'Orijinal sayfa IGDC Search içinde gösterilir.',viewAll:'Tümünü gör',collapse:'Kapat',itemsSuffix:'',sectionDefault:'Genel web sonuçları',tabs:{all:'Tümü',map:'Haritalar',knowledge:'Bilgi',wiki:'Wiki',site:'Siteler',book:'Kitaplar',blog:'Bloglar',cafe:'Kafeler',shopping:'Alışveriş',news:'Haberler',image:'Görseller',video:'Videolar',sns:'Sosyal',tour:'Seyahat',public_data:'Kamu verisi',academic:'Akademik',sports:'Spor',finance:'Finans',webtoon:'Webtoon'}},
+  ta:{home:'முகப்பு',globalSearchTitle:'உலகளாவிய தேடல்',search:'தேடு',placeholder:'உலகத்தைத் தேடு…',resultsFor:'முடிவுகள்',receiving:'பெறுகிறது...',searchResultDetail:'முடிவு விவரம்',searchList:'முடிவு பட்டியல்',sourcePage:'அசல் பக்கம்',source:'மூலம்',domain:'டொமைன்',category:'வகை',language:'மொழி',relatedSearch:'தொடர்புடைய தேடல்கள்',internalSource:'உள் பார்வை',internalSourceHelp:'அசல் பக்கம் IGDC Search உள்ளே காட்டப்படும்.',viewAll:'அனைத்தையும் காட்டு',collapse:'மூடு',itemsSuffix:'',sectionDefault:'பொது வலை முடிவுகள்',tabs:{all:'அனைத்தும்',map:'வரைபடம்',knowledge:'அறிவு',wiki:'விக்கி',site:'தளங்கள்',book:'புத்தகங்கள்',blog:'வலைப்பதிவுகள்',cafe:'கஃபே',shopping:'ஷாப்பிங்',news:'செய்தி',image:'படங்கள்',video:'வீடியோ',sns:'சமூக',tour:'சுற்றுலா',public_data:'பொது தரவு',academic:'கல்வி',sports:'விளையாட்டு',finance:'நிதி',webtoon:'வெப்டூன்'}},
+  sw:{home:'Nyumbani',globalSearchTitle:'Utafutaji wa kimataifa',search:'Tafuta',placeholder:'Tafuta dunia…',resultsFor:'matokeo ya',receiving:'inapokea...',searchResultDetail:'Maelezo ya matokeo',searchList:'Orodha ya matokeo',sourcePage:'Ukurasa asili',source:'Chanzo',domain:'Kikoa',category:'Kategoria',language:'Lugha',relatedSearch:'Utafutaji husika',internalSource:'Mwonekano wa ndani',internalSourceHelp:'Ukurasa asili unaonyeshwa ndani ya IGDC Search.',viewAll:'Ona yote',collapse:'Funga',itemsSuffix:'',sectionDefault:'Matokeo ya wavuti ya jumla',tabs:{all:'Yote',map:'Ramani',knowledge:'Maarifa',wiki:'Wiki',site:'Tovuti',book:'Vitabu',blog:'Blogu',cafe:'Kahawa',shopping:'Ununuzi',news:'Habari',image:'Picha',video:'Video',sns:'Jamii',tour:'Safari',public_data:'Data ya umma',academic:'Kitaaluma',sports:'Michezo',finance:'Fedha',webtoon:'Webtoon'}},
+  ur:{home:'ہوم',globalSearchTitle:'عالمی تلاش',search:'تلاش',placeholder:'دنیا تلاش کریں…',resultsFor:'نتائج برائے',receiving:'موصول ہو رہا ہے...',searchResultDetail:'نتیجے کی تفصیل',searchList:'نتائج کی فہرست',sourcePage:'اصل صفحہ',source:'ماخذ',domain:'ڈومین',category:'زمرہ',language:'زبان',relatedSearch:'متعلقہ تلاشیں',internalSource:'اندرونی منظر',internalSourceHelp:'اصل صفحہ IGDC Search کے اندر دکھایا جاتا ہے۔',viewAll:'سب دیکھیں',collapse:'بند کریں',itemsSuffix:'',sectionDefault:'عام ویب نتائج',tabs:{all:'سب',map:'نقشے',knowledge:'علم',wiki:'ویکی',site:'سائٹس',book:'کتابیں',blog:'بلاگ',cafe:'کیفے',shopping:'خریداری',news:'خبریں',image:'تصاویر',video:'ویڈیو',sns:'سوشل',tour:'سفر',public_data:'عوامی ڈیٹا',academic:'علمی',sports:'کھیل',finance:'مالیات',webtoon:'ویب ٹون'}},
+  bn:{home:'হোম',globalSearchTitle:'গ্লোবাল সার্চ',search:'অনুসন্ধান',placeholder:'বিশ্ব খুঁজুন…',resultsFor:'এর ফলাফল',receiving:'গ্রহণ হচ্ছে...',searchResultDetail:'ফলাফলের বিবরণ',searchList:'ফলাফলের তালিকা',sourcePage:'মূল পৃষ্ঠা',source:'উৎস',domain:'ডোমেইন',category:'বিভাগ',language:'ভাষা',relatedSearch:'সম্পর্কিত অনুসন্ধান',internalSource:'অভ্যন্তরীণ দৃশ্য',internalSourceHelp:'মূল পৃষ্ঠা IGDC Search-এর মধ্যে দেখানো হয়।',viewAll:'সব দেখুন',collapse:'বন্ধ',itemsSuffix:'',sectionDefault:'সাধারণ ওয়েব ফলাফল',tabs:{all:'সব',map:'মানচিত্র',knowledge:'জ্ঞান',wiki:'উইকি',site:'সাইট',book:'বই',blog:'ব্লগ',cafe:'ক্যাফে',shopping:'শপিং',news:'সংবাদ',image:'ছবি',video:'ভিডিও',sns:'সামাজিক',tour:'ভ্রমণ',public_data:'পাবলিক ডেটা',academic:'একাডেমিক',sports:'খেলা',finance:'অর্থনীতি',webtoon:'ওয়েবটুন'}},
+  fa:{home:'خانه',globalSearchTitle:'جستجوی جهانی',search:'جستجو',placeholder:'جهان را جستجو کنید…',resultsFor:'نتیجه برای',receiving:'در حال دریافت...',searchResultDetail:'جزئیات نتیجه',searchList:'فهرست نتایج',sourcePage:'صفحه اصلی',source:'منبع',domain:'دامنه',category:'دسته',language:'زبان',relatedSearch:'جستجوهای مرتبط',internalSource:'نمایش داخلی',internalSourceHelp:'صفحه اصلی داخل IGDC Search نمایش داده می‌شود.',viewAll:'نمایش همه',collapse:'بستن',itemsSuffix:'',sectionDefault:'نتایج عمومی وب',tabs:{all:'همه',map:'نقشه',knowledge:'دانش',wiki:'ویکی',site:'سایت‌ها',book:'کتاب‌ها',blog:'وبلاگ‌ها',cafe:'کافه',shopping:'خرید',news:'اخبار',image:'تصاویر',video:'ویدئو',sns:'اجتماعی',tour:'سفر',public_data:'داده عمومی',academic:'علمی',sports:'ورزش',finance:'مالی',webtoon:'وبتون'}},
+  hu:{home:'Kezdőlap',globalSearchTitle:'Globális keresés',search:'Keresés',placeholder:'Keresés a világban…',resultsFor:'találat erre:',receiving:'fogadás...',searchResultDetail:'Találat részletei',searchList:'Találati lista',sourcePage:'Eredeti oldal',source:'Forrás',domain:'Domain',category:'Kategória',language:'Nyelv',relatedSearch:'Kapcsolódó keresések',internalSource:'Belső nézet',internalSourceHelp:'Az eredeti oldal az IGDC Search-ben jelenik meg.',viewAll:'Összes',collapse:'Bezár',itemsSuffix:'',sectionDefault:'Általános webes találatok',tabs:{all:'Összes',map:'Térképek',knowledge:'Tudás',wiki:'Wiki',site:'Oldalak',book:'Könyvek',blog:'Blogok',cafe:'Kávézók',shopping:'Vásárlás',news:'Hírek',image:'Képek',video:'Videók',sns:'Közösségi',tour:'Utazás',public_data:'Közadatok',academic:'Akadémiai',sports:'Sport',finance:'Pénzügy',webtoon:'Webtoon'}},
+  ms:{home:'Utama',globalSearchTitle:'Carian global',search:'Cari',placeholder:'Cari dunia…',resultsFor:'hasil untuk',receiving:'menerima...',searchResultDetail:'Butiran hasil',searchList:'Senarai hasil',sourcePage:'Halaman asal',source:'Sumber',domain:'Domain',category:'Kategori',language:'Bahasa',relatedSearch:'Carian berkaitan',internalSource:'Paparan dalaman',internalSourceHelp:'Halaman asal dipaparkan dalam IGDC Search.',viewAll:'Lihat semua',collapse:'Tutup',itemsSuffix:'',sectionDefault:'Hasil web umum',tabs:{all:'Semua',map:'Peta',knowledge:'Pengetahuan',wiki:'Wiki',site:'Laman',book:'Buku',blog:'Blog',cafe:'Kafe',shopping:'Beli-belah',news:'Berita',image:'Imej',video:'Video',sns:'Sosial',tour:'Pelancongan',public_data:'Data awam',academic:'Akademik',sports:'Sukan',finance:'Kewangan',webtoon:'Webtoon'}},
+  nl:{home:'Home',globalSearchTitle:'Globaal zoeken',search:'Zoeken',placeholder:'Zoek de wereld…',resultsFor:'resultaten voor',receiving:'ontvangen...',searchResultDetail:'Resultaatdetails',searchList:'Resultatenlijst',sourcePage:'Originele pagina',source:'Bron',domain:'Domein',category:'Categorie',language:'Taal',relatedSearch:'Gerelateerde zoekopdrachten',internalSource:'Interne weergave',internalSourceHelp:'De originele pagina wordt binnen IGDC Search weergegeven.',viewAll:'Alles bekijken',collapse:'Sluiten',itemsSuffix:'',sectionDefault:'Algemene webresultaten',tabs:{all:'Alles',map:'Kaarten',knowledge:'Kennis',wiki:'Wiki',site:'Sites',book:'Boeken',blog:'Blogs',cafe:'Cafés',shopping:'Winkelen',news:'Nieuws',image:'Afbeeldingen',video:'Video’s',sns:'Sociaal',tour:'Reizen',public_data:'Openbare data',academic:'Academisch',sports:'Sport',finance:'Financiën',webtoon:'Webtoons'}},
+  pl:{home:'Start',globalSearchTitle:'Wyszukiwanie globalne',search:'Szukaj',placeholder:'Przeszukaj świat…',resultsFor:'wyników dla',receiving:'odbieranie...',searchResultDetail:'Szczegóły wyniku',searchList:'Lista wyników',sourcePage:'Oryginalna strona',source:'Źródło',domain:'Domena',category:'Kategoria',language:'Język',relatedSearch:'Powiązane wyszukiwania',internalSource:'Widok wewnętrzny',internalSourceHelp:'Oryginalna strona jest wyświetlana w IGDC Search.',viewAll:'Zobacz wszystko',collapse:'Zamknij',itemsSuffix:'',sectionDefault:'Ogólne wyniki web',tabs:{all:'Wszystko',map:'Mapy',knowledge:'Wiedza',wiki:'Wiki',site:'Strony',book:'Książki',blog:'Blogi',cafe:'Kawiarnie',shopping:'Zakupy',news:'Wiadomości',image:'Obrazy',video:'Wideo',sns:'Społeczności',tour:'Podróże',public_data:'Dane publiczne',academic:'Akademickie',sports:'Sport',finance:'Finanse',webtoon:'Webtoony'}},
+  sv:{home:'Hem',globalSearchTitle:'Global sökning',search:'Sök',placeholder:'Sök i världen…',resultsFor:'resultat för',receiving:'tar emot...',searchResultDetail:'Resultatdetalj',searchList:'Resultatlista',sourcePage:'Originalsida',source:'Källa',domain:'Domän',category:'Kategori',language:'Språk',relatedSearch:'Relaterade sökningar',internalSource:'Intern vy',internalSourceHelp:'Originalsidan visas inne i IGDC Search.',viewAll:'Visa alla',collapse:'Stäng',itemsSuffix:'',sectionDefault:'Allmänna webbresultat',tabs:{all:'Alla',map:'Kartor',knowledge:'Kunskap',wiki:'Wiki',site:'Webbplatser',book:'Böcker',blog:'Bloggar',cafe:'Kaféer',shopping:'Shopping',news:'Nyheter',image:'Bilder',video:'Videor',sns:'Socialt',tour:'Resor',public_data:'Offentlig data',academic:'Akademiskt',sports:'Sport',finance:'Finans',webtoon:'Webtoons'}},
+  tl:{home:'Home',globalSearchTitle:'Pandaigdigang paghahanap',search:'Hanapin',placeholder:'Hanapin ang mundo…',resultsFor:'resulta para sa',receiving:'tumatanggap...',searchResultDetail:'Detalye ng resulta',searchList:'Listahan ng resulta',sourcePage:'Orihinal na pahina',source:'Pinagmulan',domain:'Domain',category:'Kategorya',language:'Wika',relatedSearch:'Kaugnay na paghahanap',internalSource:'Panloob na view',internalSourceHelp:'Ipinapakita ang orihinal na pahina sa loob ng IGDC Search.',viewAll:'Tingnan lahat',collapse:'Isara',itemsSuffix:'',sectionDefault:'Pangkalahatang resulta sa web',tabs:{all:'Lahat',map:'Mapa',knowledge:'Kaalaman',wiki:'Wiki',site:'Mga site',book:'Aklat',blog:'Blog',cafe:'Cafe',shopping:'Shopping',news:'Balita',image:'Larawan',video:'Video',sns:'Social',tour:'Paglalakbay',public_data:'Pampublikong data',academic:'Akademiko',sports:'Sports',finance:'Pananalapi',webtoon:'Webtoon'}},
+  uk:{home:'Головна',globalSearchTitle:'Глобальний пошук',search:'Пошук',placeholder:'Шукати у світі…',resultsFor:'результатів для',receiving:'отримання...',searchResultDetail:'Деталі результату',searchList:'Список результатів',sourcePage:'Оригінальна сторінка',source:'Джерело',domain:'Домен',category:'Категорія',language:'Мова',relatedSearch:'Пов’язані пошуки',internalSource:'Внутрішній перегляд',internalSourceHelp:'Оригінальна сторінка відображається в IGDC Search.',viewAll:'Показати все',collapse:'Закрити',itemsSuffix:'',sectionDefault:'Загальні веб-результати',tabs:{all:'Усе',map:'Карти',knowledge:'Знання',wiki:'Вікі',site:'Сайти',book:'Книги',blog:'Блоги',cafe:'Кафе',shopping:'Покупки',news:'Новини',image:'Зображення',video:'Відео',sns:'Соцмережі',tour:'Подорожі',public_data:'Публічні дані',academic:'Наукове',sports:'Спорт',finance:'Фінанси',webtoon:'Вебтуни'}},
+  uz:{home:'Bosh sahifa',globalSearchTitle:'Global qidiruv',search:'Qidirish',placeholder:'Dunyoni qidiring…',resultsFor:'natija:',receiving:'qabul qilinmoqda...',searchResultDetail:'Natija tafsiloti',searchList:'Natijalar ro‘yxati',sourcePage:'Asl sahifa',source:'Manba',domain:'Domen',category:'Turkum',language:'Til',relatedSearch:'Aloqador qidiruvlar',internalSource:'Ichki ko‘rinish',internalSourceHelp:'Asl sahifa IGDC Search ichida ko‘rsatiladi.',viewAll:'Hammasini ko‘rish',collapse:'Yopish',itemsSuffix:'',sectionDefault:'Umumiy veb natijalari',tabs:{all:'Barchasi',map:'Xaritalar',knowledge:'Bilim',wiki:'Viki',site:'Saytlar',book:'Kitoblar',blog:'Bloglar',cafe:'Kafelar',shopping:'Xarid',news:'Yangiliklar',image:'Rasmlar',video:'Videolar',sns:'Ijtimoiy',tour:'Sayohat',public_data:'Ochiq maʼlumot',academic:'Akademik',sports:'Sport',finance:'Moliya',webtoon:'Vebtun'}}
+};
+
+function normalizeUiLang(v){
+  let s = String(v || '').trim().toLowerCase();
+  if(!s) return 'ko';
+  s = s.replace('_','-');
+  if(s === 'kr' || s === 'ko-kr' || s === 'korean') return 'ko';
+  if(s === 'zh-tw' || s === 'zh-hk' || s === 'zh-hant' || s === 'zht') return 'zht';
+  if(s === 'zh-cn' || s === 'zh-hans') return 'zh';
+  if(s.indexOf('-') > -1) s = s.split('-')[0];
+  return SEARCH_I18N[s] ? s : 'en';
+}
+
+function getSearchUiLang(){
+  try{
+    const urlLang = (new URLSearchParams(location.search).get('lang') || '').trim();
+    if(urlLang) return normalizeUiLang(urlLang);
+  }catch(e){}
+  try{
+    if(window.IGTC && typeof window.IGTC.getLang === 'function') return normalizeUiLang(window.IGTC.getLang());
+  }catch(e){}
+  try{
+    const saved = (localStorage.getItem('igdc_lang') || '').trim();
+    if(saved) return normalizeUiLang(saved);
+  }catch(e){}
+  try{
+    const docLang = (document.documentElement && document.documentElement.getAttribute('lang')) || '';
+    if(docLang) return normalizeUiLang(docLang);
+  }catch(e){}
+  try{return normalizeUiLang(navigator.language || 'ko');}catch(e){return 'ko';}
+}
+
+function i18nDict(){
+  const lang = getSearchUiLang();
+  return SEARCH_I18N[lang] || SEARCH_I18N.en || SEARCH_I18N.ko;
+}
+
+function uiText(key, fallback){
+  const d = i18nDict();
+  return (d && d[key]) || (SEARCH_I18N.en && SEARCH_I18N.en[key]) || fallback || key;
+}
+
+function tabLabel(type){
+  const t = normalizeSearchType(type);
+  const d = i18nDict();
+  return (d.tabs && d.tabs[t]) || (SEARCH_I18N.en.tabs && SEARCH_I18N.en.tabs[t]) || (SEARCH_I18N.ko.tabs && SEARCH_I18N.ko.tabs[t]) || t;
+}
+
+function groupLabel(group){
+  const d = i18nDict();
+  return (d.groups && d.groups[group]) || (SEARCH_I18N.en.groups && SEARCH_I18N.en.groups[group]) || (SEARCH_I18N.ko.groups && SEARCH_I18N.ko.groups[group]) || uiText('sectionDefault', 'General web results');
+}
+
+function itemCountText(n){
+  const suffix = uiText('itemsSuffix', '');
+  return suffix ? `${n}${suffix}` : String(n);
+}
+
+function statusResultsText(count, q, type, receiving){
+  const suffix = receiving ? ` · ${uiText('receiving', 'receiving...')}` : '';
+  return `${count} ${uiText('resultsFor', 'results for')} "${q}" · ${getTypeLabel(type)}${suffix}`;
+}
 
 function normalizeSearchType(v){
   const raw = String(v || '').trim().toLowerCase();
-  const allowed = new Set(SEARCH_TABS.map(x => x[0]));
+  const allowed = new Set(SEARCH_TAB_KEYS);
   const alias = { books: 'book', 도서: 'book', 책: 'book', sns: 'sns', social: 'sns', public: 'public_data', 공공자료: 'public_data', wiki: 'wiki', 위키: 'wiki', academic: 'academic', 학술: 'academic', site: 'site', 사이트: 'site' };
   return allowed.has(raw) ? raw : (alias[raw] || 'all');
 }
 
 function getTypeLabel(type){
-  const hit = SEARCH_TABS.find(x => x[0] === normalizeSearchType(type));
-  return hit ? hit[1] : '전체';
+  return tabLabel(normalizeSearchType(type));
 }
 
 function searchTabDef(type){
   const t = normalizeSearchType(type);
-  const hit = SEARCH_TABS.find(x => x[0] === t);
-  return hit || ['all', '전체'];
+  return [t, tabLabel(t)];
 }
 
 function uniqueSearchTabs(types){
@@ -223,7 +299,7 @@ function inferSearchTabsForQuery(q, active){
 
 function searchTabsProfileKey(q, active){
   const tabs = inferSearchTabsForQuery(q, active).map(x => x[0]).join('|');
-  return tabs + '::' + normalizeSearchType(active || activeType || 'all');
+  return tabs + '::' + normalizeSearchType(active || activeType || 'all') + '::' + getSearchUiLang();
 }
 
 
@@ -585,6 +661,163 @@ function ensureSearchCardMediaStyle(){
 
 ensureSearchCardMediaStyle();
 
+const SEARCH_PAGE_PROXY_URL = '/.netlify/functions/search-page-proxy';
+
+function isSkippableNavigationHref(href){
+  const h = String(href || '').trim();
+  return !h || h === '#' || h.charAt(0) === '#' || /^javascript:/i.test(h) || /^mailto:|^tel:/i.test(h);
+}
+
+function proxyUrlForResult(target){
+  const raw = String(target || '').trim();
+  if(!raw) return '';
+  try{
+    const u = new URL(raw, location.href);
+    if(!/^https?:$/.test(u.protocol)) return '';
+    return SEARCH_PAGE_PROXY_URL + '?safe=1&embed=1&url=' + encodeURIComponent(u.href);
+  }catch(e){
+    return '';
+  }
+}
+
+
+function proxyFailSrcdoc(target, message){
+  const safeTarget = String(target || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const safeMessage = String(message || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>body{margin:0;background:#f8fafc;color:#334155;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.box{max-width:780px;margin:42px auto;padding:24px;border:1px solid #e2e8f0;border-radius:16px;background:#fff;box-shadow:0 10px 30px rgba(15,23,42,.06)}h3{margin:0 0 10px;color:#0f172a;font-size:18px}.url{margin-top:12px;padding:10px;border-radius:10px;background:#f1f5f9;color:#64748b;font-size:13px;word-break:break-all}.small{font-size:13px;line-height:1.6;color:#64748b}</style></head><body><div class="box"><h3>내부 원문 표시를 완료하지 못했습니다.</h3><p class="small">검색 화면은 유지됩니다. 원문 사이트가 서버 접근을 차단했거나 프록시 함수가 아직 배포되지 않았을 수 있습니다.</p><p class="small">' + safeMessage + '</p><div class="url">' + safeTarget + '</div></div></body></html>';
+}
+
+async function loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target){
+  if(!frame || !proxySrc) return;
+  let settled = false;
+  let blobUrl = '';
+
+  const finish = () => {
+    if(settled) return;
+    settled = true;
+    try{ if(loadingEl) loadingEl.remove(); }catch(e){}
+  };
+
+  const installHtml = (htmlText) => {
+    const html = String(htmlText || '') || proxyFailSrcdoc(target, 'empty proxy response');
+
+    // Prefer Blob over direct iframe navigation/srcdoc. This avoids external
+    // frame blocking and keeps the IGDC search shell, tabs, pager and history
+    // in the top page. The iframe is only a viewport inside #searchResults.
+    try{
+      if(frame.__maruProxyBlobUrl){
+        try{ URL.revokeObjectURL(frame.__maruProxyBlobUrl); }catch(e){}
+        frame.__maruProxyBlobUrl = '';
+      }
+      const blob = new Blob([html], { type:'text/html;charset=utf-8' });
+      blobUrl = URL.createObjectURL(blob);
+      frame.__maruProxyBlobUrl = blobUrl;
+      frame.removeAttribute('srcdoc');
+      frame.onload = () => finish();
+      frame.src = blobUrl;
+      setTimeout(finish, 1800);
+      return;
+    }catch(e){
+      try{
+        frame.removeAttribute('src');
+        frame.srcdoc = html;
+        frame.onload = () => finish();
+        setTimeout(finish, 1800);
+        return;
+      }catch(e2){}
+    }
+
+    frame.removeAttribute('src');
+    frame.srcdoc = proxyFailSrcdoc(target, 'viewer install failed');
+    finish();
+  };
+
+  try{
+    if(loadingEl) loadingEl.textContent = uiText('receiving', 'receiving...');
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 16000);
+    const r = await fetch(proxySrc, { cache:'no-store', credentials:'same-origin', signal:ctrl.signal });
+    const text = await r.text();
+    clearTimeout(timer);
+    if(!r.ok){
+      installHtml(proxyFailSrcdoc(target, 'proxy status ' + r.status));
+      return;
+    }
+    installHtml(text);
+  }catch(e){
+    installHtml(proxyFailSrcdoc(target, String(e && e.message || e || 'proxy failed')));
+  }
+}
+
+
+function originalUrlFromMaybeProxy(href){
+  const raw = String(href || '').trim();
+  if(!raw) return '';
+  try{
+    const u = new URL(raw, location.href);
+    if(u.origin === location.origin && u.pathname === SEARCH_PAGE_PROXY_URL){
+      return u.searchParams.get('url') || raw;
+    }
+    return u.href;
+  }catch(e){
+    return raw;
+  }
+}
+
+function buildSearchOwnedResultHref(target){
+  try{
+    const raw = String(target || '').trim();
+    if(!raw) return '#';
+    const u = new URL(location.href);
+    u.searchParams.set('view', 'result');
+    u.searchParams.set('target', raw);
+    u.searchParams.set('page', String(currentPage || 1));
+    u.searchParams.set('block', String(currentBlock || 0));
+    const q = String(lastQuery || input.value || '').trim();
+    if(q) u.searchParams.set('q', q);
+    if(activeType && activeType !== 'all') u.searchParams.set('type', activeType);
+    else u.searchParams.delete('type');
+    return u.pathname + u.search + u.hash;
+  }catch(e){
+    return '#';
+  }
+}
+
+function findSearchItemByUrl(target){
+  const raw = String(target || '').trim();
+  if(!raw) return null;
+  let norm = raw.toLowerCase();
+  try{ norm = new URL(raw, location.href).href.toLowerCase(); }catch(e){}
+  const list = Array.isArray(allItems) ? allItems : [];
+  for(const it of list){
+    const urls = [it && it.url, it && it.link, it && it.openUrl, it && it.href].map(v => String(v || '').trim()).filter(Boolean);
+    for(const u0 of urls){
+      let v = u0.toLowerCase();
+      try{ v = new URL(u0, location.href).href.toLowerCase(); }catch(e){}
+      if(v === norm) return it;
+    }
+  }
+  return null;
+}
+
+function installSearchResultClickGuard(){
+  if(!results || results.__maruOwnedClickGuardInstalled) return;
+  results.__maruOwnedClickGuardInstalled = true;
+  results.addEventListener('click', function(e){
+    if(!isSearchPage) return;
+    const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if(!a || a.dataset.maruExternal === '1' || a.closest('.maru-result-viewer-actions')) return;
+    const href = a.getAttribute('href') || '';
+    if(isSkippableNavigationHref(href)) return;
+    if(a.closest('.maru-search-owned-result-actions') && a.dataset.maruExternal === '1') return;
+    const target = a.dataset.originalUrl || originalUrlFromMaybeProxy(href);
+    if(!target) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openResultInsideSearchFrame(target, findSearchItemByUrl(target) || { url: target, title: a.textContent || target });
+  }, true);
+}
+
 
 function resolveSearchHomeUrl(){
   try {
@@ -617,16 +850,63 @@ function ensureSearchHeaderHomeLink(){
     home.id = 'maru-search-home-title-link';
     home.className = 'maru-search-home-link';
     home.href = resolveSearchHomeUrl();
-    home.textContent = 'Home';
+    home.textContent = uiText('home', 'Home');
     home.setAttribute('aria-label', 'Go to Home');
 
     wrap.appendChild(home);
-    wrap.appendChild(document.createTextNode(' Global Search'));
+    wrap.appendChild(document.createTextNode(' ' + uiText('globalSearchTitle', 'Global Search')));
     node.parentNode.replaceChild(wrap, node);
   } catch(e) {}
 }
 
+function applySearchUiI18n(){
+  try{
+    const lang = getSearchUiLang();
+    const htmlLang = lang === 'zht' ? 'zh-Hant' : lang;
+    if(document.documentElement && htmlLang && document.documentElement.getAttribute('lang') !== htmlLang) {
+      document.documentElement.setAttribute('lang', htmlLang);
+    }
+  }catch(e){}
+  try{ if(input) input.setAttribute('placeholder', uiText('placeholder', 'Search the world…')); }catch(e){}
+  try{ if(btn) btn.textContent = uiText('search', 'Search'); }catch(e){}
+  try{
+    const home = document.getElementById('maru-search-home-title-link');
+    if(home) home.textContent = uiText('home', 'Home');
+    const brand = document.querySelector('.brand');
+    if(brand){
+      const titleWrap = brand.querySelector('.maru-search-header-title');
+      if(titleWrap){
+        Array.from(titleWrap.childNodes).forEach(node => {
+          if(node.nodeType === 3) node.nodeValue = ' ' + uiText('globalSearchTitle', 'Global Search');
+        });
+      }else if(!brand.querySelector('#maru-search-home-title-link')){
+        brand.textContent = uiText('globalSearchTitle', 'Global Search');
+      }
+    }
+  }catch(e){}
+  try{
+    const bar = document.getElementById('maru-search-tabs');
+    if(bar) bar.dataset.profileKey = '';
+    updateSearchTabsActive(queryTextForTabs());
+  }catch(e){}
+}
+
+function bindSearchUiI18nEvents(){
+  if(bindSearchUiI18nEvents._bound) return;
+  bindSearchUiI18nEvents._bound = true;
+  const rerender = () => setTimeout(applySearchUiI18n, 0);
+  try{ window.addEventListener('igdc:langchange', rerender); }catch(e){}
+  try{ window.addEventListener('languagechange', rerender); }catch(e){}
+  try{ window.addEventListener('storage', e => { if(!e || e.key === 'igdc_lang') rerender(); }); }catch(e){}
+  try{
+    new MutationObserver(rerender).observe(document.documentElement, { attributes:true, attributeFilter:['lang'] });
+  }catch(e){}
+}
+
 ensureSearchHeaderHomeLink();
+applySearchUiI18n();
+bindSearchUiI18nEvents();
+installSearchResultClickGuard();
 
 
 const type0 = normalizeSearchType(params.get('type') || 'all');
@@ -761,6 +1041,23 @@ window.addEventListener('popstate', (e) => {
   // 3️⃣ 검색어 동기화
   if (q && input.value !== q) {
     input.value = q;
+  }
+
+  const viewMode = (sp.get('view') || state.view || '').trim();
+  const viewTarget = (sp.get('target') || state.target || '').trim();
+  if (viewMode === 'result' && viewTarget) {
+    const renderOwnedView = () => {
+      currentPage = page;
+      currentBlock = block;
+      const item = findSearchItemByUrl(viewTarget) || { url:viewTarget, link:viewTarget, title: state.title || viewTarget };
+      renderSearchOwnedResultView(viewTarget, item, { skipHistory:true });
+    };
+    if ((!allItems || !allItems.length || q !== lastQuery || nextType !== lastType) && q) {
+      runSearch(q, nextType).then(renderOwnedView);
+    } else {
+      renderOwnedView();
+    }
+    return;
   }
 
   // 4️⃣ 데이터 없거나 검색어/탭이 바뀌면 다시 검색
@@ -1064,28 +1361,60 @@ function startContinuousIntake(q, type, seq){
 
   let nextPage = Math.max(2, preloadPageCountFromItems(allItems) + 1);
   const maxPages = Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(target / PAGE_SIZE)));
+  const retryPages = [];
+  const retryCounts = new Map();
+
+  function takeNextIntakePage(){
+    while(retryPages.length){
+      const p = retryPages.shift();
+      if(p && !loadedServerPages.has(p)) return p;
+    }
+    while(nextPage <= maxPages){
+      const p = nextPage++;
+      if(p && !loadedServerPages.has(p)) return p;
+    }
+    return 0;
+  }
 
   async function worker(){
-    while(continuousIntakeActive && continuousIntakeSeq === token && runSearch._seq === seq && nextPage <= maxPages){
-      const page = nextPage++;
-      if(loadedServerPages.has(page)) continue;
+    while(continuousIntakeActive && continuousIntakeSeq === token && runSearch._seq === seq){
+      const page = takeNextIntakePage();
+      if(!page) break;
       try{
         const pack = await fetchSearch(q, type, page);
         if(!continuousIntakeActive || continuousIntakeSeq !== token || runSearch._seq !== seq) return;
         const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack))).slice(0, PAGE_SIZE);
         if(pageSlice.length){
           loadedServerPages.set(page, pageSlice);
-          allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice);
+          retryCounts.delete(page);
+          allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice).slice(0, MAX_SMOOTH_CANDIDATES);
           lastSearchPayload = pack && pack.payload || lastSearchPayload;
-          updateProgressiveTotalFromPayload(pack && pack.payload, allItems.length);
+          updateProgressiveTotalFromPayload(pack && pack.payload, Math.max(target, allItems.length));
           if(page === currentPage) renderPage(page, true);
           else drawPager();
-          status.textContent = `${actualResultCountForStatus()} results for "${q}" · ${getTypeLabel(type)} · receiving...`;
+          status.textContent = statusResultsText(actualResultCountForStatus(), q, type, true);
+        }else if(allItems.length < target){
+          const tried = retryCounts.get(page) || 0;
+          if(tried < 3){
+            retryCounts.set(page, tried + 1);
+            retryPages.push(page);
+          }
         }
       }catch(e){
+        const tried = retryCounts.get(page) || 0;
+        if(tried < 3 && allItems.length < target){
+          retryCounts.set(page, tried + 1);
+          retryPages.push(page);
+        }
         console.warn('continuous intake page skipped:', page, e);
       }
       await sleepIntake(INTAKE_BURST_DELAY_MS);
+    }
+    if(continuousIntakeActive && continuousIntakeSeq === token && runSearch._seq === seq){
+      drawPager();
+      if(allItems.length >= Math.min(target, MAX_SMOOTH_CANDIDATES)) {
+        status.textContent = statusResultsText(actualResultCountForStatus(), q, type);
+      }
     }
   }
 
@@ -1468,7 +1797,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       box.innerHTML = '';
       const cap = document.createElement('div');
       cap.className = 'maru-related-suggest-caption';
-      cap.textContent = '연관 검색어';
+      cap.textContent = uiText('relatedSearch', 'Related searches');
       box.appendChild(cap);
       terms.forEach(term => {
         const row = document.createElement('button');
@@ -2082,30 +2411,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function displayGroupLabel(group, sample){
-      const labels = {
-        authority: '주요 정보',
-        public_data: '공공자료',
-        local_tour: '지도/지역',
-        knowledge: '지식/백과',
-        wiki: '위키',
-        academic: '학술/논문',
-        site: '사이트/홈페이지',
-        book: '도서',
-        news: '뉴스',
-        blog: '블로그',
-        cafe: '카페',
-        community: '커뮤니티',
-        image: '이미지',
-        video: '영상',
-        media: '이미지/영상',
-        social: 'SNS',
-        shopping: '쇼핑',
-        sports: '스포츠',
-        finance: '금융',
-        webtoon: '웹툰',
-        web: '일반 웹 결과'
-      };
-      return labels[group] || '일반 웹 결과';
+      return groupLabel(group || 'web');
     }
 
     function displayGroupPreviewLimit(group, sample){
@@ -2290,7 +2596,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         meta.className = 'maru-display-section-meta';
         const sourceTotal = parseInt(groupInfo.sourceTotal, 10) || Math.max.apply(null, groupInfo.items.map(x => parseInt(x && x.displayGroupSourceTotal, 10) || 0).concat([groupInfo.items.length]));
         const visibleCountForMeta = Array.isArray(groupInfo.previewItems) ? groupInfo.previewItems.length : groupInfo.items.length;
-        meta.textContent = sourceTotal > visibleCountForMeta ? `${visibleCountForMeta}/${sourceTotal}개` : `${visibleCountForMeta}개`;
+        meta.textContent = sourceTotal > visibleCountForMeta ? `${visibleCountForMeta}/${itemCountText(sourceTotal)}` : itemCountText(visibleCountForMeta);
 
         head.appendChild(title);
         head.appendChild(meta);
@@ -2325,13 +2631,13 @@ async function fetchInstantSearchPack(q, type = activeType){
           more.className = 'maru-display-more';
           const hiddenCount = hiddenItems.length;
           const label = groupInfo.label || '이 섹션';
-          more.textContent = `${label} 전체 보기 ▾ (${hiddenCount}개)`;
+          more.textContent = `${label} ${uiText('viewAll', 'View all')} ▾ (${itemCountText(hiddenCount)})`;
           more.addEventListener('click', () => {
             const open = section.dataset.expanded === '1';
             if(open){
               section.dataset.expanded = '0';
               if(hiddenWrap) hiddenWrap.style.display = 'none';
-              more.textContent = `${label} 전체 보기 ▾ (${hiddenCount}개)`;
+              more.textContent = `${label} ${uiText('viewAll', 'View all')} ▾ (${itemCountText(hiddenCount)})`;
               return;
             }
 
@@ -2344,7 +2650,7 @@ async function fetchInstantSearchPack(q, type = activeType){
               hiddenMounted = true;
             }
             if(hiddenWrap) hiddenWrap.style.display = '';
-            more.textContent = `${label} 접기 ▴`;
+            more.textContent = `${label} ${uiText('collapse', 'Collapse')} ▴`;
           });
           section.appendChild(more);
         }
@@ -2781,58 +3087,428 @@ async function fetchInstantSearchPack(q, type = activeType){
       return '';
     }
 
-    function openResultInsideSearchFrame(url, it){
+    function ensureSearchOwnedResultViewStyle(){
+      if(document.getElementById('maru-search-owned-result-style')) return;
+      const style = document.createElement('style');
+      style.id = 'maru-search-owned-result-style';
+      style.textContent = `
+        .maru-search-owned-result {
+          margin: 10px 0 22px;
+          border: 1px solid #e5e7eb;
+          border-radius: 14px;
+          background: #ffffff;
+          overflow: hidden;
+          box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+        }
+        .maru-search-owned-result-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 12px 14px;
+          border-bottom: 1px solid #eef2f7;
+          background: linear-gradient(180deg, #ffffff, #f8fafc);
+        }
+        .maru-search-owned-result-kicker {
+          font-size: 13px;
+          font-weight: 900;
+          color: #111827;
+        }
+        .maru-search-owned-result-actions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex: 0 0 auto;
+        }
+        .maru-search-owned-result-actions button,
+        .maru-search-owned-result-actions a {
+          border: 1px solid #dbe2ea;
+          border-radius: 9px;
+          background: #fff;
+          color: #334155;
+          padding: 7px 10px;
+          font-size: 12px;
+          font-weight: 900;
+          text-decoration: none;
+          cursor: pointer;
+        }
+        .maru-search-owned-result-actions a {
+          background: #4f46e5;
+          border-color: #4f46e5;
+          color: #fff;
+        }
+        .maru-search-owned-result-main {
+          padding: 18px 18px 20px;
+          display: grid;
+          grid-template-columns: minmax(0, 1.15fr) minmax(260px, .85fr);
+          gap: 18px;
+          align-items: start;
+        }
+        .maru-search-owned-result-source {
+          margin: 0 0 8px;
+          color: #64748b;
+          font-size: 13px;
+          font-weight: 700;
+          word-break: break-all;
+        }
+        .maru-search-owned-result-title {
+          margin: 0 0 10px;
+          color: #1a0dab;
+          font-size: 27px;
+          font-weight: 900;
+          line-height: 1.18;
+          letter-spacing: -0.03em;
+        }
+        .maru-search-owned-result-desc {
+          margin: 0 0 13px;
+          color: #334155;
+          font-size: 15px;
+          line-height: 1.72;
+          white-space: pre-wrap;
+        }
+        .maru-search-owned-result-facts {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin: 12px 0 0;
+        }
+        .maru-search-owned-result-fact {
+          padding: 7px 9px;
+          border-radius: 999px;
+          background: #f1f5f9;
+          color: #334155;
+          font-size: 12px;
+          font-weight: 800;
+        }
+        .maru-search-owned-media-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+        }
+        .maru-search-owned-media-grid img {
+          display: block;
+          width: 100%;
+          min-height: 128px;
+          max-height: 230px;
+          object-fit: cover;
+          border-radius: 12px;
+          border: 1px solid #e5e7eb;
+          background: #f8fafc;
+        }
+        .maru-search-owned-media-grid img:first-child {
+          grid-column: 1 / -1;
+          min-height: 210px;
+        }
+        .maru-search-owned-result-related {
+          margin-top: 14px;
+          padding-top: 12px;
+          border-top: 1px solid #eef2f7;
+        }
+        .maru-search-owned-result-related-title {
+          margin: 0 0 8px;
+          font-size: 13px;
+          font-weight: 900;
+          color: #111827;
+        }
+        .maru-search-owned-result-related-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+        .maru-search-owned-result-related-list button {
+          border: 1px solid #e5e7eb;
+          border-radius: 999px;
+          background: #f8fafc;
+          color: #111827;
+          padding: 7px 11px;
+          font-size: 12px;
+          font-weight: 800;
+          cursor: pointer;
+        }
+        .maru-search-owned-proxy {
+          margin: 0 18px 20px;
+          border: 1px solid #e5e7eb;
+          border-radius: 14px;
+          overflow: hidden;
+          background: #fff;
+        }
+        .maru-search-owned-proxy-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 10px 12px;
+          border-bottom: 1px solid #eef2f7;
+          background: #f8fafc;
+        }
+        .maru-search-owned-proxy-title {
+          font-size: 13px;
+          font-weight: 900;
+          color: #0f172a;
+          white-space: nowrap;
+        }
+        .maru-search-owned-proxy-help {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          color: #64748b;
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .maru-search-owned-proxy-loading {
+          padding: 12px;
+          color: #64748b;
+          font-size: 13px;
+          font-weight: 800;
+          border-bottom: 1px solid #eef2f7;
+        }
+        .maru-search-owned-proxy-frame {
+          display: block;
+          width: 100%;
+          min-height: calc(100vh - 280px);
+          height: 720px;
+          border: 0;
+          background: #fff;
+        }
+
+        .maru-search-owned-result-minimal .maru-search-owned-result-head {
+          padding: 10px 12px;
+          background: #fff;
+        }
+        .maru-search-owned-result-head-main {
+          min-width: 0;
+        }
+        .maru-search-owned-result-minimal .maru-search-owned-result-kicker {
+          max-width: 860px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-size: 17px;
+          color: #111827;
+        }
+        .maru-search-owned-result-head-source {
+          margin: 3px 0 0;
+          font-size: 12px;
+          color: #64748b;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .maru-search-owned-result-summary {
+          padding: 11px 12px;
+          border-bottom: 1px solid #eef2f7;
+          color: #334155;
+          font-size: 14px;
+          line-height: 1.55;
+          background: #fff;
+        }
+        .maru-search-owned-proxy-minimal {
+          margin: 0;
+          border: 0;
+          border-radius: 0;
+        }
+        .maru-search-owned-proxy-minimal .maru-search-owned-proxy-loading {
+          padding: 10px 12px;
+          border-bottom: 1px solid #eef2f7;
+          background: #fff;
+        }
+        .maru-search-owned-proxy-minimal .maru-search-owned-proxy-frame {
+          height: calc(100vh - 255px);
+          min-height: 560px;
+        }
+        @media (max-width: 840px) {
+          .maru-search-owned-result-main { grid-template-columns: 1fr; }
+          .maru-search-owned-result-title { font-size: 23px; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    function sourceLabelForOwnedResult(it, target){
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const rawSource = (it && it.source && typeof it.source === 'object')
+        ? (it.source.name || it.source.platform || it.source.provider || '')
+        : (it && it.source) || displayCard.source || payload.source || '';
+      const host = domainOf(target || (it && (it.url || it.link)) || '');
+      return String(rawSource || host || target || '').trim();
+    }
+
+    function detailTextForOwnedResult(it){
+      const desc = descriptionForItemClient(it);
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const candidates = [
+        desc,
+        displayCard.body,
+        displayCard.text,
+        displayCard.description,
+        displayCard.summary,
+        it && it.content,
+        it && it.text,
+        it && it.body,
+        it && it.excerpt,
+        it && it.abstract,
+        payload.body,
+        payload.content,
+        payload.text,
+        payload.description,
+        payload.summary
+      ];
+      for(const v of candidates){
+        const text = compactCardTextClient(v);
+        if(text && text.length >= 18) return text.slice(0, 900);
+      }
+      return '';
+    }
+
+    function relatedTermsForOwnedResult(it){
+      const rawTags = []
+        .concat(Array.isArray(it && it.tags) ? it.tags : [])
+        .concat(Array.isArray(it && it.keywords) ? it.keywords : [])
+        .concat(Array.isArray(it && it.categories) ? it.categories : []);
+      const title = String((it && it.title) || lastQuery || '').trim();
+      const base = String(lastQuery || input.value || title || '').trim();
+      const fallback = base ? relatedSearchTermsFor(base).slice(0, 6) : [];
+      const out = [];
+      const seen = new Set();
+      rawTags.concat(fallback).forEach(v => {
+        const s = String(v || '').replace(/[#;]/g, ' ').replace(/\s+/g, ' ').trim();
+        if(!s || seen.has(s.toLowerCase())) return;
+        seen.add(s.toLowerCase());
+        out.push(s);
+      });
+      return out.slice(0, 8);
+    }
+
+    function renderSearchOwnedResultView(url, it, opts){
+      opts = opts || {};
       const target = String(url || '').trim();
       if(!target) return;
       if(!isSearchPage){
         try { window.location.href = target; } catch(e) {}
         return;
       }
-      try{
-        const viewer = document.createElement('div');
-        viewer.className = 'maru-result-viewer';
 
-        const head = document.createElement('div');
-        head.className = 'maru-result-viewer-head';
+      ensureSearchOwnedResultViewStyle();
 
-        const title = document.createElement('div');
-        title.className = 'maru-result-viewer-title';
-        title.textContent = String((it && it.title) || target).trim() || target;
+      const displayTitle = String((it && it.title) || sourceLabelForOwnedResult(it || {}, target) || domainOf(target) || target).trim() || target;
+      const sourceLabel = sourceLabelForOwnedResult(it || {}, target);
+      const descText = detailTextForOwnedResult(it || {});
 
-        const actions = document.createElement('div');
-        actions.className = 'maru-result-viewer-actions';
+      if(!opts.skipHistory) try{
+        const currentQ = String(lastQuery || input.value || '').trim();
+        const u = new URL(location.href);
+        u.searchParams.set('view', 'result');
+        u.searchParams.set('target', target);
+        u.searchParams.set('page', String(currentPage || 1));
+        u.searchParams.set('block', String(currentBlock || 0));
+        if(currentQ) u.searchParams.set('q', currentQ);
+        if(activeType && activeType !== 'all') u.searchParams.set('type', activeType);
+        else u.searchParams.delete('type');
+        history.pushState({
+          ...(history.state || {}),
+          __maruSearchOwnedResult: true,
+          q: currentQ,
+          page: currentPage || 1,
+          block: currentBlock || 0,
+          type: activeType,
+          target: target,
+          title: displayTitle.slice(0, 180),
+          view: 'result'
+        }, '', u.toString());
+      }catch(e){}
 
-        const back = document.createElement('button');
-        back.type = 'button';
-        back.textContent = '검색 결과로 돌아가기';
-        back.addEventListener('click', () => renderPage(currentPage || 1, true));
+      const shell = document.createElement('div');
+      shell.className = 'maru-search-owned-result maru-search-owned-result-minimal';
 
-        const open = document.createElement('a');
-        open.href = target;
-        open.target = '_blank';
-        open.rel = 'noopener';
-        open.textContent = '새 창 열기';
+      const head = document.createElement('div');
+      head.className = 'maru-search-owned-result-head';
 
-        actions.appendChild(back);
-        actions.appendChild(open);
-        head.appendChild(title);
-        head.appendChild(actions);
+      const titleWrap = document.createElement('div');
+      titleWrap.className = 'maru-search-owned-result-head-main';
 
-        const iframe = document.createElement('iframe');
-        iframe.src = target;
-        iframe.loading = 'eager';
-        iframe.referrerPolicy = 'no-referrer-when-downgrade';
-        iframe.title = title.textContent;
+      const title = document.createElement('div');
+      title.className = 'maru-search-owned-result-kicker';
+      title.textContent = displayTitle;
+      titleWrap.appendChild(title);
 
-        viewer.appendChild(head);
-        viewer.appendChild(iframe);
-        results.innerHTML = '';
-        results.appendChild(viewer);
-        drawPager();
-        try { results.scrollIntoView({ block:'start', behavior:'smooth' }); } catch(e) {}
-      }catch(e){
-        try { window.location.href = target; } catch(_e) {}
+      const source = document.createElement('div');
+      source.className = 'maru-search-owned-result-source maru-search-owned-result-head-source';
+      source.textContent = sourceLabel ? `${sourceLabel} · ${target}` : target;
+      titleWrap.appendChild(source);
+
+      const actions = document.createElement('div');
+      actions.className = 'maru-search-owned-result-actions';
+
+      const back = document.createElement('button');
+      back.type = 'button';
+      back.textContent = uiText('searchList', 'Search list');
+      back.addEventListener('click', () => {
+        try{
+          const u = new URL(location.href);
+          u.searchParams.delete('view');
+          u.searchParams.delete('target');
+          history.replaceState({ ...(history.state || {}), __maruSearchOwnedResult:false }, '', u.toString());
+        }catch(e){}
+        try{ document.querySelectorAll('.maru-search-owned-proxy-frame').forEach(f => { if(f.__maruProxyBlobUrl){ URL.revokeObjectURL(f.__maruProxyBlobUrl); f.__maruProxyBlobUrl=''; } }); }catch(e){}
+        renderPage(currentPage || 1, true);
+        status.textContent = statusResultsText(actualResultCountForStatus(), lastQuery || input.value || '', activeType);
+      });
+
+      const open = document.createElement('a');
+      open.href = target;
+      open.target = '_blank';
+      open.rel = 'noopener noreferrer';
+      open.dataset.maruExternal = '1';
+      open.textContent = uiText('sourcePage', 'Original page');
+
+      actions.appendChild(back);
+      actions.appendChild(open);
+      head.appendChild(titleWrap);
+      head.appendChild(actions);
+      shell.appendChild(head);
+
+      if(descText){
+        const summary = document.createElement('div');
+        summary.className = 'maru-search-owned-result-summary';
+        summary.textContent = descText;
+        shell.appendChild(summary);
       }
+
+      const proxySrc = proxyUrlForResult(target);
+      if(proxySrc){
+        const proxyBox = document.createElement('div');
+        proxyBox.className = 'maru-search-owned-proxy maru-search-owned-proxy-minimal';
+        const loading = document.createElement('div');
+        loading.className = 'maru-search-owned-proxy-loading';
+        loading.textContent = uiText('receiving', 'receiving...');
+        const frame = document.createElement('iframe');
+        frame.className = 'maru-search-owned-proxy-frame';
+        frame.loading = 'eager';
+        frame.referrerPolicy = 'no-referrer-when-downgrade';
+        frame.sandbox = 'allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads allow-same-origin';
+        frame.title = displayTitle.slice(0, 120);
+        proxyBox.appendChild(loading);
+        proxyBox.appendChild(frame);
+        shell.appendChild(proxyBox);
+        loadProxyHtmlIntoFrame(frame, loading, proxySrc, target);
+      }
+
+      results.innerHTML = '';
+      results.appendChild(shell);
+      drawPager();
+      status.textContent = statusResultsText(actualResultCountForStatus(), lastQuery || input.value || '', activeType);
+      try { results.scrollIntoView({ block:'start', behavior:'smooth' }); } catch(e) {}
+    }
+
+    function openResultInsideSearchFrame(url, it){
+      // Google/Naver-style behavior for IGDC:
+      // keep the IGDC search header, tabs, pager and render the selected result
+      // as our own search-owned detail page and load the source through the
+      // server proxy iframe so the browser does not leave IGDC Search.
+      renderSearchOwnedResultView(url, it);
     }
 
     function displayUrlForImageItemClient(it, src){
@@ -3022,6 +3698,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         card.style.cursor = 'pointer';
         card.addEventListener('click', (e) => {
           if (e.target && e.target.closest && e.target.closest('a, button, iframe, video, .maru-video-embed-wrap, .maru-card-media')) return;
+          e.preventDefault();
+          e.stopPropagation();
           openResultInsideSearchFrame(url, it);
         });
       }
@@ -3038,7 +3716,8 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       if (url) {
         const a = document.createElement('a');
-        a.href = url;
+        a.href = buildSearchOwnedResultHref(url);
+        a.dataset.originalUrl = url;
         a.target = '_self';
         a.rel = 'noopener';
         a.textContent = (it.title || '').trim() || '(no title)';
@@ -3605,7 +4284,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         renderPage(page);
         return;
       }
-      status.textContent = `Loading page ${page} for "${q}"...`;
+      status.textContent = `${uiText('loadingPage', 'Loading page')} ${page} ${uiText('resultsFor', 'for')} "${q}"...`;
       try{
         const pack = await fetchSearch(q, activeType, page);
         const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
@@ -3617,14 +4296,14 @@ if (it.riskLabel === '⚠️ high-risk') {
         } else if(serverTotalItems > ((page - 1) * PAGE_SIZE)){
           // Do not silently render a blank page when the pager says that page exists.
           // Keep the loading state visible and let the user retry by clicking the page again.
-          status.textContent = `Page ${page} data is being supplied for "${q}"...`;
+          status.textContent = `${uiText('pageDataSupplying', 'Page data is being supplied')} ${page} · "${q}"...`;
         }
       }catch(e){
         console.warn('server page fetch skipped:', e);
       }
       if(loadedServerPages.has(page) || page <= preloadPageCountFromItems(allItems)){
         renderPage(page);
-        status.textContent = `${actualResultCountForStatus()} results for "${q}" · ${getTypeLabel(activeType)}`;
+        status.textContent = statusResultsText(actualResultCountForStatus(), q, activeType);
       }
     }
 
@@ -3745,7 +4424,7 @@ async function runSearch(q, type = activeType){
   loadedServerPages.clear();
 
   signalSanmaruSearch(qq, activeType, 'run-search');
-  status.textContent = `Receiving ${getTypeLabel(activeType)} supply for "${qq}"...`;
+  status.textContent = `${uiText('receiving', 'receiving...')} ${getTypeLabel(activeType)} · "${qq}"...`;
   renderSkeleton();
   clearPager();
 
@@ -3766,7 +4445,7 @@ async function runSearch(q, type = activeType){
     intakeStarted = true;
     if(intakeTimer) clearTimeout(intakeTimer);
     startContinuousIntake(qq, activeType, seq);
-    status.textContent = `${actualResultCountForStatus()} results for "${qq}" · ${getTypeLabel(activeType)} · receiving...`;
+    status.textContent = statusResultsText(actualResultCountForStatus(), qq, activeType, true);
   }
 
   function applySupplyPack(pack, sourceName){
@@ -3805,7 +4484,7 @@ async function runSearch(q, type = activeType){
     }else if(firstPaintDone){
       drawPager();
     }
-    status.textContent = `${actualResultCountForStatus()} results for "${qq}" · ${getTypeLabel(activeType)} · receiving...`;
+    status.textContent = statusResultsText(actualResultCountForStatus(), qq, activeType, true);
     if(!intakeStarted && allItems.length >= 250){
       setTimeout(() => startIntakeOnce('receiver-250-open-pipe'), 0);
     }
@@ -3832,7 +4511,7 @@ async function runSearch(q, type = activeType){
 
     if(!firstPaintDone){
       results.innerHTML = '';
-      status.textContent = `No quick results for "${qq}" · receiving...`;
+      status.textContent = `${uiText('noQuickResults', 'No quick results')} "${qq}" · ${uiText('receiving', 'receiving...')}`;
     }
 
     // Do not wait for Sanmaru/MaruSearch to finish all lanes. Start the faucet
@@ -3857,7 +4536,7 @@ async function runSearch(q, type = activeType){
     if(!firstPaintDone){
       results.innerHTML = '';
       clearPager();
-      status.textContent = `No results for "${qq}"`;
+      status.textContent = `${uiText('noResults', 'No results')} "${qq}"`;
     }
     startIntakeOnce('fallback');
   }
