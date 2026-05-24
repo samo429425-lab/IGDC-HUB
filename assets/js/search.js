@@ -674,11 +674,81 @@ function proxyUrlForResult(target){
   try{
     const u = new URL(raw, location.href);
     if(!/^https?:$/.test(u.protocol)) return '';
-    return SEARCH_PAGE_PROXY_URL + '?url=' + encodeURIComponent(u.href);
+    return SEARCH_PAGE_PROXY_URL + '?safe=1&embed=1&url=' + encodeURIComponent(u.href);
   }catch(e){
     return '';
   }
 }
+
+
+function proxyFailSrcdoc(target, message){
+  const safeTarget = String(target || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const safeMessage = String(message || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>body{margin:0;background:#f8fafc;color:#334155;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.box{max-width:780px;margin:42px auto;padding:24px;border:1px solid #e2e8f0;border-radius:16px;background:#fff;box-shadow:0 10px 30px rgba(15,23,42,.06)}h3{margin:0 0 10px;color:#0f172a;font-size:18px}.url{margin-top:12px;padding:10px;border-radius:10px;background:#f1f5f9;color:#64748b;font-size:13px;word-break:break-all}.small{font-size:13px;line-height:1.6;color:#64748b}</style></head><body><div class="box"><h3>내부 원문 표시를 완료하지 못했습니다.</h3><p class="small">검색 화면은 유지됩니다. 원문 사이트가 서버 접근을 차단했거나 프록시 함수가 아직 배포되지 않았을 수 있습니다.</p><p class="small">' + safeMessage + '</p><div class="url">' + safeTarget + '</div></div></body></html>';
+}
+
+async function loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target){
+  if(!frame || !proxySrc) return;
+  let settled = false;
+  let blobUrl = '';
+
+  const finish = () => {
+    if(settled) return;
+    settled = true;
+    try{ if(loadingEl) loadingEl.remove(); }catch(e){}
+  };
+
+  const installHtml = (htmlText) => {
+    const html = String(htmlText || '') || proxyFailSrcdoc(target, 'empty proxy response');
+
+    // Prefer Blob over direct iframe navigation/srcdoc. This avoids external
+    // frame blocking and keeps the IGDC search shell, tabs, pager and history
+    // in the top page. The iframe is only a viewport inside #searchResults.
+    try{
+      if(frame.__maruProxyBlobUrl){
+        try{ URL.revokeObjectURL(frame.__maruProxyBlobUrl); }catch(e){}
+        frame.__maruProxyBlobUrl = '';
+      }
+      const blob = new Blob([html], { type:'text/html;charset=utf-8' });
+      blobUrl = URL.createObjectURL(blob);
+      frame.__maruProxyBlobUrl = blobUrl;
+      frame.removeAttribute('srcdoc');
+      frame.onload = () => finish();
+      frame.src = blobUrl;
+      setTimeout(finish, 1800);
+      return;
+    }catch(e){
+      try{
+        frame.removeAttribute('src');
+        frame.srcdoc = html;
+        frame.onload = () => finish();
+        setTimeout(finish, 1800);
+        return;
+      }catch(e2){}
+    }
+
+    frame.removeAttribute('src');
+    frame.srcdoc = proxyFailSrcdoc(target, 'viewer install failed');
+    finish();
+  };
+
+  try{
+    if(loadingEl) loadingEl.textContent = uiText('receiving', 'receiving...');
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 16000);
+    const r = await fetch(proxySrc, { cache:'no-store', credentials:'same-origin', signal:ctrl.signal });
+    const text = await r.text();
+    clearTimeout(timer);
+    if(!r.ok){
+      installHtml(proxyFailSrcdoc(target, 'proxy status ' + r.status));
+      return;
+    }
+    installHtml(text);
+  }catch(e){
+    installHtml(proxyFailSrcdoc(target, String(e && e.message || e || 'proxy failed')));
+  }
+}
+
 
 function originalUrlFromMaybeProxy(href){
   const raw = String(href || '').trim();
@@ -3323,6 +3393,7 @@ async function fetchInstantSearchPack(q, type = activeType){
           u.searchParams.delete('target');
           history.replaceState({ ...(history.state || {}), __maruSearchOwnedResult:false }, '', u.toString());
         }catch(e){}
+        try{ document.querySelectorAll('.maru-search-owned-proxy-frame').forEach(f => { if(f.__maruProxyBlobUrl){ URL.revokeObjectURL(f.__maruProxyBlobUrl); f.__maruProxyBlobUrl=''; } }); }catch(e){}
         renderPage(currentPage || 1, true);
         status.textContent = statusResultsText(actualResultCountForStatus(), lastQuery || input.value || '', activeType);
       });
@@ -3461,16 +3532,15 @@ async function fetchInstantSearchPack(q, type = activeType){
         loading.textContent = uiText('receiving', 'receiving...');
         const frame = document.createElement('iframe');
         frame.className = 'maru-search-owned-proxy-frame';
-        frame.src = proxySrc;
         frame.loading = 'eager';
         frame.referrerPolicy = 'no-referrer-when-downgrade';
-        frame.sandbox = 'allow-scripts allow-forms allow-popups allow-presentation allow-downloads';
+        frame.sandbox = 'allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads';
         frame.title = String((it && it.title) || target).slice(0, 120);
-        frame.addEventListener('load', () => { try{ loading.remove(); }catch(e){} });
         proxyBox.appendChild(proxyHead);
         proxyBox.appendChild(loading);
         proxyBox.appendChild(frame);
         shell.appendChild(proxyBox);
+        loadProxyHtmlIntoFrame(frame, loading, proxySrc, target);
       }
 
       results.innerHTML = '';
