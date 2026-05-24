@@ -734,6 +734,13 @@ window.addEventListener('popstate', (e) => {
 
   const state = e.state || {};
 
+  // Internal search detail history restore: keep search.html header/tabs/pager
+  // and redraw the selected result detail without iframe/external-page embedding.
+  if (state && state.__maruSearchDetail) {
+    renderInternalSearchDetail(state.detailUrl || '', state.detailItem || {}, true);
+    return;
+  }
+
   // 1️⃣ 검색 진입 이전 페이지로 복귀
   if (state.__searchEntry && state.from) {
     location.href = state.from;
@@ -2781,6 +2788,229 @@ async function fetchInstantSearchPack(q, type = activeType){
       return '';
     }
 
+    function isDirectContentImageUrlClient(url){
+      const s = String(url || '').trim().toLowerCase();
+      return /^https?:\/\//i.test(s) && /\.(png|jpe?g|webp|gif|avif)(\?|#|$)/i.test(s);
+    }
+
+    function firstCardTextClient(){
+      for(let i=0; i<arguments.length; i++){
+        const text = compactCardTextClient(arguments[i]);
+        if(text) return text;
+      }
+      return '';
+    }
+
+    function detailSummaryForItemClient(it){
+      it = it && typeof it === 'object' ? it : {};
+      const dc = it.displayCard && typeof it.displayCard === 'object' ? it.displayCard : {};
+      const p = it.payload && typeof it.payload === 'object' ? it.payload : {};
+      const media = it.media && typeof it.media === 'object' ? it.media : {};
+      const preview = media.preview && typeof media.preview === 'object' ? media.preview : {};
+      const body = firstCardTextClient(
+        dc.body, dc.summary, dc.description, dc.snippet, dc.text,
+        it.displaySummary, it.summary, it.snippet, it.description, it.contentSnippet,
+        it.excerpt, it.abstract, it.content, it.text, it.metaDescription, it.ogDescription,
+        p.summary, p.snippet, p.description, p.contentSnippet, p.excerpt, p.abstract, p.content, p.text,
+        preview.description, preview.caption
+      );
+      return body ? body.slice(0, 1200) : '';
+    }
+
+    function detailImagesForItemClient(it, target){
+      const out = [];
+      const seen = new Set();
+      function add(v){
+        const s = String(v || '').trim();
+        if(!s) return;
+        if(!/^https?:\/\//i.test(s) && !s.startsWith('/')) return;
+        if(isDirectContentImageUrlClient(s) || isMeaningfulImageForItemClient(s, it || {})){
+          const key = s.split('#')[0].toLowerCase();
+          if(!seen.has(key)){ seen.add(key); out.push(s); }
+        }
+      }
+      if(isDirectContentImageUrlClient(target)) add(target);
+      try { collectNaturalImages(it || {}).forEach(add); } catch(e) {}
+      const dc = it && it.displayCard && typeof it.displayCard === 'object' ? it.displayCard : {};
+      const p = it && it.payload && typeof it.payload === 'object' ? it.payload : {};
+      [
+        dc.thumbnail, dc.image, dc.imageUrl,
+        it && it.thumbnail, it && it.thumb, it && it.image, it && it.imageUrl,
+        p.thumbnail, p.thumb, p.image, p.imageUrl, p.ogImage, p.og_image
+      ].forEach(add);
+      if(Array.isArray(dc.imageSet)) dc.imageSet.forEach(add);
+      if(Array.isArray(it && it.imageSet)) it.imageSet.forEach(add);
+      if(Array.isArray(p.imageSet)) p.imageSet.forEach(add);
+      return out.slice(0, 6);
+    }
+
+    function sourceLabelForItemClient(it, target){
+      const source = it && it.source;
+      if(source && typeof source === 'object') return String(source.name || source.platform || source.label || '').trim();
+      const raw = String(source || '').trim();
+      if(raw) return raw;
+      try { return new URL(target || '').hostname.replace(/^www\./, ''); } catch(e) { return ''; }
+    }
+
+    function renderInternalSearchDetail(target, it, fromHistory){
+      target = String(target || '').trim();
+      it = it && typeof it === 'object' ? it : {};
+      const titleText = String((it.displayCard && it.displayCard.title) || it.title || it.name || target || '검색 결과').trim();
+      const summary = detailSummaryForItemClient(it);
+      const source = sourceLabelForItemClient(it, target);
+      const images = detailImagesForItemClient(it, target);
+
+      if(!fromHistory){
+        try{
+          const u = new URL(location.href);
+          u.searchParams.set('view', 'result');
+          if(lastQuery || input.value) u.searchParams.set('q', lastQuery || input.value || '');
+          u.searchParams.set('page', String(currentPage || 1));
+          u.searchParams.set('block', String(currentBlock || 0));
+          if(activeType && activeType !== 'all') u.searchParams.set('type', activeType);
+          else u.searchParams.delete('type');
+          if(target) u.searchParams.set('u', target);
+          history.pushState({
+            __maruSearchDetail:true,
+            detailUrl:target,
+            detailItem:it,
+            q:lastQuery || input.value || '',
+            type:activeType,
+            page:currentPage || 1,
+            block:currentBlock || 0
+          }, '', u.toString());
+        }catch(e){}
+      }
+
+      results.innerHTML = '';
+      const wrap = document.createElement('article');
+      wrap.className = 'maru-result-viewer';
+      wrap.style.padding = '0';
+      wrap.style.border = '1px solid #e5e7eb';
+      wrap.style.borderRadius = '14px';
+      wrap.style.background = '#fff';
+      wrap.style.overflow = 'hidden';
+
+      const head = document.createElement('div');
+      head.className = 'maru-result-viewer-head';
+      head.style.display = 'flex';
+      head.style.alignItems = 'center';
+      head.style.justifyContent = 'space-between';
+      head.style.gap = '10px';
+      head.style.padding = '12px 14px';
+      head.style.borderBottom = '1px solid #eef2f7';
+      head.style.background = '#f8fafc';
+
+      const title = document.createElement('div');
+      title.className = 'maru-result-viewer-title';
+      title.textContent = titleText;
+      title.style.fontSize = '16px';
+      title.style.fontWeight = '900';
+      title.style.color = '#0f172a';
+      title.style.minWidth = '0';
+      title.style.overflow = 'hidden';
+      title.style.textOverflow = 'ellipsis';
+      title.style.whiteSpace = 'nowrap';
+
+      const actions = document.createElement('div');
+      actions.className = 'maru-result-viewer-actions';
+      actions.style.display = 'flex';
+      actions.style.gap = '8px';
+      actions.style.flex = '0 0 auto';
+
+      const back = document.createElement('button');
+      back.type = 'button';
+      back.textContent = '검색 목록';
+      back.addEventListener('click', () => {
+        try { history.back(); }
+        catch(e) { renderPage(currentPage || 1, true); }
+      });
+
+      const original = document.createElement('a');
+      original.href = target || '#';
+      original.textContent = '원문 보기';
+      original.rel = 'noopener';
+      original.style.display = target ? '' : 'none';
+
+      actions.appendChild(back);
+      actions.appendChild(original);
+      head.appendChild(title);
+      head.appendChild(actions);
+      wrap.appendChild(head);
+
+      const body = document.createElement('div');
+      body.style.padding = '18px 18px 22px';
+
+      if(source || target){
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.style.marginBottom = '12px';
+        meta.style.color = '#64748b';
+        meta.style.fontSize = '13px';
+        meta.textContent = [source, target].filter(Boolean).join(' · ');
+        body.appendChild(meta);
+      }
+
+      const h1 = document.createElement('h1');
+      h1.textContent = titleText;
+      h1.style.fontSize = '24px';
+      h1.style.lineHeight = '1.25';
+      h1.style.margin = '0 0 12px';
+      h1.style.color = '#111827';
+      body.appendChild(h1);
+
+      if(summary){
+        const p = document.createElement('p');
+        p.textContent = summary;
+        p.style.fontSize = '15px';
+        p.style.lineHeight = '1.72';
+        p.style.color = '#334155';
+        p.style.margin = '0 0 16px';
+        body.appendChild(p);
+      }
+
+      if(images.length){
+        const grid = document.createElement('div');
+        grid.style.display = 'grid';
+        grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(220px, 1fr))';
+        grid.style.gap = '10px';
+        grid.style.margin = '12px 0 18px';
+        images.forEach(src => {
+          const img = document.createElement('img');
+          img.src = src;
+          img.alt = titleText;
+          img.loading = 'lazy';
+          img.style.width = '100%';
+          img.style.minHeight = '160px';
+          img.style.maxHeight = '320px';
+          img.style.objectFit = 'cover';
+          img.style.borderRadius = '12px';
+          img.style.border = '1px solid #e5e7eb';
+          grid.appendChild(img);
+        });
+        body.appendChild(grid);
+      }
+
+      const note = document.createElement('div');
+      note.style.marginTop = '12px';
+      note.style.padding = '12px 14px';
+      note.style.border = '1px solid #e5e7eb';
+      note.style.borderRadius = '12px';
+      note.style.background = '#f8fafc';
+      note.style.color = '#475569';
+      note.style.fontSize = '13px';
+      note.style.lineHeight = '1.55';
+      note.textContent = summary
+        ? '이 화면은 IGDC 검색 결과 상세 화면입니다. 상단 검색창, 카테고리, 페이지 목록은 유지되며 원문은 원문 보기로 이동할 수 있습니다.'
+        : '이 결과는 원문 본문 요약이 충분히 내려오지 않았습니다. 상단 검색창, 카테고리, 페이지 목록은 유지되며 원문은 원문 보기로 이동할 수 있습니다.';
+      body.appendChild(note);
+
+      wrap.appendChild(body);
+      results.appendChild(wrap);
+      drawPager();
+      try { results.scrollIntoView({ block:'start', behavior:'smooth' }); } catch(e) {}
+    }
+
     function openResultInsideSearchFrame(url, it){
       const target = String(url || '').trim();
       if(!target) return;
@@ -2788,51 +3018,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         try { window.location.href = target; } catch(e) {}
         return;
       }
-      try{
-        const viewer = document.createElement('div');
-        viewer.className = 'maru-result-viewer';
-
-        const head = document.createElement('div');
-        head.className = 'maru-result-viewer-head';
-
-        const title = document.createElement('div');
-        title.className = 'maru-result-viewer-title';
-        title.textContent = String((it && it.title) || target).trim() || target;
-
-        const actions = document.createElement('div');
-        actions.className = 'maru-result-viewer-actions';
-
-        const back = document.createElement('button');
-        back.type = 'button';
-        back.textContent = '검색 결과로 돌아가기';
-        back.addEventListener('click', () => renderPage(currentPage || 1, true));
-
-        const open = document.createElement('a');
-        open.href = target;
-        open.target = '_blank';
-        open.rel = 'noopener';
-        open.textContent = '새 창 열기';
-
-        actions.appendChild(back);
-        actions.appendChild(open);
-        head.appendChild(title);
-        head.appendChild(actions);
-
-        const iframe = document.createElement('iframe');
-        iframe.src = target;
-        iframe.loading = 'eager';
-        iframe.referrerPolicy = 'no-referrer-when-downgrade';
-        iframe.title = title.textContent;
-
-        viewer.appendChild(head);
-        viewer.appendChild(iframe);
-        results.innerHTML = '';
-        results.appendChild(viewer);
-        drawPager();
-        try { results.scrollIntoView({ block:'start', behavior:'smooth' }); } catch(e) {}
-      }catch(e){
-        try { window.location.href = target; } catch(_e) {}
-      }
+      renderInternalSearchDetail(target, it || {}, false);
     }
 
     function displayUrlForImageItemClient(it, src){
@@ -3662,11 +3848,7 @@ function updateSearchPageHistory(page, block) {
 }
 
 function drawPager(){
-  // Do not shrink the search page bar below the initial 12-page / 300-result window
-  // while a search is active. Actual results can keep growing as Maru Search supplies
-  // page 13, 14, 15...; but the UI must not collapse to 3~8 pages during first paint.
-  const pagerFloorPages = lastQuery ? INITIAL_PROGRESSIVE_PAGER_PAGES : 1;
-  const pages = Math.min(MAX_PAGER_PAGES, Math.max(pagerFloorPages, Math.ceil(visibleItemCountForPager() / PAGE_SIZE)));
+  const pages = Math.min(MAX_PAGER_PAGES, Math.max(1, Math.ceil(visibleItemCountForPager() / PAGE_SIZE)));
   if (pages <= 1) { clearPager(); return; }
 
   const bar = ensurePager();
@@ -3751,10 +3933,13 @@ async function runSearch(q, type = activeType){
   signalSanmaruSearch(qq, activeType, 'run-search');
   status.textContent = `Receiving ${getTypeLabel(activeType)} supply for "${qq}"...`;
   renderSkeleton();
+  clearPager();
+  // Keep the first 12 pages visible while the first 300-result window is filling.
+  // This must not depend on how many cards have arrived in the first server response.
+  drawPager();
 
   currentBlock = 0;
   currentPage = 1;
-  drawPager();
   lastQuery = qq;
   lastType = activeType;
   pageImageEnrichCache.clear();
@@ -3842,7 +4027,7 @@ async function runSearch(q, type = activeType){
     // Do not wait for Sanmaru/MaruSearch to finish all lanes. Start the faucet
     // shortly after first paint, but let the page-1 300-window seed pages 1~12
     // first when it arrives quickly.
-    intakeTimer = setTimeout(() => startIntakeOnce('first-paint-timer'), 10);
+    intakeTimer = setTimeout(() => startIntakeOnce('first-paint-timer'), 50);
 
     maruWindowPromise.then(res => {
       if(runSearch._seq !== seq || !res || res.error) return;
