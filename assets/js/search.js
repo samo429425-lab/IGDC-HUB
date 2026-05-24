@@ -3580,10 +3580,11 @@ async function fetchInstantSearchPack(q, type = activeType){
       }
 
       const proxyId = 'maru-proxy-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
-      // Load the proxied page as fetched HTML and then inject it into an iframe.
-      // This prevents the external page from taking over browser history or
-      // hanging the top IGDC search page, while still rendering in the same area.
-      const proxySrc = proxyUrlForResult(target, { mode: 'live', proxyId });
+      // Stable embedded viewer: load the Netlify proxy as an iframe URL.
+      // Do not fetch+srcdoc. srcdoc turns the document into about:srcdoc and
+      // causes many public/official scripts to loop, freeze, or lose their base
+      // navigation. The proxy itself rewrites links so the IGDC shell is kept.
+      const proxySrc = proxyUrlForResult(target, { mode: 'static', proxyId });
       if(proxySrc){
         const proxyBox = document.createElement('div');
         proxyBox.className = 'maru-search-owned-proxy';
@@ -3593,15 +3594,20 @@ async function fetchInstantSearchPack(q, type = activeType){
         const frame = document.createElement('iframe');
         frame.className = 'maru-search-owned-proxy-frame';
         frame.dataset.proxyId = proxyId;
+        frame.src = proxySrc;
         frame.loading = 'eager';
         frame.referrerPolicy = 'no-referrer-when-downgrade';
-        frame.sandbox = 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads';
+        // No allow-top-navigation and no popup escape: the source cannot replace
+        // the IGDC search tab. Scripts are disabled by mode=static, so this viewer
+        // stays stable and does not trigger Chrome's unresponsive-page dialog.
+        frame.sandbox = 'allow-forms allow-popups allow-presentation allow-downloads';
         frame.title = displayTitle.slice(0, 120);
+        frame.addEventListener('load', () => { try{ loading.remove(); }catch(e){} });
+        setTimeout(() => { try{ loading.remove(); }catch(e){} }, 1800);
         proxyBox.appendChild(loading);
         proxyBox.appendChild(frame);
         shell.appendChild(proxyBox);
         installProxyViewerMessageBridge();
-        loadProxyHtmlIntoFrame(frame, loading, proxySrc, target);
       }else{
         const empty = document.createElement('div');
         empty.className = 'maru-search-owned-empty';
