@@ -107,6 +107,72 @@ ready(function () {
       bootSanmaruOnce(reason || 'search-signal', q, type);
     }
 
+    function isSafeOriginalUrl(url){
+      const raw = String(url || '').trim();
+      if (!raw) return false;
+      if (/^(javascript|data|vbscript):/i.test(raw)) return false;
+      try {
+        const u = new URL(raw, location.href);
+        return /^https?:$/i.test(u.protocol);
+      } catch(e) {
+        return false;
+      }
+    }
+
+    function rememberSearchReturnState(url, item){
+      try {
+        const state = {
+          q: lastQuery || (input && input.value ? input.value.trim() : '') || (new URLSearchParams(location.search).get('q') || ''),
+          type: normalizeSearchType(activeType || lastType || 'all'),
+          page: currentPage || 1,
+          block: currentBlock || 0,
+          scrollY: window.scrollY || 0,
+          href: location.href,
+          openedUrl: String(url || ''),
+          title: item && item.title ? String(item.title).slice(0, 180) : '',
+          ts: Date.now()
+        };
+        sessionStorage.setItem('maruSearchReturnState', JSON.stringify(state));
+        history.replaceState(Object.assign({}, history.state || {}, {
+          __maruSearchReturnReady: true,
+          q: state.q,
+          type: state.type,
+          page: state.page,
+          block: state.block
+        }), '', location.href);
+      } catch(e) {}
+    }
+
+    function restoreSearchScrollIfReturning(){
+      if (!isSearchPage) return;
+      try {
+        const raw = sessionStorage.getItem('maruSearchReturnState');
+        if (!raw) return;
+        const state = JSON.parse(raw);
+        if (!state || !state.ts || Date.now() - state.ts > 60 * 60 * 1000) {
+          sessionStorage.removeItem('maruSearchReturnState');
+          return;
+        }
+        const sp = new URLSearchParams(location.search);
+        const q = (sp.get('q') || '').trim();
+        if (state.q && q && state.q !== q) return;
+        const targetY = Math.max(0, Number(state.scrollY) || 0);
+        setTimeout(() => window.scrollTo({ top: targetY, left: 0, behavior: 'auto' }), 80);
+        setTimeout(() => window.scrollTo({ top: targetY, left: 0, behavior: 'auto' }), 450);
+      } catch(e) {}
+    }
+
+    function openOriginalFromSearch(url, item, event){
+      if (!isSafeOriginalUrl(url)) return false;
+      if (event && typeof event.preventDefault === 'function') event.preventDefault();
+      if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+      rememberSearchReturnState(url, item);
+      // Same-tab navigation keeps the browser Back arrow active.
+      // It does not open a detached tab, and it avoids blocked iframe/viewer pages.
+      window.location.assign(String(url).trim());
+      return false;
+    }
+
 const params = new URLSearchParams(location.search);
 const q0 = (params.get('q') || '').trim();
 const from0 = (params.get('from') || '').trim();
@@ -620,6 +686,7 @@ updateSearchTabsActive();
 if (q0) {
   signalSanmaruSearch(q0, activeType, 'search-page-url-open');
   syncSearchFromUrl(true);
+  restoreSearchScrollIfReturning();
 } else {
   bootSanmaruOnce('search-ui-ready', '', activeType);
   status.textContent = '';
@@ -2674,51 +2741,6 @@ async function fetchInstantSearchPack(q, type = activeType){
       return false;
     }
 
-
-
-    function sanitizeOriginalUrlForOpen(url){
-      const raw = String(url || '').trim();
-      if(!raw) return '';
-      try {
-        const u = new URL(raw, location.origin);
-        if(!/^https?:$/i.test(u.protocol)) return '';
-        return u.href;
-      } catch(e) {
-        return /^https?:\/\//i.test(raw) ? raw : '';
-      }
-    }
-
-    function openOriginalFromSearchCard(url, event){
-      const href = sanitizeOriginalUrlForOpen(url);
-      if(!href) return false;
-      if(event && typeof event.preventDefault === 'function') event.preventDefault();
-      if(event && typeof event.stopPropagation === 'function') event.stopPropagation();
-
-      // 검색 화면(search.html)은 그대로 유지하고, 사용자가 누른 즉시 원문만 브라우저 기본 방식으로 연다.
-      // iframe/미리보기/확인 패널은 쓰지 않는다.
-      try {
-        const a = document.createElement('a');
-        a.href = href;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        a.style.position = 'fixed';
-        a.style.left = '-9999px';
-        a.style.top = '-9999px';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => { try { a.remove(); } catch(_) {} }, 0);
-        return true;
-      } catch(e) {
-        try {
-          const w = window.open(href, '_blank', 'noopener,noreferrer');
-          if(w && typeof w.focus === 'function') w.focus();
-          return !!w;
-        } catch(_) {
-          return false;
-        }
-      }
-    }
-
     function renderItem(it, mountTarget){
       const url = it.url || it.link || '';
       const domain = domainOf(url);
@@ -2732,8 +2754,8 @@ async function fetchInstantSearchPack(q, type = activeType){
       if (url) {
         card.style.cursor = 'pointer';
         card.addEventListener('click', (e) => {
-          if (e.target && e.target.closest && e.target.closest('a, button, iframe, video, .maru-video-embed-wrap')) return;
-          openOriginalFromSearchCard(url, e);
+          if (e.target && e.target.closest && e.target.closest('button, iframe, video, .maru-video-embed-wrap')) return;
+          return openOriginalFromSearch(url, it, e);
         });
       }
 
@@ -2750,12 +2772,13 @@ async function fetchInstantSearchPack(q, type = activeType){
       if (url) {
         const a = document.createElement('a');
         a.href = url;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
+        a.target = '_self';
+        a.rel = 'noopener';
+        a.dataset.originalUrl = url;
         a.textContent = (it.title || '').trim() || '(no title)';
         a.style.color = 'inherit';
         a.style.textDecoration = 'none';
-        a.addEventListener('click', (e) => openOriginalFromSearchCard(url, e));
+        a.addEventListener('click', (e) => openOriginalFromSearch(url, it, e));
         t.appendChild(a);
       } else {
         t.textContent = (it.title || '').trim() || '(no title)';
@@ -2862,14 +2885,11 @@ if (it.riskLabel === '⚠️ high-risk') {
           mediaCount === 2 ? '164px' :
           '176px';
 
-        mediaWrap.addEventListener('click', (e) => openOriginalFromSearchCard(url, e));
-
         naturalImages.forEach((src) => {
           const img = document.createElement('img');
           img.src = src;
           img.loading = 'lazy';
           img.alt = '';
-          img.style.cursor = url ? 'pointer' : '';
           img.onerror = () => img.remove();
           mediaWrap.appendChild(img);
         });
