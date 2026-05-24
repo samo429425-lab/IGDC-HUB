@@ -697,7 +697,6 @@ function proxyFailSrcdoc(target, message){
 async function loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target){
   if(!frame || !proxySrc) return;
   let settled = false;
-  let blobUrl = '';
 
   const finish = () => {
     if(settled) return;
@@ -708,31 +707,32 @@ async function loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target){
   const installHtml = (htmlText) => {
     const html = String(htmlText || '') || proxyFailSrcdoc(target, 'empty proxy response');
 
-    // Prefer Blob over direct iframe navigation/srcdoc. This avoids external
-    // frame blocking and keeps the IGDC search shell, tabs, pager and history
-    // in the top page. The iframe is only a viewport inside #searchResults.
+    // Use srcdoc, not iframe.src/blob navigation. This keeps the browser Back
+    // button owned by the IGDC search page instead of being captured by the
+    // nested source page history. The proxy injects a navigation bridge so
+    // links inside the source page reload this same iframe without leaving IGDC.
     try{
       if(frame.__maruProxyBlobUrl){
         try{ URL.revokeObjectURL(frame.__maruProxyBlobUrl); }catch(e){}
         frame.__maruProxyBlobUrl = '';
       }
+      frame.removeAttribute('src');
+      frame.srcdoc = html;
+      frame.onload = () => finish();
+      setTimeout(finish, 1800);
+      return;
+    }catch(e){}
+
+    try{
       const blob = new Blob([html], { type:'text/html;charset=utf-8' });
-      blobUrl = URL.createObjectURL(blob);
+      const blobUrl = URL.createObjectURL(blob);
       frame.__maruProxyBlobUrl = blobUrl;
       frame.removeAttribute('srcdoc');
       frame.onload = () => finish();
       frame.src = blobUrl;
       setTimeout(finish, 1800);
       return;
-    }catch(e){
-      try{
-        frame.removeAttribute('src');
-        frame.srcdoc = html;
-        frame.onload = () => finish();
-        setTimeout(finish, 1800);
-        return;
-      }catch(e2){}
-    }
+    }catch(e2){}
 
     frame.removeAttribute('src');
     frame.srcdoc = proxyFailSrcdoc(target, 'viewer install failed');
@@ -742,7 +742,7 @@ async function loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target){
   try{
     if(loadingEl) loadingEl.textContent = uiText('receiving', 'receiving...');
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 16000);
+    const timer = setTimeout(() => ctrl.abort(), 18000);
     const r = await fetch(proxySrc, { cache:'no-store', credentials:'same-origin', signal:ctrl.signal });
     const text = await r.text();
     clearTimeout(timer);
@@ -754,6 +754,31 @@ async function loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target){
   }catch(e){
     installHtml(proxyFailSrcdoc(target, String(e && e.message || e || 'proxy failed')));
   }
+}
+
+function installProxyViewerMessageBridge(){
+  if(installProxyViewerMessageBridge._done) return;
+  installProxyViewerMessageBridge._done = true;
+  window.addEventListener('message', function(ev){
+    const data = ev && ev.data;
+    if(!data || typeof data !== 'object') return;
+    if(data.__igdcProxyNavigate !== 1) return;
+    const proxyId = String(data.proxyId || '');
+    const nextUrl = String(data.url || '').trim();
+    if(!proxyId || !nextUrl) return;
+    const frame = Array.from(document.querySelectorAll('.maru-search-owned-proxy-frame')).find(f => f && f.dataset && f.dataset.proxyId === proxyId);
+    if(!frame) return;
+    const proxyBox = frame.closest('.maru-search-owned-proxy');
+    let loading = proxyBox && proxyBox.querySelector('.maru-search-owned-proxy-loading');
+    if(!loading && proxyBox){
+      loading = document.createElement('div');
+      loading.className = 'maru-search-owned-proxy-loading';
+      loading.textContent = uiText('receiving', 'receiving...');
+      proxyBox.insertBefore(loading, frame);
+    }
+    const src = proxyUrlForResult(nextUrl, { mode:'live', proxyId });
+    loadProxyHtmlIntoFrame(frame, loading, src, nextUrl);
+  });
 }
 
 
@@ -3253,6 +3278,11 @@ async function fetchInstantSearchPack(q, type = activeType){
           border: 0;
           background: #ffffff;
         }
+        .maru-search-owned-image-grid {
+          padding: 16px;
+          margin: 0;
+          border-top: 1px solid #edf0f5;
+        }
         .maru-search-owned-empty {
           padding: 34px 16px 46px;
           text-align: center;
@@ -3386,6 +3416,74 @@ async function fetchInstantSearchPack(q, type = activeType){
       });
     }
 
+    function isImageProviderResult(target, it){
+      const raw = String(target || '').toLowerCase();
+      const source = String((it && (it.source || it.provider || it.channel || it.type || it.category)) || '').toLowerCase();
+      return /bing\.com\/images|google\.[^/]+\/search.*(?:tbm=isch|udm=2)|search\.naver\.com\/search\.naver.*where=image|image_passthrough|bing_image|google_image|naver_image/.test(raw + ' ' + source);
+    }
+
+    function collectImageProviderItems(seed){
+      const out = [];
+      const seen = new Set();
+      function push(it){
+        if(!it) return;
+        const imgs = dedupeImageVariantsClient(collectNaturalImages(it));
+        const src = imgs[0] || String((it && (it.image || it.thumbnail || it.thumb)) || '').trim();
+        if(!src) return;
+        const key = normalizeImageVariantKeyClient(src) || src.toLowerCase();
+        if(seen.has(key)) return;
+        seen.add(key);
+        out.push(it);
+      }
+      push(seed);
+      (Array.isArray(allItems) ? allItems : []).forEach(push);
+      return out.slice(0, 120);
+    }
+
+    function appendNativeImageProviderView(shell, seedItem){
+      const list = collectImageProviderItems(seedItem);
+      if(!list.length) return false;
+      const grid = document.createElement('div');
+      grid.className = 'maru-image-gallery-grid maru-search-owned-image-grid';
+      list.forEach((imgItem) => {
+        const images = dedupeImageVariantsClient(collectNaturalImages(imgItem));
+        const src = images[0] || String((imgItem && (imgItem.image || imgItem.thumbnail || imgItem.thumb)) || '').trim();
+        if(!src) return;
+        const tile = document.createElement('div');
+        tile.className = 'maru-image-tile';
+        tile.title = String((imgItem && imgItem.title) || '').trim();
+        const img = document.createElement('img');
+        img.src = src;
+        img.loading = 'lazy';
+        img.alt = String((imgItem && imgItem.title) || '').trim();
+        img.onload = () => {
+          try{
+            const w = img.naturalWidth || 0;
+            const h = img.naturalHeight || 0;
+            tile.dataset.orientation = h > w * 1.18 ? 'portrait' : (w > h * 1.25 ? 'landscape' : 'square');
+          }catch(e){}
+        };
+        img.onerror = () => tile.remove();
+        tile.appendChild(img);
+        const capText = String((imgItem && imgItem.title) || '').trim();
+        if(capText){
+          const cap = document.createElement('div');
+          cap.className = 'maru-image-tile-caption';
+          cap.textContent = capText;
+          tile.appendChild(cap);
+        }
+        tile.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const pageUrl = displayUrlForImageItemClient(imgItem, src);
+          if(pageUrl) openResultInsideSearchFrame(pageUrl, imgItem);
+        });
+        grid.appendChild(tile);
+      });
+      shell.appendChild(grid);
+      return !!grid.childNodes.length;
+    }
+
     function renderSearchOwnedResultView(url, it, opts){
       opts = opts || {};
       const target = String(url || '').trim();
@@ -3465,7 +3563,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       open.target = '_blank';
       open.rel = 'noopener noreferrer';
       open.dataset.maruExternal = '1';
-      open.textContent = uiText('sourcePage', 'Original page');
+      open.textContent = uiText('openNewWindow', '새 창 열기');
 
       actions.appendChild(back);
       actions.appendChild(open);
@@ -3473,11 +3571,19 @@ async function fetchInstantSearchPack(q, type = activeType){
       head.appendChild(actions);
       shell.appendChild(head);
 
+      if(isImageProviderResult(target, it) && appendNativeImageProviderView(shell, it)){
+        results.innerHTML = '';
+        results.appendChild(shell);
+        drawPager();
+        status.textContent = statusResultsText(actualResultCountForStatus(), lastQuery || input.value || '', activeType);
+        return;
+      }
+
       const proxyId = 'maru-proxy-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
       // Load the proxied page as fetched HTML and then inject it into an iframe.
       // This prevents the external page from taking over browser history or
       // hanging the top IGDC search page, while still rendering in the same area.
-      const proxySrc = proxyUrlForResult(target, { static: '1', proxyId });
+      const proxySrc = proxyUrlForResult(target, { mode: 'live', proxyId });
       if(proxySrc){
         const proxyBox = document.createElement('div');
         proxyBox.className = 'maru-search-owned-proxy';
@@ -3486,13 +3592,15 @@ async function fetchInstantSearchPack(q, type = activeType){
         loading.textContent = uiText('receiving', 'receiving...');
         const frame = document.createElement('iframe');
         frame.className = 'maru-search-owned-proxy-frame';
+        frame.dataset.proxyId = proxyId;
         frame.loading = 'eager';
         frame.referrerPolicy = 'no-referrer-when-downgrade';
-        frame.sandbox = 'allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads';
+        frame.sandbox = 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads';
         frame.title = displayTitle.slice(0, 120);
         proxyBox.appendChild(loading);
         proxyBox.appendChild(frame);
         shell.appendChild(proxyBox);
+        installProxyViewerMessageBridge();
         loadProxyHtmlIntoFrame(frame, loading, proxySrc, target);
       }else{
         const empty = document.createElement('div');
