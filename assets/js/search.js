@@ -1021,14 +1021,15 @@ window.addEventListener('popstate', (e) => {
 
   const state = e.state || {};
 
-  // 1️⃣ 검색 진입 이전 페이지로 복귀
-  if (state.__searchEntry && state.from) {
+  // 1️⃣ 검색 상세/목록 상태에서는 브라우저 뒤로가기가 반드시 검색 목록으로 복원되어야 한다.
+  // from 복귀는 검색어가 없는 순수 진입 상태에서만 허용한다.
+  const sp = new URLSearchParams(location.search);
+  if (state.__searchEntry && state.from && !sp.get('q') && !sp.get('view')) {
     location.href = state.from;
     return;
   }
 
   // 2️⃣ URL 기준으로 항상 복원 (state 의존 제거)
-  const sp = new URLSearchParams(location.search);
 
   const page = Math.max(
     1,
@@ -1987,20 +1988,29 @@ async function fetchInstantSearchPack(q, type = activeType){
       if(!row){
         row = document.createElement('div');
         row.id = 'maru-search-status-pager-row';
-        row.style.display = 'flex';
-        row.style.alignItems = 'center';
-        row.style.justifyContent = 'space-between';
-        row.style.gap = '12px';
-        row.style.padding = '6px 24px 6px';
-        row.style.minHeight = '34px';
-        row.style.borderBottom = '1px solid #f1f5f9';
-        row.style.background = '#fff';
         statusEl.parentNode.insertBefore(row, statusEl);
         row.appendChild(statusEl);
       }else if(statusEl.parentNode !== row){
         row.insertBefore(statusEl, row.firstChild || null);
       }
-      statusEl.style.flex = '1 1 auto';
+
+      // Google/Naver-like compact fixed search control line:
+      // status text stays on the left, the pager is visually centered, and
+      // the whole line remains sticky together with the search category tabs.
+      row.style.display = 'grid';
+      row.style.gridTemplateColumns = 'minmax(180px, 1fr) auto minmax(180px, 1fr)';
+      row.style.alignItems = 'center';
+      row.style.columnGap = '12px';
+      row.style.padding = '4px 24px';
+      row.style.minHeight = '34px';
+      row.style.borderBottom = '1px solid #f1f5f9';
+      row.style.background = '#fff';
+      row.style.position = 'sticky';
+      row.style.top = '116px';
+      row.style.zIndex = '88';
+      row.style.boxShadow = '0 1px 0 rgba(15,23,42,.03)';
+
+      statusEl.style.gridColumn = '1';
       statusEl.style.minWidth = '0';
       statusEl.style.margin = '0';
       statusEl.style.padding = '0';
@@ -2008,6 +2018,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       statusEl.style.overflow = 'hidden';
       statusEl.style.textOverflow = 'ellipsis';
       statusEl.style.fontSize = '12px';
+      statusEl.style.lineHeight = '1.2';
       return row;
     }
 
@@ -2016,13 +2027,6 @@ async function fetchInstantSearchPack(q, type = activeType){
       if (!bar){
         bar = document.createElement('div');
         bar.id = 'maru-page-controls';
-        bar.style.display = 'flex';
-        bar.style.alignItems = 'center';
-        bar.style.justifyContent = 'flex-end';
-        bar.style.gap = '4px';
-        bar.style.margin = '0';
-        bar.style.padding = '0';
-        bar.style.flex = '0 0 auto';
         const row = ensureStatusPagerRow();
         if(row) row.appendChild(bar);
         else status.parentNode.insertBefore(bar, status.nextSibling);
@@ -2030,6 +2034,15 @@ async function fetchInstantSearchPack(q, type = activeType){
         const row = ensureStatusPagerRow();
         if(row && bar.parentNode !== row) row.appendChild(bar);
       }
+      bar.style.gridColumn = '2';
+      bar.style.display = 'flex';
+      bar.style.alignItems = 'center';
+      bar.style.justifyContent = 'center';
+      bar.style.gap = '4px';
+      bar.style.margin = '0 auto';
+      bar.style.padding = '0';
+      bar.style.flex = '0 0 auto';
+      bar.style.whiteSpace = 'nowrap';
       return bar;
     }
 
@@ -3461,7 +3474,10 @@ async function fetchInstantSearchPack(q, type = activeType){
       shell.appendChild(head);
 
       const proxyId = 'maru-proxy-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
-      const proxySrc = proxyUrlForResult(target, { proxyId });
+      // Load the proxied page as fetched HTML and then inject it into an iframe.
+      // This prevents the external page from taking over browser history or
+      // hanging the top IGDC search page, while still rendering in the same area.
+      const proxySrc = proxyUrlForResult(target, { static: '1', proxyId });
       if(proxySrc){
         const proxyBox = document.createElement('div');
         proxyBox.className = 'maru-search-owned-proxy';
@@ -3470,17 +3486,14 @@ async function fetchInstantSearchPack(q, type = activeType){
         loading.textContent = uiText('receiving', 'receiving...');
         const frame = document.createElement('iframe');
         frame.className = 'maru-search-owned-proxy-frame';
-        frame.src = proxySrc;
         frame.loading = 'eager';
         frame.referrerPolicy = 'no-referrer-when-downgrade';
-        frame.sandbox = 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads';
+        frame.sandbox = 'allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads';
         frame.title = displayTitle.slice(0, 120);
-        frame.addEventListener('load', () => { try{ loading.remove(); }catch(e){} });
-        setTimeout(() => { try{ loading.remove(); }catch(e){} }, 1800);
-        bindProxyAutoFallback(frame, proxySrc, target, proxyId);
         proxyBox.appendChild(loading);
         proxyBox.appendChild(frame);
         shell.appendChild(proxyBox);
+        loadProxyHtmlIntoFrame(frame, loading, proxySrc, target);
       }else{
         const empty = document.createElement('div');
         empty.className = 'maru-search-owned-empty';
@@ -4340,9 +4353,9 @@ function drawPager(){
   bar.innerHTML = '';
 
   function stylePagerButton(b, on){
-    b.style.minWidth = '30px';
-    b.style.height = '30px';
-    b.style.padding = '0 9px';
+    b.style.minWidth = '28px';
+    b.style.height = '28px';
+    b.style.padding = '0 8px';
     b.style.borderRadius = '8px';
     b.style.border = '1px solid ' + (on ? '#4f46e5' : '#dbe2ea');
     b.style.background = on ? '#4f46e5' : '#ffffff';
