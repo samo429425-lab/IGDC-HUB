@@ -683,8 +683,7 @@ function proxyUrlForResult(target){
 
 function proxyFailSrcdoc(target, message){
   const safeTarget = String(target || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const safeMessage = String(message || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>body{margin:0;background:#f8fafc;color:#334155;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.box{max-width:780px;margin:42px auto;padding:24px;border:1px solid #e2e8f0;border-radius:16px;background:#fff;box-shadow:0 10px 30px rgba(15,23,42,.06)}h3{margin:0 0 10px;color:#0f172a;font-size:18px}.url{margin-top:12px;padding:10px;border-radius:10px;background:#f1f5f9;color:#64748b;font-size:13px;word-break:break-all}.small{font-size:13px;line-height:1.6;color:#64748b}</style></head><body><div class="box"><h3>내부 원문 표시를 완료하지 못했습니다.</h3><p class="small">검색 화면은 유지됩니다. 원문 사이트가 서버 접근을 차단했거나 프록시 함수가 아직 배포되지 않았을 수 있습니다.</p><p class="small">' + safeMessage + '</p><div class="url">' + safeTarget + '</div></div></body></html>';
+  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff;color:#334155;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.wrap{padding:32px 20px}.url{font-size:13px;color:#64748b;word-break:break-all}</style></head><body><div class="wrap"><div class="url">' + safeTarget + '</div></div></body></html>';
 }
 
 async function loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target){
@@ -3093,233 +3092,133 @@ async function fetchInstantSearchPack(q, type = activeType){
       style.id = 'maru-search-owned-result-style';
       style.textContent = `
         .maru-search-owned-result {
-          margin: 10px 0 22px;
-          border: 1px solid #e5e7eb;
-          border-radius: 14px;
+          margin: 8px 0 20px;
+          border: 1px solid #e6e8ef;
+          border-radius: 16px;
           background: #ffffff;
           overflow: hidden;
-          box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+          box-shadow: 0 1px 2px rgba(15,23,42,.04);
         }
         .maru-search-owned-result-head {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 12px;
-          padding: 12px 14px;
-          border-bottom: 1px solid #eef2f7;
-          background: linear-gradient(180deg, #ffffff, #f8fafc);
+          gap: 14px;
+          min-height: 52px;
+          padding: 10px 12px 10px 14px;
+          border-bottom: 1px solid #edf0f5;
+          background: #ffffff;
+        }
+        .maru-search-owned-result-head-main {
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
         }
         .maru-search-owned-result-kicker {
-          font-size: 13px;
-          font-weight: 900;
+          max-width: 900px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
           color: #111827;
+          font-size: 15px;
+          font-weight: 800;
+          line-height: 1.25;
+          letter-spacing: -0.01em;
+        }
+        .maru-search-owned-result-source {
+          max-width: 980px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          margin-top: 3px;
+          color: #64748b;
+          font-size: 12px;
+          font-weight: 600;
+          line-height: 1.2;
         }
         .maru-search-owned-result-actions {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 7px;
           flex: 0 0 auto;
         }
         .maru-search-owned-result-actions button,
         .maru-search-owned-result-actions a {
-          border: 1px solid #dbe2ea;
-          border-radius: 9px;
-          background: #fff;
+          height: 32px;
+          padding: 0 12px;
+          border: 1px solid #dfe4ee;
+          border-radius: 10px;
+          background: #ffffff;
           color: #334155;
-          padding: 7px 10px;
           font-size: 12px;
-          font-weight: 900;
+          font-weight: 800;
           text-decoration: none;
           cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          white-space: nowrap;
         }
         .maru-search-owned-result-actions a {
           background: #4f46e5;
           border-color: #4f46e5;
-          color: #fff;
+          color: #ffffff;
         }
-        .maru-search-owned-result-main {
-          padding: 18px 18px 20px;
-          display: grid;
-          grid-template-columns: minmax(0, 1.15fr) minmax(260px, .85fr);
-          gap: 18px;
-          align-items: start;
-        }
-        .maru-search-owned-result-source {
-          margin: 0 0 8px;
-          color: #64748b;
-          font-size: 13px;
-          font-weight: 700;
-          word-break: break-all;
-        }
-        .maru-search-owned-result-title {
-          margin: 0 0 10px;
-          color: #1a0dab;
-          font-size: 27px;
-          font-weight: 900;
-          line-height: 1.18;
-          letter-spacing: -0.03em;
-        }
-        .maru-search-owned-result-desc {
-          margin: 0 0 13px;
-          color: #334155;
-          font-size: 15px;
-          line-height: 1.72;
-          white-space: pre-wrap;
-        }
-        .maru-search-owned-result-facts {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-          margin: 12px 0 0;
-        }
-        .maru-search-owned-result-fact {
-          padding: 7px 9px;
-          border-radius: 999px;
-          background: #f1f5f9;
-          color: #334155;
-          font-size: 12px;
-          font-weight: 800;
-        }
-        .maru-search-owned-media-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 8px;
-        }
-        .maru-search-owned-media-grid img {
-          display: block;
-          width: 100%;
-          min-height: 128px;
-          max-height: 230px;
-          object-fit: cover;
-          border-radius: 12px;
-          border: 1px solid #e5e7eb;
-          background: #f8fafc;
-        }
-        .maru-search-owned-media-grid img:first-child {
-          grid-column: 1 / -1;
-          min-height: 210px;
-        }
-        .maru-search-owned-result-related {
-          margin-top: 14px;
-          padding-top: 12px;
-          border-top: 1px solid #eef2f7;
-        }
-        .maru-search-owned-result-related-title {
-          margin: 0 0 8px;
-          font-size: 13px;
-          font-weight: 900;
-          color: #111827;
-        }
-        .maru-search-owned-result-related-list {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-        }
-        .maru-search-owned-result-related-list button {
-          border: 1px solid #e5e7eb;
-          border-radius: 999px;
-          background: #f8fafc;
-          color: #111827;
-          padding: 7px 11px;
-          font-size: 12px;
-          font-weight: 800;
-          cursor: pointer;
+        .maru-search-owned-result-actions button:hover,
+        .maru-search-owned-result-actions a:hover {
+          filter: brightness(.98);
+          text-decoration: none;
         }
         .maru-search-owned-proxy {
-          margin: 0 18px 20px;
-          border: 1px solid #e5e7eb;
-          border-radius: 14px;
-          overflow: hidden;
-          background: #fff;
+          margin: 0;
+          border: 0;
+          border-radius: 0;
+          background: #ffffff;
         }
-        .maru-search-owned-proxy-head {
+        .maru-search-owned-proxy-loading {
+          height: 36px;
+          padding: 0 14px;
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          padding: 10px 12px;
-          border-bottom: 1px solid #eef2f7;
-          background: #f8fafc;
-        }
-        .maru-search-owned-proxy-title {
-          font-size: 13px;
-          font-weight: 900;
-          color: #0f172a;
-          white-space: nowrap;
-        }
-        .maru-search-owned-proxy-help {
-          min-width: 0;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+          border-bottom: 1px solid #edf0f5;
           color: #64748b;
           font-size: 12px;
           font-weight: 700;
-        }
-        .maru-search-owned-proxy-loading {
-          padding: 12px;
-          color: #64748b;
-          font-size: 13px;
-          font-weight: 800;
-          border-bottom: 1px solid #eef2f7;
+          background: #ffffff;
         }
         .maru-search-owned-proxy-frame {
           display: block;
           width: 100%;
-          min-height: calc(100vh - 280px);
-          height: 720px;
+          height: calc(100vh - 252px);
+          min-height: 620px;
           border: 0;
-          background: #fff;
+          background: #ffffff;
         }
-
-        .maru-search-owned-result-minimal .maru-search-owned-result-head {
-          padding: 10px 12px;
-          background: #fff;
-        }
-        .maru-search-owned-result-head-main {
-          min-width: 0;
-        }
-        .maru-search-owned-result-minimal .maru-search-owned-result-kicker {
-          max-width: 860px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          font-size: 17px;
-          color: #111827;
-        }
-        .maru-search-owned-result-head-source {
-          margin: 3px 0 0;
-          font-size: 12px;
+        .maru-search-owned-empty {
+          padding: 34px 16px 46px;
+          text-align: center;
           color: #64748b;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .maru-search-owned-result-summary {
-          padding: 11px 12px;
-          border-bottom: 1px solid #eef2f7;
-          color: #334155;
           font-size: 14px;
-          line-height: 1.55;
-          background: #fff;
-        }
-        .maru-search-owned-proxy-minimal {
-          margin: 0;
-          border: 0;
-          border-radius: 0;
-        }
-        .maru-search-owned-proxy-minimal .maru-search-owned-proxy-loading {
-          padding: 10px 12px;
-          border-bottom: 1px solid #eef2f7;
-          background: #fff;
-        }
-        .maru-search-owned-proxy-minimal .maru-search-owned-proxy-frame {
-          height: calc(100vh - 255px);
-          min-height: 560px;
+          line-height: 1.7;
+          background: #ffffff;
         }
         @media (max-width: 840px) {
-          .maru-search-owned-result-main { grid-template-columns: 1fr; }
-          .maru-search-owned-result-title { font-size: 23px; }
+          .maru-search-owned-result-head {
+            align-items: flex-start;
+            flex-direction: column;
+          }
+          .maru-search-owned-result-actions {
+            width: 100%;
+          }
+          .maru-search-owned-result-actions button,
+          .maru-search-owned-result-actions a {
+            flex: 1 1 auto;
+          }
+          .maru-search-owned-proxy-frame {
+            height: calc(100vh - 310px);
+            min-height: 520px;
+          }
         }
       `;
       document.head.appendChild(style);
@@ -3395,7 +3294,6 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const displayTitle = String((it && it.title) || sourceLabelForOwnedResult(it || {}, target) || domainOf(target) || target).trim() || target;
       const sourceLabel = sourceLabelForOwnedResult(it || {}, target);
-      const descText = detailTextForOwnedResult(it || {});
 
       if(!opts.skipHistory) try{
         const currentQ = String(lastQuery || input.value || '').trim();
@@ -3421,7 +3319,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       }catch(e){}
 
       const shell = document.createElement('div');
-      shell.className = 'maru-search-owned-result maru-search-owned-result-minimal';
+      shell.className = 'maru-search-owned-result';
 
       const head = document.createElement('div');
       head.className = 'maru-search-owned-result-head';
@@ -3435,7 +3333,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       titleWrap.appendChild(title);
 
       const source = document.createElement('div');
-      source.className = 'maru-search-owned-result-source maru-search-owned-result-head-source';
+      source.className = 'maru-search-owned-result-source';
       source.textContent = sourceLabel ? `${sourceLabel} · ${target}` : target;
       titleWrap.appendChild(source);
 
@@ -3470,30 +3368,30 @@ async function fetchInstantSearchPack(q, type = activeType){
       head.appendChild(actions);
       shell.appendChild(head);
 
-      if(descText){
-        const summary = document.createElement('div');
-        summary.className = 'maru-search-owned-result-summary';
-        summary.textContent = descText;
-        shell.appendChild(summary);
-      }
-
       const proxySrc = proxyUrlForResult(target);
       if(proxySrc){
         const proxyBox = document.createElement('div');
-        proxyBox.className = 'maru-search-owned-proxy maru-search-owned-proxy-minimal';
+        proxyBox.className = 'maru-search-owned-proxy';
         const loading = document.createElement('div');
         loading.className = 'maru-search-owned-proxy-loading';
         loading.textContent = uiText('receiving', 'receiving...');
         const frame = document.createElement('iframe');
         frame.className = 'maru-search-owned-proxy-frame';
+        frame.src = proxySrc;
         frame.loading = 'eager';
         frame.referrerPolicy = 'no-referrer-when-downgrade';
-        frame.sandbox = 'allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads allow-same-origin';
+        frame.sandbox = 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads';
         frame.title = displayTitle.slice(0, 120);
+        frame.addEventListener('load', () => { try{ loading.remove(); }catch(e){} });
+        setTimeout(() => { try{ loading.remove(); }catch(e){} }, 2200);
         proxyBox.appendChild(loading);
         proxyBox.appendChild(frame);
         shell.appendChild(proxyBox);
-        loadProxyHtmlIntoFrame(frame, loading, proxySrc, target);
+      }else{
+        const empty = document.createElement('div');
+        empty.className = 'maru-search-owned-empty';
+        empty.textContent = target;
+        shell.appendChild(empty);
       }
 
       results.innerHTML = '';
