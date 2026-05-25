@@ -169,68 +169,43 @@ function fallbackDocument(title, message, target){
   return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff;color:#334155;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.page{padding:28px 30px}.title{font-size:18px;font-weight:800;color:#111827;margin-bottom:8px}.msg{font-size:14px;line-height:1.65;color:#64748b;max-width:760px}.url{margin-top:14px;font-size:12px;color:#64748b;word-break:break-all;background:#f1f5f9;border-radius:9px;padding:8px 10px}</style></head><body><div class="page"><div class="title">' + escapeHtml(title) + '</div><div class="msg">' + escapeHtml(message) + '</div><div class="url">' + escapeHtml(target || '') + '</div></div></body></html>';
 }
 
-function textContentOnly(markup){
-  return String(markup || '')
-    .replace(/<script\b[\s\S]*?<\/script>/ig, ' ')
-    .replace(/<style\b[\s\S]*?<\/style>/ig, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function extractMetaContent(markup, name){
-  const esc = String(name || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp('<meta[^>]+(?:name|property)=["\']' + esc + '["\'][^>]*content=["\']([^"\']*)["\'][^>]*>', 'i');
-  const m = String(markup || '').match(re);
-  return m ? m[1] : '';
-}
-
-function extractFirst(markup, re){
-  const m = String(markup || '').match(re);
-  return m ? m[1] : '';
-}
-
-function snapshotDocument(originalHtml, finalUrl){
-  const title = extractMetaContent(originalHtml, 'og:title') || extractFirst(originalHtml, /<title[^>]*>([\s\S]*?)<\/title>/i) || finalUrl;
-  const desc = extractMetaContent(originalHtml, 'og:description') || extractMetaContent(originalHtml, 'description') || '';
-  const image = absoluteUrl(extractMetaContent(originalHtml, 'og:image') || extractMetaContent(originalHtml, 'twitter:image') || '', finalUrl);
-  const bodyText = textContentOnly(originalHtml).slice(0, 650);
-  const imageHtml = /^https?:\/\//i.test(image) ? '<div class="hero"><img src="' + escapeHtml(image) + '" alt=""></div>' : '';
-  const descHtml = desc ? '<p class="desc">' + escapeHtml(desc) + '</p>' : '';
-  const bodyHtml = bodyText && bodyText !== title ? '<p class="body">' + escapeHtml(bodyText) + '</p>' : '';
-  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><base href="' + escapeHtml(finalUrl) + '"><style>html,body{margin:0;background:#fff;color:#111827;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.wrap{max-width:1080px;margin:0 auto;padding:24px 28px 40px}.url{font-size:12px;color:#64748b;word-break:break-all;margin-bottom:12px}.title{font-size:30px;line-height:1.25;font-weight:900;letter-spacing:-.03em;margin:0 0 10px}.desc,.body{font-size:16px;line-height:1.72;color:#334155;max-width:860px}.hero{margin:18px 0 22px;border-radius:18px;overflow:hidden;background:#f1f5f9}.hero img{display:block;width:100%;max-height:460px;object-fit:cover}.note{margin-top:22px;padding:12px 14px;border-radius:12px;background:#f8fafc;color:#64748b;font-size:13px}</style></head><body><main class="wrap"><div class="url">' + escapeHtml(finalUrl) + '</div><h1 class="title">' + escapeHtml(title) + '</h1>' + descHtml + imageHtml + bodyHtml + '<div class="note">이 페이지는 자바스크립트 렌더링 비중이 높아 IGDC가 안전한 요약 스냅샷으로 표시했습니다. 전체 원문은 상단의 원문 보기로 이 탭에서 열 수 있으며, 브라우저 뒤로가기로 검색 목록으로 돌아옵니다.</div></main></body></html>';
-}
-
-function isStaticOutputTooEmpty(markup){
-  const textLen = textContentOnly(markup).length;
-  const mediaCount = (String(markup || '').match(/<(img|svg|canvas|video|table)\b/ig) || []).length;
-  const bodyHasAppShell = /id=["']?(app|root|__next|container)["']?/i.test(String(markup || ''));
-  return textLen < 80 && mediaCount < 1 && bodyHasAppShell;
-}
-
 function lightweightBridge(finalUrl, opts){
   const proxyId = String((opts && opts.proxyId) || '');
+  const baseUrl = String(finalUrl || '');
   return `<script>(function(){
     var PROXY_ID=${JSON.stringify(proxyId)};
-    function report(){try{var b=document.body||{};var d=document.documentElement||{};var txt=(b.innerText||'').trim();var media=document.querySelectorAll?document.querySelectorAll('img,svg,canvas,video,iframe,table').length:0;parent.postMessage({__igdcProxyStatus:1,proxyId:PROXY_ID,title:document.title||'',textLen:txt.length,height:Math.max(b.scrollHeight||0,d.scrollHeight||0),mediaCount:media},'*')}catch(e){}}
-    setTimeout(report,500);setTimeout(report,1600);window.addEventListener('load',function(){setTimeout(report,100);setTimeout(report,1000)});
+    var BASE_URL=${JSON.stringify(baseUrl)};
+    function abs(v){try{return new URL(v, BASE_URL || location.href).href;}catch(e){return '';}}
+    function report(){try{var b=document.body||{};var d=document.documentElement||{};var txt=(b.innerText||'').trim();var media=document.querySelectorAll?document.querySelectorAll('img,svg,canvas,video,iframe,table,picture').length:0;parent.postMessage({__igdcProxyStatus:1,proxyId:PROXY_ID,title:document.title||'',textLen:txt.length,height:Math.max(b.scrollHeight||0,d.scrollHeight||0),mediaCount:media},'*')}catch(e){}}
+    function sendNav(u){try{if(u) parent.postMessage({__igdcProxyNavigate:1,proxyId:PROXY_ID,url:u},'*')}catch(e){}}
+    document.addEventListener('click',function(e){
+      var a=e.target&&e.target.closest?e.target.closest('a[href],area[href]'):null;
+      if(!a) return;
+      var h=a.getAttribute('href')||'';
+      if(!h||h.charAt(0)==='#'||/^javascript:/i.test(h)||/^mailto:|^tel:/i.test(h)) return;
+      var u=abs(h); if(!u) return;
+      e.preventDefault(); e.stopPropagation(); sendNav(u);
+    },true);
+    document.addEventListener('submit',function(e){
+      var f=e.target; if(!f||!f.action) return;
+      var method=(f.method||'GET').toUpperCase();
+      if(method!=='GET') return;
+      try{var u=new URL(f.getAttribute('action')||BASE_URL, BASE_URL); var fd=new FormData(f); fd.forEach(function(v,k){u.searchParams.set(k,v)}); e.preventDefault(); sendNav(u.href);}catch(x){}
+    },true);
+    setTimeout(report,450);setTimeout(report,1500);setTimeout(report,3200);window.addEventListener('load',function(){setTimeout(report,100);setTimeout(report,1000)});
   })();</script>`;
 }
 
 function injectShell(htmlText, finalUrl, opts){
   opts = opts || {};
   const mode = String(opts.mode || 'static').toLowerCase();
+  if(mode === 'snapshot') return snapshotDocument(htmlText, finalUrl);
   let out = String(htmlText || '');
   out = removeFrameAndRedirectTraps(out);
   // Static is the stable IGDC viewer path. It prevents source-page scripts from
   // freezing the search shell while still showing server-rendered HTML/CSS/images.
   if(mode !== 'live') out = stripActiveScripts(out);
   out = rewriteAttributes(out, finalUrl, { mode: mode === 'live' ? 'live' : 'static', proxyId: opts.proxyId || '' });
-  if(mode !== 'live' && isStaticOutputTooEmpty(out)) {
-    return snapshotDocument(htmlText, finalUrl);
-  }
 
   const headInject = [
     '<meta charset="utf-8">',
@@ -245,6 +220,77 @@ function injectShell(htmlText, finalUrl, opts){
   if(!/<body[^>]*>/i.test(out)) out = '<body>' + out + '</body>';
   if(!/<!doctype/i.test(out)) out = '<!doctype html>' + out;
   return out;
+}
+
+
+
+function normalizeHeaderValue(v){ return String(v || '').trim(); }
+
+function requesterOrigin(event){
+  const h = event.headers || {};
+  const raw = h.origin || h.Origin || h.referer || h.Referer || '';
+  try{ return raw ? new URL(raw).origin.toLowerCase() : ''; }catch(e){ return ''; }
+}
+
+function cspAllowsAncestor(csp, origin){
+  const text = String(csp || '');
+  const m = text.match(/(?:^|;)\s*frame-ancestors\s+([^;]+)/i);
+  if(!m) return true;
+  const list = m[1].trim().split(/\s+/).map(x => x.replace(/^['"]|['"]$/g, '').toLowerCase());
+  if(!list.length) return false;
+  if(list.includes('*')) return true;
+  if(list.includes('none')) return false;
+  if(list.includes('self')) return false;
+  if(origin && list.includes(origin)) return true;
+  if(origin){
+    for(const token of list){
+      if(token.endsWith(':')) continue;
+      if(token.includes('*')){
+        const re = new RegExp('^' + token.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '.*') + '$');
+        if(re.test(origin)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function directFrameAllowedFromHeaders(headers, origin){
+  const xfo = normalizeHeaderValue(headers.get('x-frame-options')).toLowerCase();
+  if(xfo){
+    if(xfo.includes('deny')) return { directAllowed:false, reason:'x-frame-options-deny', xFrameOptions:xfo };
+    if(xfo.includes('sameorigin')) return { directAllowed:false, reason:'x-frame-options-sameorigin', xFrameOptions:xfo };
+  }
+  const csp = normalizeHeaderValue(headers.get('content-security-policy')).toLowerCase();
+  if(csp && !cspAllowsAncestor(csp, origin)) return { directAllowed:false, reason:'csp-frame-ancestors', contentSecurityPolicy:csp.slice(0, 500) };
+  return { directAllowed:true, reason:'allowed-by-headers', xFrameOptions:xfo || '', contentSecurityPolicy:csp.slice(0, 500) };
+}
+
+async function frameCheck(event, target){
+  const origin = requesterOrigin(event);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 7000);
+  try{
+    let upstream = await fetch(target.href, {
+      method:'HEAD',
+      redirect:'follow',
+      signal:ctrl.signal,
+      headers: copyRequestHeaders(event, target)
+    });
+    if(upstream.status === 405 || upstream.status === 403){
+      upstream = await fetch(target.href, {
+        method:'GET',
+        redirect:'follow',
+        signal:ctrl.signal,
+        headers: copyRequestHeaders(event, target)
+      });
+    }
+    const policy = directFrameAllowedFromHeaders(upstream.headers, origin);
+    return json(200, Object.assign({ ok:true, status:upstream.status || 0, finalUrl: upstream.url || target.href }, policy));
+  }catch(e){
+    return json(200, { ok:false, directAllowed:true, reason:String(e && e.message || e || 'frame-check-failed'), finalUrl: target.href });
+  }finally{
+    clearTimeout(timer);
+  }
 }
 
 function copyRequestHeaders(event, target){
@@ -264,7 +310,7 @@ exports.handler = async function(event){
   if(event.httpMethod === 'OPTIONS') return json(200, { ok:true });
   const qp = event.queryStringParameters || {};
   const raw = qp.url;
-  const mode = qp.mode || (qp.static === '1' ? 'static' : 'static');
+  const mode = qp.mode || (qp.snapshot === '1' ? 'snapshot' : (qp.static === '1' ? 'static' : 'static'));
   const proxyId = qp.proxyId || '';
   if(!raw) return html(400, fallbackDocument('Missing url', '표시할 원문 주소가 없습니다.', ''));
 
@@ -275,6 +321,10 @@ exports.handler = async function(event){
     await assertPublicTarget(target);
   }catch(e){
     return html(400, fallbackDocument('원문 주소를 표시할 수 없습니다.', String(e && e.message || e), raw));
+  }
+
+  if(String(qp.action || '').toLowerCase() === 'frame-check') {
+    return frameCheck(event, target);
   }
 
   const ctrl = new AbortController();
