@@ -169,13 +169,101 @@ function fallbackDocument(title, message, target){
   return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff;color:#334155;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.page{padding:28px 30px}.title{font-size:18px;font-weight:800;color:#111827;margin-bottom:8px}.msg{font-size:14px;line-height:1.65;color:#64748b;max-width:760px}.url{margin-top:14px;font-size:12px;color:#64748b;word-break:break-all;background:#f1f5f9;border-radius:9px;padding:8px 10px}</style></head><body><div class="page"><div class="title">' + escapeHtml(title) + '</div><div class="msg">' + escapeHtml(message) + '</div><div class="url">' + escapeHtml(target || '') + '</div></div></body></html>';
 }
 
+
+function stripTagsToText(markup){
+  return String(markup || '')
+    .replace(/<script\b[\s\S]*?<\/script>/ig, ' ')
+    .replace(/<style\b[\s\S]*?<\/style>/ig, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function decodeEntities(v){
+  return String(v || '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .trim();
+}
+
+function attrValue(tag, attr){
+  const text = String(tag || '');
+  const re1 = new RegExp("\\s" + attr + "\\s*=\\s*\\\"([\\s\\S]*?)\\\"", "i");
+  const re2 = new RegExp("\\s" + attr + "\\s*=\\s*'([\\s\\S]*?)'", "i");
+  const m = text.match(re1) || text.match(re2);
+  return m && m[1] ? decodeEntities(m[1]) : '';
+}
+
+function firstMetaContent(markup, names){
+  const metas = String(markup || '').match(/<meta\b[^>]*>/ig) || [];
+  const wanted = new Set((names || []).map(x => String(x).toLowerCase()));
+  for(const tag of metas){
+    const key = String(attrValue(tag, 'name') || attrValue(tag, 'property')).toLowerCase();
+    if(wanted.has(key)){
+      const c = attrValue(tag, 'content');
+      if(c) return c;
+    }
+  }
+  return '';
+}
+
+function firstTitle(markup, finalUrl){
+  const og = firstMetaContent(markup, ['og:title', 'twitter:title']);
+  if(og) return og;
+  const m = String(markup || '').match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if(m && m[1]) return stripTagsToText(m[1]).slice(0, 160);
+  try{ return new URL(finalUrl).hostname; }catch(e){ return finalUrl || 'Original page'; }
+}
+
+function collectSnapshotImages(markup, finalUrl){
+  const out = [];
+  const seen = new Set();
+  function push(v){
+    const abs = absoluteUrl(v, finalUrl);
+    if(!/^https?:\/\//i.test(abs)) return;
+    const key = abs.toLowerCase();
+    if(seen.has(key)) return;
+    if(/favicon|sprite|\.ico(\?|#|$)|placeholder|blank|pixel/i.test(key)) return;
+    seen.add(key); out.push(abs);
+  }
+  push(firstMetaContent(markup, ['og:image', 'twitter:image', 'twitter:image:src']));
+  const imgs = String(markup || '').match(/<img\b[^>]*>/ig) || [];
+  imgs.forEach(tag => push(attrValue(tag, 'src')));
+  const srcsets = String(markup || '').match(/\ssrcset\s*=\s*(["'])([\s\S]*?)\1/ig) || [];
+  srcsets.forEach(s => {
+    const m = s.match(/=["']([\s\S]*?)["']$/);
+    String((m && m[1]) || '').split(',').forEach(part => push((part.trim().split(/\s+/)[0] || '')));
+  });
+  return out.slice(0, 12);
+}
+
+function snapshotDocument(htmlText, finalUrl){
+  const title = firstTitle(htmlText, finalUrl);
+  const desc = firstMetaContent(htmlText, ['description','og:description','twitter:description']);
+  const images = collectSnapshotImages(htmlText, finalUrl);
+  const bodyText = stripTagsToText(htmlText).replace(String(title || ''), '').trim();
+  const excerpt = (desc || bodyText || '').slice(0, 900);
+  const imageHtml = images.length ? '<div class="shots">' + images.map(src => '<img src="' + escapeHtml(src) + '" loading="lazy" alt="">').join('') + '</div>' : '';
+  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><base href="' + escapeHtml(finalUrl) + '"><meta name="referrer" content="no-referrer-when-downgrade"><style>html,body{margin:0;background:#fff;color:#111827;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.wrap{max-width:1120px;margin:0 auto;padding:34px 28px 56px}.url{font-size:13px;color:#64748b;word-break:break-all;margin-bottom:12px}.title{font-size:30px;line-height:1.25;font-weight:850;letter-spacing:-.03em;margin-bottom:18px}.desc{font-size:15px;line-height:1.75;color:#334155;max-width:900px;margin-bottom:22px}.shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-top:18px}.shots img{width:100%;height:180px;object-fit:cover;border-radius:14px;border:1px solid #e5e7eb;background:#f8fafc}.note{margin-top:24px;padding:12px 14px;border:1px solid #e5e7eb;border-radius:12px;background:#f8fafc;color:#64748b;font-size:13px}</style>' + lightweightBridge(finalUrl, { proxyId: '' }) + '</head><body><main class="wrap"><div class="url">' + escapeHtml(finalUrl || '') + '</div><h1 class="title">' + escapeHtml(title || finalUrl || '') + '</h1>' + (excerpt ? '<div class="desc">' + escapeHtml(excerpt) + '</div>' : '') + imageHtml + '<div class="note">이 페이지는 IGDC 검색 화면 안에서 안정적으로 보기 위해 공개 HTML을 스냅샷으로 정리한 화면입니다.</div></main></body></html>';
+}
+
 function lightweightBridge(finalUrl, opts){
   const proxyId = String((opts && opts.proxyId) || '');
   const baseUrl = String(finalUrl || '');
   return `<script>(function(){
     var PROXY_ID=${JSON.stringify(proxyId)};
     var BASE_URL=${JSON.stringify(baseUrl)};
-    function abs(v){try{return new URL(v, BASE_URL || location.href).href;}catch(e){return '';}}
+    function abs(v){try{var raw=String(v||'');var u=new URL(raw, BASE_URL || location.href);var urlParam=u.searchParams&&u.searchParams.get('url');if((raw.indexOf('/.netlify/functions/search-page-proxy')===0||/\/\.netlify\/functions\/search-page-proxy/i.test(u.pathname))&&urlParam){return urlParam;}return u.href;}catch(e){return '';}}
     function report(){try{var b=document.body||{};var d=document.documentElement||{};var txt=(b.innerText||'').trim();var media=document.querySelectorAll?document.querySelectorAll('img,svg,canvas,video,iframe,table,picture').length:0;parent.postMessage({__igdcProxyStatus:1,proxyId:PROXY_ID,title:document.title||'',textLen:txt.length,height:Math.max(b.scrollHeight||0,d.scrollHeight||0),mediaCount:media},'*')}catch(e){}}
     function sendNav(u){try{if(u) parent.postMessage({__igdcProxyNavigate:1,proxyId:PROXY_ID,url:u},'*')}catch(e){}}
     document.addEventListener('click',function(e){
@@ -196,103 +284,6 @@ function lightweightBridge(finalUrl, opts){
   })();</script>`;
 }
 
-
-function stripTagsForText(markup){
-  return String(markup || '')
-    .replace(/<script\b[\s\S]*?<\/script>/ig, ' ')
-    .replace(/<style\b[\s\S]*?<\/style>/ig, ' ')
-    .replace(/<noscript\b[^>]*>/ig, ' ')
-    .replace(/<\/noscript>/ig, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/ig, ' ')
-    .replace(/&amp;/ig, '&')
-    .replace(/&lt;/ig, '<')
-    .replace(/&gt;/ig, '>')
-    .replace(/&#39;/ig, "'")
-    .replace(/&quot;/ig, '"')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function isMeaningfullyVisibleHtml(markup){
-  const text = stripTagsForText(markup);
-  if(text.length >= 80) return true;
-  if(/<(img|picture|svg|video|canvas|table)\b/i.test(String(markup || ''))) return true;
-  if(/<h[1-6]\b|<p\b|<article\b|<main\b|<section\b/i.test(String(markup || '')) && text.length >= 35) return true;
-  return false;
-}
-
-function firstMatch(markup, re){
-  const m = String(markup || '').match(re);
-  return m ? (m[1] || m[2] || '').trim() : '';
-}
-
-function metaContent(markup, name){
-  const esc = String(name || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const a = new RegExp("<meta\\b[^>]*(?:name|property)=[\"']" + esc + "[\"'][^>]*content=[\"']([\\s\\S]*?)[\"'][^>]*>", 'i');
-  const b = new RegExp("<meta\\b[^>]*content=[\"']([\\s\\S]*?)[\"'][^>]*(?:name|property)=[\"']" + esc + "[\"'][^>]*>", 'i');
-  return firstMatch(markup, a) || firstMatch(markup, b);
-}
-
-function collectSnapshotImages(markup, baseUrl){
-  const out = [];
-  const seen = new Set();
-  function add(v){
-    const raw = String(v || '').trim();
-    if(!raw || /^data:|^blob:|^javascript:/i.test(raw)) return;
-    const u = absoluteUrl(raw, baseUrl);
-    const k = u.split('#')[0];
-    if(seen.has(k)) return;
-    seen.add(k);
-    out.push(u);
-  }
-  add(metaContent(markup, 'og:image'));
-  add(metaContent(markup, 'twitter:image'));
-  String(markup || '').replace(/<img\b[^>]*\ssrc\s*=\s*(["'])(.*?)\1/ig, function(_, q, src){ add(src); return _; });
-  String(markup || '').replace(/<source\b[^>]*\ssrcset\s*=\s*(["'])(.*?)\1/ig, function(_, q, srcset){
-    String(srcset || '').split(',').slice(0,2).forEach(part => add(part.trim().split(/\s+/)[0]));
-    return _;
-  });
-  return out.filter(u => !/favicon|apple-touch-icon|\.ico(\?|#|$)/i.test(u)).slice(0, 12);
-}
-
-function collectSnapshotLinks(markup, baseUrl){
-  const out = [];
-  const seen = new Set();
-  String(markup || '').replace(/<a\b([^>]*?)\shref\s*=\s*(["'])(.*?)\2([^>]*)>([\s\S]*?)<\/a>/ig, function(_, before, q, href, after, labelHtml){
-    const label = stripTagsForText(labelHtml).slice(0, 90);
-    if(!label || label.length < 2) return _;
-    const abs = absoluteUrl(href, baseUrl);
-    if(!/^https?:\/\//i.test(abs)) return _;
-    const k = abs + '|' + label;
-    if(seen.has(k)) return _;
-    seen.add(k);
-    out.push({ href: abs, label });
-    return _;
-  });
-  return out.slice(0, 24);
-}
-
-function snapshotDocument(htmlText, finalUrl){
-  const raw = String(htmlText || '');
-  const title = stripTagsForText(firstMatch(raw, /<title[^>]*>([\s\S]*?)<\/title>/i)) ||
-    metaContent(raw, 'og:title') ||
-    metaContent(raw, 'twitter:title') ||
-    (function(){ try{ return new URL(finalUrl).hostname; }catch(e){ return '원문 스냅샷'; } })();
-  const desc = metaContent(raw, 'description') || metaContent(raw, 'og:description') || metaContent(raw, 'twitter:description') || '';
-  let text = stripTagsForText(raw);
-  if(desc && text.toLowerCase().indexOf(desc.toLowerCase()) !== 0) text = desc + ' ' + text;
-  const images = collectSnapshotImages(raw, finalUrl);
-  const links = collectSnapshotLinks(raw, finalUrl);
-  const safeUrl = escapeHtml(finalUrl || '');
-  const bodyText = escapeHtml(text.slice(0, 2600));
-  const imageHtml = images.length ? '<div class="igdc-snap-images">' + images.map(src => '<img src="' + escapeHtml(src) + '" loading="lazy">').join('') + '</div>' : '';
-  const linksHtml = links.length ? '<div class="igdc-snap-links">' + links.map(l => '<a href="' + escapeHtml(proxyUrl(l.href, finalUrl, { mode:'static' })) + '">' + escapeHtml(l.label) + '</a>').join('') + '</div>' : '';
-  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><base href="' + safeUrl + '"><meta name="referrer" content="no-referrer-when-downgrade"><style>' +
-    'html,body{margin:0;background:#fff;color:#1f2937;font-family:system-ui,-apple-system,Segoe UI,sans-serif}body{padding:0}.igdc-snap{padding:28px 34px 42px;max-width:1180px;margin:0 auto}.igdc-url{font-size:12px;color:#64748b;word-break:break-all;margin-bottom:8px}.igdc-title{font-size:28px;line-height:1.25;font-weight:850;letter-spacing:-.03em;color:#111827;margin:0 0 12px}.igdc-desc{font-size:15px;line-height:1.7;color:#334155;white-space:pre-wrap;max-width:920px}.igdc-snap-images{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin:18px 0 22px}.igdc-snap-images img{width:100%;height:180px;object-fit:cover;border-radius:13px;border:1px solid #e5e7eb;background:#f8fafc}.igdc-snap-links{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px}.igdc-snap-links a{padding:9px 12px;border:1px solid #e5e7eb;border-radius:999px;text-decoration:none;color:#1d4ed8;background:#fff;font-size:13px;font-weight:700}.igdc-note{margin-top:18px;padding:10px 12px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;color:#64748b;font-size:12px;line-height:1.5}@media(max-width:760px){.igdc-snap{padding:20px 16px}.igdc-title{font-size:22px}.igdc-snap-images{grid-template-columns:1fr 1fr}.igdc-snap-images img{height:130px}}' +
-    '</style>' + lightweightBridge(finalUrl, { proxyId: '' }) + '</head><body><main class="igdc-snap"><div class="igdc-url">' + safeUrl + '</div><h1 class="igdc-title">' + escapeHtml(title) + '</h1>' + imageHtml + '<div class="igdc-desc">' + bodyText + '</div>' + linksHtml + '<div class="igdc-note">이 원문은 IGDC 검색 화면 안에서 안정적으로 보기 위해 서버가 읽어 온 공개 HTML을 스냅샷으로 정리한 화면입니다.</div></main></body></html>';
-}
-
 function injectShell(htmlText, finalUrl, opts){
   opts = opts || {};
   const mode = String(opts.mode || 'static').toLowerCase();
@@ -303,10 +294,6 @@ function injectShell(htmlText, finalUrl, opts){
   // freezing the search shell while still showing server-rendered HTML/CSS/images.
   if(mode !== 'live') out = stripActiveScripts(out);
   out = rewriteAttributes(out, finalUrl, { mode: mode === 'live' ? 'live' : 'static', proxyId: opts.proxyId || '' });
-
-  if(mode !== 'live' && !isMeaningfullyVisibleHtml(out)){
-    return snapshotDocument(htmlText, finalUrl);
-  }
 
   const headInject = [
     '<meta charset="utf-8">',
@@ -388,7 +375,9 @@ async function frameCheck(event, target){
     const policy = directFrameAllowedFromHeaders(upstream.headers, origin);
     return json(200, Object.assign({ ok:true, status:upstream.status || 0, finalUrl: upstream.url || target.href }, policy));
   }catch(e){
-    return json(200, { ok:false, directAllowed:true, reason:String(e && e.message || e || 'frame-check-failed'), finalUrl: target.href });
+    // Fail closed: when the checker cannot confirm direct framing, use the
+    // owned proxy path so the IGDC search shell is not replaced or frozen.
+    return json(200, { ok:false, directAllowed:false, reason:String(e && e.message || e || 'frame-check-failed'), finalUrl: target.href });
   }finally{
     clearTimeout(timer);
   }
