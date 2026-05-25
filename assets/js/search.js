@@ -1420,7 +1420,7 @@ function startContinuousIntake(q, type, seq){
         if(pageSlice.length){
           loadedServerPages.set(page, pageSlice);
           retryCounts.delete(page);
-          allItems = rankSearchItemsForQuery(mergeItemsPreferDisplayRichness(allItems, pageSlice), q, type).slice(0, MAX_SMOOTH_CANDIDATES);
+          allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice).slice(0, MAX_SMOOTH_CANDIDATES);
           lastSearchPayload = pack && pack.payload || lastSearchPayload;
           updateProgressiveTotalFromPayload(pack && pack.payload, Math.max(target, allItems.length));
           if(page === currentPage) renderPage(page, true);
@@ -2921,44 +2921,6 @@ async function fetchInstantSearchPack(q, type = activeType){
       return (Array.isArray(items) ? items : []).filter(it => !shouldRejectSearchResultItem(it));
     }
 
-    function isBroadLocalAuthorityQuery(q){
-      const text = String(q || '').trim().toLowerCase().replace(/\s+/g, '');
-      if(!text) return false;
-      return /^(서울|서울시|서울특별시|부산|부산시|부산광역시|대구|인천|광주|대전|울산|세종|제주|제주도|대한민국|한국|korea|seoul|busan)$/.test(text);
-    }
-
-    function officialAuthorityScoreForItem(it, q){
-      if(!it || normalizeSearchType(activeType) !== 'all') return 0;
-      if(!isBroadLocalAuthorityQuery(q)) return 0;
-      const url = String(it.url || it.link || it.openUrl || it.href || '').toLowerCase();
-      const title = String(it.title || it.name || '').toLowerCase();
-      const summary = String(it.summary || it.description || it.snippet || '').toLowerCase();
-      const source = String((it.source && (it.source.name || it.source.platform)) || it.source || it.provider || it.channel || it.section || it.category || '').toLowerCase();
-      const hay = [url, title, summary, source, Array.isArray(it.tags) ? it.tags.join(' ').toLowerCase() : ''].join(' ');
-      let score = 0;
-
-      // Public/official entry points should appear first for broad place queries,
-      // like Google/Naver showing the city authority/knowledge surface before
-      // generic news, blogs, or provider passthrough pages.
-      if(/(^|\.)seoul\.go\.kr\//.test(url) || /(^|\.)seoul\.go\.kr$/.test(url)) score += 120;
-      if(/(^|\.)go\.kr\//.test(url) || /(^|\.)go\.kr$/.test(url)) score += 90;
-      if(/visitseoul\.net|english\.visitseoul\.net|korean\.visitseoul\.net/.test(url)) score += 78;
-      if(/archives\.seoul\.go\.kr|job\.seoul\.go\.kr|land\.seoul\.go\.kr|gil\.seoul\.go\.kr/.test(url)) score += 72;
-      if(/서울특별시|서울시|공식|시청|관광|부동산|일자리|기록원|둘레길/.test(title + ' ' + summary)) score += 35;
-      if(/authority|official|public|government|local_authority|공공|공식|기관/.test(source + ' ' + hay)) score += 28;
-      if(/news|뉴스|신문|blog|블로그|cafe|카페|sns|image_passthrough|bing_image|google_image/.test(source + ' ' + url)) score -= 45;
-      if(/bing\.com|google\.[^/]+\/search|search\.naver\.com/.test(url)) score -= 70;
-      return score;
-    }
-
-    function rankSearchItemsForQuery(items, q, type){
-      const list = Array.isArray(items) ? items.slice() : [];
-      if(normalizeSearchType(type || activeType) !== 'all' || !isBroadLocalAuthorityQuery(q)) return list;
-      return list.map((it, idx) => ({ it, idx, score: officialAuthorityScoreForItem(it, q) }))
-        .sort((a, b) => (b.score - a.score) || (a.idx - b.idx))
-        .map(x => x.it);
-    }
-
     function getDirectVideoUrl(it){
       const urls = [
         it && it.videoUrl,
@@ -3598,33 +3560,10 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const open = document.createElement('a');
       open.href = target;
-      open.target = '_self';
+      open.target = '_blank';
       open.rel = 'noopener noreferrer';
       open.dataset.maruExternal = '1';
-      open.textContent = uiText('sourcePage', '원문 보기');
-      open.addEventListener('click', () => {
-        // If the user chooses the real source page, navigate in this tab like
-        // Google/Naver search results do. Replace the current IGDC detail entry
-        // with the search-list URL first, so the browser Back button returns
-        // directly to the exact search results page instead of getting trapped
-        // in a detached source tab or an IGDC detail state.
-        try{
-          const u = new URL(location.href);
-          u.searchParams.delete('view');
-          u.searchParams.delete('target');
-          u.searchParams.set('page', String(currentPage || 1));
-          u.searchParams.set('block', String(currentBlock || 0));
-          history.replaceState({
-            ...(history.state || {}),
-            __maruSearchOwnedResult:false,
-            view:'list',
-            q: String(lastQuery || input.value || '').trim(),
-            page: currentPage || 1,
-            block: currentBlock || 0,
-            type: activeType
-          }, '', u.toString());
-        }catch(e){}
-      }, true);
+      open.textContent = uiText('openNewWindow', '새 창 열기');
 
       actions.appendChild(back);
       actions.appendChild(open);
@@ -4470,7 +4409,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
         if(pageSlice.length){
           loadedServerPages.set(page, pageSlice.slice(0, PAGE_SIZE));
-          allItems = rankSearchItemsForQuery(mergeItemsPreferDisplayRichness(allItems, pageSlice), q, activeType);
+          allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice);
           const total = serverTotalFromPayload(pack && pack.payload, serverTotalItems || pageSlice.length);
           serverTotalItems = Math.max(serverTotalItems || 0, total || 0, INITIAL_PRELOAD_TARGET);
         } else if(serverTotalItems > ((page - 1) * PAGE_SIZE)){
@@ -4664,7 +4603,7 @@ async function runSearch(q, type = activeType){
       Math.max(INITIAL_PRELOAD_TARGET, incoming.length)
     );
     const windowItems = incoming.slice(0, initialWindow);
-    allItems = rankSearchItemsForQuery(mergeItemsPreferDisplayRichness(allItems, windowItems), qq, activeType).slice(0, MAX_SMOOTH_CANDIDATES);
+    allItems = mergeItemsPreferDisplayRichness(allItems, windowItems).slice(0, MAX_SMOOTH_CANDIDATES);
     seedLoadedServerPagesFromItems(allItems, Math.min(allItems.length, Math.max(INITIAL_PRELOAD_TARGET, windowItems.length)));
     if(pageItems.length) loadedServerPages.set(1, pageItems.slice(0, PAGE_SIZE));
 
