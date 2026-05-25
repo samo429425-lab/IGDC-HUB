@@ -757,13 +757,14 @@ function loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl){
   const proxySrc = proxyUrlForResult(target, { mode:'static', proxyId });
   frame.classList.add('maru-search-owned-proxy-frame');
   frame.classList.remove('maru-search-owned-source-frame');
-  frame.removeAttribute('srcdoc');
   frame.referrerPolicy = 'no-referrer-when-downgrade';
-  frame.sandbox = 'allow-forms allow-popups allow-presentation allow-downloads';
+  frame.sandbox = 'allow-scripts allow-forms allow-popups allow-presentation allow-downloads';
   frame.dataset.viewerMode = 'static-proxy';
-  frame.onload = () => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} };
-  try{ frame.src = proxySrc; }catch(e){ loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target); }
-  setTimeout(() => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} }, 3800);
+
+  // Do not navigate the iframe with src for proxy pages. Injecting the proxy
+  // response as srcdoc keeps browser Back owned by IGDC Search, so Back returns
+  // to the result list instead of cycling through iframe/source history.
+  loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target);
 }
 
 async function mountOwnedSourceFrame(frame, loadingEl, target, proxyId){
@@ -865,8 +866,7 @@ function installProxyViewerMessageBridge(){
       proxyBox.insertBefore(loading, frame);
     }
     const src = proxyUrlForResult(nextUrl, { mode:'static', proxyId });
-    try{ frame.src = src; }catch(e){ loadProxyHtmlIntoFrame(frame, loading, src, nextUrl); }
-    setTimeout(() => { try{ if(loading) loading.remove(); }catch(e){} }, 1800);
+    loadProxyHtmlIntoFrame(frame, loading, src, nextUrl);
   });
 }
 
@@ -3591,16 +3591,35 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       if(!opts.skipHistory) try{
         const currentQ = String(lastQuery || input.value || '').trim();
-        const u = new URL(location.href);
+
+        // Keep the browser Back button Google/Naver-like: every source view
+        // must go back to the search result list, not to a previously opened
+        // source card. If we are already on a source view, first collapse that
+        // history entry back to the list URL, then push only the new source view.
+        const listUrl = new URL(location.href);
+        listUrl.searchParams.delete('view');
+        listUrl.searchParams.delete('target');
+        listUrl.searchParams.set('page', String(currentPage || 1));
+        listUrl.searchParams.set('block', String(currentBlock || 0));
+        if(currentQ) listUrl.searchParams.set('q', currentQ);
+        if(activeType && activeType !== 'all') listUrl.searchParams.set('type', activeType);
+        else listUrl.searchParams.delete('type');
+
+        history.replaceState({
+          ...(history.state || {}),
+          __maruSearchOwnedResult: false,
+          view: 'list',
+          q: currentQ,
+          page: currentPage || 1,
+          block: currentBlock || 0,
+          type: activeType,
+          target: ''
+        }, '', listUrl.toString());
+
+        const u = new URL(listUrl.href);
         u.searchParams.set('view', 'result');
         u.searchParams.set('target', target);
-        u.searchParams.set('page', String(currentPage || 1));
-        u.searchParams.set('block', String(currentBlock || 0));
-        if(currentQ) u.searchParams.set('q', currentQ);
-        if(activeType && activeType !== 'all') u.searchParams.set('type', activeType);
-        else u.searchParams.delete('type');
         history.pushState({
-          ...(history.state || {}),
           __maruSearchOwnedResult: true,
           q: currentQ,
           page: currentPage || 1,
@@ -3642,7 +3661,18 @@ async function fetchInstantSearchPack(q, type = activeType){
           const u = new URL(location.href);
           u.searchParams.delete('view');
           u.searchParams.delete('target');
-          history.replaceState({ ...(history.state || {}), __maruSearchOwnedResult:false }, '', u.toString());
+          u.searchParams.set('page', String(currentPage || 1));
+          u.searchParams.set('block', String(currentBlock || 0));
+          history.replaceState({
+            ...(history.state || {}),
+            __maruSearchOwnedResult:false,
+            view:'list',
+            target:'',
+            q: String(lastQuery || input.value || '').trim(),
+            page: currentPage || 1,
+            block: currentBlock || 0,
+            type: activeType
+          }, '', u.toString());
         }catch(e){}
         try{ document.querySelectorAll('.maru-search-owned-proxy-frame').forEach(f => { if(f.__maruProxyBlobUrl){ URL.revokeObjectURL(f.__maruProxyBlobUrl); f.__maruProxyBlobUrl=''; } }); }catch(e){}
         renderPage(currentPage || 1, true);
@@ -3654,7 +3684,8 @@ async function fetchInstantSearchPack(q, type = activeType){
       open.target = '_blank';
       open.rel = 'noopener noreferrer';
       open.dataset.maruExternal = '1';
-      open.textContent = uiText('openNewWindow', '새 창으로 원문');
+      open.textContent = uiText('sourcePage', '원문 보기');
+      open.title = '원본 사이트를 새 탭에서 엽니다';
 
       actions.appendChild(back);
       actions.appendChild(open);
