@@ -196,6 +196,55 @@ function lightweightBridge(finalUrl, opts){
   })();</script>`;
 }
 
+
+function metaContent(markup, selector){
+  const text = String(markup || '');
+  let re;
+  if(selector === 'title'){
+    const m = text.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    return m ? decodeBasicEntities(m[1].replace(/<[^>]+>/g, '').trim()) : '';
+  }
+  if(selector === 'description') re = /<meta[^>]+name=["']description["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i;
+  else if(selector === 'og:title') re = /<meta[^>]+property=["']og:title["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i;
+  else if(selector === 'og:description') re = /<meta[^>]+property=["']og:description["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i;
+  else if(selector === 'og:image') re = /<meta[^>]+property=["']og:image["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i;
+  const m = re && text.match(re);
+  return m ? decodeBasicEntities(m[1].trim()) : '';
+}
+
+function decodeBasicEntities(v){
+  return String(v || '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x([0-9a-f]+);/ig, function(_, h){ try{return String.fromCodePoint(parseInt(h,16));}catch(e){return _;} })
+    .replace(/&#(\d+);/g, function(_, d){ try{return String.fromCodePoint(parseInt(d,10));}catch(e){return _;} });
+}
+
+function textSnippetFromHtml(markup){
+  let text = String(markup || '')
+    .replace(/<script\b[\s\S]*?<\/script>/ig, ' ')
+    .replace(/<style\b[\s\S]*?<\/style>/ig, ' ')
+    .replace(/<noscript\b[\s\S]*?<\/noscript>/ig, ' ')
+    .replace(/<[^>]+>/g, ' ');
+  text = decodeBasicEntities(text).replace(/\s+/g, ' ').trim();
+  return text.slice(0, 1400);
+}
+
+function snapshotDocument(htmlText, finalUrl){
+  const title = metaContent(htmlText, 'og:title') || metaContent(htmlText, 'title') || finalUrl;
+  const desc = metaContent(htmlText, 'og:description') || metaContent(htmlText, 'description') || textSnippetFromHtml(htmlText);
+  const imgRaw = metaContent(htmlText, 'og:image');
+  const img = imgRaw ? absoluteUrl(imgRaw, finalUrl) : '';
+  const safeTitle = escapeHtml(title);
+  const safeDesc = escapeHtml(desc || '이 사이트는 보안 정책 또는 자바스크립트 렌더링 구조 때문에 원문 전체를 직접 붙여 표시하지 못했습니다. 검색 화면은 유지됩니다.');
+  const safeUrl = escapeHtml(finalUrl || '');
+  const safeImg = escapeHtml(img || '');
+  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><base href="' + safeUrl + '"><style>html,body{margin:0;background:#fff;color:#111827;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.igdc-snapshot{padding:34px 42px;max-width:1040px}.url{font-size:13px;color:#64748b;word-break:break-all;margin-bottom:16px}.title{font-size:30px;line-height:1.25;font-weight:800;margin:0 0 16px}.desc{font-size:16px;line-height:1.72;color:#334155;white-space:pre-wrap}.img{max-width:520px;max-height:340px;object-fit:contain;border:1px solid #e5e7eb;border-radius:14px;margin:6px 0 20px;background:#f8fafc}.note{margin-top:22px;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;color:#64748b;font-size:13px;background:#f8fafc}</style></head><body><main class="igdc-snapshot"><div class="url">' + safeUrl + '</div><h1 class="title">' + safeTitle + '</h1>' + (safeImg ? '<img class="img" src="' + safeImg + '" alt="">' : '') + '<div class="desc">' + safeDesc + '</div><div class="note">IGDC 검색 화면 아래에 붙여 보기 위한 안정형 스냅샷입니다.</div></main>' + lightweightBridge(finalUrl, {proxyId:''}) + '</body></html>';
+}
+
 function injectShell(htmlText, finalUrl, opts){
   opts = opts || {};
   const mode = String(opts.mode || 'static').toLowerCase();
