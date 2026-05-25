@@ -64,6 +64,29 @@ function escapeHtml(v){
     .replace(/'/g, '&#39;');
 }
 
+
+function normalizeTargetUrl(raw){
+  const value = String(raw || '').trim();
+  if(!value) return value;
+  try{
+    const u = new URL(value);
+    if(!/^https?:$/.test(u.protocol)) return value;
+    const host = u.hostname.replace(/^www\./i, '').toLowerCase();
+    const path = (u.pathname || '/').replace(/\/+/g, '/');
+    if(host === 'archives.seoul.go.kr'){
+      if(path === '/' || path === '' || path.toLowerCase() === '/index.do' || path.toLowerCase() === '/index'){
+        u.pathname = '/main';
+        u.search = '';
+        u.hash = '';
+        return u.href;
+      }
+    }
+    return u.href;
+  }catch(e){
+    return value;
+  }
+}
+
 function absoluteUrl(v, baseUrl){
   const raw = String(v || '').trim();
   if(!raw || raw.charAt(0) === '#' || /^javascript:/i.test(raw) || /^mailto:|^tel:|^data:|^blob:/i.test(raw)) return raw;
@@ -165,6 +188,33 @@ function rewriteAttributes(markup, baseUrl, opts){
   return out;
 }
 
+
+function attrContent(markup, re){
+  const m = String(markup || '').match(re);
+  return m ? String(m[1] || '').trim() : '';
+}
+
+function stripTags(v){
+  return String(v || '')
+    .replace(/<script\b[\s\S]*?<\/script>/ig, ' ')
+    .replace(/<style\b[\s\S]*?<\/style>/ig, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function snapshotDocument(htmlText, finalUrl){
+  const markup = String(htmlText || '');
+  const title = attrContent(markup, /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["'][^>]*>/i) ||
+                attrContent(markup, /<title[^>]*>([\s\S]*?)<\/title>/i) ||
+                finalUrl;
+  const desc = attrContent(markup, /<meta[^>]+(?:name|property)=["'](?:description|og:description)["'][^>]+content=["']([^"']+)["'][^>]*>/i);
+  const img = attrContent(markup, /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i);
+  const text = stripTags(markup).slice(0, 900);
+  const imageHtml = img ? '<img class="hero" src="' + escapeHtml(absoluteUrl(img, finalUrl)) + '" alt="">' : '';
+  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><base href="' + escapeHtml(finalUrl) + '"><style>html,body{margin:0;background:#fff;color:#111827;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.page{max-width:980px;padding:32px 44px}.url{font-size:13px;color:#64748b;word-break:break-all;margin-bottom:14px}.title{font-size:30px;line-height:1.25;font-weight:850;letter-spacing:-.03em;margin:0 0 14px}.desc{font-size:16px;line-height:1.65;color:#334155;margin:0 0 18px}.hero{display:block;max-width:520px;max-height:320px;object-fit:cover;border:1px solid #e5e7eb;border-radius:14px;margin:18px 0}.note{margin-top:20px;padding:12px 14px;border:1px solid #e5e7eb;border-radius:12px;background:#f8fafc;color:#64748b;font-size:13px}.text{font-size:14px;line-height:1.7;color:#475569;white-space:pre-wrap}</style></head><body><main class="page"><div class="url">' + escapeHtml(finalUrl) + '</div><h1 class="title">' + escapeHtml(title) + '</h1>' + imageHtml + (desc ? '<p class="desc">' + escapeHtml(desc) + '</p>' : '') + (text ? '<div class="text">' + escapeHtml(text) + '</div>' : '') + '<div class="note">IGDC 검색 화면 아래에 붙여 보기 위한 안정형 스냅샷입니다.</div></main></body></html>';
+}
+
 function fallbackDocument(title, message, target){
   return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff;color:#334155;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.page{padding:28px 30px}.title{font-size:18px;font-weight:800;color:#111827;margin-bottom:8px}.msg{font-size:14px;line-height:1.65;color:#64748b;max-width:760px}.url{margin-top:14px;font-size:12px;color:#64748b;word-break:break-all;background:#f1f5f9;border-radius:9px;padding:8px 10px}</style></head><body><div class="page"><div class="title">' + escapeHtml(title) + '</div><div class="msg">' + escapeHtml(message) + '</div><div class="url">' + escapeHtml(target || '') + '</div></div></body></html>';
 }
@@ -194,55 +244,6 @@ function lightweightBridge(finalUrl, opts){
     },true);
     setTimeout(report,450);setTimeout(report,1500);setTimeout(report,3200);window.addEventListener('load',function(){setTimeout(report,100);setTimeout(report,1000)});
   })();</script>`;
-}
-
-
-function metaContent(markup, selector){
-  const text = String(markup || '');
-  let re;
-  if(selector === 'title'){
-    const m = text.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-    return m ? decodeBasicEntities(m[1].replace(/<[^>]+>/g, '').trim()) : '';
-  }
-  if(selector === 'description') re = /<meta[^>]+name=["']description["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i;
-  else if(selector === 'og:title') re = /<meta[^>]+property=["']og:title["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i;
-  else if(selector === 'og:description') re = /<meta[^>]+property=["']og:description["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i;
-  else if(selector === 'og:image') re = /<meta[^>]+property=["']og:image["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i;
-  const m = re && text.match(re);
-  return m ? decodeBasicEntities(m[1].trim()) : '';
-}
-
-function decodeBasicEntities(v){
-  return String(v || '')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#x([0-9a-f]+);/ig, function(_, h){ try{return String.fromCodePoint(parseInt(h,16));}catch(e){return _;} })
-    .replace(/&#(\d+);/g, function(_, d){ try{return String.fromCodePoint(parseInt(d,10));}catch(e){return _;} });
-}
-
-function textSnippetFromHtml(markup){
-  let text = String(markup || '')
-    .replace(/<script\b[\s\S]*?<\/script>/ig, ' ')
-    .replace(/<style\b[\s\S]*?<\/style>/ig, ' ')
-    .replace(/<noscript\b[\s\S]*?<\/noscript>/ig, ' ')
-    .replace(/<[^>]+>/g, ' ');
-  text = decodeBasicEntities(text).replace(/\s+/g, ' ').trim();
-  return text.slice(0, 1400);
-}
-
-function snapshotDocument(htmlText, finalUrl){
-  const title = metaContent(htmlText, 'og:title') || metaContent(htmlText, 'title') || finalUrl;
-  const desc = metaContent(htmlText, 'og:description') || metaContent(htmlText, 'description') || textSnippetFromHtml(htmlText);
-  const imgRaw = metaContent(htmlText, 'og:image');
-  const img = imgRaw ? absoluteUrl(imgRaw, finalUrl) : '';
-  const safeTitle = escapeHtml(title);
-  const safeDesc = escapeHtml(desc || '이 사이트는 보안 정책 또는 자바스크립트 렌더링 구조 때문에 원문 전체를 직접 붙여 표시하지 못했습니다. 검색 화면은 유지됩니다.');
-  const safeUrl = escapeHtml(finalUrl || '');
-  const safeImg = escapeHtml(img || '');
-  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><base href="' + safeUrl + '"><style>html,body{margin:0;background:#fff;color:#111827;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.igdc-snapshot{padding:34px 42px;max-width:1040px}.url{font-size:13px;color:#64748b;word-break:break-all;margin-bottom:16px}.title{font-size:30px;line-height:1.25;font-weight:800;margin:0 0 16px}.desc{font-size:16px;line-height:1.72;color:#334155;white-space:pre-wrap}.img{max-width:520px;max-height:340px;object-fit:contain;border:1px solid #e5e7eb;border-radius:14px;margin:6px 0 20px;background:#f8fafc}.note{margin-top:22px;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;color:#64748b;font-size:13px;background:#f8fafc}</style></head><body><main class="igdc-snapshot"><div class="url">' + safeUrl + '</div><h1 class="title">' + safeTitle + '</h1>' + (safeImg ? '<img class="img" src="' + safeImg + '" alt="">' : '') + '<div class="desc">' + safeDesc + '</div><div class="note">IGDC 검색 화면 아래에 붙여 보기 위한 안정형 스냅샷입니다.</div></main>' + lightweightBridge(finalUrl, {proxyId:''}) + '</body></html>';
 }
 
 function injectShell(htmlText, finalUrl, opts){
@@ -358,7 +359,7 @@ function copyRequestHeaders(event, target){
 exports.handler = async function(event){
   if(event.httpMethod === 'OPTIONS') return json(200, { ok:true });
   const qp = event.queryStringParameters || {};
-  const raw = qp.url;
+  const raw = normalizeTargetUrl(qp.url);
   const mode = qp.mode || (qp.snapshot === '1' ? 'snapshot' : (qp.static === '1' ? 'static' : 'static'));
   const proxyId = qp.proxyId || '';
   if(!raw) return html(400, fallbackDocument('Missing url', '표시할 원문 주소가 없습니다.', ''));
