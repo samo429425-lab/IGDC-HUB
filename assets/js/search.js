@@ -689,6 +689,94 @@ function proxyUrlForResult(target, extraParams){
 }
 
 
+
+
+function sourceFrameCheckUrl(target){
+  const raw = String(target || '').trim();
+  if(!raw) return '';
+  try{
+    const u = new URL(raw, location.href);
+    if(!/^https?:$/.test(u.protocol)) return '';
+    const sp = new URLSearchParams();
+    sp.set('action', 'frame-check');
+    sp.set('url', u.href);
+    return SEARCH_PAGE_PROXY_URL + '?' + sp.toString();
+  }catch(e){ return ''; }
+}
+
+async function checkSourceFramePolicy(target){
+  const url = sourceFrameCheckUrl(target);
+  if(!url) return { ok:false, directAllowed:false, reason:'invalid-url' };
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => { try{ ctrl.abort(); }catch(e){} }, 4200);
+  try{
+    const r = await fetch(url, { cache:'no-store', credentials:'same-origin', signal:ctrl.signal });
+    const json = await r.json().catch(() => null);
+    clearTimeout(timer);
+    if(!r.ok || !json) return { ok:false, directAllowed:true, reason:'check-failed' };
+    return json;
+  }catch(e){
+    clearTimeout(timer);
+    // If the checker is unavailable, try the real page directly rather than
+    // replacing the viewer with an empty proxy page.
+    return { ok:false, directAllowed:true, reason:'check-timeout' };
+  }
+}
+
+function loadDirectSourceFrame(frame, target, loadingEl){
+  if(!frame || !target) return;
+  frame.classList.remove('maru-search-owned-proxy-frame');
+  frame.classList.add('maru-search-owned-source-frame');
+  frame.removeAttribute('srcdoc');
+  frame.referrerPolicy = 'no-referrer-when-downgrade';
+  frame.sandbox = 'allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-presentation';
+  frame.dataset.viewerMode = 'direct';
+  let blankLoaded = false;
+  let done = false;
+  const finish = () => {
+    if(done) return;
+    done = true;
+    try{ if(loadingEl) loadingEl.remove(); }catch(e){}
+  };
+  frame.onload = () => {
+    if(!blankLoaded){
+      blankLoaded = true;
+      try{ frame.contentWindow.location.replace(target); }
+      catch(e){ try{ frame.src = target; }catch(e2){} }
+      return;
+    }
+    setTimeout(finish, 600);
+  };
+  try{ frame.src = 'about:blank'; }
+  catch(e){ try{ frame.src = target; }catch(e2){} }
+  setTimeout(finish, 5200);
+}
+
+function loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl){
+  if(!frame || !target) return;
+  const proxySrc = proxyUrlForResult(target, { mode:'static', proxyId });
+  frame.classList.add('maru-search-owned-proxy-frame');
+  frame.classList.remove('maru-search-owned-source-frame');
+  frame.removeAttribute('srcdoc');
+  frame.referrerPolicy = 'no-referrer-when-downgrade';
+  frame.sandbox = 'allow-forms allow-popups allow-presentation allow-downloads';
+  frame.dataset.viewerMode = 'static-proxy';
+  frame.onload = () => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} };
+  try{ frame.src = proxySrc; }catch(e){ loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target); }
+  setTimeout(() => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} }, 3800);
+}
+
+async function mountOwnedSourceFrame(frame, loadingEl, target, proxyId){
+  if(!frame || !target) return;
+  if(loadingEl) loadingEl.textContent = uiText('receiving', 'receiving...');
+  const policy = await checkSourceFramePolicy(target);
+  if(policy && policy.directAllowed){
+    loadDirectSourceFrame(frame, target, loadingEl);
+    return;
+  }
+  loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl);
+}
+
 function proxyFailSrcdoc(target, message){
   const safeTarget = String(target || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff;color:#334155;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.wrap{padding:32px 20px}.url{font-size:13px;color:#64748b;word-break:break-all}</style></head><body><div class="wrap"><div class="url">' + safeTarget + '</div></div></body></html>';
@@ -776,8 +864,9 @@ function installProxyViewerMessageBridge(){
       loading.textContent = uiText('receiving', 'receiving...');
       proxyBox.insertBefore(loading, frame);
     }
-    const src = proxyUrlForResult(nextUrl, { mode:'live', proxyId });
-    loadProxyHtmlIntoFrame(frame, loading, src, nextUrl);
+    const src = proxyUrlForResult(nextUrl, { mode:'static', proxyId });
+    try{ frame.src = src; }catch(e){ loadProxyHtmlIntoFrame(frame, loading, src, nextUrl); }
+    setTimeout(() => { try{ if(loading) loading.remove(); }catch(e){} }, 1800);
   });
 }
 
@@ -832,52 +921,6 @@ function findSearchItemByUrl(target){
   return null;
 }
 
-
-function currentSearchListUrlForBack(){
-  try{
-    const u = new URL(location.href);
-    u.searchParams.delete('view');
-    u.searchParams.delete('target');
-    u.searchParams.set('page', String(currentPage || Math.max(1, parseInt((new URLSearchParams(location.search).get('page') || '1'), 10) || 1)));
-    u.searchParams.set('block', String(currentBlock || Math.max(0, parseInt((new URLSearchParams(location.search).get('block') || '0'), 10) || 0)));
-    const q = String(lastQuery || input.value || u.searchParams.get('q') || '').trim();
-    if(q) u.searchParams.set('q', q);
-    if(activeType && activeType !== 'all') u.searchParams.set('type', activeType);
-    else u.searchParams.delete('type');
-    return u.pathname + u.search + u.hash;
-  }catch(e){
-    return location.pathname + location.search + location.hash;
-  }
-}
-
-function navigateSourceFromSearch(target, it){
-  const raw = String(target || '').trim();
-  if(!raw || isSkippableNavigationHref(raw)) return;
-  let url = raw;
-  try{ url = new URL(raw, location.href).href; }catch(e){}
-  // Google/Naver-compatible result behavior: open the real source in this tab,
-  // not in a detached tab and not through an unstable iframe. The current IGDC
-  // search URL is normalized first so the browser Back button returns directly
-  // to the same query/page/block list.
-  try{
-    const backUrl = currentSearchListUrlForBack();
-    history.replaceState({
-      ...(history.state || {}),
-      __maruSearchList: true,
-      __maruSearchOwnedResult: false,
-      view: 'list',
-      q: String(lastQuery || input.value || '').trim(),
-      page: currentPage || 1,
-      block: currentBlock || 0,
-      type: activeType,
-      lastOpenedTitle: String((it && it.title) || '').slice(0, 180),
-      lastOpenedUrl: url
-    }, '', backUrl);
-    try{ sessionStorage.setItem('maruSearch:lastListUrl', backUrl); }catch(e){}
-  }catch(e){}
-  try{ window.location.assign(url); }catch(e){ window.location.href = url; }
-}
-
 function installSearchResultClickGuard(){
   if(!results || results.__maruOwnedClickGuardInstalled) return;
   results.__maruOwnedClickGuardInstalled = true;
@@ -892,7 +935,7 @@ function installSearchResultClickGuard(){
     if(!target) return;
     e.preventDefault();
     e.stopPropagation();
-    navigateSourceFromSearch(target, findSearchItemByUrl(target) || { url: target, title: a.textContent || target });
+    openResultInsideSearchFrame(target, findSearchItemByUrl(target) || { url: target, title: a.textContent || target });
   }, true);
 }
 
@@ -1466,7 +1509,7 @@ function startContinuousIntake(q, type, seq){
         if(pageSlice.length){
           loadedServerPages.set(page, pageSlice);
           retryCounts.delete(page);
-          allItems = rankSearchItemsForQuery(mergeItemsPreferDisplayRichness(allItems, pageSlice), q, type).slice(0, MAX_SMOOTH_CANDIDATES);
+          allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice).slice(0, MAX_SMOOTH_CANDIDATES);
           lastSearchPayload = pack && pack.payload || lastSearchPayload;
           updateProgressiveTotalFromPayload(pack && pack.payload, Math.max(target, allItems.length));
           if(page === currentPage) renderPage(page, true);
@@ -2967,44 +3010,6 @@ async function fetchInstantSearchPack(q, type = activeType){
       return (Array.isArray(items) ? items : []).filter(it => !shouldRejectSearchResultItem(it));
     }
 
-    function isBroadLocalAuthorityQuery(q){
-      const text = String(q || '').trim().toLowerCase().replace(/\s+/g, '');
-      if(!text) return false;
-      return /^(서울|서울시|서울특별시|부산|부산시|부산광역시|대구|인천|광주|대전|울산|세종|제주|제주도|대한민국|한국|korea|seoul|busan)$/.test(text);
-    }
-
-    function officialAuthorityScoreForItem(it, q){
-      if(!it || normalizeSearchType(activeType) !== 'all') return 0;
-      if(!isBroadLocalAuthorityQuery(q)) return 0;
-      const url = String(it.url || it.link || it.openUrl || it.href || '').toLowerCase();
-      const title = String(it.title || it.name || '').toLowerCase();
-      const summary = String(it.summary || it.description || it.snippet || '').toLowerCase();
-      const source = String((it.source && (it.source.name || it.source.platform)) || it.source || it.provider || it.channel || it.section || it.category || '').toLowerCase();
-      const hay = [url, title, summary, source, Array.isArray(it.tags) ? it.tags.join(' ').toLowerCase() : ''].join(' ');
-      let score = 0;
-
-      // Public/official entry points should appear first for broad place queries,
-      // like Google/Naver showing the city authority/knowledge surface before
-      // generic news, blogs, or provider passthrough pages.
-      if(/(^|\.)seoul\.go\.kr\//.test(url) || /(^|\.)seoul\.go\.kr$/.test(url)) score += 120;
-      if(/(^|\.)go\.kr\//.test(url) || /(^|\.)go\.kr$/.test(url)) score += 90;
-      if(/visitseoul\.net|english\.visitseoul\.net|korean\.visitseoul\.net/.test(url)) score += 78;
-      if(/archives\.seoul\.go\.kr|job\.seoul\.go\.kr|land\.seoul\.go\.kr|gil\.seoul\.go\.kr/.test(url)) score += 72;
-      if(/서울특별시|서울시|공식|시청|관광|부동산|일자리|기록원|둘레길/.test(title + ' ' + summary)) score += 35;
-      if(/authority|official|public|government|local_authority|공공|공식|기관/.test(source + ' ' + hay)) score += 28;
-      if(/news|뉴스|신문|blog|블로그|cafe|카페|sns|image_passthrough|bing_image|google_image/.test(source + ' ' + url)) score -= 45;
-      if(/bing\.com|google\.[^/]+\/search|search\.naver\.com/.test(url)) score -= 70;
-      return score;
-    }
-
-    function rankSearchItemsForQuery(items, q, type){
-      const list = Array.isArray(items) ? items.slice() : [];
-      if(normalizeSearchType(type || activeType) !== 'all' || !isBroadLocalAuthorityQuery(q)) return list;
-      return list.map((it, idx) => ({ it, idx, score: officialAuthorityScoreForItem(it, q) }))
-        .sort((a, b) => (b.score - a.score) || (a.idx - b.idx))
-        .map(x => x.it);
-    }
-
     function getDirectVideoUrl(it){
       const urls = [
         it && it.videoUrl,
@@ -3354,7 +3359,8 @@ async function fetchInstantSearchPack(q, type = activeType){
           font-weight: 700;
           background: #ffffff;
         }
-        .maru-search-owned-proxy-frame {
+        .maru-search-owned-proxy-frame,
+        .maru-search-owned-source-frame {
           display: block;
           width: 100%;
           height: calc(100vh - 252px);
@@ -3387,7 +3393,8 @@ async function fetchInstantSearchPack(q, type = activeType){
           .maru-search-owned-result-actions a {
             flex: 1 1 auto;
           }
-          .maru-search-owned-proxy-frame {
+          .maru-search-owned-proxy-frame,
+        .maru-search-owned-source-frame {
             height: calc(100vh - 310px);
             min-height: 520px;
           }
@@ -3460,7 +3467,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       const useStatic = () => {
         if(triedStatic) return;
         triedStatic = true;
-        try{ frame.src = proxyUrlForResult(target, { static: '1', proxyId: proxyId + '-static' }); }catch(e){}
+        try{ frame.src = proxyUrlForResult(target, { mode: 'snapshot', proxyId: proxyId + '-snapshot' }); }catch(e){}
       };
       const cleanup = () => {
         try{ window.removeEventListener('message', onMessage); }catch(e){}
@@ -3644,15 +3651,10 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const open = document.createElement('a');
       open.href = target;
-      open.target = '_self';
+      open.target = '_blank';
       open.rel = 'noopener noreferrer';
       open.dataset.maruExternal = '1';
-      open.textContent = uiText('sourcePage', '원문 보기');
-      open.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        navigateSourceFromSearch(target, it || {});
-      }, true);
+      open.textContent = uiText('openNewWindow', '새 창으로 원문');
 
       actions.appendChild(back);
       actions.appendChild(open);
@@ -3669,40 +3671,21 @@ async function fetchInstantSearchPack(q, type = activeType){
       }
 
       const proxyId = 'maru-proxy-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
-      // Stable embedded viewer: load the Netlify proxy as an iframe URL.
-      // Do not fetch+srcdoc. srcdoc turns the document into about:srcdoc and
-      // causes many public/official scripts to loop, freeze, or lose their base
-      // navigation. The proxy itself rewrites links so the IGDC shell is kept.
-      const proxySrc = proxyUrlForResult(target, { mode: 'static', proxyId });
-      if(proxySrc){
-        const proxyBox = document.createElement('div');
-        proxyBox.className = 'maru-search-owned-proxy';
-        const loading = document.createElement('div');
-        loading.className = 'maru-search-owned-proxy-loading';
-        loading.textContent = uiText('receiving', 'receiving...');
-        const frame = document.createElement('iframe');
-        frame.className = 'maru-search-owned-proxy-frame';
-        frame.dataset.proxyId = proxyId;
-        frame.src = proxySrc;
-        frame.loading = 'eager';
-        frame.referrerPolicy = 'no-referrer-when-downgrade';
-        // No allow-top-navigation and no popup escape: the source cannot replace
-        // the IGDC search tab. Scripts are disabled by mode=static, so this viewer
-        // stays stable and does not trigger Chrome's unresponsive-page dialog.
-        frame.sandbox = 'allow-forms allow-popups allow-presentation allow-downloads';
-        frame.title = displayTitle.slice(0, 120);
-        frame.addEventListener('load', () => { try{ loading.remove(); }catch(e){} });
-        setTimeout(() => { try{ loading.remove(); }catch(e){} }, 1800);
-        proxyBox.appendChild(loading);
-        proxyBox.appendChild(frame);
-        shell.appendChild(proxyBox);
-        installProxyViewerMessageBridge();
-      }else{
-        const empty = document.createElement('div');
-        empty.className = 'maru-search-owned-empty';
-        empty.textContent = target;
-        shell.appendChild(empty);
-      }
+      const proxyBox = document.createElement('div');
+      proxyBox.className = 'maru-search-owned-proxy';
+      const loading = document.createElement('div');
+      loading.className = 'maru-search-owned-proxy-loading';
+      loading.textContent = uiText('receiving', 'receiving...');
+      const frame = document.createElement('iframe');
+      frame.className = 'maru-search-owned-source-frame';
+      frame.dataset.proxyId = proxyId;
+      frame.loading = 'eager';
+      frame.title = displayTitle.slice(0, 120);
+      proxyBox.appendChild(loading);
+      proxyBox.appendChild(frame);
+      shell.appendChild(proxyBox);
+      installProxyViewerMessageBridge();
+      mountOwnedSourceFrame(frame, loading, target, proxyId);
 
       results.innerHTML = '';
       results.appendChild(shell);
@@ -3712,7 +3695,11 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function openResultInsideSearchFrame(url, it){
-      navigateSourceFromSearch(url, it || {});
+      // Google/Naver-style behavior for IGDC:
+      // keep the IGDC search header, tabs, pager and render the selected result
+      // as our own search-owned detail page and load the source through the
+      // server proxy iframe so the browser does not leave IGDC Search.
+      renderSearchOwnedResultView(url, it);
     }
 
     function displayUrlForImageItemClient(it, src){
@@ -3920,7 +3907,7 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       if (url) {
         const a = document.createElement('a');
-        a.href = url;
+        a.href = buildSearchOwnedResultHref(url);
         a.dataset.originalUrl = url;
         a.target = '_self';
         a.rel = 'noopener';
@@ -4494,7 +4481,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
         if(pageSlice.length){
           loadedServerPages.set(page, pageSlice.slice(0, PAGE_SIZE));
-          allItems = rankSearchItemsForQuery(mergeItemsPreferDisplayRichness(allItems, pageSlice), q, activeType);
+          allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice);
           const total = serverTotalFromPayload(pack && pack.payload, serverTotalItems || pageSlice.length);
           serverTotalItems = Math.max(serverTotalItems || 0, total || 0, INITIAL_PRELOAD_TARGET);
         } else if(serverTotalItems > ((page - 1) * PAGE_SIZE)){
@@ -4688,7 +4675,7 @@ async function runSearch(q, type = activeType){
       Math.max(INITIAL_PRELOAD_TARGET, incoming.length)
     );
     const windowItems = incoming.slice(0, initialWindow);
-    allItems = rankSearchItemsForQuery(mergeItemsPreferDisplayRichness(allItems, windowItems), qq, activeType).slice(0, MAX_SMOOTH_CANDIDATES);
+    allItems = mergeItemsPreferDisplayRichness(allItems, windowItems).slice(0, MAX_SMOOTH_CANDIDATES);
     seedLoadedServerPagesFromItems(allItems, Math.min(allItems.length, Math.max(INITIAL_PRELOAD_TARGET, windowItems.length)));
     if(pageItems.length) loadedServerPages.set(1, pageItems.slice(0, PAGE_SIZE));
 
