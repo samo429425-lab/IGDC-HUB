@@ -27,7 +27,7 @@ const path = require("path");
 let LogosEngineClass = null;
 try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) { LogosEngineClass = null; }
 
-const VERSION = "sanmaru-engine-v2.8.1-fast-query-warm";
+const VERSION = "sanmaru-engine-v2.8.0-instant-supply-os";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 3000;
@@ -1362,41 +1362,6 @@ function supplyCategorySync(input, opts){
   const category = firstNonEmpty(opts.category, opts.type, input && input.category, input && input.type);
   const searchType = category ? normalizeSearchType(category) : normalizeSearchType(opts.searchType || opts.type || "all");
   return supplyResidentSync({ q }, Object.assign({}, opts, { searchType, type:searchType, reason:opts.reason || "supply-category" }));
-}
-
-function warmResidentQueryForBoot(q, opts){
-  opts = opts || {};
-  const clean = sanitizeQuery(q);
-  if(!clean.ok || !clean.value) return null;
-  try{
-    const perPage = clampInt(firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage), DEFAULT_VISIBLE_PER_PAGE, 1, 100);
-    const firstWindow = Math.max(perPage * 12, clampInt(firstNonEmpty(opts.firstPaintLimit, opts.initialPreloadTarget, opts.limit), 300, perPage, MAX_LIMIT));
-    const pack = supplyResidentSync({ q:clean.value, query:clean.value }, {
-      reason:firstNonEmpty(opts.reason, 'resident-boot-query-warm'),
-      limit:firstWindow,
-      candidatePoolTarget:firstNonEmpty(opts.candidatePool, opts.candidatePoolTarget, firstWindow),
-      searchType:firstNonEmpty(opts.searchType, opts.type, opts.category, opts.tab, opts.vertical, 'all'),
-      type:firstNonEmpty(opts.searchType, opts.type, opts.category, opts.tab, opts.vertical, 'all'),
-      lang:firstNonEmpty(opts.lang, opts.uiLang, opts.locale),
-      page:firstNonEmpty(opts.page, opts.p, opts.start, 1),
-      perPage,
-      visibleNeed:perPage,
-      firstPaintLimit:firstWindow,
-      allowRouteCards:false,
-      noRouteCards:true,
-      allowOpeningCards:false,
-      noOpeningCards:true
-    });
-    return {
-      status:pack && pack.status || 'ok',
-      count:Array.isArray(pack && pack.items) ? pack.items.length : 0,
-      totalCandidates:pack && pack.meta && pack.meta.totalCandidates,
-      queryCacheHit:pack && pack.meta && pack.meta.queryCacheHit,
-      searchBankIndex:pack && pack.meta && pack.meta.searchBankIndex
-    };
-  }catch(e){
-    return { status:'soft-failed', error:responseErrorCode(e) };
-  }
 }
 
 function triggerDeepRefresh(input, opts){
@@ -3221,18 +3186,8 @@ async function handler(event){
   }
 
   if(action === "health") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, health:healthSnapshot(), resident:residentBootSnapshot(), security:{ allowed:true, admin:security.admin } });
-  if(action === "resident-boot" || action === "boot" || action === "mount-library") {
-    const qx = firstNonEmpty(merged.q, merged.query);
-    const resident = touchResidentSwitch({ reason:firstNonEmpty(merged.reason, "manual-boot-switch"), q:qx });
-    const warmSupply = warmResidentQueryForBoot(qx, Object.assign({}, merged, { reason:"resident-boot-query-warm" }));
-    return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-boot", resident, warmSupply });
-  }
-  if(action === "resident-activate" || action === "resident-switch" || action === "warm-ping" || action === "warm") {
-    const qx = firstNonEmpty(merged.q, merged.query);
-    const resident = touchResidentSwitch({ reason:firstNonEmpty(merged.reason, action), q:qx });
-    const warmSupply = warmResidentQueryForBoot(qx, Object.assign({}, merged, { reason:"resident-switch-query-warm" }));
-    return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-switch", resident, warmSupply });
-  }
+  if(action === "resident-boot" || action === "boot" || action === "mount-library") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-boot", resident:touchResidentSwitch({ reason:firstNonEmpty(merged.reason, "manual-boot-switch"), q:firstNonEmpty(merged.q, merged.query) }) });
+  if(action === "resident-activate" || action === "resident-switch" || action === "warm-ping" || action === "warm") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-switch", resident:touchResidentSwitch({ reason:firstNonEmpty(merged.reason, action), q:firstNonEmpty(merged.q, merged.query) }) });
   if(action === "resident-rebuild" || action === "rebuild-resident") { const rebuilt = ensureResidentBoot({ force:true, admin:security.admin, engineUpgrade:truthy(merged.engineUpgrade || merged.upgrade || merged.versionUpload), engineUpload:truthy(merged.engineUpload || merged.sanmaruEngineUpload || merged.sanmaruEngineReupload || merged.codeUpload), reason:"manual-rebuild" }); return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-rebuild", resident:touchResidentSwitch({ reason:"manual-rebuild-switch" }), rebuilt, lifecycleNote:"admin permission does not reset Sanmaru by itself; only Sanmaru engine file upload/code fingerprint change performs engine reboot" }); }
   if(action === "resident-status") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"resident-status", resident:touchResidentSwitch({ reason:"resident-status" }), health:healthSnapshot(), providerHealth:providerHealthSnapshot() });
   if(action === "provider-health") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"provider-health", providerHealth:providerHealthSnapshot(), resident:residentBootSnapshot() });
